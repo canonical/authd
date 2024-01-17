@@ -1,0 +1,63 @@
+# This is for linting. To run it, please use:
+# golangci-lint run ${MODULE}/... [--fix]
+
+linters:
+  # linters to run in addition to default ones
+  enable:
+    - dupl
+    - durationcheck
+    - errname
+    - errorlint
+    - exportloopref
+    - forbidigo
+    - forcetypeassert
+    - gci
+    - godot
+    - gofmt
+    - gosec
+    - misspell
+    - nakedret
+    - nolintlint
+    - revive
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - whitespace
+
+run:
+  timeout: 5m
+
+# Get all linter issues, even if duplicated
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  fix: false # we don’t want this in CI
+  exclude:
+    # EXC0001 errcheck: most errors are in defer calls, which are safe to ignore and idiomatic Go (would be good to only ignore defer ones though)
+    - 'Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*print(f|ln)?|os\.(Un)?Setenv|w\.Stop). is not checked'
+    # EXC0008 gosec: duplicated of errcheck
+    - (G104|G307)
+    # EXC0010 gosec: False positive is triggered by 'src, err := ioutil.ReadFile(filename)'
+    - Potential file inclusion via variable
+    # We don't wrap errors on purpose
+    - non-wrapping format verb for fmt.Errorf. Use `%w` to format errors
+    # We want named parameters even if unused, as they help better document the function
+    - unused-parameter
+    # Sometimes it is more readable it do a `if err:=a(); err != nil` tha simpy `return a()`
+    - if-return
+
+nolintlint:
+  require-explanation: true
+  require-specific: true
+
+linters-settings:
+  # Forbid the usage of deprecated ioutil and debug prints
+  forbidigo:
+    forbid:
+      - ioutil\.
+      - ^print.*$
+  # Never have naked return ever
+  nakedret:
+    max-func-lines: 1
