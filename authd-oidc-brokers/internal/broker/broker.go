@@ -1,4 +1,4 @@
-// package broker is the generic oidc business code.
+// Package broker is the generic oidc business code.
 package broker
 
 import (
