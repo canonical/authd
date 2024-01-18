@@ -1,0 +1,58 @@
+name: QA & sanity checks
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "*"
+  pull_request:
+
+jobs:
+  go-sanity:
+    name: "Go: Code sanity"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Go code sanity check
+        uses: canonical/desktop-engineering/gh-actions/go/code-sanity@main
+        with:
+          golangci-lint-configfile: ".golangci.yaml"
+          tools-directory: "tools"
+
+  go-tests:
+    name: "Go: Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests (with coverage collection)
+        run: |
+          set -eu
+
+          # The coverage is not written if the output directory does not exist, so we need to create it.
+          raw_cov_dir="/tmp/raw_files"
+          rm -fr "${raw_cov_dir}"
+          mkdir -p "${raw_cov_dir}"
+
+          # Overriding the default coverage directory is not an exported flag of go test (yet), so
+          # we need to override it using the test.gocoverdir flag instead.
+          #TODO: Update when https://go-review.googlesource.com/c/go/+/456595 is merged.
+          go test -cover -covermode=set ./... -shuffle=on -args -test.gocoverdir="${raw_cov_dir}"
+
+          # Convert the raw coverage data into textfmt so we can merge the Rust one into it
+          go tool covdata textfmt -i="${raw_cov_dir}" -o="/tmp/coverage.out"
+
+          # Filter out the testutils package and the pb.go file
+          grep -v -e "testutils" "/tmp/coverage.out" >"/tmp/coverage.out.filtered"
+
+      - name: Run tests (with race detector)
+        run: |
+          go test -race ./...
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: /tmp/coverage.out.filtered

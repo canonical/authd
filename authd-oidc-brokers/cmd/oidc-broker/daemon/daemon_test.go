@@ -117,7 +117,6 @@ func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 
 	// TODO
 	t.Fail()
-
 }
 
 func TestAppCanSigHupWhenExecute(t *testing.T) {
@@ -286,6 +285,8 @@ func requireGoroutineStarted(t *testing.T, f func()) {
 
 // startDaemon prepares and starts the daemon in the background. The done function should be called
 // to wait for the daemon to stop.
+//
+//nolint:unparam // TODO: This should be removed once we implement the config tests.
 func startDaemon(t *testing.T, conf *daemon.DaemonConfig) (app *daemon.App, done func()) {
 	t.Helper()
 

@@ -1,3 +1,4 @@
+// Package log configures the logging utilities for the project.
 package log
 
 import (

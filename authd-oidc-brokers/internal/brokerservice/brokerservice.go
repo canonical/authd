@@ -1,4 +1,4 @@
-// package brokerservice is the dbus service implementation delegating its functional call to brokers.
+// Package brokerservice is the dbus service implementation delegating its functional call to brokers.
 package brokerservice
 
 import (
@@ -9,7 +9,6 @@ import (
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 	"github.com/ubuntu/decorate"
-
 	"github.com/ubuntu/oidc-broker/internal/broker"
 )
 
@@ -56,7 +55,7 @@ type Service struct {
 }
 
 // New returns a new dbus service after exporting to the system bus our name.
-func New(ctx context.Context, serviceName string) (s *Service, err error) {
+func New(_ context.Context, serviceName string) (s *Service, err error) {
 	serviceName = strings.ReplaceAll(serviceName, "-", "_")
 	defer decorate.OnError(&err, "cannot create dbus service %q", serviceName)
 

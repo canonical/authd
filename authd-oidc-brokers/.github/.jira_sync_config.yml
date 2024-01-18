@@ -1,0 +1,6 @@
+# For more information on configuring the Jira Sync bot, see: https://github.com/canonical/gh-jira-sync-bot
+settings:
+  jira_project_key: "UDENG"
+  status_mapping:
+    opened: Untriaged
+    closed: Done
