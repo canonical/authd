@@ -1,6 +1,8 @@
 module github.com/ubuntu/oidc-broker/tools
 
-go 1.21.5
+go 1.21.0
+
+toolchain go1.21.6
 
 require github.com/golangci/golangci-lint v1.55.2
 
