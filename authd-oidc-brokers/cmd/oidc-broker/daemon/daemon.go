@@ -31,8 +31,8 @@ type App struct {
 
 // only overriable for tests.
 type systemPaths struct {
-	BrokersConf string
-	Cache       string
+	BrokerConf string
+	Cache      string
 }
 
 // daemonConfig defines configuration parameters of the daemon.
@@ -60,8 +60,8 @@ func New(name string) *App {
 			}
 			a.config = daemonConfig{
 				Paths: systemPaths{
-					BrokersConf: filepath.Join(consts.DefaultBrokersConfPath, name),
-					Cache:       systemCache,
+					BrokerConf: filepath.Join(consts.DefaultBrokersConfPath, name),
+					Cache:      systemCache,
 				},
 			}
 

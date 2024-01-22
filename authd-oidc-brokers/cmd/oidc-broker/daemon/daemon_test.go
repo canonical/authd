@@ -252,7 +252,7 @@ func TestNoConfigSetDefaults(t *testing.T) {
 	require.NoError(t, err, "Run should not return an error")
 
 	require.Equal(t, 0, a.Config().Verbosity, "Default Verbosity")
-	require.Equal(t, filepath.Join(consts.DefaultBrokersConfPath, t.Name()), a.Config().Paths.BrokersConf, "Default brokers configuration path")
+	require.Equal(t, filepath.Join(consts.DefaultBrokersConfPath, t.Name()), a.Config().Paths.BrokerConf, "Default broker configuration path")
 	//require.Equal(t, consts.DefaultCacheDir, a.Config().Paths.Cache, "Default cache directory")
 }
 
