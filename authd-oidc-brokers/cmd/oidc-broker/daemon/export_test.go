@@ -21,7 +21,7 @@ func NewForTests(t *testing.T, conf *DaemonConfig, args ...string) *App {
 	argsWithConf := []string{"--config", p}
 	argsWithConf = append(argsWithConf, args...)
 
-	a := New()
+	a := New(t.Name())
 	a.rootCmd.SetArgs(argsWithConf)
 	return a
 }
