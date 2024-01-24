@@ -1,0 +1,5 @@
+[authd]
+name = OIDC Broker
+brand_icon = broker_icon.png
+dbus_name = com.ubuntu.authd.oidc_broker
+dbus_object = /com/ubuntu/authd/oidc_broker
