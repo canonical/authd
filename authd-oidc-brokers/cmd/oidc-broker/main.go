@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 
@@ -20,7 +21,7 @@ import (
 
 func main() {
 	i18n.InitI18nDomain(consts.TEXTDOMAIN, po.Files)
-	a := daemon.New()
+	a := daemon.New(filepath.Base(os.Args[0]))
 	os.Exit(run(a))
 }
 

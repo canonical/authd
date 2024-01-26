@@ -17,9 +17,6 @@ import (
 	"github.com/ubuntu/oidc-broker/internal/daemon"
 )
 
-// cmdName is the binary name for the agent.
-var cmdName = filepath.Base(os.Args[0])
-
 // App encapsulate commands and options of the daemon, which can be controlled by env variables and config files.
 type App struct {
 	rootCmd cobra.Command
@@ -27,14 +24,15 @@ type App struct {
 	config  daemonConfig
 
 	daemon *daemon.Daemon
+	name   string
 
 	ready chan struct{}
 }
 
 // only overriable for tests.
 type systemPaths struct {
-	BrokersConf string
-	Cache       string
+	BrokerConf string
+	Cache      string
 }
 
 // daemonConfig defines configuration parameters of the daemon.
@@ -44,31 +42,31 @@ type daemonConfig struct {
 }
 
 // New registers commands and return a new App.
-func New() *App {
-	a := App{ready: make(chan struct{})}
+func New(name string) *App {
+	a := App{ready: make(chan struct{}), name: name}
 	a.rootCmd = cobra.Command{
-		Use:   fmt.Sprintf("%s COMMAND", cmdName),
-		Short: fmt.Sprintf("%s authentication broker", cmdName),
-		Long:  fmt.Sprintf("Authentication daemon %s to communicate with our authentication daemon.", cmdName),
+		Use:   fmt.Sprintf("%s COMMAND", name),
+		Short: fmt.Sprintf("%s authentication broker", name),
+		Long:  fmt.Sprintf("Authentication daemon %s to communicate with our authentication daemon.", name),
 		Args:  cobra.NoArgs,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Command parsing has been successful. Returns to not print usage anymore.
 			a.rootCmd.SilenceUsage = true
 
 			// Set config defaults
-			systemCache := filepath.Join("/var", "lib", cmdName)
+			systemCache := filepath.Join("/var", "lib", name)
 			if snapData := os.Getenv("SNAP_DATA"); snapData != "" {
 				systemCache = filepath.Join(snapData, "cache")
 			}
 			a.config = daemonConfig{
 				Paths: systemPaths{
-					BrokersConf: filepath.Join(consts.DefaultBrokersConfPath, cmdName),
-					Cache:       systemCache,
+					BrokerConf: filepath.Join(consts.DefaultBrokersConfPath, name),
+					Cache:      systemCache,
 				},
 			}
 
 			// Install and unmarshall configuration
-			if err := initViperConfig(cmdName, &a.rootCmd, a.viper); err != nil {
+			if err := initViperConfig(name, &a.rootCmd, a.viper); err != nil {
 				return err
 			}
 			if err := a.viper.Unmarshal(&a.config); err != nil {
@@ -108,7 +106,7 @@ func (a *App) serve(config daemonConfig) error {
 		return fmt.Errorf("error initializing users cache directory at %q: %v", config.Paths.Cache, err)
 	}
 
-	s, err := brokerservice.New(ctx, cmdName)
+	s, err := brokerservice.New(ctx, a.name)
 	if err != nil {
 		close(a.ready)
 		return err
