@@ -48,9 +48,7 @@ func TestVersion(t *testing.T) {
 	fields := strings.Fields(out)
 	require.Len(t, fields, 2, "wrong number of fields in version: %s", out)
 
-	want := "authd"
-
-	require.Equal(t, want, fields[0], "Wrong executable name")
+	require.Equal(t, t.Name(), fields[0], "Wrong executable name")
 	require.Equal(t, consts.Version, fields[1], "Wrong version")
 }
 
@@ -224,8 +222,7 @@ func TestAutoDetectConfig(t *testing.T) {
 	// Remove configuration next binary for other tests to not pick it up.
 	defer os.Remove(configNextToBinaryPath)
 
-	a := daemon.New()
-
+	a := daemon.New(t.Name())
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
@@ -248,21 +245,19 @@ func TestNoConfigSetDefaults(t *testing.T) {
 	// TODO
 	t.Fail()
 
-	a := daemon.New()
-	// Use version to still run preExec to load no config but without running server
+	a := daemon.New(t.Name()) // Use version to still run preExec to load no config but without running server
 	a.SetArgs("version")
 
 	err := a.Run()
 	require.NoError(t, err, "Run should not return an error")
 
 	require.Equal(t, 0, a.Config().Verbosity, "Default Verbosity")
-	require.Equal(t, consts.DefaultBrokersConfPath, a.Config().Paths.BrokersConf, "Default brokers configuration path")
+	require.Equal(t, filepath.Join(consts.DefaultBrokersConfPath, t.Name()), a.Config().Paths.BrokerConf, "Default broker configuration path")
 	//require.Equal(t, consts.DefaultCacheDir, a.Config().Paths.Cache, "Default cache directory")
 }
 
 func TestBadConfigReturnsError(t *testing.T) {
-	a := daemon.New()
-	// Use version to still run preExec to load no config but without running server
+	a := daemon.New(t.Name()) // Use version to still run preExec to load no config but without running server
 	a.SetArgs("version", "--config", "/does/not/exist.yaml")
 
 	err := a.Run()

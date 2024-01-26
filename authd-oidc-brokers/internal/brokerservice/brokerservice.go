@@ -107,7 +107,12 @@ func (s *Service) Serve() error {
 
 // Stop stop the service and do all the necessary cleanup operation.
 func (s *Service) Stop() error {
-	close(s.serve)
-	s.disconnect()
+	// Check if already stopped.
+	select {
+	case <-s.serve:
+	default:
+		close(s.serve)
+		s.disconnect()
+	}
 	return nil
 }
