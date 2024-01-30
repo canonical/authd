@@ -110,11 +110,52 @@ func TestAppCanQuitWithoutExecute(t *testing.T) {
 
 func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 	t.Parallel()
-	// Trigger the error with a cache directory that cannot be created over an
-	// existing file
+	const (
+		// Cache errors
+		dirIsFile = iota
+		wrongPermission
+		noParentDir
+	)
 
-	// TODO
-	t.Fail()
+	tests := map[string]struct {
+		cachePathBehavior int
+		configBehavior    int
+	}{
+		"Error on existing cache path being a file":    {cachePathBehavior: dirIsFile},
+		"Error on cache path missing parent directory": {cachePathBehavior: noParentDir},
+		"Error on wrong permission on cache path":      {cachePathBehavior: wrongPermission},
+	}
+	for name, tc := range tests {
+		tc := tc
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			tmpDir := t.TempDir()
+			cachePath := filepath.Join(tmpDir, "cache")
+
+			switch tc.cachePathBehavior {
+			case dirIsFile:
+				err := os.WriteFile(cachePath, []byte("file"), 0600)
+				require.NoError(t, err, "Setup: could not create cache file for tests")
+			case wrongPermission:
+				err := os.Mkdir(cachePath, 0600)
+				require.NoError(t, err, "Setup: could not create cache directory for tests")
+			case noParentDir:
+				cachePath = filepath.Join(tmpDir, "doesnotexist", "cache")
+			}
+
+			config := daemon.DaemonConfig{
+				Verbosity: 0,
+				Paths: daemon.SystemPaths{
+					Cache: cachePath,
+				},
+			}
+
+			a := daemon.NewForTests(t, &config)
+			err := a.Run()
+			require.Error(t, err, "Run should return an error")
+		})
+	}
 }
 
 func TestAppCanSigHupWhenExecute(t *testing.T) {
@@ -190,33 +231,36 @@ func TestAppGetRootCmd(t *testing.T) {
 }
 
 func TestConfigLoad(t *testing.T) {
-	// TODO
-	t.Fail()
+	t.Parallel()
 
-	/*customizedSocketPath := filepath.Join(t.TempDir(), "mysocket")
-	var config daemon.DaemonConfig
-	config.Verbosity = 1
-	config.Paths.Socket = customizedSocketPath
+	tmpDir := t.TempDir()
+	config := daemon.DaemonConfig{
+		Verbosity: 1,
+		Paths: daemon.SystemPaths{
+			BrokerConf: filepath.Join(tmpDir, "broker.conf"),
+			Cache:      filepath.Join(tmpDir, "cache"),
+		},
+	}
 
 	a, wait := startDaemon(t, &config)
 	defer wait()
 	defer a.Quit()
 
-	_, err := os.Stat(customizedSocketPath)
-	require.NoError(t, err, "Socket should exist")
-	require.Equal(t, 1, a.Config().Verbosity, "Verbosity is set from config")*/
+	require.Equal(t, config, a.Config(), "Config is loaded")
 }
 
 func TestAutoDetectConfig(t *testing.T) {
-	// TODO
-	t.Fail()
-
-	customizedSocketPath := filepath.Join(t.TempDir(), "mysocket")
-	var config daemon.DaemonConfig
-	config.Verbosity = 1
+	tmpDir := t.TempDir()
+	config := daemon.DaemonConfig{
+		Verbosity: 1,
+		Paths: daemon.SystemPaths{
+			BrokerConf: filepath.Join(tmpDir, "broker.conf"),
+			Cache:      filepath.Join(tmpDir, "cache"),
+		},
+	}
 
 	configPath := daemon.GenerateTestConfig(t, &config)
-	configNextToBinaryPath := filepath.Join(filepath.Dir(os.Args[0]), "authd.yaml")
+	configNextToBinaryPath := filepath.Join(filepath.Dir(os.Args[0]), t.Name()+".yaml")
 	err := os.Rename(configPath, configNextToBinaryPath)
 	require.NoError(t, err, "Could not relocate authd configuration file in the binary directory")
 	// Remove configuration next binary for other tests to not pick it up.
@@ -236,14 +280,12 @@ func TestAutoDetectConfig(t *testing.T) {
 	defer wg.Wait()
 	defer a.Quit()
 
-	_, err = os.Stat(customizedSocketPath)
-	require.NoError(t, err, "Socket should exist")
-	require.Equal(t, 1, a.Config().Verbosity, "Verbosity is set from config")
+	require.Equal(t, config, a.Config(), "Did not load configuration next to binary")
 }
 
 func TestNoConfigSetDefaults(t *testing.T) {
-	// TODO
-	t.Fail()
+	tmpDir := t.TempDir()
+	t.Setenv("SNAP_DATA", tmpDir)
 
 	a := daemon.New(t.Name()) // Use version to still run preExec to load no config but without running server
 	a.SetArgs("version")
@@ -253,7 +295,7 @@ func TestNoConfigSetDefaults(t *testing.T) {
 
 	require.Equal(t, 0, a.Config().Verbosity, "Default Verbosity")
 	require.Equal(t, filepath.Join(consts.DefaultBrokersConfPath, t.Name()), a.Config().Paths.BrokerConf, "Default broker configuration path")
-	//require.Equal(t, consts.DefaultCacheDir, a.Config().Paths.Cache, "Default cache directory")
+	require.Equal(t, filepath.Join(tmpDir, "cache"), a.Config().Paths.Cache, "Default cache directory")
 }
 
 func TestBadConfigReturnsError(t *testing.T) {
@@ -280,8 +322,6 @@ func requireGoroutineStarted(t *testing.T, f func()) {
 
 // startDaemon prepares and starts the daemon in the background. The done function should be called
 // to wait for the daemon to stop.
-//
-//nolint:unparam // TODO: This should be removed once we implement the config tests.
 func startDaemon(t *testing.T, conf *daemon.DaemonConfig) (app *daemon.App, done func()) {
 	t.Helper()
 
