@@ -132,7 +132,6 @@ func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 			tmpDir := t.TempDir()
 			cachePath := filepath.Join(tmpDir, "cache")
 
-			//nolint:govet // This is fixed with Go 1.22.0 and is a false positive (https://github.com/securego/gosec/pull/1108)
 			switch tc.cachePathBehavior {
 			case dirIsFile:
 				err := os.WriteFile(cachePath, []byte("file"), 0600)
