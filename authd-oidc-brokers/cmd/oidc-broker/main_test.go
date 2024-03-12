@@ -61,7 +61,6 @@ func TestRun(t *testing.T) {
 		"Send SIGHUP with exit":       {sendSig: syscall.SIGHUP, hupReturn: true},
 	}
 	for name, tc := range tests {
-		tc := tc
 		t.Run(name, func(t *testing.T) {
 			a := myApp{
 				done:             make(chan struct{}),
