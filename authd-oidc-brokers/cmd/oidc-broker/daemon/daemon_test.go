@@ -126,13 +126,13 @@ func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 		"Error on wrong permission on cache path":      {cachePathBehavior: wrongPermission},
 	}
 	for name, tc := range tests {
-		tc := tc
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
 			tmpDir := t.TempDir()
 			cachePath := filepath.Join(tmpDir, "cache")
 
+			//nolint:govet // This is fixed with Go 1.22.0 and is a false positive (https://github.com/securego/gosec/pull/1108)
 			switch tc.cachePathBehavior {
 			case dirIsFile:
 				err := os.WriteFile(cachePath, []byte("file"), 0600)
