@@ -11,7 +11,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/ubuntu/decorate"
 	"github.com/ubuntu/oidc-broker/internal/brokerservice"
 	"github.com/ubuntu/oidc-broker/internal/consts"
 	"github.com/ubuntu/oidc-broker/internal/daemon"
@@ -129,7 +128,11 @@ func (a *App) serve(config daemonConfig) error {
 // installVerbosityFlag adds the -v and -vv options and returns the reference to it.
 func installVerbosityFlag(cmd *cobra.Command, viper *viper.Viper) *int {
 	r := cmd.PersistentFlags().CountP("verbosity", "v" /*i18n.G(*/, "issue INFO (-v), DEBUG (-vv) or DEBUG with caller (-vvv) output") //)
-	decorate.LogOnError(viper.BindPFlag("verbosity", cmd.PersistentFlags().Lookup("verbosity")))
+
+	if err := viper.BindPFlag("verbosity", cmd.PersistentFlags().Lookup("verbosity")); err != nil {
+		slog.Warn(err.Error())
+	}
+
 	return r
 }
 
