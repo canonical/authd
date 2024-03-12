@@ -1,8 +1,8 @@
 module github.com/ubuntu/oidc-broker
 
-go 1.21.0
+go 1.22.0
 
-toolchain go1.21.6
+toolchain go1.22.1
 
 require (
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
