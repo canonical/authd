@@ -3,13 +3,13 @@ package brokerservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
-	"github.com/ubuntu/decorate"
 	"github.com/ubuntu/oidc-broker/internal/broker"
+	"gopkg.in/ini.v1"
 )
 
 const intro = `
@@ -49,24 +49,44 @@ const intro = `
 // Service is the handler exposing our broker methods on the system bus.
 type Service struct {
 	name   string
-	broker broker.Broker
+	broker *broker.Broker
 
 	serve      chan struct{}
 	disconnect func()
 }
 
 // New returns a new dbus service after exporting to the system bus our name.
-func New(_ context.Context, serviceName string) (s *Service, err error) {
-	serviceName = strings.ReplaceAll(serviceName, "-", "_")
-	defer decorate.OnError(&err, "cannot create dbus service %q", serviceName)
+func New(_ context.Context, cfgPath, cachePath string) (s *Service, err error) {
+	cfg, err := parseConfig(cfgPath)
+	if err != nil {
+		return nil, err
+	}
 
-	name := fmt.Sprintf("com.ubuntu.oidc.%s", serviceName)
 	iface := "com.ubuntu.authd.Broker"
-	object := dbus.ObjectPath(fmt.Sprintf("/com/ubuntu/oidc/%s", serviceName))
+	name := cfg[authdSection][dbusNameKey]
+	object := dbus.ObjectPath(cfg[authdSection][dbusObjectKey])
+	if name == "" {
+		return nil, errors.New("missing required name for dbus service")
+	}
+	if object == "" {
+		return nil, errors.New("missing required object path for dbus service")
+	}
+
+	bCfg := broker.Config{
+		IssuerURL:         cfg[oidcSection][issuerKey],
+		ClientID:          cfg[oidcSection][clientIDKey],
+		OfflineExpiration: cfg[oidcSection][offlineExpirationKey],
+		HomeBaseDir:       cfg[oidcSection][homeDirKey],
+		CachePath:         cachePath,
+	}
+	b, err := broker.New(bCfg)
+	if err != nil {
+		return nil, err
+	}
 
 	s = &Service{
 		name:   name,
-		broker: broker.Broker{},
+		broker: b,
 		serve:  make(chan struct{}),
 	}
 
@@ -95,8 +115,25 @@ func New(_ context.Context, serviceName string) (s *Service, err error) {
 	return s, nil
 }
 
+// parseConfig parses the config file and returns a map with the configuration keys and values.
+func parseConfig(cfgPath string) (map[string]map[string]string, error) {
+	iniCfg, err := ini.Load(cfgPath)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := make(map[string]map[string]string)
+	for _, section := range iniCfg.Sections() {
+		cfg[section.Name()] = make(map[string]string)
+		for _, key := range section.Keys() {
+			cfg[section.Name()][key.Name()] = key.String()
+		}
+	}
+	return cfg, nil
+}
+
 // Addr returns the address of the service.
-func (s Service) Addr() string {
+func (s *Service) Addr() string {
 	return s.name
 }
 
