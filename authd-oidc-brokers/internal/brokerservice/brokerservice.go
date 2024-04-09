@@ -18,6 +18,7 @@ const intro = `
 		<method name="NewSession">
 		<arg type="s" direction="in" name="username"/>
 		<arg type="s" direction="in" name="lang"/>
+		<arg type="s" direction="in" name="mode"/>
 		<arg type="s" direction="out" name="sessionID"/>
 		<arg type="s" direction="out" name="encryptionKey"/>
 		</method>
