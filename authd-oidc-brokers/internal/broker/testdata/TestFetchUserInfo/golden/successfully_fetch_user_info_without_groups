@@ -1,0 +1,8 @@
+{
+		"name": "test-user@email.com",
+		"uuid": "saved-user-id",
+		"gecos": "saved-user",
+		"dir": "/home/userInfoTests/test-user@email.com",
+		"shell": "/usr/bin/bash",
+		"groups": [  ]
+}
