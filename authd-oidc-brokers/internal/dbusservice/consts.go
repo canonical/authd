@@ -1,4 +1,4 @@
-package brokerservice
+package dbusservice
 
 // Configuration sections and keys.
 const (

@@ -1,4 +1,4 @@
-package brokerservice
+package dbusservice
 
 import (
 	"github.com/godbus/dbus/v5"

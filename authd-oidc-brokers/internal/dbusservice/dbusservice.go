@@ -1,5 +1,5 @@
-// Package brokerservice is the dbus service implementation delegating its functional call to brokers.
-package brokerservice
+// Package dbusservice is the dbus service implementation delegating its functional call to brokers.
+package dbusservice
 
 import (
 	"context"
