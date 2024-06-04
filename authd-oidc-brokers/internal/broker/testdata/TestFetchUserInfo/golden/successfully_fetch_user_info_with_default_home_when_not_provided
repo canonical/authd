@@ -1,0 +1,8 @@
+{
+		"name": "test-user@email.com",
+		"uuid": "saved-user-id",
+		"gecos": "saved-user",
+		"dir": "/home/test-user@email.com",
+		"shell": "/usr/bin/bash",
+		"groups": [ {"name": "remote-group", "ugid": "12345"}, {"name": "linux-local-group", "ugid": ""} ]
+}

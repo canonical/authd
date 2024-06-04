@@ -1,0 +1,3 @@
+access: denied
+data: ""
+err: IsAuthenticated already running for session "SESSION_ID"

@@ -1,0 +1,11 @@
+access: granted
+data: |-
+    {"userinfo": {
+    		"name": "test-user@email.com",
+    		"uuid": "saved-user-id",
+    		"gecos": "saved-user",
+    		"dir": "/home/test-user@email.com",
+    		"shell": "/usr/bin/bash",
+    		"groups": [{"name": "saved-remote-group", "gid": "12345"}, {"name": "saved-local-group", "gid": ""}]
+    }}
+err: <nil>

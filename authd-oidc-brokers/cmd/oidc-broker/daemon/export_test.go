@@ -1,8 +1,10 @@
 package daemon
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,10 +16,10 @@ type (
 	SystemPaths  = systemPaths
 )
 
-func NewForTests(t *testing.T, conf *DaemonConfig, args ...string) *App {
+func NewForTests(t *testing.T, conf *DaemonConfig, providerURL string, args ...string) *App {
 	t.Helper()
 
-	p := GenerateTestConfig(t, conf)
+	p := GenerateTestConfig(t, conf, providerURL)
 	argsWithConf := []string{"--config", p}
 	argsWithConf = append(argsWithConf, args...)
 
@@ -26,7 +28,7 @@ func NewForTests(t *testing.T, conf *DaemonConfig, args ...string) *App {
 	return a
 }
 
-func GenerateTestConfig(t *testing.T, origConf *daemonConfig) string {
+func GenerateTestConfig(t *testing.T, origConf *daemonConfig, providerURL string) string {
 	t.Helper()
 
 	var conf daemonConfig
@@ -44,6 +46,24 @@ func GenerateTestConfig(t *testing.T, origConf *daemonConfig) string {
 		err := os.Chmod(conf.Paths.Cache, 0700)
 		require.NoError(t, err, "Setup: could not change permission on cache directory for tests")
 	}
+	if conf.Paths.BrokerConf == "" {
+		conf.Paths.BrokerConf = filepath.Join(t.TempDir(), strings.ReplaceAll(t.Name(), "/", "_")+".yaml")
+	}
+
+	brokerCfg := fmt.Sprintf(`
+[authd]
+name = %[1]s
+brand_icon = broker_icon.png
+dbus_name = com.ubuntu.authd.%[1]s
+dbus_object = /com/ubuntu/authd/%[1]s
+
+[oidc]
+issuer = %[2]s
+client_id = client_id
+`, strings.ReplaceAll(t.Name(), "/", "_"), providerURL)
+	err := os.WriteFile(conf.Paths.BrokerConf, []byte(brokerCfg), 0600)
+	require.NoError(t, err, "Setup: could not create broker configuration for tests")
+
 	d, err := yaml.Marshal(conf)
 	require.NoError(t, err, "Setup: could not marshal configuration for tests")
 
