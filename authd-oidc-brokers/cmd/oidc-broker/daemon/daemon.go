@@ -11,9 +11,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/ubuntu/oidc-broker/internal/brokerservice"
 	"github.com/ubuntu/oidc-broker/internal/consts"
 	"github.com/ubuntu/oidc-broker/internal/daemon"
+	"github.com/ubuntu/oidc-broker/internal/dbusservice"
 )
 
 // App encapsulate commands and options of the daemon, which can be controlled by env variables and config files.
@@ -105,7 +105,7 @@ func (a *App) serve(config daemonConfig) error {
 		return fmt.Errorf("error initializing users cache directory at %q: %v", config.Paths.Cache, err)
 	}
 
-	s, err := brokerservice.New(ctx, a.name)
+	s, err := dbusservice.New(ctx, config.Paths.BrokerConf, config.Paths.Cache)
 	if err != nil {
 		close(a.ready)
 		return err

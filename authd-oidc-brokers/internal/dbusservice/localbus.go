@@ -1,6 +1,6 @@
 //go:build withlocalbus
 
-package brokerservice
+package dbusservice
 
 import (
 	"fmt"
