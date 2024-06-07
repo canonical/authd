@@ -1,0 +1,40 @@
+name: oidc-broker
+summary: OIDC Broker for authd
+description: |
+  Broker that enables OIDC authentication for authd.
+version: git
+grade: stable
+base: core24
+confinement: strict
+license: GPL-3.0+
+
+apps:
+  oidc-broker:
+    command: bin/oidc-broker
+    daemon: simple
+    slots:
+      - dbus-oidc
+    plugs:
+      - network
+      - config-files
+    restart-condition: always
+
+slots:
+  dbus-oidc:
+    interface: dbus
+    bus: system
+    name: com.ubuntu.authd.OidcBroker
+
+plugs:
+  config-files:
+    interface: system-files
+    read:
+      - /etc/authd/brokers.d/oidc-broker
+
+parts:
+  oidc-broker:
+    source: .
+    source-type: local
+    plugin: go
+    build-snaps:
+      - go

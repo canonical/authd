@@ -1,12 +1,12 @@
 [authd]
 name = OIDC Broker
-brand_icon = broker_icon.png
-dbus_name = com.ubuntu.authd.oidc_broker
-dbus_object = /com/ubuntu/authd/oidc_broker
+brand_icon = {abs_path_to_icon}
+dbus_name = com.ubuntu.authd.OidcBroker
+dbus_object = /com/ubuntu/authd/OidcBroker
 
 [oidc]
 issuer = https://{issuer_url}
-client_id = client_id
+client_id = {client_id}
 
 # The amount of days the user will be allowed to authenticate without a network connection.
 offline_expiration = 180
