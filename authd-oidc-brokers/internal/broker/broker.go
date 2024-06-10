@@ -259,12 +259,12 @@ func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []map[string]st
 
 		case "form":
 			if slices.Contains(supportedEntries, "chars_password") {
-				supportedModes["password"] = "Password Authentication"
+				supportedModes["password"] = "Local Password Authentication"
 			}
 
 		case "newpassword":
 			if slices.Contains(supportedEntries, "chars_password") {
-				supportedModes["newpassword"] = "Define your password"
+				supportedModes["newpassword"] = "Define your local password"
 			}
 		}
 	}
@@ -329,14 +329,14 @@ func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[
 	case "password":
 		uiLayout = map[string]string{
 			"type":  "form",
-			"label": "Gimme your password",
+			"label": "Enter your local password",
 			"entry": "chars_password",
 		}
 
 	case "newpassword":
 		uiLayout = map[string]string{
 			"type":  "newpassword",
-			"label": "Enter your password",
+			"label": "Create a local password",
 			"entry": "chars_password",
 		}
 	}
