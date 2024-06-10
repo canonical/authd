@@ -6,7 +6,7 @@ toolchain go1.22.4
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.10.0
-	github.com/coreos/go-oidc/v3 v3.9.0
+	github.com/coreos/go-oidc/v3 v3.10.0
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/google/uuid v1.6.0
@@ -30,7 +30,7 @@ require (
 	github.com/cjlapao/common-go v0.0.39 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
-	github.com/go-jose/go-jose/v3 v3.0.3 // indirect
+	github.com/go-jose/go-jose/v4 v4.0.1 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
