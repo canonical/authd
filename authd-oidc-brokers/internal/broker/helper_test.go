@@ -102,11 +102,11 @@ var testTokens = map[string]broker.AuthCachedInfo{
 	},
 }
 
-func generateCachedInfo(t *testing.T, preexistentToken, issuer string) broker.AuthCachedInfo {
+func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.AuthCachedInfo {
 	t.Helper()
 
 	if preexistentToken == "invalid" {
-		return broker.AuthCachedInfo{}
+		return nil
 	}
 
 	var email string
@@ -153,5 +153,5 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) broker.Au
 	tok.Token = tok.Token.WithExtra(map[string]string{"id_token": encodedToken})
 	tok.RawIDToken = encodedToken
 
-	return tok
+	return &tok
 }

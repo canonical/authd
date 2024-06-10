@@ -616,7 +616,7 @@ func (b *Broker) loadAuthInfo(session *sessionInfo, password string) (loadedInfo
 	tok, err := b.auth.oauthCfg.TokenSource(context.Background(), cachedInfo.Token).Token()
 	if err != nil {
 		castErr := &oauth2.RetrieveError{}
-		if errors.As(err, &castErr) && castErr.Response.StatusCode != http.StatusServiceUnavailable {
+		if !errors.As(err, &castErr) || castErr.Response.StatusCode != http.StatusServiceUnavailable {
 			return authCachedInfo{}, false, fmt.Errorf("could not refresh token: %v", err)
 		}
 

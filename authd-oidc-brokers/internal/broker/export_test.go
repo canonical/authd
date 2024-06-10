@@ -1,6 +1,11 @@
 package broker
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+)
 
 // TokenPathForSession returns the path to the token file for the given session.
 func (b *Broker) TokenPathForSession(sessionID string) string {
@@ -52,12 +57,30 @@ func (b *Broker) SetAuthInfo(sessionID, key string, value any) error {
 type AuthCachedInfo = authCachedInfo
 
 // CacheAuthInfo exposes the broker's cacheAuthInfo method for tests.
-func (b *Broker) CacheAuthInfo(sessionID string, token authCachedInfo, password string) error {
+func (b *Broker) CacheAuthInfo(sessionID string, token *authCachedInfo, password string) error {
 	s, err := b.getSession(sessionID)
 	if err != nil {
 		return err
 	}
-	return b.cacheAuthInfo(&s, token, password)
+
+	if token == nil {
+		return writeTrashToken(s.cachePath, password)
+	}
+
+	return b.cacheAuthInfo(&s, *token, password)
+}
+
+func writeTrashToken(path, challenge string) error {
+	content, err := encrypt([]byte("This is a trash token that is not valid for authentication"), []byte(challenge))
+	if err != nil {
+		return err
+	}
+	// Create issuer specific cache directory if it doesn't exist.
+	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return fmt.Errorf("could not create token directory: %v", err)
+	}
+
+	return os.WriteFile(path, content, 0600)
 }
 
 // FetchUserInfo exposes the broker's fetchUserInfo method for tests.

@@ -556,8 +556,11 @@ func TestFetchUserInfo(t *testing.T) {
 			require.NoError(t, err, "Setup: Failed to create session for the tests")
 
 			cachedInfo := generateCachedInfo(t, tc.userToken, defaultProvider.URL)
+			if cachedInfo == nil {
+				cachedInfo = &broker.AuthCachedInfo{}
+			}
 
-			got, err := b.FetchUserInfo(sessionID, &cachedInfo)
+			got, err := b.FetchUserInfo(sessionID, cachedInfo)
 			if tc.wantErr {
 				require.Error(t, err, "FetchUserInfo should have returned an error")
 				return
