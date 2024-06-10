@@ -309,8 +309,7 @@ func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[
 	case "qrcode":
 		response, err := b.auth.oauthCfg.DeviceAuth(context.TODO())
 		if err != nil {
-			slog.Error(fmt.Sprintf("Error getting device auth: %v", err))
-			return nil, errors.New("could not generate QR code layout")
+			return nil, fmt.Errorf("could not generate QR code layout: %v", err)
 		}
 		session.authInfo["response"] = response
 
@@ -354,7 +353,7 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	var authData map[string]string
 	if authenticationData != "" {
 		if err := json.Unmarshal([]byte(authenticationData), &authData); err != nil {
-			return AuthDenied, "", errors.New("authentication data is not a valid json value")
+			return AuthDenied, "", fmt.Errorf("authentication data is not a valid json value: %v", err)
 		}
 	}
 
@@ -457,7 +456,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 
 		authInfo.UserInfo, err = b.userInfoFromClaims(userClaims, groups)
 		if err != nil {
-			return AuthDenied, fmt.Sprintf(`{"message": "could not get user info: %v"}`, err)
+			return AuthDenied, fmt.Sprintf(`{"message": "could not parse user info from claims: %v"}`, err)
 		}
 	}
 
@@ -466,7 +465,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 	}
 
 	if err := b.cacheAuthInfo(session, authInfo, challenge); err != nil {
-		return AuthRetry, fmt.Sprintf(`{"message": "could not update token: %v"}`, err)
+		return AuthRetry, fmt.Sprintf(`{"message": "could not update cached info: %v"}`, err)
 	}
 
 	return AuthGranted, fmt.Sprintf(`{"userinfo": %s}`, authInfo.UserInfo)
@@ -563,14 +562,7 @@ type authCachedInfo struct {
 
 // cacheAuthInfo serializes the access token and cache it.
 func (b *Broker) cacheAuthInfo(session *sessionInfo, authInfo authCachedInfo, password string) (err error) {
-	defer func() {
-		// Override the error so that we don't leak information. Also, abstract it for the user.
-		// We still log as error for the admin to get access.
-		if err != nil {
-			slog.Error(fmt.Sprintf("Error when caching token: %v", err))
-			err = errors.New("could not cache token")
-		}
-	}()
+	defer decorate.OnError(&err, "could not cache info")
 
 	authInfo.AcquiredAt = time.Now()
 	content, err := json.Marshal(authInfo)
@@ -597,14 +589,7 @@ func (b *Broker) cacheAuthInfo(session *sessionInfo, authInfo authCachedInfo, pa
 
 // loadAuthInfo deserializes the token from the cache and refreshes it if needed.
 func (b *Broker) loadAuthInfo(session *sessionInfo, password string) (loadedInfo authCachedInfo, offline bool, err error) {
-	defer func() {
-		// Override the error so that we don't leak information. Also, abstract it for the user.
-		// We still log as error for the admin to get access.
-		if err != nil {
-			slog.Error(fmt.Sprintf("Error when loading token: %v", err))
-			err = errors.New("could not load token")
-		}
-	}()
+	defer decorate.OnError(&err, "could not load cached info")
 
 	s, err := os.ReadFile(session.cachePath)
 	if err != nil {
@@ -613,12 +598,12 @@ func (b *Broker) loadAuthInfo(session *sessionInfo, password string) (loadedInfo
 
 	deserialized, err := decrypt(s, []byte(password))
 	if err != nil {
-		return authCachedInfo{}, false, fmt.Errorf("could not deserializing token: %v", err)
+		return authCachedInfo{}, false, fmt.Errorf("could not deserialize token: %v", err)
 	}
 
 	var cachedInfo authCachedInfo
 	if err := json.Unmarshal(deserialized, &cachedInfo); err != nil {
-		return authCachedInfo{}, false, fmt.Errorf("could not unmarshaling token: %v", err)
+		return authCachedInfo{}, false, fmt.Errorf("could not unmarshal token: %v", err)
 	}
 
 	// If the token is not expired, we should use the cached information.
@@ -655,14 +640,7 @@ func (b *Broker) loadAuthInfo(session *sessionInfo, password string) (loadedInfo
 }
 
 func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *authCachedInfo) (userClaims claims, userGroups []group.Info, err error) {
-	defer func() {
-		// Override the error so that we don't leak information. Also, abstract it for the user.
-		// We still log as error for the admin to get access.
-		if err != nil {
-			slog.Error(fmt.Sprintf("Error when fetching user info: %v", err))
-			err = errors.New("could not fetch user info")
-		}
-	}()
+	defer decorate.OnError(&err, "could not fetch user info")
 
 	// If we didn't restore user information from the cache, we need to query the provider for it, which means
 	// we need to validate the token.
@@ -681,7 +659,7 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *aut
 	}
 
 	if userClaims.Email == "" {
-		return claims{}, nil, errors.New("invalid claims")
+		return claims{}, nil, errors.New("user email is required, but was not provided")
 	}
 
 	if userClaims.Email != session.username {

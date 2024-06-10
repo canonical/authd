@@ -1,3 +1,3 @@
 access: retry
-data: '{"message": "could not update token: could not cache token"}'
+data: '{"message": "could not update cached info: could not cache info: could not create token directory: mkdir provider_cache_path: permission denied"}'
 err: <nil>

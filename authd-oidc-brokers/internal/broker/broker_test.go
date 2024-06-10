@@ -412,8 +412,9 @@ func TestIsAuthenticated(t *testing.T) {
 
 				access, data, err := b.IsAuthenticated(sessionID, authData)
 
-				// Redact variant session id from the response
+				// Redact variant values from the response
 				data = strings.ReplaceAll(data, sessionID, "SESSION_ID")
+				data = strings.ReplaceAll(data, filepath.Dir(b.TokenPathForSession(sessionID)), "provider_cache_path")
 				errStr := strings.ReplaceAll(fmt.Sprintf("%v", err), sessionID, "SESSION_ID")
 
 				got := isAuthenticatedResponse{Access: access, Data: data, Err: errStr}
@@ -446,8 +447,9 @@ func TestIsAuthenticated(t *testing.T) {
 
 					access, data, err := b.IsAuthenticated(sessionID, secondAuthData)
 
-					// Redact variant session id from the response
+					// Redact variant values from the response
 					data = strings.ReplaceAll(data, sessionID, "SESSION_ID")
+					data = strings.ReplaceAll(data, filepath.Dir(b.TokenPathForSession(sessionID)), "provider_cache_path")
 					errStr := strings.ReplaceAll(fmt.Sprintf("%v", err), sessionID, "SESSION_ID")
 
 					got := isAuthenticatedResponse{Access: access, Data: data, Err: errStr}
