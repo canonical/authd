@@ -1,0 +1,76 @@
+name: Auto update broker variant branches
+on:
+  push:
+    branches:
+      - main
+concurrency: auto-update-broker-variants
+
+permissions:
+    pull-requests: write
+    contents: write
+
+env:
+    DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  update-snap-branches:
+    name: Update snap branches
+    strategy:
+      matrix:
+        branch_name: ["msentraid-broker"]
+    runs-on: ubuntu-latest
+    steps:
+        - name: Install dependencies
+          run: |
+            set -eu
+            sudo apt update
+            sudo apt install -y git
+        - uses: actions/checkout@v4
+          with:
+            ref: main
+            fetch-depth: 0
+        - name: Merge main into branches
+          id: merge
+          run: |
+            set -eux
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git fetch
+            git checkout ${{ matrix.branch_name }}
+
+            # First, assume that we will have conflicts due to the merge command
+            # failing the action if there's any.
+            echo "has_conflicts=true" >> $GITHUB_OUTPUT
+            has_conflicts=true
+            if git merge main --commit; then
+              has_conflicts=false
+            fi
+
+            echo "has_conflicts=${has_conflicts}" >> $GITHUB_OUTPUT
+        - name: Push branch
+          if: ${{ steps.merge.outputs.has_conflicts == 'false' }}
+          run: |
+            set -eux
+            git push origin ${{ matrix.branch_name }}
+
+            # Potentially existing PR with conflicts is not valid anymore: we just automerged.
+            git push origin --delete update-${{ matrix.branch_name }} || true
+        - name: Restore and prepare branch
+          if: ${{ steps.merge.outputs.has_conflicts == 'true' }}
+          run: |
+            set -eux
+            # Reset the state of the current destination
+            git merge --abort
+            # Apply the changes we want to merge (which is the content of main)
+            git reset --hard main
+        - name: Create Pull Request
+          if: ${{ steps.merge.outputs.has_conflicts == 'true' }}
+          uses: peter-evans/create-pull-request@v6
+          with:
+            commit-message: Auto update ${{ matrix.branch_name }} branch
+            title: Auto update ${{ matrix.branch_name }} branch
+            body: |
+              Pull request created due to conflicts found when merging main into ${{ matrix.branch_name }}.
+            branch: update-${{ matrix.branch_name }}
+            delete-branch: true
+            token: ${{ secrets.GITHUB_TOKEN }}
