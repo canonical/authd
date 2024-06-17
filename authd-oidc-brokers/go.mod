@@ -13,7 +13,7 @@ require (
 	github.com/microsoftgraph/msgraph-sdk-go v1.45.0
 	github.com/microsoftgraph/msgraph-sdk-go-core v1.1.0
 	github.com/otiai10/copy v1.14.0
-	github.com/spf13/cobra v1.8.0
+	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.9.0
 	github.com/ubuntu/decorate v0.0.0-20240301153420-5015d6dbc8e5
