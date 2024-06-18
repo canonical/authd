@@ -258,7 +258,8 @@ func TestIsAuthenticated(t *testing.T) {
 
 		customHandlers map[string]testutils.ProviderHandler
 
-		wantSecondCall bool
+		wantSecondCall  bool
+		secondChallenge string
 
 		preexistentToken     string
 		offlineExpiration    string
@@ -312,7 +313,7 @@ func TestIsAuthenticated(t *testing.T) {
 				"/token": testutils.UnavailableHandler(),
 			},
 		},
-
+		"Error when empty challenge is provided for local password": {firstChallenge: "-", wantSecondCall: true, secondChallenge: "-"},
 		"Error when mode is newpassword and token is not set": {
 			firstMode:     "newpassword",
 			firstAuthInfo: map[string]any{"token": nil},
@@ -434,7 +435,12 @@ func TestIsAuthenticated(t *testing.T) {
 				// Give some time for the first call
 				time.Sleep(10 * time.Millisecond)
 
-				secondAuthData := `{"challenge":"` + encryptChallenge(t, "passwordpassword", key) + `"}`
+				challenge := "passwordpassword"
+				if tc.secondChallenge == "-" {
+					challenge = ""
+				}
+
+				secondAuthData := `{"challenge":"` + encryptChallenge(t, challenge, key) + `"}`
 				if tc.invalidAuthData {
 					secondAuthData = "invalid json"
 				}
