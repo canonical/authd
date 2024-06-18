@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"text/template"
@@ -34,19 +33,17 @@ const maxAuthAttempts = 3
 
 // Config is the configuration for the broker.
 type Config struct {
-	IssuerURL         string
-	ClientID          string
-	CachePath         string
-	OfflineExpiration string
-	HomeBaseDir       string
+	IssuerURL   string
+	ClientID    string
+	CachePath   string
+	HomeBaseDir string
 }
 
 // Broker is the real implementation of the broker to track sessions and process oidc calls.
 type Broker struct {
-	providerInfo      providers.ProviderInfoer
-	auth              authConfig
-	offlineExpiration time.Duration
-	homeDirPath       string
+	providerInfo providers.ProviderInfoer
+	auth         authConfig
+	homeDirPath  string
 
 	currentSessions   map[string]sessionInfo
 	currentSessionsMu sync.RWMutex
@@ -119,16 +116,6 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 		return &Broker{}, errors.New("issuer and client ID must be provided")
 	}
 
-	// Set offline expiration
-	var offlineExpiration time.Duration
-	if cfg.OfflineExpiration != "" {
-		intValue, err := strconv.Atoi(cfg.OfflineExpiration)
-		if err != nil {
-			return &Broker{}, fmt.Errorf("could not parse offline expiration: %v", err)
-		}
-		offlineExpiration = time.Duration(intValue*24) * time.Hour
-	}
-
 	homeDirPath := "/home"
 	if cfg.HomeBaseDir != "" {
 		homeDirPath = cfg.HomeBaseDir
@@ -163,11 +150,10 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	}
 
 	return &Broker{
-		providerInfo:      opts.providerInfo,
-		auth:              authCfg,
-		offlineExpiration: offlineExpiration,
-		homeDirPath:       homeDirPath,
-		privateKey:        privateKey,
+		providerInfo: opts.providerInfo,
+		auth:         authCfg,
+		homeDirPath:  homeDirPath,
+		privateKey:   privateKey,
 
 		currentSessions:   make(map[string]sessionInfo),
 		currentSessionsMu: sync.RWMutex{},
