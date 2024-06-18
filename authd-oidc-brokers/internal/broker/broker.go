@@ -440,6 +440,10 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 		}
 
 	case "newpassword":
+		if challenge == "" {
+			return AuthRetry, `{"message": "challenge must not be empty"}`
+		}
+
 		var ok bool
 		// This mode must always come after a authentication mode, so it has to have an auth_info.
 		authInfo, ok = session.authInfo["auth_info"].(authCachedInfo)
