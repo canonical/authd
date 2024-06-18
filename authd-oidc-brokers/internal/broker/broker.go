@@ -592,13 +592,7 @@ func (b *Broker) loadAuthInfo(session *sessionInfo, password string) (loadedInfo
 		return authCachedInfo{}, false, fmt.Errorf("could not unmarshal token: %v", err)
 	}
 
-	// If the token is not expired, we should use the cached information.
-	if cachedInfo.Token.Valid() {
-		return cachedInfo, true, nil
-	}
-
-	// Tries to refresh the access token. If the service is unavailable and token is still valid from the broker
-	// perspective (i.e. last modification was between now and now-expiration), we can use it.
+	// Tries to refresh the access token. If the service is unavailable, we allow authentication.
 	tok, err := b.auth.oauthCfg.TokenSource(context.Background(), cachedInfo.Token).Token()
 	if err != nil {
 		castErr := &oauth2.RetrieveError{}
@@ -606,13 +600,7 @@ func (b *Broker) loadAuthInfo(session *sessionInfo, password string) (loadedInfo
 			return authCachedInfo{}, false, fmt.Errorf("could not refresh token: %v", err)
 		}
 
-		if time.Since(cachedInfo.AcquiredAt) >= b.offlineExpiration {
-			return authCachedInfo{}, false, errors.New("token exceeded offline expiration")
-		}
-
-		// If we get here, it means that the token is expired and we could not refresh it
-		// but we can still use it locally due to offline expiration configuration
-		// However, we don't want to update the token file neither its saved files.
+		// The provider is unavailable, so we allow offline authentication.
 		return cachedInfo, true, nil
 	}
 

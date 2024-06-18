@@ -257,7 +257,6 @@ func TestIsAuthenticated(t *testing.T) {
 		wantSecondCall bool
 
 		preexistentToken     string
-		offlineExpiration    string
 		invalidAuthData      bool
 		dontWaitForFirstCall bool
 		readOnlyCacheDir     bool
@@ -267,10 +266,16 @@ func TestIsAuthenticated(t *testing.T) {
 
 		"Authenticating with qrcode reacquires token":          {firstChallenge: "-", wantSecondCall: true, preexistentToken: "valid"},
 		"Authenticating with password refreshes expired token": {firstMode: "password", preexistentToken: "expired"},
-		"Authenticating with password still allowed if server is unreachable and token is not offline-expired": {
-			firstMode:         "password",
-			preexistentToken:  "expired",
-			offlineExpiration: "10",
+		"Authenticating with password still allowed if server is unreachable": {
+			firstMode:        "password",
+			preexistentToken: "valid",
+			customHandlers: map[string]testutils.ProviderHandler{
+				"/token": testutils.UnavailableHandler(),
+			},
+		},
+		"Authenticating with password still allowed if token is expired and server is unreachable": {
+			firstMode:        "password",
+			preexistentToken: "expired",
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.UnavailableHandler(),
 			},
@@ -283,17 +288,9 @@ func TestIsAuthenticated(t *testing.T) {
 		"Error when IsAuthenticated is ongoing for session": {dontWaitForFirstCall: true, wantSecondCall: true},
 
 		"Error when mode is password and token does not exist": {firstMode: "password"},
-		"Error when mode is password and server offline and token expired": {
+		"Error when mode is password but server returns error": {
 			firstMode:        "password",
 			preexistentToken: "expired",
-			customHandlers: map[string]testutils.ProviderHandler{
-				"/token": testutils.UnavailableHandler(),
-			},
-		},
-		"Error when mode is password and token is offline-valid but server returns error": {
-			firstMode:         "password",
-			preexistentToken:  "expired",
-			offlineExpiration: "10",
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.BadRequestHandler(),
 			},
@@ -348,7 +345,7 @@ func TestIsAuthenticated(t *testing.T) {
 				defer cleanup()
 				provider = p
 			}
-			b, sessionID, key := newBrokerForTests(t, cacheDir, provider.URL, tc.offlineExpiration, tc.sessionMode)
+			b, sessionID, key := newBrokerForTests(t, cacheDir, provider.URL, tc.sessionMode)
 
 			if tc.preexistentToken != "" {
 				tok := generateCachedInfo(t, tc.preexistentToken, provider.URL)
