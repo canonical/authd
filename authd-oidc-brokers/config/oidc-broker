@@ -8,9 +8,6 @@ dbus_object = /com/ubuntu/authd/OidcBroker
 issuer = https://{issuer_url}
 client_id = {client_id}
 
-# The amount of days the user will be allowed to authenticate without a network connection.
-offline_expiration = 180
-
 # The directory where the user's home directory will be created.
 # The user home directory will be created in the format of $homedir_path/$username
 home_base_dir = /home

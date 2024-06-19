@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"text/template"
@@ -34,19 +33,17 @@ const maxAuthAttempts = 3
 
 // Config is the configuration for the broker.
 type Config struct {
-	IssuerURL         string
-	ClientID          string
-	CachePath         string
-	OfflineExpiration string
-	HomeBaseDir       string
+	IssuerURL   string
+	ClientID    string
+	CachePath   string
+	HomeBaseDir string
 }
 
 // Broker is the real implementation of the broker to track sessions and process oidc calls.
 type Broker struct {
-	providerInfo      providers.ProviderInfoer
-	auth              authConfig
-	offlineExpiration time.Duration
-	homeDirPath       string
+	providerInfo providers.ProviderInfoer
+	auth         authConfig
+	homeDirPath  string
 
 	currentSessions   map[string]sessionInfo
 	currentSessionsMu sync.RWMutex
@@ -119,16 +116,6 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 		return &Broker{}, errors.New("issuer and client ID must be provided")
 	}
 
-	// Set offline expiration
-	var offlineExpiration time.Duration
-	if cfg.OfflineExpiration != "" {
-		intValue, err := strconv.Atoi(cfg.OfflineExpiration)
-		if err != nil {
-			return &Broker{}, fmt.Errorf("could not parse offline expiration: %v", err)
-		}
-		offlineExpiration = time.Duration(intValue*24) * time.Hour
-	}
-
 	homeDirPath := "/home"
 	if cfg.HomeBaseDir != "" {
 		homeDirPath = cfg.HomeBaseDir
@@ -163,11 +150,10 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	}
 
 	return &Broker{
-		providerInfo:      opts.providerInfo,
-		auth:              authCfg,
-		offlineExpiration: offlineExpiration,
-		homeDirPath:       homeDirPath,
-		privateKey:        privateKey,
+		providerInfo: opts.providerInfo,
+		auth:         authCfg,
+		homeDirPath:  homeDirPath,
+		privateKey:   privateKey,
 
 		currentSessions:   make(map[string]sessionInfo),
 		currentSessionsMu: sync.RWMutex{},
@@ -610,13 +596,7 @@ func (b *Broker) loadAuthInfo(session *sessionInfo, password string) (loadedInfo
 		return authCachedInfo{}, false, fmt.Errorf("could not unmarshal token: %v", err)
 	}
 
-	// If the token is not expired, we should use the cached information.
-	if cachedInfo.Token.Valid() {
-		return cachedInfo, true, nil
-	}
-
-	// Tries to refresh the access token. If the service is unavailable and token is still valid from the broker
-	// perspective (i.e. last modification was between now and now-expiration), we can use it.
+	// Tries to refresh the access token. If the service is unavailable, we allow authentication.
 	tok, err := b.auth.oauthCfg.TokenSource(context.Background(), cachedInfo.Token).Token()
 	if err != nil {
 		castErr := &oauth2.RetrieveError{}
@@ -624,13 +604,7 @@ func (b *Broker) loadAuthInfo(session *sessionInfo, password string) (loadedInfo
 			return authCachedInfo{}, false, fmt.Errorf("could not refresh token: %v", err)
 		}
 
-		if time.Since(cachedInfo.AcquiredAt) >= b.offlineExpiration {
-			return authCachedInfo{}, false, errors.New("token exceeded offline expiration")
-		}
-
-		// If we get here, it means that the token is expired and we could not refresh it
-		// but we can still use it locally due to offline expiration configuration
-		// However, we don't want to update the token file neither its saved files.
+		// The provider is unavailable, so we allow offline authentication.
 		return cachedInfo, true, nil
 	}
 
