@@ -73,11 +73,10 @@ func New(_ context.Context, cfgPath, cachePath string) (s *Service, err error) {
 	}
 
 	bCfg := broker.Config{
-		IssuerURL:         cfg[oidcSection][issuerKey],
-		ClientID:          cfg[oidcSection][clientIDKey],
-		OfflineExpiration: cfg[oidcSection][offlineExpirationKey],
-		HomeBaseDir:       cfg[oidcSection][homeDirKey],
-		CachePath:         cachePath,
+		IssuerURL:   cfg[oidcSection][issuerKey],
+		ClientID:    cfg[oidcSection][clientIDKey],
+		HomeBaseDir: cfg[oidcSection][homeDirKey],
+		CachePath:   cachePath,
 	}
 	b, err := broker.New(bCfg)
 	if err != nil {

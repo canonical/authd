@@ -25,21 +25,18 @@ func TestNew(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		issuer            string
-		clientID          string
-		cachePath         string
-		offlineExpiration string
+		issuer    string
+		clientID  string
+		cachePath string
 
 		wantErr bool
 	}{
-		"Successfully create new broker":                         {},
-		"Successfully create new broker with offline expiration": {offlineExpiration: "10"},
+		"Successfully create new broker": {},
 
-		"Error if issuer is not provided":                           {issuer: "-", wantErr: true},
-		"Error if provided issuer is not reachable":                 {issuer: "https://notavailable", wantErr: true},
-		"Error if clientID is not provided":                         {clientID: "-", wantErr: true},
-		"Error if cacheDir is not provided":                         {cachePath: "-", wantErr: true},
-		"Error if offline expiration is provided but not parseable": {offlineExpiration: "invalid", wantErr: true},
+		"Error if issuer is not provided":           {issuer: "-", wantErr: true},
+		"Error if provided issuer is not reachable": {issuer: "https://notavailable", wantErr: true},
+		"Error if clientID is not provided":         {clientID: "-", wantErr: true},
+		"Error if cacheDir is not provided":         {cachePath: "-", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -65,10 +62,9 @@ func TestNew(t *testing.T) {
 			}
 
 			bCfg := broker.Config{
-				IssuerURL:         tc.issuer,
-				ClientID:          tc.clientID,
-				CachePath:         tc.cachePath,
-				OfflineExpiration: tc.offlineExpiration,
+				IssuerURL: tc.issuer,
+				ClientID:  tc.clientID,
+				CachePath: tc.cachePath,
 			}
 			b, err := broker.New(bCfg)
 			if tc.wantErr {
@@ -147,7 +143,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 				tc.sessionMode = "auth"
 			}
 
-			b, sessionID, _ := newBrokerForTests(t, t.TempDir(), defaultProvider.URL, "", tc.sessionMode)
+			b, sessionID, _ := newBrokerForTests(t, t.TempDir(), defaultProvider.URL, tc.sessionMode)
 
 			if tc.sessionID == "-" {
 				sessionID = ""
@@ -225,7 +221,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 				provider = p
 			}
 
-			b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, "", "auth")
+			b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, "auth")
 
 			// We need to do a GAM call first to get all the modes.
 			_, err := b.GetAuthenticationModes(sessionID, supportedLayouts)
@@ -262,7 +258,6 @@ func TestIsAuthenticated(t *testing.T) {
 		secondChallenge string
 
 		preexistentToken     string
-		offlineExpiration    string
 		invalidAuthData      bool
 		dontWaitForFirstCall bool
 		readOnlyCacheDir     bool
@@ -272,10 +267,16 @@ func TestIsAuthenticated(t *testing.T) {
 
 		"Authenticating with qrcode reacquires token":          {firstChallenge: "-", wantSecondCall: true, preexistentToken: "valid"},
 		"Authenticating with password refreshes expired token": {firstMode: "password", preexistentToken: "expired"},
-		"Authenticating with password still allowed if server is unreachable and token is not offline-expired": {
-			firstMode:         "password",
-			preexistentToken:  "expired",
-			offlineExpiration: "10",
+		"Authenticating with password still allowed if server is unreachable": {
+			firstMode:        "password",
+			preexistentToken: "valid",
+			customHandlers: map[string]testutils.ProviderHandler{
+				"/token": testutils.UnavailableHandler(),
+			},
+		},
+		"Authenticating with password still allowed if token is expired and server is unreachable": {
+			firstMode:        "password",
+			preexistentToken: "expired",
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.UnavailableHandler(),
 			},
@@ -288,17 +289,9 @@ func TestIsAuthenticated(t *testing.T) {
 		"Error when IsAuthenticated is ongoing for session": {dontWaitForFirstCall: true, wantSecondCall: true},
 
 		"Error when mode is password and token does not exist": {firstMode: "password"},
-		"Error when mode is password and server offline and token expired": {
+		"Error when mode is password but server returns error": {
 			firstMode:        "password",
 			preexistentToken: "expired",
-			customHandlers: map[string]testutils.ProviderHandler{
-				"/token": testutils.UnavailableHandler(),
-			},
-		},
-		"Error when mode is password and token is offline-valid but server returns error": {
-			firstMode:         "password",
-			preexistentToken:  "expired",
-			offlineExpiration: "10",
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.BadRequestHandler(),
 			},
@@ -353,7 +346,7 @@ func TestIsAuthenticated(t *testing.T) {
 				defer cleanup()
 				provider = p
 			}
-			b, sessionID, key := newBrokerForTests(t, cacheDir, provider.URL, tc.offlineExpiration, tc.sessionMode)
+			b, sessionID, key := newBrokerForTests(t, cacheDir, provider.URL, tc.sessionMode)
 
 			if tc.preexistentToken != "" {
 				tok := generateCachedInfo(t, tc.preexistentToken, provider.URL)
@@ -586,7 +579,7 @@ func TestCancelIsAuthenticated(t *testing.T) {
 	provider, cleanup := testutils.StartMockProvider(testutils.WithHandler("/token", testutils.HangingHandler(ctx)))
 	t.Cleanup(cleanup)
 
-	b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, "", "auth")
+	b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, "auth")
 	updateAuthModes(t, b, sessionID, "qrcode")
 
 	stopped := make(chan struct{})
@@ -607,7 +600,7 @@ func TestCancelIsAuthenticated(t *testing.T) {
 func TestEndSession(t *testing.T) {
 	t.Parallel()
 
-	b, sessionID, _ := newBrokerForTests(t, t.TempDir(), defaultProvider.URL, "", "auth")
+	b, sessionID, _ := newBrokerForTests(t, t.TempDir(), defaultProvider.URL, "auth")
 
 	// Try to end a session that does not exist
 	err := b.EndSession("nonexistent")

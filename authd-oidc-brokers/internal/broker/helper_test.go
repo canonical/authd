@@ -19,14 +19,13 @@ import (
 
 // newBrokerForTests is a helper function to create a new broker for tests and already starts a session for user
 // t.Name() normalized.
-func newBrokerForTests(t *testing.T, cachePath, issuerURL, offlineExpiration, mode string) (b *broker.Broker, id, key string) {
+func newBrokerForTests(t *testing.T, cachePath, issuerURL, mode string) (b *broker.Broker, id, key string) {
 	t.Helper()
 
 	cfg := broker.Config{
-		IssuerURL:         issuerURL,
-		ClientID:          "test-client-id",
-		CachePath:         cachePath,
-		OfflineExpiration: offlineExpiration,
+		IssuerURL: issuerURL,
+		ClientID:  "test-client-id",
+		CachePath: cachePath,
 	}
 
 	b, err := broker.New(
