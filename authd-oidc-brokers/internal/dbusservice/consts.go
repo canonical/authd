@@ -15,8 +15,6 @@ const (
 	issuerKey = "issuer"
 	// clientIDKey is the key in the config file for the client ID.
 	clientIDKey = "client_id"
-	// offlineExpirationKey is the key in the config file for the offline expiration.
-	offlineExpirationKey = "offline_expiration"
 	// homeDirKey is the key in the config file for the home directory prefix.
 	homeDirKey = "home_base_dir"
 )
