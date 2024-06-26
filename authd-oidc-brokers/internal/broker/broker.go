@@ -68,7 +68,7 @@ type sessionInfo struct {
 
 	selectedMode      string
 	firstSelectedMode string
-	supportedModes    map[string]string
+	authModes         []string
 	attemptsPerMode   map[string]int
 
 	authInfo  map[string]any
@@ -214,17 +214,13 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 	}
 
 	for _, id := range availableModes {
-		label, ok := supportedAuthModes[id]
-		if !ok {
-			return nil, fmt.Errorf("required mode %q is not supported", id)
-		}
 		authModes = append(authModes, map[string]string{
 			"id":    id,
-			"label": label,
+			"label": supportedAuthModes[id],
 		})
 	}
 
-	session.supportedModes = supportedAuthModes
+	session.authModes = availableModes
 	if err := b.updateSession(sessionID, session); err != nil {
 		return nil, err
 	}
@@ -286,7 +282,7 @@ func (b *Broker) SelectAuthenticationMode(sessionID, authModeID string) (uiLayou
 }
 
 func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[string]string, error) {
-	if _, exists := session.supportedModes[authModeID]; !exists {
+	if !slices.Contains(session.authModes, authModeID) {
 		return nil, fmt.Errorf("selected authentication mode %q does not exist", authModeID)
 	}
 
