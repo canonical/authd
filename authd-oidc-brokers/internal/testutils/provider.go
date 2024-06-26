@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"time"
@@ -32,9 +33,18 @@ func WithHandler(path string, handler func(http.ResponseWriter, *http.Request)) 
 }
 
 // StartMockProvider starts a new HTTP server to be used as an OpenID Connect provider for tests.
-func StartMockProvider(args ...OptionProvider) (*httptest.Server, func()) {
+func StartMockProvider(address string, args ...OptionProvider) (*httptest.Server, func()) {
 	servMux := http.NewServeMux()
-	server := httptest.NewServer(servMux)
+	server := httptest.NewUnstartedServer(servMux)
+
+	if address != "" {
+		l, err := net.Listen("tcp", address)
+		if err != nil {
+			panic(fmt.Sprintf("error starting listener: %v", err))
+		}
+		server.Listener = l
+	}
+	server.Start()
 
 	opts := optionProvider{
 		handlers: map[string]ProviderHandler{
@@ -66,6 +76,25 @@ func DefaultOpenIDHandler(serverURL string) ProviderHandler {
 			"issuer": "%[1]s",
 			"authorization_endpoint": "%[1]s/auth",
 			"device_authorization_endpoint": "%[1]s/device_auth",
+			"token_endpoint": "%[1]s/token",
+			"jwks_uri": "%[1]s/keys",
+			"id_token_signing_alg_values_supported": ["RS256"]
+		}`, serverURL)
+
+		w.Header().Add("Content-Type", "application/json")
+		_, err := w.Write([]byte(wellKnown))
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}
+}
+
+// OpenIDHandlerWithNoDeviceEndpoint returns a handler that returns an OpenID Connect configuration without device endpoint.
+func OpenIDHandlerWithNoDeviceEndpoint(serverURL string) ProviderHandler {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		wellKnown := fmt.Sprintf(`{
+			"issuer": "%[1]s",
+			"authorization_endpoint": "%[1]s/auth",
 			"token_endpoint": "%[1]s/token",
 			"jwks_uri": "%[1]s/keys",
 			"id_token_signing_alg_values_supported": ["RS256"]
@@ -204,7 +233,14 @@ func (p *MockProviderInfoer) GetGroups(*oauth2.Token) ([]group.Info, error) {
 }
 
 // CurrentAuthenticationModesOffered returns the authentication modes supported by the provider.
-func (p *MockProviderInfoer) CurrentAuthenticationModesOffered(sessionMode string, supportedAuthModes map[string]string, tokenExists bool, currentAuthStep int) ([]string, error) {
+func (p MockProviderInfoer) CurrentAuthenticationModesOffered(
+	sessionMode string,
+	supportedAuthModes map[string]string,
+	tokenExists bool,
+	providerReachable bool,
+	endpoints map[string]string,
+	currentAuthStep int,
+) ([]string, error) {
 	var offeredModes []string
 	switch sessionMode {
 	case "passwd":
@@ -217,7 +253,9 @@ func (p *MockProviderInfoer) CurrentAuthenticationModesOffered(sessionMode strin
 		}
 
 	default: // auth mode
-		offeredModes = []string{"device_auth"}
+		if providerReachable && endpoints["device_auth"] != "" {
+			offeredModes = []string{"device_auth"}
+		}
 		if tokenExists {
 			offeredModes = append([]string{"password"}, offeredModes...)
 		}

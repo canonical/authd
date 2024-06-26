@@ -204,10 +204,24 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 	_, err = os.Stat(session.cachePath)
 	tokenExists := err == nil
 
+	// Checks if the provider is accessible and if device authentication is supported
+	providerReachable := true
+	r, err := http.Get(strings.TrimSuffix(b.auth.providerURL, "/") + "/.well-known/openid-configuration")
+	// This means the provider is not available or something bad happened, so we assume no connection.
+	if err != nil || r.StatusCode != http.StatusOK {
+		providerReachable = false
+	}
+
 	availableModes, err := b.providerInfo.CurrentAuthenticationModesOffered(
 		session.mode,
 		supportedAuthModes,
 		tokenExists,
+		providerReachable,
+		map[string]string{
+			"auth":        b.auth.provider.Endpoint().AuthURL,
+			"device_auth": b.auth.provider.Endpoint().DeviceAuthURL,
+			"token":       b.auth.provider.Endpoint().TokenURL,
+		},
 		session.currentAuthStep)
 	if err != nil {
 		return nil, err
@@ -218,6 +232,10 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 			"id":    id,
 			"label": supportedAuthModes[id],
 		})
+	}
+
+	if len(authModes) == 0 {
+		return nil, fmt.Errorf("no authentication modes available for user %q", session.username)
 	}
 
 	session.authModes = availableModes
