@@ -394,7 +394,7 @@ func TestIsAuthenticated(t *testing.T) {
 				defer close(firstCallDone)
 
 				if tc.firstMode == "" {
-					tc.firstMode = "qrcode"
+					tc.firstMode = "device_auth"
 				}
 				updateAuthModes(t, b, sessionID, tc.firstMode)
 
@@ -580,7 +580,7 @@ func TestCancelIsAuthenticated(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, "auth")
-	updateAuthModes(t, b, sessionID, "qrcode")
+	updateAuthModes(t, b, sessionID, "device_auth")
 
 	stopped := make(chan struct{})
 	go func() {

@@ -1,5 +1,0 @@
-button: regenerate QR code
-content: https://verification_uri.com
-label: Scan the QR code or access "https://verification_uri.com" and use the code "user_code"
-type: qrcode
-wait: "true"

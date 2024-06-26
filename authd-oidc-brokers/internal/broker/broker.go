@@ -237,7 +237,7 @@ func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []map[string]st
 			if !strings.Contains(layout["wait"], "true") {
 				continue
 			}
-			supportedModes["qrcode"] = "Device Authentication"
+			supportedModes["device_auth"] = "Device Authentication"
 
 		case "form":
 			if slices.Contains(supportedEntries, "chars_password") {
@@ -288,7 +288,7 @@ func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[
 
 	var uiLayout map[string]string
 	switch authModeID {
-	case "qrcode":
+	case "device_auth":
 		response, err := b.auth.oauthCfg.DeviceAuth(context.TODO())
 		if err != nil {
 			return nil, fmt.Errorf("could not generate QR code layout: %v", err)
@@ -391,7 +391,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 
 	offline := false
 	switch session.selectedMode {
-	case "qrcode":
+	case "device_auth":
 		response, ok := session.authInfo["response"].(*oauth2.DeviceAuthResponse)
 		if !ok {
 			return AuthDenied, `{"message": "could not get required response"}`

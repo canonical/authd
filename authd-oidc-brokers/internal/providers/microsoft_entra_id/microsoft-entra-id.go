@@ -106,9 +106,9 @@ func (p MSEntraIDProvider) CurrentAuthenticationModesOffered(sessionMode string,
 		}
 
 	default: // auth mode
-		offeredModes = []string{"qrcode"}
+		offeredModes = []string{"device_auth"}
 		if tokenExists {
-			offeredModes = []string{"password", "qrcode"}
+			offeredModes = append([]string{"password"}, offeredModes...)
 		}
 		if currentAuthStep > 0 {
 			offeredModes = []string{"newpassword"}
