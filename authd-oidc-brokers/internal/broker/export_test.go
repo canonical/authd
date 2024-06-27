@@ -54,6 +54,16 @@ func (b *Broker) SetAuthInfo(sessionID, key string, value any) error {
 	return nil
 }
 
+func (b *Broker) SetAvailableMode(sessionID, mode string) error {
+	s, err := b.getSession(sessionID)
+	if err != nil {
+		return err
+	}
+	s.authModes = []string{mode}
+
+	return b.updateSession(sessionID, s)
+}
+
 type AuthCachedInfo = authCachedInfo
 
 // CacheAuthInfo exposes the broker's cacheAuthInfo method for tests.

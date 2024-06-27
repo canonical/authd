@@ -10,6 +10,13 @@ import (
 type ProviderInfoer interface {
 	AdditionalScopes() []string
 	AuthOptions() []oauth2.AuthCodeOption
-	CurrentAuthenticationModesOffered(sessionMode string, supportedAuthModes map[string]string, tokenExists bool, currentAuthStep int) ([]string, error)
+	CurrentAuthenticationModesOffered(
+		sessionMode string,
+		supportedAuthModes map[string]string,
+		tokenExists bool,
+		providerReachable bool,
+		endpoints map[string]string,
+		currentAuthStep int,
+	) ([]string, error)
 	GetGroups(*oauth2.Token) ([]group.Info, error)
 }
