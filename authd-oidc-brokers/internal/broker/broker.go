@@ -68,7 +68,7 @@ type sessionInfo struct {
 
 	selectedMode      string
 	firstSelectedMode string
-	supportedModes    map[string]string
+	authModes         []string
 	attemptsPerMode   map[string]int
 
 	authInfo  map[string]any
@@ -204,27 +204,41 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 	_, err = os.Stat(session.cachePath)
 	tokenExists := err == nil
 
+	// Checks if the provider is accessible and if device authentication is supported
+	providerReachable := true
+	r, err := http.Get(strings.TrimSuffix(b.auth.providerURL, "/") + "/.well-known/openid-configuration")
+	// This means the provider is not available or something bad happened, so we assume no connection.
+	if err != nil || r.StatusCode != http.StatusOK {
+		providerReachable = false
+	}
+
 	availableModes, err := b.providerInfo.CurrentAuthenticationModesOffered(
 		session.mode,
 		supportedAuthModes,
 		tokenExists,
+		providerReachable,
+		map[string]string{
+			"auth":        b.auth.provider.Endpoint().AuthURL,
+			"device_auth": b.auth.provider.Endpoint().DeviceAuthURL,
+			"token":       b.auth.provider.Endpoint().TokenURL,
+		},
 		session.currentAuthStep)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, id := range availableModes {
-		label, ok := supportedAuthModes[id]
-		if !ok {
-			return nil, fmt.Errorf("required mode %q is not supported", id)
-		}
 		authModes = append(authModes, map[string]string{
 			"id":    id,
-			"label": label,
+			"label": supportedAuthModes[id],
 		})
 	}
 
-	session.supportedModes = supportedAuthModes
+	if len(authModes) == 0 {
+		return nil, fmt.Errorf("no authentication modes available for user %q", session.username)
+	}
+
+	session.authModes = availableModes
 	if err := b.updateSession(sessionID, session); err != nil {
 		return nil, err
 	}
@@ -241,7 +255,7 @@ func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []map[string]st
 			if !strings.Contains(layout["wait"], "true") {
 				continue
 			}
-			supportedModes["qrcode"] = "Device Authentication"
+			supportedModes["device_auth"] = "Device Authentication"
 
 		case "form":
 			if slices.Contains(supportedEntries, "chars_password") {
@@ -286,13 +300,13 @@ func (b *Broker) SelectAuthenticationMode(sessionID, authModeID string) (uiLayou
 }
 
 func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[string]string, error) {
-	if _, exists := session.supportedModes[authModeID]; !exists {
+	if !slices.Contains(session.authModes, authModeID) {
 		return nil, fmt.Errorf("selected authentication mode %q does not exist", authModeID)
 	}
 
 	var uiLayout map[string]string
 	switch authModeID {
-	case "qrcode":
+	case "device_auth":
 		response, err := b.auth.oauthCfg.DeviceAuth(context.TODO())
 		if err != nil {
 			return nil, fmt.Errorf("could not generate QR code layout: %v", err)
@@ -302,13 +316,13 @@ func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[
 		uiLayout = map[string]string{
 			"type": "qrcode",
 			"label": fmt.Sprintf(
-				"Scan the QR code or access %q and use the code %q",
+				"Scan the QR code or access %q and use the provided code",
 				response.VerificationURI,
-				response.UserCode,
 			),
 			"wait":    "true",
 			"button":  "regenerate QR code",
 			"content": response.VerificationURI,
+			"code":    response.UserCode,
 		}
 
 	case "password":
@@ -395,7 +409,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 
 	offline := false
 	switch session.selectedMode {
-	case "qrcode":
+	case "device_auth":
 		response, ok := session.authInfo["response"].(*oauth2.DeviceAuthResponse)
 		if !ok {
 			return AuthDenied, `{"message": "could not get required response"}`

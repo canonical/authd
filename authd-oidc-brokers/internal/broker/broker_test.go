@@ -111,15 +111,21 @@ func TestGetAuthenticationModes(t *testing.T) {
 		sessionID        string
 		supportedLayouts []string
 
-		tokenExists    bool
-		secondAuthStep bool
+		providerAddress       string
+		tokenExists           bool
+		secondAuthStep        bool
+		unavailableProvider   bool
+		deviceAuthUnsupported bool
 
 		wantErr bool
 	}{
 		// Auth Session
-		"Get qrcode if there is no token":                      {},
-		"Get newpassword if already authenticated with QRCode": {secondAuthStep: true},
-		"Get password and qrcode if token exists":              {tokenExists: true},
+		"Get device_auth if there is no token":                      {},
+		"Get newpassword if already authenticated with device_auth": {secondAuthStep: true},
+		"Get password and device_auth if token exists":              {tokenExists: true},
+
+		"Get only password if token exists and provider is not available":             {tokenExists: true, providerAddress: "127.0.0.1:31310", unavailableProvider: true},
+		"Get only password if token exists and provider does not support device_auth": {tokenExists: true, providerAddress: "127.0.0.1:31311", deviceAuthUnsupported: true},
 
 		// Passwd Session
 		"Get only password if token exists and session is passwd":                      {sessionMode: "passwd", tokenExists: true},
@@ -128,7 +134,8 @@ func TestGetAuthenticationModes(t *testing.T) {
 		"Error if there is no session": {sessionID: "-", wantErr: true},
 
 		// General errors
-		"Error if expecting qrcode but not supported":      {supportedLayouts: []string{"qrcode-without-wait"}, wantErr: true},
+		"Error if no authentication mode is supported":     {providerAddress: "127.0.0.1:31312", deviceAuthUnsupported: true, wantErr: true},
+		"Error if expecting device_auth but not supported": {supportedLayouts: []string{"qrcode-without-wait"}, wantErr: true},
 		"Error if expecting newpassword but not supported": {supportedLayouts: []string{"newpassword-without-entry"}, wantErr: true},
 		"Error if expecting password but not supported":    {supportedLayouts: []string{"form-without-entry"}, wantErr: true},
 
@@ -143,7 +150,21 @@ func TestGetAuthenticationModes(t *testing.T) {
 				tc.sessionMode = "auth"
 			}
 
-			b, sessionID, _ := newBrokerForTests(t, t.TempDir(), defaultProvider.URL, tc.sessionMode)
+			provider := defaultProvider
+			var stopServer func()
+			if tc.providerAddress != "" {
+				address := tc.providerAddress
+				opts := []testutils.OptionProvider{}
+				if tc.deviceAuthUnsupported {
+					opts = append(opts, testutils.WithHandler(
+						"/.well-known/openid-configuration",
+						testutils.OpenIDHandlerWithNoDeviceEndpoint("http://"+address),
+					))
+				}
+				provider, stopServer = testutils.StartMockProvider(address, opts...)
+				t.Cleanup(stopServer)
+			}
+			b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, tc.sessionMode)
 
 			if tc.sessionID == "-" {
 				sessionID = ""
@@ -164,6 +185,10 @@ func TestGetAuthenticationModes(t *testing.T) {
 			var layouts []map[string]string
 			for _, layout := range tc.supportedLayouts {
 				layouts = append(layouts, supportedUILayouts[layout])
+			}
+
+			if tc.unavailableProvider {
+				stopServer()
 			}
 
 			got, err := b.GetAuthenticationModes(sessionID, layouts)
@@ -191,16 +216,18 @@ func TestSelectAuthenticationMode(t *testing.T) {
 	tests := map[string]struct {
 		modeName string
 
+		tokenExists    bool
+		secondAuthStep bool
 		customHandlers map[string]testutils.ProviderHandler
 
 		wantErr bool
 	}{
-		"Successfully select password":    {modeName: "password"},
-		"Successfully select qrcode":      {modeName: "qrcode"},
-		"Successfully select newpassword": {modeName: "newpassword"},
+		"Successfully select password":    {modeName: "password", tokenExists: true},
+		"Successfully select device_auth": {modeName: "device_auth"},
+		"Successfully select newpassword": {modeName: "newpassword", secondAuthStep: true},
 
 		"Error when selecting invalid mode": {modeName: "invalid", wantErr: true},
-		"Error when selecting qrcode but provider is unavailable": {modeName: "qrcode", wantErr: true,
+		"Error when selecting device_auth but provider is unavailable": {modeName: "device_auth", wantErr: true,
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/device_auth": testutils.UnavailableHandler(),
 			},
@@ -216,12 +243,21 @@ func TestSelectAuthenticationMode(t *testing.T) {
 				for path, handler := range tc.customHandlers {
 					opts = append(opts, testutils.WithHandler(path, handler))
 				}
-				p, cleanup := testutils.StartMockProvider(opts...)
+				p, cleanup := testutils.StartMockProvider("", opts...)
 				defer cleanup()
 				provider = p
 			}
 
 			b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, "auth")
+			if tc.tokenExists {
+				err := os.MkdirAll(filepath.Dir(b.TokenPathForSession(sessionID)), 0700)
+				require.NoError(t, err, "Setup: MkdirAll should not have returned an error")
+				err = os.WriteFile(b.TokenPathForSession(sessionID), []byte("some token"), 0600)
+				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
+			}
+			if tc.secondAuthStep {
+				b.UpdateSessionAuthStep(sessionID, 1)
+			}
 
 			// We need to do a GAM call first to get all the modes.
 			_, err := b.GetAuthenticationModes(sessionID, supportedLayouts)
@@ -342,7 +378,7 @@ func TestIsAuthenticated(t *testing.T) {
 				for path, handler := range tc.customHandlers {
 					opts = append(opts, testutils.WithHandler(path, handler))
 				}
-				p, cleanup := testutils.StartMockProvider(opts...)
+				p, cleanup := testutils.StartMockProvider("", opts...)
 				defer cleanup()
 				provider = p
 			}
@@ -394,7 +430,7 @@ func TestIsAuthenticated(t *testing.T) {
 				defer close(firstCallDone)
 
 				if tc.firstMode == "" {
-					tc.firstMode = "qrcode"
+					tc.firstMode = "device_auth"
 				}
 				updateAuthModes(t, b, sessionID, tc.firstMode)
 
@@ -576,11 +612,11 @@ func TestCancelIsAuthenticated(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	provider, cleanup := testutils.StartMockProvider(testutils.WithHandler("/token", testutils.HangingHandler(ctx)))
+	provider, cleanup := testutils.StartMockProvider("", testutils.WithHandler("/token", testutils.HangingHandler(ctx)))
 	t.Cleanup(cleanup)
 
 	b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, "auth")
-	updateAuthModes(t, b, sessionID, "qrcode")
+	updateAuthModes(t, b, sessionID, "device_auth")
 
 	stopped := make(chan struct{})
 	go func() {
@@ -615,7 +651,7 @@ func TestMain(m *testing.M) {
 	testutils.InstallUpdateFlag()
 	flag.Parse()
 
-	server, cleanup := testutils.StartMockProvider()
+	server, cleanup := testutils.StartMockProvider("")
 	defer cleanup()
 
 	defaultProvider = server

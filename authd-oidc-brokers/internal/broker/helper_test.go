@@ -72,8 +72,8 @@ func encryptChallenge(t *testing.T, challenge, strKey string) string {
 func updateAuthModes(t *testing.T, b *broker.Broker, sessionID, selectedMode string) {
 	t.Helper()
 
-	_, err := b.GetAuthenticationModes(sessionID, supportedLayouts)
-	require.NoError(t, err, "Setup: GetAuthenticationModes should not have returned an error")
+	err := b.SetAvailableMode(sessionID, selectedMode)
+	require.NoError(t, err, "Setup: SetAvailableMode should not have returned an error")
 	_, err = b.SelectAuthenticationMode(sessionID, selectedMode)
 	require.NoError(t, err, "Setup: SelectAuthenticationMode should not have returned an error")
 }

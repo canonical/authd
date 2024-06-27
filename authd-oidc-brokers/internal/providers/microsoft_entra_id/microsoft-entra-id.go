@@ -93,7 +93,14 @@ func (p MSEntraIDProvider) GetGroups(token *oauth2.Token) ([]group.Info, error) 
 // CurrentAuthenticationModesOffered returns the generic authentication modes supported by the provider.
 //
 // Token validity is not considered, only the presence of a token.
-func (p MSEntraIDProvider) CurrentAuthenticationModesOffered(sessionMode string, supportedAuthModes map[string]string, tokenExists bool, currentAuthStep int) ([]string, error) {
+func (p MSEntraIDProvider) CurrentAuthenticationModesOffered(
+	sessionMode string,
+	supportedAuthModes map[string]string,
+	tokenExists bool,
+	providerReachable bool,
+	endpoints map[string]string,
+	currentAuthStep int,
+) ([]string, error) {
 	var offeredModes []string
 	switch sessionMode {
 	case "passwd":
@@ -106,9 +113,11 @@ func (p MSEntraIDProvider) CurrentAuthenticationModesOffered(sessionMode string,
 		}
 
 	default: // auth mode
-		offeredModes = []string{"qrcode"}
+		if providerReachable && endpoints["device_auth"] != "" {
+			offeredModes = []string{"device_auth"}
+		}
 		if tokenExists {
-			offeredModes = []string{"password", "qrcode"}
+			offeredModes = append([]string{"password"}, offeredModes...)
 		}
 		if currentAuthStep > 0 {
 			offeredModes = []string{"newpassword"}
