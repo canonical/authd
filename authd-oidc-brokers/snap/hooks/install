@@ -5,6 +5,8 @@ snap_base_dir=$(dirname ${SNAP})
 
 cat <<EOF > ${SNAP_COMMON}/oidc-broker
 [authd]
+# This section is used by authd to identify and communicate with the broker.
+# It should not be edited.
 name = OIDC Broker
 brand_icon = ${snap_base_dir}/current/broker_icon.png
 dbus_name = com.ubuntu.authd.OidcBroker
@@ -14,10 +16,8 @@ dbus_object = /com/ubuntu/authd/OidcBroker
 issuer = https://{issuer_url}
 client_id = {client_id}
 
-# The amount of days the user will be allowed to authenticate without a network connection.
-# offline_expiration = 180
-
-# The directory where the user's home directory will be created.
+# The directory where the home directory will be created for new users.
+# Existing users will keep their current directory.
 # The user home directory will be created in the format of {home_base_dir}/{username}
 # home_base_dir = /home
 
