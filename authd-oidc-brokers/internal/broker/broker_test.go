@@ -218,6 +218,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 
 		tokenExists    bool
 		secondAuthStep bool
+		passwdSession  bool
 		customHandlers map[string]testutils.ProviderHandler
 
 		wantErr bool
@@ -225,6 +226,8 @@ func TestSelectAuthenticationMode(t *testing.T) {
 		"Successfully select password":    {modeName: "password", tokenExists: true},
 		"Successfully select device_auth": {modeName: "device_auth"},
 		"Successfully select newpassword": {modeName: "newpassword", secondAuthStep: true},
+
+		"Selected newpassword shows correct label in passwd session": {modeName: "newpassword", passwdSession: true, tokenExists: true, secondAuthStep: true},
 
 		"Error when selecting invalid mode": {modeName: "invalid", wantErr: true},
 		"Error when selecting device_auth but provider is unavailable": {modeName: "device_auth", wantErr: true,
@@ -248,7 +251,12 @@ func TestSelectAuthenticationMode(t *testing.T) {
 				provider = p
 			}
 
-			b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, "auth")
+			sessionType := "auth"
+			if tc.passwdSession {
+				sessionType = "passwd"
+			}
+
+			b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, sessionType)
 			if tc.tokenExists {
 				err := os.MkdirAll(filepath.Dir(b.TokenPathForSession(sessionID)), 0700)
 				require.NoError(t, err, "Setup: MkdirAll should not have returned an error")
