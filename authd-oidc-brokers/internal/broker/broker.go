@@ -333,9 +333,14 @@ func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[
 		}
 
 	case "newpassword":
+		label := "Create a local password"
+		if session.mode == "passwd" {
+			label = "Update your local password"
+		}
+
 		uiLayout = map[string]string{
 			"type":  "newpassword",
-			"label": "Create a local password",
+			"label": label,
 			"entry": "chars_password",
 		}
 	}
