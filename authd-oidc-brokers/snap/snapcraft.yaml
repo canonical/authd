@@ -1,4 +1,4 @@
-name: msentraid-broker
+name: authd-msentraid
 summary: MS EntraID Broker for authd
 description: |
   Broker that enables OIDC authentication with MS EntraID group management for authd.
@@ -6,33 +6,33 @@ version: "0.1"
 grade: stable
 base: core24
 confinement: strict
-license: GPL-3.0+
+license: GPL-3.0
 
 apps:
-  msentraid-broker:
-    command: bin/msentraid-broker
+  authd-msentraid:
+    command: bin/authd-msentraid
     daemon: simple
     slots:
-      - dbus-oidc
+      - dbus-authd
     plugs:
       - network
-      - config-files
+      - config-file
     restart-condition: always
 
 slots:
-  dbus-oidc:
+  dbus-authd:
     interface: dbus
     bus: system
-    name: com.ubuntu.authd.MSEntraIDBroker
+    name: com.ubuntu.authd.MSEntraID
 
 plugs:
-  config-files:
+  config-file:
     interface: system-files
     read:
-      - /etc/authd/brokers.d/msentraid-broker
+      - /etc/authd/brokers.d/msentraid
 
 parts:
-  msentraid-broker:
+  broker:
     source: .
     source-type: local
     plugin: go
@@ -41,4 +41,4 @@ parts:
       - go
     override-build: |
       go mod download all
-      go build -tags=withmsentraid -o ${GOBIN}/msentraid-broker ./cmd/oidc-broker
+      go build -tags=withmsentraid -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc

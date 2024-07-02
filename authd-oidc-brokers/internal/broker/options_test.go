@@ -1,6 +1,6 @@
 package broker
 
-import "github.com/ubuntu/oidc-broker/internal/providers"
+import "github.com/ubuntu/authd-oidc-brokers/internal/providers"
 
 // WithSkipSignatureCheck returns an option that skips the JWT signature check.
 func WithSkipSignatureCheck() Option {

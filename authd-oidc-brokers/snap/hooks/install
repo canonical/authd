@@ -3,14 +3,14 @@ set -eu
 
 snap_base_dir=$(dirname ${SNAP})
 
-cat <<EOF > ${SNAP_COMMON}/msentraid-broker
+cat <<EOF > ${SNAP_COMMON}/msentraid
 [authd]
 # This section is used by authd to identify and communicate with the broker.
 # It should not be edited.
-name = MS EntraID Broker
+name = MS EntraID
 brand_icon = ${snap_base_dir}/current/broker_icon.png
-dbus_name = com.ubuntu.authd.MSEntraIDBroker
-dbus_object = /com/ubuntu/authd/MSEntraIDBroker
+dbus_name = com.ubuntu.authd.MSEntraID
+dbus_object = /com/ubuntu/authd/MSEntraID
 
 [oidc]
 issuer = https://{issuer_url}

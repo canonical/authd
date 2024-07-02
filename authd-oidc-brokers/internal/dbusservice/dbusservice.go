@@ -8,7 +8,7 @@ import (
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
-	"github.com/ubuntu/oidc-broker/internal/broker"
+	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
 	"gopkg.in/ini.v1"
 )
 

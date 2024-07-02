@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/oidc-broker/internal/broker"
-	"github.com/ubuntu/oidc-broker/internal/providers/group"
-	"github.com/ubuntu/oidc-broker/internal/testutils"
+	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/group"
+	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"golang.org/x/oauth2"
 )
 
