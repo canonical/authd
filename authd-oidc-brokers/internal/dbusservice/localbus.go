@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/godbus/dbus/v5"
-	"github.com/ubuntu/oidc-broker/internal/testutils"
+	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 )
 
 // getBus creates the local bus and returns a connection to the bus.

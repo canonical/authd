@@ -22,9 +22,9 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/group"
 	"github.com/ubuntu/decorate"
-	"github.com/ubuntu/oidc-broker/internal/providers"
-	"github.com/ubuntu/oidc-broker/internal/providers/group"
 	"golang.org/x/exp/slog"
 	"golang.org/x/oauth2"
 )

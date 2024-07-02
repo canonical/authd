@@ -14,7 +14,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
 	msauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
-	"github.com/ubuntu/oidc-broker/internal/providers/group"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/group"
 	"golang.org/x/oauth2"
 )
 

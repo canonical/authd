@@ -10,9 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
+	"github.com/ubuntu/authd-oidc-brokers/internal/log"
 	"github.com/ubuntu/decorate"
-	"github.com/ubuntu/oidc-broker/internal/consts"
-	"github.com/ubuntu/oidc-broker/internal/log"
 )
 
 // initViperConfig sets verbosity level and add config env variables and file support based on name prefix.

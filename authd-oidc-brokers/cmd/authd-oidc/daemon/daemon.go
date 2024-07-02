@@ -11,9 +11,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/ubuntu/oidc-broker/internal/consts"
-	"github.com/ubuntu/oidc-broker/internal/daemon"
-	"github.com/ubuntu/oidc-broker/internal/dbusservice"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
+	"github.com/ubuntu/authd-oidc-brokers/internal/daemon"
+	"github.com/ubuntu/authd-oidc-brokers/internal/dbusservice"
 )
 
 // App encapsulate commands and options of the daemon, which can be controlled by env variables and config files.

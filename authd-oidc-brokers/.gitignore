@@ -2,10 +2,10 @@
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #
 # Binaries for programs and plugins
-/oid-broker
-cmd/oidc-broker/oidc-broker
-/microsoft-entra-id-broker
-cmd/oidc-broker/microsoft-entra-id-broker
+/authd-oidc
+cmd/authd-oidc/authd-oidc
+/authd-msentraid
+cmd/authd-oidc/authd-msentraid
 
 # Test binary, built with `go test -c`
 *.test
