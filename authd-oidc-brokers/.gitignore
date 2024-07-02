@@ -2,6 +2,7 @@
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #
 # Binaries for programs and plugins
+*.snap
 /authd-oidc
 cmd/authd-oidc/authd-oidc
 /authd-msentraid
