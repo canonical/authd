@@ -316,11 +316,11 @@ func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[
 		uiLayout = map[string]string{
 			"type": "qrcode",
 			"label": fmt.Sprintf(
-				"Scan the QR code or access %q and use the provided code",
+				"Scan the QR code or access %q and use the provided login code",
 				response.VerificationURI,
 			),
 			"wait":    "true",
-			"button":  "regenerate QR code",
+			"button":  "Request new login code",
 			"content": response.VerificationURI,
 			"code":    response.UserCode,
 		}
