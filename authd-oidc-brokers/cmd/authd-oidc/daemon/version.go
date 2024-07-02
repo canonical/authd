@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/ubuntu/oidc-broker/internal/consts"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 )
 
 func (a *App) installVersion() {

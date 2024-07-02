@@ -9,10 +9,10 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/ubuntu/authd-oidc-brokers/cmd/authd-oidc/daemon"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
+	"github.com/ubuntu/authd-oidc-brokers/po"
 	"github.com/ubuntu/go-i18n"
-	"github.com/ubuntu/oidc-broker/cmd/oidc-broker/daemon"
-	"github.com/ubuntu/oidc-broker/internal/consts"
-	"github.com/ubuntu/oidc-broker/po"
 )
 
 //FIXME go:generate go run ../generate_completion_documentation.go completion ../../generated

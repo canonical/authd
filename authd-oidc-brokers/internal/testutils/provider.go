@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/ubuntu/oidc-broker/internal/providers/group"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/group"
 	"golang.org/x/oauth2"
 )
 

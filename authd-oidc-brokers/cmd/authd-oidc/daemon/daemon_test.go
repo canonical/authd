@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/oidc-broker/cmd/oidc-broker/daemon"
-	"github.com/ubuntu/oidc-broker/internal/consts"
-	"github.com/ubuntu/oidc-broker/internal/testutils"
+	"github.com/ubuntu/authd-oidc-brokers/cmd/authd-oidc/daemon"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
+	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 )
 
 var mockProvider *httptest.Server

@@ -10,7 +10,7 @@ var (
 
 const (
 	// TEXTDOMAIN is the gettext domain for l10n.
-	TEXTDOMAIN = "oidc-broker"
+	TEXTDOMAIN = "authd-oidc"
 
 	// DefaultLevelLog is the default logging level selected without any option.
 	DefaultLevelLog = slog.LevelWarn

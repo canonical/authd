@@ -1,7 +1,7 @@
 name: Request a feature
 description: Suggest new functionality or improvements for this project
-title: 'Feature: '
-labels: ['feature']
+title: "Feature: "
+labels: ["feature"]
 body:
   - type: markdown
     attributes:
@@ -9,11 +9,11 @@ body:
         :warning: **Please do not report security vulnerabilities here**
 
         Be careful with sensitive information and security vulnerabilities. In order to report bugs that could contain
-        sensitive information, use [Launchpad](https://bugs.launchpad.net/ubuntu/+source/oidc-broker/+filebug) instead.
-        On Ubuntu machines, you can use `ubuntu-bug oidc-broker` to collect relevant information.
+        sensitive information, use [Launchpad](https://bugs.launchpad.net/ubuntu/+source/authd-oidc/+filebug) instead.
+        On Ubuntu machines, you can use `ubuntu-bug authd-oidc` to collect relevant information.
 
 
-        Thanks for taking the time to report an issue and help improve oidc-broker! Please fill out the form below as
+        Thanks for taking the time to report an issue and help improve authd-oidc! Please fill out the form below as
         best as you can so that we can help you.
 
         Your additional work here is greatly appreciated and will help us respond as quickly as possible. For general
@@ -49,7 +49,7 @@ body:
     attributes:
       label: "Ubuntu users: System information and logs"
       description: >
-        Ubuntu users can run `ubuntu-bug oidc-broker --save=/tmp/report.txt`
+        Ubuntu users can run `ubuntu-bug authd-oidc --save=/tmp/report.txt`
         and drag the file below.
 
         It will contain useful information pertaining to the system and the packages installed.
@@ -60,14 +60,14 @@ body:
         For users of distributions other than Ubuntu, provide details about the environment you experienced the issue in:
       value: |
         ### Environment
-        * oidc-broker version: please run //TODO
+        * authd-oidc version: please run //TODO
         * Distribution: (**NAME** in `/etc/os-release`)
         * Distribution version: (**VERSION_ID** on `/etc/os-release`):
 
         ### Log files
         Please redact/remove sensitive information:
         ```raw
-        oidc-broker logs can be found in //TODO
+        authd-oidc logs can be found in //TODO
         ```
 
         ### Application settings
@@ -79,7 +79,7 @@ body:
     attributes:
       label: Relevant information
       description: >
-        Please look at our [Troubleshooting guide](../#troubleshooting) and provide logs for the oidc-broker package.
+        Please look at our [Troubleshooting guide](../#troubleshooting) and provide logs for the authd-oidc package.
       placeholder: Remember to redact any sensitive information from them.
   - type: checkboxes
     attributes:
