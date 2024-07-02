@@ -6,7 +6,7 @@ version: git
 grade: stable
 base: core24
 confinement: strict
-license: GPL-3.0+
+license: GPL-3.0
 
 apps:
   authd-oidc:
