@@ -17,7 +17,7 @@ jobs:
     name: Update snap branches
     strategy:
       matrix:
-        branch_name: ["msentraid-broker"]
+        branch_name: ["msentraid"]
     runs-on: ubuntu-latest
     steps:
         - name: Install dependencies
