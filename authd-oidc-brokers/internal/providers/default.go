@@ -3,7 +3,7 @@
 package providers
 
 import (
-	"github.com/ubuntu/oidc-broker/internal/providers/noprovider"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/noprovider"
 )
 
 // CurrentProviderInfo returns a generic oidc provider implementation.

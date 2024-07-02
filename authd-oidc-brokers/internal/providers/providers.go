@@ -2,7 +2,7 @@
 package providers
 
 import (
-	"github.com/ubuntu/oidc-broker/internal/providers/group"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/group"
 	"golang.org/x/oauth2"
 )
 

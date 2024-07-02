@@ -1,18 +1,18 @@
-# Welcome to OpenID Connect Broker
+# Welcome to Authd OpenID Connect Broker
 
-[actions-image]: https://github.com/ubuntu/oidc-broker/actions/workflows/ci.yaml/badge.svg
-[actions-url]: https://github.com/ubuntu/oidc-broker/actions?query=workflow%3ACI
+[actions-image]: https://github.com/ubuntu/authd-oidc-brokers/actions/workflows/ci.yaml/badge.svg
+[actions-url]: https://github.com/ubuntu/authd-oidc-brokers/actions?query=workflow%3ACI
 
 [license-image]: https://img.shields.io/badge/License-GPL3.0-blue.svg
 
-[codecov-image]: https://codecov.io/gh/ubuntu/oidc-broker/graph/badge.svg
-[codecov-url]: https://codecov.io/gh/ubuntu/oidc-broker
+[codecov-image]: https://codecov.io/gh/ubuntu/authd-oidc-brokers/graph/badge.svg
+[codecov-url]: https://codecov.io/gh/ubuntu/authd-oidc-brokers
 
-[user-documentation-image]: https://pkg.go.dev/github.com/ubuntu/oidc-broker
-[user-documentation-url]: https://pkg.go.dev/github.com/ubuntu/oidc-broker
+[user-documentation-image]: https://pkg.go.dev/github.com/ubuntu/authd-oidc-brokers
+[user-documentation-url]: https://pkg.go.dev/github.com/ubuntu/authd-oidc-brokers
 
-[goreport-image]: https://goreportcard.com/badge/github.com/ubuntu/oidc-broker
-[goreport-url]: https://goreportcard.com/report/github.com/ubuntu/oidc-broker
+[goreport-image]: https://goreportcard.com/badge/github.com/ubuntu/authd-oidc-brokers
+[goreport-url]: https://goreportcard.com/report/github.com/ubuntu/authd-oidc-brokers
 
 [![Code quality][actions-image]][actions-url]
 [![License][license-image]](LICENSE)
@@ -20,7 +20,7 @@
 [![User Documentation][user-documentation-image]][user-documentation-url]
 [![Go Report Card][goreport-image]][goreport-url]
 
-This is the code repository for OpenID Connect (OIDC) broker. It is used in conjunction with Ubuntu authentication daemon authd.
+This is the code repository for Authd OpenID Connect (OIDC) brokers. It is used in conjunction with Ubuntu authentication daemon authd.
 
 This project contains specific code for different OpenID Connect providers. We build different binaries based on build tags.
 
