@@ -610,7 +610,7 @@ func TestFetchUserInfo(t *testing.T) {
 			}
 			require.NoError(t, err, "FetchUserInfo should not have returned an error")
 
-			want := testutils.LoadWithUpdateFromGolden(t, got)
+			want := testutils.LoadWithUpdateFromGoldenYAML(t, got)
 			require.Equal(t, want, got, "FetchUserInfo should have returned the expected value")
 		})
 	}

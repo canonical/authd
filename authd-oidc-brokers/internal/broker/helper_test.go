@@ -135,18 +135,21 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.A
 		tok = testTokens["valid"]
 	}
 
-	tok.UserInfo = fmt.Sprintf(`{
-		"name": "%[1]s",
-		"uuid": "saved-user-id",
-		"gecos": "saved-user",
-		"dir": "/home/%[1]s",
-		"shell": "/usr/bin/bash",
-		"groups": [{"name": "saved-remote-group", "gid": "12345"}, {"name": "saved-local-group", "gid": ""}]
-}`, email)
+	tok.UserInfo = broker.UserInfo{
+		Name:  email,
+		UUID:  "saved-user-id",
+		Home:  "/home/" + email,
+		Gecos: "saved-user",
+		Shell: "/usr/bin/bash",
+		Groups: []group.Info{
+			{Name: "saved-remote-group", UGID: "12345"},
+			{Name: "saved-local-group", UGID: ""},
+		},
+	}
 
 	if preexistentToken == "invalid-id" {
 		encodedToken = ".invalid."
-		tok.UserInfo = ""
+		tok.UserInfo = broker.UserInfo{}
 	}
 
 	tok.Token = tok.Token.WithExtra(map[string]string{"id_token": encodedToken})

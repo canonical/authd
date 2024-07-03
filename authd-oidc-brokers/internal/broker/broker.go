@@ -2,7 +2,6 @@
 package broker
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -17,8 +16,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"text/template"
-	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
@@ -564,16 +561,14 @@ func (b *Broker) updateSession(sessionID string, session sessionInfo) error {
 // authCachedInfo represents the token that will be saved on disk for offline authentication.
 type authCachedInfo struct {
 	Token      *oauth2.Token
-	AcquiredAt time.Time
 	RawIDToken string
-	UserInfo   string
+	UserInfo   userInfo
 }
 
 // cacheAuthInfo serializes the access token and cache it.
 func (b *Broker) cacheAuthInfo(session *sessionInfo, authInfo authCachedInfo, password string) (err error) {
 	defer decorate.OnError(&err, "could not cache info")
 
-	authInfo.AcquiredAt = time.Now()
 	content, err := json.Marshal(authInfo)
 	if err != nil {
 		return fmt.Errorf("could not marshal token: %v", err)
@@ -636,34 +631,20 @@ func (b *Broker) loadAuthInfo(session *sessionInfo, password string) (loadedInfo
 	return authCachedInfo{Token: tok, RawIDToken: refreshedIDToken}, false, nil
 }
 
-func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *authCachedInfo) (userClaims claims, userGroups []group.Info, err error) {
+func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *authCachedInfo) (userInfo userInfo, err error) {
 	defer decorate.OnError(&err, "could not fetch user info")
 
-	// If we didn't restore user information from the cache, we need to query the provider for it, which means
-	// we need to validate the token.
-	idToken, err := b.auth.provider.Verifier(&b.auth.oidcCfg).Verify(ctx, t.RawIDToken)
+	userClaims, err := b.userClaims(ctx, t.RawIDToken, session.username)
 	if err != nil {
-		return claims{}, nil, fmt.Errorf("could not verify token: %v", err)
+		return userInfo, err
 	}
 
-	userGroups, err = b.providerInfo.GetGroups(t.Token)
+	userGroups, err := b.providerInfo.GetGroups(t.Token)
 	if err != nil {
-		return claims{}, nil, fmt.Errorf("could not get user groups: %v", err)
+		return userInfo, fmt.Errorf("could not get user groups: %v", err)
 	}
 
-	if err := idToken.Claims(&userClaims); err != nil {
-		return claims{}, nil, fmt.Errorf("could not get user info: %v", err)
-	}
-
-	if userClaims.Email == "" {
-		return claims{}, nil, errors.New("user email is required, but was not provided")
-	}
-
-	if userClaims.Email != session.username {
-		return claims{}, nil, fmt.Errorf("returned user %q does not match the selected one %q", userClaims.Email, session.username)
-	}
-
-	return userClaims, userGroups, nil
+	return b.userInfoFromClaims(userClaims, userGroups), nil
 }
 
 type claims struct {
@@ -674,15 +655,40 @@ type claims struct {
 	Sub               string `json:"sub"`
 }
 
-func (b *Broker) userInfoFromClaims(userClaims claims, groups []group.Info) (string, error) {
-	user := struct {
-		Name   string
-		UUID   string
-		Home   string
-		Shell  string
-		Gecos  string
-		Groups []group.Info
-	}{
+func (b *Broker) userClaims(ctx context.Context, rawIDToken, username string) (userClaims claims, err error) {
+	// We need to verify the token to get the user claims.
+	idToken, err := b.auth.provider.Verifier(&b.auth.oidcCfg).Verify(ctx, rawIDToken)
+	if err != nil {
+		return claims{}, fmt.Errorf("could not verify token: %v", err)
+	}
+
+	if err := idToken.Claims(&userClaims); err != nil {
+		return claims{}, fmt.Errorf("could not get user info: %v", err)
+	}
+
+	if userClaims.Email == "" {
+		return claims{}, errors.New("user email is required, but was not provided")
+	}
+
+	if userClaims.Email != username {
+		return claims{}, fmt.Errorf("returned user %q does not match the selected one %q", userClaims.Email, username)
+	}
+
+	return userClaims, nil
+}
+
+// userInfo represents the user information obtained from the provider.
+type userInfo struct {
+	Name   string       `json:"name"`
+	UUID   string       `json:"uuid"`
+	Home   string       `json:"dir"`
+	Shell  string       `json:"shell"`
+	Gecos  string       `json:"gecos"`
+	Groups []group.Info `json:"groups"`
+}
+
+func (b *Broker) userInfoFromClaims(userClaims claims, groups []group.Info) userInfo {
+	return userInfo{
 		Name:   userClaims.Email,
 		UUID:   userClaims.Sub,
 		Home:   filepath.Join(b.homeDirPath, userClaims.Email),
@@ -690,22 +696,4 @@ func (b *Broker) userInfoFromClaims(userClaims claims, groups []group.Info) (str
 		Gecos:  userClaims.Name,
 		Groups: groups,
 	}
-
-	var buf bytes.Buffer
-	err := template.Must(template.New("").Parse(`{
-		"name": "{{.Name}}",
-		"uuid": "{{.UUID}}",
-		"gecos": "{{.Gecos}}",
-		"dir": "{{.Home}}",
-		"shell": "{{.Shell}}",
-		"groups": [ {{range $index, $g := .Groups}}
-			{{- if $index}}, {{end -}}
-			{"name": "{{.Name}}", "ugid": "{{.UGID}}"}
-		{{- end}} ]
-}`)).Execute(&buf, user)
-	if err != nil {
-		return "", err
-	}
-
-	return buf.String(), nil
 }
