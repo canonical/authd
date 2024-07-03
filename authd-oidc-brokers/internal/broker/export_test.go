@@ -94,16 +94,21 @@ func writeTrashToken(path, challenge string) error {
 }
 
 // FetchUserInfo exposes the broker's fetchUserInfo method for tests.
-func (b *Broker) FetchUserInfo(sessionID string, cachedInfo *authCachedInfo) (string, error) {
+//
+//nolint:revive // This is a test helper and the returned userInfo will be marshaled for golden files.
+func (b *Broker) FetchUserInfo(sessionID string, cachedInfo *authCachedInfo) (userInfo, error) {
 	s, err := b.getSession(sessionID)
 	if err != nil {
-		return "", err
+		return userInfo{}, err
 	}
 
-	uInfo, groups, err := b.fetchUserInfo(context.TODO(), &s, cachedInfo)
+	uInfo, err := b.fetchUserInfo(context.TODO(), &s, cachedInfo)
 	if err != nil {
-		return "", err
+		return userInfo{}, err
 	}
 
-	return b.userInfoFromClaims(uInfo, groups)
+	return uInfo, err
 }
+
+// UserInfo exposes the private userInfo for tests.
+type UserInfo = userInfo

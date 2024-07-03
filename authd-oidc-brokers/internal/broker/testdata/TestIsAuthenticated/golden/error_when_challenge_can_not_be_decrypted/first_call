@@ -1,3 +1,3 @@
 access: retry
-data: '{"message": "could not decode challenge: could not decode challenge"}'
+data: '{"message":"could not decode challenge: could not decode challenge"}'
 err: <nil>
