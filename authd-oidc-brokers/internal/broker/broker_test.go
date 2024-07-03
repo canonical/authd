@@ -165,8 +165,8 @@ func TestGetAuthenticationModes(t *testing.T) {
 				provider, stopServer = testutils.StartMockProvider(address, opts...)
 				t.Cleanup(stopServer)
 			}
-			b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, tc.sessionMode, "")
-
+			b := newBrokerForTests(t, broker.Config{IssuerURL: provider.URL})
+			sessionID, _ := newSessionForTests(t, b, "", tc.sessionMode)
 			if tc.sessionID == "-" {
 				sessionID = ""
 			}
@@ -257,7 +257,9 @@ func TestSelectAuthenticationMode(t *testing.T) {
 				sessionType = "passwd"
 			}
 
-			b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, sessionType, "")
+			b := newBrokerForTests(t, broker.Config{IssuerURL: provider.URL})
+			sessionID, _ := newSessionForTests(t, b, "", sessionType)
+
 			if tc.tokenExists {
 				err := os.MkdirAll(filepath.Dir(b.TokenPathForSession(sessionID)), 0700)
 				require.NoError(t, err, "Setup: MkdirAll should not have returned an error")
@@ -395,7 +397,9 @@ func TestIsAuthenticated(t *testing.T) {
 				defer cleanup()
 				provider = p
 			}
-			b, sessionID, key := newBrokerForTests(t, cacheDir, provider.URL, tc.sessionMode, tc.username)
+
+			b := newBrokerForTests(t, broker.Config{CachePath: cacheDir, IssuerURL: provider.URL})
+			sessionID, key := newSessionForTests(t, b, tc.username, tc.sessionMode)
 
 			if tc.preexistentToken != "" {
 				tok := generateCachedInfo(t, tc.preexistentToken, provider.URL)
@@ -630,7 +634,9 @@ func TestCancelIsAuthenticated(t *testing.T) {
 	provider, cleanup := testutils.StartMockProvider("", testutils.WithHandler("/token", testutils.HangingHandler(ctx)))
 	t.Cleanup(cleanup)
 
-	b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, "auth", "")
+	b := newBrokerForTests(t, broker.Config{IssuerURL: provider.URL})
+	sessionID, _ := newSessionForTests(t, b, "", "")
+
 	updateAuthModes(t, b, sessionID, "device_auth")
 
 	stopped := make(chan struct{})
@@ -651,7 +657,9 @@ func TestCancelIsAuthenticated(t *testing.T) {
 func TestEndSession(t *testing.T) {
 	t.Parallel()
 
-	b, sessionID, _ := newBrokerForTests(t, t.TempDir(), defaultProvider.URL, "auth", "")
+	b := newBrokerForTests(t, broker.Config{IssuerURL: defaultProvider.URL})
+
+	sessionID, _ := newSessionForTests(t, b, "", "")
 
 	// Try to end a session that does not exist
 	err := b.EndSession("nonexistent")
@@ -660,6 +668,53 @@ func TestEndSession(t *testing.T) {
 	// End a session that exists
 	err = b.EndSession(sessionID)
 	require.NoError(t, err, "EndSession should not have returned an error when ending an existent session")
+}
+
+func TestUserPreCheck(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		username        string
+		allowedSuffixes []string
+
+		wantErr bool
+	}{
+		"Successfully allow username with matching allowed suffix": {
+			username:        "user@allowed",
+			allowedSuffixes: []string{"@allowed"}},
+		"Successfully allow username that matches at least one allowed suffix": {
+			username:        "user@allowed",
+			allowedSuffixes: []string{"@other", "@something", "@allowed"},
+		},
+
+		"Error when username does not match allowed suffix": {
+			username:        "user@notallowed",
+			allowedSuffixes: []string{"@allowed"},
+			wantErr:         true,
+		},
+		"Error when username does not match any of the allowed suffixes": {
+			username:        "user@notallowed",
+			allowedSuffixes: []string{"@other", "@something", "@allowed"},
+			wantErr:         true,
+		},
+		"Error when no allowed suffixes are provided": {
+			username: "user@allowed",
+			wantErr:  true,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			b := newBrokerForTests(t, broker.Config{IssuerURL: defaultProvider.URL, AllowedSSHSuffixes: tc.allowedSuffixes})
+
+			err := b.UserPreCheck(tc.username)
+			if tc.wantErr {
+				require.Error(t, err, "UserPreCheck should have returned an error")
+				return
+			}
+			require.NoError(t, err, "UserPreCheck should not have returned an error")
+		})
+	}
 }
 
 func TestMain(m *testing.M) {

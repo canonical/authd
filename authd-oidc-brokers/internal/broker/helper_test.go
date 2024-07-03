@@ -17,15 +17,19 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// newBrokerForTests is a helper function to create a new broker for tests and already starts a session for the
-// specified user.
-func newBrokerForTests(t *testing.T, cachePath, issuerURL, mode, username string) (b *broker.Broker, id, key string) {
+// newBrokerForTests is a helper function to create a new broker for tests with the specified configuration.
+//
+// Note that the IssuerURL is required in the configuration.
+func newBrokerForTests(t *testing.T, cfg broker.Config) (b *broker.Broker) {
 	t.Helper()
 
-	cfg := broker.Config{
-		IssuerURL: issuerURL,
-		ClientID:  "test-client-id",
-		CachePath: cachePath,
+	require.NotEmpty(t, cfg.IssuerURL, "Setup: issuerURL must not be empty")
+
+	if cfg.CachePath == "" {
+		cfg.CachePath = t.TempDir()
+	}
+	if cfg.ClientID == "" {
+		cfg.ClientID = "test-client-id"
 	}
 
 	b, err := broker.New(
@@ -39,14 +43,25 @@ func newBrokerForTests(t *testing.T, cachePath, issuerURL, mode, username string
 		}),
 	)
 	require.NoError(t, err, "Setup: New should not have returned an error")
+	return b
+}
+
+// newSessionForTests is a helper function to easily create a new session for tests.
+// If kept empty, username and mode will be assigned default values.
+func newSessionForTests(t *testing.T, b *broker.Broker, username, mode string) (id, key string) {
+	t.Helper()
 
 	if username == "" {
 		username = "test-user@email.com"
 	}
-	id, key, err = b.NewSession(username, "some lang", mode)
+	if mode == "" {
+		mode = "auth"
+	}
+
+	id, key, err := b.NewSession(username, "some lang", mode)
 	require.NoError(t, err, "Setup: NewSession should not have returned an error")
 
-	return b, id, key
+	return id, key
 }
 
 func encryptChallenge(t *testing.T, challenge, strKey string) string {

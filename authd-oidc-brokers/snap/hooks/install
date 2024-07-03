@@ -21,4 +21,8 @@ client_id = {client_id}
 # The user home directory will be created in the format of {home_base_dir}/{username}
 # home_base_dir = /home
 
+# The username suffixes that are allowed to login via ssh without existing previously in the system.
+# The suffixes must be separated by commas.
+# ssh_allowed_suffixes = @example.com,@anotherexample.com
+
 EOF
