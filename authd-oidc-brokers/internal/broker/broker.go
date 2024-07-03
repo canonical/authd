@@ -437,13 +437,26 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 			return AuthDenied, errorMessage{Message: "could not get id_token"}
 		}
 
-		session.authInfo["auth_info"] = authCachedInfo{Token: t, RawIDToken: rawIDToken}
+		authInfo = authCachedInfo{Token: t, RawIDToken: rawIDToken}
+		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
+		if err != nil {
+			return AuthDenied, errorMessage{Message: fmt.Sprintf("could not get user info: %v", err)}
+		}
+
+		session.authInfo["auth_info"] = authInfo
 		return AuthNext, nil
 
 	case "password":
 		authInfo, offline, err = b.loadAuthInfo(session, challenge)
 		if err != nil {
 			return AuthRetry, errorMessage{Message: fmt.Sprintf("could not authenticate user: %v", err)}
+		}
+
+		if authInfo.UserInfo.Name == "" {
+			authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
+			if err != nil {
+				return AuthDenied, errorMessage{Message: fmt.Sprintf("could not get user info: %v", err)}
+			}
 		}
 
 		if session.mode == "passwd" {
@@ -461,13 +474,6 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 		authInfo, ok = session.authInfo["auth_info"].(authCachedInfo)
 		if !ok {
 			return AuthDenied, errorMessage{Message: "could not get required information"}
-		}
-	}
-
-	if authInfo.UserInfo.Name == "" {
-		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
-		if err != nil {
-			return AuthDenied, errorMessage{Message: fmt.Sprintf("could not get user info: %v", err)}
 		}
 	}
 
