@@ -368,7 +368,8 @@ func TestIsAuthenticated(t *testing.T) {
 				"token": (&oauth2.Token{}).WithExtra(map[string]interface{}{"id_token": "invalid"}),
 			},
 		},
-		"Error when selected username does not match the provider one": {username: "not-matching", firstChallenge: "-", wantSecondCall: true},
+		// This test case also tests that errors with double quotes are marshaled to JSON correctly.
+		"Error when selected username does not match the provider one": {username: "not-matching", firstChallenge: "-"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
