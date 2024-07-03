@@ -165,8 +165,8 @@ func TestGetAuthenticationModes(t *testing.T) {
 				provider, stopServer = testutils.StartMockProvider(address, opts...)
 				t.Cleanup(stopServer)
 			}
-			b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, tc.sessionMode, "")
-
+			b := newBrokerForTests(t, broker.Config{IssuerURL: provider.URL})
+			sessionID, _ := newSessionForTests(t, b, "", tc.sessionMode)
 			if tc.sessionID == "-" {
 				sessionID = ""
 			}
@@ -257,7 +257,9 @@ func TestSelectAuthenticationMode(t *testing.T) {
 				sessionType = "passwd"
 			}
 
-			b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, sessionType, "")
+			b := newBrokerForTests(t, broker.Config{IssuerURL: provider.URL})
+			sessionID, _ := newSessionForTests(t, b, "", sessionType)
+
 			if tc.tokenExists {
 				err := os.MkdirAll(filepath.Dir(b.TokenPathForSession(sessionID)), 0700)
 				require.NoError(t, err, "Setup: MkdirAll should not have returned an error")
@@ -394,7 +396,9 @@ func TestIsAuthenticated(t *testing.T) {
 				defer cleanup()
 				provider = p
 			}
-			b, sessionID, key := newBrokerForTests(t, cacheDir, provider.URL, tc.sessionMode, tc.username)
+
+			b := newBrokerForTests(t, broker.Config{CachePath: cacheDir, IssuerURL: provider.URL})
+			sessionID, key := newSessionForTests(t, b, tc.username, tc.sessionMode)
 
 			if tc.preexistentToken != "" {
 				tok := generateCachedInfo(t, tc.preexistentToken, provider.URL)
@@ -629,7 +633,9 @@ func TestCancelIsAuthenticated(t *testing.T) {
 	provider, cleanup := testutils.StartMockProvider("", testutils.WithHandler("/token", testutils.HangingHandler(ctx)))
 	t.Cleanup(cleanup)
 
-	b, sessionID, _ := newBrokerForTests(t, t.TempDir(), provider.URL, "auth", "")
+	b := newBrokerForTests(t, broker.Config{IssuerURL: provider.URL})
+	sessionID, _ := newSessionForTests(t, b, "", "")
+
 	updateAuthModes(t, b, sessionID, "device_auth")
 
 	stopped := make(chan struct{})
@@ -650,7 +656,9 @@ func TestCancelIsAuthenticated(t *testing.T) {
 func TestEndSession(t *testing.T) {
 	t.Parallel()
 
-	b, sessionID, _ := newBrokerForTests(t, t.TempDir(), defaultProvider.URL, "auth", "")
+	b := newBrokerForTests(t, broker.Config{IssuerURL: defaultProvider.URL})
+
+	sessionID, _ := newSessionForTests(t, b, "", "")
 
 	// Try to end a session that does not exist
 	err := b.EndSession("nonexistent")
