@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
@@ -44,6 +45,9 @@ const intro = `
 		<method name="CancelIsAuthenticated">
 			<arg type="s" direction="in" name="sessionID"/>
 		</method>
+		<method name="UserPreCheck">
+			<arg type="s" direction="in" name="username"/>
+		</method>
 	</interface>` + introspect.IntrospectDataString + `</node> `
 
 // Service is the handler exposing our broker methods on the system bus.
@@ -72,11 +76,17 @@ func New(_ context.Context, cfgPath, cachePath string) (s *Service, err error) {
 		return nil, errors.New("missing required object path for dbus service")
 	}
 
+	var allowedSSHSuffixes []string
+	if cfg[oidcSection][sshSuffixesKey] != "" {
+		allowedSSHSuffixes = strings.Split(cfg[oidcSection][sshSuffixesKey], ",")
+	}
+
 	bCfg := broker.Config{
-		IssuerURL:   cfg[oidcSection][issuerKey],
-		ClientID:    cfg[oidcSection][clientIDKey],
-		HomeBaseDir: cfg[oidcSection][homeDirKey],
-		CachePath:   cachePath,
+		IssuerURL:          cfg[oidcSection][issuerKey],
+		ClientID:           cfg[oidcSection][clientIDKey],
+		HomeBaseDir:        cfg[oidcSection][homeDirKey],
+		AllowedSSHSuffixes: allowedSSHSuffixes,
+		CachePath:          cachePath,
 	}
 	b, err := broker.New(bCfg)
 	if err != nil {
