@@ -669,6 +669,53 @@ func TestEndSession(t *testing.T) {
 	require.NoError(t, err, "EndSession should not have returned an error when ending an existent session")
 }
 
+func TestUserPreCheck(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		username        string
+		allowedSuffixes []string
+
+		wantErr bool
+	}{
+		"Successfully allow username with matching allowed suffix": {
+			username:        "user@allowed",
+			allowedSuffixes: []string{"@allowed"}},
+		"Successfully allow username that matches at least one allowed suffix": {
+			username:        "user@allowed",
+			allowedSuffixes: []string{"@other", "@something", "@allowed"},
+		},
+
+		"Error when username does not match allowed suffix": {
+			username:        "user@notallowed",
+			allowedSuffixes: []string{"@allowed"},
+			wantErr:         true,
+		},
+		"Error when username does not match any of the allowed suffixes": {
+			username:        "user@notallowed",
+			allowedSuffixes: []string{"@other", "@something", "@allowed"},
+			wantErr:         true,
+		},
+		"Error when no allowed suffixes are provided": {
+			username: "user@allowed",
+			wantErr:  true,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			b := newBrokerForTests(t, broker.Config{IssuerURL: defaultProvider.URL, AllowedSSHSuffixes: tc.allowedSuffixes})
+
+			err := b.UserPreCheck(tc.username)
+			if tc.wantErr {
+				require.Error(t, err, "UserPreCheck should have returned an error")
+				return
+			}
+			require.NoError(t, err, "UserPreCheck should not have returned an error")
+		})
+	}
+}
+
 func TestMain(m *testing.M) {
 	testutils.InstallUpdateFlag()
 	flag.Parse()

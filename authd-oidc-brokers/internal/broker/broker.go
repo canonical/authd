@@ -30,17 +30,19 @@ const maxAuthAttempts = 3
 
 // Config is the configuration for the broker.
 type Config struct {
-	IssuerURL   string
-	ClientID    string
-	CachePath   string
-	HomeBaseDir string
+	IssuerURL          string
+	ClientID           string
+	CachePath          string
+	HomeBaseDir        string
+	AllowedSSHSuffixes []string
 }
 
 // Broker is the real implementation of the broker to track sessions and process oidc calls.
 type Broker struct {
-	providerInfo providers.ProviderInfoer
-	auth         authConfig
-	homeDirPath  string
+	providerInfo       providers.ProviderInfoer
+	auth               authConfig
+	homeDirPath        string
+	allowedSSHSuffixes []string
 
 	currentSessions   map[string]sessionInfo
 	currentSessionsMu sync.RWMutex
@@ -147,10 +149,11 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	}
 
 	return &Broker{
-		providerInfo: opts.providerInfo,
-		auth:         authCfg,
-		homeDirPath:  homeDirPath,
-		privateKey:   privateKey,
+		providerInfo:       opts.providerInfo,
+		auth:               authCfg,
+		homeDirPath:        homeDirPath,
+		allowedSSHSuffixes: cfg.AllowedSSHSuffixes,
+		privateKey:         privateKey,
 
 		currentSessions:   make(map[string]sessionInfo),
 		currentSessionsMu: sync.RWMutex{},
@@ -538,6 +541,16 @@ func (b *Broker) CancelIsAuthenticated(sessionID string) {
 	if err := b.updateSession(sessionID, session); err != nil {
 		slog.Error(fmt.Sprintf("Error when cancelling IsAuthenticated: %v", err))
 	}
+}
+
+// UserPreCheck checks if the user is valid and can be allowed to authenticate.
+func (b *Broker) UserPreCheck(username string) error {
+	for _, suffix := range b.allowedSSHSuffixes {
+		if strings.HasSuffix(username, suffix) {
+			return nil
+		}
+	}
+	return errors.New("username does not match the allowed suffixes")
 }
 
 // getSession returns the session information for the specified session ID or an error if the session is not active.

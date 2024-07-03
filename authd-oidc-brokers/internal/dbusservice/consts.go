@@ -17,4 +17,6 @@ const (
 	clientIDKey = "client_id"
 	// homeDirKey is the key in the config file for the home directory prefix.
 	homeDirKey = "home_base_dir"
+	// SSHSuffixKey is the key in the config file for the SSH allowed suffixes.
+	sshSuffixesKey = "ssh_allowed_suffixes"
 )
