@@ -17,9 +17,9 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// newBrokerForTests is a helper function to create a new broker for tests and already starts a session for user
-// t.Name() normalized.
-func newBrokerForTests(t *testing.T, cachePath, issuerURL, mode string) (b *broker.Broker, id, key string) {
+// newBrokerForTests is a helper function to create a new broker for tests and already starts a session for the
+// specified user.
+func newBrokerForTests(t *testing.T, cachePath, issuerURL, mode, username string) (b *broker.Broker, id, key string) {
 	t.Helper()
 
 	cfg := broker.Config{
@@ -40,7 +40,10 @@ func newBrokerForTests(t *testing.T, cachePath, issuerURL, mode string) (b *brok
 	)
 	require.NoError(t, err, "Setup: New should not have returned an error")
 
-	id, key, err = b.NewSession("test-user@email.com", "some lang", mode)
+	if username == "" {
+		username = "test-user@email.com"
+	}
+	id, key, err = b.NewSession(username, "some lang", mode)
 	require.NoError(t, err, "Setup: NewSession should not have returned an error")
 
 	return b, id, key
@@ -135,18 +138,21 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.A
 		tok = testTokens["valid"]
 	}
 
-	tok.UserInfo = fmt.Sprintf(`{
-		"name": "%[1]s",
-		"uuid": "saved-user-id",
-		"gecos": "saved-user",
-		"dir": "/home/%[1]s",
-		"shell": "/usr/bin/bash",
-		"groups": [{"name": "saved-remote-group", "gid": "12345"}, {"name": "saved-local-group", "gid": ""}]
-}`, email)
+	tok.UserInfo = broker.UserInfo{
+		Name:  email,
+		UUID:  "saved-user-id",
+		Home:  "/home/" + email,
+		Gecos: "saved-user",
+		Shell: "/usr/bin/bash",
+		Groups: []group.Info{
+			{Name: "saved-remote-group", UGID: "12345"},
+			{Name: "saved-local-group", UGID: ""},
+		},
+	}
 
 	if preexistentToken == "invalid-id" {
 		encodedToken = ".invalid."
-		tok.UserInfo = ""
+		tok.UserInfo = broker.UserInfo{}
 	}
 
 	tok.Token = tok.Token.WithExtra(map[string]string{"id_token": encodedToken})

@@ -2,7 +2,6 @@
 package broker
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -17,8 +16,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"text/template"
-	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
@@ -352,35 +349,38 @@ func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[
 func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, string, error) {
 	session, err := b.getSession(sessionID)
 	if err != nil {
-		return AuthDenied, "", err
+		return AuthDenied, "{}", err
 	}
 
 	var authData map[string]string
 	if authenticationData != "" {
 		if err := json.Unmarshal([]byte(authenticationData), &authData); err != nil {
-			return AuthDenied, "", fmt.Errorf("authentication data is not a valid json value: %v", err)
+			return AuthDenied, "{}", fmt.Errorf("authentication data is not a valid json value: %v", err)
 		}
 	}
 
 	ctx, err := b.startAuthenticate(sessionID)
 	if err != nil {
-		return AuthDenied, "", err
+		return AuthDenied, "{}", err
 	}
 
 	// Cleans up the IsAuthenticated context when the call is done.
 	defer b.CancelIsAuthenticated(sessionID)
 
 	authDone := make(chan struct{})
-	var access, data string
+	var access string
+	var iadResponse isAuthenticatedDataResponse
 	go func() {
-		access, data = b.handleIsAuthenticated(ctx, &session, authData)
+		access, iadResponse = b.handleIsAuthenticated(ctx, &session, authData)
 		close(authDone)
 	}()
 
 	select {
 	case <-authDone:
 	case <-ctx.Done():
-		return AuthCancelled, `{"message": "authentication request cancelled"}`, ctx.Err()
+		// We can ignore the error here since the message is constant.
+		msg, _ := json.Marshal(errorMessage{Message: "authentication request cancelled"})
+		return AuthCancelled, string(msg), ctx.Err()
 	}
 
 	switch access {
@@ -388,7 +388,7 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 		session.attemptsPerMode[session.selectedMode]++
 		if session.attemptsPerMode[session.selectedMode] == maxAuthAttempts {
 			access = AuthDenied
-			data = `{"message": "maximum number of attempts reached"}`
+			iadResponse = errorMessage{Message: "maximum number of attempts reached"}
 		}
 
 	case AuthNext:
@@ -396,88 +396,90 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	}
 
 	if err = b.updateSession(sessionID, session); err != nil {
-		return AuthDenied, "", err
+		return AuthDenied, "{}", err
+	}
+
+	encoded, err := json.Marshal(iadResponse)
+	if err != nil {
+		return AuthDenied, "{}", fmt.Errorf("could not parse data to JSON: %v", err)
+	}
+
+	data := string(encoded)
+	if data == "null" {
+		data = "{}"
 	}
 	return access, data, nil
 }
 
-func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo, authData map[string]string) (access, data string) {
+func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo, authData map[string]string) (access string, data isAuthenticatedDataResponse) {
 	// Decrypt challenge if present.
 	challenge, err := decodeRawChallenge(b.privateKey, authData["challenge"])
 	if err != nil {
-		return AuthRetry, fmt.Sprintf(`{"message": "could not decode challenge: %v"}`, err)
+		return AuthRetry, errorMessage{Message: fmt.Sprintf("could not decode challenge: %v", err)}
 	}
 
 	var authInfo authCachedInfo
-	var userClaims claims
-	var groups []group.Info
-
 	offline := false
 	switch session.selectedMode {
 	case "device_auth":
 		response, ok := session.authInfo["response"].(*oauth2.DeviceAuthResponse)
 		if !ok {
-			return AuthDenied, `{"message": "could not get required response"}`
+			return AuthDenied, errorMessage{Message: "could not get required response"}
 		}
 
 		t, err := b.auth.oauthCfg.DeviceAccessToken(ctx, response, b.providerInfo.AuthOptions()...)
 		if err != nil {
-			return AuthRetry, fmt.Sprintf(`{"message": "could not authenticate user: %v"}`, err)
+			return AuthRetry, errorMessage{Message: fmt.Sprintf("could not authenticate user: %v", err)}
 		}
 
 		rawIDToken, ok := t.Extra("id_token").(string)
 		if !ok {
-			return AuthDenied, `{"message": "could not get id_token"}`
+			return AuthDenied, errorMessage{Message: "could not get id_token"}
 		}
 
 		session.authInfo["auth_info"] = authCachedInfo{Token: t, RawIDToken: rawIDToken}
-		return AuthNext, ""
+		return AuthNext, nil
 
 	case "password":
 		authInfo, offline, err = b.loadAuthInfo(session, challenge)
 		if err != nil {
-			return AuthRetry, fmt.Sprintf(`{"message": "could not authenticate user: %v"}`, err)
+			return AuthRetry, errorMessage{Message: fmt.Sprintf("could not authenticate user: %v", err)}
 		}
 
 		if session.mode == "passwd" {
 			session.authInfo["auth_info"] = authInfo
-			return AuthNext, ""
+			return AuthNext, nil
 		}
 
 	case "newpassword":
 		if challenge == "" {
-			return AuthRetry, `{"message": "challenge must not be empty"}`
+			return AuthRetry, errorMessage{Message: "challenge must not be empty"}
 		}
 
 		var ok bool
 		// This mode must always come after a authentication mode, so it has to have an auth_info.
 		authInfo, ok = session.authInfo["auth_info"].(authCachedInfo)
 		if !ok {
-			return AuthDenied, `{"message": "could not get required information"}`
+			return AuthDenied, errorMessage{Message: "could not get required information"}
 		}
 	}
 
-	if authInfo.UserInfo == "" {
-		userClaims, groups, err = b.fetchUserInfo(ctx, session, &authInfo)
+	if authInfo.UserInfo.Name == "" {
+		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil {
-			return AuthDenied, fmt.Sprintf(`{"message": "could not get user info: %v"}`, err)
-		}
-
-		authInfo.UserInfo, err = b.userInfoFromClaims(userClaims, groups)
-		if err != nil {
-			return AuthDenied, fmt.Sprintf(`{"message": "could not parse user info from claims: %v"}`, err)
+			return AuthDenied, errorMessage{Message: fmt.Sprintf("could not get user info: %v", err)}
 		}
 	}
 
 	if offline {
-		return AuthGranted, fmt.Sprintf(`{"userinfo": %s}`, authInfo.UserInfo)
+		return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 	}
 
 	if err := b.cacheAuthInfo(session, authInfo, challenge); err != nil {
-		return AuthRetry, fmt.Sprintf(`{"message": "could not update cached info: %v"}`, err)
+		return AuthRetry, errorMessage{Message: fmt.Sprintf("could not update cached info: %v", err)}
 	}
 
-	return AuthGranted, fmt.Sprintf(`{"userinfo": %s}`, authInfo.UserInfo)
+	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 }
 
 func (b *Broker) startAuthenticate(sessionID string) (context.Context, error) {
@@ -564,16 +566,14 @@ func (b *Broker) updateSession(sessionID string, session sessionInfo) error {
 // authCachedInfo represents the token that will be saved on disk for offline authentication.
 type authCachedInfo struct {
 	Token      *oauth2.Token
-	AcquiredAt time.Time
 	RawIDToken string
-	UserInfo   string
+	UserInfo   userInfo
 }
 
 // cacheAuthInfo serializes the access token and cache it.
 func (b *Broker) cacheAuthInfo(session *sessionInfo, authInfo authCachedInfo, password string) (err error) {
 	defer decorate.OnError(&err, "could not cache info")
 
-	authInfo.AcquiredAt = time.Now()
 	content, err := json.Marshal(authInfo)
 	if err != nil {
 		return fmt.Errorf("could not marshal token: %v", err)
@@ -636,34 +636,20 @@ func (b *Broker) loadAuthInfo(session *sessionInfo, password string) (loadedInfo
 	return authCachedInfo{Token: tok, RawIDToken: refreshedIDToken}, false, nil
 }
 
-func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *authCachedInfo) (userClaims claims, userGroups []group.Info, err error) {
+func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *authCachedInfo) (userInfo userInfo, err error) {
 	defer decorate.OnError(&err, "could not fetch user info")
 
-	// If we didn't restore user information from the cache, we need to query the provider for it, which means
-	// we need to validate the token.
-	idToken, err := b.auth.provider.Verifier(&b.auth.oidcCfg).Verify(ctx, t.RawIDToken)
+	userClaims, err := b.userClaims(ctx, t.RawIDToken, session.username)
 	if err != nil {
-		return claims{}, nil, fmt.Errorf("could not verify token: %v", err)
+		return userInfo, err
 	}
 
-	userGroups, err = b.providerInfo.GetGroups(t.Token)
+	userGroups, err := b.providerInfo.GetGroups(t.Token)
 	if err != nil {
-		return claims{}, nil, fmt.Errorf("could not get user groups: %v", err)
+		return userInfo, fmt.Errorf("could not get user groups: %v", err)
 	}
 
-	if err := idToken.Claims(&userClaims); err != nil {
-		return claims{}, nil, fmt.Errorf("could not get user info: %v", err)
-	}
-
-	if userClaims.Email == "" {
-		return claims{}, nil, errors.New("user email is required, but was not provided")
-	}
-
-	if userClaims.Email != session.username {
-		return claims{}, nil, fmt.Errorf("returned user %q does not match the selected one %q", userClaims.Email, session.username)
-	}
-
-	return userClaims, userGroups, nil
+	return b.userInfoFromClaims(userClaims, userGroups), nil
 }
 
 type claims struct {
@@ -674,15 +660,40 @@ type claims struct {
 	Sub               string `json:"sub"`
 }
 
-func (b *Broker) userInfoFromClaims(userClaims claims, groups []group.Info) (string, error) {
-	user := struct {
-		Name   string
-		UUID   string
-		Home   string
-		Shell  string
-		Gecos  string
-		Groups []group.Info
-	}{
+func (b *Broker) userClaims(ctx context.Context, rawIDToken, username string) (userClaims claims, err error) {
+	// We need to verify the token to get the user claims.
+	idToken, err := b.auth.provider.Verifier(&b.auth.oidcCfg).Verify(ctx, rawIDToken)
+	if err != nil {
+		return claims{}, fmt.Errorf("could not verify token: %v", err)
+	}
+
+	if err := idToken.Claims(&userClaims); err != nil {
+		return claims{}, fmt.Errorf("could not get user info: %v", err)
+	}
+
+	if userClaims.Email == "" {
+		return claims{}, errors.New("user email is required, but was not provided")
+	}
+
+	if userClaims.Email != username {
+		return claims{}, fmt.Errorf("returned user %q does not match the selected one %q", userClaims.Email, username)
+	}
+
+	return userClaims, nil
+}
+
+// userInfo represents the user information obtained from the provider.
+type userInfo struct {
+	Name   string       `json:"name"`
+	UUID   string       `json:"uuid"`
+	Home   string       `json:"dir"`
+	Shell  string       `json:"shell"`
+	Gecos  string       `json:"gecos"`
+	Groups []group.Info `json:"groups"`
+}
+
+func (b *Broker) userInfoFromClaims(userClaims claims, groups []group.Info) userInfo {
+	return userInfo{
 		Name:   userClaims.Email,
 		UUID:   userClaims.Sub,
 		Home:   filepath.Join(b.homeDirPath, userClaims.Email),
@@ -690,22 +701,4 @@ func (b *Broker) userInfoFromClaims(userClaims claims, groups []group.Info) (str
 		Gecos:  userClaims.Name,
 		Groups: groups,
 	}
-
-	var buf bytes.Buffer
-	err := template.Must(template.New("").Parse(`{
-		"name": "{{.Name}}",
-		"uuid": "{{.UUID}}",
-		"gecos": "{{.Gecos}}",
-		"dir": "{{.Home}}",
-		"shell": "{{.Shell}}",
-		"groups": [ {{range $index, $g := .Groups}}
-			{{- if $index}}, {{end -}}
-			{"name": "{{.Name}}", "ugid": "{{.UGID}}"}
-		{{- end}} ]
-}`)).Execute(&buf, user)
-	if err != nil {
-		return "", err
-	}
-
-	return buf.String(), nil
 }
