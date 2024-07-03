@@ -17,9 +17,9 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// newBrokerForTests is a helper function to create a new broker for tests and already starts a session for user
-// t.Name() normalized.
-func newBrokerForTests(t *testing.T, cachePath, issuerURL, mode string) (b *broker.Broker, id, key string) {
+// newBrokerForTests is a helper function to create a new broker for tests and already starts a session for the
+// specified user.
+func newBrokerForTests(t *testing.T, cachePath, issuerURL, mode, username string) (b *broker.Broker, id, key string) {
 	t.Helper()
 
 	cfg := broker.Config{
@@ -40,7 +40,10 @@ func newBrokerForTests(t *testing.T, cachePath, issuerURL, mode string) (b *brok
 	)
 	require.NoError(t, err, "Setup: New should not have returned an error")
 
-	id, key, err = b.NewSession("test-user@email.com", "some lang", mode)
+	if username == "" {
+		username = "test-user@email.com"
+	}
+	id, key, err = b.NewSession(username, "some lang", mode)
 	require.NoError(t, err, "Setup: NewSession should not have returned an error")
 
 	return b, id, key

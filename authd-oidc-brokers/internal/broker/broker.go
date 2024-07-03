@@ -349,35 +349,38 @@ func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[
 func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, string, error) {
 	session, err := b.getSession(sessionID)
 	if err != nil {
-		return AuthDenied, "", err
+		return AuthDenied, "{}", err
 	}
 
 	var authData map[string]string
 	if authenticationData != "" {
 		if err := json.Unmarshal([]byte(authenticationData), &authData); err != nil {
-			return AuthDenied, "", fmt.Errorf("authentication data is not a valid json value: %v", err)
+			return AuthDenied, "{}", fmt.Errorf("authentication data is not a valid json value: %v", err)
 		}
 	}
 
 	ctx, err := b.startAuthenticate(sessionID)
 	if err != nil {
-		return AuthDenied, "", err
+		return AuthDenied, "{}", err
 	}
 
 	// Cleans up the IsAuthenticated context when the call is done.
 	defer b.CancelIsAuthenticated(sessionID)
 
 	authDone := make(chan struct{})
-	var access, data string
+	var access string
+	var iadResponse isAuthenticatedDataResponse
 	go func() {
-		access, data = b.handleIsAuthenticated(ctx, &session, authData)
+		access, iadResponse = b.handleIsAuthenticated(ctx, &session, authData)
 		close(authDone)
 	}()
 
 	select {
 	case <-authDone:
 	case <-ctx.Done():
-		return AuthCancelled, `{"message": "authentication request cancelled"}`, ctx.Err()
+		// We can ignore the error here since the message is constant.
+		msg, _ := json.Marshal(errorMessage{Message: "authentication request cancelled"})
+		return AuthCancelled, string(msg), ctx.Err()
 	}
 
 	switch access {
@@ -385,7 +388,7 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 		session.attemptsPerMode[session.selectedMode]++
 		if session.attemptsPerMode[session.selectedMode] == maxAuthAttempts {
 			access = AuthDenied
-			data = `{"message": "maximum number of attempts reached"}`
+			iadResponse = errorMessage{Message: "maximum number of attempts reached"}
 		}
 
 	case AuthNext:
@@ -393,88 +396,90 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	}
 
 	if err = b.updateSession(sessionID, session); err != nil {
-		return AuthDenied, "", err
+		return AuthDenied, "{}", err
+	}
+
+	encoded, err := json.Marshal(iadResponse)
+	if err != nil {
+		return AuthDenied, "{}", fmt.Errorf("could not parse data to JSON: %v", err)
+	}
+
+	data := string(encoded)
+	if data == "null" {
+		data = "{}"
 	}
 	return access, data, nil
 }
 
-func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo, authData map[string]string) (access, data string) {
+func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo, authData map[string]string) (access string, data isAuthenticatedDataResponse) {
 	// Decrypt challenge if present.
 	challenge, err := decodeRawChallenge(b.privateKey, authData["challenge"])
 	if err != nil {
-		return AuthRetry, fmt.Sprintf(`{"message": "could not decode challenge: %v"}`, err)
+		return AuthRetry, errorMessage{Message: fmt.Sprintf("could not decode challenge: %v", err)}
 	}
 
 	var authInfo authCachedInfo
-	var userClaims claims
-	var groups []group.Info
-
 	offline := false
 	switch session.selectedMode {
 	case "device_auth":
 		response, ok := session.authInfo["response"].(*oauth2.DeviceAuthResponse)
 		if !ok {
-			return AuthDenied, `{"message": "could not get required response"}`
+			return AuthDenied, errorMessage{Message: "could not get required response"}
 		}
 
 		t, err := b.auth.oauthCfg.DeviceAccessToken(ctx, response, b.providerInfo.AuthOptions()...)
 		if err != nil {
-			return AuthRetry, fmt.Sprintf(`{"message": "could not authenticate user: %v"}`, err)
+			return AuthRetry, errorMessage{Message: fmt.Sprintf("could not authenticate user: %v", err)}
 		}
 
 		rawIDToken, ok := t.Extra("id_token").(string)
 		if !ok {
-			return AuthDenied, `{"message": "could not get id_token"}`
+			return AuthDenied, errorMessage{Message: "could not get id_token"}
 		}
 
 		session.authInfo["auth_info"] = authCachedInfo{Token: t, RawIDToken: rawIDToken}
-		return AuthNext, ""
+		return AuthNext, nil
 
 	case "password":
 		authInfo, offline, err = b.loadAuthInfo(session, challenge)
 		if err != nil {
-			return AuthRetry, fmt.Sprintf(`{"message": "could not authenticate user: %v"}`, err)
+			return AuthRetry, errorMessage{Message: fmt.Sprintf("could not authenticate user: %v", err)}
 		}
 
 		if session.mode == "passwd" {
 			session.authInfo["auth_info"] = authInfo
-			return AuthNext, ""
+			return AuthNext, nil
 		}
 
 	case "newpassword":
 		if challenge == "" {
-			return AuthRetry, `{"message": "challenge must not be empty"}`
+			return AuthRetry, errorMessage{Message: "challenge must not be empty"}
 		}
 
 		var ok bool
 		// This mode must always come after a authentication mode, so it has to have an auth_info.
 		authInfo, ok = session.authInfo["auth_info"].(authCachedInfo)
 		if !ok {
-			return AuthDenied, `{"message": "could not get required information"}`
+			return AuthDenied, errorMessage{Message: "could not get required information"}
 		}
 	}
 
-	if authInfo.UserInfo == "" {
-		userClaims, groups, err = b.fetchUserInfo(ctx, session, &authInfo)
+	if authInfo.UserInfo.Name == "" {
+		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil {
-			return AuthDenied, fmt.Sprintf(`{"message": "could not get user info: %v"}`, err)
-		}
-
-		authInfo.UserInfo, err = b.userInfoFromClaims(userClaims, groups)
-		if err != nil {
-			return AuthDenied, fmt.Sprintf(`{"message": "could not parse user info from claims: %v"}`, err)
+			return AuthDenied, errorMessage{Message: fmt.Sprintf("could not get user info: %v", err)}
 		}
 	}
 
 	if offline {
-		return AuthGranted, fmt.Sprintf(`{"userinfo": %s}`, authInfo.UserInfo)
+		return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 	}
 
 	if err := b.cacheAuthInfo(session, authInfo, challenge); err != nil {
-		return AuthRetry, fmt.Sprintf(`{"message": "could not update cached info: %v"}`, err)
+		return AuthRetry, errorMessage{Message: fmt.Sprintf("could not update cached info: %v", err)}
 	}
 
-	return AuthGranted, fmt.Sprintf(`{"userinfo": %s}`, authInfo.UserInfo)
+	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 }
 
 func (b *Broker) startAuthenticate(sessionID string) (context.Context, error) {
