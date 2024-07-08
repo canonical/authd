@@ -11,7 +11,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/daemon"
 	"github.com/ubuntu/authd-oidc-brokers/internal/dbusservice"
 )
@@ -54,12 +53,14 @@ func New(name string) *App {
 
 			// Set config defaults
 			systemCache := filepath.Join("/var", "lib", name)
+			configDir := "."
 			if snapData := os.Getenv("SNAP_DATA"); snapData != "" {
 				systemCache = filepath.Join(snapData, "cache")
+				configDir = snapData
 			}
 			a.config = daemonConfig{
 				Paths: systemPaths{
-					BrokerConf: filepath.Join(consts.DefaultBrokersConfPath, name),
+					BrokerConf: filepath.Join(configDir, "broker.conf"),
 					Cache:      systemCache,
 				},
 			}
