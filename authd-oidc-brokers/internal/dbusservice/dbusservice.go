@@ -3,13 +3,13 @@ package dbusservice
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"gopkg.in/ini.v1"
 )
 
@@ -67,14 +67,14 @@ func New(_ context.Context, cfgPath, cachePath string) (s *Service, err error) {
 	}
 
 	var allowedSSHSuffixes []string
-	if cfg[oidcSection][sshSuffixesKey] != "" {
-		allowedSSHSuffixes = strings.Split(cfg[oidcSection][sshSuffixesKey], ",")
+	if cfg[usersSection][sshSuffixesKey] != "" {
+		allowedSSHSuffixes = strings.Split(cfg[usersSection][sshSuffixesKey], ",")
 	}
 
 	bCfg := broker.Config{
 		IssuerURL:          cfg[oidcSection][issuerKey],
 		ClientID:           cfg[oidcSection][clientIDKey],
-		HomeBaseDir:        cfg[oidcSection][homeDirKey],
+		HomeBaseDir:        cfg[usersSection][homeDirKey],
 		AllowedSSHSuffixes: allowedSSHSuffixes,
 		CachePath:          cachePath,
 	}

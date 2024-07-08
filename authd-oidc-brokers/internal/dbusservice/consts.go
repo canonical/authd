@@ -8,6 +8,9 @@ const (
 	issuerKey = "issuer"
 	// clientIDKey is the key in the config file for the client ID.
 	clientIDKey = "client_id"
+
+	// usersSection is the section name in the config file for the users and broker specific configuration.
+	usersSection = "users"
 	// homeDirKey is the key in the config file for the home directory prefix.
 	homeDirKey = "home_base_dir"
 	// SSHSuffixKey is the key in the config file for the SSH allowed suffixes.
