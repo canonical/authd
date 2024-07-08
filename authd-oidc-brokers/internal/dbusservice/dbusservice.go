@@ -66,16 +66,6 @@ func New(_ context.Context, cfgPath, cachePath string) (s *Service, err error) {
 		return nil, err
 	}
 
-	iface := "com.ubuntu.authd.Broker"
-	name := cfg[authdSection][dbusNameKey]
-	object := dbus.ObjectPath(cfg[authdSection][dbusObjectKey])
-	if name == "" {
-		return nil, errors.New("missing required name for dbus service")
-	}
-	if object == "" {
-		return nil, errors.New("missing required object path for dbus service")
-	}
-
 	var allowedSSHSuffixes []string
 	if cfg[oidcSection][sshSuffixesKey] != "" {
 		allowedSSHSuffixes = strings.Split(cfg[oidcSection][sshSuffixesKey], ",")
@@ -93,6 +83,9 @@ func New(_ context.Context, cfgPath, cachePath string) (s *Service, err error) {
 		return nil, err
 	}
 
+	name := consts.DbusName
+	object := dbus.ObjectPath(consts.DbusObject)
+	iface := "com.ubuntu.authd.Broker"
 	s = &Service{
 		name:   name,
 		broker: b,
@@ -111,7 +104,7 @@ func New(_ context.Context, cfgPath, cachePath string) (s *Service, err error) {
 		return nil, err
 	}
 
-	reply, err := conn.RequestName(name, dbus.NameFlagDoNotQueue)
+	reply, err := conn.RequestName(consts.DbusName, dbus.NameFlagDoNotQueue)
 	if err != nil {
 		s.disconnect()
 		return nil, err
