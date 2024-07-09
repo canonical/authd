@@ -47,6 +47,41 @@ jobs:
             fi
 
             echo "has_conflicts=${has_conflicts}" >> $GITHUB_OUTPUT
+
+        - uses: actions/setup-go@v5
+          if: ${{ steps.merge.outputs.has_conflicts == 'false' }}
+          with:
+            go-version-file: go.mod
+        - name: Regenerate consts for this broker
+          if: ${{ steps.merge.outputs.has_conflicts == 'false' }}
+          run: |
+            set -eux
+            # Regenerate the consts for the broker
+            go generate ./internal/consts/
+        - name: Find generated changes
+          if: ${{ steps.merge.outputs.has_conflicts == 'false' }}
+          id: check-diff
+          uses: canonical/desktop-engineering/gh-actions/common/has-diff@main
+          with:
+            working-directory: ./internal/consts/
+            fail-on-diff: false
+        - name: Commit generated changes
+          if: ${{ steps.merge.outputs.has_conflicts == 'false' && steps.check-diff.outputs.diff == 'true' }}
+          run: |
+            set -eux
+            git add ./internal/consts/
+            git commit -m "Regenerate consts for ${{ matrix.branch_name }}"
+        - name: Create Pull Request
+          if: ${{ steps.merge.outputs.has_conflicts == 'false' }}
+          uses: peter-evans/create-pull-request@v6
+          with:
+            commit-message: Auto update ${{ matrix.branch_name }} branch
+            title: Auto update ${{ matrix.branch_name }} branch
+            body: |
+              Automated merge from main of ${{ matrix.branch_name }}.
+            branch: update-${{ matrix.branch_name }}
+            delete-branch: true
+            token: ${{ secrets.GITHUB_TOKEN }}
         - name: Push branch
           if: ${{ steps.merge.outputs.has_conflicts == 'false' }}
           run: |
@@ -55,6 +90,7 @@ jobs:
 
             # Potentially existing PR with conflicts is not valid anymore: we just automerged.
             git push origin --delete update-${{ matrix.branch_name }} || true
+
         - name: Restore and prepare branch
           if: ${{ steps.merge.outputs.has_conflicts == 'true' }}
           run: |
@@ -71,6 +107,8 @@ jobs:
             title: Auto update ${{ matrix.branch_name }} branch
             body: |
               Pull request created due to conflicts found when merging main into ${{ matrix.branch_name }}.
+
+              Remember to run go generate ./internal/consts/ and committing those changes before merging this PR.
             branch: update-${{ matrix.branch_name }}
             delete-branch: true
             token: ${{ secrets.GITHUB_TOKEN }}
