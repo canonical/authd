@@ -16,7 +16,6 @@ apps:
       - dbus-authd
     plugs:
       - network
-      - config-file
     restart-condition: always
 
 slots:
@@ -25,12 +24,6 @@ slots:
     bus: system
     name: com.ubuntu.authd.Oidc
 
-plugs:
-  config-file:
-    interface: system-files
-    read:
-      - /etc/authd/brokers.d/oidc
-
 parts:
   broker:
     source: .
@@ -38,3 +31,10 @@ parts:
     plugin: go
     build-snaps:
       - go
+  config:
+    source: conf/
+    source-type: local
+    plugin: dump
+    organize:
+      "authd.conf": "conf/authd/oidc.conf"
+      "broker.conf": "conf/broker.conf.orig"
