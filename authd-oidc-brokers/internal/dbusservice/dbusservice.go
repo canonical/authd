@@ -3,13 +3,13 @@ package dbusservice
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"gopkg.in/ini.v1"
 )
 
@@ -66,25 +66,15 @@ func New(_ context.Context, cfgPath, cachePath string) (s *Service, err error) {
 		return nil, err
 	}
 
-	iface := "com.ubuntu.authd.Broker"
-	name := cfg[authdSection][dbusNameKey]
-	object := dbus.ObjectPath(cfg[authdSection][dbusObjectKey])
-	if name == "" {
-		return nil, errors.New("missing required name for dbus service")
-	}
-	if object == "" {
-		return nil, errors.New("missing required object path for dbus service")
-	}
-
 	var allowedSSHSuffixes []string
-	if cfg[oidcSection][sshSuffixesKey] != "" {
-		allowedSSHSuffixes = strings.Split(cfg[oidcSection][sshSuffixesKey], ",")
+	if cfg[usersSection][sshSuffixesKey] != "" {
+		allowedSSHSuffixes = strings.Split(cfg[usersSection][sshSuffixesKey], ",")
 	}
 
 	bCfg := broker.Config{
 		IssuerURL:          cfg[oidcSection][issuerKey],
 		ClientID:           cfg[oidcSection][clientIDKey],
-		HomeBaseDir:        cfg[oidcSection][homeDirKey],
+		HomeBaseDir:        cfg[usersSection][homeDirKey],
 		AllowedSSHSuffixes: allowedSSHSuffixes,
 		CachePath:          cachePath,
 	}
@@ -93,6 +83,9 @@ func New(_ context.Context, cfgPath, cachePath string) (s *Service, err error) {
 		return nil, err
 	}
 
+	name := consts.DbusName
+	object := dbus.ObjectPath(consts.DbusObject)
+	iface := "com.ubuntu.authd.Broker"
 	s = &Service{
 		name:   name,
 		broker: b,
@@ -111,7 +104,7 @@ func New(_ context.Context, cfgPath, cachePath string) (s *Service, err error) {
 		return nil, err
 	}
 
-	reply, err := conn.RequestName(name, dbus.NameFlagDoNotQueue)
+	reply, err := conn.RequestName(consts.DbusName, dbus.NameFlagDoNotQueue)
 	if err != nil {
 		s.disconnect()
 		return nil, err

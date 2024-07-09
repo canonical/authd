@@ -16,7 +16,6 @@ apps:
       - dbus-authd
     plugs:
       - network
-      - config-file
     restart-condition: always
 
 slots:
@@ -24,12 +23,6 @@ slots:
     interface: dbus
     bus: system
     name: com.ubuntu.authd.MSEntraID
-
-plugs:
-  config-file:
-    interface: system-files
-    read:
-      - /etc/authd/brokers.d/msentraid
 
 parts:
   broker:
@@ -42,3 +35,10 @@ parts:
     override-build: |
       go mod download all
       go build -tags=withmsentraid -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc
+  config:
+    source: conf/
+    source-type: local
+    plugin: dump
+    organize:
+      "authd.conf": "conf/authd/msentraid.conf"
+      "broker.conf": "conf/broker.conf.orig"
