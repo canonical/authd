@@ -14,7 +14,4 @@ const (
 
 	// DefaultLevelLog is the default logging level selected without any option.
 	DefaultLevelLog = slog.LevelWarn
-
-	// DefaultBrokersConfPath is the default configuration directory for the brokers.
-	DefaultBrokersConfPath = "/etc/authd/brokers.d/"
 )
