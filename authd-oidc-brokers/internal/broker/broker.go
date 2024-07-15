@@ -550,13 +550,24 @@ func (b *Broker) CancelIsAuthenticated(sessionID string) {
 }
 
 // UserPreCheck checks if the user is valid and can be allowed to authenticate.
-func (b *Broker) UserPreCheck(username string) error {
+func (b *Broker) UserPreCheck(username string) (string, error) {
+	found := false
 	for _, suffix := range b.allowedSSHSuffixes {
 		if strings.HasSuffix(username, suffix) {
-			return nil
+			found = true
+			break
 		}
 	}
-	return errors.New("username does not match the allowed suffixes")
+
+	if !found {
+		return "", errors.New("username does not match the allowed suffixes")
+	}
+
+	encoded, err := json.Marshal(b.userInfoFromClaims(claims{Email: username, Name: username}, nil))
+	if err != nil {
+		return "", fmt.Errorf("could not marshal user info: %v", err)
+	}
+	return string(encoded), nil
 }
 
 // getSession returns the session information for the specified session ID or an error if the session is not active.

@@ -56,10 +56,10 @@ func (s *Service) CancelIsAuthenticated(sessionID string) (dbusErr *dbus.Error) 
 }
 
 // UserPreCheck is the method through which the broker and the daemon will communicate once dbusInterface.UserPreCheck is called.
-func (s *Service) UserPreCheck(username string) (dbusErr *dbus.Error) {
-	err := s.broker.UserPreCheck(username)
+func (s *Service) UserPreCheck(username string) (userinfo string, dbusErr *dbus.Error) {
+	userinfo, err := s.broker.UserPreCheck(username)
 	if err != nil {
-		return dbus.MakeFailedError(err)
+		return "", dbus.MakeFailedError(err)
 	}
-	return nil
+	return userinfo, nil
 }
