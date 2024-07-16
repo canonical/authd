@@ -47,39 +47,52 @@ body:
         place.
   - type: textarea
     attributes:
-      label: "Ubuntu users: System information and logs"
-      description: >
-        Ubuntu users can run `ubuntu-bug authd-oidc --save=/tmp/report.txt`
-        and drag the file below.
-
-        It will contain useful information pertaining to the system and the packages installed.
-  - type: textarea
-    attributes:
-      label: "Non Ubuntu users: System information and logs"
+      label: "System information and logs"
       description: |
-        For users of distributions other than Ubuntu, provide details about the environment you experienced the issue in:
+        Provide details about the environment you experienced the issue in. Change msentraid for the provider you are using:
       value: |
         ### Environment
-        * authd-oidc version: please run //TODO
+        * broker version: please run `snap info authd-msentraid`
+        * authd version: please run `/usr/libexec/authd version`
         * Distribution: (**NAME** in `/etc/os-release`)
         * Distribution version: (**VERSION_ID** on `/etc/os-release`):
 
         ### Log files
         Please redact/remove sensitive information:
+
+        #### Authd entries:
+
         ```raw
-        authd-oidc logs can be found in //TODO
+        journalctl -u authd.service
+        ```
+
+        ####  MS Entra ID broker entries:
+
+        ```raw
+        journalctl -u snap.authd-msentraid.authd-msentraid.service
         ```
 
         ### Application settings
+
         Please redact/remove sensitive information:
+
+        ####  Broker configuration:
+
         ```raw
-        You can get the configuration file from //TODO
+        cat /var/snap/authd-msentraid/current/broker.conf
         ```
+
+        ####  Broker authd configuration:
+
+        ```raw
+        cat /etc/authd/brokers.d/msentraid.conf
+        ```
+
   - type: textarea
     attributes:
       label: Relevant information
       description: >
-        Please look at our [Troubleshooting guide](../#troubleshooting) and provide logs for the authd-oidc package.
+        Please look at our [Troubleshooting guide](https://github.com/ubuntu/authd/wiki/05--Troubleshooting) and provide logs for both authd and the oidc provider package.
       placeholder: Remember to redact any sensitive information from them.
   - type: checkboxes
     attributes:
