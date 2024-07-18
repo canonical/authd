@@ -67,8 +67,6 @@ func TestNoUsageError(t *testing.T) {
 }
 
 func TestUsageError(t *testing.T) {
-	t.Parallel()
-
 	a := daemon.NewForTests(t, nil, mockProvider.URL, "doesnotexist")
 
 	err := a.Run()
@@ -78,8 +76,6 @@ func TestUsageError(t *testing.T) {
 }
 
 func TestCanQuitWhenExecute(t *testing.T) {
-	t.Parallel()
-
 	a, wait := startDaemon(t, nil)
 	defer wait()
 
@@ -87,8 +83,6 @@ func TestCanQuitWhenExecute(t *testing.T) {
 }
 
 func TestCanQuitTwice(t *testing.T) {
-	t.Parallel()
-
 	a, wait := startDaemon(t, nil)
 
 	a.Quit()
@@ -100,8 +94,6 @@ func TestCanQuitTwice(t *testing.T) {
 func TestAppCanQuitWithoutExecute(t *testing.T) {
 	t.Skipf("This test is skipped because it is flaky. There is no way to guarantee Quit has been called before run.")
 
-	t.Parallel()
-
 	a := daemon.NewForTests(t, nil, mockProvider.URL)
 
 	requireGoroutineStarted(t, a.Quit)
@@ -112,7 +104,6 @@ func TestAppCanQuitWithoutExecute(t *testing.T) {
 }
 
 func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
-	t.Parallel()
 	const (
 		// Cache errors
 		dirIsFile = iota
@@ -130,8 +121,6 @@ func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			tmpDir := t.TempDir()
 			cachePath := filepath.Join(tmpDir, "cache")
 
@@ -226,15 +215,11 @@ func TestAppCanSigHupWithoutExecute(t *testing.T) {
 }
 
 func TestAppGetRootCmd(t *testing.T) {
-	t.Parallel()
-
 	a := daemon.NewForTests(t, nil, mockProvider.URL)
 	require.NotNil(t, a.RootCmd(), "Returns root command")
 }
 
 func TestConfigLoad(t *testing.T) {
-	t.Parallel()
-
 	tmpDir := t.TempDir()
 	config := daemon.DaemonConfig{
 		Verbosity: 1,

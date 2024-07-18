@@ -7,11 +7,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/k0kubun/pp"
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
 	msauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/group"
@@ -63,6 +65,7 @@ func (p MSEntraIDProvider) GetGroups(token *oauth2.Token) ([]group.Info, error) 
 		}
 		name, ok = v.(*string)
 		if !ok || name == nil {
+			slog.Warn(pp.Sprintf("Invalid group found: %v", obj))
 			return nil, errors.New("could not parse group name")
 		}
 

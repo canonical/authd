@@ -676,6 +676,7 @@ func TestUserPreCheck(t *testing.T) {
 	tests := map[string]struct {
 		username        string
 		allowedSuffixes []string
+		homePrefix      string
 
 		wantErr bool
 	}{
@@ -685,6 +686,11 @@ func TestUserPreCheck(t *testing.T) {
 		"Successfully allow username that matches at least one allowed suffix": {
 			username:        "user@allowed",
 			allowedSuffixes: []string{"@other", "@something", "@allowed"},
+		},
+		"Return userinfo with correct homedir after precheck": {
+			username:        "user@allowed",
+			allowedSuffixes: []string{"@allowed"},
+			homePrefix:      "/home/allowed/",
 		},
 
 		"Error when username does not match allowed suffix": {
@@ -705,14 +711,17 @@ func TestUserPreCheck(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			b := newBrokerForTests(t, broker.Config{IssuerURL: defaultProvider.URL, AllowedSSHSuffixes: tc.allowedSuffixes})
+			b := newBrokerForTests(t, broker.Config{IssuerURL: defaultProvider.URL, AllowedSSHSuffixes: tc.allowedSuffixes, HomeBaseDir: tc.homePrefix})
 
-			err := b.UserPreCheck(tc.username)
+			got, err := b.UserPreCheck(tc.username)
 			if tc.wantErr {
 				require.Error(t, err, "UserPreCheck should have returned an error")
 				return
 			}
 			require.NoError(t, err, "UserPreCheck should not have returned an error")
+
+			want := testutils.LoadWithUpdateFromGolden(t, got)
+			require.Equal(t, want, got, "UserPreCheck should have returned the expected value")
 		})
 	}
 }
