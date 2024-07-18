@@ -32,8 +32,20 @@ body:
       label: Describe the issue
       description: >
         Provide a clear and concise description of what the issue is, including what you expected to happen.
+
+        Please precise if the option is in the graphical display manager or in the terminal. If it is with the graphical
+        display manager, try to login with another local user, and open a terminal. Then, try to login with "login"
+        and see if you can reproduce the issue there too. State so in the description.
     validations:
       required: true
+  - type: checkboxes
+    attributes:
+      label: Where does the issue happens
+      options:
+        - label: I can reproduce the issue in the graphical display manager
+          required: false
+        - label: I can reproduce the issue on a terminal with "login"
+          required: false
   - type: textarea
     attributes:
       label: Steps to reproduce it
