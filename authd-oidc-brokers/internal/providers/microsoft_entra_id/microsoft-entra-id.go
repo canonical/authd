@@ -13,9 +13,9 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/k0kubun/pp"
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
 	msauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
+	"github.com/microsoftgraph/msgraph-sdk-go/models"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/group"
 	"golang.org/x/oauth2"
 )
@@ -55,20 +55,33 @@ func (p MSEntraIDProvider) GetGroups(token *oauth2.Token) ([]group.Info, error) 
 		return nil, err
 	}
 
-	var ok bool
-	var name, id *string
 	var groups []group.Info
 	for _, obj := range m.GetValue() {
-		v, err := obj.GetBackingStore().Get("displayName")
+		msGroup, ok := obj.(*models.Group)
+		if !ok {
+			unknown := "Unknown"
+			id, oType := obj.GetId(), obj.GetOdataType()
+			if id == nil {
+				id = &unknown
+			}
+			if oType == nil {
+				oType = &unknown
+			}
+			slog.Debug(fmt.Sprintf(
+				"Found non-group object with ID: %q of type: %q in graphsdk response. Ignoring it",
+				*id, *oType,
+			))
+			continue
+		}
+
+		v, err := msGroup.GetBackingStore().Get("displayName")
 		if err != nil {
 			return nil, err
 		}
-		name, ok = v.(*string)
+		name, ok := v.(*string)
 		if !ok || name == nil {
-			slog.Warn(pp.Sprintf("Invalid group found: %v", obj))
 			return nil, errors.New("could not parse group name")
 		}
-
 		groupName := strings.ToLower(*name)
 
 		// Local group
@@ -78,11 +91,11 @@ func (p MSEntraIDProvider) GetGroups(token *oauth2.Token) ([]group.Info, error) 
 			continue
 		}
 
-		v, err = obj.GetBackingStore().Get("id")
+		v, err = msGroup.GetBackingStore().Get("id")
 		if err != nil {
 			return nil, err
 		}
-		id, ok = v.(*string)
+		id, ok := v.(*string)
 		if !ok || id == nil {
 			return nil, errors.New("could not parse group id")
 		}
