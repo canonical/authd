@@ -70,6 +70,7 @@ body:
         ### Environment
         * broker version: please run `snap info authd-msentraid`
         * authd version: please run `/usr/libexec/authd version`
+        * gnome shell version: please run `apt policy gnome-shell`
         * Distribution: (**NAME** in `/etc/os-release`)
         * Distribution version: (**VERSION_ID** on `/etc/os-release`):
 
