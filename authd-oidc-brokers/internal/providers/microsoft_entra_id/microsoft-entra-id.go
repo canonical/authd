@@ -57,9 +57,9 @@ func (p MSEntraIDProvider) GetGroups(token *oauth2.Token) ([]group.Info, error) 
 
 	var groups []group.Info
 	for _, obj := range m.GetValue() {
+		unknown := "Unknown"
 		msGroup, ok := obj.(*models.Group)
 		if !ok {
-			unknown := "Unknown"
 			id, oType := obj.GetId(), obj.GetOdataType()
 			if id == nil {
 				id = &unknown
@@ -80,6 +80,11 @@ func (p MSEntraIDProvider) GetGroups(token *oauth2.Token) ([]group.Info, error) 
 		}
 		name, ok := v.(*string)
 		if !ok || name == nil {
+			id := msGroup.GetId()
+			if id == nil {
+				id = &unknown
+			}
+			slog.Warn(fmt.Sprint("Invalid group object (ID: %s) found: %v", id, msGroup))
 			return nil, errors.New("could not parse group name")
 		}
 		groupName := strings.ToLower(*name)
@@ -97,6 +102,7 @@ func (p MSEntraIDProvider) GetGroups(token *oauth2.Token) ([]group.Info, error) 
 		}
 		id, ok := v.(*string)
 		if !ok || id == nil {
+			slog.Warn(fmt.Sprint("Could not get ID for group %q: %v", groupName, msGroup))
 			return nil, errors.New("could not parse group id")
 		}
 
