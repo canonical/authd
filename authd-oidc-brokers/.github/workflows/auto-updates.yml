@@ -86,7 +86,7 @@ jobs:
           if: ${{ steps.merge.outputs.has_conflicts == 'false' }}
           run: |
             set -eux
-            git push origin ${{ matrix.branch_name }}
+            git push origin :${{ matrix.branch_name }}
 
             # Potentially existing PR with conflicts is not valid anymore: we just automerged.
             git push origin --delete update-${{ matrix.branch_name }} || true
