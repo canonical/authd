@@ -83,7 +83,7 @@ func (p Provider) GetGroups(token *oauth2.Token) ([]group.Info, error) {
 			if id == nil {
 				id = &unknown
 			}
-			slog.Warn(pretty.Sprintf("Could not get displayName from group object (ID: %s) found: %v", *id, msGroup))
+			slog.Warn(pretty.Sprintf("Could not get displayName from group object (ID: %s) found: %v", *id, *msGroup))
 			return nil, errors.New("could not parse group name")
 		}
 		groupName := strings.ToLower(*name)
@@ -101,7 +101,7 @@ func (p Provider) GetGroups(token *oauth2.Token) ([]group.Info, error) {
 		}
 		id, ok := v.(*string)
 		if !ok || id == nil {
-			slog.Warn(pretty.Sprintf("Could not get ID for group %q: %v", groupName, msGroup))
+			slog.Warn(pretty.Sprintf("Could not get ID for group %q: %v", groupName, *msGroup))
 			return nil, errors.New("could not parse group id")
 		}
 
