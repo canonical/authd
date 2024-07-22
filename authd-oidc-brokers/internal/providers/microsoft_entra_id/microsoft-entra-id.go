@@ -13,6 +13,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/kr/pretty"
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
 	msauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
@@ -84,7 +85,7 @@ func (p MSEntraIDProvider) GetGroups(token *oauth2.Token) ([]group.Info, error) 
 			if id == nil {
 				id = &unknown
 			}
-			slog.Warn(fmt.Sprint("Invalid group object (ID: %s) found: %v", id, msGroup))
+			slog.Warn(pretty.Sprintf("Could not get displayName from group object (ID: %s) found: %v", *id, msGroup))
 			return nil, errors.New("could not parse group name")
 		}
 		groupName := strings.ToLower(*name)
@@ -102,7 +103,7 @@ func (p MSEntraIDProvider) GetGroups(token *oauth2.Token) ([]group.Info, error) 
 		}
 		id, ok := v.(*string)
 		if !ok || id == nil {
-			slog.Warn(fmt.Sprint("Could not get ID for group %q: %v", groupName, msGroup))
+			slog.Warn(pretty.Sprintf("Could not get ID for group %q: %v", groupName, msGroup))
 			return nil, errors.New("could not parse group id")
 		}
 
