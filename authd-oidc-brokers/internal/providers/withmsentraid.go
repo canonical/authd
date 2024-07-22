@@ -3,10 +3,10 @@
 package providers
 
 import (
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/microsoft_entra_id"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid"
 )
 
 // CurrentProviderInfo returns a Microsoft Entra ID provider implementation.
 func CurrentProviderInfo() ProviderInfoer {
-	return microsoft_entra_id.MSEntraIDProvider{}
+	return msentraid.Provider{}
 }
