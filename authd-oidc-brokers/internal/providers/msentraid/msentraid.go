@@ -21,21 +21,21 @@ import (
 
 const localGroupPrefix = "linux-"
 
-// MSEntraIDProvider is the Microsoft Entra ID provider implementation.
-type MSEntraIDProvider struct{}
+// Provider is the Microsoft Entra ID provider implementation.
+type Provider struct{}
 
 // AdditionalScopes returns the generic scopes required by the EntraID provider.
-func (p MSEntraIDProvider) AdditionalScopes() []string {
+func (p Provider) AdditionalScopes() []string {
 	return []string{oidc.ScopeOfflineAccess}
 }
 
 // AuthOptions returns the generic auth options required by the EntraID provider.
-func (p MSEntraIDProvider) AuthOptions() []oauth2.AuthCodeOption {
+func (p Provider) AuthOptions() []oauth2.AuthCodeOption {
 	return []oauth2.AuthCodeOption{}
 }
 
 // GetGroups access the Microsoft Graph API to get the groups the user is a member of.
-func (p MSEntraIDProvider) GetGroups(token *oauth2.Token) ([]group.Info, error) {
+func (p Provider) GetGroups(token *oauth2.Token) ([]group.Info, error) {
 	cred := azureTokenCredential{token: token}
 	auth, err := msauth.NewAzureIdentityAuthenticationProvider(cred)
 	if err != nil {
@@ -114,7 +114,7 @@ func (p MSEntraIDProvider) GetGroups(token *oauth2.Token) ([]group.Info, error) 
 // CurrentAuthenticationModesOffered returns the generic authentication modes supported by the provider.
 //
 // Token validity is not considered, only the presence of a token.
-func (p MSEntraIDProvider) CurrentAuthenticationModesOffered(
+func (p Provider) CurrentAuthenticationModesOffered(
 	sessionMode string,
 	supportedAuthModes map[string]string,
 	tokenExists bool,
