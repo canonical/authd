@@ -11,13 +11,17 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/kr/pretty"
+	"github.com/k0kubun/pp"
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
 	msauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/group"
 	"golang.org/x/oauth2"
 )
+
+func init() {
+	pp.ColoringEnabled = false
+}
 
 const localGroupPrefix = "linux-"
 
@@ -83,7 +87,7 @@ func (p Provider) GetGroups(token *oauth2.Token) ([]group.Info, error) {
 			if id == nil {
 				id = &unknown
 			}
-			slog.Warn(pretty.Sprintf("Could not get displayName from group object (ID: %s) found: %v", *id, *msGroup))
+			slog.Warn(pp.Sprintf("Could not get displayName from group object (ID: %s) found: %v", *id, *msGroup))
 			return nil, errors.New("could not parse group name")
 		}
 		groupName := strings.ToLower(*name)
@@ -101,7 +105,7 @@ func (p Provider) GetGroups(token *oauth2.Token) ([]group.Info, error) {
 		}
 		id, ok := v.(*string)
 		if !ok || id == nil {
-			slog.Warn(pretty.Sprintf("Could not get ID for group %q: %v", groupName, *msGroup))
+			slog.Warn(pp.Sprintf("Could not get ID for group %q: %v", groupName, *msGroup))
 			return nil, errors.New("could not parse group id")
 		}
 
