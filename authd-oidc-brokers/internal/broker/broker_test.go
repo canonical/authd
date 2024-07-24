@@ -1,7 +1,6 @@
 package broker_test
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -32,12 +31,12 @@ func TestNew(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Successfully create new broker": {},
+		"Successfully create new broker":                              {},
+		"Successfully create new even if can not connect to provider": {issuer: "https://notavailable"},
 
-		"Error if issuer is not provided":           {issuer: "-", wantErr: true},
-		"Error if provided issuer is not reachable": {issuer: "https://notavailable", wantErr: true},
-		"Error if clientID is not provided":         {clientID: "-", wantErr: true},
-		"Error if cacheDir is not provided":         {cachePath: "-", wantErr: true},
+		"Error if issuer is not provided":   {issuer: "-", wantErr: true},
+		"Error if clientID is not provided": {clientID: "-", wantErr: true},
+		"Error if cacheDir is not provided": {cachePath: "-", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -74,6 +73,52 @@ func TestNew(t *testing.T) {
 			}
 			require.NoError(t, err, "New should not have returned an error")
 			require.NotNil(t, b, "New should have returned a non-nil broker")
+		})
+	}
+}
+
+func TestNewSession(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		customHandlers map[string]testutils.ProviderHandler
+
+		wantOffline bool
+	}{
+		"Successfully create new session": {},
+		"Creates new session in offline mode if provider is not available": {
+			customHandlers: map[string]testutils.ProviderHandler{
+				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
+			},
+			wantOffline: true,
+		},
+		"Creates new session in offline mode if provider connection times out": {
+			customHandlers: map[string]testutils.ProviderHandler{
+				"/.well-known/openid-configuration": testutils.HangingHandler(broker.MaxRequestDuration + 1),
+			},
+			wantOffline: true,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var opts []testutils.OptionProvider
+			for endpoint, handler := range tc.customHandlers {
+				opts = append(opts, testutils.WithHandler(endpoint, handler))
+			}
+
+			provider, stopServer := testutils.StartMockProvider("", opts...)
+			t.Cleanup(stopServer)
+			b := newBrokerForTests(t, broker.Config{IssuerURL: provider.URL})
+
+			id, _, err := b.NewSession("test-user", "lang", "auth")
+			require.NoError(t, err, "NewSession should not have returned an error")
+
+			gotOffline, err := b.IsOffline(id)
+			require.NoError(t, err, "Session should have been created")
+
+			require.Equal(t, tc.wantOffline, gotOffline, "Session should have been created in the expected mode")
 		})
 	}
 }
@@ -162,6 +207,12 @@ func TestGetAuthenticationModes(t *testing.T) {
 						testutils.OpenIDHandlerWithNoDeviceEndpoint("http://"+address),
 					))
 				}
+				if tc.unavailableProvider {
+					opts = append(opts, testutils.WithHandler(
+						"/.well-known/openid-configuration",
+						testutils.UnavailableHandler(),
+					))
+				}
 				provider, stopServer = testutils.StartMockProvider(address, opts...)
 				t.Cleanup(stopServer)
 			}
@@ -186,10 +237,6 @@ func TestGetAuthenticationModes(t *testing.T) {
 			var layouts []map[string]string
 			for _, layout := range tc.supportedLayouts {
 				layouts = append(layouts, supportedUILayouts[layout])
-			}
-
-			if tc.unavailableProvider {
-				stopServer()
 			}
 
 			got, err := b.GetAuthenticationModes(sessionID, layouts)
@@ -234,6 +281,11 @@ func TestSelectAuthenticationMode(t *testing.T) {
 		"Error when selecting device_auth but provider is unavailable": {modeName: "device_auth", wantErr: true,
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/device_auth": testutils.UnavailableHandler(),
+			},
+		},
+		"Error when selecting device_auth but request times out": {modeName: "device_auth", wantErr: true,
+			customHandlers: map[string]testutils.ProviderHandler{
+				"/device_auth": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
 	}
@@ -327,7 +379,7 @@ func TestIsAuthenticated(t *testing.T) {
 			firstMode:        "password",
 			preexistentToken: "expired",
 			customHandlers: map[string]testutils.ProviderHandler{
-				"/token": testutils.UnavailableHandler(),
+				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
 		},
 
@@ -347,12 +399,27 @@ func TestIsAuthenticated(t *testing.T) {
 		},
 		"Error when mode is password and token is invalid":                {firstMode: "password", preexistentToken: "invalid"},
 		"Error when mode is password and cached token can't be refreshed": {firstMode: "password", preexistentToken: "no-refresh"},
-		"Error when mode is password and can not fetch user info":         {firstMode: "password", preexistentToken: "invalid-id"},
+		"Error when mode is password and token refresh times out": {firstMode: "password", preexistentToken: "expired",
+			customHandlers: map[string]testutils.ProviderHandler{
+				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
+			},
+		},
+		"Error when mode is password and can not fetch user info": {firstMode: "password", preexistentToken: "invalid-id"},
 
 		"Error when mode is qrcode and response is invalid": {firstAuthInfo: map[string]any{"response": "not a valid response"}},
+		"Error when mode is qrcode and link expires": {
+			customHandlers: map[string]testutils.ProviderHandler{
+				"/device_auth": testutils.ExpiryDeviceAuthHandler(),
+			},
+		},
 		"Error when mode is qrcode and can not get token": {
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.UnavailableHandler(),
+			},
+		},
+		"Error when mode is qrcode and can not get token due to timeout": {
+			customHandlers: map[string]testutils.ProviderHandler{
+				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
 		"Error when empty challenge is provided for local password": {firstChallenge: "-", wantSecondCall: true, secondChallenge: "-"},
@@ -394,7 +461,7 @@ func TestIsAuthenticated(t *testing.T) {
 					opts = append(opts, testutils.WithHandler(path, handler))
 				}
 				p, cleanup := testutils.StartMockProvider("", opts...)
-				defer cleanup()
+				t.Cleanup(cleanup)
 				provider = p
 			}
 
@@ -463,6 +530,7 @@ func TestIsAuthenticated(t *testing.T) {
 				// Redact variant values from the response
 				data = strings.ReplaceAll(data, sessionID, "SESSION_ID")
 				data = strings.ReplaceAll(data, filepath.Dir(b.TokenPathForSession(sessionID)), "provider_cache_path")
+				data = strings.ReplaceAll(data, provider.URL, "provider_url")
 				errStr := strings.ReplaceAll(fmt.Sprintf("%v", err), sessionID, "SESSION_ID")
 
 				got := isAuthenticatedResponse{Access: access, Data: data, Err: errStr}
@@ -504,6 +572,7 @@ func TestIsAuthenticated(t *testing.T) {
 					// Redact variant values from the response
 					data = strings.ReplaceAll(data, sessionID, "SESSION_ID")
 					data = strings.ReplaceAll(data, filepath.Dir(b.TokenPathForSession(sessionID)), "provider_cache_path")
+					data = strings.ReplaceAll(data, provider.URL, "provider_url")
 					errStr := strings.ReplaceAll(fmt.Sprintf("%v", err), sessionID, "SESSION_ID")
 
 					got := isAuthenticatedResponse{Access: access, Data: data, Err: errStr}
@@ -630,8 +699,7 @@ func TestFetchUserInfo(t *testing.T) {
 func TestCancelIsAuthenticated(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	provider, cleanup := testutils.StartMockProvider("", testutils.WithHandler("/token", testutils.HangingHandler(ctx)))
+	provider, cleanup := testutils.StartMockProvider("", testutils.WithHandler("/token", testutils.HangingHandler(3*time.Second)))
 	t.Cleanup(cleanup)
 
 	b := newBrokerForTests(t, broker.Config{IssuerURL: provider.URL})
@@ -650,7 +718,6 @@ func TestCancelIsAuthenticated(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	b.CancelIsAuthenticated(sessionID)
-	cancel()
 	<-stopped
 }
 
