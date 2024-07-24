@@ -14,6 +14,7 @@ import (
 	"github.com/k0kubun/pp"
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
 	msauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
+	msgraphgroups "github.com/microsoftgraph/msgraph-sdk-go/groups"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/group"
 	"golang.org/x/oauth2"
@@ -52,6 +53,17 @@ func (p Provider) GetGroups(token *oauth2.Token) ([]group.Info, error) {
 	}
 
 	client := msgraphsdk.NewGraphServiceClient(adapter)
+
+	// Check GroupMember.Read.All access
+	var topOne int32 = 1
+	requestOptions := &msgraphgroups.GroupsRequestBuilderGetRequestConfiguration{
+		QueryParameters: &msgraphgroups.GroupsRequestBuilderGetQueryParameters{
+			Top: &topOne, // Limit to only one group
+		},
+	}
+	if _, err = client.Groups().Get(context.Background(), requestOptions); err != nil {
+		return nil, fmt.Errorf("could not access user's groups: %v", err)
+	}
 
 	m, err := client.Me().MemberOf().Get(context.Background(), nil)
 	if err != nil {
