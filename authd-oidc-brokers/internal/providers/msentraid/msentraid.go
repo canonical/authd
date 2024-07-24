@@ -135,7 +135,7 @@ func (p Provider) CurrentAuthenticationModesOffered(
 	supportedAuthModes map[string]string,
 	tokenExists bool,
 	providerReachable bool,
-	endpoints map[string]string,
+	endpoints map[string]struct{},
 	currentAuthStep int,
 ) ([]string, error) {
 	var offeredModes []string
@@ -150,7 +150,7 @@ func (p Provider) CurrentAuthenticationModesOffered(
 		}
 
 	default: // auth mode
-		if providerReachable && endpoints["device_auth"] != "" {
+		if _, ok := endpoints["device_auth"]; ok && providerReachable {
 			offeredModes = []string{"device_auth"}
 		}
 		if tokenExists {
