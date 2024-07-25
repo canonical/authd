@@ -65,7 +65,7 @@ func (p Provider) GetGroups(token *oauth2.Token) ([]group.Info, error) {
 		return nil, fmt.Errorf("could not access user's groups: %v", err)
 	}
 
-	m, err := client.Me().MemberOf().Get(context.Background(), nil)
+	m, err := client.Me().TransitiveMemberOf().Get(context.Background(), nil)
 	if err != nil {
 		return nil, err
 	}
