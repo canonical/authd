@@ -10,12 +10,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
@@ -26,7 +26,10 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const maxAuthAttempts = 3
+const (
+	maxAuthAttempts    = 3
+	maxRequestDuration = 5 * time.Second
+)
 
 // Config is the configuration for the broker.
 type Config struct {
@@ -39,8 +42,11 @@ type Config struct {
 
 // Broker is the real implementation of the broker to track sessions and process oidc calls.
 type Broker struct {
-	providerInfo       providers.ProviderInfoer
-	auth               authConfig
+	providerInfo providers.ProviderInfoer
+	issuerURL    string
+	oidcCfg      oidc.Config
+
+	cachePath          string
 	homeDirPath        string
 	allowedSSHSuffixes []string
 
@@ -48,16 +54,6 @@ type Broker struct {
 	currentSessionsMu sync.RWMutex
 
 	privateKey *rsa.PrivateKey
-}
-
-type authConfig struct {
-	cachePath string
-
-	provider    *oidc.Provider
-	providerURL string
-
-	oidcCfg  oidc.Config
-	oauthCfg oauth2.Config
 }
 
 type sessionInfo struct {
@@ -70,12 +66,20 @@ type sessionInfo struct {
 	authModes         []string
 	attemptsPerMode   map[string]int
 
+	authCfg   authConfig
 	authInfo  map[string]any
+	isOffline bool
 	cachePath string
 
 	currentAuthStep int
 
 	isAuthenticating *isAuthenticatedCtx
+}
+
+// authConfig holds the required values for authenticating a user with OIDC.
+type authConfig struct {
+	provider *oidc.Provider
+	oauth    oauth2.Config
 }
 
 type isAuthenticatedCtx struct {
@@ -109,9 +113,7 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 		return &Broker{}, errors.New("cache path must be provided")
 	}
 
-	clientID := cfg.ClientID
-	issuerURL := cfg.IssuerURL
-	if issuerURL == "" || clientID == "" {
+	if cfg.IssuerURL == "" || cfg.ClientID == "" {
 		return &Broker{}, errors.New("issuer and client ID must be provided")
 	}
 
@@ -126,38 +128,19 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 		panic(fmt.Sprintf("could not create an valid rsa key: %v", err))
 	}
 
-	// Create provider
-	provider, err := oidc.NewProvider(context.TODO(), issuerURL)
-	if err != nil {
-		return &Broker{}, err
-	}
-	oidcCfg := oidc.Config{
-		ClientID:                   clientID,
-		InsecureSkipSignatureCheck: opts.skipJWTSignatureCheck,
-	}
-	oauthCfg := oauth2.Config{
-		ClientID: clientID,
-		Endpoint: provider.Endpoint(),
-		Scopes:   append([]string{oidc.ScopeOpenID, "profile", "email"}, opts.providerInfo.AdditionalScopes()...),
-	}
-	authCfg := authConfig{
-		provider:    provider,
-		providerURL: issuerURL,
-		cachePath:   cfg.CachePath,
-		oidcCfg:     oidcCfg,
-		oauthCfg:    oauthCfg,
-	}
-
-	return &Broker{
+	b = &Broker{
 		providerInfo:       opts.providerInfo,
-		auth:               authCfg,
+		issuerURL:          cfg.IssuerURL,
+		oidcCfg:            oidc.Config{ClientID: cfg.ClientID, InsecureSkipSignatureCheck: opts.skipJWTSignatureCheck},
+		cachePath:          cfg.CachePath,
 		homeDirPath:        homeDirPath,
 		allowedSSHSuffixes: cfg.AllowedSSHSuffixes,
 		privateKey:         privateKey,
 
 		currentSessions:   make(map[string]sessionInfo),
 		currentSessionsMu: sync.RWMutex{},
-	}, nil
+	}
+	return b, nil
 }
 
 // NewSession creates a new session for the user.
@@ -179,16 +162,41 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 		return "", "", err
 	}
 
-	_, url, _ := strings.Cut(b.auth.providerURL, "://")
+	_, url, _ := strings.Cut(b.issuerURL, "://")
 	url = strings.ReplaceAll(url, "/", "_")
 	url = strings.ReplaceAll(url, ":", "_")
-	session.cachePath = filepath.Join(b.auth.cachePath, url, username+".cache")
+	session.cachePath = filepath.Join(b.cachePath, url, username+".cache")
+
+	// Check whether to start the session in offline mode.
+	session.authCfg, err = b.connectToProvider(context.Background())
+	if err != nil {
+		slog.Debug(fmt.Sprintf("Could not connect to the provider: %v. Starting session in offline mode.", err))
+		session.isOffline = true
+	}
 
 	b.currentSessionsMu.Lock()
 	b.currentSessions[sessionID] = session
 	b.currentSessionsMu.Unlock()
 
 	return sessionID, base64.StdEncoding.EncodeToString(pubASN1), nil
+}
+
+func (b *Broker) connectToProvider(ctx context.Context) (authCfg authConfig, err error) {
+	ctx, cancel := context.WithTimeout(ctx, maxRequestDuration)
+	defer cancel()
+
+	provider, err := oidc.NewProvider(ctx, b.issuerURL)
+	if err != nil {
+		return authConfig{}, err
+	}
+
+	oauthCfg := oauth2.Config{
+		ClientID: b.oidcCfg.ClientID,
+		Endpoint: provider.Endpoint(),
+		Scopes:   append([]string{oidc.ScopeOpenID, "profile", "email"}, b.providerInfo.AdditionalScopes()...),
+	}
+
+	return authConfig{provider: provider, oauth: oauthCfg}, nil
 }
 
 // GetAuthenticationModes returns the authentication modes available for the user.
@@ -204,24 +212,17 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 	_, err = os.Stat(session.cachePath)
 	tokenExists := err == nil
 
-	// Checks if the provider is accessible and if device authentication is supported
-	providerReachable := true
-	r, err := http.Get(strings.TrimSuffix(b.auth.providerURL, "/") + "/.well-known/openid-configuration")
-	// This means the provider is not available or something bad happened, so we assume no connection.
-	if err != nil || r.StatusCode != http.StatusOK {
-		providerReachable = false
+	endpoints := make(map[string]struct{})
+	if session.authCfg.provider != nil && session.authCfg.provider.Endpoint().DeviceAuthURL != "" {
+		endpoints["device_auth"] = struct{}{}
 	}
 
 	availableModes, err := b.providerInfo.CurrentAuthenticationModesOffered(
 		session.mode,
 		supportedAuthModes,
 		tokenExists,
-		providerReachable,
-		map[string]string{
-			"auth":        b.auth.provider.Endpoint().AuthURL,
-			"device_auth": b.auth.provider.Endpoint().DeviceAuthURL,
-			"token":       b.auth.provider.Endpoint().TokenURL,
-		},
+		!session.isOffline,
+		endpoints,
 		session.currentAuthStep)
 	if err != nil {
 		return nil, err
@@ -307,7 +308,9 @@ func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[
 	var uiLayout map[string]string
 	switch authModeID {
 	case "device_auth":
-		response, err := b.auth.oauthCfg.DeviceAuth(context.TODO())
+		ctx, cancel := context.WithTimeout(context.Background(), maxRequestDuration)
+		defer cancel()
+		response, err := session.authCfg.oauth.DeviceAuth(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("could not generate QR code layout: %v", err)
 		}
@@ -422,7 +425,6 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 	}
 
 	var authInfo authCachedInfo
-	offline := false
 	switch session.selectedMode {
 	case "device_auth":
 		response, ok := session.authInfo["response"].(*oauth2.DeviceAuthResponse)
@@ -430,7 +432,12 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 			return AuthDenied, errorMessage{Message: "could not get required response"}
 		}
 
-		t, err := b.auth.oauthCfg.DeviceAccessToken(ctx, response, b.providerInfo.AuthOptions()...)
+		if response.Expiry.IsZero() {
+			response.Expiry = time.Now().Add(time.Hour)
+		}
+		expiryCtx, cancel := context.WithDeadline(ctx, response.Expiry)
+		defer cancel()
+		t, err := session.authCfg.oauth.DeviceAccessToken(expiryCtx, response, b.providerInfo.AuthOptions()...)
 		if err != nil {
 			return AuthRetry, errorMessage{Message: fmt.Sprintf("could not authenticate user: %v", err)}
 		}
@@ -450,7 +457,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 		return AuthNext, nil
 
 	case "password":
-		authInfo, offline, err = b.loadAuthInfo(session, challenge)
+		authInfo, err = b.loadAuthInfo(ctx, session, challenge)
 		if err != nil {
 			return AuthRetry, errorMessage{Message: fmt.Sprintf("could not authenticate user: %v", err)}
 		}
@@ -480,7 +487,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 		}
 	}
 
-	if offline {
+	if session.isOffline {
 		return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 	}
 
@@ -627,34 +634,36 @@ func (b *Broker) cacheAuthInfo(session *sessionInfo, authInfo authCachedInfo, pa
 }
 
 // loadAuthInfo deserializes the token from the cache and refreshes it if needed.
-func (b *Broker) loadAuthInfo(session *sessionInfo, password string) (loadedInfo authCachedInfo, offline bool, err error) {
+func (b *Broker) loadAuthInfo(ctx context.Context, session *sessionInfo, password string) (loadedInfo authCachedInfo, err error) {
 	defer decorate.OnError(&err, "could not load cached info")
 
 	s, err := os.ReadFile(session.cachePath)
 	if err != nil {
-		return authCachedInfo{}, false, fmt.Errorf("could not read token: %v", err)
+		return authCachedInfo{}, fmt.Errorf("could not read token: %v", err)
 	}
 
 	deserialized, err := decrypt(s, []byte(password))
 	if err != nil {
-		return authCachedInfo{}, false, fmt.Errorf("could not deserialize token: %v", err)
+		return authCachedInfo{}, fmt.Errorf("could not deserialize token: %v", err)
 	}
 
 	var cachedInfo authCachedInfo
 	if err := json.Unmarshal(deserialized, &cachedInfo); err != nil {
-		return authCachedInfo{}, false, fmt.Errorf("could not unmarshal token: %v", err)
+		return authCachedInfo{}, fmt.Errorf("could not unmarshal token: %v", err)
+	}
+
+	// If the token is still valid, we return it. Ideally, we would refresh it online, but the TokenSource API also uses
+	// this logic to decide whether the token needs refreshing, so we should run it early to control the returned values.
+	if cachedInfo.Token.Valid() || session.isOffline {
+		return cachedInfo, nil
 	}
 
 	// Tries to refresh the access token. If the service is unavailable, we allow authentication.
-	tok, err := b.auth.oauthCfg.TokenSource(context.Background(), cachedInfo.Token).Token()
+	timeoutCtx, cancel := context.WithTimeout(ctx, maxRequestDuration)
+	defer cancel()
+	tok, err := session.authCfg.oauth.TokenSource(timeoutCtx, cachedInfo.Token).Token()
 	if err != nil {
-		castErr := &oauth2.RetrieveError{}
-		if !errors.As(err, &castErr) || castErr.Response.StatusCode != http.StatusServiceUnavailable {
-			return authCachedInfo{}, false, fmt.Errorf("could not refresh token: %v", err)
-		}
-
-		// The provider is unavailable, so we allow offline authentication.
-		return cachedInfo, true, nil
+		return authCachedInfo{}, fmt.Errorf("could not refresh token: %v", err)
 	}
 
 	// If the ID token was refreshed, we overwrite the cached one.
@@ -663,13 +672,17 @@ func (b *Broker) loadAuthInfo(session *sessionInfo, password string) (loadedInfo
 		refreshedIDToken = cachedInfo.RawIDToken
 	}
 
-	return authCachedInfo{Token: tok, RawIDToken: refreshedIDToken}, false, nil
+	return authCachedInfo{Token: tok, RawIDToken: refreshedIDToken}, nil
 }
 
 func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *authCachedInfo) (userInfo userInfo, err error) {
 	defer decorate.OnError(&err, "could not fetch user info")
 
-	userClaims, err := b.userClaims(ctx, t.RawIDToken, session.username)
+	if session.isOffline {
+		return userInfo, errors.New("session is in offline mode")
+	}
+
+	userClaims, err := b.userClaims(ctx, session, t.RawIDToken, session.username)
 	if err != nil {
 		return userInfo, err
 	}
@@ -690,9 +703,10 @@ type claims struct {
 	Sub               string `json:"sub"`
 }
 
-func (b *Broker) userClaims(ctx context.Context, rawIDToken, username string) (userClaims claims, err error) {
+func (b *Broker) userClaims(ctx context.Context, session *sessionInfo, rawIDToken, username string) (userClaims claims, err error) {
 	// We need to verify the token to get the user claims.
-	idToken, err := b.auth.provider.Verifier(&b.auth.oidcCfg).Verify(ctx, rawIDToken)
+	// Due to an internal implementation, the verification process can't be cancelled, so we can't add a timeout for it.
+	idToken, err := session.authCfg.provider.Verifier(&b.oidcCfg).Verify(ctx, rawIDToken)
 	if err != nil {
 		return claims{}, fmt.Errorf("could not verify token: %v", err)
 	}

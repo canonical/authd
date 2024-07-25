@@ -1,7 +1,6 @@
 package testutils
 
 import (
-	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -129,7 +128,7 @@ func DefaultDeviceAuthHandler() ProviderHandler {
 func DefaultTokenHandler(serverURL string) ProviderHandler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Mimics user going through auth process
-		time.Sleep(3 * time.Second)
+		time.Sleep(2 * time.Second)
 
 		idToken := fmt.Sprintf(`{
 			"iss": "%s",
@@ -187,13 +186,31 @@ func CustomResponseHandler(response string) ProviderHandler {
 	}
 }
 
-// HangingHandler returns a handler that hangs the request until the context is done.
-func HangingHandler(ctx context.Context) ProviderHandler {
+// HangingHandler returns a handler that hangs the request until the duration has elapsed.
+func HangingHandler(d time.Duration) ProviderHandler {
 	return func(w http.ResponseWriter, r *http.Request) {
-		<-ctx.Done()
+		time.Sleep(d)
 
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusRequestTimeout)
+	}
+}
+
+// ExpiryDeviceAuthHandler returns a handler that returns a device auth response with a short expiry time.
+func ExpiryDeviceAuthHandler() ProviderHandler {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		response := `{
+			"device_code": "device_code",
+			"user_code": "user_code",
+			"verification_uri": "https://verification_uri.com",
+			"expires_in": 4
+		}`
+
+		w.Header().Add("Content-Type", "application/json")
+		_, err := w.Write([]byte(response))
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
 	}
 }
 
@@ -238,7 +255,7 @@ func (p MockProviderInfoer) CurrentAuthenticationModesOffered(
 	supportedAuthModes map[string]string,
 	tokenExists bool,
 	providerReachable bool,
-	endpoints map[string]string,
+	endpoints map[string]struct{},
 	currentAuthStep int,
 ) ([]string, error) {
 	var offeredModes []string
@@ -253,7 +270,7 @@ func (p MockProviderInfoer) CurrentAuthenticationModesOffered(
 		}
 
 	default: // auth mode
-		if providerReachable && endpoints["device_auth"] != "" {
+		if _, ok := endpoints["device_auth"]; ok && providerReachable {
 			offeredModes = []string{"device_auth"}
 		}
 		if tokenExists {
