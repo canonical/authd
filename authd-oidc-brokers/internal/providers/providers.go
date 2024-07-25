@@ -15,7 +15,7 @@ type ProviderInfoer interface {
 		supportedAuthModes map[string]string,
 		tokenExists bool,
 		providerReachable bool,
-		endpoints map[string]string,
+		endpoints map[string]struct{},
 		currentAuthStep int,
 	) ([]string, error)
 	GetGroups(*oauth2.Token) ([]group.Info, error)

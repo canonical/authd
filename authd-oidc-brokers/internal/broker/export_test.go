@@ -22,7 +22,7 @@ func (b *Broker) TokenPathForSession(sessionID string) string {
 
 // CachePath returns the path to the cache directory for tests.
 func (b *Broker) CachePath() string {
-	return b.auth.cachePath
+	return b.cachePath
 }
 
 // UpdateSessionAuthStep updates the current auth step for the given session.
@@ -110,5 +110,17 @@ func (b *Broker) FetchUserInfo(sessionID string, cachedInfo *authCachedInfo) (us
 	return uInfo, err
 }
 
+// IsOffline returns whether the given session is offline or an error if the session does not exist.
+func (b *Broker) IsOffline(sessionID string) (bool, error) {
+	session, err := b.getSession(sessionID)
+	if err != nil {
+		return false, err
+	}
+	return session.isOffline, nil
+}
+
 // UserInfo exposes the private userInfo for tests.
 type UserInfo = userInfo
+
+// MaxRequestDuration exposes the broker's maxRequestDuration for tests.
+const MaxRequestDuration = maxRequestDuration
