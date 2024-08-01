@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 )
 
 // TokenPathForSession returns the path to the token file for the given session.
@@ -94,17 +96,15 @@ func writeTrashToken(path, challenge string) error {
 }
 
 // FetchUserInfo exposes the broker's fetchUserInfo method for tests.
-//
-//nolint:revive // This is a test helper and the returned userInfo will be marshaled for golden files.
-func (b *Broker) FetchUserInfo(sessionID string, cachedInfo *authCachedInfo) (userInfo, error) {
+func (b *Broker) FetchUserInfo(sessionID string, cachedInfo *authCachedInfo) (info.User, error) {
 	s, err := b.getSession(sessionID)
 	if err != nil {
-		return userInfo{}, err
+		return info.User{}, err
 	}
 
 	uInfo, err := b.fetchUserInfo(context.TODO(), &s, cachedInfo)
 	if err != nil {
-		return userInfo{}, err
+		return info.User{}, err
 	}
 
 	return uInfo, err
@@ -118,9 +118,6 @@ func (b *Broker) IsOffline(sessionID string) (bool, error) {
 	}
 	return session.isOffline, nil
 }
-
-// UserInfo exposes the private userInfo for tests.
-type UserInfo = userInfo
 
 // MaxRequestDuration exposes the broker's maxRequestDuration for tests.
 const MaxRequestDuration = maxRequestDuration

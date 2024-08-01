@@ -2,7 +2,10 @@
 package providers
 
 import (
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/group"
+	"context"
+
+	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
 
@@ -18,5 +21,5 @@ type ProviderInfoer interface {
 		endpoints map[string]struct{},
 		currentAuthStep int,
 	) ([]string, error)
-	GetGroups(*oauth2.Token) ([]group.Info, error)
+	GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error)
 }

@@ -1,8 +1,8 @@
-name: test-user@email.com
+name: TEST-USER@EMAIL.COM
 uuid: saved-user-id
-home: /home/test-user@email.com
+home: /home/userInfoTests/TEST-USER@EMAIL.COM
 shell: /usr/bin/bash
-gecos: test-user@email.com
+gecos: TEST-USER@EMAIL.COM
 groups:
     - name: remote-group
       ugid: "12345"

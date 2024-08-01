@@ -2,11 +2,12 @@
 package noprovider
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/group"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
 
@@ -21,11 +22,6 @@ func (p NoProvider) AdditionalScopes() []string {
 // AuthOptions is a no-op when no specific provider is in use.
 func (p NoProvider) AuthOptions() []oauth2.AuthCodeOption {
 	return []oauth2.AuthCodeOption{}
-}
-
-// GetGroups is a no-op when no specific provider is in use.
-func (p NoProvider) GetGroups(_ *oauth2.Token) ([]group.Info, error) {
-	return nil, nil
 }
 
 // CurrentAuthenticationModesOffered returns the generic authentication modes supported by the provider.
@@ -67,4 +63,48 @@ func (p NoProvider) CurrentAuthenticationModesOffered(
 	}
 
 	return offeredModes, nil
+}
+
+// GetUserInfo is a no-op when no specific provider is in use.
+func (p NoProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error) {
+	userClaims, err := p.userClaims(idToken)
+	if err != nil {
+		return info.User{}, err
+	}
+
+	userGroups, err := p.getGroups(accessToken)
+	if err != nil {
+		return info.User{}, err
+	}
+
+	return info.NewUser(
+		userClaims.PreferredUserName,
+		userClaims.Home,
+		userClaims.Sub,
+		userClaims.Shell,
+		userClaims.Gecos,
+		userGroups,
+	), nil
+}
+
+type claims struct {
+	PreferredUserName string `json:"preferred_username"`
+	Sub               string `json:"sub"`
+	Home              string `json:"home"`
+	Shell             string `json:"shell"`
+	Gecos             string `json:"gecos"`
+}
+
+// userClaims returns the user claims parsed from the ID token.
+func (p NoProvider) userClaims(idToken *oidc.IDToken) (claims, error) {
+	var userClaims claims
+	if err := idToken.Claims(&userClaims); err != nil {
+		return claims{}, fmt.Errorf("could not get user info: %v", err)
+	}
+	return userClaims, nil
+}
+
+// getGroups is a no-op when no specific provider is in use.
+func (p NoProvider) getGroups(_ *oauth2.Token) ([]info.Group, error) {
+	return nil, nil
 }

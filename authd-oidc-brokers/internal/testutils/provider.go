@@ -1,6 +1,7 @@
 package testutils
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -10,7 +11,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/group"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
 
@@ -136,8 +137,8 @@ func DefaultTokenHandler(serverURL string) ProviderHandler {
 			"aud": "test-client-id",
 			"exp": 9999999999,
 			"name": "test-user",
-			"preferred_username": "User Test",
-			"email": "test-user@email.com",
+			"preferred_username": "test-user@email.com",
+			"email": "test-user@anotheremail.com",
 			"email_verified": true
 		}`, serverURL)
 
@@ -218,7 +219,7 @@ func ExpiryDeviceAuthHandler() ProviderHandler {
 type MockProviderInfoer struct {
 	Scopes    []string
 	Options   []oauth2.AuthCodeOption
-	Groups    []group.Info
+	Groups    []info.Group
 	GroupsErr bool
 }
 
@@ -238,8 +239,47 @@ func (p *MockProviderInfoer) AuthOptions() []oauth2.AuthCodeOption {
 	return []oauth2.AuthCodeOption{}
 }
 
+// GetUserInfo is a no-op when no specific provider is in use.
+func (p *MockProviderInfoer) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error) {
+	userClaims, err := p.userClaims(idToken)
+	if err != nil {
+		return info.User{}, err
+	}
+
+	userGroups, err := p.getGroups(accessToken)
+	if err != nil {
+		return info.User{}, err
+	}
+
+	return info.NewUser(
+		userClaims.PreferredUserName,
+		userClaims.Home,
+		userClaims.Sub,
+		userClaims.Shell,
+		userClaims.Gecos,
+		userGroups,
+	), nil
+}
+
+type claims struct {
+	PreferredUserName string `json:"preferred_username"`
+	Sub               string `json:"sub"`
+	Home              string `json:"home"`
+	Shell             string `json:"shell"`
+	Gecos             string `json:"gecos"`
+}
+
+// userClaims returns the user claims parsed from the ID token.
+func (p *MockProviderInfoer) userClaims(idToken *oidc.IDToken) (claims, error) {
+	var userClaims claims
+	if err := idToken.Claims(&userClaims); err != nil {
+		return claims{}, fmt.Errorf("could not get user info: %v", err)
+	}
+	return userClaims, nil
+}
+
 // GetGroups returns the groups the user is a member of.
-func (p *MockProviderInfoer) GetGroups(*oauth2.Token) ([]group.Info, error) {
+func (p *MockProviderInfoer) getGroups(*oauth2.Token) ([]info.Group, error) {
 	if p.GroupsErr {
 		return nil, errors.New("error requested in the mock")
 	}

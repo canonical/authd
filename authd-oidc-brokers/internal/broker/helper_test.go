@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/group"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"golang.org/x/oauth2"
 )
@@ -36,7 +36,7 @@ func newBrokerForTests(t *testing.T, cfg broker.Config) (b *broker.Broker) {
 		cfg,
 		broker.WithSkipSignatureCheck(),
 		broker.WithCustomProviderInfo(&testutils.MockProviderInfoer{
-			Groups: []group.Info{
+			Groups: []info.Group{
 				{Name: "remote-group", UGID: "12345"},
 				{Name: "linux-local-group", UGID: ""},
 			},
@@ -126,14 +126,16 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.A
 		return nil
 	}
 
-	var email string
+	var username string
 	switch preexistentToken {
-	case "no-email":
-		email = ""
-	case "other-email":
-		email = "other-user@email.com"
+	case "no-name":
+		username = ""
+	case "other-name":
+		username = "other-user@email.com"
+	case "uppercased-name":
+		username = "TEST-USER@EMAIL.COM"
 	default:
-		email = "test-user@email.com"
+		username = "test-user@email.com"
 	}
 
 	idToken := fmt.Sprintf(`{
@@ -142,10 +144,8 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.A
 		"aud": "test-client-id",
 		"name": "saved-user",
 		"exp": 9999999999,
-		"preferred_username": "User Saved",
-		"email": "%s",
-		"email_verified": true
-	}`, issuer, email)
+		"preferred_username": "%s"
+	}`, issuer, username)
 	encodedToken := fmt.Sprintf(".%s.", base64.RawURLEncoding.EncodeToString([]byte(idToken)))
 
 	tok, ok := testTokens[preexistentToken]
@@ -153,13 +153,13 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.A
 		tok = testTokens["valid"]
 	}
 
-	tok.UserInfo = broker.UserInfo{
-		Name:  email,
+	tok.UserInfo = info.User{
+		Name:  username,
 		UUID:  "saved-user-id",
-		Home:  "/home/" + email,
-		Gecos: "saved-user",
+		Home:  "/home/" + username,
+		Gecos: username,
 		Shell: "/usr/bin/bash",
-		Groups: []group.Info{
+		Groups: []info.Group{
 			{Name: "saved-remote-group", UGID: "12345"},
 			{Name: "saved-local-group", UGID: ""},
 		},
@@ -167,7 +167,7 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.A
 
 	if preexistentToken == "invalid-id" {
 		encodedToken = ".invalid."
-		tok.UserInfo = broker.UserInfo{}
+		tok.UserInfo = info.User{}
 	}
 
 	tok.Token = tok.Token.WithExtra(map[string]string{"id_token": encodedToken})

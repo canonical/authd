@@ -13,7 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/group"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"golang.org/x/oauth2"
 	"gopkg.in/yaml.v3"
@@ -631,12 +631,13 @@ func TestFetchUserInfo(t *testing.T) {
 		"Successfully fetch user info with groups":                         {},
 		"Successfully fetch user info without groups":                      {emptyGroups: true},
 		"Successfully fetch user info with default home when not provided": {emptyHomeDir: true},
+		"Successfully fetch user info ignoring different casing in name":   {userToken: "uppercased-name"},
 
-		"Error when token can not be validated":                     {userToken: "invalid", wantErr: true},
-		"Error when ID token claims are invalid":                    {userToken: "invalid-id", wantErr: true},
-		"Error when user email is not configured":                   {userToken: "no-email", wantErr: true},
-		"Error when user email is different than the requested one": {userToken: "other-email", wantErr: true},
-		"Error when getting user groups":                            {wantGroupErr: true, wantErr: true},
+		"Error when token can not be validated":                   {userToken: "invalid", wantErr: true},
+		"Error when ID token claims are invalid":                  {userToken: "invalid-id", wantErr: true},
+		"Error when username is not configured":                   {userToken: "no-name", wantErr: true},
+		"Error when username is different than the requested one": {userToken: "other-name", wantErr: true},
+		"Error when getting user groups":                          {wantGroupErr: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -656,13 +657,13 @@ func TestFetchUserInfo(t *testing.T) {
 
 			mockInfoer := &testutils.MockProviderInfoer{
 				GroupsErr: tc.wantGroupErr,
-				Groups: []group.Info{
+				Groups: []info.Group{
 					{Name: "remote-group", UGID: "12345"},
 					{Name: "linux-local-group", UGID: ""},
 				},
 			}
 			if tc.emptyGroups {
-				mockInfoer.Groups = []group.Info{}
+				mockInfoer.Groups = []info.Group{}
 			}
 
 			b, err := broker.New(brokerCfg, broker.WithSkipSignatureCheck(), broker.WithCustomProviderInfo(mockInfoer))
