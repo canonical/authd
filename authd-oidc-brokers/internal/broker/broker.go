@@ -20,7 +20,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/group"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/decorate"
 	"golang.org/x/exp/slog"
 	"golang.org/x/oauth2"
@@ -570,7 +570,8 @@ func (b *Broker) UserPreCheck(username string) (string, error) {
 		return "", errors.New("username does not match the allowed suffixes")
 	}
 
-	encoded, err := json.Marshal(b.userInfoFromClaims(claims{Email: username, Name: username}, nil))
+	u := info.NewUser(username, filepath.Join(b.homeDirPath, username), "", "", "", nil)
+	encoded, err := json.Marshal(u)
 	if err != nil {
 		return "", fmt.Errorf("could not marshal user info: %v", err)
 	}
@@ -604,7 +605,7 @@ func (b *Broker) updateSession(sessionID string, session sessionInfo) error {
 type authCachedInfo struct {
 	Token      *oauth2.Token
 	RawIDToken string
-	UserInfo   userInfo
+	UserInfo   info.User
 }
 
 // cacheAuthInfo serializes the access token and cache it.
@@ -675,74 +676,32 @@ func (b *Broker) loadAuthInfo(ctx context.Context, session *sessionInfo, passwor
 	return authCachedInfo{Token: tok, RawIDToken: refreshedIDToken}, nil
 }
 
-func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *authCachedInfo) (userInfo userInfo, err error) {
+func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *authCachedInfo) (userInfo info.User, err error) {
 	defer decorate.OnError(&err, "could not fetch user info")
 
 	if session.isOffline {
-		return userInfo, errors.New("session is in offline mode")
+		return info.User{}, errors.New("session is in offline mode")
 	}
 
-	userClaims, err := b.userClaims(ctx, session, t.RawIDToken, session.username)
+	idToken, err := session.authCfg.provider.Verifier(&b.oidcCfg).Verify(ctx, t.RawIDToken)
 	if err != nil {
-		return userInfo, err
+		return info.User{}, fmt.Errorf("could not verify token: %v", err)
 	}
 
-	userGroups, err := b.providerInfo.GetGroups(t.Token)
+	userInfo, err = b.providerInfo.GetUserInfo(ctx, t.Token, idToken)
 	if err != nil {
-		return userInfo, fmt.Errorf("could not get user groups: %v", err)
+		return info.User{}, fmt.Errorf("could not get user info: %v", err)
 	}
 
-	return b.userInfoFromClaims(userClaims, userGroups), nil
-}
-
-type claims struct {
-	Name              string `json:"name"`
-	PreferredUserName string `json:"preferred_username"`
-	Email             string `json:"email"`
-	EmailVerified     bool   `json:"email_verified"`
-	Sub               string `json:"sub"`
-}
-
-func (b *Broker) userClaims(ctx context.Context, session *sessionInfo, rawIDToken, username string) (userClaims claims, err error) {
-	// We need to verify the token to get the user claims.
-	// Due to an internal implementation, the verification process can't be cancelled, so we can't add a timeout for it.
-	idToken, err := session.authCfg.provider.Verifier(&b.oidcCfg).Verify(ctx, rawIDToken)
-	if err != nil {
-		return claims{}, fmt.Errorf("could not verify token: %v", err)
+	// Some providers are case-insensitive, but we are not. So we need to lowercase the returned username.
+	if !strings.EqualFold(userInfo.Name, session.username) {
+		return info.User{}, fmt.Errorf("returned user %q does not match the selected one %q", userInfo.Name, session.username)
 	}
 
-	if err := idToken.Claims(&userClaims); err != nil {
-		return claims{}, fmt.Errorf("could not get user info: %v", err)
+	// This means that home was not provided by the claims, so we need to set it to the broker default.
+	if !filepath.IsAbs(userInfo.Home) {
+		userInfo.Home = filepath.Join(b.homeDirPath, userInfo.Home)
 	}
 
-	if userClaims.Email == "" {
-		return claims{}, errors.New("user email is required, but was not provided")
-	}
-
-	if userClaims.Email != username {
-		return claims{}, fmt.Errorf("returned user %q does not match the selected one %q", userClaims.Email, username)
-	}
-
-	return userClaims, nil
-}
-
-// userInfo represents the user information obtained from the provider.
-type userInfo struct {
-	Name   string       `json:"name"`
-	UUID   string       `json:"uuid"`
-	Home   string       `json:"dir"`
-	Shell  string       `json:"shell"`
-	Gecos  string       `json:"gecos"`
-	Groups []group.Info `json:"groups"`
-}
-
-func (b *Broker) userInfoFromClaims(userClaims claims, groups []group.Info) userInfo {
-	return userInfo{
-		Name:   userClaims.Email,
-		UUID:   userClaims.Sub,
-		Home:   filepath.Join(b.homeDirPath, userClaims.Email),
-		Shell:  "/usr/bin/bash",
-		Gecos:  userClaims.Name,
-		Groups: groups,
-	}
+	return userInfo, err
 }

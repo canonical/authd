@@ -1,12 +1,14 @@
 package broker
 
+import "github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+
 type isAuthenticatedDataResponse interface {
 	isAuthenticatedDataResponse()
 }
 
 // userInfoMessage represents the user information message that is returned to authd.
 type userInfoMessage struct {
-	UserInfo userInfo `json:"userinfo"`
+	UserInfo info.User `json:"userinfo"`
 }
 
 func (userInfoMessage) isAuthenticatedDataResponse() {}
