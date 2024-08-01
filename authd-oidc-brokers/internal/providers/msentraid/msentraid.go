@@ -13,10 +13,10 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/k0kubun/pp"
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
-	msauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
+	msgraphauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
 	msgraphgroups "github.com/microsoftgraph/msgraph-sdk-go/groups"
-	"github.com/microsoftgraph/msgraph-sdk-go/models"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/group"
+	msgraphmodels "github.com/microsoftgraph/msgraph-sdk-go/models"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
 
@@ -39,10 +39,49 @@ func (p Provider) AuthOptions() []oauth2.AuthCodeOption {
 	return []oauth2.AuthCodeOption{}
 }
 
-// GetGroups access the Microsoft Graph API to get the groups the user is a member of.
-func (p Provider) GetGroups(token *oauth2.Token) ([]group.Info, error) {
+// GetUserInfo is a no-op when no specific provider is in use.
+func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error) {
+	userClaims, err := p.userClaims(idToken)
+	if err != nil {
+		return info.User{}, err
+	}
+
+	userGroups, err := p.getGroups(accessToken)
+	if err != nil {
+		return info.User{}, err
+	}
+
+	return info.NewUser(
+		userClaims.PreferredUserName,
+		userClaims.Home,
+		userClaims.Sub,
+		userClaims.Shell,
+		userClaims.Gecos,
+		userGroups,
+	), nil
+}
+
+type claims struct {
+	PreferredUserName string `json:"preferred_username"`
+	Sub               string `json:"sub"`
+	Home              string `json:"home"`
+	Shell             string `json:"shell"`
+	Gecos             string `json:"gecos"`
+}
+
+// userClaims returns the user claims parsed from the ID token.
+func (p Provider) userClaims(idToken *oidc.IDToken) (claims, error) {
+	var userClaims claims
+	if err := idToken.Claims(&userClaims); err != nil {
+		return claims{}, fmt.Errorf("could not get user info: %v", err)
+	}
+	return userClaims, nil
+}
+
+// getGroups access the Microsoft Graph API to get the groups the user is a member of.
+func (p Provider) getGroups(token *oauth2.Token) ([]info.Group, error) {
 	cred := azureTokenCredential{token: token}
-	auth, err := msauth.NewAzureIdentityAuthenticationProvider(cred)
+	auth, err := msgraphauth.NewAzureIdentityAuthenticationProvider(cred)
 	if err != nil {
 		return nil, err
 	}
@@ -70,10 +109,10 @@ func (p Provider) GetGroups(token *oauth2.Token) ([]group.Info, error) {
 		return nil, err
 	}
 
-	var groups []group.Info
+	var groups []info.Group
 	for _, obj := range m.GetValue() {
 		unknown := "Unknown"
-		msGroup, ok := obj.(*models.Group)
+		msGroup, ok := obj.(*msgraphmodels.Group)
 		if !ok {
 			id, oType := obj.GetId(), obj.GetOdataType()
 			if id == nil {
@@ -107,7 +146,7 @@ func (p Provider) GetGroups(token *oauth2.Token) ([]group.Info, error) {
 		// Local group
 		if strings.HasPrefix(groupName, localGroupPrefix) {
 			groupName = strings.TrimPrefix(groupName, localGroupPrefix)
-			groups = append(groups, group.Info{Name: groupName})
+			groups = append(groups, info.Group{Name: groupName})
 			continue
 		}
 
@@ -121,7 +160,7 @@ func (p Provider) GetGroups(token *oauth2.Token) ([]group.Info, error) {
 			return nil, errors.New("could not parse group id")
 		}
 
-		groups = append(groups, group.Info{Name: groupName, UGID: *id})
+		groups = append(groups, info.Group{Name: groupName, UGID: *id})
 	}
 
 	return groups, nil

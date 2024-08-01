@@ -2,7 +2,7 @@ name: test-user@email.com
 uuid: saved-user-id
 home: /home/userInfoTests/test-user@email.com
 shell: /usr/bin/bash
-gecos: saved-user
+gecos: test-user@email.com
 groups:
     - name: remote-group
       ugid: "12345"
