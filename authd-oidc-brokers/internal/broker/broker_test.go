@@ -339,6 +339,12 @@ func TestSelectAuthenticationMode(t *testing.T) {
 	}
 }
 
+type isAuthenticatedResponse struct {
+	Access string
+	Data   string
+	Err    string
+}
+
 func TestIsAuthenticated(t *testing.T) {
 	t.Parallel()
 
@@ -503,12 +509,6 @@ func TestIsAuthenticated(t *testing.T) {
 				authData = "invalid json"
 			}
 
-			type isAuthenticatedResponse struct {
-				Access string
-				Data   string
-				Err    string
-			}
-
 			firstCallDone := make(chan struct{})
 			go func() {
 				defer close(firstCallDone)
@@ -611,6 +611,131 @@ func TestIsAuthenticated(t *testing.T) {
 				}
 			}
 
+			testutils.CompareTreesWithFiltering(t, outDir, testutils.GoldenPath(t), testutils.Update())
+		})
+	}
+}
+
+// Due to ordering restrictions, this test can not be run in parallel, otherwise the routines would not be ordered as expected.
+func TestConcurrentIsAuthenticated(t *testing.T) {
+	tests := map[string]struct {
+		firstUser  string
+		secondUser string
+
+		timeBetween time.Duration
+	}{
+		"First auth starts and finishes before second":                  {timeBetween: 2 * time.Second},
+		"First auth starts first but second finishes first":             {firstUser: "user-timeout-3", timeBetween: time.Second},
+		"First auth starts first then second starts and first finishes": {firstUser: "user-timeout-2", secondUser: "user-timeout-3", timeBetween: time.Second},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			outDir := t.TempDir()
+			cacheDir := filepath.Join(outDir, "cache")
+			err := os.Mkdir(cacheDir, 0700)
+			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
+			b := newBrokerForTests(t, broker.Config{CachePath: cacheDir, IssuerURL: defaultProvider.URL})
+
+			if tc.firstUser == "" {
+				tc.firstUser = "user-timeout-0"
+			}
+			if tc.secondUser == "" {
+				tc.secondUser = "user-timeout-1"
+			}
+
+			firstSession, firstKey := newSessionForTests(t, b, tc.firstUser, "")
+			tok := generateCachedInfo(t, tc.firstUser, defaultProvider.URL)
+			err = b.CacheAuthInfo(firstSession, tok, "password")
+			require.NoError(t, err, "Setup: SaveToken should not have returned an error")
+
+			secondSession, secondKey := newSessionForTests(t, b, tc.secondUser, "")
+			tok = generateCachedInfo(t, tc.secondUser, defaultProvider.URL)
+			err = b.CacheAuthInfo(secondSession, tok, "password")
+			require.NoError(t, err, "Setup: SaveToken should not have returned an error")
+
+			firstCallDone := make(chan struct{})
+			//nolint:dupl // This is not a duplicate, just a very similar set of calls.
+			go func() {
+				t.Logf("%s: First auth starting", t.Name())
+				defer close(firstCallDone)
+
+				updateAuthModes(t, b, firstSession, "password")
+
+				authData := `{"challenge":"` + encryptChallenge(t, "password", firstKey) + `"}`
+
+				access, data, err := b.IsAuthenticated(firstSession, authData)
+				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
+
+				// Redact variant values from the response
+				data = strings.ReplaceAll(data, firstSession, "SESSION_ID")
+				data = strings.ReplaceAll(data, filepath.Dir(b.TokenPathForSession(firstSession)), "provider_cache_path")
+				data = strings.ReplaceAll(data, defaultProvider.URL, "provider_url")
+				errStr := strings.ReplaceAll(fmt.Sprintf("%v", err), firstSession, "SESSION_ID")
+
+				got := isAuthenticatedResponse{Access: access, Data: data, Err: errStr}
+
+				out, err := yaml.Marshal(got)
+				require.NoError(t, err, "Failed to marshal first response")
+
+				err = os.WriteFile(filepath.Join(outDir, "first_auth"), out, 0600)
+				require.NoError(t, err, "Failed to write first response")
+
+				t.Logf("%s: First auth done", t.Name())
+			}()
+
+			time.Sleep(tc.timeBetween)
+
+			secondCallDone := make(chan struct{})
+			//nolint:dupl // This is not a duplicate, just a very similar set of calls.
+			go func() {
+				t.Logf("%s: Second auth starting", t.Name())
+				defer close(secondCallDone)
+
+				updateAuthModes(t, b, secondSession, "password")
+
+				authData := `{"challenge":"` + encryptChallenge(t, "password", secondKey) + `"}`
+
+				access, data, err := b.IsAuthenticated(secondSession, authData)
+				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
+
+				// Redact variant values from the response
+				data = strings.ReplaceAll(data, secondSession, "SESSION_ID")
+				data = strings.ReplaceAll(data, filepath.Dir(b.TokenPathForSession(secondSession)), "provider_cache_path")
+				data = strings.ReplaceAll(data, defaultProvider.URL, "provider_url")
+				errStr := strings.ReplaceAll(fmt.Sprintf("%v", err), secondSession, "SESSION_ID")
+
+				got := isAuthenticatedResponse{Access: access, Data: data, Err: errStr}
+
+				out, err := yaml.Marshal(got)
+				require.NoError(t, err, "Failed to marshal second response")
+
+				err = os.WriteFile(filepath.Join(outDir, "second_auth"), out, 0600)
+				require.NoError(t, err, "Failed to write second response")
+
+				t.Logf("%s: Second auth done", t.Name())
+			}()
+
+			<-firstCallDone
+			<-secondCallDone
+
+			for _, sessionID := range []string{firstSession, secondSession} {
+				// Ensure that the token content is generic to avoid golden file conflicts
+				if _, err := os.Stat(b.TokenPathForSession(sessionID)); err == nil {
+					err := os.WriteFile(b.TokenPathForSession(sessionID), []byte("Definitely an encrypted token"), 0600)
+					require.NoError(t, err, "Teardown: Failed to write generic token file")
+				}
+			}
+
+			// Ensure that the directory structure is generic to avoid golden file conflicts
+			if _, err := os.Stat(filepath.Dir(b.TokenPathForSession(firstSession))); err == nil {
+				toReplace := strings.ReplaceAll(strings.TrimPrefix(defaultProvider.URL, "http://"), ":", "_")
+				providerCache := filepath.Dir(b.TokenPathForSession(firstSession))
+				newProviderCache := strings.ReplaceAll(providerCache, toReplace, "provider_url")
+				err := os.Rename(providerCache, newProviderCache)
+				if err != nil {
+					require.ErrorIs(t, err, os.ErrNotExist, "Teardown: Failed to rename cache directory")
+				}
+			}
 			testutils.CompareTreesWithFiltering(t, outDir, testutils.GoldenPath(t), testutils.Update())
 		})
 	}
