@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -249,6 +251,16 @@ func (p *MockProviderInfoer) GetUserInfo(ctx context.Context, accessToken *oauth
 	userGroups, err := p.getGroups(accessToken)
 	if err != nil {
 		return info.User{}, err
+	}
+
+	// This is a special case for testing purposes. If the username starts with "user-timeout-", we will delay the
+	// return for a while to control the authentication order for multiple users.
+	if strings.HasPrefix(userClaims.PreferredUserName, "user-timeout") {
+		d, err := strconv.Atoi(strings.TrimPrefix(userClaims.PreferredUserName, "user-timeout-"))
+		if err != nil {
+			return info.User{}, err
+		}
+		time.Sleep(time.Duration(d) * time.Second)
 	}
 
 	return info.NewUser(

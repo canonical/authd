@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -138,6 +139,11 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.A
 		username = "test-user@email.com"
 	}
 
+	// This is to handle delay cases where we need to control the authentication ordering.
+	if strings.HasPrefix(preexistentToken, "user-timeout-") {
+		username = preexistentToken
+	}
+
 	idToken := fmt.Sprintf(`{
 		"iss": "%s",
 		"sub": "saved-user-id",
@@ -163,6 +169,11 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.A
 			{Name: "saved-remote-group", UGID: "12345"},
 			{Name: "saved-local-group", UGID: ""},
 		},
+	}
+
+	// This is to force the broker to query the provider for the user info.
+	if strings.HasPrefix(preexistentToken, "user-timeout-") {
+		tok.UserInfo = info.User{}
 	}
 
 	if preexistentToken == "invalid-id" {

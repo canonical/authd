@@ -1,0 +1,3 @@
+access: granted
+data: '{"userinfo":{"name":"user-timeout-1","uuid":"saved-user-id","dir":"/home/user-timeout-1","shell":"/usr/bin/bash","gecos":"user-timeout-1","groups":[{"name":"remote-group","ugid":"12345"},{"name":"linux-local-group","ugid":""}]}}'
+err: <nil>
