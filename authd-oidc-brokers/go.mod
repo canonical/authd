@@ -5,7 +5,7 @@ go 1.22.0
 toolchain go1.22.5
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.13.0
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.14.0
 	github.com/coreos/go-oidc/v3 v3.11.0
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/godbus/dbus/v5 v5.1.0
