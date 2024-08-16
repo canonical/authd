@@ -108,6 +108,10 @@ func (p Provider) getGroups(token *oauth2.Token) ([]info.Group, error) {
 	if err != nil {
 		return nil, err
 	}
+	if m == nil {
+		slog.Debug("Got nil response from Microsoft Graph API for user's groups, assuming that user is not a member of any group.")
+		return []info.Group{}, nil
+	}
 
 	var groups []info.Group
 	for _, obj := range m.GetValue() {
