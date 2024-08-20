@@ -928,5 +928,5 @@ func TestMain(m *testing.M) {
 
 	defaultProvider = server
 
-	m.Run()
+	os.Exit(m.Run())
 }
