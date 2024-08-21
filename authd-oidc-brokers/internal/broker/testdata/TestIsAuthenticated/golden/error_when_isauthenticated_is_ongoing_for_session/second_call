@@ -1,3 +1,3 @@
 access: denied
 data: '{}'
-err: IsAuthenticated already running for session "SESSION_ID"
+err: authentication already running for this user session
