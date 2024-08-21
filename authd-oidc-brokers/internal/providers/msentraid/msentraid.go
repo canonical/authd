@@ -73,7 +73,7 @@ type claims struct {
 func (p Provider) userClaims(idToken *oidc.IDToken) (claims, error) {
 	var userClaims claims
 	if err := idToken.Claims(&userClaims); err != nil {
-		return claims{}, fmt.Errorf("could not get user info: %v", err)
+		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
 	}
 	return userClaims, nil
 }
@@ -83,12 +83,12 @@ func (p Provider) getGroups(token *oauth2.Token) ([]info.Group, error) {
 	cred := azureTokenCredential{token: token}
 	auth, err := msgraphauth.NewAzureIdentityAuthenticationProvider(cred)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create AzureIdentityAuthenticationProvider: %v", err)
 	}
 
 	adapter, err := msgraphsdk.NewGraphRequestAdapter(auth)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create GraphRequestAdapter: %v", err)
 	}
 
 	client := msgraphsdk.NewGraphServiceClient(adapter)
@@ -101,12 +101,12 @@ func (p Provider) getGroups(token *oauth2.Token) ([]info.Group, error) {
 		},
 	}
 	if _, err = client.Groups().Get(context.Background(), requestOptions); err != nil {
-		return nil, fmt.Errorf("could not access user's groups: %v", err)
+		return nil, fmt.Errorf("failed to list groups: %v", err)
 	}
 
 	m, err := client.Me().TransitiveMemberOf().Get(context.Background(), nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get user's groups: %v", err)
 	}
 	if m == nil {
 		slog.Debug("Got nil response from Microsoft Graph API for user's groups, assuming that user is not a member of any group.")
@@ -134,7 +134,7 @@ func (p Provider) getGroups(token *oauth2.Token) ([]info.Group, error) {
 
 		v, err := msGroup.GetBackingStore().Get("displayName")
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get displayName from group object: %v", err)
 		}
 		name, ok := v.(*string)
 		if !ok || name == nil {
@@ -156,7 +156,7 @@ func (p Provider) getGroups(token *oauth2.Token) ([]info.Group, error) {
 
 		v, err = msGroup.GetBackingStore().Get("id")
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to get id from group object: %v", err)
 		}
 		id, ok := v.(*string)
 		if !ok || id == nil {
