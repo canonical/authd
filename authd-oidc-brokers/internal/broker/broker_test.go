@@ -527,14 +527,7 @@ func TestIsAuthenticated(t *testing.T) {
 				access, data, err := b.IsAuthenticated(sessionID, authData)
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
 
-				// Redact variant values from the response
-				data = strings.ReplaceAll(data, sessionID, "SESSION_ID")
-				data = strings.ReplaceAll(data, filepath.Dir(b.TokenPathForSession(sessionID)), "provider_cache_path")
-				data = strings.ReplaceAll(data, provider.URL, "provider_url")
-				errStr := strings.ReplaceAll(fmt.Sprintf("%v", err), sessionID, "SESSION_ID")
-
-				got := isAuthenticatedResponse{Access: access, Data: data, Err: errStr}
-
+				got := isAuthenticatedResponse{Access: access, Data: data, Err: fmt.Sprint(err)}
 				out, err := yaml.Marshal(got)
 				require.NoError(t, err, "Failed to marshal first response")
 
@@ -569,13 +562,7 @@ func TestIsAuthenticated(t *testing.T) {
 					access, data, err := b.IsAuthenticated(sessionID, secondAuthData)
 					require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
 
-					// Redact variant values from the response
-					data = strings.ReplaceAll(data, sessionID, "SESSION_ID")
-					data = strings.ReplaceAll(data, filepath.Dir(b.TokenPathForSession(sessionID)), "provider_cache_path")
-					data = strings.ReplaceAll(data, provider.URL, "provider_url")
-					errStr := strings.ReplaceAll(fmt.Sprintf("%v", err), sessionID, "SESSION_ID")
-
-					got := isAuthenticatedResponse{Access: access, Data: data, Err: errStr}
+					got := isAuthenticatedResponse{Access: access, Data: data, Err: fmt.Sprint(err)}
 					out, err := yaml.Marshal(got)
 					require.NoError(t, err, "Failed to marshal second response")
 
@@ -654,7 +641,6 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			require.NoError(t, err, "Setup: SaveToken should not have returned an error")
 
 			firstCallDone := make(chan struct{})
-			//nolint:dupl // This is not a duplicate, just a very similar set of calls.
 			go func() {
 				t.Logf("%s: First auth starting", t.Name())
 				defer close(firstCallDone)
@@ -666,14 +652,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 				access, data, err := b.IsAuthenticated(firstSession, authData)
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
 
-				// Redact variant values from the response
-				data = strings.ReplaceAll(data, firstSession, "SESSION_ID")
-				data = strings.ReplaceAll(data, filepath.Dir(b.TokenPathForSession(firstSession)), "provider_cache_path")
-				data = strings.ReplaceAll(data, defaultProvider.URL, "provider_url")
-				errStr := strings.ReplaceAll(fmt.Sprintf("%v", err), firstSession, "SESSION_ID")
-
-				got := isAuthenticatedResponse{Access: access, Data: data, Err: errStr}
-
+				got := isAuthenticatedResponse{Access: access, Data: data, Err: fmt.Sprint(err)}
 				out, err := yaml.Marshal(got)
 				require.NoError(t, err, "Failed to marshal first response")
 
@@ -686,7 +665,6 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			time.Sleep(tc.timeBetween)
 
 			secondCallDone := make(chan struct{})
-			//nolint:dupl // This is not a duplicate, just a very similar set of calls.
 			go func() {
 				t.Logf("%s: Second auth starting", t.Name())
 				defer close(secondCallDone)
@@ -698,14 +676,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 				access, data, err := b.IsAuthenticated(secondSession, authData)
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
 
-				// Redact variant values from the response
-				data = strings.ReplaceAll(data, secondSession, "SESSION_ID")
-				data = strings.ReplaceAll(data, filepath.Dir(b.TokenPathForSession(secondSession)), "provider_cache_path")
-				data = strings.ReplaceAll(data, defaultProvider.URL, "provider_url")
-				errStr := strings.ReplaceAll(fmt.Sprintf("%v", err), secondSession, "SESSION_ID")
-
-				got := isAuthenticatedResponse{Access: access, Data: data, Err: errStr}
-
+				got := isAuthenticatedResponse{Access: access, Data: data, Err: fmt.Sprint(err)}
 				out, err := yaml.Marshal(got)
 				require.NoError(t, err, "Failed to marshal second response")
 
