@@ -1,3 +1,3 @@
 access: denied
-data: '{"message":"could not get required response"}'
+data: '{"message":"authentication failure: could not get required response"}'
 err: <nil>

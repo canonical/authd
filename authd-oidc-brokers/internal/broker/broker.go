@@ -418,10 +418,13 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 }
 
 func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo, authData map[string]string) (access string, data isAuthenticatedDataResponse) {
+	defer decorateErrorMessage(&data, "authentication failure")
+
 	// Decrypt challenge if present.
 	challenge, err := decodeRawChallenge(b.privateKey, authData["challenge"])
 	if err != nil {
-		return AuthRetry, errorMessage{Message: fmt.Sprintf("could not decode challenge: %v", err)}
+		slog.Error(err.Error())
+		return AuthRetry, errorMessage{Message: "could not decode challenge"}
 	}
 
 	var authInfo authCachedInfo
@@ -429,6 +432,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 	case "device_auth":
 		response, ok := session.authInfo["response"].(*oauth2.DeviceAuthResponse)
 		if !ok {
+			slog.Error("could not get device auth response")
 			return AuthDenied, errorMessage{Message: "could not get required response"}
 		}
 
@@ -439,18 +443,21 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 		defer cancel()
 		t, err := session.authCfg.oauth.DeviceAccessToken(expiryCtx, response, b.providerInfo.AuthOptions()...)
 		if err != nil {
-			return AuthRetry, errorMessage{Message: fmt.Sprintf("could not authenticate user: %v", err)}
+			slog.Error(err.Error())
+			return AuthRetry, errorMessage{Message: "could not authenticate user remotely"}
 		}
 
 		rawIDToken, ok := t.Extra("id_token").(string)
 		if !ok {
-			return AuthDenied, errorMessage{Message: "could not get id_token"}
+			slog.Error("could not get ID token")
+			return AuthDenied, errorMessage{Message: "could not get ID token"}
 		}
 
 		authInfo = authCachedInfo{Token: t, RawIDToken: rawIDToken}
 		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil {
-			return AuthDenied, errorMessage{Message: fmt.Sprintf("could not get user info: %v", err)}
+			slog.Error(err.Error())
+			return AuthDenied, errorMessage{Message: "could not fetch user info"}
 		}
 
 		session.authInfo["auth_info"] = authInfo
@@ -459,13 +466,15 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 	case "password":
 		authInfo, err = b.loadAuthInfo(ctx, session, challenge)
 		if err != nil {
-			return AuthRetry, errorMessage{Message: fmt.Sprintf("could not authenticate user: %v", err)}
+			slog.Error(err.Error())
+			return AuthRetry, errorMessage{Message: "could not load cached info"}
 		}
 
 		if authInfo.UserInfo.Name == "" {
 			authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 			if err != nil {
-				return AuthDenied, errorMessage{Message: fmt.Sprintf("could not get user info: %v", err)}
+				slog.Error(err.Error())
+				return AuthDenied, errorMessage{Message: "could not fetch user info"}
 			}
 		}
 
@@ -476,13 +485,14 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 
 	case "newpassword":
 		if challenge == "" {
-			return AuthRetry, errorMessage{Message: "challenge must not be empty"}
+			return AuthRetry, errorMessage{Message: "empty challenge"}
 		}
 
 		var ok bool
 		// This mode must always come after a authentication mode, so it has to have an auth_info.
 		authInfo, ok = session.authInfo["auth_info"].(authCachedInfo)
 		if !ok {
+			slog.Error("could not get required information")
 			return AuthDenied, errorMessage{Message: "could not get required information"}
 		}
 	}
@@ -492,7 +502,8 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 	}
 
 	if err := b.cacheAuthInfo(session, authInfo, challenge); err != nil {
-		return AuthRetry, errorMessage{Message: fmt.Sprintf("could not update cached info: %v", err)}
+		slog.Error(err.Error())
+		return AuthDenied, errorMessage{Message: "could not cache user info"}
 	}
 
 	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
@@ -505,7 +516,8 @@ func (b *Broker) startAuthenticate(sessionID string) (context.Context, error) {
 	}
 
 	if session.isAuthenticating != nil {
-		return nil, fmt.Errorf("IsAuthenticated already running for session %q", sessionID)
+		slog.Error(fmt.Sprintf("Authentication already running for session %q", sessionID))
+		return nil, errors.New("authentication already running for this user session")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -610,8 +622,6 @@ type authCachedInfo struct {
 
 // cacheAuthInfo serializes the access token and cache it.
 func (b *Broker) cacheAuthInfo(session *sessionInfo, authInfo authCachedInfo, password string) (err error) {
-	defer decorate.OnError(&err, "could not cache info")
-
 	content, err := json.Marshal(authInfo)
 	if err != nil {
 		return fmt.Errorf("could not marshal token: %v", err)
@@ -636,8 +646,6 @@ func (b *Broker) cacheAuthInfo(session *sessionInfo, authInfo authCachedInfo, pa
 
 // loadAuthInfo deserializes the token from the cache and refreshes it if needed.
 func (b *Broker) loadAuthInfo(ctx context.Context, session *sessionInfo, password string) (loadedInfo authCachedInfo, err error) {
-	defer decorate.OnError(&err, "could not load cached info")
-
 	s, err := os.ReadFile(session.cachePath)
 	if err != nil {
 		return authCachedInfo{}, fmt.Errorf("could not read token: %v", err)
@@ -677,8 +685,6 @@ func (b *Broker) loadAuthInfo(ctx context.Context, session *sessionInfo, passwor
 }
 
 func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *authCachedInfo) (userInfo info.User, err error) {
-	defer decorate.OnError(&err, "could not fetch user info")
-
 	if session.isOffline {
 		return info.User{}, errors.New("session is in offline mode")
 	}
@@ -704,4 +710,17 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *aut
 	}
 
 	return userInfo, err
+}
+
+// decorateErrorMessage decorates the isAuthenticatedDataResponse with the provided message, if it's an errorMessage.
+func decorateErrorMessage(data *isAuthenticatedDataResponse, msg string) {
+	if *data == nil {
+		return
+	}
+	errMsg, ok := (*data).(errorMessage)
+	if !ok {
+		return
+	}
+	errMsg.Message = fmt.Sprintf("%s: %s", msg, errMsg.Message)
+	*data = errMsg
 }
