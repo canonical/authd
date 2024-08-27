@@ -285,7 +285,7 @@ type claims struct {
 func (p *MockProviderInfoer) userClaims(idToken *oidc.IDToken) (claims, error) {
 	var userClaims claims
 	if err := idToken.Claims(&userClaims); err != nil {
-		return claims{}, fmt.Errorf("could not get user info: %v", err)
+		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
 	}
 	return userClaims, nil
 }
