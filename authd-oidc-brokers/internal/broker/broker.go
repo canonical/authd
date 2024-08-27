@@ -98,7 +98,7 @@ type Option func(*option)
 
 // New returns a new oidc Broker with the providers listed in the configuration file.
 func New(cfg Config, args ...Option) (b *Broker, err error) {
-	defer decorate.OnError(&err, "could not create broker with provided issuer and client ID")
+	defer decorate.OnError(&err, "could not create broker")
 
 	opts := option{
 		// This is to avoid too much complexity in the tests.
@@ -110,11 +110,16 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	}
 
 	if cfg.CachePath == "" {
-		return &Broker{}, errors.New("cache path must be provided")
+		err = errors.Join(err, errors.New("cache path is required and was not provided"))
 	}
-
-	if cfg.IssuerURL == "" || cfg.ClientID == "" {
-		return &Broker{}, errors.New("issuer and client ID must be provided")
+	if cfg.IssuerURL == "" {
+		err = errors.Join(err, errors.New("issuer URL is required and was not provided"))
+	}
+	if cfg.ClientID == "" {
+		err = errors.Join(err, errors.New("client ID is required and was not provided"))
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	homeDirPath := "/home"
@@ -125,7 +130,8 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	// Generate a new private key for the broker.
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		panic(fmt.Sprintf("could not create an valid rsa key: %v", err))
+		slog.Error(err.Error())
+		return nil, errors.New("failed to generate broker private key")
 	}
 
 	b = &Broker{
