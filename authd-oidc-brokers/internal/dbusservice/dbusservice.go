@@ -3,6 +3,7 @@ package dbusservice
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -128,8 +129,17 @@ func parseConfig(cfgPath string) (map[string]map[string]string, error) {
 	for _, section := range iniCfg.Sections() {
 		cfg[section.Name()] = make(map[string]string)
 		for _, key := range section.Keys() {
+			if strings.Contains(key.String(), "<") && strings.Contains(key.String(), ">") {
+				err = errors.Join(err, fmt.Errorf("found invalid character in section %q, key %q", section.Name(), key.Name()))
+				continue
+			}
 			cfg[section.Name()][key.Name()] = key.String()
 		}
+	}
+
+	// This means we found at least one section that was potentially not edited.
+	if err != nil {
+		return nil, fmt.Errorf("config file has invalid values, did you edit the file %q?\n%w", cfgPath, err)
 	}
 	return cfg, nil
 }

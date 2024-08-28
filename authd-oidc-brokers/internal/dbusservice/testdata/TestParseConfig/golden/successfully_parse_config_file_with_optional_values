@@ -1,0 +1,7 @@
+DEFAULT: {}
+oidc:
+    client_id: client_id
+    issuer: https://issuer.url.com
+users:
+    allowed_ssh_suffixes: '@issuer.url.com'
+    home_base_dir: /home
