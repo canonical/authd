@@ -8,14 +8,18 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
+
+var scopes = []string{"offline_access", "openid", "profile"}
 
 // ProviderHandler is a function that handles a request to the mock provider.
 type ProviderHandler func(http.ResponseWriter, *http.Request)
@@ -151,10 +155,10 @@ func DefaultTokenHandler(serverURL string) ProviderHandler {
 			"access_token": "accesstoken",
 			"refresh_token": "refreshtoken",
 			"token_type": "Bearer",
-			"scope": "offline_access openid profile",
+			"scope": "%s",
 			"expires_in": 3600,
 			"id_token": "%s"
-		}`, rawToken)
+		}`, strings.Join(scopes, " "), rawToken)
 
 		w.Header().Add("Content-Type", "application/json")
 		_, err := w.Write([]byte(response))
@@ -223,6 +227,23 @@ type MockProviderInfoer struct {
 	Options   []oauth2.AuthCodeOption
 	Groups    []info.Group
 	GroupsErr bool
+}
+
+// CheckTokenScopes checks if the token has the required scopes.
+func (p *MockProviderInfoer) CheckTokenScopes(token *oauth2.Token) error {
+	scopesStr, ok := token.Extra("scope").(string)
+	if !ok {
+		return fmt.Errorf("failed to cast token scopes to string: %v", token.Extra("scope"))
+	}
+
+	scopes := strings.Split(scopesStr, " ")
+	var errs []error
+	for _, s := range consts.DefaultScopes {
+		if !slices.Contains(scopes, s) {
+			errs = append(errs, fmt.Errorf("token is missing scope %q", s))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // AdditionalScopes returns the additional scopes required by the provider.

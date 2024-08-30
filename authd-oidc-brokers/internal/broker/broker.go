@@ -20,6 +20,7 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/decorate"
@@ -199,7 +200,7 @@ func (b *Broker) connectToProvider(ctx context.Context) (authCfg authConfig, err
 	oauthCfg := oauth2.Config{
 		ClientID: b.oidcCfg.ClientID,
 		Endpoint: provider.Endpoint(),
-		Scopes:   append([]string{oidc.ScopeOpenID, "profile", "email"}, b.providerInfo.AdditionalScopes()...),
+		Scopes:   append(consts.DefaultScopes, b.providerInfo.AdditionalScopes()...),
 	}
 
 	return authConfig{provider: provider, oauth: oauthCfg}, nil
@@ -451,6 +452,10 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 		if err != nil {
 			slog.Error(err.Error())
 			return AuthRetry, errorMessage{Message: "could not authenticate user remotely"}
+		}
+
+		if err = b.providerInfo.CheckTokenScopes(t); err != nil {
+			slog.Warn(err.Error())
 		}
 
 		rawIDToken, ok := t.Extra("id_token").(string)

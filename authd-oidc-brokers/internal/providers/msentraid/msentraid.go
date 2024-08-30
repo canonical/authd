@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -16,6 +17,7 @@ import (
 	msgraphauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
 	msgraphgroups "github.com/microsoftgraph/msgraph-sdk-go/groups"
 	msgraphmodels "github.com/microsoftgraph/msgraph-sdk-go/models"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
@@ -27,7 +29,16 @@ func init() {
 const localGroupPrefix = "linux-"
 
 // Provider is the Microsoft Entra ID provider implementation.
-type Provider struct{}
+type Provider struct {
+	expectedScopes []string
+}
+
+// New returns a new MSEntraID provider.
+func New() Provider {
+	return Provider{
+		expectedScopes: append(consts.DefaultScopes, "GroupMember.Read.All", "User.Read"),
+	}
+}
 
 // AdditionalScopes returns the generic scopes required by the EntraID provider.
 func (p Provider) AdditionalScopes() []string {
@@ -37,6 +48,23 @@ func (p Provider) AdditionalScopes() []string {
 // AuthOptions returns the generic auth options required by the EntraID provider.
 func (p Provider) AuthOptions() []oauth2.AuthCodeOption {
 	return []oauth2.AuthCodeOption{}
+}
+
+// CheckTokenScopes checks if the token has the required scopes.
+func (p Provider) CheckTokenScopes(token *oauth2.Token) error {
+	scopesStr, ok := token.Extra("scope").(string)
+	if !ok {
+		return fmt.Errorf("failed to cast token scopes to string: %v", token.Extra("scope"))
+	}
+
+	scopes := strings.Split(scopesStr, " ")
+	var errs []error
+	for _, s := range p.expectedScopes {
+		if !slices.Contains(scopes, s) {
+			errs = append(errs, fmt.Errorf("token is missing scope %q", s))
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // GetUserInfo is a no-op when no specific provider is in use.

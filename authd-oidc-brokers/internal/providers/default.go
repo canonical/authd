@@ -8,5 +8,5 @@ import (
 
 // CurrentProviderInfo returns a generic oidc provider implementation.
 func CurrentProviderInfo() ProviderInfoer {
-	return noprovider.NoProvider{}
+	return noprovider.New()
 }
