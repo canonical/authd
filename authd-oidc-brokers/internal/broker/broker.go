@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,7 +23,6 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/decorate"
-	"golang.org/x/exp/slog"
 	"golang.org/x/oauth2"
 )
 

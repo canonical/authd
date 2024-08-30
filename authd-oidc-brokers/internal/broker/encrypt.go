@@ -9,9 +9,9 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"golang.org/x/crypto/scrypt"
-	"golang.org/x/exp/slog"
 )
 
 const saltLen = 32
