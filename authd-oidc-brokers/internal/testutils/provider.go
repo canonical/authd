@@ -19,8 +19,6 @@ import (
 	"golang.org/x/oauth2"
 )
 
-var scopes = []string{"offline_access", "openid", "profile"}
-
 // ProviderHandler is a function that handles a request to the mock provider.
 type ProviderHandler func(http.ResponseWriter, *http.Request)
 
@@ -56,7 +54,7 @@ func StartMockProvider(address string, args ...OptionProvider) (*httptest.Server
 		handlers: map[string]ProviderHandler{
 			"/.well-known/openid-configuration": DefaultOpenIDHandler(server.URL),
 			"/device_auth":                      DefaultDeviceAuthHandler(),
-			"/token":                            DefaultTokenHandler(server.URL),
+			"/token":                            DefaultTokenHandler(server.URL, consts.DefaultScopes),
 		},
 	}
 	for _, arg := range args {
@@ -132,7 +130,7 @@ func DefaultDeviceAuthHandler() ProviderHandler {
 }
 
 // DefaultTokenHandler returns a handler that returns a default token response.
-func DefaultTokenHandler(serverURL string) ProviderHandler {
+func DefaultTokenHandler(serverURL string, scopes []string) ProviderHandler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Mimics user going through auth process
 		time.Sleep(2 * time.Second)
@@ -237,13 +235,16 @@ func (p *MockProviderInfoer) CheckTokenScopes(token *oauth2.Token) error {
 	}
 
 	scopes := strings.Split(scopesStr, " ")
-	var errs []error
+	var missingScopes []string
 	for _, s := range consts.DefaultScopes {
 		if !slices.Contains(scopes, s) {
-			errs = append(errs, fmt.Errorf("token is missing scope %q", s))
+			missingScopes = append(missingScopes, s)
 		}
 	}
-	return errors.Join(errs...)
+	if len(missingScopes) > 0 {
+		return fmt.Errorf("missing required scopes: %s", strings.Join(missingScopes, ", "))
+	}
+	return nil
 }
 
 // AdditionalScopes returns the additional scopes required by the provider.

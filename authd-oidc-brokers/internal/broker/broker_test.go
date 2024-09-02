@@ -360,6 +360,7 @@ func TestIsAuthenticated(t *testing.T) {
 		badFirstKey    bool
 
 		customHandlers map[string]testutils.ProviderHandler
+		address        string
 
 		wantSecondCall  bool
 		secondChallenge string
@@ -387,6 +388,14 @@ func TestIsAuthenticated(t *testing.T) {
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
+		},
+		"Authenticating still allowed if token is missing scopes": {
+			firstChallenge: "-",
+			wantSecondCall: true,
+			customHandlers: map[string]testutils.ProviderHandler{
+				"/token": testutils.DefaultTokenHandler("http://127.0.0.1:31313", []string{}),
+			},
+			address: "127.0.0.1:31313",
 		},
 
 		"Error when authentication data is invalid":         {invalidAuthData: true},
@@ -466,7 +475,7 @@ func TestIsAuthenticated(t *testing.T) {
 				for path, handler := range tc.customHandlers {
 					opts = append(opts, testutils.WithHandler(path, handler))
 				}
-				p, cleanup := testutils.StartMockProvider("", opts...)
+				p, cleanup := testutils.StartMockProvider(tc.address, opts...)
 				t.Cleanup(cleanup)
 				provider = p
 			}
