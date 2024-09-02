@@ -58,13 +58,16 @@ func (p Provider) CheckTokenScopes(token *oauth2.Token) error {
 	}
 
 	scopes := strings.Split(scopesStr, " ")
-	var errs []error
+	var missingScopes []string
 	for _, s := range p.expectedScopes {
 		if !slices.Contains(scopes, s) {
-			errs = append(errs, fmt.Errorf("token is missing scope %q", s))
+			missingScopes = append(missingScopes, s)
 		}
 	}
-	return errors.Join(errs...)
+	if len(missingScopes) > 0 {
+		return fmt.Errorf("missing required scopes: %s", strings.Join(missingScopes, ", "))
+	}
+	return nil
 }
 
 // GetUserInfo is a no-op when no specific provider is in use.
