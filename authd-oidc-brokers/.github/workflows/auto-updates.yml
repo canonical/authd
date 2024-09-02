@@ -26,7 +26,7 @@ jobs:
             set -eu
             sudo apt update
             sudo apt install -y git
-        - uses: actions/checkout@v4
+        - uses: actions/checkout@v4.1.7
           with:
             ref: main
             fetch-depth: 0
