@@ -8,5 +8,5 @@ import (
 
 // CurrentProviderInfo returns a Microsoft Entra ID provider implementation.
 func CurrentProviderInfo() ProviderInfoer {
-	return msentraid.Provider{}
+	return msentraid.New()
 }
