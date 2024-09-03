@@ -13,6 +13,7 @@ import (
 type ProviderInfoer interface {
 	AdditionalScopes() []string
 	AuthOptions() []oauth2.AuthCodeOption
+	CheckTokenScopes(token *oauth2.Token) error
 	CurrentAuthenticationModesOffered(
 		sessionMode string,
 		supportedAuthModes map[string]string,

@@ -8,11 +8,13 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
@@ -52,7 +54,7 @@ func StartMockProvider(address string, args ...OptionProvider) (*httptest.Server
 		handlers: map[string]ProviderHandler{
 			"/.well-known/openid-configuration": DefaultOpenIDHandler(server.URL),
 			"/device_auth":                      DefaultDeviceAuthHandler(),
-			"/token":                            DefaultTokenHandler(server.URL),
+			"/token":                            DefaultTokenHandler(server.URL, consts.DefaultScopes),
 		},
 	}
 	for _, arg := range args {
@@ -128,7 +130,7 @@ func DefaultDeviceAuthHandler() ProviderHandler {
 }
 
 // DefaultTokenHandler returns a handler that returns a default token response.
-func DefaultTokenHandler(serverURL string) ProviderHandler {
+func DefaultTokenHandler(serverURL string, scopes []string) ProviderHandler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Mimics user going through auth process
 		time.Sleep(2 * time.Second)
@@ -151,10 +153,10 @@ func DefaultTokenHandler(serverURL string) ProviderHandler {
 			"access_token": "accesstoken",
 			"refresh_token": "refreshtoken",
 			"token_type": "Bearer",
-			"scope": "offline_access openid profile",
+			"scope": "%s",
 			"expires_in": 3600,
 			"id_token": "%s"
-		}`, rawToken)
+		}`, strings.Join(scopes, " "), rawToken)
 
 		w.Header().Add("Content-Type", "application/json")
 		_, err := w.Write([]byte(response))
@@ -223,6 +225,26 @@ type MockProviderInfoer struct {
 	Options   []oauth2.AuthCodeOption
 	Groups    []info.Group
 	GroupsErr bool
+}
+
+// CheckTokenScopes checks if the token has the required scopes.
+func (p *MockProviderInfoer) CheckTokenScopes(token *oauth2.Token) error {
+	scopesStr, ok := token.Extra("scope").(string)
+	if !ok {
+		return fmt.Errorf("failed to cast token scopes to string: %v", token.Extra("scope"))
+	}
+
+	scopes := strings.Split(scopesStr, " ")
+	var missingScopes []string
+	for _, s := range consts.DefaultScopes {
+		if !slices.Contains(scopes, s) {
+			missingScopes = append(missingScopes, s)
+		}
+	}
+	if len(missingScopes) > 0 {
+		return fmt.Errorf("missing required scopes: %s", strings.Join(missingScopes, ", "))
+	}
+	return nil
 }
 
 // AdditionalScopes returns the additional scopes required by the provider.
