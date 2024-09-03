@@ -9,6 +9,30 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 )
 
+func (cfg *Config) SetClientID(clientID string) {
+	cfg.clientID = clientID
+}
+
+func (cfg *Config) SetIssuerURL(issuerURL string) {
+	cfg.issuerURL = issuerURL
+}
+
+func (cfg *Config) SetHomeBaseDir(homeBaseDir string) {
+	cfg.homeBaseDir = homeBaseDir
+}
+
+func (cfg *Config) SetAllowedSSHSuffixes(allowedSSHSuffixes []string) {
+	cfg.allowedSSHSuffixes = allowedSSHSuffixes
+}
+
+func (cfg *Config) ClientID() string {
+	return cfg.clientID
+}
+
+func (cfg *Config) IssuerURL() string {
+	return cfg.issuerURL
+}
+
 // TokenPathForSession returns the path to the token file for the given session.
 func (b *Broker) TokenPathForSession(sessionID string) string {
 	b.currentSessionsMu.Lock()
@@ -19,12 +43,38 @@ func (b *Broker) TokenPathForSession(sessionID string) string {
 		return ""
 	}
 
-	return session.cachePath
+	return session.tokenPath
 }
 
-// CachePath returns the path to the cache directory for tests.
-func (b *Broker) CachePath() string {
-	return b.cfg.CachePath
+// PasswordFilepathForSession returns the path to the password file for the given session.
+func (b *Broker) PasswordFilepathForSession(sessionID string) string {
+	b.currentSessionsMu.Lock()
+	defer b.currentSessionsMu.Unlock()
+
+	session, ok := b.currentSessions[sessionID]
+	if !ok {
+		return ""
+	}
+
+	return session.passwordPath
+}
+
+// UserDataDirForSession returns the path to the user data directory for the given session.
+func (b *Broker) UserDataDirForSession(sessionID string) string {
+	b.currentSessionsMu.Lock()
+	defer b.currentSessionsMu.Unlock()
+
+	session, ok := b.currentSessions[sessionID]
+	if !ok {
+		return ""
+	}
+
+	return session.userDataDir
+}
+
+// DataDir returns the path to the data directory for tests.
+func (b *Broker) DataDir() string {
+	return b.cfg.DataDir
 }
 
 // UpdateSessionAuthStep updates the current auth step for the given session.
@@ -69,24 +119,23 @@ func (b *Broker) SetAvailableMode(sessionID, mode string) error {
 type AuthCachedInfo = authCachedInfo
 
 // CacheAuthInfo exposes the broker's cacheAuthInfo method for tests.
-func (b *Broker) CacheAuthInfo(sessionID string, token *authCachedInfo, password string) error {
+func (b *Broker) CacheAuthInfo(sessionID string, token *authCachedInfo) error {
 	s, err := b.getSession(sessionID)
 	if err != nil {
 		return err
 	}
 
 	if token == nil {
-		return writeTrashToken(s.cachePath, password)
+		return writeTrashToken(s.tokenPath)
 	}
 
-	return b.cacheAuthInfo(&s, *token, password)
+	return b.cacheAuthInfo(&s, *token)
 }
 
-func writeTrashToken(path, challenge string) error {
-	content, err := encrypt([]byte("This is a trash token that is not valid for authentication"), []byte(challenge))
-	if err != nil {
-		return err
-	}
+func writeTrashToken(path string) error {
+	var err error
+	content := []byte("This is a trash token that is not valid for authentication")
+
 	// Create issuer specific cache directory if it doesn't exist.
 	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return fmt.Errorf("could not create token directory: %v", err)

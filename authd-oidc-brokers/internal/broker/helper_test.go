@@ -20,17 +20,17 @@ import (
 
 // newBrokerForTests is a helper function to create a new broker for tests with the specified configuration.
 //
-// Note that the IssuerURL is required in the configuration.
+// Note that the issuerURL is required in the configuration.
 func newBrokerForTests(t *testing.T, cfg broker.Config) (b *broker.Broker) {
 	t.Helper()
 
-	require.NotEmpty(t, cfg.IssuerURL, "Setup: issuerURL must not be empty")
+	require.NotEmpty(t, cfg.IssuerURL(), "Setup: issuerURL must not be empty")
 
-	if cfg.CachePath == "" {
-		cfg.CachePath = t.TempDir()
+	if cfg.DataDir == "" {
+		cfg.DataDir = t.TempDir()
 	}
-	if cfg.ClientID == "" {
-		cfg.ClientID = "test-client-id"
+	if cfg.ClientID() == "" {
+		cfg.SetClientID("test-client-id")
 	}
 
 	b, err := broker.New(

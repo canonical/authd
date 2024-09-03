@@ -13,7 +13,6 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/log"
 	"github.com/ubuntu/decorate"
-	"gopkg.in/ini.v1"
 )
 
 // initViperConfig sets verbosity level and add config env variables and file support based on name prefix.
@@ -102,30 +101,4 @@ func setVerboseMode(level int) {
 	}
 
 	//slog.SetReportCaller(reportCaller)
-}
-
-// parseConfig parses the config file and returns a map with the configuration keys and values.
-func parseConfig(cfgPath string) (map[string]map[string]string, error) {
-	iniCfg, err := ini.Load(cfgPath)
-	if err != nil {
-		return nil, err
-	}
-
-	cfg := make(map[string]map[string]string)
-	for _, section := range iniCfg.Sections() {
-		cfg[section.Name()] = make(map[string]string)
-		for _, key := range section.Keys() {
-			if strings.Contains(key.String(), "<") && strings.Contains(key.String(), ">") {
-				err = errors.Join(err, fmt.Errorf("found invalid character in section %q, key %q", section.Name(), key.Name()))
-				continue
-			}
-			cfg[section.Name()][key.Name()] = key.String()
-		}
-	}
-
-	// This means we found at least one section that was potentially not edited.
-	if err != nil {
-		return nil, fmt.Errorf("config file has invalid values, did you edit the file %q?\n%w", cfgPath, err)
-	}
-	return cfg, nil
 }

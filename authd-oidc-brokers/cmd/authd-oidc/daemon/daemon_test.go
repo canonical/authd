@@ -106,40 +106,40 @@ func TestAppCanQuitWithoutExecute(t *testing.T) {
 
 func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 	const (
-		// Cache errors
+		// DataDir errors
 		dirIsFile = iota
 		wrongPermission
 		noParentDir
 	)
 
 	tests := map[string]struct {
-		cachePathBehavior int
-		configBehavior    int
+		dataDirBehavior int
+		configBehavior  int
 	}{
-		"Error on existing cache path being a file":    {cachePathBehavior: dirIsFile},
-		"Error on cache path missing parent directory": {cachePathBehavior: noParentDir},
-		"Error on wrong permission on cache path":      {cachePathBehavior: wrongPermission},
+		"Error on existing data dir being a file":    {dataDirBehavior: dirIsFile},
+		"Error on data dir missing parent directory": {dataDirBehavior: noParentDir},
+		"Error on wrong permission on data dir":      {dataDirBehavior: wrongPermission},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			tmpDir := t.TempDir()
-			cachePath := filepath.Join(tmpDir, "cache")
+			dataDir := filepath.Join(tmpDir, "data")
 
-			switch tc.cachePathBehavior {
+			switch tc.dataDirBehavior {
 			case dirIsFile:
-				err := os.WriteFile(cachePath, []byte("file"), 0600)
+				err := os.WriteFile(dataDir, []byte("file"), 0600)
 				require.NoError(t, err, "Setup: could not create cache file for tests")
 			case wrongPermission:
-				err := os.Mkdir(cachePath, 0600)
+				err := os.Mkdir(dataDir, 0600)
 				require.NoError(t, err, "Setup: could not create cache directory for tests")
 			case noParentDir:
-				cachePath = filepath.Join(tmpDir, "doesnotexist", "cache")
+				dataDir = filepath.Join(dataDir, "doesnotexist", "data")
 			}
 
 			config := daemon.DaemonConfig{
 				Verbosity: 0,
 				Paths: daemon.SystemPaths{
-					Cache: cachePath,
+					DataDir: dataDir,
 				},
 			}
 
@@ -226,7 +226,7 @@ func TestConfigLoad(t *testing.T) {
 		Verbosity: 1,
 		Paths: daemon.SystemPaths{
 			BrokerConf: filepath.Join(tmpDir, "broker.conf"),
-			Cache:      filepath.Join(tmpDir, "cache"),
+			DataDir:    filepath.Join(tmpDir, "data"),
 		},
 	}
 
@@ -243,7 +243,7 @@ func TestConfigHasPrecedenceOverPathsConfig(t *testing.T) {
 		Verbosity: 1,
 		Paths: daemon.SystemPaths{
 			BrokerConf: filepath.Join(tmpDir, "broker.conf"),
-			Cache:      filepath.Join(tmpDir, "cache"),
+			DataDir:    filepath.Join(tmpDir, "data"),
 		},
 	}
 
@@ -275,7 +275,7 @@ func TestAutoDetectConfig(t *testing.T) {
 		Verbosity: 1,
 		Paths: daemon.SystemPaths{
 			BrokerConf: filepath.Join(tmpDir, "broker.conf"),
-			Cache:      filepath.Join(tmpDir, "cache"),
+			DataDir:    filepath.Join(tmpDir, "data"),
 		},
 	}
 
@@ -315,7 +315,7 @@ func TestNoConfigSetDefaults(t *testing.T) {
 
 	require.Equal(t, 0, a.Config().Verbosity, "Default Verbosity")
 	require.Equal(t, filepath.Join(tmpDir, "broker.conf"), a.Config().Paths.BrokerConf, "Default broker configuration path")
-	require.Equal(t, filepath.Join(tmpDir, "cache"), a.Config().Paths.Cache, "Default cache directory")
+	require.Equal(t, tmpDir, a.Config().Paths.DataDir, "Default data directory")
 }
 
 func TestBadConfigReturnsError(t *testing.T) {

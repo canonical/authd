@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
+	"github.com/ubuntu/authd-oidc-brokers/internal/password"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"golang.org/x/oauth2"
@@ -26,9 +27,9 @@ func TestNew(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		issuer    string
-		clientID  string
-		cachePath string
+		issuer   string
+		clientID string
+		dataDir  string
 
 		wantErr bool
 	}{
@@ -37,7 +38,7 @@ func TestNew(t *testing.T) {
 
 		"Error if issuer is not provided":   {issuer: "-", wantErr: true},
 		"Error if clientID is not provided": {clientID: "-", wantErr: true},
-		"Error if cacheDir is not provided": {cachePath: "-", wantErr: true},
+		"Error if dataDir is not provided":  {dataDir: "-", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -56,18 +57,16 @@ func TestNew(t *testing.T) {
 				tc.clientID = "test-client-id"
 			}
 
-			if tc.cachePath == "-" {
-				tc.cachePath = ""
+			if tc.dataDir == "-" {
+				tc.dataDir = ""
 			} else {
-				tc.cachePath = t.TempDir()
+				tc.dataDir = t.TempDir()
 			}
 
-			bCfg := broker.Config{
-				IssuerURL: tc.issuer,
-				ClientID:  tc.clientID,
-				CachePath: tc.cachePath,
-			}
-			b, err := broker.New(bCfg)
+			bCfg := &broker.Config{DataDir: tc.dataDir}
+			bCfg.SetIssuerURL(tc.issuer)
+			bCfg.SetClientID(tc.clientID)
+			b, err := broker.New(*bCfg)
 			if tc.wantErr {
 				require.Error(t, err, "New should have returned an error")
 				return
@@ -111,7 +110,9 @@ func TestNewSession(t *testing.T) {
 
 			provider, stopServer := testutils.StartMockProvider("", opts...)
 			t.Cleanup(stopServer)
-			b := newBrokerForTests(t, broker.Config{IssuerURL: provider.URL})
+			cfg := &broker.Config{}
+			cfg.SetIssuerURL(provider.URL)
+			b := newBrokerForTests(t, *cfg)
 
 			id, _, err := b.NewSession("test-user", "lang", "auth")
 			require.NoError(t, err, "NewSession should not have returned an error")
@@ -227,7 +228,9 @@ func TestGetAuthenticationModes(t *testing.T) {
 				provider, stopServer = testutils.StartMockProvider(address, opts...)
 				t.Cleanup(stopServer)
 			}
-			b := newBrokerForTests(t, broker.Config{IssuerURL: provider.URL})
+			cfg := &broker.Config{}
+			cfg.SetIssuerURL(provider.URL)
+			b := newBrokerForTests(t, *cfg)
 			sessionID, _ := newSessionForTests(t, b, "", tc.sessionMode)
 			if tc.sessionID == "-" {
 				sessionID = ""
@@ -344,7 +347,9 @@ func TestSelectAuthenticationMode(t *testing.T) {
 				sessionType = "passwd"
 			}
 
-			b := newBrokerForTests(t, broker.Config{IssuerURL: provider.URL})
+			cfg := &broker.Config{}
+			cfg.SetIssuerURL(provider.URL)
+			b := newBrokerForTests(t, *cfg)
 			sessionID, _ := newSessionForTests(t, b, "", sessionType)
 
 			if tc.tokenExists {
@@ -406,7 +411,7 @@ func TestIsAuthenticated(t *testing.T) {
 		preexistentToken     string
 		invalidAuthData      bool
 		dontWaitForFirstCall bool
-		readOnlyCacheDir     bool
+		readOnlyDataDir      bool
 	}{
 		"Successfully authenticate user with qrcode and newpassword":    {firstChallenge: "-", wantSecondCall: true},
 		"Successfully authenticate user with link code and newpassword": {firstMode: authmodes.Device, firstChallenge: "-", wantSecondCall: true},
@@ -441,7 +446,7 @@ func TestIsAuthenticated(t *testing.T) {
 		"Error when authentication data is invalid":         {invalidAuthData: true},
 		"Error when challenge can not be decrypted":         {firstMode: authmodes.Password, badFirstKey: true},
 		"Error when provided wrong challenge":               {firstMode: authmodes.Password, preexistentToken: "valid", firstChallenge: "wrongpassword"},
-		"Error when can not cache token":                    {firstChallenge: "-", wantSecondCall: true, readOnlyCacheDir: true},
+		"Error when can not cache token":                    {firstChallenge: "-", wantSecondCall: true, readOnlyDataDir: true},
 		"Error when IsAuthenticated is ongoing for session": {dontWaitForFirstCall: true, wantSecondCall: true},
 
 		"Error when mode is password and token does not exist": {firstMode: authmodes.Password},
@@ -520,9 +525,9 @@ func TestIsAuthenticated(t *testing.T) {
 			}
 
 			outDir := t.TempDir()
-			cacheDir := filepath.Join(outDir, "cache")
+			dataDir := filepath.Join(outDir, "data")
 
-			err := os.Mkdir(cacheDir, 0700)
+			err := os.Mkdir(dataDir, 0700)
 			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
 
 			provider := defaultProvider
@@ -536,23 +541,27 @@ func TestIsAuthenticated(t *testing.T) {
 				provider = p
 			}
 
-			b := newBrokerForTests(t, broker.Config{CachePath: cacheDir, IssuerURL: provider.URL})
+			cfg := &broker.Config{DataDir: dataDir}
+			cfg.SetIssuerURL(provider.URL)
+			b := newBrokerForTests(t, *cfg)
 			sessionID, key := newSessionForTests(t, b, tc.username, tc.sessionMode)
 
 			if tc.preexistentToken != "" {
 				tok := generateCachedInfo(t, tc.preexistentToken, provider.URL)
-				err := b.CacheAuthInfo(sessionID, tok, correctPassword)
+				err := b.CacheAuthInfo(sessionID, tok)
 				require.NoError(t, err, "Setup: SaveToken should not have returned an error")
+				err = password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID))
+				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 			}
 
-			var readOnlyCacheCleanup, readOnlyTokenCleanup func()
-			if tc.readOnlyCacheDir {
+			var readOnlyDataCleanup, readOnlyTokenCleanup func()
+			if tc.readOnlyDataDir {
 				if tc.preexistentToken != "" {
 					readOnlyTokenCleanup = testutils.MakeReadOnly(t, b.TokenPathForSession(sessionID))
 					t.Cleanup(readOnlyTokenCleanup)
 				}
-				readOnlyCacheCleanup = testutils.MakeReadOnly(t, b.CachePath())
-				t.Cleanup(readOnlyCacheCleanup)
+				readOnlyDataCleanup = testutils.MakeReadOnly(t, b.DataDir())
+				t.Cleanup(readOnlyDataCleanup)
 			}
 
 			switch tc.firstChallenge {
@@ -639,8 +648,8 @@ func TestIsAuthenticated(t *testing.T) {
 			<-firstCallDone
 
 			// We need to restore some permissions in order to save the golden files.
-			if tc.readOnlyCacheDir {
-				readOnlyCacheCleanup()
+			if tc.readOnlyDataDir {
+				readOnlyDataCleanup()
 				if tc.preexistentToken != "" {
 					readOnlyTokenCleanup()
 				}
@@ -651,15 +660,21 @@ func TestIsAuthenticated(t *testing.T) {
 				err := os.WriteFile(b.TokenPathForSession(sessionID), []byte("Definitely an encrypted token"), 0600)
 				require.NoError(t, err, "Teardown: Failed to write generic token file")
 			}
+			passwordPath := b.PasswordFilepathForSession(sessionID)
+			if _, err := os.Stat(passwordPath); err == nil {
+				err := os.WriteFile(passwordPath, []byte("Definitely a hashed password"), 0600)
+				require.NoError(t, err, "Teardown: Failed to write generic password file")
+			}
 
 			// Ensure that the directory structure is generic to avoid golden file conflicts
 			if _, err := os.Stat(filepath.Dir(b.TokenPathForSession(sessionID))); err == nil {
 				toReplace := strings.ReplaceAll(strings.TrimPrefix(provider.URL, "http://"), ":", "_")
-				providerCache := filepath.Dir(b.TokenPathForSession(sessionID))
-				newProviderCache := strings.ReplaceAll(providerCache, toReplace, "provider_url")
-				err := os.Rename(providerCache, newProviderCache)
+				tokenDir := filepath.Dir(filepath.Dir(b.TokenPathForSession(sessionID)))
+				newTokenDir := strings.ReplaceAll(tokenDir, toReplace, "provider_url")
+				err := os.Rename(tokenDir, newTokenDir)
 				if err != nil {
-					require.ErrorIs(t, err, os.ErrNotExist, "Teardown: Failed to rename cache directory")
+					require.ErrorIs(t, err, os.ErrNotExist, "Teardown: Failed to rename token directory")
+					t.Logf("Failed to rename token directory: %v", err)
 				}
 			}
 
@@ -683,10 +698,12 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			outDir := t.TempDir()
-			cacheDir := filepath.Join(outDir, "cache")
-			err := os.Mkdir(cacheDir, 0700)
+			dataDir := filepath.Join(outDir, "data")
+			err := os.Mkdir(dataDir, 0700)
 			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
-			b := newBrokerForTests(t, broker.Config{CachePath: cacheDir, IssuerURL: defaultProvider.URL})
+			cfg := &broker.Config{DataDir: dataDir}
+			cfg.SetIssuerURL(defaultProvider.URL)
+			b := newBrokerForTests(t, *cfg)
 
 			if tc.firstUser == "" {
 				tc.firstUser = "user-timeout-0"
@@ -697,13 +714,17 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 
 			firstSession, firstKey := newSessionForTests(t, b, tc.firstUser, "")
 			tok := generateCachedInfo(t, tc.firstUser, defaultProvider.URL)
-			err = b.CacheAuthInfo(firstSession, tok, authmodes.Password)
+			err = b.CacheAuthInfo(firstSession, tok)
 			require.NoError(t, err, "Setup: SaveToken should not have returned an error")
+			err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(firstSession))
+			require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 
 			secondSession, secondKey := newSessionForTests(t, b, tc.secondUser, "")
 			tok = generateCachedInfo(t, tc.secondUser, defaultProvider.URL)
-			err = b.CacheAuthInfo(secondSession, tok, authmodes.Password)
+			err = b.CacheAuthInfo(secondSession, tok)
 			require.NoError(t, err, "Setup: SaveToken should not have returned an error")
+			err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(secondSession))
+			require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 
 			firstCallDone := make(chan struct{})
 			go func() {
@@ -760,16 +781,22 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 					err := os.WriteFile(b.TokenPathForSession(sessionID), []byte("Definitely an encrypted token"), 0600)
 					require.NoError(t, err, "Teardown: Failed to write generic token file")
 				}
+				passwordPath := b.PasswordFilepathForSession(sessionID)
+				if _, err := os.Stat(passwordPath); err == nil {
+					err := os.WriteFile(passwordPath, []byte("Definitely a hashed password"), 0600)
+					require.NoError(t, err, "Teardown: Failed to write generic password file")
+				}
 			}
 
 			// Ensure that the directory structure is generic to avoid golden file conflicts
-			if _, err := os.Stat(filepath.Dir(b.TokenPathForSession(firstSession))); err == nil {
+			issuerDataDir := filepath.Dir(b.UserDataDirForSession(firstSession))
+			if _, err := os.Stat(issuerDataDir); err == nil {
 				toReplace := strings.ReplaceAll(strings.TrimPrefix(defaultProvider.URL, "http://"), ":", "_")
-				providerCache := filepath.Dir(b.TokenPathForSession(firstSession))
-				newProviderCache := strings.ReplaceAll(providerCache, toReplace, "provider_url")
-				err := os.Rename(providerCache, newProviderCache)
+				newIssuerDataDir := strings.ReplaceAll(issuerDataDir, toReplace, "provider_url")
+				err := os.Rename(issuerDataDir, newIssuerDataDir)
 				if err != nil {
-					require.ErrorIs(t, err, os.ErrNotExist, "Teardown: Failed to rename cache directory")
+					require.ErrorIs(t, err, os.ErrNotExist, "Teardown: Failed to rename issuer data directory")
+					t.Logf("Failed to rename issuer data directory: %v", err)
 				}
 			}
 			testutils.CompareTreesWithFiltering(t, outDir, testutils.GoldenPath(t), testutils.Update())
@@ -808,12 +835,12 @@ func TestFetchUserInfo(t *testing.T) {
 				homeDirPath = ""
 			}
 
-			brokerCfg := broker.Config{
-				IssuerURL:   defaultProvider.URL,
-				ClientID:    "test-client-id",
-				CachePath:   t.TempDir(),
-				HomeBaseDir: homeDirPath,
-			}
+			dataDir := t.TempDir()
+			clientID := "test-client-id"
+			brokerCfg := &broker.Config{DataDir: dataDir}
+			brokerCfg.SetIssuerURL(defaultProvider.URL)
+			brokerCfg.SetHomeBaseDir(homeDirPath)
+			brokerCfg.SetClientID(clientID)
 
 			mockInfoer := &testutils.MockProviderInfoer{
 				GroupsErr: tc.wantGroupErr,
@@ -826,7 +853,7 @@ func TestFetchUserInfo(t *testing.T) {
 				mockInfoer.Groups = []info.Group{}
 			}
 
-			b, err := broker.New(brokerCfg, broker.WithCustomProviderInfo(mockInfoer))
+			b, err := broker.New(*brokerCfg, broker.WithCustomProviderInfo(mockInfoer))
 			require.NoError(t, err, "Setup: New should not have returned an error")
 
 			if tc.username == "" {
@@ -863,7 +890,9 @@ func TestCancelIsAuthenticated(t *testing.T) {
 	provider, cleanup := testutils.StartMockProvider("", testutils.WithHandler("/token", testutils.HangingHandler(3*time.Second)))
 	t.Cleanup(cleanup)
 
-	b := newBrokerForTests(t, broker.Config{IssuerURL: provider.URL})
+	cfg := &broker.Config{}
+	cfg.SetIssuerURL(provider.URL)
+	b := newBrokerForTests(t, *cfg)
 	sessionID, _ := newSessionForTests(t, b, "", "")
 
 	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
@@ -885,7 +914,9 @@ func TestCancelIsAuthenticated(t *testing.T) {
 func TestEndSession(t *testing.T) {
 	t.Parallel()
 
-	b := newBrokerForTests(t, broker.Config{IssuerURL: defaultProvider.URL})
+	cfg := &broker.Config{}
+	cfg.SetIssuerURL(defaultProvider.URL)
+	b := newBrokerForTests(t, *cfg)
 
 	sessionID, _ := newSessionForTests(t, b, "", "")
 
@@ -939,7 +970,11 @@ func TestUserPreCheck(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			b := newBrokerForTests(t, broker.Config{IssuerURL: defaultProvider.URL, AllowedSSHSuffixes: tc.allowedSuffixes, HomeBaseDir: tc.homePrefix})
+			cfg := &broker.Config{}
+			cfg.SetIssuerURL(defaultProvider.URL)
+			cfg.SetHomeBaseDir(tc.homePrefix)
+			cfg.SetAllowedSSHSuffixes(tc.allowedSuffixes)
+			b := newBrokerForTests(t, *cfg)
 
 			got, err := b.UserPreCheck(tc.username)
 			if tc.wantErr {

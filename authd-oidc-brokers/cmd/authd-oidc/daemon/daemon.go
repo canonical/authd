@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -31,8 +30,9 @@ type App struct {
 
 // only overriable for tests.
 type systemPaths struct {
-	BrokerConf string
-	Cache      string
+	BrokerConf            string
+	DataDir               string
+	OldEncryptedTokensDir string
 }
 
 // daemonConfig defines configuration parameters of the daemon.
@@ -54,16 +54,23 @@ func New(name string) *App {
 			a.rootCmd.SilenceUsage = true
 
 			// Set config defaults
-			systemCache := filepath.Join("/var", "lib", name)
+			// Before version 0.2, we used to store the tokens encrypted
+			// in a different directory. For backward compatibility, we
+			// try to use the encrypted tokens from the old directory
+			// if they are not found in the new one.
+			oldEncryptedTokensDir := filepath.Join("/var", "lib", name)
+			dataDir := filepath.Join("/var", "lib", name)
 			configDir := "."
 			if snapData := os.Getenv("SNAP_DATA"); snapData != "" {
-				systemCache = filepath.Join(snapData, "cache")
+				oldEncryptedTokensDir = filepath.Join(snapData, "cache")
+				dataDir = snapData
 				configDir = snapData
 			}
 			a.config = daemonConfig{
 				Paths: systemPaths{
-					BrokerConf: filepath.Join(configDir, "broker.conf"),
-					Cache:      systemCache,
+					BrokerConf:            filepath.Join(configDir, "broker.conf"),
+					DataDir:               dataDir,
+					OldEncryptedTokensDir: oldEncryptedTokensDir,
 				},
 			}
 
@@ -110,27 +117,18 @@ func New(name string) *App {
 func (a *App) serve(config daemonConfig) error {
 	ctx := context.Background()
 
-	if err := ensureDirWithPerms(config.Paths.Cache, 0700, os.Geteuid()); err != nil {
-		close(a.ready)
-		return fmt.Errorf("error initializing users cache directory at %q: %v", config.Paths.Cache, err)
-	}
-
-	cfg, err := parseConfig(config.Paths.BrokerConf)
-	if err != nil {
-		return err
-	}
-
-	var allowedSSHSuffixes []string
-	if cfg[usersSection][sshSuffixesKey] != "" {
-		allowedSSHSuffixes = strings.Split(cfg[usersSection][sshSuffixesKey], ",")
+	// When the data directory is SNAP_DATA, it has permission 0755, else we want to create it with 0700.
+	if err := ensureDirWithPerms(config.Paths.DataDir, 0700, os.Geteuid()); err != nil {
+		if err := ensureDirWithPerms(config.Paths.DataDir, 0755, os.Geteuid()); err != nil {
+			close(a.ready)
+			return fmt.Errorf("error initializing data directory %q: %v", config.Paths.DataDir, err)
+		}
 	}
 
 	b, err := broker.New(broker.Config{
-		IssuerURL:          cfg[oidcSection][issuerKey],
-		ClientID:           cfg[oidcSection][clientIDKey],
-		HomeBaseDir:        cfg[usersSection][homeDirKey],
-		AllowedSSHSuffixes: allowedSSHSuffixes,
-		CachePath:          config.Paths.Cache,
+		ConfigFile:            config.Paths.BrokerConf,
+		DataDir:               config.Paths.DataDir,
+		OldEncryptedTokensDir: config.Paths.OldEncryptedTokensDir,
 	})
 	if err != nil {
 		return err

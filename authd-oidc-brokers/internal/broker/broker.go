@@ -22,6 +22,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
+	"github.com/ubuntu/authd-oidc-brokers/internal/fileutils"
+	"github.com/ubuntu/authd-oidc-brokers/internal/password"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
@@ -36,11 +38,18 @@ const (
 
 // Config is the configuration for the broker.
 type Config struct {
-	IssuerURL          string
-	ClientID           string
-	CachePath          string
-	HomeBaseDir        string
-	AllowedSSHSuffixes []string
+	ConfigFile            string
+	DataDir               string
+	OldEncryptedTokensDir string
+
+	userConfig
+}
+
+type userConfig struct {
+	clientID           string
+	issuerURL          string
+	homeBaseDir        string
+	allowedSSHSuffixes []string
 }
 
 // Broker is the real implementation of the broker to track sessions and process oidc calls.
@@ -66,10 +75,13 @@ type sessionInfo struct {
 	authModes         []string
 	attemptsPerMode   map[string]int
 
-	authCfg   authConfig
-	authInfo  map[string]any
-	isOffline bool
-	cachePath string
+	authCfg               authConfig
+	authInfo              map[string]any
+	isOffline             bool
+	userDataDir           string
+	passwordPath          string
+	tokenPath             string
+	oldEncryptedTokenPath string
 
 	currentAuthStep int
 
@@ -98,6 +110,13 @@ type Option func(*option)
 func New(cfg Config, args ...Option) (b *Broker, err error) {
 	defer decorate.OnError(&err, "could not create broker")
 
+	if cfg.ConfigFile != "" {
+		cfg.userConfig, err = parseConfigFile(cfg.ConfigFile)
+		if err != nil {
+			return nil, fmt.Errorf("could not parse config: %v", err)
+		}
+	}
+
 	opts := option{
 		providerInfo: providers.CurrentProviderInfo(),
 	}
@@ -105,21 +124,21 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 		arg(&opts)
 	}
 
-	if cfg.CachePath == "" {
+	if cfg.DataDir == "" {
 		err = errors.Join(err, errors.New("cache path is required and was not provided"))
 	}
-	if cfg.IssuerURL == "" {
+	if cfg.issuerURL == "" {
 		err = errors.Join(err, errors.New("issuer URL is required and was not provided"))
 	}
-	if cfg.ClientID == "" {
+	if cfg.clientID == "" {
 		err = errors.Join(err, errors.New("client ID is required and was not provided"))
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	if cfg.HomeBaseDir == "" {
-		cfg.HomeBaseDir = "/home"
+	if cfg.homeBaseDir == "" {
+		cfg.homeBaseDir = "/home"
 	}
 
 	// Generate a new private key for the broker.
@@ -132,7 +151,7 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	b = &Broker{
 		cfg:          cfg,
 		providerInfo: opts.providerInfo,
-		oidcCfg:      oidc.Config{ClientID: cfg.ClientID},
+		oidcCfg:      oidc.Config{ClientID: cfg.clientID},
 		privateKey:   privateKey,
 
 		currentSessions:   make(map[string]sessionInfo),
@@ -160,10 +179,15 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 		return "", "", err
 	}
 
-	_, url, _ := strings.Cut(b.cfg.IssuerURL, "://")
-	url = strings.ReplaceAll(url, "/", "_")
-	url = strings.ReplaceAll(url, ":", "_")
-	session.cachePath = filepath.Join(b.cfg.CachePath, url, username+".cache")
+	_, issuer, _ := strings.Cut(b.cfg.issuerURL, "://")
+	issuer = strings.ReplaceAll(issuer, "/", "_")
+	issuer = strings.ReplaceAll(issuer, ":", "_")
+	session.userDataDir = filepath.Join(b.cfg.DataDir, issuer, username)
+	// The token is stored in $DATA_DIR/$ISSUER/$USERNAME/token.json.
+	session.tokenPath = filepath.Join(session.userDataDir, "token.json")
+	// The password is stored in $DATA_DIR/$ISSUER/$USERNAME/password.
+	session.passwordPath = filepath.Join(session.userDataDir, "password")
+	session.oldEncryptedTokenPath = filepath.Join(b.cfg.OldEncryptedTokensDir, issuer, username+".cache")
 
 	// Check whether to start the session in offline mode.
 	session.authCfg, err = b.connectToProvider(context.Background())
@@ -183,7 +207,7 @@ func (b *Broker) connectToProvider(ctx context.Context) (authCfg authConfig, err
 	ctx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
 
-	provider, err := oidc.NewProvider(ctx, b.cfg.IssuerURL)
+	provider, err := oidc.NewProvider(ctx, b.cfg.issuerURL)
 	if err != nil {
 		return authConfig{}, err
 	}
@@ -210,8 +234,17 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 	slog.Debug(fmt.Sprintf("Supported Authentication modes for session %s: %#v", sessionID, supportedAuthModes))
 
 	// Checks if the token exists in the cache.
-	_, err = os.Stat(session.cachePath)
-	tokenExists := err == nil
+	tokenExists, err := fileutils.FileExists(session.tokenPath)
+	if err != nil {
+		slog.Warn(fmt.Sprintf("Could not check if token exists: %v", err))
+	}
+	if !tokenExists {
+		// Check the old encrypted token path.
+		tokenExists, err = fileutils.FileExists(session.oldEncryptedTokenPath)
+		if err != nil {
+			slog.Warn(fmt.Sprintf("Could not check if old encrypted token exists: %v", err))
+		}
+	}
 
 	endpoints := make(map[string]struct{})
 	if session.authCfg.provider != nil && session.authCfg.provider.Endpoint().DeviceAuthURL != "" {
@@ -488,10 +521,49 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 		return AuthNext, nil
 
 	case authmodes.Password:
-		authInfo, err = b.loadAuthInfo(ctx, session, challenge)
+		var useOldEncryptedToken bool
+		exists, err := fileutils.FileExists(session.passwordPath)
+		if err != nil {
+			slog.Error(err.Error())
+			return AuthDenied, errorMessage{Message: "could not check password file"}
+		}
+		if !exists {
+			// For backwards compatibility, we also check the old encrypted token path.
+			exists, err = fileutils.FileExists(session.oldEncryptedTokenPath)
+			if err != nil {
+				slog.Error(err.Error())
+				return AuthDenied, errorMessage{Message: "could not check old encrypted token path"}
+			}
+			if !exists {
+				return AuthDenied, errorMessage{Message: "password file does not exist"}
+			}
+			useOldEncryptedToken = true
+		}
+
+		if !useOldEncryptedToken {
+			ok, err := password.CheckPassword(challenge, session.passwordPath)
+			if err != nil {
+				slog.Error(err.Error())
+				return AuthRetry, errorMessage{Message: "could not check password"}
+			}
+			if !ok {
+				return AuthRetry, errorMessage{Message: "incorrect password"}
+			}
+		}
+
+		authInfo, err = b.loadAuthInfo(ctx, session, challenge, useOldEncryptedToken)
 		if err != nil {
 			slog.Error(err.Error())
 			return AuthRetry, errorMessage{Message: "could not load cached info"}
+		}
+
+		if useOldEncryptedToken {
+			// We were able to decrypt the old token with the password, so we can now hash and store the password in the
+			// new format.
+			if err = password.HashAndStorePassword(challenge, session.passwordPath); err != nil {
+				slog.Error(err.Error())
+				return AuthDenied, errorMessage{Message: "could not store password"}
+			}
 		}
 
 		userInfo, err := b.fetchUserInfo(ctx, session, &authInfo)
@@ -524,16 +596,25 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 			slog.Error("could not get required information")
 			return AuthDenied, errorMessage{Message: "could not get required information"}
 		}
+
+		if err = password.HashAndStorePassword(challenge, session.passwordPath); err != nil {
+			slog.Error(err.Error())
+			return AuthDenied, errorMessage{Message: "could not store password"}
+		}
 	}
 
 	if session.isOffline {
 		return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 	}
 
-	if err := b.cacheAuthInfo(session, authInfo, challenge); err != nil {
+	if err := b.cacheAuthInfo(session, authInfo); err != nil {
 		slog.Error(err.Error())
 		return AuthDenied, errorMessage{Message: "could not cache user info"}
 	}
+
+	// At this point we successfully stored the hashed password and a new token, so we can now safely remove any old
+	// encrypted token.
+	cleanupOldEncryptedToken(session.oldEncryptedTokenPath)
 
 	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 }
@@ -600,7 +681,7 @@ func (b *Broker) CancelIsAuthenticated(sessionID string) {
 // UserPreCheck checks if the user is valid and can be allowed to authenticate.
 func (b *Broker) UserPreCheck(username string) (string, error) {
 	found := false
-	for _, suffix := range b.cfg.AllowedSSHSuffixes {
+	for _, suffix := range b.cfg.allowedSSHSuffixes {
 		if strings.HasSuffix(username, suffix) {
 			found = true
 			break
@@ -611,7 +692,7 @@ func (b *Broker) UserPreCheck(username string) (string, error) {
 		return "", errors.New("username does not match the allowed suffixes")
 	}
 
-	u := info.NewUser(username, filepath.Join(b.cfg.HomeBaseDir, username), "", "", "", nil)
+	u := info.NewUser(username, filepath.Join(b.cfg.homeBaseDir, username), "", "", "", nil)
 	encoded, err := json.Marshal(u)
 	if err != nil {
 		return "", fmt.Errorf("could not marshal user info: %v", err)
@@ -658,44 +739,46 @@ func (b *Broker) newAuthCachedInfo(t *oauth2.Token, idToken string) authCachedIn
 	}
 }
 
-// cacheAuthInfo serializes the access token and cache it.
-func (b *Broker) cacheAuthInfo(session *sessionInfo, authInfo authCachedInfo, password string) (err error) {
-	content, err := json.Marshal(authInfo)
+// cacheAuthInfo saves the token to the file.
+func (b *Broker) cacheAuthInfo(session *sessionInfo, authInfo authCachedInfo) (err error) {
+	jsonData, err := json.Marshal(authInfo)
 	if err != nil {
 		return fmt.Errorf("could not marshal token: %v", err)
 	}
 
-	serialized, err := encrypt(content, []byte(password))
-	if err != nil {
-		return fmt.Errorf("could not encrypt token: %v", err)
-	}
-
 	// Create issuer specific cache directory if it doesn't exist.
-	if err = os.MkdirAll(filepath.Dir(session.cachePath), 0700); err != nil {
+	if err = os.MkdirAll(filepath.Dir(session.tokenPath), 0700); err != nil {
 		return fmt.Errorf("could not create token directory: %v", err)
 	}
 
-	if err = os.WriteFile(session.cachePath, serialized, 0600); err != nil {
+	if err = os.WriteFile(session.tokenPath, jsonData, 0600); err != nil {
 		return fmt.Errorf("could not save token: %v", err)
 	}
 
 	return nil
 }
 
-// loadAuthInfo deserializes the token from the cache and refreshes it if needed.
-func (b *Broker) loadAuthInfo(ctx context.Context, session *sessionInfo, password string) (loadedInfo authCachedInfo, err error) {
-	s, err := os.ReadFile(session.cachePath)
-	if err != nil {
-		return authCachedInfo{}, fmt.Errorf("could not read token: %v", err)
-	}
-
-	deserialized, err := decrypt(s, []byte(password))
-	if err != nil {
-		return authCachedInfo{}, fmt.Errorf("could not deserialize token: %v", err)
+// loadAuthInfo reads the token from the file and tries to refresh it if it's expired.
+func (b *Broker) loadAuthInfo(ctx context.Context, session *sessionInfo, password string, useOldEncryptedToken bool) (loadedInfo authCachedInfo, err error) {
+	var jsonData []byte
+	if useOldEncryptedToken {
+		encryptedData, err := os.ReadFile(session.oldEncryptedTokenPath)
+		if err != nil {
+			return authCachedInfo{}, fmt.Errorf("could not read old encrypted token: %v", err)
+		}
+		jsonData, err = decrypt(encryptedData, []byte(password))
+		if err != nil {
+			return authCachedInfo{}, fmt.Errorf("could not decrypt token: %v", err)
+		}
+	} else {
+		jsonData, err = os.ReadFile(session.tokenPath)
+		if err != nil {
+			return authCachedInfo{}, fmt.Errorf("could not read token: %v", err)
+		}
 	}
 
 	var cachedInfo authCachedInfo
-	if err := json.Unmarshal(deserialized, &cachedInfo); err != nil {
+	if err := json.Unmarshal(jsonData, &cachedInfo); err != nil {
 		return authCachedInfo{}, fmt.Errorf("could not unmarshal token: %v", err)
 	}
 
@@ -748,7 +831,7 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *aut
 
 	// This means that home was not provided by the claims, so we need to set it to the broker default.
 	if !filepath.IsAbs(userInfo.Home) {
-		userInfo.Home = filepath.Join(b.cfg.HomeBaseDir, userInfo.Home)
+		userInfo.Home = filepath.Join(b.cfg.homeBaseDir, userInfo.Home)
 	}
 
 	return userInfo, err
@@ -775,4 +858,49 @@ func errorMessageForDisplay(err error, fallback string) errorMessage {
 		return errorMessage{Message: e.Error()}
 	}
 	return errorMessage{Message: fallback}
+}
+
+func cleanupOldEncryptedToken(path string) {
+	exists, err := fileutils.FileExists(path)
+	if err != nil {
+		slog.Warn(fmt.Sprintf("Failed to check if old encrypted token exists %s: %v", path, err))
+	}
+	if !exists {
+		return
+	}
+
+	if err := os.Remove(path); err != nil {
+		slog.Warn(fmt.Sprintf("Failed to remove old encrypted token %s: %v", path, err))
+		return
+	}
+
+	// Also remove the parent directory and the parent's parent directory if they are empty. The directory structure was:
+	//   $SNAP_DATA/cache/$ISSUER/$USERNAME.cache
+	// so we try to remove the $SNAP_DATA/cache/$ISSUER directory and the $SNAP_DATA/cache directory.
+
+	// Check if the parent directory is empty.
+	empty, err := fileutils.IsDirEmpty(filepath.Dir(path))
+	if err != nil {
+		slog.Warn(fmt.Sprintf("Failed to check if old encrypted token parent directory %s is empty: %v", filepath.Dir(path), err))
+		return
+	}
+	if !empty {
+		return
+	}
+	if err := os.Remove(filepath.Dir(path)); err != nil {
+		slog.Warn(fmt.Sprintf("Failed to remove old encrypted token directory %s: %v", filepath.Dir(path), err))
+	}
+
+	// Check if the parent's parent directory is empty.
+	empty, err = fileutils.IsDirEmpty(filepath.Dir(filepath.Dir(path)))
+	if err != nil {
+		slog.Warn(fmt.Sprintf("Failed to check if old encrypted token parent directory %s is empty: %v", filepath.Dir(filepath.Dir(path)), err))
+		return
+	}
+	if !empty {
+		return
+	}
+	if err := os.Remove(filepath.Dir(filepath.Dir(path))); err != nil {
+		slog.Warn(fmt.Sprintf("Failed to remove old encrypted token parent directory %s: %v", filepath.Dir(filepath.Dir(path)), err))
+	}
 }
