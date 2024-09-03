@@ -14,6 +14,17 @@ import (
 // NoProvider is a generic OIDC provider.
 type NoProvider struct{}
 
+// New returns a new NoProvider.
+func New() NoProvider {
+	return NoProvider{}
+}
+
+// CheckTokenScopes should check the token scopes, but we're not sure
+// if there is a generic way to do this, so for now it's a no-op.
+func (p NoProvider) CheckTokenScopes(token *oauth2.Token) error {
+	return nil
+}
+
 // AdditionalScopes returns the generic scopes required by the provider.
 func (p NoProvider) AdditionalScopes() []string {
 	return []string{oidc.ScopeOfflineAccess}
