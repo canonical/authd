@@ -247,6 +247,15 @@ func (p Provider) CurrentAuthenticationModesOffered(
 	return offeredModes, nil
 }
 
+// VerifyUsername checks if the authenticated username matches the requested username.
+func (p Provider) VerifyUsername(requestedUsername, authenticatedUsername string) error {
+	// Microsoft Entra usernames are case-insensitive.
+	if !strings.EqualFold(requestedUsername, authenticatedUsername) {
+		return fmt.Errorf("requested username %q does not match the authenticated user %q", requestedUsername, authenticatedUsername)
+	}
+	return nil
+}
+
 type azureTokenCredential struct {
 	token *oauth2.Token
 }

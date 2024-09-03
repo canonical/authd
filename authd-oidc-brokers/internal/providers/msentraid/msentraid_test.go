@@ -51,3 +51,34 @@ func TestCheckTokenScopes(t *testing.T) {
 		})
 	}
 }
+
+func TestVerifyUsername(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		requestedUsername string
+		authenticatedUser string
+
+		wantErr bool
+	}{
+		"Success when usernames are the same":   {requestedUsername: "foo@bar", authenticatedUser: "foo@bar"},
+		"Success when usernames differ in case": {requestedUsername: "foo@bar", authenticatedUser: "Foo@bar"},
+
+		"Error when usernames differ": {requestedUsername: "foo@bar", authenticatedUser: "bar@foo", wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			p := msentraid.New()
+
+			err := p.VerifyUsername(tc.requestedUsername, tc.authenticatedUser)
+			if tc.wantErr {
+				require.Error(t, err, "VerifyUsername should return an error")
+				return
+			}
+
+			require.NoError(t, err, "VerifyUsername should not return an error")
+		})
+	}
+}

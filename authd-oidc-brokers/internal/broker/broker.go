@@ -711,9 +711,8 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *aut
 		return info.User{}, fmt.Errorf("could not get user info: %w", err)
 	}
 
-	// Some providers are case-insensitive, but we are not. So we need to lowercase the returned username.
-	if !strings.EqualFold(userInfo.Name, session.username) {
-		return info.User{}, fmt.Errorf("returned user %q does not match the selected one %q", userInfo.Name, session.username)
+	if err = b.providerInfo.VerifyUsername(session.username, userInfo.Name); err != nil {
+		return info.User{}, fmt.Errorf("username verification failed: %w", err)
 	}
 
 	// This means that home was not provided by the claims, so we need to set it to the broker default.
