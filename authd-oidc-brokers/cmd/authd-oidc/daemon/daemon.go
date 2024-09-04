@@ -108,7 +108,7 @@ func New(name string) *App {
 func (a *App) serve(config daemonConfig) error {
 	ctx := context.Background()
 
-	if err := ensureDirWithPerms(config.Paths.Cache, 0700); err != nil {
+	if err := ensureDirWithPerms(config.Paths.Cache, 0700, os.Geteuid()); err != nil {
 		close(a.ready)
 		return fmt.Errorf("error initializing users cache directory at %q: %v", config.Paths.Cache, err)
 	}
