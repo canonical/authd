@@ -8,9 +8,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
 	"github.com/ubuntu/authd-oidc-brokers/internal/daemon"
 	"github.com/ubuntu/authd-oidc-brokers/internal/dbusservice"
 )
@@ -113,7 +115,28 @@ func (a *App) serve(config daemonConfig) error {
 		return fmt.Errorf("error initializing users cache directory at %q: %v", config.Paths.Cache, err)
 	}
 
-	s, err := dbusservice.New(ctx, config.Paths.BrokerConf, config.Paths.Cache)
+	cfg, err := parseConfig(config.Paths.BrokerConf)
+	if err != nil {
+		return err
+	}
+
+	var allowedSSHSuffixes []string
+	if cfg[usersSection][sshSuffixesKey] != "" {
+		allowedSSHSuffixes = strings.Split(cfg[usersSection][sshSuffixesKey], ",")
+	}
+
+	b, err := broker.New(broker.Config{
+		IssuerURL:          cfg[oidcSection][issuerKey],
+		ClientID:           cfg[oidcSection][clientIDKey],
+		HomeBaseDir:        cfg[usersSection][homeDirKey],
+		AllowedSSHSuffixes: allowedSSHSuffixes,
+		CachePath:          config.Paths.Cache,
+	})
+	if err != nil {
+		return err
+	}
+
+	s, err := dbusservice.New(ctx, b)
 	if err != nil {
 		close(a.ready)
 		return err

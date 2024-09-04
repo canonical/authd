@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"io"
 	"net/http/httptest"
@@ -406,6 +407,14 @@ func TestMain(m *testing.M) {
 	providerServer, cleanup := testutils.StartMockProvider("")
 	defer cleanup()
 	mockProvider = providerServer
+
+	testutils.InstallUpdateFlag()
+	flag.Parse()
+	// Remove the flag from the command line arguments if it is present, to avoid that it's being parsed by the cobra
+	// command in the tests.
+	if testutils.Update() {
+		os.Args = os.Args[:len(os.Args)-1]
+	}
 
 	m.Run()
 }

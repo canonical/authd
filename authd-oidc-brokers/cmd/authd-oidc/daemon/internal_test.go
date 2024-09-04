@@ -1,7 +1,6 @@
-package dbusservice
+package daemon
 
 import (
-	"flag"
 	"os"
 	"path/filepath"
 	"testing"
@@ -89,11 +88,4 @@ func TestParseConfig(t *testing.T) {
 			require.EqualValues(t, want, got)
 		})
 	}
-}
-
-func TestMain(m *testing.M) {
-	testutils.InstallUpdateFlag()
-	flag.Parse()
-
-	m.Run()
 }

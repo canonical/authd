@@ -1,4 +1,4 @@
-package dbusservice
+package daemon
 
 // Configuration sections and keys.
 const (
