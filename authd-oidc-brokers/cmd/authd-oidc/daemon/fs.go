@@ -16,7 +16,7 @@ func ensureDirWithPerms(path string, perm os.FileMode, owner int) error {
 			return &os.PathError{Op: "mkdir", Path: path, Err: syscall.ENOTDIR}
 		}
 		if dir.Mode() != (perm | fs.ModeDir) {
-			return fmt.Errorf("permissions %v don't match what we desired: %v", dir.Mode(), perm|fs.ModeDir)
+			return fmt.Errorf("permissions should be %v but are %v", perm|fs.ModeDir, dir.Mode())
 		}
 		stat, ok := dir.Sys().(*syscall.Stat_t)
 		if !ok {
