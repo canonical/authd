@@ -24,7 +24,7 @@ func (b *Broker) TokenPathForSession(sessionID string) string {
 
 // CachePath returns the path to the cache directory for tests.
 func (b *Broker) CachePath() string {
-	return b.cachePath
+	return b.cfg.CachePath
 }
 
 // UpdateSessionAuthStep updates the current auth step for the given session.

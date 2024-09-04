@@ -45,13 +45,10 @@ type Config struct {
 
 // Broker is the real implementation of the broker to track sessions and process oidc calls.
 type Broker struct {
-	providerInfo providers.ProviderInfoer
-	issuerURL    string
-	oidcCfg      oidc.Config
+	cfg Config
 
-	cachePath          string
-	homeDirPath        string
-	allowedSSHSuffixes []string
+	providerInfo providers.ProviderInfoer
+	oidcCfg      oidc.Config
 
 	currentSessions   map[string]sessionInfo
 	currentSessionsMu sync.RWMutex
@@ -121,9 +118,8 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 		return nil, err
 	}
 
-	homeDirPath := "/home"
-	if cfg.HomeBaseDir != "" {
-		homeDirPath = cfg.HomeBaseDir
+	if cfg.HomeBaseDir == "" {
+		cfg.HomeBaseDir = "/home"
 	}
 
 	// Generate a new private key for the broker.
@@ -134,13 +130,10 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	}
 
 	b = &Broker{
-		providerInfo:       opts.providerInfo,
-		issuerURL:          cfg.IssuerURL,
-		oidcCfg:            oidc.Config{ClientID: cfg.ClientID},
-		cachePath:          cfg.CachePath,
-		homeDirPath:        homeDirPath,
-		allowedSSHSuffixes: cfg.AllowedSSHSuffixes,
-		privateKey:         privateKey,
+		cfg:          cfg,
+		providerInfo: opts.providerInfo,
+		oidcCfg:      oidc.Config{ClientID: cfg.ClientID},
+		privateKey:   privateKey,
 
 		currentSessions:   make(map[string]sessionInfo),
 		currentSessionsMu: sync.RWMutex{},
@@ -167,10 +160,10 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 		return "", "", err
 	}
 
-	_, url, _ := strings.Cut(b.issuerURL, "://")
+	_, url, _ := strings.Cut(b.cfg.IssuerURL, "://")
 	url = strings.ReplaceAll(url, "/", "_")
 	url = strings.ReplaceAll(url, ":", "_")
-	session.cachePath = filepath.Join(b.cachePath, url, username+".cache")
+	session.cachePath = filepath.Join(b.cfg.CachePath, url, username+".cache")
 
 	// Check whether to start the session in offline mode.
 	session.authCfg, err = b.connectToProvider(context.Background())
@@ -190,7 +183,7 @@ func (b *Broker) connectToProvider(ctx context.Context) (authCfg authConfig, err
 	ctx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
 
-	provider, err := oidc.NewProvider(ctx, b.issuerURL)
+	provider, err := oidc.NewProvider(ctx, b.cfg.IssuerURL)
 	if err != nil {
 		return authConfig{}, err
 	}
@@ -607,7 +600,7 @@ func (b *Broker) CancelIsAuthenticated(sessionID string) {
 // UserPreCheck checks if the user is valid and can be allowed to authenticate.
 func (b *Broker) UserPreCheck(username string) (string, error) {
 	found := false
-	for _, suffix := range b.allowedSSHSuffixes {
+	for _, suffix := range b.cfg.AllowedSSHSuffixes {
 		if strings.HasSuffix(username, suffix) {
 			found = true
 			break
@@ -618,7 +611,7 @@ func (b *Broker) UserPreCheck(username string) (string, error) {
 		return "", errors.New("username does not match the allowed suffixes")
 	}
 
-	u := info.NewUser(username, filepath.Join(b.homeDirPath, username), "", "", "", nil)
+	u := info.NewUser(username, filepath.Join(b.cfg.HomeBaseDir, username), "", "", "", nil)
 	encoded, err := json.Marshal(u)
 	if err != nil {
 		return "", fmt.Errorf("could not marshal user info: %v", err)
@@ -755,7 +748,7 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *aut
 
 	// This means that home was not provided by the claims, so we need to set it to the broker default.
 	if !filepath.IsAbs(userInfo.Home) {
-		userInfo.Home = filepath.Join(b.homeDirPath, userInfo.Home)
+		userInfo.Home = filepath.Join(b.cfg.HomeBaseDir, userInfo.Home)
 	}
 
 	return userInfo, err
