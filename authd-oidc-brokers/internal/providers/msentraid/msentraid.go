@@ -119,6 +119,8 @@ func (p Provider) userClaims(idToken *oidc.IDToken) (claims, error) {
 
 // getGroups access the Microsoft Graph API to get the groups the user is a member of.
 func (p Provider) getGroups(token *oauth2.Token) ([]info.Group, error) {
+	slog.Debug("Getting user groups from Microsoft Graph API")
+
 	// Check if the token has the GroupMember.Read.All scope
 	scopes, err := p.getTokenScopes(token)
 	if err != nil {
@@ -200,6 +202,7 @@ func getAllUserGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.Gr
 		groups = append(groups, result.GetValue()...)
 	}
 
+	slog.Debug(fmt.Sprintf("Got groups: %v", groups))
 	return groups, nil
 }
 
