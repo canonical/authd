@@ -478,12 +478,17 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 			return AuthRetry, errorMessage{Message: "could not load cached info"}
 		}
 
-		if authInfo.UserInfo.Name == "" {
-			authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
-			if err != nil {
-				slog.Error(err.Error())
-				return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
-			}
+		userInfo, err := b.fetchUserInfo(ctx, session, &authInfo)
+		if err != nil && authInfo.UserInfo.Name == "" {
+			// We don't have a valid user info, so we can't proceed.
+			slog.Error(err.Error())
+			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
+		}
+		if err != nil {
+			// We couldn't fetch the user info, but we have a valid cached one.
+			slog.Warn(fmt.Sprintf("Could not fetch user info: %v. Using cached user info.", err))
+		} else {
+			authInfo.UserInfo = userInfo
 		}
 
 		if session.mode == "passwd" {
