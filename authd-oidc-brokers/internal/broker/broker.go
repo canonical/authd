@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
+	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/decorate"
 	"golang.org/x/oauth2"
@@ -468,7 +469,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil {
 			slog.Error(err.Error())
-			return AuthDenied, errorMessage{Message: "could not fetch user info"}
+			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
 		}
 
 		session.authInfo["auth_info"] = authInfo
@@ -485,7 +486,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 			authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 			if err != nil {
 				slog.Error(err.Error())
-				return AuthDenied, errorMessage{Message: "could not fetch user info"}
+				return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
 			}
 		}
 
@@ -707,7 +708,7 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *aut
 
 	userInfo, err = b.providerInfo.GetUserInfo(ctx, t.Token, idToken)
 	if err != nil {
-		return info.User{}, fmt.Errorf("could not get user info: %v", err)
+		return info.User{}, fmt.Errorf("could not get user info: %w", err)
 	}
 
 	// Some providers are case-insensitive, but we are not. So we need to lowercase the returned username.
@@ -734,4 +735,14 @@ func decorateErrorMessage(data *isAuthenticatedDataResponse, msg string) {
 	}
 	errMsg.Message = fmt.Sprintf("%s: %s", msg, errMsg.Message)
 	*data = errMsg
+}
+
+// Checks if the provided error is of type ForDisplayError. If it is, it returns the error message. Else, it returns
+// the provided fallback message.
+func errorMessageForDisplay(err error, fallback string) errorMessage {
+	var e *providerErrors.ForDisplayError
+	if errors.As(err, &e) {
+		return errorMessage{Message: e.Error()}
+	}
+	return errorMessage{Message: fallback}
 }
