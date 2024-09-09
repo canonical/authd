@@ -4,11 +4,11 @@
 linters:
   # linters to run in addition to default ones
   enable:
+    - copyloopvar
     - dupl
     - durationcheck
     - errname
     - errorlint
-    - exportloopref
     - forbidigo
     - forcetypeassert
     - gci
