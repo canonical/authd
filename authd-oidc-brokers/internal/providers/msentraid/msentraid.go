@@ -15,9 +15,9 @@ import (
 	"github.com/k0kubun/pp"
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
 	msgraphauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
-	msgraphgroups "github.com/microsoftgraph/msgraph-sdk-go/groups"
 	msgraphmodels "github.com/microsoftgraph/msgraph-sdk-go/models"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
+	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
@@ -52,12 +52,11 @@ func (p Provider) AuthOptions() []oauth2.AuthCodeOption {
 
 // CheckTokenScopes checks if the token has the required scopes.
 func (p Provider) CheckTokenScopes(token *oauth2.Token) error {
-	scopesStr, ok := token.Extra("scope").(string)
-	if !ok {
-		return fmt.Errorf("failed to cast token scopes to string: %v", token.Extra("scope"))
+	scopes, err := p.getTokenScopes(token)
+	if err != nil {
+		return err
 	}
 
-	scopes := strings.Split(scopesStr, " ")
 	var missingScopes []string
 	for _, s := range p.expectedScopes {
 		if !slices.Contains(scopes, s) {
@@ -68,6 +67,14 @@ func (p Provider) CheckTokenScopes(token *oauth2.Token) error {
 		return fmt.Errorf("missing required scopes: %s", strings.Join(missingScopes, ", "))
 	}
 	return nil
+}
+
+func (p Provider) getTokenScopes(token *oauth2.Token) ([]string, error) {
+	scopesStr, ok := token.Extra("scope").(string)
+	if !ok {
+		return nil, fmt.Errorf("failed to cast token scopes to string: %v", token.Extra("scope"))
+	}
+	return strings.Split(scopesStr, " "), nil
 }
 
 // GetUserInfo is a no-op when no specific provider is in use.
@@ -111,6 +118,15 @@ func (p Provider) userClaims(idToken *oidc.IDToken) (claims, error) {
 
 // getGroups access the Microsoft Graph API to get the groups the user is a member of.
 func (p Provider) getGroups(token *oauth2.Token) ([]info.Group, error) {
+	// Check if the token has the GroupMember.Read.All scope
+	scopes, err := p.getTokenScopes(token)
+	if err != nil {
+		return nil, err
+	}
+	if !slices.Contains(scopes, "GroupMember.Read.All") {
+		return nil, providerErrors.NewForDisplayError("the Microsoft Entra ID app is missing the GroupMember.Read.All permission")
+	}
+
 	cred := azureTokenCredential{token: token}
 	auth, err := msgraphauth.NewAzureIdentityAuthenticationProvider(cred)
 	if err != nil {
@@ -124,28 +140,15 @@ func (p Provider) getGroups(token *oauth2.Token) ([]info.Group, error) {
 
 	client := msgraphsdk.NewGraphServiceClient(adapter)
 
-	// Check GroupMember.Read.All access
-	var topOne int32 = 1
-	requestOptions := &msgraphgroups.GroupsRequestBuilderGetRequestConfiguration{
-		QueryParameters: &msgraphgroups.GroupsRequestBuilderGetQueryParameters{
-			Top: &topOne, // Limit to only one group
-		},
-	}
-	if _, err = client.Groups().Get(context.Background(), requestOptions); err != nil {
-		return nil, fmt.Errorf("failed to list groups: %v", err)
-	}
-
-	m, err := client.Me().TransitiveMemberOf().Get(context.Background(), nil)
+	// Get the groups (only the groups, not directory roles or administrative units, because that would require
+	// additional permissions) which the user is a member of.
+	graphGroups, err := client.Me().TransitiveMemberOf().GraphGroup().Get(context.Background(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user's groups: %v", err)
-	}
-	if m == nil {
-		slog.Debug("Got nil response from Microsoft Graph API for user's groups, assuming that user is not a member of any group.")
-		return []info.Group{}, nil
+		return nil, fmt.Errorf("failed to get user groups: %v", err)
 	}
 
 	var groups []info.Group
-	for _, obj := range m.GetValue() {
+	for _, obj := range graphGroups.GetValue() {
 		unknown := "Unknown"
 		msGroup, ok := obj.(*msgraphmodels.Group)
 		if !ok {
