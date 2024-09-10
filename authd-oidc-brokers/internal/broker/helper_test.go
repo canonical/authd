@@ -6,6 +6,8 @@ import (
 	"crypto/sha512"
 	"crypto/x509"
 	"encoding/base64"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
+	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"golang.org/x/oauth2"
 )
 
@@ -100,7 +103,7 @@ func updateAuthModes(t *testing.T, b *broker.Broker, sessionID, selectedMode str
 	require.NoError(t, err, "Setup: SelectAuthenticationMode should not have returned an error")
 }
 
-var testTokens = map[string]broker.AuthCachedInfo{
+var testTokens = map[string]token.AuthCachedInfo{
 	"valid": {
 		Token: &oauth2.Token{
 			AccessToken:  "accesstoken",
@@ -123,7 +126,19 @@ var testTokens = map[string]broker.AuthCachedInfo{
 	},
 }
 
-func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.AuthCachedInfo {
+func generateAndStoreCachedInfo(t *testing.T, preexistentToken, issuer, path string) {
+	t.Helper()
+
+	tok := generateCachedInfo(t, preexistentToken, issuer)
+	if tok == nil {
+		writeTrashToken(t, path)
+		return
+	}
+	err := token.CacheAuthInfo(path, *tok)
+	require.NoError(t, err, "Setup: storing token should not have failed")
+}
+
+func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *token.AuthCachedInfo {
 	t.Helper()
 
 	if preexistentToken == "invalid" {
@@ -158,16 +173,18 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.A
 		tok = testTokens["valid"]
 	}
 
-	tok.UserInfo = info.User{
-		Name:  username,
-		UUID:  "saved-user-id",
-		Home:  "/home/" + username,
-		Gecos: username,
-		Shell: "/usr/bin/bash",
-		Groups: []info.Group{
-			{Name: "saved-remote-group", UGID: "12345"},
-			{Name: "saved-local-group", UGID: ""},
-		},
+	if preexistentToken != "no-user-info" {
+		tok.UserInfo = info.User{
+			Name:  username,
+			UUID:  "saved-user-id",
+			Home:  "/home/" + username,
+			Gecos: username,
+			Shell: "/usr/bin/bash",
+			Groups: []info.Group{
+				{Name: "saved-remote-group", UGID: "12345"},
+				{Name: "saved-local-group", UGID: ""},
+			},
+		}
 	}
 
 	if preexistentToken == "invalid-id" {
@@ -179,4 +196,17 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.A
 	tok.RawIDToken = encodedToken
 
 	return &tok
+}
+
+func writeTrashToken(t *testing.T, path string) {
+	t.Helper()
+
+	content := []byte("This is a trash token that is not valid for authentication")
+
+	// Create issuer specific cache directory if it doesn't exist.
+	err := os.MkdirAll(filepath.Dir(path), 0700)
+	require.NoError(t, err, "Setup: creating token directory should not have failed")
+
+	err = os.WriteFile(path, content, 0600)
+	require.NoError(t, err, "Setup: writing trash token should not have failed")
 }
