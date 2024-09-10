@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -27,6 +26,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"github.com/ubuntu/decorate"
 	"golang.org/x/oauth2"
 )
@@ -480,7 +480,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 		return AuthRetry, errorMessage{Message: "could not decode challenge"}
 	}
 
-	var authInfo authCachedInfo
+	var authInfo token.AuthCachedInfo
 	switch session.selectedMode {
 	case authmodes.Device, authmodes.DeviceQr:
 		response, ok := session.authInfo["response"].(*oauth2.DeviceAuthResponse)
@@ -510,7 +510,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 			return AuthDenied, errorMessage{Message: "could not get ID token"}
 		}
 
-		authInfo = b.newAuthCachedInfo(t, rawIDToken)
+		authInfo = token.NewAuthCachedInfo(t, rawIDToken, b.providerInfo)
 		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil {
 			slog.Error(err.Error())
@@ -521,51 +521,53 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 		return AuthNext, nil
 
 	case authmodes.Password:
-		var useOldEncryptedToken bool
-		exists, err := fileutils.FileExists(session.passwordPath)
+		useOldEncryptedToken, err := token.UseOldEncryptedToken(session.tokenPath, session.passwordPath, session.oldEncryptedTokenPath)
 		if err != nil {
 			slog.Error(err.Error())
 			return AuthDenied, errorMessage{Message: "could not check password file"}
 		}
-		if !exists {
-			// For backwards compatibility, we also check the old encrypted token path.
-			exists, err = fileutils.FileExists(session.oldEncryptedTokenPath)
-			if err != nil {
-				slog.Error(err.Error())
-				return AuthDenied, errorMessage{Message: "could not check old encrypted token path"}
-			}
-			if !exists {
-				return AuthDenied, errorMessage{Message: "password file does not exist"}
-			}
-			useOldEncryptedToken = true
-		}
-
-		if !useOldEncryptedToken {
-			ok, err := password.CheckPassword(challenge, session.passwordPath)
-			if err != nil {
-				slog.Error(err.Error())
-				return AuthRetry, errorMessage{Message: "could not check password"}
-			}
-			if !ok {
-				return AuthRetry, errorMessage{Message: "incorrect password"}
-			}
-		}
-
-		authInfo, err = b.loadAuthInfo(ctx, session, challenge, useOldEncryptedToken)
-		if err != nil {
-			slog.Error(err.Error())
-			return AuthRetry, errorMessage{Message: "could not load cached info"}
-		}
 
 		if useOldEncryptedToken {
+			authInfo, err = token.LoadOldEncryptedAuthInfo(session.oldEncryptedTokenPath, challenge)
+			if err != nil {
+				slog.Error(err.Error())
+				return AuthDenied, errorMessage{Message: "could not load encrypted token"}
+			}
+
 			// We were able to decrypt the old token with the password, so we can now hash and store the password in the
 			// new format.
 			if err = password.HashAndStorePassword(challenge, session.passwordPath); err != nil {
 				slog.Error(err.Error())
 				return AuthDenied, errorMessage{Message: "could not store password"}
 			}
+		} else {
+			ok, err := password.CheckPassword(challenge, session.passwordPath)
+			if err != nil {
+				slog.Error(err.Error())
+				return AuthDenied, errorMessage{Message: "could not check password"}
+			}
+			if !ok {
+				return AuthRetry, errorMessage{Message: "incorrect password"}
+			}
+
+			authInfo, err = token.LoadAuthInfo(session.tokenPath)
+			if err != nil {
+				slog.Error(err.Error())
+				return AuthDenied, errorMessage{Message: "could not load stored token"}
+			}
 		}
 
+		// Refresh the token if it has expired and we're online. Ideally, we should always refresh it when we're online,
+		// but the oauth2.TokenSource implementation only refreshes the token when it's expired.
+		if !authInfo.Token.Valid() && !session.isOffline {
+			authInfo, err = b.refreshToken(ctx, session.authCfg.oauth, authInfo)
+			if err != nil {
+				slog.Error(err.Error())
+				return AuthDenied, errorMessage{Message: "could not refresh token"}
+			}
+		}
+
+		// Try to refresh the user info
 		userInfo, err := b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil && authInfo.UserInfo.Name == "" {
 			// We don't have a valid user info, so we can't proceed.
@@ -591,7 +593,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 
 		var ok bool
 		// This mode must always come after a authentication mode, so it has to have an auth_info.
-		authInfo, ok = session.authInfo["auth_info"].(authCachedInfo)
+		authInfo, ok = session.authInfo["auth_info"].(token.AuthCachedInfo)
 		if !ok {
 			slog.Error("could not get required information")
 			return AuthDenied, errorMessage{Message: "could not get required information"}
@@ -607,14 +609,14 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 		return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 	}
 
-	if err := b.cacheAuthInfo(session, authInfo); err != nil {
+	if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
 		slog.Error(err.Error())
 		return AuthDenied, errorMessage{Message: "could not cache user info"}
 	}
 
 	// At this point we successfully stored the hashed password and a new token, so we can now safely remove any old
 	// encrypted token.
-	cleanupOldEncryptedToken(session.oldEncryptedTokenPath)
+	token.CleanupOldEncryptedToken(session.oldEncryptedTokenPath)
 
 	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 }
@@ -723,94 +725,28 @@ func (b *Broker) updateSession(sessionID string, session sessionInfo) error {
 	return nil
 }
 
-// authCachedInfo represents the token that will be saved on disk for offline authentication.
-type authCachedInfo struct {
-	Token       *oauth2.Token
-	ExtraFields map[string]interface{}
-	RawIDToken  string
-	UserInfo    info.User
-}
-
-func (b *Broker) newAuthCachedInfo(t *oauth2.Token, idToken string) authCachedInfo {
-	return authCachedInfo{
-		Token:       t,
-		RawIDToken:  idToken,
-		ExtraFields: b.providerInfo.GetExtraFields(t),
-	}
-}
-
-// cacheAuthInfo saves the token to the file.
-func (b *Broker) cacheAuthInfo(session *sessionInfo, authInfo authCachedInfo) (err error) {
-	jsonData, err := json.Marshal(authInfo)
-	if err != nil {
-		return fmt.Errorf("could not marshal token: %v", err)
-	}
-
-	// Create issuer specific cache directory if it doesn't exist.
-	if err = os.MkdirAll(filepath.Dir(session.tokenPath), 0700); err != nil {
-		return fmt.Errorf("could not create token directory: %v", err)
-	}
-
-	if err = os.WriteFile(session.tokenPath, jsonData, 0600); err != nil {
-		return fmt.Errorf("could not save token: %v", err)
-	}
-
-	return nil
-}
-
-// loadAuthInfo reads the token from the file and tries to refresh it if it's expired.
-func (b *Broker) loadAuthInfo(ctx context.Context, session *sessionInfo, password string, useOldEncryptedToken bool) (loadedInfo authCachedInfo, err error) {
-	var jsonData []byte
-	if useOldEncryptedToken {
-		encryptedData, err := os.ReadFile(session.oldEncryptedTokenPath)
-		if err != nil {
-			return authCachedInfo{}, fmt.Errorf("could not read old encrypted token: %v", err)
-		}
-		jsonData, err = decrypt(encryptedData, []byte(password))
-		if err != nil {
-			return authCachedInfo{}, fmt.Errorf("could not decrypt token: %v", err)
-		}
-	} else {
-		jsonData, err = os.ReadFile(session.tokenPath)
-		if err != nil {
-			return authCachedInfo{}, fmt.Errorf("could not read token: %v", err)
-		}
-	}
-
-	var cachedInfo authCachedInfo
-	if err := json.Unmarshal(jsonData, &cachedInfo); err != nil {
-		return authCachedInfo{}, fmt.Errorf("could not unmarshal token: %v", err)
-	}
-
-	// Set the extra fields of the token.
-	if cachedInfo.ExtraFields != nil {
-		cachedInfo.Token = cachedInfo.Token.WithExtra(cachedInfo.ExtraFields)
-	}
-
-	// If the token is still valid, we return it. Ideally, we would refresh it online, but the TokenSource API also uses
-	// this logic to decide whether the token needs refreshing, so we should run it early to control the returned values.
-	if cachedInfo.Token.Valid() || session.isOffline {
-		return cachedInfo, nil
-	}
-
-	// Tries to refresh the access token. If the service is unavailable, we allow authentication.
+// refreshToken refreshes the OAuth2 token and returns the updated AuthCachedInfo.
+func (b *Broker) refreshToken(ctx context.Context, oauth2Config oauth2.Config, oldToken token.AuthCachedInfo) (token.AuthCachedInfo, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
-	tok, err := session.authCfg.oauth.TokenSource(timeoutCtx, cachedInfo.Token).Token()
+	oauthToken, err := oauth2Config.TokenSource(timeoutCtx, oldToken.Token).Token()
 	if err != nil {
-		return authCachedInfo{}, fmt.Errorf("could not refresh token: %v", err)
+		return token.AuthCachedInfo{}, err
 	}
 
-	// If the ID token was refreshed, we overwrite the cached one.
-	refreshedIDToken, ok := tok.Extra("id_token").(string)
+	// Update the raw ID token
+	rawIDToken, ok := oauthToken.Extra("id_token").(string)
 	if !ok {
-		refreshedIDToken = cachedInfo.RawIDToken
+		slog.Debug("refreshed token does not contain an ID token, keeping the old one")
+		rawIDToken = oldToken.RawIDToken
 	}
 
-	return b.newAuthCachedInfo(tok, refreshedIDToken), nil
+	t := token.NewAuthCachedInfo(oauthToken, rawIDToken, b.providerInfo)
+	t.UserInfo = oldToken.UserInfo
+	return t, nil
 }
 
-func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *authCachedInfo) (userInfo info.User, err error) {
+func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *token.AuthCachedInfo) (userInfo info.User, err error) {
 	if session.isOffline {
 		return info.User{}, errors.New("session is in offline mode")
 	}
@@ -858,49 +794,4 @@ func errorMessageForDisplay(err error, fallback string) errorMessage {
 		return errorMessage{Message: e.Error()}
 	}
 	return errorMessage{Message: fallback}
-}
-
-func cleanupOldEncryptedToken(path string) {
-	exists, err := fileutils.FileExists(path)
-	if err != nil {
-		slog.Warn(fmt.Sprintf("Failed to check if old encrypted token exists %s: %v", path, err))
-	}
-	if !exists {
-		return
-	}
-
-	if err := os.Remove(path); err != nil {
-		slog.Warn(fmt.Sprintf("Failed to remove old encrypted token %s: %v", path, err))
-		return
-	}
-
-	// Also remove the parent directory and the parent's parent directory if they are empty. The directory structure was:
-	//   $SNAP_DATA/cache/$ISSUER/$USERNAME.cache
-	// so we try to remove the $SNAP_DATA/cache/$ISSUER directory and the $SNAP_DATA/cache directory.
-
-	// Check if the parent directory is empty.
-	empty, err := fileutils.IsDirEmpty(filepath.Dir(path))
-	if err != nil {
-		slog.Warn(fmt.Sprintf("Failed to check if old encrypted token parent directory %s is empty: %v", filepath.Dir(path), err))
-		return
-	}
-	if !empty {
-		return
-	}
-	if err := os.Remove(filepath.Dir(path)); err != nil {
-		slog.Warn(fmt.Sprintf("Failed to remove old encrypted token directory %s: %v", filepath.Dir(path), err))
-	}
-
-	// Check if the parent's parent directory is empty.
-	empty, err = fileutils.IsDirEmpty(filepath.Dir(filepath.Dir(path)))
-	if err != nil {
-		slog.Warn(fmt.Sprintf("Failed to check if old encrypted token parent directory %s is empty: %v", filepath.Dir(filepath.Dir(path)), err))
-		return
-	}
-	if !empty {
-		return
-	}
-	if err := os.Remove(filepath.Dir(filepath.Dir(path))); err != nil {
-		slog.Warn(fmt.Sprintf("Failed to remove old encrypted token parent directory %s: %v", filepath.Dir(filepath.Dir(path)), err))
-	}
 }

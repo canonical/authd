@@ -53,7 +53,6 @@ func New(name string) *App {
 			// Command parsing has been successful. Returns to not print usage anymore.
 			a.rootCmd.SilenceUsage = true
 
-			// Set config defaults
 			// Before version 0.2, we used to store the tokens encrypted
 			// in a different directory. For backward compatibility, we
 			// try to use the encrypted tokens from the old directory
@@ -66,6 +65,7 @@ func New(name string) *App {
 				dataDir = snapData
 				configDir = snapData
 			}
+			// Set config defaults
 			a.config = daemonConfig{
 				Paths: systemPaths{
 					BrokerConf:            filepath.Join(configDir, "broker.conf"),

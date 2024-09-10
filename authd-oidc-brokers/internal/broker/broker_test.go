@@ -17,6 +17,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/password"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
+	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"golang.org/x/oauth2"
 	"gopkg.in/yaml.v3"
 )
@@ -465,7 +466,7 @@ func TestIsAuthenticated(t *testing.T) {
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
-		"Error when token is expired and can not fetch user info": {firstMode: authmodes.Password, preexistentToken: "expired", getUserInfoFails: true},
+		"Error when existing token has no user info and fetching user info fails": {firstMode: authmodes.Password, preexistentToken: "no-user-info", getUserInfoFails: true},
 
 		"Error when mode is qrcode and response is invalid": {firstAuthInfo: map[string]any{"response": "not a valid response"}},
 		"Error when mode is qrcode and link expires": {
@@ -549,9 +550,7 @@ func TestIsAuthenticated(t *testing.T) {
 			sessionID, key := newSessionForTests(t, b, tc.username, tc.sessionMode)
 
 			if tc.preexistentToken != "" {
-				tok := generateCachedInfo(t, tc.preexistentToken, provider.URL)
-				err := b.CacheAuthInfo(sessionID, tok)
-				require.NoError(t, err, "Setup: SaveToken should not have returned an error")
+				generateAndStoreCachedInfo(t, tc.preexistentToken, provider.URL, b.TokenPathForSession(sessionID))
 				err = password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID))
 				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 			}
@@ -709,16 +708,12 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			b := newBrokerForTests(t, *cfg, mockInfoer)
 
 			firstSession, firstKey := newSessionForTests(t, b, "user1", "")
-			tok := generateCachedInfo(t, "", defaultProvider.URL)
-			err = b.CacheAuthInfo(firstSession, tok)
-			require.NoError(t, err, "Setup: SaveToken should not have returned an error")
+			generateAndStoreCachedInfo(t, "", defaultProvider.URL, b.TokenPathForSession(firstSession))
 			err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(firstSession))
 			require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 
 			secondSession, secondKey := newSessionForTests(t, b, "user2", "")
-			tok = generateCachedInfo(t, "", defaultProvider.URL)
-			err = b.CacheAuthInfo(secondSession, tok)
-			require.NoError(t, err, "Setup: SaveToken should not have returned an error")
+			generateAndStoreCachedInfo(t, "", defaultProvider.URL, b.TokenPathForSession(secondSession))
 			err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(secondSession))
 			require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 
@@ -864,7 +859,7 @@ func TestFetchUserInfo(t *testing.T) {
 
 			cachedInfo := generateCachedInfo(t, tc.userToken, defaultProvider.URL)
 			if cachedInfo == nil {
-				cachedInfo = &broker.AuthCachedInfo{}
+				cachedInfo = &token.AuthCachedInfo{}
 			}
 
 			got, err := b.FetchUserInfo(sessionID, cachedInfo)

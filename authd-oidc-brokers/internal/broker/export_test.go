@@ -2,11 +2,9 @@ package broker
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"path/filepath"
 
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+	tokenPkg "github.com/ubuntu/authd-oidc-brokers/internal/token"
 )
 
 func (cfg *Config) SetClientID(clientID string) {
@@ -116,42 +114,14 @@ func (b *Broker) SetAvailableMode(sessionID, mode string) error {
 	return b.updateSession(sessionID, s)
 }
 
-type AuthCachedInfo = authCachedInfo
-
-// CacheAuthInfo exposes the broker's cacheAuthInfo method for tests.
-func (b *Broker) CacheAuthInfo(sessionID string, token *authCachedInfo) error {
-	s, err := b.getSession(sessionID)
-	if err != nil {
-		return err
-	}
-
-	if token == nil {
-		return writeTrashToken(s.tokenPath)
-	}
-
-	return b.cacheAuthInfo(&s, *token)
-}
-
-func writeTrashToken(path string) error {
-	var err error
-	content := []byte("This is a trash token that is not valid for authentication")
-
-	// Create issuer specific cache directory if it doesn't exist.
-	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return fmt.Errorf("could not create token directory: %v", err)
-	}
-
-	return os.WriteFile(path, content, 0600)
-}
-
 // FetchUserInfo exposes the broker's fetchUserInfo method for tests.
-func (b *Broker) FetchUserInfo(sessionID string, cachedInfo *authCachedInfo) (info.User, error) {
+func (b *Broker) FetchUserInfo(sessionID string, token *tokenPkg.AuthCachedInfo) (info.User, error) {
 	s, err := b.getSession(sessionID)
 	if err != nil {
 		return info.User{}, err
 	}
 
-	uInfo, err := b.fetchUserInfo(context.TODO(), &s, cachedInfo)
+	uInfo, err := b.fetchUserInfo(context.TODO(), &s, token)
 	if err != nil {
 		return info.User{}, err
 	}
