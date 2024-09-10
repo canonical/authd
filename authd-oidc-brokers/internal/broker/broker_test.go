@@ -379,7 +379,7 @@ func TestIsAuthenticated(t *testing.T) {
 			firstMode:        "password",
 			preexistentToken: "valid",
 			customHandlers: map[string]testutils.ProviderHandler{
-				"/token": testutils.UnavailableHandler(),
+				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
 		},
 		"Authenticating with password still allowed if token is expired and server is unreachable": {
