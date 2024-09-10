@@ -482,7 +482,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 			return AuthRetry, errorMessage{Message: "could not load cached info"}
 		}
 
-		if !session.isOffline {
+		if authInfo.UserInfo.Name == "" {
 			authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 			if err != nil {
 				slog.Error(err.Error())
