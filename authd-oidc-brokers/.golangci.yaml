@@ -19,7 +19,6 @@ linters:
     - nakedret
     - nolintlint
     - revive
-    - thelper
     - tparallel
     - unconvert
     - unparam
