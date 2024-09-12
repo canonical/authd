@@ -736,7 +736,6 @@ func TestFetchUserInfo(t *testing.T) {
 		"Successfully fetch user info with groups":                         {},
 		"Successfully fetch user info without groups":                      {emptyGroups: true},
 		"Successfully fetch user info with default home when not provided": {emptyHomeDir: true},
-		"Successfully fetch user info ignoring different casing in name":   {userToken: "uppercased-name"},
 
 		"Error when token can not be validated":                   {userToken: "invalid", wantErr: true},
 		"Error when ID token claims are invalid":                  {userToken: "invalid-id", wantErr: true},

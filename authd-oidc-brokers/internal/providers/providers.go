@@ -23,4 +23,5 @@ type ProviderInfoer interface {
 		currentAuthStep int,
 	) ([]string, error)
 	GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error)
+	VerifyUsername(requestedUsername, authenticatedUsername string) error
 }

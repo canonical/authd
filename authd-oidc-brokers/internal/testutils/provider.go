@@ -363,3 +363,11 @@ func (p MockProviderInfoer) CurrentAuthenticationModesOffered(
 
 	return offeredModes, nil
 }
+
+// VerifyUsername checks if the requested username matches the authenticated user.
+func (p *MockProviderInfoer) VerifyUsername(requestedUsername, username string) error {
+	if requestedUsername != username {
+		return fmt.Errorf("requested username %q does not match the authenticated user %q", requestedUsername, username)
+	}
+	return nil
+}

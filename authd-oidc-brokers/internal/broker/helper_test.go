@@ -133,8 +133,6 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.A
 		username = ""
 	case "other-name":
 		username = "other-user@email.com"
-	case "uppercased-name":
-		username = "TEST-USER@EMAIL.COM"
 	default:
 		username = "test-user@email.com"
 	}

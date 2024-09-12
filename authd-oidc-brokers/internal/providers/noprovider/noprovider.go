@@ -98,6 +98,14 @@ func (p NoProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, 
 	), nil
 }
 
+// VerifyUsername checks if the requested username matches the authenticated user.
+func (p NoProvider) VerifyUsername(requestedUsername, username string) error {
+	if requestedUsername != username {
+		return fmt.Errorf("requested username %q does not match the authenticated user %q", requestedUsername, username)
+	}
+	return nil
+}
+
 type claims struct {
 	PreferredUserName string `json:"preferred_username"`
 	Sub               string `json:"sub"`
