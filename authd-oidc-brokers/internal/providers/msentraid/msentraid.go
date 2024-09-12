@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -247,12 +248,27 @@ func (p Provider) CurrentAuthenticationModesOffered(
 	return offeredModes, nil
 }
 
-// VerifyUsername checks if the authenticated username matches the requested username.
+// VerifyUsername checks if the authenticated username matches the requested username and that both are valid.
 func (p Provider) VerifyUsername(requestedUsername, authenticatedUsername string) error {
-	// Microsoft Entra usernames are case-insensitive.
+	// Microsoft Entra usernames are case-insensitive. We can safely use strings.EqualFold here without worrying about
+	// different Unicode characters that fold to the same lowercase letter, because the Microsoft Entra username policy
+	// (which we checked above) ensures that the username only contains ASCII characters.
 	if !strings.EqualFold(requestedUsername, authenticatedUsername) {
 		return fmt.Errorf("requested username %q does not match the authenticated user %q", requestedUsername, authenticatedUsername)
 	}
+
+	// Check that the usernames only contain the characters allowed by the Microsoft Entra username policy
+	// https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sspr-policy#username-policies
+	usernameRegexp := regexp.MustCompile(`^[a-zA-Z0-9'.-_!#^~]+$`)
+	if !usernameRegexp.MatchString(authenticatedUsername) {
+		// If this error occurs, we should investigate and probably relax the username policy, so we ask the user
+		// explicitly to report this error.
+		return providerErrors.NewForDisplayError("the authenticated username %q contains invalid characters. Please report this error on https://github.com/ubuntu/authd/issues", authenticatedUsername)
+	}
+	if !usernameRegexp.MatchString(requestedUsername) {
+		return fmt.Errorf("requested username %q contains invalid characters", requestedUsername)
+	}
+
 	return nil
 }
 
