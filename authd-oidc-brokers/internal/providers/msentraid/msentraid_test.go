@@ -23,12 +23,12 @@ func TestCheckTokenScopes(t *testing.T) {
 
 		wantErr bool
 	}{
-		"success when checking all scopes are present":       {scopes: msentraid.AllExpectedScopes()},
-		"success even if getting more scopes than requested": {scopes: msentraid.AllExpectedScopes() + " extra-scope"},
+		"Success when checking all scopes are present":       {scopes: msentraid.AllExpectedScopes()},
+		"Success even if getting more scopes than requested": {scopes: msentraid.AllExpectedScopes() + " extra-scope"},
 
-		"error with missing scopes":       {scopes: "profile email", wantErr: true},
-		"error without extra scope field": {noExtraScopeField: true, wantErr: true},
-		"error with empty scopes":         {scopes: "", wantErr: true},
+		"Error with missing scopes":       {scopes: "profile email", wantErr: true},
+		"Error without extra scope field": {noExtraScopeField: true, wantErr: true},
+		"Error with empty scopes":         {scopes: "", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -48,6 +48,43 @@ func TestCheckTokenScopes(t *testing.T) {
 			}
 
 			require.NoError(t, err, "CheckTokenScopes should not return an error")
+		})
+	}
+}
+
+func TestVerifyUsername(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		requestedUsername string
+		authenticatedUser string
+
+		wantErr bool
+	}{
+		"Success when usernames are the same":   {requestedUsername: "foo@bar", authenticatedUser: "foo@bar"},
+		"Success when usernames differ in case": {requestedUsername: "foo@bar", authenticatedUser: "Foo@bar"},
+
+		"Error when usernames differ": {requestedUsername: "foo@bar", authenticatedUser: "bar@foo", wantErr: true},
+		"Error when requested username contains invalid characters": {
+			requestedUsername: "fóó@bar", authenticatedUser: "foo@bar", wantErr: true,
+		},
+		"Error when authenticated username contains invalid characters": {
+			requestedUsername: "foo@bar", authenticatedUser: "fóó@bar", wantErr: true,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			p := msentraid.New()
+
+			err := p.VerifyUsername(tc.requestedUsername, tc.authenticatedUser)
+			if tc.wantErr {
+				require.Error(t, err, "VerifyUsername should return an error")
+				return
+			}
+
+			require.NoError(t, err, "VerifyUsername should not return an error")
 		})
 	}
 }
