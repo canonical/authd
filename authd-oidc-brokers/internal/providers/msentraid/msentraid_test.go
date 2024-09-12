@@ -23,12 +23,12 @@ func TestCheckTokenScopes(t *testing.T) {
 
 		wantErr bool
 	}{
-		"success when checking all scopes are present":       {scopes: msentraid.AllExpectedScopes()},
-		"success even if getting more scopes than requested": {scopes: msentraid.AllExpectedScopes() + " extra-scope"},
+		"Success when checking all scopes are present":       {scopes: msentraid.AllExpectedScopes()},
+		"Success even if getting more scopes than requested": {scopes: msentraid.AllExpectedScopes() + " extra-scope"},
 
-		"error with missing scopes":       {scopes: "profile email", wantErr: true},
-		"error without extra scope field": {noExtraScopeField: true, wantErr: true},
-		"error with empty scopes":         {scopes: "", wantErr: true},
+		"Error with missing scopes":       {scopes: "profile email", wantErr: true},
+		"Error without extra scope field": {noExtraScopeField: true, wantErr: true},
+		"Error with empty scopes":         {scopes: "", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
