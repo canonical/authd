@@ -24,8 +24,7 @@ var testToken = token.AuthCachedInfo{
 		Gecos: "foo",
 		Shell: "/usr/bin/bash",
 		Groups: []info.Group{
-			{Name: "saved-remote-group", UGID: "12345"},
-			{Name: "saved-local-group", UGID: ""},
+			{Name: "token-test-group", UGID: "12345"},
 		},
 	},
 }

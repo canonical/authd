@@ -33,8 +33,8 @@ func newBrokerForTests(t *testing.T, cfg broker.Config, providerInfoer *testutil
 	}
 	if providerInfoer.Groups == nil {
 		providerInfoer.Groups = []info.Group{
-			{Name: "remote-group", UGID: "12345"},
-			{Name: "linux-local-group", UGID: ""},
+			{Name: "new-broker-for-tests-remote-group", UGID: "12345"},
+			{Name: "linux-new-broker-for-tests-local-group", UGID: ""},
 		}
 	}
 

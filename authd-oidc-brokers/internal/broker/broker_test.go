@@ -836,8 +836,8 @@ func TestFetchUserInfo(t *testing.T) {
 			mockInfoer := &testutils.MockProviderInfoer{
 				GroupsErr: tc.wantGroupErr,
 				Groups: []info.Group{
-					{Name: "remote-group", UGID: "12345"},
-					{Name: "linux-local-group", UGID: ""},
+					{Name: "test-fetch-user-info-remote-group", UGID: "12345"},
+					{Name: "linux-test-fetch-user-info-local-group", UGID: ""},
 				},
 			}
 			if tc.emptyGroups {
