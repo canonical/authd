@@ -259,7 +259,7 @@ func (p Provider) VerifyUsername(requestedUsername, authenticatedUsername string
 
 	// Check that the usernames only contain the characters allowed by the Microsoft Entra username policy
 	// https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sspr-policy#username-policies
-	usernameRegexp := regexp.MustCompile(`^[a-zA-Z0-9'.-_!#^~]+$`)
+	usernameRegexp := regexp.MustCompile(`^[a-zA-Z0-9'.\-_!#^~@]+$`)
 	if !usernameRegexp.MatchString(authenticatedUsername) {
 		// If this error occurs, we should investigate and probably relax the username policy, so we ask the user
 		// explicitly to report this error.
