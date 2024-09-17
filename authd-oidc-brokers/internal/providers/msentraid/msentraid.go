@@ -43,7 +43,7 @@ func New() Provider {
 
 // AdditionalScopes returns the generic scopes required by the EntraID provider.
 func (p Provider) AdditionalScopes() []string {
-	return []string{oidc.ScopeOfflineAccess}
+	return []string{oidc.ScopeOfflineAccess, "GroupMember.Read.All", "User.Read"}
 }
 
 // AuthOptions returns the generic auth options required by the EntraID provider.
