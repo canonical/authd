@@ -61,10 +61,16 @@ func TestVerifyUsername(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Success when usernames are the same":   {requestedUsername: "foo@bar", authenticatedUser: "foo@bar"},
-		"Success when usernames differ in case": {requestedUsername: "foo@bar", authenticatedUser: "Foo@bar"},
+		"Success when usernames are the same":   {requestedUsername: "foo-bar@example", authenticatedUser: "foo-bar@example"},
+		"Success when usernames differ in case": {requestedUsername: "foo-bar@example", authenticatedUser: "Foo-Bar@example"},
 
-		"Error when usernames differ": {requestedUsername: "foo@bar", authenticatedUser: "bar@foo", wantErr: true},
+		"Error when usernames differ": {requestedUsername: "foo@example", authenticatedUser: "bar@foo", wantErr: true},
+		"Error when requested username contains invalid characters": {
+			requestedUsername: "fóó@example", authenticatedUser: "foo@example", wantErr: true,
+		},
+		"Error when authenticated username contains invalid characters": {
+			requestedUsername: "foo@example", authenticatedUser: "fóó@example", wantErr: true,
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
