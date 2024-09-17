@@ -397,10 +397,11 @@ func TestIsAuthenticated(t *testing.T) {
 		sessionMode string
 		username    string
 
-		firstMode      string
-		firstChallenge string
-		firstAuthInfo  map[string]any
-		badFirstKey    bool
+		firstMode        string
+		firstChallenge   string
+		firstAuthInfo    map[string]any
+		badFirstKey      bool
+		getUserInfoFails bool
 
 		customHandlers map[string]testutils.ProviderHandler
 		address        string
@@ -464,7 +465,7 @@ func TestIsAuthenticated(t *testing.T) {
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
-		"Error when mode is password and can not fetch user info": {firstMode: authmodes.Password, preexistentToken: "invalid-id"},
+		"Error when token is expired and can not fetch user info": {firstMode: authmodes.Password, preexistentToken: "expired", getUserInfoFails: true},
 
 		"Error when mode is qrcode and response is invalid": {firstAuthInfo: map[string]any{"response": "not a valid response"}},
 		"Error when mode is qrcode and link expires": {
@@ -543,7 +544,8 @@ func TestIsAuthenticated(t *testing.T) {
 
 			cfg := &broker.Config{DataDir: dataDir}
 			cfg.SetIssuerURL(provider.URL)
-			b := newBrokerForTests(t, *cfg, nil)
+			mockInfoer := &testutils.MockProviderInfoer{GetUserInfoFails: tc.getUserInfoFails}
+			b := newBrokerForTests(t, *cfg, mockInfoer)
 			sessionID, key := newSessionForTests(t, b, tc.username, tc.sessionMode)
 
 			if tc.preexistentToken != "" {
