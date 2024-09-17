@@ -6,7 +6,6 @@ import (
 	"crypto/sha512"
 	"crypto/x509"
 	"encoding/base64"
-	"strings"
 	"testing"
 	"time"
 
@@ -21,10 +20,20 @@ import (
 // newBrokerForTests is a helper function to create a new broker for tests with the specified configuration.
 //
 // Note that the issuerURL is required in the configuration.
-func newBrokerForTests(t *testing.T, cfg broker.Config) (b *broker.Broker) {
+func newBrokerForTests(t *testing.T, cfg broker.Config, providerInfoer *testutils.MockProviderInfoer) (b *broker.Broker) {
 	t.Helper()
 
 	require.NotEmpty(t, cfg.IssuerURL(), "Setup: issuerURL must not be empty")
+
+	if providerInfoer == nil {
+		providerInfoer = &testutils.MockProviderInfoer{}
+	}
+	if providerInfoer.Groups == nil {
+		providerInfoer.Groups = []info.Group{
+			{Name: "remote-group", UGID: "12345"},
+			{Name: "linux-local-group", UGID: ""},
+		}
+	}
 
 	if cfg.DataDir == "" {
 		cfg.DataDir = t.TempDir()
@@ -35,12 +44,7 @@ func newBrokerForTests(t *testing.T, cfg broker.Config) (b *broker.Broker) {
 
 	b, err := broker.New(
 		cfg,
-		broker.WithCustomProviderInfo(&testutils.MockProviderInfoer{
-			Groups: []info.Group{
-				{Name: "remote-group", UGID: "12345"},
-				{Name: "linux-local-group", UGID: ""},
-			},
-		}),
+		broker.WithCustomProviderInfo(providerInfoer),
 	)
 	require.NoError(t, err, "Setup: New should not have returned an error")
 	return b
@@ -136,11 +140,6 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.A
 		username = "test-user@email.com"
 	}
 
-	// This is to handle delay cases where we need to control the authentication ordering.
-	if strings.HasPrefix(preexistentToken, "user-timeout-") {
-		username = preexistentToken
-	}
-
 	idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
 		"iss":                issuer,
 		"sub":                "saved-user-id",
@@ -169,11 +168,6 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.A
 			{Name: "saved-remote-group", UGID: "12345"},
 			{Name: "saved-local-group", UGID: ""},
 		},
-	}
-
-	// This is to force the broker to query the provider for the user info.
-	if strings.HasPrefix(preexistentToken, "user-timeout-") {
-		tok.UserInfo = info.User{}
 	}
 
 	if preexistentToken == "invalid-id" {

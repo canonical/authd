@@ -112,7 +112,7 @@ func TestNewSession(t *testing.T) {
 			t.Cleanup(stopServer)
 			cfg := &broker.Config{}
 			cfg.SetIssuerURL(provider.URL)
-			b := newBrokerForTests(t, *cfg)
+			b := newBrokerForTests(t, *cfg, nil)
 
 			id, _, err := b.NewSession("test-user", "lang", "auth")
 			require.NoError(t, err, "NewSession should not have returned an error")
@@ -230,7 +230,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 			}
 			cfg := &broker.Config{}
 			cfg.SetIssuerURL(provider.URL)
-			b := newBrokerForTests(t, *cfg)
+			b := newBrokerForTests(t, *cfg, nil)
 			sessionID, _ := newSessionForTests(t, b, "", tc.sessionMode)
 			if tc.sessionID == "-" {
 				sessionID = ""
@@ -349,7 +349,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 
 			cfg := &broker.Config{}
 			cfg.SetIssuerURL(provider.URL)
-			b := newBrokerForTests(t, *cfg)
+			b := newBrokerForTests(t, *cfg, nil)
 			sessionID, _ := newSessionForTests(t, b, "", sessionType)
 
 			if tc.tokenExists {
@@ -543,7 +543,7 @@ func TestIsAuthenticated(t *testing.T) {
 
 			cfg := &broker.Config{DataDir: dataDir}
 			cfg.SetIssuerURL(provider.URL)
-			b := newBrokerForTests(t, *cfg)
+			b := newBrokerForTests(t, *cfg, nil)
 			sessionID, key := newSessionForTests(t, b, tc.username, tc.sessionMode)
 
 			if tc.preexistentToken != "" {
@@ -686,14 +686,14 @@ func TestIsAuthenticated(t *testing.T) {
 // Due to ordering restrictions, this test can not be run in parallel, otherwise the routines would not be ordered as expected.
 func TestConcurrentIsAuthenticated(t *testing.T) {
 	tests := map[string]struct {
-		firstUser  string
-		secondUser string
+		firstCallDelay  int
+		secondCallDelay int
 
 		timeBetween time.Duration
 	}{
-		"First auth starts and finishes before second":                  {timeBetween: 2 * time.Second},
-		"First auth starts first but second finishes first":             {firstUser: "user-timeout-3", timeBetween: time.Second},
-		"First auth starts first then second starts and first finishes": {firstUser: "user-timeout-2", secondUser: "user-timeout-3", timeBetween: time.Second},
+		"First auth starts and finishes before second":                  {secondCallDelay: 1, timeBetween: 2 * time.Second},
+		"First auth starts first but second finishes first":             {firstCallDelay: 3, timeBetween: time.Second},
+		"First auth starts first then second starts and first finishes": {firstCallDelay: 2, secondCallDelay: 3, timeBetween: time.Second},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -703,24 +703,18 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
 			cfg := &broker.Config{DataDir: dataDir}
 			cfg.SetIssuerURL(defaultProvider.URL)
-			b := newBrokerForTests(t, *cfg)
+			mockInfoer := &testutils.MockProviderInfoer{FirstCallDelay: tc.firstCallDelay, SecondCallDelay: tc.secondCallDelay}
+			b := newBrokerForTests(t, *cfg, mockInfoer)
 
-			if tc.firstUser == "" {
-				tc.firstUser = "user-timeout-0"
-			}
-			if tc.secondUser == "" {
-				tc.secondUser = "user-timeout-1"
-			}
-
-			firstSession, firstKey := newSessionForTests(t, b, tc.firstUser, "")
-			tok := generateCachedInfo(t, tc.firstUser, defaultProvider.URL)
+			firstSession, firstKey := newSessionForTests(t, b, "user1", "")
+			tok := generateCachedInfo(t, "", defaultProvider.URL)
 			err = b.CacheAuthInfo(firstSession, tok)
 			require.NoError(t, err, "Setup: SaveToken should not have returned an error")
 			err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(firstSession))
 			require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 
-			secondSession, secondKey := newSessionForTests(t, b, tc.secondUser, "")
-			tok = generateCachedInfo(t, tc.secondUser, defaultProvider.URL)
+			secondSession, secondKey := newSessionForTests(t, b, "user2", "")
+			tok = generateCachedInfo(t, "", defaultProvider.URL)
 			err = b.CacheAuthInfo(secondSession, tok)
 			require.NoError(t, err, "Setup: SaveToken should not have returned an error")
 			err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(secondSession))
@@ -892,7 +886,7 @@ func TestCancelIsAuthenticated(t *testing.T) {
 
 	cfg := &broker.Config{}
 	cfg.SetIssuerURL(provider.URL)
-	b := newBrokerForTests(t, *cfg)
+	b := newBrokerForTests(t, *cfg, nil)
 	sessionID, _ := newSessionForTests(t, b, "", "")
 
 	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
@@ -916,7 +910,7 @@ func TestEndSession(t *testing.T) {
 
 	cfg := &broker.Config{}
 	cfg.SetIssuerURL(defaultProvider.URL)
-	b := newBrokerForTests(t, *cfg)
+	b := newBrokerForTests(t, *cfg, nil)
 
 	sessionID, _ := newSessionForTests(t, b, "", "")
 
@@ -974,7 +968,7 @@ func TestUserPreCheck(t *testing.T) {
 			cfg.SetIssuerURL(defaultProvider.URL)
 			cfg.SetHomeBaseDir(tc.homePrefix)
 			cfg.SetAllowedSSHSuffixes(tc.allowedSuffixes)
-			b := newBrokerForTests(t, *cfg)
+			b := newBrokerForTests(t, *cfg, nil)
 
 			got, err := b.UserPreCheck(tc.username)
 			if tc.wantErr {
