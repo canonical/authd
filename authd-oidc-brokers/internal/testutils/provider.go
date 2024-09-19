@@ -2,7 +2,8 @@ package testutils
 
 import (
 	"context"
-	"encoding/base64"
+	"crypto/rand"
+	"crypto/rsa"
 	"errors"
 	"fmt"
 	"net"
@@ -14,10 +15,22 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
+
+// MockKey is the RSA key used to sign the JWTs for the mock provider.
+var MockKey *rsa.PrivateKey
+
+func init() {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		panic(fmt.Sprintf("Setup: Could not generate RSA key for the Mock: %v", err))
+	}
+	MockKey = key
+}
 
 // ProviderHandler is a function that handles a request to the mock provider.
 type ProviderHandler func(http.ResponseWriter, *http.Request)
@@ -135,19 +148,21 @@ func DefaultTokenHandler(serverURL string, scopes []string) ProviderHandler {
 		// Mimics user going through auth process
 		time.Sleep(2 * time.Second)
 
-		idToken := fmt.Sprintf(`{
-			"iss": "%s",
-			"sub": "test-user-id",
-			"aud": "test-client-id",
-			"exp": 9999999999,
-			"name": "test-user",
+		idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+			"iss":                serverURL,
+			"sub":                "test-user-id",
+			"aud":                "test-client-id",
+			"exp":                9999999999,
+			"name":               "test-user",
 			"preferred_username": "test-user@email.com",
-			"email": "test-user@anotheremail.com",
-			"email_verified": true
-		}`, serverURL)
+			"email":              "test-user@anotheremail.com",
+			"email_verified":     true,
+		})
 
-		// The token must be JWT formatted, even though we ignore the validation in the broker during the tests.
-		rawToken := fmt.Sprintf(".%s.", base64.RawURLEncoding.EncodeToString([]byte(idToken)))
+		rawToken, err := idToken.SignedString(MockKey)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
 
 		response := fmt.Sprintf(`{
 			"access_token": "accesstoken",

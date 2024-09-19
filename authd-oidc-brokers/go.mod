@@ -7,6 +7,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.11.0
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/godbus/dbus/v5 v5.1.0
+	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/google/uuid v1.6.0
 	github.com/k0kubun/pp v3.0.1+incompatible
 	github.com/microsoftgraph/msgraph-sdk-go v1.48.0
