@@ -35,7 +35,6 @@ func newBrokerForTests(t *testing.T, cfg broker.Config) (b *broker.Broker) {
 
 	b, err := broker.New(
 		cfg,
-		broker.WithSkipSignatureCheck(),
 		broker.WithCustomProviderInfo(&testutils.MockProviderInfoer{
 			Groups: []info.Group{
 				{Name: "remote-group", UGID: "12345"},

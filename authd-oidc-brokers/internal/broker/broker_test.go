@@ -770,7 +770,7 @@ func TestFetchUserInfo(t *testing.T) {
 				mockInfoer.Groups = []info.Group{}
 			}
 
-			b, err := broker.New(brokerCfg, broker.WithSkipSignatureCheck(), broker.WithCustomProviderInfo(mockInfoer))
+			b, err := broker.New(brokerCfg, broker.WithCustomProviderInfo(mockInfoer))
 			require.NoError(t, err, "Setup: New should not have returned an error")
 
 			if tc.username == "" {
