@@ -1,0 +1,91 @@
+#!/bin/sh
+set -eu
+
+# Script to build the version to set to the snap.
+
+# When considering a tag, if starting with "<current branch name>-" it will have its prefix removed.
+# For instance:
+# * 0.1 -> 0.1
+# * msentraid-0.1 -> 0.1 on msentraid branch.
+
+# 1. If current commit is tagged, the version is directly the tag name.
+# 2. If current commit is not tagged, the version is:
+#    a. <last tag name on current branch>+<commit_sha> for main branch.
+#    b. <last tag name on current branch (not in main)>+<commit_sha>.<last_commit_merged_from_main> for other branches.
+#
+# Any of those version will be annoted with +dirty if there are local changes.
+
+# set_version will markup the version in the snapcraft.yaml file after amending it with a dirty markup if necessary.
+# $1: version: the version to set.
+set_version() {
+    version="${1}"
+
+    version=$(annotate_with_dirty "${version}")
+    craftctl set version="${version}"
+}
+
+# annotate_with_dirty may amend the version with a dirty markup if there are local changes.
+# $1: version: the version to annotate.
+annotate_with_dirty() {
+    version="${1}"
+
+    # check if current tree content is dirty.
+    is_dirty=$(git -C "${SNAPCRAFT_PART_SRC}" status --porcelain)
+    if [ -n "${is_dirty}" ]; then
+        version="${version}+dirty"
+    fi
+
+    echo "${version}"
+}
+
+# strip_branch_tag_prefix will remove the branch name prefix from the tag name.
+# $1: tag: the tag name to strip the prefix from.
+# $2: current_branch: the branch name to strip from the tag.
+strip_branch_tag_prefix() {
+    tag="${1}"
+    current_branch="${2}"
+
+    echo "${tag#"${current_branch}-"}"
+}
+
+
+current_branch=$(git -C "${SNAPCRAFT_PART_SRC}" branch --show-current)
+
+# Try to get most recent tag on that branch not coming from main.
+# Main will just get the most recent tag merged into it.
+tag_cmd_suffix=""
+if [ "${current_branch}" != "main" ]; then
+    tag_cmd_suffix="--no-merged=main"
+fi
+
+# Get most recent tag on that branch not coming from the other branch.
+tag=$(git tag --sort=-v:refname --merged="${current_branch}" ${tag_cmd_suffix} | head -1)
+
+version="${tag}"
+if [ -z "${version}" ]; then
+    # No tag found, use "notag" as version.
+    version="notag"
+fi
+version=$(strip_branch_tag_prefix "${version}" "${current_branch}")
+
+# If the most recent tag is on the current commit, taking it as is once transformed as a version.
+if [ -n "${tag}" ] && [ "$(git describe --tags --exact-match 2>/dev/null)" = "${tag}" ]; then
+    set_version "${version}"
+    exit 0
+fi
+
+# Current commit is not tagged, append commit(s) sha.
+version="${version}+$(git -C ${SNAPCRAFT_PART_SRC} rev-parse --short=7 HEAD)"
+
+# Main branch will be set as is.
+if [ "${current_branch}" = "main" ]; then
+    set_version "${version}"
+    exit 0
+fi
+
+# Get the short version of last commit merged from the main branch.
+last_commit_on_main=$(git -C "${SNAPCRAFT_PART_SRC}" merge-base main HEAD)
+last_commit_on_main=$(git -C "${SNAPCRAFT_PART_SRC}" rev-parse --short=7 "${last_commit_on_main}")
+version="${version}.${last_commit_on_main}"
+
+set_version "${version}"

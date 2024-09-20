@@ -2,7 +2,7 @@ name: authd-oidc
 summary: OIDC Broker for authd
 description: |
   Broker that enables OIDC authentication for authd.
-version: git
+adopt-info: version
 grade: stable
 base: core24
 confinement: strict
@@ -38,3 +38,10 @@ parts:
     organize:
       "authd.conf": "conf/authd/oidc.conf"
       "broker.conf": "conf/broker.conf.orig"
+  # Build the snap version from the git repository and current tree state.
+  version:
+    source: .
+    plugin: nil
+    build-packages:
+      - git # The script needs Git.
+    override-build: ./snap/get_version
