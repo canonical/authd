@@ -410,28 +410,26 @@ func TestIsAuthenticated(t *testing.T) {
 		wantSecondCall  bool
 		secondChallenge string
 
-		preexistentToken     string
+		token                *tokenOptions
 		invalidAuthData      bool
 		dontWaitForFirstCall bool
 		readOnlyDataDir      bool
 	}{
-		"Successfully authenticate user with qrcode and newpassword":    {firstChallenge: "-", wantSecondCall: true},
-		"Successfully authenticate user with link code and newpassword": {firstMode: authmodes.Device, firstChallenge: "-", wantSecondCall: true},
-		"Successfully authenticate user with password":                  {firstMode: authmodes.Password, preexistentToken: "valid"},
+		"Successfully authenticate user with QRCode+newpassword": {firstChallenge: "-", wantSecondCall: true},
+		"Successfully authenticate user with password":           {firstMode: authmodes.Password, token: &tokenOptions{}},
 
-		"Authenticating with qrcode reacquires token":          {firstChallenge: "-", wantSecondCall: true, preexistentToken: "valid"},
-		"Authenticating with link code reacquires token":       {firstMode: authmodes.Device, firstChallenge: "-", wantSecondCall: true, preexistentToken: "valid"},
-		"Authenticating with password refreshes expired token": {firstMode: authmodes.Password, preexistentToken: "expired"},
+		"Authenticating with qrcode reacquires token":          {firstChallenge: "-", wantSecondCall: true, token: &tokenOptions{}},
+		"Authenticating with password refreshes expired token": {firstMode: authmodes.Password, token: &tokenOptions{expired: true}},
 		"Authenticating with password still allowed if server is unreachable": {
-			firstMode:        authmodes.Password,
-			preexistentToken: "valid",
+			firstMode: authmodes.Password,
+			token:     &tokenOptions{},
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
 		},
 		"Authenticating with password still allowed if token is expired and server is unreachable": {
-			firstMode:        authmodes.Password,
-			preexistentToken: "expired",
+			firstMode: authmodes.Password,
+			token:     &tokenOptions{expired: true},
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
@@ -447,26 +445,26 @@ func TestIsAuthenticated(t *testing.T) {
 
 		"Error when authentication data is invalid":         {invalidAuthData: true},
 		"Error when challenge can not be decrypted":         {firstMode: authmodes.Password, badFirstKey: true},
-		"Error when provided wrong challenge":               {firstMode: authmodes.Password, preexistentToken: "valid", firstChallenge: "wrongpassword"},
+		"Error when provided wrong challenge":               {firstMode: authmodes.Password, token: &tokenOptions{}, firstChallenge: "wrongpassword"},
 		"Error when can not cache token":                    {firstChallenge: "-", wantSecondCall: true, readOnlyDataDir: true},
 		"Error when IsAuthenticated is ongoing for session": {dontWaitForFirstCall: true, wantSecondCall: true},
 
 		"Error when mode is password and token does not exist": {firstMode: authmodes.Password},
 		"Error when mode is password but server returns error": {
-			firstMode:        authmodes.Password,
-			preexistentToken: "expired",
+			firstMode: authmodes.Password,
+			token:     &tokenOptions{expired: true},
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.BadRequestHandler(),
 			},
 		},
-		"Error when mode is password and token is invalid":                {firstMode: authmodes.Password, preexistentToken: "invalid"},
-		"Error when mode is password and cached token can't be refreshed": {firstMode: authmodes.Password, preexistentToken: "no-refresh"},
-		"Error when mode is password and token refresh times out": {firstMode: authmodes.Password, preexistentToken: "expired",
+		"Error when mode is password and token is invalid":                {firstMode: authmodes.Password, token: &tokenOptions{invalid: true}},
+		"Error when mode is password and cached token can't be refreshed": {firstMode: authmodes.Password, token: &tokenOptions{expired: true, noRefreshToken: true}},
+		"Error when mode is password and token refresh times out": {firstMode: authmodes.Password, token: &tokenOptions{expired: true},
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
-		"Error when existing token has no user info and fetching user info fails": {firstMode: authmodes.Password, preexistentToken: "no-user-info", getUserInfoFails: true},
+		"Error when existing token has no user info and fetching user info fails": {firstMode: authmodes.Password, token: &tokenOptions{noUserInfo: true}, getUserInfoFails: true},
 
 		"Error when mode is qrcode and response is invalid": {firstAuthInfo: map[string]any{"response": "not a valid response"}},
 		"Error when mode is qrcode and link expires": {
@@ -549,15 +547,16 @@ func TestIsAuthenticated(t *testing.T) {
 			b := newBrokerForTests(t, *cfg, mockInfoer)
 			sessionID, key := newSessionForTests(t, b, tc.username, tc.sessionMode)
 
-			if tc.preexistentToken != "" {
-				generateAndStoreCachedInfo(t, tc.preexistentToken, provider.URL, b.TokenPathForSession(sessionID))
+			if tc.token != nil {
+				tc.token.issuer = provider.URL
+				generateAndStoreCachedInfo(t, *tc.token, b.TokenPathForSession(sessionID))
 				err = password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID))
 				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 			}
 
 			var readOnlyDataCleanup, readOnlyTokenCleanup func()
 			if tc.readOnlyDataDir {
-				if tc.preexistentToken != "" {
+				if tc.token != nil {
 					readOnlyTokenCleanup = testutils.MakeReadOnly(t, b.TokenPathForSession(sessionID))
 					t.Cleanup(readOnlyTokenCleanup)
 				}
@@ -651,7 +650,7 @@ func TestIsAuthenticated(t *testing.T) {
 			// We need to restore some permissions in order to save the golden files.
 			if tc.readOnlyDataDir {
 				readOnlyDataCleanup()
-				if tc.preexistentToken != "" {
+				if tc.token != nil {
 					readOnlyTokenCleanup()
 				}
 			}
@@ -708,12 +707,14 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			b := newBrokerForTests(t, *cfg, mockInfoer)
 
 			firstSession, firstKey := newSessionForTests(t, b, "user1", "")
-			generateAndStoreCachedInfo(t, "", defaultProvider.URL, b.TokenPathForSession(firstSession))
+			firstToken := tokenOptions{username: "user1", issuer: defaultProvider.URL}
+			generateAndStoreCachedInfo(t, firstToken, b.TokenPathForSession(firstSession))
 			err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(firstSession))
 			require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 
 			secondSession, secondKey := newSessionForTests(t, b, "user2", "")
-			generateAndStoreCachedInfo(t, "", defaultProvider.URL, b.TokenPathForSession(secondSession))
+			secondToken := tokenOptions{username: "user2", issuer: defaultProvider.URL}
+			generateAndStoreCachedInfo(t, secondToken, b.TokenPathForSession(secondSession))
 			err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(secondSession))
 			require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 
@@ -799,8 +800,8 @@ func TestFetchUserInfo(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		username  string
-		userToken string
+		username string
+		token    tokenOptions
 
 		emptyHomeDir bool
 		emptyGroups  bool
@@ -811,10 +812,10 @@ func TestFetchUserInfo(t *testing.T) {
 		"Successfully fetch user info without groups":                      {emptyGroups: true},
 		"Successfully fetch user info with default home when not provided": {emptyHomeDir: true},
 
-		"Error when token can not be validated":                   {userToken: "invalid", wantErr: true},
-		"Error when ID token claims are invalid":                  {userToken: "invalid-id", wantErr: true},
-		"Error when username is not configured":                   {userToken: "no-name", wantErr: true},
-		"Error when username is different than the requested one": {userToken: "other-name", wantErr: true},
+		"Error when token can not be validated":                   {token: tokenOptions{invalid: true}, wantErr: true},
+		"Error when ID token claims are invalid":                  {token: tokenOptions{invalidClaims: true}, wantErr: true},
+		"Error when username is not configured":                   {token: tokenOptions{username: "-"}, wantErr: true},
+		"Error when username is different than the requested one": {token: tokenOptions{username: "other-user@email.com"}, wantErr: true},
 		"Error when getting user groups":                          {wantGroupErr: true, wantErr: true},
 	}
 	for name, tc := range tests {
@@ -850,14 +851,12 @@ func TestFetchUserInfo(t *testing.T) {
 			if tc.username == "" {
 				tc.username = "test-user@email.com"
 			}
-			if tc.userToken == "" {
-				tc.userToken = "valid"
-			}
+			tc.token.issuer = defaultProvider.URL
 
 			sessionID, _, err := b.NewSession(tc.username, "lang", "auth")
 			require.NoError(t, err, "Setup: Failed to create session for the tests")
 
-			cachedInfo := generateCachedInfo(t, tc.userToken, defaultProvider.URL)
+			cachedInfo := generateCachedInfo(t, tc.token)
 			if cachedInfo == nil {
 				cachedInfo = &token.AuthCachedInfo{}
 			}

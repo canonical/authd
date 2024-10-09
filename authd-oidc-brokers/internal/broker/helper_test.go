@@ -103,33 +103,10 @@ func updateAuthModes(t *testing.T, b *broker.Broker, sessionID, selectedMode str
 	require.NoError(t, err, "Setup: SelectAuthenticationMode should not have returned an error")
 }
 
-var testTokens = map[string]token.AuthCachedInfo{
-	"valid": {
-		Token: &oauth2.Token{
-			AccessToken:  "accesstoken",
-			RefreshToken: "refreshtoken",
-			Expiry:       time.Now().Add(1000 * time.Hour),
-		},
-	},
-	"expired": {
-		Token: &oauth2.Token{
-			AccessToken:  "accesstoken",
-			RefreshToken: "refreshtoken",
-			Expiry:       time.Now().Add(-1000 * time.Hour),
-		},
-	},
-	"no-refresh": {
-		Token: &oauth2.Token{
-			AccessToken: "accesstoken",
-			Expiry:      time.Now().Add(-1000 * time.Hour),
-		},
-	},
-}
-
-func generateAndStoreCachedInfo(t *testing.T, preexistentToken, issuer, path string) {
+func generateAndStoreCachedInfo(t *testing.T, options tokenOptions, path string) {
 	t.Helper()
 
-	tok := generateCachedInfo(t, preexistentToken, issuer)
+	tok := generateCachedInfo(t, options)
 	if tok == nil {
 		writeTrashToken(t, path)
 		return
@@ -138,47 +115,65 @@ func generateAndStoreCachedInfo(t *testing.T, preexistentToken, issuer, path str
 	require.NoError(t, err, "Setup: storing token should not have failed")
 }
 
-func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *token.AuthCachedInfo {
+type tokenOptions struct {
+	username string
+	issuer   string
+
+	expired        bool
+	noRefreshToken bool
+	invalid        bool
+	invalidClaims  bool
+	noUserInfo     bool
+}
+
+func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInfo {
 	t.Helper()
 
-	if preexistentToken == "invalid" {
+	if options.invalid {
 		return nil
 	}
 
-	var username string
-	switch preexistentToken {
-	case "no-name":
-		username = ""
-	case "other-name":
-		username = "other-user@email.com"
-	default:
-		username = "test-user@email.com"
+	if options.username == "" {
+		options.username = "test-user@email.com"
+	}
+	if options.username == "-" {
+		options.username = ""
 	}
 
 	idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"iss":                issuer,
+		"iss":                options.issuer,
 		"sub":                "saved-user-id",
 		"aud":                "test-client-id",
 		"exp":                9999999999,
 		"name":               "test-user",
 		"preferred_username": "test-user-preferred-username@email.com",
-		"email":              username,
+		"email":              options.username,
 		"email_verified":     true,
 	})
 	encodedToken, err := idToken.SignedString(testutils.MockKey)
 	require.NoError(t, err, "Setup: signing token should not have failed")
 
-	tok, ok := testTokens[preexistentToken]
-	if !ok {
-		tok = testTokens["valid"]
+	tok := token.AuthCachedInfo{
+		Token: &oauth2.Token{
+			AccessToken:  "accesstoken",
+			RefreshToken: "refreshtoken",
+			Expiry:       time.Now().Add(1000 * time.Hour),
+		},
 	}
 
-	if preexistentToken != "no-user-info" {
+	if options.expired {
+		tok.Token.Expiry = time.Now().Add(-1000 * time.Hour)
+	}
+	if options.noRefreshToken {
+		tok.Token.RefreshToken = ""
+	}
+
+	if !options.noUserInfo {
 		tok.UserInfo = info.User{
-			Name:  username,
+			Name:  options.username,
 			UUID:  "saved-user-id",
-			Home:  "/home/" + username,
-			Gecos: username,
+			Home:  "/home/" + options.username,
+			Gecos: options.username,
 			Shell: "/usr/bin/bash",
 			Groups: []info.Group{
 				{Name: "saved-remote-group", UGID: "12345"},
@@ -187,7 +182,7 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *token.Au
 		}
 	}
 
-	if preexistentToken == "invalid-id" {
+	if options.invalidClaims {
 		encodedToken = ".invalid."
 		tok.UserInfo = info.User{}
 	}
