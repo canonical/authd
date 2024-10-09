@@ -143,30 +143,13 @@ func (p Provider) getGroups(token *oauth2.Token) ([]info.Group, error) {
 
 	// Get the groups (only the groups, not directory roles or administrative units, because that would require
 	// additional permissions) which the user is a member of.
-	graphGroups, err := client.Me().TransitiveMemberOf().GraphGroup().Get(context.Background(), nil)
+	graphGroups, err := getAllUserGroups(client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user groups: %v", err)
 	}
 
 	var groups []info.Group
-	for _, obj := range graphGroups.GetValue() {
-		unknown := "Unknown"
-		msGroup, ok := obj.(*msgraphmodels.Group)
-		if !ok {
-			id, oType := obj.GetId(), obj.GetOdataType()
-			if id == nil {
-				id = &unknown
-			}
-			if oType == nil {
-				oType = &unknown
-			}
-			slog.Debug(fmt.Sprintf(
-				"Found non-group object with ID: %q of type: %q in graphsdk response. Ignoring it",
-				*id, *oType,
-			))
-			continue
-		}
-
+	for _, msGroup := range graphGroups {
 		v, err := msGroup.GetBackingStore().Get("displayName")
 		if err != nil {
 			return nil, fmt.Errorf("failed to get displayName from group object: %v", err)
@@ -175,9 +158,10 @@ func (p Provider) getGroups(token *oauth2.Token) ([]info.Group, error) {
 		if !ok || name == nil {
 			id := msGroup.GetId()
 			if id == nil {
+				unknown := "Unknown"
 				id = &unknown
 			}
-			slog.Warn(pp.Sprintf("Could not get displayName from group object (ID: %s) found: %v", *id, *msGroup))
+			slog.Warn(pp.Sprintf("Could not get displayName from group object (ID: %s) found: %v", *id, msGroup))
 			return nil, errors.New("could not parse group name")
 		}
 		groupName := strings.ToLower(*name)
@@ -195,11 +179,36 @@ func (p Provider) getGroups(token *oauth2.Token) ([]info.Group, error) {
 		}
 		id, ok := v.(*string)
 		if !ok || id == nil {
-			slog.Warn(pp.Sprintf("Could not get ID for group %q: %v", groupName, *msGroup))
+			slog.Warn(pp.Sprintf("Could not get ID for group %q: %v", groupName, msGroup))
 			return nil, errors.New("could not parse group id")
 		}
 
 		groups = append(groups, info.Group{Name: groupName, UGID: *id})
+	}
+
+	return groups, nil
+}
+
+func getAllUserGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.Groupable, error) {
+	// Initial request to get groups
+	requestBuilder := client.Me().TransitiveMemberOf().GraphGroup()
+	result, err := requestBuilder.Get(context.Background(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user groups: %v", err)
+	}
+
+	groups := result.GetValue()
+
+	// Continue fetching groups using paging if a next link is available
+	for result.GetOdataNextLink() != nil {
+		nextLink := *result.GetOdataNextLink()
+
+		result, err = requestBuilder.WithUrl(nextLink).Get(context.Background(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get next page of user groups: %v", err)
+		}
+
+		groups = append(groups, result.GetValue()...)
 	}
 
 	return groups, nil
