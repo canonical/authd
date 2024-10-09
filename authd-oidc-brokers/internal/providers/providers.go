@@ -22,6 +22,7 @@ type ProviderInfoer interface {
 		endpoints map[string]struct{},
 		currentAuthStep int,
 	) ([]string, error)
+	GetExtraFields(token *oauth2.Token) map[string]interface{}
 	GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error)
 	VerifyUsername(requestedUsername, authenticatedUsername string) error
 }

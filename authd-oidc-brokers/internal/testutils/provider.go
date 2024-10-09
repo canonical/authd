@@ -335,6 +335,11 @@ func (p *MockProviderInfoer) AuthOptions() []oauth2.AuthCodeOption {
 	return []oauth2.AuthCodeOption{}
 }
 
+// GetExtraFields returns the extra fields of the token which should be stored persistently.
+func (p *MockProviderInfoer) GetExtraFields(token *oauth2.Token) map[string]interface{} {
+	return nil
+}
+
 // GetUserInfo is a no-op when no specific provider is in use.
 func (p *MockProviderInfoer) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error) {
 	userClaims, err := p.userClaims(idToken)
