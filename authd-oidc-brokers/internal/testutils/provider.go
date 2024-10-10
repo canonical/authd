@@ -2,9 +2,13 @@ package testutils
 
 import (
 	"context"
-	"encoding/base64"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,10 +18,50 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/go-jose/go-jose/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
+
+// MockKey is the RSA key used to sign the JWTs for the mock provider.
+var MockKey *rsa.PrivateKey
+
+var mockCertificate *x509.Certificate
+
+func init() {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		panic(fmt.Sprintf("Setup: Could not generate RSA key for the Mock: %v", err))
+	}
+	MockKey = key
+
+	certTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(2024),
+		Subject: pkix.Name{
+			Organization: []string{"Mocks ltd."},
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().AddDate(0, 0, 1),
+		SubjectKeyId:          []byte{1, 2, 3, 4, 5},
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	}
+
+	c, err := x509.CreateCertificate(rand.Reader, certTemplate, certTemplate, &MockKey.PublicKey, MockKey)
+	if err != nil {
+		panic("Setup: Could not create certificate for the Mock")
+	}
+
+	cert, err := x509.ParseCertificate(c)
+	if err != nil {
+		panic("Setup: Could not parse certificate for the Mock")
+	}
+	mockCertificate = cert
+}
 
 // ProviderHandler is a function that handles a request to the mock provider.
 type ProviderHandler func(http.ResponseWriter, *http.Request)
@@ -55,6 +99,7 @@ func StartMockProvider(address string, args ...OptionProvider) (*httptest.Server
 			"/.well-known/openid-configuration": DefaultOpenIDHandler(server.URL),
 			"/device_auth":                      DefaultDeviceAuthHandler(),
 			"/token":                            DefaultTokenHandler(server.URL, consts.DefaultScopes),
+			"/keys":                             DefaultJWKHandler(),
 		},
 	}
 	for _, arg := range args {
@@ -135,19 +180,21 @@ func DefaultTokenHandler(serverURL string, scopes []string) ProviderHandler {
 		// Mimics user going through auth process
 		time.Sleep(2 * time.Second)
 
-		idToken := fmt.Sprintf(`{
-			"iss": "%s",
-			"sub": "test-user-id",
-			"aud": "test-client-id",
-			"exp": 9999999999,
-			"name": "test-user",
+		idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+			"iss":                serverURL,
+			"sub":                "test-user-id",
+			"aud":                "test-client-id",
+			"exp":                9999999999,
+			"name":               "test-user",
 			"preferred_username": "test-user@email.com",
-			"email": "test-user@anotheremail.com",
-			"email_verified": true
-		}`, serverURL)
+			"email":              "test-user@anotheremail.com",
+			"email_verified":     true,
+		})
 
-		// The token must be JWT formatted, even though we ignore the validation in the broker during the tests.
-		rawToken := fmt.Sprintf(".%s.", base64.RawURLEncoding.EncodeToString([]byte(idToken)))
+		rawToken, err := idToken.SignedString(MockKey)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
 
 		response := fmt.Sprintf(`{
 			"access_token": "accesstoken",
@@ -159,8 +206,33 @@ func DefaultTokenHandler(serverURL string, scopes []string) ProviderHandler {
 		}`, strings.Join(scopes, " "), rawToken)
 
 		w.Header().Add("Content-Type", "application/json")
-		_, err := w.Write([]byte(response))
+		if _, err := w.Write([]byte(response)); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}
+}
+
+// DefaultJWKHandler returns a handler that provides the signing keys from the broker.
+//
+// Meant to be used an the endpoint for /keys.
+func DefaultJWKHandler() ProviderHandler {
+	return func(w http.ResponseWriter, r *http.Request) {
+		jwk := jose.JSONWebKey{
+			Key:          &MockKey.PublicKey,
+			KeyID:        "fa834459-66c6-475a-852f-444262a07c13_sig_rs256",
+			Algorithm:    "RS256",
+			Use:          "sig",
+			Certificates: []*x509.Certificate{mockCertificate},
+		}
+
+		encodedJWK, err := jwk.MarshalJSON()
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+
+		response := fmt.Sprintf(`{"keys": [%s]}`, encodedJWK)
+		w.Header().Add("Content-Type", "application/json")
+		if _, err := w.Write([]byte(response)); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}

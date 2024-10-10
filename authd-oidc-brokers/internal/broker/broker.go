@@ -90,9 +90,7 @@ type isAuthenticatedCtx struct {
 }
 
 type option struct {
-	// skipJWTSignatureCheck is used to skip the JWT validation done by the oidc web server.
-	skipJWTSignatureCheck bool
-	providerInfo          providers.ProviderInfoer
+	providerInfo providers.ProviderInfoer
 }
 
 // Option is a func that allows to override some of the broker default settings.
@@ -103,9 +101,7 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	defer decorate.OnError(&err, "could not create broker")
 
 	opts := option{
-		// This is to avoid too much complexity in the tests.
-		skipJWTSignatureCheck: false,
-		providerInfo:          providers.CurrentProviderInfo(),
+		providerInfo: providers.CurrentProviderInfo(),
 	}
 	for _, arg := range args {
 		arg(&opts)
@@ -139,7 +135,7 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	b = &Broker{
 		providerInfo:       opts.providerInfo,
 		issuerURL:          cfg.IssuerURL,
-		oidcCfg:            oidc.Config{ClientID: cfg.ClientID, InsecureSkipSignatureCheck: opts.skipJWTSignatureCheck},
+		oidcCfg:            oidc.Config{ClientID: cfg.ClientID},
 		cachePath:          cfg.CachePath,
 		homeDirPath:        homeDirPath,
 		allowedSSHSuffixes: cfg.AllowedSSHSuffixes,

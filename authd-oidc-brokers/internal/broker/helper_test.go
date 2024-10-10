@@ -6,11 +6,11 @@ import (
 	"crypto/sha512"
 	"crypto/x509"
 	"encoding/base64"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
@@ -35,7 +35,6 @@ func newBrokerForTests(t *testing.T, cfg broker.Config) (b *broker.Broker) {
 
 	b, err := broker.New(
 		cfg,
-		broker.WithSkipSignatureCheck(),
 		broker.WithCustomProviderInfo(&testutils.MockProviderInfoer{
 			Groups: []info.Group{
 				{Name: "remote-group", UGID: "12345"},
@@ -142,15 +141,18 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.A
 		username = preexistentToken
 	}
 
-	idToken := fmt.Sprintf(`{
-		"iss": "%s",
-		"sub": "saved-user-id",
-		"aud": "test-client-id",
-		"name": "saved-user",
-		"exp": 9999999999,
-		"preferred_username": "%s"
-	}`, issuer, username)
-	encodedToken := fmt.Sprintf(".%s.", base64.RawURLEncoding.EncodeToString([]byte(idToken)))
+	idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"iss":                issuer,
+		"sub":                "saved-user-id",
+		"aud":                "test-client-id",
+		"exp":                9999999999,
+		"name":               "test-user",
+		"preferred_username": username,
+		"email":              "test-user@anotheremail.com",
+		"email_verified":     true,
+	})
+	encodedToken, err := idToken.SignedString(testutils.MockKey)
+	require.NoError(t, err, "Setup: signing token should not have failed")
 
 	tok, ok := testTokens[preexistentToken]
 	if !ok {
