@@ -150,40 +150,29 @@ func (p Provider) getGroups(token *oauth2.Token) ([]info.Group, error) {
 
 	var groups []info.Group
 	for _, msGroup := range graphGroups {
-		v, err := msGroup.GetBackingStore().Get("displayName")
-		if err != nil {
-			return nil, fmt.Errorf("failed to get displayName from group object: %v", err)
+		idPtr := msGroup.GetId()
+		if idPtr == nil {
+			slog.Warn(pp.Sprintf("Could not get ID for group: %v", msGroup))
+			return nil, errors.New("could not get group id")
 		}
-		name, ok := v.(*string)
-		if !ok || name == nil {
-			id := msGroup.GetId()
-			if id == nil {
-				unknown := "Unknown"
-				id = &unknown
-			}
-			slog.Warn(pp.Sprintf("Could not get displayName from group object (ID: %s) found: %v", *id, msGroup))
-			return nil, errors.New("could not parse group name")
-		}
-		groupName := strings.ToLower(*name)
+		id := *idPtr
 
-		// Local group
+		groupNamePtr := msGroup.GetDisplayName()
+		if groupNamePtr == nil {
+			slog.Warn(pp.Sprintf("Could not get display name for group object (ID: %s): %v", id, msGroup))
+			return nil, errors.New("could not get group name")
+		}
+		groupName := strings.ToLower(*groupNamePtr)
+
+		// Check if the group is a local group, in which case we don't set the UGID (because that's how the user manager
+		// differentiates between local and remote groups).
 		if strings.HasPrefix(groupName, localGroupPrefix) {
 			groupName = strings.TrimPrefix(groupName, localGroupPrefix)
 			groups = append(groups, info.Group{Name: groupName})
 			continue
 		}
 
-		v, err = msGroup.GetBackingStore().Get("id")
-		if err != nil {
-			return nil, fmt.Errorf("failed to get id from group object: %v", err)
-		}
-		id, ok := v.(*string)
-		if !ok || id == nil {
-			slog.Warn(pp.Sprintf("Could not get ID for group %q: %v", groupName, msGroup))
-			return nil, errors.New("could not parse group id")
-		}
-
-		groups = append(groups, info.Group{Name: groupName, UGID: *id})
+		groups = append(groups, info.Group{Name: groupName, UGID: id})
 	}
 
 	return groups, nil
