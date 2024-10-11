@@ -76,6 +76,11 @@ func (p NoProvider) CurrentAuthenticationModesOffered(
 	return offeredModes, nil
 }
 
+// GetExtraFields returns the extra fields of the token which should be stored persistently.
+func (p NoProvider) GetExtraFields(token *oauth2.Token) map[string]interface{} {
+	return nil
+}
+
 // GetUserInfo is a no-op when no specific provider is in use.
 func (p NoProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error) {
 	userClaims, err := p.userClaims(idToken)
