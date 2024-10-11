@@ -461,7 +461,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 			return AuthDenied, errorMessage{Message: "could not get ID token"}
 		}
 
-		authInfo = authCachedInfo{Token: t, RawIDToken: rawIDToken}
+		authInfo = b.newAuthCachedInfo(t, rawIDToken)
 		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil {
 			slog.Error(err.Error())
@@ -478,12 +478,17 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 			return AuthRetry, errorMessage{Message: "could not load cached info"}
 		}
 
-		if authInfo.UserInfo.Name == "" {
-			authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
-			if err != nil {
-				slog.Error(err.Error())
-				return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
-			}
+		userInfo, err := b.fetchUserInfo(ctx, session, &authInfo)
+		if err != nil && authInfo.UserInfo.Name == "" {
+			// We don't have a valid user info, so we can't proceed.
+			slog.Error(err.Error())
+			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
+		}
+		if err != nil {
+			// We couldn't fetch the user info, but we have a valid cached one.
+			slog.Warn(fmt.Sprintf("Could not fetch user info: %v. Using cached user info.", err))
+		} else {
+			authInfo.UserInfo = userInfo
 		}
 
 		if session.mode == "passwd" {
@@ -623,9 +628,18 @@ func (b *Broker) updateSession(sessionID string, session sessionInfo) error {
 
 // authCachedInfo represents the token that will be saved on disk for offline authentication.
 type authCachedInfo struct {
-	Token      *oauth2.Token
-	RawIDToken string
-	UserInfo   info.User
+	Token       *oauth2.Token
+	ExtraFields map[string]interface{}
+	RawIDToken  string
+	UserInfo    info.User
+}
+
+func (b *Broker) newAuthCachedInfo(t *oauth2.Token, idToken string) authCachedInfo {
+	return authCachedInfo{
+		Token:       t,
+		RawIDToken:  idToken,
+		ExtraFields: b.providerInfo.GetExtraFields(t),
+	}
 }
 
 // cacheAuthInfo serializes the access token and cache it.
@@ -669,6 +683,11 @@ func (b *Broker) loadAuthInfo(ctx context.Context, session *sessionInfo, passwor
 		return authCachedInfo{}, fmt.Errorf("could not unmarshal token: %v", err)
 	}
 
+	// Set the extra fields of the token.
+	if cachedInfo.ExtraFields != nil {
+		cachedInfo.Token = cachedInfo.Token.WithExtra(cachedInfo.ExtraFields)
+	}
+
 	// If the token is still valid, we return it. Ideally, we would refresh it online, but the TokenSource API also uses
 	// this logic to decide whether the token needs refreshing, so we should run it early to control the returned values.
 	if cachedInfo.Token.Valid() || session.isOffline {
@@ -689,7 +708,7 @@ func (b *Broker) loadAuthInfo(ctx context.Context, session *sessionInfo, passwor
 		refreshedIDToken = cachedInfo.RawIDToken
 	}
 
-	return authCachedInfo{Token: tok, RawIDToken: refreshedIDToken}, nil
+	return b.newAuthCachedInfo(tok, refreshedIDToken), nil
 }
 
 func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *authCachedInfo) (userInfo info.User, err error) {
