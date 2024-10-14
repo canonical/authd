@@ -210,7 +210,15 @@ func getAllUserGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.Gr
 		groups = append(groups, result.GetValue()...)
 	}
 
-	slog.Debug(fmt.Sprintf("Got groups: %v", groups))
+	var groupNames []string
+	for _, group := range groups {
+		groupNamePtr := group.GetDisplayName()
+		if groupNamePtr != nil {
+			groupNames = append(groupNames, *groupNamePtr)
+		}
+	}
+	slog.Debug(fmt.Sprintf("Got groups: %s", strings.Join(groupNames, ", ")))
+
 	return groups, nil
 }
 
