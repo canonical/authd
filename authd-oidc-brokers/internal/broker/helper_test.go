@@ -147,8 +147,8 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.A
 		"aud":                "test-client-id",
 		"exp":                9999999999,
 		"name":               "test-user",
-		"preferred_username": username,
-		"email":              "test-user@anotheremail.com",
+		"preferred_username": "test-user-preferred-username@email.com",
+		"email":              username,
 		"email_verified":     true,
 	})
 	encodedToken, err := idToken.SignedString(testutils.MockKey)
