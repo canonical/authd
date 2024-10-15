@@ -1,4 +1,4 @@
-//go:build !withmsentraid
+//go:build !withgoogle && !withmsentraid
 
 package providers
 
