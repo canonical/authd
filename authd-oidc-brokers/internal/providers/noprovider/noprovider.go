@@ -94,7 +94,7 @@ func (p NoProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, 
 	}
 
 	return info.NewUser(
-		userClaims.PreferredUserName,
+		userClaims.Email,
 		userClaims.Home,
 		userClaims.Sub,
 		userClaims.Shell,
@@ -112,11 +112,11 @@ func (p NoProvider) VerifyUsername(requestedUsername, username string) error {
 }
 
 type claims struct {
-	PreferredUserName string `json:"preferred_username"`
-	Sub               string `json:"sub"`
-	Home              string `json:"home"`
-	Shell             string `json:"shell"`
-	Gecos             string `json:"gecos"`
+	Email string `json:"email"`
+	Sub   string `json:"sub"`
+	Home  string `json:"home"`
+	Shell string `json:"shell"`
+	Gecos string `json:"gecos"`
 }
 
 // userClaims returns the user claims parsed from the ID token.

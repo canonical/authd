@@ -186,8 +186,8 @@ func DefaultTokenHandler(serverURL string, scopes []string) ProviderHandler {
 			"aud":                "test-client-id",
 			"exp":                9999999999,
 			"name":               "test-user",
-			"preferred_username": "test-user@email.com",
-			"email":              "test-user@anotheremail.com",
+			"preferred_username": "test-user-preferred-username@email.com",
+			"email":              "test-user@email.com",
 			"email_verified":     true,
 		})
 
@@ -354,8 +354,8 @@ func (p *MockProviderInfoer) GetUserInfo(ctx context.Context, accessToken *oauth
 
 	// This is a special case for testing purposes. If the username starts with "user-timeout-", we will delay the
 	// return for a while to control the authentication order for multiple users.
-	if strings.HasPrefix(userClaims.PreferredUserName, "user-timeout") {
-		d, err := strconv.Atoi(strings.TrimPrefix(userClaims.PreferredUserName, "user-timeout-"))
+	if strings.HasPrefix(userClaims.Email, "user-timeout") {
+		d, err := strconv.Atoi(strings.TrimPrefix(userClaims.Email, "user-timeout-"))
 		if err != nil {
 			return info.User{}, err
 		}
@@ -363,7 +363,7 @@ func (p *MockProviderInfoer) GetUserInfo(ctx context.Context, accessToken *oauth
 	}
 
 	return info.NewUser(
-		userClaims.PreferredUserName,
+		userClaims.Email,
 		userClaims.Home,
 		userClaims.Sub,
 		userClaims.Shell,
@@ -373,11 +373,11 @@ func (p *MockProviderInfoer) GetUserInfo(ctx context.Context, accessToken *oauth
 }
 
 type claims struct {
-	PreferredUserName string `json:"preferred_username"`
-	Sub               string `json:"sub"`
-	Home              string `json:"home"`
-	Shell             string `json:"shell"`
-	Gecos             string `json:"gecos"`
+	Email string `json:"email"`
+	Sub   string `json:"sub"`
+	Home  string `json:"home"`
+	Shell string `json:"shell"`
+	Gecos string `json:"gecos"`
 }
 
 // userClaims returns the user claims parsed from the ID token.
