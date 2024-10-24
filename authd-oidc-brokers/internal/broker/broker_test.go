@@ -167,12 +167,12 @@ func TestGetAuthenticationModes(t *testing.T) {
 		wantErr bool
 	}{
 		// Auth Session
-		"Get device_auth if there is no token":                      {},
-		"Get newpassword if already authenticated with device_auth": {secondAuthStep: true},
-		"Get password and device_auth if token exists":              {tokenExists: true},
+		"Get device_auth_qr if there is no token":                      {},
+		"Get newpassword if already authenticated with device_auth_qr": {secondAuthStep: true},
+		"Get password and device_auth_qr if token exists":              {tokenExists: true},
 
-		"Get only password if token exists and provider is not available":             {tokenExists: true, providerAddress: "127.0.0.1:31310", unavailableProvider: true},
-		"Get only password if token exists and provider does not support device_auth": {tokenExists: true, providerAddress: "127.0.0.1:31311", deviceAuthUnsupported: true},
+		"Get only password if token exists and provider is not available":                {tokenExists: true, providerAddress: "127.0.0.1:31310", unavailableProvider: true},
+		"Get only password if token exists and provider does not support device_auth_qr": {tokenExists: true, providerAddress: "127.0.0.1:31311", deviceAuthUnsupported: true},
 
 		// Passwd Session
 		"Get only password if token exists and session is passwd":                      {sessionMode: "passwd", tokenExists: true},
@@ -181,10 +181,10 @@ func TestGetAuthenticationModes(t *testing.T) {
 		"Error if there is no session": {sessionID: "-", wantErr: true},
 
 		// General errors
-		"Error if no authentication mode is supported":     {providerAddress: "127.0.0.1:31312", deviceAuthUnsupported: true, wantErr: true},
-		"Error if expecting device_auth but not supported": {supportedLayouts: []string{"qrcode-without-wait"}, wantErr: true},
-		"Error if expecting newpassword but not supported": {supportedLayouts: []string{"newpassword-without-entry"}, wantErr: true},
-		"Error if expecting password but not supported":    {supportedLayouts: []string{"form-without-entry"}, wantErr: true},
+		"Error if no authentication mode is supported":        {providerAddress: "127.0.0.1:31312", deviceAuthUnsupported: true, wantErr: true},
+		"Error if expecting device_auth_qr but not supported": {supportedLayouts: []string{"qrcode-without-wait"}, wantErr: true},
+		"Error if expecting newpassword but not supported":    {supportedLayouts: []string{"newpassword-without-entry"}, wantErr: true},
+		"Error if expecting password but not supported":       {supportedLayouts: []string{"form-without-entry"}, wantErr: true},
 
 		// Passwd session errors
 		"Error if session is passwd but token does not exist": {sessionMode: "passwd", wantErr: true},
@@ -272,19 +272,19 @@ func TestSelectAuthenticationMode(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Successfully select password":    {modeName: authmodes.Password, tokenExists: true},
-		"Successfully select device_auth": {modeName: authmodes.DeviceQr},
-		"Successfully select newpassword": {modeName: authmodes.NewPassword, secondAuthStep: true},
+		"Successfully select password":       {modeName: authmodes.Password, tokenExists: true},
+		"Successfully select device_auth_qr": {modeName: authmodes.DeviceQr},
+		"Successfully select newpassword":    {modeName: authmodes.NewPassword, secondAuthStep: true},
 
 		"Selected newpassword shows correct label in passwd session": {modeName: authmodes.NewPassword, passwdSession: true, tokenExists: true, secondAuthStep: true},
 
 		"Error when selecting invalid mode": {modeName: "invalid", wantErr: true},
-		"Error when selecting device_auth but provider is unavailable": {modeName: authmodes.DeviceQr, wantErr: true,
+		"Error when selecting device_auth_qr but provider is unavailable": {modeName: authmodes.DeviceQr, wantErr: true,
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/device_auth": testutils.UnavailableHandler(),
 			},
 		},
-		"Error when selecting device_auth but request times out": {modeName: authmodes.DeviceQr, wantErr: true,
+		"Error when selecting device_auth_qr but request times out": {modeName: authmodes.DeviceQr, wantErr: true,
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/device_auth": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
