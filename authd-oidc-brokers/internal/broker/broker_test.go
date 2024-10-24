@@ -140,6 +140,15 @@ var supportedUILayouts = map[string]map[string]string{
 	"qrcode-without-wait": {
 		"type": "qrcode",
 	},
+	"qrcode-without-qrcode": {
+		"type":           "qrcode",
+		"renders_qrcode": "false",
+		"wait":           "true",
+	},
+	"qrcode-without-wait-and-qrcode": {
+		"type":           "qrcode",
+		"renders_qrcode": "false",
+	},
 
 	"newpassword": {
 		"type":  "newpassword",
@@ -183,6 +192,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 		// General errors
 		"Error if no authentication mode is supported":        {providerAddress: "127.0.0.1:31312", deviceAuthUnsupported: true, wantErr: true},
 		"Error if expecting device_auth_qr but not supported": {supportedLayouts: []string{"qrcode-without-wait"}, wantErr: true},
+		"Error if expecting device_auth but not supported":    {supportedLayouts: []string{"qrcode-without-wait-and-qrcode"}, wantErr: true},
 		"Error if expecting newpassword but not supported":    {supportedLayouts: []string{"newpassword-without-entry"}, wantErr: true},
 		"Error if expecting password but not supported":       {supportedLayouts: []string{"form-without-entry"}, wantErr: true},
 
@@ -259,21 +269,29 @@ var supportedLayouts = []map[string]string{
 	supportedUILayouts["newpassword"],
 }
 
+var supportedLayoutsWithoutQrCode = []map[string]string{
+	supportedUILayouts["form"],
+	supportedUILayouts["qrcode-without-qrcode"],
+	supportedUILayouts["newpassword"],
+}
+
 func TestSelectAuthenticationMode(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
 		modeName string
 
-		tokenExists    bool
-		secondAuthStep bool
-		passwdSession  bool
-		customHandlers map[string]testutils.ProviderHandler
+		tokenExists      bool
+		secondAuthStep   bool
+		passwdSession    bool
+		customHandlers   map[string]testutils.ProviderHandler
+		supportedLayouts []map[string]string
 
 		wantErr bool
 	}{
 		"Successfully select password":       {modeName: authmodes.Password, tokenExists: true},
 		"Successfully select device_auth_qr": {modeName: authmodes.DeviceQr},
+		"Successfully select device_auth":    {supportedLayouts: supportedLayoutsWithoutQrCode, modeName: authmodes.Device},
 		"Successfully select newpassword":    {modeName: authmodes.NewPassword, secondAuthStep: true},
 
 		"Selected newpassword shows correct label in passwd session": {modeName: authmodes.NewPassword, passwdSession: true, tokenExists: true, secondAuthStep: true},
@@ -284,10 +302,26 @@ func TestSelectAuthenticationMode(t *testing.T) {
 				"/device_auth": testutils.UnavailableHandler(),
 			},
 		},
+		"Error when selecting device_auth but provider is unavailable": {
+			supportedLayouts: supportedLayoutsWithoutQrCode,
+			modeName:         authmodes.Device,
+			customHandlers: map[string]testutils.ProviderHandler{
+				"/device_auth": testutils.UnavailableHandler(),
+			},
+			wantErr: true,
+		},
 		"Error when selecting device_auth_qr but request times out": {modeName: authmodes.DeviceQr, wantErr: true,
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/device_auth": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
+		},
+		"Error when selecting device_auth but request times out": {
+			supportedLayouts: supportedLayoutsWithoutQrCode,
+			modeName:         authmodes.Device,
+			customHandlers: map[string]testutils.ProviderHandler{
+				"/device_auth": testutils.HangingHandler(broker.MaxRequestDuration + 1),
+			},
+			wantErr: true,
 		},
 	}
 	for name, tc := range tests {
@@ -322,9 +356,12 @@ func TestSelectAuthenticationMode(t *testing.T) {
 			if tc.secondAuthStep {
 				b.UpdateSessionAuthStep(sessionID, 1)
 			}
+			if tc.supportedLayouts == nil {
+				tc.supportedLayouts = supportedLayouts
+			}
 
 			// We need to do a GAM call first to get all the modes.
-			_, err := b.GetAuthenticationModes(sessionID, supportedLayouts)
+			_, err := b.GetAuthenticationModes(sessionID, tc.supportedLayouts)
 			require.NoError(t, err, "Setup: GetAuthenticationModes should not have returned an error")
 
 			got, err := b.SelectAuthenticationMode(sessionID, tc.modeName)
@@ -371,10 +408,12 @@ func TestIsAuthenticated(t *testing.T) {
 		dontWaitForFirstCall bool
 		readOnlyCacheDir     bool
 	}{
-		"Successfully authenticate user with QRCode+newpassword": {firstChallenge: "-", wantSecondCall: true},
-		"Successfully authenticate user with password":           {firstMode: authmodes.Password, preexistentToken: "valid"},
+		"Successfully authenticate user with qrcode and newpassword":    {firstChallenge: "-", wantSecondCall: true},
+		"Successfully authenticate user with link code and newpassword": {firstMode: authmodes.Device, firstChallenge: "-", wantSecondCall: true},
+		"Successfully authenticate user with password":                  {firstMode: authmodes.Password, preexistentToken: "valid"},
 
 		"Authenticating with qrcode reacquires token":          {firstChallenge: "-", wantSecondCall: true, preexistentToken: "valid"},
+		"Authenticating with link code reacquires token":       {firstMode: authmodes.Device, firstChallenge: "-", wantSecondCall: true, preexistentToken: "valid"},
 		"Authenticating with password refreshes expired token": {firstMode: authmodes.Password, preexistentToken: "expired"},
 		"Authenticating with password still allowed if server is unreachable": {
 			firstMode:        authmodes.Password,
@@ -434,6 +473,22 @@ func TestIsAuthenticated(t *testing.T) {
 			},
 		},
 		"Error when mode is qrcode and can not get token due to timeout": {
+			customHandlers: map[string]testutils.ProviderHandler{
+				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
+			},
+		},
+		"Error when mode is link code and response is invalid": {firstAuthInfo: map[string]any{"response": "not a valid response"}},
+		"Error when mode is link code and link expires": {
+			customHandlers: map[string]testutils.ProviderHandler{
+				"/device_auth": testutils.ExpiryDeviceAuthHandler(),
+			},
+		},
+		"Error when mode is link code and can not get token": {
+			customHandlers: map[string]testutils.ProviderHandler{
+				"/token": testutils.UnavailableHandler(),
+			},
+		},
+		"Error when mode is link code and can not get token due to timeout": {
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},

@@ -1,0 +1,6 @@
+button: Request new login code
+code: user_code
+content: https://verification_uri.com
+label: Access "https://verification_uri.com" and use the provided login code
+type: qrcode
+wait: "true"
