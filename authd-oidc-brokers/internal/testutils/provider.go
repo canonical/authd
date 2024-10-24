@@ -20,9 +20,9 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/noprovider"
 	"golang.org/x/oauth2"
 )
 
@@ -294,6 +294,7 @@ func ExpiryDeviceAuthHandler() ProviderHandler {
 
 // MockProviderInfoer is a mock that implements the ProviderInfoer interface.
 type MockProviderInfoer struct {
+	noprovider.NoProvider
 	Scopes    []string
 	Options   []oauth2.AuthCodeOption
 	Groups    []info.Group
@@ -325,7 +326,7 @@ func (p *MockProviderInfoer) AdditionalScopes() []string {
 	if p.Scopes != nil {
 		return p.Scopes
 	}
-	return []string{oidc.ScopeOfflineAccess}
+	return p.NoProvider.AdditionalScopes()
 }
 
 // AuthOptions returns the additional options required by the provider.
@@ -333,12 +334,7 @@ func (p *MockProviderInfoer) AuthOptions() []oauth2.AuthCodeOption {
 	if p.Options != nil {
 		return p.Options
 	}
-	return []oauth2.AuthCodeOption{}
-}
-
-// GetExtraFields returns the extra fields of the token which should be stored persistently.
-func (p *MockProviderInfoer) GetExtraFields(token *oauth2.Token) map[string]interface{} {
-	return nil
+	return p.NoProvider.AuthOptions()
 }
 
 // GetUserInfo is a no-op when no specific provider is in use.
@@ -399,53 +395,4 @@ func (p *MockProviderInfoer) getGroups(*oauth2.Token) ([]info.Group, error) {
 		return p.Groups, nil
 	}
 	return nil, nil
-}
-
-// CurrentAuthenticationModesOffered returns the authentication modes supported by the provider.
-func (p MockProviderInfoer) CurrentAuthenticationModesOffered(
-	sessionMode string,
-	supportedAuthModes map[string]string,
-	tokenExists bool,
-	providerReachable bool,
-	endpoints map[string]struct{},
-	currentAuthStep int,
-) ([]string, error) {
-	var offeredModes []string
-	switch sessionMode {
-	case "passwd":
-		if !tokenExists {
-			return nil, errors.New("user has no cached token")
-		}
-		offeredModes = []string{authmodes.Password}
-		if currentAuthStep > 0 {
-			offeredModes = []string{authmodes.NewPassword}
-		}
-
-	default: // auth mode
-		if _, ok := endpoints[authmodes.Device]; ok && providerReachable {
-			offeredModes = []string{authmodes.Device}
-		}
-		if tokenExists {
-			offeredModes = append([]string{authmodes.Password}, offeredModes...)
-		}
-		if currentAuthStep > 0 {
-			offeredModes = []string{authmodes.NewPassword}
-		}
-	}
-
-	for _, mode := range offeredModes {
-		if _, ok := supportedAuthModes[mode]; !ok {
-			return nil, fmt.Errorf("auth mode %q required by the provider, but is not supported locally", mode)
-		}
-	}
-
-	return offeredModes, nil
-}
-
-// VerifyUsername checks if the requested username matches the authenticated user.
-func (p *MockProviderInfoer) VerifyUsername(requestedUsername, username string) error {
-	if requestedUsername != username {
-		return fmt.Errorf("requested username %q does not match the authenticated user %q", requestedUsername, username)
-	}
-	return nil
 }
