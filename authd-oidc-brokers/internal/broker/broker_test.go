@@ -273,18 +273,18 @@ func TestSelectAuthenticationMode(t *testing.T) {
 		wantErr bool
 	}{
 		"Successfully select password":    {modeName: authmodes.Password, tokenExists: true},
-		"Successfully select device_auth": {modeName: authmodes.Device},
+		"Successfully select device_auth": {modeName: authmodes.DeviceQr},
 		"Successfully select newpassword": {modeName: authmodes.NewPassword, secondAuthStep: true},
 
 		"Selected newpassword shows correct label in passwd session": {modeName: authmodes.NewPassword, passwdSession: true, tokenExists: true, secondAuthStep: true},
 
 		"Error when selecting invalid mode": {modeName: "invalid", wantErr: true},
-		"Error when selecting device_auth but provider is unavailable": {modeName: authmodes.Device, wantErr: true,
+		"Error when selecting device_auth but provider is unavailable": {modeName: authmodes.DeviceQr, wantErr: true,
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/device_auth": testutils.UnavailableHandler(),
 			},
 		},
-		"Error when selecting device_auth but request times out": {modeName: authmodes.Device, wantErr: true,
+		"Error when selecting device_auth but request times out": {modeName: authmodes.DeviceQr, wantErr: true,
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/device_auth": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
@@ -524,7 +524,7 @@ func TestIsAuthenticated(t *testing.T) {
 				defer close(firstCallDone)
 
 				if tc.firstMode == "" {
-					tc.firstMode = authmodes.Device
+					tc.firstMode = authmodes.DeviceQr
 				}
 				updateAuthModes(t, b, sessionID, tc.firstMode)
 
@@ -811,7 +811,7 @@ func TestCancelIsAuthenticated(t *testing.T) {
 	b := newBrokerForTests(t, broker.Config{IssuerURL: provider.URL})
 	sessionID, _ := newSessionForTests(t, b, "", "")
 
-	updateAuthModes(t, b, sessionID, authmodes.Device)
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
 
 	stopped := make(chan struct{})
 	go func() {
