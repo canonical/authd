@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
+	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"golang.org/x/oauth2"
@@ -271,19 +272,19 @@ func TestSelectAuthenticationMode(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Successfully select password":    {modeName: "password", tokenExists: true},
-		"Successfully select device_auth": {modeName: "device_auth"},
-		"Successfully select newpassword": {modeName: "newpassword", secondAuthStep: true},
+		"Successfully select password":    {modeName: authmodes.Password, tokenExists: true},
+		"Successfully select device_auth": {modeName: authmodes.Device},
+		"Successfully select newpassword": {modeName: authmodes.NewPassword, secondAuthStep: true},
 
-		"Selected newpassword shows correct label in passwd session": {modeName: "newpassword", passwdSession: true, tokenExists: true, secondAuthStep: true},
+		"Selected newpassword shows correct label in passwd session": {modeName: authmodes.NewPassword, passwdSession: true, tokenExists: true, secondAuthStep: true},
 
 		"Error when selecting invalid mode": {modeName: "invalid", wantErr: true},
-		"Error when selecting device_auth but provider is unavailable": {modeName: "device_auth", wantErr: true,
+		"Error when selecting device_auth but provider is unavailable": {modeName: authmodes.Device, wantErr: true,
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/device_auth": testutils.UnavailableHandler(),
 			},
 		},
-		"Error when selecting device_auth but request times out": {modeName: "device_auth", wantErr: true,
+		"Error when selecting device_auth but request times out": {modeName: authmodes.Device, wantErr: true,
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/device_auth": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
@@ -371,19 +372,19 @@ func TestIsAuthenticated(t *testing.T) {
 		readOnlyCacheDir     bool
 	}{
 		"Successfully authenticate user with QRCode+newpassword": {firstChallenge: "-", wantSecondCall: true},
-		"Successfully authenticate user with password":           {firstMode: "password", preexistentToken: "valid"},
+		"Successfully authenticate user with password":           {firstMode: authmodes.Password, preexistentToken: "valid"},
 
 		"Authenticating with qrcode reacquires token":          {firstChallenge: "-", wantSecondCall: true, preexistentToken: "valid"},
-		"Authenticating with password refreshes expired token": {firstMode: "password", preexistentToken: "expired"},
+		"Authenticating with password refreshes expired token": {firstMode: authmodes.Password, preexistentToken: "expired"},
 		"Authenticating with password still allowed if server is unreachable": {
-			firstMode:        "password",
+			firstMode:        authmodes.Password,
 			preexistentToken: "valid",
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
 		},
 		"Authenticating with password still allowed if token is expired and server is unreachable": {
-			firstMode:        "password",
+			firstMode:        authmodes.Password,
 			preexistentToken: "expired",
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
@@ -399,27 +400,27 @@ func TestIsAuthenticated(t *testing.T) {
 		},
 
 		"Error when authentication data is invalid":         {invalidAuthData: true},
-		"Error when challenge can not be decrypted":         {firstMode: "password", badFirstKey: true},
-		"Error when provided wrong challenge":               {firstMode: "password", preexistentToken: "valid", firstChallenge: "wrongpassword"},
+		"Error when challenge can not be decrypted":         {firstMode: authmodes.Password, badFirstKey: true},
+		"Error when provided wrong challenge":               {firstMode: authmodes.Password, preexistentToken: "valid", firstChallenge: "wrongpassword"},
 		"Error when can not cache token":                    {firstChallenge: "-", wantSecondCall: true, readOnlyCacheDir: true},
 		"Error when IsAuthenticated is ongoing for session": {dontWaitForFirstCall: true, wantSecondCall: true},
 
-		"Error when mode is password and token does not exist": {firstMode: "password"},
+		"Error when mode is password and token does not exist": {firstMode: authmodes.Password},
 		"Error when mode is password but server returns error": {
-			firstMode:        "password",
+			firstMode:        authmodes.Password,
 			preexistentToken: "expired",
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.BadRequestHandler(),
 			},
 		},
-		"Error when mode is password and token is invalid":                {firstMode: "password", preexistentToken: "invalid"},
-		"Error when mode is password and cached token can't be refreshed": {firstMode: "password", preexistentToken: "no-refresh"},
-		"Error when mode is password and token refresh times out": {firstMode: "password", preexistentToken: "expired",
+		"Error when mode is password and token is invalid":                {firstMode: authmodes.Password, preexistentToken: "invalid"},
+		"Error when mode is password and cached token can't be refreshed": {firstMode: authmodes.Password, preexistentToken: "no-refresh"},
+		"Error when mode is password and token refresh times out": {firstMode: authmodes.Password, preexistentToken: "expired",
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
-		"Error when mode is password and can not fetch user info": {firstMode: "password", preexistentToken: "invalid-id"},
+		"Error when mode is password and can not fetch user info": {firstMode: authmodes.Password, preexistentToken: "invalid-id"},
 
 		"Error when mode is qrcode and response is invalid": {firstAuthInfo: map[string]any{"response": "not a valid response"}},
 		"Error when mode is qrcode and link expires": {
@@ -439,15 +440,15 @@ func TestIsAuthenticated(t *testing.T) {
 		},
 		"Error when empty challenge is provided for local password": {firstChallenge: "-", wantSecondCall: true, secondChallenge: "-"},
 		"Error when mode is newpassword and token is not set": {
-			firstMode:     "newpassword",
+			firstMode:     authmodes.NewPassword,
 			firstAuthInfo: map[string]any{"token": nil},
 		},
 		"Error when mode is newpassword and id token is not set": {
-			firstMode:     "newpassword",
+			firstMode:     authmodes.NewPassword,
 			firstAuthInfo: map[string]any{"token": &oauth2.Token{}},
 		},
 		"Error when mode is newpassword and can not fetch user info": {
-			firstMode: "newpassword",
+			firstMode: authmodes.NewPassword,
 			firstAuthInfo: map[string]any{
 				"token": (&oauth2.Token{}).WithExtra(map[string]interface{}{"id_token": "invalid"}),
 			},
@@ -523,7 +524,7 @@ func TestIsAuthenticated(t *testing.T) {
 				defer close(firstCallDone)
 
 				if tc.firstMode == "" {
-					tc.firstMode = "device_auth"
+					tc.firstMode = authmodes.Device
 				}
 				updateAuthModes(t, b, sessionID, tc.firstMode)
 
@@ -566,7 +567,7 @@ func TestIsAuthenticated(t *testing.T) {
 				go func() {
 					defer close(secondCallDone)
 
-					updateAuthModes(t, b, sessionID, "newpassword")
+					updateAuthModes(t, b, sessionID, authmodes.NewPassword)
 
 					access, data, err := b.IsAuthenticated(sessionID, secondAuthData)
 					require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
@@ -641,12 +642,12 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 
 			firstSession, firstKey := newSessionForTests(t, b, tc.firstUser, "")
 			tok := generateCachedInfo(t, tc.firstUser, defaultProvider.URL)
-			err = b.CacheAuthInfo(firstSession, tok, "password")
+			err = b.CacheAuthInfo(firstSession, tok, authmodes.Password)
 			require.NoError(t, err, "Setup: SaveToken should not have returned an error")
 
 			secondSession, secondKey := newSessionForTests(t, b, tc.secondUser, "")
 			tok = generateCachedInfo(t, tc.secondUser, defaultProvider.URL)
-			err = b.CacheAuthInfo(secondSession, tok, "password")
+			err = b.CacheAuthInfo(secondSession, tok, authmodes.Password)
 			require.NoError(t, err, "Setup: SaveToken should not have returned an error")
 
 			firstCallDone := make(chan struct{})
@@ -654,7 +655,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 				t.Logf("%s: First auth starting", t.Name())
 				defer close(firstCallDone)
 
-				updateAuthModes(t, b, firstSession, "password")
+				updateAuthModes(t, b, firstSession, authmodes.Password)
 
 				authData := `{"challenge":"` + encryptChallenge(t, "password", firstKey) + `"}`
 
@@ -678,7 +679,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 				t.Logf("%s: Second auth starting", t.Name())
 				defer close(secondCallDone)
 
-				updateAuthModes(t, b, secondSession, "password")
+				updateAuthModes(t, b, secondSession, authmodes.Password)
 
 				authData := `{"challenge":"` + encryptChallenge(t, "password", secondKey) + `"}`
 
@@ -810,7 +811,7 @@ func TestCancelIsAuthenticated(t *testing.T) {
 	b := newBrokerForTests(t, broker.Config{IssuerURL: provider.URL})
 	sessionID, _ := newSessionForTests(t, b, "", "")
 
-	updateAuthModes(t, b, sessionID, "device_auth")
+	updateAuthModes(t, b, sessionID, authmodes.Device)
 
 	stopped := make(chan struct{})
 	go func() {

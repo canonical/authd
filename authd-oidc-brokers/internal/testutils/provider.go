@@ -20,6 +20,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
@@ -415,20 +416,20 @@ func (p MockProviderInfoer) CurrentAuthenticationModesOffered(
 		if !tokenExists {
 			return nil, errors.New("user has no cached token")
 		}
-		offeredModes = []string{"password"}
+		offeredModes = []string{authmodes.Password}
 		if currentAuthStep > 0 {
-			offeredModes = []string{"newpassword"}
+			offeredModes = []string{authmodes.NewPassword}
 		}
 
 	default: // auth mode
-		if _, ok := endpoints["device_auth"]; ok && providerReachable {
-			offeredModes = []string{"device_auth"}
+		if _, ok := endpoints[authmodes.Device]; ok && providerReachable {
+			offeredModes = []string{authmodes.Device}
 		}
 		if tokenExists {
-			offeredModes = append([]string{"password"}, offeredModes...)
+			offeredModes = append([]string{authmodes.Password}, offeredModes...)
 		}
 		if currentAuthStep > 0 {
-			offeredModes = []string{"newpassword"}
+			offeredModes = []string{authmodes.NewPassword}
 		}
 	}
 

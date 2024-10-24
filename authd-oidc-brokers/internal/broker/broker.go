@@ -20,6 +20,7 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
+	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
@@ -218,7 +219,7 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 
 	endpoints := make(map[string]struct{})
 	if session.authCfg.provider != nil && session.authCfg.provider.Endpoint().DeviceAuthURL != "" {
-		endpoints["device_auth"] = struct{}{}
+		endpoints[authmodes.Device] = struct{}{}
 	}
 
 	availableModes, err := b.providerInfo.CurrentAuthenticationModesOffered(
@@ -260,16 +261,16 @@ func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []map[string]st
 			if !strings.Contains(layout["wait"], "true") {
 				continue
 			}
-			supportedModes["device_auth"] = "Device Authentication"
+			supportedModes[authmodes.Device] = "Device Authentication"
 
 		case "form":
 			if slices.Contains(supportedEntries, "chars_password") {
-				supportedModes["password"] = "Local Password Authentication"
+				supportedModes[authmodes.Password] = "Local Password Authentication"
 			}
 
 		case "newpassword":
 			if slices.Contains(supportedEntries, "chars_password") {
-				supportedModes["newpassword"] = "Define your local password"
+				supportedModes[authmodes.NewPassword] = "Define your local password"
 			}
 		}
 	}
@@ -311,7 +312,7 @@ func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[
 
 	var uiLayout map[string]string
 	switch authModeID {
-	case "device_auth":
+	case authmodes.Device:
 		ctx, cancel := context.WithTimeout(context.Background(), maxRequestDuration)
 		defer cancel()
 		response, err := session.authCfg.oauth.DeviceAuth(ctx)
@@ -332,14 +333,14 @@ func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[
 			"code":    response.UserCode,
 		}
 
-	case "password":
+	case authmodes.Password:
 		uiLayout = map[string]string{
 			"type":  "form",
 			"label": "Enter your local password",
 			"entry": "chars_password",
 		}
 
-	case "newpassword":
+	case authmodes.NewPassword:
 		label := "Create a local password"
 		if session.mode == "passwd" {
 			label = "Update your local password"
@@ -433,7 +434,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 
 	var authInfo authCachedInfo
 	switch session.selectedMode {
-	case "device_auth":
+	case authmodes.Device:
 		response, ok := session.authInfo["response"].(*oauth2.DeviceAuthResponse)
 		if !ok {
 			slog.Error("could not get device auth response")
@@ -471,7 +472,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 		session.authInfo["auth_info"] = authInfo
 		return AuthNext, nil
 
-	case "password":
+	case authmodes.Password:
 		authInfo, err = b.loadAuthInfo(ctx, session, challenge)
 		if err != nil {
 			slog.Error(err.Error())
@@ -496,7 +497,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 			return AuthNext, nil
 		}
 
-	case "newpassword":
+	case authmodes.NewPassword:
 		if challenge == "" {
 			return AuthRetry, errorMessage{Message: "empty challenge"}
 		}
