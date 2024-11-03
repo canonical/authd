@@ -357,7 +357,20 @@ func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[
 	case authmodes.Device, authmodes.DeviceQr:
 		ctx, cancel := context.WithTimeout(context.Background(), maxRequestDuration)
 		defer cancel()
-		response, err := session.authCfg.oauth.DeviceAuth(ctx)
+
+		var authOpts []oauth2.AuthCodeOption
+
+		// workaround to cater for fully RFC compliant oauth2 server which require this
+		// extra option, public providers tend to have bespoke implementation for passing client
+		// credentials that completely bypass this
+		// full explanation in https://github.com/golang/oauth2/issues/320
+		if secret := session.authCfg.oauth.ClientSecret; secret != "" {
+			// TODO @shipperizer verificationMethod should be a configurable value
+			verificationMethod := "client_post"
+			authOpts = append(authOpts, oauth2.SetAuthURLParam(verificationMethod, secret))
+		}
+
+		response, err := session.authCfg.oauth.DeviceAuth(ctx, authOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("could not generate Device Authentication code layout: %v", err)
 		}
