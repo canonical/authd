@@ -73,6 +73,11 @@ func New(name string) *App {
 				return fmt.Errorf("unable to decode configuration into struct: %w", err)
 			}
 
+			// FIXME: for now, config is only the broker.conf file. It should be merged with the viper configuration.
+			if v, err := cmd.Flags().GetString("config"); err == nil && v != "" {
+				a.config.Paths.BrokerConf = v
+			}
+
 			setVerboseMode(a.config.Verbosity)
 			slog.Debug("Debug mode is enabled")
 
