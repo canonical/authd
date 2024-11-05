@@ -20,3 +20,9 @@ vendor/
 
 # Go workspace file
 go.work
+
+# Directories created by `snapcraft --destructive-mode`
+/parts
+/prime
+/stage
+
