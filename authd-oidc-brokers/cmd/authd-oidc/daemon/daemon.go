@@ -90,6 +90,8 @@ func New(name string) *App {
 
 	installVerbosityFlag(&a.rootCmd, a.viper)
 	installConfigFlag(&a.rootCmd)
+	// FIXME: This option is for the viper path configuration. We should merge --config and this one in the future.
+	a.rootCmd.PersistentFlags().StringP("paths-config", "", "", "use a specific paths configuration file")
 
 	// subcommands
 	a.installVersion()

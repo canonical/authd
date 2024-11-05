@@ -287,7 +287,7 @@ func TestNoConfigSetDefaults(t *testing.T) {
 
 func TestBadConfigReturnsError(t *testing.T) {
 	a := daemon.New(t.Name()) // Use version to still run preExec to load no config but without running server
-	a.SetArgs("version", "--config", "/does/not/exist.yaml")
+	a.SetArgs("version", "--paths-config", "/does/not/exist.yaml")
 
 	err := a.Run()
 	require.Error(t, err, "Run should return an error on config file")

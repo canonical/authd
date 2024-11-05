@@ -20,7 +20,7 @@ func NewForTests(t *testing.T, conf *DaemonConfig, providerURL string, args ...s
 	t.Helper()
 
 	p := GenerateTestConfig(t, conf, providerURL)
-	argsWithConf := []string{"--config", p}
+	argsWithConf := []string{"--paths-config", p}
 	argsWithConf = append(argsWithConf, args...)
 
 	a := New(t.Name())
