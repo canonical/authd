@@ -50,19 +50,7 @@ func GenerateTestConfig(t *testing.T, origConf *daemonConfig, providerURL string
 		conf.Paths.BrokerConf = filepath.Join(t.TempDir(), strings.ReplaceAll(t.Name(), "/", "_")+".yaml")
 	}
 
-	brokerCfg := fmt.Sprintf(`
-[authd]
-name = %[1]s
-brand_icon = broker_icon.png
-dbus_name = com.ubuntu.authd.%[1]s
-dbus_object = /com/ubuntu/authd/%[1]s
-
-[oidc]
-issuer = %[2]s
-client_id = client_id
-`, strings.ReplaceAll(t.Name(), "/", "_"), providerURL)
-	err := os.WriteFile(conf.Paths.BrokerConf, []byte(brokerCfg), 0600)
-	require.NoError(t, err, "Setup: could not create broker configuration for tests")
+	GenerateBrokerConfig(t, conf.Paths.BrokerConf, providerURL)
 
 	d, err := yaml.Marshal(conf)
 	require.NoError(t, err, "Setup: could not marshal configuration for tests")
@@ -72,6 +60,28 @@ client_id = client_id
 	require.NoError(t, err, "Setup: could not create configuration for tests")
 
 	return confPath
+}
+
+// GenerateBrokerConfig creates a broker configuration file for tests.
+func GenerateBrokerConfig(t *testing.T, p, providerURL string) {
+	t.Helper()
+
+	err := os.MkdirAll(filepath.Dir(p), 0700)
+	require.NoError(t, err, "Setup: could not create parent broker configuration directory for tests")
+
+	brokerCfg := fmt.Sprintf(`
+	[authd]
+	name = %[1]s
+	brand_icon = broker_icon.png
+	dbus_name = com.ubuntu.authd.%[1]s
+	dbus_object = /com/ubuntu/authd/%[1]s
+
+	[oidc]
+	issuer = %[2]s
+	client_id = client_id
+	`, strings.ReplaceAll(t.Name(), "/", "_"), providerURL)
+	err = os.WriteFile(p, []byte(brokerCfg), 0600)
+	require.NoError(t, err, "Setup: could not create broker configuration for tests")
 }
 
 // Config returns a DaemonConfig for tests.
