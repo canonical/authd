@@ -30,7 +30,7 @@ func initViperConfig(name string, cmd *cobra.Command, vip *viper.Viper) (err err
 	setVerboseMode(v)
 
 	// Handle configuration.
-	if v, err := cmd.Flags().GetString("config"); err == nil && v != "" {
+	if v, err := cmd.Flags().GetString("paths-config"); err == nil && v != "" {
 		vip.SetConfigFile(v)
 	} else {
 		vip.SetConfigName(name)

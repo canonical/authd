@@ -73,6 +73,11 @@ func New(name string) *App {
 				return fmt.Errorf("unable to decode configuration into struct: %w", err)
 			}
 
+			// FIXME: for now, config is only the broker.conf file. It should be merged with the viper configuration.
+			if v, err := cmd.Flags().GetString("config"); err == nil && v != "" {
+				a.config.Paths.BrokerConf = v
+			}
+
 			setVerboseMode(a.config.Verbosity)
 			slog.Debug("Debug mode is enabled")
 
@@ -90,6 +95,8 @@ func New(name string) *App {
 
 	installVerbosityFlag(&a.rootCmd, a.viper)
 	installConfigFlag(&a.rootCmd)
+	// FIXME: This option is for the viper path configuration. We should merge --config and this one in the future.
+	a.rootCmd.PersistentFlags().StringP("paths-config", "", "", "use a specific paths configuration file")
 
 	// subcommands
 	a.installVersion()
