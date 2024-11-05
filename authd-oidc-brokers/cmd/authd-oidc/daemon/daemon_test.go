@@ -236,6 +236,38 @@ func TestConfigLoad(t *testing.T) {
 	require.Equal(t, config, a.Config(), "Config is loaded")
 }
 
+func TestConfigHasPrecedenceOverPathsConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	config := daemon.DaemonConfig{
+		Verbosity: 1,
+		Paths: daemon.SystemPaths{
+			BrokerConf: filepath.Join(tmpDir, "broker.conf"),
+			Cache:      filepath.Join(tmpDir, "cache"),
+		},
+	}
+
+	overrideBrokerConfPath := filepath.Join(tmpDir, "override", "via", "config", "broker.conf")
+	daemon.GenerateBrokerConfig(t, overrideBrokerConfPath, mockProvider.URL)
+	a := daemon.NewForTests(t, &config, mockProvider.URL, "--config", overrideBrokerConfPath)
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := a.Run()
+		require.NoError(t, err, "Run should exits without any error")
+	}()
+	a.WaitReady()
+	time.Sleep(50 * time.Millisecond)
+
+	defer wg.Wait()
+	defer a.Quit()
+
+	want := config
+	want.Paths.BrokerConf = overrideBrokerConfPath
+	require.Equal(t, want, a.Config(), "Config is loaded")
+}
+
 func TestAutoDetectConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	config := daemon.DaemonConfig{
@@ -287,7 +319,7 @@ func TestNoConfigSetDefaults(t *testing.T) {
 
 func TestBadConfigReturnsError(t *testing.T) {
 	a := daemon.New(t.Name()) // Use version to still run preExec to load no config but without running server
-	a.SetArgs("version", "--config", "/does/not/exist.yaml")
+	a.SetArgs("version", "--paths-config", "/does/not/exist.yaml")
 
 	err := a.Run()
 	require.Error(t, err, "Run should return an error on config file")
