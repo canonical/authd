@@ -457,8 +457,8 @@ func TestIsAuthenticated(t *testing.T) {
 				"/token": testutils.BadRequestHandler(),
 			},
 		},
-		"Error when mode is password and token is invalid":                {firstMode: authmodes.Password, token: &tokenOptions{invalid: true}},
-		"Error when mode is password and cached token can't be refreshed": {firstMode: authmodes.Password, token: &tokenOptions{expired: true, noRefreshToken: true}},
+		"Error when mode is password and token is invalid":       {firstMode: authmodes.Password, token: &tokenOptions{invalid: true}},
+		"Error when token is expired and refreshing token fails": {firstMode: authmodes.Password, token: &tokenOptions{expired: true, noRefreshToken: true}},
 		"Error when mode is password and token refresh times out": {firstMode: authmodes.Password, token: &tokenOptions{expired: true},
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
