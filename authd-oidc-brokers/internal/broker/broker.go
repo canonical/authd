@@ -20,6 +20,7 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
+	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
@@ -212,13 +213,23 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 
 	supportedAuthModes := b.supportedAuthModesFromLayout(supportedUILayouts)
 
+	slog.Debug(fmt.Sprintf("Supported UI Layouts for session %s: %#v", sessionID, supportedUILayouts))
+	slog.Debug(fmt.Sprintf("Supported Authentication modes for session %s: %#v", sessionID, supportedAuthModes))
+
 	// Checks if the token exists in the cache.
 	_, err = os.Stat(session.cachePath)
 	tokenExists := err == nil
 
 	endpoints := make(map[string]struct{})
 	if session.authCfg.provider != nil && session.authCfg.provider.Endpoint().DeviceAuthURL != "" {
-		endpoints["device_auth"] = struct{}{}
+		authMode := authmodes.DeviceQr
+		if _, ok := supportedAuthModes[authMode]; ok {
+			endpoints[authMode] = struct{}{}
+		}
+		authMode = authmodes.Device
+		if _, ok := supportedAuthModes[authMode]; ok {
+			endpoints[authMode] = struct{}{}
+		}
 	}
 
 	availableModes, err := b.providerInfo.CurrentAuthenticationModesOffered(
@@ -260,16 +271,20 @@ func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []map[string]st
 			if !strings.Contains(layout["wait"], "true") {
 				continue
 			}
-			supportedModes["device_auth"] = "Device Authentication"
+			deviceAuthID := authmodes.DeviceQr
+			if layout["renders_qrcode"] == "false" {
+				deviceAuthID = authmodes.Device
+			}
+			supportedModes[deviceAuthID] = "Device Authentication"
 
 		case "form":
 			if slices.Contains(supportedEntries, "chars_password") {
-				supportedModes["password"] = "Local Password Authentication"
+				supportedModes[authmodes.Password] = "Local Password Authentication"
 			}
 
 		case "newpassword":
 			if slices.Contains(supportedEntries, "chars_password") {
-				supportedModes["newpassword"] = "Define your local password"
+				supportedModes[authmodes.NewPassword] = "Define your local password"
 			}
 		}
 	}
@@ -311,35 +326,43 @@ func (b *Broker) generateUILayout(session *sessionInfo, authModeID string) (map[
 
 	var uiLayout map[string]string
 	switch authModeID {
-	case "device_auth":
+	case authmodes.Device, authmodes.DeviceQr:
 		ctx, cancel := context.WithTimeout(context.Background(), maxRequestDuration)
 		defer cancel()
 		response, err := session.authCfg.oauth.DeviceAuth(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("could not generate QR code layout: %v", err)
+			return nil, fmt.Errorf("could not generate Device Authentication code layout: %v", err)
 		}
 		session.authInfo["response"] = response
 
-		uiLayout = map[string]string{
-			"type": "qrcode",
-			"label": fmt.Sprintf(
+		label := fmt.Sprintf(
+			"Access %q and use the provided login code",
+			response.VerificationURI,
+		)
+		if authModeID == authmodes.DeviceQr {
+			label = fmt.Sprintf(
 				"Scan the QR code or access %q and use the provided login code",
 				response.VerificationURI,
-			),
+			)
+		}
+
+		uiLayout = map[string]string{
+			"type":    "qrcode",
+			"label":   label,
 			"wait":    "true",
 			"button":  "Request new login code",
 			"content": response.VerificationURI,
 			"code":    response.UserCode,
 		}
 
-	case "password":
+	case authmodes.Password:
 		uiLayout = map[string]string{
 			"type":  "form",
 			"label": "Enter your local password",
 			"entry": "chars_password",
 		}
 
-	case "newpassword":
+	case authmodes.NewPassword:
 		label := "Create a local password"
 		if session.mode == "passwd" {
 			label = "Update your local password"
@@ -433,7 +456,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 
 	var authInfo authCachedInfo
 	switch session.selectedMode {
-	case "device_auth":
+	case authmodes.Device, authmodes.DeviceQr:
 		response, ok := session.authInfo["response"].(*oauth2.DeviceAuthResponse)
 		if !ok {
 			slog.Error("could not get device auth response")
@@ -471,7 +494,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 		session.authInfo["auth_info"] = authInfo
 		return AuthNext, nil
 
-	case "password":
+	case authmodes.Password:
 		authInfo, err = b.loadAuthInfo(ctx, session, challenge)
 		if err != nil {
 			slog.Error(err.Error())
@@ -496,7 +519,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 			return AuthNext, nil
 		}
 
-	case "newpassword":
+	case authmodes.NewPassword:
 		if challenge == "" {
 			return AuthRetry, errorMessage{Message: "empty challenge"}
 		}
