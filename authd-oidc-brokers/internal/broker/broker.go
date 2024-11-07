@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -22,9 +21,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
+	"github.com/ubuntu/authd-oidc-brokers/internal/fileutils"
+	"github.com/ubuntu/authd-oidc-brokers/internal/password"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"github.com/ubuntu/decorate"
 	"golang.org/x/oauth2"
 )
@@ -36,22 +38,26 @@ const (
 
 // Config is the configuration for the broker.
 type Config struct {
-	IssuerURL          string
-	ClientID           string
-	CachePath          string
-	HomeBaseDir        string
-	AllowedSSHSuffixes []string
+	ConfigFile            string
+	DataDir               string
+	OldEncryptedTokensDir string
+
+	userConfig
+}
+
+type userConfig struct {
+	clientID           string
+	issuerURL          string
+	homeBaseDir        string
+	allowedSSHSuffixes []string
 }
 
 // Broker is the real implementation of the broker to track sessions and process oidc calls.
 type Broker struct {
-	providerInfo providers.ProviderInfoer
-	issuerURL    string
-	oidcCfg      oidc.Config
+	cfg Config
 
-	cachePath          string
-	homeDirPath        string
-	allowedSSHSuffixes []string
+	providerInfo providers.ProviderInfoer
+	oidcCfg      oidc.Config
 
 	currentSessions   map[string]sessionInfo
 	currentSessionsMu sync.RWMutex
@@ -69,10 +75,13 @@ type sessionInfo struct {
 	authModes         []string
 	attemptsPerMode   map[string]int
 
-	authCfg   authConfig
-	authInfo  map[string]any
-	isOffline bool
-	cachePath string
+	authCfg               authConfig
+	authInfo              map[string]any
+	isOffline             bool
+	userDataDir           string
+	passwordPath          string
+	tokenPath             string
+	oldEncryptedTokenPath string
 
 	currentAuthStep int
 
@@ -101,6 +110,13 @@ type Option func(*option)
 func New(cfg Config, args ...Option) (b *Broker, err error) {
 	defer decorate.OnError(&err, "could not create broker")
 
+	if cfg.ConfigFile != "" {
+		cfg.userConfig, err = parseConfigFile(cfg.ConfigFile)
+		if err != nil {
+			return nil, fmt.Errorf("could not parse config: %v", err)
+		}
+	}
+
 	opts := option{
 		providerInfo: providers.CurrentProviderInfo(),
 	}
@@ -108,22 +124,21 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 		arg(&opts)
 	}
 
-	if cfg.CachePath == "" {
+	if cfg.DataDir == "" {
 		err = errors.Join(err, errors.New("cache path is required and was not provided"))
 	}
-	if cfg.IssuerURL == "" {
+	if cfg.issuerURL == "" {
 		err = errors.Join(err, errors.New("issuer URL is required and was not provided"))
 	}
-	if cfg.ClientID == "" {
+	if cfg.clientID == "" {
 		err = errors.Join(err, errors.New("client ID is required and was not provided"))
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	homeDirPath := "/home"
-	if cfg.HomeBaseDir != "" {
-		homeDirPath = cfg.HomeBaseDir
+	if cfg.homeBaseDir == "" {
+		cfg.homeBaseDir = "/home"
 	}
 
 	// Generate a new private key for the broker.
@@ -134,13 +149,10 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	}
 
 	b = &Broker{
-		providerInfo:       opts.providerInfo,
-		issuerURL:          cfg.IssuerURL,
-		oidcCfg:            oidc.Config{ClientID: cfg.ClientID},
-		cachePath:          cfg.CachePath,
-		homeDirPath:        homeDirPath,
-		allowedSSHSuffixes: cfg.AllowedSSHSuffixes,
-		privateKey:         privateKey,
+		cfg:          cfg,
+		providerInfo: opts.providerInfo,
+		oidcCfg:      oidc.Config{ClientID: cfg.clientID},
+		privateKey:   privateKey,
 
 		currentSessions:   make(map[string]sessionInfo),
 		currentSessionsMu: sync.RWMutex{},
@@ -167,10 +179,15 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 		return "", "", err
 	}
 
-	_, url, _ := strings.Cut(b.issuerURL, "://")
-	url = strings.ReplaceAll(url, "/", "_")
-	url = strings.ReplaceAll(url, ":", "_")
-	session.cachePath = filepath.Join(b.cachePath, url, username+".cache")
+	_, issuer, _ := strings.Cut(b.cfg.issuerURL, "://")
+	issuer = strings.ReplaceAll(issuer, "/", "_")
+	issuer = strings.ReplaceAll(issuer, ":", "_")
+	session.userDataDir = filepath.Join(b.cfg.DataDir, issuer, username)
+	// The token is stored in $DATA_DIR/$ISSUER/$USERNAME/token.json.
+	session.tokenPath = filepath.Join(session.userDataDir, "token.json")
+	// The password is stored in $DATA_DIR/$ISSUER/$USERNAME/password.
+	session.passwordPath = filepath.Join(session.userDataDir, "password")
+	session.oldEncryptedTokenPath = filepath.Join(b.cfg.OldEncryptedTokensDir, issuer, username+".cache")
 
 	// Check whether to start the session in offline mode.
 	session.authCfg, err = b.connectToProvider(context.Background())
@@ -190,7 +207,7 @@ func (b *Broker) connectToProvider(ctx context.Context) (authCfg authConfig, err
 	ctx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
 
-	provider, err := oidc.NewProvider(ctx, b.issuerURL)
+	provider, err := oidc.NewProvider(ctx, b.cfg.issuerURL)
 	if err != nil {
 		return authConfig{}, err
 	}
@@ -217,8 +234,17 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 	slog.Debug(fmt.Sprintf("Supported Authentication modes for session %s: %#v", sessionID, supportedAuthModes))
 
 	// Checks if the token exists in the cache.
-	_, err = os.Stat(session.cachePath)
-	tokenExists := err == nil
+	tokenExists, err := fileutils.FileExists(session.tokenPath)
+	if err != nil {
+		slog.Warn(fmt.Sprintf("Could not check if token exists: %v", err))
+	}
+	if !tokenExists {
+		// Check the old encrypted token path.
+		tokenExists, err = fileutils.FileExists(session.oldEncryptedTokenPath)
+		if err != nil {
+			slog.Warn(fmt.Sprintf("Could not check if old encrypted token exists: %v", err))
+		}
+	}
 
 	endpoints := make(map[string]struct{})
 	if session.authCfg.provider != nil && session.authCfg.provider.Endpoint().DeviceAuthURL != "" {
@@ -454,7 +480,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 		return AuthRetry, errorMessage{Message: "could not decode challenge"}
 	}
 
-	var authInfo authCachedInfo
+	var authInfo token.AuthCachedInfo
 	switch session.selectedMode {
 	case authmodes.Device, authmodes.DeviceQr:
 		response, ok := session.authInfo["response"].(*oauth2.DeviceAuthResponse)
@@ -484,7 +510,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 			return AuthDenied, errorMessage{Message: "could not get ID token"}
 		}
 
-		authInfo = b.newAuthCachedInfo(t, rawIDToken)
+		authInfo = token.NewAuthCachedInfo(t, rawIDToken, b.providerInfo)
 		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil {
 			slog.Error(err.Error())
@@ -495,12 +521,53 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 		return AuthNext, nil
 
 	case authmodes.Password:
-		authInfo, err = b.loadAuthInfo(ctx, session, challenge)
+		useOldEncryptedToken, err := token.UseOldEncryptedToken(session.tokenPath, session.passwordPath, session.oldEncryptedTokenPath)
 		if err != nil {
 			slog.Error(err.Error())
-			return AuthRetry, errorMessage{Message: "could not load cached info"}
+			return AuthDenied, errorMessage{Message: "could not check password file"}
 		}
 
+		if useOldEncryptedToken {
+			authInfo, err = token.LoadOldEncryptedAuthInfo(session.oldEncryptedTokenPath, challenge)
+			if err != nil {
+				slog.Error(err.Error())
+				return AuthDenied, errorMessage{Message: "could not load encrypted token"}
+			}
+
+			// We were able to decrypt the old token with the password, so we can now hash and store the password in the
+			// new format.
+			if err = password.HashAndStorePassword(challenge, session.passwordPath); err != nil {
+				slog.Error(err.Error())
+				return AuthDenied, errorMessage{Message: "could not store password"}
+			}
+		} else {
+			ok, err := password.CheckPassword(challenge, session.passwordPath)
+			if err != nil {
+				slog.Error(err.Error())
+				return AuthDenied, errorMessage{Message: "could not check password"}
+			}
+			if !ok {
+				return AuthRetry, errorMessage{Message: "incorrect password"}
+			}
+
+			authInfo, err = token.LoadAuthInfo(session.tokenPath)
+			if err != nil {
+				slog.Error(err.Error())
+				return AuthDenied, errorMessage{Message: "could not load stored token"}
+			}
+		}
+
+		// Refresh the token if it has expired and we're online. Ideally, we should always refresh it when we're online,
+		// but the oauth2.TokenSource implementation only refreshes the token when it's expired.
+		if !authInfo.Token.Valid() && !session.isOffline {
+			authInfo, err = b.refreshToken(ctx, session.authCfg.oauth, authInfo)
+			if err != nil {
+				slog.Error(err.Error())
+				return AuthDenied, errorMessage{Message: "could not refresh token"}
+			}
+		}
+
+		// Try to refresh the user info
 		userInfo, err := b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil && authInfo.UserInfo.Name == "" {
 			// We don't have a valid user info, so we can't proceed.
@@ -526,10 +593,15 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 
 		var ok bool
 		// This mode must always come after a authentication mode, so it has to have an auth_info.
-		authInfo, ok = session.authInfo["auth_info"].(authCachedInfo)
+		authInfo, ok = session.authInfo["auth_info"].(token.AuthCachedInfo)
 		if !ok {
 			slog.Error("could not get required information")
 			return AuthDenied, errorMessage{Message: "could not get required information"}
+		}
+
+		if err = password.HashAndStorePassword(challenge, session.passwordPath); err != nil {
+			slog.Error(err.Error())
+			return AuthDenied, errorMessage{Message: "could not store password"}
 		}
 	}
 
@@ -537,10 +609,14 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 		return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 	}
 
-	if err := b.cacheAuthInfo(session, authInfo, challenge); err != nil {
+	if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
 		slog.Error(err.Error())
 		return AuthDenied, errorMessage{Message: "could not cache user info"}
 	}
+
+	// At this point we successfully stored the hashed password and a new token, so we can now safely remove any old
+	// encrypted token.
+	token.CleanupOldEncryptedToken(session.oldEncryptedTokenPath)
 
 	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 }
@@ -607,7 +683,7 @@ func (b *Broker) CancelIsAuthenticated(sessionID string) {
 // UserPreCheck checks if the user is valid and can be allowed to authenticate.
 func (b *Broker) UserPreCheck(username string) (string, error) {
 	found := false
-	for _, suffix := range b.allowedSSHSuffixes {
+	for _, suffix := range b.cfg.allowedSSHSuffixes {
 		if strings.HasSuffix(username, suffix) {
 			found = true
 			break
@@ -618,7 +694,7 @@ func (b *Broker) UserPreCheck(username string) (string, error) {
 		return "", errors.New("username does not match the allowed suffixes")
 	}
 
-	u := info.NewUser(username, filepath.Join(b.homeDirPath, username), "", "", "", nil)
+	u := info.NewUser(username, filepath.Join(b.cfg.homeBaseDir, username), "", "", "", nil)
 	encoded, err := json.Marshal(u)
 	if err != nil {
 		return "", fmt.Errorf("could not marshal user info: %v", err)
@@ -649,92 +725,28 @@ func (b *Broker) updateSession(sessionID string, session sessionInfo) error {
 	return nil
 }
 
-// authCachedInfo represents the token that will be saved on disk for offline authentication.
-type authCachedInfo struct {
-	Token       *oauth2.Token
-	ExtraFields map[string]interface{}
-	RawIDToken  string
-	UserInfo    info.User
-}
-
-func (b *Broker) newAuthCachedInfo(t *oauth2.Token, idToken string) authCachedInfo {
-	return authCachedInfo{
-		Token:       t,
-		RawIDToken:  idToken,
-		ExtraFields: b.providerInfo.GetExtraFields(t),
-	}
-}
-
-// cacheAuthInfo serializes the access token and cache it.
-func (b *Broker) cacheAuthInfo(session *sessionInfo, authInfo authCachedInfo, password string) (err error) {
-	content, err := json.Marshal(authInfo)
-	if err != nil {
-		return fmt.Errorf("could not marshal token: %v", err)
-	}
-
-	serialized, err := encrypt(content, []byte(password))
-	if err != nil {
-		return fmt.Errorf("could not encrypt token: %v", err)
-	}
-
-	// Create issuer specific cache directory if it doesn't exist.
-	if err = os.MkdirAll(filepath.Dir(session.cachePath), 0700); err != nil {
-		return fmt.Errorf("could not create token directory: %v", err)
-	}
-
-	if err = os.WriteFile(session.cachePath, serialized, 0600); err != nil {
-		return fmt.Errorf("could not save token: %v", err)
-	}
-
-	return nil
-}
-
-// loadAuthInfo deserializes the token from the cache and refreshes it if needed.
-func (b *Broker) loadAuthInfo(ctx context.Context, session *sessionInfo, password string) (loadedInfo authCachedInfo, err error) {
-	s, err := os.ReadFile(session.cachePath)
-	if err != nil {
-		return authCachedInfo{}, fmt.Errorf("could not read token: %v", err)
-	}
-
-	deserialized, err := decrypt(s, []byte(password))
-	if err != nil {
-		return authCachedInfo{}, fmt.Errorf("could not deserialize token: %v", err)
-	}
-
-	var cachedInfo authCachedInfo
-	if err := json.Unmarshal(deserialized, &cachedInfo); err != nil {
-		return authCachedInfo{}, fmt.Errorf("could not unmarshal token: %v", err)
-	}
-
-	// Set the extra fields of the token.
-	if cachedInfo.ExtraFields != nil {
-		cachedInfo.Token = cachedInfo.Token.WithExtra(cachedInfo.ExtraFields)
-	}
-
-	// If the token is still valid, we return it. Ideally, we would refresh it online, but the TokenSource API also uses
-	// this logic to decide whether the token needs refreshing, so we should run it early to control the returned values.
-	if cachedInfo.Token.Valid() || session.isOffline {
-		return cachedInfo, nil
-	}
-
-	// Tries to refresh the access token. If the service is unavailable, we allow authentication.
+// refreshToken refreshes the OAuth2 token and returns the updated AuthCachedInfo.
+func (b *Broker) refreshToken(ctx context.Context, oauth2Config oauth2.Config, oldToken token.AuthCachedInfo) (token.AuthCachedInfo, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
-	tok, err := session.authCfg.oauth.TokenSource(timeoutCtx, cachedInfo.Token).Token()
+	oauthToken, err := oauth2Config.TokenSource(timeoutCtx, oldToken.Token).Token()
 	if err != nil {
-		return authCachedInfo{}, fmt.Errorf("could not refresh token: %v", err)
+		return token.AuthCachedInfo{}, err
 	}
 
-	// If the ID token was refreshed, we overwrite the cached one.
-	refreshedIDToken, ok := tok.Extra("id_token").(string)
+	// Update the raw ID token
+	rawIDToken, ok := oauthToken.Extra("id_token").(string)
 	if !ok {
-		refreshedIDToken = cachedInfo.RawIDToken
+		slog.Debug("refreshed token does not contain an ID token, keeping the old one")
+		rawIDToken = oldToken.RawIDToken
 	}
 
-	return b.newAuthCachedInfo(tok, refreshedIDToken), nil
+	t := token.NewAuthCachedInfo(oauthToken, rawIDToken, b.providerInfo)
+	t.UserInfo = oldToken.UserInfo
+	return t, nil
 }
 
-func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *authCachedInfo) (userInfo info.User, err error) {
+func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *token.AuthCachedInfo) (userInfo info.User, err error) {
 	if session.isOffline {
 		return info.User{}, errors.New("session is in offline mode")
 	}
@@ -755,7 +767,7 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *sessionInfo, t *aut
 
 	// This means that home was not provided by the claims, so we need to set it to the broker default.
 	if !filepath.IsAbs(userInfo.Home) {
-		userInfo.Home = filepath.Join(b.homeDirPath, userInfo.Home)
+		userInfo.Home = filepath.Join(b.cfg.homeBaseDir, userInfo.Home)
 	}
 
 	return userInfo, err

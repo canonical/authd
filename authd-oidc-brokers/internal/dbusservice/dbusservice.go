@@ -3,15 +3,12 @@ package dbusservice
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
-	"gopkg.in/ini.v1"
 )
 
 const intro = `
@@ -61,35 +58,13 @@ type Service struct {
 }
 
 // New returns a new dbus service after exporting to the system bus our name.
-func New(_ context.Context, cfgPath, cachePath string) (s *Service, err error) {
-	cfg, err := parseConfig(cfgPath)
-	if err != nil {
-		return nil, err
-	}
-
-	var allowedSSHSuffixes []string
-	if cfg[usersSection][sshSuffixesKey] != "" {
-		allowedSSHSuffixes = strings.Split(cfg[usersSection][sshSuffixesKey], ",")
-	}
-
-	bCfg := broker.Config{
-		IssuerURL:          cfg[oidcSection][issuerKey],
-		ClientID:           cfg[oidcSection][clientIDKey],
-		HomeBaseDir:        cfg[usersSection][homeDirKey],
-		AllowedSSHSuffixes: allowedSSHSuffixes,
-		CachePath:          cachePath,
-	}
-	b, err := broker.New(bCfg)
-	if err != nil {
-		return nil, err
-	}
-
+func New(_ context.Context, broker *broker.Broker) (s *Service, err error) {
 	name := consts.DbusName
 	object := dbus.ObjectPath(consts.DbusObject)
 	iface := "com.ubuntu.authd.Broker"
 	s = &Service{
 		name:   name,
-		broker: b,
+		broker: broker,
 		serve:  make(chan struct{}),
 	}
 
@@ -116,32 +91,6 @@ func New(_ context.Context, cfgPath, cachePath string) (s *Service, err error) {
 	}
 
 	return s, nil
-}
-
-// parseConfig parses the config file and returns a map with the configuration keys and values.
-func parseConfig(cfgPath string) (map[string]map[string]string, error) {
-	iniCfg, err := ini.Load(cfgPath)
-	if err != nil {
-		return nil, err
-	}
-
-	cfg := make(map[string]map[string]string)
-	for _, section := range iniCfg.Sections() {
-		cfg[section.Name()] = make(map[string]string)
-		for _, key := range section.Keys() {
-			if strings.Contains(key.String(), "<") && strings.Contains(key.String(), ">") {
-				err = errors.Join(err, fmt.Errorf("found invalid character in section %q, key %q", section.Name(), key.Name()))
-				continue
-			}
-			cfg[section.Name()][key.Name()] = key.String()
-		}
-	}
-
-	// This means we found at least one section that was potentially not edited.
-	if err != nil {
-		return nil, fmt.Errorf("config file has invalid values, did you edit the file %q?\n%w", cfgPath, err)
-	}
-	return cfg, nil
 }
 
 // Addr returns the address of the service.

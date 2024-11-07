@@ -158,9 +158,9 @@ func CompareTreesWithFiltering(t *testing.T, p, goldPath string, update bool) {
 		}
 	}
 
-	// Maps are not ordered, so we need to compare the contents through keys
+	// Maps are not ordered, so we need to compare the content and attributes of each file
 	for key, value := range goldContent {
-		require.Equal(t, value, gotContent[key], "got and expected content differs")
+		require.Equal(t, value, gotContent[key], "Content or attributes are different for %s", key)
 		delete(gotContent, key)
 	}
 	require.Empty(t, gotContent, "Some files are missing in the golden directory")
