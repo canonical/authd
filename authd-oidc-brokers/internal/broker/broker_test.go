@@ -414,8 +414,8 @@ func TestIsAuthenticated(t *testing.T) {
 		dontWaitForFirstCall bool
 		readOnlyDataDir      bool
 	}{
-		"Successfully_authenticate_user_with_QRCode+newpassword": {firstChallenge: "-", wantSecondCall: true},
-		"Successfully_authenticate_user_with_password":           {firstMode: authmodes.Password, token: &tokenOptions{}},
+		"Successfully_authenticate_user_with_device_auth_and_newpassword": {firstChallenge: "-", wantSecondCall: true},
+		"Successfully_authenticate_user_with_password":                    {firstMode: authmodes.Password, token: &tokenOptions{}},
 
 		"Authenticating_with_qrcode_reacquires_token":          {firstChallenge: "-", wantSecondCall: true, token: &tokenOptions{}},
 		"Authenticating_with_password_refreshes_expired_token": {firstMode: authmodes.Password, token: &tokenOptions{expired: true}},
