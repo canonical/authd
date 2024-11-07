@@ -33,12 +33,12 @@ func TestNew(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Successfully create new broker":                              {},
-		"Successfully create new even if can not connect to provider": {issuer: "https://notavailable"},
+		"Successfully_create_new_broker":                              {},
+		"Successfully_create_new_even_if_can_not_connect_to_provider": {issuer: "https://notavailable"},
 
-		"Error if issuer is not provided":   {issuer: "-", wantErr: true},
-		"Error if clientID is not provided": {clientID: "-", wantErr: true},
-		"Error if dataDir is not provided":  {dataDir: "-", wantErr: true},
+		"Error_if_issuer_is_not_provided":   {issuer: "-", wantErr: true},
+		"Error_if_clientID_is_not_provided": {clientID: "-", wantErr: true},
+		"Error_if_dataDir_is_not_provided":  {dataDir: "-", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -85,14 +85,14 @@ func TestNewSession(t *testing.T) {
 
 		wantOffline bool
 	}{
-		"Successfully create new session": {},
-		"Creates new session in offline mode if provider is not available": {
+		"Successfully_create_new_session": {},
+		"Creates_new_session_in_offline_mode_if_provider_is_not_available": {
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
 			wantOffline: true,
 		},
-		"Creates new session in offline mode if provider connection times out": {
+		"Creates_new_session_in_offline_mode_if_provider_connection_times_out": {
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/.well-known/openid-configuration": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
@@ -177,28 +177,28 @@ func TestGetAuthenticationModes(t *testing.T) {
 		wantErr bool
 	}{
 		// Auth Session
-		"Get device_auth_qr if there is no token":                      {},
-		"Get newpassword if already authenticated with device_auth_qr": {secondAuthStep: true},
-		"Get password and device_auth_qr if token exists":              {tokenExists: true},
+		"Get_device_auth_qr_if_there_is_no_token":                      {},
+		"Get_newpassword_if_already_authenticated_with_device_auth_qr": {secondAuthStep: true},
+		"Get_password_and_device_auth_qr_if_token_exists":              {tokenExists: true},
 
-		"Get only password if token exists and provider is not available":                {tokenExists: true, providerAddress: "127.0.0.1:31310", unavailableProvider: true},
-		"Get only password if token exists and provider does not support device_auth_qr": {tokenExists: true, providerAddress: "127.0.0.1:31311", deviceAuthUnsupported: true},
+		"Get_only_password_if_token_exists_and_provider_is_not_available":                {tokenExists: true, providerAddress: "127.0.0.1:31310", unavailableProvider: true},
+		"Get_only_password_if_token_exists_and_provider_does_not_support_device_auth_qr": {tokenExists: true, providerAddress: "127.0.0.1:31311", deviceAuthUnsupported: true},
 
 		// Passwd Session
-		"Get only password if token exists and session is passwd":                      {sessionMode: "passwd", tokenExists: true},
-		"Get newpassword if already authenticated with password and session is passwd": {sessionMode: "passwd", tokenExists: true, secondAuthStep: true},
+		"Get_only_password_if_token_exists_and_session_is_passwd":                      {sessionMode: "passwd", tokenExists: true},
+		"Get_newpassword_if_already_authenticated_with_password_and_session_is_passwd": {sessionMode: "passwd", tokenExists: true, secondAuthStep: true},
 
-		"Error if there is no session": {sessionID: "-", wantErr: true},
+		"Error_if_there_is_no_session": {sessionID: "-", wantErr: true},
 
 		// General errors
-		"Error if no authentication mode is supported":        {providerAddress: "127.0.0.1:31312", deviceAuthUnsupported: true, wantErr: true},
-		"Error if expecting device_auth_qr but not supported": {supportedLayouts: []string{"qrcode-without-wait"}, wantErr: true},
-		"Error if expecting device_auth but not supported":    {supportedLayouts: []string{"qrcode-without-wait-and-qrcode"}, wantErr: true},
-		"Error if expecting newpassword but not supported":    {supportedLayouts: []string{"newpassword-without-entry"}, wantErr: true},
-		"Error if expecting password but not supported":       {supportedLayouts: []string{"form-without-entry"}, wantErr: true},
+		"Error_if_no_authentication_mode_is_supported":        {providerAddress: "127.0.0.1:31312", deviceAuthUnsupported: true, wantErr: true},
+		"Error_if_expecting_device_auth_qr_but_not_supported": {supportedLayouts: []string{"qrcode-without-wait"}, wantErr: true},
+		"Error_if_expecting_device_auth_but_not_supported":    {supportedLayouts: []string{"qrcode-without-wait-and-qrcode"}, wantErr: true},
+		"Error_if_expecting_newpassword_but_not_supported":    {supportedLayouts: []string{"newpassword-without-entry"}, wantErr: true},
+		"Error_if_expecting_password_but_not_supported":       {supportedLayouts: []string{"form-without-entry"}, wantErr: true},
 
 		// Passwd session errors
-		"Error if session is passwd but token does not exist": {sessionMode: "passwd", wantErr: true},
+		"Error_if_session_is_passwd_but_token_does_not_exist": {sessionMode: "passwd", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -292,20 +292,20 @@ func TestSelectAuthenticationMode(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Successfully select password":       {modeName: authmodes.Password, tokenExists: true},
-		"Successfully select device_auth_qr": {modeName: authmodes.DeviceQr},
-		"Successfully select device_auth":    {supportedLayouts: supportedLayoutsWithoutQrCode, modeName: authmodes.Device},
-		"Successfully select newpassword":    {modeName: authmodes.NewPassword, secondAuthStep: true},
+		"Successfully_select_password":       {modeName: authmodes.Password, tokenExists: true},
+		"Successfully_select_device_auth_qr": {modeName: authmodes.DeviceQr},
+		"Successfully_select_device_auth":    {supportedLayouts: supportedLayoutsWithoutQrCode, modeName: authmodes.Device},
+		"Successfully_select_newpassword":    {modeName: authmodes.NewPassword, secondAuthStep: true},
 
-		"Selected newpassword shows correct label in passwd session": {modeName: authmodes.NewPassword, passwdSession: true, tokenExists: true, secondAuthStep: true},
+		"Selected_newpassword_shows_correct_label_in_passwd_session": {modeName: authmodes.NewPassword, passwdSession: true, tokenExists: true, secondAuthStep: true},
 
-		"Error when selecting invalid mode": {modeName: "invalid", wantErr: true},
-		"Error when selecting device_auth_qr but provider is unavailable": {modeName: authmodes.DeviceQr, wantErr: true,
+		"Error_when_selecting_invalid_mode": {modeName: "invalid", wantErr: true},
+		"Error_when_selecting_device_auth_qr_but_provider_is_unavailable": {modeName: authmodes.DeviceQr, wantErr: true,
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/device_auth": testutils.UnavailableHandler(),
 			},
 		},
-		"Error when selecting device_auth but provider is unavailable": {
+		"Error_when_selecting_device_auth_but_provider_is_unavailable": {
 			supportedLayouts: supportedLayoutsWithoutQrCode,
 			modeName:         authmodes.Device,
 			customHandlers: map[string]testutils.ProviderHandler{
@@ -313,12 +313,12 @@ func TestSelectAuthenticationMode(t *testing.T) {
 			},
 			wantErr: true,
 		},
-		"Error when selecting device_auth_qr but request times out": {modeName: authmodes.DeviceQr, wantErr: true,
+		"Error_when_selecting_device_auth_qr_but_request_times_out": {modeName: authmodes.DeviceQr, wantErr: true,
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/device_auth": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
-		"Error when selecting device_auth but request times out": {
+		"Error_when_selecting_device_auth_but_request_times_out": {
 			supportedLayouts: supportedLayoutsWithoutQrCode,
 			modeName:         authmodes.Device,
 			customHandlers: map[string]testutils.ProviderHandler{
@@ -414,26 +414,26 @@ func TestIsAuthenticated(t *testing.T) {
 		dontWaitForFirstCall bool
 		readOnlyDataDir      bool
 	}{
-		"Successfully authenticate user with QRCode+newpassword": {firstChallenge: "-", wantSecondCall: true},
-		"Successfully authenticate user with password":           {firstMode: authmodes.Password, token: &tokenOptions{}},
+		"Successfully_authenticate_user_with_QRCode+newpassword": {firstChallenge: "-", wantSecondCall: true},
+		"Successfully_authenticate_user_with_password":           {firstMode: authmodes.Password, token: &tokenOptions{}},
 
-		"Authenticating with qrcode reacquires token":          {firstChallenge: "-", wantSecondCall: true, token: &tokenOptions{}},
-		"Authenticating with password refreshes expired token": {firstMode: authmodes.Password, token: &tokenOptions{expired: true}},
-		"Authenticating with password still allowed if server is unreachable": {
+		"Authenticating_with_qrcode_reacquires_token":          {firstChallenge: "-", wantSecondCall: true, token: &tokenOptions{}},
+		"Authenticating_with_password_refreshes_expired_token": {firstMode: authmodes.Password, token: &tokenOptions{expired: true}},
+		"Authenticating_with_password_still_allowed_if_server_is_unreachable": {
 			firstMode: authmodes.Password,
 			token:     &tokenOptions{},
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
 		},
-		"Authenticating with password still allowed if token is expired and server is unreachable": {
+		"Authenticating_with_password_still_allowed_if_token_is_expired_and_server_is_unreachable": {
 			firstMode: authmodes.Password,
 			token:     &tokenOptions{expired: true},
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
 		},
-		"Authenticating still allowed if token is missing scopes": {
+		"Authenticating_still_allowed_if_token_is_missing_scopes": {
 			firstChallenge: "-",
 			wantSecondCall: true,
 			customHandlers: map[string]testutils.ProviderHandler{
@@ -442,65 +442,65 @@ func TestIsAuthenticated(t *testing.T) {
 			address: "127.0.0.1:31313",
 		},
 
-		"Error when authentication data is invalid":         {invalidAuthData: true},
-		"Error when challenge can not be decrypted":         {firstMode: authmodes.Password, badFirstKey: true},
-		"Error when provided wrong challenge":               {firstMode: authmodes.Password, token: &tokenOptions{}, firstChallenge: "wrongpassword"},
-		"Error when can not cache token":                    {firstChallenge: "-", wantSecondCall: true, readOnlyDataDir: true},
-		"Error when IsAuthenticated is ongoing for session": {dontWaitForFirstCall: true, wantSecondCall: true},
+		"Error_when_authentication_data_is_invalid":         {invalidAuthData: true},
+		"Error_when_challenge_can_not_be_decrypted":         {firstMode: authmodes.Password, badFirstKey: true},
+		"Error_when_provided_wrong_challenge":               {firstMode: authmodes.Password, token: &tokenOptions{}, firstChallenge: "wrongpassword"},
+		"Error_when_can_not_cache_token":                    {firstChallenge: "-", wantSecondCall: true, readOnlyDataDir: true},
+		"Error_when_IsAuthenticated_is_ongoing_for_session": {dontWaitForFirstCall: true, wantSecondCall: true},
 
-		"Error when mode is password and token does not exist": {firstMode: authmodes.Password},
-		"Error when mode is password but server returns error": {
+		"Error_when_mode_is_password_and_token_does_not_exist": {firstMode: authmodes.Password},
+		"Error_when_mode_is_password_but_server_returns_error": {
 			firstMode: authmodes.Password,
 			token:     &tokenOptions{expired: true},
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.BadRequestHandler(),
 			},
 		},
-		"Error when mode is password and token is invalid":       {firstMode: authmodes.Password, token: &tokenOptions{invalid: true}},
-		"Error when token is expired and refreshing token fails": {firstMode: authmodes.Password, token: &tokenOptions{expired: true, noRefreshToken: true}},
-		"Error when mode is password and token refresh times out": {firstMode: authmodes.Password, token: &tokenOptions{expired: true},
+		"Error_when_mode_is_password_and_token_is_invalid":       {firstMode: authmodes.Password, token: &tokenOptions{invalid: true}},
+		"Error_when_token_is_expired_and_refreshing_token_fails": {firstMode: authmodes.Password, token: &tokenOptions{expired: true, noRefreshToken: true}},
+		"Error_when_mode_is_password_and_token_refresh_times_out": {firstMode: authmodes.Password, token: &tokenOptions{expired: true},
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
-		"Error when existing token has no user info and fetching user info fails": {firstMode: authmodes.Password, token: &tokenOptions{noUserInfo: true}, getUserInfoFails: true},
+		"Error_when_existing_token_has_no_user_info_and_fetching_user_info_fails": {firstMode: authmodes.Password, token: &tokenOptions{noUserInfo: true}, getUserInfoFails: true},
 
-		"Error when mode is qrcode and response is invalid": {firstAuthInfo: map[string]any{"response": "not a valid response"}},
-		"Error when mode is qrcode and link expires": {
+		"Error_when_mode_is_qrcode_and_response_is_invalid": {firstAuthInfo: map[string]any{"response": "not a valid response"}},
+		"Error_when_mode_is_qrcode_and_link_expires": {
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/device_auth": testutils.ExpiryDeviceAuthHandler(),
 			},
 		},
-		"Error when mode is qrcode and can not get token": {
+		"Error_when_mode_is_qrcode_and_can_not_get_token": {
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.UnavailableHandler(),
 			},
 		},
-		"Error when mode is qrcode and can not get token due to timeout": {
+		"Error_when_mode_is_qrcode_and_can_not_get_token_due_to_timeout": {
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
-		"Error when mode is link code and response is invalid": {firstAuthInfo: map[string]any{"response": "not a valid response"}},
-		"Error when mode is link code and link expires": {
+		"Error_when_mode_is_link_code_and_response_is_invalid": {firstAuthInfo: map[string]any{"response": "not a valid response"}},
+		"Error_when_mode_is_link_code_and_link_expires": {
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/device_auth": testutils.ExpiryDeviceAuthHandler(),
 			},
 		},
-		"Error when mode is link code and can not get token": {
+		"Error_when_mode_is_link_code_and_can_not_get_token": {
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.UnavailableHandler(),
 			},
 		},
-		"Error when mode is link code and can not get token due to timeout": {
+		"Error_when_mode_is_link_code_and_can_not_get_token_due_to_timeout": {
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
-		"Error when empty challenge is provided for local password": {firstChallenge: "-", wantSecondCall: true, secondChallenge: "-"},
-		"Error when mode is newpassword and session has no token":   {firstMode: authmodes.NewPassword},
+		"Error_when_empty_challenge_is_provided_for_local_password": {firstChallenge: "-", wantSecondCall: true, secondChallenge: "-"},
+		"Error_when_mode_is_newpassword_and_session_has_no_token":   {firstMode: authmodes.NewPassword},
 		// This test case also tests that errors with double quotes are marshaled to JSON correctly.
-		"Error when selected username does not match the provider one": {username: "not-matching", firstChallenge: "-"},
+		"Error_when_selected_username_does_not_match_the_provider_one": {username: "not-matching", firstChallenge: "-"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -677,9 +677,9 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 
 		timeBetween time.Duration
 	}{
-		"First auth starts and finishes before second":                  {secondCallDelay: 1, timeBetween: 2 * time.Second},
-		"First auth starts first but second finishes first":             {firstCallDelay: 3, timeBetween: time.Second},
-		"First auth starts first then second starts and first finishes": {firstCallDelay: 2, secondCallDelay: 3, timeBetween: time.Second},
+		"First_auth_starts_and_finishes_before_second":                  {secondCallDelay: 1, timeBetween: 2 * time.Second},
+		"First_auth_starts_first_but_second_finishes_first":             {firstCallDelay: 3, timeBetween: time.Second},
+		"First_auth_starts_first_then_second_starts_and_first_finishes": {firstCallDelay: 2, secondCallDelay: 3, timeBetween: time.Second},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -794,15 +794,15 @@ func TestFetchUserInfo(t *testing.T) {
 		wantGroupErr bool
 		wantErr      bool
 	}{
-		"Successfully fetch user info with groups":                         {},
-		"Successfully fetch user info without groups":                      {emptyGroups: true},
-		"Successfully fetch user info with default home when not provided": {emptyHomeDir: true},
+		"Successfully_fetch_user_info_with_groups":                         {},
+		"Successfully_fetch_user_info_without_groups":                      {emptyGroups: true},
+		"Successfully_fetch_user_info_with_default_home_when_not_provided": {emptyHomeDir: true},
 
-		"Error when token can not be validated":                   {token: tokenOptions{invalid: true}, wantErr: true},
-		"Error when ID token claims are invalid":                  {token: tokenOptions{invalidClaims: true}, wantErr: true},
-		"Error when username is not configured":                   {token: tokenOptions{username: "-"}, wantErr: true},
-		"Error when username is different than the requested one": {token: tokenOptions{username: "other-user@email.com"}, wantErr: true},
-		"Error when getting user groups":                          {wantGroupErr: true, wantErr: true},
+		"Error_when_token_can_not_be_validated":                   {token: tokenOptions{invalid: true}, wantErr: true},
+		"Error_when_ID_token_claims_are_invalid":                  {token: tokenOptions{invalidClaims: true}, wantErr: true},
+		"Error_when_username_is_not_configured":                   {token: tokenOptions{username: "-"}, wantErr: true},
+		"Error_when_username_is_different_than_the_requested_one": {token: tokenOptions{username: "other-user@email.com"}, wantErr: true},
+		"Error_when_getting_user_groups":                          {wantGroupErr: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -915,30 +915,30 @@ func TestUserPreCheck(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Successfully allow username with matching allowed suffix": {
+		"Successfully_allow_username_with_matching_allowed_suffix": {
 			username:        "user@allowed",
 			allowedSuffixes: []string{"@allowed"}},
-		"Successfully allow username that matches at least one allowed suffix": {
+		"Successfully_allow_username_that_matches_at_least_one_allowed_suffix": {
 			username:        "user@allowed",
 			allowedSuffixes: []string{"@other", "@something", "@allowed"},
 		},
-		"Return userinfo with correct homedir after precheck": {
+		"Return_userinfo_with_correct_homedir_after_precheck": {
 			username:        "user@allowed",
 			allowedSuffixes: []string{"@allowed"},
 			homePrefix:      "/home/allowed/",
 		},
 
-		"Error when username does not match allowed suffix": {
+		"Error_when_username_does_not_match_allowed_suffix": {
 			username:        "user@notallowed",
 			allowedSuffixes: []string{"@allowed"},
 			wantErr:         true,
 		},
-		"Error when username does not match any of the allowed suffixes": {
+		"Error_when_username_does_not_match_any_of_the_allowed_suffixes": {
 			username:        "user@notallowed",
 			allowedSuffixes: []string{"@other", "@something", "@allowed"},
 			wantErr:         true,
 		},
-		"Error when no allowed suffixes are provided": {
+		"Error_when_no_allowed_suffixes_are_provided": {
 			username: "user@allowed",
 			wantErr:  true,
 		},

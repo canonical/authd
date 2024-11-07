@@ -20,11 +20,11 @@ func TestFileExists(t *testing.T) {
 		wantExists bool
 		wantError  bool
 	}{
-		"Returns true when file exists":                      {fileExists: true, wantExists: true},
-		"Returns false when file does not exist":             {fileExists: false, wantExists: false},
-		"Returns false when parent directory does not exist": {fileExists: false, wantExists: false},
+		"Returns_true_when_file_exists":                      {fileExists: true, wantExists: true},
+		"Returns_false_when_file_does_not_exist":             {fileExists: false, wantExists: false},
+		"Returns_false_when_parent_directory_does_not_exist": {fileExists: false, wantExists: false},
 
-		"Error when parent directory is a file": {parentDirIsFile: true, wantError: true},
+		"Error_when_parent_directory_is_a_file": {parentDirIsFile: true, wantError: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -64,11 +64,11 @@ func TestIsDirEmpty(t *testing.T) {
 		wantEmpty bool
 		wantError bool
 	}{
-		"Returns true when directory is empty":      {isEmpty: true, wantEmpty: true},
-		"Returns false when directory is not empty": {wantEmpty: false},
+		"Returns_true_when_directory_is_empty":      {isEmpty: true, wantEmpty: true},
+		"Returns_false_when_directory_is_not_empty": {wantEmpty: false},
 
-		"Error when directory does not exist": {doesNotExist: true, wantError: true},
-		"Error when directory is a file":      {isFile: true, wantError: true},
+		"Error_when_directory_does_not_exist": {doesNotExist: true, wantError: true},
+		"Error_when_directory_is_a_file":      {isFile: true, wantError: true},
 	}
 
 	for name, tc := range tests {
@@ -115,11 +115,11 @@ func TestTouch(t *testing.T) {
 
 		wantError bool
 	}{
-		"Creates file when it does not exist":            {fileExists: false},
-		"Does not return error when file already exists": {fileExists: true},
+		"Creates_file_when_it_does_not_exist":            {fileExists: false},
+		"Does_not_return_error_when_file_already_exists": {fileExists: true},
 
-		"Returns error when file is a directory":             {fileIsDir: true, wantError: true},
-		"Returns error when parent directory does not exist": {parentDoesNotExist: true, wantError: true},
+		"Returns_error_when_file_is_a_directory":             {fileIsDir: true, wantError: true},
+		"Returns_error_when_parent_directory_does_not_exist": {parentDoesNotExist: true, wantError: true},
 	}
 
 	for _, tc := range tests {
