@@ -40,7 +40,7 @@ func TestCacheAuthInfo(t *testing.T) {
 
 		wantError bool
 	}{
-		"Successfully_store_token_with_non-existing_parent_directory": {},
+		"Successfully_store_token_with_non_existing_parent_directory": {},
 		"Successfully_store_token_with_existing_parent_directory":     {existingParentDir: true},
 		"Successfully_store_token_with_existing_file":                 {existingParentDir: true, existingFile: true},
 
