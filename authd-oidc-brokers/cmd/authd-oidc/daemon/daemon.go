@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
 	"github.com/ubuntu/authd-oidc-brokers/internal/daemon"
 	"github.com/ubuntu/authd-oidc-brokers/internal/dbusservice"
 )
@@ -29,8 +30,9 @@ type App struct {
 
 // only overriable for tests.
 type systemPaths struct {
-	BrokerConf string
-	Cache      string
+	BrokerConf            string
+	DataDir               string
+	OldEncryptedTokensDir string
 }
 
 // daemonConfig defines configuration parameters of the daemon.
@@ -51,17 +53,24 @@ func New(name string) *App {
 			// Command parsing has been successful. Returns to not print usage anymore.
 			a.rootCmd.SilenceUsage = true
 
-			// Set config defaults
-			systemCache := filepath.Join("/var", "lib", name)
+			// Before version 0.2, we used to store the tokens encrypted
+			// in a different directory. For backward compatibility, we
+			// try to use the encrypted tokens from the old directory
+			// if they are not found in the new one.
+			oldEncryptedTokensDir := filepath.Join("/var", "lib", name)
+			dataDir := filepath.Join("/var", "lib", name)
 			configDir := "."
 			if snapData := os.Getenv("SNAP_DATA"); snapData != "" {
-				systemCache = filepath.Join(snapData, "cache")
+				oldEncryptedTokensDir = filepath.Join(snapData, "cache")
+				dataDir = snapData
 				configDir = snapData
 			}
+			// Set config defaults
 			a.config = daemonConfig{
 				Paths: systemPaths{
-					BrokerConf: filepath.Join(configDir, "broker.conf"),
-					Cache:      systemCache,
+					BrokerConf:            filepath.Join(configDir, "broker.conf"),
+					DataDir:               dataDir,
+					OldEncryptedTokensDir: oldEncryptedTokensDir,
 				},
 			}
 
@@ -108,12 +117,24 @@ func New(name string) *App {
 func (a *App) serve(config daemonConfig) error {
 	ctx := context.Background()
 
-	if err := ensureDirWithPerms(config.Paths.Cache, 0700); err != nil {
-		close(a.ready)
-		return fmt.Errorf("error initializing users cache directory at %q: %v", config.Paths.Cache, err)
+	// When the data directory is SNAP_DATA, it has permission 0755, else we want to create it with 0700.
+	if err := ensureDirWithPerms(config.Paths.DataDir, 0700, os.Geteuid()); err != nil {
+		if err := ensureDirWithPerms(config.Paths.DataDir, 0755, os.Geteuid()); err != nil {
+			close(a.ready)
+			return fmt.Errorf("error initializing data directory %q: %v", config.Paths.DataDir, err)
+		}
 	}
 
-	s, err := dbusservice.New(ctx, config.Paths.BrokerConf, config.Paths.Cache)
+	b, err := broker.New(broker.Config{
+		ConfigFile:            config.Paths.BrokerConf,
+		DataDir:               config.Paths.DataDir,
+		OldEncryptedTokensDir: config.Paths.OldEncryptedTokensDir,
+	})
+	if err != nil {
+		return err
+	}
+
+	s, err := dbusservice.New(ctx, b)
 	if err != nil {
 		close(a.ready)
 		return err

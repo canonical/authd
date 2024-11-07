@@ -40,10 +40,10 @@ func GenerateTestConfig(t *testing.T, origConf *daemonConfig, providerURL string
 	if conf.Verbosity == 0 {
 		conf.Verbosity = 2
 	}
-	if conf.Paths.Cache == "" {
-		conf.Paths.Cache = t.TempDir()
+	if conf.Paths.DataDir == "" {
+		conf.Paths.DataDir = t.TempDir()
 		//nolint: gosec // This is a directory owned only by the current user for tests.
-		err := os.Chmod(conf.Paths.Cache, 0700)
+		err := os.Chmod(conf.Paths.DataDir, 0700)
 		require.NoError(t, err, "Setup: could not change permission on cache directory for tests")
 	}
 	if conf.Paths.BrokerConf == "" {

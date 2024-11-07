@@ -1,3 +1,3 @@
 access: retry
-data: '{"message":"authentication failure: could not load cached info"}'
+data: '{"message":"authentication failure: incorrect password"}'
 err: <nil>
