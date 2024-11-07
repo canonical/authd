@@ -1,0 +1,4 @@
+clientID=<CLIENT_ID
+issuerURL=https://ISSUER_URL>
+homeBaseDir=
+allowedSSHSuffixes=[]

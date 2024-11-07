@@ -6,7 +6,8 @@ import (
 	"crypto/sha512"
 	"crypto/x509"
 	"encoding/base64"
-	"strings"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -15,32 +16,38 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
+	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"golang.org/x/oauth2"
 )
 
 // newBrokerForTests is a helper function to create a new broker for tests with the specified configuration.
 //
-// Note that the IssuerURL is required in the configuration.
-func newBrokerForTests(t *testing.T, cfg broker.Config) (b *broker.Broker) {
+// Note that the issuerURL is required in the configuration.
+func newBrokerForTests(t *testing.T, cfg broker.Config, providerInfoer *testutils.MockProviderInfoer) (b *broker.Broker) {
 	t.Helper()
 
-	require.NotEmpty(t, cfg.IssuerURL, "Setup: issuerURL must not be empty")
+	require.NotEmpty(t, cfg.IssuerURL(), "Setup: issuerURL must not be empty")
 
-	if cfg.CachePath == "" {
-		cfg.CachePath = t.TempDir()
+	if providerInfoer == nil {
+		providerInfoer = &testutils.MockProviderInfoer{}
 	}
-	if cfg.ClientID == "" {
-		cfg.ClientID = "test-client-id"
+	if providerInfoer.Groups == nil {
+		providerInfoer.Groups = []info.Group{
+			{Name: "new-broker-for-tests-remote-group", UGID: "12345"},
+			{Name: "linux-new-broker-for-tests-local-group", UGID: ""},
+		}
+	}
+
+	if cfg.DataDir == "" {
+		cfg.DataDir = t.TempDir()
+	}
+	if cfg.ClientID() == "" {
+		cfg.SetClientID("test-client-id")
 	}
 
 	b, err := broker.New(
 		cfg,
-		broker.WithCustomProviderInfo(&testutils.MockProviderInfoer{
-			Groups: []info.Group{
-				{Name: "remote-group", UGID: "12345"},
-				{Name: "linux-local-group", UGID: ""},
-			},
-		}),
+		broker.WithCustomProviderInfo(providerInfoer),
 	)
 	require.NoError(t, err, "Setup: New should not have returned an error")
 	return b
@@ -96,87 +103,86 @@ func updateAuthModes(t *testing.T, b *broker.Broker, sessionID, selectedMode str
 	require.NoError(t, err, "Setup: SelectAuthenticationMode should not have returned an error")
 }
 
-var testTokens = map[string]broker.AuthCachedInfo{
-	"valid": {
-		Token: &oauth2.Token{
-			AccessToken:  "accesstoken",
-			RefreshToken: "refreshtoken",
-			Expiry:       time.Now().Add(1000 * time.Hour),
-		},
-	},
-	"expired": {
-		Token: &oauth2.Token{
-			AccessToken:  "accesstoken",
-			RefreshToken: "refreshtoken",
-			Expiry:       time.Now().Add(-1000 * time.Hour),
-		},
-	},
-	"no-refresh": {
-		Token: &oauth2.Token{
-			AccessToken: "accesstoken",
-			Expiry:      time.Now().Add(-1000 * time.Hour),
-		},
-	},
-}
-
-func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.AuthCachedInfo {
+func generateAndStoreCachedInfo(t *testing.T, options tokenOptions, path string) {
 	t.Helper()
 
-	if preexistentToken == "invalid" {
+	tok := generateCachedInfo(t, options)
+	if tok == nil {
+		writeTrashToken(t, path)
+		return
+	}
+	err := token.CacheAuthInfo(path, *tok)
+	require.NoError(t, err, "Setup: storing token should not have failed")
+}
+
+type tokenOptions struct {
+	username string
+	issuer   string
+
+	expired        bool
+	noRefreshToken bool
+	invalid        bool
+	invalidClaims  bool
+	noUserInfo     bool
+}
+
+func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInfo {
+	t.Helper()
+
+	if options.invalid {
 		return nil
 	}
 
-	var username string
-	switch preexistentToken {
-	case "no-name":
-		username = ""
-	case "other-name":
-		username = "other-user@email.com"
-	default:
-		username = "test-user@email.com"
+	if options.username == "" {
+		options.username = "test-user@email.com"
 	}
-
-	// This is to handle delay cases where we need to control the authentication ordering.
-	if strings.HasPrefix(preexistentToken, "user-timeout-") {
-		username = preexistentToken
+	if options.username == "-" {
+		options.username = ""
 	}
 
 	idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"iss":                issuer,
+		"iss":                options.issuer,
 		"sub":                "saved-user-id",
 		"aud":                "test-client-id",
 		"exp":                9999999999,
 		"name":               "test-user",
 		"preferred_username": "test-user-preferred-username@email.com",
-		"email":              username,
+		"email":              options.username,
 		"email_verified":     true,
 	})
 	encodedToken, err := idToken.SignedString(testutils.MockKey)
 	require.NoError(t, err, "Setup: signing token should not have failed")
 
-	tok, ok := testTokens[preexistentToken]
-	if !ok {
-		tok = testTokens["valid"]
-	}
-
-	tok.UserInfo = info.User{
-		Name:  username,
-		UUID:  "saved-user-id",
-		Home:  "/home/" + username,
-		Gecos: username,
-		Shell: "/usr/bin/bash",
-		Groups: []info.Group{
-			{Name: "saved-remote-group", UGID: "12345"},
-			{Name: "saved-local-group", UGID: ""},
+	tok := token.AuthCachedInfo{
+		Token: &oauth2.Token{
+			AccessToken:  "accesstoken",
+			RefreshToken: "refreshtoken",
+			Expiry:       time.Now().Add(1000 * time.Hour),
 		},
 	}
 
-	// This is to force the broker to query the provider for the user info.
-	if strings.HasPrefix(preexistentToken, "user-timeout-") {
-		tok.UserInfo = info.User{}
+	if options.expired {
+		tok.Token.Expiry = time.Now().Add(-1000 * time.Hour)
+	}
+	if options.noRefreshToken {
+		tok.Token.RefreshToken = ""
 	}
 
-	if preexistentToken == "invalid-id" {
+	if !options.noUserInfo {
+		tok.UserInfo = info.User{
+			Name:  options.username,
+			UUID:  "saved-user-id",
+			Home:  "/home/" + options.username,
+			Gecos: options.username,
+			Shell: "/usr/bin/bash",
+			Groups: []info.Group{
+				{Name: "saved-remote-group", UGID: "12345"},
+				{Name: "saved-local-group", UGID: ""},
+			},
+		}
+	}
+
+	if options.invalidClaims {
 		encodedToken = ".invalid."
 		tok.UserInfo = info.User{}
 	}
@@ -185,4 +191,17 @@ func generateCachedInfo(t *testing.T, preexistentToken, issuer string) *broker.A
 	tok.RawIDToken = encodedToken
 
 	return &tok
+}
+
+func writeTrashToken(t *testing.T, path string) {
+	t.Helper()
+
+	content := []byte("This is a trash token that is not valid for authentication")
+
+	// Create issuer specific cache directory if it doesn't exist.
+	err := os.MkdirAll(filepath.Dir(path), 0700)
+	require.NoError(t, err, "Setup: creating token directory should not have failed")
+
+	err = os.WriteFile(path, content, 0600)
+	require.NoError(t, err, "Setup: writing trash token should not have failed")
 }
