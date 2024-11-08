@@ -2,7 +2,6 @@ package broker_test
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"net/http/httptest"
 	"os"
@@ -966,9 +965,6 @@ func TestUserPreCheck(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
-	testutils.InstallUpdateFlag()
-	flag.Parse()
-
 	server, cleanup := testutils.StartMockProvider("")
 	defer cleanup()
 
