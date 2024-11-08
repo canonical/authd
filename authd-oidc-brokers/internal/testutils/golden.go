@@ -127,7 +127,7 @@ func GoldenPath(t *testing.T) string {
 func CompareTreesWithFiltering(t *testing.T, p, goldPath string, update bool) {
 	t.Helper()
 
-	// Update golden file
+	// UpdateEnabled golden file
 	if update {
 		t.Logf("updating golden file %s", goldPath)
 		require.NoError(t, os.RemoveAll(goldPath), "Cannot remove target golden directory")
@@ -262,7 +262,7 @@ func addEmptyMarker(p string) error {
 	return err
 }
 
-// Update returns true if the update flag was set, false otherwise.
-func Update() bool {
+// UpdateEnabled returns true if the update flag was set, false otherwise.
+func UpdateEnabled() bool {
 	return update
 }
