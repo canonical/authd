@@ -3,7 +3,6 @@ package testutils
 import (
 	"bytes"
 	"errors"
-	"flag"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -16,6 +15,18 @@ import (
 )
 
 var update bool
+
+const (
+	// UpdateGoldenFilesEnv is the environment variable used to indicate go test that
+	// the golden files should be overwritten with the current test results.
+	UpdateGoldenFilesEnv = `TESTS_UPDATE_GOLDEN`
+)
+
+func init() {
+	if os.Getenv(UpdateGoldenFilesEnv) != "" {
+		update = true
+	}
+}
 
 type goldenOptions struct {
 	goldenPath string
@@ -249,12 +260,6 @@ func addEmptyMarker(p string) error {
 	})
 
 	return err
-}
-
-// InstallUpdateFlag install an update flag referenced in this package.
-// The flags need to be parsed before running the tests.
-func InstallUpdateFlag() {
-	flag.BoolVar(&update, "update", false, "update golden files")
 }
 
 // Update returns true if the update flag was set, false otherwise.
