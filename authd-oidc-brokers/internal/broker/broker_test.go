@@ -663,7 +663,7 @@ func TestIsAuthenticated(t *testing.T) {
 				}
 			}
 
-			testutils.CompareTreesWithFiltering(t, outDir, testutils.GoldenPath(t), testutils.Update())
+			testutils.CompareTreesWithFiltering(t, outDir, testutils.GoldenPath(t), testutils.UpdateEnabled())
 		})
 	}
 }
@@ -776,7 +776,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 					t.Logf("Failed to rename issuer data directory: %v", err)
 				}
 			}
-			testutils.CompareTreesWithFiltering(t, outDir, testutils.GoldenPath(t), testutils.Update())
+			testutils.CompareTreesWithFiltering(t, outDir, testutils.GoldenPath(t), testutils.UpdateEnabled())
 		})
 	}
 }
