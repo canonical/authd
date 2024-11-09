@@ -559,9 +559,8 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *sessionInfo
 			}
 		}
 
-		// Refresh the token if it has expired and we're online. Ideally, we should always refresh it when we're online,
-		// but the oauth2.TokenSource implementation only refreshes the token when it's expired.
-		if !authInfo.Token.Valid() && !session.isOffline {
+		// Refresh the token if we're online even if the token has not expired
+		if !session.isOffline {
 			authInfo, err = b.refreshToken(ctx, session.authCfg.oauth, authInfo)
 			if err != nil {
 				slog.Error(err.Error())
@@ -731,6 +730,9 @@ func (b *Broker) updateSession(sessionID string, session sessionInfo) error {
 func (b *Broker) refreshToken(ctx context.Context, oauth2Config oauth2.Config, oldToken token.AuthCachedInfo) (token.AuthCachedInfo, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
+	// set cached token expiry time to one hour in the past
+	// this makes sure the token is refreshed even if it has not 'actually' expired
+	oldToken.Token.Expiry = time.Now().Add(-time.Hour)
 	oauthToken, err := oauth2Config.TokenSource(timeoutCtx, oldToken.Token).Token()
 	if err != nil {
 		return token.AuthCachedInfo{}, err
