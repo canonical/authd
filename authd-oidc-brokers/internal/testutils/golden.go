@@ -121,8 +121,8 @@ func GoldenPath(t *testing.T) string {
 	return path
 }
 
-// CompareTreesWithFiltering allows comparing a goldPath directory to p. Those can be updated via the dedicated flag.
-func CompareTreesWithFiltering(t *testing.T, p, goldPath string, update bool) {
+// CheckOrUpdateGoldenFileTree allows comparing a goldPath directory to p. Those can be updated via the dedicated flag.
+func CheckOrUpdateGoldenFileTree(t *testing.T, p, goldPath string, update bool) {
 	t.Helper()
 
 	// UpdateEnabled golden file
