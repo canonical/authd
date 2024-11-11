@@ -127,7 +127,8 @@ func CheckOrUpdateGoldenFileTree(t *testing.T, p, goldPath string) {
 
 	if update {
 		t.Logf("updating golden file %s", goldPath)
-		require.NoError(t, os.RemoveAll(goldPath), "Cannot remove target golden directory")
+		err := os.RemoveAll(goldPath)
+		require.NoError(t, err, "Cannot remove target golden directory")
 
 		// check the source directory exists before trying to copy it
 		info, err := os.Stat(p)
@@ -140,7 +141,8 @@ func CheckOrUpdateGoldenFileTree(t *testing.T, p, goldPath string) {
 			// copy file
 			data, err := os.ReadFile(p)
 			require.NoError(t, err, "Cannot read new generated file file %s", p)
-			require.NoError(t, os.WriteFile(goldPath, data, info.Mode()), "Cannot write golden file")
+			err = os.WriteFile(goldPath, data, info.Mode())
+			require.NoError(t, err, "Cannot write golden file")
 		} else {
 			err := addEmptyMarker(p)
 			require.NoError(t, err, "Cannot add empty marker to directory %s", p)
