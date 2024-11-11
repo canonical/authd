@@ -18,7 +18,6 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
-	"golang.org/x/oauth2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -499,20 +498,7 @@ func TestIsAuthenticated(t *testing.T) {
 			},
 		},
 		"Error when empty challenge is provided for local password": {firstChallenge: "-", wantSecondCall: true, secondChallenge: "-"},
-		"Error when mode is newpassword and token is not set": {
-			firstMode:     authmodes.NewPassword,
-			firstAuthInfo: map[string]any{"token": nil},
-		},
-		"Error when mode is newpassword and id token is not set": {
-			firstMode:     authmodes.NewPassword,
-			firstAuthInfo: map[string]any{"token": &oauth2.Token{}},
-		},
-		"Error when mode is newpassword and can not fetch user info": {
-			firstMode: authmodes.NewPassword,
-			firstAuthInfo: map[string]any{
-				"token": (&oauth2.Token{}).WithExtra(map[string]interface{}{"id_token": "invalid"}),
-			},
-		},
+		"Error when mode is newpassword and session has no token":   {firstMode: authmodes.NewPassword},
 		// This test case also tests that errors with double quotes are marshaled to JSON correctly.
 		"Error when selected username does not match the provider one": {username: "not-matching", firstChallenge: "-"},
 	}

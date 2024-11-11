@@ -121,6 +121,7 @@ type tokenOptions struct {
 
 	expired        bool
 	noRefreshToken bool
+	noIDToken      bool
 	invalid        bool
 	invalidClaims  bool
 	noUserInfo     bool
@@ -187,8 +188,10 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 		tok.UserInfo = info.User{}
 	}
 
-	tok.Token = tok.Token.WithExtra(map[string]string{"id_token": encodedToken})
-	tok.RawIDToken = encodedToken
+	if !options.noIDToken {
+		tok.Token = tok.Token.WithExtra(map[string]string{"id_token": encodedToken})
+		tok.RawIDToken = encodedToken
+	}
 
 	return &tok
 }
