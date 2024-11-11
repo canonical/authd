@@ -498,9 +498,7 @@ func TestIsAuthenticated(t *testing.T) {
 			},
 		},
 		"Error when empty challenge is provided for local password": {firstChallenge: "-", wantSecondCall: true, secondChallenge: "-"},
-		"Error when mode is newpassword and token is not set": {
-			firstMode: authmodes.NewPassword,
-		},
+		"Error when mode is newpassword and session has no token":   {firstMode: authmodes.NewPassword},
 		"Error when mode is newpassword and id token is not set": {
 			firstMode: authmodes.NewPassword,
 			token:     &tokenOptions{noIDToken: true},
