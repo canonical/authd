@@ -122,7 +122,6 @@ func GoldenPath(t *testing.T) string {
 }
 
 // CompareTreesWithFiltering allows comparing a goldPath directory to p. Those can be updated via the dedicated flag.
-// It will filter dconf database and not commit it in the new golden directory.
 func CompareTreesWithFiltering(t *testing.T, p, goldPath string, update bool) {
 	t.Helper()
 
