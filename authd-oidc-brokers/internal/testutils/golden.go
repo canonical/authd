@@ -122,47 +122,47 @@ func GoldenPath(t *testing.T) string {
 }
 
 // CheckOrUpdateGoldenFileTree allows comparing a goldPath directory to p. Those can be updated via the dedicated flag.
-func CheckOrUpdateGoldenFileTree(t *testing.T, p, goldPath string) {
+func CheckOrUpdateGoldenFileTree(t *testing.T, path, goldenPath string) {
 	t.Helper()
 
 	if update {
-		t.Logf("updating golden file %s", goldPath)
-		err := os.RemoveAll(goldPath)
+		t.Logf("updating golden path %s", goldenPath)
+		err := os.RemoveAll(goldenPath)
 		require.NoError(t, err, "Cannot remove target golden directory")
 
 		// check the source directory exists before trying to copy it
-		info, err := os.Stat(p)
+		info, err := os.Stat(path)
 		if errors.Is(err, fs.ErrNotExist) {
 			return
 		}
-		require.NoErrorf(t, err, "Error on checking %q", p)
+		require.NoErrorf(t, err, "Error on checking %q", path)
 
 		if !info.IsDir() {
 			// copy file
-			data, err := os.ReadFile(p)
-			require.NoError(t, err, "Cannot read new generated file file %s", p)
-			err = os.WriteFile(goldPath, data, info.Mode())
+			data, err := os.ReadFile(path)
+			require.NoError(t, err, "Cannot read new generated file file %s", path)
+			err = os.WriteFile(goldenPath, data, info.Mode())
 			require.NoError(t, err, "Cannot write golden file")
 		} else {
-			err := addEmptyMarker(p)
-			require.NoError(t, err, "Cannot add empty marker to directory %s", p)
+			err := addEmptyMarker(path)
+			require.NoError(t, err, "Cannot add empty marker to directory %s", path)
 
-			err = cp.Copy(p, goldPath)
+			err = cp.Copy(path, goldenPath)
 			require.NoError(t, err, "Can’t update golden directory")
 		}
 	}
 
 	var gotContent map[string]treeAttrs
-	if _, err := os.Stat(p); err == nil {
-		gotContent, err = treeContentAndAttrs(t, p, nil)
+	if _, err := os.Stat(path); err == nil {
+		gotContent, err = treeContentAndAttrs(t, path, nil)
 		if err != nil {
 			t.Fatalf("No generated content: %v", err)
 		}
 	}
 
 	var goldContent map[string]treeAttrs
-	if _, err := os.Stat(goldPath); err == nil {
-		goldContent, err = treeContentAndAttrs(t, goldPath, nil)
+	if _, err := os.Stat(goldenPath); err == nil {
+		goldContent, err = treeContentAndAttrs(t, goldenPath, nil)
 		if err != nil {
 			t.Fatalf("No golden directory found: %v", err)
 		}
@@ -175,8 +175,8 @@ func CheckOrUpdateGoldenFileTree(t *testing.T, p, goldPath string) {
 	}
 	require.Empty(t, gotContent, "Some files are missing in the golden directory")
 
-	// No more verification on p if it doesn’t exists
-	if _, err := os.Stat(p); errors.Is(err, fs.ErrNotExist) {
+	// No more verification on path if it doesn’t exists
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
 		return
 	}
 }
