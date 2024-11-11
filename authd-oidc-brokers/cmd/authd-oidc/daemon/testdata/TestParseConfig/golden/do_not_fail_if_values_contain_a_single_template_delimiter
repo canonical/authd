@@ -1,4 +1,0 @@
-DEFAULT: {}
-oidc:
-    client_id: <CLIENT_ID
-    issuer: https://ISSUER_URL>
