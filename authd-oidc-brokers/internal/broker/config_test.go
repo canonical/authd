@@ -106,7 +106,7 @@ func TestParseConfig(t *testing.T) {
 			err = os.WriteFile(filepath.Join(outDir, "config.txt"), []byte(strings.Join(fields, "\n")), 0600)
 			require.NoError(t, err)
 
-			testutils.CheckOrUpdateGoldenFileTree(t, outDir, testutils.GoldenPath(t), testutils.UpdateEnabled())
+			testutils.CheckOrUpdateGoldenFileTree(t, outDir, testutils.GoldenPath(t))
 		})
 	}
 }

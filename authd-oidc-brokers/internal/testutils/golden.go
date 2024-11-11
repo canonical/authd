@@ -122,10 +122,9 @@ func GoldenPath(t *testing.T) string {
 }
 
 // CheckOrUpdateGoldenFileTree allows comparing a goldPath directory to p. Those can be updated via the dedicated flag.
-func CheckOrUpdateGoldenFileTree(t *testing.T, p, goldPath string, update bool) {
+func CheckOrUpdateGoldenFileTree(t *testing.T, p, goldPath string) {
 	t.Helper()
 
-	// UpdateEnabled golden file
 	if update {
 		t.Logf("updating golden file %s", goldPath)
 		require.NoError(t, os.RemoveAll(goldPath), "Cannot remove target golden directory")
