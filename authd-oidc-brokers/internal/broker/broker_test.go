@@ -2,7 +2,6 @@ package broker_test
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"net/http/httptest"
 	"os"
@@ -664,7 +663,7 @@ func TestIsAuthenticated(t *testing.T) {
 				}
 			}
 
-			testutils.CompareTreesWithFiltering(t, outDir, testutils.GoldenPath(t), testutils.Update())
+			testutils.CompareTreesWithFiltering(t, outDir, testutils.GoldenPath(t), testutils.UpdateEnabled())
 		})
 	}
 }
@@ -777,7 +776,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 					t.Logf("Failed to rename issuer data directory: %v", err)
 				}
 			}
-			testutils.CompareTreesWithFiltering(t, outDir, testutils.GoldenPath(t), testutils.Update())
+			testutils.CompareTreesWithFiltering(t, outDir, testutils.GoldenPath(t), testutils.UpdateEnabled())
 		})
 	}
 }
@@ -966,9 +965,6 @@ func TestUserPreCheck(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
-	testutils.InstallUpdateFlag()
-	flag.Parse()
-
 	server, cleanup := testutils.StartMockProvider("")
 	defer cleanup()
 
