@@ -40,12 +40,12 @@ func TestCacheAuthInfo(t *testing.T) {
 
 		wantError bool
 	}{
-		"Successfully store token with non-existing parent directory": {},
-		"Successfully store token with existing parent directory":     {existingParentDir: true},
-		"Successfully store token with existing file":                 {existingParentDir: true, existingFile: true},
+		"Successfully_store_token_with_non-existing_parent_directory": {},
+		"Successfully_store_token_with_existing_parent_directory":     {existingParentDir: true},
+		"Successfully_store_token_with_existing_file":                 {existingParentDir: true, existingFile: true},
 
-		"Error when file exists and is a directory": {existingParentDir: true, existingFile: true, fileIsDir: true, wantError: true},
-		"Error when parent directory is a file":     {existingParentDir: true, parentIsFile: true, wantError: true},
+		"Error_when_file_exists_and_is_a_directory": {existingParentDir: true, existingFile: true, fileIsDir: true, wantError: true},
+		"Error_when_parent_directory_is_a_file":     {existingParentDir: true, parentIsFile: true, wantError: true},
 	}
 
 	for name, tc := range tests {
@@ -92,9 +92,9 @@ func TestLoadAuthInfo(t *testing.T) {
 
 		wantError bool
 	}{
-		"Successfully load token from existing file": {fileExists: true, expectedRet: testToken},
-		"Error when file does not exist":             {wantError: true},
-		"Error when file contains invalid JSON":      {fileExists: true, invalidJSON: true, wantError: true},
+		"Successfully_load_token_from_existing_file": {fileExists: true, expectedRet: testToken},
+		"Error_when_file_does_not_exist":             {wantError: true},
+		"Error_when_file_contains_invalid_JSON":      {fileExists: true, invalidJSON: true, wantError: true},
 	}
 
 	for name, tc := range tests {

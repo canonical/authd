@@ -18,7 +18,7 @@ func TestNewUser(t *testing.T) {
 		gecos  string
 		groups []info.Group
 	}{
-		"Create a new user": {
+		"Create_a_new_user": {
 			name:   "test-user",
 			home:   "/home/test-user",
 			uuid:   "some-uuid",
@@ -28,7 +28,7 @@ func TestNewUser(t *testing.T) {
 		},
 
 		// Default values
-		"Create a new user with default home": {
+		"Create_a_new_user_with_default_home": {
 			name:   "test-user",
 			home:   "",
 			uuid:   "some-uuid",
@@ -36,7 +36,7 @@ func TestNewUser(t *testing.T) {
 			gecos:  "Test User",
 			groups: []info.Group{{Name: "test-group", UGID: "12345"}},
 		},
-		"Create a new user with default shell": {
+		"Create_a_new_user_with_default_shell": {
 			name:   "test-user",
 			home:   "/home/test-user",
 			uuid:   "some-uuid",
@@ -44,7 +44,7 @@ func TestNewUser(t *testing.T) {
 			gecos:  "Test User",
 			groups: []info.Group{{Name: "test-group", UGID: "12345"}},
 		},
-		"Create a new user with default gecos": {name: "test-user",
+		"Create_a_new_user_with_default_gecos": {name: "test-user",
 			home:   "/home/test-user",
 			uuid:   "some-uuid",
 			shell:  "/usr/bin/zsh",
