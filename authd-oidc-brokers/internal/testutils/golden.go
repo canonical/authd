@@ -2,6 +2,7 @@ package testutils
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	cp "github.com/otiai10/copy"
+	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
@@ -53,8 +55,11 @@ func CheckOrUpdateGolden(t *testing.T, got string, opts *GoldenOptions) {
 		opts.Path = GoldenPath(t)
 	}
 
-	want := LoadWithUpdateFromGolden(t, got, opts)
-	require.Equal(t, want, got, "Output does not match golden file %s", opts.Path)
+	if update {
+		updateGoldenFile(t, opts.Path, []byte(got))
+	}
+
+	checkGoldenFileEqualsString(t, got, opts.Path)
 }
 
 // CheckOrUpdateGoldenYAML compares the provided object with the content of the golden file. If the update environment
@@ -140,6 +145,58 @@ func GoldenPath(t *testing.T) string {
 	return path
 }
 
+// checkFileContent compares the content of the actual and golden files and reports any differences.
+func checkFileContent(t *testing.T, actual, expected, actualPath, expectedPath string) {
+	if actual == expected {
+		return
+	}
+
+	diff := difflib.UnifiedDiff{
+		A:        difflib.SplitLines(expected),
+		B:        difflib.SplitLines(actual),
+		FromFile: "Expected (golden)",
+		ToFile:   "Actual",
+		Context:  3,
+	}
+	diffStr, err := difflib.GetUnifiedDiffString(diff)
+	require.NoError(t, err, "Cannot get unified diff")
+
+	msg := fmt.Sprintf("Golden file: %s", expectedPath)
+	if actualPath != "Actual" {
+		msg += fmt.Sprintf("\nFile: %s", actualPath)
+	}
+
+	require.Failf(t, strings.Join([]string{
+		"Golden file content mismatch",
+		"\nExpected (golden):",
+		strings.Repeat("-", 50),
+		strings.TrimSuffix(expected, "\n"),
+		strings.Repeat("-", 50),
+		"\nActual: ",
+		strings.Repeat("-", 50),
+		strings.TrimSuffix(actual, "\n"),
+		strings.Repeat("-", 50),
+		"\nDiff:",
+		diffStr,
+	}, "\n"), msg)
+}
+
+func checkGoldenFileEqualsFile(t *testing.T, path, goldenPath string) {
+	fileContent, err := os.ReadFile(path)
+	require.NoError(t, err, "Cannot read file %s", path)
+	goldenContent, err := os.ReadFile(goldenPath)
+	require.NoError(t, err, "Cannot read golden file %s", goldenPath)
+
+	checkFileContent(t, string(fileContent), string(goldenContent), path, goldenPath)
+}
+
+func checkGoldenFileEqualsString(t *testing.T, got, goldenPath string) {
+	goldenContent, err := os.ReadFile(goldenPath)
+	require.NoError(t, err, "Cannot read golden file %s", goldenPath)
+
+	checkFileContent(t, got, string(goldenContent), "Actual", goldenPath)
+}
+
 // CheckOrUpdateGoldenFileTree allows comparing a goldPath directory to p. Those can be updated via the dedicated flag.
 func CheckOrUpdateGoldenFileTree(t *testing.T, path, goldenPath string) {
 	t.Helper()
@@ -200,11 +257,7 @@ func CheckOrUpdateGoldenFileTree(t *testing.T, path, goldenPath string) {
 		require.Equal(t, a, b, "Executable bit does not match.\nFile: %s\nGolden file: %s", p, goldenFilePath)
 
 		// Compare content
-		fileContent, err := os.ReadFile(p)
-		require.NoError(t, err, "Cannot read file %s", p)
-		goldenContent, err := os.ReadFile(goldenFilePath)
-		require.NoError(t, err, "Cannot read golden file %s", goldenFilePath)
-		require.Equal(t, string(fileContent), string(goldenContent), "Content does not match.\nFile: %s\nGolden file: %s", p, goldenFilePath)
+		checkGoldenFileEqualsFile(t, p, goldenFilePath)
 
 		return nil
 	})
