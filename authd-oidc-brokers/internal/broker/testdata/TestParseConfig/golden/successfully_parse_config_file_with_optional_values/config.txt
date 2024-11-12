@@ -1,4 +1,5 @@
 clientID=client_id
+clientSecret=
 issuerURL=https://issuer.url.com
 homeBaseDir=/home
 allowedSSHSuffixes=[]
