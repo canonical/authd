@@ -47,6 +47,7 @@ type Config struct {
 
 type userConfig struct {
 	clientID           string
+	clientSecret       string
 	issuerURL          string
 	homeBaseDir        string
 	allowedSSHSuffixes []string
@@ -213,9 +214,10 @@ func (b *Broker) connectToProvider(ctx context.Context) (authCfg authConfig, err
 	}
 
 	oauthCfg := oauth2.Config{
-		ClientID: b.oidcCfg.ClientID,
-		Endpoint: provider.Endpoint(),
-		Scopes:   append(consts.DefaultScopes, b.providerInfo.AdditionalScopes()...),
+		ClientID:     b.oidcCfg.ClientID,
+		ClientSecret: b.cfg.clientSecret,
+		Endpoint:     provider.Endpoint(),
+		Scopes:       append(consts.DefaultScopes, b.providerInfo.AdditionalScopes()...),
 	}
 
 	return authConfig{provider: provider, oauth: oauthCfg}, nil
