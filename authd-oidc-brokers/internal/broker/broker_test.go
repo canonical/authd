@@ -436,7 +436,7 @@ func TestIsAuthenticated(t *testing.T) {
 			firstChallenge: "-",
 			wantSecondCall: true,
 			customHandlers: map[string]testutils.ProviderHandler{
-				"/token": testutils.DefaultTokenHandler("http://127.0.0.1:31313", []string{}),
+				"/token": testutils.TokenHandler("http://127.0.0.1:31313", []string{}),
 			},
 			address: "127.0.0.1:31313",
 		},

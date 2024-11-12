@@ -99,7 +99,7 @@ func StartMockProvider(address string, args ...OptionProvider) (*httptest.Server
 		handlers: map[string]ProviderHandler{
 			"/.well-known/openid-configuration": DefaultOpenIDHandler(server.URL),
 			"/device_auth":                      DefaultDeviceAuthHandler(),
-			"/token":                            DefaultTokenHandler(server.URL, consts.DefaultScopes),
+			"/token":                            TokenHandler(server.URL, consts.DefaultScopes),
 			"/keys":                             DefaultJWKHandler(),
 		},
 	}
@@ -175,8 +175,8 @@ func DefaultDeviceAuthHandler() ProviderHandler {
 	}
 }
 
-// DefaultTokenHandler returns a handler that returns a default token response.
-func DefaultTokenHandler(serverURL string, scopes []string) ProviderHandler {
+// TokenHandler returns a handler that returns a default token response.
+func TokenHandler(serverURL string, scopes []string) ProviderHandler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Mimics user going through auth process
 		time.Sleep(2 * time.Second)
