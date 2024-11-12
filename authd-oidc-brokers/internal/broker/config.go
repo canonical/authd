@@ -16,6 +16,8 @@ const (
 	issuerKey = "issuer"
 	// clientIDKey is the key in the config file for the client ID.
 	clientIDKey = "client_id"
+	// clientSecret is the optional client secret for this client.
+	clientSecret = "client_secret"
 
 	// usersSection is the section name in the config file for the users and broker specific configuration.
 	usersSection = "users"
@@ -50,6 +52,7 @@ func parseConfigFile(cfgPath string) (userConfig, error) {
 	if oidc != nil {
 		cfg.issuerURL = oidc.Key(issuerKey).String()
 		cfg.clientID = oidc.Key(clientIDKey).String()
+		cfg.clientSecret = oidc.Key(clientSecret).String()
 	}
 
 	users := iniCfg.Section(usersSection)
