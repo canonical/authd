@@ -480,18 +480,23 @@ func TestIsAuthenticated(t *testing.T) {
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
-		"Error_when_mode_is_link_code_and_response_is_invalid": {firstAuthInfo: map[string]any{"response": "not a valid response"}},
+		"Error_when_mode_is_link_code_and_response_is_invalid": {
+			firstMode:     authmodes.Device,
+			firstAuthInfo: map[string]any{"response": "not a valid response"},
+		},
 		"Error_when_mode_is_link_code_and_link_expires": {
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/device_auth": testutils.ExpiryDeviceAuthHandler(),
 			},
 		},
 		"Error_when_mode_is_link_code_and_can_not_get_token": {
+			firstMode: authmodes.Device,
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.UnavailableHandler(),
 			},
 		},
 		"Error_when_mode_is_link_code_and_can_not_get_token_due_to_timeout": {
+			firstMode: authmodes.Device,
 			customHandlers: map[string]testutils.ProviderHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
