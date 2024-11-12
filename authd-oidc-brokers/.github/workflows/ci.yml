@@ -21,7 +21,7 @@ jobs:
 
   go-tests:
     name: "Go: Tests"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # ubuntu-latest-runner
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
