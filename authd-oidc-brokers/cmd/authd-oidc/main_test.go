@@ -49,16 +49,16 @@ func TestRun(t *testing.T) {
 
 		wantReturnCode int
 	}{
-		"Run and exit successfully":              {},
-		"Run and return error":                   {runError: true, wantReturnCode: 1},
-		"Run and return usage error":             {usageErrorReturn: true, runError: true, wantReturnCode: 2},
-		"Run and usage error only does not fail": {usageErrorReturn: true, runError: false, wantReturnCode: 0},
+		"Run_and_exit_successfully":              {},
+		"Run_and_return_error":                   {runError: true, wantReturnCode: 1},
+		"Run_and_return_usage_error":             {usageErrorReturn: true, runError: true, wantReturnCode: 2},
+		"Run_and_usage_error_only_does_not_fail": {usageErrorReturn: true, runError: false, wantReturnCode: 0},
 
 		// Signals handling
-		"Send SIGINT exits":           {sendSig: syscall.SIGINT},
-		"Send SIGTERM exits":          {sendSig: syscall.SIGTERM},
-		"Send SIGHUP without exiting": {sendSig: syscall.SIGHUP},
-		"Send SIGHUP with exit":       {sendSig: syscall.SIGHUP, hupReturn: true},
+		"Send_SIGINT_exits":           {sendSig: syscall.SIGINT},
+		"Send_SIGTERM_exits":          {sendSig: syscall.SIGTERM},
+		"Send_SIGHUP_without_exiting": {sendSig: syscall.SIGHUP},
+		"Send_SIGHUP_with_exit":       {sendSig: syscall.SIGHUP, hupReturn: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {

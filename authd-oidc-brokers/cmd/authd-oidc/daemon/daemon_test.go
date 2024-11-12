@@ -115,9 +115,9 @@ func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 		dataDirBehavior int
 		configBehavior  int
 	}{
-		"Error on existing data dir being a file":    {dataDirBehavior: dirIsFile},
-		"Error on data dir missing parent directory": {dataDirBehavior: noParentDir},
-		"Error on wrong permission on data dir":      {dataDirBehavior: wrongPermission},
+		"Error_on_existing_data_dir_being_a_file":    {dataDirBehavior: dirIsFile},
+		"Error_on_data_dir_missing_parent_directory": {dataDirBehavior: noParentDir},
+		"Error_on_wrong_permission_on_data_dir":      {dataDirBehavior: wrongPermission},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {

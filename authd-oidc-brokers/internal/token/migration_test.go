@@ -26,12 +26,12 @@ func TestUseOldEncryptedToken(t *testing.T) {
 		wantRet   bool
 		wantError bool
 	}{
-		"Success when both the password file and the new token file exist": {passwordFileExists: true, newTokenFileExists: true, wantRet: false},
-		"Success when old encrypted token file exists":                     {oldEncryptedTokenFileExists: true, wantRet: true, wantError: false},
+		"Success_when_both_the_password_file_and_the_new_token_file_exist": {passwordFileExists: true, newTokenFileExists: true, wantRet: false},
+		"Success_when_old_encrypted_token_file_exists":                     {oldEncryptedTokenFileExists: true, wantRet: true, wantError: false},
 
-		"Error if only the password file exists":                                     {passwordFileExists: true, wantRet: false, wantError: true},
-		"Error if only the new token file exists":                                    {newTokenFileExists: true, wantRet: false, wantError: true},
-		"Error if neither the password file nor the old encrypted token file exists": {wantError: true},
+		"Error_if_only_the_password_file_exists":                                     {passwordFileExists: true, wantRet: false, wantError: true},
+		"Error_if_only_the_new_token_file_exists":                                    {newTokenFileExists: true, wantRet: false, wantError: true},
+		"Error_if_neither_the_password_file_nor_the_old_encrypted_token_file_exists": {wantError: true},
 	}
 
 	for name, tc := range tests {
@@ -77,10 +77,10 @@ func TestLoadOldEncryptedAuthInfo(t *testing.T) {
 		wantToken token.AuthCachedInfo
 		wantError bool
 	}{
-		"Successfully load old encrypted token": {wantToken: testToken, wantError: false},
-		"Error when file does not exist":        {noOldToken: true, wantError: true},
-		"Error when file contains invalid data": {invalidData: true, wantError: true},
-		"Error when password is incorrect":      {incorrectPassword: true, wantError: true},
+		"Successfully_load_old_encrypted_token": {wantToken: testToken, wantError: false},
+		"Error_when_file_does_not_exist":        {noOldToken: true, wantError: true},
+		"Error_when_file_contains_invalid_data": {invalidData: true, wantError: true},
+		"Error_when_password_is_incorrect":      {incorrectPassword: true, wantError: true},
 	}
 
 	for name, tc := range tests {

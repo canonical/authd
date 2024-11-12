@@ -51,14 +51,14 @@ func TestParseConfig(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Successfully parse config file":                      {},
-		"Successfully parse config file with optional values": {configType: "valid+optional"},
+		"Successfully_parse_config_file":                      {},
+		"Successfully_parse_config_file_with_optional_values": {configType: "valid+optional"},
 
-		"Do not fail if values contain a single template delimiter": {configType: "singles"},
+		"Do_not_fail_if_values_contain_a_single_template_delimiter": {configType: "singles"},
 
-		"Error if file does not exist": {configType: "inexistent", wantErr: true},
-		"Error if file is unreadable":  {configType: "unreadable", wantErr: true},
-		"Error if file is not updated": {configType: "template", wantErr: true},
+		"Error_if_file_does_not_exist": {configType: "inexistent", wantErr: true},
+		"Error_if_file_is_unreadable":  {configType: "unreadable", wantErr: true},
+		"Error_if_file_is_not_updated": {configType: "template", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {

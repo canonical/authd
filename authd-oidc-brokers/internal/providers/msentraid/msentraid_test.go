@@ -23,12 +23,12 @@ func TestCheckTokenScopes(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Success when checking all scopes are present":       {scopes: msentraid.AllExpectedScopes()},
-		"Success even if getting more scopes than requested": {scopes: msentraid.AllExpectedScopes() + " extra-scope"},
+		"Success_when_checking_all_scopes_are_present":       {scopes: msentraid.AllExpectedScopes()},
+		"Success_even_if_getting_more_scopes_than_requested": {scopes: msentraid.AllExpectedScopes() + " extra-scope"},
 
-		"Error with missing scopes":       {scopes: "profile email", wantErr: true},
-		"Error without extra scope field": {noExtraScopeField: true, wantErr: true},
-		"Error with empty scopes":         {scopes: "", wantErr: true},
+		"Error_with_missing_scopes":       {scopes: "profile email", wantErr: true},
+		"Error_without_extra_scope_field": {noExtraScopeField: true, wantErr: true},
+		"Error_with_empty_scopes":         {scopes: "", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -61,14 +61,14 @@ func TestVerifyUsername(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Success when usernames are the same":   {requestedUsername: "foo-bar@example", authenticatedUser: "foo-bar@example"},
-		"Success when usernames differ in case": {requestedUsername: "foo-bar@example", authenticatedUser: "Foo-Bar@example"},
+		"Success_when_usernames_are_the_same":   {requestedUsername: "foo-bar@example", authenticatedUser: "foo-bar@example"},
+		"Success_when_usernames_differ_in_case": {requestedUsername: "foo-bar@example", authenticatedUser: "Foo-Bar@example"},
 
-		"Error when usernames differ": {requestedUsername: "foo@example", authenticatedUser: "bar@foo", wantErr: true},
-		"Error when requested username contains invalid characters": {
+		"Error_when_usernames_differ": {requestedUsername: "foo@example", authenticatedUser: "bar@foo", wantErr: true},
+		"Error_when_requested_username_contains_invalid_characters": {
 			requestedUsername: "fóó@example", authenticatedUser: "foo@example", wantErr: true,
 		},
-		"Error when authenticated username contains invalid characters": {
+		"Error_when_authenticated_username_contains_invalid_characters": {
 			requestedUsername: "foo@example", authenticatedUser: "fóó@example", wantErr: true,
 		},
 	}
