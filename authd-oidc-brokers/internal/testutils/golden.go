@@ -1,10 +1,12 @@
 package testutils
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -145,6 +147,22 @@ func GoldenPath(t *testing.T) string {
 	return path
 }
 
+// runDelta pipes the unified diff through the `delta` command for word-level diff and coloring.
+func runDelta(diff string) (string, error) {
+	cmd := exec.Command("delta", "--diff-so-fancy", "--hunk-header-style", "omit")
+	cmd.Stdin = strings.NewReader(diff)
+
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+
+	err := cmd.Run()
+	if err != nil {
+		return "", fmt.Errorf("failed to run delta: %w", err)
+	}
+	return out.String(), nil
+}
+
 // checkFileContent compares the content of the actual and golden files and reports any differences.
 func checkFileContent(t *testing.T, actual, expected, actualPath, expectedPath string) {
 	if actual == expected {
@@ -161,6 +179,15 @@ func checkFileContent(t *testing.T, actual, expected, actualPath, expectedPath s
 	diffStr, err := difflib.GetUnifiedDiffString(diff)
 	require.NoError(t, err, "Cannot get unified diff")
 
+	// Check if the `delta` command is available and use it to colorize the diff.
+	_, err = exec.LookPath("delta")
+	if err == nil {
+		diffStr, err = runDelta(diffStr)
+		require.NoError(t, err, "Cannot run delta")
+	} else {
+		diffStr = "\nDiff:\n" + diffStr
+	}
+
 	msg := fmt.Sprintf("Golden file: %s", expectedPath)
 	if actualPath != "Actual" {
 		msg += fmt.Sprintf("\nFile: %s", actualPath)
@@ -176,7 +203,6 @@ func checkFileContent(t *testing.T, actual, expected, actualPath, expectedPath s
 		strings.Repeat("-", 50),
 		strings.TrimSuffix(actual, "\n"),
 		strings.Repeat("-", 50),
-		"\nDiff:",
 		diffStr,
 	}, "\n"), msg)
 }
