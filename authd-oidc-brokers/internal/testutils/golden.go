@@ -88,15 +88,13 @@ func LoadWithUpdateFromGoldenYAML[E any](t *testing.T, got E, opts ...GoldenOpti
 	return wantDeserialized
 }
 
-// NormalizeGoldenName returns the name of the golden file with illegal Windows
-// characters replaced or removed.
-func NormalizeGoldenName(t *testing.T, name string) string {
+// CheckValidGoldenFileName checks if the provided name is a valid golden file name.
+func CheckValidGoldenFileName(t *testing.T, name string) {
 	t.Helper()
 
-	name = strings.ReplaceAll(name, `\`, "_")
-	name = strings.ReplaceAll(name, ":", "")
-	name = strings.ToLower(name)
-	return name
+	// A valid golden file contains only alphanumeric characters, underscores, dashes, and dots.
+	require.Regexp(t, `^[\w\-.]+$`, name,
+		"Invalid golden file name %q. Only alphanumeric characters, underscores, dashes, and dots are allowed", name)
 }
 
 // TestFamilyPath returns the path of the dir for storing fixtures and other files related to the test.
@@ -114,9 +112,10 @@ func GoldenPath(t *testing.T) string {
 	t.Helper()
 
 	path := filepath.Join(TestFamilyPath(t), "golden")
-	_, sub, found := strings.Cut(t.Name(), "/")
+	_, subtestName, found := strings.Cut(t.Name(), "/")
 	if found {
-		path = filepath.Join(path, NormalizeGoldenName(t, sub))
+		CheckValidGoldenFileName(t, subtestName)
+		path = filepath.Join(path, subtestName)
 	}
 
 	return path

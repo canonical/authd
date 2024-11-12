@@ -22,9 +22,9 @@ func TestHashAndStorePassword(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Success_when_password_file_and_parent_dir_don't_exist_yet": {password: "test123"},
-		"Success_when_parent_directory_already_exists":              {password: "test123", parentDirExists: true},
-		"Success_when_password_file_already_exists":                 {password: "test123", pathExists: true},
+		"Success_when_password_file_and_parent_dir_do_not_exist_yet": {password: "test123"},
+		"Success_when_parent_directory_already_exists":               {password: "test123", parentDirExists: true},
+		"Success_when_password_file_already_exists":                  {password: "test123", pathExists: true},
 	}
 
 	for name, tc := range tests {
@@ -67,10 +67,10 @@ func TestCheckPassword(t *testing.T) {
 		wantMatch     bool
 		expectedError error
 	}{
-		"Success_when_password_matches":        {password: "test123", wantMatch: true},
-		"No_match_when_password_doesn't_match": {password: "not-test123", wantMatch: false},
+		"Success_when_password_matches":         {password: "test123", wantMatch: true},
+		"No_match_when_password_does_not_match": {password: "not-test123", wantMatch: false},
 
-		"Error_when_password_file_doesn't_exist":    {password: "test123", pathToRead: "nonexistent", expectedError: os.ErrNotExist},
+		"Error_when_password_file_does_not_exist":   {password: "test123", pathToRead: "nonexistent", expectedError: os.ErrNotExist},
 		"Error_when_password_file_contains_garbage": {password: "test123", writeGarbage: true, expectedError: base64.CorruptInputError(0)},
 	}
 
