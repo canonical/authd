@@ -259,7 +259,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 			}
 			require.NoError(t, err, "GetAuthenticationModes should not have returned an error")
 
-			testutils.CheckOrUpdateGoldenYAML(t, got, nil)
+			testutils.CheckOrUpdateGoldenYAML(t, got)
 		})
 	}
 }
@@ -374,7 +374,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 			}
 			require.NoError(t, err, "SelectAuthenticationMode should not have returned an error")
 
-			testutils.CheckOrUpdateGoldenYAML(t, got, nil)
+			testutils.CheckOrUpdateGoldenYAML(t, got)
 		})
 	}
 }
@@ -869,7 +869,7 @@ func TestFetchUserInfo(t *testing.T) {
 			}
 			require.NoError(t, err, "FetchUserInfo should not have returned an error")
 
-			testutils.CheckOrUpdateGoldenYAML(t, got, nil)
+			testutils.CheckOrUpdateGoldenYAML(t, got)
 		})
 	}
 }
@@ -973,7 +973,7 @@ func TestUserPreCheck(t *testing.T) {
 			}
 			require.NoError(t, err, "UserPreCheck should not have returned an error")
 
-			testutils.CheckOrUpdateGolden(t, got, nil)
+			testutils.CheckOrUpdateGolden(t, got)
 		})
 	}
 }

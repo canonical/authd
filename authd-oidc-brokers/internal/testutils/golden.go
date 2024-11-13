@@ -32,9 +32,20 @@ func init() {
 	}
 }
 
-// GoldenOptions are options for functions that work with golden files.
-type GoldenOptions struct {
-	Path string
+type goldenOptions struct {
+	path string
+}
+
+// GoldenOption is a supported option reference to change the golden files comparison.
+type GoldenOption func(*goldenOptions)
+
+// WithGoldenPath overrides the default path for golden files used.
+func WithGoldenPath(path string) GoldenOption {
+	return func(o *goldenOptions) {
+		if path != "" {
+			o.path = path
+		}
+	}
 }
 
 func updateGoldenFile(t *testing.T, path string, data []byte) {
@@ -47,51 +58,51 @@ func updateGoldenFile(t *testing.T, path string, data []byte) {
 
 // CheckOrUpdateGolden compares the provided string with the content of the golden file. If the update environment
 // variable is set, the golden file is updated with the provided string.
-func CheckOrUpdateGolden(t *testing.T, got string, opts *GoldenOptions) {
+func CheckOrUpdateGolden(t *testing.T, got string, options ...GoldenOption) {
 	t.Helper()
 
-	if opts == nil {
-		opts = &GoldenOptions{}
+	opts := goldenOptions{
+		path: GoldenPath(t),
 	}
-	if opts.Path == "" {
-		opts.Path = GoldenPath(t)
+	for _, f := range options {
+		f(&opts)
 	}
 
 	if update {
-		updateGoldenFile(t, opts.Path, []byte(got))
+		updateGoldenFile(t, opts.path, []byte(got))
 	}
 
-	checkGoldenFileEqualsString(t, got, opts.Path)
+	checkGoldenFileEqualsString(t, got, opts.path)
 }
 
 // CheckOrUpdateGoldenYAML compares the provided object with the content of the golden file. If the update environment
 // variable is set, the golden file is updated with the provided object serialized as YAML.
-func CheckOrUpdateGoldenYAML[E any](t *testing.T, got E, opts *GoldenOptions) {
+func CheckOrUpdateGoldenYAML[E any](t *testing.T, got E, options ...GoldenOption) {
 	t.Helper()
 
 	data, err := yaml.Marshal(got)
 	require.NoError(t, err, "Cannot serialize provided object")
 
-	CheckOrUpdateGolden(t, string(data), opts)
+	CheckOrUpdateGolden(t, string(data), options...)
 }
 
 // LoadWithUpdateFromGolden loads the element from a plaintext golden file.
 // It will update the file if the update flag is used prior to loading it.
-func LoadWithUpdateFromGolden(t *testing.T, data string, opts *GoldenOptions) string {
+func LoadWithUpdateFromGolden(t *testing.T, data string, options ...GoldenOption) string {
 	t.Helper()
 
-	if opts == nil {
-		opts = &GoldenOptions{}
+	opts := goldenOptions{
+		path: GoldenPath(t),
 	}
-	if opts.Path == "" {
-		opts.Path = GoldenPath(t)
+	for _, f := range options {
+		f(&opts)
 	}
 
 	if update {
-		updateGoldenFile(t, opts.Path, []byte(data))
+		updateGoldenFile(t, opts.path, []byte(data))
 	}
 
-	want, err := os.ReadFile(opts.Path)
+	want, err := os.ReadFile(opts.path)
 	require.NoError(t, err, "Cannot load golden file")
 
 	return string(want)
@@ -99,13 +110,13 @@ func LoadWithUpdateFromGolden(t *testing.T, data string, opts *GoldenOptions) st
 
 // LoadWithUpdateFromGoldenYAML load the generic element from a YAML serialized golden file.
 // It will update the file if the update flag is used prior to deserializing it.
-func LoadWithUpdateFromGoldenYAML[E any](t *testing.T, got E, opts *GoldenOptions) E {
+func LoadWithUpdateFromGoldenYAML[E any](t *testing.T, got E, options ...GoldenOption) E {
 	t.Helper()
 
 	t.Logf("Serializing object for golden file")
 	data, err := yaml.Marshal(got)
 	require.NoError(t, err, "Cannot serialize provided object")
-	want := LoadWithUpdateFromGolden(t, string(data), opts)
+	want := LoadWithUpdateFromGolden(t, string(data), options...)
 
 	var wantDeserialized E
 	err = yaml.Unmarshal([]byte(want), &wantDeserialized)
