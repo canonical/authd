@@ -403,7 +403,7 @@ func TestMain(m *testing.M) {
 	defer cleanup()
 
 	// Start provider mock
-	providerServer, cleanup := testutils.StartMockProvider("")
+	providerServer, cleanup := testutils.StartMockProvider("", nil)
 	defer cleanup()
 	mockProvider = providerServer
 
