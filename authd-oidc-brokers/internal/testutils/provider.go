@@ -82,7 +82,7 @@ func WithHandler(path string, handler func(http.ResponseWriter, *http.Request)) 
 }
 
 // StartMockProvider starts a new HTTP server to be used as an OpenID Connect provider for tests.
-func StartMockProvider(address string, args ...OptionProvider) (*httptest.Server, func()) {
+func StartMockProvider(address string, tokenHandlerOpts *TokenHandlerOptions, args ...OptionProvider) (*httptest.Server, func()) {
 	servMux := http.NewServeMux()
 	server := httptest.NewUnstartedServer(servMux)
 
@@ -99,7 +99,7 @@ func StartMockProvider(address string, args ...OptionProvider) (*httptest.Server
 		handlers: map[string]ProviderHandler{
 			"/.well-known/openid-configuration": DefaultOpenIDHandler(server.URL),
 			"/device_auth":                      DefaultDeviceAuthHandler(),
-			"/token":                            DefaultTokenHandler(server.URL, consts.DefaultScopes),
+			"/token":                            TokenHandler(server.URL, tokenHandlerOpts),
 			"/keys":                             DefaultJWKHandler(),
 		},
 	}
@@ -175,13 +175,32 @@ func DefaultDeviceAuthHandler() ProviderHandler {
 	}
 }
 
-// DefaultTokenHandler returns a handler that returns a default token response.
-func DefaultTokenHandler(serverURL string, scopes []string) ProviderHandler {
+// TokenHandlerOptions contains options for the token handler.
+type TokenHandlerOptions struct {
+	Scopes []string
+	// A list of custom claims to be added to the ID token. Each time the
+	// handler returns a token, the claims from the first element of the list
+	// will be added to the token, and then that element will be removed from
+	// the list.
+	IDTokenClaims []map[string]interface{}
+}
+
+var idTokenClaimsMutex sync.Mutex
+
+// TokenHandler returns a handler that returns a default token response.
+func TokenHandler(serverURL string, opts *TokenHandlerOptions) ProviderHandler {
+	if opts == nil {
+		opts = &TokenHandlerOptions{}
+	}
+	if opts.Scopes == nil {
+		opts.Scopes = consts.DefaultScopes
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Mimics user going through auth process
 		time.Sleep(2 * time.Second)
 
-		idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		claims := jwt.MapClaims{
 			"iss":                serverURL,
 			"sub":                "test-user-id",
 			"aud":                "test-client-id",
@@ -190,7 +209,19 @@ func DefaultTokenHandler(serverURL string, scopes []string) ProviderHandler {
 			"preferred_username": "test-user-preferred-username@email.com",
 			"email":              "test-user@email.com",
 			"email_verified":     true,
-		})
+		}
+
+		idTokenClaimsMutex.Lock()
+		// Override the default claims with the custom claims
+		if len(opts.IDTokenClaims) > 0 {
+			for k, v := range opts.IDTokenClaims[0] {
+				claims[k] = v
+			}
+			opts.IDTokenClaims = opts.IDTokenClaims[1:]
+		}
+		idTokenClaimsMutex.Unlock()
+
+		idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 
 		rawToken, err := idToken.SignedString(MockKey)
 		if err != nil {
@@ -204,7 +235,7 @@ func DefaultTokenHandler(serverURL string, scopes []string) ProviderHandler {
 			"scope": "%s",
 			"expires_in": 3600,
 			"id_token": "%s"
-		}`, strings.Join(scopes, " "), rawToken)
+		}`, strings.Join(opts.Scopes, " "), rawToken)
 
 		w.Header().Add("Content-Type", "application/json")
 		if _, err := w.Write([]byte(response)); err != nil {

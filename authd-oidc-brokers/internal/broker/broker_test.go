@@ -107,7 +107,7 @@ func TestNewSession(t *testing.T) {
 				opts = append(opts, testutils.WithHandler(endpoint, handler))
 			}
 
-			provider, stopServer := testutils.StartMockProvider("", opts...)
+			provider, stopServer := testutils.StartMockProvider("", nil, opts...)
 			t.Cleanup(stopServer)
 			cfg := &broker.Config{}
 			cfg.SetIssuerURL(provider.URL)
@@ -224,7 +224,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 						testutils.UnavailableHandler(),
 					))
 				}
-				provider, stopServer = testutils.StartMockProvider(address, opts...)
+				provider, stopServer = testutils.StartMockProvider(address, nil, opts...)
 				t.Cleanup(stopServer)
 			}
 			cfg := &broker.Config{}
@@ -336,7 +336,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 				for path, handler := range tc.customHandlers {
 					opts = append(opts, testutils.WithHandler(path, handler))
 				}
-				p, cleanup := testutils.StartMockProvider("", opts...)
+				p, cleanup := testutils.StartMockProvider("", nil, opts...)
 				defer cleanup()
 				provider = p
 			}
@@ -436,7 +436,7 @@ func TestIsAuthenticated(t *testing.T) {
 			firstChallenge: "-",
 			wantSecondCall: true,
 			customHandlers: map[string]testutils.ProviderHandler{
-				"/token": testutils.DefaultTokenHandler("http://127.0.0.1:31313", []string{}),
+				"/token": testutils.TokenHandler("http://127.0.0.1:31313", nil),
 			},
 			address: "127.0.0.1:31313",
 		},
@@ -526,7 +526,7 @@ func TestIsAuthenticated(t *testing.T) {
 				for path, handler := range tc.customHandlers {
 					opts = append(opts, testutils.WithHandler(path, handler))
 				}
-				p, cleanup := testutils.StartMockProvider(tc.address, opts...)
+				p, cleanup := testutils.StartMockProvider(tc.address, nil, opts...)
 				t.Cleanup(cleanup)
 				provider = p
 			}
@@ -685,25 +685,38 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 		"First_auth_starts_first_but_second_finishes_first":             {firstCallDelay: 3, timeBetween: time.Second},
 		"First_auth_starts_first_then_second_starts_and_first_finishes": {firstCallDelay: 2, secondCallDelay: 3, timeBetween: time.Second},
 	}
+
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			outDir := t.TempDir()
 			dataDir := filepath.Join(outDir, "data")
 			err := os.Mkdir(dataDir, 0700)
 			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
+
+			username1 := "user1@example.com"
+			username2 := "user2@example.com"
+
+			provider, cleanup := testutils.StartMockProvider("", &testutils.TokenHandlerOptions{
+				IDTokenClaims: []map[string]interface{}{
+					{"sub": "user1", "name": "user1", "email": username1},
+					{"sub": "user2", "name": "user2", "email": username2},
+				},
+			})
+			defer cleanup()
+
 			cfg := &broker.Config{DataDir: dataDir}
-			cfg.SetIssuerURL(defaultProvider.URL)
+			cfg.SetIssuerURL(provider.URL)
 			mockInfoer := &testutils.MockProviderInfoer{FirstCallDelay: tc.firstCallDelay, SecondCallDelay: tc.secondCallDelay}
 			b := newBrokerForTests(t, *cfg, mockInfoer)
 
-			firstSession, firstKey := newSessionForTests(t, b, "user1", "")
-			firstToken := tokenOptions{username: "user1", issuer: defaultProvider.URL}
+			firstSession, firstKey := newSessionForTests(t, b, username1, "")
+			firstToken := tokenOptions{username: username1, issuer: provider.URL}
 			generateAndStoreCachedInfo(t, firstToken, b.TokenPathForSession(firstSession))
 			err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(firstSession))
 			require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 
-			secondSession, secondKey := newSessionForTests(t, b, "user2", "")
-			secondToken := tokenOptions{username: "user2", issuer: defaultProvider.URL}
+			secondSession, secondKey := newSessionForTests(t, b, username2, "")
+			secondToken := tokenOptions{username: username2, issuer: provider.URL}
 			generateAndStoreCachedInfo(t, secondToken, b.TokenPathForSession(secondSession))
 			err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(secondSession))
 			require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
@@ -773,7 +786,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			// Ensure that the directory structure is generic to avoid golden file conflicts
 			issuerDataDir := filepath.Dir(b.UserDataDirForSession(firstSession))
 			if _, err := os.Stat(issuerDataDir); err == nil {
-				toReplace := strings.ReplaceAll(strings.TrimPrefix(defaultProvider.URL, "http://"), ":", "_")
+				toReplace := strings.ReplaceAll(strings.TrimPrefix(provider.URL, "http://"), ":", "_")
 				newIssuerDataDir := strings.ReplaceAll(issuerDataDir, toReplace, "provider_url")
 				err := os.Rename(issuerDataDir, newIssuerDataDir)
 				if err != nil {
@@ -867,7 +880,7 @@ func TestFetchUserInfo(t *testing.T) {
 func TestCancelIsAuthenticated(t *testing.T) {
 	t.Parallel()
 
-	provider, cleanup := testutils.StartMockProvider("", testutils.WithHandler("/token", testutils.HangingHandler(3*time.Second)))
+	provider, cleanup := testutils.StartMockProvider("", nil, testutils.WithHandler("/token", testutils.HangingHandler(3*time.Second)))
 	t.Cleanup(cleanup)
 
 	cfg := &broker.Config{}
@@ -970,7 +983,7 @@ func TestUserPreCheck(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
-	server, cleanup := testutils.StartMockProvider("")
+	server, cleanup := testutils.StartMockProvider("", nil)
 	defer cleanup()
 
 	defaultProvider = server
