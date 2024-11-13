@@ -28,6 +28,16 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Prepare tests artifacts path
+        run: |
+          set -eu
+
+          artifacts_dir=$(mktemp -d --tmpdir authd-test-artifacts-XXXXXX)
+          echo AUTHD_TEST_ARTIFACTS_DIR="${artifacts_dir}" >> $GITHUB_ENV
+
+      - name: Install gotestfmt and our wrapper script
+        uses: canonical/desktop-engineering/gh-actions/go/gotestfmt@main
+
       - name: Run tests (with coverage collection)
         run: |
           set -eu
@@ -37,10 +47,14 @@ jobs:
           rm -fr "${raw_cov_dir}"
           mkdir -p "${raw_cov_dir}"
 
+          # Print executed commands to ease debugging
+          set -x
+
           # Overriding the default coverage directory is not an exported flag of go test (yet), so
           # we need to override it using the test.gocoverdir flag instead.
           #TODO: Update when https://go-review.googlesource.com/c/go/+/456595 is merged.
-          go test -cover -covermode=set ./... -shuffle=on -args -test.gocoverdir="${raw_cov_dir}"
+          go test -json -cover -covermode=set ./... -shuffle=on -args -test.gocoverdir="${raw_cov_dir}" 2>&1 | \
+            gotestfmt --logfile "${AUTHD_TEST_ARTIFACTS_DIR}/gotestfmt.cover.log"
 
           # Convert the raw coverage data into textfmt so we can merge the Rust one into it
           go tool covdata textfmt -i="${raw_cov_dir}" -o="/tmp/coverage.out"
@@ -48,11 +62,9 @@ jobs:
           # Filter out the testutils package and the pb.go file
           grep -v -e "testutils" "/tmp/coverage.out" >"/tmp/coverage.out.filtered"
 
-      - name: Run tests (with race detector)
-        run: |
-          go test -race ./...
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
         with:
-          file: /tmp/coverage.out.filtered
+          name: authd-${{ github.job }}-artifacts-${{ github.run_attempt }}
+          path: ${{ env.AUTHD_TEST_ARTIFACTS_DIR }}
