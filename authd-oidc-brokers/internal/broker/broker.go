@@ -76,7 +76,7 @@ type session struct {
 	authModes         []string
 	attemptsPerMode   map[string]int
 
-	oidcProvider          *oidc.Provider
+	oidcServer            *oidc.Provider
 	oauth2Config          oauth2.Config
 	authInfo              map[string]any
 	isOffline             bool
@@ -186,17 +186,17 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 	s.oldEncryptedTokenPath = filepath.Join(b.cfg.OldEncryptedTokensDir, issuer, username+".cache")
 
 	// Construct an OIDC provider via OIDC discovery.
-	s.oidcProvider, err = b.connectToProvider(context.Background())
+	s.oidcServer, err = b.connectToOIDCServer(context.Background())
 	if err != nil {
 		slog.Debug(fmt.Sprintf("Could not connect to the provider: %v. Starting session in offline mode.", err))
 		s.isOffline = true
 	}
 
-	if s.oidcProvider != nil {
+	if s.oidcServer != nil {
 		s.oauth2Config = oauth2.Config{
 			ClientID:     b.oidcCfg.ClientID,
 			ClientSecret: b.cfg.clientSecret,
-			Endpoint:     s.oidcProvider.Endpoint(),
+			Endpoint:     s.oidcServer.Endpoint(),
 			Scopes:       append(consts.DefaultScopes, b.provider.AdditionalScopes()...),
 		}
 	}
@@ -208,7 +208,7 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 	return sessionID, base64.StdEncoding.EncodeToString(pubASN1), nil
 }
 
-func (b *Broker) connectToProvider(ctx context.Context) (*oidc.Provider, error) {
+func (b *Broker) connectToOIDCServer(ctx context.Context) (*oidc.Provider, error) {
 	ctx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
 
@@ -241,7 +241,7 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 	}
 
 	endpoints := make(map[string]struct{})
-	if session.oidcProvider != nil && session.oidcProvider.Endpoint().DeviceAuthURL != "" {
+	if session.oidcServer != nil && session.oidcServer.Endpoint().DeviceAuthURL != "" {
 		authMode := authmodes.DeviceQr
 		if _, ok := supportedAuthModes[authMode]; ok {
 			endpoints[authMode] = struct{}{}
@@ -760,7 +760,7 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.A
 		return info.User{}, errors.New("session is in offline mode")
 	}
 
-	idToken, err := session.oidcProvider.Verifier(&b.oidcCfg).Verify(ctx, t.RawIDToken)
+	idToken, err := session.oidcServer.Verifier(&b.oidcCfg).Verify(ctx, t.RawIDToken)
 	if err != nil {
 		return info.User{}, fmt.Errorf("could not verify token: %v", err)
 	}
