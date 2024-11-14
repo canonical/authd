@@ -31,14 +31,6 @@ func newBrokerForTests(t *testing.T, cfg broker.Config, provider *testutils.Mock
 	if provider == nil {
 		provider = &testutils.MockProvider{}
 	}
-	if provider.GetGroupsFunc == nil {
-		provider.GetGroupsFunc = func() ([]info.Group, error) {
-			return []info.Group{
-				{Name: "new-broker-for-tests-remote-group", UGID: "12345"},
-				{Name: "linux-new-broker-for-tests-local-group", UGID: ""},
-			}, nil
-		}
-	}
 
 	if cfg.DataDir == "" {
 		cfg.DataDir = t.TempDir()

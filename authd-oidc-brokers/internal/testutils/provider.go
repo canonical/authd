@@ -384,7 +384,10 @@ func (p *MockProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Toke
 		return info.User{}, err
 	}
 
-	var userGroups []info.Group
+	userGroups := []info.Group{
+		{Name: "remote-test-group", UGID: "12345"},
+		{Name: "local-test-group", UGID: ""},
+	}
 	if p.GetGroupsFunc != nil {
 		userGroups, err = p.GetGroupsFunc()
 		if err != nil {

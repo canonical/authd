@@ -849,13 +849,6 @@ func TestFetchUserInfo(t *testing.T) {
 				getGroupsFunc = func() ([]info.Group, error) {
 					return []info.Group{}, nil
 				}
-			} else {
-				getGroupsFunc = func() ([]info.Group, error) {
-					return []info.Group{
-						{Name: "test-fetch-user-info-remote-group", UGID: "12345"},
-						{Name: "linux-test-fetch-user-info-local-group", UGID: ""},
-					}, nil
-				}
 			}
 
 			mockProvider := &testutils.MockProvider{GetGroupsFunc: getGroupsFunc}
