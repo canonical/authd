@@ -375,14 +375,16 @@ func TestIsAuthenticated(t *testing.T) {
 	correctPassword := "password"
 
 	tests := map[string]struct {
-		sessionMode string
-		username    string
+		sessionMode    string
+		sessionOffline bool
+		username       string
 
-		firstMode        string
-		firstChallenge   string
-		firstAuthInfo    map[string]any
-		badFirstKey      bool
-		getUserInfoFails bool
+		firstMode                string
+		firstChallenge           string
+		firstAuthInfo            map[string]any
+		badFirstKey              bool
+		getUserInfoFails         bool
+		groupsReturnedByProvider []info.Group
 
 		customHandlers map[string]testutils.EndpointHandler
 		address        string
@@ -395,6 +397,7 @@ func TestIsAuthenticated(t *testing.T) {
 		invalidAuthData      bool
 		dontWaitForFirstCall bool
 		readOnlyDataDir      bool
+		wantGroups           []info.Group
 	}{
 		"Successfully_authenticate_user_with_device_auth_and_newpassword": {firstChallenge: "-", wantSecondCall: true},
 		"Successfully_authenticate_user_with_password":                    {firstMode: authmodes.Password, token: &tokenOptions{}},
@@ -422,6 +425,24 @@ func TestIsAuthenticated(t *testing.T) {
 				"/token": testutils.TokenHandler("http://127.0.0.1:31313", nil),
 			},
 			address: "127.0.0.1:31313",
+		},
+		"Authenticating_with_password_refreshes_groups": {
+			firstMode:                authmodes.Password,
+			token:                    &tokenOptions{},
+			groupsReturnedByProvider: []info.Group{{Name: "refreshed-group"}},
+			wantGroups:               []info.Group{{Name: "refreshed-group"}},
+		},
+		"Authenticating_with_password_keeps_old_groups_if_fetching_user_info_fails": {
+			firstMode:        authmodes.Password,
+			token:            &tokenOptions{groups: []info.Group{{Name: "old-group"}}},
+			getUserInfoFails: true,
+			wantGroups:       []info.Group{{Name: "old-group"}},
+		},
+		"Authenticating_with_password_keeps_old_groups_if_session_is_offline": {
+			firstMode:      authmodes.Password,
+			token:          &tokenOptions{groups: []info.Group{{Name: "old-group"}}},
+			sessionOffline: true,
+			wantGroups:     []info.Group{{Name: "old-group"}},
 		},
 
 		"Error_when_authentication_data_is_invalid":         {invalidAuthData: true},
@@ -501,6 +522,12 @@ func TestIsAuthenticated(t *testing.T) {
 				tc.sessionMode = "auth"
 			}
 
+			if tc.sessionOffline {
+				tc.customHandlers = map[string]testutils.EndpointHandler{
+					"/.well-known/openid-configuration": testutils.UnavailableHandler(),
+				}
+			}
+
 			outDir := t.TempDir()
 			dataDir := filepath.Join(outDir, "data")
 
@@ -517,6 +544,11 @@ func TestIsAuthenticated(t *testing.T) {
 			} else {
 				cfg.customHandlers = tc.customHandlers
 				cfg.listenAddress = tc.address
+			}
+			if tc.groupsReturnedByProvider != nil {
+				cfg.getGroupsFunc = func() ([]info.Group, error) {
+					return tc.groupsReturnedByProvider, nil
+				}
 			}
 			b := newBrokerForTests(t, cfg)
 
@@ -581,6 +613,17 @@ func TestIsAuthenticated(t *testing.T) {
 
 				err = os.WriteFile(filepath.Join(outDir, "first_call"), out, 0600)
 				require.NoError(t, err, "Failed to write first response")
+
+				if tc.wantGroups != nil {
+					type userInfoMsgType struct {
+						UserInfo info.User `json:"userinfo"`
+					}
+					userInfoMsg := userInfoMsgType{}
+					err = json.Unmarshal([]byte(data), &userInfoMsg)
+					require.NoError(t, err, "Failed to unmarshal user info message")
+					userInfo := userInfoMsg.UserInfo
+					require.ElementsMatch(t, tc.wantGroups, userInfo.Groups, "Groups should match")
+				}
 			}()
 
 			if !tc.dontWaitForFirstCall {
