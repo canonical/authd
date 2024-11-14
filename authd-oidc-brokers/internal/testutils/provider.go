@@ -67,22 +67,22 @@ func init() {
 // ProviderHandler is a function that handles a request to the mock provider.
 type ProviderHandler func(http.ResponseWriter, *http.Request)
 
-type optionProvider struct {
+type providerServerOption struct {
 	handlers map[string]ProviderHandler
 }
 
-// OptionProvider is a function that allows to override default options of the mock provider.
-type OptionProvider func(*optionProvider)
+// ProviderServerOption is a function that allows to override default options of the mock provider.
+type ProviderServerOption func(*providerServerOption)
 
 // WithHandler specifies a handler to the requested path in the mock provider.
-func WithHandler(path string, handler func(http.ResponseWriter, *http.Request)) OptionProvider {
-	return func(o *optionProvider) {
+func WithHandler(path string, handler func(http.ResponseWriter, *http.Request)) ProviderServerOption {
+	return func(o *providerServerOption) {
 		o.handlers[path] = handler
 	}
 }
 
-// StartMockProvider starts a new HTTP server to be used as an OpenID Connect provider for tests.
-func StartMockProvider(address string, tokenHandlerOpts *TokenHandlerOptions, args ...OptionProvider) (string, func()) {
+// StartMockProviderServer starts a new HTTP server to be used as an OpenID Connect provider for tests.
+func StartMockProviderServer(address string, tokenHandlerOpts *TokenHandlerOptions, args ...ProviderServerOption) (string, func()) {
 	servMux := http.NewServeMux()
 	server := httptest.NewUnstartedServer(servMux)
 
@@ -95,7 +95,7 @@ func StartMockProvider(address string, tokenHandlerOpts *TokenHandlerOptions, ar
 	}
 	server.Start()
 
-	opts := optionProvider{
+	opts := providerServerOption{
 		handlers: map[string]ProviderHandler{
 			"/.well-known/openid-configuration": DefaultOpenIDHandler(server.URL),
 			"/device_auth":                      DefaultDeviceAuthHandler(),

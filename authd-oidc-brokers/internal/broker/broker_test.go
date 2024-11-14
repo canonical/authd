@@ -101,12 +101,12 @@ func TestNewSession(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			var opts []testutils.OptionProvider
+			var opts []testutils.ProviderServerOption
 			for endpoint, handler := range tc.customHandlers {
 				opts = append(opts, testutils.WithHandler(endpoint, handler))
 			}
 
-			providerURL, cleanup := testutils.StartMockProvider("", nil, opts...)
+			providerURL, cleanup := testutils.StartMockProviderServer("", nil, opts...)
 			t.Cleanup(cleanup)
 			cfg := &broker.Config{}
 			cfg.SetIssuerURL(providerURL)
@@ -209,7 +209,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 			providerURL := defaultProviderURL
 			if tc.providerAddress != "" {
 				address := tc.providerAddress
-				opts := []testutils.OptionProvider{}
+				opts := []testutils.ProviderServerOption{}
 				if tc.deviceAuthUnsupported {
 					opts = append(opts, testutils.WithHandler(
 						"/.well-known/openid-configuration",
@@ -223,7 +223,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 					))
 				}
 				var cleanup func()
-				providerURL, cleanup = testutils.StartMockProvider(address, nil, opts...)
+				providerURL, cleanup = testutils.StartMockProviderServer(address, nil, opts...)
 				t.Cleanup(cleanup)
 			}
 			cfg := &broker.Config{}
@@ -330,12 +330,12 @@ func TestSelectAuthenticationMode(t *testing.T) {
 
 			providerURL := defaultProviderURL
 			if tc.customHandlers != nil {
-				var opts []testutils.OptionProvider
+				var opts []testutils.ProviderServerOption
 				for path, handler := range tc.customHandlers {
 					opts = append(opts, testutils.WithHandler(path, handler))
 				}
 				var cleanup func()
-				providerURL, cleanup = testutils.StartMockProvider("", nil, opts...)
+				providerURL, cleanup = testutils.StartMockProviderServer("", nil, opts...)
 				defer cleanup()
 			}
 
@@ -519,12 +519,12 @@ func TestIsAuthenticated(t *testing.T) {
 
 			providerURL := defaultProviderURL
 			if tc.customHandlers != nil {
-				var opts []testutils.OptionProvider
+				var opts []testutils.ProviderServerOption
 				for path, handler := range tc.customHandlers {
 					opts = append(opts, testutils.WithHandler(path, handler))
 				}
 				var cleanup func()
-				providerURL, cleanup = testutils.StartMockProvider(tc.address, nil, opts...)
+				providerURL, cleanup = testutils.StartMockProviderServer(tc.address, nil, opts...)
 				t.Cleanup(cleanup)
 			}
 
@@ -693,7 +693,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			username1 := "user1@example.com"
 			username2 := "user2@example.com"
 
-			providerURL, cleanup := testutils.StartMockProvider("", &testutils.TokenHandlerOptions{
+			providerURL, cleanup := testutils.StartMockProviderServer("", &testutils.TokenHandlerOptions{
 				IDTokenClaims: []map[string]interface{}{
 					{"sub": "user1", "name": "user1", "email": username1},
 					{"sub": "user2", "name": "user2", "email": username2},
@@ -876,7 +876,7 @@ func TestFetchUserInfo(t *testing.T) {
 func TestCancelIsAuthenticated(t *testing.T) {
 	t.Parallel()
 
-	providerURL, cleanup := testutils.StartMockProvider("", nil, testutils.WithHandler("/token", testutils.HangingHandler(3*time.Second)))
+	providerURL, cleanup := testutils.StartMockProviderServer("", nil, testutils.WithHandler("/token", testutils.HangingHandler(3*time.Second)))
 	t.Cleanup(cleanup)
 
 	cfg := &broker.Config{}
@@ -979,7 +979,7 @@ func TestUserPreCheck(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	var cleanup func()
-	defaultProviderURL, cleanup = testutils.StartMockProvider("", nil)
+	defaultProviderURL, cleanup = testutils.StartMockProviderServer("", nil)
 	defer cleanup()
 
 	os.Exit(m.Run())
