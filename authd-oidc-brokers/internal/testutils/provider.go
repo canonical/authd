@@ -82,7 +82,7 @@ func WithHandler(path string, handler func(http.ResponseWriter, *http.Request)) 
 }
 
 // StartMockProvider starts a new HTTP server to be used as an OpenID Connect provider for tests.
-func StartMockProvider(address string, tokenHandlerOpts *TokenHandlerOptions, args ...OptionProvider) (*httptest.Server, func()) {
+func StartMockProvider(address string, tokenHandlerOpts *TokenHandlerOptions, args ...OptionProvider) (string, func()) {
 	servMux := http.NewServeMux()
 	server := httptest.NewUnstartedServer(servMux)
 
@@ -114,7 +114,7 @@ func StartMockProvider(address string, tokenHandlerOpts *TokenHandlerOptions, ar
 		servMux.HandleFunc(path, handler)
 	}
 
-	return server, func() {
+	return server.URL, func() {
 		server.Close()
 	}
 }
