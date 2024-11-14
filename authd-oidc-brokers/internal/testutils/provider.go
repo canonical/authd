@@ -326,13 +326,9 @@ func ExpiryDeviceAuthHandler() EndpointHandler {
 // MockProvider is a mock that implements the Provider interface.
 type MockProvider struct {
 	noprovider.NoProvider
-	Scopes  []string
-	Options []oauth2.AuthCodeOption
-	// A list of groups to be returned by the GetUserInfo method. Each time the
-	// method is called, the groups from the first element of the list will be
-	// returned, and then that element will be removed from the list.
-	Groups           [][]info.Group
-	GroupsErr        bool
+	Scopes           []string
+	Options          []oauth2.AuthCodeOption
+	GetGroupsFunc    func() ([]info.Group, error)
 	FirstCallDelay   int
 	SecondCallDelay  int
 	GetUserInfoFails bool
@@ -388,9 +384,12 @@ func (p *MockProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Toke
 		return info.User{}, err
 	}
 
-	userGroups, err := p.getGroups(accessToken)
-	if err != nil {
-		return info.User{}, err
+	var userGroups []info.Group
+	if p.GetGroupsFunc != nil {
+		userGroups, err = p.GetGroupsFunc()
+		if err != nil {
+			return info.User{}, err
+		}
 	}
 
 	p.numCallsLock.Lock()
@@ -430,19 +429,4 @@ func (p *MockProvider) userClaims(idToken *oidc.IDToken) (claims, error) {
 		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
 	}
 	return userClaims, nil
-}
-
-// GetGroups returns the groups the user is a member of.
-func (p *MockProvider) getGroups(*oauth2.Token) ([]info.Group, error) {
-	if p.GroupsErr {
-		return nil, errors.New("error requested in the mock")
-	}
-
-	if len(p.Groups) == 0 {
-		return nil, nil
-	}
-
-	groups := p.Groups[0]
-	p.Groups = p.Groups[1:]
-	return groups, nil
 }

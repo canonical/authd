@@ -2,6 +2,7 @@ package broker_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -839,16 +840,25 @@ func TestFetchUserInfo(t *testing.T) {
 			brokerCfg.SetHomeBaseDir(homeDirPath)
 			brokerCfg.SetClientID(clientID)
 
-			mockProvider := &testutils.MockProvider{
-				GroupsErr: tc.wantGroupErr,
-				Groups: [][]info.Group{{
-					{Name: "test-fetch-user-info-remote-group", UGID: "12345"},
-					{Name: "linux-test-fetch-user-info-local-group", UGID: ""},
-				}},
+			var getGroupsFunc func() ([]info.Group, error)
+			if tc.wantGroupErr {
+				getGroupsFunc = func() ([]info.Group, error) {
+					return nil, errors.New("error getting groups")
+				}
+			} else if tc.emptyGroups {
+				getGroupsFunc = func() ([]info.Group, error) {
+					return []info.Group{}, nil
+				}
+			} else {
+				getGroupsFunc = func() ([]info.Group, error) {
+					return []info.Group{
+						{Name: "test-fetch-user-info-remote-group", UGID: "12345"},
+						{Name: "linux-test-fetch-user-info-local-group", UGID: ""},
+					}, nil
+				}
 			}
-			if tc.emptyGroups {
-				mockProvider.Groups = [][]info.Group{}
-			}
+
+			mockProvider := &testutils.MockProvider{GetGroupsFunc: getGroupsFunc}
 
 			b, err := broker.New(*brokerCfg, broker.WithCustomProvider(mockProvider))
 			require.NoError(t, err, "Setup: New should not have returned an error")
