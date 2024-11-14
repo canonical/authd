@@ -326,9 +326,12 @@ func ExpiryDeviceAuthHandler() EndpointHandler {
 // MockProvider is a mock that implements the Provider interface.
 type MockProvider struct {
 	noprovider.NoProvider
-	Scopes           []string
-	Options          []oauth2.AuthCodeOption
-	Groups           []info.Group
+	Scopes  []string
+	Options []oauth2.AuthCodeOption
+	// A list of groups to be returned by the GetUserInfo method. Each time the
+	// method is called, the groups from the first element of the list will be
+	// returned, and then that element will be removed from the list.
+	Groups           [][]info.Group
 	GroupsErr        bool
 	FirstCallDelay   int
 	SecondCallDelay  int
@@ -434,8 +437,12 @@ func (p *MockProvider) getGroups(*oauth2.Token) ([]info.Group, error) {
 	if p.GroupsErr {
 		return nil, errors.New("error requested in the mock")
 	}
-	if p.Groups != nil {
-		return p.Groups, nil
+
+	if len(p.Groups) == 0 {
+		return nil, nil
 	}
-	return nil, nil
+
+	groups := p.Groups[0]
+	p.Groups = p.Groups[1:]
+	return groups, nil
 }

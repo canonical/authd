@@ -841,13 +841,13 @@ func TestFetchUserInfo(t *testing.T) {
 
 			mockProvider := &testutils.MockProvider{
 				GroupsErr: tc.wantGroupErr,
-				Groups: []info.Group{
+				Groups: [][]info.Group{{
 					{Name: "test-fetch-user-info-remote-group", UGID: "12345"},
 					{Name: "linux-test-fetch-user-info-local-group", UGID: ""},
-				},
+				}},
 			}
 			if tc.emptyGroups {
-				mockProvider.Groups = []info.Group{}
+				mockProvider.Groups = [][]info.Group{}
 			}
 
 			b, err := broker.New(*brokerCfg, broker.WithCustomProvider(mockProvider))
