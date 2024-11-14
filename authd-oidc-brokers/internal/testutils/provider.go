@@ -64,11 +64,11 @@ func init() {
 	mockCertificate = cert
 }
 
-// ProviderHandler is a function that handles a request to the mock provider.
-type ProviderHandler func(http.ResponseWriter, *http.Request)
+// EndpointHandler is a function that handles a request to an OIDC provider endpoint.
+type EndpointHandler func(http.ResponseWriter, *http.Request)
 
 type providerServerOption struct {
-	handlers map[string]ProviderHandler
+	handlers map[string]EndpointHandler
 }
 
 // ProviderServerOption is a function that allows to override default options of the mock provider.
@@ -96,7 +96,7 @@ func StartMockProviderServer(address string, tokenHandlerOpts *TokenHandlerOptio
 	server.Start()
 
 	opts := providerServerOption{
-		handlers: map[string]ProviderHandler{
+		handlers: map[string]EndpointHandler{
 			"/.well-known/openid-configuration": DefaultOpenIDHandler(server.URL),
 			"/device_auth":                      DefaultDeviceAuthHandler(),
 			"/token":                            TokenHandler(server.URL, tokenHandlerOpts),
@@ -120,7 +120,7 @@ func StartMockProviderServer(address string, tokenHandlerOpts *TokenHandlerOptio
 }
 
 // DefaultOpenIDHandler returns a handler that returns a default OpenID Connect configuration.
-func DefaultOpenIDHandler(serverURL string) ProviderHandler {
+func DefaultOpenIDHandler(serverURL string) EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		wellKnown := fmt.Sprintf(`{
 			"issuer": "%[1]s",
@@ -140,7 +140,7 @@ func DefaultOpenIDHandler(serverURL string) ProviderHandler {
 }
 
 // OpenIDHandlerWithNoDeviceEndpoint returns a handler that returns an OpenID Connect configuration without device endpoint.
-func OpenIDHandlerWithNoDeviceEndpoint(serverURL string) ProviderHandler {
+func OpenIDHandlerWithNoDeviceEndpoint(serverURL string) EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		wellKnown := fmt.Sprintf(`{
 			"issuer": "%[1]s",
@@ -159,7 +159,7 @@ func OpenIDHandlerWithNoDeviceEndpoint(serverURL string) ProviderHandler {
 }
 
 // DefaultDeviceAuthHandler returns a handler that returns a default device auth response.
-func DefaultDeviceAuthHandler() ProviderHandler {
+func DefaultDeviceAuthHandler() EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		response := `{
 			"device_code": "device_code",
@@ -188,7 +188,7 @@ type TokenHandlerOptions struct {
 var idTokenClaimsMutex sync.Mutex
 
 // TokenHandler returns a handler that returns a default token response.
-func TokenHandler(serverURL string, opts *TokenHandlerOptions) ProviderHandler {
+func TokenHandler(serverURL string, opts *TokenHandlerOptions) EndpointHandler {
 	if opts == nil {
 		opts = &TokenHandlerOptions{}
 	}
@@ -247,7 +247,7 @@ func TokenHandler(serverURL string, opts *TokenHandlerOptions) ProviderHandler {
 // DefaultJWKHandler returns a handler that provides the signing keys from the broker.
 //
 // Meant to be used an the endpoint for /keys.
-func DefaultJWKHandler() ProviderHandler {
+func DefaultJWKHandler() EndpointHandler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		jwk := jose.JSONWebKey{
 			Key:          &MockKey.PublicKey,
@@ -271,21 +271,21 @@ func DefaultJWKHandler() ProviderHandler {
 }
 
 // UnavailableHandler returns a handler that returns a 503 Service Unavailable response.
-func UnavailableHandler() ProviderHandler {
+func UnavailableHandler() EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
 }
 
 // BadRequestHandler returns a handler that returns a 400 Bad Request response.
-func BadRequestHandler() ProviderHandler {
+func BadRequestHandler() EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 }
 
 // CustomResponseHandler returns a handler that returns a custom token response.
-func CustomResponseHandler(response string) ProviderHandler {
+func CustomResponseHandler(response string) EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Add("Content-Type", "application/json")
 		_, err := w.Write([]byte(response))
@@ -296,7 +296,7 @@ func CustomResponseHandler(response string) ProviderHandler {
 }
 
 // HangingHandler returns a handler that hangs the request until the duration has elapsed.
-func HangingHandler(d time.Duration) ProviderHandler {
+func HangingHandler(d time.Duration) EndpointHandler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(d)
 
@@ -306,7 +306,7 @@ func HangingHandler(d time.Duration) ProviderHandler {
 }
 
 // ExpiryDeviceAuthHandler returns a handler that returns a device auth response with a short expiry time.
-func ExpiryDeviceAuthHandler() ProviderHandler {
+func ExpiryDeviceAuthHandler() EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		response := `{
 			"device_code": "device_code",
