@@ -22,7 +22,7 @@ type AuthCachedInfo struct {
 
 // NewAuthCachedInfo creates a new AuthCachedInfo. It sets the provided token and rawIDToken and the provider-specific
 // extra fields which should be stored persistently.
-func NewAuthCachedInfo(token *oauth2.Token, rawIDToken string, provider providers.ProviderInfoer) AuthCachedInfo {
+func NewAuthCachedInfo(token *oauth2.Token, rawIDToken string, provider providers.Provider) AuthCachedInfo {
 	return AuthCachedInfo{
 		Token:       token,
 		RawIDToken:  rawIDToken,

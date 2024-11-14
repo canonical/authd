@@ -531,8 +531,8 @@ func TestIsAuthenticated(t *testing.T) {
 
 			cfg := &broker.Config{DataDir: dataDir}
 			cfg.SetIssuerURL(provider.URL)
-			mockInfoer := &testutils.MockProviderInfoer{GetUserInfoFails: tc.getUserInfoFails}
-			b := newBrokerForTests(t, *cfg, mockInfoer)
+			mockProvider := &testutils.MockProvider{GetUserInfoFails: tc.getUserInfoFails}
+			b := newBrokerForTests(t, *cfg, mockProvider)
 			sessionID, key := newSessionForTests(t, b, tc.username, tc.sessionMode)
 
 			if tc.token != nil {
@@ -704,8 +704,8 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 
 			cfg := &broker.Config{DataDir: dataDir}
 			cfg.SetIssuerURL(provider.URL)
-			mockInfoer := &testutils.MockProviderInfoer{FirstCallDelay: tc.firstCallDelay, SecondCallDelay: tc.secondCallDelay}
-			b := newBrokerForTests(t, *cfg, mockInfoer)
+			mockProvider := &testutils.MockProvider{FirstCallDelay: tc.firstCallDelay, SecondCallDelay: tc.secondCallDelay}
+			b := newBrokerForTests(t, *cfg, mockProvider)
 
 			firstSession, firstKey := newSessionForTests(t, b, username1, "")
 			firstToken := tokenOptions{username: username1, issuer: provider.URL}
@@ -835,7 +835,7 @@ func TestFetchUserInfo(t *testing.T) {
 			brokerCfg.SetHomeBaseDir(homeDirPath)
 			brokerCfg.SetClientID(clientID)
 
-			mockInfoer := &testutils.MockProviderInfoer{
+			mockProvider := &testutils.MockProvider{
 				GroupsErr: tc.wantGroupErr,
 				Groups: []info.Group{
 					{Name: "test-fetch-user-info-remote-group", UGID: "12345"},
@@ -843,10 +843,10 @@ func TestFetchUserInfo(t *testing.T) {
 				},
 			}
 			if tc.emptyGroups {
-				mockInfoer.Groups = []info.Group{}
+				mockProvider.Groups = []info.Group{}
 			}
 
-			b, err := broker.New(*brokerCfg, broker.WithCustomProviderInfo(mockInfoer))
+			b, err := broker.New(*brokerCfg, broker.WithCustomProvider(mockProvider))
 			require.NoError(t, err, "Setup: New should not have returned an error")
 
 			if tc.username == "" {

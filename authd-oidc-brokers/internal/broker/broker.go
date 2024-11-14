@@ -57,8 +57,8 @@ type userConfig struct {
 type Broker struct {
 	cfg Config
 
-	providerInfo providers.ProviderInfoer
-	oidcCfg      oidc.Config
+	provider providers.Provider
+	oidcCfg  oidc.Config
 
 	currentSessions   map[string]session
 	currentSessionsMu sync.RWMutex
@@ -96,7 +96,7 @@ type isAuthenticatedCtx struct {
 }
 
 type option struct {
-	providerInfo providers.ProviderInfoer
+	provider providers.Provider
 }
 
 // Option is a func that allows to override some of the broker default settings.
@@ -114,7 +114,7 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	}
 
 	opts := option{
-		providerInfo: providers.CurrentProviderInfo(),
+		provider: providers.CurrentProvider(),
 	}
 	for _, arg := range args {
 		arg(&opts)
@@ -145,10 +145,10 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	}
 
 	b = &Broker{
-		cfg:          cfg,
-		providerInfo: opts.providerInfo,
-		oidcCfg:      oidc.Config{ClientID: cfg.clientID},
-		privateKey:   privateKey,
+		cfg:        cfg,
+		provider:   opts.provider,
+		oidcCfg:    oidc.Config{ClientID: cfg.clientID},
+		privateKey: privateKey,
 
 		currentSessions:   make(map[string]session),
 		currentSessionsMu: sync.RWMutex{},
@@ -197,7 +197,7 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 			ClientID:     b.oidcCfg.ClientID,
 			ClientSecret: b.cfg.clientSecret,
 			Endpoint:     s.oidcProvider.Endpoint(),
-			Scopes:       append(consts.DefaultScopes, b.providerInfo.AdditionalScopes()...),
+			Scopes:       append(consts.DefaultScopes, b.provider.AdditionalScopes()...),
 		}
 	}
 
@@ -252,7 +252,7 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 		}
 	}
 
-	availableModes, err := b.providerInfo.CurrentAuthenticationModesOffered(
+	availableModes, err := b.provider.CurrentAuthenticationModesOffered(
 		session.mode,
 		supportedAuthModes,
 		tokenExists,
@@ -501,13 +501,13 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 		expiryCtx, cancel := context.WithDeadline(ctx, response.Expiry)
 		defer cancel()
-		t, err := session.oauth2Config.DeviceAccessToken(expiryCtx, response, b.providerInfo.AuthOptions()...)
+		t, err := session.oauth2Config.DeviceAccessToken(expiryCtx, response, b.provider.AuthOptions()...)
 		if err != nil {
 			slog.Error(err.Error())
 			return AuthRetry, errorMessage{Message: "could not authenticate user remotely"}
 		}
 
-		if err = b.providerInfo.CheckTokenScopes(t); err != nil {
+		if err = b.provider.CheckTokenScopes(t); err != nil {
 			slog.Warn(err.Error())
 		}
 
@@ -517,7 +517,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			return AuthDenied, errorMessage{Message: "could not get ID token"}
 		}
 
-		authInfo = token.NewAuthCachedInfo(t, rawIDToken, b.providerInfo)
+		authInfo = token.NewAuthCachedInfo(t, rawIDToken, b.provider)
 		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil {
 			slog.Error(err.Error())
@@ -750,7 +750,7 @@ func (b *Broker) refreshToken(ctx context.Context, oauth2Config oauth2.Config, o
 		rawIDToken = oldToken.RawIDToken
 	}
 
-	t := token.NewAuthCachedInfo(oauthToken, rawIDToken, b.providerInfo)
+	t := token.NewAuthCachedInfo(oauthToken, rawIDToken, b.provider)
 	t.UserInfo = oldToken.UserInfo
 	return t, nil
 }
@@ -765,12 +765,12 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.A
 		return info.User{}, fmt.Errorf("could not verify token: %v", err)
 	}
 
-	userInfo, err = b.providerInfo.GetUserInfo(ctx, t.Token, idToken)
+	userInfo, err = b.provider.GetUserInfo(ctx, t.Token, idToken)
 	if err != nil {
 		return info.User{}, fmt.Errorf("could not get user info: %w", err)
 	}
 
-	if err = b.providerInfo.VerifyUsername(session.username, userInfo.Name); err != nil {
+	if err = b.provider.VerifyUsername(session.username, userInfo.Name); err != nil {
 		return info.User{}, fmt.Errorf("username verification failed: %w", err)
 	}
 

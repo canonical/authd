@@ -6,7 +6,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/noprovider"
 )
 
-// CurrentProviderInfo returns a generic oidc provider implementation.
-func CurrentProviderInfo() ProviderInfoer {
+// CurrentProvider returns a generic oidc provider implementation.
+func CurrentProvider() Provider {
 	return noprovider.New()
 }
