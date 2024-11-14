@@ -74,14 +74,14 @@ type providerServerOption struct {
 // ProviderServerOption is a function that allows to override default options of the mock provider.
 type ProviderServerOption func(*providerServerOption)
 
-// WithHandler specifies a handler to the requested path in the mock provider.
+// WithHandler returns a ProviderServerOption that adds a handler for a provider endpoint specified by path.
 func WithHandler(path string, handler func(http.ResponseWriter, *http.Request)) ProviderServerOption {
 	return func(o *providerServerOption) {
 		o.handlers[path] = handler
 	}
 }
 
-// StartMockProviderServer starts a new HTTP server to be used as an OpenID Connect provider for tests.
+// StartMockProviderServer starts a new HTTP server to be used as an OIDC provider for tests.
 func StartMockProviderServer(address string, tokenHandlerOpts *TokenHandlerOptions, args ...ProviderServerOption) (string, func()) {
 	servMux := http.NewServeMux()
 	server := httptest.NewUnstartedServer(servMux)
@@ -119,7 +119,7 @@ func StartMockProviderServer(address string, tokenHandlerOpts *TokenHandlerOptio
 	}
 }
 
-// DefaultOpenIDHandler returns a handler that returns a default OpenID Connect configuration.
+// DefaultOpenIDHandler returns a handler that returns a default OIDC configuration.
 func DefaultOpenIDHandler(serverURL string) EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		wellKnown := fmt.Sprintf(`{
@@ -139,7 +139,7 @@ func DefaultOpenIDHandler(serverURL string) EndpointHandler {
 	}
 }
 
-// OpenIDHandlerWithNoDeviceEndpoint returns a handler that returns an OpenID Connect configuration without device endpoint.
+// OpenIDHandlerWithNoDeviceEndpoint returns a handler that returns an OIDC configuration without device endpoint.
 func OpenIDHandlerWithNoDeviceEndpoint(serverURL string) EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		wellKnown := fmt.Sprintf(`{
