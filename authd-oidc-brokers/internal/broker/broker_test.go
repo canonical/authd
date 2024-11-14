@@ -403,6 +403,7 @@ func TestIsAuthenticated(t *testing.T) {
 		address        string
 
 		wantSecondCall  bool
+		secondMode      string
 		secondChallenge string
 
 		token                *tokenOptions
@@ -614,11 +615,15 @@ func TestIsAuthenticated(t *testing.T) {
 					secondAuthData = "invalid json"
 				}
 
+				if tc.secondMode == "" {
+					tc.secondMode = authmodes.NewPassword
+				}
+
 				secondCallDone := make(chan struct{})
 				go func() {
 					defer close(secondCallDone)
 
-					updateAuthModes(t, b, sessionID, authmodes.NewPassword)
+					updateAuthModes(t, b, sessionID, tc.secondMode)
 
 					access, data, err := b.IsAuthenticated(sessionID, secondAuthData)
 					require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
