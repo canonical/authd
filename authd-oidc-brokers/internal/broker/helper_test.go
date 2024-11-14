@@ -69,13 +69,13 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 		for endpoint, handler := range cfg.customHandlers {
 			serverOpts = append(serverOpts, testutils.WithHandler(endpoint, handler))
 		}
-		providerURL, cleanup := testutils.StartMockProviderServer(
+		issuerURL, cleanup := testutils.StartMockProviderServer(
 			cfg.listenAddress,
 			cfg.tokenHandlerOptions,
 			serverOpts...,
 		)
 		t.Cleanup(cleanup)
-		cfg.SetIssuerURL(providerURL)
+		cfg.SetIssuerURL(issuerURL)
 	}
 
 	b, err := broker.New(cfg.Config, broker.WithCustomProvider(provider))
