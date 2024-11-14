@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -102,16 +101,9 @@ func TestNewSession(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			var opts []testutils.ProviderServerOption
-			for endpoint, handler := range tc.customHandlers {
-				opts = append(opts, testutils.WithHandler(endpoint, handler))
-			}
-
-			providerURL, cleanup := testutils.StartMockProviderServer("", nil, opts...)
-			t.Cleanup(cleanup)
-			cfg := &broker.Config{}
-			cfg.SetIssuerURL(providerURL)
-			b := newBrokerForTests(t, *cfg, nil)
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				customHandlers: tc.customHandlers,
+			})
 
 			id, _, err := b.NewSession("test-user", "lang", "auth")
 			require.NoError(t, err, "NewSession should not have returned an error")
@@ -207,29 +199,27 @@ func TestGetAuthenticationModes(t *testing.T) {
 				tc.sessionMode = "auth"
 			}
 
-			providerURL := defaultProviderURL
-			if tc.providerAddress != "" {
-				address := tc.providerAddress
-				opts := []testutils.ProviderServerOption{}
+			cfg := &brokerForTestConfig{}
+			if tc.providerAddress == "" {
+				// Use the default provider URL if no address is provided.
+				cfg.issuerURL = defaultProviderURL
+			} else {
+				cfg.listenAddress = tc.providerAddress
+
+				const wellKnown = "/.well-known/openid-configuration"
 				if tc.deviceAuthUnsupported {
-					opts = append(opts, testutils.WithHandler(
-						"/.well-known/openid-configuration",
-						testutils.OpenIDHandlerWithNoDeviceEndpoint("http://"+address),
-					))
+					cfg.customHandlers = map[string]testutils.EndpointHandler{
+						wellKnown: testutils.OpenIDHandlerWithNoDeviceEndpoint("http://" + tc.providerAddress),
+					}
 				}
 				if tc.unavailableProvider {
-					opts = append(opts, testutils.WithHandler(
-						"/.well-known/openid-configuration",
-						testutils.UnavailableHandler(),
-					))
+					cfg.customHandlers = map[string]testutils.EndpointHandler{
+						wellKnown: testutils.UnavailableHandler(),
+					}
 				}
-				var cleanup func()
-				providerURL, cleanup = testutils.StartMockProviderServer(address, nil, opts...)
-				t.Cleanup(cleanup)
 			}
-			cfg := &broker.Config{}
-			cfg.SetIssuerURL(providerURL)
-			b := newBrokerForTests(t, *cfg, nil)
+			b := newBrokerForTests(t, cfg)
+
 			sessionID, _ := newSessionForTests(t, b, "", tc.sessionMode)
 			if tc.sessionID == "-" {
 				sessionID = ""
@@ -329,25 +319,19 @@ func TestSelectAuthenticationMode(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			providerURL := defaultProviderURL
-			if tc.customHandlers != nil {
-				var opts []testutils.ProviderServerOption
-				for path, handler := range tc.customHandlers {
-					opts = append(opts, testutils.WithHandler(path, handler))
-				}
-				var cleanup func()
-				providerURL, cleanup = testutils.StartMockProviderServer("", nil, opts...)
-				defer cleanup()
+			cfg := &brokerForTestConfig{}
+			if tc.customHandlers == nil {
+				// Use the default provider URL if no custom handlers are provided.
+				cfg.issuerURL = defaultProviderURL
+			} else {
+				cfg.customHandlers = tc.customHandlers
 			}
+			b := newBrokerForTests(t, cfg)
 
 			sessionType := "auth"
 			if tc.passwdSession {
 				sessionType = "passwd"
 			}
-
-			cfg := &broker.Config{}
-			cfg.SetIssuerURL(providerURL)
-			b := newBrokerForTests(t, *cfg, nil)
 			sessionID, _ := newSessionForTests(t, b, "", sessionType)
 
 			if tc.tokenExists {
@@ -461,7 +445,11 @@ func TestIsAuthenticated(t *testing.T) {
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
-		"Error_when_existing_token_has_no_user_info_and_fetching_user_info_fails": {firstMode: authmodes.Password, token: &tokenOptions{noUserInfo: true}, getUserInfoFails: true},
+		"Error_when_existing_token_has_no_user_info_and_fetching_user_info_fails": {
+			firstMode:        authmodes.Password,
+			token:            &tokenOptions{noUserInfo: true},
+			getUserInfoFails: true,
+		},
 
 		"Error_when_mode_is_qrcode_and_response_is_invalid": {firstAuthInfo: map[string]any{"response": "not a valid response"}},
 		"Error_when_mode_is_qrcode_and_link_expires": {
@@ -519,25 +507,22 @@ func TestIsAuthenticated(t *testing.T) {
 			err := os.Mkdir(dataDir, 0700)
 			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
 
-			providerURL := defaultProviderURL
-			if tc.customHandlers != nil {
-				var opts []testutils.ProviderServerOption
-				for path, handler := range tc.customHandlers {
-					opts = append(opts, testutils.WithHandler(path, handler))
-				}
-				var cleanup func()
-				providerURL, cleanup = testutils.StartMockProviderServer(tc.address, nil, opts...)
-				t.Cleanup(cleanup)
+			cfg := &brokerForTestConfig{
+				Config:           broker.Config{DataDir: dataDir},
+				getUserInfoFails: tc.getUserInfoFails,
 			}
+			if tc.customHandlers == nil {
+				// Use the default provider URL if no custom handlers are provided.
+				cfg.issuerURL = defaultProviderURL
+			} else {
+				cfg.customHandlers = tc.customHandlers
+				cfg.listenAddress = tc.address
+			}
+			b := newBrokerForTests(t, cfg)
 
-			cfg := &broker.Config{DataDir: dataDir}
-			cfg.SetIssuerURL(providerURL)
-			mockProvider := &testutils.MockProvider{GetUserInfoFails: tc.getUserInfoFails}
-			b := newBrokerForTests(t, *cfg, mockProvider)
 			sessionID, key := newSessionForTests(t, b, tc.username, tc.sessionMode)
 
 			if tc.token != nil {
-				tc.token.issuer = providerURL
 				generateAndStoreCachedInfo(t, *tc.token, b.TokenPathForSession(sessionID))
 				err = password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID))
 				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
@@ -661,10 +646,9 @@ func TestIsAuthenticated(t *testing.T) {
 
 			// Ensure that the directory structure is generic to avoid golden file conflicts
 			if _, err := os.Stat(filepath.Dir(b.TokenPathForSession(sessionID))); err == nil {
-				toReplace := strings.ReplaceAll(strings.TrimPrefix(providerURL, "http://"), ":", "_")
-				tokenDir := filepath.Dir(filepath.Dir(b.TokenPathForSession(sessionID)))
-				newTokenDir := strings.ReplaceAll(tokenDir, toReplace, "provider_url")
-				err := os.Rename(tokenDir, newTokenDir)
+				issuerDir := filepath.Dir(filepath.Dir(b.TokenPathForSession(sessionID)))
+				newIsserDir := filepath.Join(filepath.Dir(issuerDir), "provider_url")
+				err := os.Rename(issuerDir, newIsserDir)
 				if err != nil {
 					require.ErrorIs(t, err, os.ErrNotExist, "Teardown: Failed to rename token directory")
 					t.Logf("Failed to rename token directory: %v", err)
@@ -699,27 +683,26 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			username1 := "user1@example.com"
 			username2 := "user2@example.com"
 
-			providerURL, cleanup := testutils.StartMockProviderServer("", &testutils.TokenHandlerOptions{
-				IDTokenClaims: []map[string]interface{}{
-					{"sub": "user1", "name": "user1", "email": username1},
-					{"sub": "user2", "name": "user2", "email": username2},
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config:          broker.Config{DataDir: dataDir},
+				firstCallDelay:  tc.firstCallDelay,
+				secondCallDelay: tc.secondCallDelay,
+				tokenHandlerOptions: &testutils.TokenHandlerOptions{
+					IDTokenClaims: []map[string]interface{}{
+						{"sub": "user1", "name": "user1", "email": username1},
+						{"sub": "user2", "name": "user2", "email": username2},
+					},
 				},
 			})
-			defer cleanup()
-
-			cfg := &broker.Config{DataDir: dataDir}
-			cfg.SetIssuerURL(providerURL)
-			mockProvider := &testutils.MockProvider{FirstCallDelay: tc.firstCallDelay, SecondCallDelay: tc.secondCallDelay}
-			b := newBrokerForTests(t, *cfg, mockProvider)
 
 			firstSession, firstKey := newSessionForTests(t, b, username1, "")
-			firstToken := tokenOptions{username: username1, issuer: providerURL}
+			firstToken := tokenOptions{username: username1}
 			generateAndStoreCachedInfo(t, firstToken, b.TokenPathForSession(firstSession))
 			err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(firstSession))
 			require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 
 			secondSession, secondKey := newSessionForTests(t, b, username2, "")
-			secondToken := tokenOptions{username: username2, issuer: providerURL}
+			secondToken := tokenOptions{username: username2}
 			generateAndStoreCachedInfo(t, secondToken, b.TokenPathForSession(secondSession))
 			err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(secondSession))
 			require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
@@ -789,9 +772,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			// Ensure that the directory structure is generic to avoid golden file conflicts
 			issuerDataDir := filepath.Dir(b.UserDataDirForSession(firstSession))
 			if _, err := os.Stat(issuerDataDir); err == nil {
-				toReplace := strings.ReplaceAll(strings.TrimPrefix(providerURL, "http://"), ":", "_")
-				newIssuerDataDir := strings.ReplaceAll(issuerDataDir, toReplace, "provider_url")
-				err := os.Rename(issuerDataDir, newIssuerDataDir)
+				err := os.Rename(issuerDataDir, filepath.Join(filepath.Dir(issuerDataDir), "provider_url"))
 				if err != nil {
 					require.ErrorIs(t, err, os.ErrNotExist, "Teardown: Failed to rename issuer data directory")
 					t.Logf("Failed to rename issuer data directory: %v", err)
@@ -834,27 +815,23 @@ func TestFetchUserInfo(t *testing.T) {
 			}
 
 			dataDir := t.TempDir()
-			clientID := "test-client-id"
-			brokerCfg := &broker.Config{DataDir: dataDir}
-			brokerCfg.SetIssuerURL(defaultProviderURL)
-			brokerCfg.SetHomeBaseDir(homeDirPath)
-			brokerCfg.SetClientID(clientID)
 
-			var getGroupsFunc func() ([]info.Group, error)
-			if tc.wantGroupErr {
-				getGroupsFunc = func() ([]info.Group, error) {
-					return nil, errors.New("error getting groups")
-				}
-			} else if tc.emptyGroups {
-				getGroupsFunc = func() ([]info.Group, error) {
+			cfg := &brokerForTestConfig{
+				Config:      broker.Config{DataDir: dataDir},
+				issuerURL:   defaultProviderURL,
+				homeBaseDir: homeDirPath,
+			}
+			if tc.emptyGroups {
+				cfg.getGroupsFunc = func() ([]info.Group, error) {
 					return []info.Group{}, nil
 				}
 			}
-
-			mockProvider := &testutils.MockProvider{GetGroupsFunc: getGroupsFunc}
-
-			b, err := broker.New(*brokerCfg, broker.WithCustomProvider(mockProvider))
-			require.NoError(t, err, "Setup: New should not have returned an error")
+			if tc.wantGroupErr {
+				cfg.getGroupsFunc = func() ([]info.Group, error) {
+					return nil, errors.New("error getting groups")
+				}
+			}
+			b := newBrokerForTests(t, cfg)
 
 			if tc.username == "" {
 				tc.username = "test-user@email.com"
@@ -884,12 +861,11 @@ func TestFetchUserInfo(t *testing.T) {
 func TestCancelIsAuthenticated(t *testing.T) {
 	t.Parallel()
 
-	providerURL, cleanup := testutils.StartMockProviderServer("", nil, testutils.WithHandler("/token", testutils.HangingHandler(3*time.Second)))
-	t.Cleanup(cleanup)
-
-	cfg := &broker.Config{}
-	cfg.SetIssuerURL(providerURL)
-	b := newBrokerForTests(t, *cfg, nil)
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		customHandlers: map[string]testutils.EndpointHandler{
+			"/token": testutils.HangingHandler(3 * time.Second),
+		},
+	})
 	sessionID, _ := newSessionForTests(t, b, "", "")
 
 	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
@@ -911,9 +887,9 @@ func TestCancelIsAuthenticated(t *testing.T) {
 func TestEndSession(t *testing.T) {
 	t.Parallel()
 
-	cfg := &broker.Config{}
-	cfg.SetIssuerURL(defaultProviderURL)
-	b := newBrokerForTests(t, *cfg, nil)
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		issuerURL: defaultProviderURL,
+	})
 
 	sessionID, _ := newSessionForTests(t, b, "", "")
 
@@ -967,11 +943,12 @@ func TestUserPreCheck(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			cfg := &broker.Config{}
-			cfg.SetIssuerURL(defaultProviderURL)
-			cfg.SetHomeBaseDir(tc.homePrefix)
-			cfg.SetAllowedSSHSuffixes(tc.allowedSuffixes)
-			b := newBrokerForTests(t, *cfg, nil)
+
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				issuerURL:          defaultProviderURL,
+				homeBaseDir:        tc.homePrefix,
+				allowedSSHSuffixes: tc.allowedSuffixes,
+			})
 
 			got, err := b.UserPreCheck(tc.username)
 			if tc.wantErr {
