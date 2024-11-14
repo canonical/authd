@@ -4,7 +4,7 @@ home: /home/test-user@email.com
 shell: /usr/bin/bash
 gecos: test-user@email.com
 groups:
-    - name: test-fetch-user-info-remote-group
+    - name: remote-test-group
       ugid: "12345"
-    - name: linux-test-fetch-user-info-local-group
+    - name: local-test-group
       ugid: ""
