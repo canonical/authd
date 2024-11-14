@@ -79,19 +79,19 @@ func TestNewSession(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		customHandlers map[string]testutils.ProviderHandler
+		customHandlers map[string]testutils.EndpointHandler
 
 		wantOffline bool
 	}{
 		"Successfully_create_new_session": {},
 		"Creates_new_session_in_offline_mode_if_provider_is_not_available": {
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
 			wantOffline: true,
 		},
 		"Creates_new_session_in_offline_mode_if_provider_connection_times_out": {
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/.well-known/openid-configuration": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 			wantOffline: true,
@@ -284,7 +284,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 		tokenExists      bool
 		secondAuthStep   bool
 		passwdSession    bool
-		customHandlers   map[string]testutils.ProviderHandler
+		customHandlers   map[string]testutils.EndpointHandler
 		supportedLayouts []map[string]string
 
 		wantErr bool
@@ -298,27 +298,27 @@ func TestSelectAuthenticationMode(t *testing.T) {
 
 		"Error_when_selecting_invalid_mode": {modeName: "invalid", wantErr: true},
 		"Error_when_selecting_device_auth_qr_but_provider_is_unavailable": {modeName: authmodes.DeviceQr, wantErr: true,
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/device_auth": testutils.UnavailableHandler(),
 			},
 		},
 		"Error_when_selecting_device_auth_but_provider_is_unavailable": {
 			supportedLayouts: supportedLayoutsWithoutQrCode,
 			modeName:         authmodes.Device,
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/device_auth": testutils.UnavailableHandler(),
 			},
 			wantErr: true,
 		},
 		"Error_when_selecting_device_auth_qr_but_request_times_out": {modeName: authmodes.DeviceQr, wantErr: true,
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/device_auth": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
 		"Error_when_selecting_device_auth_but_request_times_out": {
 			supportedLayouts: supportedLayoutsWithoutQrCode,
 			modeName:         authmodes.Device,
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/device_auth": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 			wantErr: true,
@@ -399,7 +399,7 @@ func TestIsAuthenticated(t *testing.T) {
 		badFirstKey      bool
 		getUserInfoFails bool
 
-		customHandlers map[string]testutils.ProviderHandler
+		customHandlers map[string]testutils.EndpointHandler
 		address        string
 
 		wantSecondCall  bool
@@ -418,21 +418,21 @@ func TestIsAuthenticated(t *testing.T) {
 		"Authenticating_with_password_still_allowed_if_server_is_unreachable": {
 			firstMode: authmodes.Password,
 			token:     &tokenOptions{},
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
 		},
 		"Authenticating_with_password_still_allowed_if_token_is_expired_and_server_is_unreachable": {
 			firstMode: authmodes.Password,
 			token:     &tokenOptions{expired: true},
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
 		},
 		"Authenticating_still_allowed_if_token_is_missing_scopes": {
 			firstChallenge: "-",
 			wantSecondCall: true,
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.TokenHandler("http://127.0.0.1:31313", nil),
 			},
 			address: "127.0.0.1:31313",
@@ -448,14 +448,14 @@ func TestIsAuthenticated(t *testing.T) {
 		"Error_when_mode_is_password_but_server_returns_error": {
 			firstMode: authmodes.Password,
 			token:     &tokenOptions{expired: true},
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.BadRequestHandler(),
 			},
 		},
 		"Error_when_mode_is_password_and_token_is_invalid":       {firstMode: authmodes.Password, token: &tokenOptions{invalid: true}},
 		"Error_when_token_is_expired_and_refreshing_token_fails": {firstMode: authmodes.Password, token: &tokenOptions{expired: true, noRefreshToken: true}},
 		"Error_when_mode_is_password_and_token_refresh_times_out": {firstMode: authmodes.Password, token: &tokenOptions{expired: true},
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
@@ -463,17 +463,17 @@ func TestIsAuthenticated(t *testing.T) {
 
 		"Error_when_mode_is_qrcode_and_response_is_invalid": {firstAuthInfo: map[string]any{"response": "not a valid response"}},
 		"Error_when_mode_is_qrcode_and_link_expires": {
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/device_auth": testutils.ExpiryDeviceAuthHandler(),
 			},
 		},
 		"Error_when_mode_is_qrcode_and_can_not_get_token": {
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.UnavailableHandler(),
 			},
 		},
 		"Error_when_mode_is_qrcode_and_can_not_get_token_due_to_timeout": {
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
@@ -482,19 +482,19 @@ func TestIsAuthenticated(t *testing.T) {
 			firstAuthInfo: map[string]any{"response": "not a valid response"},
 		},
 		"Error_when_mode_is_link_code_and_link_expires": {
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/device_auth": testutils.ExpiryDeviceAuthHandler(),
 			},
 		},
 		"Error_when_mode_is_link_code_and_can_not_get_token": {
 			firstMode: authmodes.Device,
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.UnavailableHandler(),
 			},
 		},
 		"Error_when_mode_is_link_code_and_can_not_get_token_due_to_timeout": {
 			firstMode: authmodes.Device,
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
