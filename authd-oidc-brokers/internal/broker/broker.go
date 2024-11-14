@@ -76,7 +76,8 @@ type session struct {
 	authModes         []string
 	attemptsPerMode   map[string]int
 
-	authCfg               authConfig
+	oidcProvider          *oidc.Provider
+	oauth2Config          oauth2.Config
 	authInfo              map[string]any
 	isOffline             bool
 	userDataDir           string
@@ -87,12 +88,6 @@ type session struct {
 	currentAuthStep int
 
 	isAuthenticating *isAuthenticatedCtx
-}
-
-// authConfig holds the required values for authenticating a user with OIDC.
-type authConfig struct {
-	provider *oidc.Provider
-	oauth    oauth2.Config
 }
 
 type isAuthenticatedCtx struct {
@@ -190,11 +185,20 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 	s.passwordPath = filepath.Join(s.userDataDir, "password")
 	s.oldEncryptedTokenPath = filepath.Join(b.cfg.OldEncryptedTokensDir, issuer, username+".cache")
 
-	// Check whether to start the session in offline mode.
-	s.authCfg, err = b.connectToProvider(context.Background())
+	// Construct an OIDC provider via OIDC discovery.
+	s.oidcProvider, err = b.connectToProvider(context.Background())
 	if err != nil {
 		slog.Debug(fmt.Sprintf("Could not connect to the provider: %v. Starting session in offline mode.", err))
 		s.isOffline = true
+	}
+
+	if s.oidcProvider != nil {
+		s.oauth2Config = oauth2.Config{
+			ClientID:     b.oidcCfg.ClientID,
+			ClientSecret: b.cfg.clientSecret,
+			Endpoint:     s.oidcProvider.Endpoint(),
+			Scopes:       append(consts.DefaultScopes, b.providerInfo.AdditionalScopes()...),
+		}
 	}
 
 	b.currentSessionsMu.Lock()
@@ -204,23 +208,11 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 	return sessionID, base64.StdEncoding.EncodeToString(pubASN1), nil
 }
 
-func (b *Broker) connectToProvider(ctx context.Context) (authCfg authConfig, err error) {
+func (b *Broker) connectToProvider(ctx context.Context) (*oidc.Provider, error) {
 	ctx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
 
-	provider, err := oidc.NewProvider(ctx, b.cfg.issuerURL)
-	if err != nil {
-		return authConfig{}, err
-	}
-
-	oauthCfg := oauth2.Config{
-		ClientID:     b.oidcCfg.ClientID,
-		ClientSecret: b.cfg.clientSecret,
-		Endpoint:     provider.Endpoint(),
-		Scopes:       append(consts.DefaultScopes, b.providerInfo.AdditionalScopes()...),
-	}
-
-	return authConfig{provider: provider, oauth: oauthCfg}, nil
+	return oidc.NewProvider(ctx, b.cfg.issuerURL)
 }
 
 // GetAuthenticationModes returns the authentication modes available for the user.
@@ -249,7 +241,7 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 	}
 
 	endpoints := make(map[string]struct{})
-	if session.authCfg.provider != nil && session.authCfg.provider.Endpoint().DeviceAuthURL != "" {
+	if session.oidcProvider != nil && session.oidcProvider.Endpoint().DeviceAuthURL != "" {
 		authMode := authmodes.DeviceQr
 		if _, ok := supportedAuthModes[authMode]; ok {
 			endpoints[authMode] = struct{}{}
@@ -364,13 +356,13 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 		// extra option, public providers tend to have bespoke implementation for passing client
 		// credentials that completely bypass this
 		// full explanation in https://github.com/golang/oauth2/issues/320
-		if secret := session.authCfg.oauth.ClientSecret; secret != "" {
+		if secret := session.oauth2Config.ClientSecret; secret != "" {
 			// TODO @shipperizer verificationMethod should be a configurable value
 			verificationMethod := "client_post"
 			authOpts = append(authOpts, oauth2.SetAuthURLParam(verificationMethod, secret))
 		}
 
-		response, err := session.authCfg.oauth.DeviceAuth(ctx, authOpts...)
+		response, err := session.oauth2Config.DeviceAuth(ctx, authOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("could not generate Device Authentication code layout: %v", err)
 		}
@@ -509,7 +501,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 		expiryCtx, cancel := context.WithDeadline(ctx, response.Expiry)
 		defer cancel()
-		t, err := session.authCfg.oauth.DeviceAccessToken(expiryCtx, response, b.providerInfo.AuthOptions()...)
+		t, err := session.oauth2Config.DeviceAccessToken(expiryCtx, response, b.providerInfo.AuthOptions()...)
 		if err != nil {
 			slog.Error(err.Error())
 			return AuthRetry, errorMessage{Message: "could not authenticate user remotely"}
@@ -574,7 +566,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 
 		// Refresh the token if we're online even if the token has not expired
 		if !session.isOffline {
-			authInfo, err = b.refreshToken(ctx, session.authCfg.oauth, authInfo)
+			authInfo, err = b.refreshToken(ctx, session.oauth2Config, authInfo)
 			if err != nil {
 				slog.Error(err.Error())
 				return AuthDenied, errorMessage{Message: "could not refresh token"}
@@ -768,7 +760,7 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.A
 		return info.User{}, errors.New("session is in offline mode")
 	}
 
-	idToken, err := session.authCfg.provider.Verifier(&b.oidcCfg).Verify(ctx, t.RawIDToken)
+	idToken, err := session.oidcProvider.Verifier(&b.oidcCfg).Verify(ctx, t.RawIDToken)
 	if err != nil {
 		return info.User{}, fmt.Errorf("could not verify token: %v", err)
 	}
