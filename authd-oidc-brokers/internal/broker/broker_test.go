@@ -19,7 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var defaultProviderURL string
+var defaultIssuerURL string
 
 func TestNew(t *testing.T) {
 	t.Parallel()
@@ -44,7 +44,7 @@ func TestNew(t *testing.T) {
 
 			switch tc.issuer {
 			case "":
-				tc.issuer = defaultProviderURL
+				tc.issuer = defaultIssuerURL
 			case "-":
 				tc.issuer = ""
 			}
@@ -202,7 +202,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 			cfg := &brokerForTestConfig{}
 			if tc.providerAddress == "" {
 				// Use the default provider URL if no address is provided.
-				cfg.issuerURL = defaultProviderURL
+				cfg.issuerURL = defaultIssuerURL
 			} else {
 				cfg.listenAddress = tc.providerAddress
 
@@ -322,7 +322,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 			cfg := &brokerForTestConfig{}
 			if tc.customHandlers == nil {
 				// Use the default provider URL if no custom handlers are provided.
-				cfg.issuerURL = defaultProviderURL
+				cfg.issuerURL = defaultIssuerURL
 			} else {
 				cfg.customHandlers = tc.customHandlers
 			}
@@ -513,7 +513,7 @@ func TestIsAuthenticated(t *testing.T) {
 			}
 			if tc.customHandlers == nil {
 				// Use the default provider URL if no custom handlers are provided.
-				cfg.issuerURL = defaultProviderURL
+				cfg.issuerURL = defaultIssuerURL
 			} else {
 				cfg.customHandlers = tc.customHandlers
 				cfg.listenAddress = tc.address
@@ -818,7 +818,7 @@ func TestFetchUserInfo(t *testing.T) {
 
 			cfg := &brokerForTestConfig{
 				Config:      broker.Config{DataDir: dataDir},
-				issuerURL:   defaultProviderURL,
+				issuerURL:   defaultIssuerURL,
 				homeBaseDir: homeDirPath,
 			}
 			if tc.emptyGroups {
@@ -836,7 +836,7 @@ func TestFetchUserInfo(t *testing.T) {
 			if tc.username == "" {
 				tc.username = "test-user@email.com"
 			}
-			tc.token.issuer = defaultProviderURL
+			tc.token.issuer = defaultIssuerURL
 
 			sessionID, _, err := b.NewSession(tc.username, "lang", "auth")
 			require.NoError(t, err, "Setup: Failed to create session for the tests")
@@ -888,7 +888,7 @@ func TestEndSession(t *testing.T) {
 	t.Parallel()
 
 	b := newBrokerForTests(t, &brokerForTestConfig{
-		issuerURL: defaultProviderURL,
+		issuerURL: defaultIssuerURL,
 	})
 
 	sessionID, _ := newSessionForTests(t, b, "", "")
@@ -945,7 +945,7 @@ func TestUserPreCheck(t *testing.T) {
 			t.Parallel()
 
 			b := newBrokerForTests(t, &brokerForTestConfig{
-				issuerURL:          defaultProviderURL,
+				issuerURL:          defaultIssuerURL,
 				homeBaseDir:        tc.homePrefix,
 				allowedSSHSuffixes: tc.allowedSuffixes,
 			})
@@ -964,7 +964,7 @@ func TestUserPreCheck(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	var cleanup func()
-	defaultProviderURL, cleanup = testutils.StartMockProviderServer("", nil)
+	defaultIssuerURL, cleanup = testutils.StartMockProviderServer("", nil)
 	defer cleanup()
 
 	os.Exit(m.Run())
