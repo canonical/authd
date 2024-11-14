@@ -323,8 +323,8 @@ func ExpiryDeviceAuthHandler() ProviderHandler {
 	}
 }
 
-// MockProviderInfoer is a mock that implements the ProviderInfoer interface.
-type MockProviderInfoer struct {
+// MockProvider is a mock that implements the Provider interface.
+type MockProvider struct {
 	noprovider.NoProvider
 	Scopes           []string
 	Options          []oauth2.AuthCodeOption
@@ -339,7 +339,7 @@ type MockProviderInfoer struct {
 }
 
 // CheckTokenScopes checks if the token has the required scopes.
-func (p *MockProviderInfoer) CheckTokenScopes(token *oauth2.Token) error {
+func (p *MockProvider) CheckTokenScopes(token *oauth2.Token) error {
 	scopesStr, ok := token.Extra("scope").(string)
 	if !ok {
 		return fmt.Errorf("failed to cast token scopes to string: %v", token.Extra("scope"))
@@ -359,7 +359,7 @@ func (p *MockProviderInfoer) CheckTokenScopes(token *oauth2.Token) error {
 }
 
 // AdditionalScopes returns the additional scopes required by the provider.
-func (p *MockProviderInfoer) AdditionalScopes() []string {
+func (p *MockProvider) AdditionalScopes() []string {
 	if p.Scopes != nil {
 		return p.Scopes
 	}
@@ -367,7 +367,7 @@ func (p *MockProviderInfoer) AdditionalScopes() []string {
 }
 
 // AuthOptions returns the additional options required by the provider.
-func (p *MockProviderInfoer) AuthOptions() []oauth2.AuthCodeOption {
+func (p *MockProvider) AuthOptions() []oauth2.AuthCodeOption {
 	if p.Options != nil {
 		return p.Options
 	}
@@ -375,7 +375,7 @@ func (p *MockProviderInfoer) AuthOptions() []oauth2.AuthCodeOption {
 }
 
 // GetUserInfo is a no-op when no specific provider is in use.
-func (p *MockProviderInfoer) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error) {
+func (p *MockProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error) {
 	if p.GetUserInfoFails {
 		return info.User{}, errors.New("error requested in the mock")
 	}
@@ -421,7 +421,7 @@ type claims struct {
 }
 
 // userClaims returns the user claims parsed from the ID token.
-func (p *MockProviderInfoer) userClaims(idToken *oidc.IDToken) (claims, error) {
+func (p *MockProvider) userClaims(idToken *oidc.IDToken) (claims, error) {
 	var userClaims claims
 	if err := idToken.Claims(&userClaims); err != nil {
 		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
@@ -430,7 +430,7 @@ func (p *MockProviderInfoer) userClaims(idToken *oidc.IDToken) (claims, error) {
 }
 
 // GetGroups returns the groups the user is a member of.
-func (p *MockProviderInfoer) getGroups(*oauth2.Token) ([]info.Group, error) {
+func (p *MockProvider) getGroups(*oauth2.Token) ([]info.Group, error) {
 	if p.GroupsErr {
 		return nil, errors.New("error requested in the mock")
 	}

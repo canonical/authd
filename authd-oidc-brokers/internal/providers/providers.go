@@ -9,8 +9,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// ProviderInfoer defines provider-specific methods to be used by the broker.
-type ProviderInfoer interface {
+// Provider defines provider-specific methods to be used by the broker.
+type Provider interface {
 	AdditionalScopes() []string
 	AuthOptions() []oauth2.AuthCodeOption
 	CheckTokenScopes(token *oauth2.Token) error
