@@ -64,25 +64,25 @@ func init() {
 	mockCertificate = cert
 }
 
-// ProviderHandler is a function that handles a request to the mock provider.
-type ProviderHandler func(http.ResponseWriter, *http.Request)
+// EndpointHandler is a function that handles a request to an OIDC provider endpoint.
+type EndpointHandler func(http.ResponseWriter, *http.Request)
 
-type optionProvider struct {
-	handlers map[string]ProviderHandler
+type providerServerOption struct {
+	handlers map[string]EndpointHandler
 }
 
-// OptionProvider is a function that allows to override default options of the mock provider.
-type OptionProvider func(*optionProvider)
+// ProviderServerOption is a function that allows to override default options of the mock provider.
+type ProviderServerOption func(*providerServerOption)
 
-// WithHandler specifies a handler to the requested path in the mock provider.
-func WithHandler(path string, handler func(http.ResponseWriter, *http.Request)) OptionProvider {
-	return func(o *optionProvider) {
+// WithHandler returns a ProviderServerOption that adds a handler for a provider endpoint specified by path.
+func WithHandler(path string, handler func(http.ResponseWriter, *http.Request)) ProviderServerOption {
+	return func(o *providerServerOption) {
 		o.handlers[path] = handler
 	}
 }
 
-// StartMockProvider starts a new HTTP server to be used as an OpenID Connect provider for tests.
-func StartMockProvider(address string, tokenHandlerOpts *TokenHandlerOptions, args ...OptionProvider) (*httptest.Server, func()) {
+// StartMockProviderServer starts a new HTTP server to be used as an OIDC provider for tests.
+func StartMockProviderServer(address string, tokenHandlerOpts *TokenHandlerOptions, args ...ProviderServerOption) (string, func()) {
 	servMux := http.NewServeMux()
 	server := httptest.NewUnstartedServer(servMux)
 
@@ -95,8 +95,8 @@ func StartMockProvider(address string, tokenHandlerOpts *TokenHandlerOptions, ar
 	}
 	server.Start()
 
-	opts := optionProvider{
-		handlers: map[string]ProviderHandler{
+	opts := providerServerOption{
+		handlers: map[string]EndpointHandler{
 			"/.well-known/openid-configuration": DefaultOpenIDHandler(server.URL),
 			"/device_auth":                      DefaultDeviceAuthHandler(),
 			"/token":                            TokenHandler(server.URL, tokenHandlerOpts),
@@ -114,13 +114,13 @@ func StartMockProvider(address string, tokenHandlerOpts *TokenHandlerOptions, ar
 		servMux.HandleFunc(path, handler)
 	}
 
-	return server, func() {
+	return server.URL, func() {
 		server.Close()
 	}
 }
 
-// DefaultOpenIDHandler returns a handler that returns a default OpenID Connect configuration.
-func DefaultOpenIDHandler(serverURL string) ProviderHandler {
+// DefaultOpenIDHandler returns a handler that returns a default OIDC configuration.
+func DefaultOpenIDHandler(serverURL string) EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		wellKnown := fmt.Sprintf(`{
 			"issuer": "%[1]s",
@@ -139,8 +139,8 @@ func DefaultOpenIDHandler(serverURL string) ProviderHandler {
 	}
 }
 
-// OpenIDHandlerWithNoDeviceEndpoint returns a handler that returns an OpenID Connect configuration without device endpoint.
-func OpenIDHandlerWithNoDeviceEndpoint(serverURL string) ProviderHandler {
+// OpenIDHandlerWithNoDeviceEndpoint returns a handler that returns an OIDC configuration without device endpoint.
+func OpenIDHandlerWithNoDeviceEndpoint(serverURL string) EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		wellKnown := fmt.Sprintf(`{
 			"issuer": "%[1]s",
@@ -159,7 +159,7 @@ func OpenIDHandlerWithNoDeviceEndpoint(serverURL string) ProviderHandler {
 }
 
 // DefaultDeviceAuthHandler returns a handler that returns a default device auth response.
-func DefaultDeviceAuthHandler() ProviderHandler {
+func DefaultDeviceAuthHandler() EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		response := `{
 			"device_code": "device_code",
@@ -188,7 +188,7 @@ type TokenHandlerOptions struct {
 var idTokenClaimsMutex sync.Mutex
 
 // TokenHandler returns a handler that returns a default token response.
-func TokenHandler(serverURL string, opts *TokenHandlerOptions) ProviderHandler {
+func TokenHandler(serverURL string, opts *TokenHandlerOptions) EndpointHandler {
 	if opts == nil {
 		opts = &TokenHandlerOptions{}
 	}
@@ -247,7 +247,7 @@ func TokenHandler(serverURL string, opts *TokenHandlerOptions) ProviderHandler {
 // DefaultJWKHandler returns a handler that provides the signing keys from the broker.
 //
 // Meant to be used an the endpoint for /keys.
-func DefaultJWKHandler() ProviderHandler {
+func DefaultJWKHandler() EndpointHandler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		jwk := jose.JSONWebKey{
 			Key:          &MockKey.PublicKey,
@@ -271,21 +271,21 @@ func DefaultJWKHandler() ProviderHandler {
 }
 
 // UnavailableHandler returns a handler that returns a 503 Service Unavailable response.
-func UnavailableHandler() ProviderHandler {
+func UnavailableHandler() EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
 }
 
 // BadRequestHandler returns a handler that returns a 400 Bad Request response.
-func BadRequestHandler() ProviderHandler {
+func BadRequestHandler() EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 }
 
 // CustomResponseHandler returns a handler that returns a custom token response.
-func CustomResponseHandler(response string) ProviderHandler {
+func CustomResponseHandler(response string) EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Add("Content-Type", "application/json")
 		_, err := w.Write([]byte(response))
@@ -296,7 +296,7 @@ func CustomResponseHandler(response string) ProviderHandler {
 }
 
 // HangingHandler returns a handler that hangs the request until the duration has elapsed.
-func HangingHandler(d time.Duration) ProviderHandler {
+func HangingHandler(d time.Duration) EndpointHandler {
 	return func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(d)
 
@@ -306,7 +306,7 @@ func HangingHandler(d time.Duration) ProviderHandler {
 }
 
 // ExpiryDeviceAuthHandler returns a handler that returns a device auth response with a short expiry time.
-func ExpiryDeviceAuthHandler() ProviderHandler {
+func ExpiryDeviceAuthHandler() EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		response := `{
 			"device_code": "device_code",
@@ -323,8 +323,8 @@ func ExpiryDeviceAuthHandler() ProviderHandler {
 	}
 }
 
-// MockProviderInfoer is a mock that implements the ProviderInfoer interface.
-type MockProviderInfoer struct {
+// MockProvider is a mock that implements the Provider interface.
+type MockProvider struct {
 	noprovider.NoProvider
 	Scopes           []string
 	Options          []oauth2.AuthCodeOption
@@ -339,7 +339,7 @@ type MockProviderInfoer struct {
 }
 
 // CheckTokenScopes checks if the token has the required scopes.
-func (p *MockProviderInfoer) CheckTokenScopes(token *oauth2.Token) error {
+func (p *MockProvider) CheckTokenScopes(token *oauth2.Token) error {
 	scopesStr, ok := token.Extra("scope").(string)
 	if !ok {
 		return fmt.Errorf("failed to cast token scopes to string: %v", token.Extra("scope"))
@@ -359,7 +359,7 @@ func (p *MockProviderInfoer) CheckTokenScopes(token *oauth2.Token) error {
 }
 
 // AdditionalScopes returns the additional scopes required by the provider.
-func (p *MockProviderInfoer) AdditionalScopes() []string {
+func (p *MockProvider) AdditionalScopes() []string {
 	if p.Scopes != nil {
 		return p.Scopes
 	}
@@ -367,7 +367,7 @@ func (p *MockProviderInfoer) AdditionalScopes() []string {
 }
 
 // AuthOptions returns the additional options required by the provider.
-func (p *MockProviderInfoer) AuthOptions() []oauth2.AuthCodeOption {
+func (p *MockProvider) AuthOptions() []oauth2.AuthCodeOption {
 	if p.Options != nil {
 		return p.Options
 	}
@@ -375,7 +375,7 @@ func (p *MockProviderInfoer) AuthOptions() []oauth2.AuthCodeOption {
 }
 
 // GetUserInfo is a no-op when no specific provider is in use.
-func (p *MockProviderInfoer) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error) {
+func (p *MockProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error) {
 	if p.GetUserInfoFails {
 		return info.User{}, errors.New("error requested in the mock")
 	}
@@ -421,7 +421,7 @@ type claims struct {
 }
 
 // userClaims returns the user claims parsed from the ID token.
-func (p *MockProviderInfoer) userClaims(idToken *oidc.IDToken) (claims, error) {
+func (p *MockProvider) userClaims(idToken *oidc.IDToken) (claims, error) {
 	var userClaims claims
 	if err := idToken.Claims(&userClaims); err != nil {
 		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
@@ -430,7 +430,7 @@ func (p *MockProviderInfoer) userClaims(idToken *oidc.IDToken) (claims, error) {
 }
 
 // GetGroups returns the groups the user is a member of.
-func (p *MockProviderInfoer) getGroups(*oauth2.Token) ([]info.Group, error) {
+func (p *MockProvider) getGroups(*oauth2.Token) ([]info.Group, error) {
 	if p.GroupsErr {
 		return nil, errors.New("error requested in the mock")
 	}
