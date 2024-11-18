@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,10 +17,10 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 )
 
-var mockProvider *httptest.Server
+var providerURL string
 
 func TestHelp(t *testing.T) {
-	a := daemon.NewForTests(t, nil, mockProvider.URL, "--help")
+	a := daemon.NewForTests(t, nil, providerURL, "--help")
 
 	getStdout := captureStdout(t)
 
@@ -30,7 +29,7 @@ func TestHelp(t *testing.T) {
 }
 
 func TestCompletion(t *testing.T) {
-	a := daemon.NewForTests(t, nil, mockProvider.URL, "completion", "bash")
+	a := daemon.NewForTests(t, nil, providerURL, "completion", "bash")
 
 	getStdout := captureStdout(t)
 
@@ -39,7 +38,7 @@ func TestCompletion(t *testing.T) {
 }
 
 func TestVersion(t *testing.T) {
-	a := daemon.NewForTests(t, nil, mockProvider.URL, "version")
+	a := daemon.NewForTests(t, nil, providerURL, "version")
 
 	getStdout := captureStdout(t)
 
@@ -56,7 +55,7 @@ func TestVersion(t *testing.T) {
 }
 
 func TestNoUsageError(t *testing.T) {
-	a := daemon.NewForTests(t, nil, mockProvider.URL, "completion", "bash")
+	a := daemon.NewForTests(t, nil, providerURL, "completion", "bash")
 
 	getStdout := captureStdout(t)
 	err := a.Run()
@@ -67,7 +66,7 @@ func TestNoUsageError(t *testing.T) {
 }
 
 func TestUsageError(t *testing.T) {
-	a := daemon.NewForTests(t, nil, mockProvider.URL, "doesnotexist")
+	a := daemon.NewForTests(t, nil, providerURL, "doesnotexist")
 
 	err := a.Run()
 	require.Error(t, err, "Run should return an error, stdout: %v")
@@ -94,7 +93,7 @@ func TestCanQuitTwice(t *testing.T) {
 func TestAppCanQuitWithoutExecute(t *testing.T) {
 	t.Skipf("This test is skipped because it is flaky. There is no way to guarantee Quit has been called before run.")
 
-	a := daemon.NewForTests(t, nil, mockProvider.URL)
+	a := daemon.NewForTests(t, nil, providerURL)
 
 	requireGoroutineStarted(t, a.Quit)
 	err := a.Run()
@@ -142,7 +141,7 @@ func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 				},
 			}
 
-			a := daemon.NewForTests(t, &config, mockProvider.URL)
+			a := daemon.NewForTests(t, &config, providerURL)
 			err := a.Run()
 			require.Error(t, err, "Run should return an error")
 		})
@@ -198,7 +197,7 @@ func TestAppCanSigHupWithoutExecute(t *testing.T) {
 	r, w, err := os.Pipe()
 	require.NoError(t, err, "Setup: pipe shouldn't fail")
 
-	a := daemon.NewForTests(t, nil, mockProvider.URL)
+	a := daemon.NewForTests(t, nil, providerURL)
 
 	orig := os.Stdout
 	os.Stdout = w
@@ -215,7 +214,7 @@ func TestAppCanSigHupWithoutExecute(t *testing.T) {
 }
 
 func TestAppGetRootCmd(t *testing.T) {
-	a := daemon.NewForTests(t, nil, mockProvider.URL)
+	a := daemon.NewForTests(t, nil, providerURL)
 	require.NotNil(t, a.RootCmd(), "Returns root command")
 }
 
@@ -247,8 +246,8 @@ func TestConfigHasPrecedenceOverPathsConfig(t *testing.T) {
 	}
 
 	overrideBrokerConfPath := filepath.Join(tmpDir, "override", "via", "config", "broker.conf")
-	daemon.GenerateBrokerConfig(t, overrideBrokerConfPath, mockProvider.URL)
-	a := daemon.NewForTests(t, &config, mockProvider.URL, "--config", overrideBrokerConfPath)
+	daemon.GenerateBrokerConfig(t, overrideBrokerConfPath, providerURL)
+	a := daemon.NewForTests(t, &config, providerURL, "--config", overrideBrokerConfPath)
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -278,7 +277,7 @@ func TestAutoDetectConfig(t *testing.T) {
 		},
 	}
 
-	configPath := daemon.GenerateTestConfig(t, &config, mockProvider.URL)
+	configPath := daemon.GenerateTestConfig(t, &config, providerURL)
 	configNextToBinaryPath := filepath.Join(filepath.Dir(os.Args[0]), t.Name()+".yaml")
 	err := os.Rename(configPath, configNextToBinaryPath)
 	require.NoError(t, err, "Could not relocate authd configuration file in the binary directory")
@@ -344,7 +343,7 @@ func requireGoroutineStarted(t *testing.T, f func()) {
 func startDaemon(t *testing.T, conf *daemon.DaemonConfig) (app *daemon.App, done func()) {
 	t.Helper()
 
-	a := daemon.NewForTests(t, conf, mockProvider.URL)
+	a := daemon.NewForTests(t, conf, providerURL)
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -403,9 +402,8 @@ func TestMain(m *testing.M) {
 	defer cleanup()
 
 	// Start provider mock
-	providerServer, cleanup := testutils.StartMockProvider("", nil)
+	providerURL, cleanup = testutils.StartMockProviderServer("", nil)
 	defer cleanup()
-	mockProvider = providerServer
 
 	m.Run()
 }

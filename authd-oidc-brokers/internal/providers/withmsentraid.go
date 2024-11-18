@@ -6,7 +6,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid"
 )
 
-// CurrentProviderInfo returns a Microsoft Entra ID provider implementation.
-func CurrentProviderInfo() ProviderInfoer {
+// CurrentProvider returns a Microsoft Entra ID provider implementation.
+func CurrentProvider() Provider {
 	return msentraid.New()
 }

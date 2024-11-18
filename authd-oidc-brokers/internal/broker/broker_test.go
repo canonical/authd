@@ -3,7 +3,6 @@ package broker_test
 import (
 	"encoding/json"
 	"fmt"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var defaultProvider *httptest.Server
+var defaultProviderURL string
 
 func TestNew(t *testing.T) {
 	t.Parallel()
@@ -45,7 +44,7 @@ func TestNew(t *testing.T) {
 
 			switch tc.issuer {
 			case "":
-				tc.issuer = defaultProvider.URL
+				tc.issuer = defaultProviderURL
 			case "-":
 				tc.issuer = ""
 			}
@@ -80,19 +79,19 @@ func TestNewSession(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		customHandlers map[string]testutils.ProviderHandler
+		customHandlers map[string]testutils.EndpointHandler
 
 		wantOffline bool
 	}{
 		"Successfully_create_new_session": {},
 		"Creates_new_session_in_offline_mode_if_provider_is_not_available": {
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
 			wantOffline: true,
 		},
 		"Creates_new_session_in_offline_mode_if_provider_connection_times_out": {
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/.well-known/openid-configuration": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 			wantOffline: true,
@@ -102,15 +101,15 @@ func TestNewSession(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			var opts []testutils.OptionProvider
+			var opts []testutils.ProviderServerOption
 			for endpoint, handler := range tc.customHandlers {
 				opts = append(opts, testutils.WithHandler(endpoint, handler))
 			}
 
-			provider, stopServer := testutils.StartMockProvider("", nil, opts...)
-			t.Cleanup(stopServer)
+			providerURL, cleanup := testutils.StartMockProviderServer("", nil, opts...)
+			t.Cleanup(cleanup)
 			cfg := &broker.Config{}
-			cfg.SetIssuerURL(provider.URL)
+			cfg.SetIssuerURL(providerURL)
 			b := newBrokerForTests(t, *cfg, nil)
 
 			id, _, err := b.NewSession("test-user", "lang", "auth")
@@ -207,11 +206,10 @@ func TestGetAuthenticationModes(t *testing.T) {
 				tc.sessionMode = "auth"
 			}
 
-			provider := defaultProvider
-			var stopServer func()
+			providerURL := defaultProviderURL
 			if tc.providerAddress != "" {
 				address := tc.providerAddress
-				opts := []testutils.OptionProvider{}
+				opts := []testutils.ProviderServerOption{}
 				if tc.deviceAuthUnsupported {
 					opts = append(opts, testutils.WithHandler(
 						"/.well-known/openid-configuration",
@@ -224,11 +222,12 @@ func TestGetAuthenticationModes(t *testing.T) {
 						testutils.UnavailableHandler(),
 					))
 				}
-				provider, stopServer = testutils.StartMockProvider(address, nil, opts...)
-				t.Cleanup(stopServer)
+				var cleanup func()
+				providerURL, cleanup = testutils.StartMockProviderServer(address, nil, opts...)
+				t.Cleanup(cleanup)
 			}
 			cfg := &broker.Config{}
-			cfg.SetIssuerURL(provider.URL)
+			cfg.SetIssuerURL(providerURL)
 			b := newBrokerForTests(t, *cfg, nil)
 			sessionID, _ := newSessionForTests(t, b, "", tc.sessionMode)
 			if tc.sessionID == "-" {
@@ -285,7 +284,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 		tokenExists      bool
 		secondAuthStep   bool
 		passwdSession    bool
-		customHandlers   map[string]testutils.ProviderHandler
+		customHandlers   map[string]testutils.EndpointHandler
 		supportedLayouts []map[string]string
 
 		wantErr bool
@@ -299,27 +298,27 @@ func TestSelectAuthenticationMode(t *testing.T) {
 
 		"Error_when_selecting_invalid_mode": {modeName: "invalid", wantErr: true},
 		"Error_when_selecting_device_auth_qr_but_provider_is_unavailable": {modeName: authmodes.DeviceQr, wantErr: true,
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/device_auth": testutils.UnavailableHandler(),
 			},
 		},
 		"Error_when_selecting_device_auth_but_provider_is_unavailable": {
 			supportedLayouts: supportedLayoutsWithoutQrCode,
 			modeName:         authmodes.Device,
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/device_auth": testutils.UnavailableHandler(),
 			},
 			wantErr: true,
 		},
 		"Error_when_selecting_device_auth_qr_but_request_times_out": {modeName: authmodes.DeviceQr, wantErr: true,
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/device_auth": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
 		"Error_when_selecting_device_auth_but_request_times_out": {
 			supportedLayouts: supportedLayoutsWithoutQrCode,
 			modeName:         authmodes.Device,
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/device_auth": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 			wantErr: true,
@@ -329,15 +328,15 @@ func TestSelectAuthenticationMode(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			provider := defaultProvider
+			providerURL := defaultProviderURL
 			if tc.customHandlers != nil {
-				var opts []testutils.OptionProvider
+				var opts []testutils.ProviderServerOption
 				for path, handler := range tc.customHandlers {
 					opts = append(opts, testutils.WithHandler(path, handler))
 				}
-				p, cleanup := testutils.StartMockProvider("", nil, opts...)
+				var cleanup func()
+				providerURL, cleanup = testutils.StartMockProviderServer("", nil, opts...)
 				defer cleanup()
-				provider = p
 			}
 
 			sessionType := "auth"
@@ -346,7 +345,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 			}
 
 			cfg := &broker.Config{}
-			cfg.SetIssuerURL(provider.URL)
+			cfg.SetIssuerURL(providerURL)
 			b := newBrokerForTests(t, *cfg, nil)
 			sessionID, _ := newSessionForTests(t, b, "", sessionType)
 
@@ -400,7 +399,7 @@ func TestIsAuthenticated(t *testing.T) {
 		badFirstKey      bool
 		getUserInfoFails bool
 
-		customHandlers map[string]testutils.ProviderHandler
+		customHandlers map[string]testutils.EndpointHandler
 		address        string
 
 		wantSecondCall  bool
@@ -419,21 +418,21 @@ func TestIsAuthenticated(t *testing.T) {
 		"Authenticating_with_password_still_allowed_if_server_is_unreachable": {
 			firstMode: authmodes.Password,
 			token:     &tokenOptions{},
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
 		},
 		"Authenticating_with_password_still_allowed_if_token_is_expired_and_server_is_unreachable": {
 			firstMode: authmodes.Password,
 			token:     &tokenOptions{expired: true},
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
 		},
 		"Authenticating_still_allowed_if_token_is_missing_scopes": {
 			firstChallenge: "-",
 			wantSecondCall: true,
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.TokenHandler("http://127.0.0.1:31313", nil),
 			},
 			address: "127.0.0.1:31313",
@@ -449,14 +448,14 @@ func TestIsAuthenticated(t *testing.T) {
 		"Error_when_mode_is_password_but_server_returns_error": {
 			firstMode: authmodes.Password,
 			token:     &tokenOptions{expired: true},
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.BadRequestHandler(),
 			},
 		},
 		"Error_when_mode_is_password_and_token_is_invalid":       {firstMode: authmodes.Password, token: &tokenOptions{invalid: true}},
 		"Error_when_token_is_expired_and_refreshing_token_fails": {firstMode: authmodes.Password, token: &tokenOptions{expired: true, noRefreshToken: true}},
 		"Error_when_mode_is_password_and_token_refresh_times_out": {firstMode: authmodes.Password, token: &tokenOptions{expired: true},
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
@@ -464,17 +463,17 @@ func TestIsAuthenticated(t *testing.T) {
 
 		"Error_when_mode_is_qrcode_and_response_is_invalid": {firstAuthInfo: map[string]any{"response": "not a valid response"}},
 		"Error_when_mode_is_qrcode_and_link_expires": {
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/device_auth": testutils.ExpiryDeviceAuthHandler(),
 			},
 		},
 		"Error_when_mode_is_qrcode_and_can_not_get_token": {
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.UnavailableHandler(),
 			},
 		},
 		"Error_when_mode_is_qrcode_and_can_not_get_token_due_to_timeout": {
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
@@ -483,19 +482,19 @@ func TestIsAuthenticated(t *testing.T) {
 			firstAuthInfo: map[string]any{"response": "not a valid response"},
 		},
 		"Error_when_mode_is_link_code_and_link_expires": {
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/device_auth": testutils.ExpiryDeviceAuthHandler(),
 			},
 		},
 		"Error_when_mode_is_link_code_and_can_not_get_token": {
 			firstMode: authmodes.Device,
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.UnavailableHandler(),
 			},
 		},
 		"Error_when_mode_is_link_code_and_can_not_get_token_due_to_timeout": {
 			firstMode: authmodes.Device,
-			customHandlers: map[string]testutils.ProviderHandler{
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
@@ -518,25 +517,25 @@ func TestIsAuthenticated(t *testing.T) {
 			err := os.Mkdir(dataDir, 0700)
 			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
 
-			provider := defaultProvider
+			providerURL := defaultProviderURL
 			if tc.customHandlers != nil {
-				var opts []testutils.OptionProvider
+				var opts []testutils.ProviderServerOption
 				for path, handler := range tc.customHandlers {
 					opts = append(opts, testutils.WithHandler(path, handler))
 				}
-				p, cleanup := testutils.StartMockProvider(tc.address, nil, opts...)
+				var cleanup func()
+				providerURL, cleanup = testutils.StartMockProviderServer(tc.address, nil, opts...)
 				t.Cleanup(cleanup)
-				provider = p
 			}
 
 			cfg := &broker.Config{DataDir: dataDir}
-			cfg.SetIssuerURL(provider.URL)
-			mockInfoer := &testutils.MockProviderInfoer{GetUserInfoFails: tc.getUserInfoFails}
-			b := newBrokerForTests(t, *cfg, mockInfoer)
+			cfg.SetIssuerURL(providerURL)
+			mockProvider := &testutils.MockProvider{GetUserInfoFails: tc.getUserInfoFails}
+			b := newBrokerForTests(t, *cfg, mockProvider)
 			sessionID, key := newSessionForTests(t, b, tc.username, tc.sessionMode)
 
 			if tc.token != nil {
-				tc.token.issuer = provider.URL
+				tc.token.issuer = providerURL
 				generateAndStoreCachedInfo(t, *tc.token, b.TokenPathForSession(sessionID))
 				err = password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID))
 				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
@@ -656,7 +655,7 @@ func TestIsAuthenticated(t *testing.T) {
 
 			// Ensure that the directory structure is generic to avoid golden file conflicts
 			if _, err := os.Stat(filepath.Dir(b.TokenPathForSession(sessionID))); err == nil {
-				toReplace := strings.ReplaceAll(strings.TrimPrefix(provider.URL, "http://"), ":", "_")
+				toReplace := strings.ReplaceAll(strings.TrimPrefix(providerURL, "http://"), ":", "_")
 				tokenDir := filepath.Dir(filepath.Dir(b.TokenPathForSession(sessionID)))
 				newTokenDir := strings.ReplaceAll(tokenDir, toReplace, "provider_url")
 				err := os.Rename(tokenDir, newTokenDir)
@@ -694,7 +693,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			username1 := "user1@example.com"
 			username2 := "user2@example.com"
 
-			provider, cleanup := testutils.StartMockProvider("", &testutils.TokenHandlerOptions{
+			providerURL, cleanup := testutils.StartMockProviderServer("", &testutils.TokenHandlerOptions{
 				IDTokenClaims: []map[string]interface{}{
 					{"sub": "user1", "name": "user1", "email": username1},
 					{"sub": "user2", "name": "user2", "email": username2},
@@ -703,18 +702,18 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			defer cleanup()
 
 			cfg := &broker.Config{DataDir: dataDir}
-			cfg.SetIssuerURL(provider.URL)
-			mockInfoer := &testutils.MockProviderInfoer{FirstCallDelay: tc.firstCallDelay, SecondCallDelay: tc.secondCallDelay}
-			b := newBrokerForTests(t, *cfg, mockInfoer)
+			cfg.SetIssuerURL(providerURL)
+			mockProvider := &testutils.MockProvider{FirstCallDelay: tc.firstCallDelay, SecondCallDelay: tc.secondCallDelay}
+			b := newBrokerForTests(t, *cfg, mockProvider)
 
 			firstSession, firstKey := newSessionForTests(t, b, username1, "")
-			firstToken := tokenOptions{username: username1, issuer: provider.URL}
+			firstToken := tokenOptions{username: username1, issuer: providerURL}
 			generateAndStoreCachedInfo(t, firstToken, b.TokenPathForSession(firstSession))
 			err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(firstSession))
 			require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 
 			secondSession, secondKey := newSessionForTests(t, b, username2, "")
-			secondToken := tokenOptions{username: username2, issuer: provider.URL}
+			secondToken := tokenOptions{username: username2, issuer: providerURL}
 			generateAndStoreCachedInfo(t, secondToken, b.TokenPathForSession(secondSession))
 			err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(secondSession))
 			require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
@@ -784,7 +783,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			// Ensure that the directory structure is generic to avoid golden file conflicts
 			issuerDataDir := filepath.Dir(b.UserDataDirForSession(firstSession))
 			if _, err := os.Stat(issuerDataDir); err == nil {
-				toReplace := strings.ReplaceAll(strings.TrimPrefix(provider.URL, "http://"), ":", "_")
+				toReplace := strings.ReplaceAll(strings.TrimPrefix(providerURL, "http://"), ":", "_")
 				newIssuerDataDir := strings.ReplaceAll(issuerDataDir, toReplace, "provider_url")
 				err := os.Rename(issuerDataDir, newIssuerDataDir)
 				if err != nil {
@@ -831,11 +830,11 @@ func TestFetchUserInfo(t *testing.T) {
 			dataDir := t.TempDir()
 			clientID := "test-client-id"
 			brokerCfg := &broker.Config{DataDir: dataDir}
-			brokerCfg.SetIssuerURL(defaultProvider.URL)
+			brokerCfg.SetIssuerURL(defaultProviderURL)
 			brokerCfg.SetHomeBaseDir(homeDirPath)
 			brokerCfg.SetClientID(clientID)
 
-			mockInfoer := &testutils.MockProviderInfoer{
+			mockProvider := &testutils.MockProvider{
 				GroupsErr: tc.wantGroupErr,
 				Groups: []info.Group{
 					{Name: "test-fetch-user-info-remote-group", UGID: "12345"},
@@ -843,16 +842,16 @@ func TestFetchUserInfo(t *testing.T) {
 				},
 			}
 			if tc.emptyGroups {
-				mockInfoer.Groups = []info.Group{}
+				mockProvider.Groups = []info.Group{}
 			}
 
-			b, err := broker.New(*brokerCfg, broker.WithCustomProviderInfo(mockInfoer))
+			b, err := broker.New(*brokerCfg, broker.WithCustomProvider(mockProvider))
 			require.NoError(t, err, "Setup: New should not have returned an error")
 
 			if tc.username == "" {
 				tc.username = "test-user@email.com"
 			}
-			tc.token.issuer = defaultProvider.URL
+			tc.token.issuer = defaultProviderURL
 
 			sessionID, _, err := b.NewSession(tc.username, "lang", "auth")
 			require.NoError(t, err, "Setup: Failed to create session for the tests")
@@ -877,11 +876,11 @@ func TestFetchUserInfo(t *testing.T) {
 func TestCancelIsAuthenticated(t *testing.T) {
 	t.Parallel()
 
-	provider, cleanup := testutils.StartMockProvider("", nil, testutils.WithHandler("/token", testutils.HangingHandler(3*time.Second)))
+	providerURL, cleanup := testutils.StartMockProviderServer("", nil, testutils.WithHandler("/token", testutils.HangingHandler(3*time.Second)))
 	t.Cleanup(cleanup)
 
 	cfg := &broker.Config{}
-	cfg.SetIssuerURL(provider.URL)
+	cfg.SetIssuerURL(providerURL)
 	b := newBrokerForTests(t, *cfg, nil)
 	sessionID, _ := newSessionForTests(t, b, "", "")
 
@@ -905,7 +904,7 @@ func TestEndSession(t *testing.T) {
 	t.Parallel()
 
 	cfg := &broker.Config{}
-	cfg.SetIssuerURL(defaultProvider.URL)
+	cfg.SetIssuerURL(defaultProviderURL)
 	b := newBrokerForTests(t, *cfg, nil)
 
 	sessionID, _ := newSessionForTests(t, b, "", "")
@@ -961,7 +960,7 @@ func TestUserPreCheck(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			cfg := &broker.Config{}
-			cfg.SetIssuerURL(defaultProvider.URL)
+			cfg.SetIssuerURL(defaultProviderURL)
 			cfg.SetHomeBaseDir(tc.homePrefix)
 			cfg.SetAllowedSSHSuffixes(tc.allowedSuffixes)
 			b := newBrokerForTests(t, *cfg, nil)
@@ -979,10 +978,9 @@ func TestUserPreCheck(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
-	server, cleanup := testutils.StartMockProvider("", nil)
+	var cleanup func()
+	defaultProviderURL, cleanup = testutils.StartMockProviderServer("", nil)
 	defer cleanup()
-
-	defaultProvider = server
 
 	os.Exit(m.Run())
 }
