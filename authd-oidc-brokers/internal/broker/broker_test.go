@@ -259,8 +259,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 			}
 			require.NoError(t, err, "GetAuthenticationModes should not have returned an error")
 
-			want := testutils.LoadWithUpdateFromGoldenYAML(t, got)
-			require.Equal(t, want, got, "GetAuthenticationModes should have returned the expected value")
+			testutils.CheckOrUpdateGoldenYAML(t, got)
 		})
 	}
 }
@@ -375,8 +374,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 			}
 			require.NoError(t, err, "SelectAuthenticationMode should not have returned an error")
 
-			want := testutils.LoadWithUpdateFromGoldenYAML(t, got)
-			require.Equal(t, want, got, "SelectAuthenticationMode should have returned the expected layout")
+			testutils.CheckOrUpdateGoldenYAML(t, got)
 		})
 	}
 }
@@ -668,7 +666,7 @@ func TestIsAuthenticated(t *testing.T) {
 				}
 			}
 
-			testutils.CompareTreesWithFiltering(t, outDir, testutils.GoldenPath(t), testutils.UpdateEnabled())
+			testutils.CheckOrUpdateGoldenFileTree(t, outDir, testutils.GoldenPath(t))
 		})
 	}
 }
@@ -794,7 +792,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 					t.Logf("Failed to rename issuer data directory: %v", err)
 				}
 			}
-			testutils.CompareTreesWithFiltering(t, outDir, testutils.GoldenPath(t), testutils.UpdateEnabled())
+			testutils.CheckOrUpdateGoldenFileTree(t, outDir, testutils.GoldenPath(t))
 		})
 	}
 }
@@ -871,8 +869,7 @@ func TestFetchUserInfo(t *testing.T) {
 			}
 			require.NoError(t, err, "FetchUserInfo should not have returned an error")
 
-			want := testutils.LoadWithUpdateFromGoldenYAML(t, got)
-			require.Equal(t, want, got, "FetchUserInfo should have returned the expected value")
+			testutils.CheckOrUpdateGoldenYAML(t, got)
 		})
 	}
 }
@@ -976,8 +973,7 @@ func TestUserPreCheck(t *testing.T) {
 			}
 			require.NoError(t, err, "UserPreCheck should not have returned an error")
 
-			want := testutils.LoadWithUpdateFromGolden(t, got)
-			require.Equal(t, want, got, "UserPreCheck should have returned the expected value")
+			testutils.CheckOrUpdateGolden(t, got)
 		})
 	}
 }
