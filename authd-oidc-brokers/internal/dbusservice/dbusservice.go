@@ -23,8 +23,8 @@ const intro = `
 		</method>
 		<method name="GetAuthenticationModes">
 			<arg type="s" direction="in" name="sessionID"/>
-			<arg type="a{ss}" direction="in" name="supportedUILayouts"/>
-			<arg type="a{ss}" direction="out" name="authenticationModes"/>
+			<arg type="aa{ss}" direction="in" name="supportedUILayouts"/>
+			<arg type="aa{ss}" direction="out" name="authenticationModes"/>
 		</method>
 		<method name="SelectAuthenticationMode">
 			<arg type="s" direction="in" name="sessionID"/>
