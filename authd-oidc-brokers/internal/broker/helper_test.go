@@ -23,16 +23,16 @@ import (
 // newBrokerForTests is a helper function to create a new broker for tests with the specified configuration.
 //
 // Note that the issuerURL is required in the configuration.
-func newBrokerForTests(t *testing.T, cfg broker.Config, providerInfoer *testutils.MockProviderInfoer) (b *broker.Broker) {
+func newBrokerForTests(t *testing.T, cfg broker.Config, provider *testutils.MockProvider) (b *broker.Broker) {
 	t.Helper()
 
 	require.NotEmpty(t, cfg.IssuerURL(), "Setup: issuerURL must not be empty")
 
-	if providerInfoer == nil {
-		providerInfoer = &testutils.MockProviderInfoer{}
+	if provider == nil {
+		provider = &testutils.MockProvider{}
 	}
-	if providerInfoer.Groups == nil {
-		providerInfoer.Groups = []info.Group{
+	if provider.Groups == nil {
+		provider.Groups = []info.Group{
 			{Name: "new-broker-for-tests-remote-group", UGID: "12345"},
 			{Name: "linux-new-broker-for-tests-local-group", UGID: ""},
 		}
@@ -47,7 +47,7 @@ func newBrokerForTests(t *testing.T, cfg broker.Config, providerInfoer *testutil
 
 	b, err := broker.New(
 		cfg,
-		broker.WithCustomProviderInfo(providerInfoer),
+		broker.WithCustomProvider(provider),
 	)
 	require.NoError(t, err, "Setup: New should not have returned an error")
 	return b
