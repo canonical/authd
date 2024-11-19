@@ -1,4 +1,5 @@
-package testutils
+// Package golden provides utilities to compare and update golden files in tests.
+package golden
 
 import (
 	"bytes"

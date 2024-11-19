@@ -15,6 +15,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/password"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
+	"github.com/ubuntu/authd-oidc-brokers/internal/testutils/golden"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"gopkg.in/yaml.v3"
 )
@@ -249,7 +250,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 			}
 			require.NoError(t, err, "GetAuthenticationModes should not have returned an error")
 
-			testutils.CheckOrUpdateGoldenYAML(t, got)
+			golden.CheckOrUpdateGoldenYAML(t, got)
 		})
 	}
 }
@@ -358,7 +359,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 			}
 			require.NoError(t, err, "SelectAuthenticationMode should not have returned an error")
 
-			testutils.CheckOrUpdateGoldenYAML(t, got)
+			golden.CheckOrUpdateGoldenYAML(t, got)
 		})
 	}
 }
@@ -698,7 +699,7 @@ func TestIsAuthenticated(t *testing.T) {
 				}
 			}
 
-			testutils.CheckOrUpdateGoldenFileTree(t, outDir, testutils.GoldenPath(t))
+			golden.CheckOrUpdateGoldenFileTree(t, outDir, golden.GoldenPath(t))
 		})
 	}
 }
@@ -821,7 +822,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 					t.Logf("Failed to rename issuer data directory: %v", err)
 				}
 			}
-			testutils.CheckOrUpdateGoldenFileTree(t, outDir, testutils.GoldenPath(t))
+			golden.CheckOrUpdateGoldenFileTree(t, outDir, golden.GoldenPath(t))
 		})
 	}
 }
@@ -896,7 +897,7 @@ func TestFetchUserInfo(t *testing.T) {
 			}
 			require.NoError(t, err, "FetchUserInfo should not have returned an error")
 
-			testutils.CheckOrUpdateGoldenYAML(t, got)
+			golden.CheckOrUpdateGoldenYAML(t, got)
 		})
 	}
 }
@@ -1000,7 +1001,7 @@ func TestUserPreCheck(t *testing.T) {
 			}
 			require.NoError(t, err, "UserPreCheck should not have returned an error")
 
-			testutils.CheckOrUpdateGolden(t, got)
+			golden.CheckOrUpdateGolden(t, got)
 		})
 	}
 }

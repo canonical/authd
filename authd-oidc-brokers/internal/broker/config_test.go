@@ -10,7 +10,7 @@ import (
 	"unsafe"
 
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
+	"github.com/ubuntu/authd-oidc-brokers/internal/testutils/golden"
 )
 
 var configTypes = map[string]string{
@@ -106,7 +106,7 @@ func TestParseConfig(t *testing.T) {
 			err = os.WriteFile(filepath.Join(outDir, "config.txt"), []byte(strings.Join(fields, "\n")), 0600)
 			require.NoError(t, err)
 
-			testutils.CheckOrUpdateGoldenFileTree(t, outDir, testutils.GoldenPath(t))
+			golden.CheckOrUpdateGoldenFileTree(t, outDir, golden.GoldenPath(t))
 		})
 	}
 }
