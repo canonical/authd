@@ -227,13 +227,20 @@ func checkGoldenFileEqualsString(t *testing.T, got, goldenPath string) {
 }
 
 // CheckOrUpdateGoldenFileTree allows comparing a goldPath directory to p. Those can be updated via the dedicated flag.
-func CheckOrUpdateGoldenFileTree(t *testing.T, path, goldenPath string) {
+func CheckOrUpdateGoldenFileTree(t *testing.T, path string, options ...GoldenOption) {
 	t.Helper()
 
+	opts := goldenOptions{
+		path: GoldenPath(t),
+	}
+	for _, f := range options {
+		f(&opts)
+	}
+
 	if update {
-		t.Logf("updating golden path %s", goldenPath)
-		err := os.RemoveAll(goldenPath)
-		require.NoError(t, err, "Cannot remove golden path %s", goldenPath)
+		t.Logf("updating golden path %s", opts.path)
+		err := os.RemoveAll(opts.path)
+		require.NoError(t, err, "Cannot remove golden path %s", opts.path)
 
 		// check the source directory exists before trying to copy it
 		info, err := os.Stat(path)
@@ -246,13 +253,13 @@ func CheckOrUpdateGoldenFileTree(t *testing.T, path, goldenPath string) {
 			// copy file
 			data, err := os.ReadFile(path)
 			require.NoError(t, err, "Cannot read file %s", path)
-			err = os.WriteFile(goldenPath, data, info.Mode())
+			err = os.WriteFile(opts.path, data, info.Mode())
 			require.NoError(t, err, "Cannot write golden file")
 		} else {
 			err := addEmptyMarker(path)
 			require.NoError(t, err, "Cannot add empty marker to directory %s", path)
 
-			err = cp.Copy(path, goldenPath)
+			err = cp.Copy(path, opts.path)
 			require.NoError(t, err, "Can’t update golden directory")
 		}
 	}
@@ -265,7 +272,7 @@ func CheckOrUpdateGoldenFileTree(t *testing.T, path, goldenPath string) {
 
 		relPath, err := filepath.Rel(path, p)
 		require.NoError(t, err, "Cannot get relative path for %s", p)
-		goldenFilePath := filepath.Join(goldenPath, relPath)
+		goldenFilePath := filepath.Join(opts.path, relPath)
 
 		if de.IsDir() {
 			return nil
@@ -293,7 +300,7 @@ func CheckOrUpdateGoldenFileTree(t *testing.T, path, goldenPath string) {
 	require.NoError(t, err, "Cannot walk through directory %s", path)
 
 	// Check if there are files in the golden directory that are not in the source directory.
-	err = filepath.WalkDir(goldenPath, func(p string, de fs.DirEntry, err error) error {
+	err = filepath.WalkDir(opts.path, func(p string, de fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -303,7 +310,7 @@ func CheckOrUpdateGoldenFileTree(t *testing.T, path, goldenPath string) {
 			return nil
 		}
 
-		relPath, err := filepath.Rel(goldenPath, p)
+		relPath, err := filepath.Rel(opts.path, p)
 		require.NoError(t, err, "Cannot get relative path for %s", p)
 		filePath := filepath.Join(path, relPath)
 
@@ -316,7 +323,7 @@ func CheckOrUpdateGoldenFileTree(t *testing.T, path, goldenPath string) {
 
 		return nil
 	})
-	require.NoError(t, err, "Cannot walk through directory %s", goldenPath)
+	require.NoError(t, err, "Cannot walk through directory %s", opts.path)
 }
 
 const fileForEmptyDir = ".empty"
