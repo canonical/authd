@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	cp "github.com/otiai10/copy"
+	"github.com/otiai10/copy"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -267,7 +267,7 @@ func CheckOrUpdateFileTree(t *testing.T, path string, options ...Option) {
 			err := addEmptyMarker(path)
 			require.NoError(t, err, "Cannot add empty marker to directory %s", path)
 
-			err = cp.Copy(path, opts.path)
+			err = copy.Copy(path, opts.path)
 			require.NoError(t, err, "Can’t update golden directory")
 		}
 	}
