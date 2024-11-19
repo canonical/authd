@@ -250,7 +250,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 			}
 			require.NoError(t, err, "GetAuthenticationModes should not have returned an error")
 
-			golden.CheckOrUpdateGoldenYAML(t, got)
+			golden.CheckOrUpdateYAML(t, got)
 		})
 	}
 }
@@ -359,7 +359,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 			}
 			require.NoError(t, err, "SelectAuthenticationMode should not have returned an error")
 
-			golden.CheckOrUpdateGoldenYAML(t, got)
+			golden.CheckOrUpdateYAML(t, got)
 		})
 	}
 }
@@ -699,7 +699,7 @@ func TestIsAuthenticated(t *testing.T) {
 				}
 			}
 
-			golden.CheckOrUpdateGoldenFileTree(t, outDir)
+			golden.CheckOrUpdateFileTree(t, outDir)
 		})
 	}
 }
@@ -822,7 +822,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 					t.Logf("Failed to rename issuer data directory: %v", err)
 				}
 			}
-			golden.CheckOrUpdateGoldenFileTree(t, outDir)
+			golden.CheckOrUpdateFileTree(t, outDir)
 		})
 	}
 }
@@ -897,7 +897,7 @@ func TestFetchUserInfo(t *testing.T) {
 			}
 			require.NoError(t, err, "FetchUserInfo should not have returned an error")
 
-			golden.CheckOrUpdateGoldenYAML(t, got)
+			golden.CheckOrUpdateYAML(t, got)
 		})
 	}
 }
@@ -1001,7 +1001,7 @@ func TestUserPreCheck(t *testing.T) {
 			}
 			require.NoError(t, err, "UserPreCheck should not have returned an error")
 
-			golden.CheckOrUpdateGolden(t, got)
+			golden.CheckOrUpdate(t, got)
 		})
 	}
 }
