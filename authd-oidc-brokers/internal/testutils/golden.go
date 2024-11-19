@@ -134,28 +134,19 @@ func CheckValidGoldenFileName(t *testing.T, name string) {
 		"Invalid golden file name %q. Only alphanumeric characters, underscores, dashes, and dots are allowed", name)
 }
 
-// TestFamilyPath returns the path of the dir for storing fixtures and other files related to the test.
-func TestFamilyPath(t *testing.T) string {
-	t.Helper()
-
-	// Ensures that only the name of the parent test is used.
-	super, _, _ := strings.Cut(t.Name(), "/")
-
-	return filepath.Join("testdata", super)
-}
-
 // GoldenPath returns the golden path for the provided test.
 func GoldenPath(t *testing.T) string {
 	t.Helper()
 
-	path := filepath.Join(TestFamilyPath(t), "golden")
-	_, subtestName, found := strings.Cut(t.Name(), "/")
-	if found {
-		CheckValidGoldenFileName(t, subtestName)
-		path = filepath.Join(path, subtestName)
+	topLevelTest, subtest, subtestFound := strings.Cut(t.Name(), "/")
+	CheckValidGoldenFileName(t, topLevelTest)
+
+	if !subtestFound {
+		return filepath.Join("testdata", "golden", topLevelTest)
 	}
 
-	return path
+	CheckValidGoldenFileName(t, subtest)
+	return filepath.Join("testdata", "golden", topLevelTest, subtest)
 }
 
 // runDelta pipes the unified diff through the `delta` command for word-level diff and coloring.
