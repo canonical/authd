@@ -62,11 +62,12 @@ func updateGoldenFile(t *testing.T, path string, data []byte) {
 func CheckOrUpdateGolden(t *testing.T, got string, options ...GoldenOption) {
 	t.Helper()
 
-	opts := goldenOptions{
-		path: GoldenPath(t),
-	}
+	opts := goldenOptions{}
 	for _, f := range options {
 		f(&opts)
+	}
+	if !filepath.IsAbs(opts.path) {
+		opts.path = filepath.Join(GoldenPath(t), opts.path)
 	}
 
 	if update {
@@ -92,11 +93,12 @@ func CheckOrUpdateGoldenYAML[E any](t *testing.T, got E, options ...GoldenOption
 func LoadWithUpdateFromGolden(t *testing.T, data string, options ...GoldenOption) string {
 	t.Helper()
 
-	opts := goldenOptions{
-		path: GoldenPath(t),
-	}
+	opts := goldenOptions{}
 	for _, f := range options {
 		f(&opts)
+	}
+	if !filepath.IsAbs(opts.path) {
+		opts.path = filepath.Join(GoldenPath(t), opts.path)
 	}
 
 	if update {
@@ -139,15 +141,20 @@ func CheckValidGoldenFileName(t *testing.T, name string) {
 func GoldenPath(t *testing.T) string {
 	t.Helper()
 
+	cwd, err := os.Getwd()
+	require.NoError(t, err, "Cannot get current working directory")
+
 	topLevelTest, subtest, subtestFound := strings.Cut(t.Name(), "/")
 	CheckValidGoldenFileName(t, topLevelTest)
 
+	path := filepath.Join(cwd, "testdata", "golden", topLevelTest)
+
 	if !subtestFound {
-		return filepath.Join("testdata", "golden", topLevelTest)
+		return path
 	}
 
 	CheckValidGoldenFileName(t, subtest)
-	return filepath.Join("testdata", "golden", topLevelTest, subtest)
+	return filepath.Join(path, subtest)
 }
 
 // runDelta pipes the unified diff through the `delta` command for word-level diff and coloring.
@@ -230,11 +237,12 @@ func checkGoldenFileEqualsString(t *testing.T, got, goldenPath string) {
 func CheckOrUpdateGoldenFileTree(t *testing.T, path string, options ...GoldenOption) {
 	t.Helper()
 
-	opts := goldenOptions{
-		path: GoldenPath(t),
-	}
+	opts := goldenOptions{}
 	for _, f := range options {
 		f(&opts)
+	}
+	if !filepath.IsAbs(opts.path) {
+		opts.path = filepath.Join(GoldenPath(t), opts.path)
 	}
 
 	if update {
