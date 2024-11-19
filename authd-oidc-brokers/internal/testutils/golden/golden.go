@@ -37,11 +37,11 @@ type goldenOptions struct {
 	path string
 }
 
-// GoldenOption is a supported option reference to change the golden files comparison.
-type GoldenOption func(*goldenOptions)
+// Option is a supported option reference to change the golden files comparison.
+type Option func(*goldenOptions)
 
-// WithGoldenPath overrides the default path for golden files used.
-func WithGoldenPath(path string) GoldenOption {
+// WithPath overrides the default path for golden files used.
+func WithPath(path string) Option {
 	return func(o *goldenOptions) {
 		if path != "" {
 			o.path = path
@@ -57,9 +57,9 @@ func updateGoldenFile(t *testing.T, path string, data []byte) {
 	require.NoError(t, err, "Cannot write golden file")
 }
 
-// CheckOrUpdateGolden compares the provided string with the content of the golden file. If the update environment
+// CheckOrUpdate compares the provided string with the content of the golden file. If the update environment
 // variable is set, the golden file is updated with the provided string.
-func CheckOrUpdateGolden(t *testing.T, got string, options ...GoldenOption) {
+func CheckOrUpdate(t *testing.T, got string, options ...Option) {
 	t.Helper()
 
 	opts := goldenOptions{}
@@ -67,7 +67,7 @@ func CheckOrUpdateGolden(t *testing.T, got string, options ...GoldenOption) {
 		f(&opts)
 	}
 	if !filepath.IsAbs(opts.path) {
-		opts.path = filepath.Join(GoldenPath(t), opts.path)
+		opts.path = filepath.Join(Path(t), opts.path)
 	}
 
 	if update {
@@ -77,20 +77,20 @@ func CheckOrUpdateGolden(t *testing.T, got string, options ...GoldenOption) {
 	checkGoldenFileEqualsString(t, got, opts.path)
 }
 
-// CheckOrUpdateGoldenYAML compares the provided object with the content of the golden file. If the update environment
+// CheckOrUpdateYAML compares the provided object with the content of the golden file. If the update environment
 // variable is set, the golden file is updated with the provided object serialized as YAML.
-func CheckOrUpdateGoldenYAML[E any](t *testing.T, got E, options ...GoldenOption) {
+func CheckOrUpdateYAML[E any](t *testing.T, got E, options ...Option) {
 	t.Helper()
 
 	data, err := yaml.Marshal(got)
 	require.NoError(t, err, "Cannot serialize provided object")
 
-	CheckOrUpdateGolden(t, string(data), options...)
+	CheckOrUpdate(t, string(data), options...)
 }
 
-// LoadWithUpdateFromGolden loads the element from a plaintext golden file.
+// LoadWithUpdate loads the element from a plaintext golden file.
 // It will update the file if the update flag is used prior to loading it.
-func LoadWithUpdateFromGolden(t *testing.T, data string, options ...GoldenOption) string {
+func LoadWithUpdate(t *testing.T, data string, options ...Option) string {
 	t.Helper()
 
 	opts := goldenOptions{}
@@ -98,7 +98,7 @@ func LoadWithUpdateFromGolden(t *testing.T, data string, options ...GoldenOption
 		f(&opts)
 	}
 	if !filepath.IsAbs(opts.path) {
-		opts.path = filepath.Join(GoldenPath(t), opts.path)
+		opts.path = filepath.Join(Path(t), opts.path)
 	}
 
 	if update {
@@ -111,15 +111,15 @@ func LoadWithUpdateFromGolden(t *testing.T, data string, options ...GoldenOption
 	return string(want)
 }
 
-// LoadWithUpdateFromGoldenYAML load the generic element from a YAML serialized golden file.
+// LoadWithUpdateYAML load the generic element from a YAML serialized golden file.
 // It will update the file if the update flag is used prior to deserializing it.
-func LoadWithUpdateFromGoldenYAML[E any](t *testing.T, got E, options ...GoldenOption) E {
+func LoadWithUpdateYAML[E any](t *testing.T, got E, options ...Option) E {
 	t.Helper()
 
 	t.Logf("Serializing object for golden file")
 	data, err := yaml.Marshal(got)
 	require.NoError(t, err, "Cannot serialize provided object")
-	want := LoadWithUpdateFromGolden(t, string(data), options...)
+	want := LoadWithUpdate(t, string(data), options...)
 
 	var wantDeserialized E
 	err = yaml.Unmarshal([]byte(want), &wantDeserialized)
@@ -137,8 +137,8 @@ func CheckValidGoldenFileName(t *testing.T, name string) {
 		"Invalid golden file name %q. Only alphanumeric characters, underscores, dashes, and dots are allowed", name)
 }
 
-// GoldenPath returns the golden path for the provided test.
-func GoldenPath(t *testing.T) string {
+// Path returns the golden path for the provided test.
+func Path(t *testing.T) string {
 	t.Helper()
 
 	cwd, err := os.Getwd()
@@ -233,8 +233,8 @@ func checkGoldenFileEqualsString(t *testing.T, got, goldenPath string) {
 	checkFileContent(t, got, string(goldenContent), "Actual", goldenPath)
 }
 
-// CheckOrUpdateGoldenFileTree allows comparing a goldPath directory to p. Those can be updated via the dedicated flag.
-func CheckOrUpdateGoldenFileTree(t *testing.T, path string, options ...GoldenOption) {
+// CheckOrUpdateFileTree allows comparing a goldPath directory to p. Those can be updated via the dedicated flag.
+func CheckOrUpdateFileTree(t *testing.T, path string, options ...Option) {
 	t.Helper()
 
 	opts := goldenOptions{}
@@ -242,7 +242,7 @@ func CheckOrUpdateGoldenFileTree(t *testing.T, path string, options ...GoldenOpt
 		f(&opts)
 	}
 	if !filepath.IsAbs(opts.path) {
-		opts.path = filepath.Join(GoldenPath(t), opts.path)
+		opts.path = filepath.Join(Path(t), opts.path)
 	}
 
 	if update {
