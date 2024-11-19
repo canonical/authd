@@ -33,18 +33,18 @@ func init() {
 	}
 }
 
-type goldenOptions struct {
+type config struct {
 	path string
 }
 
 // Option is a supported option reference to change the golden files comparison.
-type Option func(*goldenOptions)
+type Option func(*config)
 
 // WithPath overrides the default path for golden files used.
 func WithPath(path string) Option {
-	return func(o *goldenOptions) {
+	return func(cfg *config) {
 		if path != "" {
-			o.path = path
+			cfg.path = path
 		}
 	}
 }
@@ -64,19 +64,19 @@ func updateGoldenFile(t *testing.T, path string, data []byte) {
 func CheckOrUpdate(t *testing.T, got string, options ...Option) {
 	t.Helper()
 
-	opts := goldenOptions{}
+	cfg := config{}
 	for _, f := range options {
-		f(&opts)
+		f(&cfg)
 	}
-	if !filepath.IsAbs(opts.path) {
-		opts.path = filepath.Join(Path(t), opts.path)
+	if !filepath.IsAbs(cfg.path) {
+		cfg.path = filepath.Join(Path(t), cfg.path)
 	}
 
 	if update {
-		updateGoldenFile(t, opts.path, []byte(got))
+		updateGoldenFile(t, cfg.path, []byte(got))
 	}
 
-	checkGoldenFileEqualsString(t, got, opts.path)
+	checkGoldenFileEqualsString(t, got, cfg.path)
 }
 
 // CheckOrUpdateYAML compares the provided object with the content of the golden file. If the update environment
@@ -95,19 +95,19 @@ func CheckOrUpdateYAML[E any](t *testing.T, got E, options ...Option) {
 func LoadWithUpdate(t *testing.T, data string, options ...Option) string {
 	t.Helper()
 
-	opts := goldenOptions{}
+	cfg := config{}
 	for _, f := range options {
-		f(&opts)
+		f(&cfg)
 	}
-	if !filepath.IsAbs(opts.path) {
-		opts.path = filepath.Join(Path(t), opts.path)
+	if !filepath.IsAbs(cfg.path) {
+		cfg.path = filepath.Join(Path(t), cfg.path)
 	}
 
 	if update {
-		updateGoldenFile(t, opts.path, []byte(data))
+		updateGoldenFile(t, cfg.path, []byte(data))
 	}
 
-	want, err := os.ReadFile(opts.path)
+	want, err := os.ReadFile(cfg.path)
 	require.NoError(t, err, "Cannot load golden file")
 
 	return string(want)
@@ -245,18 +245,18 @@ func checkGoldenFileEqualsString(t *testing.T, got, goldenPath string) {
 func CheckOrUpdateFileTree(t *testing.T, path string, options ...Option) {
 	t.Helper()
 
-	opts := goldenOptions{}
+	cfg := config{}
 	for _, f := range options {
-		f(&opts)
+		f(&cfg)
 	}
-	if !filepath.IsAbs(opts.path) {
-		opts.path = filepath.Join(Path(t), opts.path)
+	if !filepath.IsAbs(cfg.path) {
+		cfg.path = filepath.Join(Path(t), cfg.path)
 	}
 
 	if update {
-		t.Logf("updating golden path %s", opts.path)
-		err := os.RemoveAll(opts.path)
-		require.NoError(t, err, "Cannot remove golden path %s", opts.path)
+		t.Logf("updating golden path %s", cfg.path)
+		err := os.RemoveAll(cfg.path)
+		require.NoError(t, err, "Cannot remove golden path %s", cfg.path)
 
 		// check the source directory exists before trying to copy it
 		info, err := os.Stat(path)
@@ -269,13 +269,13 @@ func CheckOrUpdateFileTree(t *testing.T, path string, options ...Option) {
 			// copy file
 			data, err := os.ReadFile(path)
 			require.NoError(t, err, "Cannot read file %s", path)
-			err = os.WriteFile(opts.path, data, info.Mode())
+			err = os.WriteFile(cfg.path, data, info.Mode())
 			require.NoError(t, err, "Cannot write golden file")
 		} else {
 			err := addEmptyMarker(path)
 			require.NoError(t, err, "Cannot add empty marker to directory %s", path)
 
-			err = copy.Copy(path, opts.path)
+			err = copy.Copy(path, cfg.path)
 			require.NoError(t, err, "Can’t update golden directory")
 		}
 	}
@@ -288,7 +288,7 @@ func CheckOrUpdateFileTree(t *testing.T, path string, options ...Option) {
 
 		relPath, err := filepath.Rel(path, p)
 		require.NoError(t, err, "Cannot get relative path for %s", p)
-		goldenFilePath := filepath.Join(opts.path, relPath)
+		goldenFilePath := filepath.Join(cfg.path, relPath)
 
 		if de.IsDir() {
 			return nil
@@ -316,7 +316,7 @@ func CheckOrUpdateFileTree(t *testing.T, path string, options ...Option) {
 	require.NoError(t, err, "Cannot walk through directory %s", path)
 
 	// Check if there are files in the golden directory that are not in the source directory.
-	err = filepath.WalkDir(opts.path, func(p string, de fs.DirEntry, err error) error {
+	err = filepath.WalkDir(cfg.path, func(p string, de fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -326,7 +326,7 @@ func CheckOrUpdateFileTree(t *testing.T, path string, options ...Option) {
 			return nil
 		}
 
-		relPath, err := filepath.Rel(opts.path, p)
+		relPath, err := filepath.Rel(cfg.path, p)
 		require.NoError(t, err, "Cannot get relative path for %s", p)
 		filePath := filepath.Join(path, relPath)
 
@@ -339,7 +339,7 @@ func CheckOrUpdateFileTree(t *testing.T, path string, options ...Option) {
 
 		return nil
 	})
-	require.NoError(t, err, "Cannot walk through directory %s", opts.path)
+	require.NoError(t, err, "Cannot walk through directory %s", cfg.path)
 }
 
 const fileForEmptyDir = ".empty"
