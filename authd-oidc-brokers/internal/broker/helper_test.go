@@ -20,22 +20,41 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// newBrokerForTests is a helper function to create a new broker for tests with the specified configuration.
-//
-// Note that the issuerURL is required in the configuration.
-func newBrokerForTests(t *testing.T, cfg broker.Config, provider *testutils.MockProvider) (b *broker.Broker) {
+type brokerForTestConfig struct {
+	broker.Config
+	issuerURL          string
+	homeBaseDir        string
+	allowedSSHSuffixes []string
+
+	getUserInfoFails bool
+	firstCallDelay   int
+	secondCallDelay  int
+	getGroupsFunc    func() ([]info.Group, error)
+
+	listenAddress       string
+	tokenHandlerOptions *testutils.TokenHandlerOptions
+	customHandlers      map[string]testutils.EndpointHandler
+}
+
+// newBrokerForTests is a helper function to easily create a new broker for tests.
+func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker) {
 	t.Helper()
 
-	require.NotEmpty(t, cfg.IssuerURL(), "Setup: issuerURL must not be empty")
-
-	if provider == nil {
-		provider = &testutils.MockProvider{}
+	if cfg.issuerURL != "" {
+		cfg.SetIssuerURL(cfg.issuerURL)
 	}
-	if provider.Groups == nil {
-		provider.Groups = []info.Group{
-			{Name: "new-broker-for-tests-remote-group", UGID: "12345"},
-			{Name: "linux-new-broker-for-tests-local-group", UGID: ""},
-		}
+	if cfg.homeBaseDir != "" {
+		cfg.SetHomeBaseDir(cfg.homeBaseDir)
+	}
+	if cfg.allowedSSHSuffixes != nil {
+		cfg.SetAllowedSSHSuffixes(cfg.allowedSSHSuffixes)
+	}
+
+	provider := &testutils.MockProvider{
+		GetUserInfoFails: cfg.getUserInfoFails,
+		FirstCallDelay:   cfg.firstCallDelay,
+		SecondCallDelay:  cfg.secondCallDelay,
+		GetGroupsFunc:    cfg.getGroupsFunc,
 	}
 
 	if cfg.DataDir == "" {
@@ -45,10 +64,21 @@ func newBrokerForTests(t *testing.T, cfg broker.Config, provider *testutils.Mock
 		cfg.SetClientID("test-client-id")
 	}
 
-	b, err := broker.New(
-		cfg,
-		broker.WithCustomProvider(provider),
-	)
+	if cfg.IssuerURL() == "" {
+		var serverOpts []testutils.ProviderServerOption
+		for endpoint, handler := range cfg.customHandlers {
+			serverOpts = append(serverOpts, testutils.WithHandler(endpoint, handler))
+		}
+		issuerURL, cleanup := testutils.StartMockProviderServer(
+			cfg.listenAddress,
+			cfg.tokenHandlerOptions,
+			serverOpts...,
+		)
+		t.Cleanup(cleanup)
+		cfg.SetIssuerURL(issuerURL)
+	}
+
+	b, err := broker.New(cfg.Config, broker.WithCustomProvider(provider))
 	require.NoError(t, err, "Setup: New should not have returned an error")
 	return b
 }
@@ -118,6 +148,7 @@ func generateAndStoreCachedInfo(t *testing.T, options tokenOptions, path string)
 type tokenOptions struct {
 	username string
 	issuer   string
+	groups   []info.Group
 
 	expired        bool
 	noRefreshToken bool
@@ -180,6 +211,9 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 				{Name: "saved-remote-group", UGID: "12345"},
 				{Name: "saved-local-group", UGID: ""},
 			},
+		}
+		if options.groups != nil {
+			tok.UserInfo.Groups = options.groups
 		}
 	}
 

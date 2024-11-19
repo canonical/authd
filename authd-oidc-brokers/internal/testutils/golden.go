@@ -281,7 +281,7 @@ func CheckOrUpdateGoldenFileTree(t *testing.T, path, goldenPath string) {
 
 		goldenFile, err := os.Stat(goldenFilePath)
 		if errors.Is(err, fs.ErrNotExist) {
-			require.Failf(t, "Unexpected file %s", p)
+			require.Failf(t, fmt.Sprintf("Missing golden file %s", goldenFilePath), "File: %s", p)
 		}
 		require.NoError(t, err, "Cannot get golden file %s", goldenFilePath)
 
