@@ -328,8 +328,7 @@ type MockProvider struct {
 	noprovider.NoProvider
 	Scopes           []string
 	Options          []oauth2.AuthCodeOption
-	Groups           []info.Group
-	GroupsErr        bool
+	GetGroupsFunc    func() ([]info.Group, error)
 	FirstCallDelay   int
 	SecondCallDelay  int
 	GetUserInfoFails bool
@@ -385,9 +384,15 @@ func (p *MockProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Toke
 		return info.User{}, err
 	}
 
-	userGroups, err := p.getGroups(accessToken)
-	if err != nil {
-		return info.User{}, err
+	userGroups := []info.Group{
+		{Name: "remote-test-group", UGID: "12345"},
+		{Name: "local-test-group", UGID: ""},
+	}
+	if p.GetGroupsFunc != nil {
+		userGroups, err = p.GetGroupsFunc()
+		if err != nil {
+			return info.User{}, err
+		}
 	}
 
 	p.numCallsLock.Lock()
@@ -427,15 +432,4 @@ func (p *MockProvider) userClaims(idToken *oidc.IDToken) (claims, error) {
 		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
 	}
 	return userClaims, nil
-}
-
-// GetGroups returns the groups the user is a member of.
-func (p *MockProvider) getGroups(*oauth2.Token) ([]info.Group, error) {
-	if p.GroupsErr {
-		return nil, errors.New("error requested in the mock")
-	}
-	if p.Groups != nil {
-		return p.Groups, nil
-	}
-	return nil, nil
 }
