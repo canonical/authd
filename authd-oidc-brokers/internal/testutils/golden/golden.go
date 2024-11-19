@@ -50,6 +50,8 @@ func WithPath(path string) Option {
 }
 
 func updateGoldenFile(t *testing.T, path string, data []byte) {
+	t.Helper()
+
 	t.Logf("updating golden file %s", path)
 	err := os.MkdirAll(filepath.Dir(path), 0750)
 	require.NoError(t, err, "Cannot create directory for updating golden files")
@@ -175,6 +177,8 @@ func runDelta(diff string) (string, error) {
 
 // checkFileContent compares the content of the actual and golden files and reports any differences.
 func checkFileContent(t *testing.T, actual, expected, actualPath, expectedPath string) {
+	t.Helper()
+
 	if actual == expected {
 		return
 	}
@@ -218,6 +222,8 @@ func checkFileContent(t *testing.T, actual, expected, actualPath, expectedPath s
 }
 
 func checkGoldenFileEqualsFile(t *testing.T, path, goldenPath string) {
+	t.Helper()
+
 	fileContent, err := os.ReadFile(path)
 	require.NoError(t, err, "Cannot read file %s", path)
 	goldenContent, err := os.ReadFile(goldenPath)
@@ -227,6 +233,8 @@ func checkGoldenFileEqualsFile(t *testing.T, path, goldenPath string) {
 }
 
 func checkGoldenFileEqualsString(t *testing.T, got, goldenPath string) {
+	t.Helper()
+
 	goldenContent, err := os.ReadFile(goldenPath)
 	require.NoError(t, err, "Cannot read golden file %s", goldenPath)
 
