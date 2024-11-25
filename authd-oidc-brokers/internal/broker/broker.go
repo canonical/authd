@@ -352,14 +352,20 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 
 		var authOpts []oauth2.AuthCodeOption
 
-		// workaround to cater for fully RFC compliant oauth2 server which require this
-		// extra option, public providers tend to have bespoke implementation for passing client
-		// credentials that completely bypass this
-		// full explanation in https://github.com/golang/oauth2/issues/320
+		// Workaround to cater for RFC compliant oauth2 server. Public providers do not properly
+		// implement the RFC, (probably) because they assume that device clients are public.
+		// As described in https://datatracker.ietf.org/doc/html/rfc8628#section-3.1
+		// device authentication requests must provide client authentication, similar to that for
+		// the token endpoint.
+		// The golang/oauth2 library does not implement this, see https://github.com/golang/oauth2/issues/685.
+		// We implement a workaround for implementing the client_secret_post client authn method.
+		// Supporting client_secret_basic would require us to patch the http client used by the
+		// oauth2 lib.
+		// Some providers support both of these authentication methods, some implement only one and
+		// some implement neither.
+		// TODO @shipperizer: client_authentication methods should be configurable
 		if secret := session.oauth2Config.ClientSecret; secret != "" {
-			// TODO @shipperizer verificationMethod should be a configurable value
-			verificationMethod := "client_post"
-			authOpts = append(authOpts, oauth2.SetAuthURLParam(verificationMethod, secret))
+			authOpts = append(authOpts, oauth2.SetAuthURLParam("client_secret", secret))
 		}
 
 		response, err := session.oauth2Config.DeviceAuth(ctx, authOpts...)
