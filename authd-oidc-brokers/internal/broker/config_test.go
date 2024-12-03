@@ -41,6 +41,17 @@ client_id = <CLIENT_ID
 issuer = https://<ISSUER_URL>
 client_id = <CLIENT_ID>
 `,
+
+	"overwrite_lower_precedence": `
+[oidc]
+issuer = https://lower-precedence-issuer.url.com
+client_id = lower_precedence_client_id
+`,
+
+	"overwrite_higher_precedence": `
+[oidc]
+issuer = https://higher-precedence-issuer.url.com
+`,
 }
 
 func TestParseConfig(t *testing.T) {
@@ -53,6 +64,7 @@ func TestParseConfig(t *testing.T) {
 	}{
 		"Successfully_parse_config_file":                      {},
 		"Successfully_parse_config_file_with_optional_values": {configType: "valid+optional"},
+		"Successfully_parse_config_with_drop_in_files":        {configType: "overwritten-by-drop-in"},
 
 		"Do_not_fail_if_values_contain_a_single_template_delimiter": {configType: "singles"},
 
@@ -79,6 +91,19 @@ func TestParseConfig(t *testing.T) {
 			case "unreadable":
 				err = os.Chmod(confPath, 0000)
 				require.NoError(t, err, "Setup: Failed to make config file unreadable")
+			case "overwritten-by-drop-in":
+				dropInDir := confPath + ".d"
+				err = os.Mkdir(dropInDir, 0700)
+				require.NoError(t, err, "Setup: Failed to create drop-in directory")
+				// Create multiple drop-in files to test that they are loaded in the correct order.
+				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["overwrite_lower_precedence"]), 0600)
+				require.NoError(t, err, "Setup: Failed to write drop-in file")
+				err = os.WriteFile(filepath.Join(dropInDir, "01-drop-in.conf"), []byte(configTypes["overwrite_higher_precedence"]), 0600)
+				require.NoError(t, err, "Setup: Failed to write drop-in file")
+				// Create the main config file, to test that the options which are not overwritten by the drop-in files
+				// are still present.
+				err = os.WriteFile(confPath, []byte(configTypes["valid+optional"]), 0600)
+				require.NoError(t, err, "Setup: Failed to write config file")
 			}
 
 			cfg, err := parseConfigFile(confPath)
