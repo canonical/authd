@@ -3,6 +3,9 @@ package broker
 import (
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/ini.v1"
@@ -27,11 +30,39 @@ const (
 	sshSuffixesKey = "ssh_allowed_suffixes"
 )
 
+func getDropInFiles(cfgPath string) ([]any, error) {
+	// Check if a .d directory exists and return the paths to the files in it.
+	dropInDir := cfgPath + ".d"
+	files, err := os.ReadDir(dropInDir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var dropInFiles []any
+	// files is empty if the directory does not exist
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		dropInFiles = append(dropInFiles, filepath.Join(dropInDir, file.Name()))
+	}
+
+	return dropInFiles, nil
+}
+
 // parseConfigFile parses the config file and returns a map with the configuration keys and values.
 func parseConfigFile(cfgPath string) (userConfig, error) {
 	cfg := userConfig{}
 
-	iniCfg, err := ini.Load(cfgPath)
+	dropInFiles, err := getDropInFiles(cfgPath)
+	if err != nil {
+		return cfg, err
+	}
+
+	iniCfg, err := ini.Load(cfgPath, dropInFiles...)
 	if err != nil {
 		return cfg, err
 	}

@@ -1,0 +1,5 @@
+clientID=lower_precedence_client_id
+clientSecret=
+issuerURL=https://higher-precedence-issuer.url.com
+homeBaseDir=/home
+allowedSSHSuffixes=[]
