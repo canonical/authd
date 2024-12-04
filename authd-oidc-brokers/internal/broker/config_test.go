@@ -59,18 +59,21 @@ func TestParseConfig(t *testing.T) {
 
 	tests := map[string]struct {
 		configType string
+		dropInType string
 
 		wantErr bool
 	}{
 		"Successfully_parse_config_file":                      {},
 		"Successfully_parse_config_file_with_optional_values": {configType: "valid+optional"},
-		"Successfully_parse_config_with_drop_in_files":        {configType: "overwritten-by-drop-in"},
+		"Successfully_parse_config_with_drop_in_files":        {dropInType: "valid"},
 
 		"Do_not_fail_if_values_contain_a_single_template_delimiter": {configType: "singles"},
 
-		"Error_if_file_does_not_exist": {configType: "inexistent", wantErr: true},
-		"Error_if_file_is_unreadable":  {configType: "unreadable", wantErr: true},
-		"Error_if_file_is_not_updated": {configType: "template", wantErr: true},
+		"Error_if_file_does_not_exist":             {configType: "inexistent", wantErr: true},
+		"Error_if_file_is_unreadable":              {configType: "unreadable", wantErr: true},
+		"Error_if_file_is_not_updated":             {configType: "template", wantErr: true},
+		"Error_if_drop_in_directory_is_unreadable": {dropInType: "unreadable-dir", wantErr: true},
+		"Error_if_drop_in_file_is_unreadable":      {dropInType: "unreadable-file", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -91,10 +94,16 @@ func TestParseConfig(t *testing.T) {
 			case "unreadable":
 				err = os.Chmod(confPath, 0000)
 				require.NoError(t, err, "Setup: Failed to make config file unreadable")
-			case "overwritten-by-drop-in":
-				dropInDir := confPath + ".d"
+			}
+
+			dropInDir := confPath + ".d"
+			if tc.dropInType != "" {
 				err = os.Mkdir(dropInDir, 0700)
 				require.NoError(t, err, "Setup: Failed to create drop-in directory")
+			}
+
+			switch tc.dropInType {
+			case "valid":
 				// Create multiple drop-in files to test that they are loaded in the correct order.
 				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["overwrite_lower_precedence"]), 0600)
 				require.NoError(t, err, "Setup: Failed to write drop-in file")
@@ -104,6 +113,12 @@ func TestParseConfig(t *testing.T) {
 				// are still present.
 				err = os.WriteFile(confPath, []byte(configTypes["valid+optional"]), 0600)
 				require.NoError(t, err, "Setup: Failed to write config file")
+			case "unreadable-dir":
+				err = os.Chmod(dropInDir, 0000)
+				require.NoError(t, err, "Setup: Failed to make drop-in directory unreadable")
+			case "unreadable-file":
+				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["valid"]), 0000)
+				require.NoError(t, err, "Setup: Failed to make drop-in file unreadable")
 			}
 
 			cfg, err := parseConfigFile(confPath)
