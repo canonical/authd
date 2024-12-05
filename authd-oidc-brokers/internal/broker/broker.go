@@ -363,6 +363,9 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 		// oauth2 lib.
 		// Some providers support both of these authentication methods, some implement only one and
 		// some implement neither.
+		// This was tested with the following providers:
+		// - Google: supports client_secret_post
+		// - Ory Hydra: supports client_secret_post
 		// TODO @shipperizer: client_authentication methods should be configurable
 		if secret := session.oauth2Config.ClientSecret; secret != "" {
 			authOpts = append(authOpts, oauth2.SetAuthURLParam("client_secret", secret))
