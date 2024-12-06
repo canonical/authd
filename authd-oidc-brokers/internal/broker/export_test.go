@@ -19,6 +19,26 @@ func (cfg *Config) SetHomeBaseDir(homeBaseDir string) {
 	cfg.homeBaseDir = homeBaseDir
 }
 
+func (cfg *Config) SetAllowedUsers(allowedUsers map[string]struct{}) {
+	cfg.allowedUsers = allowedUsers
+}
+
+func (cfg *Config) SetOwner(owner string) {
+	cfg.owner = owner
+}
+
+func (cfg *Config) SetFirstUserBecomesOwner(firstUserBecomesOwner bool) {
+	cfg.firstUserBecomesOwner = firstUserBecomesOwner
+}
+
+func (cfg *Config) SetAllUsersAllowed(allUsersAllowed bool) {
+	cfg.allUsersAllowed = allUsersAllowed
+}
+
+func (cfg *Config) SetOwnerAllowed(ownerAllowed bool) {
+	cfg.ownerAllowed = ownerAllowed
+}
+
 func (cfg *Config) SetAllowedSSHSuffixes(allowedSSHSuffixes []string) {
 	cfg.allowedSSHSuffixes = allowedSSHSuffixes
 }

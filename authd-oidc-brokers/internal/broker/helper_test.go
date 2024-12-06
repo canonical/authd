@@ -22,9 +22,14 @@ import (
 
 type brokerForTestConfig struct {
 	broker.Config
-	issuerURL          string
-	homeBaseDir        string
-	allowedSSHSuffixes []string
+	issuerURL             string
+	allowedUsers          map[string]struct{}
+	allUsersAllowed       bool
+	ownerAllowed          bool
+	firstUserBecomesOwner bool
+	owner                 string
+	homeBaseDir           string
+	allowedSSHSuffixes    []string
 
 	getUserInfoFails bool
 	firstCallDelay   int
@@ -48,6 +53,21 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	}
 	if cfg.allowedSSHSuffixes != nil {
 		cfg.SetAllowedSSHSuffixes(cfg.allowedSSHSuffixes)
+	}
+	if cfg.allowedUsers != nil {
+		cfg.SetAllowedUsers(cfg.allowedUsers)
+	}
+	if cfg.owner != "" {
+		cfg.SetOwner(cfg.owner)
+	}
+	if cfg.firstUserBecomesOwner != false {
+		cfg.SetFirstUserBecomesOwner(cfg.firstUserBecomesOwner)
+	}
+	if cfg.allUsersAllowed != false {
+		cfg.SetAllUsersAllowed(cfg.allUsersAllowed)
+	}
+	if cfg.ownerAllowed != false {
+		cfg.SetOwnerAllowed(cfg.ownerAllowed)
 	}
 
 	provider := &testutils.MockProvider{
