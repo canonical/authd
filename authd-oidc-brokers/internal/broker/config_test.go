@@ -96,7 +96,7 @@ func TestParseConfig(t *testing.T) {
 				require.NoError(t, err, "Setup: Failed to make config file unreadable")
 			}
 
-			dropInDir := confPath + ".d"
+			dropInDir := GetDropInDir(confPath)
 			if tc.dropInType != "" {
 				err = os.Mkdir(dropInDir, 0700)
 				require.NoError(t, err, "Setup: Failed to create drop-in directory")
@@ -272,7 +272,7 @@ func TestParseUserConfig(t *testing.T) {
 			err := os.WriteFile(confPath, []byte(testParseUserConfigTypes[name]), 0600)
 			require.NoError(t, err, "Setup: Failed to write config file")
 
-			dropInDir := confPath + ".d"
+			dropInDir := GetDropInDir(confPath)
 			err = os.Mkdir(dropInDir, 0700)
 			require.NoError(t, err, "Setup: Failed to create drop-in directory")
 
@@ -294,4 +294,30 @@ func TestParseUserConfig(t *testing.T) {
 			golden.CheckOrUpdateFileTree(t, outDir)
 		})
 	}
+}
+
+func TestRegisterOwner(t *testing.T) {
+	outDir := t.TempDir()
+	userName := "owner_name"
+	confPath := filepath.Join(outDir, "broker.conf")
+
+	err := os.WriteFile(confPath, []byte(configTypes["valid"]), 0600)
+	require.NoError(t, err, "Setup: Failed to write config file")
+
+	dropInDir := GetDropInDir(confPath)
+	err = os.Mkdir(dropInDir, 0700)
+	require.NoError(t, err, "Setup: Failed to create drop-in directory")
+
+	cfg := userConfig{firstUserBecomesOwner: true, ownerAllowed: true}
+	err = cfg.registerOwner(confPath, userName)
+	require.NoError(t, err)
+
+	require.Equal(t, cfg.owner, userName)
+	require.Equal(t, cfg.firstUserBecomesOwner, false)
+
+	f, err := os.Open(filepath.Join(dropInDir, "20-owner-autoregistration.conf"))
+	require.NoError(t, err, "failed to open 20-owner-autoregistration.conf")
+	defer f.Close()
+
+	golden.CheckOrUpdateFileTree(t, outDir)
 }
