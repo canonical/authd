@@ -1,8 +1,10 @@
 package broker
 
 import (
+	"embed"
 	"errors"
 	"fmt"
+	"html/template"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -37,11 +39,43 @@ const (
 	allUsersKeyword = "ALL"
 	// ownerUserKeyword is the keyword for the `allowed_users` key that allows access to the owner.
 	ownerUserKeyword = "OWNER"
+
+	// ownerAutoRegistrationConfigPath is the name of the file that will be auto-generated to register the owner.
+	ownerAutoRegistrationConfigPath     = "20-owner-autoregistration.conf"
+	ownerAutoRegistrationConfigTemplate = "templates/20-owner-autoregistration.conf.tmpl"
 )
+
+var (
+	//go:embed templates/20-owner-autoregistration.conf.tmpl
+	ownerAutoRegistrationConfig embed.FS
+)
+
+type templateEnv struct {
+	Owner string
+}
+
+type userConfig struct {
+	clientID     string
+	clientSecret string
+	issuerURL    string
+
+	allowedUsers          map[string]struct{}
+	allUsersAllowed       bool
+	ownerAllowed          bool
+	firstUserBecomesOwner bool
+	owner                 string
+	homeBaseDir           string
+	allowedSSHSuffixes    []string
+}
+
+// GetDropInDir takes the broker configuration path and returns the drop in dir path.
+func GetDropInDir(cfgPath string) string {
+	return cfgPath + ".d"
+}
 
 func getDropInFiles(cfgPath string) ([]any, error) {
 	// Check if a .d directory exists and return the paths to the files in it.
-	dropInDir := cfgPath + ".d"
+	dropInDir := GetDropInDir(cfgPath)
 	files, err := os.ReadDir(dropInDir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -140,4 +174,41 @@ func parseConfigFile(cfgPath string) (userConfig, error) {
 	cfg.populateUsersConfig(iniCfg.Section(usersSection))
 
 	return cfg, nil
+}
+
+func (uc *userConfig) shouldRegisterOwner() bool {
+	return uc.ownerAllowed && uc.firstUserBecomesOwner && uc.owner == ""
+}
+
+func (uc *userConfig) registerOwner(cfgPath, userName string) error {
+	if cfgPath == "" {
+		uc.owner = userName
+		uc.firstUserBecomesOwner = false
+		return nil
+	}
+
+	p := filepath.Join(GetDropInDir(cfgPath), ownerAutoRegistrationConfigPath)
+
+	templateName := filepath.Base(ownerAutoRegistrationConfigTemplate)
+	t, err := template.New(templateName).ParseFS(ownerAutoRegistrationConfig, ownerAutoRegistrationConfigTemplate)
+	if err != nil {
+		return fmt.Errorf("failed to open autoregistration template: %v", err)
+	}
+
+	f, err := os.OpenFile(p, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to create owner registration file: %v", err)
+	}
+	defer f.Close()
+
+	if err := t.Execute(f, templateEnv{Owner: userName}); err != nil {
+		return fmt.Errorf("failed to write owner registration file: %v", err)
+	}
+
+	// We set the owner after we create the autoregistration file, so that in case of an error
+	// the owner is not updated.
+	uc.owner = userName
+	uc.firstUserBecomesOwner = false
+
+	return nil
 }
