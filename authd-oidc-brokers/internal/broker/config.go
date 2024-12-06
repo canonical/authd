@@ -24,10 +24,19 @@ const (
 
 	// usersSection is the section name in the config file for the users and broker specific configuration.
 	usersSection = "users"
+	// allowedUsersKey is the key in the config file for the users that are allowed to access the machine.
+	allowedUsersKey = "allowed_users"
+	// ownerKey is the key in the config file for the owner of the machine.
+	ownerKey = "owner"
 	// homeDirKey is the key in the config file for the home directory prefix.
 	homeDirKey = "home_base_dir"
 	// SSHSuffixKey is the key in the config file for the SSH allowed suffixes.
 	sshSuffixesKey = "ssh_allowed_suffixes"
+
+	// allUsersKeyword is the keyword for the `allowed_users` key that allows access to all users.
+	allUsersKeyword = "ALL"
+	// ownerUserKeyword is the keyword for the `allowed_users` key that allows access to the owner.
+	ownerUserKeyword = "OWNER"
 )
 
 func getDropInFiles(cfgPath string) ([]any, error) {
@@ -51,6 +60,48 @@ func getDropInFiles(cfgPath string) ([]any, error) {
 	}
 
 	return dropInFiles, nil
+}
+
+func (uc *userConfig) populateUsersConfig(users *ini.Section) {
+	if users == nil {
+		// The default behavior is to allow only the owner
+		uc.ownerAllowed = true
+		uc.firstUserBecomesOwner = true
+		return
+	}
+
+	uc.homeBaseDir = users.Key(homeDirKey).String()
+	uc.allowedSSHSuffixes = strings.Split(users.Key(sshSuffixesKey).String(), ",")
+
+	if uc.allowedUsers == nil {
+		uc.allowedUsers = make(map[string]struct{})
+	}
+
+	allowedUsers := users.Key(allowedUsersKey).Strings(",")
+	if len(allowedUsers) == 0 {
+		allowedUsers = append(allowedUsers, ownerUserKeyword)
+	}
+
+	for _, user := range allowedUsers {
+		if user == allUsersKeyword {
+			uc.allUsersAllowed = true
+			continue
+		}
+		if user == ownerUserKeyword {
+			uc.ownerAllowed = true
+			if !users.HasKey(ownerKey) {
+				// If owner is unset, then the first user becomes owner
+				uc.firstUserBecomesOwner = true
+			}
+			continue
+		}
+
+		uc.allowedUsers[user] = struct{}{}
+	}
+
+	// We need to read the owner key after we call HasKey, because the key is created
+	// when we call the "Key" function and we can't distinguish between empty and unset.
+	uc.owner = users.Key(ownerKey).String()
 }
 
 // parseConfigFile parses the config file and returns a map with the configuration keys and values.
@@ -86,11 +137,7 @@ func parseConfigFile(cfgPath string) (userConfig, error) {
 		cfg.clientSecret = oidc.Key(clientSecret).String()
 	}
 
-	users := iniCfg.Section(usersSection)
-	if users != nil {
-		cfg.homeBaseDir = users.Key(homeDirKey).String()
-		cfg.allowedSSHSuffixes = strings.Split(users.Key(sshSuffixesKey).String(), ",")
-	}
+	cfg.populateUsersConfig(iniCfg.Section(usersSection))
 
 	return cfg, nil
 }

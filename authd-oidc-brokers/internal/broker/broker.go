@@ -46,11 +46,17 @@ type Config struct {
 }
 
 type userConfig struct {
-	clientID           string
-	clientSecret       string
-	issuerURL          string
-	homeBaseDir        string
-	allowedSSHSuffixes []string
+	clientID     string
+	clientSecret string
+	issuerURL    string
+
+	allowedUsers          map[string]struct{}
+	allUsersAllowed       bool
+	ownerAllowed          bool
+	firstUserBecomesOwner bool
+	owner                 string
+	homeBaseDir           string
+	allowedSSHSuffixes    []string
 }
 
 // Broker is the real implementation of the broker to track sessions and process oidc calls.
