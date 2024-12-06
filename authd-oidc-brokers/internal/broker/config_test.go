@@ -150,3 +150,148 @@ func TestParseConfig(t *testing.T) {
 		})
 	}
 }
+
+var testParseUserConfigTypes = map[string]string{
+	"All_are_allowed": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = ALL
+owner = machine_owner
+home_base_dir = /home
+allowed_ssh_suffixes = @issuer.url.com
+`,
+	"Only_owner_is_allowed": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = OWNER
+owner = machine_owner
+home_base_dir = /home
+allowed_ssh_suffixes = @issuer.url.com
+`,
+	"By_default_only_owner_is_allowed": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+owner = machine_owner
+home_base_dir = /home
+allowed_ssh_suffixes = @issuer.url.com
+`,
+	"Only_owner_is_allowed_but_is_unset": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+home_base_dir = /home
+allowed_ssh_suffixes = @issuer.url.com
+`,
+	"Only_owner_is_allowed_but_is_empty": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+owner =
+home_base_dir = /home
+allowed_ssh_suffixes = @issuer.url.com
+`,
+	"Users_u1_and_u2_are_allowed": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = u1,u2
+home_base_dir = /home
+allowed_ssh_suffixes = @issuer.url.com
+`,
+	"Unset_owner_and_u1_is_allowed": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = OWNER,u1
+home_base_dir = /home
+allowed_ssh_suffixes = @issuer.url.com
+`,
+	"Set_owner_and_u1_is_allowed": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = OWNER,u1
+owner = machine_owner
+home_base_dir = /home
+allowed_ssh_suffixes = @issuer.url.com
+`,
+}
+
+func TestParseUserConfig(t *testing.T) {
+	t.Parallel()
+	tests := map[string]struct {
+		wantAllUsersAllowed       bool
+		wantOwnerAllowed          bool
+		wantFirstUserBecomesOwner bool
+		wantOwner                 string
+		wantAllowedUsers          []string
+	}{
+		"All_are_allowed":                    {wantAllUsersAllowed: true, wantOwner: "machine_owner"},
+		"Only_owner_is_allowed":              {wantOwnerAllowed: true, wantOwner: "machine_owner"},
+		"By_default_only_owner_is_allowed":   {wantOwnerAllowed: true, wantOwner: "machine_owner"},
+		"Only_owner_is_allowed_but_is_unset": {wantOwnerAllowed: true, wantFirstUserBecomesOwner: true},
+		"Only_owner_is_allowed_but_is_empty": {wantOwnerAllowed: true},
+		"Users_u1_and_u2_are_allowed":        {wantAllowedUsers: []string{"u1", "u2"}},
+		"Unset_owner_and_u1_is_allowed": {
+			wantOwnerAllowed:          true,
+			wantFirstUserBecomesOwner: true,
+			wantAllowedUsers:          []string{"u1"},
+		},
+		"Set_owner_and_u1_is_allowed": {
+			wantOwnerAllowed: true,
+			wantOwner:        "machine_owner",
+			wantAllowedUsers: []string{"u1"},
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			outDir := t.TempDir()
+			confPath := filepath.Join(outDir, "broker.conf")
+
+			err := os.WriteFile(confPath, []byte(testParseUserConfigTypes[name]), 0600)
+			require.NoError(t, err, "Setup: Failed to write config file")
+
+			dropInDir := confPath + ".d"
+			err = os.Mkdir(dropInDir, 0700)
+			require.NoError(t, err, "Setup: Failed to create drop-in directory")
+
+			cfg, err := parseConfigFile(confPath)
+
+			// convert the allowed users array to a map
+			allowedUsersMap := map[string]struct{}{}
+			for _, k := range tc.wantAllowedUsers {
+				allowedUsersMap[k] = struct{}{}
+			}
+
+			require.Equal(t, tc.wantAllUsersAllowed, cfg.allUsersAllowed)
+			require.Equal(t, tc.wantOwnerAllowed, cfg.ownerAllowed)
+			require.Equal(t, tc.wantOwner, cfg.owner)
+			require.Equal(t, tc.wantFirstUserBecomesOwner, cfg.firstUserBecomesOwner)
+			require.Equal(t, allowedUsersMap, cfg.allowedUsers)
+
+			require.NoError(t, err)
+			golden.CheckOrUpdateFileTree(t, outDir)
+		})
+	}
+}
