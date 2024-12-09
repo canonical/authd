@@ -195,6 +195,10 @@ func getAllUserGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.Gr
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user groups: %v", err)
 	}
+	if result == nil {
+		slog.Debug("Got nil response from Microsoft Graph API for user's groups, assuming that user is not a member of any group.")
+		return []msgraphmodels.Groupable{}, nil
+	}
 
 	groups := result.GetValue()
 
