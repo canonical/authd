@@ -14,6 +14,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
@@ -30,6 +31,7 @@ type brokerForTestConfig struct {
 	owner                 string
 	homeBaseDir           string
 	allowedSSHSuffixes    []string
+	provider              providers.Provider
 
 	getUserInfoFails bool
 	firstCallDelay   int
@@ -77,6 +79,9 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 		GetGroupsFunc:    cfg.getGroupsFunc,
 	}
 
+	if cfg.provider == nil {
+		cfg.SetProvider(provider)
+	}
 	if cfg.DataDir == "" {
 		cfg.DataDir = t.TempDir()
 	}

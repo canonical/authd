@@ -10,6 +10,7 @@ import (
 	"unsafe"
 
 	"github.com/stretchr/testify/require"
+	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils/golden"
 )
 
@@ -56,6 +57,8 @@ issuer = https://higher-precedence-issuer.url.com
 
 func TestParseConfig(t *testing.T) {
 	t.Parallel()
+	p := &testutils.MockProvider{}
+	uncheckedFields := map[string]struct{}{"provider": {}}
 
 	tests := map[string]struct {
 		configType string
@@ -121,12 +124,13 @@ func TestParseConfig(t *testing.T) {
 				require.NoError(t, err, "Setup: Failed to make drop-in file unreadable")
 			}
 
-			cfg, err := parseConfigFile(confPath)
+			cfg, err := parseConfigFile(confPath, p)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
 			}
 			require.NoError(t, err)
+			require.Equal(t, cfg.provider, p)
 
 			outDir := t.TempDir()
 			// Write the names and values of all fields in the config to a file. We can't use the json or yaml
@@ -136,6 +140,9 @@ func TestParseConfig(t *testing.T) {
 			typ := reflect.TypeOf(&cfg).Elem()
 			for i := 0; i < typ.NumField(); i++ {
 				field := typ.Field(i)
+				if _, ok := uncheckedFields[field.Name]; ok {
+					continue
+				}
 				fieldValue := val.Field(i)
 				if field.PkgPath != "" {
 					//nolint: gosec // We are using unsafe to access unexported fields for testing purposes
@@ -238,6 +245,8 @@ allowed_ssh_suffixes = @issuer.url.com
 
 func TestParseUserConfig(t *testing.T) {
 	t.Parallel()
+	p := &testutils.MockProvider{}
+
 	tests := map[string]struct {
 		wantAllUsersAllowed       bool
 		wantOwnerAllowed          bool
@@ -276,7 +285,7 @@ func TestParseUserConfig(t *testing.T) {
 			err = os.Mkdir(dropInDir, 0700)
 			require.NoError(t, err, "Setup: Failed to create drop-in directory")
 
-			cfg, err := parseConfigFile(confPath)
+			cfg, err := parseConfigFile(confPath, p)
 
 			// convert the allowed users array to a map
 			allowedUsersMap := map[string]struct{}{}
@@ -297,6 +306,7 @@ func TestParseUserConfig(t *testing.T) {
 }
 
 func TestRegisterOwner(t *testing.T) {
+	p := &testutils.MockProvider{}
 	outDir := t.TempDir()
 	userName := "owner_name"
 	confPath := filepath.Join(outDir, "broker.conf")
@@ -308,7 +318,7 @@ func TestRegisterOwner(t *testing.T) {
 	err = os.Mkdir(dropInDir, 0700)
 	require.NoError(t, err, "Setup: Failed to create drop-in directory")
 
-	cfg := userConfig{firstUserBecomesOwner: true, ownerAllowed: true}
+	cfg := userConfig{firstUserBecomesOwner: true, ownerAllowed: true, provider: p}
 	err = cfg.registerOwner(confPath, userName)
 	require.NoError(t, err)
 

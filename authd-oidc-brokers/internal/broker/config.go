@@ -50,6 +50,10 @@ var (
 	ownerAutoRegistrationConfig embed.FS
 )
 
+type provider interface {
+	NormalizeUsername(username string) string
+}
+
 type templateEnv struct {
 	Owner string
 }
@@ -66,6 +70,8 @@ type userConfig struct {
 	owner                 string
 	homeBaseDir           string
 	allowedSSHSuffixes    []string
+
+	provider provider
 }
 
 // GetDropInDir takes the broker configuration path and returns the drop in dir path.
@@ -130,17 +136,17 @@ func (uc *userConfig) populateUsersConfig(users *ini.Section) {
 			continue
 		}
 
-		uc.allowedUsers[user] = struct{}{}
+		uc.allowedUsers[uc.provider.NormalizeUsername(user)] = struct{}{}
 	}
 
 	// We need to read the owner key after we call HasKey, because the key is created
 	// when we call the "Key" function and we can't distinguish between empty and unset.
-	uc.owner = users.Key(ownerKey).String()
+	uc.owner = uc.provider.NormalizeUsername(users.Key(ownerKey).String())
 }
 
 // parseConfigFile parses the config file and returns a map with the configuration keys and values.
-func parseConfigFile(cfgPath string) (userConfig, error) {
-	cfg := userConfig{}
+func parseConfigFile(cfgPath string, p provider) (userConfig, error) {
+	cfg := userConfig{provider: p}
 
 	dropInFiles, err := getDropInFiles(cfgPath)
 	if err != nil {
@@ -182,7 +188,7 @@ func (uc *userConfig) shouldRegisterOwner() bool {
 
 func (uc *userConfig) registerOwner(cfgPath, userName string) error {
 	if cfgPath == "" {
-		uc.owner = userName
+		uc.owner = uc.provider.NormalizeUsername(userName)
 		uc.firstUserBecomesOwner = false
 		return nil
 	}
@@ -207,7 +213,7 @@ func (uc *userConfig) registerOwner(cfgPath, userName string) error {
 
 	// We set the owner after we create the autoregistration file, so that in case of an error
 	// the owner is not updated.
-	uc.owner = userName
+	uc.owner = uc.provider.NormalizeUsername(userName)
 	uc.firstUserBecomesOwner = false
 
 	return nil

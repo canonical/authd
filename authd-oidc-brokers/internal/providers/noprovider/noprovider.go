@@ -106,9 +106,14 @@ func (p NoProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, 
 	), nil
 }
 
+// NormalizeUsername parses a username into a normalized version.
+func (p NoProvider) NormalizeUsername(username string) string {
+	return username
+}
+
 // VerifyUsername checks if the requested username matches the authenticated user.
 func (p NoProvider) VerifyUsername(requestedUsername, username string) error {
-	if requestedUsername != username {
+	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(username) {
 		return fmt.Errorf("requested username %q does not match the authenticated user %q", requestedUsername, username)
 	}
 	return nil

@@ -98,15 +98,17 @@ type Option func(*option)
 func New(cfg Config, args ...Option) (b *Broker, err error) {
 	defer decorate.OnError(&err, "could not create broker")
 
+	p := providers.CurrentProvider()
+
 	if cfg.ConfigFile != "" {
-		cfg.userConfig, err = parseConfigFile(cfg.ConfigFile)
+		cfg.userConfig, err = parseConfigFile(cfg.ConfigFile, p)
 		if err != nil {
 			return nil, fmt.Errorf("could not parse config: %v", err)
 		}
 	}
 
 	opts := option{
-		provider: providers.CurrentProvider(),
+		provider: p,
 	}
 	for _, arg := range args {
 		arg(&opts)
@@ -644,6 +646,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 
 // userNameIsAllowed checks whether the user's username is allowed to access the machine.
 func (b *Broker) userNameIsAllowed(userName string) bool {
+	normalizedUsername := b.provider.NormalizeUsername(userName)
 	// The user is allowed to log in if:
 	// - ALL users are allowed
 	// - the user's name is in the list of allowed_users
@@ -651,14 +654,14 @@ func (b *Broker) userNameIsAllowed(userName string) bool {
 	if b.cfg.userConfig.allUsersAllowed {
 		return true
 	}
-	if _, ok := b.cfg.userConfig.allowedUsers[userName]; ok {
+	if _, ok := b.cfg.userConfig.allowedUsers[normalizedUsername]; ok {
 		return true
 	}
 	if !b.cfg.userConfig.ownerAllowed {
 		return false
 	}
 	// If owner is undefined, then the first user to log in is considered the owner
-	return b.cfg.userConfig.firstUserBecomesOwner || b.cfg.userConfig.owner == userName
+	return b.cfg.userConfig.firstUserBecomesOwner || b.cfg.userConfig.owner == normalizedUsername
 }
 
 func (b *Broker) startAuthenticate(sessionID string) (context.Context, error) {

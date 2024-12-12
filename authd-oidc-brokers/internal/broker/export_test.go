@@ -43,6 +43,10 @@ func (cfg *Config) SetAllowedSSHSuffixes(allowedSSHSuffixes []string) {
 	cfg.allowedSSHSuffixes = allowedSSHSuffixes
 }
 
+func (cfg *Config) SetProvider(provider provider) {
+	cfg.provider = provider
+}
+
 func (cfg *Config) ClientID() string {
 	return cfg.clientID
 }
