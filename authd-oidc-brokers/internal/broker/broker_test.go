@@ -1011,5 +1011,5 @@ func TestMain(m *testing.M) {
 	defaultIssuerURL, cleanup = testutils.StartMockProviderServer("", nil)
 	defer cleanup()
 
-	os.Exit(m.Run())
+	m.Run()
 }
