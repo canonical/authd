@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+
+echo "pre-refresh hook" >> /tmp/snap.log # TODO: Only for debugging
+
+snapctl set previous-version=${SNAP_VERSION}
