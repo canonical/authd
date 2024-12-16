@@ -857,6 +857,17 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 
 func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 	t.Parallel()
+
+	u1 := "u1"
+	u2 := "u2"
+	u3 := "u3"
+	allUsers := []string{u1, u2, u3}
+
+	idTokenClaims := []map[string]interface{}{}
+	for _, uname := range allUsers {
+		idTokenClaims = append(idTokenClaims, map[string]interface{}{"sub": "user", "name": "user", "email": uname})
+	}
+
 	tests := map[string]struct {
 		allowedUsers          map[string]struct{}
 		owner                 string
@@ -864,49 +875,47 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 		allUsersAllowed       bool
 		firstUserBecomesOwner bool
 
-		allowedUsernames   []string
-		unallowedUsernames []string
+		wantAllowedUsers   []string
+		wantUnallowedUsers []string
 	}{
 		"All_users_are_allowed": {
 			allUsersAllowed:  true,
-			allowedUsernames: []string{"u1", "u2"},
+			wantAllowedUsers: allUsers,
 		},
 		"Only_owner_allowed": {
 			ownerAllowed:       true,
-			owner:              "machine_owner",
-			allowedUsernames:   []string{"machine_owner"},
-			unallowedUsernames: []string{"u1", "u2"},
+			owner:              u1,
+			wantAllowedUsers:   []string{u1},
+			wantUnallowedUsers: []string{u2, u3},
 		},
 		"No_users_allowed": {
-			unallowedUsernames: []string{"u1", "u2", "machine_owner", "u3"},
+			wantUnallowedUsers: allUsers,
 		},
 		"No_users_allowed_when_owner_is_allowed_but_not_set": {
 			ownerAllowed:       true,
-			unallowedUsernames: []string{"u1", "u2", "machine_owner", "u3"},
+			wantUnallowedUsers: allUsers,
 		},
 		"Only_first_user_allowed": {
 			ownerAllowed:          true,
 			firstUserBecomesOwner: true,
-			allowedUsernames:      []string{"random_user"},
-			unallowedUsernames:    []string{"u1", "u2"},
+			wantAllowedUsers:      []string{u1},
+			wantUnallowedUsers:    []string{u2, u3},
 		},
 		"Specific_users_allowed": {
-			allowedUsers:       map[string]struct{}{"u1": {}, "u2": {}},
-			allowedUsernames:   []string{"u1", "u2"},
-			unallowedUsernames: []string{"u3"},
+			allowedUsers:       map[string]struct{}{u1: {}, u2: {}},
+			wantAllowedUsers:   []string{u1, u2},
+			wantUnallowedUsers: []string{u3},
 		},
 		"Specific_users_and_owner": {
-			allowedUsers:       map[string]struct{}{"u1": {}, "u2": {}},
 			ownerAllowed:       true,
-			owner:              "machine_owner",
-			allowedUsernames:   []string{"u1", "u2", "machine_owner"},
-			unallowedUsernames: []string{"u3"},
+			allowedUsers:       map[string]struct{}{u1: {}},
+			owner:              u2,
+			wantAllowedUsers:   []string{u1, u2},
+			wantUnallowedUsers: []string{u3},
 		},
-		"Owner_is_disabled_even_when_registered": {
-			allowedUsers:       map[string]struct{}{"u1": {}, "u2": {}},
-			owner:              "machine_owner",
-			allowedUsernames:   []string{"u1", "u2"},
-			unallowedUsernames: []string{"machine_owner", "u3"},
+		"Owner_is_set_but_not_allowed": {
+			owner:              u1,
+			wantUnallowedUsers: allUsers,
 		},
 	}
 
@@ -917,14 +926,6 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 			dataDir := filepath.Join(outDir, "data")
 			err := os.Mkdir(dataDir, 0700)
 			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
-
-			idTokenClaims := []map[string]interface{}{}
-			for _, uname := range tc.allowedUsernames {
-				idTokenClaims = append(idTokenClaims, map[string]interface{}{"sub": "user", "name": "user", "email": uname})
-			}
-			for _, uname := range tc.unallowedUsernames {
-				idTokenClaims = append(idTokenClaims, map[string]interface{}{"sub": "user", "name": "user", "email": uname})
-			}
 
 			b := newBrokerForTests(t, &brokerForTestConfig{
 				Config:                broker.Config{DataDir: dataDir},
@@ -938,7 +939,7 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 				},
 			})
 
-			for _, u := range append(tc.allowedUsernames, tc.unallowedUsernames...) {
+			for _, u := range allUsers {
 				sessionID, key := newSessionForTests(t, b, u, "")
 				token := tokenOptions{username: u}
 				generateAndStoreCachedInfo(t, token, b.TokenPathForSession(sessionID))
@@ -952,11 +953,15 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 				access, data, err := b.IsAuthenticated(sessionID, authData)
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
 				require.NoError(t, err)
-				if slices.Contains(tc.allowedUsernames, u) {
+				if slices.Contains(tc.wantAllowedUsers, u) {
 					require.Equal(t, access, broker.AuthGranted, "authentication failed")
-				} else {
-					require.Equal(t, access, broker.AuthDenied, "authentication failed")
+					continue
 				}
+				if slices.Contains(tc.wantUnallowedUsers, u) {
+					require.Equal(t, access, broker.AuthDenied, "authentication failed")
+					continue
+				}
+				t.Fatalf("user %s is not in the allowed or unallowed users list", u)
 			}
 		})
 	}
