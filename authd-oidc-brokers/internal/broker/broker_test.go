@@ -878,6 +878,18 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 		wantAllowedUsers   []string
 		wantUnallowedUsers []string
 	}{
+		"No_users_allowed": {
+			wantUnallowedUsers: allUsers,
+		},
+		"No_users_allowed_when_owner_is_allowed_but_not_set": {
+			ownerAllowed:       true,
+			wantUnallowedUsers: allUsers,
+		},
+		"No_users_allowed_when_owner_is_set_but_not_allowed": {
+			owner:              u1,
+			wantUnallowedUsers: allUsers,
+		},
+
 		"All_users_are_allowed": {
 			allUsersAllowed:  true,
 			wantAllowedUsers: allUsers,
@@ -887,13 +899,6 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 			owner:              u1,
 			wantAllowedUsers:   []string{u1},
 			wantUnallowedUsers: []string{u2, u3},
-		},
-		"No_users_allowed": {
-			wantUnallowedUsers: allUsers,
-		},
-		"No_users_allowed_when_owner_is_allowed_but_not_set": {
-			ownerAllowed:       true,
-			wantUnallowedUsers: allUsers,
 		},
 		"Only_first_user_allowed": {
 			ownerAllowed:          true,
@@ -912,10 +917,6 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 			owner:              u2,
 			wantAllowedUsers:   []string{u1, u2},
 			wantUnallowedUsers: []string{u3},
-		},
-		"Owner_is_set_but_not_allowed": {
-			owner:              u1,
-			wantUnallowedUsers: allUsers,
 		},
 	}
 
