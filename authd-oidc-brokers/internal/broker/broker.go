@@ -49,6 +49,8 @@ type Config struct {
 type Broker struct {
 	cfg Config
 
+	setOwnerMutex sync.Mutex
+
 	provider providers.Provider
 	oidcCfg  oidc.Config
 
@@ -613,19 +615,16 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 	}
 
-	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
-		return AuthDenied, errorMessage{Message: "permission denied"}
+	err = b.maybeRegisterOwner(b.cfg.ConfigFile, authInfo.UserInfo.Name)
+	if err != nil {
+		// The user is not allowed if we fail to create the owner-autoregistration file.
+		// Otherwise the owner might change if the broker is restarted.
+		slog.Error(fmt.Sprintf("Failed to assign the owner role: %v", err))
+		return AuthDenied, errorMessage{Message: "could not register the owner"}
 	}
 
-	// If the owner is unset and allowed, we auto-generate a config file with the first
-	// user to log in as the owner.
-	if b.cfg.userConfig.shouldRegisterOwner() {
-		if err := b.cfg.registerOwner(b.cfg.ConfigFile, authInfo.UserInfo.Name); err != nil {
-			// The user is not allowed, if we fail to create the owner-autoregistration file.
-			// Otherwise the owner might change if the broker is restarted.
-			slog.Error(fmt.Sprintf("Failed to assign the owner role: %v", err))
-			return AuthDenied, errorMessage{Message: "could not register the owner"}
-		}
+	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
+		return AuthDenied, errorMessage{Message: "permission denied"}
 	}
 
 	if session.isOffline {
@@ -644,6 +643,19 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 }
 
+func (b *Broker) maybeRegisterOwner(cfgPath string, userName string) error {
+	// We need to lock here to avoid a race condition where two users log in at the same time, causing both to be
+	// considered the owner.
+	b.setOwnerMutex.Lock()
+	defer b.setOwnerMutex.Unlock()
+
+	if !b.cfg.userConfig.shouldRegisterOwner() {
+		return nil
+	}
+
+	return b.cfg.registerOwner(cfgPath, userName)
+}
+
 // userNameIsAllowed checks whether the user's username is allowed to access the machine.
 func (b *Broker) userNameIsAllowed(userName string) bool {
 	normalizedUsername := b.provider.NormalizeUsername(userName)
@@ -657,11 +669,7 @@ func (b *Broker) userNameIsAllowed(userName string) bool {
 	if _, ok := b.cfg.userConfig.allowedUsers[normalizedUsername]; ok {
 		return true
 	}
-	if !b.cfg.userConfig.ownerAllowed {
-		return false
-	}
-	// If owner is undefined, then the first user to log in is considered the owner
-	return b.cfg.userConfig.firstUserBecomesOwner || b.cfg.userConfig.owner == normalizedUsername
+	return b.cfg.userConfig.ownerAllowed && b.cfg.userConfig.owner == normalizedUsername
 }
 
 func (b *Broker) startAuthenticate(sessionID string) (context.Context, error) {
