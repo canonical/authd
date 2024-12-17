@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"unsafe"
 
@@ -58,7 +59,7 @@ issuer = https://higher-precedence-issuer.url.com
 func TestParseConfig(t *testing.T) {
 	t.Parallel()
 	p := &testutils.MockProvider{}
-	uncheckedFields := map[string]struct{}{"provider": {}}
+	ignoredFields := map[string]struct{}{"provider": {}, "ownerMutex": {}}
 
 	tests := map[string]struct {
 		configType string
@@ -140,7 +141,7 @@ func TestParseConfig(t *testing.T) {
 			typ := reflect.TypeOf(&cfg).Elem()
 			for i := 0; i < typ.NumField(); i++ {
 				field := typ.Field(i)
-				if _, ok := uncheckedFields[field.Name]; ok {
+				if _, ok := ignoredFields[field.Name]; ok {
 					continue
 				}
 				fieldValue := val.Field(i)
@@ -318,7 +319,7 @@ func TestRegisterOwner(t *testing.T) {
 	err = os.Mkdir(dropInDir, 0700)
 	require.NoError(t, err, "Setup: Failed to create drop-in directory")
 
-	cfg := userConfig{firstUserBecomesOwner: true, ownerAllowed: true, provider: p}
+	cfg := userConfig{firstUserBecomesOwner: true, ownerAllowed: true, provider: p, ownerMutex: &sync.RWMutex{}}
 	err = cfg.registerOwner(confPath, userName)
 	require.NoError(t, err)
 

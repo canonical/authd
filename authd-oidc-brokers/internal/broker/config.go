@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"gopkg.in/ini.v1"
 )
@@ -68,6 +69,7 @@ type userConfig struct {
 	ownerAllowed          bool
 	firstUserBecomesOwner bool
 	owner                 string
+	ownerMutex            *sync.RWMutex
 	homeBaseDir           string
 	allowedSSHSuffixes    []string
 
@@ -103,6 +105,9 @@ func getDropInFiles(cfgPath string) ([]any, error) {
 }
 
 func (uc *userConfig) populateUsersConfig(users *ini.Section) {
+	uc.ownerMutex.Lock()
+	defer uc.ownerMutex.Unlock()
+
 	if users == nil {
 		// The default behavior is to allow only the owner
 		uc.ownerAllowed = true
@@ -146,7 +151,7 @@ func (uc *userConfig) populateUsersConfig(users *ini.Section) {
 
 // parseConfigFile parses the config file and returns a map with the configuration keys and values.
 func parseConfigFile(cfgPath string, p provider) (userConfig, error) {
-	cfg := userConfig{provider: p}
+	cfg := userConfig{provider: p, ownerMutex: &sync.RWMutex{}}
 
 	dropInFiles, err := getDropInFiles(cfgPath)
 	if err != nil {
@@ -182,11 +187,23 @@ func parseConfigFile(cfgPath string, p provider) (userConfig, error) {
 	return cfg, nil
 }
 
-func (uc *userConfig) shouldRegisterOwner() bool {
-	return uc.ownerAllowed && uc.firstUserBecomesOwner && uc.owner == ""
+func (uc *userConfig) isOwnerAllowed(userName string) bool {
+	uc.ownerMutex.RLock()
+	defer uc.ownerMutex.RUnlock()
+
+	return uc.ownerAllowed && uc.owner == userName
 }
 
 func (uc *userConfig) registerOwner(cfgPath, userName string) error {
+	// We need to lock here to avoid a race condition where two users log in at the same time, causing both to be
+	// considered the owner.
+	uc.ownerMutex.Lock()
+	defer uc.ownerMutex.Unlock()
+
+	if shouldRegister := uc.ownerAllowed && uc.firstUserBecomesOwner && uc.owner == ""; !shouldRegister {
+		return nil
+	}
+
 	if cfgPath == "" {
 		uc.owner = uc.provider.NormalizeUsername(userName)
 		uc.firstUserBecomesOwner = false

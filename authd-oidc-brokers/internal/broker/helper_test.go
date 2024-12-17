@@ -47,6 +47,7 @@ type brokerForTestConfig struct {
 func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker) {
 	t.Helper()
 
+	cfg.Init()
 	if cfg.issuerURL != "" {
 		cfg.SetIssuerURL(cfg.issuerURL)
 	}
