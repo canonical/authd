@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -860,7 +861,7 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 
 	u1 := "u1"
 	u2 := "u2"
-	u3 := "u3"
+	u3 := "U3"
 	allUsers := []string{u1, u2, u3}
 
 	idTokenClaims := []map[string]interface{}{}
@@ -917,6 +918,13 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 			owner:              u2,
 			wantAllowedUsers:   []string{u1, u2},
 			wantUnallowedUsers: []string{u3},
+		},
+		"Usernames_are_normalized": {
+			ownerAllowed:       true,
+			allowedUsers:       map[string]struct{}{u3: {}},
+			owner:              strings.ToLower(u3),
+			wantAllowedUsers:   []string{u3},
+			wantUnallowedUsers: []string{u1, u2},
 		},
 	}
 

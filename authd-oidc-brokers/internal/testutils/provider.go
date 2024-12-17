@@ -373,6 +373,11 @@ func (p *MockProvider) AuthOptions() []oauth2.AuthCodeOption {
 	return p.NoProvider.AuthOptions()
 }
 
+// NormalizeUsername parses a username into a normalized version.
+func (p *MockProvider) NormalizeUsername(username string) string {
+	return strings.ToLower(username)
+}
+
 // GetUserInfo is a no-op when no specific provider is in use.
 func (p *MockProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error) {
 	if p.GetUserInfoFails {
