@@ -14,6 +14,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
@@ -22,9 +23,15 @@ import (
 
 type brokerForTestConfig struct {
 	broker.Config
-	issuerURL          string
-	homeBaseDir        string
-	allowedSSHSuffixes []string
+	issuerURL             string
+	allowedUsers          map[string]struct{}
+	allUsersAllowed       bool
+	ownerAllowed          bool
+	firstUserBecomesOwner bool
+	owner                 string
+	homeBaseDir           string
+	allowedSSHSuffixes    []string
+	provider              providers.Provider
 
 	getUserInfoFails bool
 	firstCallDelay   int
@@ -40,6 +47,7 @@ type brokerForTestConfig struct {
 func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker) {
 	t.Helper()
 
+	cfg.Init()
 	if cfg.issuerURL != "" {
 		cfg.SetIssuerURL(cfg.issuerURL)
 	}
@@ -49,6 +57,21 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	if cfg.allowedSSHSuffixes != nil {
 		cfg.SetAllowedSSHSuffixes(cfg.allowedSSHSuffixes)
 	}
+	if cfg.allowedUsers != nil {
+		cfg.SetAllowedUsers(cfg.allowedUsers)
+	}
+	if cfg.owner != "" {
+		cfg.SetOwner(cfg.owner)
+	}
+	if cfg.firstUserBecomesOwner != false {
+		cfg.SetFirstUserBecomesOwner(cfg.firstUserBecomesOwner)
+	}
+	if cfg.allUsersAllowed != false {
+		cfg.SetAllUsersAllowed(cfg.allUsersAllowed)
+	}
+	if cfg.ownerAllowed != false {
+		cfg.SetOwnerAllowed(cfg.ownerAllowed)
+	}
 
 	provider := &testutils.MockProvider{
 		GetUserInfoFails: cfg.getUserInfoFails,
@@ -57,6 +80,9 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 		GetGroupsFunc:    cfg.getGroupsFunc,
 	}
 
+	if cfg.provider == nil {
+		cfg.SetProvider(provider)
+	}
 	if cfg.DataDir == "" {
 		cfg.DataDir = t.TempDir()
 	}

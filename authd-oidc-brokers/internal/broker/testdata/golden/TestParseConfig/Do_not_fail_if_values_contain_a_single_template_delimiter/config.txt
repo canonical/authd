@@ -1,5 +1,10 @@
 clientID=<CLIENT_ID
 clientSecret=
 issuerURL=https://ISSUER_URL>
+allowedUsers=map[]
+allUsersAllowed=false
+ownerAllowed=true
+firstUserBecomesOwner=true
+owner=
 homeBaseDir=
 allowedSSHSuffixes=[]
