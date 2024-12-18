@@ -45,14 +45,6 @@ type Config struct {
 	userConfig
 }
 
-type userConfig struct {
-	clientID           string
-	clientSecret       string
-	issuerURL          string
-	homeBaseDir        string
-	allowedSSHSuffixes []string
-}
-
 // Broker is the real implementation of the broker to track sessions and process oidc calls.
 type Broker struct {
 	cfg Config
@@ -106,15 +98,17 @@ type Option func(*option)
 func New(cfg Config, args ...Option) (b *Broker, err error) {
 	defer decorate.OnError(&err, "could not create broker")
 
+	p := providers.CurrentProvider()
+
 	if cfg.ConfigFile != "" {
-		cfg.userConfig, err = parseConfigFile(cfg.ConfigFile)
+		cfg.userConfig, err = parseConfigFile(cfg.ConfigFile, p)
 		if err != nil {
 			return nil, fmt.Errorf("could not parse config: %v", err)
 		}
 	}
 
 	opts := option{
-		provider: providers.CurrentProvider(),
+		provider: p,
 	}
 	for _, arg := range args {
 		arg(&opts)
@@ -364,7 +358,6 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 		// Some providers support both of these authentication methods, some implement only one and
 		// some implement neither.
 		// This was tested with the following providers:
-		// - Google: supports client_secret_post
 		// - Ory Hydra: supports client_secret_post
 		// TODO @shipperizer: client_authentication methods should be configurable
 		if secret := session.oauth2Config.ClientSecret; secret != "" {
@@ -620,6 +613,17 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 	}
 
+	if err := b.cfg.registerOwner(b.cfg.ConfigFile, authInfo.UserInfo.Name); err != nil {
+		// The user is not allowed if we fail to create the owner-autoregistration file.
+		// Otherwise the owner might change if the broker is restarted.
+		slog.Error(fmt.Sprintf("Failed to assign the owner role: %v", err))
+		return AuthDenied, errorMessage{Message: "could not register the owner"}
+	}
+
+	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
+		return AuthDenied, errorMessage{Message: "permission denied"}
+	}
+
 	if session.isOffline {
 		return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 	}
@@ -634,6 +638,23 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	token.CleanupOldEncryptedToken(session.oldEncryptedTokenPath)
 
 	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
+}
+
+// userNameIsAllowed checks whether the user's username is allowed to access the machine.
+func (b *Broker) userNameIsAllowed(userName string) bool {
+	normalizedUsername := b.provider.NormalizeUsername(userName)
+	// The user is allowed to log in if:
+	// - ALL users are allowed
+	// - the user's name is in the list of allowed_users
+	// - the user is the owner of the machine and OWNER is in the allowed_users list
+	if b.cfg.userConfig.allUsersAllowed {
+		return true
+	}
+	if _, ok := b.cfg.userConfig.allowedUsers[normalizedUsername]; ok {
+		return true
+	}
+
+	return b.cfg.isOwnerAllowed(normalizedUsername)
 }
 
 func (b *Broker) startAuthenticate(sessionID string) (context.Context, error) {

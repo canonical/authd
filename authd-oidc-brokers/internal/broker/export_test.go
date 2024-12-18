@@ -2,10 +2,15 @@ package broker
 
 import (
 	"context"
+	"sync"
 
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	tokenPkg "github.com/ubuntu/authd-oidc-brokers/internal/token"
 )
+
+func (cfg *Config) Init() {
+	cfg.ownerMutex = &sync.RWMutex{}
+}
 
 func (cfg *Config) SetClientID(clientID string) {
 	cfg.clientID = clientID
@@ -19,8 +24,41 @@ func (cfg *Config) SetHomeBaseDir(homeBaseDir string) {
 	cfg.homeBaseDir = homeBaseDir
 }
 
+func (cfg *Config) SetAllowedUsers(allowedUsers map[string]struct{}) {
+	cfg.allowedUsers = allowedUsers
+}
+
+func (cfg *Config) SetOwner(owner string) {
+	cfg.ownerMutex.Lock()
+	defer cfg.ownerMutex.Unlock()
+
+	cfg.owner = owner
+}
+
+func (cfg *Config) SetFirstUserBecomesOwner(firstUserBecomesOwner bool) {
+	cfg.ownerMutex.Lock()
+	defer cfg.ownerMutex.Unlock()
+
+	cfg.firstUserBecomesOwner = firstUserBecomesOwner
+}
+
+func (cfg *Config) SetAllUsersAllowed(allUsersAllowed bool) {
+	cfg.allUsersAllowed = allUsersAllowed
+}
+
+func (cfg *Config) SetOwnerAllowed(ownerAllowed bool) {
+	cfg.ownerMutex.Lock()
+	defer cfg.ownerMutex.Unlock()
+
+	cfg.ownerAllowed = ownerAllowed
+}
+
 func (cfg *Config) SetAllowedSSHSuffixes(allowedSSHSuffixes []string) {
 	cfg.allowedSSHSuffixes = allowedSSHSuffixes
+}
+
+func (cfg *Config) SetProvider(provider provider) {
+	cfg.provider = provider
 }
 
 func (cfg *Config) ClientID() string {

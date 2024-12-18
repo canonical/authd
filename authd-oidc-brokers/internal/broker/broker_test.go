@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -536,8 +538,10 @@ func TestIsAuthenticated(t *testing.T) {
 			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
 
 			cfg := &brokerForTestConfig{
-				Config:           broker.Config{DataDir: dataDir},
-				getUserInfoFails: tc.getUserInfoFails,
+				Config:                broker.Config{DataDir: dataDir},
+				getUserInfoFails:      tc.getUserInfoFails,
+				ownerAllowed:          true,
+				firstUserBecomesOwner: true,
 			}
 			if tc.customHandlers == nil {
 				// Use the default provider URL if no custom handlers are provided.
@@ -707,14 +711,36 @@ func TestIsAuthenticated(t *testing.T) {
 // Due to ordering restrictions, this test can not be run in parallel, otherwise the routines would not be ordered as expected.
 func TestConcurrentIsAuthenticated(t *testing.T) {
 	tests := map[string]struct {
-		firstCallDelay  int
-		secondCallDelay int
+		firstCallDelay        int
+		secondCallDelay       int
+		ownerAllowed          bool
+		allUsersAllowed       bool
+		firstUserBecomesOwner bool
 
 		timeBetween time.Duration
 	}{
-		"First_auth_starts_and_finishes_before_second":                  {secondCallDelay: 1, timeBetween: 2 * time.Second},
-		"First_auth_starts_first_but_second_finishes_first":             {firstCallDelay: 3, timeBetween: time.Second},
-		"First_auth_starts_first_then_second_starts_and_first_finishes": {firstCallDelay: 2, secondCallDelay: 3, timeBetween: time.Second},
+		"First_auth_starts_and_finishes_before_second": {
+			secondCallDelay: 1,
+			timeBetween:     2 * time.Second,
+			allUsersAllowed: true,
+		},
+		"First_auth_starts_first_but_second_finishes_first": {
+			firstCallDelay:  3,
+			timeBetween:     time.Second,
+			allUsersAllowed: true,
+		},
+		"First_auth_starts_first_then_second_starts_and_first_finishes": {
+			firstCallDelay:  2,
+			secondCallDelay: 3,
+			timeBetween:     time.Second,
+			allUsersAllowed: true,
+		},
+		"First_auth_starts_first_but_second_finishes_first_and_is_registered_as_the_owner": {
+			firstCallDelay:        3,
+			timeBetween:           time.Second,
+			ownerAllowed:          true,
+			firstUserBecomesOwner: true,
+		},
 	}
 
 	for name, tc := range tests {
@@ -728,9 +754,12 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			username2 := "user2@example.com"
 
 			b := newBrokerForTests(t, &brokerForTestConfig{
-				Config:          broker.Config{DataDir: dataDir},
-				firstCallDelay:  tc.firstCallDelay,
-				secondCallDelay: tc.secondCallDelay,
+				Config:                broker.Config{DataDir: dataDir},
+				allUsersAllowed:       tc.allUsersAllowed,
+				ownerAllowed:          tc.ownerAllowed,
+				firstUserBecomesOwner: tc.firstUserBecomesOwner,
+				firstCallDelay:        tc.firstCallDelay,
+				secondCallDelay:       tc.secondCallDelay,
 				tokenHandlerOptions: &testutils.TokenHandlerOptions{
 					IDTokenClaims: []map[string]interface{}{
 						{"sub": "user1", "name": "user1", "email": username1},
@@ -823,6 +852,126 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 				}
 			}
 			golden.CheckOrUpdateFileTree(t, outDir)
+		})
+	}
+}
+
+func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
+	t.Parallel()
+
+	u1 := "u1"
+	u2 := "u2"
+	u3 := "U3"
+	allUsers := []string{u1, u2, u3}
+
+	idTokenClaims := []map[string]interface{}{}
+	for _, uname := range allUsers {
+		idTokenClaims = append(idTokenClaims, map[string]interface{}{"sub": "user", "name": "user", "email": uname})
+	}
+
+	tests := map[string]struct {
+		allowedUsers          map[string]struct{}
+		owner                 string
+		ownerAllowed          bool
+		allUsersAllowed       bool
+		firstUserBecomesOwner bool
+
+		wantAllowedUsers   []string
+		wantUnallowedUsers []string
+	}{
+		"No_users_allowed": {
+			wantUnallowedUsers: allUsers,
+		},
+		"No_users_allowed_when_owner_is_allowed_but_not_set": {
+			ownerAllowed:       true,
+			wantUnallowedUsers: allUsers,
+		},
+		"No_users_allowed_when_owner_is_set_but_not_allowed": {
+			owner:              u1,
+			wantUnallowedUsers: allUsers,
+		},
+
+		"All_users_are_allowed": {
+			allUsersAllowed:  true,
+			wantAllowedUsers: allUsers,
+		},
+		"Only_owner_allowed": {
+			ownerAllowed:       true,
+			owner:              u1,
+			wantAllowedUsers:   []string{u1},
+			wantUnallowedUsers: []string{u2, u3},
+		},
+		"Only_first_user_allowed": {
+			ownerAllowed:          true,
+			firstUserBecomesOwner: true,
+			wantAllowedUsers:      []string{u1},
+			wantUnallowedUsers:    []string{u2, u3},
+		},
+		"Specific_users_allowed": {
+			allowedUsers:       map[string]struct{}{u1: {}, u2: {}},
+			wantAllowedUsers:   []string{u1, u2},
+			wantUnallowedUsers: []string{u3},
+		},
+		"Specific_users_and_owner": {
+			ownerAllowed:       true,
+			allowedUsers:       map[string]struct{}{u1: {}},
+			owner:              u2,
+			wantAllowedUsers:   []string{u1, u2},
+			wantUnallowedUsers: []string{u3},
+		},
+		"Usernames_are_normalized": {
+			ownerAllowed:       true,
+			allowedUsers:       map[string]struct{}{u3: {}},
+			owner:              strings.ToLower(u3),
+			wantAllowedUsers:   []string{u3},
+			wantUnallowedUsers: []string{u1, u2},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			outDir := t.TempDir()
+			dataDir := filepath.Join(outDir, "data")
+			err := os.Mkdir(dataDir, 0700)
+			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
+
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config:                broker.Config{DataDir: dataDir},
+				allowedUsers:          tc.allowedUsers,
+				owner:                 tc.owner,
+				ownerAllowed:          tc.ownerAllowed,
+				allUsersAllowed:       tc.allUsersAllowed,
+				firstUserBecomesOwner: tc.firstUserBecomesOwner,
+				tokenHandlerOptions: &testutils.TokenHandlerOptions{
+					IDTokenClaims: idTokenClaims,
+				},
+			})
+
+			for _, u := range allUsers {
+				sessionID, key := newSessionForTests(t, b, u, "")
+				token := tokenOptions{username: u}
+				generateAndStoreCachedInfo(t, token, b.TokenPathForSession(sessionID))
+				err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID))
+				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
+
+				updateAuthModes(t, b, sessionID, authmodes.Password)
+
+				authData := `{"challenge":"` + encryptChallenge(t, "password", key) + `"}`
+
+				access, data, err := b.IsAuthenticated(sessionID, authData)
+				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
+				require.NoError(t, err)
+				if slices.Contains(tc.wantAllowedUsers, u) {
+					require.Equal(t, access, broker.AuthGranted, "authentication failed")
+					continue
+				}
+				if slices.Contains(tc.wantUnallowedUsers, u) {
+					require.Equal(t, access, broker.AuthDenied, "authentication failed")
+					continue
+				}
+				t.Fatalf("user %s is not in the allowed or unallowed users list", u)
+			}
 		})
 	}
 }

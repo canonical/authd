@@ -1,5 +1,10 @@
 clientID=lower_precedence_client_id
 clientSecret=
 issuerURL=https://higher-precedence-issuer.url.com
+allowedUsers=map[]
+allUsersAllowed=false
+ownerAllowed=true
+firstUserBecomesOwner=true
+owner=
 homeBaseDir=/home
 allowedSSHSuffixes=[]

@@ -24,5 +24,6 @@ type Provider interface {
 	) ([]string, error)
 	GetExtraFields(token *oauth2.Token) map[string]interface{}
 	GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error)
+	NormalizeUsername(username string) string
 	VerifyUsername(requestedUsername, authenticatedUsername string) error
 }

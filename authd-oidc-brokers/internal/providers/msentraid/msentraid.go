@@ -273,12 +273,17 @@ func (p Provider) CurrentAuthenticationModesOffered(
 	return offeredModes, nil
 }
 
+// NormalizeUsername parses a username into a normalized version.
+func (p Provider) NormalizeUsername(username string) string {
+	// Microsoft Entra usernames are case-insensitive. We can safely use strings.ToLower here without worrying about
+	// different Unicode characters that fold to the same lowercase letter, because the Microsoft Entra username policy
+	// (which we check in VerifyUsername) ensures that the username only contains ASCII characters.
+	return strings.ToLower(username)
+}
+
 // VerifyUsername checks if the authenticated username matches the requested username and that both are valid.
 func (p Provider) VerifyUsername(requestedUsername, authenticatedUsername string) error {
-	// Microsoft Entra usernames are case-insensitive. We can safely use strings.EqualFold here without worrying about
-	// different Unicode characters that fold to the same lowercase letter, because the Microsoft Entra username policy
-	// (which we checked above) ensures that the username only contains ASCII characters.
-	if !strings.EqualFold(requestedUsername, authenticatedUsername) {
+	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(authenticatedUsername) {
 		return fmt.Errorf("requested username %q does not match the authenticated user %q", requestedUsername, authenticatedUsername)
 	}
 
