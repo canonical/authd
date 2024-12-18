@@ -18,7 +18,7 @@ version_less_than() {
 
 echo_and_log_to_journal() {
   echo "${@}"
-  logger -t $SNAP_NAME "${@}"
+  logger -t "${SNAP_NAME}" "${@}"
 }
 
 should_transition_to_allowed_users() {
@@ -34,8 +34,8 @@ should_transition_to_allowed_users() {
 
 transition_to_allowed_users() {
   echo_and_log_to_journal "Transitioning to allowed users"
-  mkdir -p ${SNAP_DATA}/broker.conf.d
-  cp --update=none ${SNAP}/conf/migrations/pre-${INITIAL_ALLOWED_USERS_VERSION}/broker.conf.d/* ${SNAP_DATA}/broker.conf.d/
+  mkdir -p "${SNAP_DATA}/broker.conf.d"
+  cp --update=none "${SNAP}/conf/migrations/pre-${INITIAL_ALLOWED_USERS_VERSION}/broker.conf.d/"* "${SNAP_DATA}/broker.conf.d/"
 }
 
 migrate() {
