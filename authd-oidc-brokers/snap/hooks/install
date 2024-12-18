@@ -1,4 +1,5 @@
 #!/bin/sh
+
 set -eu
 
-cp --update=none ${SNAP}/conf/broker.conf.orig ${SNAP_DATA}/broker.conf
+install --mode=0600 "${SNAP}/conf/broker.conf.orig" "${SNAP_DATA}/broker.conf"
