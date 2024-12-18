@@ -12,13 +12,12 @@ fi
 PREVIOUS_VERSION=$(snapctl get previous-version)
 INITIAL_ALLOWED_USERS_VERSION="0.2.0"
 
-version_less_than() {
-  [ "$(printf '%s\n' "${@}" | sort -V | head -n1)" = "$1" ]
+log() {
+  logger -t "${SNAP_NAME}" "post-refresh: $*"
 }
 
-echo_and_log_to_journal() {
-  echo "${@}"
-  logger -t "${SNAP_NAME}" "${@}"
+version_less_than() {
+  [ "$(printf '%s\n' "${@}" | sort -V | head -n1)" = "$1" ]
 }
 
 should_transition_to_allowed_users() {
@@ -33,19 +32,13 @@ should_transition_to_allowed_users() {
 }
 
 transition_to_allowed_users() {
-  echo_and_log_to_journal "Transitioning to allowed users"
+  log "Transitioning to allowed users"
   mkdir -p "${SNAP_DATA}/broker.conf.d"
   cp --update=none "${SNAP}/conf/migrations/pre-${INITIAL_ALLOWED_USERS_VERSION}/broker.conf.d/"* "${SNAP_DATA}/broker.conf.d/"
 }
 
-migrate() {
-  echo "post-refresh hook"
-  echo_and_log_to_journal "Previous version: $PREVIOUS_VERSION"
+log "Previous version: $PREVIOUS_VERSION"
 
-  if should_transition_to_allowed_users; then
-    transition_to_allowed_users
-  fi
-}
-
-migrate >> /tmp/snap-refresh.log # TODO: Only for debugging
-
+if should_transition_to_allowed_users; then
+  transition_to_allowed_users
+fi
