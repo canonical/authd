@@ -33,8 +33,7 @@ should_transition_to_allowed_users() {
 
 transition_to_allowed_users() {
   log "Transitioning to allowed users"
-  mkdir -p "${SNAP_DATA}/broker.conf.d"
-  cp --update=none "${SNAP}/conf/migrations/pre-${INITIAL_ALLOWED_USERS_VERSION}/broker.conf.d/"* "${SNAP_DATA}/broker.conf.d/"
+  install -D --target-directory --mode=0700"${SNAP_DATA}/broker.conf.d" "${SNAP}/conf/migrations/pre-${INITIAL_ALLOWED_USERS_VERSION}/broker.conf.d/"*
 }
 
 if [ -z "${PREVIOUS_VERSION}" ]; then
