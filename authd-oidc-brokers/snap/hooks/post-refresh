@@ -37,7 +37,7 @@ transition_to_allowed_users() {
   cp --update=none "${SNAP}/conf/migrations/pre-${INITIAL_ALLOWED_USERS_VERSION}/broker.conf.d/"* "${SNAP_DATA}/broker.conf.d/"
 }
 
-log "Previous version: $PREVIOUS_VERSION"
+log "previous-version: $PREVIOUS_VERSION"
 
 if should_transition_to_allowed_users; then
   transition_to_allowed_users
