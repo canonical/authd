@@ -8,3 +8,41 @@ set -eu
 if [ -f "${SNAP_DATA}/broker.conf" ]; then
   chmod 0600 "${SNAP_DATA}/broker.conf"
 fi
+
+PREVIOUS_VERSION=$(snapctl get previous-version)
+INITIAL_ALLOWED_USERS_VERSION="0.2.0"
+
+log() {
+  logger -t "${SNAP_NAME}" "post-refresh: $*"
+}
+
+version_less_than() {
+  [ "$1" = "$2" ] && return 1 || [ "$(printf '%s\n' "${@}" | sort -V | head -n1)" = "$1" ]
+}
+
+should_transition_to_allowed_users() {
+  # Transition to allowed users if:
+  # - previous-version is not set (that means that the previous version is
+  #   older than 0.2.0, i.e. the version where we introduced setting the
+  #   previous-version in the pre-refresh hook).
+  # - previous-version is set, but it is less than 0.2.0. That should never
+  #   happen, but we check it to give an example how the previous-version
+  #   can be used to transition data from older versions.
+  [ -z "${PREVIOUS_VERSION}" ] || version_less_than "${PREVIOUS_VERSION}" "${INITIAL_ALLOWED_USERS_VERSION}"
+}
+
+transition_to_allowed_users() {
+  log "Transitioning to allowed users"
+  install -D --target-directory "${SNAP_DATA}/broker.conf.d" --mode=0700  \
+    "${SNAP}/conf/migrations/pre-${INITIAL_ALLOWED_USERS_VERSION}/broker.conf.d/"*
+}
+
+if [ -z "${PREVIOUS_VERSION}" ]; then
+  log "previous-version: <not set>"
+else
+  log "previous-version: $PREVIOUS_VERSION"
+fi
+
+if should_transition_to_allowed_users; then
+  transition_to_allowed_users
+fi
