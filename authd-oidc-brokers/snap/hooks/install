@@ -2,4 +2,4 @@
 
 set -eu
 
-install --mode=0600 "${SNAP}/conf/broker.conf.orig" "${SNAP_DATA}/broker.conf"
+install --mode=0700 "${SNAP}/conf/broker.conf.orig" "${SNAP_DATA}/broker.conf"

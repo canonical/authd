@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+
+if [ -n "${DEBUG:-}" ]; then
+  logger -t "${SNAP_NAME}" "pre-refresh: Setting previous-version to ${SNAP_VERSION}"
+fi
+
+snapctl set previous-version="${SNAP_VERSION}"

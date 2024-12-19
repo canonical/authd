@@ -38,6 +38,7 @@ parts:
     organize:
       "authd.conf": "conf/authd/oidc.conf"
       "broker.conf": "conf/broker.conf.orig"
+      "migrations": "conf/migrations"
   # Build the snap version from the git repository and current tree state.
   version:
     source: .
