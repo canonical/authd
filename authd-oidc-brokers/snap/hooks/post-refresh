@@ -1,0 +1,10 @@
+#!/bin/sh
+
+set -eu
+
+# In previous versions, the broker.conf was created with mode 0777 - umask.
+# This is not secure, because the file can contain sensitive information
+# (like the client_secret), so we ensure that the mode is 0700.
+if [ -f "${SNAP_DATA}/broker.conf" ]; then
+  chmod 0600 "${SNAP_DATA}/broker.conf"
+fi
