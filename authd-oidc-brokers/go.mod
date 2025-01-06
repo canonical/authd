@@ -13,7 +13,7 @@ require (
 	github.com/k0kubun/pp v3.0.1+incompatible
 	github.com/microsoftgraph/msgraph-sdk-go v1.54.0
 	github.com/microsoftgraph/msgraph-sdk-go-core v1.2.1
-	github.com/otiai10/copy v1.14.0
+	github.com/otiai10/copy v1.14.1
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.19.0
@@ -48,6 +48,7 @@ require (
 	github.com/microsoft/kiota-serialization-multipart-go v1.0.0 // indirect
 	github.com/microsoft/kiota-serialization-text-go v1.0.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
+	github.com/otiai10/mint v1.6.3 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
