@@ -82,7 +82,11 @@ func initViperConfig(name string, cmd *cobra.Command, vip *viper.Viper) (err err
 
 // installConfigFlag installs a --config option.
 func installConfigFlag(cmd *cobra.Command) *string {
-	return cmd.PersistentFlags().StringP("config", "c", "", "use a specific configuration file")
+	flag := cmd.PersistentFlags().StringP("config", "c", "", "use a specific configuration file")
+	if err := cmd.PersistentFlags().MarkHidden("config"); err != nil {
+		slog.Warn(fmt.Sprintf("Failed to hide --config flag: %v", err))
+	}
+	return flag
 }
 
 // SetVerboseMode change ErrorFormat and logs between very, middly and non verbose.
