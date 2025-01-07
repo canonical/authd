@@ -28,7 +28,11 @@ func init() {
 	pp.ColoringEnabled = false
 }
 
-const localGroupPrefix = "linux-"
+const (
+	localGroupPrefix   = "linux-"
+	defaultMSGraphHost = "graph.microsoft.com"
+	msgraphAPIVersion  = "v1.0"
+)
 
 // Provider is the Microsoft Entra ID provider implementation.
 type Provider struct {
@@ -86,14 +90,35 @@ func (p Provider) GetExtraFields(token *oauth2.Token) map[string]interface{} {
 	}
 }
 
-// GetUserInfo is a no-op when no specific provider is in use.
-func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error) {
+// GetMetadata returns relevant metadata about the provider.
+func (p Provider) GetMetadata(provider *oidc.Provider) (map[string]interface{}, error) {
+	var claims struct {
+		MSGraphHost string `json:"msgraph_host"`
+	}
+
+	if err := provider.Claims(&claims); err != nil {
+		return nil, fmt.Errorf("failed to get provider claims: %v", err)
+	}
+
+	return map[string]interface{}{
+		"msgraph_host": claims.MSGraphHost,
+	}, nil
+}
+
+// GetUserInfo returns the user info from the ID token and the groups the user is a member of, which are retrieved via
+// the Microsoft Graph API.
+func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken, providerMetadata map[string]interface{}) (info.User, error) {
+	msgraphHost := providerMetadata["msgraph_host"]
+	if msgraphHost == nil {
+		msgraphHost = defaultMSGraphHost
+	}
+
 	userClaims, err := p.userClaims(idToken)
 	if err != nil {
 		return info.User{}, err
 	}
 
-	userGroups, err := p.getGroups(accessToken)
+	userGroups, err := p.getGroups(accessToken, msgraphHost.(string))
 	if err != nil {
 		return info.User{}, err
 	}
@@ -126,7 +151,7 @@ func (p Provider) userClaims(idToken *oidc.IDToken) (claims, error) {
 }
 
 // getGroups access the Microsoft Graph API to get the groups the user is a member of.
-func (p Provider) getGroups(token *oauth2.Token) ([]info.Group, error) {
+func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Group, error) {
 	slog.Debug("Getting user groups from Microsoft Graph API")
 
 	// Check if the token has the GroupMember.Read.All scope
@@ -148,6 +173,7 @@ func (p Provider) getGroups(token *oauth2.Token) ([]info.Group, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GraphRequestAdapter: %v", err)
 	}
+	adapter.SetBaseUrl(fmt.Sprintf("https://%s/%s", msgraphHost, msgraphAPIVersion))
 
 	client := msgraphsdk.NewGraphServiceClient(adapter)
 

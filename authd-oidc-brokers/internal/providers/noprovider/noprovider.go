@@ -84,8 +84,13 @@ func (p NoProvider) GetExtraFields(token *oauth2.Token) map[string]interface{} {
 	return nil
 }
 
+// GetMetadata is a no-op when no specific provider is in use.
+func (p NoProvider) GetMetadata(provider *oidc.Provider) (map[string]interface{}, error) {
+	return nil, nil
+}
+
 // GetUserInfo is a no-op when no specific provider is in use.
-func (p NoProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error) {
+func (p NoProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken, providerMetadata map[string]interface{}) (info.User, error) {
 	userClaims, err := p.userClaims(idToken)
 	if err != nil {
 		return info.User{}, err
