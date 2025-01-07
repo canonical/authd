@@ -105,7 +105,8 @@ func (p Provider) GetMetadata(provider *oidc.Provider) (map[string]interface{}, 
 	}, nil
 }
 
-// GetUserInfo is a no-op when no specific provider is in use.
+// GetUserInfo returns the user info from the ID token and the groups the user is a member of, which are retrieved via
+// the Microsoft Graph API.
 func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken, providerMetadata map[string]interface{}) (info.User, error) {
 	msgraphHost := providerMetadata["msgraph_host"]
 	if msgraphHost == nil {
