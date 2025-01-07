@@ -10,7 +10,8 @@ if [ -f "${SNAP_DATA}/broker.conf" ]; then
 fi
 
 PREVIOUS_VERSION=$(snapctl get previous-version)
-INITIAL_ALLOWED_USERS_VERSION="0.2.0"
+# For Google, we are directly starting shipping 0.2.0 files. Bump on first transition.
+INITIAL_ALLOWED_USERS_VERSION="0.0.0"
 
 log() {
   logger -t "${SNAP_NAME}" "post-refresh: $*"
