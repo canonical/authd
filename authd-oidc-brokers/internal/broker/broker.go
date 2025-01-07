@@ -520,6 +520,13 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 
 		authInfo = token.NewAuthCachedInfo(t, rawIDToken, b.provider)
+
+		authInfo.ProviderMetadata, err = b.provider.GetMetadata(session.oidcServer)
+		if err != nil {
+			slog.Error(err.Error())
+			return AuthDenied, errorMessage{Message: "could not get provider metadata"}
+		}
+
 		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil {
 			slog.Error(err.Error())
@@ -781,6 +788,7 @@ func (b *Broker) refreshToken(ctx context.Context, oauth2Config oauth2.Config, o
 	}
 
 	t := token.NewAuthCachedInfo(oauthToken, rawIDToken, b.provider)
+	t.ProviderMetadata = oldToken.ProviderMetadata
 	t.UserInfo = oldToken.UserInfo
 	return t, nil
 }
@@ -795,7 +803,7 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.A
 		return info.User{}, fmt.Errorf("could not verify token: %v", err)
 	}
 
-	userInfo, err = b.provider.GetUserInfo(ctx, t.Token, idToken)
+	userInfo, err = b.provider.GetUserInfo(ctx, t.Token, idToken, t.ProviderMetadata)
 	if err != nil {
 		return info.User{}, fmt.Errorf("could not get user info: %w", err)
 	}
