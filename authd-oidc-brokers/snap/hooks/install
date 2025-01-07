@@ -2,4 +2,5 @@
 
 set -eu
 
-install --mode=0700 "${SNAP}/conf/broker.conf.orig" "${SNAP_DATA}/broker.conf"
+cp --update=none "${SNAP}/conf/broker.conf.orig" "${SNAP_DATA}/broker.conf"
+chmod 0600 "${SNAP_DATA}/broker.conf"
