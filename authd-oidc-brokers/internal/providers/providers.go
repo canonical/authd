@@ -23,7 +23,8 @@ type Provider interface {
 		currentAuthStep int,
 	) ([]string, error)
 	GetExtraFields(token *oauth2.Token) map[string]interface{}
-	GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken) (info.User, error)
+	GetMetadata(provider *oidc.Provider) (map[string]interface{}, error)
+	GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken, providerMetadata map[string]interface{}) (info.User, error)
 	NormalizeUsername(username string) string
 	VerifyUsername(requestedUsername, authenticatedUsername string) error
 }
