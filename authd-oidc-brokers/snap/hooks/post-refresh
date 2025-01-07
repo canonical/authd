@@ -33,8 +33,15 @@ should_transition_to_allowed_users() {
 
 transition_to_allowed_users() {
   log "Transitioning to allowed users"
-  install -D --target-directory "${SNAP_DATA}/broker.conf.d" --mode=0700  \
-    "${SNAP}/conf/migrations/pre-${INITIAL_ALLOWED_USERS_VERSION}/broker.conf.d/"*
+  src_dir="${SNAP}/conf/migrations/pre-${INITIAL_ALLOWED_USERS_VERSION}/broker.conf.d"
+  dest_dir="${SNAP_DATA}/broker.conf.d"
+  # shellcheck disable=SC2174 # it's fine that --mode only applies to the deepest directory, because the SNAP_DATA
+  # directory is created by snapd with the correct permissions.
+  mkdir -p --mode=0700 "${dest_dir}"
+  for f in "${src_dir}"/*; do
+    cp --update=none "${f}" "${dest_dir}"
+    chmod 0600 "${dest_dir}/$(basename "${f}")"
+  done
 }
 
 if [ -z "${PREVIOUS_VERSION}" ]; then
