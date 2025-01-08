@@ -10,7 +10,7 @@ if [ -f "${SNAP_DATA}/broker.conf" ]; then
 fi
 
 PREVIOUS_VERSION=$(snapctl get previous-version)
-INITIAL_ALLOWED_USERS_VERSION="0.2.0"
+INITIAL_ALLOWED_USERS_VERSION="0.2.0-pre1"
 
 log() {
   logger -t "${SNAP_NAME}" "post-refresh: $*"
