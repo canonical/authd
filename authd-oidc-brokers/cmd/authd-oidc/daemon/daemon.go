@@ -106,6 +106,9 @@ func New(name string) *App {
 	installConfigFlag(&a.rootCmd)
 	// FIXME: This option is for the viper path configuration. We should merge --config and this one in the future.
 	a.rootCmd.PersistentFlags().StringP("paths-config", "", "", "use a specific paths configuration file")
+	if err := a.rootCmd.PersistentFlags().MarkHidden("paths-config"); err != nil {
+		slog.Warn(fmt.Sprintf("Failed to hide --paths-config flag: %v", err))
+	}
 
 	// subcommands
 	a.installVersion()
