@@ -88,4 +88,10 @@ last_commit_on_main=$(git -C "${SNAPCRAFT_PART_SRC}" merge-base main HEAD)
 last_commit_on_main=$(git -C "${SNAPCRAFT_PART_SRC}" rev-parse --short=7 "${last_commit_on_main}")
 version="${version}.${last_commit_on_main}"
 
+# Check if the version is a valid semantic version.
+if ! semver check "${version}"; then
+    echo "Version ${version} is not a valid semantic version."
+    exit 1
+fi
+
 set_version "${version}"
