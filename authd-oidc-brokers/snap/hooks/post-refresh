@@ -17,7 +17,8 @@ log() {
 }
 
 version_less_than() {
-  [ "$1" = "$2" ] && return 1 || [ "$(printf '%s\n' "${@}" | sort -V | head -n1)" = "$1" ]
+  output=$(semver compare "$1" "$2") || exit 1
+  [ "${output}" = "less" ]
 }
 
 should_transition_to_allowed_users() {
