@@ -21,7 +21,24 @@ version_less_than() {
   [ "${output}" = "less" ]
 }
 
+valid_semver() {
+  output=$(semver check "$1")
+  if [ "$?" -ne 0 ] && [ "${output}" != "invalid" ]; then
+    exit 1
+  fi
+  [ "${output}" = "valid" ]
+}
+
 should_transition_to_allowed_users() {
+  # Do not transition if the previous version is set but not a valid
+  # semantic version. That's the case for snaps published to the edge
+  # channel before the 0.2.0 release, which already ship the allowed users
+  # configuration.
+  # TODO: We can remove this check once all users have updated to 0.2.0.
+  if [ -n "${PREVIOUS_VERSION}" ] && ! valid_semver "${PREVIOUS_VERSION}"; then
+    return 1
+  fi
+
   # Transition to allowed users if:
   # - previous-version is not set (that means that the previous version is
   #   older than 0.2.0, i.e. the version where we introduced setting the
