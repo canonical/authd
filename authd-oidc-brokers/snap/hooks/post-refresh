@@ -10,6 +10,11 @@ if [ -f "${SNAP_DATA}/broker.conf" ]; then
 fi
 
 PREVIOUS_VERSION=$(snapctl get previous-version)
+
+# Important: If you add new migrations, make sure to tag the commit which
+# first introduces the change, so that pre-release versions which already
+# contain the change (and which automatically uploaded to the edge channel)
+# will not be migrated.
 INITIAL_ALLOWED_USERS_VERSION="0.2.0-pre1"
 
 log() {
