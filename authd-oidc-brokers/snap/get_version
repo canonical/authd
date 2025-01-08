@@ -13,7 +13,7 @@ set -eu
 #    a. <last tag name on current branch>+<commit_sha> for main branch.
 #    b. <last tag name on current branch (not in main)>+<commit_sha>.<last_commit_merged_from_main> for other branches.
 #
-# Any of those version will be annoted with +dirty if there are local changes.
+# Any of those version will be annoted with .dirty if there are local changes.
 
 # set_version will markup the version in the snapcraft.yaml file after amending it with a dirty markup if necessary.
 # $1: version: the version to set.
@@ -32,7 +32,7 @@ annotate_with_dirty() {
     # check if current tree content is dirty.
     is_dirty=$(git -C "${SNAPCRAFT_PART_SRC}" status --porcelain)
     if [ -n "${is_dirty}" ]; then
-        version="${version}+dirty"
+        version="${version}.dirty"
     fi
 
     echo "${version}"
