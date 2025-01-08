@@ -75,7 +75,7 @@ if [ -n "${tag}" ] && [ "$(git describe --tags --exact-match 2>/dev/null)" = "${
 fi
 
 # Current commit is not tagged, append commit(s) sha.
-version="${version}+$(git -C ${SNAPCRAFT_PART_SRC} rev-parse --short=7 HEAD)"
+version="${version}+$(git -C "${SNAPCRAFT_PART_SRC}" rev-parse --short=7 HEAD)"
 
 # Main branch will be set as is.
 if [ "${current_branch}" = "main" ]; then
