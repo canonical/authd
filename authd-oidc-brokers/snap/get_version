@@ -5,8 +5,8 @@ set -eu
 
 # When considering a tag, if starting with "<current branch name>-" it will have its prefix removed.
 # For instance:
-# * 0.1 -> 0.1
-# * msentraid-0.1 -> 0.1 on msentraid branch.
+# * 0.1.0 -> 0.1.0
+# * msentraid-0.1.0 -> 0.1.0 on msentraid branch.
 
 # 1. If current commit is tagged, the version is directly the tag name.
 # 2. If current commit is not tagged, the version is:
