@@ -96,7 +96,7 @@ func setVerboseMode(level int) {
 	case 0:
 		log.SetLevel(consts.DefaultLevelLog)
 	case 1:
-		log.SetLevel(slog.LevelDebug)
+		log.SetLevel(slog.LevelInfo)
 	case 3:
 		//reportCaller = true
 		fallthrough
