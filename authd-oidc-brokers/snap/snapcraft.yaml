@@ -43,6 +43,14 @@ parts:
       "authd.conf": "conf/authd/google.conf"
       "broker.conf": "conf/broker.conf.orig"
       "migrations": "conf/migrations"
+  # SemVer comparison helper
+  semver:
+    source: tools
+    source-type: local
+    plugin: go
+    override-build: |
+      go mod download all
+      go build -o ${GOBIN}/semver semver/semver.go
   # Build the snap version from the git repository and current tree state.
   version:
     source: .
@@ -50,3 +58,5 @@ parts:
     build-packages:
       - git # The script needs Git.
     override-build: ./snap/get_version
+    after:
+      - semver
