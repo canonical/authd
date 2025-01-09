@@ -5,15 +5,15 @@ set -eu
 
 # When considering a tag, if starting with "<current branch name>-" it will have its prefix removed.
 # For instance:
-# * 0.1 -> 0.1
-# * msentraid-0.1 -> 0.1 on msentraid branch.
+# * 0.1.0 -> 0.1.0
+# * msentraid-0.1.0 -> 0.1.0 on msentraid branch.
 
 # 1. If current commit is tagged, the version is directly the tag name.
 # 2. If current commit is not tagged, the version is:
 #    a. <last tag name on current branch>+<commit_sha> for main branch.
 #    b. <last tag name on current branch (not in main)>+<commit_sha>.<last_commit_merged_from_main> for other branches.
 #
-# Any of those version will be annoted with +dirty if there are local changes.
+# Any of those version will be annoted with .dirty if there are local changes.
 
 # set_version will markup the version in the snapcraft.yaml file after amending it with a dirty markup if necessary.
 # $1: version: the version to set.
@@ -32,7 +32,7 @@ annotate_with_dirty() {
     # check if current tree content is dirty.
     is_dirty=$(git -C "${SNAPCRAFT_PART_SRC}" status --porcelain)
     if [ -n "${is_dirty}" ]; then
-        version="${version}+dirty"
+        version="${version}.dirty"
     fi
 
     echo "${version}"
@@ -75,7 +75,7 @@ if [ -n "${tag}" ] && [ "$(git describe --tags --exact-match 2>/dev/null)" = "${
 fi
 
 # Current commit is not tagged, append commit(s) sha.
-version="${version}+$(git -C ${SNAPCRAFT_PART_SRC} rev-parse --short=7 HEAD)"
+version="${version}+$(git -C "${SNAPCRAFT_PART_SRC}" rev-parse --short=7 HEAD)"
 
 # Main branch will be set as is.
 if [ "${current_branch}" = "main" ]; then
@@ -87,5 +87,11 @@ fi
 last_commit_on_main=$(git -C "${SNAPCRAFT_PART_SRC}" merge-base main HEAD)
 last_commit_on_main=$(git -C "${SNAPCRAFT_PART_SRC}" rev-parse --short=7 "${last_commit_on_main}")
 version="${version}.${last_commit_on_main}"
+
+# Check if the version is a valid semantic version.
+if ! semver check "${version}"; then
+    echo "Version ${version} is not a valid semantic version."
+    exit 1
+fi
 
 set_version "${version}"

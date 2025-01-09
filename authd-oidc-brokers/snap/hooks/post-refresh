@@ -4,23 +4,46 @@ set -eu
 
 # In previous versions, the broker.conf was created with mode 0777 - umask.
 # This is not secure, because the file can contain sensitive information
-# (like the client_secret), so we ensure that the mode is 0700.
+# (like the client_secret), so we ensure that the mode is 0600.
 if [ -f "${SNAP_DATA}/broker.conf" ]; then
   chmod 0600 "${SNAP_DATA}/broker.conf"
 fi
 
 PREVIOUS_VERSION=$(snapctl get previous-version)
-INITIAL_ALLOWED_USERS_VERSION="0.2.0"
+
+# Important: If you add new migrations, make sure to tag the commit which
+# first introduces the change, so that pre-release versions which already
+# contain the change (and which automatically uploaded to the edge channel)
+# will not be migrated.
+INITIAL_ALLOWED_USERS_VERSION="0.2.0-pre1"
 
 log() {
   logger -t "${SNAP_NAME}" "post-refresh: $*"
 }
 
 version_less_than() {
-  [ "$1" = "$2" ] && return 1 || [ "$(printf '%s\n' "${@}" | sort -V | head -n1)" = "$1" ]
+  output=$(semver compare "$1" "$2") || exit 1
+  [ "${output}" = "less" ]
+}
+
+valid_semver() {
+  output=$(semver check "$1")
+  if [ "$?" -ne 0 ] && [ "${output}" != "invalid" ]; then
+    exit 1
+  fi
+  [ "${output}" = "valid" ]
 }
 
 should_transition_to_allowed_users() {
+  # Do not transition if the previous version is set but not a valid
+  # semantic version. That's the case for snaps published to the edge
+  # channel before the 0.2.0 release, which already ship the allowed users
+  # configuration.
+  # TODO: We can remove this check once all users have updated to 0.2.0.
+  if [ -n "${PREVIOUS_VERSION}" ] && ! valid_semver "${PREVIOUS_VERSION}"; then
+    return 1
+  fi
+
   # Transition to allowed users if:
   # - previous-version is not set (that means that the previous version is
   #   older than 0.2.0, i.e. the version where we introduced setting the
