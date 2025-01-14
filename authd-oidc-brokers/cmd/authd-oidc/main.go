@@ -2,7 +2,7 @@
 package main
 
 import (
-	"log/slog"
+	"context"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -12,6 +12,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/cmd/authd-oidc/daemon"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/po"
+	"github.com/ubuntu/authd/log"
 	"github.com/ubuntu/go-i18n"
 )
 
@@ -36,7 +37,7 @@ func run(a app) int {
 	defer installSignalHandler(a)()
 
 	if err := a.Run(); err != nil {
-		slog.Error(err.Error())
+		log.Error(context.Background(), err.Error())
 
 		if a.UsageError() {
 			return 2

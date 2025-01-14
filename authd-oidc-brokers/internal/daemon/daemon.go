@@ -4,9 +4,9 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/coreos/go-systemd/daemon"
+	"github.com/ubuntu/authd/log"
 	"github.com/ubuntu/decorate"
 )
 
@@ -39,7 +39,7 @@ type Service interface {
 func New(ctx context.Context, service Service, args ...Option) (d *Daemon, err error) {
 	defer decorate.OnError(&err, "can't create daemon")
 
-	slog.Debug("Building new daemon")
+	log.Debug(context.Background(), "Building new daemon")
 
 	// Set default options.
 	opts := options{
@@ -61,22 +61,22 @@ func New(ctx context.Context, service Service, args ...Option) (d *Daemon, err e
 func (d *Daemon) Serve(ctx context.Context) (err error) {
 	defer decorate.OnError(&err, "error while serving")
 
-	slog.Debug("Starting to serve requests")
+	log.Debug(context.Background(), "Starting to serve requests")
 
 	// Signal to systemd that we are ready.
 	if sent, err := d.systemdSdNotifier(false, "READY=1"); err != nil {
 		return fmt.Errorf("couldn't send ready notification to systemd: %v", err)
 	} else if sent {
-		slog.Debug("Ready state sent to systemd")
+		log.Debug(context.Background(), "Ready state sent to systemd")
 	}
 
-	slog.Info(fmt.Sprintf("Serving requests as %v", d.service.Addr()))
+	log.Infof(context.Background(), "Serving requests as %v", d.service.Addr())
 	return d.service.Serve()
 }
 
 // Quit gracefully quits listening loop and stops the grpc server.
 // It can drops any existing connexion is force is true.
 func (d Daemon) Quit() {
-	slog.Info("Stopping daemon requested.")
+	log.Info(context.Background(), "Stopping daemon requested.")
 	_ = d.service.Stop()
 }

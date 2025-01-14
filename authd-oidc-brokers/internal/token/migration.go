@@ -1,15 +1,16 @@
 package token
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/ubuntu/authd-oidc-brokers/internal/fileutils"
+	"github.com/ubuntu/authd/log"
 	"golang.org/x/crypto/scrypt"
 )
 
@@ -105,14 +106,14 @@ func decrypt(blob, key []byte) ([]byte, error) {
 func CleanupOldEncryptedToken(path string) {
 	exists, err := fileutils.FileExists(path)
 	if err != nil {
-		slog.Warn(fmt.Sprintf("Failed to check if old encrypted token exists %s: %v", path, err))
+		log.Warningf(context.Background(), "Failed to check if old encrypted token exists %s: %v", path, err)
 	}
 	if !exists {
 		return
 	}
 
 	if err := os.Remove(path); err != nil {
-		slog.Warn(fmt.Sprintf("Failed to remove old encrypted token %s: %v", path, err))
+		log.Warningf(context.Background(), "Failed to remove old encrypted token %s: %v", path, err)
 		return
 	}
 
@@ -123,26 +124,26 @@ func CleanupOldEncryptedToken(path string) {
 	// Check if the parent directory is empty.
 	empty, err := fileutils.IsDirEmpty(filepath.Dir(path))
 	if err != nil {
-		slog.Warn(fmt.Sprintf("Failed to check if old encrypted token parent directory %s is empty: %v", filepath.Dir(path), err))
+		log.Warningf(context.Background(), "Failed to check if old encrypted token parent directory %s is empty: %v", filepath.Dir(path), err)
 		return
 	}
 	if !empty {
 		return
 	}
 	if err := os.Remove(filepath.Dir(path)); err != nil {
-		slog.Warn(fmt.Sprintf("Failed to remove old encrypted token directory %s: %v", filepath.Dir(path), err))
+		log.Warningf(context.Background(), "Failed to remove old encrypted token directory %s: %v", filepath.Dir(path), err)
 	}
 
 	// Check if the parent's parent directory is empty.
 	empty, err = fileutils.IsDirEmpty(filepath.Dir(filepath.Dir(path)))
 	if err != nil {
-		slog.Warn(fmt.Sprintf("Failed to check if old encrypted token parent directory %s is empty: %v", filepath.Dir(filepath.Dir(path)), err))
+		log.Warningf(context.Background(), "Failed to check if old encrypted token parent directory %s is empty: %v", filepath.Dir(filepath.Dir(path)), err)
 		return
 	}
 	if !empty {
 		return
 	}
 	if err := os.Remove(filepath.Dir(filepath.Dir(path))); err != nil {
-		slog.Warn(fmt.Sprintf("Failed to remove old encrypted token parent directory %s: %v", filepath.Dir(filepath.Dir(path)), err))
+		log.Warningf(context.Background(), "Failed to remove old encrypted token parent directory %s: %v", filepath.Dir(filepath.Dir(path)), err)
 	}
 }
