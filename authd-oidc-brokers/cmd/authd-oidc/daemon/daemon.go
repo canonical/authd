@@ -4,7 +4,6 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +13,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
 	"github.com/ubuntu/authd-oidc-brokers/internal/daemon"
 	"github.com/ubuntu/authd-oidc-brokers/internal/dbusservice"
+	log "github.com/ubuntu/authd/log"
 )
 
 // App encapsulate commands and options of the daemon, which can be controlled by env variables and config files.
@@ -88,7 +88,7 @@ func New(name string) *App {
 			}
 
 			setVerboseMode(a.config.Verbosity)
-			slog.Debug("Debug mode is enabled")
+			log.Debug(context.Background(), "Debug mode is enabled")
 
 			return nil
 		},
@@ -107,7 +107,7 @@ func New(name string) *App {
 	// FIXME: This option is for the viper path configuration. We should merge --config and this one in the future.
 	a.rootCmd.PersistentFlags().StringP("paths-config", "", "", "use a specific paths configuration file")
 	if err := a.rootCmd.PersistentFlags().MarkHidden("paths-config"); err != nil {
-		slog.Warn(fmt.Sprintf("Failed to hide --paths-config flag: %v", err))
+		log.Warningf(context.Background(), "Failed to hide --paths-config flag: %v", err)
 	}
 
 	// subcommands
@@ -174,7 +174,7 @@ func installVerbosityFlag(cmd *cobra.Command, viper *viper.Viper) *int {
 	r := cmd.PersistentFlags().CountP("verbosity", "v" /*i18n.G(*/, "issue INFO (-v), DEBUG (-vv) or DEBUG with caller (-vvv) output") //)
 
 	if err := viper.BindPFlag("verbosity", cmd.PersistentFlags().Lookup("verbosity")); err != nil {
-		slog.Warn(err.Error())
+		log.Warning(context.Background(), err.Error())
 	}
 
 	return r

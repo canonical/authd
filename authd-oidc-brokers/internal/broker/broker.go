@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -27,6 +26,7 @@ import (
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
+	"github.com/ubuntu/authd/log"
 	"github.com/ubuntu/decorate"
 	"golang.org/x/oauth2"
 )
@@ -134,7 +134,7 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	// Generate a new private key for the broker.
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		slog.Error(err.Error())
+		log.Error(context.Background(), err.Error())
 		return nil, errors.New("failed to generate broker private key")
 	}
 
@@ -182,7 +182,7 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 	// Construct an OIDC provider via OIDC discovery.
 	s.oidcServer, err = b.connectToOIDCServer(context.Background())
 	if err != nil {
-		slog.Debug(fmt.Sprintf("Could not connect to the provider: %v. Starting session in offline mode.", err))
+		log.Debugf(context.Background(), "Could not connect to the provider: %v. Starting session in offline mode.", err)
 		s.isOffline = true
 	}
 
@@ -218,19 +218,19 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 
 	supportedAuthModes := b.supportedAuthModesFromLayout(supportedUILayouts)
 
-	slog.Debug(fmt.Sprintf("Supported UI Layouts for session %s: %#v", sessionID, supportedUILayouts))
-	slog.Debug(fmt.Sprintf("Supported Authentication modes for session %s: %#v", sessionID, supportedAuthModes))
+	log.Debugf(context.Background(), "Supported UI Layouts for session %s: %#v", sessionID, supportedUILayouts)
+	log.Debugf(context.Background(), "Supported Authentication modes for session %s: %#v", sessionID, supportedAuthModes)
 
 	// Checks if the token exists in the cache.
 	tokenExists, err := fileutils.FileExists(session.tokenPath)
 	if err != nil {
-		slog.Warn(fmt.Sprintf("Could not check if token exists: %v", err))
+		log.Warningf(context.Background(), "Could not check if token exists: %v", err)
 	}
 	if !tokenExists {
 		// Check the old encrypted token path.
 		tokenExists, err = fileutils.FileExists(session.oldEncryptedTokenPath)
 		if err != nil {
-			slog.Warn(fmt.Sprintf("Could not check if old encrypted token exists: %v", err))
+			log.Warningf(context.Background(), "Could not check if old encrypted token exists: %v", err)
 		}
 	}
 
@@ -485,7 +485,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	// Decrypt challenge if present.
 	challenge, err := decodeRawChallenge(b.privateKey, authData["challenge"])
 	if err != nil {
-		slog.Error(err.Error())
+		log.Error(context.Background(), err.Error())
 		return AuthRetry, errorMessage{Message: "could not decode challenge"}
 	}
 
@@ -494,7 +494,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	case authmodes.Device, authmodes.DeviceQr:
 		response, ok := session.authInfo["response"].(*oauth2.DeviceAuthResponse)
 		if !ok {
-			slog.Error("could not get device auth response")
+			log.Error(context.Background(), "could not get device auth response")
 			return AuthDenied, errorMessage{Message: "could not get required response"}
 		}
 
@@ -505,17 +505,17 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		defer cancel()
 		t, err := session.oauth2Config.DeviceAccessToken(expiryCtx, response, b.provider.AuthOptions()...)
 		if err != nil {
-			slog.Error(err.Error())
+			log.Error(context.Background(), err.Error())
 			return AuthRetry, errorMessage{Message: "could not authenticate user remotely"}
 		}
 
 		if err = b.provider.CheckTokenScopes(t); err != nil {
-			slog.Warn(err.Error())
+			log.Warning(context.Background(), err.Error())
 		}
 
 		rawIDToken, ok := t.Extra("id_token").(string)
 		if !ok {
-			slog.Error("could not get ID token")
+			log.Error(context.Background(), "could not get ID token")
 			return AuthDenied, errorMessage{Message: "could not get ID token"}
 		}
 
@@ -523,13 +523,13 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 
 		authInfo.ProviderMetadata, err = b.provider.GetMetadata(session.oidcServer)
 		if err != nil {
-			slog.Error(err.Error())
+			log.Error(context.Background(), err.Error())
 			return AuthDenied, errorMessage{Message: "could not get provider metadata"}
 		}
 
 		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil {
-			slog.Error(err.Error())
+			log.Error(context.Background(), err.Error())
 			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
 		}
 
@@ -539,27 +539,27 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	case authmodes.Password:
 		useOldEncryptedToken, err := token.UseOldEncryptedToken(session.tokenPath, session.passwordPath, session.oldEncryptedTokenPath)
 		if err != nil {
-			slog.Error(err.Error())
+			log.Error(context.Background(), err.Error())
 			return AuthDenied, errorMessage{Message: "could not check password file"}
 		}
 
 		if useOldEncryptedToken {
 			authInfo, err = token.LoadOldEncryptedAuthInfo(session.oldEncryptedTokenPath, challenge)
 			if err != nil {
-				slog.Error(err.Error())
+				log.Error(context.Background(), err.Error())
 				return AuthDenied, errorMessage{Message: "could not load encrypted token"}
 			}
 
 			// We were able to decrypt the old token with the password, so we can now hash and store the password in the
 			// new format.
 			if err = password.HashAndStorePassword(challenge, session.passwordPath); err != nil {
-				slog.Error(err.Error())
+				log.Error(context.Background(), err.Error())
 				return AuthDenied, errorMessage{Message: "could not store password"}
 			}
 		} else {
 			ok, err := password.CheckPassword(challenge, session.passwordPath)
 			if err != nil {
-				slog.Error(err.Error())
+				log.Error(context.Background(), err.Error())
 				return AuthDenied, errorMessage{Message: "could not check password"}
 			}
 			if !ok {
@@ -568,7 +568,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 
 			authInfo, err = token.LoadAuthInfo(session.tokenPath)
 			if err != nil {
-				slog.Error(err.Error())
+				log.Error(context.Background(), err.Error())
 				return AuthDenied, errorMessage{Message: "could not load stored token"}
 			}
 		}
@@ -577,7 +577,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		if !session.isOffline {
 			authInfo, err = b.refreshToken(ctx, session.oauth2Config, authInfo)
 			if err != nil {
-				slog.Error(err.Error())
+				log.Error(context.Background(), err.Error())
 				return AuthDenied, errorMessage{Message: "could not refresh token"}
 			}
 		}
@@ -586,12 +586,12 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		userInfo, err := b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil && authInfo.UserInfo.Name == "" {
 			// We don't have a valid user info, so we can't proceed.
-			slog.Error(err.Error())
+			log.Error(context.Background(), err.Error())
 			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
 		}
 		if err != nil {
 			// We couldn't fetch the user info, but we have a valid cached one.
-			slog.Warn(fmt.Sprintf("Could not fetch user info: %v. Using cached user info.", err))
+			log.Warningf(context.Background(), "Could not fetch user info: %v. Using cached user info.", err)
 		} else {
 			authInfo.UserInfo = userInfo
 		}
@@ -610,12 +610,12 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		// This mode must always come after a authentication mode, so it has to have an auth_info.
 		authInfo, ok = session.authInfo["auth_info"].(token.AuthCachedInfo)
 		if !ok {
-			slog.Error("could not get required information")
+			log.Error(context.Background(), "could not get required information")
 			return AuthDenied, errorMessage{Message: "could not get required information"}
 		}
 
 		if err = password.HashAndStorePassword(challenge, session.passwordPath); err != nil {
-			slog.Error(err.Error())
+			log.Error(context.Background(), err.Error())
 			return AuthDenied, errorMessage{Message: "could not store password"}
 		}
 	}
@@ -623,7 +623,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	if err := b.cfg.registerOwner(b.cfg.ConfigFile, authInfo.UserInfo.Name); err != nil {
 		// The user is not allowed if we fail to create the owner-autoregistration file.
 		// Otherwise the owner might change if the broker is restarted.
-		slog.Error(fmt.Sprintf("Failed to assign the owner role: %v", err))
+		log.Errorf(context.Background(), "Failed to assign the owner role: %v", err)
 		return AuthDenied, errorMessage{Message: "could not register the owner"}
 	}
 
@@ -636,7 +636,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	}
 
 	if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
-		slog.Error(err.Error())
+		log.Error(context.Background(), err.Error())
 		return AuthDenied, errorMessage{Message: "could not cache user info"}
 	}
 
@@ -671,7 +671,7 @@ func (b *Broker) startAuthenticate(sessionID string) (context.Context, error) {
 	}
 
 	if session.isAuthenticating != nil {
-		slog.Error(fmt.Sprintf("Authentication already running for session %q", sessionID))
+		log.Errorf(context.Background(), "Authentication already running for session %q", sessionID)
 		return nil, errors.New("authentication already running for this user session")
 	}
 
@@ -719,7 +719,7 @@ func (b *Broker) CancelIsAuthenticated(sessionID string) {
 	session.isAuthenticating = nil
 
 	if err := b.updateSession(sessionID, session); err != nil {
-		slog.Error(fmt.Sprintf("Error when cancelling IsAuthenticated: %v", err))
+		log.Errorf(context.Background(), "Error when cancelling IsAuthenticated: %v", err)
 	}
 }
 
@@ -783,7 +783,7 @@ func (b *Broker) refreshToken(ctx context.Context, oauth2Config oauth2.Config, o
 	// Update the raw ID token
 	rawIDToken, ok := oauthToken.Extra("id_token").(string)
 	if !ok {
-		slog.Debug("refreshed token does not contain an ID token, keeping the old one")
+		log.Debug(context.Background(), "refreshed token does not contain an ID token, keeping the old one")
 		rawIDToken = oldToken.RawIDToken
 	}
 
