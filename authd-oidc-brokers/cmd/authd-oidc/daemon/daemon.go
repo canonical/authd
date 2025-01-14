@@ -50,6 +50,9 @@ func New(name string) *App {
 		Long:  fmt.Sprintf("Authentication daemon %s to communicate with our authentication daemon.", name),
 		Args:  cobra.NoArgs,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// First thing, initialize the log handler
+			log.InitJournalHandler(false)
+
 			// Command parsing has been successful. Returns to not print usage anymore.
 			a.rootCmd.SilenceUsage = true
 
