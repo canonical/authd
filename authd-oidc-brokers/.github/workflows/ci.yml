@@ -21,12 +21,18 @@ jobs:
 
   go-tests:
     name: "Go: Tests"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # ubuntu-latest-runner
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+
+      - name: Install dependencies
+        run: |
+          set -eu
+          sudo apt update
+          sudo apt install -y git-delta
 
       - name: Prepare tests artifacts path
         run: |
