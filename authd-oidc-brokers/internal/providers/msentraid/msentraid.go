@@ -179,7 +179,7 @@ func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Gro
 
 	// Get the groups (only the groups, not directory roles or administrative units, because that would require
 	// additional permissions) which the user is a member of.
-	graphGroups, err := getAllUserGroups(client)
+	graphGroups, err := getSecurityGroups(client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user groups: %v", err)
 	}
@@ -214,7 +214,7 @@ func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Gro
 	return groups, nil
 }
 
-func getAllUserGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.Groupable, error) {
+func getSecurityGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.Groupable, error) {
 	// Initial request to get groups
 	requestBuilder := client.Me().TransitiveMemberOf().GraphGroup()
 	result, err := requestBuilder.Get(context.Background(), nil)
@@ -240,6 +240,15 @@ func getAllUserGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.Gr
 		groups = append(groups, result.GetValue()...)
 	}
 
+	// Remove the groups which are not security groups (but for example Microsoft 365 groups, which can be created
+	// by non-admin users).
+	for i, group := range groups {
+		if !isSecurityGroup(group) {
+			log.Debugf(context.Background(), "Removing non-security group %s", *group.GetDisplayName())
+			groups = append(groups[:i], groups[i+1:]...)
+		}
+	}
+
 	var groupNames []string
 	for _, group := range groups {
 		groupNamePtr := group.GetDisplayName()
@@ -250,6 +259,17 @@ func getAllUserGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.Gr
 	log.Debugf(context.Background(), "Got groups: %s", strings.Join(groupNames, ", "))
 
 	return groups, nil
+}
+
+func isSecurityGroup(group msgraphmodels.Groupable) bool {
+	// A group is a security group if the `securityEnabled` property is true and the `groupTypes` property does not
+	// contain "Unified".
+	securityEnabledPtr := group.GetSecurityEnabled()
+	if securityEnabledPtr == nil || !*securityEnabledPtr {
+		return false
+	}
+
+	return !slices.Contains(group.GetGroupTypes(), "Unified")
 }
 
 // CurrentAuthenticationModesOffered returns the generic authentication modes supported by the provider.
