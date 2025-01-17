@@ -20,4 +20,5 @@ type Provider interface {
 	NormalizeUsername(username string) string
 	SupportedOIDCAuthModes() []string
 	VerifyUsername(requestedUsername, authenticatedUsername string) error
+	IsTokenExpiredError(err oauth2.RetrieveError) bool
 }

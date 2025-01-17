@@ -106,3 +106,9 @@ func (p NoProvider) userClaims(idToken *oidc.IDToken) (claims, error) {
 func (p NoProvider) getGroups(_ *oauth2.Token) ([]info.Group, error) {
 	return nil, nil
 }
+
+// IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.
+func (p NoProvider) IsTokenExpiredError(err oauth2.RetrieveError) bool {
+	// There is no generic error for this, so we return false.
+	return false
+}

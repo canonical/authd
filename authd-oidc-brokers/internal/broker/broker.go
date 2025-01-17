@@ -67,7 +67,7 @@ type session struct {
 	selectedMode    string
 	authModes       []string
 	attemptsPerMode map[string]int
-	nextAuthMode    string
+	nextAuthModes   []string
 
 	oidcServer            *oidc.Provider
 	oauth2Config          oauth2.Config
@@ -248,8 +248,15 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 }
 
 func (b *Broker) availableAuthModes(session session) (availableModes []string, err error) {
-	if session.nextAuthMode != "" {
-		return []string{session.nextAuthMode}, nil
+	if len(session.nextAuthModes) > 0 {
+		for _, mode := range session.nextAuthModes {
+			if !authModeIsAvailable(session, mode) {
+				log.Infof(context.Background(), "Authentication mode %q is not available", mode)
+				continue
+			}
+			availableModes = append(availableModes, mode)
+		}
+		return availableModes, nil
 	}
 
 	switch session.mode {
@@ -262,33 +269,26 @@ func (b *Broker) availableAuthModes(session session) (availableModes []string, e
 
 	default:
 		// session is for login
-		if !session.isOffline {
-			availableModes = b.oidcAuthModes(session)
-		}
-		if tokenExists(session) {
-			availableModes = append([]string{authmodes.Password}, availableModes...)
+		modes := append(b.provider.SupportedOIDCAuthModes(), authmodes.Password)
+		for _, mode := range modes {
+			if authModeIsAvailable(session, mode) {
+				availableModes = append(availableModes, mode)
+			}
 		}
 		return availableModes, nil
 	}
 }
 
-func (b *Broker) oidcAuthModes(session session) []string {
-	var modes []string
-	endpoints := make(map[string]struct{})
-	if session.oidcServer != nil && session.oidcServer.Endpoint().DeviceAuthURL != "" {
-		endpoints[authmodes.DeviceQr] = struct{}{}
-		endpoints[authmodes.Device] = struct{}{}
+func authModeIsAvailable(session session, authMode string) bool {
+	switch authMode {
+	case authmodes.Password:
+		return tokenExists(session)
+	case authmodes.NewPassword:
+		return true
+	case authmodes.Device, authmodes.DeviceQr:
+		return session.oidcServer != nil && session.oidcServer.Endpoint().DeviceAuthURL != "" && !session.isOffline
 	}
-
-	for _, mode := range b.provider.SupportedOIDCAuthModes() {
-		if _, ok := endpoints[mode]; ok {
-			modes = append(modes, mode)
-		} else {
-			log.Warningf(context.Background(), "No provider endpoint for mode %q", mode)
-		}
-	}
-
-	return modes
+	return false
 }
 
 func tokenExists(session session) bool {
@@ -574,7 +574,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 
 		session.authInfo["auth_info"] = authInfo
-		session.nextAuthMode = authmodes.NewPassword
+		session.nextAuthModes = []string{authmodes.NewPassword}
 
 		return AuthNext, nil
 
@@ -626,6 +626,14 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		// Refresh the token if we're online even if the token has not expired
 		if !session.isOffline {
 			authInfo, err = b.refreshToken(ctx, session.oauth2Config, authInfo)
+
+			var retrieveErr *oauth2.RetrieveError
+			if errors.As(err, &retrieveErr) && b.provider.IsTokenExpiredError(*retrieveErr) {
+				// The refresh token is expired, so the user needs to authenticate via OIDC again.
+				session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
+				return AuthNext, nil
+			}
+
 			if err != nil {
 				log.Error(context.Background(), err.Error())
 				return AuthDenied, errorMessage{Message: "could not refresh token"}
