@@ -246,15 +246,15 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 		}
 	}
 
-	availableModes, err := b.provider.CurrentAuthenticationModesOffered(
-		session.mode,
-		supportedAuthModes,
-		tokenExists,
-		!session.isOffline,
-		endpoints,
-		session.currentAuthStep)
+	availableModes, err := b.availableAuthModes(session, tokenExists, endpoints)
 	if err != nil {
 		return nil, err
+	}
+
+	for _, mode := range availableModes {
+		if _, ok := supportedAuthModes[mode]; !ok {
+			return nil, fmt.Errorf("auth mode %q required by the provider, but is not supported locally", mode)
+		}
 	}
 
 	for _, id := range availableModes {
@@ -274,6 +274,36 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 	}
 
 	return authModes, nil
+}
+
+func (b *Broker) availableAuthModes(session session, tokenExists bool, endpoints map[string]struct{}) (availableModes []string, err error) {
+	switch session.mode {
+	case sessionmode.ChangePassword, sessionmode.ChangePasswordOld:
+		// session is for changing the password
+		if !tokenExists {
+			return nil, errors.New("user has no cached token")
+		}
+		availableModes = []string{authmodes.Password}
+		if session.currentAuthStep > 0 {
+			availableModes = []string{authmodes.NewPassword}
+		}
+
+	default: // session is for login
+		if !session.isOffline {
+			for _, mode := range b.provider.SupportedOIDCAuthModes() {
+				if _, ok := endpoints[mode]; ok {
+					availableModes = append(availableModes, mode)
+				}
+			}
+		}
+		if tokenExists {
+			availableModes = append([]string{authmodes.Password}, availableModes...)
+		}
+		if session.currentAuthStep > 0 {
+			availableModes = []string{authmodes.NewPassword}
+		}
+	}
+	return availableModes, nil
 }
 
 func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []map[string]string) (supportedModes map[string]string) {
