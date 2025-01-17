@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"regexp"
 	"slices"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+	"github.com/ubuntu/authd/log"
 	"golang.org/x/oauth2"
 )
 
@@ -152,7 +152,7 @@ func (p Provider) userClaims(idToken *oidc.IDToken) (claims, error) {
 
 // getGroups access the Microsoft Graph API to get the groups the user is a member of.
 func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Group, error) {
-	slog.Debug("Getting user groups from Microsoft Graph API")
+	log.Debug(context.Background(), "Getting user groups from Microsoft Graph API")
 
 	// Check if the token has the GroupMember.Read.All scope
 	scopes, err := p.getTokenScopes(token)
@@ -188,14 +188,14 @@ func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Gro
 	for _, msGroup := range graphGroups {
 		idPtr := msGroup.GetId()
 		if idPtr == nil {
-			slog.Warn(pp.Sprintf("Could not get ID for group: %v", msGroup))
+			log.Warning(context.Background(), pp.Sprintf("Could not get ID for group: %v", msGroup))
 			return nil, errors.New("could not get group id")
 		}
 		id := *idPtr
 
 		groupNamePtr := msGroup.GetDisplayName()
 		if groupNamePtr == nil {
-			slog.Warn(pp.Sprintf("Could not get display name for group object (ID: %s): %v", id, msGroup))
+			log.Warning(context.Background(), pp.Sprintf("Could not get display name for group object (ID: %s): %v", id, msGroup))
 			return nil, errors.New("could not get group name")
 		}
 		groupName := strings.ToLower(*groupNamePtr)
@@ -222,7 +222,7 @@ func getAllUserGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.Gr
 		return nil, fmt.Errorf("failed to get user groups: %v", err)
 	}
 	if result == nil {
-		slog.Debug("Got nil response from Microsoft Graph API for user's groups, assuming that user is not a member of any group.")
+		log.Debug(context.Background(), "Got nil response from Microsoft Graph API for user's groups, assuming that user is not a member of any group.")
 		return []msgraphmodels.Groupable{}, nil
 	}
 
@@ -247,7 +247,7 @@ func getAllUserGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.Gr
 			groupNames = append(groupNames, *groupNamePtr)
 		}
 	}
-	slog.Debug(fmt.Sprintf("Got groups: %s", strings.Join(groupNames, ", ")))
+	log.Debugf(context.Background(), "Got groups: %s", strings.Join(groupNames, ", "))
 
 	return groups, nil
 }
@@ -263,7 +263,7 @@ func (p Provider) CurrentAuthenticationModesOffered(
 	endpoints map[string]struct{},
 	currentAuthStep int,
 ) ([]string, error) {
-	slog.Debug(fmt.Sprintf("In CurrentAuthenticationModesOffered: sessionMode=%q, supportedAuthModes=%q, tokenExists=%t, providerReachable=%t, endpoints=%q, currentAuthStep=%d\n", sessionMode, supportedAuthModes, tokenExists, providerReachable, endpoints, currentAuthStep))
+	log.Debugf(context.Background(), "In CurrentAuthenticationModesOffered: sessionMode=%q, supportedAuthModes=%q, tokenExists=%t, providerReachable=%t, endpoints=%q, currentAuthStep=%d\n", sessionMode, supportedAuthModes, tokenExists, providerReachable, endpoints, currentAuthStep)
 	var offeredModes []string
 	switch sessionMode {
 	case "passwd":
@@ -288,7 +288,7 @@ func (p Provider) CurrentAuthenticationModesOffered(
 			offeredModes = []string{authmodes.NewPassword}
 		}
 	}
-	slog.Debug(fmt.Sprintf("Offered modes: %q", offeredModes))
+	log.Debugf(context.Background(), "Offered modes: %q", offeredModes)
 
 	for _, mode := range offeredModes {
 		if _, ok := supportedAuthModes[mode]; !ok {

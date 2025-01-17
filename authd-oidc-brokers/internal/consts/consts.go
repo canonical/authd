@@ -1,7 +1,9 @@
 // Package consts defines the constants used by the project.
 package consts
 
-import "log/slog"
+import (
+	"github.com/ubuntu/authd/log"
+)
 
 var (
 	// Version is the version of the executable.
@@ -13,5 +15,5 @@ const (
 	TEXTDOMAIN = "authd-oidc"
 
 	// DefaultLevelLog is the default logging level selected without any option.
-	DefaultLevelLog = slog.LevelWarn
+	DefaultLevelLog = log.WarnLevel
 )

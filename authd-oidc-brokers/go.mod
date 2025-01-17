@@ -18,6 +18,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
+	github.com/ubuntu/authd v0.3.8-0.20250114154108-c636df971351
 	github.com/ubuntu/decorate v0.0.0-20240301153420-5015d6dbc8e5
 	github.com/ubuntu/go-i18n v0.0.0-20231113092927-594c1754ca47
 	golang.org/x/crypto v0.32.0
@@ -29,6 +30,7 @@ require (
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.10.0 // indirect
 	github.com/cjlapao/common-go v0.0.39 // indirect
+	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
@@ -39,7 +41,7 @@ require (
 	github.com/leonelquinteros/gotext v1.5.3-0.20230829162019-37f474cfb069 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.17 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/microsoft/kiota-abstractions-go v1.8.1 // indirect
 	github.com/microsoft/kiota-authentication-azure-go v1.1.0 // indirect
 	github.com/microsoft/kiota-http-go v1.4.4 // indirect
