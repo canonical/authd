@@ -236,7 +236,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
 			}
 			if tc.nextAuthMode != "" {
-				b.SetNextAuthMode(sessionID, tc.nextAuthMode)
+				b.SetNextAuthModes(sessionID, []string{tc.nextAuthMode})
 			}
 
 			if tc.supportedLayouts == nil {
@@ -346,7 +346,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
 			}
 			if tc.nextAuthMode != "" {
-				b.SetNextAuthMode(sessionID, tc.nextAuthMode)
+				b.SetNextAuthModes(sessionID, []string{tc.nextAuthMode})
 			}
 			if tc.supportedLayouts == nil {
 				tc.supportedLayouts = supportedLayouts
