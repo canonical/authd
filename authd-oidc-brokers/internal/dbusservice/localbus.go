@@ -3,8 +3,6 @@
 package dbusservice
 
 import (
-	"fmt"
-	"log/slog"
 	"os"
 
 	"github.com/godbus/dbus/v5"
@@ -18,7 +16,7 @@ func (s *Service) getBus() (*dbus.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	slog.Info(fmt.Sprintf("Using local bus address: %s", os.Getenv("DBUS_SYSTEM_BUS_ADDRESS")))
+	log.Infof(context.Background(), "Using local bus address: %s", os.Getenv("DBUS_SYSTEM_BUS_ADDRESS"))
 	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
 		return nil, err
