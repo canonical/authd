@@ -20,6 +20,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils/golden"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
+	"github.com/ubuntu/authd/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1183,6 +1184,8 @@ func TestUserPreCheck(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
+	log.SetLevel(log.DebugLevel)
+
 	var cleanup func()
 	defaultIssuerURL, cleanup = testutils.StartMockProviderServer("", nil)
 	defer cleanup()
