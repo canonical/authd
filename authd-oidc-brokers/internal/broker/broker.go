@@ -626,14 +626,12 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		// Refresh the token if we're online even if the token has not expired
 		if !session.isOffline {
 			authInfo, err = b.refreshToken(ctx, session.oauth2Config, authInfo)
-
 			var retrieveErr *oauth2.RetrieveError
 			if errors.As(err, &retrieveErr) && b.provider.IsTokenExpiredError(*retrieveErr) {
 				// The refresh token is expired, so the user needs to authenticate via OIDC again.
 				session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
 				return AuthNext, nil
 			}
-
 			if err != nil {
 				log.Error(context.Background(), err.Error())
 				return AuthDenied, errorMessage{Message: "could not refresh token"}

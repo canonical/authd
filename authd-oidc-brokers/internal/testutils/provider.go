@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"slices"
 	"strings"
 	"sync"
@@ -23,7 +24,13 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/noprovider"
+	"github.com/ubuntu/authd/log"
 	"golang.org/x/oauth2"
+)
+
+const (
+	// ExpiredRefreshToken is used to test the expired refresh token error.
+	ExpiredRefreshToken = "expired-refresh-token"
 )
 
 // MockKey is the RSA key used to sign the JWTs for the mock provider.
@@ -197,6 +204,22 @@ func TokenHandler(serverURL string, opts *TokenHandlerOptions) EndpointHandler {
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
+		s, err := httputil.DumpRequest(r, true)
+		if err != nil {
+			log.Errorf(context.Background(), "could not dump request: %v", err)
+		}
+		log.Debugf(context.Background(), "/token endpoint request:\n%s", s)
+
+		// Handle expired refresh token
+		refreshToken := r.FormValue("refresh_token")
+		if refreshToken == ExpiredRefreshToken {
+			w.Header().Add("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			// This is an msentraid specific error code and description.
+			_, _ = w.Write([]byte(`{"error": "invalid_grant", "error_description": "AADSTS50173: The refresh token has expired."}`))
+			return
+		}
+
 		// Mimics user going through auth process
 		time.Sleep(2 * time.Second)
 

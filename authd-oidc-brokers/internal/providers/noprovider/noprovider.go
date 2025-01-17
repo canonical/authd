@@ -4,6 +4,7 @@ package noprovider
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
@@ -109,6 +110,7 @@ func (p NoProvider) getGroups(_ *oauth2.Token) ([]info.Group, error) {
 
 // IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.
 func (p NoProvider) IsTokenExpiredError(err oauth2.RetrieveError) bool {
-	// There is no generic error for this, so we return false.
-	return false
+	// TODO: This is an msentraid specific error code and description.
+	//       Change it to the ones from Google once we know them.
+	return err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50173:")
 }

@@ -113,6 +113,18 @@ func (b *Broker) DataDir() string {
 	return b.cfg.DataDir
 }
 
+// GetNextAuthModes returns the next auth mode of the specified session.
+func (b *Broker) GetNextAuthModes(sessionID string) []string {
+	b.currentSessionsMu.Lock()
+	defer b.currentSessionsMu.Unlock()
+
+	session, ok := b.currentSessions[sessionID]
+	if !ok {
+		return nil
+	}
+	return session.nextAuthModes
+}
+
 // SetNextAuthModes sets the next auth mode of the specified session.
 func (b *Broker) SetNextAuthModes(sessionID string, authModes []string) {
 	b.currentSessionsMu.Lock()

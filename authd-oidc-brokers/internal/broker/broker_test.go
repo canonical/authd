@@ -406,6 +406,7 @@ func TestIsAuthenticated(t *testing.T) {
 		dontWaitForFirstCall bool
 		readOnlyDataDir      bool
 		wantGroups           []info.Group
+		wantNextAuthModes    []string
 	}{
 		"Successfully_authenticate_user_with_device_auth_and_newpassword": {firstSecret: "-", wantSecondCall: true},
 		"Successfully_authenticate_user_with_password":                    {firstMode: authmodes.Password, token: &tokenOptions{}},
@@ -462,6 +463,13 @@ func TestIsAuthenticated(t *testing.T) {
 			firstMode:        authmodes.Password,
 			token:            &tokenOptions{noUserInfo: true},
 			getUserInfoFails: true,
+		},
+		"Authenticating_with_password_when_refresh_token_is_expired_results_in_device_auth_as_next_mode": {
+			firstMode:         authmodes.Password,
+			token:             &tokenOptions{refreshTokenExpired: true},
+			wantNextAuthModes: []string{authmodes.Device, authmodes.DeviceQr},
+			wantSecondCall:    true,
+			secondMode:        authmodes.DeviceQr,
 		},
 
 		"Error_when_authentication_data_is_invalid":         {invalidAuthData: true},
@@ -639,6 +647,11 @@ func TestIsAuthenticated(t *testing.T) {
 
 				err = os.WriteFile(filepath.Join(outDir, "first_call"), out, 0600)
 				require.NoError(t, err, "Failed to write first response")
+
+				if tc.wantNextAuthModes != nil {
+					nextAuthModes := b.GetNextAuthModes(sessionID)
+					require.ElementsMatch(t, tc.wantNextAuthModes, nextAuthModes, "Next auth modes should match")
+				}
 
 				if tc.wantGroups != nil {
 					type userInfoMsgType struct {
