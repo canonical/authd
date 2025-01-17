@@ -64,10 +64,9 @@ type session struct {
 	lang     string
 	mode     string
 
-	selectedMode      string
-	firstSelectedMode string
-	authModes         []string
-	attemptsPerMode   map[string]int
+	selectedMode    string
+	authModes       []string
+	attemptsPerMode map[string]int
 
 	oidcServer            *oidc.Provider
 	oauth2Config          oauth2.Config
@@ -322,10 +321,6 @@ func (b *Broker) SelectAuthenticationMode(sessionID, authModeID string) (uiLayou
 
 	// Store selected mode
 	session.selectedMode = authModeID
-	// Store the first one to use to update the lastSelectedMode in MFA cases.
-	if session.currentAuthStep == 0 {
-		session.firstSelectedMode = authModeID
-	}
 
 	if err = b.updateSession(sessionID, session); err != nil {
 		return nil, err
