@@ -176,6 +176,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 		"Get_device_auth_qr_if_there_is_no_token":                      {},
 		"Get_newpassword_if_already_authenticated_with_device_auth_qr": {nextAuthMode: authmodes.NewPassword},
 		"Get_password_and_device_auth_qr_if_token_exists":              {tokenExists: true},
+		"Get_device_auth_qr_if_next_auth_mode_is_device_qr":            {nextAuthMode: authmodes.DeviceQr},
 
 		"Get_only_password_if_token_exists_and_provider_is_not_available":                {tokenExists: true, providerAddress: "127.0.0.1:31310", unavailableProvider: true},
 		"Get_only_password_if_token_exists_and_provider_does_not_support_device_auth_qr": {tokenExists: true, providerAddress: "127.0.0.1:31311", deviceAuthUnsupported: true},
