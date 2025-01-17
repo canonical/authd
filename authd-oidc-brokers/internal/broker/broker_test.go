@@ -165,7 +165,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 
 		providerAddress       string
 		tokenExists           bool
-		secondAuthStep        bool
+		nextAuthMode          string
 		unavailableProvider   bool
 		deviceAuthUnsupported bool
 
@@ -173,7 +173,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 	}{
 		// Authentication session
 		"Get_device_auth_qr_if_there_is_no_token":                      {},
-		"Get_newpassword_if_already_authenticated_with_device_auth_qr": {secondAuthStep: true},
+		"Get_newpassword_if_already_authenticated_with_device_auth_qr": {nextAuthMode: authmodes.NewPassword},
 		"Get_password_and_device_auth_qr_if_token_exists":              {tokenExists: true},
 
 		"Get_only_password_if_token_exists_and_provider_is_not_available":                {tokenExists: true, providerAddress: "127.0.0.1:31310", unavailableProvider: true},
@@ -181,7 +181,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 
 		// Change password session
 		"Get_only_password_if_token_exists_and_session_is_for_changing_password":                      {sessionMode: sessionmode.ChangePassword, tokenExists: true},
-		"Get_newpassword_if_already_authenticated_with_password_and_session_is_for_changing_password": {sessionMode: sessionmode.ChangePassword, tokenExists: true, secondAuthStep: true},
+		"Get_newpassword_if_already_authenticated_with_password_and_session_is_for_changing_password": {sessionMode: sessionmode.ChangePassword, tokenExists: true, nextAuthMode: authmodes.NewPassword},
 		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value":                  {sessionMode: sessionmode.ChangePasswordOld, tokenExists: true},
 
 		"Error_if_there_is_no_session": {sessionID: "-", wantErr: true},
@@ -235,8 +235,8 @@ func TestGetAuthenticationModes(t *testing.T) {
 				err = os.WriteFile(b.TokenPathForSession(sessionID), []byte("some token"), 0600)
 				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
 			}
-			if tc.secondAuthStep {
-				b.UpdateSessionAuthStep(sessionID, 1)
+			if tc.nextAuthMode != "" {
+				b.SetNextAuthMode(sessionID, tc.nextAuthMode)
 			}
 
 			if tc.supportedLayouts == nil {
@@ -278,7 +278,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 		modeName string
 
 		tokenExists      bool
-		secondAuthStep   bool
+		nextAuthMode     string
 		passwdSession    bool
 		customHandlers   map[string]testutils.EndpointHandler
 		supportedLayouts []map[string]string
@@ -288,9 +288,9 @@ func TestSelectAuthenticationMode(t *testing.T) {
 		"Successfully_select_password":       {modeName: authmodes.Password, tokenExists: true},
 		"Successfully_select_device_auth_qr": {modeName: authmodes.DeviceQr},
 		"Successfully_select_device_auth":    {supportedLayouts: supportedLayoutsWithoutQrCode, modeName: authmodes.Device},
-		"Successfully_select_newpassword":    {modeName: authmodes.NewPassword, secondAuthStep: true},
+		"Successfully_select_newpassword":    {modeName: authmodes.NewPassword, nextAuthMode: authmodes.NewPassword},
 
-		"Selected_newpassword_shows_correct_label_in_passwd_session": {modeName: authmodes.NewPassword, passwdSession: true, tokenExists: true, secondAuthStep: true},
+		"Selected_newpassword_shows_correct_label_in_passwd_session": {modeName: authmodes.NewPassword, passwdSession: true, tokenExists: true, nextAuthMode: authmodes.NewPassword},
 
 		"Error_when_selecting_invalid_mode": {modeName: "invalid", wantErr: true},
 		"Error_when_selecting_device_auth_qr_but_provider_is_unavailable": {modeName: authmodes.DeviceQr, wantErr: true,
@@ -345,8 +345,8 @@ func TestSelectAuthenticationMode(t *testing.T) {
 				err = os.WriteFile(b.TokenPathForSession(sessionID), []byte("some token"), 0600)
 				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
 			}
-			if tc.secondAuthStep {
-				b.UpdateSessionAuthStep(sessionID, 1)
+			if tc.nextAuthMode != "" {
+				b.SetNextAuthMode(sessionID, tc.nextAuthMode)
 			}
 			if tc.supportedLayouts == nil {
 				tc.supportedLayouts = supportedLayouts
