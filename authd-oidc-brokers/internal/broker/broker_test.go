@@ -173,18 +173,18 @@ func TestGetAuthenticationModes(t *testing.T) {
 		wantErr bool
 	}{
 		// Authentication session
-		"Get_device_auth_qr_if_there_is_no_token":                      {},
-		"Get_newpassword_if_already_authenticated_with_device_auth_qr": {nextAuthMode: authmodes.NewPassword},
-		"Get_password_and_device_auth_qr_if_token_exists":              {tokenExists: true},
-		"Get_device_auth_qr_if_next_auth_mode_is_device_qr":            {nextAuthMode: authmodes.DeviceQr},
+		"Get_device_auth_qr_if_there_is_no_token":           {},
+		"Get_password_and_device_auth_qr_if_token_exists":   {tokenExists: true},
+		"Get_newpassword_if_next_auth_mode_is_newpassword":  {nextAuthMode: authmodes.NewPassword},
+		"Get_device_auth_qr_if_next_auth_mode_is_device_qr": {nextAuthMode: authmodes.DeviceQr},
 
 		"Get_only_password_if_token_exists_and_provider_is_not_available":                {tokenExists: true, providerAddress: "127.0.0.1:31310", unavailableProvider: true},
 		"Get_only_password_if_token_exists_and_provider_does_not_support_device_auth_qr": {tokenExists: true, providerAddress: "127.0.0.1:31311", deviceAuthUnsupported: true},
 
 		// Change password session
-		"Get_only_password_if_token_exists_and_session_is_for_changing_password":                      {sessionMode: sessionmode.ChangePassword, tokenExists: true},
-		"Get_newpassword_if_already_authenticated_with_password_and_session_is_for_changing_password": {sessionMode: sessionmode.ChangePassword, tokenExists: true, nextAuthMode: authmodes.NewPassword},
-		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value":                  {sessionMode: sessionmode.ChangePasswordOld, tokenExists: true},
+		"Get_only_password_if_token_exists_and_session_is_for_changing_password":                {sessionMode: sessionmode.ChangePassword, tokenExists: true},
+		"Get_newpassword_if_session_is_for changing_password_and_next_auth_mode_is_newpassword": {sessionMode: sessionmode.ChangePassword, tokenExists: true, nextAuthMode: authmodes.NewPassword},
+		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value":            {sessionMode: sessionmode.ChangePasswordOld, tokenExists: true},
 
 		"Error_if_there_is_no_session": {sessionID: "-", wantErr: true},
 
