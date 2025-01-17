@@ -1,9 +1,9 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
-	"github.com/ubuntu/authd-oidc-brokers/internal/log"
+	"github.com/ubuntu/authd/log"
 	"github.com/ubuntu/decorate"
 )
 
@@ -40,7 +40,7 @@ func initViperConfig(name string, cmd *cobra.Command, vip *viper.Viper) (err err
 		vip.AddConfigPath(filepath.Join("/etc", name))
 		// Add the executable path to the config search path.
 		if binPath, err := os.Executable(); err != nil {
-			slog.Warn(fmt.Sprintf("Failed to get current executable path, not adding it as a config dir: %v", err))
+			log.Warningf(context.Background(), "Failed to get current executable path, not adding it as a config dir: %v", err)
 		} else {
 			vip.AddConfigPath(filepath.Dir(binPath))
 		}
@@ -49,12 +49,12 @@ func initViperConfig(name string, cmd *cobra.Command, vip *viper.Viper) (err err
 	if err := vip.ReadInConfig(); err != nil {
 		var e viper.ConfigFileNotFoundError
 		if errors.As(err, &e) {
-			slog.Info(fmt.Sprintf("No configuration file: %v.\nWe will only use the defaults, env variables or flags.", e))
+			log.Infof(context.Background(), "No configuration file: %v.\nWe will only use the defaults, env variables or flags.", e)
 		} else {
 			return fmt.Errorf("invalid configuration file: %w", err)
 		}
 	} else {
-		slog.Info(fmt.Sprintf("Using configuration file: %v", vip.ConfigFileUsed()))
+		log.Infof(context.Background(), "Using configuration file: %v", vip.ConfigFileUsed())
 	}
 
 	// Handle environment.
@@ -84,7 +84,7 @@ func initViperConfig(name string, cmd *cobra.Command, vip *viper.Viper) (err err
 func installConfigFlag(cmd *cobra.Command) *string {
 	flag := cmd.PersistentFlags().StringP("config", "c", "", "use a specific configuration file")
 	if err := cmd.PersistentFlags().MarkHidden("config"); err != nil {
-		slog.Warn(fmt.Sprintf("Failed to hide --config flag: %v", err))
+		log.Warningf(context.Background(), "Failed to hide --config flag: %v", err)
 	}
 	return flag
 }
@@ -96,12 +96,12 @@ func setVerboseMode(level int) {
 	case 0:
 		log.SetLevel(consts.DefaultLevelLog)
 	case 1:
-		log.SetLevel(slog.LevelInfo)
+		log.SetLevel(log.InfoLevel)
 	case 3:
 		//reportCaller = true
 		fallthrough
 	default:
-		log.SetLevel(slog.LevelDebug)
+		log.SetLevel(log.DebugLevel)
 	}
 
 	//slog.SetReportCaller(reportCaller)

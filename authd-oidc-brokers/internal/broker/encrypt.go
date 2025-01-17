@@ -1,12 +1,14 @@
 package broker
 
 import (
+	"context"
 	"crypto/rsa"
 	"crypto/sha512"
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log/slog"
+
+	"github.com/ubuntu/authd/log"
 )
 
 // decodeRawChallenge extract the base64 challenge and try to decrypt it with the private key.
@@ -15,7 +17,7 @@ func decodeRawChallenge(priv *rsa.PrivateKey, rawChallenge string) (decoded stri
 		// Override the error so that we don't leak information. Also, abstract it for the user.
 		// We still log as error for the admin to get access.
 		if err != nil {
-			slog.Error(fmt.Sprintf("Error when decoding challenge: %v", err))
+			log.Errorf(context.Background(), "Error when decoding challenge: %v", err)
 			err = errors.New("could not decode challenge")
 		}
 	}()
