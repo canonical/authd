@@ -19,6 +19,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
+	"github.com/ubuntu/authd-oidc-brokers/internal/broker/sessionmode"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/fileutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/password"
@@ -399,7 +400,7 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 
 	case authmodes.NewPassword:
 		label := "Create a local password"
-		if session.mode == "passwd" {
+		if session.mode == sessionmode.ChangePassword {
 			label = "Update your local password"
 		}
 
@@ -596,7 +597,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			authInfo.UserInfo = userInfo
 		}
 
-		if session.mode == "passwd" {
+		if session.mode == sessionmode.ChangePassword {
 			session.authInfo["auth_info"] = authInfo
 			return AuthNext, nil
 		}
