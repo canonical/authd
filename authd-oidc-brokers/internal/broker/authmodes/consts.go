@@ -14,3 +14,13 @@ const (
 	// NewPassword is the ID of the new password configuration method.
 	NewPassword = "newpassword"
 )
+
+var (
+	// Label is a map of auth mode IDs to their display labels.
+	Label = map[string]string{
+		Password:    "Local Password Authentication",
+		Device:      "Device Authentication",
+		DeviceQr:    "Device Authentication",
+		NewPassword: "Define your local password",
+	}
+)
