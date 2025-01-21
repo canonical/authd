@@ -590,7 +590,7 @@ func TestIsAuthenticated(t *testing.T) {
 				if tc.badFirstKey {
 					eKey = ""
 				}
-				authData = `{"challenge":"` + encryptSecret(t, tc.firstSecret, eKey) + `"}`
+				authData = `{"secret":"` + encryptSecret(t, tc.firstSecret, eKey) + `"}`
 			}
 			if tc.invalidAuthData {
 				authData = "invalid json"
@@ -646,7 +646,7 @@ func TestIsAuthenticated(t *testing.T) {
 					secret = ""
 				}
 
-				secondAuthData := `{"challenge":"` + encryptSecret(t, secret, key) + `"}`
+				secondAuthData := `{"secret":"` + encryptSecret(t, secret, key) + `"}`
 				if tc.invalidAuthData {
 					secondAuthData = "invalid json"
 				}
@@ -789,7 +789,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 
 				updateAuthModes(t, b, firstSession, authmodes.Password)
 
-				authData := `{"challenge":"` + encryptSecret(t, "password", firstKey) + `"}`
+				authData := `{"secret":"` + encryptSecret(t, "password", firstKey) + `"}`
 
 				access, data, err := b.IsAuthenticated(firstSession, authData)
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
@@ -813,7 +813,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 
 				updateAuthModes(t, b, secondSession, authmodes.Password)
 
-				authData := `{"challenge":"` + encryptSecret(t, "password", secondKey) + `"}`
+				authData := `{"secret":"` + encryptSecret(t, "password", secondKey) + `"}`
 
 				access, data, err := b.IsAuthenticated(secondSession, authData)
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
@@ -959,7 +959,7 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 
 				updateAuthModes(t, b, sessionID, authmodes.Password)
 
-				authData := `{"challenge":"` + encryptSecret(t, "password", key) + `"}`
+				authData := `{"secret":"` + encryptSecret(t, "password", key) + `"}`
 
 				access, data, err := b.IsAuthenticated(sessionID, authData)
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
