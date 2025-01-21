@@ -483,8 +483,13 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, authData map[string]string) (access string, data isAuthenticatedDataResponse) {
 	defer decorateErrorMessage(&data, "authentication failure")
 
+	rawSecret, ok := authData[AuthDataSecret]
+	if !ok {
+		rawSecret = authData[AuthDataSecretOld]
+	}
+
 	// Decrypt secret if present.
-	secret, err := decodeRawSecret(b.privateKey, authData["challenge"])
+	secret, err := decodeRawSecret(b.privateKey, rawSecret)
 	if err != nil {
 		log.Error(context.Background(), err.Error())
 		return AuthRetry, errorMessage{Message: "could not decode secret"}
