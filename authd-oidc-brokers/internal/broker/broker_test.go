@@ -182,6 +182,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 		// Change password session
 		"Get_only_password_if_token_exists_and_session_is_for_changing_password":                      {sessionMode: sessionmode.ChangePassword, tokenExists: true},
 		"Get_newpassword_if_already_authenticated_with_password_and_session_is_for_changing_password": {sessionMode: sessionmode.ChangePassword, tokenExists: true, secondAuthStep: true},
+		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value":                  {sessionMode: sessionmode.ChangePasswordOld, tokenExists: true},
 
 		"Error_if_there_is_no_session": {sessionID: "-", wantErr: true},
 
