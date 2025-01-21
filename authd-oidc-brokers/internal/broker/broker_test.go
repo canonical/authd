@@ -180,8 +180,8 @@ func TestGetAuthenticationModes(t *testing.T) {
 		"Get_only_password_if_token_exists_and_provider_does_not_support_device_auth_qr": {tokenExists: true, providerAddress: "127.0.0.1:31311", deviceAuthUnsupported: true},
 
 		// Change password session
-		"Get_only_password_if_token_exists_and_session_is_passwd":                      {sessionMode: sessionmode.ChangePassword, tokenExists: true},
-		"Get_newpassword_if_already_authenticated_with_password_and_session_is_passwd": {sessionMode: sessionmode.ChangePassword, tokenExists: true, secondAuthStep: true},
+		"Get_only_password_if_token_exists_and_session_is_for_changing_password":                      {sessionMode: sessionmode.ChangePassword, tokenExists: true},
+		"Get_newpassword_if_already_authenticated_with_password_and_session_is_for_changing_password": {sessionMode: sessionmode.ChangePassword, tokenExists: true, secondAuthStep: true},
 
 		"Error_if_there_is_no_session": {sessionID: "-", wantErr: true},
 
@@ -193,7 +193,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 		"Error_if_expecting_password_but_not_supported":       {supportedLayouts: []string{"form-without-entry"}, wantErr: true},
 
 		// Change password session errors
-		"Error_if_session_is_passwd_but_token_does_not_exist": {sessionMode: sessionmode.ChangePassword, wantErr: true},
+		"Error_if_session_is_for_changing_password_but_token_does_not_exist": {sessionMode: sessionmode.ChangePassword, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
