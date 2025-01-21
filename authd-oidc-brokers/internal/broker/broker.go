@@ -483,11 +483,11 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, authData map[string]string) (access string, data isAuthenticatedDataResponse) {
 	defer decorateErrorMessage(&data, "authentication failure")
 
-	// Decrypt challenge if present.
-	challenge, err := decodeRawChallenge(b.privateKey, authData["challenge"])
+	// Decrypt secret if present.
+	secret, err := decodeRawSecret(b.privateKey, authData["challenge"])
 	if err != nil {
 		log.Error(context.Background(), err.Error())
-		return AuthRetry, errorMessage{Message: "could not decode challenge"}
+		return AuthRetry, errorMessage{Message: "could not decode secret"}
 	}
 
 	var authInfo token.AuthCachedInfo
@@ -545,7 +545,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 
 		if useOldEncryptedToken {
-			authInfo, err = token.LoadOldEncryptedAuthInfo(session.oldEncryptedTokenPath, challenge)
+			authInfo, err = token.LoadOldEncryptedAuthInfo(session.oldEncryptedTokenPath, secret)
 			if err != nil {
 				log.Error(context.Background(), err.Error())
 				return AuthDenied, errorMessage{Message: "could not load encrypted token"}
@@ -553,12 +553,12 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 
 			// We were able to decrypt the old token with the password, so we can now hash and store the password in the
 			// new format.
-			if err = password.HashAndStorePassword(challenge, session.passwordPath); err != nil {
+			if err = password.HashAndStorePassword(secret, session.passwordPath); err != nil {
 				log.Error(context.Background(), err.Error())
 				return AuthDenied, errorMessage{Message: "could not store password"}
 			}
 		} else {
-			ok, err := password.CheckPassword(challenge, session.passwordPath)
+			ok, err := password.CheckPassword(secret, session.passwordPath)
 			if err != nil {
 				log.Error(context.Background(), err.Error())
 				return AuthDenied, errorMessage{Message: "could not check password"}
@@ -603,8 +603,8 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 
 	case authmodes.NewPassword:
-		if challenge == "" {
-			return AuthRetry, errorMessage{Message: "empty challenge"}
+		if secret == "" {
+			return AuthRetry, errorMessage{Message: "empty secret"}
 		}
 
 		var ok bool
@@ -615,7 +615,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			return AuthDenied, errorMessage{Message: "could not get required information"}
 		}
 
-		if err = password.HashAndStorePassword(challenge, session.passwordPath); err != nil {
+		if err = password.HashAndStorePassword(secret, session.passwordPath); err != nil {
 			log.Error(context.Background(), err.Error())
 			return AuthDenied, errorMessage{Message: "could not store password"}
 		}

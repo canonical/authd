@@ -1,0 +1,3 @@
+access: retry
+data: '{"message":"authentication failure: empty secret"}'
+err: <nil>

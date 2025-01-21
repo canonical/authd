@@ -385,7 +385,7 @@ func TestIsAuthenticated(t *testing.T) {
 		username       string
 
 		firstMode                string
-		firstChallenge           string
+		firstSecret              string
 		firstAuthInfo            map[string]any
 		badFirstKey              bool
 		getUserInfoFails         bool
@@ -394,9 +394,9 @@ func TestIsAuthenticated(t *testing.T) {
 		customHandlers map[string]testutils.EndpointHandler
 		address        string
 
-		wantSecondCall  bool
-		secondMode      string
-		secondChallenge string
+		wantSecondCall bool
+		secondMode     string
+		secondSecret   string
 
 		token                *tokenOptions
 		invalidAuthData      bool
@@ -404,10 +404,10 @@ func TestIsAuthenticated(t *testing.T) {
 		readOnlyDataDir      bool
 		wantGroups           []info.Group
 	}{
-		"Successfully_authenticate_user_with_device_auth_and_newpassword": {firstChallenge: "-", wantSecondCall: true},
+		"Successfully_authenticate_user_with_device_auth_and_newpassword": {firstSecret: "-", wantSecondCall: true},
 		"Successfully_authenticate_user_with_password":                    {firstMode: authmodes.Password, token: &tokenOptions{}},
 
-		"Authenticating_with_qrcode_reacquires_token":          {firstChallenge: "-", wantSecondCall: true, token: &tokenOptions{}},
+		"Authenticating_with_qrcode_reacquires_token":          {firstSecret: "-", wantSecondCall: true, token: &tokenOptions{}},
 		"Authenticating_with_password_refreshes_expired_token": {firstMode: authmodes.Password, token: &tokenOptions{expired: true}},
 		"Authenticating_with_password_still_allowed_if_server_is_unreachable": {
 			firstMode: authmodes.Password,
@@ -424,7 +424,7 @@ func TestIsAuthenticated(t *testing.T) {
 			},
 		},
 		"Authenticating_still_allowed_if_token_is_missing_scopes": {
-			firstChallenge: "-",
+			firstSecret:    "-",
 			wantSecondCall: true,
 			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.TokenHandler("http://127.0.0.1:31313", nil),
@@ -451,9 +451,9 @@ func TestIsAuthenticated(t *testing.T) {
 		},
 
 		"Error_when_authentication_data_is_invalid":         {invalidAuthData: true},
-		"Error_when_challenge_can_not_be_decrypted":         {firstMode: authmodes.Password, badFirstKey: true},
-		"Error_when_provided_wrong_challenge":               {firstMode: authmodes.Password, token: &tokenOptions{}, firstChallenge: "wrongpassword"},
-		"Error_when_can_not_cache_token":                    {firstChallenge: "-", wantSecondCall: true, readOnlyDataDir: true},
+		"Error_when_secret_can_not_be_decrypted":            {firstMode: authmodes.Password, badFirstKey: true},
+		"Error_when_provided_wrong_secret":                  {firstMode: authmodes.Password, token: &tokenOptions{}, firstSecret: "wrongpassword"},
+		"Error_when_can_not_cache_token":                    {firstSecret: "-", wantSecondCall: true, readOnlyDataDir: true},
 		"Error_when_IsAuthenticated_is_ongoing_for_session": {dontWaitForFirstCall: true, wantSecondCall: true},
 
 		"Error_when_mode_is_password_and_token_does_not_exist": {firstMode: authmodes.Password},
@@ -514,10 +514,10 @@ func TestIsAuthenticated(t *testing.T) {
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
 		},
-		"Error_when_empty_challenge_is_provided_for_local_password": {firstChallenge: "-", wantSecondCall: true, secondChallenge: "-"},
-		"Error_when_mode_is_newpassword_and_session_has_no_token":   {firstMode: authmodes.NewPassword},
+		"Error_when_empty_secret_is_provided_for_local_password":  {firstSecret: "-", wantSecondCall: true, secondSecret: "-"},
+		"Error_when_mode_is_newpassword_and_session_has_no_token": {firstMode: authmodes.NewPassword},
 		// This test case also tests that errors with double quotes are marshaled to JSON correctly.
-		"Error_when_selected_username_does_not_match_the_provider_one": {username: "not-matching", firstChallenge: "-"},
+		"Error_when_selected_username_does_not_match_the_provider_one": {username: "not-matching", firstSecret: "-"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -577,20 +577,20 @@ func TestIsAuthenticated(t *testing.T) {
 				t.Cleanup(readOnlyDataCleanup)
 			}
 
-			switch tc.firstChallenge {
+			switch tc.firstSecret {
 			case "":
-				tc.firstChallenge = correctPassword
+				tc.firstSecret = correctPassword
 			case "-":
-				tc.firstChallenge = ""
+				tc.firstSecret = ""
 			}
 
 			authData := "{}"
-			if tc.firstChallenge != "" {
+			if tc.firstSecret != "" {
 				eKey := key
 				if tc.badFirstKey {
 					eKey = ""
 				}
-				authData = `{"challenge":"` + encryptChallenge(t, tc.firstChallenge, eKey) + `"}`
+				authData = `{"challenge":"` + encryptSecret(t, tc.firstSecret, eKey) + `"}`
 			}
 			if tc.invalidAuthData {
 				authData = "invalid json"
@@ -641,12 +641,12 @@ func TestIsAuthenticated(t *testing.T) {
 				// Give some time for the first call
 				time.Sleep(10 * time.Millisecond)
 
-				challenge := "passwordpassword"
-				if tc.secondChallenge == "-" {
-					challenge = ""
+				secret := "passwordpassword"
+				if tc.secondSecret == "-" {
+					secret = ""
 				}
 
-				secondAuthData := `{"challenge":"` + encryptChallenge(t, challenge, key) + `"}`
+				secondAuthData := `{"challenge":"` + encryptSecret(t, secret, key) + `"}`
 				if tc.invalidAuthData {
 					secondAuthData = "invalid json"
 				}
@@ -789,7 +789,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 
 				updateAuthModes(t, b, firstSession, authmodes.Password)
 
-				authData := `{"challenge":"` + encryptChallenge(t, "password", firstKey) + `"}`
+				authData := `{"challenge":"` + encryptSecret(t, "password", firstKey) + `"}`
 
 				access, data, err := b.IsAuthenticated(firstSession, authData)
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
@@ -813,7 +813,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 
 				updateAuthModes(t, b, secondSession, authmodes.Password)
 
-				authData := `{"challenge":"` + encryptChallenge(t, "password", secondKey) + `"}`
+				authData := `{"challenge":"` + encryptSecret(t, "password", secondKey) + `"}`
 
 				access, data, err := b.IsAuthenticated(secondSession, authData)
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
@@ -959,7 +959,7 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 
 				updateAuthModes(t, b, sessionID, authmodes.Password)
 
-				authData := `{"challenge":"` + encryptChallenge(t, "password", key) + `"}`
+				authData := `{"challenge":"` + encryptSecret(t, "password", key) + `"}`
 
 				access, data, err := b.IsAuthenticated(sessionID, authData)
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
