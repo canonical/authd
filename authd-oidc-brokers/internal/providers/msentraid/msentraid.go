@@ -287,7 +287,7 @@ func (p Provider) CurrentAuthenticationModesOffered(
 	log.Debugf(context.Background(), "In CurrentAuthenticationModesOffered: sessionMode=%q, supportedAuthModes=%q, tokenExists=%t, providerReachable=%t, endpoints=%q, currentAuthStep=%d\n", sessionMode, supportedAuthModes, tokenExists, providerReachable, endpoints, currentAuthStep)
 	var offeredModes []string
 	switch sessionMode {
-	case sessionmode.ChangePassword:
+	case sessionmode.ChangePassword, sessionmode.ChangePasswordOld:
 		if !tokenExists {
 			return nil, errors.New("user has no cached token")
 		}

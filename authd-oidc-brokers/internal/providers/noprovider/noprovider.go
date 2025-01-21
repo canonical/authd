@@ -48,7 +48,7 @@ func (p NoProvider) CurrentAuthenticationModesOffered(
 ) ([]string, error) {
 	var offeredModes []string
 	switch sessionMode {
-	case sessionmode.ChangePassword:
+	case sessionmode.ChangePassword, sessionmode.ChangePasswordOld:
 		if !tokenExists {
 			return nil, errors.New("user has no cached token")
 		}
