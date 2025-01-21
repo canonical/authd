@@ -14,6 +14,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
+	"github.com/ubuntu/authd-oidc-brokers/internal/broker/sessionmode"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
@@ -118,7 +119,7 @@ func newSessionForTests(t *testing.T, b *broker.Broker, username, mode string) (
 		username = "test-user@email.com"
 	}
 	if mode == "" {
-		mode = "auth"
+		mode = sessionmode.Login
 	}
 
 	id, key, err := b.NewSession(username, "some lang", mode)

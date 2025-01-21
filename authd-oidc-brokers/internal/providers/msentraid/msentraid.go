@@ -17,6 +17,7 @@ import (
 	msgraphauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
 	msgraphmodels "github.com/microsoftgraph/msgraph-sdk-go/models"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
+	"github.com/ubuntu/authd-oidc-brokers/internal/broker/sessionmode"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
@@ -286,7 +287,7 @@ func (p Provider) CurrentAuthenticationModesOffered(
 	log.Debugf(context.Background(), "In CurrentAuthenticationModesOffered: sessionMode=%q, supportedAuthModes=%q, tokenExists=%t, providerReachable=%t, endpoints=%q, currentAuthStep=%d\n", sessionMode, supportedAuthModes, tokenExists, providerReachable, endpoints, currentAuthStep)
 	var offeredModes []string
 	switch sessionMode {
-	case "passwd":
+	case sessionmode.ChangePassword, sessionmode.ChangePasswordOld:
 		if !tokenExists {
 			return nil, errors.New("user has no cached token")
 		}
