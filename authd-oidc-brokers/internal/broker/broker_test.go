@@ -590,7 +590,8 @@ func TestIsAuthenticated(t *testing.T) {
 				if tc.badFirstKey {
 					eKey = ""
 				}
-				authData = `{"secret":"` + encryptSecret(t, tc.firstSecret, eKey) + `"}`
+				secret := encryptSecret(t, tc.firstSecret, eKey)
+				authData = fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, secret)
 			}
 			if tc.invalidAuthData {
 				authData = "invalid json"
@@ -646,7 +647,7 @@ func TestIsAuthenticated(t *testing.T) {
 					secret = ""
 				}
 
-				secondAuthData := `{"secret":"` + encryptSecret(t, secret, key) + `"}`
+				secondAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, secret, key))
 				if tc.invalidAuthData {
 					secondAuthData = "invalid json"
 				}
@@ -789,7 +790,8 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 
 				updateAuthModes(t, b, firstSession, authmodes.Password)
 
-				authData := `{"secret":"` + encryptSecret(t, "password", firstKey) + `"}`
+				secret := encryptSecret(t, "password", firstKey)
+				authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, secret)
 
 				access, data, err := b.IsAuthenticated(firstSession, authData)
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
@@ -813,7 +815,8 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 
 				updateAuthModes(t, b, secondSession, authmodes.Password)
 
-				authData := `{"secret":"` + encryptSecret(t, "password", secondKey) + `"}`
+				secret := encryptSecret(t, "password", secondKey)
+				authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, secret)
 
 				access, data, err := b.IsAuthenticated(secondSession, authData)
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
@@ -959,7 +962,8 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 
 				updateAuthModes(t, b, sessionID, authmodes.Password)
 
-				authData := `{"secret":"` + encryptSecret(t, "password", key) + `"}`
+				secret := encryptSecret(t, "password", key)
+				authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, secret)
 
 				access, data, err := b.IsAuthenticated(sessionID, authData)
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")
