@@ -389,6 +389,7 @@ func TestIsAuthenticated(t *testing.T) {
 		firstAuthInfo            map[string]any
 		badFirstKey              bool
 		getUserInfoFails         bool
+		useOldNameForSecretField bool
 		groupsReturnedByProvider []info.Group
 
 		customHandlers map[string]testutils.EndpointHandler
@@ -448,6 +449,11 @@ func TestIsAuthenticated(t *testing.T) {
 			token:          &tokenOptions{groups: []info.Group{{Name: "old-group"}}},
 			sessionOffline: true,
 			wantGroups:     []info.Group{{Name: "old-group"}},
+		},
+		"Authenticating_when_the_auth_data_secret_field_uses_the_old_name": {
+			firstMode:                authmodes.Password,
+			token:                    &tokenOptions{},
+			useOldNameForSecretField: true,
 		},
 
 		"Error_when_authentication_data_is_invalid":         {invalidAuthData: true},
@@ -591,7 +597,11 @@ func TestIsAuthenticated(t *testing.T) {
 					eKey = ""
 				}
 				secret := encryptSecret(t, tc.firstSecret, eKey)
-				authData = fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, secret)
+				field := broker.AuthDataSecret
+				if tc.useOldNameForSecretField {
+					field = broker.AuthDataSecretOld
+				}
+				authData = fmt.Sprintf(`{"%s":"%s"}`, field, secret)
 			}
 			if tc.invalidAuthData {
 				authData = "invalid json"
@@ -647,7 +657,12 @@ func TestIsAuthenticated(t *testing.T) {
 					secret = ""
 				}
 
-				secondAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, secret, key))
+				secret = encryptSecret(t, secret, key)
+				field := broker.AuthDataSecret
+				if tc.useOldNameForSecretField {
+					field = broker.AuthDataSecretOld
+				}
+				secondAuthData := fmt.Sprintf(`{"%s":"%s"}`, field, secret)
 				if tc.invalidAuthData {
 					secondAuthData = "invalid json"
 				}
