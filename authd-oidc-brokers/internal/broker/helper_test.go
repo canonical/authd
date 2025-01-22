@@ -128,11 +128,11 @@ func newSessionForTests(t *testing.T, b *broker.Broker, username, mode string) (
 	return id, key
 }
 
-func encryptChallenge(t *testing.T, challenge, strKey string) string {
+func encryptSecret(t *testing.T, secret, strKey string) string {
 	t.Helper()
 
 	if strKey == "" {
-		return challenge
+		return secret
 	}
 
 	pubASN1, err := base64.StdEncoding.DecodeString(strKey)
@@ -144,10 +144,10 @@ func encryptChallenge(t *testing.T, challenge, strKey string) string {
 	rsaPubKey, ok := pubKey.(*rsa.PublicKey)
 	require.True(t, ok, "Setup: public key should be an RSA key")
 
-	ciphertext, err := rsa.EncryptOAEP(sha512.New(), rand.Reader, rsaPubKey, []byte(challenge), nil)
+	ciphertext, err := rsa.EncryptOAEP(sha512.New(), rand.Reader, rsaPubKey, []byte(secret), nil)
 	require.NoError(t, err, "Setup: encryption should not have failed")
 
-	// encrypt it to base64 and replace the challenge with it
+	// encrypt it to base64 and replace the secret with it
 	return base64.StdEncoding.EncodeToString(ciphertext)
 }
 
