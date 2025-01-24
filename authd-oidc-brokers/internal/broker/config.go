@@ -187,11 +187,32 @@ func parseConfigFile(cfgPath string, p provider) (userConfig, error) {
 	return cfg, nil
 }
 
-func (uc *userConfig) isOwnerAllowed(userName string) bool {
+func (uc *userConfig) userNameIsAllowed(userName string) bool {
 	uc.ownerMutex.RLock()
 	defer uc.ownerMutex.RUnlock()
 
-	return uc.ownerAllowed && uc.owner == userName
+	// The user is allowed to log in if:
+	// - ALL users are allowed
+	// - the user's name is in the list of allowed_users
+	// - OWNER is in the allowed_users list and the user is the owner of the machine
+	// - The user will be registered as the owner
+	if uc.allUsersAllowed {
+		return true
+	}
+	if _, ok := uc.allowedUsers[userName]; ok {
+		return true
+	}
+	if uc.ownerAllowed && uc.owner == userName {
+		return true
+	}
+
+	return uc.shouldRegisterOwner()
+}
+
+// shouldRegisterOwner returns true if the first user to log in should be registered as the owner.
+// Only call this with the ownerMutex locked.
+func (uc *userConfig) shouldRegisterOwner() bool {
+	return uc.ownerAllowed && uc.firstUserBecomesOwner && uc.owner == ""
 }
 
 func (uc *userConfig) registerOwner(cfgPath, userName string) error {
@@ -200,7 +221,7 @@ func (uc *userConfig) registerOwner(cfgPath, userName string) error {
 	uc.ownerMutex.Lock()
 	defer uc.ownerMutex.Unlock()
 
-	if shouldRegister := uc.ownerAllowed && uc.firstUserBecomesOwner && uc.owner == ""; !shouldRegister {
+	if !uc.shouldRegisterOwner() {
 		return nil
 	}
 
