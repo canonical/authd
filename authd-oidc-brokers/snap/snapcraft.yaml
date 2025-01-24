@@ -17,6 +17,8 @@ apps:
     plugs:
       - network
     restart-condition: always
+    environment:
+      SYSLOG_IDENTIFIER: authd-google
 
 slots:
   dbus-authd:
