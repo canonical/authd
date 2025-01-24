@@ -58,6 +58,12 @@ transition_to_allowed_users() {
   log "Transitioning to allowed users"
   src_dir="${SNAP}/conf/migrations/pre-${INITIAL_ALLOWED_USERS_VERSION}/broker.conf.d"
   dest_dir="${SNAP_DATA}/broker.conf.d"
+
+  if [ ! -d "${src_dir}" ]; then
+    log "Error: ${src_dir} does not exist, cannot transition to allowed users"
+    return
+  fi
+
   # shellcheck disable=SC2174 # it's fine that --mode only applies to the deepest directory, because the SNAP_DATA
   # directory is created by snapd with the correct permissions.
   mkdir -p --mode=0700 "${dest_dir}"
