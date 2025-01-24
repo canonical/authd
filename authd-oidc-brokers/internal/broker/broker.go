@@ -741,7 +741,7 @@ func (b *Broker) UserPreCheck(username string) (string, error) {
 	}
 
 	if !found {
-		return "", errors.New("username does not match the allowed suffixes")
+		return "", fmt.Errorf("username %q does not match any allowed suffix", username)
 	}
 
 	u := info.NewUser(username, filepath.Join(b.cfg.homeBaseDir, username), "", "", "", nil)
