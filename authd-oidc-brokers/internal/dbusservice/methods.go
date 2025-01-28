@@ -1,7 +1,10 @@
 package dbusservice
 
 import (
+	"context"
+
 	"github.com/godbus/dbus/v5"
+	"github.com/ubuntu/authd/log"
 )
 
 // NewSession is the method through which the broker and the daemon will communicate once dbusInterface.NewSession is called.
@@ -35,8 +38,10 @@ func (s *Service) SelectAuthenticationMode(sessionID, authenticationModeName str
 func (s *Service) IsAuthenticated(sessionID, authenticationData string) (access, data string, dbusErr *dbus.Error) {
 	access, data, err := s.broker.IsAuthenticated(sessionID, authenticationData)
 	if err != nil {
+		log.Warningf(context.Background(), "IsAuthenticated error: %v", err)
 		return "", "", dbus.MakeFailedError(err)
 	}
+	log.Debugf(context.Background(), "IsAuthenticated: %s", access)
 	return access, data, nil
 }
 
