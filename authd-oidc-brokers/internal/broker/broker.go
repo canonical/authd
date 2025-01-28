@@ -634,6 +634,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	}
 
 	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
+		log.Warningf(context.Background(), "User %q is not in the list of allowed users", authInfo.UserInfo.Name)
 		return AuthDenied, errorMessage{Message: "permission denied"}
 	}
 
@@ -740,7 +741,7 @@ func (b *Broker) UserPreCheck(username string) (string, error) {
 	}
 
 	if !found {
-		return "", errors.New("username does not match the allowed suffixes")
+		return "", fmt.Errorf("username %q does not match any allowed suffix", username)
 	}
 
 	u := info.NewUser(username, filepath.Join(b.cfg.homeBaseDir, username), "", "", "", nil)
