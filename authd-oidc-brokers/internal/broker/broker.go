@@ -539,6 +539,11 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
 		}
 
+		if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
+			log.Warningf(context.Background(), "User %q is not in the list of allowed users", authInfo.UserInfo.Name)
+			return AuthDenied, errorMessage{Message: "permission denied"}
+		}
+
 		session.authInfo["auth_info"] = authInfo
 		return AuthNext, nil
 
@@ -656,19 +661,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 
 // userNameIsAllowed checks whether the user's username is allowed to access the machine.
 func (b *Broker) userNameIsAllowed(userName string) bool {
-	normalizedUsername := b.provider.NormalizeUsername(userName)
-	// The user is allowed to log in if:
-	// - ALL users are allowed
-	// - the user's name is in the list of allowed_users
-	// - the user is the owner of the machine and OWNER is in the allowed_users list
-	if b.cfg.userConfig.allUsersAllowed {
-		return true
-	}
-	if _, ok := b.cfg.userConfig.allowedUsers[normalizedUsername]; ok {
-		return true
-	}
-
-	return b.cfg.isOwnerAllowed(normalizedUsername)
+	return b.cfg.userNameIsAllowed(b.provider.NormalizeUsername(userName))
 }
 
 func (b *Broker) startAuthenticate(sessionID string) (context.Context, error) {
