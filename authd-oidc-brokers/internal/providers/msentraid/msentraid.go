@@ -216,13 +216,13 @@ func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Gro
 }
 
 func removeNonSecurityGroups(groups []msgraphmodels.Groupable) []msgraphmodels.Groupable {
-	securityGroups := []msgraphmodels.Groupable{}
+	var securityGroups []msgraphmodels.Groupable
 	for _, group := range groups {
 		if !isSecurityGroup(group) {
 			log.Debugf(context.Background(), "Removing non-security group %s", *group.GetDisplayName())
-		} else {
-			securityGroups = append(securityGroups, group)
+			continue
 		}
+		securityGroups = append(securityGroups, group)
 	}
 	return securityGroups
 }
