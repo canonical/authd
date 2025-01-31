@@ -215,6 +215,18 @@ func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Gro
 	return groups, nil
 }
 
+func removeNonSecurityGroups(groups []msgraphmodels.Groupable) []msgraphmodels.Groupable {
+	securityGroups := []msgraphmodels.Groupable{}
+	for _, group := range groups {
+		if !isSecurityGroup(group) {
+			log.Debugf(context.Background(), "Removing non-security group %s", *group.GetDisplayName())
+		} else {
+			securityGroups = append(securityGroups, group)
+		}
+	}
+	return securityGroups
+}
+
 func getSecurityGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.Groupable, error) {
 	// Initial request to get groups
 	requestBuilder := client.Me().TransitiveMemberOf().GraphGroup()
@@ -243,12 +255,7 @@ func getSecurityGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.G
 
 	// Remove the groups which are not security groups (but for example Microsoft 365 groups, which can be created
 	// by non-admin users).
-	for i, group := range groups {
-		if !isSecurityGroup(group) {
-			log.Debugf(context.Background(), "Removing non-security group %s", *group.GetDisplayName())
-			groups = append(groups[:i], groups[i+1:]...)
-		}
-	}
+	groups = removeNonSecurityGroups(groups)
 
 	var groupNames []string
 	for _, group := range groups {
