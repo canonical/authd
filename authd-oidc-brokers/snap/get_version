@@ -60,14 +60,14 @@ strip_branch_tag_prefix() {
 current_branch=$(git -C "${SNAPCRAFT_PART_SRC}" branch --show-current)
 
 # Get the highest version tag which is prefixed with the current branch name.
-tag=$(git tag --sort=-v:refname --merged="${current_branch}" | grep "^${current_branch}-" | head -1)
+tag=$(git -c "versionsort.suffix=-pre" tag --sort=-v:refname --merged="${current_branch}" | grep "^${current_branch}-" | head -1)
 
 # If there is no tag prefixed with the current branch name, use the most
 # recent tag that does not have a non-numerical prefix (that's the case
 # when we're building a snap for testing on a branch that's not
 # "msentraid" or "google").
 if [ -z "${tag}" ]; then
-    tag=$(git tag --sort=-v:refname --merged="${current_branch}" | grep -E '^[0-9]+' | head -1)
+    tag=$(git -c "versionsort.suffix=-pre" tag --sort=-v:refname --merged="${current_branch}" | grep -E '^[0-9]+' | head -1)
 fi
 
 version="${tag}"
