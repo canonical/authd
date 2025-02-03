@@ -574,6 +574,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 				return AuthDenied, errorMessage{Message: "could not check password"}
 			}
 			if !ok {
+				log.Warningf(context.Background(), "Authentication failure: incorrect local password for user %q", session.username)
 				return AuthRetry, errorMessage{Message: "incorrect password"}
 			}
 
