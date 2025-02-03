@@ -584,6 +584,13 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			}
 		}
 
+		// If the session is for changing the password, we don't need to refresh the token and user info (and we don't
+		// want the method call to return an error if refreshing the token or user info fails).
+		if session.mode == sessionmode.ChangePassword || session.mode == sessionmode.ChangePasswordOld {
+			session.authInfo["auth_info"] = authInfo
+			return AuthNext, nil
+		}
+
 		// Refresh the token if we're online even if the token has not expired
 		if !session.isOffline {
 			authInfo, err = b.refreshToken(ctx, session.oauth2Config, authInfo)
@@ -605,11 +612,6 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			log.Warningf(context.Background(), "Could not fetch user info: %v. Using cached user info.", err)
 		} else {
 			authInfo.UserInfo = userInfo
-		}
-
-		if session.mode == sessionmode.ChangePassword || session.mode == sessionmode.ChangePasswordOld {
-			session.authInfo["auth_info"] = authInfo
-			return AuthNext, nil
 		}
 
 	case authmodes.NewPassword:

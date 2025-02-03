@@ -455,6 +455,12 @@ func TestIsAuthenticated(t *testing.T) {
 			token:                    &tokenOptions{},
 			useOldNameForSecretField: true,
 		},
+		"Authenticating_to_change_password_still_allowed_if_fetching_user_info_fails": {
+			sessionMode:      sessionmode.ChangePassword,
+			firstMode:        authmodes.Password,
+			token:            &tokenOptions{noUserInfo: true},
+			getUserInfoFails: true,
+		},
 
 		"Error_when_authentication_data_is_invalid":         {invalidAuthData: true},
 		"Error_when_secret_can_not_be_decrypted":            {firstMode: authmodes.Password, badFirstKey: true},
