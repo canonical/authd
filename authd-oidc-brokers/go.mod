@@ -2,6 +2,8 @@ module github.com/ubuntu/authd-oidc-brokers
 
 go 1.23.0
 
+toolchain go1.23.5
+
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.17.0
 	github.com/coreos/go-oidc/v3 v3.12.0
