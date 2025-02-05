@@ -123,6 +123,8 @@ github.com/subosito/gotenv v1.6.0 h1:9NlTDc1FTs4qu0DDq7AEtTPNw6SVm7uBMsUCUjABIf8
 github.com/subosito/gotenv v1.6.0/go.mod h1:Dk4QP5c2W3ibzajGcXpNraDfq2IrhjMIvMSWPKKo0FU=
 github.com/ubuntu/authd v0.4.1 h1:6gihmB6soI6J14aY8KyM+vamN24y+un5rGdvD3iGQi4=
 github.com/ubuntu/authd v0.4.1/go.mod h1:QUhHmd7fuMzHkwGu41k3C/D+ul1+9ZnpUdFtGoOtsU4=
+github.com/ubuntu/authd v0.4.2-0.20250203155723-a499f298f969 h1:93TjnT/gtCY09U2BY0sCSvCgpBNzjgtTNLOmSzGp7ek=
+github.com/ubuntu/authd v0.4.2-0.20250203155723-a499f298f969/go.mod h1:QUhHmd7fuMzHkwGu41k3C/D+ul1+9ZnpUdFtGoOtsU4=
 github.com/ubuntu/decorate v0.0.0-20240301153420-5015d6dbc8e5 h1:qO8m+4mLbo1HRpD5lfhEfr7R1PuqZvbAmjaRzYEy+tM=
 github.com/ubuntu/decorate v0.0.0-20240301153420-5015d6dbc8e5/go.mod h1:PUpwIgUuCQyuCz/gwiq6WYbo7IvtXXd8JqL01ez+jZE=
 github.com/ubuntu/go-i18n v0.0.0-20231113092927-594c1754ca47 h1:CA2dVorxvzdsGtszqhSjyvkrXxZi4bS52ZKvP0Ko634=
