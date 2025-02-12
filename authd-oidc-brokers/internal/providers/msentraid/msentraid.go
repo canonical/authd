@@ -199,6 +199,7 @@ func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Gro
 			log.Warning(context.Background(), pp.Sprintf("Could not get display name for group object (ID: %s): %v", id, msGroup))
 			return nil, errors.New("could not get group name")
 		}
+		// Microsoft groups are case-insensitive, see https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/resource-name-rules
 		groupName := strings.ToLower(*groupNamePtr)
 
 		// Check if the group is a local group, in which case we don't set the UGID (because that's how the user manager
