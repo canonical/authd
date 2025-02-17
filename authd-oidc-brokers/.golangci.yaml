@@ -57,5 +57,7 @@ linters-settings:
   nakedret:
     max-func-lines: 1
   nolintlint:
+    # Require an explanation of nonzero length after each nolint directive.
     require-explanation: true
+    # Require nolint directives to mention the specific linter being suppressed.
     require-specific: true
