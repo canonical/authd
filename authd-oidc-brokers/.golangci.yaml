@@ -47,10 +47,6 @@ issues:
     # Sometimes it is more readable it do a `if err:=a(); err != nil` tha simpy `return a()`
     - if-return
 
-nolintlint:
-  require-explanation: true
-  require-specific: true
-
 linters-settings:
   # Forbid the usage of deprecated ioutil and debug prints
   forbidigo:
@@ -60,3 +56,6 @@ linters-settings:
   # Never have naked return ever
   nakedret:
     max-func-lines: 1
+  nolintlint:
+    require-explanation: true
+    require-specific: true
