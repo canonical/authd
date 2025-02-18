@@ -3,12 +3,11 @@ package noprovider
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
-	"github.com/ubuntu/authd-oidc-brokers/internal/broker/sessionmode"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
@@ -35,49 +34,6 @@ func (p NoProvider) AdditionalScopes() []string {
 // AuthOptions is a no-op when no specific provider is in use.
 func (p NoProvider) AuthOptions() []oauth2.AuthCodeOption {
 	return []oauth2.AuthCodeOption{}
-}
-
-// CurrentAuthenticationModesOffered returns the generic authentication modes supported by the provider.
-func (p NoProvider) CurrentAuthenticationModesOffered(
-	sessionMode string,
-	supportedAuthModes map[string]string,
-	tokenExists bool,
-	providerReachable bool,
-	endpoints map[string]struct{},
-	currentAuthStep int,
-) ([]string, error) {
-	var offeredModes []string
-	switch sessionMode {
-	case sessionmode.ChangePassword, sessionmode.ChangePasswordOld:
-		if !tokenExists {
-			return nil, errors.New("user has no cached token")
-		}
-		offeredModes = []string{authmodes.Password}
-		if currentAuthStep > 0 {
-			offeredModes = []string{authmodes.NewPassword}
-		}
-
-	default: // auth mode
-		if _, ok := endpoints[authmodes.DeviceQr]; ok && providerReachable {
-			offeredModes = []string{authmodes.DeviceQr}
-		} else if _, ok := endpoints[authmodes.Device]; ok && providerReachable {
-			offeredModes = []string{authmodes.Device}
-		}
-		if tokenExists {
-			offeredModes = append([]string{authmodes.Password}, offeredModes...)
-		}
-		if currentAuthStep > 0 {
-			offeredModes = []string{authmodes.NewPassword}
-		}
-	}
-
-	for _, mode := range offeredModes {
-		if _, ok := supportedAuthModes[mode]; !ok {
-			return nil, fmt.Errorf("auth mode %q required by the provider, but is not supported locally", mode)
-		}
-	}
-
-	return offeredModes, nil
 }
 
 // GetExtraFields returns the extra fields of the token which should be stored persistently.
@@ -125,6 +81,11 @@ func (p NoProvider) VerifyUsername(requestedUsername, username string) error {
 	return nil
 }
 
+// SupportedOIDCAuthModes returns the OIDC authentication modes supported by the provider.
+func (p NoProvider) SupportedOIDCAuthModes() []string {
+	return []string{authmodes.Device, authmodes.DeviceQr}
+}
+
 type claims struct {
 	Email string `json:"email"`
 	Sub   string `json:"sub"`
@@ -145,4 +106,11 @@ func (p NoProvider) userClaims(idToken *oidc.IDToken) (claims, error) {
 // getGroups is a no-op when no specific provider is in use.
 func (p NoProvider) getGroups(_ *oauth2.Token) ([]info.Group, error) {
 	return nil, nil
+}
+
+// IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.
+func (p NoProvider) IsTokenExpiredError(err oauth2.RetrieveError) bool {
+	// TODO: This is an msentraid specific error code and description.
+	//       Change it to the ones from Google once we know them.
+	return err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50173:")
 }

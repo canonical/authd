@@ -14,17 +14,11 @@ type Provider interface {
 	AdditionalScopes() []string
 	AuthOptions() []oauth2.AuthCodeOption
 	CheckTokenScopes(token *oauth2.Token) error
-	CurrentAuthenticationModesOffered(
-		sessionMode string,
-		supportedAuthModes map[string]string,
-		tokenExists bool,
-		providerReachable bool,
-		endpoints map[string]struct{},
-		currentAuthStep int,
-	) ([]string, error)
 	GetExtraFields(token *oauth2.Token) map[string]interface{}
 	GetMetadata(provider *oidc.Provider) (map[string]interface{}, error)
 	GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken, providerMetadata map[string]interface{}) (info.User, error)
 	NormalizeUsername(username string) string
+	SupportedOIDCAuthModes() []string
 	VerifyUsername(requestedUsername, authenticatedUsername string) error
+	IsTokenExpiredError(err oauth2.RetrieveError) bool
 }
