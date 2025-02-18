@@ -17,7 +17,6 @@ import (
 	msgraphauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
 	msgraphmodels "github.com/microsoftgraph/msgraph-sdk-go/models"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
-	"github.com/ubuntu/authd-oidc-brokers/internal/broker/sessionmode"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
@@ -280,59 +279,17 @@ func isSecurityGroup(group msgraphmodels.Groupable) bool {
 	return !slices.Contains(group.GetGroupTypes(), "Unified")
 }
 
-// CurrentAuthenticationModesOffered returns the generic authentication modes supported by the provider.
-//
-// Token validity is not considered, only the presence of a token.
-func (p Provider) CurrentAuthenticationModesOffered(
-	sessionMode string,
-	supportedAuthModes map[string]string,
-	tokenExists bool,
-	providerReachable bool,
-	endpoints map[string]struct{},
-	currentAuthStep int,
-) ([]string, error) {
-	log.Debugf(context.Background(), "In CurrentAuthenticationModesOffered: sessionMode=%q, supportedAuthModes=%q, tokenExists=%t, providerReachable=%t, endpoints=%q, currentAuthStep=%d\n", sessionMode, supportedAuthModes, tokenExists, providerReachable, endpoints, currentAuthStep)
-	var offeredModes []string
-	switch sessionMode {
-	case sessionmode.ChangePassword, sessionmode.ChangePasswordOld:
-		if !tokenExists {
-			return nil, errors.New("user has no cached token")
-		}
-		offeredModes = []string{authmodes.Password}
-		if currentAuthStep > 0 {
-			offeredModes = []string{authmodes.NewPassword}
-		}
-
-	default: // auth mode
-		if _, ok := endpoints[authmodes.DeviceQr]; ok && providerReachable {
-			offeredModes = []string{authmodes.DeviceQr}
-		} else if _, ok := endpoints[authmodes.Device]; ok && providerReachable {
-			offeredModes = []string{authmodes.Device}
-		}
-		if tokenExists {
-			offeredModes = append([]string{authmodes.Password}, offeredModes...)
-		}
-		if currentAuthStep > 0 {
-			offeredModes = []string{authmodes.NewPassword}
-		}
-	}
-	log.Debugf(context.Background(), "Offered modes: %q", offeredModes)
-
-	for _, mode := range offeredModes {
-		if _, ok := supportedAuthModes[mode]; !ok {
-			return nil, fmt.Errorf("auth mode %q required by the provider, but is not supported locally", mode)
-		}
-	}
-
-	return offeredModes, nil
-}
-
 // NormalizeUsername parses a username into a normalized version.
 func (p Provider) NormalizeUsername(username string) string {
 	// Microsoft Entra usernames are case-insensitive. We can safely use strings.ToLower here without worrying about
 	// different Unicode characters that fold to the same lowercase letter, because the Microsoft Entra username policy
 	// (which we check in VerifyUsername) ensures that the username only contains ASCII characters.
 	return strings.ToLower(username)
+}
+
+// SupportedOIDCAuthModes returns the OIDC authentication modes supported by the provider.
+func (p Provider) SupportedOIDCAuthModes() []string {
+	return []string{authmodes.Device, authmodes.DeviceQr}
 }
 
 // VerifyUsername checks if the authenticated username matches the requested username and that both are valid.
@@ -366,4 +323,9 @@ func (c azureTokenCredential) GetToken(_ context.Context, _ policy.TokenRequestO
 		Token:     c.token.AccessToken,
 		ExpiresOn: c.token.Expiry,
 	}, nil
+}
+
+// IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.
+func (p Provider) IsTokenExpiredError(err oauth2.RetrieveError) bool {
+	return err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50173:")
 }
