@@ -218,9 +218,6 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 
 	supportedAuthModes := b.supportedAuthModesFromLayout(supportedUILayouts)
 
-	log.Debugf(context.Background(), "Supported UI Layouts for session %s: %#v", sessionID, supportedUILayouts)
-	log.Debugf(context.Background(), "Supported Authentication modes for session %s: %#v", sessionID, supportedAuthModes)
-
 	// Checks if the token exists in the cache.
 	tokenExists, err := fileutils.FileExists(session.tokenPath)
 	if err != nil {
