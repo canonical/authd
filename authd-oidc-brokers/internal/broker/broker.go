@@ -210,15 +210,13 @@ func (b *Broker) connectToOIDCServer(ctx context.Context) (*oidc.Provider, error
 }
 
 // GetAuthenticationModes returns the authentication modes available for the user.
-func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []map[string]string) (authModes []map[string]string, err error) {
+func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []map[string]string) (authModesWithLabels []map[string]string, err error) {
 	session, err := b.getSession(sessionID)
 	if err != nil {
 		return nil, err
 	}
 
-	supportedAuthModes := b.supportedAuthModesFromLayout(supportedUILayouts)
-
-	// Checks if the token exists in the cache.
+	// Check if the token exists in the cache.
 	tokenExists, err := fileutils.FileExists(session.tokenPath)
 	if err != nil {
 		log.Warningf(context.Background(), "Could not check if token exists: %v", err)
@@ -231,37 +229,26 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 		}
 	}
 
-	endpoints := make(map[string]struct{})
-	if session.oidcServer != nil && session.oidcServer.Endpoint().DeviceAuthURL != "" {
-		authMode := authmodes.DeviceQr
-		if _, ok := supportedAuthModes[authMode]; ok {
-			endpoints[authMode] = struct{}{}
-		}
-		authMode = authmodes.Device
-		if _, ok := supportedAuthModes[authMode]; ok {
-			endpoints[authMode] = struct{}{}
-		}
-	}
-
-	availableModes, err := b.availableAuthModes(session, tokenExists, endpoints)
+	availableModes, err := b.availableAuthModes(session, tokenExists)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, mode := range availableModes {
-		if _, ok := supportedAuthModes[mode]; !ok {
-			return nil, fmt.Errorf("auth mode %q required by the provider, but is not supported locally", mode)
-		}
-	}
+	modesSupportedByUI := b.authModesSupportedByUI(supportedUILayouts)
 
-	for _, id := range availableModes {
-		authModes = append(authModes, map[string]string{
-			"id":    id,
-			"label": supportedAuthModes[id],
+	for _, mode := range availableModes {
+		if _, ok := modesSupportedByUI[mode]; !ok {
+			log.Infof(context.Background(), "Authentication mode %q is not supported by the UI", mode)
+			continue
+		}
+
+		authModesWithLabels = append(authModesWithLabels, map[string]string{
+			"id":    mode,
+			"label": modesSupportedByUI[mode],
 		})
 	}
 
-	if len(authModes) == 0 {
+	if len(authModesWithLabels) == 0 {
 		return nil, fmt.Errorf("no authentication modes available for user %q", session.username)
 	}
 
@@ -270,10 +257,10 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 		return nil, err
 	}
 
-	return authModes, nil
+	return authModesWithLabels, nil
 }
 
-func (b *Broker) availableAuthModes(session session, tokenExists bool, endpoints map[string]struct{}) (availableModes []string, err error) {
+func (b *Broker) availableAuthModes(session session, tokenExists bool) (availableModes []string, err error) {
 	switch session.mode {
 	case sessionmode.ChangePassword, sessionmode.ChangePasswordOld:
 		// session is for changing the password
@@ -287,11 +274,7 @@ func (b *Broker) availableAuthModes(session session, tokenExists bool, endpoints
 
 	default: // session is for login
 		if !session.isOffline {
-			for _, mode := range b.provider.SupportedOIDCAuthModes() {
-				if _, ok := endpoints[mode]; ok {
-					availableModes = append(availableModes, mode)
-				}
-			}
+			availableModes = b.oidcAuthModes(session)
 		}
 		if tokenExists {
 			availableModes = append([]string{authmodes.Password}, availableModes...)
@@ -303,7 +286,26 @@ func (b *Broker) availableAuthModes(session session, tokenExists bool, endpoints
 	return availableModes, nil
 }
 
-func (b *Broker) supportedAuthModesFromLayout(supportedUILayouts []map[string]string) (supportedModes map[string]string) {
+func (b *Broker) oidcAuthModes(session session) []string {
+	var modes []string
+	endpoints := make(map[string]struct{})
+	if session.oidcServer != nil && session.oidcServer.Endpoint().DeviceAuthURL != "" {
+		endpoints[authmodes.DeviceQr] = struct{}{}
+		endpoints[authmodes.Device] = struct{}{}
+	}
+
+	for _, mode := range b.provider.SupportedOIDCAuthModes() {
+		if _, ok := endpoints[mode]; ok {
+			modes = append(modes, mode)
+		} else {
+			log.Warningf(context.Background(), "No provider endpoint for mode %q", mode)
+		}
+	}
+
+	return modes
+}
+
+func (b *Broker) authModesSupportedByUI(supportedUILayouts []map[string]string) (supportedModes map[string]string) {
 	supportedModes = make(map[string]string)
 	for _, layout := range supportedUILayouts {
 		supportedEntries := strings.Split(strings.TrimPrefix(layout["entry"], "optional:"), ",")
