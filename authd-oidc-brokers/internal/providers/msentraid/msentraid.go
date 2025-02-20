@@ -108,9 +108,13 @@ func (p Provider) GetMetadata(provider *oidc.Provider) (map[string]interface{}, 
 // GetUserInfo returns the user info from the ID token and the groups the user is a member of, which are retrieved via
 // the Microsoft Graph API.
 func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken, providerMetadata map[string]interface{}) (info.User, error) {
-	msgraphHost := providerMetadata["msgraph_host"]
-	if msgraphHost == nil {
-		msgraphHost = defaultMSGraphHost
+	msgraphHost := defaultMSGraphHost
+	if providerMetadata["msgraph_host"] != nil {
+		var ok bool
+		msgraphHost, ok = providerMetadata["msgraph_host"].(string)
+		if !ok {
+			return info.User{}, fmt.Errorf("failed to cast msgraph_host to string: %v", providerMetadata["msgraph_host"])
+		}
 	}
 
 	userClaims, err := p.userClaims(idToken)
@@ -118,7 +122,7 @@ func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, id
 		return info.User{}, err
 	}
 
-	userGroups, err := p.getGroups(accessToken, msgraphHost.(string))
+	userGroups, err := p.getGroups(accessToken, msgraphHost)
 	if err != nil {
 		return info.User{}, err
 	}
