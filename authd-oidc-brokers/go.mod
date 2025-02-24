@@ -23,7 +23,7 @@ require (
 	github.com/ubuntu/authd v0.4.2-0.20250203155723-a499f298f969
 	github.com/ubuntu/decorate v0.0.0-20240301153420-5015d6dbc8e5
 	github.com/ubuntu/go-i18n v0.0.0-20231113092927-594c1754ca47
-	golang.org/x/crypto v0.33.0
+	golang.org/x/crypto v0.34.0
 	golang.org/x/oauth2 v0.26.0
 	gopkg.in/ini.v1 v1.67.0
 	gopkg.in/yaml.v3 v3.0.1
