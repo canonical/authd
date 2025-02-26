@@ -2,18 +2,18 @@
 package google
 
 import (
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/noprovider"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/genericprovider"
 )
 
 // Provider is the google provider implementation.
 type Provider struct {
-	noprovider.NoProvider
+	genericprovider.GenericProvider
 }
 
 // New returns a new GoogleProvider.
 func New() Provider {
 	return Provider{
-		NoProvider: noprovider.New(),
+		GenericProvider: genericprovider.New(),
 	}
 }
 
