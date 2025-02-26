@@ -1,5 +1,5 @@
-// Package noprovider is the generic oidc extension.
-package noprovider
+// Package genericprovider is the generic oidc extension.
+package genericprovider
 
 import (
 	"context"
@@ -12,42 +12,42 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// NoProvider is a generic OIDC provider.
-type NoProvider struct{}
+// GenericProvider is a generic OIDC provider.
+type GenericProvider struct{}
 
-// New returns a new NoProvider.
-func New() NoProvider {
-	return NoProvider{}
+// New returns a new GenericProvider.
+func New() GenericProvider {
+	return GenericProvider{}
 }
 
 // CheckTokenScopes should check the token scopes, but we're not sure
 // if there is a generic way to do this, so for now it's a no-op.
-func (p NoProvider) CheckTokenScopes(token *oauth2.Token) error {
+func (p GenericProvider) CheckTokenScopes(token *oauth2.Token) error {
 	return nil
 }
 
 // AdditionalScopes returns the generic scopes required by the provider.
-func (p NoProvider) AdditionalScopes() []string {
+func (p GenericProvider) AdditionalScopes() []string {
 	return []string{oidc.ScopeOfflineAccess}
 }
 
 // AuthOptions is a no-op when no specific provider is in use.
-func (p NoProvider) AuthOptions() []oauth2.AuthCodeOption {
+func (p GenericProvider) AuthOptions() []oauth2.AuthCodeOption {
 	return []oauth2.AuthCodeOption{}
 }
 
 // GetExtraFields returns the extra fields of the token which should be stored persistently.
-func (p NoProvider) GetExtraFields(token *oauth2.Token) map[string]interface{} {
+func (p GenericProvider) GetExtraFields(token *oauth2.Token) map[string]interface{} {
 	return nil
 }
 
 // GetMetadata is a no-op when no specific provider is in use.
-func (p NoProvider) GetMetadata(provider *oidc.Provider) (map[string]interface{}, error) {
+func (p GenericProvider) GetMetadata(provider *oidc.Provider) (map[string]interface{}, error) {
 	return nil, nil
 }
 
 // GetUserInfo is a no-op when no specific provider is in use.
-func (p NoProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken, providerMetadata map[string]interface{}) (info.User, error) {
+func (p GenericProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken, providerMetadata map[string]interface{}) (info.User, error) {
 	userClaims, err := p.userClaims(idToken)
 	if err != nil {
 		return info.User{}, err
@@ -69,12 +69,12 @@ func (p NoProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, 
 }
 
 // NormalizeUsername parses a username into a normalized version.
-func (p NoProvider) NormalizeUsername(username string) string {
+func (p GenericProvider) NormalizeUsername(username string) string {
 	return username
 }
 
 // VerifyUsername checks if the requested username matches the authenticated user.
-func (p NoProvider) VerifyUsername(requestedUsername, username string) error {
+func (p GenericProvider) VerifyUsername(requestedUsername, username string) error {
 	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(username) {
 		return fmt.Errorf("requested username %q does not match the authenticated user %q", requestedUsername, username)
 	}
@@ -82,7 +82,7 @@ func (p NoProvider) VerifyUsername(requestedUsername, username string) error {
 }
 
 // SupportedOIDCAuthModes returns the OIDC authentication modes supported by the provider.
-func (p NoProvider) SupportedOIDCAuthModes() []string {
+func (p GenericProvider) SupportedOIDCAuthModes() []string {
 	return []string{authmodes.Device, authmodes.DeviceQr}
 }
 
@@ -95,7 +95,7 @@ type claims struct {
 }
 
 // userClaims returns the user claims parsed from the ID token.
-func (p NoProvider) userClaims(idToken *oidc.IDToken) (claims, error) {
+func (p GenericProvider) userClaims(idToken *oidc.IDToken) (claims, error) {
 	var userClaims claims
 	if err := idToken.Claims(&userClaims); err != nil {
 		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
@@ -104,12 +104,12 @@ func (p NoProvider) userClaims(idToken *oidc.IDToken) (claims, error) {
 }
 
 // getGroups is a no-op when no specific provider is in use.
-func (p NoProvider) getGroups(_ *oauth2.Token) ([]info.Group, error) {
+func (p GenericProvider) getGroups(_ *oauth2.Token) ([]info.Group, error) {
 	return nil, nil
 }
 
 // IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.
-func (p NoProvider) IsTokenExpiredError(err oauth2.RetrieveError) bool {
+func (p GenericProvider) IsTokenExpiredError(err oauth2.RetrieveError) bool {
 	// TODO: This is an msentraid specific error code and description.
 	//       Change it to the ones from Google once we know them.
 	return err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50173:")

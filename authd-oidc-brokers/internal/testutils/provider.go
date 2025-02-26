@@ -22,8 +22,8 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/genericprovider"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/noprovider"
 	"github.com/ubuntu/authd/log"
 	"golang.org/x/oauth2"
 )
@@ -348,7 +348,7 @@ func ExpiryDeviceAuthHandler() EndpointHandler {
 
 // MockProvider is a mock that implements the Provider interface.
 type MockProvider struct {
-	noprovider.NoProvider
+	genericprovider.GenericProvider
 	Scopes           []string
 	Options          []oauth2.AuthCodeOption
 	GetGroupsFunc    func() ([]info.Group, error)
@@ -385,7 +385,7 @@ func (p *MockProvider) AdditionalScopes() []string {
 	if p.Scopes != nil {
 		return p.Scopes
 	}
-	return p.NoProvider.AdditionalScopes()
+	return p.GenericProvider.AdditionalScopes()
 }
 
 // AuthOptions returns the additional options required by the provider.
@@ -393,7 +393,7 @@ func (p *MockProvider) AuthOptions() []oauth2.AuthCodeOption {
 	if p.Options != nil {
 		return p.Options
 	}
-	return p.NoProvider.AuthOptions()
+	return p.GenericProvider.AuthOptions()
 }
 
 // NormalizeUsername parses a username into a normalized version.
