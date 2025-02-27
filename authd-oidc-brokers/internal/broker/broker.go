@@ -230,7 +230,7 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 
 	for _, mode := range availableModes {
 		if !slices.Contains(modesSupportedByUI, mode) {
-			log.Infof(context.Background(), "Authentication mode %q is not supported by the UI", mode)
+			log.Debugf(context.Background(), "Authentication mode %q is not supported by the UI", mode)
 			continue
 		}
 
@@ -261,15 +261,18 @@ func (b *Broker) availableAuthModes(session session) (availableModes []string, e
 
 	switch session.mode {
 	case sessionmode.ChangePassword, sessionmode.ChangePasswordOld:
-		// session is for changing the password
+		// Session is for changing the password.
 		if !tokenExists(session) {
 			return nil, errors.New("user has no cached token")
 		}
 		return []string{authmodes.Password}, nil
 
 	default:
-		// session is for login
-		modes := append(b.provider.SupportedOIDCAuthModes(), authmodes.Password)
+		// Session is for login. Check which auth modes are available.
+		// The order of the modes is important, because authd picks the first supported one.
+		// Password authentication should be the first option if available, to avoid performing device authentication
+		// when it's not necessary.
+		modes := append([]string{authmodes.Password}, b.provider.SupportedOIDCAuthModes()...)
 		for _, mode := range modes {
 			if authModeIsAvailable(session, mode) {
 				availableModes = append(availableModes, mode)
