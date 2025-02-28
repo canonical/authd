@@ -85,8 +85,6 @@ func GenerateBrokerConfig(t *testing.T, p, providerURL string) {
 }
 
 // Config returns a DaemonConfig for tests.
-//
-//nolint:revive // DaemonConfig is a type alias for tests
 func (a App) Config() DaemonConfig {
 	return a.config
 }
