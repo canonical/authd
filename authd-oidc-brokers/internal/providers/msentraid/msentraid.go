@@ -189,7 +189,10 @@ func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Gro
 	}
 
 	var groups []info.Group
+	var msGroupNames []string
 	for _, msGroup := range graphGroups {
+		var group info.Group
+
 		idPtr := msGroup.GetId()
 		if idPtr == nil {
 			log.Warning(context.Background(), pp.Sprintf("Could not get ID for group: %v", msGroup))
@@ -197,25 +200,62 @@ func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Gro
 		}
 		id := *idPtr
 
-		groupNamePtr := msGroup.GetDisplayName()
-		if groupNamePtr == nil {
+		msGroupNamePtr := msGroup.GetDisplayName()
+		if msGroupNamePtr == nil {
 			log.Warning(context.Background(), pp.Sprintf("Could not get display name for group object (ID: %s): %v", id, msGroup))
 			return nil, errors.New("could not get group name")
 		}
-		groupName := strings.ToLower(*groupNamePtr)
+		msGroupName := *msGroupNamePtr
 
-		// Check if the group is a local group, in which case we don't set the UGID (because that's how the user manager
-		// differentiates between local and remote groups).
-		if strings.HasPrefix(groupName, localGroupPrefix) {
-			groupName = strings.TrimPrefix(groupName, localGroupPrefix)
-			groups = append(groups, info.Group{Name: groupName})
+		// Check if there is a name conflict with another group returned by the Graph API. It's not clear in which case
+		// the Graph API returns multiple groups with the same name (or the same group twice), but we've seen it happen
+		// in https://github.com/ubuntu/authd/issues/789.
+		if checkGroupIsDuplicate(msGroupName, msGroupNames) {
 			continue
 		}
 
-		groups = append(groups, info.Group{Name: groupName, UGID: id})
+		// Microsoft groups are case-insensitive, see https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/resource-name-rules
+		group.Name = strings.ToLower(msGroupName)
+
+		isLocalGroup := strings.HasPrefix(group.Name, localGroupPrefix)
+		if isLocalGroup {
+			group.Name = strings.TrimPrefix(group.Name, localGroupPrefix)
+		}
+
+		// Don't set the UGID for local groups, because that's how the user manager differentiates between local and
+		// remote groups.
+		if !isLocalGroup {
+			group.UGID = id
+		}
+
+		groups = append(groups, group)
+		msGroupNames = append(msGroupNames, msGroupName)
 	}
 
 	return groups, nil
+}
+
+func checkGroupIsDuplicate(groupName string, groupNames []string) bool {
+	for _, name := range groupNames {
+		// We don't want to treat local groups without the prefix as duplicates of non-local groups
+		// (e.g. "linux-sudo" and "sudo"), so we compare the names as returned by the Graph API - except that we
+		// ignore the case, because we use the group names in lowercase.
+		if strings.EqualFold(name, groupName) {
+			// Not a duplicate
+			continue
+		}
+
+		// To make debugging easier, check if the groups differ in case, and mention that in the log message.
+		if name == groupName {
+			log.Warningf(context.Background(), "The Microsoft Graph API returned the group %q multiple times, ignoring the duplicate", name)
+		} else {
+			log.Warningf(context.Background(), "The Microsoft Graph API returned the group %[1]q multiple times, but with different case (%[2]q and %[1]q), ignoring the duplicate", groupName, name)
+		}
+
+		return true
+	}
+
+	return false
 }
 
 func removeNonSecurityGroups(groups []msgraphmodels.Groupable) []msgraphmodels.Groupable {
