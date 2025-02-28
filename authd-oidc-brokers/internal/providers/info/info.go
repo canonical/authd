@@ -42,3 +42,8 @@ func NewUser(name, home, uuid, shell, gecos string, groups []Group) User {
 
 	return u
 }
+
+// Claimer is an interface that defines a method to extract the claims from the ID token.
+type Claimer interface {
+	Claims(any) error
+}

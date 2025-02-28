@@ -47,7 +47,7 @@ func (p GenericProvider) GetMetadata(provider *oidc.Provider) (map[string]interf
 }
 
 // GetUserInfo is a no-op when no specific provider is in use.
-func (p GenericProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken, providerMetadata map[string]interface{}) (info.User, error) {
+func (p GenericProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}) (info.User, error) {
 	userClaims, err := p.userClaims(idToken)
 	if err != nil {
 		return info.User{}, err
@@ -95,7 +95,7 @@ type claims struct {
 }
 
 // userClaims returns the user claims parsed from the ID token.
-func (p GenericProvider) userClaims(idToken *oidc.IDToken) (claims, error) {
+func (p GenericProvider) userClaims(idToken info.Claimer) (claims, error) {
 	var userClaims claims
 	if err := idToken.Claims(&userClaims); err != nil {
 		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)

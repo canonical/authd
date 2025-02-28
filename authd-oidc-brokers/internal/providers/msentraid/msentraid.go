@@ -107,7 +107,7 @@ func (p Provider) GetMetadata(provider *oidc.Provider) (map[string]interface{}, 
 
 // GetUserInfo returns the user info from the ID token and the groups the user is a member of, which are retrieved via
 // the Microsoft Graph API.
-func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken, providerMetadata map[string]interface{}) (info.User, error) {
+func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}) (info.User, error) {
 	msgraphHost := defaultMSGraphHost
 	if providerMetadata["msgraph_host"] != nil {
 		var ok bool
@@ -146,7 +146,7 @@ type claims struct {
 }
 
 // userClaims returns the user claims parsed from the ID token.
-func (p Provider) userClaims(idToken *oidc.IDToken) (claims, error) {
+func (p Provider) userClaims(idToken info.Claimer) (claims, error) {
 	var userClaims claims
 	if err := idToken.Claims(&userClaims); err != nil {
 		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)

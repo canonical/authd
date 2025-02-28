@@ -16,7 +16,7 @@ type Provider interface {
 	CheckTokenScopes(token *oauth2.Token) error
 	GetExtraFields(token *oauth2.Token) map[string]interface{}
 	GetMetadata(provider *oidc.Provider) (map[string]interface{}, error)
-	GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken, providerMetadata map[string]interface{}) (info.User, error)
+	GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}) (info.User, error)
 	NormalizeUsername(username string) string
 	SupportedOIDCAuthModes() []string
 	VerifyUsername(requestedUsername, authenticatedUsername string) error
