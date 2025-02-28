@@ -262,7 +262,12 @@ func removeNonSecurityGroups(groups []msgraphmodels.Groupable) []msgraphmodels.G
 	var securityGroups []msgraphmodels.Groupable
 	for _, group := range groups {
 		if !isSecurityGroup(group) {
-			log.Debugf(context.Background(), "Removing non-security group %s", *group.GetDisplayName())
+			groupNamePtr := group.GetDisplayName()
+			if groupNamePtr == nil {
+				log.Debugf(context.Background(), "Removing unnamed non-security group")
+				continue
+			}
+			log.Debugf(context.Background(), "Removing non-security group %s", *groupNamePtr)
 			continue
 		}
 		securityGroups = append(securityGroups, group)
