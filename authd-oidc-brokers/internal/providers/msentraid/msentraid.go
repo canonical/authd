@@ -101,14 +101,14 @@ func (p Provider) GetMetadata(provider *oidc.Provider) (map[string]interface{}, 
 	}
 
 	return map[string]interface{}{
-		"msgraph_host": claims.MSGraphHost,
+		"msgraph_host": fmt.Sprintf("https://%s/%s", claims.MSGraphHost, msgraphAPIVersion),
 	}, nil
 }
 
 // GetUserInfo returns the user info from the ID token and the groups the user is a member of, which are retrieved via
 // the Microsoft Graph API.
 func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}) (info.User, error) {
-	msgraphHost := defaultMSGraphHost
+	msgraphHost := fmt.Sprintf("https://%s/%s", defaultMSGraphHost, msgraphAPIVersion)
 	if providerMetadata["msgraph_host"] != nil {
 		var ok bool
 		msgraphHost, ok = providerMetadata["msgraph_host"].(string)
@@ -177,7 +177,7 @@ func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Gro
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GraphRequestAdapter: %v", err)
 	}
-	adapter.SetBaseUrl(fmt.Sprintf("https://%s/%s", msgraphHost, msgraphAPIVersion))
+	adapter.SetBaseUrl(msgraphHost)
 
 	client := msgraphsdk.NewGraphServiceClient(adapter)
 
