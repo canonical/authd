@@ -1,0 +1,10 @@
+name: valid-user
+uuid: valid-sub
+home: /home/valid-user
+shell: /bin/bash
+gecos: Valid User
+groups:
+    - name: local1
+      ugid: ""
+    - name: local2
+      ugid: ""
