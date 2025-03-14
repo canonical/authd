@@ -4,7 +4,7 @@ description: |
   Authd is a powerful authentication service for Ubuntu, designed to integrate with cloud identity providers like
   Microsoft Entra ID. It delivers a secure, flexible solution for organizations and individuals who are transitioning
   to cloud-based identity management on Ubuntu workstations and servers.
-  Authd uses the Oauth Device Authorization Grant and ensures a consistent and secure login experience across
+  Authd uses the OAuth Device Authorization Grant and ensures a consistent and secure login experience across
   Ubuntu Desktop and Server — whether through GDM, SSH, or network services like NFS and Samba.
 
   Key Features
