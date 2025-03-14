@@ -1,7 +1,27 @@
 name: authd-google
-summary: Google Broker for authd
+summary: Authd - Google IAM Cloud Authentication for Ubuntu
 description: |
-  Broker that enables OIDC authentication with Google for authd.
+  Authd is a powerful authentication service for Ubuntu, designed to integrate with cloud identity providers like
+  Google IAM. It delivers a secure, flexible solution for organizations and individuals who are transitioning
+  to cloud-based identity management on Ubuntu workstations and servers.
+  Authd uses the Oauth Device Authorization Grant and ensures a consistent and secure login experience across
+  Ubuntu Desktop and Server — whether through GDM, SSH, or network services like NFS and Samba.
+
+  Key Features
+  * Cloud identity provider Integration: Connects with Google IAM
+  * Secure Login: Authd leverages the Oauth Device Authorization Grant RFC 8628-compliant workflows for reliability
+    and security.
+  * Open-Source: Free and community-driven, with contributions welcomed.
+  * Enterprise ready: Ubuntu Pro customers will benefit from the same expanded security and support guarantees.
+  * Authd is free for all Ubuntu Desktop and Server 24.04 LTS users and is under active development.
+    Explore the official documentation for installation and configuration steps, or visit the GitHub repository to
+    contribute or provide feedback.
+icon: snap/logo.png
+website:
+  - https://github.com/ubuntu/authd-oidc-brokers
+  - https://github.com/ubuntu/authd
+issues: https://github.com/ubuntu/authd/issues
+source-code: https://github.com/ubuntu/authd-oidc-brokers/tree/google
 adopt-info: version
 grade: stable
 base: core24
