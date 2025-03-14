@@ -9,7 +9,7 @@ description: |
 
   Key Features
   * Cloud identity provider Integration: Connects with Microsoft Entra ID
-  * Secure Login: Authd leverages the Oauth Device Authorization Grant RFC 8628-compliant workflows for reliability
+  * Secure Login: Authd leverages the OAuth Device Authorization Grant RFC 8628-compliant workflows for reliability
     and security.
   * Open-Source: Free and community-driven, with contributions welcomed.
   * Enterprise ready: Ubuntu Pro customers will benefit from the same expanded security and support guarantees.
