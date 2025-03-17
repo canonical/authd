@@ -407,7 +407,7 @@ func (p *MockProvider) GetMetadata(provider *oidc.Provider) (map[string]interfac
 }
 
 // GetUserInfo is a no-op when no specific provider is in use.
-func (p *MockProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken, providerMetadata map[string]interface{}) (info.User, error) {
+func (p *MockProvider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}) (info.User, error) {
 	if p.GetUserInfoFails {
 		return info.User{}, errors.New("error requested in the mock")
 	}
@@ -459,7 +459,7 @@ type claims struct {
 }
 
 // userClaims returns the user claims parsed from the ID token.
-func (p *MockProvider) userClaims(idToken *oidc.IDToken) (claims, error) {
+func (p *MockProvider) userClaims(idToken info.Claimer) (claims, error) {
 	var userClaims claims
 	if err := idToken.Claims(&userClaims); err != nil {
 		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
