@@ -240,7 +240,7 @@ func checkGroupIsDuplicate(groupName string, groupNames []string) bool {
 		// We don't want to treat local groups without the prefix as duplicates of non-local groups
 		// (e.g. "linux-sudo" and "sudo"), so we compare the names as returned by the Graph API - except that we
 		// ignore the case, because we use the group names in lowercase.
-		if strings.EqualFold(name, groupName) {
+		if !strings.EqualFold(name, groupName) {
 			// Not a duplicate
 			continue
 		}
