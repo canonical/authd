@@ -101,14 +101,14 @@ func (p Provider) GetMetadata(provider *oidc.Provider) (map[string]interface{}, 
 	}
 
 	return map[string]interface{}{
-		"msgraph_host": claims.MSGraphHost,
+		"msgraph_host": fmt.Sprintf("https://%s/%s", claims.MSGraphHost, msgraphAPIVersion),
 	}, nil
 }
 
 // GetUserInfo returns the user info from the ID token and the groups the user is a member of, which are retrieved via
 // the Microsoft Graph API.
-func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken *oidc.IDToken, providerMetadata map[string]interface{}) (info.User, error) {
-	msgraphHost := defaultMSGraphHost
+func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}) (info.User, error) {
+	msgraphHost := fmt.Sprintf("https://%s/%s", defaultMSGraphHost, msgraphAPIVersion)
 	if providerMetadata["msgraph_host"] != nil {
 		var ok bool
 		msgraphHost, ok = providerMetadata["msgraph_host"].(string)
@@ -146,7 +146,7 @@ type claims struct {
 }
 
 // userClaims returns the user claims parsed from the ID token.
-func (p Provider) userClaims(idToken *oidc.IDToken) (claims, error) {
+func (p Provider) userClaims(idToken info.Claimer) (claims, error) {
 	var userClaims claims
 	if err := idToken.Claims(&userClaims); err != nil {
 		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
@@ -177,7 +177,7 @@ func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Gro
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GraphRequestAdapter: %v", err)
 	}
-	adapter.SetBaseUrl(fmt.Sprintf("https://%s/%s", msgraphHost, msgraphAPIVersion))
+	adapter.SetBaseUrl(msgraphHost)
 
 	client := msgraphsdk.NewGraphServiceClient(adapter)
 
@@ -262,7 +262,12 @@ func removeNonSecurityGroups(groups []msgraphmodels.Groupable) []msgraphmodels.G
 	var securityGroups []msgraphmodels.Groupable
 	for _, group := range groups {
 		if !isSecurityGroup(group) {
-			log.Debugf(context.Background(), "Removing non-security group %s", *group.GetDisplayName())
+			groupNamePtr := group.GetDisplayName()
+			if groupNamePtr == nil {
+				log.Debugf(context.Background(), "Removing unnamed non-security group")
+				continue
+			}
+			log.Debugf(context.Background(), "Removing non-security group %s", *groupNamePtr)
 			continue
 		}
 		securityGroups = append(securityGroups, group)
