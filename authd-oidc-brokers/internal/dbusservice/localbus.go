@@ -1,3 +1,5 @@
+// TiCS: disabled // This is a helper file for tests.
+
 //go:build withlocalbus
 
 package dbusservice
