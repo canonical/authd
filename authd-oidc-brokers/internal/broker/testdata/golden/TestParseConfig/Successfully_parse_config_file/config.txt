@@ -1,6 +1,7 @@
 clientID=client_id
 clientSecret=
 issuerURL=https://issuer.url.com
+forceProviderAuthentication=false
 allowedUsers=map[]
 allUsersAllowed=false
 ownerAllowed=true
