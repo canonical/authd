@@ -26,10 +26,18 @@ client_id = client_id
 [oidc]
 issuer = https://issuer.url.com
 client_id = client_id
+force_provider_authentication = true
 
 [users]
 home_base_dir = /home
 allowed_ssh_suffixes = @issuer.url.com
+`,
+
+	"invalid_boolean_value": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+force_provider_authentication = invalid
 `,
 
 	"singles": `
@@ -78,6 +86,7 @@ func TestParseConfig(t *testing.T) {
 		"Error_if_file_is_not_updated":             {configType: "template", wantErr: true},
 		"Error_if_drop_in_directory_is_unreadable": {dropInType: "unreadable-dir", wantErr: true},
 		"Error_if_drop_in_file_is_unreadable":      {dropInType: "unreadable-file", wantErr: true},
+		"Error_if_config_contains_invalid_values":  {configType: "invalid_boolean_value", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
