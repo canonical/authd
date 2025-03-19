@@ -1,3 +1,5 @@
+// TiCS: disabled // This is a helper file to generate the consts used based on which broker was built.
+
 //go:build generate
 
 package main
