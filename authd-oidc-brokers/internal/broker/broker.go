@@ -95,8 +95,6 @@ type Option func(*option)
 
 // New returns a new oidc Broker with the providers listed in the configuration file.
 func New(cfg Config, args ...Option) (b *Broker, err error) {
-	defer decorate.OnError(&err, "could not create broker")
-
 	p := providers.CurrentProvider()
 
 	if cfg.ConfigFile != "" {
