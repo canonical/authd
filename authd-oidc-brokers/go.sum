@@ -31,8 +31,8 @@ github.com/go-viper/mapstructure/v2 v2.2.1/go.mod h1:oJDH3BJKyqBA2TXFhDsKDGDTlnd
 github.com/godbus/dbus/v5 v5.0.4/go.mod h1:xhWf0FNVPg57R7Z0UbKHbJfkEywrmjJnf7w5xrFpKfA=
 github.com/godbus/dbus/v5 v5.1.0 h1:4KLkAxT3aOY8Li4FRJe/KvhoNFFxo0m6fNuFUO8QJUk=
 github.com/godbus/dbus/v5 v5.1.0/go.mod h1:xhWf0FNVPg57R7Z0UbKHbJfkEywrmjJnf7w5xrFpKfA=
-github.com/golang-jwt/jwt/v5 v5.2.1 h1:OuVbFODueb089Lh128TAcimifWaLhJwVflnrgM17wHk=
-github.com/golang-jwt/jwt/v5 v5.2.1/go.mod h1:pqrtFR0X4osieyHYxtmOUWsAWrfe1Q5UVIyoH402zdk=
+github.com/golang-jwt/jwt/v5 v5.2.2 h1:Rl4B7itRWVtYIHFrSNd7vhTiz9UpLdi6gZhZ3wEeDy8=
+github.com/golang-jwt/jwt/v5 v5.2.2/go.mod h1:pqrtFR0X4osieyHYxtmOUWsAWrfe1Q5UVIyoH402zdk=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
@@ -68,8 +68,8 @@ github.com/microsoft/kiota-serialization-multipart-go v1.1.0 h1:rALPMWJU749Bb81Q
 github.com/microsoft/kiota-serialization-multipart-go v1.1.0/go.mod h1:GBDmHOLO3+DhBnMmJC7OCR2Jq05VJuYKSpx7jKNrGmE=
 github.com/microsoft/kiota-serialization-text-go v1.1.0 h1:PfX+asvJW9KdkbC4MikRgekoRqtAclqkGm1/d2QTQWw=
 github.com/microsoft/kiota-serialization-text-go v1.1.0/go.mod h1:UgXgpLZ3a98nVF8A1nuEXmkv1HTMhJ+bXHDM1yRaFuw=
-github.com/microsoftgraph/msgraph-sdk-go v1.65.0 h1:Z5QWWMbZHV3RfTbYoZzX82zUQpJy3K7fupKeuKxYMro=
-github.com/microsoftgraph/msgraph-sdk-go v1.65.0/go.mod h1:oF9nvRZxvf33VEspYTjDqT+dhm+sioT0fiyf0PRp2as=
+github.com/microsoftgraph/msgraph-sdk-go v1.66.0 h1:PTiaoHXsFzoBwUro7icuU6oqPIeWES5w+s50oGMQPJ0=
+github.com/microsoftgraph/msgraph-sdk-go v1.66.0/go.mod h1:oF9nvRZxvf33VEspYTjDqT+dhm+sioT0fiyf0PRp2as=
 github.com/microsoftgraph/msgraph-sdk-go-core v1.3.0 h1:2eHvehXGH0i6Ngsq/5LMAEHqspe6xfYVhFnSRfDq1Hg=
 github.com/microsoftgraph/msgraph-sdk-go-core v1.3.0/go.mod h1:Y61FHnaNhoQGjf+bWCxH05RJeioZhbnADjkCkYt51wA=
 github.com/otiai10/copy v1.14.1 h1:5/7E6qsUMBaH5AnQ0sSLzzTg1oTECmcCmT6lvF45Na8=

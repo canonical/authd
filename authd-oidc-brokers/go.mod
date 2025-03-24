@@ -10,10 +10,10 @@ require (
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/go-jose/go-jose/v4 v4.0.5
 	github.com/godbus/dbus/v5 v5.1.0
-	github.com/golang-jwt/jwt/v5 v5.2.1
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/google/uuid v1.6.0
 	github.com/k0kubun/pp v3.0.1+incompatible
-	github.com/microsoftgraph/msgraph-sdk-go v1.65.0
+	github.com/microsoftgraph/msgraph-sdk-go v1.66.0
 	github.com/microsoftgraph/msgraph-sdk-go-core v1.3.0
 	github.com/otiai10/copy v1.14.1
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
