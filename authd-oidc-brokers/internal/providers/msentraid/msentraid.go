@@ -115,6 +115,12 @@ func (p Provider) GetUserInfo(ctx context.Context, accessToken *oauth2.Token, id
 		if !ok {
 			return info.User{}, fmt.Errorf("failed to cast msgraph_host to string: %v", providerMetadata["msgraph_host"])
 		}
+
+		// Handle the case that the provider metadata only contains the host without the protocol and API version,
+		// as was the case before 5fc98520c45294ffb85bb27a81929e2ec1b89fcb. This fixes #858.
+		if !strings.Contains(msgraphHost, "://") {
+			msgraphHost = fmt.Sprintf("https://%s/%s", msgraphHost, msgraphAPIVersion)
+		}
 	}
 
 	userClaims, err := p.userClaims(idToken)
@@ -185,7 +191,7 @@ func (p Provider) getGroups(token *oauth2.Token, msgraphHost string) ([]info.Gro
 	// additional permissions) which the user is a member of.
 	graphGroups, err := getSecurityGroups(client)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user groups: %v", err)
+		return nil, err
 	}
 
 	var groups []info.Group
