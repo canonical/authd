@@ -20,6 +20,10 @@ func (cfg *Config) SetIssuerURL(issuerURL string) {
 	cfg.issuerURL = issuerURL
 }
 
+func (cfg *Config) SetForceProviderAuthentication(value bool) {
+	cfg.forceProviderAuthentication = value
+}
+
 func (cfg *Config) SetHomeBaseDir(homeBaseDir string) {
 	cfg.homeBaseDir = homeBaseDir
 }

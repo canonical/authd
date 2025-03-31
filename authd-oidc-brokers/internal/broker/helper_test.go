@@ -24,15 +24,16 @@ import (
 
 type brokerForTestConfig struct {
 	broker.Config
-	issuerURL             string
-	allowedUsers          map[string]struct{}
-	allUsersAllowed       bool
-	ownerAllowed          bool
-	firstUserBecomesOwner bool
-	owner                 string
-	homeBaseDir           string
-	allowedSSHSuffixes    []string
-	provider              providers.Provider
+	issuerURL                   string
+	forceProviderAuthentication bool
+	allowedUsers                map[string]struct{}
+	allUsersAllowed             bool
+	ownerAllowed                bool
+	firstUserBecomesOwner       bool
+	owner                       string
+	homeBaseDir                 string
+	allowedSSHSuffixes          []string
+	provider                    providers.Provider
 
 	getUserInfoFails bool
 	firstCallDelay   int
@@ -51,6 +52,9 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	cfg.Init()
 	if cfg.issuerURL != "" {
 		cfg.SetIssuerURL(cfg.issuerURL)
+	}
+	if cfg.forceProviderAuthentication {
+		cfg.SetForceProviderAuthentication(cfg.forceProviderAuthentication)
 	}
 	if cfg.homeBaseDir != "" {
 		cfg.SetHomeBaseDir(cfg.homeBaseDir)

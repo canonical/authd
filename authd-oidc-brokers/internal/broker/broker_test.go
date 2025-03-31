@@ -387,9 +387,10 @@ func TestIsAuthenticated(t *testing.T) {
 	correctPassword := "password"
 
 	tests := map[string]struct {
-		sessionMode    string
-		sessionOffline bool
-		username       string
+		sessionMode                 string
+		sessionOffline              bool
+		username                    string
+		forceProviderAuthentication bool
 
 		firstMode                string
 		firstSecret              string
@@ -476,6 +477,11 @@ func TestIsAuthenticated(t *testing.T) {
 			wantSecondCall:    true,
 			secondMode:        authmodes.DeviceQr,
 		},
+		"Authenticating_with_password_when_provider_authentication_is_forced": {
+			firstMode:                   authmodes.Password,
+			token:                       &tokenOptions{},
+			forceProviderAuthentication: true,
+		},
 
 		"Error_when_authentication_data_is_invalid":         {invalidAuthData: true},
 		"Error_when_secret_can_not_be_decrypted":            {firstMode: authmodes.Password, badFirstKey: true},
@@ -545,6 +551,12 @@ func TestIsAuthenticated(t *testing.T) {
 		"Error_when_mode_is_newpassword_and_session_has_no_token": {firstMode: authmodes.NewPassword},
 		// This test case also tests that errors with double quotes are marshaled to JSON correctly.
 		"Error_when_selected_username_does_not_match_the_provider_one": {username: "not-matching", firstSecret: "-"},
+		"Error_when_provider_authentication_is_forced_and_session_is_offline": {
+			firstMode:                   authmodes.Password,
+			token:                       &tokenOptions{},
+			forceProviderAuthentication: true,
+			sessionOffline:              true,
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -567,10 +579,11 @@ func TestIsAuthenticated(t *testing.T) {
 			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
 
 			cfg := &brokerForTestConfig{
-				Config:                broker.Config{DataDir: dataDir},
-				getUserInfoFails:      tc.getUserInfoFails,
-				ownerAllowed:          true,
-				firstUserBecomesOwner: true,
+				Config:                      broker.Config{DataDir: dataDir},
+				getUserInfoFails:            tc.getUserInfoFails,
+				ownerAllowed:                true,
+				firstUserBecomesOwner:       true,
+				forceProviderAuthentication: tc.forceProviderAuthentication,
 			}
 			if tc.customHandlers == nil {
 				// Use the default provider URL if no custom handlers are provided.
