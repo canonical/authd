@@ -1,9 +1,6 @@
 module github.com/ubuntu/authd-oidc-brokers
 
 go 1.24.0
-
-toolchain go1.24.1
-
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.17.1
 	github.com/coreos/go-oidc/v3 v3.13.0
@@ -18,7 +15,7 @@ require (
 	github.com/otiai10/copy v1.14.1
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/spf13/cobra v1.9.1
-	github.com/spf13/viper v1.20.0
+	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
 	github.com/ubuntu/authd v0.4.2-0.20250203155723-a499f298f969
 	github.com/ubuntu/decorate v0.0.0-20240301153420-5015d6dbc8e5
