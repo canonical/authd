@@ -16,6 +16,9 @@ import (
 
 // Configuration sections and keys.
 const (
+	// forceProviderAuthenticationKey is the key in the config file for the option to force provider authentication during login.
+	forceProviderAuthenticationKey = "force_provider_authentication"
+
 	// oidcSection is the section name in the config file for the OIDC specific configuration.
 	oidcSection = "oidc"
 	// issuerKey is the key in the config file for the issuer.
@@ -63,6 +66,8 @@ type userConfig struct {
 	clientID     string
 	clientSecret string
 	issuerURL    string
+
+	forceProviderAuthentication bool
 
 	allowedUsers          map[string]struct{}
 	allUsersAllowed       bool
@@ -180,6 +185,12 @@ func parseConfigFile(cfgPath string, p provider) (userConfig, error) {
 		cfg.issuerURL = oidc.Key(issuerKey).String()
 		cfg.clientID = oidc.Key(clientIDKey).String()
 		cfg.clientSecret = oidc.Key(clientSecret).String()
+		if oidc.HasKey(forceProviderAuthenticationKey) {
+			cfg.forceProviderAuthentication, err = oidc.Key(forceProviderAuthenticationKey).Bool()
+			if err != nil {
+				return cfg, fmt.Errorf("error parsing '%s': %w", forceProviderAuthenticationKey, err)
+			}
+		}
 	}
 
 	cfg.populateUsersConfig(iniCfg.Section(usersSection))
