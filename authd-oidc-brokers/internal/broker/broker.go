@@ -95,14 +95,12 @@ type Option func(*option)
 
 // New returns a new oidc Broker with the providers listed in the configuration file.
 func New(cfg Config, args ...Option) (b *Broker, err error) {
-	defer decorate.OnError(&err, "could not create broker")
-
 	p := providers.CurrentProvider()
 
 	if cfg.ConfigFile != "" {
 		cfg.userConfig, err = parseConfigFile(cfg.ConfigFile, p)
 		if err != nil {
-			return nil, fmt.Errorf("could not parse config: %v", err)
+			return nil, fmt.Errorf("could not parse config file '%s': %v", cfg.ConfigFile, err)
 		}
 	}
 
@@ -626,8 +624,12 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			return AuthNext, nil
 		}
 
+		if b.cfg.forceProviderAuthentication && session.isOffline {
+			return AuthDenied, errorMessage{Message: "could not refresh token: provider is not reachable"}
+		}
+
 		// Refresh the token if we're online even if the token has not expired
-		if !session.isOffline {
+		if b.cfg.forceProviderAuthentication || !session.isOffline {
 			authInfo, err = b.refreshToken(ctx, session.oauth2Config, authInfo)
 			var retrieveErr *oauth2.RetrieveError
 			if errors.As(err, &retrieveErr) && b.provider.IsTokenExpiredError(*retrieveErr) {
