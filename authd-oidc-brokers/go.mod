@@ -14,7 +14,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/k0kubun/pp v3.0.1+incompatible
 	github.com/microsoftgraph/msgraph-sdk-go v1.67.0
-	github.com/microsoftgraph/msgraph-sdk-go-core v1.3.1
+	github.com/microsoftgraph/msgraph-sdk-go-core v1.3.2
 	github.com/otiai10/copy v1.14.1
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/spf13/cobra v1.9.1
@@ -30,8 +30,7 @@ require (
 )
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/internal v1.10.0 // indirect
-	github.com/cjlapao/common-go v0.0.48 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
@@ -43,11 +42,11 @@ require (
 	github.com/leonelquinteros/gotext v1.5.3-0.20230829162019-37f474cfb069 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/microsoft/kiota-abstractions-go v1.9.1 // indirect
-	github.com/microsoft/kiota-authentication-azure-go v1.2.1 // indirect
-	github.com/microsoft/kiota-http-go v1.5.1 // indirect
+	github.com/microsoft/kiota-abstractions-go v1.9.2 // indirect
+	github.com/microsoft/kiota-authentication-azure-go v1.3.0 // indirect
+	github.com/microsoft/kiota-http-go v1.5.2 // indirect
 	github.com/microsoft/kiota-serialization-form-go v1.1.1 // indirect
-	github.com/microsoft/kiota-serialization-json-go v1.1.1 // indirect
+	github.com/microsoft/kiota-serialization-json-go v1.1.2 // indirect
 	github.com/microsoft/kiota-serialization-multipart-go v1.1.1 // indirect
 	github.com/microsoft/kiota-serialization-text-go v1.1.1 // indirect
 	github.com/otiai10/mint v1.6.3 // indirect
@@ -65,7 +64,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.35.0 // indirect
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/net v0.37.0 // indirect
+	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/sync v0.12.0 // indirect
 	golang.org/x/sys v0.31.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
