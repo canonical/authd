@@ -179,7 +179,7 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 	// Construct an OIDC provider via OIDC discovery.
 	s.oidcServer, err = b.connectToOIDCServer(context.Background())
 	if err != nil {
-		log.Debugf(context.Background(), "Could not connect to the provider: %v. Starting session in offline mode.", err)
+		log.Noticef(context.Background(), "Could not connect to the provider: %v. Starting session in offline mode.", err)
 		s.isOffline = true
 	}
 
