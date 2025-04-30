@@ -30,9 +30,7 @@ func TestTransactionHandler(t *testing.T) {
 	t.Parallel()
 
 	tx, _ := prepareTransaction(t, nil)
-	dbusTx, ok := tx.(*dbusmodule.Transaction)
-	require.True(t, ok, "Transaction should be a dbus module Transaction")
-	require.ErrorIs(t, dbusTx.InvokeHandler(nil, 0, nil), pam.ErrAbort)
+	require.ErrorIs(t, tx.InvokeHandler(nil, 0, nil), pam.ErrAbort)
 }
 
 func TestTransactionSetEnv(t *testing.T) {
@@ -603,6 +601,19 @@ func TestStartBinaryConv(t *testing.T) {
 	}
 }
 
+func TestDisconnectionHandler(t *testing.T) {
+	address, _, cleanup := prepareTestServerWithCleanup(t, nil)
+	tx, txCleanup, err := dbusmodule.NewTransaction(context.TODO(), address,
+		dbusmodule.WithSharedConnection(true))
+	require.NoError(t, err, "Setup: Can't connect to %s", address)
+	t.Cleanup(txCleanup)
+
+	require.NoError(t, tx.Context().Err(), "Context must not be cancelled")
+	cleanup()
+	<-tx.Context().Done()
+	require.ErrorIs(t, tx.Context().Err(), context.Canceled, "Context must be cancelled")
+}
+
 type methodCallExpectations struct {
 	methodReturns   []methodReturn
 	wantMethodCalls []methodCall
@@ -628,13 +639,14 @@ func requireDbusErrorIs(t *testing.T, err error, wantError error) {
 	}
 }
 
-func prepareTransaction(t *testing.T, expectedReturns []methodReturn) (pam.ModuleTransaction, *testServer) {
+func prepareTransaction(t *testing.T, expectedReturns []methodReturn) (*dbusmodule.Transaction, *testServer) {
 	t.Helper()
 
 	address, obj := prepareTestServer(t, expectedReturns)
 	tx, cleanup, err := dbusmodule.NewTransaction(address,
 		dbusmodule.WithSharedConnection(true))
 	require.NoError(t, err, "Setup: Can't connect to %s", address)
+	t.Cleanup(func() { <-tx.Context().Done() })
 	t.Cleanup(cleanup)
 
 	t.Logf("Using bus at address %s", address)
@@ -642,7 +654,14 @@ func prepareTransaction(t *testing.T, expectedReturns []methodReturn) (pam.Modul
 	return tx, obj
 }
 
-func prepareTestServer(t *testing.T, expectedReturns []methodReturn) (string, *testServer) {
+func prepareTestServer(t *testing.T, expectedReturns []methodReturn) (address string, server *testServer) {
+	t.Helper()
+
+	address, server, _ = prepareTestServerWithCleanup(t, expectedReturns)
+	return address, server
+}
+
+func prepareTestServerWithCleanup(t *testing.T, expectedReturns []methodReturn) (address string, server *testServer, cleanup func()) {
 	t.Helper()
 
 	address, cleanup, err := testutils.StartBusMock()
@@ -657,8 +676,8 @@ func prepareTestServer(t *testing.T, expectedReturns []methodReturn) (string, *t
 		}
 	})
 
-	obj := &testServer{t: t, mu: &sync.Mutex{}, returns: expectedReturns}
-	err = conn.Export(obj, objectPath, ifaceName)
+	server = &testServer{t: t, mu: &sync.Mutex{}, returns: expectedReturns}
+	err = conn.Export(server, objectPath, ifaceName)
 	require.NoError(t, err, "Setup: Exporting test server object to bus failed")
 
 	reply, err := conn.RequestName(ifaceName, dbus.NameFlagDoNotQueue)
@@ -666,7 +685,7 @@ func prepareTestServer(t *testing.T, expectedReturns []methodReturn) (string, *t
 	require.Equal(t, reply, dbus.RequestNameReplyPrimaryOwner,
 		"Setup: can't get dbus name")
 
-	return address, obj
+	return address, server, cleanup
 }
 
 func TestMain(m *testing.M) {
