@@ -65,7 +65,29 @@ func mainFunc() error {
 	if err != nil {
 		return fmt.Errorf("%w: can't connect to server: %w", pam_test.ErrInvalid, err)
 	}
-	defer closeFunc()
+
+	clientReturned := make(chan struct{})
+	defer func() {
+		close(clientReturned)
+		closeFunc()
+	}()
+
+	go func() {
+		select {
+		case <-clientReturned:
+		case <-mTx.Context().Done():
+			// The connection context is also cancelled by closeFunc() during a
+			// normal shutdown, which races with the clientReturned close above.
+			// Make sure we only react to a genuine disconnect and not to our own
+			// teardown.
+			select {
+			case <-clientReturned:
+				return
+			default:
+			}
+			panic(fmt.Sprintf("D-Bus Connection lost: %v", mTx.Context().Err()))
+		}
+	}()
 
 	action, args := args[0], args[1:]
 

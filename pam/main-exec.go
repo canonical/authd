@@ -50,6 +50,28 @@ func mainFunc() error {
 	}
 	defer closeFunc()
 
+	actionDone := make(chan struct{})
+	defer close(actionDone)
+
+	go func() {
+		select {
+		case <-actionDone:
+		case <-mTx.Context().Done():
+			// The connection context is also cancelled by closeFunc() during a
+			// normal shutdown, which races with the actionDone close above.
+			// Make sure we only react to a genuine disconnect and not to our own
+			// teardown.
+			select {
+			case <-actionDone:
+				return
+			default:
+			}
+			log.Warningf(context.Background(), "[%v] D-Bus Connection closed: %v",
+				os.Getpid(), mTx.Context().Err())
+			os.Exit(255)
+		}
+	}()
+
 	action, args := args[0], args[1:]
 
 	flags := pam.Flags(0)
