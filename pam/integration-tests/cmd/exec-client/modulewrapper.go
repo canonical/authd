@@ -18,10 +18,13 @@ import (
 )
 
 type moduleWrapper struct {
-	pam.ModuleTransaction
+	*dbusmodule.Transaction
 }
 
-func newModuleWrapper(serverAddress string) (pam.ModuleTransaction, func(), error) {
+// Statically Ensure that [moduleWrapper] implements [pam.ModuleTransaction].
+var _ pam.ModuleTransaction = &moduleWrapper{}
+
+func newModuleWrapper(serverAddress string) (*moduleWrapper, func(), error) {
 	mTx, closeFunc, err := dbusmodule.NewTransaction(serverAddress)
 	return &moduleWrapper{mTx}, closeFunc, err
 }
@@ -29,8 +32,7 @@ func newModuleWrapper(serverAddress string) (pam.ModuleTransaction, func(), erro
 // SimulateClientPanic forces the client to panic with the provided text.
 func (m *moduleWrapper) CallUnhandledMethod() error {
 	method := "com.ubuntu.authd.pam.UnhandledMethod"
-	tx, _ := m.ModuleTransaction.(*dbusmodule.Transaction)
-	return tx.BusObject().Call(method, dbus.FlagNoAutoStart).Err
+	return m.BusObject().Call(method, dbus.FlagNoAutoStart).Err
 }
 
 // SimulateClientPanic forces the client to panic with the provided text.
