@@ -15,7 +15,8 @@ import (
 
 // Transaction is a [pam.Transaction] with dbus support.
 type Transaction struct {
-	obj dbus.BusObject
+	conn *dbus.Conn
+	obj  dbus.BusObject
 }
 
 type options struct {
@@ -38,10 +39,13 @@ const objectPath = "/com/ubuntu/authd/pam"
 // FIXME: dbus.Variant does not support maybe types, so we're using a variant string instead.
 const variantNothing = "<@mv nothing>"
 
+// Statically Ensure that [Transaction] implements [pam.ModuleTransaction].
+var _ pam.ModuleTransaction = &Transaction{}
+
 // NewTransaction creates a new [dbusmodule.Transaction] with the provided connection.
 // A [pam.ModuleTransaction] implementation is returned together with a cleanup function that
 // should be called to release the connection.
-func NewTransaction(address string, o ...TransactionOptions) (tx pam.ModuleTransaction, cleanup func(), err error) {
+func NewTransaction(address string, o ...TransactionOptions) (tx *Transaction, cleanup func(), err error) {
 	opts := options{}
 	for _, f := range o {
 		f(&opts)
@@ -64,12 +68,19 @@ func NewTransaction(address string, o ...TransactionOptions) (tx pam.ModuleTrans
 		}
 	}
 	obj := conn.Object(ifaceName, objectPath)
-	return &Transaction{obj: obj}, cleanup, nil
+
+	return &Transaction{conn: conn, obj: obj}, cleanup, nil
 }
 
 // BusObject gets the DBus object.
 func (tx *Transaction) BusObject() dbus.BusObject {
 	return tx.obj
+}
+
+// Context returns the context associated with the connection.  The
+// context will be cancelled when the connection is closed.
+func (tx *Transaction) Context() context.Context {
+	return tx.conn.Context()
 }
 
 // SetData allows to save any value in the module data that is preserved
