@@ -50,6 +50,19 @@ func mainFunc() error {
 	}
 	defer closeFunc()
 
+	actionDone := make(chan struct{})
+	defer close(actionDone)
+
+	go func() {
+		select {
+		case <-actionDone:
+		case <-mTx.Context().Done():
+			log.Warningf(context.Background(), "[%v] D-Bus Connection closed: %v",
+				os.Getpid(), mTx.Context().Err())
+			os.Exit(255)
+		}
+	}()
+
 	action, args := args[0], args[1:]
 
 	flags := pam.Flags(0)

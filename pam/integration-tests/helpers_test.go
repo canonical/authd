@@ -38,6 +38,10 @@ type authdInstance struct {
 	cleanup          func()
 }
 
+// pamExecChildName is the file name of the authd-pam helper binary built by
+// [buildPAMExecChild] and forked by the PAM exec module.
+const pamExecChildName = "authd-pam"
+
 var (
 	sharedAuthdInstance = authdInstance{}
 )
@@ -186,7 +190,7 @@ func pamExecChildGoBuildArgs(output string) []string {
 func buildPAMExecChild(t *testing.T) string {
 	t.Helper()
 
-	authdPam := filepath.Join(t.TempDir(), "authd-pam")
+	authdPam := filepath.Join(t.TempDir(), pamExecChildName)
 
 	//nolint:gosec // G204 - test-only code; args are controlled by pamExecChildGoBuildArgs.
 	cmd := exec.Command("go", pamExecChildGoBuildArgs(authdPam)...)
@@ -569,4 +573,38 @@ func requireRunnerResult(t *testing.T, sessionMode authd.SessionMode, goldenCont
 	t.Helper()
 
 	requireRunnerResultForUser(t, sessionMode, "", goldenContent)
+}
+
+// findPAMExecChildPID returns the PID of the authd-pam helper child (the
+// binary built by [buildPAMExecChild]) spawned by the PAM exec module.
+func findPAMExecChildPID(t *testing.T, parentPID int) int {
+	t.Helper()
+
+	taskDir := fmt.Sprintf("/proc/%d/task", parentPID)
+	tids, err := os.ReadDir(taskDir)
+	require.NoError(t, err, "Reading %s", taskDir)
+
+	for _, tid := range tids {
+		data, err := os.ReadFile(filepath.Join(taskDir, tid.Name(), "children"))
+		if err != nil {
+			continue
+		}
+		for _, field := range strings.Fields(string(data)) {
+			pid, err := strconv.Atoi(field)
+			require.NoError(t, err, "Parsing child PID %q", field)
+
+			commBytes, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
+			if err != nil {
+				// The child may have exited between listing and reading.
+				continue
+			}
+			if strings.TrimSpace(string(commBytes)) == pamExecChildName {
+				return pid
+			}
+		}
+	}
+
+	require.FailNow(t, "PAM exec child not found",
+		"PAM runner pid %d has no %q child", parentPID, pamExecChildName)
+	return 0
 }

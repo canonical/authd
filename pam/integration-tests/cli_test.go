@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -47,6 +48,7 @@ func TestCLIAuthenticate(t *testing.T) {
 		extraArgs          []string
 		socketPath         string // override socket path
 		useCancelableAuthd bool
+		skipRunnerCheck    bool // skip the final runner-result assertion (use for tests that kill the runner)
 
 		test func(t *testing.T, c *ptytest.Console)
 		// testWithSignals is like test but receives a signalFn that creates a broker
@@ -685,6 +687,35 @@ func TestCLIAuthenticate(t *testing.T) {
 				cliWaitForResult(t, c)
 			},
 		},
+		//nolint:dupl // This is not a duplicate test
+		"Exit_the_pam_client_if_parent_pam_application_is_stopped": {
+			skipRunnerCheck:  true,
+			expectedExitCode: -1,
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				c.WaitFor(t, `Username:`)
+
+				parentPID := c.Pid()
+				helperPID := findPAMExecChildPID(t, parentPID)
+				t.Logf("Found %s helper child pid %d under PAM runner pid %d",
+					pamExecChildName, helperPID, parentPID)
+
+				// Kill the parent PAM application. This tears down the
+				// private D-Bus server that the PAM module was hosting for
+				// the helper, which is the condition the helper is supposed
+				// to detect.
+				c.Signal(t, syscall.SIGTERM)
+
+				// The helper must terminate on its own once it sees the
+				// disconnect.
+				require.Eventually(t, func() bool {
+					return syscall.Kill(helperPID, 0) == syscall.ESRCH
+				}, sleepDuration(1*time.Second), 50*time.Millisecond,
+					"authd-pam helper child (pid %d) was not terminated after parent was killed",
+					helperPID)
+			},
+		},
 
 		"Error_if_cannot_connect_to_authd": {
 			socketPath:       "/some-path/not-existent-socket",
@@ -771,7 +802,9 @@ func TestCLIAuthenticate(t *testing.T) {
 
 			golden.CheckOrUpdate(t, consoleOutput)
 			localgroupstestutils.RequireGroupFile(t, groupFileOutput, golden.Path(t))
-			requireRunnerResultForUser(t, authd.SessionMode_LOGIN, tc.clientOptions.PamUser, consoleOutput)
+			if !tc.skipRunnerCheck {
+				requireRunnerResultForUser(t, authd.SessionMode_LOGIN, tc.clientOptions.PamUser, consoleOutput)
+			}
 		})
 	}
 }
