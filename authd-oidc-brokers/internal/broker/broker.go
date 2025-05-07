@@ -570,7 +570,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 
 		if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
-			log.Warningf(context.Background(), "User %q is not in the list of allowed users", authInfo.UserInfo.Name)
+			log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
 			return AuthDenied, errorMessage{Message: "user not allowed in broker configuration"}
 		}
 
@@ -684,7 +684,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 	}
 
 	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
-		log.Warningf(context.Background(), "User %q is not in the list of allowed users", authInfo.UserInfo.Name)
+		log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
 		return AuthDenied, errorMessage{Message: "user not allowed in broker configuration"}
 	}
 
@@ -707,6 +707,12 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 // userNameIsAllowed checks whether the user's username is allowed to access the machine.
 func (b *Broker) userNameIsAllowed(userName string) bool {
 	return b.cfg.userNameIsAllowed(b.provider.NormalizeUsername(userName))
+}
+
+func (b *Broker) userNotAllowedLogMsg(userName string) string {
+	logMsg := fmt.Sprintf("User %q is not in the list of allowed users.", userName)
+	logMsg += fmt.Sprintf("\nYou can add the user to allowed_users in %s", b.cfg.ConfigFile)
+	return logMsg
 }
 
 func (b *Broker) startAuthenticate(sessionID string) (context.Context, error) {
