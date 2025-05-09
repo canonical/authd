@@ -679,16 +679,32 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 	}
 
-	if err := b.cfg.registerOwner(b.cfg.ConfigFile, authInfo.UserInfo.Name); err != nil {
-		// The user is not allowed if we fail to create the owner-autoregistration file.
-		// Otherwise the owner might change if the broker is restarted.
-		log.Errorf(context.Background(), "Failed to assign the owner role: %v", err)
-		return AuthDenied, errorMessage{Message: "could not register the owner"}
+	if b.cfg.shouldRegisterOwner() {
+		if err := b.cfg.registerOwner(b.cfg.ConfigFile, authInfo.UserInfo.Name); err != nil {
+			// The user is not allowed if we fail to create the owner-autoregistration file.
+			// Otherwise the owner might change if the broker is restarted.
+			log.Errorf(context.Background(), "Failed to assign the owner role: %v", err)
+			return AuthDenied, errorMessage{Message: "could not register the owner"}
+		}
 	}
 
 	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
 		log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
 		return AuthDenied, errorMessage{Message: "user not allowed in broker configuration"}
+	}
+
+	// Add extra groups to the user info.
+	for _, name := range b.cfg.extraGroups {
+		log.Debugf(context.Background(), "Adding extra group %q", name)
+		authInfo.UserInfo.Groups = append(authInfo.UserInfo.Groups, info.Group{Name: name})
+	}
+
+	if b.isOwner(authInfo.UserInfo.Name) {
+		// Add the owner extra groups to the user info.
+		for _, name := range b.cfg.ownerExtraGroups {
+			log.Debugf(context.Background(), "Adding owner extra group %q", name)
+			authInfo.UserInfo.Groups = append(authInfo.UserInfo.Groups, info.Group{Name: name})
+		}
 	}
 
 	if session.isOffline {
@@ -710,6 +726,11 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 // userNameIsAllowed checks whether the user's username is allowed to access the machine.
 func (b *Broker) userNameIsAllowed(userName string) bool {
 	return b.cfg.userNameIsAllowed(b.provider.NormalizeUsername(userName))
+}
+
+// isOwner returns true if the user is the owner of the machine.
+func (b *Broker) isOwner(userName string) bool {
+	return b.cfg.owner == b.provider.NormalizeUsername(userName)
 }
 
 func (b *Broker) userNotAllowedLogMsg(userName string) string {

@@ -38,6 +38,10 @@ const (
 	homeDirKey = "home_base_dir"
 	// SSHSuffixKey is the key in the config file for the SSH allowed suffixes.
 	sshSuffixesKey = "ssh_allowed_suffixes"
+	// extraGroupsKey is the key in the config file for the extra groups to add to each authd user.
+	extraGroupsKey = "extra_groups"
+	// ownerExtraGroupsKey is the key in the config file for the extra groups to add to the owner.
+	ownerExtraGroupsKey = "owner_extra_groups"
 
 	// allUsersKeyword is the keyword for the `allowed_users` key that allows access to all users.
 	allUsersKeyword = "ALL"
@@ -77,6 +81,8 @@ type userConfig struct {
 	ownerMutex            *sync.RWMutex
 	homeBaseDir           string
 	allowedSSHSuffixes    []string
+	extraGroups           []string
+	ownerExtraGroups      []string
 
 	provider provider
 }
@@ -152,6 +158,9 @@ func (uc *userConfig) populateUsersConfig(users *ini.Section) {
 	// We need to read the owner key after we call HasKey, because the key is created
 	// when we call the "Key" function and we can't distinguish between empty and unset.
 	uc.owner = uc.provider.NormalizeUsername(users.Key(ownerKey).String())
+
+	uc.extraGroups = users.Key(extraGroupsKey).Strings(",")
+	uc.ownerExtraGroups = users.Key(ownerExtraGroupsKey).Strings(",")
 }
 
 // parseConfigFile parses the config file and returns a map with the configuration keys and values.
@@ -231,10 +240,6 @@ func (uc *userConfig) registerOwner(cfgPath, userName string) error {
 	// considered the owner.
 	uc.ownerMutex.Lock()
 	defer uc.ownerMutex.Unlock()
-
-	if !uc.shouldRegisterOwner() {
-		return nil
-	}
 
 	if cfgPath == "" {
 		uc.owner = uc.provider.NormalizeUsername(userName)

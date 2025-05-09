@@ -391,6 +391,10 @@ func TestIsAuthenticated(t *testing.T) {
 		sessionOffline              bool
 		username                    string
 		forceProviderAuthentication bool
+		userDoesNotBecomeOwner      bool
+		allUsersAllowed             bool
+		extraGroups                 []string
+		ownerExtraGroups            []string
 
 		firstMode                string
 		firstSecret              string
@@ -481,6 +485,29 @@ func TestIsAuthenticated(t *testing.T) {
 			firstMode:                   authmodes.Password,
 			token:                       &tokenOptions{},
 			forceProviderAuthentication: true,
+		},
+		"Extra_groups_configured": {
+			firstMode:                authmodes.Password,
+			token:                    &tokenOptions{},
+			groupsReturnedByProvider: []info.Group{{Name: "remote-group"}},
+			extraGroups:              []string{"extra-group"},
+			wantGroups:               []info.Group{{Name: "remote-group"}, {Name: "extra-group"}},
+		},
+		"Owner_extra_groups_configured": {
+			firstMode:                authmodes.Password,
+			token:                    &tokenOptions{},
+			groupsReturnedByProvider: []info.Group{{Name: "remote-group"}},
+			ownerExtraGroups:         []string{"owner-group"},
+			wantGroups:               []info.Group{{Name: "remote-group"}, {Name: "owner-group"}},
+		},
+		"Owner_extra_groups_configured_but_user_does_not_become_owner": {
+			firstMode:                authmodes.Password,
+			token:                    &tokenOptions{},
+			groupsReturnedByProvider: []info.Group{{Name: "remote-group"}},
+			userDoesNotBecomeOwner:   true,
+			allUsersAllowed:          true,
+			ownerExtraGroups:         []string{"owner-group"},
+			wantGroups:               []info.Group{{Name: "remote-group"}},
 		},
 
 		"Error_when_authentication_data_is_invalid":         {invalidAuthData: true},
@@ -582,8 +609,11 @@ func TestIsAuthenticated(t *testing.T) {
 				Config:                      broker.Config{DataDir: dataDir},
 				getUserInfoFails:            tc.getUserInfoFails,
 				ownerAllowed:                true,
-				firstUserBecomesOwner:       true,
+				firstUserBecomesOwner:       !tc.userDoesNotBecomeOwner,
+				allUsersAllowed:             tc.allUsersAllowed,
 				forceProviderAuthentication: tc.forceProviderAuthentication,
+				extraGroups:                 tc.extraGroups,
+				ownerExtraGroups:            tc.ownerExtraGroups,
 			}
 			if tc.customHandlers == nil {
 				// Use the default provider URL if no custom handlers are provided.

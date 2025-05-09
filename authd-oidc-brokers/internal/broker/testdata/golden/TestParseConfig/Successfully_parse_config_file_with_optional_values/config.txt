@@ -9,3 +9,5 @@ firstUserBecomesOwner=true
 owner=
 homeBaseDir=/home
 allowedSSHSuffixes=[]
+extraGroups=[]
+ownerExtraGroups=[]

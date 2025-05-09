@@ -57,6 +57,14 @@ func (cfg *Config) SetOwnerAllowed(ownerAllowed bool) {
 	cfg.ownerAllowed = ownerAllowed
 }
 
+func (cfg *Config) SetExtraGroups(extraGroups []string) {
+	cfg.extraGroups = extraGroups
+}
+
+func (cfg *Config) SetOwnerExtraGroups(ownerExtraGroups []string) {
+	cfg.ownerExtraGroups = ownerExtraGroups
+}
+
 func (cfg *Config) SetAllowedSSHSuffixes(allowedSSHSuffixes []string) {
 	cfg.allowedSSHSuffixes = allowedSSHSuffixes
 }

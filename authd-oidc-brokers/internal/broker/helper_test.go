@@ -31,6 +31,8 @@ type brokerForTestConfig struct {
 	ownerAllowed                bool
 	firstUserBecomesOwner       bool
 	owner                       string
+	extraGroups                 []string
+	ownerExtraGroups            []string
 	homeBaseDir                 string
 	allowedSSHSuffixes          []string
 	provider                    providers.Provider
@@ -76,6 +78,12 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	}
 	if cfg.ownerAllowed != false {
 		cfg.SetOwnerAllowed(cfg.ownerAllowed)
+	}
+	if cfg.extraGroups != nil {
+		cfg.SetExtraGroups(cfg.extraGroups)
+	}
+	if cfg.ownerExtraGroups != nil {
+		cfg.SetOwnerExtraGroups(cfg.ownerExtraGroups)
 	}
 
 	provider := &testutils.MockProvider{
