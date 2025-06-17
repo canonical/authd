@@ -86,5 +86,9 @@ SystemCallFilter=@system-service
 # This makes all files and directories not associated with process management invisible in /proc
 ProcSubset=pid
 
-# gpasswd requires this specific capability to alter the shadow files
-CapabilityBoundingSet=CAP_CHOWN
+# CAP_CHOWN: Required by gpasswd to alter the shadow files.
+# CAP_DAC_READ_SEARCH: Required by the chown system call to change ownership of
+#                      files not owned by the user. We need this to change the
+#                      ownership of the user's home directory when changing the
+#                      user's UID.
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_READ_SEARCH
