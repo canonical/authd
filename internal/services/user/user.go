@@ -218,6 +218,28 @@ func (s Service) ListGroups(ctx context.Context, req *authd.Empty) (*authd.Group
 	return &res, nil
 }
 
+// SetUserID sets the UID of a user.
+func (s Service) SetUserID(ctx context.Context, req *authd.SetUserIDRequest) (*authd.SetUserIDResponse, error) {
+	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
+		return nil, err
+	}
+
+	// authd uses lowercase usernames.
+	name := strings.ToLower(req.GetName())
+
+	if name == "" {
+		return nil, status.Error(codes.InvalidArgument, "no user name provided")
+	}
+
+	warnings, err := s.userManager.SetUserID(name, req.GetId())
+	if err != nil {
+		log.Errorf(ctx, "SetUserID: %v", err)
+		return nil, grpcError(err)
+	}
+
+	return &authd.SetUserIDResponse{Warnings: warnings}, nil
+}
+
 // userToProtobuf converts a types.UserEntry to authd.User.
 func userToProtobuf(u types.UserEntry) *authd.User {
 	return &authd.User{
