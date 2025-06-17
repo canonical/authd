@@ -120,7 +120,7 @@ func (s Service) ListUsers(ctx context.Context, req *authd.Empty) (*authd.Users,
 // LockUser marks a user as locked.
 func (s Service) LockUser(ctx context.Context, req *authd.LockUserRequest) (*authd.Empty, error) {
 	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
-		return nil, err
+		return nil, status.Error(codes.PermissionDenied, err.Error())
 	}
 
 	// authd uses lowercase usernames.
@@ -140,7 +140,7 @@ func (s Service) LockUser(ctx context.Context, req *authd.LockUserRequest) (*aut
 // UnlockUser marks a user as unlocked.
 func (s Service) UnlockUser(ctx context.Context, req *authd.UnlockUserRequest) (*authd.Empty, error) {
 	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
-		return nil, err
+		return nil, status.Error(codes.PermissionDenied, err.Error())
 	}
 
 	// authd uses lowercase usernames.
@@ -221,7 +221,7 @@ func (s Service) ListGroups(ctx context.Context, req *authd.Empty) (*authd.Group
 // SetUserID sets the UID of a user.
 func (s Service) SetUserID(ctx context.Context, req *authd.SetUserIDRequest) (*authd.SetUserIDResponse, error) {
 	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
-		return nil, err
+		return nil, status.Error(codes.PermissionDenied, err.Error())
 	}
 
 	// authd uses lowercase usernames.
