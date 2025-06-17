@@ -46,4 +46,5 @@ func NewUserServiceClient() (authd.UserServiceClient, error) {
 func init() {
 	UserCmd.AddCommand(lockCmd)
 	UserCmd.AddCommand(unlockCmd)
+	UserCmd.AddCommand(setUIDCmd)
 }

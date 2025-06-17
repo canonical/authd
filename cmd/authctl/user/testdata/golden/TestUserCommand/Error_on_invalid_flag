@@ -5,6 +5,7 @@ Usage:
 Available Commands:
   lock        Lock (disable) a user managed by authd
   unlock      Unlock (enable) a user managed by authd
+  set-uid     Set the UID of a user managed by authd
 
 Flags:
   -h, --help   help for user
