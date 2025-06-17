@@ -193,3 +193,71 @@ func (m *Manager) UpdateLockedFieldForUser(username string, locked bool) error {
 
 	return nil
 }
+
+// SetUserID updates the UID of a user.
+func (m *Manager) SetUserID(username string, newUID uint32) error {
+	// Temporarily disable foreign key constraints to allow updating the UID without violating constraints.
+	// SQLite does not allow disabling foreign key constraints in a transaction,
+	// so we do it before starting the transaction. See https://www.sqlite.org/foreignkeys.html#fk_enable
+	if _, err := m.db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	defer func() {
+		// Re-enable foreign key constraints after the operation
+		if _, err := m.db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+			log.Errorf(context.TODO(), "Failed to re-enable foreign keys: %v", err)
+		}
+	}()
+
+	// Start a transaction
+	tx, err := m.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+
+	// Ensure the transaction is committed or rolled back
+	defer func() {
+		err = commitOrRollBackTransaction(err, tx)
+	}()
+
+	// Check if the new UID is already in use
+	existingUser, err := userByID(tx, newUID)
+	if err != nil && !errors.Is(err, NoDataFoundError{}) {
+		return fmt.Errorf("failed to check if new UID is already in use: %w", err)
+	}
+	if existingUser.Name != "" && existingUser.Name != username {
+		log.Errorf(context.TODO(), "UID %d already in use by user %q", newUID, existingUser.Name)
+		return fmt.Errorf("UID %d already in use by a different user", newUID)
+	}
+	if existingUser.Name == username {
+		log.Debugf(context.TODO(), "User %q already has UID %d, no update needed", username, newUID)
+		return nil
+	}
+
+	// Get the old UID of the user
+	oldUser, err := userByName(tx, username)
+	if errors.Is(err, NoDataFoundError{}) {
+		return err
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get user by name: %w", err)
+	}
+	oldUID := oldUser.UID
+
+	// Update the users table
+	if _, err := tx.Exec(`UPDATE users SET uid = ? WHERE name = ?`, newUID, username); err != nil {
+		return err
+	}
+
+	// Update the users_to_groups table
+	if _, err := tx.Exec(`UPDATE users_to_groups SET uid = ? WHERE uid = ?`, newUID, oldUID); err != nil {
+		return err
+	}
+
+	// Update the users_to_local_groups table
+	if _, err := tx.Exec(`UPDATE users_to_local_groups SET uid = ? WHERE uid = ?`, newUID, oldUID); err != nil {
+		return err
+	}
+
+	return nil
+}

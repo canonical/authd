@@ -7,13 +7,16 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/user"
 	"slices"
+	"strconv"
 	"sync"
 	"syscall"
 
 	"github.com/canonical/authd/internal/decorate"
 	"github.com/canonical/authd/internal/users/db"
 	"github.com/canonical/authd/internal/users/localentries"
+	userslocking "github.com/canonical/authd/internal/users/locking"
 	"github.com/canonical/authd/internal/users/tempentries"
 	"github.com/canonical/authd/internal/users/types"
 	"github.com/canonical/authd/log"
@@ -362,6 +365,51 @@ func compareNewUserInfoWithUserInfoFromDB(newUserInfo, dbUserInfo types.UserInfo
 	}
 
 	return dbUserInfo.Equals(newUserInfo)
+}
+
+// SetUserID updates the UID of the user with the given name to the specified UID.
+func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err error) {
+	log.Debugf(context.TODO(), "Updating UID for user %q to %d", name, uid)
+
+	if name == "" {
+		return nil, errors.New("empty username")
+	}
+
+	// Call lckpwdf to avoid race conditions with other processes which add UIDs
+	err = userslocking.WriteLock()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { err = errors.Join(err, userslocking.WriteUnlock()) }()
+
+	// Check if the user already has the given UID
+	oldUser, err := m.db.UserByName(name)
+	if err != nil {
+		return nil, err
+	}
+	if oldUser.UID == uid {
+		warning := fmt.Sprintf("User %q already has UID %d", name, uid)
+		log.Info(context.Background(), warning)
+		return []string{warning}, nil
+	}
+
+	// Check if another user already has the given UID
+	_, err = user.LookupId(strconv.FormatUint(uint64(uid), 10))
+	var userErr user.UnknownUserIdError
+	if err != nil && !errors.As(err, &userErr) {
+		// Unexpected error
+		return nil, err
+	}
+	if err == nil {
+		return nil, fmt.Errorf("UID %d already exists", uid)
+	}
+
+	err = m.db.SetUserID(name, uid)
+	if err != nil {
+		return nil, err
+	}
+
+	return nil, nil
 }
 
 // checkGroupNameConflict checks if a group with the given name already exists.
