@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 
 	"github.com/canonical/authd/internal/proto/authd"
@@ -33,12 +34,17 @@ var setUIDCmd = &cobra.Command{
 			return err
 		}
 
-		_, err = client.SetUserID(context.Background(), &authd.SetUserIDRequest{
+		resp, err := client.SetUserID(context.Background(), &authd.SetUserIDRequest{
 			Name: name,
 			Id:   uint32(uid),
 		})
 		if err != nil {
 			return err
+		}
+
+		// Print any warnings returned by the server.
+		for _, warning := range resp.Warnings {
+			fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
 		}
 
 		return nil
