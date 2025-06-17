@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 )
@@ -129,4 +130,49 @@ func LockDir(dir string) (func() error, error) {
 	}
 
 	return unlock, nil
+}
+
+// ChownRecursiveFrom changes ownership of files and directories under the
+// specified root directory from the current UID/GID (fromUID, fromGID) to the
+// new UID/GID (toUID, toGID).
+//
+// It mirrors the behavior of chown_tree from shadow-utils:
+// https://github.com/shadow-maint/shadow/blob/e7ccd3df6845c184d155a2dd573f52d239c94337/lib/chowndir.c#L129-L141
+//
+// Symlinks are not followed.
+//
+// If toUID or toGID is negative, the UID or GID is not changed.
+func ChownRecursiveFrom(root string, fromUID, fromGID uint32, toUID, toGID int32) error {
+	if toUID < 0 && toGID < 0 {
+		return nil
+	}
+
+	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		stat, ok := info.Sys().(*syscall.Stat_t)
+		if !ok {
+			return fmt.Errorf("failed to get raw stat for %q", path)
+		}
+
+		if toUID >= 0 && stat.Uid == fromUID {
+			if err := os.Lchown(path, int(toUID), -1); err != nil {
+				return fmt.Errorf("failed to change ownership: %w", err)
+			}
+		}
+
+		if toGID >= 0 && stat.Gid == fromGID {
+			if err := os.Lchown(path, -1, int(toGID)); err != nil {
+				return fmt.Errorf("failed to change group ownership: %w", err)
+			}
+		}
+
+		return nil
+	})
 }
