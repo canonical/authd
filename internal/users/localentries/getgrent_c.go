@@ -4,19 +4,22 @@
 package localentries
 
 /*
+#define _GNU_SOURCE
+
 #include <stdlib.h>
 #include <pwd.h>
 #include <grp.h>
-#include <errno.h>
 */
 import "C"
 
 import (
 	"errors"
-	"fmt"
+	"runtime"
 	"sync"
+	"syscall"
+	"unsafe"
 
-	"github.com/ubuntu/authd/internal/errno"
+	"github.com/ubuntu/decorate"
 )
 
 // Group represents a group entry.
@@ -28,81 +31,98 @@ type Group struct {
 
 var getgrentMu sync.Mutex
 
-func getGroupEntry() (*C.struct_group, error) {
-	errno.Lock()
-	defer errno.Unlock()
-
-	cGroup := C.getgrent()
-	if cGroup != nil {
-		return cGroup, nil
-	}
-
-	err := errno.Get()
-	// It's not documented in the man page, but apparently getgrent sets errno to ENOENT when there are no more
-	// entries in the group database.
-	if errors.Is(err, errno.ErrNoEnt) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("getgrent: %v", err)
-	}
-	return cGroup, nil
-}
-
 // GetGroupEntries returns all group entries.
-func GetGroupEntries() ([]Group, error) {
-	// This function repeatedly calls getgrent, which iterates over the records in the group database.
+func GetGroupEntries() (entries []Group, err error) {
+	decorate.OnError(&err, "getgrent_r")
+
+	// This function repeatedly calls getgrent_r, which iterates over the records in the group database.
 	// Use a mutex to avoid that parallel calls to this function interfere with each other.
+	// It would be nice to use fgetgrent_r, that is thread safe, but it can only
+	// iterate over a stream, while we want to iterate over all the NSS sources too.
 	getgrentMu.Lock()
 	defer getgrentMu.Unlock()
 
 	C.setgrent()
 	defer C.endgrent()
 
-	var entries []Group
+	var group C.struct_group
+	var groupPtr *C.struct_group
+	buf := make([]C.char, 1024)
+
+	pinner := runtime.Pinner{}
+	defer pinner.Unpin()
+
+	pinner.Pin(&group)
+	pinner.Pin(&buf[0])
+
 	for {
-		cGroup, err := getGroupEntry()
-		if err != nil {
-			return nil, err
+		ret := C.getgrent_r(&group, &buf[0], C.size_t(len(buf)), &groupPtr)
+		errno := syscall.Errno(ret)
+
+		if errors.Is(errno, syscall.ERANGE) {
+			buf = make([]C.char, len(buf)*2)
+			pinner.Pin(&buf[0])
+			continue
 		}
-		if cGroup == nil {
-			// No more entries in the group database.
-			break
+		if errors.Is(errno, syscall.ENOENT) {
+			return entries, nil
+		}
+		if !errors.Is(errno, syscall.Errno(0)) {
+			return nil, errno
 		}
 
 		entries = append(entries, Group{
-			Name:   C.GoString(cGroup.gr_name),
-			GID:    uint32(cGroup.gr_gid),
-			Passwd: C.GoString(cGroup.gr_passwd),
+			Name:   C.GoString(groupPtr.gr_name),
+			Passwd: C.GoString(groupPtr.gr_passwd),
+			GID:    uint32(groupPtr.gr_gid),
 		})
 	}
-
-	return entries, nil
 }
 
 // ErrGroupNotFound is returned when a group is not found.
 var ErrGroupNotFound = errors.New("group not found")
 
 // GetGroupByName returns the group with the given name.
-func GetGroupByName(name string) (Group, error) {
-	errno.Lock()
-	defer errno.Unlock()
+func GetGroupByName(name string) (g Group, err error) {
+	decorate.OnError(&err, "getgrnam_r")
 
-	cGroup := C.getgrnam(C.CString(name))
-	if cGroup == nil {
-		err := errno.Get()
-		if err == nil ||
-			errors.Is(err, errno.ErrNoEnt) ||
-			errors.Is(err, errno.ErrSrch) ||
-			errors.Is(err, errno.ErrBadf) ||
-			errors.Is(err, errno.ErrPerm) {
+	var group C.struct_group
+	var groupPtr *C.struct_group
+	buf := make([]C.char, 256)
+
+	pinner := runtime.Pinner{}
+	defer pinner.Unpin()
+
+	pinner.Pin(&group)
+	pinner.Pin(&buf[0])
+
+	cName := C.CString(name)
+	defer C.free(unsafe.Pointer(cName))
+
+	for {
+		ret := C.getgrnam_r(cName, &group, &buf[0], C.size_t(len(buf)), &groupPtr)
+		errno := syscall.Errno(ret)
+
+		if errors.Is(errno, syscall.ERANGE) {
+			buf = make([]C.char, len(buf)*2)
+			pinner.Pin(&buf[0])
+			continue
+		}
+		if (errors.Is(errno, syscall.Errno(0)) && groupPtr == nil) ||
+			errors.Is(errno, syscall.ENOENT) ||
+			errors.Is(errno, syscall.ESRCH) ||
+			errors.Is(errno, syscall.EBADF) ||
+			errors.Is(errno, syscall.EPERM) {
 			return Group{}, ErrGroupNotFound
 		}
-		return Group{}, fmt.Errorf("getgrnam: %v", err)
-	}
+		if !errors.Is(errno, syscall.Errno(0)) {
+			return Group{}, errno
+		}
 
-	return Group{
-		Name: C.GoString(cGroup.gr_name),
-		GID:  uint32(cGroup.gr_gid),
-	}, nil
+		return Group{
+			Name:   C.GoString(groupPtr.gr_name),
+			GID:    uint32(groupPtr.gr_gid),
+			Passwd: C.GoString(groupPtr.gr_passwd),
+		}, nil
+	}
 }
