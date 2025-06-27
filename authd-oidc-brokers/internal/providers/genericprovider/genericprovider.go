@@ -8,6 +8,7 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
+	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
@@ -76,7 +77,7 @@ func (p GenericProvider) NormalizeUsername(username string) string {
 // VerifyUsername checks if the requested username matches the authenticated user.
 func (p GenericProvider) VerifyUsername(requestedUsername, username string) error {
 	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(username) {
-		return fmt.Errorf("requested username %q does not match the authenticated user %q", requestedUsername, username)
+		return providerErrors.NewForDisplayError("requested username %q does not match the authenticated user %q", requestedUsername, username)
 	}
 	return nil
 }

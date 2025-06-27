@@ -350,7 +350,7 @@ func (p Provider) SupportedOIDCAuthModes() []string {
 // VerifyUsername checks if the authenticated username matches the requested username and that both are valid.
 func (p Provider) VerifyUsername(requestedUsername, authenticatedUsername string) error {
 	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(authenticatedUsername) {
-		return fmt.Errorf("requested username %q does not match the authenticated user %q", requestedUsername, authenticatedUsername)
+		return providerErrors.NewForDisplayError("requested username %q does not match the authenticated user %q", requestedUsername, authenticatedUsername)
 	}
 
 	// Check that the usernames only contain the characters allowed by the Microsoft Entra username policy
@@ -362,7 +362,7 @@ func (p Provider) VerifyUsername(requestedUsername, authenticatedUsername string
 		return providerErrors.NewForDisplayError("the authenticated username %q contains invalid characters. Please report this error on https://github.com/ubuntu/authd/issues", authenticatedUsername)
 	}
 	if !usernameRegexp.MatchString(requestedUsername) {
-		return fmt.Errorf("requested username %q contains invalid characters", requestedUsername)
+		return providerErrors.NewForDisplayError("requested username %q contains invalid characters", requestedUsername)
 	}
 
 	return nil
