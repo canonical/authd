@@ -36,13 +36,14 @@ const (
 	ownerKey = "owner"
 	// homeDirKey is the key in the config file for the home directory prefix.
 	homeDirKey = "home_base_dir"
-	// SSHSuffixKey is the key in the config file for the SSH allowed suffixes.
-	sshSuffixesKey = "ssh_allowed_suffixes"
+	// sshSuffixesKey is the key in the config file for the SSH allowed suffixes.
+	sshSuffixesKey = "ssh_allowed_suffixes_first_auth"
+	// sshSuffixesKeyOld is the old key in the config file for the SSH allowed suffixes. It should be removed later.
+	sshSuffixesKeyOld = "ssh_allowed_suffixes"
 	// extraGroupsKey is the key in the config file for the extra groups to add to each authd user.
 	extraGroupsKey = "extra_groups"
 	// ownerExtraGroupsKey is the key in the config file for the extra groups to add to the owner.
 	ownerExtraGroupsKey = "owner_extra_groups"
-
 	// allUsersKeyword is the keyword for the `allowed_users` key that allows access to all users.
 	allUsersKeyword = "ALL"
 	// ownerUserKeyword is the keyword for the `allowed_users` key that allows access to the owner.
@@ -127,7 +128,13 @@ func (uc *userConfig) populateUsersConfig(users *ini.Section) {
 	}
 
 	uc.homeBaseDir = users.Key(homeDirKey).String()
-	uc.allowedSSHSuffixes = strings.Split(users.Key(sshSuffixesKey).String(), ",")
+
+	suffixesKey := sshSuffixesKey
+	// If we don't have the new key, we should try reading the old one instead.
+	if !users.HasKey(sshSuffixesKey) {
+		suffixesKey = sshSuffixesKeyOld
+	}
+	uc.allowedSSHSuffixes = strings.Split(users.Key(suffixesKey).String(), ",")
 
 	if uc.allowedUsers == nil {
 		uc.allowedUsers = make(map[string]struct{})

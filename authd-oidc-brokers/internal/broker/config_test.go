@@ -178,7 +178,7 @@ client_id = client_id
 allowed_users = ALL
 owner = machine_owner
 home_base_dir = /home
-allowed_ssh_suffixes = @issuer.url.com
+allowed_ssh_suffixes_first_auth = @issuer.url.com
 `,
 	"Only_owner_is_allowed": `
 [oidc]
@@ -189,7 +189,7 @@ client_id = client_id
 allowed_users = OWNER
 owner = machine_owner
 home_base_dir = /home
-allowed_ssh_suffixes = @issuer.url.com
+allowed_ssh_suffixes_first_auth = @issuer.url.com
 `,
 	"By_default_only_owner_is_allowed": `
 [oidc]
@@ -199,7 +199,7 @@ client_id = client_id
 [users]
 owner = machine_owner
 home_base_dir = /home
-allowed_ssh_suffixes = @issuer.url.com
+allowed_ssh_suffixes_first_auth = @issuer.url.com
 `,
 	"Only_owner_is_allowed_but_is_unset": `
 [oidc]
@@ -208,7 +208,7 @@ client_id = client_id
 
 [users]
 home_base_dir = /home
-allowed_ssh_suffixes = @issuer.url.com
+allowed_ssh_suffixes_first_auth = @issuer.url.com
 `,
 	"Only_owner_is_allowed_but_is_empty": `
 [oidc]
@@ -218,7 +218,7 @@ client_id = client_id
 [users]
 owner =
 home_base_dir = /home
-allowed_ssh_suffixes = @issuer.url.com
+allowed_ssh_suffixes_first_auth = @issuer.url.com
 `,
 	"Users_u1_and_u2_are_allowed": `
 [oidc]
@@ -228,7 +228,7 @@ client_id = client_id
 [users]
 allowed_users = u1,u2
 home_base_dir = /home
-allowed_ssh_suffixes = @issuer.url.com
+allowed_ssh_suffixes_first_auth = @issuer.url.com
 `,
 	"Unset_owner_and_u1_is_allowed": `
 [oidc]
@@ -238,7 +238,7 @@ client_id = client_id
 [users]
 allowed_users = OWNER,u1
 home_base_dir = /home
-allowed_ssh_suffixes = @issuer.url.com
+allowed_ssh_suffixes_first_auth = @issuer.url.com
 `,
 	"Set_owner_and_u1_is_allowed": `
 [oidc]
@@ -247,6 +247,17 @@ client_id = client_id
 
 [users]
 allowed_users = OWNER,u1
+owner = machine_owner
+home_base_dir = /home
+allowed_ssh_suffixes_first_auth = @issuer.url.com
+`,
+	"Support_old_suffixes_key": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = ALL
 owner = machine_owner
 home_base_dir = /home
 allowed_ssh_suffixes = @issuer.url.com
@@ -280,6 +291,7 @@ func TestParseUserConfig(t *testing.T) {
 			wantOwner:        "machine_owner",
 			wantAllowedUsers: []string{"u1"},
 		},
+		"Support_old_suffixes_key": {wantAllUsersAllowed: true, wantOwner: "machine_owner"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
