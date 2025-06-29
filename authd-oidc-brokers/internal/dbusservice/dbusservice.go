@@ -45,6 +45,7 @@ const intro = `
 		</method>
 		<method name="UserPreCheck">
 			<arg type="s" direction="in" name="username"/>
+			<arg type="s" direction="out" name="userInfo"/>
 		</method>
 	</interface>` + introspect.IntrospectDataString + `</node> `
 
