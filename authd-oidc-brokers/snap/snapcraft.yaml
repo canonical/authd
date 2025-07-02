@@ -46,6 +46,7 @@ parts:
     plugin: go
     override-build: |
       go mod download all
+      go mod vendor
       go build -o ${GOBIN}/semver semver/semver.go
   # Build the snap version from the git repository and current tree state.
   version:
