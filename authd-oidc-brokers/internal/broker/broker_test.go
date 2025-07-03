@@ -1202,6 +1202,18 @@ func TestUserPreCheck(t *testing.T) {
 			username:        "user@allowed",
 			allowedSuffixes: []string{"@other", "@something", "@allowed"},
 		},
+		"Successfully_allow_username_if_suffix_is_allow_all": {
+			username:        "user@doesnotmatter",
+			allowedSuffixes: []string{"*"},
+		},
+		"Successfully_allow_username_if_suffix_has_asterisk": {
+			username:        "user@allowed",
+			allowedSuffixes: []string{"*@allowed"},
+		},
+		"Successfully_allow_username_ignoring_empty_string_in_config": {
+			username:        "user@allowed",
+			allowedSuffixes: []string{"@anothersuffix", "", "@allowed"},
+		},
 		"Return_userinfo_with_correct_homedir_after_precheck": {
 			username:        "user@allowed",
 			allowedSuffixes: []string{"@allowed"},
@@ -1215,12 +1227,17 @@ func TestUserPreCheck(t *testing.T) {
 		},
 		"Error_when_username_does_not_match_any_of_the_allowed_suffixes": {
 			username:        "user@notallowed",
-			allowedSuffixes: []string{"@other", "@something", "@allowed"},
+			allowedSuffixes: []string{"@other", "@something", "@allowed", ""},
 			wantErr:         true,
 		},
 		"Error_when_no_allowed_suffixes_are_provided": {
 			username: "user@allowed",
 			wantErr:  true,
+		},
+		"Error_when_allowed_suffixes_has_only_empty_string": {
+			username:        "user@allowed",
+			allowedSuffixes: []string{""},
+			wantErr:         true,
 		},
 	}
 	for name, tc := range tests {

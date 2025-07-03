@@ -802,6 +802,12 @@ func (b *Broker) CancelIsAuthenticated(sessionID string) {
 func (b *Broker) UserPreCheck(username string) (string, error) {
 	found := false
 	for _, suffix := range b.cfg.allowedSSHSuffixes {
+		if suffix == "" {
+			continue
+		}
+
+		// If suffx is only "*", TrimPrefix will return the empty string and that works for the 'match all' case also.
+		suffix = strings.TrimPrefix(suffix, "*")
 		if strings.HasSuffix(username, suffix) {
 			found = true
 			break
