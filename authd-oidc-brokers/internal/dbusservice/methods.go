@@ -2,6 +2,7 @@ package dbusservice
 
 import (
 	"context"
+	"errors"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/ubuntu/authd/log"
@@ -37,6 +38,9 @@ func (s *Service) SelectAuthenticationMode(sessionID, authenticationModeName str
 // IsAuthenticated is the method through which the broker and the daemon will communicate once dbusInterface.IsAuthenticated is called.
 func (s *Service) IsAuthenticated(sessionID, authenticationData string) (access, data string, dbusErr *dbus.Error) {
 	access, data, err := s.broker.IsAuthenticated(sessionID, authenticationData)
+	if errors.Is(err, context.Canceled) {
+		return access, data, makeCanceledError()
+	}
 	if err != nil {
 		log.Warningf(context.Background(), "IsAuthenticated error: %v", err)
 		return "", "", dbus.MakeFailedError(err)
@@ -67,4 +71,9 @@ func (s *Service) UserPreCheck(username string) (userinfo string, dbusErr *dbus.
 		return "", dbus.MakeFailedError(err)
 	}
 	return userinfo, nil
+}
+
+// makeCanceledError creates a dbus.Error for a canceled operation.
+func makeCanceledError() *dbus.Error {
+	return &dbus.Error{Name: "com.ubuntu.authd.Canceled"}
 }
