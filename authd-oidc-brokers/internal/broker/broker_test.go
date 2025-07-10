@@ -1192,8 +1192,6 @@ func TestUserPreCheck(t *testing.T) {
 		username        string
 		allowedSuffixes []string
 		homePrefix      string
-
-		wantErr bool
 	}{
 		"Successfully_allow_username_with_matching_allowed_suffix": {
 			username:        "user@allowed",
@@ -1220,24 +1218,20 @@ func TestUserPreCheck(t *testing.T) {
 			homePrefix:      "/home/allowed/",
 		},
 
-		"Error_when_username_does_not_match_allowed_suffix": {
+		"Empty_userinfo_if_username_does_not_match_allowed_suffix": {
 			username:        "user@notallowed",
 			allowedSuffixes: []string{"@allowed"},
-			wantErr:         true,
 		},
-		"Error_when_username_does_not_match_any_of_the_allowed_suffixes": {
+		"Empty_userinfo_if_username_does_not_match_any_of_the_allowed_suffixes": {
 			username:        "user@notallowed",
 			allowedSuffixes: []string{"@other", "@something", "@allowed", ""},
-			wantErr:         true,
 		},
-		"Error_when_no_allowed_suffixes_are_provided": {
+		"Empty_userinfo_if_no_allowed_suffixes_are_provided": {
 			username: "user@allowed",
-			wantErr:  true,
 		},
-		"Error_when_allowed_suffixes_has_only_empty_string": {
+		"Empty_userinfo_if_allowed_suffixes_has_only_empty_string": {
 			username:        "user@allowed",
 			allowedSuffixes: []string{""},
-			wantErr:         true,
 		},
 	}
 	for name, tc := range tests {
@@ -1251,10 +1245,6 @@ func TestUserPreCheck(t *testing.T) {
 			})
 
 			got, err := b.UserPreCheck(tc.username)
-			if tc.wantErr {
-				require.Error(t, err, "UserPreCheck should have returned an error")
-				return
-			}
 			require.NoError(t, err, "UserPreCheck should not have returned an error")
 
 			golden.CheckOrUpdate(t, got)

@@ -799,6 +799,7 @@ func (b *Broker) CancelIsAuthenticated(sessionID string) {
 }
 
 // UserPreCheck checks if the user is valid and can be allowed to authenticate.
+// It returns the user info in JSON format if the user is valid, or an empty string if the user is not allowed.
 func (b *Broker) UserPreCheck(username string) (string, error) {
 	found := false
 	for _, suffix := range b.cfg.allowedSSHSuffixes {
@@ -815,7 +816,8 @@ func (b *Broker) UserPreCheck(username string) (string, error) {
 	}
 
 	if !found {
-		return "", fmt.Errorf("username %q does not match any allowed suffix", username)
+		// The username does not match any of the allowed suffixes.
+		return "", nil
 	}
 
 	u := info.NewUser(username, filepath.Join(b.cfg.homeBaseDir, username), "", "", "", nil)
