@@ -35,3 +35,11 @@ updates:
         update-types: [ "minor", "patch" ]
     commit-message:
       prefix: "deps(go-tools)"
+
+  ## git submodules
+  - package-ecosystem: "gitsubmodule"
+    directory: "/" # Directory containing .gitmodules
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps(submodule)"
