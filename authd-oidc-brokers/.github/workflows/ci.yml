@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          submodules: recursive
 
       - name: Build libhimmelblau
         # The code sanity check fails if himmelblau.h does not exist, so we generate it first.
@@ -29,6 +31,8 @@ jobs:
     runs-on: ubuntu-24.04 # ubuntu-latest-runner
     steps:
       - uses: actions/checkout@v5
+        with:
+          submodules: recursive
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
