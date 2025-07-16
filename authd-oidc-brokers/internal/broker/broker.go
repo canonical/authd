@@ -650,7 +650,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		userInfo, err := b.fetchUserInfo(ctx, session, &authInfo)
 		if err != nil && authInfo.UserInfo.Name == "" {
 			// We don't have a valid user info, so we can't proceed.
-			log.Error(context.Background(), err.Error())
+			log.Errorf(context.Background(), "could not fetch user info: %s", err)
 			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
 		}
 		if err != nil {
@@ -888,7 +888,7 @@ func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.A
 
 	userInfo, err = b.provider.GetUserInfo(ctx, t.Token, idToken, t.ProviderMetadata)
 	if err != nil {
-		return info.User{}, fmt.Errorf("could not get user info: %w", err)
+		return info.User{}, err
 	}
 
 	if err = b.provider.VerifyUsername(session.username, userInfo.Name); err != nil {
