@@ -54,6 +54,7 @@ parts:
     plugin: nil
     build-packages:
       - git # The script needs Git.
-    override-build: ./snap/get_version
+    override-build: |
+      craftctl set version="$(./snap/version)"
     after:
       - semver
