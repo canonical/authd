@@ -575,6 +575,8 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			return AuthDenied, errorMessage{Message: "user not allowed in broker configuration"}
 		}
 
+		// Store the auth info in the session so that we can use it when handling the
+		// next IsAuthenticated call for the new password mode.
 		session.authInfo = authInfo
 		session.nextAuthModes = []string{authmodes.NewPassword}
 
@@ -600,6 +602,8 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		// If the session is for changing the password, we don't need to refresh the token and user info (and we don't
 		// want the method call to return an error if refreshing the token or user info fails).
 		if session.mode == sessionmode.ChangePassword || session.mode == sessionmode.ChangePasswordOld {
+			// Store the auth info in the session so that we can use it when handling the
+			// next IsAuthenticated call for the new password mode.
 			session.authInfo = authInfo
 			return AuthNext, nil
 		}
@@ -642,7 +646,8 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			return AuthRetry, errorMessage{Message: "empty secret"}
 		}
 
-		// This mode must always come after a authentication mode, so it has to have an auth_info.
+		// This mode must always come after an authentication mode, so we should have auth info from the previous mode
+		// stored in the session.
 		authInfo = session.authInfo
 		if authInfo == nil {
 			log.Error(context.Background(), "could not get required information")
