@@ -1,0 +1,91 @@
+#!/bin/sh
+set -eu
+
+# This scripts prints the version of the snap based on the git tags and the
+# current branch. The version is determined as follows:
+#
+# If there's a tag prefixed with the current branch name, that tag is
+# used and the prefix is stripped. For example:
+# * msentraid-0.1.0 -> 0.1.0
+#
+# Else, the highest version tag that starts with a number (in contrast
+# to a prefix like "msentraid-") is used. For example:
+# * 0.1.0 -> 0.1.0
+#
+# 1. If current commit is tagged, that tag is used as the version as is.
+# 2. If current commit is not tagged, the version is:
+#    * When on main: <latest tag on current branch>+<commit_sha>
+#    * Else: <latest tag on current branch>+<commit_sha>.<last_commit_merged_from_main>
+#
+# The version is appended with ".dirty" if there are uncommitted changes.
+
+# strip_branch_tag_prefix removes any non-numeric prefix ending with a
+# dash (e.g. "msentraid-") from the tag name. We use this to remove the
+# branch name prefix from the tag name, but we do not just strip the
+# current branch name because we also want to support branching of a new
+# branch and use the latest tag from that branch (for example when
+# branching of the msentraid branch to test a fix, then that branch
+# should still use a valid version).
+# $1: tag: the tag name to strip the prefix from.
+strip_branch_tag_prefix() {
+    tag="${1}"
+
+    echo "${tag}" | sed 's/^[^0-9-]*-//'
+}
+
+get_version() {
+    current_branch=$(git branch --show-current)
+
+    # Get the highest version tag which is prefixed with the current branch name.
+    tag=$(git -c "versionsort.suffix=-pre" tag --sort=-v:refname --merged="${current_branch}" | grep "^${current_branch}-" | head -1)
+
+    # If there is no tag prefixed with the current branch name, use the most
+    # recent tag that does not have a non-numerical prefix (that's the case
+    # when we're building a snap for testing on a branch that's not
+    # "msentraid" or "google").
+    if [ -z "${tag}" ]; then
+        tag=$(git -c "versionsort.suffix=-pre" tag --sort=-v:refname --merged="${current_branch}" | grep -E '^[0-9]+' | head -1)
+    fi
+
+    version="${tag}"
+    if [ -z "${version}" ]; then
+        # No tag found, use "notag" as version.
+        version="notag"
+    fi
+    version=$(strip_branch_tag_prefix "${version}")
+
+    # If the highest version tag is on the current commit, use it as is after
+    # stripping the prefix.
+    if [ -n "${tag}" ] && [ "$(git describe --tags --exact-match 2>/dev/null)" = "${tag}" ]; then
+        echo "${version}"
+        return
+    fi
+
+    # Current commit is not tagged, append commit(s) sha.
+    version="${version}+$(git rev-parse --short=7 HEAD)"
+
+    # Main branch will be set as is.
+    if [ "${current_branch}" = "main" ]; then
+        echo "${version}"
+        return
+    fi
+
+    # Get the short version of last commit merged from the main branch.
+    last_commit_on_main=$(git merge-base main HEAD)
+    last_commit_on_main=$(git rev-parse --short=7 "${last_commit_on_main}")
+    echo "${version}.${last_commit_on_main}"
+}
+
+version=$(get_version)
+
+if ! "${SEMVER:-semver}" check "${version}" >/dev/null; then
+    echo "Version ${version} is not a valid semantic version."
+    exit 1
+fi
+
+# append ".dirty" if there are uncommitted changes.
+if [ -n "$(git status --porcelain)" ]; then
+    version="${version}.dirty"
+fi
+
+echo "${version}"
