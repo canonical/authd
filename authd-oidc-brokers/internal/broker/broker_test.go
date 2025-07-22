@@ -237,6 +237,8 @@ func TestGetAuthenticationModes(t *testing.T) {
 				require.NoError(t, err, "Setup: MkdirAll should not have returned an error")
 				err = os.WriteFile(b.TokenPathForSession(sessionID), []byte("some token"), 0600)
 				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
+				err = os.WriteFile(b.PasswordFilepathForSession(sessionID), []byte("some password"), 0600)
+				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
 			}
 			if tc.nextAuthMode != "" {
 				b.SetNextAuthModes(sessionID, []string{tc.nextAuthMode})
@@ -350,6 +352,8 @@ func TestSelectAuthenticationMode(t *testing.T) {
 				err := os.MkdirAll(filepath.Dir(b.TokenPathForSession(sessionID)), 0700)
 				require.NoError(t, err, "Setup: MkdirAll should not have returned an error")
 				err = os.WriteFile(b.TokenPathForSession(sessionID), []byte("some token"), 0600)
+				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
+				err = os.WriteFile(b.PasswordFilepathForSession(sessionID), []byte("some password"), 0600)
 				require.NoError(t, err, "Setup: WriteFile should not have returned an error")
 			}
 			if tc.nextAuthMode != "" {
@@ -770,7 +774,7 @@ func TestIsAuthenticated(t *testing.T) {
 
 			// Ensure that the token content is generic to avoid golden file conflicts
 			if _, err := os.Stat(b.TokenPathForSession(sessionID)); err == nil {
-				err := os.WriteFile(b.TokenPathForSession(sessionID), []byte("Definitely an encrypted token"), 0600)
+				err := os.WriteFile(b.TokenPathForSession(sessionID), []byte("Definitely a token"), 0600)
 				require.NoError(t, err, "Teardown: Failed to write generic token file")
 			}
 			passwordPath := b.PasswordFilepathForSession(sessionID)
@@ -921,7 +925,7 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			for _, sessionID := range []string{firstSession, secondSession} {
 				// Ensure that the token content is generic to avoid golden file conflicts
 				if _, err := os.Stat(b.TokenPathForSession(sessionID)); err == nil {
-					err := os.WriteFile(b.TokenPathForSession(sessionID), []byte("Definitely an encrypted token"), 0600)
+					err := os.WriteFile(b.TokenPathForSession(sessionID), []byte("Definitely a token"), 0600)
 					require.NoError(t, err, "Teardown: Failed to write generic token file")
 				}
 				passwordPath := b.PasswordFilepathForSession(sessionID)

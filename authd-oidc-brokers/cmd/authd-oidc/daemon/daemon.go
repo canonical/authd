@@ -30,9 +30,8 @@ type App struct {
 
 // only overriable for tests.
 type systemPaths struct {
-	BrokerConf            string
-	DataDir               string
-	OldEncryptedTokensDir string
+	BrokerConf string
+	DataDir    string
 }
 
 // daemonConfig defines configuration parameters of the daemon.
@@ -56,24 +55,17 @@ func New(name string) *App {
 			// Command parsing has been successful. Returns to not print usage anymore.
 			a.rootCmd.SilenceUsage = true
 
-			// Before version 0.2, we used to store the tokens encrypted
-			// in a different directory. For backward compatibility, we
-			// try to use the encrypted tokens from the old directory
-			// if they are not found in the new one.
-			oldEncryptedTokensDir := filepath.Join("/var", "lib", name)
 			dataDir := filepath.Join("/var", "lib", name)
 			configDir := "."
 			if snapData := os.Getenv("SNAP_DATA"); snapData != "" {
-				oldEncryptedTokensDir = filepath.Join(snapData, "cache")
 				dataDir = snapData
 				configDir = snapData
 			}
 			// Set config defaults
 			a.config = daemonConfig{
 				Paths: systemPaths{
-					BrokerConf:            filepath.Join(configDir, "broker.conf"),
-					DataDir:               dataDir,
-					OldEncryptedTokensDir: oldEncryptedTokensDir,
+					BrokerConf: filepath.Join(configDir, "broker.conf"),
+					DataDir:    dataDir,
 				},
 			}
 
@@ -146,9 +138,8 @@ func (a *App) serve(config daemonConfig) error {
 	}
 
 	b, err := broker.New(broker.Config{
-		ConfigFile:            config.Paths.BrokerConf,
-		DataDir:               config.Paths.DataDir,
-		OldEncryptedTokensDir: config.Paths.OldEncryptedTokensDir,
+		ConfigFile: config.Paths.BrokerConf,
+		DataDir:    config.Paths.DataDir,
 	})
 	if err != nil {
 		return err

@@ -39,9 +39,8 @@ const (
 
 // Config is the configuration for the broker.
 type Config struct {
-	ConfigFile            string
-	DataDir               string
-	OldEncryptedTokensDir string
+	ConfigFile string
+	DataDir    string
 
 	userConfig
 }
@@ -69,14 +68,13 @@ type session struct {
 	attemptsPerMode map[string]int
 	nextAuthModes   []string
 
-	oidcServer            *oidc.Provider
-	oauth2Config          oauth2.Config
-	authInfo              map[string]any
-	isOffline             bool
-	userDataDir           string
-	passwordPath          string
-	tokenPath             string
-	oldEncryptedTokenPath string
+	oidcServer   *oidc.Provider
+	oauth2Config oauth2.Config
+	authInfo     map[string]any
+	isOffline    bool
+	userDataDir  string
+	passwordPath string
+	tokenPath    string
 
 	isAuthenticating *isAuthenticatedCtx
 }
@@ -174,7 +172,6 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 	s.tokenPath = filepath.Join(s.userDataDir, "token.json")
 	// The password is stored in $DATA_DIR/$ISSUER/$USERNAME/password.
 	s.passwordPath = filepath.Join(s.userDataDir, "password")
-	s.oldEncryptedTokenPath = filepath.Join(b.cfg.OldEncryptedTokensDir, issuer, username+".cache")
 
 	// Construct an OIDC provider via OIDC discovery.
 	s.oidcServer, err = b.connectToOIDCServer(context.Background())
@@ -260,8 +257,8 @@ func (b *Broker) availableAuthModes(session session) (availableModes []string, e
 	switch session.mode {
 	case sessionmode.ChangePassword, sessionmode.ChangePasswordOld:
 		// Session is for changing the password.
-		if !tokenExists(session) {
-			return nil, errors.New("user has no cached token")
+		if !passwordFileExists(session) {
+			return nil, errors.New("password file does not exist, cannot change password")
 		}
 		return []string{authmodes.Password}, nil
 
@@ -283,7 +280,7 @@ func (b *Broker) availableAuthModes(session session) (availableModes []string, e
 func authModeIsAvailable(session session, authMode string) bool {
 	switch authMode {
 	case authmodes.Password:
-		return tokenExists(session)
+		return tokenExists(session) && passwordFileExists(session)
 	case authmodes.NewPassword:
 		return true
 	case authmodes.Device, authmodes.DeviceQr:
@@ -293,20 +290,19 @@ func authModeIsAvailable(session session, authMode string) bool {
 }
 
 func tokenExists(session session) bool {
-	tokenExists, err := fileutils.FileExists(session.tokenPath)
+	exists, err := fileutils.FileExists(session.tokenPath)
 	if err != nil {
 		log.Warningf(context.Background(), "Could not check if token exists: %v", err)
 	}
-	if tokenExists {
-		return true
-	}
+	return exists
+}
 
-	// Check the old encrypted token path.
-	tokenExists, err = fileutils.FileExists(session.oldEncryptedTokenPath)
+func passwordFileExists(session session) bool {
+	exists, err := fileutils.FileExists(session.passwordPath)
 	if err != nil {
-		log.Warningf(context.Background(), "Could not check if old encrypted token exists: %v", err)
+		log.Warningf(context.Background(), "Could not check if local password file exists: %v", err)
 	}
-	return tokenExists
+	return exists
 }
 
 func (b *Broker) authModesSupportedByUI(supportedUILayouts []map[string]string) (supportedModes []string) {
@@ -583,41 +579,20 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		return AuthNext, nil
 
 	case authmodes.Password:
-		useOldEncryptedToken, err := token.UseOldEncryptedToken(session.tokenPath, session.passwordPath, session.oldEncryptedTokenPath)
+		ok, err := password.CheckPassword(secret, session.passwordPath)
 		if err != nil {
 			log.Error(context.Background(), err.Error())
 			return AuthDenied, errorMessage{Message: "could not check password file"}
 		}
+		if !ok {
+			log.Noticef(context.Background(), "Authentication failure: incorrect local password for user %q", session.username)
+			return AuthRetry, errorMessage{Message: "incorrect password"}
+		}
 
-		if useOldEncryptedToken {
-			authInfo, err = token.LoadOldEncryptedAuthInfo(session.oldEncryptedTokenPath, secret)
-			if err != nil {
-				log.Error(context.Background(), err.Error())
-				return AuthDenied, errorMessage{Message: "could not load encrypted token"}
-			}
-
-			// We were able to decrypt the old token with the password, so we can now hash and store the password in the
-			// new format.
-			if err = password.HashAndStorePassword(secret, session.passwordPath); err != nil {
-				log.Error(context.Background(), err.Error())
-				return AuthDenied, errorMessage{Message: "could not store password"}
-			}
-		} else {
-			ok, err := password.CheckPassword(secret, session.passwordPath)
-			if err != nil {
-				log.Error(context.Background(), err.Error())
-				return AuthDenied, errorMessage{Message: "could not check password"}
-			}
-			if !ok {
-				log.Noticef(context.Background(), "Authentication failure: incorrect local password for user %q", session.username)
-				return AuthRetry, errorMessage{Message: "incorrect password"}
-			}
-
-			authInfo, err = token.LoadAuthInfo(session.tokenPath)
-			if err != nil {
-				log.Error(context.Background(), err.Error())
-				return AuthDenied, errorMessage{Message: "could not load stored token"}
-			}
+		authInfo, err = token.LoadAuthInfo(session.tokenPath)
+		if err != nil {
+			log.Error(context.Background(), err.Error())
+			return AuthDenied, errorMessage{Message: "could not load stored token"}
 		}
 
 		// If the session is for changing the password, we don't need to refresh the token and user info (and we don't
@@ -716,10 +691,6 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		return AuthDenied, errorMessage{Message: "could not cache user info"}
 	}
 
-	// At this point we successfully stored the hashed password and a new token, so we can now safely remove any old
-	// encrypted token.
-	token.CleanupOldEncryptedToken(session.oldEncryptedTokenPath)
-
 	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 }
 
@@ -807,7 +778,7 @@ func (b *Broker) UserPreCheck(username string) (string, error) {
 			continue
 		}
 
-		// If suffx is only "*", TrimPrefix will return the empty string and that works for the 'match all' case also.
+		// If suffix is only "*", TrimPrefix will return the empty string and that works for the 'match all' case also.
 		suffix = strings.TrimPrefix(suffix, "*")
 		if strings.HasSuffix(username, suffix) {
 			found = true
