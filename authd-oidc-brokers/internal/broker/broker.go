@@ -535,8 +535,7 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 		return AuthCancelled, string(msg), ctx.Err()
 	}
 
-	switch access {
-	case AuthRetry:
+	if access == AuthRetry {
 		session.attemptsPerMode[session.selectedMode]++
 		if session.attemptsPerMode[session.selectedMode] == maxAuthAttempts {
 			access = AuthDenied
