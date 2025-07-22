@@ -164,28 +164,55 @@ func TestGetAuthenticationModes(t *testing.T) {
 		sessionID        string
 		supportedLayouts []string
 
-		providerAddress       string
-		tokenExists           bool
-		nextAuthMode          string
-		unavailableProvider   bool
-		deviceAuthUnsupported bool
+		providerAddress                    string
+		token                              *tokenOptions
+		nextAuthMode                       string
+		unavailableProvider                bool
+		deviceAuthUnsupported              bool
+		registerDevice                     bool
+		providerSupportsDeviceRegistration bool
 
 		wantErr       bool
 		wantFirstMode string
 	}{
 		// Authentication session
 		"Get_device_auth_qr_if_there_is_no_token":           {wantFirstMode: authmodes.DeviceQr},
-		"Get_password_and_device_auth_qr_if_token_exists":   {tokenExists: true, wantFirstMode: authmodes.Password},
+		"Get_password_and_device_auth_qr_if_token_exists":   {token: &tokenOptions{}, wantFirstMode: authmodes.Password},
 		"Get_newpassword_if_next_auth_mode_is_newpassword":  {nextAuthMode: authmodes.NewPassword, wantFirstMode: authmodes.NewPassword},
 		"Get_device_auth_qr_if_next_auth_mode_is_device_qr": {nextAuthMode: authmodes.DeviceQr, wantFirstMode: authmodes.DeviceQr},
 
-		"Get_only_password_if_token_exists_and_provider_is_not_available":                {tokenExists: true, providerAddress: "127.0.0.1:31310", unavailableProvider: true, wantFirstMode: authmodes.Password},
-		"Get_only_password_if_token_exists_and_provider_does_not_support_device_auth_qr": {tokenExists: true, providerAddress: "127.0.0.1:31311", deviceAuthUnsupported: true, wantFirstMode: authmodes.Password},
+		"Get_only_device_auth_qr_if_device_should_be_registered_and_token_is_not_for_device_registration": {
+			token:                              &tokenOptions{isForDeviceRegistration: false},
+			registerDevice:                     true,
+			providerSupportsDeviceRegistration: true,
+			wantFirstMode:                      authmodes.DeviceQr,
+		},
+		"Get_only_device_auth_qr_if_device_should_not_be_registered_and_token_is_for_device_registration": {
+			token:                              &tokenOptions{isForDeviceRegistration: true},
+			providerSupportsDeviceRegistration: true,
+			wantFirstMode:                      authmodes.DeviceQr,
+		},
+		"Get_password_and_device_auth_qr_if_device_should_be_registered_and_token_is_for_device_registration": {
+			token:                              &tokenOptions{isForDeviceRegistration: true},
+			providerSupportsDeviceRegistration: true,
+			registerDevice:                     true,
+		},
+		"Get_password_and_device_auth_qr_if_device_should_not_be_registered_and_token_is_not_for_device_registration": {
+			token:                              &tokenOptions{isForDeviceRegistration: false},
+			providerSupportsDeviceRegistration: true,
+		},
+		"Get_password_and_device_auth_qr_if_token_is_not_for_device_registration_but_provider_does_not_support_it": {
+			token:                              &tokenOptions{isForDeviceRegistration: false},
+			providerSupportsDeviceRegistration: false,
+		},
+
+		"Get_only_password_if_token_exists_and_provider_is_not_available":                {token: &tokenOptions{}, providerAddress: "127.0.0.1:31310", unavailableProvider: true, wantFirstMode: authmodes.Password},
+		"Get_only_password_if_token_exists_and_provider_does_not_support_device_auth_qr": {token: &tokenOptions{}, providerAddress: "127.0.0.1:31311", deviceAuthUnsupported: true, wantFirstMode: authmodes.Password},
 
 		// Change password session
-		"Get_only_password_if_token_exists_and_session_is_for_changing_password":                {sessionMode: sessionmode.ChangePassword, tokenExists: true, wantFirstMode: authmodes.Password},
-		"Get_newpassword_if_session_is_for changing_password_and_next_auth_mode_is_newpassword": {sessionMode: sessionmode.ChangePassword, tokenExists: true, nextAuthMode: authmodes.NewPassword, wantFirstMode: authmodes.NewPassword},
-		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value":            {sessionMode: sessionmode.ChangePasswordOld, tokenExists: true, wantFirstMode: authmodes.Password},
+		"Get_only_password_if_token_exists_and_session_is_for_changing_password":                {sessionMode: sessionmode.ChangePassword, token: &tokenOptions{}, wantFirstMode: authmodes.Password},
+		"Get_newpassword_if_session_is_for changing_password_and_next_auth_mode_is_newpassword": {sessionMode: sessionmode.ChangePassword, token: &tokenOptions{}, nextAuthMode: authmodes.NewPassword, wantFirstMode: authmodes.NewPassword},
+		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value":            {sessionMode: sessionmode.ChangePasswordOld, token: &tokenOptions{}, wantFirstMode: authmodes.Password},
 
 		"Error_if_there_is_no_session": {sessionID: "-", wantErr: true},
 
@@ -207,7 +234,10 @@ func TestGetAuthenticationModes(t *testing.T) {
 				tc.sessionMode = sessionmode.Login
 			}
 
-			cfg := &brokerForTestConfig{}
+			cfg := &brokerForTestConfig{
+				registerDevice:             tc.registerDevice,
+				supportsDeviceRegistration: tc.providerSupportsDeviceRegistration,
+			}
 			if tc.providerAddress == "" {
 				// Use the default provider URL if no address is provided.
 				cfg.issuerURL = defaultIssuerURL
@@ -232,8 +262,8 @@ func TestGetAuthenticationModes(t *testing.T) {
 			if tc.sessionID == "-" {
 				sessionID = ""
 			}
-			if tc.tokenExists {
-				generateAndStoreCachedInfo(t, tokenOptions{}, b.TokenPathForSession(sessionID))
+			if tc.token != nil {
+				generateAndStoreCachedInfo(t, *tc.token, b.TokenPathForSession(sessionID))
 				err := password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID))
 				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 			}

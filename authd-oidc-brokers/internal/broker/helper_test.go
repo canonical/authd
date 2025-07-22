@@ -26,6 +26,7 @@ type brokerForTestConfig struct {
 	broker.Config
 	issuerURL                   string
 	forceProviderAuthentication bool
+	registerDevice              bool
 	allowedUsers                map[string]struct{}
 	allUsersAllowed             bool
 	ownerAllowed                bool
@@ -37,10 +38,11 @@ type brokerForTestConfig struct {
 	allowedSSHSuffixes          []string
 	provider                    providers.Provider
 
-	getUserInfoFails bool
-	firstCallDelay   int
-	secondCallDelay  int
-	getGroupsFunc    func() ([]info.Group, error)
+	getUserInfoFails           bool
+	supportsDeviceRegistration bool
+	firstCallDelay             int
+	secondCallDelay            int
+	getGroupsFunc              func() ([]info.Group, error)
 
 	listenAddress       string
 	tokenHandlerOptions *testutils.TokenHandlerOptions
@@ -57,6 +59,9 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	}
 	if cfg.forceProviderAuthentication {
 		cfg.SetForceProviderAuthentication(cfg.forceProviderAuthentication)
+	}
+	if cfg.registerDevice {
+		cfg.SetRegisterDevice(cfg.registerDevice)
 	}
 	if cfg.homeBaseDir != "" {
 		cfg.SetHomeBaseDir(cfg.homeBaseDir)
@@ -87,10 +92,11 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	}
 
 	provider := &testutils.MockProvider{
-		GetUserInfoFails: cfg.getUserInfoFails,
-		FirstCallDelay:   cfg.firstCallDelay,
-		SecondCallDelay:  cfg.secondCallDelay,
-		GetGroupsFunc:    cfg.getGroupsFunc,
+		GetUserInfoFails:                   cfg.getUserInfoFails,
+		ProviderSupportsDeviceRegistration: cfg.supportsDeviceRegistration,
+		FirstCallDelay:                     cfg.firstCallDelay,
+		SecondCallDelay:                    cfg.secondCallDelay,
+		GetGroupsFunc:                      cfg.getGroupsFunc,
 	}
 
 	if cfg.provider == nil {
@@ -189,13 +195,14 @@ type tokenOptions struct {
 	issuer   string
 	groups   []info.Group
 
-	expired             bool
-	noRefreshToken      bool
-	refreshTokenExpired bool
-	noIDToken           bool
-	invalid             bool
-	invalidClaims       bool
-	noUserInfo          bool
+	expired                 bool
+	noRefreshToken          bool
+	refreshTokenExpired     bool
+	noIDToken               bool
+	invalid                 bool
+	invalidClaims           bool
+	noUserInfo              bool
+	isForDeviceRegistration bool
 }
 
 func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInfo {
@@ -222,8 +229,8 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 		"email":              options.username,
 		"email_verified":     true,
 	})
-	encodedToken, err := idToken.SignedString(testutils.MockKey)
-	require.NoError(t, err, "Setup: signing token should not have failed")
+	encodedIDToken, err := idToken.SignedString(testutils.MockKey)
+	require.NoError(t, err, "Setup: signing ID token should not have failed")
 
 	tok := token.AuthCachedInfo{
 		Token: &oauth2.Token{
@@ -241,6 +248,9 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 	}
 	if options.refreshTokenExpired {
 		tok.Token.RefreshToken = testutils.ExpiredRefreshToken
+	}
+	tok.ExtraFields = map[string]any{
+		testutils.IsForDeviceRegistrationClaim: options.isForDeviceRegistration,
 	}
 
 	if !options.noUserInfo {
@@ -261,13 +271,13 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 	}
 
 	if options.invalidClaims {
-		encodedToken = ".invalid."
+		encodedIDToken = ".invalid."
 		tok.UserInfo = info.User{}
 	}
 
 	if !options.noIDToken {
-		tok.Token = tok.Token.WithExtra(map[string]string{"id_token": encodedToken})
-		tok.RawIDToken = encodedToken
+		tok.Token = tok.Token.WithExtra(map[string]string{"id_token": encodedIDToken})
+		tok.RawIDToken = encodedIDToken
 	}
 
 	return &tok

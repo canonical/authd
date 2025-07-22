@@ -24,6 +24,10 @@ func (cfg *Config) SetForceProviderAuthentication(value bool) {
 	cfg.forceProviderAuthentication = value
 }
 
+func (cfg *Config) SetRegisterDevice(value bool) {
+	cfg.registerDevice = value
+}
+
 func (cfg *Config) SetHomeBaseDir(homeBaseDir string) {
 	cfg.homeBaseDir = homeBaseDir
 }
