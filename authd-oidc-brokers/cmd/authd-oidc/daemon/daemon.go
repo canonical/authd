@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/daemon"
 	"github.com/ubuntu/authd-oidc-brokers/internal/dbusservice"
 	log "github.com/ubuntu/authd/log"
@@ -83,6 +84,8 @@ func New(name string) *App {
 			}
 
 			setVerboseMode(a.config.Verbosity)
+
+			log.Infof(context.Background(), "Version: %s", consts.Version)
 			log.Debug(context.Background(), "Debug mode is enabled")
 
 			return nil
