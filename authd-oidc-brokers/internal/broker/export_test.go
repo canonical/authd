@@ -151,21 +151,6 @@ func (b *Broker) SetNextAuthModes(sessionID string, authModes []string) {
 	b.currentSessions[sessionID] = session
 }
 
-// SetAuthInfo sets the given key and value for the given session.AuthInfo.
-func (b *Broker) SetAuthInfo(sessionID, key string, value any) error {
-	s, err := b.getSession(sessionID)
-	if err != nil {
-		return err
-	}
-
-	s.authInfo[key] = value
-	if err = b.updateSession(sessionID, s); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (b *Broker) SetAvailableMode(sessionID, mode string) error {
 	s, err := b.getSession(sessionID)
 	if err != nil {

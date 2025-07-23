@@ -11,7 +11,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-var testToken = token.AuthCachedInfo{
+var testToken = &token.AuthCachedInfo{
 	Token: &oauth2.Token{
 		AccessToken:  "accesstoken",
 		RefreshToken: "refreshtoken",
@@ -86,7 +86,7 @@ func TestLoadAuthInfo(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		expectedRet token.AuthCachedInfo
+		expectedRet *token.AuthCachedInfo
 		fileExists  bool
 		invalidJSON bool
 

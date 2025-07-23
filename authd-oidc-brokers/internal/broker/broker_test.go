@@ -402,7 +402,6 @@ func TestIsAuthenticated(t *testing.T) {
 
 		firstMode                string
 		firstSecret              string
-		firstAuthInfo            map[string]any
 		badFirstKey              bool
 		getUserInfoFails         bool
 		useOldNameForSecretField bool
@@ -541,7 +540,6 @@ func TestIsAuthenticated(t *testing.T) {
 			getUserInfoFails: true,
 		},
 
-		"Error_when_mode_is_qrcode_and_response_is_invalid": {firstAuthInfo: map[string]any{"response": "not a valid response"}},
 		"Error_when_mode_is_qrcode_and_link_expires": {
 			customHandlers: map[string]testutils.EndpointHandler{
 				"/device_auth": testutils.ExpiryDeviceAuthHandler(),
@@ -556,10 +554,6 @@ func TestIsAuthenticated(t *testing.T) {
 			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
-		},
-		"Error_when_mode_is_link_code_and_response_is_invalid": {
-			firstMode:     authmodes.Device,
-			firstAuthInfo: map[string]any{"response": "not a valid response"},
 		},
 		"Error_when_mode_is_link_code_and_link_expires": {
 			customHandlers: map[string]testutils.EndpointHandler{
@@ -683,12 +677,6 @@ func TestIsAuthenticated(t *testing.T) {
 					tc.firstMode = authmodes.DeviceQr
 				}
 				updateAuthModes(t, b, sessionID, tc.firstMode)
-
-				if tc.firstAuthInfo != nil {
-					for k, v := range tc.firstAuthInfo {
-						require.NoError(t, b.SetAuthInfo(sessionID, k, v), "Setup: Failed to set AuthInfo for tests")
-					}
-				}
 
 				access, data, err := b.IsAuthenticated(sessionID, authData)
 				require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be a valid JSON")

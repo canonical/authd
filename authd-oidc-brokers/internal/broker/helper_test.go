@@ -180,7 +180,7 @@ func generateAndStoreCachedInfo(t *testing.T, options tokenOptions, path string)
 		writeTrashToken(t, path)
 		return
 	}
-	err := token.CacheAuthInfo(path, *tok)
+	err := token.CacheAuthInfo(path, tok)
 	require.NoError(t, err, "Setup: storing token should not have failed")
 }
 

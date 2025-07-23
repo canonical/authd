@@ -23,8 +23,8 @@ type AuthCachedInfo struct {
 
 // NewAuthCachedInfo creates a new AuthCachedInfo. It sets the provided token and rawIDToken and the provider-specific
 // extra fields which should be stored persistently.
-func NewAuthCachedInfo(token *oauth2.Token, rawIDToken string, provider providers.Provider) AuthCachedInfo {
-	return AuthCachedInfo{
+func NewAuthCachedInfo(token *oauth2.Token, rawIDToken string, provider providers.Provider) *AuthCachedInfo {
+	return &AuthCachedInfo{
 		Token:       token,
 		RawIDToken:  rawIDToken,
 		ExtraFields: provider.GetExtraFields(token),
@@ -32,7 +32,7 @@ func NewAuthCachedInfo(token *oauth2.Token, rawIDToken string, provider provider
 }
 
 // CacheAuthInfo saves the token to the given path.
-func CacheAuthInfo(path string, token AuthCachedInfo) (err error) {
+func CacheAuthInfo(path string, token *AuthCachedInfo) (err error) {
 	jsonData, err := json.Marshal(token)
 	if err != nil {
 		return fmt.Errorf("could not marshal token: %v", err)
@@ -51,15 +51,15 @@ func CacheAuthInfo(path string, token AuthCachedInfo) (err error) {
 }
 
 // LoadAuthInfo reads the token from the given path.
-func LoadAuthInfo(path string) (AuthCachedInfo, error) {
+func LoadAuthInfo(path string) (*AuthCachedInfo, error) {
 	jsonData, err := os.ReadFile(path)
 	if err != nil {
-		return AuthCachedInfo{}, fmt.Errorf("could not read token: %v", err)
+		return nil, fmt.Errorf("could not read token: %v", err)
 	}
 
 	var cachedInfo AuthCachedInfo
 	if err := json.Unmarshal(jsonData, &cachedInfo); err != nil {
-		return AuthCachedInfo{}, fmt.Errorf("could not unmarshal token: %v", err)
+		return nil, fmt.Errorf("could not unmarshal token: %v", err)
 	}
 
 	// Set the extra fields of the token.
@@ -67,5 +67,5 @@ func LoadAuthInfo(path string) (AuthCachedInfo, error) {
 		cachedInfo.Token = cachedInfo.Token.WithExtra(cachedInfo.ExtraFields)
 	}
 
-	return cachedInfo, nil
+	return &cachedInfo, nil
 }

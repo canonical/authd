@@ -70,11 +70,14 @@ type session struct {
 
 	oidcServer   *oidc.Provider
 	oauth2Config oauth2.Config
-	authInfo     map[string]any
 	isOffline    bool
 	userDataDir  string
 	passwordPath string
 	tokenPath    string
+
+	// Data to pass from one request to another.
+	deviceAuthResponse *oauth2.DeviceAuthResponse
+	authInfo           *token.AuthCachedInfo
 
 	isAuthenticating *isAuthenticatedCtx
 }
@@ -155,7 +158,6 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 		lang:     lang,
 		mode:     mode,
 
-		authInfo:        make(map[string]any),
 		attemptsPerMode: make(map[string]int),
 	}
 
@@ -398,7 +400,7 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 		if err != nil {
 			return nil, fmt.Errorf("could not generate Device Authentication code layout: %v", err)
 		}
-		session.authInfo["response"] = response
+		session.deviceAuthResponse = response
 
 		label := fmt.Sprintf(
 			"Access %q and use the provided login code",
@@ -521,11 +523,11 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		return AuthRetry, errorMessage{Message: "could not decode secret"}
 	}
 
-	var authInfo token.AuthCachedInfo
+	var authInfo *token.AuthCachedInfo
 	switch session.selectedMode {
 	case authmodes.Device, authmodes.DeviceQr:
-		response, ok := session.authInfo["response"].(*oauth2.DeviceAuthResponse)
-		if !ok {
+		response := session.deviceAuthResponse
+		if response == nil {
 			log.Error(context.Background(), "could not get device auth response")
 			return AuthDenied, errorMessage{Message: "could not get required response"}
 		}
@@ -554,7 +556,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			return AuthDenied, errorMessage{Message: "could not get ID token"}
 		}
 
-		authInfo = token.NewAuthCachedInfo(t, rawIDToken, b.provider)
+		authInfo := token.NewAuthCachedInfo(t, rawIDToken, b.provider)
 
 		authInfo.ProviderMetadata, err = b.provider.GetMetadata(session.oidcServer)
 		if err != nil {
@@ -562,7 +564,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			return AuthDenied, errorMessage{Message: "could not get provider metadata"}
 		}
 
-		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, &authInfo)
+		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, authInfo)
 		if err != nil {
 			log.Errorf(context.Background(), "could not fetch user info: %s", err)
 			return AuthDenied, errorMessageForDisplay(err, "could not fetch user info")
@@ -573,7 +575,9 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			return AuthDenied, errorMessage{Message: "user not allowed in broker configuration"}
 		}
 
-		session.authInfo["auth_info"] = authInfo
+		// Store the auth info in the session so that we can use it when handling the
+		// next IsAuthenticated call for the new password mode.
+		session.authInfo = authInfo
 		session.nextAuthModes = []string{authmodes.NewPassword}
 
 		return AuthNext, nil
@@ -598,7 +602,9 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		// If the session is for changing the password, we don't need to refresh the token and user info (and we don't
 		// want the method call to return an error if refreshing the token or user info fails).
 		if session.mode == sessionmode.ChangePassword || session.mode == sessionmode.ChangePasswordOld {
-			session.authInfo["auth_info"] = authInfo
+			// Store the auth info in the session so that we can use it when handling the
+			// next IsAuthenticated call for the new password mode.
+			session.authInfo = authInfo
 			return AuthNext, nil
 		}
 
@@ -622,7 +628,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 
 		// Try to refresh the user info
-		userInfo, err := b.fetchUserInfo(ctx, session, &authInfo)
+		userInfo, err := b.fetchUserInfo(ctx, session, authInfo)
 		if err != nil && authInfo.UserInfo.Name == "" {
 			// We don't have a valid user info, so we can't proceed.
 			log.Errorf(context.Background(), "could not fetch user info: %s", err)
@@ -640,10 +646,10 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			return AuthRetry, errorMessage{Message: "empty secret"}
 		}
 
-		var ok bool
-		// This mode must always come after a authentication mode, so it has to have an auth_info.
-		authInfo, ok = session.authInfo["auth_info"].(token.AuthCachedInfo)
-		if !ok {
+		// This mode must always come after an authentication mode, so we should have auth info from the previous mode
+		// stored in the session.
+		authInfo = session.authInfo
+		if authInfo == nil {
 			log.Error(context.Background(), "could not get required information")
 			return AuthDenied, errorMessage{Message: "could not get required information"}
 		}
@@ -823,7 +829,7 @@ func (b *Broker) updateSession(sessionID string, session session) error {
 }
 
 // refreshToken refreshes the OAuth2 token and returns the updated AuthCachedInfo.
-func (b *Broker) refreshToken(ctx context.Context, oauth2Config oauth2.Config, oldToken token.AuthCachedInfo) (token.AuthCachedInfo, error) {
+func (b *Broker) refreshToken(ctx context.Context, oauth2Config oauth2.Config, oldToken *token.AuthCachedInfo) (*token.AuthCachedInfo, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
 	// set cached token expiry time to one hour in the past
@@ -831,7 +837,7 @@ func (b *Broker) refreshToken(ctx context.Context, oauth2Config oauth2.Config, o
 	oldToken.Token.Expiry = time.Now().Add(-time.Hour)
 	oauthToken, err := oauth2Config.TokenSource(timeoutCtx, oldToken.Token).Token()
 	if err != nil {
-		return token.AuthCachedInfo{}, err
+		return nil, err
 	}
 
 	// Update the raw ID token
