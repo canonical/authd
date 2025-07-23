@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
+	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/daemon"
 	"github.com/ubuntu/authd-oidc-brokers/internal/dbusservice"
 	log "github.com/ubuntu/authd/log"
@@ -52,7 +53,7 @@ func New(name string) *App {
 			// First thing, initialize the log handler
 			log.InitJournalHandler(false)
 
-			// Command parsing has been successful. Returns to not print usage anymore.
+			// Command parsing has been successful, so don't print the usage message on errors anymore.
 			a.rootCmd.SilenceUsage = true
 
 			dataDir := filepath.Join("/var", "lib", name)
@@ -83,6 +84,8 @@ func New(name string) *App {
 			}
 
 			setVerboseMode(a.config.Verbosity)
+
+			log.Infof(context.Background(), "Version: %s", consts.Version)
 			log.Debug(context.Background(), "Debug mode is enabled")
 
 			return nil

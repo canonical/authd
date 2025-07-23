@@ -51,7 +51,9 @@ func initViperConfig(name string, cmd *cobra.Command, vip *viper.Viper) (err err
 	if err != nil && !errors.As(err, &configNotFoundErr) {
 		return fmt.Errorf("invalid configuration file: %w", err)
 	}
-	log.Infof(context.Background(), "Using configuration file: %v", vip.ConfigFileUsed())
+	if vip.ConfigFileUsed() != "" {
+		log.Infof(context.Background(), "Using configuration file: %v", vip.ConfigFileUsed())
+	}
 
 	// Handle environment.
 	vip.SetEnvPrefix(name)
