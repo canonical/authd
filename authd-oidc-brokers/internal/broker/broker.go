@@ -99,7 +99,7 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	p := providers.CurrentProvider()
 
 	if cfg.ConfigFile != "" {
-		cfg.userConfig, err = parseConfigFile(cfg.ConfigFile, p)
+		cfg.userConfig, err = parseConfigFromPath(cfg.ConfigFile, p)
 		if err != nil {
 			return nil, fmt.Errorf("could not parse config file '%s': %v", cfg.ConfigFile, err)
 		}

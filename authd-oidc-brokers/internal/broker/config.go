@@ -93,7 +93,7 @@ func GetDropInDir(cfgPath string) string {
 	return cfgPath + ".d"
 }
 
-func getDropInFiles(cfgPath string) ([]any, error) {
+func readDropInFiles(cfgPath string) ([]any, error) {
 	// Check if a .d directory exists and return the paths to the files in it.
 	dropInDir := GetDropInDir(cfgPath)
 	files, err := os.ReadDir(dropInDir)
@@ -110,7 +110,12 @@ func getDropInFiles(cfgPath string) ([]any, error) {
 		if file.IsDir() {
 			continue
 		}
-		dropInFiles = append(dropInFiles, filepath.Join(dropInDir, file.Name()))
+
+		dropInFile, err := os.ReadFile(filepath.Join(dropInDir, file.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("could not read drop-in file %q: %v", file.Name(), err)
+		}
+		dropInFiles = append(dropInFiles, dropInFile)
 	}
 
 	return dropInFiles, nil
@@ -170,16 +175,27 @@ func (uc *userConfig) populateUsersConfig(users *ini.Section) {
 	uc.ownerExtraGroups = users.Key(ownerExtraGroupsKey).Strings(",")
 }
 
-// parseConfigFile parses the config file and returns a map with the configuration keys and values.
-func parseConfigFile(cfgPath string, p provider) (userConfig, error) {
-	cfg := userConfig{provider: p, ownerMutex: &sync.RWMutex{}}
-
-	dropInFiles, err := getDropInFiles(cfgPath)
+// parseConfigFromPath parses the config file and returns a map with the configuration keys and values.
+func parseConfigFromPath(cfgPath string, p provider) (userConfig, error) {
+	cfgFile, err := os.ReadFile(cfgPath)
 	if err != nil {
-		return cfg, err
+		return userConfig{}, fmt.Errorf("could not open config file %q: %v", cfgPath, err)
 	}
 
-	iniCfg, err := ini.Load(cfgPath, dropInFiles...)
+	dropInFiles, err := readDropInFiles(cfgPath)
+	if err != nil {
+		return userConfig{}, err
+	}
+
+	return parseConfig(cfgFile, dropInFiles, p)
+}
+
+// parseConfig parses the config file and returns a userConfig struct with the configuration keys and values.
+// It also checks if the keys contain any placeholders and returns an error if they do.
+func parseConfig(cfgContent []byte, dropInContent []any, p provider) (userConfig, error) {
+	cfg := userConfig{provider: p, ownerMutex: &sync.RWMutex{}}
+
+	iniCfg, err := ini.Load(cfgContent, dropInContent...)
 	if err != nil {
 		return cfg, err
 	}
@@ -193,7 +209,7 @@ func parseConfigFile(cfgPath string, p provider) (userConfig, error) {
 		}
 	}
 	if err != nil {
-		return cfg, fmt.Errorf("config file has invalid values, did you edit the file %q?\n%w", cfgPath, err)
+		return cfg, fmt.Errorf("config file has invalid values, did you edit the config file?\n%w", err)
 	}
 
 	oidc := iniCfg.Section(oidcSection)

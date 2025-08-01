@@ -134,7 +134,7 @@ func TestParseConfig(t *testing.T) {
 				require.NoError(t, err, "Setup: Failed to make drop-in file unreadable")
 			}
 
-			cfg, err := parseConfigFile(confPath, p)
+			cfg, err := parseConfigFromPath(confPath, p)
 			if tc.wantErr {
 				require.Error(t, err)
 				return
@@ -307,7 +307,7 @@ func TestParseUserConfig(t *testing.T) {
 			err = os.Mkdir(dropInDir, 0700)
 			require.NoError(t, err, "Setup: Failed to create drop-in directory")
 
-			cfg, err := parseConfigFile(confPath, p)
+			cfg, err := parseConfigFromPath(confPath, p)
 
 			// convert the allowed users array to a map
 			allowedUsersMap := map[string]struct{}{}
