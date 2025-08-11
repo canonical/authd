@@ -472,10 +472,11 @@ func TestIsAuthenticated(t *testing.T) {
 			useOldNameForSecretField: true,
 		},
 		"Authenticating_to_change_password_still_allowed_if_fetching_user_info_fails": {
-			sessionMode:      sessionmode.ChangePassword,
-			firstMode:        authmodes.Password,
-			token:            &tokenOptions{noUserInfo: true},
-			getUserInfoFails: true,
+			sessionMode:       sessionmode.ChangePassword,
+			firstMode:         authmodes.Password,
+			wantNextAuthModes: []string{authmodes.NewPassword},
+			token:             &tokenOptions{noUserInfo: true},
+			getUserInfoFails:  true,
 		},
 		"Authenticating_with_password_when_refresh_token_is_expired_results_in_device_auth_as_next_mode": {
 			firstMode:         authmodes.Password,

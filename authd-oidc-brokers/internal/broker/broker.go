@@ -605,6 +605,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			// Store the auth info in the session so that we can use it when handling the
 			// next IsAuthenticated call for the new password mode.
 			session.authInfo = authInfo
+			session.nextAuthModes = []string{authmodes.NewPassword}
 			return AuthNext, nil
 		}
 
