@@ -618,9 +618,9 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			authInfo, err = b.refreshToken(ctx, session.oauth2Config, authInfo)
 			var retrieveErr *oauth2.RetrieveError
 			if errors.As(err, &retrieveErr) && b.provider.IsTokenExpiredError(*retrieveErr) {
-				// The refresh token is expired, so the user needs to authenticate via OIDC again.
+				log.Noticef(context.Background(), "Refresh token expired for user %q, new device authentication required", session.username)
 				session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
-				return AuthNext, nil
+				return AuthNext, errorMessage{Message: "refresh token expired, please authenticate again using device authentication"}
 			}
 			if err != nil {
 				log.Error(context.Background(), err.Error())
