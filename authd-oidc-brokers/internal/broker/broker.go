@@ -610,6 +610,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 
 		if b.cfg.forceProviderAuthentication && session.isOffline {
+			log.Error(context.Background(), "Login failed: force_provider_authentication is enabled, but the provider is not reachable")
 			return AuthDenied, errorMessage{Message: "could not refresh token: provider is not reachable"}
 		}
 
