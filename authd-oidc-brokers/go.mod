@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.4
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.18.2
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.19.0
 	github.com/coreos/go-oidc/v3 v3.15.0
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
 	github.com/go-jose/go-jose/v4 v4.1.2
@@ -13,13 +13,13 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/k0kubun/pp v3.0.1+incompatible
-	github.com/microsoftgraph/msgraph-sdk-go v1.82.0
+	github.com/microsoftgraph/msgraph-sdk-go v1.84.0
 	github.com/microsoftgraph/msgraph-sdk-go-core v1.3.2
 	github.com/otiai10/copy v1.14.1
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.20.1
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	github.com/ubuntu/authd v0.5.6
 	github.com/ubuntu/decorate v0.0.0-20240301153420-5015d6dbc8e5
 	github.com/ubuntu/go-i18n v0.0.0-20231113092927-594c1754ca47
