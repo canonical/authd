@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Go code sanity check
-        uses: canonical/desktop-engineering/gh-actions/go/code-sanity@main
+        uses: canonical/desktop-engineering/gh-actions/go/code-sanity@v1
         with:
           golangci-lint-configfile: ".golangci.yaml"
           tools-directory: "tools"
