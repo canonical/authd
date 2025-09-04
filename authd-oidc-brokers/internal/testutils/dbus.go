@@ -74,9 +74,9 @@ func StartSystemBusMock() (func(), error) {
 		_ = os.RemoveAll(tmp)
 
 		if !set {
-			os.Unsetenv("DBUS_SYSTEM_BUS_ADDRESS")
+			_ = os.Unsetenv("DBUS_SYSTEM_BUS_ADDRESS")
 		} else {
-			os.Setenv("DBUS_SYSTEM_BUS_ADDRESS", prev)
+			_ = os.Setenv("DBUS_SYSTEM_BUS_ADDRESS", prev)
 		}
 	}, nil
 }
