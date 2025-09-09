@@ -21,6 +21,7 @@ jobs:
         branch_name: ["google","msentraid"]
     runs-on: ubuntu-latest
     steps:
+        - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
         - name: Install dependencies
           run: |
             set -eu
