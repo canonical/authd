@@ -227,7 +227,6 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 
 	for _, mode := range availableModes {
 		if !slices.Contains(modesSupportedByUI, mode) {
-			log.Debugf(context.Background(), "Authentication mode %q is not supported by the UI", mode)
 			continue
 		}
 
