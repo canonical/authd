@@ -258,10 +258,12 @@ func (b *Broker) availableAuthModes(session session) (availableModes []string, e
 	if len(session.nextAuthModes) > 0 {
 		for _, mode := range session.nextAuthModes {
 			if !b.authModeIsAvailable(session, mode) {
-				log.Infof(context.Background(), "Authentication mode %q is not available", mode)
 				continue
 			}
 			availableModes = append(availableModes, mode)
+		}
+		if availableModes == nil {
+			log.Warningf(context.Background(), "None of the next auth modes are available: %v", session.nextAuthModes)
 		}
 		return availableModes, nil
 	}
@@ -336,7 +338,19 @@ func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 	case authmodes.NewPassword:
 		return true
 	case authmodes.Device, authmodes.DeviceQr:
-		return session.oidcServer != nil && session.oidcServer.Endpoint().DeviceAuthURL != "" && !session.isOffline
+		if session.oidcServer == nil {
+			log.Debugf(context.Background(), "OIDC server is not initialized, so device authentication is not available")
+			return false
+		}
+		if session.oidcServer.Endpoint().DeviceAuthURL == "" {
+			log.Debugf(context.Background(), "OIDC server does not support device authentication, so device authentication is not available")
+			return false
+		}
+		if session.isOffline {
+			log.Noticef(context.Background(), "Session is in offline mode, so device authentication is not available")
+			return false
+		}
+		return true
 	}
 	return false
 }
