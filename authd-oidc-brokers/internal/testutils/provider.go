@@ -335,7 +335,7 @@ func ExpiryDeviceAuthHandler() EndpointHandler {
 			"device_code": "device_code",
 			"user_code": "user_code",
 			"verification_uri": "https://verification_uri.com",
-			"expires_in": 4
+			"expires_in": 1
 		}`
 
 		w.Header().Add("Content-Type", "application/json")

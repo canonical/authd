@@ -227,7 +227,6 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 
 	for _, mode := range availableModes {
 		if !slices.Contains(modesSupportedByUI, mode) {
-			log.Debugf(context.Background(), "Authentication mode %q is not supported by the UI", mode)
 			continue
 		}
 
@@ -396,11 +395,13 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 			authOpts = append(authOpts, oauth2.SetAuthURLParam("client_secret", secret))
 		}
 
+		log.Debug(ctx, "Retrieving device code...")
 		response, err := session.oauth2Config.DeviceAuth(ctx, authOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("could not generate Device Authentication code layout: %v", err)
 		}
 		session.deviceAuthResponse = response
+		log.Debug(ctx, "Retrieved device code.")
 
 		label := fmt.Sprintf(
 			"Access %q and use the provided login code",
@@ -540,11 +541,18 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		}
 		expiryCtx, cancel := context.WithDeadline(ctx, response.Expiry)
 		defer cancel()
+
+		// The default interval is 5 seconds, which means the user has to wait up to 5 seconds after
+		// successful authentication. We're reducing the interval to 1 second to improve UX a bit.
+		response.Interval = 1
+
+		log.Debug(ctx, "Polling to exchange device code for token...")
 		t, err := session.oauth2Config.DeviceAccessToken(expiryCtx, response, b.provider.AuthOptions()...)
 		if err != nil {
 			log.Errorf(context.Background(), "could not authenticate user remotely: %s", err)
 			return AuthRetry, errorMessage{Message: "could not authenticate user remotely"}
 		}
+		log.Debug(ctx, "Exchanged device code for token.")
 
 		if err = b.provider.CheckTokenScopes(t); err != nil {
 			log.Warningf(context.Background(), "error checking token scopes: %s", err)
