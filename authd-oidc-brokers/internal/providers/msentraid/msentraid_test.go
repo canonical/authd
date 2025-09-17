@@ -2,7 +2,9 @@ package msentraid_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -203,6 +205,35 @@ func TestIsTokenForDeviceRegistration(t *testing.T) {
 			require.Equal(t, tc.want, got, "IsTokenForDeviceRegistration should return the expected value")
 		})
 	}
+}
+
+func TestMaybeRegisterDevice(t *testing.T) {
+	t.Parallel()
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{})
+	accessTokenStr, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err, "Failed to sign access token")
+	token := &oauth2.Token{
+		AccessToken:  accessTokenStr,
+		RefreshToken: "refreshtoken",
+		Expiry:       time.Now().Add(1000 * time.Hour),
+	}
+
+	tenantID := "8de88d99-6d0f-44d7-a8a5-925b012e5940"
+	issuerURL := fmt.Sprintf("https://login.microsoftonline.com/%s/v2.0", tenantID)
+
+	mockMS, err := newMockMS(tenantID)
+	require.NoError(t, err, "Failed to start mock MS server")
+	t.Cleanup(mockMS.Close)
+
+	msentraid.SetAuthorityBaseURL(mockMS.Server.URL)
+	err = os.Setenv("HIMMELBLAU_DISCOVERY_URL", mockMS.Server.URL)
+	require.NoError(t, err, "Failed to set HIMMELBLAU_DISCOVERY_URL environment variable")
+
+	p := msentraid.New()
+
+	_, err = p.MaybeRegisterDevice(context.Background(), token, "user@example.com", issuerURL, nil)
+	require.NoError(t, err, "MaybeRegisterDevice should not return an error")
 }
 
 func TestMain(m *testing.M) {

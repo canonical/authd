@@ -36,6 +36,8 @@ var (
 
 	// ErrDeviceDisabled is returned when the device is disabled in Microsoft Entra ID.
 	ErrDeviceDisabled = fmt.Errorf("device is disabled in Microsoft Entra ID")
+
+	authorityBaseURL = "https://login.microsoftonline.com"
 )
 
 // TokenAcquisitionError is returned when an error occurs while acquiring a token via libhimmelblau.
@@ -84,7 +86,7 @@ func ensureBrokerClientAppInitialized(tenantID string, data *deviceRegistrationD
 	brokerClientAppInitOnce.Do(func() {
 		var msalErr *C.MSAL_ERROR
 
-		authority := C.CString("https://login.microsoftonline.com/" + tenantID)
+		authority := C.CString(authorityBaseURL + "/" + tenantID)
 		defer C.free(unsafe.Pointer(authority))
 
 		cCertKey := (*C.LoadableMsDeviceEnrolmentKey)(nil)

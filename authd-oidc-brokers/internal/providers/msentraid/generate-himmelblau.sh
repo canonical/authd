@@ -17,13 +17,21 @@ cargo install cargo-c cbindgen
 
 cd "${GIT_DIR}/third_party/libhimmelblau"
 
-TARGET_TRIPLE=$(rustc -vV | awk '/host:/ {print $2}')
-
 mkdir -p himmelblau
+
+# Print executed commands to ease debugging
+set -x
+
 "${CARGO_HOME:-$HOME/.cargo}"/bin/cbindgen --config ./cbindgen.toml > himmelblau/himmelblau.h
-cargo cbuild --release --lib --features=broker,changepassword,on_behalf_of
+
+FEATURES="broker,changepassword,on_behalf_of"
+if [ -n "${ENABLE_TEST_FEATURES:-}" ]; then
+  FEATURES="${FEATURES},custom_oidc_discovery_url"
+fi
+cargo cbuild --release --lib --features="${FEATURES}"
 
 # Copy header and shared library
+TARGET_TRIPLE=$(rustc -vV | awk '/host:/ {print $2}')
 cp "target/${TARGET_TRIPLE}/release/himmelblau.h" "${SCRIPT_DIR}/"
 cp "target/${TARGET_TRIPLE}/release/libhimmelblau.so" "${SCRIPT_DIR}/libhimmelblau.so.0"
 ln -sf libhimmelblau.so.0 "${SCRIPT_DIR}/libhimmelblau.so"

@@ -17,3 +17,8 @@ func (p *Provider) SkipAccessTokenForGraphAPI() {
 func (p *Provider) SetTokenScopesForGraphAPI(scopes []string) {
 	p.tokenScopesForGraphAPI = scopes
 }
+
+// SetAuthorityBaseURL sets the base URL for the token authority, used in tests to override the default.
+func SetAuthorityBaseURL(url string) {
+	authorityBaseURL = url
+}
