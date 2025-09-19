@@ -634,6 +634,24 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			return AuthDenied, unexpectedErrMsg("could not get provider metadata")
 		}
 
+		if b.provider.SupportsDeviceRegistration() && b.cfg.registerDevice {
+			authInfo.DeviceRegistrationData, err = b.provider.MaybeRegisterDevice(ctx, t,
+				session.username,
+				b.cfg.issuerURL,
+				nil,
+			)
+			if err != nil {
+				log.Errorf(context.Background(), "error registering device: %s", err)
+				return AuthDenied, errorMessage{Message: "Error registering device"}
+			}
+
+			// Store the auth info, so that the device registration data is not lost if the login fails after this point.
+			if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
+				log.Errorf(context.Background(), "Failed to store token: %s", err)
+				return AuthDenied, unexpectedErrMsg("failed to store token")
+			}
+		}
+
 		authInfo.UserInfo, err = b.fetchUserInfo(ctx, session, authInfo)
 		if err != nil {
 			log.Errorf(context.Background(), "could not fetch user info: %s", err)
@@ -696,6 +714,26 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			if err != nil {
 				log.Errorf(context.Background(), "Failed to refresh token: %s", err)
 				return AuthDenied, errorMessage{Message: "Failed to refresh token"}
+			}
+		}
+
+		// If device registration is enabled, ensure that the device is registered.
+		if b.provider.SupportsDeviceRegistration() && b.cfg.registerDevice {
+			authInfo.DeviceRegistrationData, err = b.provider.MaybeRegisterDevice(ctx,
+				authInfo.Token,
+				session.username,
+				b.cfg.issuerURL,
+				authInfo.DeviceRegistrationData,
+			)
+			if err != nil {
+				log.Errorf(context.Background(), "error registering device: %s", err)
+				return AuthDenied, errorMessage{Message: "Error registering device"}
+			}
+
+			// Store the auth info, so that the device registration data is not lost if the login fails after this point.
+			if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
+				log.Errorf(context.Background(), "Failed to store token: %s", err)
+				return AuthDenied, unexpectedErrMsg("failed to store token")
 			}
 		}
 
@@ -946,14 +984,6 @@ func (b *Broker) refreshToken(ctx context.Context, oauth2Config oauth2.Config, o
 func (b *Broker) fetchUserInfo(ctx context.Context, session *session, t *token.AuthCachedInfo) (userInfo info.User, err error) {
 	if session.isOffline {
 		return info.User{}, errors.New("session is in offline mode")
-	}
-
-	if b.provider.SupportsDeviceRegistration() && b.cfg.registerDevice {
-		deviceRegistrationData, err := b.provider.MaybeRegisterDevice(ctx, t.Token, session.username, b.cfg.issuerURL, t.DeviceRegistrationData)
-		if err != nil {
-			return info.User{}, fmt.Errorf("could not register device: %v", err)
-		}
-		t.DeviceRegistrationData = deviceRegistrationData
 	}
 
 	idToken, err := session.oidcServer.Verifier(&b.oidcCfg).Verify(ctx, t.RawIDToken)
