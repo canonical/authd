@@ -11,12 +11,13 @@ license: GPL-3.0
 apps:
   authd-oidc:
     command: bin/authd-oidc
-    daemon: simple
+    daemon: dbus
     slots:
       - dbus-authd
     plugs:
       - network
     restart-condition: always
+    activates-on: [dbus-authd]
 
 slots:
   dbus-authd:
