@@ -32,6 +32,8 @@ parts:
     plugin: go
     build-snaps:
       - go
+    build-environment:
+      - GOFLAGS: "-tags=release"
   config:
     source: conf/
     source-type: local
