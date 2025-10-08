@@ -15,12 +15,30 @@ type Provider interface {
 	AuthOptions() []oauth2.AuthCodeOption
 	GetExtraFields(token *oauth2.Token) map[string]interface{}
 	GetMetadata(provider *oidc.Provider) (map[string]interface{}, error)
-	GetUserInfo(ctx context.Context, clientID, issuerURL string, token *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}, deviceRegistrationData []byte) (info.User, error)
+
+	GetUserInfo(
+		ctx context.Context,
+		clientID string,
+		issuerURL string,
+		token *oauth2.Token,
+		idToken info.Claimer,
+		providerMetadata map[string]interface{},
+		deviceRegistrationData []byte,
+	) (info.User, error)
+
+	IsTokenExpiredError(err oauth2.RetrieveError) bool
+	IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error)
+
+	MaybeRegisterDevice(
+		ctx context.Context,
+		token *oauth2.Token,
+		username string,
+		issuerURL string,
+		deviceRegistrationData []byte,
+	) ([]byte, func(), error)
+
 	NormalizeUsername(username string) string
 	SupportedOIDCAuthModes() []string
 	VerifyUsername(requestedUsername, authenticatedUsername string) error
-	IsTokenExpiredError(err oauth2.RetrieveError) bool
 	SupportsDeviceRegistration() bool
-	IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error)
-	MaybeRegisterDevice(ctx context.Context, token *oauth2.Token, username, issuerURL string, deviceRegistrationData []byte) ([]byte, error)
 }

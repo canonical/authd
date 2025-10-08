@@ -649,7 +649,8 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 				deviceRegistrationData = oldAuthInfo.DeviceRegistrationData
 			}
 
-			authInfo.DeviceRegistrationData, err = b.provider.MaybeRegisterDevice(ctx, t,
+			var cleanup func()
+			authInfo.DeviceRegistrationData, cleanup, err = b.provider.MaybeRegisterDevice(ctx, t,
 				session.username,
 				b.cfg.issuerURL,
 				deviceRegistrationData,
@@ -658,6 +659,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 				log.Errorf(context.Background(), "error registering device: %s", err)
 				return AuthDenied, errorMessage{Message: "Error registering device"}
 			}
+			defer cleanup()
 
 			// Store the auth info, so that the device registration data is not lost if the login fails after this point.
 			if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
@@ -733,7 +735,8 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 
 		// If device registration is enabled, ensure that the device is registered.
 		if b.provider.SupportsDeviceRegistration() && !session.isOffline && b.cfg.registerDevice {
-			authInfo.DeviceRegistrationData, err = b.provider.MaybeRegisterDevice(ctx,
+			var cleanup func()
+			authInfo.DeviceRegistrationData, cleanup, err = b.provider.MaybeRegisterDevice(ctx,
 				authInfo.Token,
 				session.username,
 				b.cfg.issuerURL,
@@ -743,6 +746,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 				log.Errorf(context.Background(), "error registering device: %s", err)
 				return AuthDenied, errorMessage{Message: "Error registering device"}
 			}
+			defer cleanup()
 
 			// Store the auth info, so that the device registration data is not lost if the login fails after this point.
 			if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {

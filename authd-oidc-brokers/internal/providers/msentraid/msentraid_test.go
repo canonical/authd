@@ -148,9 +148,9 @@ func TestGetUserInfo(t *testing.T) {
 
 			var deviceRegistrationData []byte
 			if tc.acquireAccessToken {
-				mockMSServerRegisterDeviceMu.Lock()
-				defer mockMSServerRegisterDeviceMu.Unlock()
-				deviceRegistrationData = maybeRegisterDevice(t)
+				var cleanup func()
+				deviceRegistrationData, cleanup = maybeRegisterDevice(t)
+				t.Cleanup(cleanup)
 			}
 
 			p := msentraid.New()
@@ -220,19 +220,13 @@ func TestIsTokenForDeviceRegistration(t *testing.T) {
 }
 
 func TestMaybeRegisterDevice(t *testing.T) {
-	// Registering a device is not thread-safe, because libhimmelblau sets BrokerClientApplication.cert_key
-	// after successful device registration, and uses the same field in subsequent calls,
-	// e.g. in the acquire_token_by_refresh_token method. If the cert_key does not match the expected value,
-	// libhimmelblau returns "TPM error: Failed to load IdentityKey: Aes256GcmDecrypt".
-	mockMSServerRegisterDeviceMu.Lock()
-	defer mockMSServerRegisterDeviceMu.Unlock()
-
 	t.Parallel()
 
-	maybeRegisterDevice(t)
+	_, cleanup := maybeRegisterDevice(t)
+	t.Cleanup(cleanup)
 }
 
-func maybeRegisterDevice(t *testing.T) []byte {
+func maybeRegisterDevice(t *testing.T) (registrationData []byte, cleanup func()) {
 	// Start the mock MS server (or reuse the existing one)
 	ensureMockMSServerForDeviceRegistration(t)
 	mockServer := mockMSServerForDeviceRegistration
@@ -256,7 +250,7 @@ func maybeRegisterDevice(t *testing.T) []byte {
 
 	p := msentraid.New()
 
-	registrationData, err := p.MaybeRegisterDevice(
+	registrationData, cleanup, err = p.MaybeRegisterDevice(
 		context.Background(),
 		token,
 		"user@example.com",
@@ -265,7 +259,7 @@ func maybeRegisterDevice(t *testing.T) []byte {
 	)
 	require.NoError(t, err, "MaybeRegisterDevice should not return an error")
 
-	return registrationData
+	return registrationData, cleanup
 }
 
 func TestMain(m *testing.M) {

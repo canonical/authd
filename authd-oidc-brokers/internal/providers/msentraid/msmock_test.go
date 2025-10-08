@@ -29,7 +29,6 @@ import (
 
 var mockMSServerForDeviceRegistration *mockMSServer
 var mockMSServerForDeviceRegistrationOnce sync.Once
-var mockMSServerRegisterDeviceMu sync.Mutex
 
 func ensureMockMSServerForDeviceRegistration(t *testing.T) {
 	mockMSServerForDeviceRegistrationOnce.Do(func() {

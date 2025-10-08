@@ -450,7 +450,7 @@ func (p *Provider) MaybeRegisterDevice(
 	username string,
 	issuerURL string,
 	jsonData []byte,
-) ([]byte, error) {
+) (registrationData []byte, cleanup func(), err error) {
 	// If this function is called, it means that the token that we have is for device registration,
 	// so we can't use it to access the Microsoft Graph API.
 	p.needsAccessTokenForGraphAPI = true
@@ -460,30 +460,31 @@ func (p *Provider) MaybeRegisterDevice(
 		var data himmelblau.DeviceRegistrationData
 		if err := json.Unmarshal(jsonData, &data); err != nil {
 			log.Noticef(ctx, "Device registration JSON data: %s", string(jsonData))
-			return nil, fmt.Errorf("failed to unmarshal device registration data: %v", err)
+			return nil, nil, fmt.Errorf("failed to unmarshal device registration data: %v", err)
 		}
 		if data.IsValid() {
-			return jsonData, nil
+			cleanup = func() {}
+			return jsonData, cleanup, nil
 		}
 	}
 
 	nameParts := strings.Split(username, "@")
 	if len(nameParts) != 2 {
-		return nil, fmt.Errorf("invalid username format: %s, expected format is 'username@domain'", username)
+		return nil, nil, fmt.Errorf("invalid username format: %s, expected format is 'username@domain'", username)
 	}
 	domain := nameParts[1]
 
-	data, err := himmelblau.RegisterDevice(ctx, token, tenantID(issuerURL), domain)
+	data, cleanup, err := himmelblau.RegisterDevice(ctx, token, tenantID(issuerURL), domain)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	jsonData, err = json.Marshal(data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal device registration data: %v", err)
+		return nil, nil, fmt.Errorf("failed to marshal device registration data: %v", err)
 	}
 
-	return jsonData, nil
+	return jsonData, cleanup, nil
 }
 
 // tenantID extracts the tenant ID from a Microsoft Entra ID issuer URL.

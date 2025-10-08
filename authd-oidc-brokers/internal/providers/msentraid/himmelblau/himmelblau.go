@@ -26,6 +26,8 @@ var (
 
 	authorityBaseURL   = "https://login.microsoftonline.com"
 	authorityBaseURLMu sync.RWMutex
+
+	deviceRegistrationMu sync.RWMutex
 )
 
 func ensureTPMInitialized() error {
@@ -102,50 +104,80 @@ func (d *DeviceRegistrationData) IsValid() bool {
 		d.TPMMachineKey != nil
 }
 
-// RegisterDevice registers the device with Microsoft Entra ID.
-// It returns the device registration data which is needed to acquire an access token later.
-func RegisterDevice(ctx context.Context, token *oauth2.Token, tenantID, domain string) (*DeviceRegistrationData, error) {
+// RegisterDevice registers the device with Microsoft Entra ID and returns the
+// device registration data required for subsequent access token acquisition via
+// AcquireAccessTokenForGraphAPI.
+//
+// The returned cleanup function must be called after AcquireAccessTokenForGraphAPI
+// or if that function will not be called, to release an internal mutex and allow
+// future device registrations.
+//
+// RegisterDevice is thread-safe due to an internal mutex that serializes access
+// to libhimmelblau, which modifies shared state during registration.
+func RegisterDevice(
+	ctx context.Context,
+	token *oauth2.Token,
+	tenantID string,
+	domain string,
+) (registrationData *DeviceRegistrationData, cleanup func(), err error) {
+	deviceRegistrationMu.Lock()
+	// libhimmelblau modifies BrokerClientApplication.cert_key during registration.
+	// This key is reused in later calls, including acquire_token_by_refresh_token.
+	// If cert_key changes because another device registration was done concurrently,
+	// libhimmelblau returns "TPM error: Failed to load IdentityKey: Aes256GcmDecrypt".
+	// The mutex also prevents concurrent modifications to TPM state.
+	unlock := deviceRegistrationMu.Unlock
+
+	// Ensure that the mutex is unlocked if an error occurs.
+	// We can't rename `unlock` to `cleanup` because `return nil, nil, err` sets
+	// the return value `cleanup` to `nil`, so calling `cleanup()` would panic.
+	defer func() {
+		if err != nil {
+			unlock()
+		}
+	}()
+
 	if err := ensureBrokerClientAppInitialized(tenantID, nil); err != nil {
-		return nil, fmt.Errorf("failed to initialize broker client application: %v", err)
+		return nil, nil, fmt.Errorf("failed to initialize broker client application: %v", err)
 	}
 
 	authValue, err := generateAuthValue()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	loadableMachineKey, cleanup, err := createTPMMachineKey(tpm, authValue)
+	loadableMachineKey, tpmCleanup, err := createTPMMachineKey(tpm, authValue)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	defer cleanup()
+	defer tpmCleanup()
 
 	attrs, err := initEnrollAttrs(domain, hostname(), OSVersion())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	machineKey, cleanup, err := loadTPMMachineKey(tpm, authValue, loadableMachineKey)
+	machineKey, tpmCleanup, err := loadTPMMachineKey(tpm, authValue, loadableMachineKey)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	defer cleanup()
+	defer tpmCleanup()
 
 	data, err := enrollDevice(brokerClientApp, token.RefreshToken, attrs, tpm, machineKey)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	log.Infof(ctx, "Enrolled device with ID: %v", data.DeviceID)
 
 	data.TPMMachineKey, err = serializeLoadableMachineKey(loadableMachineKey)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	data.AuthValue = authValue
 
-	return data, nil
+	return data, unlock, nil
 }
 
 func hostname() string {
