@@ -58,8 +58,6 @@ jobs:
           dotnet tool install -g dotnet-reportgenerator-globaltool
 
       - name: Build libhimmelblau
-        env:
-          ENABLE_TEST_FEATURES: 1
         run: go generate ./internal/providers/msentraid/...
 
       - name: Prepare tests artifacts path

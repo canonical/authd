@@ -1,8 +1,8 @@
-package msentraid
+// Package himmelblau provides functions to use the libhimmelblau library
+package himmelblau
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -54,7 +54,7 @@ func ensureTPMInitialized() error {
 	return tpmInitErr
 }
 
-func ensureBrokerClientAppInitialized(tenantID string, data *deviceRegistrationData) error {
+func ensureBrokerClientAppInitialized(tenantID string, data *DeviceRegistrationData) error {
 	if err := ensureTPMInitialized(); err != nil {
 		return err
 	}
@@ -83,7 +83,9 @@ func ensureBrokerClientAppInitialized(tenantID string, data *deviceRegistrationD
 	return brokerClientAppInitErr
 }
 
-type deviceRegistrationData struct {
+// DeviceRegistrationData contains the data returned by RegisterDevice
+// which is needed to acquire an access token later.
+type DeviceRegistrationData struct {
 	DeviceID      string `json:"device_id"`
 	CertKey       []byte `json:"cert_key"`
 	TransportKey  []byte `json:"transport_key"`
@@ -91,7 +93,8 @@ type deviceRegistrationData struct {
 	TPMMachineKey []byte `json:"tpm_machine_key"`
 }
 
-func (d *deviceRegistrationData) IsValid() bool {
+// IsValid checks whether all fields of the DeviceRegistrationData are set.
+func (d *DeviceRegistrationData) IsValid() bool {
 	return d.DeviceID != "" &&
 		d.CertKey != nil &&
 		d.TransportKey != nil &&
@@ -99,9 +102,9 @@ func (d *deviceRegistrationData) IsValid() bool {
 		d.TPMMachineKey != nil
 }
 
-// registerDevice registers the device with Microsoft Entra ID.
-// It returns the device registration data as JSON.
-func (p *Provider) registerDevice(ctx context.Context, token *oauth2.Token, tenantID, domain string) ([]byte, error) {
+// RegisterDevice registers the device with Microsoft Entra ID.
+// It returns the device registration data which is needed to acquire an access token later.
+func RegisterDevice(ctx context.Context, token *oauth2.Token, tenantID, domain string) (*DeviceRegistrationData, error) {
 	if err := ensureBrokerClientAppInitialized(tenantID, nil); err != nil {
 		return nil, fmt.Errorf("failed to initialize broker client application: %v", err)
 	}
@@ -142,12 +145,7 @@ func (p *Provider) registerDevice(ctx context.Context, token *oauth2.Token, tena
 
 	data.AuthValue = authValue
 
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal device registration data: %v", err)
-	}
-
-	return jsonData, nil
+	return data, nil
 }
 
 func hostname() string {
@@ -180,16 +178,15 @@ func OSVersion() string {
 	return "unknown"
 }
 
-// acquireAccessTokenForGraphAPI uses the refresh token from the provided
+// AcquireAccessTokenForGraphAPI uses the refresh token from the provided
 // OAuth 2.0 token with the required scopes to access the Microsoft Graph API.
-func acquireAccessTokenForGraphAPI(ctx context.Context, clientID, tenantID string, token *oauth2.Token, jsonData []byte) (string, error) {
-	var data deviceRegistrationData
-	err := json.Unmarshal(jsonData, &data)
-	if err != nil {
-		log.Noticef(ctx, "Device registration JSON data: %v", string(jsonData))
-		return "", fmt.Errorf("failed to unmarshal device registration data: %v", err)
-	}
-
+func AcquireAccessTokenForGraphAPI(
+	ctx context.Context,
+	clientID string,
+	tenantID string,
+	token *oauth2.Token,
+	data DeviceRegistrationData,
+) (string, error) {
 	if err := ensureBrokerClientAppInitialized(tenantID, &data); err != nil {
 		return "", fmt.Errorf("failed to initialize broker client application: %v", err)
 	}

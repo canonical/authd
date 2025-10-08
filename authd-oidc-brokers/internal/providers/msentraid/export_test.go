@@ -15,11 +15,3 @@ func (p *Provider) SetNeedsAccessTokenForGraphAPI(value bool) {
 func (p *Provider) SetTokenScopesForGraphAPI(scopes []string) {
 	p.tokenScopesForGraphAPI = scopes
 }
-
-// SetAuthorityBaseURL sets the base URL for the token authority, used in tests to override the default.
-// This is not thread-safe.
-func SetAuthorityBaseURL(url string) {
-	authorityBaseURLMu.Lock()
-	authorityBaseURL = url
-	authorityBaseURLMu.Unlock()
-}

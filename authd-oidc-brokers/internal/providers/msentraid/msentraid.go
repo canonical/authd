@@ -23,6 +23,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 	"github.com/ubuntu/authd/log"
 	"golang.org/x/oauth2"
 )
@@ -112,14 +113,29 @@ func (p *Provider) GetMetadata(provider *oidc.Provider) (map[string]interface{},
 
 // GetUserInfo returns the user info from the ID token and the groups the user is a member of, which are retrieved via
 // the Microsoft Graph API.
-func (p *Provider) GetUserInfo(ctx context.Context, clientID string, issuerURL string, token *oauth2.Token, idToken info.Claimer, providerMetadata map[string]interface{}, deviceRegistrationData []byte) (info.User, error) {
+func (p *Provider) GetUserInfo(
+	ctx context.Context,
+	clientID string,
+	issuerURL string,
+	token *oauth2.Token,
+	idToken info.Claimer,
+	providerMetadata map[string]interface{},
+	deviceRegistrationDataJSON []byte,
+) (info.User, error) {
 	var err error
 
 	accessTokenStr := token.AccessToken
 	if p.needsAccessTokenForGraphAPI {
+		var data himmelblau.DeviceRegistrationData
+		err := json.Unmarshal(deviceRegistrationDataJSON, &data)
+		if err != nil {
+			log.Noticef(ctx, "Device registration JSON data: %s", deviceRegistrationDataJSON)
+			return info.User{}, fmt.Errorf("failed to unmarshal device registration data: %v", err)
+		}
+
 		tenantID := tenantID(issuerURL)
-		accessTokenStr, err = acquireAccessTokenForGraphAPI(ctx, clientID, tenantID, token, deviceRegistrationData)
-		if errors.Is(err, ErrDeviceDisabled) {
+		accessTokenStr, err = himmelblau.AcquireAccessTokenForGraphAPI(ctx, clientID, tenantID, token, data)
+		if errors.Is(err, himmelblau.ErrDeviceDisabled) {
 			return info.User{}, err
 		}
 		if err != nil {
@@ -441,7 +457,7 @@ func (p *Provider) MaybeRegisterDevice(
 
 	// Check if the device is already registered
 	if len(jsonData) > 0 {
-		var data deviceRegistrationData
+		var data himmelblau.DeviceRegistrationData
 		if err := json.Unmarshal(jsonData, &data); err != nil {
 			log.Noticef(ctx, "Device registration JSON data: %s", string(jsonData))
 			return nil, fmt.Errorf("failed to unmarshal device registration data: %v", err)
@@ -457,7 +473,17 @@ func (p *Provider) MaybeRegisterDevice(
 	}
 	domain := nameParts[1]
 
-	return p.registerDevice(ctx, token, tenantID(issuerURL), domain)
+	data, err := himmelblau.RegisterDevice(ctx, token, tenantID(issuerURL), domain)
+	if err != nil {
+		return nil, err
+	}
+
+	jsonData, err = json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal device registration data: %v", err)
+	}
+
+	return jsonData, nil
 }
 
 // tenantID extracts the tenant ID from a Microsoft Entra ID issuer URL.

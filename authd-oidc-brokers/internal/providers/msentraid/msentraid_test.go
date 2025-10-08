@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 	"github.com/ubuntu/authd-oidc-brokers/internal/testutils/golden"
 	"github.com/ubuntu/authd/log"
@@ -237,7 +238,7 @@ func maybeRegisterDevice(t *testing.T) []byte {
 	mockServer := mockMSServerForDeviceRegistration
 
 	// Make libhimmelblau use the mock MS server.
-	msentraid.SetAuthorityBaseURL(mockServer.URL)
+	himmelblau.SetAuthorityBaseURL(t, mockServer.URL)
 	err := os.Setenv("HIMMELBLAU_DISCOVERY_URL", mockServer.URL)
 	require.NoError(t, err, "Failed to set HIMMELBLAU_DISCOVERY_URL environment variable")
 

@@ -26,7 +26,7 @@ import (
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
 	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
 	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"github.com/ubuntu/authd/log"
 	"github.com/ubuntu/decorate"
@@ -753,12 +753,12 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 
 		// Try to refresh the user info
 		userInfo, err := b.fetchUserInfo(ctx, session, authInfo)
-		if errors.Is(err, msentraid.ErrDeviceDisabled) {
+		if errors.Is(err, himmelblau.ErrDeviceDisabled) {
 			// The device is disabled, deny login
 			log.Errorf(context.Background(), "Login failed: %s", err)
 			return AuthDenied, errorMessage{Message: "This device is disabled in Microsoft Entra ID, please contact your administrator."}
 		}
-		var tokenAcquisitionError msentraid.TokenAcquisitionError
+		var tokenAcquisitionError himmelblau.TokenAcquisitionError
 		if errors.As(err, &tokenAcquisitionError) {
 			log.Errorf(context.Background(), "Token acquisition failed: %s. Try again using device authentication.", err)
 			// The token acquisition failed unexpectedly.

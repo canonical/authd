@@ -1,6 +1,6 @@
-package msentraid
+package himmelblau
 
-//go:generate ./generate-himmelblau.sh
+//go:generate ./generate.sh
 
 /*
 #cgo LDFLAGS: -L${SRCDIR} -lhimmelblau
@@ -172,7 +172,7 @@ func loadTPMMachineKey(tpm *boxedDynTPM, authValue string, loadableMachineKey *C
 	return key, cleanup, nil
 }
 
-func enrollDevice(broker *brokerClientApplication, refreshToken string, attrs *C.EnrollAttrs, tpm *boxedDynTPM, machineKey *C.MachineKey) (data *deviceRegistrationData, err error) {
+func enrollDevice(broker *brokerClientApplication, refreshToken string, attrs *C.EnrollAttrs, tpm *boxedDynTPM, machineKey *C.MachineKey) (data *DeviceRegistrationData, err error) {
 	cRefreshToken := C.CString(refreshToken)
 	defer C.free(unsafe.Pointer(cRefreshToken))
 
@@ -223,7 +223,7 @@ func enrollDevice(broker *brokerClientApplication, refreshToken string, attrs *C
 		transportKey = C.GoBytes(unsafe.Pointer(cSerializedTransportKey), C.int(cSerializedTransportKeyLen))
 	}
 
-	return &deviceRegistrationData{
+	return &DeviceRegistrationData{
 		DeviceID:     deviceID,
 		CertKey:      certKey,
 		TransportKey: transportKey,
