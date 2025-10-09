@@ -166,6 +166,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 
 		providerAddress                    string
 		token                              *tokenOptions
+		noPasswordFile                     bool
 		nextAuthMode                       string
 		unavailableProvider                bool
 		deviceAuthUnsupported              bool
@@ -177,6 +178,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 	}{
 		// Authentication session
 		"Get_device_auth_qr_if_there_is_no_token":           {wantFirstMode: authmodes.DeviceQr},
+		"Get_device_auth_qr_if_there_is_no_password_file":   {token: &tokenOptions{}, wantFirstMode: authmodes.DeviceQr, noPasswordFile: true},
 		"Get_password_and_device_auth_qr_if_token_exists":   {token: &tokenOptions{}, wantFirstMode: authmodes.Password},
 		"Get_newpassword_if_next_auth_mode_is_newpassword":  {nextAuthMode: authmodes.NewPassword, wantFirstMode: authmodes.NewPassword},
 		"Get_device_auth_qr_if_next_auth_mode_is_device_qr": {nextAuthMode: authmodes.DeviceQr, wantFirstMode: authmodes.DeviceQr},
@@ -224,7 +226,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 		"Error_if_expecting_password_but_not_supported":       {supportedLayouts: []string{"form-without-entry"}, wantErr: true},
 
 		// Change password session errors
-		"Error_if_session_is_for_changing_password_but_token_does_not_exist": {sessionMode: sessionmode.ChangePassword, wantErr: true},
+		"Error_if_session_is_for_changing_password_but_password_file_does_not_exist": {sessionMode: sessionmode.ChangePassword, noPasswordFile: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -264,6 +266,8 @@ func TestGetAuthenticationModes(t *testing.T) {
 			}
 			if tc.token != nil {
 				generateAndStoreCachedInfo(t, *tc.token, b.TokenPathForSession(sessionID))
+			}
+			if !tc.noPasswordFile && sessionID != "" {
 				err := password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID))
 				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 			}
