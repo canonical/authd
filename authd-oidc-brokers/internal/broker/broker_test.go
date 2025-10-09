@@ -611,6 +611,7 @@ func TestIsAuthenticated(t *testing.T) {
 			forceProviderAuthentication: true,
 			sessionOffline:              true,
 		},
+		"Error_when_mode_is_invalid": {firstMode: "invalid"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {

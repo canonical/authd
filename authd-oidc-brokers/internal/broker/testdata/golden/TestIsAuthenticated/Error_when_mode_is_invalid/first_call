@@ -1,0 +1,3 @@
+access: denied
+data: '{"message":"An unexpected error occurred: unknown authentication mode. Please report this error on https://github.com/ubuntu/authd/issues"}'
+err: <nil>

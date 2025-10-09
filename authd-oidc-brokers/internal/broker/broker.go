@@ -809,6 +809,9 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 			log.Errorf(context.Background(), "Failed to store password: %s", err)
 			return AuthDenied, unexpectedErrMsg("failed to store password")
 		}
+	default:
+		log.Errorf(context.Background(), "unknown authentication mode %q", session.selectedMode)
+		return AuthDenied, unexpectedErrMsg("unknown authentication mode")
 	}
 
 	if b.cfg.shouldRegisterOwner() {
