@@ -25,6 +25,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
+	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 )
 
 var mockMSServerForDeviceRegistration *mockMSServer
@@ -35,6 +36,10 @@ func ensureMockMSServerForDeviceRegistration(t *testing.T) {
 		mockMSServerForDeviceRegistration, _ = startMockMSServer(t, &mockMSServerConfig{
 			GroupEndpointHandler: simpleGroupHandler,
 		})
+
+		himmelblau.SetAuthorityBaseURL(t, mockMSServerForDeviceRegistration.URL)
+		err := os.Setenv("HIMMELBLAU_DISCOVERY_URL", mockMSServerForDeviceRegistration.URL)
+		require.NoError(t, err, "failed to set HIMMELBLAU_DISCOVERY_URL")
 	})
 }
 

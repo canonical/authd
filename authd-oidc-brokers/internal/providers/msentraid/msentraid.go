@@ -455,6 +455,8 @@ func (p *Provider) MaybeRegisterDevice(
 	// so we can't use it to access the Microsoft Graph API.
 	p.needsAccessTokenForGraphAPI = true
 
+	nop := func() {}
+
 	// Check if the device is already registered
 	if len(jsonData) > 0 {
 		var data himmelblau.DeviceRegistrationData
@@ -463,25 +465,31 @@ func (p *Provider) MaybeRegisterDevice(
 			return nil, nil, fmt.Errorf("failed to unmarshal device registration data: %v", err)
 		}
 		if data.IsValid() {
-			cleanup = func() {}
-			return jsonData, cleanup, nil
+			return jsonData, nop, nil
 		}
 	}
 
 	nameParts := strings.Split(username, "@")
 	if len(nameParts) != 2 {
-		return nil, nil, fmt.Errorf("invalid username format: %s, expected format is 'username@domain'", username)
+		return nil, nop, fmt.Errorf("invalid username format: %s, expected format is 'username@domain'", username)
 	}
 	domain := nameParts[1]
 
 	data, cleanup, err := himmelblau.RegisterDevice(ctx, token, tenantID(issuerURL), domain)
 	if err != nil {
-		return nil, nil, err
+		return nil, nop, err
 	}
+
+	// Ensure that the cleanup function is called if we return an error.
+	defer func() {
+		if err != nil {
+			cleanup()
+		}
+	}()
 
 	jsonData, err = json.Marshal(data)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to marshal device registration data: %v", err)
+		return nil, nop, fmt.Errorf("failed to marshal device registration data: %v", err)
 	}
 
 	return jsonData, cleanup, nil
