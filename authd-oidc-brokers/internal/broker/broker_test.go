@@ -181,6 +181,10 @@ func TestGetAuthenticationModes(t *testing.T) {
 			token:     nil,
 			wantModes: []string{authmodes.DeviceQr},
 		},
+		"Get_only_device_auth_qr_if_token_is_invalid": {
+			token:     &tokenOptions{invalid: true},
+			wantModes: []string{authmodes.DeviceQr},
+		},
 		"Get_device_auth_qr_if_there_is_no_password_file": {
 			token:          &tokenOptions{},
 			noPasswordFile: true,
