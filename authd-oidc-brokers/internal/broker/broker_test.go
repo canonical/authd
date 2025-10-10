@@ -177,11 +177,26 @@ func TestGetAuthenticationModes(t *testing.T) {
 		wantFirstMode string
 	}{
 		// Authentication session
-		"Get_device_auth_qr_if_there_is_no_token":           {wantFirstMode: authmodes.DeviceQr},
-		"Get_device_auth_qr_if_there_is_no_password_file":   {token: &tokenOptions{}, wantFirstMode: authmodes.DeviceQr, noPasswordFile: true},
-		"Get_password_and_device_auth_qr_if_token_exists":   {token: &tokenOptions{}, wantFirstMode: authmodes.Password},
-		"Get_newpassword_if_next_auth_mode_is_newpassword":  {nextAuthMode: authmodes.NewPassword, wantFirstMode: authmodes.NewPassword},
-		"Get_device_auth_qr_if_next_auth_mode_is_device_qr": {nextAuthMode: authmodes.DeviceQr, wantFirstMode: authmodes.DeviceQr},
+		"Get_device_auth_qr_if_there_is_no_token": {
+			wantFirstMode: authmodes.DeviceQr,
+		},
+		"Get_device_auth_qr_if_there_is_no_password_file": {
+			token:          &tokenOptions{},
+			wantFirstMode:  authmodes.DeviceQr,
+			noPasswordFile: true,
+		},
+		"Get_password_and_device_auth_qr_if_token_exists": {
+			token:         &tokenOptions{},
+			wantFirstMode: authmodes.Password,
+		},
+		"Get_newpassword_if_next_auth_mode_is_newpassword": {
+			nextAuthMode:  authmodes.NewPassword,
+			wantFirstMode: authmodes.NewPassword,
+		},
+		"Get_device_auth_qr_if_next_auth_mode_is_device_qr": {
+			nextAuthMode:  authmodes.DeviceQr,
+			wantFirstMode: authmodes.DeviceQr,
+		},
 
 		"Get_only_device_auth_qr_if_device_should_be_registered_and_token_is_not_for_device_registration": {
 			token:                              &tokenOptions{isForDeviceRegistration: false},
@@ -208,25 +223,71 @@ func TestGetAuthenticationModes(t *testing.T) {
 			providerSupportsDeviceRegistration: false,
 		},
 
-		"Get_only_password_if_token_exists_and_provider_is_not_available":                {token: &tokenOptions{}, providerAddress: "127.0.0.1:31310", unavailableProvider: true, wantFirstMode: authmodes.Password},
-		"Get_only_password_if_token_exists_and_provider_does_not_support_device_auth_qr": {token: &tokenOptions{}, providerAddress: "127.0.0.1:31311", deviceAuthUnsupported: true, wantFirstMode: authmodes.Password},
+		"Get_only_password_if_token_exists_and_provider_is_not_available": {
+			token:               &tokenOptions{},
+			providerAddress:     "127.0.0.1:31310",
+			unavailableProvider: true,
+			wantFirstMode:       authmodes.Password,
+		},
+		"Get_only_password_if_token_exists_and_provider_does_not_support_device_auth_qr": {
+			token:                 &tokenOptions{},
+			providerAddress:       "127.0.0.1:31311",
+			deviceAuthUnsupported: true,
+			wantFirstMode:         authmodes.Password,
+		},
 
 		// Change password session
-		"Get_only_password_if_token_exists_and_session_is_for_changing_password":                {sessionMode: sessionmode.ChangePassword, token: &tokenOptions{}, wantFirstMode: authmodes.Password},
-		"Get_newpassword_if_session_is_for changing_password_and_next_auth_mode_is_newpassword": {sessionMode: sessionmode.ChangePassword, token: &tokenOptions{}, nextAuthMode: authmodes.NewPassword, wantFirstMode: authmodes.NewPassword},
-		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value":            {sessionMode: sessionmode.ChangePasswordOld, token: &tokenOptions{}, wantFirstMode: authmodes.Password},
+		"Get_only_password_if_token_exists_and_session_is_for_changing_password": {
+			sessionMode:   sessionmode.ChangePassword,
+			token:         &tokenOptions{},
+			wantFirstMode: authmodes.Password,
+		},
+		"Get_newpassword_if_session_is_for changing_password_and_next_auth_mode_is_newpassword": {
+			sessionMode:   sessionmode.ChangePassword,
+			token:         &tokenOptions{},
+			nextAuthMode:  authmodes.NewPassword,
+			wantFirstMode: authmodes.NewPassword,
+		},
+		"Get_only_password_if_token_exists_and_session_mode_is_the_old_passwd_value": {
+			sessionMode:   sessionmode.ChangePasswordOld,
+			token:         &tokenOptions{},
+			wantFirstMode: authmodes.Password,
+		},
 
-		"Error_if_there_is_no_session": {sessionID: "-", wantErr: true},
+		"Error_if_there_is_no_session": {
+			sessionID: "-",
+			wantErr:   true,
+		},
 
 		// General errors
-		"Error_if_no_authentication_mode_is_supported":        {providerAddress: "127.0.0.1:31312", deviceAuthUnsupported: true, wantErr: true},
-		"Error_if_expecting_device_auth_qr_but_not_supported": {supportedLayouts: []string{"qrcode-without-wait"}, wantErr: true},
-		"Error_if_expecting_device_auth_but_not_supported":    {supportedLayouts: []string{"qrcode-without-wait-and-qrcode"}, wantErr: true},
-		"Error_if_expecting_newpassword_but_not_supported":    {supportedLayouts: []string{"newpassword-without-entry"}, wantErr: true},
-		"Error_if_expecting_password_but_not_supported":       {supportedLayouts: []string{"form-without-entry"}, wantErr: true},
+		"Error_if_no_authentication_mode_is_supported": {
+			providerAddress:       "127.0.0.1:31312",
+			deviceAuthUnsupported: true,
+			wantErr:               true,
+		},
+		"Error_if_expecting_device_auth_qr_but_not_supported": {
+			supportedLayouts: []string{"qrcode-without-wait"},
+			wantErr:          true,
+		},
+		"Error_if_expecting_device_auth_but_not_supported": {
+			supportedLayouts: []string{"qrcode-without-wait-and-qrcode"},
+			wantErr:          true,
+		},
+		"Error_if_expecting_newpassword_but_not_supported": {
+			supportedLayouts: []string{"newpassword-without-entry"},
+			wantErr:          true,
+		},
+		"Error_if_expecting_password_but_not_supported": {
+			supportedLayouts: []string{"form-without-entry"},
+			wantErr:          true,
+		},
 
 		// Change password session errors
-		"Error_if_session_is_for_changing_password_but_password_file_does_not_exist": {sessionMode: sessionmode.ChangePassword, noPasswordFile: true, wantErr: true},
+		"Error_if_session_is_for_changing_password_but_password_file_does_not_exist": {
+			sessionMode:    sessionmode.ChangePassword,
+			noPasswordFile: true,
+			wantErr:        true,
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
