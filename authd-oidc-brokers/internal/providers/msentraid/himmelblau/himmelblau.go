@@ -193,7 +193,7 @@ func hostname() string {
 // Since we're running in a snap, this returns the version of the core base snap
 // (which is not that helpful when it's shown as the device's OS in Entra, so
 // might want to change this in the future, to somehow get the host's OS version).
-func OSVersion() string {
+var OSVersion = sync.OnceValue(func() string {
 	data, err := os.ReadFile("/etc/os-release")
 	if err != nil {
 		log.Warningf(context.Background(), "Failed to read /etc/os-release: %v", err)
@@ -208,7 +208,7 @@ func OSVersion() string {
 
 	log.Warningf(context.Background(), "PRETTY_NAME not found in /etc/os-release")
 	return "unknown"
-}
+})
 
 // AcquireAccessTokenForGraphAPI uses the refresh token from the provided
 // OAuth 2.0 token with the required scopes to access the Microsoft Graph API.
