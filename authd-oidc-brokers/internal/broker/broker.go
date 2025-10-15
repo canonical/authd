@@ -658,6 +658,11 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 		return AuthDenied, errorMessageForDisplay(err, "Could not get user info")
 	}
 
+	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
+		log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
+		return AuthDenied, errorMessage{Message: "Authentication failure: user not allowed in broker configuration"}
+	}
+
 	if b.provider.SupportsDeviceRegistration() && b.cfg.registerDevice {
 		// Load existing device registration data if there is any, to avoid re-registering the device.
 		var deviceRegistrationData []byte
@@ -691,11 +696,6 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	if err != nil {
 		log.Errorf(context.Background(), "failed to get groups: %s", err)
 		return AuthDenied, errorMessageForDisplay(err, "Failed to retrieve groups from Microsoft Graph API")
-	}
-
-	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
-		log.Warning(context.Background(), b.userNotAllowedLogMsg(authInfo.UserInfo.Name))
-		return AuthDenied, errorMessage{Message: "Authentication failure: user not allowed in broker configuration"}
 	}
 
 	// Store the auth info in the session so that we can use it when handling the
