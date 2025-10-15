@@ -782,6 +782,11 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		log.Errorf(context.Background(), "Login failed: %s", err)
 		return AuthDenied, errorMessage{Message: "This device is disabled in Microsoft Entra ID, please contact your administrator."}
 	}
+	if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
+		// Deny login if the redirect URI is invalid, so that users and administrators are aware of the issue.
+		log.Errorf(context.Background(), "Login failed: %s", err)
+		return AuthDenied, errorMessageForDisplay(err, "Invalid redirect URI")
+	}
 	var tokenAcquisitionError himmelblau.TokenAcquisitionError
 	if errors.As(err, &tokenAcquisitionError) {
 		log.Errorf(context.Background(), "Token acquisition failed: %s. Try again using device authentication.", err)
