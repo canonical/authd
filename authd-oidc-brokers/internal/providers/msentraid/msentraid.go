@@ -154,7 +154,8 @@ func (p *Provider) GetGroups(
 			return nil, err
 		}
 		if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
-			return nil, providerErrors.NewForDisplayError("Token acquisition failed: The app is misconfigured in Microsoft Entra (the redirect URI is missing or invalid). Please contact your administrator.")
+			msg := "Token acquisition failed: The app is misconfigured in Microsoft Entra (the redirect URI is missing or invalid). Please contact your administrator."
+			return nil, &providerErrors.ForDisplayError{Message: msg, Err: err}
 		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", err)
@@ -218,7 +219,8 @@ func (p *Provider) fetchUserGroups(token *jwt.Token, msgraphHost string) ([]info
 
 	// Check if the token has the GroupMember.Read.All scope
 	if !slices.Contains(scopes, "GroupMember.Read.All") {
-		return nil, providerErrors.NewForDisplayError("Error: the Microsoft Entra ID app is missing the GroupMember.Read.All permission, please contact your administrator.")
+		msg := "Error: the Microsoft Entra ID app is missing the GroupMember.Read.All permission"
+		return nil, &providerErrors.ForDisplayError{Message: msg}
 	}
 
 	cred := azureTokenCredential{token: token}
@@ -405,7 +407,8 @@ func (p *Provider) SupportedOIDCAuthModes() []string {
 // VerifyUsername checks if the authenticated username matches the requested username and that both are valid.
 func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername string) error {
 	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(authenticatedUsername) {
-		return providerErrors.NewForDisplayError("Authentication failure: requested username %q does not match the authenticated user %q", requestedUsername, authenticatedUsername)
+		msg := fmt.Sprintf("Authentication failure: requested username %q does not match the authenticated username %q", requestedUsername, authenticatedUsername)
+		return &providerErrors.ForDisplayError{Message: msg}
 	}
 
 	// Check that the usernames only contain the characters allowed by the Microsoft Entra username policy
@@ -414,10 +417,12 @@ func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername strin
 	if !usernameRegexp.MatchString(authenticatedUsername) {
 		// If this error occurs, we should investigate and probably relax the username policy, so we ask the user
 		// explicitly to report this error.
-		return providerErrors.NewForDisplayError("Authentication failure: the authenticated username %q contains invalid characters. Please report this error on https://github.com/ubuntu/authd/issues", authenticatedUsername)
+		msg := fmt.Sprintf("Authentication failure: the authenticated username %q contains invalid characters. Please report this error on https://github.com/ubuntu/authd/issues", authenticatedUsername)
+		return &providerErrors.ForDisplayError{Message: msg}
 	}
 	if !usernameRegexp.MatchString(requestedUsername) {
-		return providerErrors.NewForDisplayError("Authentication failure: requested username %q contains invalid characters", requestedUsername)
+		msg := fmt.Sprintf("Authentication failure: requested username %q contains invalid characters", requestedUsername)
+		return &providerErrors.ForDisplayError{Message: msg}
 	}
 
 	return nil

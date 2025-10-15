@@ -1076,9 +1076,9 @@ func (b *Broker) getGroups(ctx context.Context, session *session, t *token.AuthC
 // Checks if the provided error is of type ForDisplayError. If it is, it returns the error message. Else, it returns
 // the provided fallback message.
 func errorMessageForDisplay(err error, fallback string) errorMessage {
-	var e *providerErrors.ForDisplayError
-	if errors.As(err, &e) {
-		return errorMessage{Message: e.Error()}
+	var forDisplayErr *providerErrors.ForDisplayError
+	if errors.As(err, &forDisplayErr) {
+		return errorMessage{Message: forDisplayErr.Error()}
 	}
 	return errorMessage{Message: fallback}
 }

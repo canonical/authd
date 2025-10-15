@@ -71,7 +71,8 @@ func (p GenericProvider) NormalizeUsername(username string) string {
 // VerifyUsername checks if the requested username matches the authenticated user.
 func (p GenericProvider) VerifyUsername(requestedUsername, username string) error {
 	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(username) {
-		return providerErrors.NewForDisplayError("Authentication failure: requested username %q does not match the authenticated user %q", requestedUsername, username)
+		msg := fmt.Sprintf("Authentication failure: requested username %q does not match the authenticated user %q", requestedUsername, username)
+		return &providerErrors.ForDisplayError{Message: msg}
 	}
 	return nil
 }
