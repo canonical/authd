@@ -755,6 +755,11 @@ func TestIsAuthenticated(t *testing.T) {
 			token:          &tokenOptions{userIsDisabled: true},
 			sessionOffline: true,
 		},
+		"Error_when_device_is_disabled_and_session_is_offline": {
+			firstMode:      authmodes.Password,
+			token:          &tokenOptions{deviceIsDisabled: true},
+			sessionOffline: true,
+		},
 		"Error_when_mode_is_invalid": {firstMode: "invalid"},
 	}
 	for name, tc := range tests {
