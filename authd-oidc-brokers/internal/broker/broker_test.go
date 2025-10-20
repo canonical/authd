@@ -750,6 +750,11 @@ func TestIsAuthenticated(t *testing.T) {
 			forceProviderAuthentication: true,
 			sessionOffline:              true,
 		},
+		"Error_when_user_is_disabled_and_session_is_offline": {
+			firstMode:      authmodes.Password,
+			token:          &tokenOptions{userIsDisabled: true},
+			sessionOffline: true,
+		},
 		"Error_when_mode_is_invalid": {firstMode: "invalid"},
 	}
 	for name, tc := range tests {
