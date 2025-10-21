@@ -27,7 +27,8 @@ type Provider interface {
 		deviceRegistrationData []byte,
 	) ([]info.Group, error)
 
-	IsTokenExpiredError(err oauth2.RetrieveError) bool
+	IsTokenExpiredError(err *oauth2.RetrieveError) bool
+	IsUserDisabledError(err *oauth2.RetrieveError) bool
 	IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error)
 
 	MaybeRegisterDevice(
