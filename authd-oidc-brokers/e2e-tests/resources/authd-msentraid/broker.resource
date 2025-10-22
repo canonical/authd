@@ -2,13 +2,12 @@
 Documentation       MS Entra ID specific resources for the tests
 
 Resource            kvm.resource
-Resource            ${AUTHD_RESOURCES}/utils.resource
+Resource            ../authd/utils.resource
 
 Library            Process
 
 *** Variables ***
-${AUTHD_RESOURCES}    ${CURDIR}/../authd-resources
-${ENTRAID_RESOURCES}    ${CURDIR}/../broker-resources
+${ENTRAID_RESOURCES}    ${CURDIR}
 
 ${AUTHD_BROKER_CFG}    /etc/authd/brokers.d/msentraid.conf
 ${ENTRAID_BROKER_CFG}    /var/snap/authd-msentraid/current/broker.conf

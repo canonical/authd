@@ -19,20 +19,12 @@ set -eu
 # This script is used to run the YARF tests for the authd-oidc-brokers project.
 ROOT_DIR=$(dirname "$(readlink -f "$0")")
 TESTS_DIR="${ROOT_DIR}/tests"
-AUTHD_RESOURCE_DIR="${ROOT_DIR}/resources/authd"
-BROKER_RESOURCE_DIR="${ROOT_DIR}/resources/$BROKER"
 
 # Create directory for the test run
 TEST_RUN_DIR="/tmp/e2e-testrun-${BROKER}"
 mkdir -p "${TEST_RUN_DIR}"
 cd "${TEST_RUN_DIR}"
-
-# Link the necessary directories into the test run directory if they don't already exist
-[ -d authd-resources ] || [ -L authd-resources ] && rm -rf authd-resources
-[ -d broker-resources ] || [ -L broker-resources ] && rm -rf broker-resources
-ln -s "${AUTHD_RESOURCE_DIR}" authd-resources
-ln -s "${BROKER_RESOURCE_DIR}" broker-resources
-mkdir -p output
+mkdir -p output resources
 
 # Read entire tests dir if arguments are not provided
 TESTS_TO_RUN="${TESTS_DIR}/*.robot"
@@ -47,8 +39,11 @@ for test_file in $TESTS_TO_RUN; do
     test_name=$(basename "${test_file}")
 
     ln -s "${test_file}" .
-    # Ensure the test file is removed on exit
-    trap "rm -f ${test_name}" EXIT
+    ln -sf --no-target-directory "$(dirname "${test_file}")/resources/authd" resources/authd
+    # Update the symlink to the broker resources to use the specified broker
+    ln -sf --no-target-directory "$(dirname "${test_file}")/resources/${BROKER}" resources/broker
+    # Ensure the test run directory is cleaned up on exit
+    trap "rm -rf ${test_name} resources" EXIT
 
     SNAPSHOT_NAME=${BROKER}-edge-configured
     if [[ "${test_name}" == *"migration"* ]]; then

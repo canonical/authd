@@ -1,16 +1,13 @@
 *** Settings ***
-Resource        ${AUTHD_RESOURCES_DIR}/utils.resource
-Resource        ${AUTHD_RESOURCES_DIR}/authd.resource
+Resource        ./resources/authd/utils.resource
+Resource        ./resources/authd/authd.resource
 
-Resource        ${BROKER_RESOURCES_DIR}/broker.resource
+Resource        ./resources/broker/broker.resource
 
 Test Tags       robot:exit-on-failure
 
 
 *** Variables ***
-${AUTHD_RESOURCES_DIR}        ${CURDIR}/authd-resources
-${BROKER_RESOURCES_DIR}      ${CURDIR}/broker-resources
-
 ${username}    %{E2E_USER}
 ${local_password}    qwer1234
 
