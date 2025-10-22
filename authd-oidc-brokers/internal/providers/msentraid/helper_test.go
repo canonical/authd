@@ -10,7 +10,7 @@ var (
 		"sub": "valid-sub",
 		"home": "/home/valid-user",
 		"shell": "/bin/bash",
-		"gecos": "Valid User"}`,
+		"name": "Valid User"}`,
 	}
 
 	invalidIDToken = &testIDToken{
