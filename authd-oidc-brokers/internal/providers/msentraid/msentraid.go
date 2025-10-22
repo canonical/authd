@@ -191,7 +191,7 @@ type claims struct {
 	Sub               string `json:"sub"`
 	Home              string `json:"home"`
 	Shell             string `json:"shell"`
-	Gecos             string `json:"gecos"`
+	Gecos             string `json:"name"`
 }
 
 // userClaims returns the user claims parsed from the ID token.
