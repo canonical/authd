@@ -18,13 +18,14 @@ jobs:
 
       - name: Build libhimmelblau
         # The code sanity check fails if himmelblau.h does not exist, so we generate it first.
-        run: go generate ./internal/providers/msentraid/...
+        run: go generate --tags withmsentraid ./internal/providers/msentraid/...
 
       - name: Go code sanity check
         uses: canonical/desktop-engineering/gh-actions/go/code-sanity@v2
         with:
           golangci-lint-configfile: ".golangci.yaml"
           tools-directory: "tools"
+          go-tags: "withmsentraid"
 
   go-tests:
     name: "Go: Tests"
@@ -58,7 +59,7 @@ jobs:
           dotnet tool install -g dotnet-reportgenerator-globaltool
 
       - name: Build libhimmelblau
-        run: go generate ./internal/providers/msentraid/...
+        run: go generate --tags withmsentraid ./internal/providers/msentraid/...
 
       - name: Prepare tests artifacts path
         run: |
