@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -eu
+set -euo pipefail
 
 # Required environment variables:
 #    E2E_USER - The username to use for the tests
