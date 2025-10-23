@@ -5,9 +5,11 @@
 The end-to-end tests are implemented using [YARF](https://github.com/canonical/yarf). They cover a wide range of scenarios,
 both for authd and the brokers.
 
-## Running the tests locally
+## Setting up the environment
 
 Running the tests locally requires a bit of setting up. This is a step-by-step guide to get you started.
+
+:memo: **Note:** This process is automated through the `e2e-tests/vm/provision.sh` script, which you can use instead of following the steps below manually.
 
 ### 1. Install the required dependencies
 
@@ -70,40 +72,39 @@ The tests need a VM to run. This can be easily setup by using the domain definit
     qemu-img resize questing-server-cloudimg-amd64.img 10G
     ```
 
-2. Create the cloud-init iso using the provided configuration in `e2e-tests/vm/runner-cloud-cfg.yaml`:
-   1. Create a directory called `seed/` and copy the YAML file there. The file must be named `user-data`.
-   2. Create the `seed.iso` file using `cloud-localds`.
+2. Create the cloud-init iso using the provided configuration in `e2e-tests/vm/cloud-init-template.yaml`:
+   1. Update the file with the ssh key that will be used to access the VM.
+   2. Create a directory and copy the YAML file there. The file must be named `user-data`.
+   3. Create the `seed.iso` file using `cloud-localds`.
 
-    ```bash
-    mkdir -p seed/
+        ```bash
 
-    cp ./e2e-tests/vm/runner-cloud-cfg.yaml seed/user-data
+        mkdir -p /tmp/seed/
 
-    cloud-localds seed.iso seed/user-data
-    ```
+        SSH_PUBLIC_KEY=$(cat "${SSH_PUBLIC_KEY_FILE}") \
+            envsubst < e2e-tests/vm/cloud-init-template.yaml > /tmp/seed/user-data
 
-3. Define the VM using the provided XML in `e2e-tests/vm/e2e-runner.xml`:
-   1. Edit the XML and set the correct paths for the disk image. Look for something like:
+        cloud-localds /tmp/seed.iso /tmp/seed/user-data
+        ```
 
-        ```xml
-        <disk type='file' device='disk'>
-            <driver name='qemu' type='qcow2' />
-            <source file='{path_to_downloaded_img}' />
-            <target dev='vda' bus='virtio' />
-            <address type='pci' domain='0x0000' bus='0x04' slot='0x00' function='0x0' />
-        </disk>
+3. Define the VM using the provided XML in `e2e-tests/vm/e2e-runner-template.xml`:
+   1. Edit the XML and set the correct paths for the disk image.
+
+        ```bash
+        IMAGE_FILE=${IMAGE_FILE} \
+        envsubst < e2e-tests/vm/e2e-runner-template.xml > /tmp/e2e-runner.xml
         ```
 
    2. Define the VM with `virsh`:
 
         ```bash
-        virsh define {path_to_authd_oidc_brokers_root}/e2e-tests/vm/e2e-runner.xml
+        virsh define /tmp/e2e-runner.xml
         ```
 
 4. Attach the cloud-init iso to the VM:
 
     ```bash
-    virsh attach-disk --domain e2e-runner --source {path_to_the_cloud-init_iso}/seed.iso --target sda --type cdrom --config
+    virsh attach-disk --domain e2e-runner --source /tmp/seed.iso --target sda --type cdrom --config
     ```
 
 5. Start the domain and wait for it to finish the initial setup:
@@ -118,11 +119,19 @@ The tests need a VM to run. This can be easily setup by using the domain definit
         virsh console e2e-runner
         ```
 
-    - The domain will automatically shutdown once the initial setup is complete. You can then start it again with `virsh start e2e-runner`.
-    - Now that the initial setup is done, we need to create a snapshot of this "fresh install" state, so we can revert to it later when installing authd.
+    - The domain will automatically shutdown once the initial setup is complete, so you need to start it again.
 
         ```bash
-        virsh snapshot-create-as e2e-runner --name fresh-install --reuse-external
+        virsh start e2e-runner
+
+        # It will take a while, so make sure to wait until it's up and running
+        sleep 180s
+        ```
+
+    - Now that the initial setup is done, we need to create a snapshot of this fresh state, so we can revert to it later when installing authd.
+
+        ```bash
+        virsh snapshot-create-as e2e-runner --name initial-setup --reuse-external
         ```
 
 ### 3. Install authd and the brokers
@@ -136,25 +145,18 @@ Now that the VM is ready, we need to install authd and the brokers we want to te
 - This can be done either through GUI or by SSH. For simplicity, we will use SSH here.
 
 - The default username is `ubuntu` and the password is whatever you set in the cloud-init file.
-- To avoid having to interactively type the password every time, we will use `sshpass` to provide it non-interactively.
 - The VM uses `socat` to forward the SSH port over VSOCK, so the SSH command will look like this:
 
     ```bash
-    sshpass -p <vm_password> ssh -o StrictHostKeyChecking=no -o ProxyCommand="socat - VSOCK-CONNECT:1000:22" ubuntu@localhost
+    ssh -o ProxyCommand="socat - VSOCK-CONNECT:1000:22" -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR ubuntu@localhost
     ```
 
-- From now on, the command will be referred to as `ssh_vm` for simplicity. You can create an alias for it:
-
-    ```bash
-    alias ssh_vm='sshpass -p <vm_password> ssh -o StrictHostKeyChecking=no -o ProxyCommand="socat - VSOCK-CONNECT:1000:22" ubuntu@localhost'
-    ```
-
+- From now on, the command will be referred to as `ssh_vm` for simplicity. You can use the `e2e-tests/vm/ssh.sh` script instead of typing the full command every time.
 - Now we can proceed to install authd and the brokers. The following steps need to be repeated for each version of authd we want to test (stable and edge).
 
 ##### Install authd
 
 1. Revert to the "fresh install" snapshot:
-    - And start the domain if the snapshot was taken with the domain powered off.
 
     ```bash
     virsh snapshot-revert e2e-runner fresh-install
@@ -185,64 +187,50 @@ Repeat the following steps for each version of each broker you want to test;
     virsh snapshot-revert e2e-runner "authd-<version>-installed"
     ```
 
-2. Install the desired broker (replace `<broker>` and `<channel>` with the desired values):
+2. Install the desired broker (replace `${broker}` and `${channel}` with the desired values):
 
     ```bash
-    ssh_vm "sudo snap install <broker> --channel=<channel>"
+    ssh_vm "sudo snap install ${broker} --channel=${channel}"
     ```
 
 3. Configure authd to recognize the installed broker.
 
     ```bash
     ssh_vm "sudo mkdir -p /etc/authd/brokers.d"
-    ssh_vm "sudo cp /snap/<broker>/current/conf/authd/<broker>.conf /etc/authd/brokers.d/"
+    ssh_vm "sudo cp /snap/${broker}/current/conf/authd/${broker}.conf /etc/authd/brokers.d/"
     ```
 
 4. Configure the installed broker:
-   1. Write the configuration file for the broker
-       - Writing the file to /tmp/ first and then moving it is easier.
-       - Some brokers may require different configuration options. Please refer to the broker documentation for more details.
 
-       ```bash
-       ssh_vm "sudo printf \"\
-       [oidc]\n\
-       issuer = <desired_issuer>\n\
-       client_id = <desired_client_id>\n\
-       force_provider_authentication = false\n\
-       [users]\n\
-       ssh_allowed_suffixes = <desired_username>\n\
-       allowed_users = OWNER\n\
-       owner = <desired_username>\n\" | sudo tee /tmp/broker.conf"
-       ```
+    ```bash
+    ssh_vm "sudo sed -i -e 's|<ISSUER_ID>|'${ISSUER_ID}'|g' \
+                          -e 's|<CLIENT_ID>|'${CLIENT_ID}'|g' \
+                          -e 's|#ssh_allowed_suffixes_first_auth =|ssh_allowed_suffixes_first_auth = '${E2E_USER}|g' \
+                          /var/snap/${broker}/current/broker.conf"
+    ```
 
-   2. Move the configuration file to the correct location and ensure the ownership and permissions are correct.
+5. Restart authd and the broker to apply the changes.
 
-       ```bash
-       ssh_vm "sudo install -o root -g root -m 600 /tmp/broker.conf /var/snap/<broker>/current/broker.conf"
-       ```
+    ```bash
+    ssh_vm "sudo systemctl restart authd.service"
 
-   3. Restart authd and the broker to apply the changes.
+    # This could fail sometimes if the restart is triggered too quickly, so don't be afraid to wait a couple of seconds and retry
+    ssh_vm "sudo snap restart ${broker}"
+    ```
 
-       ```bash
-       ssh_vm "sudo systemctl restart authd.service"
-
-       # This could fail sometimes if the restart is triggered too quickly, so don't be afraid to wait a couple of seconds and retry
-       ssh_vm "sudo snap restart <broker>"
-       ```
-
-5. Reboot the VM to ensure the snapshot is taken from the login screen.
+6. Reboot the VM to ensure the snapshot is taken from the login screen.
 
     ```bash
     virsh reboot e2e-runner
 
     # Wait a while for the VM to reboot
-    sleep 120s
+    sleep 180s
     ```
 
-6. Create a snapshot of this state, so we can revert to it later when running the tests.
+7. Create a snapshot of this state, so we can revert to it later when running the tests.
 
     ```bash
-    virsh snapshot-create-as e2e-runner --name "<broker>-<channel>-configured" --reuse-external
+    virsh snapshot-create-as e2e-runner --name "${broker}-${channel}-configured" --reuse-external
     ```
 
 #### Scripts to automate the installation and configuration of authd and brokers
@@ -258,7 +246,7 @@ declare -a versions=("edge" "stable")
 for version in "${versions[@]}"; do
     echo "Setting up authd - $version"
 
-    virsh snapshot-revert e2e-runner fresh-install
+    virsh snapshot-revert e2e-runner initial-setup
 
     PPA="ppa:ubuntu-enterprise-desktop/authd-edge"
     if [[ "$version" == "stable" ]]; then
@@ -282,67 +270,40 @@ Update the variables at the top of the script to match your desired broker and c
 
 set -eux
 
-broker="desired_broker_name" # e.g. authd-msentraid
-authd_broker_config="authd_related_broker_cfg_file"
-issuer="your_oidc_issuer"
-client_id="your_oidc_client_id"
-username="your_allowed_username"
+broker="desired_broker_name" # Change to the desired broker name
 
-declare -a versions=("edge" "stable")
-for version in "${versions[@]}"; do
-    echo "Setting up $broker broker - $version"
+declare -a channels=("edge" "stable")
+for channel in "${channels[@]}"; do
+    echo "Setting up $broker broker - $channel"
 
-    sudo virsh snapshot-revert e2e-runner "authd-$version-installed"
+    virsh snapshot-revert e2e-runner "authd-$channel-installed"
 
-    ssh_vm "sudo snap install $broker --channel=$version"
+    # Install broker, configure and restart services
+    ssh_vm "sudo snap install ${broker} --channel=${channel} && \
+            sudo mkdir -p /etc/authd/brokers.d && \
+            sudo cp /snap/${broker}/current/conf/authd/${broker_config} /etc/authd/brokers.d/ && \
+            sudo sed -i -e 's|<ISSUER_ID>|'${ISSUER_ID}'|g' \
+                        -e 's|<CLIENT_ID>|'${CLIENT_ID}'|g' \
+                        -e 's|#ssh_allowed_suffixes_first_auth =|ssh_allowed_suffixes_first_auth = '${AUTHD_USER}|g' \
+                        /var/snap/${broker}/current/broker.conf && \
+            sudo systemctl restart authd.service && \
+            sudo snap restart ${broker}"
 
-    # Configure authd
-    ssh_vm "sudo mkdir -p /etc/authd/brokers.d"
-    ssh_vm "sudo cp /snap/$broker/current/conf/authd/$authd_broker_config /etc/authd/brokers.d/"
+    # Reboot VM and wait until it's back
+    virsh reboot e2e-runner
 
-    # Configure the broker
-    ssh_vm "sudo printf \"\
-    [oidc]\n\
-    issuer = $issuer\n\
-    client_id = $client_id\n\
-    force_provider_authentication = false\n\
-    [users]\n\
-    ssh_allowed_suffixes = $username\n\
-    allowed_users = OWNER\n\
-    owner = $username\n\" | sudo tee /tmp/broker.conf"
-
-    # Move file while ensuring correct ownership and permissions
-    ssh_vm "sudo install -o root -g root -m 600 /tmp/broker.conf /var/snap/$broker/current/broker.conf"
-
-    # Restart authd and broker to apply the changes
-    ssh_vm "sudo systemctl restart authd.service"
-
-    # Retry restarting the broker snap a few times, as it may fail if the restart happens too quickly
-    set +e
-    for i in {1..10}; do
-    ssh_vm "sudo snap restart $broker"
-    exit_code=$?
-    if [[ "$exit_code" == 0 || "$exit_code" == 255 ]]; then
-        echo "Broker service was restarted successfully"
-        break
-    fi
-    echo "Restart failed, retrying in a few seconds..."
-    sleep 6s
-    done
-
-    # Reboot the VM to ensure a clean snapshot
-    sudo virsh reboot e2e-runner
-
-    sleep 120s
+    retry --times 10 --delay 3 -- ssh_vm "systemctl is-system-running --wait"
 
     # Create snapshot for broker configured state
-    sudo virsh snapshot-create-as e2e-runner --name "$broker-$version-configured" --reuse-external
+    virsh snapshot-create-as e2e-runner --name "$broker-$channel-configured" --reuse-external
 done
 ```
 
-### 4. Building YARF
+## Building YARF
 
 Now that the VM is ready with authd and the desired brokers installed and configured, we need to build YARF in order to run the tests.
+
+:memo: **Note:** This process is automated through the `e2e-tests/setup-yarf.sh` script, which you can use instead of following the steps below manually.
 
 1. Clone the YARF repository (either directly or by forking it first):
 
@@ -375,7 +336,7 @@ Now that the VM is ready with authd and the desired brokers installed and config
         source {path_to_yarf_repo}/.venv/bin/activate
         ```
 
-### 5. Running the tests
+## Running the tests
 
 Now that everything is set up, we can finally run the tests. Make sure to activate the YARF virtual environment first.
 In order to facilitate running the tests, the `e2e-tests/run-tests.sh` script is provided.
