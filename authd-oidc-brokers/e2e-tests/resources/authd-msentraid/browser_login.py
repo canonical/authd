@@ -10,11 +10,12 @@ from gi.repository import Gdk, Gtk  # type: ignore # The interpreter usually doe
 
 # The import will be resolved at runtime, which means that the directory structure will be something like:
 # test_run_dir/
-#   broker-resources/
+#   resources/
+#     authd/
+#       browser_window.py <- the dependency
+#     authd-msentraid/
 #       browser_login.py  <- this file
-#   authd-resources/
-#      BrowserWindow.py <- the dependency
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "authd-resources")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "authd")))
 from browser_window import BrowserWindow, ascii_string_to_key_events  # type: ignore # This is resolved at runtime
 
 
