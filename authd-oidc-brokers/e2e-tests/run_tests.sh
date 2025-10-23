@@ -27,11 +27,20 @@ mkdir -p "${TEST_RUN_DIR}"
 cd "${TEST_RUN_DIR}"
 mkdir -p output resources
 
-# Read entire tests dir if arguments are not provided
-TESTS_TO_RUN="${TESTS_DIR}/*.robot"
-if [ -n "${1:-}" ]; then
-    echo "Running specific test: ${1}"
-    TESTS_TO_RUN="${TESTS_DIR}/$(basename "${1}")"
+
+TESTS_TO_RUN=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        *)
+            echo "Running specific test: $1"
+            TESTS_TO_RUN="${TESTS_TO_RUN} ${TESTS_DIR}/$(basename "${1}")"
+            shift ;;
+    esac
+done
+
+if [ -z "${TESTS_TO_RUN}" ]; then
+    echo "No specific tests provided. Running all tests in ${TESTS_DIR}."
+    TESTS_TO_RUN=$(find "${TESTS_DIR}" -type f -name "*.robot")
 fi
 
 # Run the YARF tests
