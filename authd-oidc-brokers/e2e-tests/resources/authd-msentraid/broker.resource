@@ -118,7 +118,7 @@ Log In With Remote User Through CLI: Local Password
 # The full commands looks like:
 #     sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
 Change Broker Configuration
-    [arguments]    ${config_key}    ${config_value}
+    [Arguments]    ${config_key}    ${config_value}
     Open Terminal In Sudo Mode
     Hid.Type String    sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
     Hid.Keys Combo    Return
@@ -129,13 +129,13 @@ Change Broker Configuration
 # Pretty much the same as the function above, but since YARF does not have support for
 # shifted characters yet, we need to do some workarounds.
 Change allowed_users In Broker Configuration
-    [arguments]    ${config_value}
+    [Arguments]    ${config_value}
     Run Command In Terminal    sudo sed -i 's/#*allowed_users = .*/allowed_users = ${config_value}/g' ${ENTRAID_BROKER_CFG}
     Run Command In Terminal    snap restart authd-msentraid
 
 
 Comment Key In Broker Configuration
-    [arguments]    ${config_key}
+    [Arguments]    ${config_key}
     Run Command In Terminal    sudo sed -i 's/#*${config_key} = .*/#${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
     Run Command In Terminal    snap restart authd-msentraid
 
