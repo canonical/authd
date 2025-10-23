@@ -387,7 +387,7 @@ In order to facilitate running the tests, the `e2e-tests/run-tests.sh` script is
 
 - Optionally, you can set:
   - `SNAPSHOT_ON_FAIL` - If set, a snapshot will be taken if a test fail. Default is "false".
-  - `RUN_ONSCREEN` - If set, the tests will run with a visible window. Default is "false" (headless).
+  - `SHOW_WEBVIEW` - If set, the tests will run with a visible window. Default is "false" (headless).
 
 - If the script is run without arguments, it will run all the tests. You can also provide a specific test file and it will run only that test.
 
@@ -396,7 +396,7 @@ In order to facilitate running the tests, the `e2e-tests/run-tests.sh` script is
  export E2E_PASSWORD="your_password"
  export BROKER="your_broker_name" # e.g. authd-msentraid
  export SNAPSHOT_ON_FAIL="true" # optional
- export RUN_ONSCREEN="true" # optional
+ export SHOW_WEBVIEW="true" # optional
 
  # To run all tests
  ./e2e-tests/run-tests.sh

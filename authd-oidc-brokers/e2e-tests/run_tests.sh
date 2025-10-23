@@ -8,7 +8,7 @@ set -euo pipefail
 #    BROKER - The broker to test (e.g., authd-msentraid)
 # Optional environment variables:
 #    SNAPSHOT_ON_FAIL - If set, a snapshot of the VM will be taken if a test fails.
-#    RUN_ONSCREEN - If set to 1, the additional window for remote authentication will be run onscreen (useful for debugging)
+#    SHOW_WEBVIEW - If set to 1, the webview used for device authentication is shown during the test run (useful for debugging).
 
 # Required setup:
 #   Virsh domain named 'e2e-runner' must exist

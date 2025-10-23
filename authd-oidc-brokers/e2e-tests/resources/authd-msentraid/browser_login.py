@@ -20,7 +20,7 @@ from browser_window import BrowserWindow, ascii_string_to_key_events  # type: ig
 
 
 if __name__ == "__main__":
-    if os.getenv("RUN_ONSCREEN") is None and "RUNNING_OFFSCREEN" not in os.environ:
+    if os.getenv("SHOW_WEBVIEW") is None and "RUNNING_OFFSCREEN" not in os.environ:
         os.execv(
             "/usr/bin/env",
             [
