@@ -2,7 +2,7 @@
 Documentation       authd test resources
 
 Resource            kvm.resource
-Library             ${CURDIR}/StringUtils.py    AS    StringUtils
+Library             ./StringUtils.py    AS    StringUtils
 Library             Process
 
 
