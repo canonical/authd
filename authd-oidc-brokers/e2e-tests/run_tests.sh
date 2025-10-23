@@ -31,6 +31,9 @@ mkdir -p output resources
 TESTS_TO_RUN=""
 while [ $# -gt 0 ]; do
     case "$1" in
+        --)
+            shift
+            break ;;
         *)
             echo "Running specific test: $1"
             TESTS_TO_RUN="${TESTS_TO_RUN} ${TESTS_DIR}/$(basename "${1}")"
@@ -66,7 +69,7 @@ for test_file in $TESTS_TO_RUN; do
     E2E_USER="$E2E_USER" \
     E2E_PASSWORD="$E2E_PASSWORD" \
     VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2) \
-    yarf --outdir "output/${test_name}" --platform=Vnc . || test_result=$? && true
+    yarf --outdir "output/${test_name}" --platform=Vnc . "$@" || test_result=$? && true
 
     if [ ${test_result} -ne 0 ] && [ -v SNAPSHOT_ON_FAIL ]; then
         echo "Test failed. Saving VM snapshot as requested..."
