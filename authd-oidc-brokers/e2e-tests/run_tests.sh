@@ -28,7 +28,6 @@ TEST_RUN_DIR=$(mktemp -d --tmpdir="${TEST_RUNS_DIR}" "${BROKER}-XXXXXX")
 cd "${TEST_RUN_DIR}"
 mkdir -p output resources
 
-
 TESTS_TO_RUN=""
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -46,6 +45,14 @@ if [ -z "${TESTS_TO_RUN}" ]; then
     echo "No specific tests provided. Running all tests in ${TESTS_DIR}."
     TESTS_TO_RUN=$(find "${TESTS_DIR}" -type f -name "*.robot")
 fi
+
+# Activate YARF environment
+YARF_DIR="${ROOT_DIR}/.yarf"
+if [ ! -d "${YARF_DIR}" ]; then
+    echo "YARF directory not found at ${YARF_DIR}. Please run setup_yarf.sh first."
+    exit 1
+fi
+source "${YARF_DIR}/.venv/bin/activate"
 
 # Run the YARF tests
 tests_failed=
