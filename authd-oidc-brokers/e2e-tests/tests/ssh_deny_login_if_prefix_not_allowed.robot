@@ -15,7 +15,7 @@ ${remote_group}    %{E2E_USER}-group
 
 *** Test Cases ***
 Log in with local user
-    Log in
+    Log In
 
 
 Try to log in with not allowed remote user with device authentication through SSH

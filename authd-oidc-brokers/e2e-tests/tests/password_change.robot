@@ -16,7 +16,7 @@ ${remote_group}    %{E2E_USER}-group
 
 *** Test Cases ***
 Log in with local user
-    Log in
+    Log In
 
 
 Log in with remote user with device authentication
@@ -26,7 +26,7 @@ Log in with remote user with device authentication
     Close Focused Window
 
 
-Change Local Password Of Remote User
+Change local password of remote user
     Open Terminal In Sudo Mode
     Change Local Password Of Remote User    ${username}    ${local_password}    ${new_password}
     Close Terminal In Sudo Mode

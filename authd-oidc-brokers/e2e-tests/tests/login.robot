@@ -14,7 +14,7 @@ ${remote_group}    %{E2E_USER}-group
 
 *** Test Cases ***
 Log in with local user
-    Log in
+    Log In
 
 
 Log in with remote user with device authentication

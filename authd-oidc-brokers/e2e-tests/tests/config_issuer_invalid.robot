@@ -14,10 +14,10 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Log in with local user
-    Log in
+    Log In
 
 
-Change Broker Configuration to an invalid issuer
+Change broker configuration to an invalid issuer
     Change Broker Configuration    issuer    invalid
 
 

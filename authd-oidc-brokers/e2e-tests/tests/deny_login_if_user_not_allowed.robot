@@ -8,12 +8,16 @@ Test Tags       robot:exit-on-failure
 
 
 *** Variables ***
-${username}    another-%{E2E_USER}
+${username}    %{E2E_USER}
 
 
 *** Test Cases ***
 Log in with local user
-    Log in
+    Log In
+
+
+Change owner to another user
+    Change Broker Configuration    owner    different-user
 
 
 Log in with remote user with device authentication

@@ -27,7 +27,7 @@ Log Out
 
 
 Open Terminal
-    Run Command    /usr/bin/x-terminal-emulator
+    Run Command    x-terminal-emulator
     Hid.Move Pointer To Proportional    1    1
     Match Text    @ubuntu:~$    30
     Hid.Keys Combo    F11

@@ -134,7 +134,7 @@ Change allowed_users In Broker Configuration
 
 Comment Key In Broker Configuration
     [Arguments]    ${config_key}
-    Run Command In Terminal    sudo sed -i 's/#*${config_key} = .*/#${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
+    Run Command In Terminal    sudo sed -i 's/#*${config_key} = .*/#${config_key} = .*/g' ${ENTRAID_BROKER_CFG}
     Run Command In Terminal    snap restart authd-msentraid
 
 
@@ -144,7 +144,7 @@ Log In With Remote User Through SSH: QR Code
     Select Provider through SSH
     Continue Log In With Remote User: Log In On External Browser    ${username}
     Continue Log In With Remote User Through SSH: QR Code
-    Continue Log In With Remote User Through SSH: Define Local Password    ${local_password}
+    Continue Log In With Remote User Through SSH: Define Local Password    ${username}    ${local_password}
 
 
 Start Log In With Remote User Through SSH: QR Code
@@ -170,7 +170,7 @@ Continue Log In With Remote User Through SSH: QR Code
 
 
 Continue Log In With Remote User Through SSH: Define Local Password
-    [Arguments]    ${local_password}
+    [Arguments]    ${username}    ${local_password}
     Match Text    Create a local password:    30
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return

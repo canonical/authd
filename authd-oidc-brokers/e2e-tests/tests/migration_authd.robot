@@ -15,7 +15,7 @@ ${remote_group}    %{E2E_USER}-group
 
 *** Test Cases ***
 Log in with local user
-    Log in
+    Log In
 
 
 Log in with remote user with device authentication
@@ -41,7 +41,7 @@ Log in with remote user with local password
 
 
 Switch to the edge PPA for authd
-    Enable Edge Repository for Authd
+    Enable Edge Repository For Authd
     Update And Upgrade Packages
 
 

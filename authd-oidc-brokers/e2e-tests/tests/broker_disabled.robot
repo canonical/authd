@@ -13,7 +13,7 @@ ${username}    %{E2E_USER}
 
 *** Test Cases ***
 Log in with local user
-    Log in
+    Log In
 
 
 Disable broker
@@ -26,7 +26,7 @@ Ensure local sudo user can still log in
     Close Terminal In Sudo Mode
 
 
-Check that remote user can't log in
+Check that remote user cannot log in
     Open Terminal In Sudo Mode
     Try Log In With Remote User    ${username}
     Check That User Is Redirected To Local Broker

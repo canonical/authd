@@ -15,7 +15,7 @@ ${remote_group}    %{E2E_USER}-group
 
 *** Test Cases ***
 Log in with local user
-    Log in
+    Log In
 
 
 Log in with remote user using mixed case username with device authentication

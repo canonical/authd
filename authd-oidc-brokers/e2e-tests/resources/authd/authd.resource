@@ -10,11 +10,11 @@ ${local_password}    qwer1234
 
 
 *** Keywords ***
-Enable Edge Repository for Authd
+Enable Edge Repository For Authd
     Run Command In Terminal     sudo add-apt-repository ppa:ubuntu-enterprise-desktop/authd-edge -y
 
 
-Disable Authd Socket and Service
+Disable Authd Socket And Service
     Run Command In Terminal    sudo systemctl mask --now authd.socket
     Run Command In Terminal    sudo systemctl mask --now authd.service
 
