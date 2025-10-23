@@ -2,49 +2,107 @@
 
 set -euo pipefail
 
-# Required environment variables:
-#    E2E_USER - The username to use for the tests
-#    E2E_PASSWORD - The password to use for the tests
-#    BROKER - The broker to test (e.g., authd-msentraid)
-# Optional environment variables:
-#    SNAPSHOT_ON_FAIL - If set, a snapshot of the VM will be taken if a test fails.
-#    SHOW_WEBVIEW - If set to 1, the webview used for device authentication is shown during the test run (useful for debugging).
+usage() {
+    cat << EOF
+Usage: $0 [options] [test.robot...]
 
-# Required setup:
-#   Virsh domain named 'e2e-runner' must exist
-#   Domain snapshots created:
-#      ${broker}-stable-configured
-#      ${broker}-edge-configured
+Runs YARF end-to-end tests against a libvirt VM configured with the specified broker.
+For each test the script reverts the VM to a broker-specific snapshot, links
+test resources, launches the test via YARF, and optionally saves a VM snapshot
+if the test fails.
 
-# This script is used to run the YARF tests for the authd-oidc-brokers project.
+Required environment variables (or use the corresponding command-line options):
+  E2E_USER           The username used for authd login in the tests
+  E2E_PASSWORD       The password used for authd login in the tests
+  BROKER             The broker to test (e.g., authd-msentraid)
+
+Optional environment variables / flags:
+  SNAPSHOT_ON_FAIL   If set, take a snapshot of the VM when a test fails
+  SHOW_WEBVIEW       If set, show the webview used for device authentication during tests
+
+Prerequisites:
+  - A libvirt domain as set up by the vm/provision.sh script, with the snapshots:
+      \${BROKER}-stable-configured
+      \${BROKER}-edge-configured
+  - YARF must be installed via the setup_yarf.sh script
+
+Options:
+  -u, --user USERNAME          Username for the tests (can also be set via E2E_USER environment variable)
+  -p, --password PASSWORD      Password for the tests (can also be set via E2E_PASSWORD environment variable)
+  -b, --broker BROKER          Broker to test (can also be set via BROKER environment variable)
+      --snapshot-on-fail       Take a snapshot of the VM if a test fails
+      --show-webview           Show the webview used for device authentication during the tests
+  -h, --help                   Show this help message and exit
+EOF
+}
+
 ROOT_DIR=$(dirname "$(readlink -f "$0")")
 TESTS_DIR="${ROOT_DIR}/tests"
 VM_NAME=${VM_NAME:-"e2e-runner"}
 
-# Create directory for the test run
-TEST_RUNS_DIR="${ROOT_DIR}/.runs"
+# Parse command line arguments
+TESTS_TO_RUN=""
+while [[ $# -gt 0 ]]; do
+    key="$1"
+
+    case $key in
+        --user|-u)
+            E2E_USER="$2"
+            shift 2
+            ;;
+        --password|-p)
+            E2E_PASSWORD="$2"
+            shift 2
+            ;;
+        --broker|-b)
+            BROKER="$2"
+            shift 2
+            ;;
+        --snapshot-on-fail)
+            SNAPSHOT_ON_FAIL=1
+            shift
+            ;;
+        --show-webview)
+            export RUN_ONSCREEN=1
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -*)
+            echo "Unknown option: $1"
+            usage
+            exit 1
+            ;;
+        *)
+            TESTS_TO_RUN="${TESTS_TO_RUN} ${TESTS_DIR}/$(basename "${1}")"
+            shift
+            ;;
+    esac
+done
+
+if [ -z "${E2E_USER:-}" ] || [ -z "${E2E_PASSWORD:-}" ] || [ -z "${BROKER:-}" ]; then
+    echo "Error: E2E_USER, E2E_PASSWORD, and BROKER must be set either as environment variables or via command line arguments."
+    usage
+    exit 1
+fi
+
+if [ -z "${TESTS_TO_RUN}" ]; then
+    echo "Running all tests in ${TESTS_DIR}"
+    TESTS_TO_RUN=$(find "${TESTS_DIR}" -type f -name "*.robot")
+fi
+
+# Create a temporary test run directory
+TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
 mkdir -p "${TEST_RUNS_DIR}"
 TEST_RUN_DIR=$(mktemp -d --tmpdir="${TEST_RUNS_DIR}" "${BROKER}-XXXXXX")
 cd "${TEST_RUN_DIR}"
 mkdir -p output resources
-
-TESTS_TO_RUN=""
-while [ $# -gt 0 ]; do
-    case "$1" in
-        --)
-            shift
-            break ;;
-        *)
-            echo "Running specific test: $1"
-            TESTS_TO_RUN="${TESTS_TO_RUN} ${TESTS_DIR}/$(basename "${1}")"
-            shift ;;
-    esac
-done
-
-if [ -z "${TESTS_TO_RUN}" ]; then
-    echo "No specific tests provided. Running all tests in ${TESTS_DIR}."
-    TESTS_TO_RUN=$(find "${TESTS_DIR}" -type f -name "*.robot")
-fi
 
 # Activate YARF environment
 YARF_DIR="${ROOT_DIR}/.yarf"
