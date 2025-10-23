@@ -135,15 +135,15 @@ for test_file in $TESTS_TO_RUN; do
     E2E_USER="$E2E_USER" \
     E2E_PASSWORD="$E2E_PASSWORD" \
     VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2) \
-    yarf --outdir "output/${test_name}" --platform=Vnc . "$@" || test_result=$? && true
+    yarf --outdir "output/${test_name}" --platform=Vnc . "$@" || test_result=$?
 
-    if [ ${test_result} -ne 0 ] && [ -v SNAPSHOT_ON_FAIL ]; then
+    if [ "${test_result:-0}" -ne 0 ] && [ -v SNAPSHOT_ON_FAIL ]; then
         echo "Test failed. Saving VM snapshot as requested..."
         virsh snapshot-create-as "${VM_NAME}" "${test_name}-fail-$(date +%Y%m%d%H%M)"
         echo "Snapshot '${test_name}-fail-$(date +%Y%m%d%H%M)' created."
     fi
 
-    if [ ${test_result} -ne 0 ]; then
+    if [ "${test_result:-0}" -ne 0 ]; then
         tests_failed=1
         test_results+=("${test_name}: FAILED")
     else
