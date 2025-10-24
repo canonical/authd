@@ -1,5 +1,8 @@
+import cairo
 import json
 import gi
+import os
+import subprocess
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
@@ -23,6 +26,8 @@ class BrowserWindow(Gtk.Window):
             border_width=0,
             title="Authd Tests Browser Window",
         )
+
+        self._snapshot_index = 0
 
         self.web_view = WebKit.WebView()
         self.web_view.get_settings().enableJavascript = True
@@ -215,8 +220,35 @@ class BrowserWindow(Gtk.Window):
         for kt in key_taps:
             self.send_key_tap(kt)
 
+    def capture_snapshot(self, path: str, filename: str = "snapshot", ext: str = "png"):
+        alloc = self.web_view.get_allocation()
+
+        # Create an offscreen surface
+        surface = cairo.ImageSurface(cairo.Format.ARGB32, alloc.width, alloc.height)
+        ctx = cairo.Context(surface)
+
+        # Render the window contents onto the Cairo surface
+        self.web_view.draw(ctx)
+
+        # Write to file (PNG)
+        file_path = os.path.join(path, f"{self._snapshot_index:05}-{filename}.{ext}")
+        surface.write_to_png(file_path)
+        self._snapshot_index += 1
+        return file_path
+
 
 def ascii_string_to_key_events(string):
     if len(string) != len(string.encode()):
         raise TypeError(f"{string} is not an ascii string")
     return [ord(ch) for ch in list(string)]
+
+
+def render_video(screenshot_dir: str, video_path: str, framerate: int = 1):
+    subprocess.check_call([
+        "ffmpeg",
+        "-y",
+        "-framerate", str(framerate),
+        "-pattern_type", "glob",
+        "-i", f"{screenshot_dir}/*.png",
+        video_path,
+    ])
