@@ -28,10 +28,8 @@ class BrowserWindow(Gtk.Window):
         self.web_view.get_settings().set_javascript_can_open_windows_automatically(
             False
         )
-        self.web_view.grab_focus()
 
         self.web_view.set_can_default(True)
-        self.web_view.grab_default()
 
         self.web_view.set_state_flags(
             Gtk.StateFlags.ACTIVE | Gtk.StateFlags.FOCUSED, True
@@ -63,6 +61,9 @@ class BrowserWindow(Gtk.Window):
         self._overlay.add(self.web_view)
 
         self.add(self._overlay)
+
+        self.web_view.grab_default()
+        self.web_view.grab_focus()
 
     def wait_for_page_loaded(self):
         if self.load_state == WebKit.LoadEvent.FINISHED:
