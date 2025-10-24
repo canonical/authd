@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import cairo
+import locale
 import subprocess
 
 import gi, os, sys
@@ -23,6 +24,8 @@ from browser_window import BrowserWindow, ascii_string_to_key_events  # type: ig
 
 
 def main():
+    locale.setlocale(locale.LC_ALL, "C")
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument("username")
