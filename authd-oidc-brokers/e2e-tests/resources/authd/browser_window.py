@@ -5,7 +5,12 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("WebKit2", "4.1")
 
-from gi.repository import Gdk, Gtk, GLib, WebKit2 as WebKit  # type: ignore
+from gi.repository import (
+    Gdk,
+    Gtk,
+    GLib,
+    WebKit2 as WebKit
+)  # type: ignore
 
 
 class BrowserWindow(Gtk.Window):
