@@ -128,6 +128,8 @@ class BrowserWindow(Gtk.Window):
         found = False
 
         # Use json.dumps / JSON.parse to safely escape the text into a JS string literal
+        # FIXME: To ensure the text is really visible we should instead use a selector
+        # to go through the DOM and ensure that the text is actually visible.
         js = f"(document?.body?.innerText?.includes(JSON.parse(`{json.dumps(text)}`)))"
 
         def on_js_finished(web_view, result):
