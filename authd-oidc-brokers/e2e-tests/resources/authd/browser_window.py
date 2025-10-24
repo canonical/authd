@@ -221,10 +221,20 @@ class BrowserWindow(Gtk.Window):
             self.send_key_tap(kt)
 
     def capture_snapshot(self, path: str, filename: str = "snapshot", ext: str = "png"):
-        alloc = self.web_view.get_allocation()
+        view_window = self.web_view.get_window()
+        scale = view_window.get_scale_factor()
+        width = view_window.get_width() * scale
+        height = view_window.get_height() * scale
 
         # Create an offscreen surface
-        surface = cairo.ImageSurface(cairo.Format.ARGB32, alloc.width, alloc.height)
+        try:
+            # This is failing in older PyGObject versions, so let's try both ways.
+            surface = view_window.create_similar_image_surface(cairo.Format.ARGB32,
+                                                               width, height, scale)
+        except ValueError:
+            surface = cairo.ImageSurface(cairo.Format.ARGB32, width, height)
+            surface.set_device_scale(scale, scale)
+
         ctx = cairo.Context(surface)
 
         # Render the window contents onto the Cairo surface
