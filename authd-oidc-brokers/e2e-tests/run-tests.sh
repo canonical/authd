@@ -104,6 +104,7 @@ if [ ! -d "${YARF_DIR}" ]; then
     echo "YARF directory not found at ${YARF_DIR}. Please run setup_yarf.sh first."
     exit 1
 fi
+# shellcheck disable=SC1091 # Avoid info message about not following sourced file
 source "${YARF_DIR}/.venv/bin/activate"
 
 # Run the YARF tests
@@ -117,6 +118,7 @@ for test_file in $TESTS_TO_RUN; do
     # Update the symlink to the broker resources to use the specified broker
     ln -sf --no-target-directory "$(dirname "${test_file}")/resources/${BROKER}" resources/broker
     # Ensure the test run directory is cleaned up on exit
+    # shellcheck disable=SC2064 # We want to capture the current value of test_name
     trap "rm -rf ${test_name} resources" EXIT
 
     SNAPSHOT_NAME=${BROKER}-edge-configured
