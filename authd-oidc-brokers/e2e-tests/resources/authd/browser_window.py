@@ -78,6 +78,10 @@ class BrowserWindow(Gtk.Window):
     def wait_for_stable_page(self):
         self.wait_for_page_loaded()
 
+        # This overlay serves us to ensure that focus-related elements of the
+        # page (such as the cursor blinking) aren't affecting our page changes
+        # check mechanism.
+        # So we add an overlay and temporarily steal the focus.
         overlay = Gtk.Button()
         overlay.set_opacity(0)
         self._overlay.add_overlay(overlay)
@@ -90,7 +94,7 @@ class BrowserWindow(Gtk.Window):
             loop.quit()
             return False
 
-        draw_timeout = 500
+        draw_timeout = 750
         timeout = GLib.timeout_add(draw_timeout, on_timeout)
 
         def on_draw_event(_, de):
