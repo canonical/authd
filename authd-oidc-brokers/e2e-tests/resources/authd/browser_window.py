@@ -115,39 +115,42 @@ class BrowserWindow(Gtk.Window):
                               poll_interval_ms=100):
         """Wait until `text` is present in the page's visible text or raise TimeoutError."""
         loop = GLib.MainLoop()
-        poll_id = None
-        timeout_id = None
+        poll_id = 0
+        timeout_id = 0
         found = False
 
-        def on_js_finished(web_view, result, user_data):
+        def on_js_finished(web_view, result):
             nonlocal poll_id, timeout_id, found
+
             try:
                 res = web_view.run_javascript_finish(result)
                 js_value = res.get_js_value()
-                found = bool(js_value.to_boolean())
-            except Exception:
-                found = False
+                found = js_value.to_boolean()
+            except Exception as e:
+                loop.quit()
+                raise e
 
             if found:
                 if timeout_id:
                     GLib.source_remove(timeout_id)
+                    timeout_id = 0
                 if poll_id:
                     GLib.source_remove(poll_id)
+                    poll_id = 0
                 loop.quit()
 
         def poll_fn():
-            # Use json.dumps to safely escape the text into a JS string literal
-            js = (
-                     "Boolean(document.body && document.body.innerText && "
-                     "document.body.innerText.indexOf(%s) !== -1)"
-                 ) % json.dumps(text)
-            self.web_view.run_javascript(js, None, on_js_finished, None)
+            # Use json.dumps / JSON.parse to safely escape the text into a JS string literal
+            js = f"(document?.body?.innerText?.includes(JSON.parse(`{json.dumps(text)}`)))"
+
+            self.web_view.run_javascript(js, None, on_js_finished)
             return True  # keep polling until callback quits the loop
 
         def on_timeout():
             nonlocal poll_id
             if poll_id:
                 GLib.source_remove(poll_id)
+                poll_id = 0
             loop.quit()
             return False
 
