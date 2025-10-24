@@ -23,6 +23,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "a
 from browser_window import BrowserWindow, ascii_string_to_key_events  # type: ignore # This is resolved at runtime
 
 
+SNAPSHOT_INDEX = 0
+
+
 def main():
     locale.setlocale(locale.LC_ALL, "C")
 
@@ -48,49 +51,56 @@ def login(username: str, password: str, device_code: str, screenshot_dir: str = 
     browser.show_all()
 
     browser.web_view.load_uri("https://microsoft.com/devicelogin")
+    browser.wait_for_stable_page()
+    capture_window_snapshot(browser, screenshot_dir, "page-loaded")
 
     browser.wait_for_text_visible("Enter code to allow access")
     browser.wait_for_stable_page()
-    screenshot_window(browser, os.path.join(screenshot_dir, "01-device-login.png"))
+    capture_window_snapshot(browser, screenshot_dir, "device-login")
     browser.send_key_taps(
         ascii_string_to_key_events(device_code) + [Gdk.KEY_Return])
 
     browser.wait_for_text_visible("Sign in")
     browser.wait_for_stable_page()
-    screenshot_window(browser, os.path.join(screenshot_dir, "02-device-login-enter-code.png"))
+    capture_window_snapshot(browser, screenshot_dir, "device-login-enter-code")
     browser.send_key_taps(
         ascii_string_to_key_events(username) + [Gdk.KEY_Return])
 
     browser.wait_for_text_visible("Enter password")
     browser.wait_for_stable_page()
-    screenshot_window(browser, os.path.join(screenshot_dir, "03-device-login-enter-username.png"))
+    capture_window_snapshot(browser, screenshot_dir, "device-login-enter-username")
     browser.send_key_taps(
         ascii_string_to_key_events(password) + [Gdk.KEY_Return])
 
     browser.wait_for_text_visible("Are you trying to sign in")
     browser.wait_for_stable_page()
-    screenshot_window(browser, os.path.join(screenshot_dir, "04-device-login-enter-password.png"))
+    capture_window_snapshot(browser, screenshot_dir, "device-login-enter-password")
     browser.send_key_taps([Gdk.KEY_Return])
 
     browser.wait_for_text_visible("You have signed in")
     browser.wait_for_stable_page()
-    screenshot_window(browser, os.path.join(screenshot_dir, "05-device-login-success.png"))
+    capture_window_snapshot(browser, screenshot_dir, "device-login-success")
 
 
-def screenshot_window(window: Gtk.Window, filename: str):
+def capture_window_snapshot(window: Gtk.Window, path: str, filename: str = "snapshot"):
+    global SNAPSHOT_INDEX
+
     # Get widget allocation (size)
-    alloc = window.get_allocation()
-    width, height = alloc.width, alloc.height
+    alloc = window.web_view.get_allocation()
 
     # Create an offscreen surface
-    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, width, height)
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, alloc.width, alloc.height)
     ctx = cairo.Context(surface)
 
     # Render the window contents onto the Cairo surface
-    window.draw(ctx)
+    window.web_view.draw(ctx)
 
     # Write to file (PNG)
-    surface.write_to_png(filename)
+    file_path = os.path.join(path, f"{SNAPSHOT_INDEX:03}-{filename}.png")
+    surface.write_to_png(file_path)
+    SNAPSHOT_INDEX += 1
+
+    return file_path
 
 
 def write_video(screenshot_dir: str, video_path: str):
