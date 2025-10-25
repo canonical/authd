@@ -29,7 +29,10 @@ class BrowserWindow(Gtk.Window):
             title="Authd Tests Browser Window",
         )
 
+        self._draw_monitors_cancellable = None
+        self._draw_monitors = []
         self._snapshot_index = 0
+        self._snapshotting = False
 
         self.web_view = WebKit.WebView()
         self.web_view.get_settings().enableJavascript = True
@@ -73,6 +76,54 @@ class BrowserWindow(Gtk.Window):
         self.web_view.grab_default()
         self.web_view.grab_focus()
 
+        self.connect("destroy", lambda _wv: self._on_destroy())
+
+    def _on_destroy(self):
+        if self._draw_monitors_cancellable:
+            self._draw_monitors_cancellable.cancel()
+
+    def draw_event_connect(self, callback):
+        idle_id = 0
+
+        def on_idle():
+            nonlocal idle_id
+
+            for cb in self._draw_monitors:
+                cb()
+            idle_id = 0
+            return False
+
+        def on_draw_event(_, _cr):
+            nonlocal idle_id
+
+            if self._snapshotting:
+                return False
+
+            if not idle_id:
+                idle_id = GLib.idle_add(on_idle)
+            return False
+
+        self._draw_monitors.append(callback)
+        signal_id = self.web_view.connect_after("draw", on_draw_event)
+
+        def on_cancelled():
+            self._draw_monitors_cancellable = None
+
+            if idle_id:
+                GLib.source_remove(idle_id)
+
+            self.web_view.disconnect(signal_id)
+
+        if not self._draw_monitors_cancellable:
+            self._draw_monitors_cancellable = Gio.Cancellable()
+            self._draw_monitors_cancellable.connect(on_cancelled)
+
+    def draw_event_disconnect(self, callback):
+        self._draw_monitors.remove(callback)
+
+        if not self._draw_monitors and self._draw_monitors_cancellable:
+            self._draw_monitors_cancellable.cancel()
+
     def wait_for_page_loaded(self):
         if self.load_state == WebKit.LoadEvent.FINISHED:
             return
@@ -111,16 +162,15 @@ class BrowserWindow(Gtk.Window):
         draw_timeout = 750
         timeout = GLib.timeout_add(draw_timeout, on_timeout)
 
-        def on_draw_event(_, de):
+        def on_draw_event():
             nonlocal timeout
 
             GLib.source_remove(timeout)
             timeout = GLib.timeout_add(draw_timeout, on_timeout)
-            return False
 
-        signal_id = self.web_view.connect("draw", on_draw_event)
+        self.draw_event_connect(on_draw_event)
         loop.run()
-        self.web_view.disconnect(signal_id)
+        self.draw_event_disconnect(on_draw_event)
 
         overlay.destroy()
         self.web_view.grab_focus()
@@ -282,8 +332,11 @@ class BrowserWindow(Gtk.Window):
 
         ctx = cairo.Context(surface)
 
-        # Render the window contents onto the Cairo surface
+        # Render the window contents onto the Cairo surface, blocking any
+        # draw event handler to prevent reentrance
+        self._snapshotting = True
         self.web_view.draw(ctx)
+        self._snapshotting = False
 
         # Write to file
         file_path = os.path.join(path, f"{self._snapshot_index:05}-{filename}.{ext}")
