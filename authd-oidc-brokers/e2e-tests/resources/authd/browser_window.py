@@ -3,6 +3,8 @@ import json
 import gi
 import os
 import subprocess
+import traceback
+import sys
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
@@ -220,7 +222,50 @@ class BrowserWindow(Gtk.Window):
         for kt in key_taps:
             self.send_key_tap(kt)
 
-    def capture_snapshot(self, path: str, filename: str = "snapshot", ext: str = "png"):
+    def _run_async_task(self, task_function, cancellable: Gio.Cancellable = None,
+                        wait: bool = True):
+        loop = None
+        ret = False
+
+        def callback(_obj, result):
+            nonlocal ret
+
+            try:
+                ret = result.propagate_boolean()
+            except GLib.Error as e:
+                if e.matches(Gio.io_error_quark(), Gio.IOErrorEnum.CANCELLED):
+                    return
+            except Exception as e:
+                raise e
+            finally:
+                if loop:
+                    loop.quit()
+
+        def thread_func(t, _so, _td, _c):
+            try:
+                task_function()
+                t.return_boolean(True)
+            except GLib.Error as e:
+                t.return_error(e)
+            except Exception as e:
+                print(traceback.format_exc(), file=sys.stderr)
+                t.return_error(GLib.Error(f"{e}"))
+
+        if wait:
+            loop = GLib.MainLoop()
+
+        task = Gio.Task.new(source_object=self, cancellable=cancellable,
+                            callback=callback)
+        task.run_in_thread(thread_func)
+
+        if wait:
+            loop.run()
+            return ret
+
+        return True
+
+    def capture_snapshot(self, path: str, filename: str = "snapshot", ext: str = "png",
+                         sync: bool = True, cancellable: Gio.Cancellable = None):
         view_window = self.web_view.get_window()
         scale = view_window.get_scale_factor()
         width = view_window.get_width() * scale
@@ -240,11 +285,13 @@ class BrowserWindow(Gtk.Window):
         # Render the window contents onto the Cairo surface
         self.web_view.draw(ctx)
 
-        # Write to file (PNG)
+        # Write to file
         file_path = os.path.join(path, f"{self._snapshot_index:05}-{filename}.{ext}")
-        surface.write_to_png(file_path)
         self._snapshot_index += 1
         return file_path
+
+        self._run_async_task(lambda: surface.write_to_png(file_path),
+                             cancellable=cancellable, wait=sync)
 
 
 def ascii_string_to_key_events(string):
