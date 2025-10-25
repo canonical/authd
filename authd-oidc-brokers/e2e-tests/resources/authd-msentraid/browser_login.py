@@ -58,6 +58,7 @@ def main():
         if browser.get_mapped():
             browser.capture_snapshot(screenshot_dir, "failure")
         browser.stop_recording(os.path.join(args.output_dir, "webview_recording.webm"))
+        browser.destroy()
 
 
 def login(browser, username: str, password: str, device_code: str, screenshot_dir: str = "."):
