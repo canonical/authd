@@ -1,3 +1,5 @@
+//go:build withmsentraid
+
 // Package msentraid is the Microsoft Entra ID specific extension.
 package msentraid
 

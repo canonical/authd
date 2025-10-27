@@ -1,3 +1,5 @@
+//go:build withmsentraid
+
 package msentraid_test
 
 import (

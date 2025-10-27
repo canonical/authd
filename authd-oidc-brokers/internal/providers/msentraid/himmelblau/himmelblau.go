@@ -1,3 +1,5 @@
+//go:build withmsentraid
+
 // Package himmelblau provides functions to use the libhimmelblau library
 package himmelblau
 

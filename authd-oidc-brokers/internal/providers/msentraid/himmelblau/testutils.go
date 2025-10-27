@@ -1,3 +1,5 @@
+//go:build withmsentraid
+
 package himmelblau
 
 import "testing"
