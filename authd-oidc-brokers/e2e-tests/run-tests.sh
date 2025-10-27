@@ -132,6 +132,7 @@ for test_file in $TESTS_TO_RUN; do
         SNAPSHOT_NAME=${BROKER}-stable-configured
     fi
     virsh snapshot-revert "${VM_NAME}" "${SNAPSHOT_NAME}" || true
+    ${ROOT_DIR}/vm/ssh.sh -- "sh -c 'sudo systemctl restart chronyd && sudo chronyc waitsync'"
 
     echo "Running test: ${test_name}"
     E2E_USER="$E2E_USER" \
