@@ -138,7 +138,9 @@ for test_file in $TESTS_TO_RUN; do
     E2E_PASSWORD="$E2E_PASSWORD" \
     TOTP_SECRET="$TOTP_SECRET" \
     VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2) \
-    yarf --outdir "output/${test_name}" --platform=Vnc . "$@" || test_result=$?
+    yarf --outdir "output/${test_name}" --platform=Vnc . "$@" \
+        2> >(grep -v "<video controls style" >&2) || \
+        test_result=$?
 
     if [ "${test_result:-0}" -ne 0 ] && [ -v SNAPSHOT_ON_FAIL ]; then
         echo "Test failed. Saving VM snapshot as requested..."
