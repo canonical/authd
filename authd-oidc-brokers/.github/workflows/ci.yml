@@ -164,14 +164,14 @@ jobs:
 
       - name: Upload coverage report as artifact
         if: matrix.test == 'coverage' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: coverage
           path: ${{ env.COVERAGE_DIR }}
 
       - name: Upload test artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: authd-${{ github.job }}-artifacts-${{ github.run_attempt }}
           path: ${{ env.AUTHD_TEST_ARTIFACTS_DIR }}
