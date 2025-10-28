@@ -100,7 +100,7 @@ function force_create_snapshot() {
 }
 
 function wait_for_system_running() {
-    retry --times 10 --delay 3 -- "$SSH" "systemctl is-system-running --wait"
+    retry --times 20 --delay 3 -- "$SSH" "systemctl is-system-running --wait"
 }
 
 function install_brokers() {
