@@ -179,17 +179,18 @@ else
     echo "Image file already exists: ${IMAGE_FILE}"
 fi
 
-# Copy the image to avoid modifying the original
+# Copy and resize the image
 IMAGE_FILE_ORIG="${IMAGE_FILE}"
 IMAGE_FILE="${ARTIFACTS_DIR}/e2e-runner.qcow2"
 if [ ! -f "${IMAGE_FILE}" ]; then
+    # Copy the image to avoid modifying the original
     cp "${IMAGE_FILE_ORIG}" "${IMAGE_FILE}"
+
+    # Resize the image to 10GB
+    qemu-img resize "${IMAGE_FILE}" 10G
 else
     echo "Copied image file already exists: ${IMAGE_FILE}"
 fi
-
-# Resize the image to 10GB
-qemu-img resize "${IMAGE_FILE}" 10G
 
 # Create a cloud-init ISO
 CLOUD_INIT_ISO="${ARTIFACTS_DIR}/seed.iso"
@@ -229,7 +230,7 @@ else
 fi
 
 # Ensure the VM is shut off before proceeding
-if virsh dominfo "${VM_NAME}" | grep -q "running"; then
+if virsh domstate "${VM_NAME}" | grep -q '^running'; then
     virsh destroy "${VM_NAME}"
 fi
 
