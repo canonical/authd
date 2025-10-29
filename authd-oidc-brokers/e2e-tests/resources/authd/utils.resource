@@ -12,6 +12,8 @@ Library             OperatingSystem
 
 *** Keywords ***
 Log In
+    Set OCR Confidence Threshold    0.94
+    Set OCR Coincidence Threshold    92
     Match Text    Not listed    300
     Hid.Keys Combo    Return
     BuiltIn.Sleep    2
