@@ -21,7 +21,7 @@ Log in with local user
     Log In
 
 
-Fail to login if usernames do not match
+Fail to log in if usernames do not match
     Open Terminal
     Start Log In With Remote User Through CLI: QR Code   different_user
     Select Provider
