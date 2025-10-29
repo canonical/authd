@@ -1,7 +1,7 @@
 *** Settings ***
 Documentation       MS Entra ID specific resources for the tests
 
-Resource            kvm.resource
+Resource            ../kvm.resource
 Resource            ../authd/utils.resource
 Library             ./Browser.py    AS    Browser
 Library             Hid.py    AS    Hid

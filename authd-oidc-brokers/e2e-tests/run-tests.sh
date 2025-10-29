@@ -9,7 +9,7 @@ Usage: $0 [options] [test.robot...]
 
 Runs YARF end-to-end tests against a libvirt VM configured with the specified broker.
 For each test the script reverts the VM to a broker-specific snapshot, links
-test resources and launches the test via YARF.
+test resources and launches the test via robot framework.
 
 Required environment variables (or use the corresponding command-line options):
   E2E_USER           The username used for authd login in the tests
@@ -79,7 +79,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ -z "${E2E_USER:-}" ] || [ -z "${E2E_PASSWORD:-}" ] || [ -z "${BROKER:-}" ] || [ -z "${TOTP_SECRET:-}" ]; then
-    echo "Error: E2E_USER, E2E_PASSWORD, BROKER, and TOTP_SECRET must be set either as environment variables or via command line arguments."
+    echo >&2  "Error: E2E_USER, E2E_PASSWORD, BROKER, and TOTP_SECRET must be set either as environment variables or via command line arguments."
     usage
     exit 1
 fi
@@ -100,23 +100,22 @@ mkdir -p output resources
 # Activate YARF environment
 YARF_DIR="${ROOT_DIR}/.yarf"
 if [ ! -d "${YARF_DIR}" ]; then
-    echo "YARF directory not found at ${YARF_DIR}. Please run setup_yarf.sh first."
+    echo >&2  "YARF directory not found at ${YARF_DIR}. Please run setup_yarf.sh first."
     exit 1
 fi
 # shellcheck disable=SC1091 # Avoid info message about not following sourced file
 source "${YARF_DIR}/.venv/bin/activate"
 
-# Run the YARF tests
-for test_file in $TESTS_TO_RUN; do
-    test_name=$(basename "${test_file}")
+# Create symlinks to the resources directory
+mkdir -p tests/resources
+for resource in "${ROOT_DIR}/resources/"*; do
+    ln -s "${resource}" "tests/resources/$(basename "${resource}")"
+done
+ln -sf --no-target-directory "${BROKER}" tests/resources/broker
 
-    ln -s "${test_file}" .
-    ln -sf --no-target-directory "$(dirname "${test_file}")/resources/authd" resources/authd
-    # Update the symlink to the broker resources to use the specified broker
-    ln -sf --no-target-directory "$(dirname "${test_file}")/resources/${BROKER}" resources/broker
-    # Ensure the test run directory is cleaned up on exit
-    # shellcheck disable=SC2064 # We want to capture the current value of test_name
-    trap "rm -rf ${test_name} resources" EXIT
+# Create symlinks to the test files
+for test_file in $TESTS_TO_RUN; do
+    ln -s "${test_file}" tests
 done
 
 E2E_USER="$E2E_USER" \
@@ -124,7 +123,12 @@ E2E_PASSWORD="$E2E_PASSWORD" \
 TOTP_SECRET="$TOTP_SECRET" \
 BROKER="$BROKER" \
 VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2) \
-yarf --outdir "output/${test_name}" --platform=Vnc . "$@" \
+robot \
+    --loglevel DEBUG \
+    --pythonpath "${YARF_DIR}/yarf/rf_libraries/libraries/vnc" \
+    "${ROBOT_ARGS[@]}" \
+    "$@" \
+    tests \
     2> >(grep -v "<video controls style" >&2) || \
     test_result=$?
 

@@ -1,7 +1,7 @@
 *** Settings ***
 Documentation       Authd related test resources
 
-Resource            kvm.resource
+Resource            ../kvm.resource
 Resource            ./utils.resource
 
 
