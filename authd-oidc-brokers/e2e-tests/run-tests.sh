@@ -28,6 +28,7 @@ Options:
   -p, --password PASSWORD      Password for the tests (can also be set via E2E_PASSWORD environment variable)
   -s, --totp-secret SECRET     Secret to generate OTP codes for the user's MFA (can also be set via TOTP_SECRET environment variable)
   -b, --broker BROKER          Broker to test (can also be set via BROKER environment variable)
+      --rerunfailed            Re-run only the tests that failed in the previous run
   -h, --help                   Show this help message and exit
 EOF
 }
@@ -35,6 +36,7 @@ EOF
 ROOT_DIR=$(dirname "$(readlink -f "$0")")
 TESTS_DIR="${ROOT_DIR}/tests"
 VM_NAME=${VM_NAME:-"e2e-runner"}
+TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
 
 # Parse command line arguments
 TESTS_TO_RUN=""
@@ -57,6 +59,10 @@ while [[ $# -gt 0 ]]; do
         --totp-secret|-s)
             TOTP_SECRET="$2"
             shift 2
+            ;;
+        --rerunfailed)
+            RERUNFAILED=1
+            shift
             ;;
         -h|--help)
             usage
@@ -89,13 +95,28 @@ if [ -z "${TESTS_TO_RUN}" ]; then
     TESTS_TO_RUN=$(find "${TESTS_DIR}" -type f -name "*.robot")
 fi
 
+PREVIOUS_TEST_RUN_DIR=$(readlink -f "${TEST_RUNS_DIR}/${BROKER}-latest" || true)
+if [ -n "${RERUNFAILED:-}" ] && [ -z "${PREVIOUS_TEST_RUN_DIR}" ]; then
+    echo >&2 "Error: No previous test run found to rerun failed tests from."
+    exit 1
+fi
+
+ROBOT_ARGS=()
+if [ -n "${RERUNFAILED:-}" ]; then
+    echo "Rerunning failed tests from previous run in ${PREVIOUS_TEST_RUN_DIR}"
+    ROBOT_ARGS+=(--rerunfailed "${PREVIOUS_TEST_RUN_DIR}/output.xml")
+fi
+
+# Launch the domain if it's not already running
+if ! virsh domstate "${VM_NAME}" | grep -q '^running'; then
+    virsh start "${VM_NAME}"
+fi
+
 # Create a temporary test run directory
-TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
 mkdir -p "${TEST_RUNS_DIR}"
 TEST_RUN_DIR=$(mktemp -d --tmpdir="${TEST_RUNS_DIR}" "${BROKER}-XXXXXX")
 ln -sf --no-target-directory "${TEST_RUN_DIR}" "${TEST_RUNS_DIR}/${BROKER}-latest"
 cd "${TEST_RUN_DIR}"
-mkdir -p output resources
 
 # Activate YARF environment
 YARF_DIR="${ROOT_DIR}/.yarf"
