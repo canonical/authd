@@ -8,17 +8,13 @@ Usage: $0 [options] [test.robot...]
 
 Runs YARF end-to-end tests against a libvirt VM configured with the specified broker.
 For each test the script reverts the VM to a broker-specific snapshot, links
-test resources, launches the test via YARF, and optionally saves a VM snapshot
-if the test fails.
+test resources and launches the test via YARF.
 
 Required environment variables (or use the corresponding command-line options):
   E2E_USER           The username used for authd login in the tests
   E2E_PASSWORD       The password used for authd login in the tests
   TOTP_SECRET        The secret used to generate OTP codes for the E2E_USER's MFA
   BROKER             The broker to test (e.g., authd-msentraid)
-
-Optional environment variables / flags:
-  SNAPSHOT_ON_FAIL   If set, take a snapshot of the VM when a test fails
 
 Prerequisites:
   - A libvirt domain as set up by the vm/provision.sh script, with the snapshots:
@@ -31,7 +27,6 @@ Options:
   -p, --password PASSWORD      Password for the tests (can also be set via E2E_PASSWORD environment variable)
   -s, --totp-secret SECRET     Secret to generate OTP codes for the user's MFA (can also be set via TOTP_SECRET environment variable)
   -b, --broker BROKER          Broker to test (can also be set via BROKER environment variable)
-      --snapshot-on-fail       Take a snapshot of the VM if a test fails
   -h, --help                   Show this help message and exit
 EOF
 }
@@ -61,10 +56,6 @@ while [[ $# -gt 0 ]]; do
         --totp-secret|-s)
             TOTP_SECRET="$2"
             shift 2
-            ;;
-        --snapshot-on-fail)
-            SNAPSHOT_ON_FAIL=1
-            shift
             ;;
         -h|--help)
             usage
@@ -115,8 +106,6 @@ fi
 source "${YARF_DIR}/.venv/bin/activate"
 
 # Run the YARF tests
-tests_failed=
-test_results=()
 for test_file in $TESTS_TO_RUN; do
     test_name=$(basename "${test_file}")
 
@@ -127,36 +116,15 @@ for test_file in $TESTS_TO_RUN; do
     # Ensure the test run directory is cleaned up on exit
     # shellcheck disable=SC2064 # We want to capture the current value of test_name
     trap "rm -rf ${test_name} resources" EXIT
-
-    echo "Running test: ${test_name}"
-    E2E_USER="$E2E_USER" \
-    E2E_PASSWORD="$E2E_PASSWORD" \
-    TOTP_SECRET="$TOTP_SECRET" \
-    BROKER="$BROKER" \
-    VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2) \
-    yarf --outdir "output/${test_name}" --platform=Vnc . "$@" \
-        2> >(grep -v "<video controls style" >&2) || \
-        test_result=$?
-
-    if [ "${test_result:-0}" -ne 0 ] && [ -v SNAPSHOT_ON_FAIL ]; then
-        echo "Test failed. Saving VM snapshot as requested..."
-        virsh snapshot-create-as "${VM_NAME}" "${test_name}-fail-$(date +%Y%m%d%H%M)"
-        echo "Snapshot '${test_name}-fail-$(date +%Y%m%d%H%M)' created."
-    fi
-
-    if [ "${test_result:-0}" -ne 0 ]; then
-        tests_failed=1
-        test_results+=("${test_name}: FAILED")
-    else
-        test_results+=("${test_name}: OK")
-    fi
-    rm -f "${test_name}"
 done
 
-for result in "${test_results[@]}"; do
-    echo "${result}"
-done
+E2E_USER="$E2E_USER" \
+E2E_PASSWORD="$E2E_PASSWORD" \
+TOTP_SECRET="$TOTP_SECRET" \
+BROKER="$BROKER" \
+VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2) \
+yarf --outdir "output/${test_name}" --platform=Vnc . "$@" \
+    2> >(grep -v "<video controls style" >&2) || \
+    test_result=$?
 
-if [ -n "${tests_failed}" ]; then
-    exit 1
-fi
+exit "${test_result:-0}"
