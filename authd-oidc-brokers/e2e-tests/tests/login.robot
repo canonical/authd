@@ -10,7 +10,7 @@ Test Teardown    Log Videos On Error
 *** Variables ***
 ${username}    %{E2E_USER}
 ${local_password}    qwer1234
-${remote_group}    %{E2E_USER}-group
+${remote_group}    e2e-test-group
 
 
 *** Test Cases ***
