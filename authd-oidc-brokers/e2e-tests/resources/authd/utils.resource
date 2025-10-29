@@ -4,6 +4,8 @@ Documentation       authd test resources
 Resource            kvm.resource
 Library             ./StringUtils.py    AS    StringUtils
 Library             ./VideoLogger.py    AS    VideoLogger
+Library             ./Snapshot.py    AS    Snapshot
+Library             ./SSH.py    AS    SSH
 Library             Process
 Library             OperatingSystem
 
@@ -116,6 +118,18 @@ Update And Upgrade Packages
     Run Command In Terminal    apt-get upgrade -y
     Close Terminal In Sudo Mode
 
+Sync System Time
+    SSH.Execute    sudo systemctl restart chronyd && sudo chronyc waitsync
+
+### Setup ###
+
+Restore Snapshot
+    [Arguments]    ${snapshot_name}
+    Snapshot.Restore    ${snapshot_name}
+    Sync System Time
+
+
+### Teardown ###
 
 Log Videos On Error
     Run Keyword If    '${TEST STATUS}' == 'FAIL'    VideoLogger.Log videos

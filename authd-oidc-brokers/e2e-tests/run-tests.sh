@@ -128,17 +128,11 @@ for test_file in $TESTS_TO_RUN; do
     # shellcheck disable=SC2064 # We want to capture the current value of test_name
     trap "rm -rf ${test_name} resources" EXIT
 
-    SNAPSHOT_NAME=${BROKER}-edge-configured
-    if [[ "${test_name}" == *"migration"* ]]; then
-        SNAPSHOT_NAME=${BROKER}-stable-configured
-    fi
-    virsh snapshot-revert "${VM_NAME}" "${SNAPSHOT_NAME}" || true
-    ${ROOT_DIR}/vm/ssh.sh -- "sh -c 'sudo systemctl restart chronyd && sudo chronyc waitsync'"
-
     echo "Running test: ${test_name}"
     E2E_USER="$E2E_USER" \
     E2E_PASSWORD="$E2E_PASSWORD" \
     TOTP_SECRET="$TOTP_SECRET" \
+    BROKER="$BROKER" \
     VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2) \
     yarf --outdir "output/${test_name}" --platform=Vnc . "$@" \
         2> >(grep -v "<video controls style" >&2) || \

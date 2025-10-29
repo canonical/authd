@@ -6,6 +6,7 @@ Resource        ./resources/broker/broker.resource
 
 Test Tags       robot:exit-on-failure
 
+Suite Setup    Restore Snapshot    %{BROKER}-edge-configured
 Test Teardown    Log Videos On Error
 
 *** Variables ***
