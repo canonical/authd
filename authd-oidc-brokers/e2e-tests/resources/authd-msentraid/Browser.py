@@ -6,16 +6,17 @@ from robot.api import logger
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-def run_command(command: str, *arguments):
-    result = Process().run_process(command, *arguments)
+def run_command(args):
+    result = Process().run_process(args[0], *args[1:])
     if result.rc == 0:
         return
 
-    cmd = command if not arguments else f"{command} {' '.join(arguments)}"
+    cmd = " ".join(args)
     message = (f"Command '{cmd}' failed:\n"
                f"--- stdout ---\n{result.stdout}\n"
                f"--- stderr ---\n{result.stderr}")
     logger.error(message)
+
     raise RuntimeError(f"Command '{cmd}' failed")
 
 
@@ -23,6 +24,25 @@ def run_command(command: str, *arguments):
 class Browser:
     @keyword
     async def login(self, username: str, password: str, usercode: str, totp_secret: str, output_dir: str = "."):
-        """Perform device authentication with the given username, password and usercode."""
-        login_script = os.path.join(SCRIPT_DIR, "browser_login.py")
-        run_command(login_script, username, password, usercode, totp_secret, "--output-dir", output_dir)
+        """Perform device authentication with the given username, password and
+        usercode using a browser automation script. The window opened by the
+        script is run off screen using Xvfb.
+        """
+        command = [
+            os.path.join(SCRIPT_DIR, "browser_login.py"),
+            username,
+            password,
+            usercode,
+            totp_secret,
+            "--output-dir", output_dir,
+        ]
+
+        if not os.getenv("SHOW_WEBVIEW"):
+            command = [
+                          "/usr/bin/env",
+                          "GDK_BACKEND=x11",
+                          "xvfb-run", "-a",
+                          "--",
+                      ] + command
+
+        run_command(command)

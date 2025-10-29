@@ -419,23 +419,3 @@ def render_video(screenshot_dir: str, video_path: str, framerate: int = 1):
         "-i", f"{screenshot_dir}/*.png",
         video_path,
     ])
-
-
-def maybe_run_offscreen():
-    """ This must be called as first thing """
-
-    if os.getenv("SHOW_WEBVIEW") is None and "RUNNING_OFFSCREEN" not in os.environ:
-        os.execv(
-            "/usr/bin/env",
-            [
-                "/usr/bin/env",
-                "RUNNING_OFFSCREEN=1",
-                "GDK_BACKEND=x11",
-                "xvfb-run",
-                "-a",
-                "-e", "/dev/stderr",
-                "-s", "-noreset -screen 0 1280x1024x24",
-                sys.executable,
-            ]
-            + sys.argv,
-        )

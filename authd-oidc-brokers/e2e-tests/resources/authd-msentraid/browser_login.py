@@ -21,7 +21,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "a
 from browser_window import (
     BrowserWindow,
     ascii_string_to_key_events,
-    maybe_run_offscreen,
 )  # type: ignore # This is resolved at runtime
 
 from generate_totp import generate_totp # type: ignore # This is resolved at runtime
@@ -39,9 +38,6 @@ def main():
     parser.add_argument("--output-dir", required=False, default=os.path.realpath(os.curdir))
     parser.add_argument("--show-webview", action="store_true")
     args = parser.parse_args()
-
-    if not args.show_webview:
-        maybe_run_offscreen()
 
     locale.setlocale(locale.LC_ALL, "C")
 
