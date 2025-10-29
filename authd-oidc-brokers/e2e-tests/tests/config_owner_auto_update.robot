@@ -27,4 +27,4 @@ Try to log in with remote user
 
 Check that owner was updated in broker configuration
     Open Terminal In Sudo Mode
-    Check Configuration Value    owner    %{username}
+    Check Configuration Value    owner    ${username}
