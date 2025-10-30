@@ -121,6 +121,7 @@ function install_brokers() {
 		  		-e "s|<CLIENT_ID>|${CLIENT_ID}|g" \
 		  		-e "s|#ssh_allowed_suffixes_first_auth =|ssh_allowed_suffixes_first_auth = ${AUTHD_USER}|g" \
 		  		/var/snap/${broker}/current/broker.conf
+			echo 'verbosity: 2' | sudo tee /var/snap/authd-msentraid/current/${broker}.yaml
 			sudo systemctl restart authd.service
 			sudo snap restart "${broker}"
 		EOF
@@ -259,7 +260,8 @@ fi
 
 # Install authd stable and create a snapshot
 $SSH "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd && \
-      sudo apt-get install -y authd"
+      sudo apt-get install -y authd && \
+      sudo sed -i 's/^#verbosity:.*/verbosity: 2/g' /etc/authd/authd.yaml"
 force_create_snapshot "authd-stable-installed"
 
 install_brokers "stable"
@@ -269,7 +271,8 @@ virsh snapshot-revert "${VM_NAME}" --snapshotname "initial-setup"
 
 # Install authd edge and create a snapshot
 $SSH "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd-edge && \
-      sudo apt-get install -y authd"
+      sudo apt-get install -y authd && \
+      sudo sed -i 's/^#verbosity:.*/verbosity: 2/g' /etc/authd/authd.yaml"
 force_create_snapshot "authd-edge-installed"
 
 install_brokers "edge"
