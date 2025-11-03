@@ -95,9 +95,18 @@ function cloud_init_finished() {
 function force_create_snapshot() {
     local snapshot_name="$1"
     if virsh snapshot-list "${VM_NAME}" | grep -q "${snapshot_name}"; then
-        virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "${snapshot_name}"
+        time virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "${snapshot_name}"
     fi
-    virsh snapshot-create-as --domain "${VM_NAME}" "${snapshot_name}" --reuse-external
+
+    if virsh domstate "${VM_NAME}" | grep -q '^running'; then
+        # If the VM is running, we have to use --memspec to create the snapshot
+        memfile="${IMAGE%.qcow2}-${snapshot_name}.mem"
+        time virsh snapshot-create-as --domain "${VM_NAME}" --name "${snapshot_name}" \
+          --memspec "${memfile},snapshot=external"
+        return
+    fi
+
+    time virsh snapshot-create-as --domain "${VM_NAME}" --name "${snapshot_name}" --disk-only
 }
 
 function wait_for_system_running() {
@@ -275,6 +284,9 @@ force_create_snapshot "authd-stable-installed"
 
 install_brokers "stable"
 
+# Remove the authd-stable-installed snapshot which is no longer needed
+virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "authd-stable-installed"
+
 # Revert to the initial setup snapshot before installing authd edge
 virsh snapshot-revert "${VM_NAME}" --snapshotname "initial-setup"
 
@@ -290,3 +302,6 @@ $SSH "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd-edge && \
 force_create_snapshot "authd-edge-installed"
 
 install_brokers "edge"
+
+# Remove the authd-edge-installed snapshot which is no longer needed
+virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "authd-edge-installed"
