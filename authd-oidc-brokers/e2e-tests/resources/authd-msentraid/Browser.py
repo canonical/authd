@@ -12,10 +12,7 @@ def run_command(args):
         return
 
     cmd = " ".join(args)
-    message = (f"Command '{cmd}' failed:\n"
-               f"--- stdout ---\n{result.stdout}\n"
-               f"--- stderr ---\n{result.stderr}")
-    logger.error(message)
+    logger.error(f"Command '{cmd}' failed:\n{result.stderr}")
 
     raise RuntimeError(f"Command '{cmd}' failed")
 
