@@ -186,19 +186,28 @@ class BrowserWindow(Gtk.Window):
         overlay.destroy()
         self.web_view.grab_focus()
 
-    def wait_for_text_visible(self, text, timeout_ms=5000,
-                              poll_interval_ms=100):
-        """Wait until `text` is present in the page's visible text or raise TimeoutError."""
+    def wait_for_pattern(self, pattern, timeout_ms=5000,
+                         poll_interval_ms=100) -> str|None:
+        """Wait until `text` is present in the page's visible text and return the matched substring."""
         loop = GLib.MainLoop()
         cancellable = Gio.Cancellable()
         inject_delay_id = 0
         timeout_id = 0
-        found = False
+        found = None
 
         # Use json.dumps / JSON.parse to safely escape the text into a JS string literal
-        # FIXME: To ensure the text is really visible we should instead use a selector
-        # to go through the DOM and ensure that the text is actually visible.
-        js = f"(document?.body?.innerText?.includes(JSON.parse(`{json.dumps(text)}`)))"
+        # Return the first match (or empty string if none)
+        js = """(function(){
+                        try {
+                            var pattern = JSON.parse(`%s`);
+                            var re = new RegExp(pattern);
+                            var body = document && document.body && document.body.innerText ? document.body.innerText : '';
+                            var m = body.match(re);
+                            return m ? m[0] : '';
+                        } catch (e) {
+                            return '';
+                        }
+                    })()""" % json.dumps(pattern)
 
         def on_js_finished(web_view, result):
             nonlocal inject_delay_id, found
@@ -207,13 +216,14 @@ class BrowserWindow(Gtk.Window):
             try:
                 res = web_view.run_javascript_finish(result)
                 js_value = res.get_js_value()
-                found = js_value.to_boolean()
-
-                if not found:
+                match_str = js_value.to_string()
+                if not match_str:
                     # Retry
                     final_action = lambda: None
                     inject_javascript()
                     return
+
+                found = match_str
             except GLib.Error as e:
                 if e.matches(Gio.io_error_quark(), Gio.IOErrorEnum.CANCELLED):
                     return
@@ -253,7 +263,9 @@ class BrowserWindow(Gtk.Window):
         cancellable.disconnect(connect_id)
 
         if not found:
-            raise TimeoutError(f"Timed out waiting for text: \"{text}\"")
+            raise TimeoutError(f"Timed out waiting for text: \"{pattern}\"")
+
+        return found
 
     def send_key(self, event_type, key):
         default_seat = Gdk.Display.get_default().get_default_seat()

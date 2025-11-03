@@ -64,36 +64,37 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "page-loaded")
 
-    browser.wait_for_text_visible("Enter code to allow access")
+    browser.wait_for_pattern("Enter code to allow access")
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-enter-code")
     browser.send_key_taps(
         ascii_string_to_key_events(device_code) + [Gdk.KEY_Return])
 
-    browser.wait_for_text_visible("Sign in", timeout_ms=20000)
+    browser.wait_for_pattern("Sign in", timeout_ms=20000)
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-enter-username")
     browser.send_key_taps(
         ascii_string_to_key_events(username) + [Gdk.KEY_Return])
 
+    browser.wait_for_pattern("Enter password")
     browser.wait_for_stable_page()
-    browser.wait_for_text_visible("Enter password")
     browser.capture_snapshot(screenshot_dir, "device-login-enter-password")
     browser.send_key_taps(
         ascii_string_to_key_events(password) + [Gdk.KEY_Return])
 
-    # browser.wait_for_stable_page()
-    # browser.wait_for_text_visible("Enter code")
-    # browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
-    # browser.send_key_taps(
-    #     ascii_string_to_key_events(generate_totp(totp_secret)) + [Gdk.KEY_Return])
-
-    browser.wait_for_text_visible("Are you trying to sign in")
+    match = browser.wait_for_pattern(r"(Enter code|Are you trying to sign in)")
     browser.wait_for_stable_page()
+    if match == "Enter code":
+        browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
+        browser.send_key_taps(
+            ascii_string_to_key_events(generate_totp(totp_secret)) + [Gdk.KEY_Return])
+        browser.wait_for_pattern("Are you trying to sign in")
+        browser.wait_for_stable_page()
+
     browser.capture_snapshot(screenshot_dir, "device-login-confirm-signin")
     browser.send_key_taps([Gdk.KEY_Return])
 
-    browser.wait_for_text_visible("You have signed in")
+    browser.wait_for_pattern("You have signed in")
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-success")
 
