@@ -10,12 +10,15 @@ SSH_SCRIPT = os.path.abspath(os.path.join(SCRIPT_DIR, "ssh.sh"))
 @library
 class SSH:
     @keyword
-    async def execute(self, command: str) -> str:
+    async def execute(self, command: str, timeout: int|None = 30) -> str:
         """
         Run a command via SSH and return its output.
 
         Args:
             command: The command to run.
+            timeout: Duration in seconds after which the command is terminated
+                     if it's still running. The default timeout is 30 seconds.
+                     Use 'None' to run without timeout.
         Returns:
             The output of the command.
         """
@@ -24,5 +27,7 @@ class SSH:
             check=True,
             capture_output=True,
             text=True,
+            timeout=timeout,
         )
+
         return result.stdout.strip()
