@@ -10,7 +10,6 @@ Suite Setup    Restore Snapshot    %{BROKER}-edge-configured
 Test Teardown    Log Videos On Error
 
 *** Variables ***
-${username}    another-%{E2E_USER}
 ${local_password}    qwer1234
 ${remote_group}    %{E2E_USER}-group
 
@@ -21,9 +20,8 @@ Log in with local user
 
 
 Try to log in with not allowed remote user with device authentication through SSH
+    ${domain} =    Fetch From Right    %{E2E_USER}    @
+    ${username} =    Set Variable    other-user@${domain}
     Open Terminal
     Start Log In With Remote User Through SSH: QR Code    ${username}
-    Select Provider through SSH
-    Continue Log In With Remote User: Log In On External Browser    ${username}
-    Continue Log In With Remote User Through SSH: QR Code
-    Check That Remote User Is Not Allowed To Log In
+    Check That Login Is Handled By PAM Unix

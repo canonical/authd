@@ -292,3 +292,7 @@ Check Home Directory
 
 Check That Remote User Is Not Allowed To Log In
     Match Text    authentication failure: user not allowed in broker configuration    60
+
+
+Check That Login Is Handled By PAM Unix
+    Match Text    Password:
