@@ -1,10 +1,5 @@
 <domain type='kvm'>
     <name>${VM_NAME}</name>
-    <metadata>
-        <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
-            <libosinfo:os id="http://ubuntu.com/ubuntu/25.10" />
-        </libosinfo:libosinfo>
-    </metadata>
     <memory unit='GiB'>8</memory>
     <currentMemory unit='GiB'>8</currentMemory>
     <vcpu>8</vcpu>
