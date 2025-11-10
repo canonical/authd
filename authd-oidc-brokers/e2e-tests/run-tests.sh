@@ -107,10 +107,15 @@ if [ -n "${RERUNFAILED:-}" ]; then
     ROBOT_ARGS+=(--rerunfailed "${PREVIOUS_TEST_RUN_DIR}/output.xml")
 fi
 
-# Launch the domain if it's not already running
+# Launch the domain if it's not already running, so that we can get its VNC port
 if ! virsh domstate "${VM_NAME}" | grep -q '^running'; then
-    virsh start "${VM_NAME}"
+    # For some reason, when using external snapshot and the host was rebooted,
+    # `virsh start` fails with a permission denied error.
+    # Reverting to a snapshot first fixes this (and since it's a live snapshot,
+    # we don't need to start the VM afterwards).
+    virsh snapshot-revert "${VM_NAME}" "${BROKER}-stable-configured"
 fi
+VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2)
 
 # Create a temporary test run directory
 mkdir -p "${TEST_RUNS_DIR}"
@@ -143,7 +148,7 @@ E2E_USER="$E2E_USER" \
 E2E_PASSWORD="$E2E_PASSWORD" \
 TOTP_SECRET="$TOTP_SECRET" \
 BROKER="$BROKER" \
-VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2) \
+VNC_PORT="$VNC_PORT" \
 robot \
     --loglevel DEBUG \
     --pythonpath "${YARF_DIR}/yarf/rf_libraries/libraries/vnc" \
