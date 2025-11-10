@@ -235,7 +235,7 @@ fi
 
 # Attach the cloud-init ISO
 if ! virsh domblklist "${VM_NAME}" | grep -q "seed.iso"; then
-    virsh attach-disk "${VM_NAME}" "${CLOUD_INIT_ISO}" sda --type cdrom --mode readonly --config
+    virsh attach-disk "${VM_NAME}" "${CLOUD_INIT_ISO}" vdb --targetbus virtio --type disk --mode readonly --config
 else
     echo "Cloud-init ISO already attached to VM: ${VM_NAME}"
 fi
@@ -258,7 +258,7 @@ if ! cloud_init_finished "${IMAGE}"; then
     kill "${VM_CONSOLE_PID}" || true
 
     # Detach the cloud-init iSO
-    virsh detach-disk "${VM_NAME}" sda --config
+    virsh detach-disk "${VM_NAME}" vdb --config
 
     # Boot the VM and wait until it's running
     virsh start "${VM_NAME}"
