@@ -89,7 +89,7 @@ SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 CLOUD_INIT_TEMPLATE="${SCRIPT_DIR}/cloud-init-template-${RELEASE}.yaml"
 LIBVIRT_XML_TEMPLATE="${SCRIPT_DIR}/e2e-runner-template.xml"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/authd-e2e-tests"
-ARTIFACTS_DIR="${SCRIPT_DIR}/.artifacts"
+ARTIFACTS_DIR="${SCRIPT_DIR}/.artifacts/${RELEASE}"
 SSH="${SCRIPT_DIR}/ssh.sh"
 
 VM_NAME="e2e-runner-${RELEASE}"
@@ -218,7 +218,7 @@ if [ "${FORCE:-}" = true ]; then
     fi
 
     # Remove artifacts of this VM
-    find "${ARTIFACTS_DIR}" -type f -name "${VM_NAME}.*" -delete
+    rm -rf "${ARTIFACTS_DIR}"
 fi
 
 # Copy and resize the image
@@ -233,7 +233,7 @@ else
 fi
 
 # Create a cloud-init ISO
-CLOUD_INIT_ISO="${ARTIFACTS_DIR}/${VM_NAME}-seed.iso"
+CLOUD_INIT_ISO="${ARTIFACTS_DIR}/seed.iso"
 if [ ! -f "${CLOUD_INIT_ISO}" ]; then
     CLOUD_INIT_DIR="$(mktemp -d)"
     trap 'rm -rf ${CLOUD_INIT_DIR}' EXIT
