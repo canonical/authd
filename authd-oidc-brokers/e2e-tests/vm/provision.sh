@@ -92,7 +92,8 @@ CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/authd-e2e-tests"
 ARTIFACTS_DIR="${SCRIPT_DIR}/.artifacts/${RELEASE}"
 SSH="${SCRIPT_DIR}/ssh.sh"
 
-VM_NAME="e2e-runner-${RELEASE}"
+VM_NAME_BASE="e2e-runner"
+VM_NAME="${VM_NAME_BASE}-${RELEASE}"
 BROKERS=("authd-msentraid")
 
 # Installing all the packages can take some time, so we set the timeout to 15 minutes
@@ -222,7 +223,7 @@ if [ "${FORCE:-}" = true ]; then
 fi
 
 # Copy and resize the image
-IMAGE="${ARTIFACTS_DIR}/${VM_NAME}.qcow2"
+IMAGE="${ARTIFACTS_DIR}/${VM_NAME_BASE}.qcow2"
 if [ ! -f "${IMAGE}" ]; then
     mkdir -p "${ARTIFACTS_DIR}"
     cp "${SOURCE_IMAGE}" "${IMAGE}"
@@ -247,7 +248,7 @@ else
 fi
 
 # Create the libvirt XML
-LIBVIRT_XML="${ARTIFACTS_DIR}/${VM_NAME}.xml"
+LIBVIRT_XML="${ARTIFACTS_DIR}/${VM_NAME_BASE}.xml"
 if [ ! -f "${LIBVIRT_XML}" ]; then
     IMAGE_FILE=${IMAGE} \
     VM_NAME=${VM_NAME} \
