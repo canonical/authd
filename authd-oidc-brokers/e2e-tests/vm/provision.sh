@@ -124,6 +124,17 @@ function force_create_snapshot() {
     time virsh snapshot-create-as --domain "${VM_NAME}" --name "${snapshot_name}" --disk-only
 }
 
+function restore_snapshot_and_sync_time() {
+    local snapshot_name="$1"
+    virsh snapshot-revert "${VM_NAME}" --snapshotname "${snapshot_name}"
+    sync_time
+}
+
+function sync_time() {
+    local cmd="sudo systemctl restart chronyd && sudo chronyc waitsync"
+    retry --times 10 --delay 3 -- "$SSH" -- "$cmd"
+}
+
 function wait_for_system_running() {
     # shellcheck disable=SC2016
     local cmd='output=$(systemctl is-system-running --wait) || [ $output = degraded ]'
@@ -162,7 +173,7 @@ function install_brokers() {
 
         # If not the last broker, revert to the base authd snapshot for this channel
         if [ "${broker}" != "${BROKERS[-1]}" ]; then
-            virsh snapshot-revert "${VM_NAME}" --snapshotname "${base_snapshot}"
+            restore_snapshot_and_sync_time "${base_snapshot}"
         fi
     done
 }
@@ -299,7 +310,7 @@ if ! cloud_init_finished "${IMAGE}"; then
     force_create_snapshot "initial-setup"
 else
     echo "Cloud-init has already finished."
-    virsh snapshot-revert "${VM_NAME}" --snapshotname "initial-setup"
+    restore_snapshot_and_sync_time "initial-setup"
 fi
 
 # Install authd stable and create a snapshot
@@ -319,7 +330,7 @@ install_brokers "stable"
 virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "authd-stable-installed"
 
 # Revert to the initial setup snapshot before installing authd edge
-virsh snapshot-revert "${VM_NAME}" --snapshotname "initial-setup"
+restore_snapshot_and_sync_time "initial-setup"
 
 # Install authd edge and create a snapshot
 $SSH -- "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd-edge && \
