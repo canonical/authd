@@ -141,12 +141,16 @@ Update And Upgrade Packages
 Sync System Time
     SSH.Execute    sudo systemctl restart chronyd && sudo chronyc waitsync
 
+Wait Until System Time Synced
+    Wait Until Keyword Succeeds    1 min    1 sec
+    ...    Sync System Time
+
 ### Setup ###
 
 Restore Snapshot
     [Arguments]    ${snapshot_name}
     Snapshot.Restore    ${snapshot_name}
-    Sync System Time
+    Wait Until System Time Synced
 
 
 ### Teardown ###
