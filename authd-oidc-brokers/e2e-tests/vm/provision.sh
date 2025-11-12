@@ -136,9 +136,11 @@ function sync_time() {
 }
 
 function wait_for_system_running() {
+    # Wait until we can connect via SSH
+    retry --times 30 --delay 3 -- "$SSH" -- true
     # shellcheck disable=SC2016
     local cmd='output=$(systemctl is-system-running --wait) || [ $output = degraded ]'
-    retry --times 30 --delay 3 -- "$SSH" -- "$cmd"
+    retry --times 3 --delay 3 -- timeout 30 -- "$SSH" -- "$cmd"
 }
 
 function install_brokers() {
@@ -314,10 +316,13 @@ else
 fi
 
 # Install authd stable and create a snapshot
-$SSH -- "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd && \
-      sudo apt-get install -y authd && \
-      sudo mkdir -p /etc/systemd/system/authd.service.d && \
-      cat <<-EOF | sudo tee /etc/systemd/system/authd.service.d/override.conf
+retry --times 3 --delay 1 -- timeout 30 -- "$SSH" -- \
+  "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd"
+timeout 600 -- \
+    "$SSH" -- \
+    "sudo apt-get install -y authd && \
+     sudo mkdir -p /etc/systemd/system/authd.service.d && \
+     cat <<-EOF | sudo tee /etc/systemd/system/authd.service.d/override.conf
 		[Service]
 		ExecStart=
 		ExecStart=/usr/libexec/authd -vv
@@ -333,10 +338,13 @@ virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "authd-stable-install
 restore_snapshot_and_sync_time "initial-setup"
 
 # Install authd edge and create a snapshot
-$SSH -- "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd-edge && \
-      sudo apt-get install -y authd && \
-      sudo mkdir -p /etc/systemd/system/authd.service.d && \
-      cat <<-EOF | sudo tee /etc/systemd/system/authd.service.d/override.conf
+retry --times 3 --delay 1 -- timeout 30 -- "$SSH" -- \
+  "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd-edge"
+timeout 600 -- \
+    "$SSH" -- \
+    "sudo apt-get install -y authd && \
+     sudo mkdir -p /etc/systemd/system/authd.service.d && \
+     cat <<-EOF | sudo tee /etc/systemd/system/authd.service.d/override.conf
 		[Service]
 		ExecStart=
 		ExecStart=/usr/libexec/authd -vv
