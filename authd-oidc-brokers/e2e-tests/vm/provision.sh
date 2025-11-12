@@ -131,7 +131,7 @@ function restore_snapshot_and_sync_time() {
 }
 
 function sync_time() {
-    local cmd="nm-online -q && sudo systemctl restart chronyd && sudo chronyc waitsync"
+    local cmd="nm-online -q && sudo systemctl restart systemd-timesyncd.service"
     retry --times 10 --delay 3 -- "$SSH" -- "$cmd"
 }
 

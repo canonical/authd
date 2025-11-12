@@ -19,7 +19,6 @@ chpasswd:
 package_update: true
 package_upgrade: true
 packages:
-  - chrony
   - fonts-ubuntu
   - gdm3
   - gnome-shell
@@ -32,6 +31,7 @@ packages:
   - software-properties-common
   - spice-vdagent
   - systemd-container
+  - systemd-timesyncd
   - ubuntu-settings
   - yaru-theme-gtk
   - yaru-theme-icon

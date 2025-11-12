@@ -139,7 +139,7 @@ Update And Upgrade Packages
     Close Terminal In Sudo Mode
 
 Sync System Time
-    ${output} =    SSH.Execute    nm-online -q && sudo systemctl restart chronyd && sudo chronyc waitsync
+    ${output} =    SSH.Execute    nm-online -q && sudo systemctl restart systemd-timesyncd
     Log    ${output}    level=DEBUG
 
 Wait Until System Time Synced

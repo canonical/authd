@@ -32,6 +32,7 @@ packages:
   # Required for add-apt-repository
   - software-properties-common
   - systemd-container
+  - systemd-timesyncd
   - ubuntu-settings
   - yaru-theme-gtk
   - yaru-theme-icon
