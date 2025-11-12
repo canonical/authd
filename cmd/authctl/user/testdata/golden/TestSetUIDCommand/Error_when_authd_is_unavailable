@@ -1,0 +1,1 @@
+Error: connection error: desc = "transport: Error while dialing: dial unix /non-existent: connect: no such file or directory"
