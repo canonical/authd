@@ -61,13 +61,13 @@ Regenerate QR Code
     # As long as we are in the login process, we can regenerate the QR code
     Match Text    Request new login code    30
     Hid.Keys Combo    Return
-    Match Text    https://microsoft.com/devicelogin    15
+    Match Text    microsoft.com/devicelogin    15
 
 
 Continue Log In With Remote User: Log In On External Browser
     [Arguments]    ${username}
     # Wait until the verification URL and login code are displayed
-    Match Text    https://microsoft.com/devicelogin
+    Match Text    microsoft.com/devicelogin
     # Read the user code.
     ${text} =    Read Text
     ${user_code} =    StringUtils.First Match    (https://)?microsoft.com/devicelogin\n((Login code: )?([A-Z0-9]+))    ${text}
