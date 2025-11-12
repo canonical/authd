@@ -45,18 +45,29 @@ def main():
     os.makedirs(screenshot_dir, exist_ok=True)
 
     Gtk.init(None)
-    browser = BrowserWindow()
-    browser.show_all()
 
-    browser.start_recording()
+    repeat = True
+    retried_tls_error = False
+    while repeat:
+        repeat = False
 
-    try:
-        login(browser, args.username, args.password, args.device_code, args.totp_secret, screenshot_dir)
-    finally:
-        if browser.get_mapped():
-            browser.capture_snapshot(screenshot_dir, "failure")
-        browser.stop_recording(os.path.join(args.output_dir, "webview_recording.webm"))
-        browser.destroy()
+        browser = BrowserWindow()
+        browser.show_all()
+        browser.start_recording()
+
+        try:
+            login(browser, args.username, args.password, args.device_code, args.totp_secret, screenshot_dir)
+        except TimeoutError:
+            # Sometimes the page can't be loaded due to TLS errors, retry once
+            if not retried_tls_error:
+                browser.wait_for_pattern("Unacceptable TLS certificate", timeout_ms=1000)
+                repeat = True
+                retried_tls_error = True
+        finally:
+            if browser.get_mapped():
+                browser.capture_snapshot(screenshot_dir, "failure")
+            browser.stop_recording(os.path.join(args.output_dir, "webview_recording.webm"))
+            browser.destroy()
 
 
 def login(browser, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):
