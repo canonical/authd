@@ -17,25 +17,25 @@ ${remote_group}    %{E2E_USER}-group
 
 
 *** Test Cases ***
-Log in with local user
+Test changing local password of remote user
+    [Documentation]    This test verifies that a remote user can change their local password and subsequently log in using the new password.
+
+    # Log in with local user
     Log In
 
-
-Log in with remote user with device authentication
+    # Log in with remote user with device authentication
     Open Terminal
     Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
     Log Out From Terminal Session
     Close Focused Window
 
-
-Change local password of remote user
+    # Change local password of remote user
     Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
     Change Password    ${local_password}    ${new_password}
     Log Out From Terminal Session
     Close Focused Window
 
-
-Log in with remote user with local password
+    # Log in with remote user with local password
     Open Terminal In Sudo Mode
     Log In With Remote User Through CLI: Local Password    ${username}    ${new_password}

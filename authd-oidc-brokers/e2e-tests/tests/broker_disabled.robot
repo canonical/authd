@@ -14,21 +14,21 @@ ${username}    %{E2E_USER}
 
 
 *** Test Cases ***
-Log in with local user
+Test that disabling broker prevents remote logins
+    [Documentation]    This test verifies that when the broker is disabled, remote users cannot log in, while local users can still access the system.
+
+    # Log in with local user
     Log In
 
-
-Disable broker
+    # Disable broker
     Disable Broker And Purge Config
 
-
-Ensure local sudo user can still log in
+    # Ensure local sudo user can still log in
     Open Terminal
     Enter Sudo Mode In Terminal
     Close Terminal In Sudo Mode
 
-
-Check that remote user cannot log in
+    # Check that remote user cannot log in
     Open Terminal In Sudo Mode
     Try Log In With Remote User    ${username}
     Check That User Is Redirected To Local Broker

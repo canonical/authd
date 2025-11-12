@@ -17,11 +17,13 @@ ${remote_group}    %{E2E_USER}-group
 
 
 *** Test Cases ***
-Log in with remote user with device authentication via GDM
+Test login with GDM
+    [Documentation]    Test login via GDM with device authentication and local password.
+
+    # Log in with remote user with device authentication via GDM
     Log In With Remote User Through GDM: QR Code    ${username}    ${local_password}
 
-
-Check remote user is properly added to the system
+    # Check remote user is properly added to the system
     Open Terminal
     Get NSS Passwd Entry For Remote User    ${username}
     Check User Information    ${username}
@@ -30,6 +32,5 @@ Check remote user is properly added to the system
     Close Focused Window
     Log Out
 
-
-Log in with remote user with local password via GDM
+    # Log in with remote user with local password via GDM
     Log In With Remote User Through GDM: Local Password    ${username}    ${local_password}

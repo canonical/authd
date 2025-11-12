@@ -15,15 +15,16 @@ ${username}    %{E2E_USER}
 
 
 *** Test Cases ***
-Log in with local user
+Test that changing owner prevents remote logins
+    [Documentation]    This test verifies that when the broker owner is changed to a different user, the original remote user cannot log in, while local users can still access the system.
+
+    # Log in with local user
     Log In
 
-
-Change owner to another user
+    # Change owner to another user
     Change Broker Configuration    owner    different-user
 
-
-Log in with remote user with device authentication
+    # Log in with remote user with device authentication
     Open Terminal
     Start Log In With Remote User Through CLI: QR Code    ${username}
     Select Provider

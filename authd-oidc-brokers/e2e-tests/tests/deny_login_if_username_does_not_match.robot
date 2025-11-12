@@ -17,11 +17,13 @@ ${remote_group}    %{E2E_USER}-group
 
 
 *** Test Cases ***
-Log in with local user
+Test that login fails if usernames do not match
+    [Documentation]    This test verifies that when attempting to log in with a remote user whose username does not match the requested username, the login fails, while local users can still access the system.
+
+    # Log in with local user
     Log In
 
-
-Fail to log in if usernames do not match
+    # Fail to log in if usernames do not match
     Open Terminal
     Start Log In With Remote User Through CLI: QR Code   different_user
     Select Provider

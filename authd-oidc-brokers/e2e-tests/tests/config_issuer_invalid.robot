@@ -15,15 +15,16 @@ ${local_password}    qwer1234
 
 
 *** Test Cases ***
-Log in with local user
+Test that invalid broker issuer prevents remote logins
+    [Documentation]    This test verifies that when the broker is configured with an invalid issuer, remote users cannot log in, while local users can still access the system.
+
+    # Log in with local user
     Log In
 
-
-Change broker configuration to an invalid issuer
+    # Change broker configuration to an invalid issuer
     Change Broker Configuration    issuer    invalid
 
-
-Try to log in with remote user when broker has invalid issuer
+    # Try to log in with remote user when broker has invalid issuer
     Open Terminal
     Start Log In With Remote User Through CLI: QR Code    ${username}
     Select Provider
