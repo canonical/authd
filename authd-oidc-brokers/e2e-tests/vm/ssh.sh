@@ -43,21 +43,6 @@ fi
 
 VM_NAME="e2e-runner-${RELEASE}"
 
-if [ "${RELEASE}" = "noble" ]; then
-    # On noble, sshd does not listen on VSOCK, so we connect via IPv4
-    IPADDR=$(virsh domifaddr --domain e2e-runner-noble | awk '/ipv4/ {print $4}' | cut -d/ -f1 | tail -n1)
-    if [ -z "${IPADDR}" ]; then
-        echo "Error: Could not determine IP address of VM ${VM_NAME}"
-        exit 1
-    fi
-
-    exec ssh \
-      -o UserKnownHostsFile=/dev/null \
-      -o StrictHostKeyChecking=no \
-      -o LogLevel=ERROR \
-      ubuntu@"${IPADDR}" "$@"
-fi
-
 CID=$(virsh dumpxml "${VM_NAME}" | \
       xmllint --xpath 'string(//vsock/cid/@address)' -)
 

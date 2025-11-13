@@ -27,6 +27,8 @@ packages:
   - gsettings-ubuntu-schemas
   - openssh-server
   - policykit-desktop-privileges
+  # Required to bind sshd to VSOCK socket
+  - socat
   # Required for add-apt-repository
   - software-properties-common
   - spice-vdagent
@@ -68,6 +70,23 @@ write_files:
       Match User *@*
           KbdInteractiveAuthentication yes
 
+  # Bind sshd to VSOCK socket
+  - path: /etc/systemd/system/sshd-vsock.service
+    owner: root:root
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=SSH over VSOCK
+      After=network.target
+
+      [Service]
+      ExecStart=/usr/bin/socat VSOCK-LISTEN:22,reuseaddr,fork TCP:127.0.0.1:22
+      Restart=always
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+
 runcmd:
   # Disable apport
   - sed -i 's/enabled=1/enabled=0/' /etc/default/apport
@@ -78,6 +97,8 @@ runcmd:
   - dconf update
   # Disable systemd-networkd-wait-online to speed up boot time
   - sudo systemctl mask systemd-networkd-wait-online.service
+  # Enable the sshd-vsock service
+  - sudo systemctl enable sshd-vsock.service
 
 final_message: "Provisioning finished after $UPTIME seconds"
 
