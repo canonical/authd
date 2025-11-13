@@ -22,9 +22,9 @@ Enable Edge Broker
 
 Disable Broker And Purge Config
     Open Terminal In Sudo Mode
-    Run Command In Focused Terminal    snap stop authd-msentraid
-    Run Command In Focused Terminal    rm ${AUTHD_BROKER_CFG}
-    Run Command In Focused Terminal    systemctl restart authd.service
+    Run Command In Terminal    snap stop authd-msentraid
+    Run Command In Terminal    rm ${AUTHD_BROKER_CFG}
+    Run Command In Terminal    systemctl restart authd.service
     Close Terminal In Sudo Mode
 
 
@@ -120,8 +120,8 @@ Log In With Remote User Through CLI: Local Password
 Change Broker Configuration
     [Arguments]    ${config_key}    ${config_value}
     Open Terminal In Sudo Mode
-    Run Command In Focused Terminal    sed -i 's/^#*${config_key} =.*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
-    Run Command In Focused Terminal    snap restart authd-msentraid
+    Run Command In Terminal    sed -i 's/^#*${config_key} =.*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
+    Run Command In Terminal    snap restart authd-msentraid
     Close Terminal In Sudo Mode
 
 
