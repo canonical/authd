@@ -68,7 +68,7 @@ Continue Log In With Remote User: Authenticate In External Browser
     Match Text    microsoft.com/devicelogin
     # Read the user code.
     ${text} =    Read Text
-    ${user_code} =    StringUtils.First Match    (https://)?microsoft.com/devicelogin\n((Login code: )?([A-Z0-9]+))    ${text}
+    ${user_code} =    StringUtils.First Match    (https://)?microsoft.com/devicelogin\n((Login code: )?([A-Za-z0-9]+))    ${text}
     # The user code is all uppercase, but sometimes the OCR reads some letters as lowercase,
     # so convert it to uppercase to handle that.
     ${user_code} =    String.Convert To Upper Case    ${user_code}
