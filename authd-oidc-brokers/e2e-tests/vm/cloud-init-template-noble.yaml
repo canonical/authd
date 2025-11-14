@@ -81,6 +81,27 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
+  # Export the journal via VSOCK
+  - path: /etc/systemd/system/journal-vsock-export.service
+    content: |
+      [Unit]
+      Description=Exports the journal over VSOCK
+      After=systemd-journald.service
+      After=network.target
+      Requires=network.target
+      RestartSec=1
+      # Disable rate limiting
+      StartLimitIntervalSec=0
+
+      [Service]
+      Type=simple
+      ExecStart=/bin/sh -c 'journalctl -b --lines=all -o export -f | socat - VSOCK-CONNECT:2:52000'
+      OOMScoreAdjust=-1000
+      Restart=always
+
+      [Install]
+      WantedBy=basic.target
+
 runcmd:
   # Disable apport
   - sed -i 's/enabled=1/enabled=0/' /etc/default/apport
@@ -91,8 +112,9 @@ runcmd:
   - dconf update
   # Disable systemd-networkd-wait-online to speed up boot time
   - sudo systemctl mask systemd-networkd-wait-online.service
-  # Enable the sshd-vsock service
+  # Enable our systemd services
   - sudo systemctl enable sshd-vsock.service
+  - sudo systemctl enable journal-vsock-export.service
 
 final_message: "Provisioning finished after $UPTIME seconds"
 

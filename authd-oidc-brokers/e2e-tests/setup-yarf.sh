@@ -31,4 +31,6 @@ uv sync
 uv pip install '.[develop]'
 # We need pygobject in the Python environment for some tests
 uv pip install pygobject
+# We need ansi2html to log colored journalctl output as HTML
+uv pip install ansi2html
 uv pip install "$YARF_DIR"

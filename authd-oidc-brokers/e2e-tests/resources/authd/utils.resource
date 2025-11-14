@@ -2,6 +2,7 @@
 Documentation       authd test resources
 
 Resource            ../kvm.resource
+Library             ./Journal.py    AS    Journal
 Library             ./StringUtils.py    AS    StringUtils
 Library             ./VideoLogger.py    AS    VideoLogger
 Library             ./Snapshot.py    AS    Snapshot
@@ -131,13 +132,16 @@ Update And Upgrade Packages
     SSH.Execute    sudo apt-get update
     SSH.Execute    sudo apt-get upgrade -y    timeout=1200
 
+
 Sync System Time
     ${output} =    SSH.Execute    nm-online -q && sudo systemctl restart systemd-timesyncd
     Log    ${output}    level=DEBUG
 
+
 Wait Until System Time Synced
     Wait Until Keyword Succeeds    1 min    1 sec
     ...    Sync System Time
+
 
 ### Setup ###
 

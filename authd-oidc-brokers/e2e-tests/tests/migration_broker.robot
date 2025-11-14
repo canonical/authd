@@ -6,8 +6,20 @@ Resource        ./resources/broker/broker.resource
 
 Test Tags       robot:exit-on-failure
 
-Suite Setup    Restore Snapshot    %{BROKER}-stable-configured
-Test Teardown    Log Videos On Error
+Test Setup    Test Setup
+Test Teardown   Test Teardown
+
+
+*** Keywords ***
+Test Setup
+    Journal.Start Receiving Journal
+    Restore Snapshot    %{BROKER}-stable-configured
+
+Test Teardown
+    Journal.Stop Receiving Journal
+    Journal.Log Journal
+    Log Videos On Error
+
 
 *** Variables ***
 ${username}    %{E2E_USER}
