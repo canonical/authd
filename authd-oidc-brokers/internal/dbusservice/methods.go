@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
 	"github.com/ubuntu/authd/log"
 )
 
@@ -51,7 +52,7 @@ func (s *Service) IsAuthenticated(sessionID, authenticationData string) (access,
 	}
 	if err != nil {
 		log.Warningf(context.Background(), "IsAuthenticated error: %v", err)
-		return "", "", dbus.MakeFailedError(err)
+		return broker.AuthDenied, "", dbus.MakeFailedError(err)
 	}
 	log.Debugf(context.Background(), "IsAuthenticated result (session %s): %s, %s", sessionID, access, data)
 	return access, data, nil
