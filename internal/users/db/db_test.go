@@ -866,6 +866,76 @@ func TestUpdateLockedFieldForUser(t *testing.T) {
 	require.Error(t, err, "UpdateLockedFieldForUser for a nonexistent user should return an error")
 }
 
+func TestSetUserID(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		nonExistentUser bool
+		uidAlreadyInUse bool
+		uidAlreadySet   bool
+
+		wantErr         bool
+		wantErrType     error
+		wantUnchangedDB bool
+	}{
+		"Set_user_id_for_existing_user": {},
+		"No_op_if_uid_is_already_set":   {uidAlreadySet: true, wantUnchangedDB: true},
+
+		"Error_on_nonexistent_user":   {nonExistentUser: true, wantErrType: db.NoDataFoundError{}},
+		"Error_if_uid_already_in_use": {uidAlreadyInUse: true, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			m := initDB(t, "multiple_users_and_groups")
+
+			username := "user1"
+			if tc.nonExistentUser {
+				username = "nonexistent"
+			}
+
+			var newUID uint32 = 1234
+			if tc.uidAlreadyInUse {
+				newUID = 2222
+			}
+			if tc.uidAlreadySet {
+				newUID = 1111
+			}
+
+			var oldDBContent string
+			var err error
+			if tc.wantUnchangedDB {
+				oldDBContent, err = db.Z_ForTests_DumpNormalizedYAML(m)
+				require.NoError(t, err)
+			}
+
+			err = m.SetUserID(username, newUID)
+			log.Infof(context.Background(), "SetUserID error: %v", err)
+
+			if tc.wantErrType != nil {
+				require.ErrorIs(t, err, tc.wantErrType, "SetUserID should return expected error")
+				return
+			}
+			if tc.wantErr {
+				require.Error(t, err, "SetUserID should return an error but didn't")
+				return
+			}
+			require.NoError(t, err, "SetUserID should not return an error on existing user")
+
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(m)
+			require.NoError(t, err)
+
+			if tc.wantUnchangedDB {
+				require.Equal(t, oldDBContent, dbContent, "SetUserID should not change the database content")
+				return
+			}
+
+			golden.CheckOrUpdate(t, dbContent)
+		})
+	}
+}
+
 func TestRemoveDb(t *testing.T) {
 	t.Parallel()
 
