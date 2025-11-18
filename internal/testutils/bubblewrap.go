@@ -94,7 +94,13 @@ func runInBubbleWrap(t *testing.T, withSudo bool, testDataPath string, env []str
 
 	etcDir := filepath.Join(testDataPath, "etc")
 	err := os.MkdirAll(etcDir, 0700)
-	require.NoError(t, err, "Impossible to create /etc")
+	require.NoError(t, err, "Setup: could not create etc dir")
+
+	// Copy files needed to create users and groups inside bubblewrap.
+	for _, f := range []string{"passwd", "group", "subgid"} {
+		err := fileutils.CopyFile("/etc/"+f, filepath.Join(etcDir, f))
+		require.NoError(t, err, "Setup: Copying /etc/%s to %s failed", f, etcDir)
+	}
 
 	cmd.Args = append(cmd.Args,
 		"--ro-bind", "/", "/",
@@ -111,32 +117,12 @@ func runInBubbleWrap(t *testing.T, withSudo bool, testDataPath string, env []str
 		"--ro-bind", "/etc/localtime", "/etc/localtime",
 		"--ro-bind", "/etc/login.defs", "/etc/login.defs",
 		"--ro-bind", "/etc/nsswitch.conf", "/etc/nsswitch.conf",
-		"--ro-bind", "/etc/passwd", "/etc/passwd",
-		"--ro-bind", "/etc/shadow", "/etc/shadow",
-		"--ro-bind", "/etc/subgid", "/etc/subgid",
 		"--ro-bind", "/etc/sudo.conf", "/etc/sudo.conf",
 		"--ro-bind", "/etc/sudoers", "/etc/sudoers",
 		"--ro-bind-try", "/etc/timezone", "/etc/timezone",
 		"--ro-bind", "/etc/pam.d", "/etc/pam.d",
 		"--ro-bind", "/etc/security", "/etc/security",
 	)
-
-	replicateHostFile := func(file string) {
-		require.NotContains(t, cmd.Args, file,
-			"Setup: %q should not be managed by bwrap", file)
-		dst := filepath.Join(testDataPath, file)
-		err := fileutils.CopyFile(file, dst)
-		require.NoError(t, err, "Setup: Copying %q to %q failed", file, dst)
-	}
-
-	// These are the files that we replicate in the bwrap environment and that
-	// can be safely modified or mocked in the test.
-	// Adapt this as needed, ensuring these files are not bound.
-	for _, f := range []string{
-		"/etc/group",
-	} {
-		replicateHostFile(f)
-	}
 
 	if coverDir := CoverDirForTests(); coverDir != "" {
 		cmd.Args = append(cmd.Args, "--bind", coverDir, coverDir)
