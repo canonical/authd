@@ -9,7 +9,7 @@ Usage: $0 [options] [test.robot...]
 
 Runs YARF end-to-end tests against a libvirt VM configured with the specified broker.
 For each test the script reverts the VM to a broker-specific snapshot, links
-test resources and launches the test via YARF.
+test resources and launches the test via robot framework.
 
 Required environment variables (or use the corresponding command-line options):
   E2E_USER           The username used for authd login in the tests
@@ -24,17 +24,19 @@ Prerequisites:
   - YARF must be installed via the setup_yarf.sh script
 
 Options:
-  -u, --user USERNAME          Username for the tests (can also be set via E2E_USER environment variable)
-  -p, --password PASSWORD      Password for the tests (can also be set via E2E_PASSWORD environment variable)
-  -s, --totp-secret SECRET     Secret to generate OTP codes for the user's MFA (can also be set via TOTP_SECRET environment variable)
-  -b, --broker BROKER          Broker to test (can also be set via BROKER environment variable)
+  -u, --user <name>            Username for the tests (can also be set via E2E_USER environment variable)
+  -p, --password <password>    Password for the tests (can also be set via E2E_PASSWORD environment variable)
+  -s, --totp-secret <secret>   Secret to generate OTP codes for the user's MFA (can also be set via TOTP_SECRET environment variable)
+  -b, --broker <broker>        Broker to test (can also be set via BROKER environment variable)
+  -r, --release <release>      Ubuntu release to test (e.g., 'questing', can also be set via RELEASE environment variable)
+      --rerunfailed            Re-run only the tests that failed in the previous run
   -h, --help                   Show this help message and exit
 EOF
 }
 
 ROOT_DIR=$(dirname "$(readlink -f "$0")")
 TESTS_DIR="${ROOT_DIR}/tests"
-VM_NAME=${VM_NAME:-"e2e-runner"}
+TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
 
 # Parse command line arguments
 TESTS_TO_RUN=""
@@ -54,9 +56,17 @@ while [[ $# -gt 0 ]]; do
             BROKER="$2"
             shift 2
             ;;
+        --release|-r)
+            RELEASE="$2"
+            shift 2
+            ;;
         --totp-secret|-s)
             TOTP_SECRET="$2"
             shift 2
+            ;;
+        --rerunfailed)
+            RERUNFAILED=1
+            shift
             ;;
         -h|--help)
             usage
@@ -78,53 +88,80 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [ -z "${E2E_USER:-}" ] || [ -z "${E2E_PASSWORD:-}" ] || [ -z "${BROKER:-}" ] || [ -z "${TOTP_SECRET:-}" ]; then
-    echo "Error: E2E_USER, E2E_PASSWORD, BROKER, and TOTP_SECRET must be set either as environment variables or via command line arguments."
+if [ -z "${E2E_USER:-}" ] || [ -z "${E2E_PASSWORD:-}" ] || [ -z "${BROKER:-}" ] || [ -z "${RELEASE:-}" ] || [ -z "${TOTP_SECRET:-}" ]; then
+    echo >&2  "Error: E2E_USER, E2E_PASSWORD, BROKER, RELEASE, and TOTP_SECRET must be set either as environment variables or via command line arguments."
     usage
     exit 1
 fi
+
+VM_NAME=${VM_NAME:-"e2e-runner-${RELEASE}"}
 
 if [ -z "${TESTS_TO_RUN}" ]; then
     echo "Running all tests in ${TESTS_DIR}"
     TESTS_TO_RUN=$(find "${TESTS_DIR}" -type f -name "*.robot")
 fi
 
+PREVIOUS_TEST_RUN_DIR=$(readlink -f "${TEST_RUNS_DIR}/${BROKER}-latest" || true)
+if [ -n "${RERUNFAILED:-}" ] && [ -z "${PREVIOUS_TEST_RUN_DIR}" ]; then
+    echo >&2 "Error: No previous test run found to rerun failed tests from."
+    exit 1
+fi
+
+ROBOT_ARGS=()
+if [ -n "${RERUNFAILED:-}" ]; then
+    echo "Rerunning failed tests from previous run in ${PREVIOUS_TEST_RUN_DIR}"
+    ROBOT_ARGS+=(--rerunfailed "${PREVIOUS_TEST_RUN_DIR}/output.xml")
+fi
+
+# Launch the domain if it's not already running, so that we can get its VNC port
+if ! virsh domstate "${VM_NAME}" | grep -q '^running'; then
+    # For some reason, when using external snapshot and the host was rebooted,
+    # `virsh start` fails with a permission denied error.
+    # Reverting to a snapshot first fixes this (and since it's a live snapshot,
+    # we don't need to start the VM afterwards).
+    virsh snapshot-revert "${VM_NAME}" "${BROKER}-stable-configured"
+fi
+VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2)
+
 # Create a temporary test run directory
-TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
 mkdir -p "${TEST_RUNS_DIR}"
 TEST_RUN_DIR=$(mktemp -d --tmpdir="${TEST_RUNS_DIR}" "${BROKER}-XXXXXX")
 ln -sf --no-target-directory "${TEST_RUN_DIR}" "${TEST_RUNS_DIR}/${BROKER}-latest"
 cd "${TEST_RUN_DIR}"
-mkdir -p output resources
 
 # Activate YARF environment
 YARF_DIR="${ROOT_DIR}/.yarf"
 if [ ! -d "${YARF_DIR}" ]; then
-    echo "YARF directory not found at ${YARF_DIR}. Please run setup_yarf.sh first."
+    echo >&2  "YARF directory not found at ${YARF_DIR}. Please run setup_yarf.sh first."
     exit 1
 fi
 # shellcheck disable=SC1091 # Avoid info message about not following sourced file
 source "${YARF_DIR}/.venv/bin/activate"
 
-# Run the YARF tests
-for test_file in $TESTS_TO_RUN; do
-    test_name=$(basename "${test_file}")
+# Create symlinks to the resources directory
+mkdir -p tests/resources
+for resource in "${ROOT_DIR}/resources/"*; do
+    ln -s "${resource}" "tests/resources/$(basename "${resource}")"
+done
+ln -sf --no-target-directory "${BROKER}" tests/resources/broker
 
-    ln -s "${test_file}" .
-    ln -sf --no-target-directory "$(dirname "${test_file}")/resources/authd" resources/authd
-    # Update the symlink to the broker resources to use the specified broker
-    ln -sf --no-target-directory "$(dirname "${test_file}")/resources/${BROKER}" resources/broker
-    # Ensure the test run directory is cleaned up on exit
-    # shellcheck disable=SC2064 # We want to capture the current value of test_name
-    trap "rm -rf ${test_name} resources" EXIT
+# Create symlinks to the test files
+for test_file in $TESTS_TO_RUN; do
+    ln -s "${test_file}" tests
 done
 
 E2E_USER="$E2E_USER" \
 E2E_PASSWORD="$E2E_PASSWORD" \
 TOTP_SECRET="$TOTP_SECRET" \
 BROKER="$BROKER" \
-VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2) \
-yarf --outdir "output/${test_name}" --platform=Vnc . "$@" \
+RELEASE="$RELEASE" \
+VNC_PORT="$VNC_PORT" \
+robot \
+    --loglevel DEBUG \
+    --pythonpath "${YARF_DIR}/yarf/rf_libraries/libraries/vnc" \
+    "${ROBOT_ARGS[@]}" \
+    "$@" \
+    tests \
     2> >(grep -v "<video controls style" >&2) || \
     test_result=$?
 

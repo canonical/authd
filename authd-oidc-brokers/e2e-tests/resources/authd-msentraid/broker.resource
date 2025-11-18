@@ -1,7 +1,7 @@
 *** Settings ***
 Documentation       MS Entra ID specific resources for the tests
 
-Resource            kvm.resource
+Resource            ../kvm.resource
 Resource            ../authd/utils.resource
 Library             ./Browser.py    AS    Browser
 Library             Hid.py    AS    Hid
@@ -17,22 +17,20 @@ ${ENTRAID_BROKER_CFG_DIR}    /var/snap/authd-msentraid/current/broker.conf.d
 
 *** Keywords ***
 Enable Edge Broker
-    Run Command In Terminal    sudo snap refresh authd-msentraid --edge
+    SSH.Execute    sudo snap refresh authd-msentraid --edge
 
 
 Disable Broker And Purge Config
-    Open Terminal In Sudo Mode
-    Run Command In Focused Terminal    snap stop authd-msentraid
-    Run Command In Focused Terminal    rm ${AUTHD_BROKER_CFG}
-    Run Command In Focused Terminal    systemctl restart authd.service
-    Close Terminal In Sudo Mode
+    SSH.Execute    sudo snap stop authd-msentraid
+    SSH.Execute    sudo rm ${AUTHD_BROKER_CFG}
+    SSH.Execute    sudo systemctl restart authd.service
 
 
 Log In With Remote User Through CLI: QR Code
     [Arguments]    ${username}    ${local_password}
     Start Log In With Remote User Through CLI: QR Code    ${username}
     Select Provider
-    Continue Log In With Remote User: Log In On External Browser    ${username}
+    Continue Log In With Remote User: Authenticate In External Browser    ${username}
     Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
 
 
@@ -61,16 +59,16 @@ Regenerate QR Code
     # As long as we are in the login process, we can regenerate the QR code
     Match Text    Request new login code    30
     Hid.Keys Combo    Return
-    Match Text    https://microsoft.com/devicelogin    15
+    Match Text    microsoft.com/devicelogin    15
 
 
-Continue Log In With Remote User: Log In On External Browser
+Continue Log In With Remote User: Authenticate In External Browser
     [Arguments]    ${username}
     # Wait until the verification URL and login code are displayed
-    Match Text    https://microsoft.com/devicelogin
+    Match Text    microsoft.com/devicelogin
     # Read the user code.
     ${text} =    Read Text
-    ${user_code} =    StringUtils.First Match    (https://)?microsoft.com/devicelogin\n((Login code: )?([A-Z0-9]+))    ${text}
+    ${user_code} =    StringUtils.First Match    (https://)?microsoft.com/devicelogin\n((Login code: )?([A-Za-z0-9]+))    ${text}
     # The user code is all uppercase, but sometimes the OCR reads some letters as lowercase,
     # so convert it to uppercase to handle that.
     ${user_code} =    String.Convert To Upper Case    ${user_code}
@@ -119,31 +117,29 @@ Log In With Remote User Through CLI: Local Password
 #     sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
 Change Broker Configuration
     [Arguments]    ${config_key}    ${config_value}
-    Open Terminal In Sudo Mode
-    Run Command In Focused Terminal    sed -i 's/^#*${config_key} =.*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
-    Run Command In Focused Terminal    snap restart authd-msentraid
-    Close Terminal In Sudo Mode
+    SSH.Execute    sudo sed -i 's/^#*${config_key} =.*/${config_key} = ${config_value}/g' ${ENTRAID_BROKER_CFG}
+    SSH.Execute    sudo snap restart authd-msentraid
 
 
 # Pretty much the same as the function above, but since YARF does not have support for
 # shifted characters yet, we need to do some workarounds.
 Change allowed_users In Broker Configuration
     [Arguments]    ${config_value}
-    Run Command In Terminal    sudo sed -i 's/^#*allowed_users =.*/allowed_users = ${config_value}/g' ${ENTRAID_BROKER_CFG}
-    Run Command In Terminal    sudo snap restart authd-msentraid
+    SSH.Execute    sudo sed -i 's/^#*allowed_users =.*/allowed_users = ${config_value}/g' ${ENTRAID_BROKER_CFG}
+    SSH.Execute    sudo snap restart authd-msentraid
 
 
 Comment Key In Broker Configuration
     [Arguments]    ${config_key}
-    Run Command In Terminal    sudo sed -i 's/^#*${config_key} =.*/#${config_key} = .*/g' ${ENTRAID_BROKER_CFG}
-    Run Command In Terminal    sudo snap restart authd-msentraid
+    SSH.Execute    sudo sed -i 's/^#*${config_key} =.*/#${config_key} = .*/g' ${ENTRAID_BROKER_CFG}
+    SSH.Execute    sudo snap restart authd-msentraid
 
 
 Log In With Remote User Through SSH: QR Code
     [Arguments]    ${username}    ${local_password}
     Start Log In With Remote User Through SSH: QR Code    ${username}
     Select Provider through SSH
-    Continue Log In With Remote User: Log In On External Browser    ${username}
+    Continue Log In With Remote User: Authenticate In External Browser    ${username}
     Continue Log In With Remote User Through SSH: QR Code
     Continue Log In With Remote User Through SSH: Define Local Password    ${username}    ${local_password}
 
@@ -197,7 +193,7 @@ Log In With Remote User Through GDM: QR Code
     [Arguments]    ${username}    ${local_password}
     Start Log In With Remote User Through GDM: QR Code    ${username}
     Select Broker Through GDM
-    Continue Log In With Remote User: Log In On External Browser    ${username}
+    Continue Log In With Remote User: Authenticate In External Browser    ${username}
     Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
 
 

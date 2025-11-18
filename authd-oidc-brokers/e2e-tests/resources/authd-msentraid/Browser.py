@@ -19,6 +19,9 @@ def run_command(args):
 
 @library
 class Browser:
+    """Library for browser automation using a headless browser.
+    """
+
     @keyword
     async def login(self, username: str, password: str, usercode: str, totp_secret: str, output_dir: str = "."):
         """Perform device authentication with the given username, password and

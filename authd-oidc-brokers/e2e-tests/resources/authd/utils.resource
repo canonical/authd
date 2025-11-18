@@ -1,7 +1,8 @@
 *** Settings ***
 Documentation       authd test resources
 
-Resource            kvm.resource
+Resource            ../kvm.resource
+Library             ./Journal.py    AS    Journal
 Library             ./StringUtils.py    AS    StringUtils
 Library             ./VideoLogger.py    AS    VideoLogger
 Library             ./Snapshot.py    AS    Snapshot
@@ -91,20 +92,15 @@ Log Out From SSH Session
 
 
 Run Command In Terminal
-    [Arguments]    ${command}
-    Open Terminal
-    Run Command In Focused Terminal    ${command}
-    Close Focused Window
-
-
-Run Command In Focused Terminal
     [Arguments]    ${command}    ${timeout}=${600}
+    Open Terminal
     # Y21kLWZpbmlzaGVkCg== is the base64 encoding of "cmd-finished\n"
     # We use it to avoid that the `Match Text` below matches the command itself,
     # before the first clear is executed.
     Hid.Type String   clear && ${command} && echo Y21kLWZpbmlzaGVkCg== | base64 -d
     Hid.Keys Combo    Return
     Match Text    cmd-finished    ${timeout}
+    Close Focused Window
 
 
 Left Button Click
@@ -133,20 +129,26 @@ Cancel Operation
 
 
 Update And Upgrade Packages
-    Open Terminal In Sudo Mode
-    Run Command In Focused Terminal    apt-get update
-    Run Command In Focused Terminal    apt-get upgrade -y    timeout=1200
-    Close Terminal In Sudo Mode
+    SSH.Execute    sudo apt-get update
+    SSH.Execute    sudo apt-get upgrade -y    timeout=1200
+
 
 Sync System Time
-    SSH.Execute    sudo systemctl restart chronyd && sudo chronyc waitsync
+    ${output} =    SSH.Execute    nm-online -q && sudo systemctl restart systemd-timesyncd
+    Log    ${output}    level=DEBUG
+
+
+Wait Until System Time Synced
+    Wait Until Keyword Succeeds    1 min    1 sec
+    ...    Sync System Time
+
 
 ### Setup ###
 
 Restore Snapshot
     [Arguments]    ${snapshot_name}
     Snapshot.Restore    ${snapshot_name}
-    Sync System Time
+    Wait Until System Time Synced
 
 
 ### Teardown ###

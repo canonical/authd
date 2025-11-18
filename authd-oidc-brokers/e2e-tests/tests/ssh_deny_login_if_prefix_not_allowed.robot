@@ -6,8 +6,19 @@ Resource        ./resources/broker/broker.resource
 
 Test Tags       robot:exit-on-failure
 
-Suite Setup    Restore Snapshot    %{BROKER}-edge-configured
-Test Teardown    Log Videos On Error
+Test Setup    Test Setup
+Test Teardown   Test Teardown
+
+
+*** Keywords ***
+Test Setup
+    Journal.Start Receiving Journal
+    Restore Snapshot    %{BROKER}-edge-configured
+
+Test Teardown
+    Journal.Stop Receiving Journal
+    Journal.Log Journal
+    Log Videos On Error
 
 *** Variables ***
 ${local_password}    qwer1234
@@ -15,11 +26,13 @@ ${remote_group}    %{E2E_USER}-group
 
 
 *** Test Cases ***
-Log in with local user
+Test that login is denied if user is not allowed to log in via SSH
+    [Documentation]    Test that login via SSH is denied when the user is not allowed by the ssh_allowed_suffixes_first_auth setting.
+
+    # Log in with local user
     Log In
 
-
-Try to log in with not allowed remote user with device authentication through SSH
+    # Try to log in with not allowed remote user with device authentication through SSH
     ${domain} =    Fetch From Right    %{E2E_USER}    @
     ${username} =    Set Variable    other-user@${domain}
     Open Terminal

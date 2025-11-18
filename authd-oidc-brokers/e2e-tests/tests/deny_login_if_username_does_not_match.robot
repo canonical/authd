@@ -23,21 +23,20 @@ Test Teardown
 
 *** Variables ***
 ${username}    %{E2E_USER}
+${local_password}    qwer1234
+${remote_group}    %{E2E_USER}-group
 
 
 *** Test Cases ***
-Test that changing owner prevents remote logins
-    [Documentation]    This test verifies that when the broker owner is changed to a different user, the original remote user cannot log in, while local users can still access the system.
+Test that login fails if usernames do not match
+    [Documentation]    This test verifies that when attempting to log in with a remote user whose username does not match the requested username, the login fails, while local users can still access the system.
 
     # Log in with local user
     Log In
 
-    # Change owner to another user
-    Change Broker Configuration    owner    different-user
-
-    # Log in with remote user with device authentication
+    # Fail to log in if usernames do not match
     Open Terminal
-    Start Log In With Remote User Through CLI: QR Code    ${username}
+    Start Log In With Remote User Through CLI: QR Code   different_user
     Select Provider
-    Continue Log In With Remote User: Authenticate In External Browser    ${username}
-    Check That Remote User Is Not Allowed To Log In
+    Continue Log In With Remote User: Authenticate In External Browser   ${username}
+    Check That Authenticated User Does Not Match Requested User    different_user

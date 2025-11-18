@@ -1,11 +1,5 @@
 <domain type='kvm'>
-    <name>e2e-runner</name>
-    <uuid>8fa47a7f-4ed2-58be-996d-726b4cf41883</uuid>
-    <metadata>
-        <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
-            <libosinfo:os id="http://ubuntu.com/ubuntu/25.10" />
-        </libosinfo:libosinfo>
-    </metadata>
+    <name>${VM_NAME}</name>
     <memory unit='GiB'>8</memory>
     <currentMemory unit='GiB'>8</currentMemory>
     <vcpu>8</vcpu>
@@ -34,7 +28,6 @@
         <controller type='sata' index='0'/>
         <controller type='virtio-serial' index='0'/>
         <interface type='network'>
-            <mac address='52:54:00:ed:59:ea' />
             <source network='default' />
             <model type='virtio' />
             <address type='pci' domain='0x0000' bus='0x01' slot='0x00' function='0x0' />
@@ -59,7 +52,7 @@
         </video>
         <sound model='ich6'/>
         <vsock model="virtio">
-            <cid auto="no" address="1000" />
+            <cid auto="yes" />
             <address type="pci" domain="0x0000" bus="0x07" slot="0x00" function="0x0" />
         </vsock>
         <serial type='pty'>

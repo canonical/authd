@@ -6,8 +6,19 @@ Resource        ./resources/broker/broker.resource
 
 Test Tags       robot:exit-on-failure
 
-Suite Setup    Restore Snapshot    %{BROKER}-edge-configured
-Test Teardown    Log Videos On Error
+Test Setup    Test Setup
+Test Teardown   Test Teardown
+
+
+*** Keywords ***
+Test Setup
+    Journal.Start Receiving Journal
+    Restore Snapshot    %{BROKER}-edge-configured
+
+Test Teardown
+    Journal.Stop Receiving Journal
+    Journal.Log Journal
+    Log Videos On Error
 
 
 *** Variables ***
@@ -15,21 +26,21 @@ ${username}    %{E2E_USER}
 
 
 *** Test Cases ***
-Log in with local user
+Test that disabling authd prevents remote logins
+    [Documentation]    This test verifies that when authd is disabled, remote users cannot log in, while local users can still access the system.
+
+    # Log in with local user
     Log In
 
-
-Disable authd
+    # Disable authd
     Disable Authd Socket And Service
 
-
-Ensure local sudo user can still log in
+    # Ensure local sudo user can still log in
     Open Terminal
     Enter Sudo Mode In Terminal
     Close Terminal In Sudo Mode
 
-
-Check that remote user cannot log in
+    # Check that remote user cannot log in
     Open Terminal In Sudo Mode
     Try Log In With Remote User    ${username}
     Check That Log In Fails Because Authd Is Disabled

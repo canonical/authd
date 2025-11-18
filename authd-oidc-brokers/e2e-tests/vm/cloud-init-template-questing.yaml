@@ -32,22 +32,19 @@ packages:
   # Required for add-apt-repository
   - software-properties-common
   - systemd-container
+  - systemd-timesyncd
   - ubuntu-settings
   - yaru-theme-gtk
   - yaru-theme-icon
 
 write_files:
   - path: /etc/dconf/profile/user
-    owner: root:root
-    permissions: '0644'
     content: |
       user-db:user
       system-db:local
 
   # Configure dconf
   - path: /etc/dconf/db/local.d/00-e2e-tests-requirements
-    owner: root:root
-    permissions: '0644'
     content: |
       # Disable automatic suspend when plugged in
       [org/gnome/settings-daemon/plugins/power]
