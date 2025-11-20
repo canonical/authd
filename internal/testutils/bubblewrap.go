@@ -45,7 +45,7 @@ func SkipIfCannotRunBubbleWrap(t *testing.T) {
 	}
 
 	bubbleWrapNeedsSudoOnce.Do(func() {
-		bubbleWrapNeedsSudo = canUseSudoNonInteractively(t)
+		bubbleWrapNeedsSudo = canUseBwrapWithSudoNonInteractively(t)
 	})
 	if bubbleWrapNeedsSudo {
 		return
@@ -168,12 +168,10 @@ func canUseUnprivilegedUserNamespaces(t *testing.T) bool {
 	return true
 }
 
-func canUseSudoNonInteractively(t *testing.T) bool {
+func canUseBwrapWithSudoNonInteractively(t *testing.T) bool {
 	t.Helper()
 
-	cmd := exec.Command("sudo", "-Nnv")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Logf("Can't use sudo non-interactively: %v\n%s", err, out)
+	if !canUseSudoNonInteractively(t) {
 		return false
 	}
 
