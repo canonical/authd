@@ -2,13 +2,18 @@ package fileutils_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/canonical/authd/internal/fileutils"
 	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -394,5 +399,135 @@ func TestLockDir(t *testing.T) {
 		require.NoError(t, err, "Unlock should not return an error")
 	case <-time.After(testutils.MultipliedSleepDuration(5 * time.Second)):
 		require.Fail(t, "LockDir should have returned after the first lock was released")
+	}
+}
+
+func TestChownRecursiveFrom(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		fromUID            uint32
+		fromGID            uint32
+		toUID              int32
+		toGID              int32
+		readOnlyFilesystem bool
+		fileUID            uint32
+		fileGID            uint32
+		dirUID             uint32
+		dirGID             uint32
+
+		wantError      bool
+		wantErrorMatch string
+	}{
+		"Successfully_change_owner":                      {fromUID: 0, fromGID: 0, toUID: 1, toGID: -1},
+		"Successfully_change_group":                      {fromUID: 0, fromGID: 0, toUID: -1, toGID: 1},
+		"Successfully_change_owner_and_group":            {fromUID: 0, fromGID: 0, toUID: 1, toGID: 1},
+		"Group_not_changed_when_GID_does_not_match":      {fromUID: 0, fromGID: 2, toUID: 1, toGID: 1},
+		"Owner_not_changed_when_UID_does_not_match":      {fromUID: 2, fromGID: 0, toUID: 1, toGID: 1},
+		"Change_only_the_file_owner":                     {fromUID: 2, fromGID: 2, toUID: 1, toGID: 1, fileUID: 2},
+		"Change_only_the_file_group":                     {fromUID: 2, fromGID: 2, toUID: 1, toGID: 1, fileGID: 2},
+		"Change_only_the_file_owner_and_group":           {fromUID: 2, fromGID: 2, toUID: 1, toGID: 1, fileUID: 2, fileGID: 2},
+		"Change_only_the_directory_owner":                {fromUID: 2, fromGID: 2, toUID: 1, toGID: 1, dirUID: 2},
+		"Change_only_the_directory_group":                {fromUID: 2, fromGID: 2, toUID: 1, toGID: 1, dirGID: 2},
+		"Change_only_the_directory_owner_and_group":      {fromUID: 2, fromGID: 2, toUID: 1, toGID: 1, dirUID: 2, dirGID: 2},
+		"No_change_if_ownership_is_same_as_current":      {fromUID: 2, fromGID: 2, toUID: 0, toGID: 0},
+		"No_change_if_no_file_matches_fromUID":           {fromUID: 1, toUID: 0, toGID: 0},
+		"No_change_if_no_file_matches_fromGID":           {fromGID: 1, toUID: 0, toGID: 0},
+		"No_change_if_toUID_and_toGID_are_both_negative": {fromUID: 0, fromGID: 0, toUID: -1, toGID: -1},
+
+		"Error_when_filesystem_is_read_only": {
+			toUID: 1, readOnlyFilesystem: true, wantError: true, wantErrorMatch: "read-only file system",
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if !testutils.RunningAsRoot() {
+				testutils.RunTestAsRoot(t)
+				return
+			}
+
+			tempDir := testutils.TempDir(t)
+			targetDir := filepath.Join(tempDir, "dir")
+			subDir := filepath.Join(targetDir, "subdir")
+			filePath := filepath.Join(subDir, "file")
+			err := os.MkdirAll(subDir, 0o700)
+			require.NoError(t, err)
+			err = fileutils.Touch(filePath)
+			require.NoError(t, err)
+			err = os.Chown(targetDir, int(tc.dirUID), int(tc.dirGID))
+			require.NoError(t, err)
+			err = os.Chown(subDir, int(tc.dirUID), int(tc.dirGID))
+			require.NoError(t, err)
+			err = os.Chown(filePath, int(tc.fileUID), int(tc.fileGID))
+			require.NoError(t, err)
+
+			symlinkTarget := filepath.Join(tempDir, "symlink_target")
+			err = fileutils.Touch(symlinkTarget)
+			require.NoError(t, err)
+			symlink := filepath.Join(targetDir, "symlink")
+			err = os.Symlink(symlinkTarget, symlink)
+			require.NoError(t, err)
+
+			if tc.readOnlyFilesystem {
+				//nolint:gosec // G204 it's safe to use exec.Command with a variable here
+				cmd := exec.Command("mount", "--read-only", "-t", "tmpfs", "tmpfs", targetDir)
+				cmd.Stderr = os.Stderr
+				err = cmd.Run()
+				require.NoError(t, err)
+				defer func() {
+					//nolint:gosec // G204 it's safe to use exec.Command with a variable here
+					cmd := exec.Command("umount", targetDir)
+					cmd.Stderr = os.Stderr
+					_ = cmd.Run()
+				}()
+			}
+
+			err = fileutils.ChownRecursiveFrom(targetDir, tc.fromUID, tc.fromGID, tc.toUID, tc.toGID)
+			t.Logf("ChownRecursiveFrom error: %v", err)
+			if tc.wantError {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.wantErrorMatch)
+				return
+			}
+			require.NoError(t, err)
+
+			// The symlink target should not be changed
+			fileInfo, err := os.Stat(symlinkTarget)
+			require.NoError(t, err)
+			stat, ok := fileInfo.Sys().(*syscall.Stat_t)
+			require.True(t, ok, "File should have a syscall.Stat_t")
+			require.Equal(t, uint32(0), stat.Uid, "Symlink target UID should not have changed")
+			require.Equal(t, uint32(0), stat.Gid, "Symlink target GID should not have changed")
+
+			// Check ownership
+			var s string
+			for _, f := range []string{targetDir, subDir, filePath} {
+				fileInfo, err := os.Stat(f)
+				require.NoError(t, err)
+				stat, ok := fileInfo.Sys().(*syscall.Stat_t)
+				require.True(t, ok, "File should have a syscall.Stat_t")
+				relPath, err := filepath.Rel(tempDir, f)
+				require.NoError(t, err)
+				s += fmt.Sprintf("%s: %d:%d\n", relPath, stat.Uid, stat.Gid)
+			}
+			golden.CheckOrUpdate(t, s)
+
+			if golden.UpdateEnabled() {
+				// Change the owner of the golden file to the user that executed sudo
+				// to avoid permission issues.
+				sudoUID := os.Getenv("SUDO_UID")
+				sudoGID := os.Getenv("SUDO_GID")
+				if sudoUID != "" && sudoGID != "" {
+					uid, err := strconv.ParseInt(sudoUID, 10, 32)
+					require.NoError(t, err)
+					gid, err := strconv.ParseInt(sudoGID, 10, 32)
+					require.NoError(t, err)
+					err = fileutils.ChownRecursiveFrom(golden.Dir(t), 0, 0, int32(uid), int32(gid))
+					require.NoError(t, err)
+				}
+			}
+		})
 	}
 }
