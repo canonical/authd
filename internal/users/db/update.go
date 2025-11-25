@@ -261,3 +261,100 @@ func (m *Manager) SetUserID(username string, newUID uint32) error {
 
 	return nil
 }
+
+// SetGroupID updates the GID of a group and returns the list of users whose primary group was updated.
+func (m *Manager) SetGroupID(groupName string, newGID uint32) ([]UserRow, error) {
+	// Temporarily disable foreign key constraints to allow updating the GID without violating constraints.
+	// SQLite does not allow disabling foreign key constraints in a transaction,
+	// so we do it before starting the transaction. See https://www.sqlite.org/foreignkeys.html#fk_enable
+	if _, err := m.db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		return nil, err
+	}
+	defer func() {
+		// Re-enable foreign key constraints after the operation
+		if _, err := m.db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+			log.Errorf(context.TODO(), "Failed to re-enable foreign keys: %v", err)
+		}
+	}()
+
+	// Start a transaction
+	tx, err := m.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to start transaction: %w", err)
+	}
+
+	// Ensure the transaction is committed or rolled back
+	defer func() {
+		err = commitOrRollBackTransaction(err, tx)
+	}()
+
+	// Check if the new GID is already in use
+	existingGroup, err := groupByID(tx, newGID)
+	if err != nil && !errors.Is(err, NoDataFoundError{}) {
+		return nil, fmt.Errorf("failed to check if new GID is already in use: %w", err)
+	}
+	if existingGroup.Name != "" && existingGroup.Name != groupName {
+		log.Errorf(context.TODO(), "GID %d already in use by group %q", newGID, existingGroup.Name)
+		return nil, fmt.Errorf("GID %d already in use by a different group", newGID)
+	}
+	if existingGroup.Name == groupName {
+		log.Debugf(context.TODO(), "Group %q already has GID %d, no update needed", groupName, newGID)
+		return nil, nil
+	}
+
+	// Get the old GID of the group
+	oldGroup, err := groupByName(tx, groupName)
+	if errors.Is(err, NoDataFoundError{}) {
+		return nil, err
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get group by name: %w", err)
+	}
+	oldGID := oldGroup.GID
+
+	// Get the list of users whose primary group is the old GID
+	query := `SELECT name, uid, gid, gecos, dir, shell, broker_id, locked FROM users WHERE gid = ?`
+	rows, err := tx.Query(query, oldGID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get users with old group as primary group: %w", err)
+	}
+	defer closeRows(rows)
+
+	var users []UserRow
+	for rows.Next() {
+		var u UserRow
+		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked)
+		if err != nil {
+			return nil, fmt.Errorf("scan error: %w", err)
+		}
+		users = append(users, u)
+	}
+
+	// Update the groups table
+	if _, err := tx.Exec(`UPDATE groups SET gid = ? WHERE name = ?`, newGID, groupName); err != nil {
+		return nil, err
+	}
+
+	// Update the primary groups of the users table
+	if _, err := tx.Exec(`UPDATE users SET gid = ? WHERE gid = ?`, newGID, oldGID); err != nil {
+		return nil, err
+	}
+
+	// Update the users_to_groups table
+	if _, err := tx.Exec(`UPDATE users_to_groups SET gid = ? WHERE gid = ?`, newGID, oldGID); err != nil {
+		// If a foreign key error occurs, enrich it similarly to users handling if needed.
+		var sqliteErr sqlite3.Error
+		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintForeignKey {
+			// Check existence to provide clearer message
+			_, groupErr := groupByID(tx, newGID)
+			if errors.Is(groupErr, NoDataFoundError{}) {
+				err = fmt.Errorf("%w (%w)", err, groupErr)
+			} else if groupErr != nil {
+				err = errors.Join(err, fmt.Errorf("failed to check if group with GID %d exists: %w", newGID, groupErr))
+			}
+		}
+		return nil, fmt.Errorf("failed to update users_to_groups for GID change: %w", err)
+	}
+
+	return users, nil
+}
