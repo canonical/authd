@@ -936,6 +936,83 @@ func TestSetUserID(t *testing.T) {
 	}
 }
 
+func TestSetGroupID(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		nonExistentGroup bool
+		gidAlreadyInUse  bool
+		gidAlreadySet    bool
+
+		wantErr         bool
+		wantErrType     error
+		wantUnchangedDB bool
+	}{
+		"Set_group_id_for_existing_group": {},
+		"No_op_if_gid_is_already_set":     {gidAlreadySet: true, wantUnchangedDB: true},
+
+		"Error_on_nonexistent_group":  {nonExistentGroup: true, wantErrType: db.NoDataFoundError{}},
+		"Error_if_gid_already_in_use": {gidAlreadyInUse: true, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			m := initDB(t, "multiple_users_and_groups")
+
+			groupName := "group1"
+			if tc.nonExistentGroup {
+				groupName = "nonexistent"
+			}
+
+			var newGID uint32 = 12345
+			if tc.gidAlreadyInUse {
+				newGID = 22222 // gid used by group2 in test data
+			}
+			if tc.gidAlreadySet {
+				newGID = 11111 // current gid of group1 in test data
+			}
+
+			var oldDBContent string
+			var err error
+			if tc.wantUnchangedDB {
+				oldDBContent, err = db.Z_ForTests_DumpNormalizedYAML(m)
+				require.NoError(t, err)
+			}
+
+			users, err := m.SetGroupID(groupName, newGID)
+			log.Infof(context.Background(), "SetGroupID error: %v", err)
+
+			if tc.wantErrType != nil {
+				require.ErrorIs(t, err, tc.wantErrType, "SetGroupID should return expected error")
+				return
+			}
+			if tc.wantErr {
+				require.Error(t, err, "SetGroupID should return an error but didn't")
+				return
+			}
+			require.NoError(t, err, "SetGroupID should not return an error on existing group")
+
+			// Check the returned users list
+			if tc.gidAlreadySet {
+				require.Nil(t, users, "SetGroupID should return nil users list if gid was already set")
+			} else {
+				require.Len(t, users, 1, "SetGroupID should return a non-empty users list")
+			}
+
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(m)
+			require.NoError(t, err)
+
+			if tc.wantUnchangedDB {
+				require.Equal(t, oldDBContent, dbContent, "SetGroupID should not change the database content")
+				return
+			}
+
+			golden.CheckOrUpdate(t, dbContent)
+		})
+	}
+}
+
 func TestRemoveDb(t *testing.T) {
 	t.Parallel()
 
