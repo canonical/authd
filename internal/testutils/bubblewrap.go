@@ -18,6 +18,9 @@ var (
 
 	bubbleWrapNeedsSudoOnce sync.Once
 	bubbleWrapNeedsSudo     bool
+
+	copyBwrapOnce   sync.Once
+	copiedBwrapPath string
 )
 
 const bubbleWrapTestEnvVar = "BUBBLEWRAP_TEST"
@@ -79,7 +82,26 @@ func RunTestInBubbleWrap(t *testing.T, args ...string) {
 func runInBubbleWrap(t *testing.T, withSudo bool, testDataPath string, env []string, args ...string) error {
 	t.Helper()
 
-	cmd := exec.Command("bwrap")
+	// Since 25.10 Ubuntu ships the AppArmor profile /etc/apparmor.d/bwrap-userns-restrict
+	// which restricts bwrap and causes chown to fail with "Operation not permitted".
+	// We work around that by copying the bwrap binary to a temporary location so that
+	// the AppArmor profile is not applied.
+	copyBwrapOnce.Do(func() {
+		tempDir, err := os.MkdirTemp("", "authd-bwrap-")
+		require.NoError(t, err, "Setup: could not create temp dir for bwrap test data")
+		copiedBwrapPath = filepath.Join(tempDir, "bwrap")
+		err = fileutils.CopyFile("/usr/bin/bwrap", copiedBwrapPath)
+		require.NoError(t, err, "Setup: could not copy bubblewrap binary to temp location")
+	})
+
+	// To be able to use chown in bubblewrap, we need to run it in a user namespace
+	// with a uid mapping. Bubblewrap itself only supports mapping a single UID via
+	// --uid, so we use unshare to create a new user namespace with the desired mapping
+	// and run bwrap in that.
+	//nolint:gosec // We're not running untrusted code here.
+	cmd := exec.Command("unshare", "--user", "--map-root-user", "--map-auto",
+		copiedBwrapPath)
+
 	cmd.Env = AppendCovEnv(os.Environ())
 	cmd.Env = append(cmd.Env, env...)
 	cmd.Env = append(cmd.Env, bubbleWrapTestEnvVar+"=1")
@@ -126,10 +148,6 @@ func runInBubbleWrap(t *testing.T, withSudo bool, testDataPath string, env []str
 
 	if coverDir := CoverDirForTests(); coverDir != "" {
 		cmd.Args = append(cmd.Args, "--bind", coverDir, coverDir)
-	}
-
-	if os.Geteuid() != 0 && !withSudo {
-		cmd.Args = append(cmd.Args, "--unshare-user", "--uid", "0")
 	}
 
 	cmd.Args = append(cmd.Args, args...)
