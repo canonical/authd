@@ -145,6 +145,16 @@ function wait_for_system_running() {
     retry --times 3 --delay 3 -- timeout 30 -- "$SSH" -- "$cmd"
 }
 
+function reboot_system() {
+    # For some reason, `virsh shutdown` sometimes doesn't cause the VM
+    # to shut down, so we retry it a few times.
+    local cmd="virsh shutdown \"${VM_NAME}\" && \
+virsh await \"${VM_NAME}\" --condition domain-inactive --timeout 5"
+    retry --times 3 --delay 1 -- sh -c "$cmd"
+    virsh start "${VM_NAME}"
+    wait_for_system_running
+}
+
 function install_brokers() {
     local channel="$1"
     local base_snapshot="authd-${channel}-installed"
@@ -170,8 +180,7 @@ function install_brokers() {
 		EOF
 
         # Reboot VM and wait until it's back
-        virsh reboot "${VM_NAME}"
-        wait_for_system_running
+        reboot_system
 
         # Snapshot this broker installation
         force_create_snapshot "${broker}-${channel}-configured"
