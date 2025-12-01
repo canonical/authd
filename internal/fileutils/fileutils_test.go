@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -443,8 +442,8 @@ func TestChownRecursiveFrom(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if !testutils.RunningAsRoot() {
-				testutils.RunTestAsRoot(t)
+			if !testutils.RunningInBubblewrap() {
+				testutils.RunTestInBubbleWrap(t)
 				return
 			}
 
@@ -513,21 +512,6 @@ func TestChownRecursiveFrom(t *testing.T) {
 				s += fmt.Sprintf("%s: %d:%d\n", relPath, stat.Uid, stat.Gid)
 			}
 			golden.CheckOrUpdate(t, s)
-
-			if golden.UpdateEnabled() {
-				// Change the owner of the golden file to the user that executed sudo
-				// to avoid permission issues.
-				sudoUID := os.Getenv("SUDO_UID")
-				sudoGID := os.Getenv("SUDO_GID")
-				if sudoUID != "" && sudoGID != "" {
-					uid, err := strconv.ParseInt(sudoUID, 10, 32)
-					require.NoError(t, err)
-					gid, err := strconv.ParseInt(sudoGID, 10, 32)
-					require.NoError(t, err)
-					err = fileutils.ChownRecursiveFrom(golden.Dir(t), 0, 0, int32(uid), int32(gid))
-					require.NoError(t, err)
-				}
-			}
 		})
 	}
 }
