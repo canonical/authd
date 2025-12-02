@@ -12,3 +12,7 @@ var GroupCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE:  func(cmd *cobra.Command, args []string) error { return cmd.Usage() },
 }
+
+func init() {
+	GroupCmd.AddCommand(setGIDCmd)
+}
