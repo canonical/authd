@@ -124,7 +124,7 @@ func runInBubbleWrap(t *testing.T, withSudo bool, env []string, args ...string) 
 	cmd.Args = append(cmd.Args,
 		"--ro-bind", "/", "/",
 		"--dev", "/dev",
-		"--bind", os.TempDir(), os.TempDir(),
+		"--tmpfs", "/tmp",
 		"--bind", etcDir, "/etc",
 
 		// Bind relevant etc files. We go manual here, since there's no
@@ -140,6 +140,9 @@ func runInBubbleWrap(t *testing.T, withSudo bool, env []string, args ...string) 
 		"--ro-bind-try", "/etc/timezone", "/etc/timezone",
 		"--ro-bind", "/etc/pam.d", "/etc/pam.d",
 		"--ro-bind", "/etc/security", "/etc/security",
+
+		// Bind the test binary itself so that it can be run in bubblewrap.
+		"--bind", os.Args[0], os.Args[0],
 	)
 
 	if coverDir := CoverDirForTests(); coverDir != "" {
