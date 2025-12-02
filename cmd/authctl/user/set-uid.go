@@ -15,7 +15,27 @@ import (
 var setUIDCmd = &cobra.Command{
 	Use:   "set-uid <name> <uid>",
 	Short: "Set the UID of a user managed by authd",
-	Args:  cobra.ExactArgs(2),
+	Long: `Set the UID of a user managed by authd to the specified value.
+
+The new UID value must be unique and non-negative.
+
+The user's home directory and any files within it owned by the user will
+automatically have their ownership updated to the new UID.
+
+Files outside the user's home directory are not updated and must be changed
+manually. Note that changing a UID can be unsafe if files on the system are
+still owned by the original UID: those files may become accessible to a different
+account that is later assigned that UID. To change ownership of all files on the
+system from the old UID to the new UID, run:
+
+  sudo chown -R --from OLD_UID NEW_UID /
+
+This command requires root privileges.
+
+Examples:
+  authctl user set-uid john 15000
+  authctl user set-uid alice 20000`,
+	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		uidStr := args[1]
