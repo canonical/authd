@@ -3,6 +3,7 @@ Documentation       MS Entra ID specific resources for the tests
 
 Resource            ../kvm.resource
 Resource            ../authd/utils.resource
+Resource            ../authd/authd.resource
 Library             ./Browser.py    AS    Browser
 Library             Hid.py    AS    Hid
 Library             String
@@ -13,6 +14,8 @@ ${ENTRAID_RESOURCES}    ${CURDIR}
 ${AUTHD_BROKER_CFG}    /etc/authd/brokers.d/msentraid.conf
 ${ENTRAID_BROKER_CFG}    /var/snap/authd-msentraid/current/broker.conf
 ${ENTRAID_BROKER_CFG_DIR}    /var/snap/authd-msentraid/current/broker.conf.d
+
+${remote_group}    e2e-test-group
 
 
 *** Keywords ***
@@ -246,6 +249,15 @@ Log In With Remote User Through GDM: Local Password
     Hid.Keys Combo    Return
 
     Wait Until Desktop Ready
+
+
+Check If User Was Added Properly
+    [Arguments]    ${username}
+    Get NSS Passwd Entry For Remote User    ${username}
+    Check User Information    ${username}
+    Get NSS Group Entries For Remote User    ${username}
+    Check User Groups    ${username}    ${remote_group}
+    Check That Remote User Can Run Sudo Commands    ${local_password}
 
 
 Check User Information

@@ -36,10 +36,7 @@ Test login with GDM
 
     # Check remote user is properly added to the system
     Open Terminal
-    Get NSS Passwd Entry For Remote User    ${username}
-    Check User Information    ${username}
-    Get NSS Group Entries For Remote User    ${username}
-    Check User Groups    ${username}    ${remote_group}
+    Check If User Was Added Properly    ${username}
     Close Focused Window
     Log Out
 
