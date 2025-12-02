@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/stretchr/testify/require"
 )
 
@@ -143,6 +144,14 @@ func runInBubbleWrap(t *testing.T, withSudo bool, env []string, args ...string) 
 
 	if coverDir := CoverDirForTests(); coverDir != "" {
 		cmd.Args = append(cmd.Args, "--bind", coverDir, coverDir)
+	}
+
+	goldenDir := golden.Dir(t)
+	exists, err := fileutils.FileExists(goldenDir)
+	require.NoError(t, err, "Setup: could not check if golden dir exists")
+	if exists && golden.UpdateEnabled() {
+		// Bind the golden directory read-write so that the tests can update it.
+		cmd.Args = append(cmd.Args, "--bind", goldenDir, goldenDir)
 	}
 
 	cmd.Args = append(cmd.Args, args...)
