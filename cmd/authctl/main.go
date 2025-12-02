@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/canonical/authd/cmd/authctl/group"
 	"github.com/canonical/authd/cmd/authctl/user"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
@@ -35,6 +36,7 @@ func init() {
 	cobra.EnableCommandSorting = false
 
 	rootCmd.AddCommand(user.UserCmd)
+	rootCmd.AddCommand(group.GroupCmd)
 }
 
 func main() {
