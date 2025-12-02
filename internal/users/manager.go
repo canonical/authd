@@ -417,7 +417,9 @@ func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err err
 	// Check if the home directory is currently owned by the user.
 	homeUID, _, err := getHomeDirOwner(oldUser.Dir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("failed to get home directory owner for user %q: %w", name, err)
+		warning := fmt.Sprintf("Could not get owner of home directory %q", oldUser.Dir)
+		log.Warningf(context.Background(), "%s: %v", warning, err)
+		return []string{warning}, nil
 	}
 	if errors.Is(err, os.ErrNotExist) {
 		// The home directory does not exist, so we don't need to change the owner.
