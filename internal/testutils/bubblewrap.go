@@ -73,13 +73,13 @@ func RunTestInBubbleWrap(t *testing.T, args ...string) {
 	args = append(args, testCommand...)
 
 	t.Logf("Running %s in bubblewrap", t.Name())
-	err := runInBubbleWrap(t, bubbleWrapNeedsSudo, "", nil, args...)
+	err := runInBubbleWrap(t, bubbleWrapNeedsSudo, nil, args...)
 	if err != nil {
 		t.Fatalf("Running %s in bubblewrap failed: %v", t.Name(), err)
 	}
 }
 
-func runInBubbleWrap(t *testing.T, withSudo bool, testDataPath string, env []string, args ...string) error {
+func runInBubbleWrap(t *testing.T, withSudo bool, env []string, args ...string) error {
 	t.Helper()
 
 	// Since 25.10 Ubuntu ships the AppArmor profile /etc/apparmor.d/bwrap-userns-restrict
@@ -110,11 +110,7 @@ func runInBubbleWrap(t *testing.T, withSudo bool, testDataPath string, env []str
 		cmd.Args = append([]string{"sudo"}, cmd.Args...)
 	}
 
-	if testDataPath == "" {
-		testDataPath = TempDir(t)
-	}
-
-	etcDir := filepath.Join(testDataPath, "etc")
+	etcDir := filepath.Join(TempDir(t), "etc")
 	err := os.MkdirAll(etcDir, 0700)
 	require.NoError(t, err, "Setup: could not create etc dir")
 
@@ -128,7 +124,6 @@ func runInBubbleWrap(t *testing.T, withSudo bool, testDataPath string, env []str
 		"--ro-bind", "/", "/",
 		"--dev", "/dev",
 		"--bind", os.TempDir(), os.TempDir(),
-		"--bind", testDataPath, testDataPath,
 		"--bind", etcDir, "/etc",
 
 		// Bind relevant etc files. We go manual here, since there's no
@@ -163,7 +158,7 @@ func canUseUnprivilegedUserNamespaces(t *testing.T) bool {
 
 	t.Log("Checking if we can use unprivileged user namespaces")
 
-	if err := runInBubbleWrap(t, false, t.TempDir(), nil, "/bin/true"); err != nil {
+	if err := runInBubbleWrap(t, false, nil, "/bin/true"); err != nil {
 		t.Logf("Can't use user namespaces: %v", err)
 		return false
 	}
@@ -179,7 +174,7 @@ func canUseBwrapWithSudoNonInteractively(t *testing.T) bool {
 		return false
 	}
 
-	if err := runInBubbleWrap(t, true, t.TempDir(), nil, "/bin/true"); err != nil {
+	if err := runInBubbleWrap(t, true, nil, "/bin/true"); err != nil {
 		t.Logf("Can't use bubblewrap with sudo: %v", err)
 		return false
 	}
