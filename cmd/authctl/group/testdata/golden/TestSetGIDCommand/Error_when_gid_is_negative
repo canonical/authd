@@ -1,0 +1,7 @@
+Usage:
+  authctl group set-gid <name> <gid> [flags]
+
+Flags:
+  -h, --help   help for set-gid
+
+unknown shorthand flag: '1' in -1000
