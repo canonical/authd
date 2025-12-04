@@ -380,6 +380,9 @@ func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err err
 		return nil, fmt.Errorf("UID %d is too large to convert to int32", uid)
 	}
 
+	m.userManagementMu.Lock()
+	defer m.userManagementMu.Unlock()
+
 	// Call lckpwdf to avoid race conditions with other processes which add UIDs
 	err = userslocking.WriteLock()
 	if err != nil {
@@ -455,6 +458,9 @@ func (m *Manager) SetGroupID(name string, gid uint32) (warnings []string, err er
 	if gid > math.MaxInt32 {
 		return nil, fmt.Errorf("GID %d is too large to convert to int32", gid)
 	}
+
+	m.userManagementMu.Lock()
+	defer m.userManagementMu.Unlock()
 
 	// Call lckpwdf to avoid race conditions with other processes which add GIDs
 	err = userslocking.WriteLock()
