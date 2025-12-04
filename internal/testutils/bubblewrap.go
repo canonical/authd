@@ -31,38 +31,39 @@ func RunningInBubblewrap() bool {
 	return os.Getenv(bubbleWrapTestEnvVar) == "1"
 }
 
-// SkipIfCannotRunBubbleWrap checks whether we can run tests running in bubblewrap or
-// skip the tests otherwise.
-func SkipIfCannotRunBubbleWrap(t *testing.T) {
+func canRunBubblewrap(t *testing.T) bool {
 	t.Helper()
 
 	if os.Geteuid() == 0 {
 		t.Log("Running as EUID 0")
-		return
+		return true
 	}
 
 	bubbleWrapSupportsUnprivilegedNamespacesOnce.Do(func() {
 		bubbleWrapSupportsUnprivilegedNamespaces = canUseUnprivilegedUserNamespaces(t)
 	})
 	if bubbleWrapSupportsUnprivilegedNamespaces {
-		return
+		return true
 	}
 
 	bubbleWrapNeedsSudoOnce.Do(func() {
 		bubbleWrapNeedsSudo = canUseBwrapWithSudoNonInteractively(t)
 	})
-	if bubbleWrapNeedsSudo {
-		return
-	}
-
-	t.Skip("Skipping test: requires root privileges or unprivileged user namespaces")
+	return bubbleWrapNeedsSudo
 }
 
 // RunTestInBubbleWrap runs the given test in bubblewrap.
 func RunTestInBubbleWrap(t *testing.T, args ...string) {
 	t.Helper()
 
-	SkipIfCannotRunBubbleWrap(t)
+	if !canRunBubblewrap(t) {
+		if IsDebianPackageBuild() && !IsCI() {
+			// On launchpad builders, we might not be able to run bubblewrap,
+			// but we don't want to fail the tests in that case.
+			t.Skip("Skipping test: cannot run bubblewrap")
+		}
+		require.Fail(t, "Cannot run bubblewrap")
+	}
 
 	testCommand := []string{os.Args[0], "-test.run", "^" + t.Name() + "$"}
 	if testing.Verbose() {
