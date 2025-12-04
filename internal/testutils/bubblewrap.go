@@ -183,8 +183,17 @@ func canUseUnprivilegedUserNamespaces(t *testing.T) bool {
 		_ = cmd.Run()
 	}
 
+	cmd := exec.Command("unshare", "--map-root-user", "/bin/true")
+	cmd.Stdout = t.Output()
+	cmd.Stderr = t.Output()
+	t.Log("Running command:", cmd.String())
+	if err := cmd.Run(); err != nil {
+		t.Logf("Can't use unprivileged user namespaces: %v", err)
+		return false
+	}
+
 	if err := runInBubbleWrap(t, false, nil, "/bin/true"); err != nil {
-		t.Logf("Can't use user namespaces: %v", err)
+		t.Logf("Can't use user unprivileged user namespaces with bwrap: %v", err)
 		return false
 	}
 
