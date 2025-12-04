@@ -222,7 +222,6 @@ func TestLockingLockedDatabase(t *testing.T) {
 	}
 
 	if !testutils.RunningInBubblewrap() {
-		testutils.SkipIfCannotRunBubbleWrap(t)
 		testInBubbleWrapWithLockerBinary(t)
 		return
 	}
@@ -475,8 +474,6 @@ func compileLockerBinary(t *testing.T, tempDir string) {
 
 func testInBubbleWrapWithLockerBinary(t *testing.T) {
 	t.Helper()
-
-	testutils.SkipIfCannotRunBubbleWrap(t)
 
 	compileLockerBinaryOnce.Do(func() {
 		compileLockerBinary(t, tempDir)
