@@ -24,11 +24,13 @@ This is the code repository for authd OpenID Connect (OIDC) brokers. It is used 
 
 This project contains specific code for different OpenID Connect providers. We build one binary for each and snap them based on build tags to integrate with the Ubuntu authentication daemon.
 
-For general details, check the authd [getting started guide](https://github.com/ubuntu/authd/wiki/01---Get-started-with-authd). The same documentation reference hosts [installation](https://github.com/ubuntu/authd/wiki/02---Installation) and [configuration](https://github.com/ubuntu/authd/wiki/03---Configuration) instructions.
+For general details, read the [authd documentation](https://documentation.ubuntu.com/authd/stable-docs/).
+
+The documentation includes details on [installing](https://documentation.ubuntu.com/authd/stable-docs/howto/install-authd/) and [configuring](https://documentation.ubuntu.com/authd/stable-docs/howto/configure-authd/) authd.
 
 ## Troubleshooting
 
-More details on troubleshooting one of the OIDC brokers is available on the [authd documentation](https://github.com/ubuntu/authd/wiki/05--Troubleshooting).
+More details on troubleshooting one authd and authd brokers is available in the [authd documentation](https://documentation.ubuntu.com/authd/stable-docs/reference/troubleshooting/).
 
 ## Get involved
 
