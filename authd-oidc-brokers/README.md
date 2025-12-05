@@ -8,7 +8,7 @@
 [codecov-image]: https://codecov.io/gh/ubuntu/authd-oidc-brokers/graph/badge.svg
 [codecov-url]: https://codecov.io/gh/ubuntu/authd-oidc-brokers
 
-[user-documentation-image]: https://pkg.go.dev/github.com/ubuntu/authd-oidc-brokers
+[user-documentation-image]: https://pkg.go.dev/badge/github.com/ubuntu/authd-oidc-brokers.svg
 [user-documentation-url]: https://pkg.go.dev/github.com/ubuntu/authd-oidc-brokers
 
 [goreport-image]: https://goreportcard.com/badge/github.com/ubuntu/authd-oidc-brokers
