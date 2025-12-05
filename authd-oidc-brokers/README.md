@@ -1,6 +1,6 @@
-# Welcome to Authd OpenID Connect Broker
+# Welcome to authd OpenID Connect Broker
 
-[actions-image]: https://github.com/ubuntu/authd-oidc-brokers/actions/workflows/ci.yaml/badge.svg
+[actions-image]: https://github.com/ubuntu/authd-oidc-brokers/actions/workflows/ci.yml/badge.svg
 [actions-url]: https://github.com/ubuntu/authd-oidc-brokers/actions?query=workflow%3ACI
 
 [license-image]: https://img.shields.io/badge/License-GPL3.0-blue.svg
@@ -8,7 +8,7 @@
 [codecov-image]: https://codecov.io/gh/ubuntu/authd-oidc-brokers/graph/badge.svg
 [codecov-url]: https://codecov.io/gh/ubuntu/authd-oidc-brokers
 
-[user-documentation-image]: https://pkg.go.dev/github.com/ubuntu/authd-oidc-brokers
+[user-documentation-image]: https://pkg.go.dev/badge/github.com/ubuntu/authd-oidc-brokers.svg
 [user-documentation-url]: https://pkg.go.dev/github.com/ubuntu/authd-oidc-brokers
 
 [goreport-image]: https://goreportcard.com/badge/github.com/ubuntu/authd-oidc-brokers
@@ -20,15 +20,17 @@
 [![User Documentation][user-documentation-image]][user-documentation-url]
 [![Go Report Card][goreport-image]][goreport-url]
 
-This is the code repository for Authd OpenID Connect (OIDC) brokers. It is used in conjunction with Ubuntu authentication daemon [authd](https://github.com/ubuntu/authd).
+This is the code repository for authd OpenID Connect (OIDC) brokers. It is used in conjunction with Ubuntu authentication daemon [authd](https://github.com/ubuntu/authd).
 
 This project contains specific code for different OpenID Connect providers. We build one binary for each and snap them based on build tags to integrate with the Ubuntu authentication daemon.
 
-For general details, check the authd [getting started guide](https://github.com/ubuntu/authd/wiki/01---Get-started-with-authd). The same documentation reference hosts [installation](https://github.com/ubuntu/authd/wiki/02---Installation) and [configuration](https://github.com/ubuntu/authd/wiki/03---Configuration) instructions.
+For general details, read the [authd documentation](https://documentation.ubuntu.com/authd/stable-docs/).
+
+The documentation includes details on [installing](https://documentation.ubuntu.com/authd/stable-docs/howto/install-authd/) and [configuring](https://documentation.ubuntu.com/authd/stable-docs/howto/configure-authd/) authd.
 
 ## Troubleshooting
 
-More details on troubleshooting one of the OIDC brokers is available on the [authd documentation](https://github.com/ubuntu/authd/wiki/05--Troubleshooting).
+More details on troubleshooting one authd and authd brokers is available in the [authd documentation](https://documentation.ubuntu.com/authd/stable-docs/reference/troubleshooting/).
 
 ## Get involved
 
