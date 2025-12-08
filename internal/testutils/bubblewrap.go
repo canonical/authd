@@ -57,7 +57,7 @@ func RunTestInBubbleWrap(t *testing.T, args ...string) {
 	t.Helper()
 
 	if !canRunBubblewrap(t) {
-		if IsDebianPackageBuild() && !IsCI() {
+		if (IsDebianPackageBuild() || IsAutoPkgTest()) && !IsCI() {
 			// On launchpad builders, we might not be able to run bubblewrap,
 			// but we don't want to fail the tests in that case.
 			t.Skip("Skipping test: cannot run bubblewrap")

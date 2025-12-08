@@ -131,3 +131,9 @@ var IsDebianPackageBuild = sync.OnceValue(func() bool {
 	_, ok := os.LookupEnv("DEB_BUILD_ARCH")
 	return ok
 })
+
+// IsAutoPkgTest returns true if the tests are running in an autopkgtest environment.
+var IsAutoPkgTest = sync.OnceValue(func() bool {
+	_, ok := os.LookupEnv("AUTOPKGTEST_TEST_ARCH")
+	return ok
+})
