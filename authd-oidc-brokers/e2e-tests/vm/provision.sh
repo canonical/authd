@@ -171,7 +171,6 @@ function install_brokers() {
 			sudo sed -i \
 		  		-e "s|<ISSUER_ID>|${ISSUER_ID}|g" \
 		  		-e "s|<CLIENT_ID>|${CLIENT_ID}|g" \
-		  		-e "s|client_secret = <CLIENT_SECRET>|client_secret = ${CLIENT_SECRET:-}|g" \
 		  		-e "s|#ssh_allowed_suffixes_first_auth =|ssh_allowed_suffixes_first_auth = ${AUTHD_USER}|g" \
 		  		/var/snap/${broker}/current/broker.conf
 			echo 'verbosity: 2' | sudo tee /var/snap/${broker}/current/${broker}.yaml
