@@ -131,7 +131,9 @@ function restore_snapshot_and_sync_time() {
 }
 
 function sync_time() {
-    local cmd="nm-online -q && sudo systemctl restart systemd-timesyncd.service"
+    local cmd="nm-online -q && \
+sudo systemctl restart systemd-timesyncd.service && \
+timedatectl show -p NTPSynchronized --value | grep -q yes"
     retry --times 10 --delay 3 -- "$SSH" -- "$cmd"
 }
 
@@ -141,6 +143,16 @@ function wait_for_system_running() {
     # shellcheck disable=SC2016
     local cmd='output=$(systemctl is-system-running --wait) || [ $output = degraded ]'
     retry --times 3 --delay 3 -- timeout 30 -- "$SSH" -- "$cmd"
+}
+
+function reboot_system() {
+    # For some reason, `virsh shutdown` sometimes doesn't cause the VM
+    # to shut down, so we retry it a few times.
+    local cmd="virsh shutdown \"${VM_NAME}\" && \
+virsh await \"${VM_NAME}\" --condition domain-inactive --timeout 5"
+    retry --times 3 --delay 1 -- sh -c "$cmd"
+    virsh start "${VM_NAME}"
+    wait_for_system_running
 }
 
 function install_brokers() {
@@ -159,16 +171,16 @@ function install_brokers() {
 			sudo sed -i \
 		  		-e "s|<ISSUER_ID>|${ISSUER_ID}|g" \
 		  		-e "s|<CLIENT_ID>|${CLIENT_ID}|g" \
+		  		-e "s|client_secret = <CLIENT_SECRET>|client_secret = ${CLIENT_SECRET:-}|g" \
 		  		-e "s|#ssh_allowed_suffixes_first_auth =|ssh_allowed_suffixes_first_auth = ${AUTHD_USER}|g" \
 		  		/var/snap/${broker}/current/broker.conf
-			echo 'verbosity: 2' | sudo tee /var/snap/authd-msentraid/current/${broker}.yaml
+			echo 'verbosity: 2' | sudo tee /var/snap/${broker}/current/${broker}.yaml
 			sudo systemctl restart authd.service
 			sudo snap restart "${broker}"
 		EOF
 
         # Reboot VM and wait until it's back
-        virsh reboot "${VM_NAME}"
-        wait_for_system_running
+        reboot_system
 
         # Snapshot this broker installation
         force_create_snapshot "${broker}-${channel}-configured"

@@ -47,7 +47,6 @@ CID=$(virsh dumpxml "${VM_NAME}" | \
       xmllint --xpath 'string(//vsock/cid/@address)' -)
 
 exec ssh \
-  -t \
   -o ProxyCommand="socat - VSOCK-CONNECT:${CID}:22" \
   -o UserKnownHostsFile=/dev/null \
   -o StrictHostKeyChecking=no \

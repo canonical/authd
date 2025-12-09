@@ -16,11 +16,20 @@ Log In
     Set OCR Confidence Threshold    0.94
     Set OCR Coincidence Threshold    92
     Match Text    Not listed    300
-    Hid.Keys Combo    Return
-    Match Text    Password
+    Wait Until User Selected
     Hid.Type String    ubuntu
     Hid.Keys Combo    Return
     Wait Until Desktop Ready
+
+
+Wait Until User Selected
+    Wait Until Keyword Succeeds    30 sec    1 sec
+    ...    Try Select User
+
+
+Try Select User
+    Hid.Keys Combo    Return
+    Match Text    Password
 
 
 Log Out
@@ -135,6 +144,8 @@ Update And Upgrade Packages
 
 Sync System Time
     ${output} =    SSH.Execute    nm-online -q && sudo systemctl restart systemd-timesyncd
+    Log    ${output}    level=DEBUG
+    ${output} =   SSH.Execute    timedatectl show -p NTPSynchronized | grep -q NTPSynchronized=yes
     Log    ${output}    level=DEBUG
 
 
