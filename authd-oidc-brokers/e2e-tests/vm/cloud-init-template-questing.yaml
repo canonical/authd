@@ -65,6 +65,12 @@ write_files:
       Match User *@*
           KbdInteractiveAuthentication yes
 
+    # Export the journal via VSOCK
+  - path: /etc/systemd/journald.conf.d/00-forward-to-vsock.conf
+    content: |
+      [Journal]
+      ForwardToSocket=vsock:2:52000
+
 runcmd:
   # Disable apport
   - sed -i 's/enabled=1/enabled=0/' /etc/default/apport
