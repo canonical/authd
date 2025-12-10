@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/canonical/authd/cmd/authctl/internal/client"
+	"github.com/canonical/authd/cmd/authctl/internal/completion"
 	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/spf13/cobra"
 )
@@ -32,7 +34,8 @@ This command requires root privileges.
 Examples:
   authctl user set-uid john 15000
   authctl user set-uid alice 20000`,
-	Args: cobra.ExactArgs(2),
+	Args:              cobra.ExactArgs(2),
+	ValidArgsFunction: setUIDCompletionFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		uidStr := args[1]
@@ -46,7 +49,7 @@ Examples:
 			return fmt.Errorf("failed to parse UID %q: %w", uidStr, err)
 		}
 
-		client, err := NewUserServiceClient()
+		client, err := client.NewUserServiceClient()
 		if err != nil {
 			return err
 		}
@@ -66,4 +69,12 @@ Examples:
 
 		return nil
 	},
+}
+
+func setUIDCompletionFunc(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) == 0 {
+		return completion.Users(cmd, args, toComplete)
+	}
+
+	return nil, cobra.ShellCompDirectiveNoFileComp
 }
