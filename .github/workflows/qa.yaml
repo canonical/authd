@@ -333,8 +333,10 @@ jobs:
           # Print executed commands to ease debugging
           set -x
 
+          echo "::group::Install llvm-symbolizer"
           # For llvm-symbolizer
           sudo apt-get install -y llvm
+          echo "::endgroup::"
 
           go test -C ./pam/internal -json -asan -gcflags=all="${GO_GC_FLAGS}" -failfast -timeout ${GO_TESTS_TIMEOUT} ./... | \
             gotestfmt --logfile "${AUTHD_TESTS_ARTIFACTS_PATH}/gotestfmt.pam-internal-asan.log" || exit_code=$?
