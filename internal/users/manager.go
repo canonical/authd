@@ -18,6 +18,7 @@ import (
 	"github.com/canonical/authd/internal/users/db"
 	"github.com/canonical/authd/internal/users/localentries"
 	userslocking "github.com/canonical/authd/internal/users/locking"
+	"github.com/canonical/authd/internal/users/proc"
 	"github.com/canonical/authd/internal/users/tempentries"
 	"github.com/canonical/authd/internal/users/types"
 	"github.com/canonical/authd/log"
@@ -411,6 +412,12 @@ func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err err
 	}
 	if err == nil {
 		return nil, fmt.Errorf("UID %d already exists", uid)
+	}
+
+	// Check if the user has active processes
+	err = proc.CheckUserBusy(name, oldUser.UID)
+	if err != nil {
+		return nil, err
 	}
 
 	err = m.db.SetUserID(name, uid)

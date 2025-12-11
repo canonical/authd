@@ -91,4 +91,6 @@ ProcSubset=pid
 #                      files not owned by the user. We need this to change the
 #                      ownership of the user's home directory when changing the
 #                      user's UID.
-CapabilityBoundingSet=CAP_CHOWN CAP_DAC_READ_SEARCH
+# CAP_SYS_PTRACE: Required by CheckUserBusy used by SetUserID to check if any
+#                 running processes are owned by the UID being modified.
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_READ_SEARCH CAP_SYS_PTRACE
