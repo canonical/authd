@@ -111,8 +111,10 @@ export VM_NAME="${VM_NAME_BASE}-${RELEASE}"
 export RELEASE
 
 # Provision the VM with Ubuntu
-"${SCRIPT_DIR}/provision-ubuntu.sh" --ssh-public-key "${SSH_PUBLIC_KEY_FILE}" --release "${RELEASE}" \
-     ${FORCE:+--force}
+"${SCRIPT_DIR}/provision-ubuntu.sh" \
+    --ssh-public-key "${SSH_PUBLIC_KEY_FILE}" \
+    --release "${RELEASE}" \
+    ${FORCE:+--force}
 
 # Provision authd in the VM
 "${SCRIPT_DIR}/provision-authd.sh" --ssh-public-key "${SSH_PUBLIC_KEY_FILE}"
