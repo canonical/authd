@@ -36,7 +36,7 @@ More details on troubleshooting one authd and authd brokers is available in the 
 
 This is an [open source](LICENSE) project and we warmly welcome community contributions, suggestions, and constructive feedback. If you're interested in contributing, please take a look at our [Contribution guidelines](CONTRIBUTING.md) first.
 
-- to report an issue, please file a bug report against our repository, using a bug template.
+- to report an issue, please file a bug report against the [authd repository](https://github.com/ubuntu/authd), using the bug template.
 - for suggestions and constructive feedback, report a feature request bug report, using the proposed template.
 
 ## Get in touch
