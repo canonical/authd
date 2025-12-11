@@ -5,7 +5,6 @@ set -euo pipefail
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 LIB_DIR="${SCRIPT_DIR}/lib"
 SSH="${SCRIPT_DIR}/ssh.sh"
-CONFIG_FILE="${SCRIPT_DIR}/config.sh"
 
 usage(){
     cat << EOF
@@ -39,13 +38,22 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [ ! -f "${CONFIG_FILE}" ]; then
+# Validate config file if provided
+if [ -n "${CONFIG_FILE:-}" ] && [ ! -f "${CONFIG_FILE}" ]; then
     echo "Configuration file '${CONFIG_FILE}' not found." >&2
     exit 1
 fi
 
-# shellcheck source=config.sh disable=SC1091
-source "${CONFIG_FILE}"
+# Set default config file if not provided
+if [ -z "${CONFIG_FILE:-}" ]; then
+    CONFIG_FILE="${SCRIPT_DIR}/config.sh"
+fi
+
+# Load the configuration file (if it exists)
+if [ -f "${CONFIG_FILE}" ]; then
+    # shellcheck source=config.sh disable=SC1091
+    source "${CONFIG_FILE}"
+fi
 
 # shellcheck source=lib/libprovision.sh
 source "${LIB_DIR}/libprovision.sh"
