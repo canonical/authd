@@ -3,6 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+CONFIG_FILE="${SCRIPT_DIR}/config.sh"
 
 usage(){
     cat << EOF
@@ -16,10 +17,6 @@ Options:
 Provisions the VM for end-to-end tests
 EOF
 }
-
-# Default values
-FORCE=""
-CONFIG_FILE="${SCRIPT_DIR}/config.sh"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -46,21 +43,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [ ! -f "${CONFIG_FILE}" ]; then
-    echo "Configuration file '${CONFIG_FILE}' not found." >&2
-    exit 1
-fi
-
-# shellcheck source=config.sh disable=SC1091
-source "${CONFIG_FILE}"
-
-# shellcheck source=lib/libprovision.sh
-source "${LIB_DIR}/libprovision.sh"
-
-assert_env_vars BROKERS
-
-IFS=',' read -r -a BROKER_ARRAY <<< "${BROKERS}"
-
 # Print executed commands to ease debugging
 set -x
 
@@ -69,8 +51,3 @@ set -x
 
 # Provision authd in the VM
 "${SCRIPT_DIR}/provision-authd.sh" --config-file "${CONFIG_FILE}"
-
-for index in "${!BROKER_ARRAY[@]}"; do
-    # Provision the broker in the VM
-    "${SCRIPT_DIR}/provision-broker.sh" --broker "${BROKER_ARRAY[$index]}" --config-file "${CONFIG_FILE}"
-done

@@ -50,16 +50,15 @@ source "${CONFIG_FILE}"
 # shellcheck source=lib/libprovision.sh
 source "${LIB_DIR}/libprovision.sh"
 
-assert_env_vars RELEASE VM_NAME_BASE
+assert_env_vars RELEASE VM_NAME_BASE BROKERS
+
+IFS=',' read -r -a BROKER_ARRAY <<< "${BROKERS}"
 
 ARTIFACTS_DIR="${SCRIPT_DIR}/.artifacts/${RELEASE}"
 
 if [ -z "${VM_NAME:-}" ]; then
     VM_NAME="${VM_NAME_BASE}-${RELEASE}"
 fi
-
-# Print executed commands to ease debugging
-set -x
 
 # Check if we have all required artifacts
 IMAGE="${ARTIFACTS_DIR}/${VM_NAME_BASE}.qcow2"
@@ -74,8 +73,64 @@ if [ ! -f "${LIBVIRT_XML}" ]; then
     exit 1
 fi
 
-# shellcheck source=lib/libprovision.sh
-source "${LIB_DIR}/libprovision.sh"
+function install_broker() {
+    local broker="$1"
+    local channel="$2"
+    local base_snapshot="authd-${channel}-installed"
+    local broker_config="${broker#authd-}.conf"
+
+    # Get the issuer ID from the environment variable corresponding to the broker.
+    # For example, for broker "authd-msentraid", we use "AUTHD_MSENTRAID_ISSUER_ID".
+    local broker_prefix="${broker^^}"
+    broker_prefix="${broker_prefix//-/_}"
+    local issuer_id_var="${broker_prefix}_ISSUER_ID"
+    local client_id_var="${broker_prefix}_CLIENT_ID"
+    local client_secret_var="${broker_prefix}_CLIENT_SECRET"
+
+    # Assert that required environment variables are set.
+    # The client secret is optional.
+    assert_env_vars \
+      "${issuer_id_var}" \
+      "${client_id_var}"
+
+    local issuer_id="${!issuer_id_var}"
+    local client_id="${!client_id_var}"
+    local client_secret="${!client_secret_var:-}"
+
+    virsh snapshot-revert "${VM_NAME}" --snapshotname "${base_snapshot}"
+
+    # Install broker, configure and restart services
+    $SSH bash -euo pipefail -s <<-EOF
+        sudo snap install "${broker}" --channel="${channel}"
+        sudo mkdir -p /etc/authd/brokers.d
+        sudo cp /snap/${broker}/current/conf/authd/${broker_config} /etc/authd/brokers.d/
+        sudo sed -i \
+            -e "s|<ISSUER_ID>|${issuer_id}|g" \
+            -e "s|<CLIENT_ID>|${client_id}|g" \
+			-e "s|<CLIENT_SECRET>|${client_secret}|g" \
+            /var/snap/${broker}/current/broker.conf
+        echo 'verbosity: 2' | sudo tee /var/snap/${broker}/current/${broker}.yaml
+        sudo systemctl restart authd.service
+        sudo snap restart "${broker}"
+	EOF
+
+    # Reboot VM and wait until it's back
+    virsh reboot "${VM_NAME}"
+    wait_for_system_running
+
+    # Snapshot this broker installation
+    force_create_snapshot "${broker}-${channel}-configured"
+}
+
+function install_brokers() {
+    local channel="$1"
+    for index in "${!BROKER_ARRAY[@]}"; do
+        install_broker "${BROKER_ARRAY[$index]}" "${channel}"
+    done
+}
+
+# Print executed commands to ease debugging
+set -x
 
 # Define the VM
 if ! virsh dominfo "${VM_NAME}" &> /dev/null; then
@@ -115,6 +170,11 @@ timeout 600 -- \
 
 force_create_snapshot "authd-stable-installed"
 
+install_brokers "stable"
+
+# Remove the authd-stable-installed snapshot which is no longer needed
+virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "authd-stable-installed"
+
 # Revert to the pre-authd setup snapshot before installing authd edge
 restore_snapshot_and_sync_time "$PRE_AUTHD_SNAPSHOT"
 
@@ -133,3 +193,8 @@ timeout 600 -- \
 		EOF'
 
 force_create_snapshot "authd-edge-installed"
+
+install_brokers "edge"
+
+# Remove the authd-edge-installed snapshot which is no longer needed
+virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "authd-edge-installed"
