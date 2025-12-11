@@ -82,14 +82,21 @@ if ! virsh dominfo "${VM_NAME}" &> /dev/null; then
     virsh define "${LIBVIRT_XML}"
 fi
 
-# Boot the VM if not running
-if ! virsh domstate "${VM_NAME}" | grep -q '^running'; then
-    boot_system
+INITIAL_SETUP_SNAPSHOT="initial-setup"
+if has_snapshot "$INITIAL_SETUP_SNAPSHOT"; then
+    PRE_AUTHD_SNAPSHOT="${INITIAL_SETUP_SNAPSHOT}"
+else
+    PRE_AUTHD_SNAPSHOT="pre-authd-setup"
 fi
 
-# Create snapshot initial setup if it doesn't exist
-if ! has_snapshot "initial-setup"; then
-    force_create_snapshot "initial-setup"
+if has_snapshot "$PRE_AUTHD_SNAPSHOT"; then
+    restore_snapshot_and_sync_time "$PRE_AUTHD_SNAPSHOT"
+else
+    # Ensure the VM is running to perform initial setup
+    boot_system
+    # Create a pre-authd setup snapshot
+    PRE_AUTHD_SNAPSHOT=""
+    force_create_snapshot "$PRE_AUTHD_SNAPSHOT"
 fi
 
 # Install authd stable and create a snapshot
@@ -108,8 +115,8 @@ timeout 600 -- \
 
 force_create_snapshot "authd-stable-installed"
 
-# Revert to the initial setup snapshot before installing authd edge
-restore_snapshot_and_sync_time "initial-setup"
+# Revert to the pre-authd setup snapshot before installing authd edge
+restore_snapshot_and_sync_time "$PRE_AUTHD_SNAPSHOT"
 
 # Install authd edge and create a snapshot
 retry --times 3 --delay 1 -- timeout 30 -- "$SSH" -- \
