@@ -53,24 +53,6 @@ done
 # Print executed commands to ease debugging
 set -x
 
-# Install required packages
-sudo apt-get -y install \
-    bsdutils \
-    ffmpeg \
-    gir1.2-webkit2-4.1 \
-    libcairo2-dev \
-    libgirepository-2.0-dev \
-    libvirt-clients-qemu \
-    libvirt-daemon-system \
-    libxkbcommon-dev \
-    qemu-kvm \
-    python3-cairo \
-    python3-gi \
-    python3-tk \
-    socat \
-    xvfb
-
-
 # Check if we have all required artifacts
 IMAGE="${ARTIFACTS_DIR}/${VM_NAME_BASE}.qcow2"
 if [ ! -f "${IMAGE}" ]; then

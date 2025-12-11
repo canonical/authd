@@ -29,7 +29,7 @@ The tests have mainly two sets of dependencies: one required to configure and ru
     Those are all part of the archive and can be installed on Ubuntu with:
 
     ```bash
-    sudo apt install cloud-image-utils libvirt-clients-qemu libvirt-daemon-system qemu-kvm socat wget
+    sudo ./e2e-tests/vm/install-provision-deps.sh
     ```
 
 - Test-run dependencies:
@@ -49,7 +49,7 @@ The tests have mainly two sets of dependencies: one required to configure and ru
     Those are all part of the archive and can be installed on Ubuntu with:
 
     ```bash
-    sudo apt install ffmpeg gir1.2-webkit2-4.1 libxkbcommon-dev libcairo2-dev libgirepository-2.0-dev python3-tk python3-gi python3-cairo xvfb
+    sudo ./e2e-tests/install-deps.sh
     ```
 
 ### 2. Setup the VM

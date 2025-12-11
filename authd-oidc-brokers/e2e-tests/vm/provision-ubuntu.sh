@@ -101,15 +101,6 @@ function cloud_init_finished() {
 # Print executed commands to ease debugging
 set -x
 
-# Install required packages
-sudo apt-get -y install \
-    bsdutils \
-    cloud-image-utils \
-    libvirt-clients-qemu \
-    libvirt-daemon-system \
-    qemu-kvm \
-    wget
-
 # Download the image
 IMAGE_URL="https://cloud-images.ubuntu.com/${RELEASE}/current/${RELEASE}-server-cloudimg-amd64.img"
 SOURCE_IMAGE="${CACHE_DIR}/$(basename "${IMAGE_URL}")"
