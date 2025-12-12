@@ -83,6 +83,9 @@ if [[ "${SSH_PUBLIC_KEY_FILE}" != *.pub ]]; then
     exit 1
 fi
 
+# Cache sudo password early
+sudo -v
+
 # Installing all the packages can take some time, so we set the timeout to 15 minutes
 CLOUT_INIT_TIMEOUT=900
 
