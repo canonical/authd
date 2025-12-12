@@ -96,12 +96,11 @@ function install_broker() {
     local client_secret_var="${broker_prefix}_CLIENT_SECRET"
 
     # Assert that required environment variables are set.
-    # The client secret is optional.
-    assert_env_vars \
-      "${issuer_id_var}" \
-      "${client_id_var}"
+    # The issuer ID is optional (authd-google has a default one).
+    # The client secret is also optional (authd-msentraid does not require it).
+    assert_env_vars "${client_id_var}"
 
-    local issuer_id="${!issuer_id_var}"
+    local issuer_id="${!issuer_id_var:-}"
     local client_id="${!client_id_var}"
     local client_secret="${!client_secret_var:-}"
 
