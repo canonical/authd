@@ -21,6 +21,11 @@ class StringUtils:
         match = re.search(regex, text)
         if match:
             logger.debug(f"Matched regex '{regex}' against text '{text}': {match.groups()}")
-            return match.group(len(match.groups()))
+
+            # In some cases, we need to match the text with whitespaces due to OCR inaccuracies.
+            # So let's ensure we remove those whitespaces from the match.
+            cleaned_match = re.sub(r"\s+", "", match.group(len(match.groups())))
+            return cleaned_match
+
         else:
             raise ValueError(f"No match found for {regex} in {text}")

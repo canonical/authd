@@ -14,6 +14,7 @@ Test Teardown   Test Teardown
 Test Setup
     Journal.Start Receiving Journal
     Restore Snapshot    %{BROKER}-edge-configured
+    Change Broker Configuration    ssh_allowed_suffixes_first_auth    %{E2E_USER}
 
 Test Teardown
     Journal.Stop Receiving Journal
