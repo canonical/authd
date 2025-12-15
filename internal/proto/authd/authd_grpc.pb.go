@@ -394,6 +394,7 @@ const (
 	UserService_UnlockUser_FullMethodName     = "/authd.UserService/UnlockUser"
 	UserService_SetUserID_FullMethodName      = "/authd.UserService/SetUserID"
 	UserService_SetGroupID_FullMethodName     = "/authd.UserService/SetGroupID"
+	UserService_SetShell_FullMethodName       = "/authd.UserService/SetShell"
 	UserService_DeleteUser_FullMethodName     = "/authd.UserService/DeleteUser"
 	UserService_DeleteGroup_FullMethodName    = "/authd.UserService/DeleteGroup"
 	UserService_GetGroupByName_FullMethodName = "/authd.UserService/GetGroupByName"
@@ -412,6 +413,7 @@ type UserServiceClient interface {
 	UnlockUser(ctx context.Context, in *UnlockUserRequest, opts ...grpc.CallOption) (*Empty, error)
 	SetUserID(ctx context.Context, in *SetUserIDRequest, opts ...grpc.CallOption) (*SetUserIDResponse, error)
 	SetGroupID(ctx context.Context, in *SetGroupIDRequest, opts ...grpc.CallOption) (*SetGroupIDResponse, error)
+	SetShell(ctx context.Context, in *SetShellRequest, opts ...grpc.CallOption) (*Empty, error)
 	DeleteUser(ctx context.Context, in *DeleteUserRequest, opts ...grpc.CallOption) (*DeleteUserResponse, error)
 	DeleteGroup(ctx context.Context, in *DeleteGroupRequest, opts ...grpc.CallOption) (*Empty, error)
 	GetGroupByName(ctx context.Context, in *GetGroupByNameRequest, opts ...grpc.CallOption) (*Group, error)
@@ -497,6 +499,16 @@ func (c *userServiceClient) SetGroupID(ctx context.Context, in *SetGroupIDReques
 	return out, nil
 }
 
+func (c *userServiceClient) SetShell(ctx context.Context, in *SetShellRequest, opts ...grpc.CallOption) (*Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, UserService_SetShell_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *userServiceClient) DeleteUser(ctx context.Context, in *DeleteUserRequest, opts ...grpc.CallOption) (*DeleteUserResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeleteUserResponse)
@@ -558,6 +570,7 @@ type UserServiceServer interface {
 	UnlockUser(context.Context, *UnlockUserRequest) (*Empty, error)
 	SetUserID(context.Context, *SetUserIDRequest) (*SetUserIDResponse, error)
 	SetGroupID(context.Context, *SetGroupIDRequest) (*SetGroupIDResponse, error)
+	SetShell(context.Context, *SetShellRequest) (*Empty, error)
 	DeleteUser(context.Context, *DeleteUserRequest) (*DeleteUserResponse, error)
 	DeleteGroup(context.Context, *DeleteGroupRequest) (*Empty, error)
 	GetGroupByName(context.Context, *GetGroupByNameRequest) (*Group, error)
@@ -593,6 +606,9 @@ func (UnimplementedUserServiceServer) SetUserID(context.Context, *SetUserIDReque
 }
 func (UnimplementedUserServiceServer) SetGroupID(context.Context, *SetGroupIDRequest) (*SetGroupIDResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetGroupID not implemented")
+}
+func (UnimplementedUserServiceServer) SetShell(context.Context, *SetShellRequest) (*Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetShell not implemented")
 }
 func (UnimplementedUserServiceServer) DeleteUser(context.Context, *DeleteUserRequest) (*DeleteUserResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteUser not implemented")
@@ -756,6 +772,24 @@ func _UserService_SetGroupID_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_SetShell_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetShellRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).SetShell(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_SetShell_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).SetShell(ctx, req.(*SetShellRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _UserService_DeleteUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DeleteUserRequest)
 	if err := dec(in); err != nil {
@@ -880,6 +914,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetGroupID",
 			Handler:    _UserService_SetGroupID_Handler,
+		},
+		{
+			MethodName: "SetShell",
+			Handler:    _UserService_SetShell_Handler,
 		},
 		{
 			MethodName: "DeleteUser",

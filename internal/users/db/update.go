@@ -373,3 +373,20 @@ func (m *Manager) SetGroupID(groupName string, newGID uint32) ([]UserRow, error)
 
 	return users, nil
 }
+
+// SetShell updates the shell of a user.
+func (m *Manager) SetShell(username, shell string) error {
+	query := `UPDATE users SET shell = ? WHERE name = ?`
+	res, err := m.db.Exec(query, shell, username)
+	if err != nil {
+		return fmt.Errorf("failed to update shell for user: %w", err)
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return NewUserNotFoundError(username)
+	}
+	return nil
+}

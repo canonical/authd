@@ -270,6 +270,31 @@ func (s Service) SetGroupID(ctx context.Context, req *authd.SetGroupIDRequest) (
 	}, nil
 }
 
+// SetShell sets the shell of a user.
+func (s Service) SetShell(ctx context.Context, req *authd.SetShellRequest) (*authd.Empty, error) {
+	// authd uses lowercase group names.
+	name := strings.ToLower(req.GetName())
+
+	user, err := s.userManager.UserByName(name)
+	if errors.Is(err, users.NoDataFoundError{}) {
+		return nil, status.Errorf(codes.NotFound, "user %q not found", name)
+	}
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	if err := s.permissionManager.CheckRequestIsFromRootOrUID(ctx, user.UID); err != nil {
+		return nil, status.Error(codes.PermissionDenied, err.Error())
+	}
+
+	if err = s.userManager.SetShell(name, req.GetShell()); err != nil {
+		log.Errorf(ctx, "SetShell: %v", err)
+		return nil, grpcError(err)
+	}
+
+	return &authd.Empty{}, nil
+}
+
 // DeleteUser removes the user with the given name from the authd database.
 func (s Service) DeleteUser(ctx context.Context, req *authd.DeleteUserRequest) (*authd.DeleteUserResponse, error) {
 	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
