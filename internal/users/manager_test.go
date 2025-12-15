@@ -1291,6 +1291,89 @@ func TestUpdateUserAfterUnlock(t *testing.T) {
 	require.NoError(t, err, "UpdateUser should not fail")
 }
 
+func TestSetShell(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		nonExistentUser      bool
+		emptyUsername        bool
+		shellDoesNotExist    bool
+		shellIsDirectory     bool
+		shellIsNotExecutable bool
+
+		wantErr      bool
+		wantWarnings int
+	}{
+		"Successfully_set_shell": {},
+
+		"Warning_if_shell_does_not_exist": {
+			shellDoesNotExist: true,
+			wantWarnings:      1,
+		},
+		"Warning_if_shell_is_directory": {
+			shellIsDirectory: true,
+			wantWarnings:     1,
+		},
+		"Warning_if_shell_is_not_executable": {
+			shellIsNotExecutable: true,
+			wantWarnings:         1,
+		},
+
+		"Error_if_user_does_not_exist": {
+			nonExistentUser: true,
+			wantErr:         true,
+		},
+		"Error_if_username_is_empty": {
+			emptyUsername: true,
+			wantErr:       true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dbDir := t.TempDir()
+			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_and_group.db.yaml"), dbDir)
+			require.NoError(t, err, "Setup: could not create database from testdata")
+
+			m := newManagerForTests(t, dbDir)
+
+			username := "user1"
+			if tc.nonExistentUser {
+				username = "nonexistent"
+			} else if tc.emptyUsername {
+				username = ""
+			}
+
+			shell := "/bin/sh"
+			if tc.shellDoesNotExist {
+				shell = "/non/existent/shell"
+			} else if tc.shellIsDirectory {
+				shell = "/etc"
+			} else if tc.shellIsNotExecutable {
+				shell = "/etc/passwd"
+			}
+			warnings, err := m.SetShell(username, shell)
+			requireErrorAssertions(t, err, nil, tc.wantErr)
+			if tc.wantErr {
+				return
+			}
+			require.Len(t, warnings, tc.wantWarnings)
+
+			yamlData, err := db.Z_ForTests_DumpNormalizedYAML(m.DB())
+			require.NoError(t, err)
+			golden.CheckOrUpdate(t, yamlData, golden.WithPath("db"))
+
+			if len(warnings) == 0 {
+				return
+			}
+
+			golden.CheckOrUpdateYAML(t, warnings, golden.WithPath("warnings"))
+		})
+	}
+}
+
 func requireErrorAssertions(t *testing.T, gotErr, wantErrType error, wantErr bool) {
 	t.Helper()
 
