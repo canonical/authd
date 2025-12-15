@@ -16,7 +16,7 @@ jobs:
     name: "Go: Code sanity"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -35,7 +35,7 @@ jobs:
     name: "Shell: Code sanity"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Run ShellCheck
         uses: ludeeus/action-shellcheck@master
 
@@ -47,7 +47,7 @@ jobs:
       matrix:
         test: [ "coverage", "asan" ]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
       - uses: actions/setup-go@v6

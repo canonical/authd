@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - name: Block Fixup Commit Merge
       run: |
         PR_REF="${GITHUB_REF%/merge}/head"
