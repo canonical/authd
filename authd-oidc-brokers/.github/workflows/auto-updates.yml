@@ -75,7 +75,7 @@ jobs:
             git commit -m "Regenerate consts for ${{ matrix.branch_name }}"
         - name: Create Pull Request
           if: ${{ steps.merge.outputs.has_conflicts == 'false' }}
-          uses: peter-evans/create-pull-request@v7
+          uses: peter-evans/create-pull-request@v8
           with:
             commit-message: Auto update ${{ matrix.branch_name }} branch
             title: Auto update ${{ matrix.branch_name }} branch
@@ -100,7 +100,7 @@ jobs:
             git reset --hard main
         - name: Create Pull Request
           if: ${{ steps.merge.outputs.has_conflicts == 'true' }}
-          uses: peter-evans/create-pull-request@v7
+          uses: peter-evans/create-pull-request@v8
           with:
             commit-message: Auto update ${{ matrix.branch_name }} branch
             title: Auto update ${{ matrix.branch_name }} branch
