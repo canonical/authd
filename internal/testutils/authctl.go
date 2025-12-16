@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/canonical/authd/internal/testlog"
 )
 
 // BuildAuthctl builds the authctl binary in a temporary directory for testing purposes.
@@ -21,10 +23,8 @@ func BuildAuthctl() (binaryPath string, cleanup func(), err error) {
 	cmd.Args = append(cmd.Args, "-o", binaryPath, "./cmd/authctl")
 	cmd.Dir = ProjectRoot()
 
-	fmt.Fprintln(os.Stderr, "Running command:", cmd.String())
-	if output, err := cmd.CombinedOutput(); err != nil {
+	if err := testlog.RunWithTiming(nil, "Building authctl", cmd); err != nil {
 		cleanup()
-		fmt.Printf("Command output:\n%s\n", output)
 		return "", nil, fmt.Errorf("failed to build authctl: %w", err)
 	}
 
