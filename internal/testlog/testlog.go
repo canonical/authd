@@ -149,6 +149,30 @@ func LogEndSeparator(t *testing.T, args ...any) {
 	fmt.Fprint(w, separator(args...)+"\n\n")
 }
 
+// LogRedEndSeparatorf logs a separator to stderr with the given formatted message in red.
+//
+//nolint:thelper // we do call t.Helper() if t is not nil
+func LogRedEndSeparatorf(t *testing.T, s string, args ...any) {
+	if t != nil {
+		t.Helper()
+	}
+	w := testOutput(t)
+
+	fmt.Fprint(w, redSeparatorf(s, args...)+"\n\n")
+}
+
+// LogRedEndSeparator logs a separator to stderr with the given message in red.
+//
+//nolint:thelper // we do call t.Helper() if t is not nil
+func LogRedEndSeparator(t *testing.T, args ...any) {
+	if t != nil {
+		t.Helper()
+	}
+	w := testOutput(t)
+
+	fmt.Fprint(w, redSeparatorf("%s", fmt.Sprint(args...))+"\n\n")
+}
+
 // separatorf returns a formatted separator string for logging purposes.
 func separatorf(s string, args ...any) string {
 	return highCyan("===== " + fmt.Sprintf(s, args...) + " =====")
