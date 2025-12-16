@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/canonical/authd/internal/testutils"
-	"github.com/canonical/authd/internal/testutils/golden"
 )
 
 var authctlPath string
@@ -34,22 +33,7 @@ func TestRootCommand(t *testing.T) {
 
 			//nolint:gosec // G204 it's safe to use exec.Command with a variable here
 			cmd := exec.Command(authctlPath, tc.args...)
-			t.Logf("Running command: %s", cmd.String())
-			outputBytes, err := cmd.CombinedOutput()
-			output := string(outputBytes)
-			exitCode := cmd.ProcessState.ExitCode()
-
-			if tc.expectedExitCode == 0 && err != nil {
-				t.Logf("Command output:\n%s", output)
-				t.Errorf("Expected no error, but got: %v", err)
-			}
-
-			if exitCode != tc.expectedExitCode {
-				t.Logf("Command output:\n%s", output)
-				t.Errorf("Expected exit code %d, got %d", tc.expectedExitCode, exitCode)
-			}
-
-			golden.CheckOrUpdate(t, output)
+			testutils.CheckCommand(t, cmd, tc.expectedExitCode)
 		})
 	}
 }
