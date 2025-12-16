@@ -80,9 +80,9 @@ func RunWithTiming(t *testing.T, msg string, cmd *exec.Cmd, options ...RunWithTi
 	duration := time.Since(start)
 
 	if err != nil {
-		fmt.Fprintln(w, redSeparatorf("%s failed in %.3fs with %v", msg, duration.Seconds(), err)+"\n")
+		fmt.Fprint(w, redSeparatorf("%s failed in %.3fs with %v", msg, duration.Seconds(), err)+"\n")
 	} else {
-		fmt.Fprintln(w, separatorf("%s finished in %.3fs", msg, duration.Seconds())+"\n")
+		fmt.Fprint(w, separatorf("%s finished in %.3fs", msg, duration.Seconds())+"\n")
 	}
 
 	return err
@@ -98,7 +98,7 @@ func LogCommand(t *testing.T, msg string, cmd *exec.Cmd) {
 	w := testOutput(t)
 
 	sep := "----------------------------------------"
-	fmt.Fprintf(w, "\n"+separator(msg)+"command: %s\n%s\nenvironment: %s\n%s\n", cmd.String(), sep, cmd.Env, sep)
+	fmt.Fprintf(w, "\n"+separator(msg)+"\ncommand: %s\n%s\nenvironment: %s\n%s\n", cmd.String(), sep, cmd.Env, sep)
 }
 
 // LogStartSeparatorf logs a separator to stderr with the given formatted message.
@@ -110,7 +110,7 @@ func LogStartSeparatorf(t *testing.T, s string, args ...any) {
 	}
 	w := testOutput(t)
 
-	fmt.Fprintln(w, "\n"+separatorf(s, args...))
+	fmt.Fprint(w, "\n"+separatorf(s, args...))
 }
 
 // LogStartSeparator logs a separator to stderr with the given message.
@@ -122,7 +122,7 @@ func LogStartSeparator(t *testing.T, args ...any) {
 	}
 	w := testOutput(t)
 
-	fmt.Fprintln(w, "\n"+separator(args...))
+	fmt.Fprint(w, "\n"+separator(args...))
 }
 
 // LogEndSeparatorf logs a separator to stderr with the given formatted message.
@@ -134,7 +134,7 @@ func LogEndSeparatorf(t *testing.T, s string, args ...any) {
 	}
 	w := testOutput(t)
 
-	fmt.Fprintln(w, separatorf(s, args...)+"\n")
+	fmt.Fprint(w, separatorf(s, args...)+"\n\n")
 }
 
 // LogEndSeparator logs a separator to stderr with the given message.
@@ -146,21 +146,21 @@ func LogEndSeparator(t *testing.T, args ...any) {
 	}
 	w := testOutput(t)
 
-	fmt.Fprintln(w, separator(args...)+"\n")
+	fmt.Fprint(w, separator(args...)+"\n\n")
 }
 
 // separatorf returns a formatted separator string for logging purposes.
 func separatorf(s string, args ...any) string {
-	return highCyan("===== " + fmt.Sprintf(s, args...) + " =====\n")
+	return highCyan("===== " + fmt.Sprintf(s, args...) + " =====")
 }
 
 // separator returns a separator string for logging purposes.
 func separator(args ...any) string {
-	return highCyan("===== " + fmt.Sprint(args...) + " =====\n")
+	return highCyan("===== " + fmt.Sprint(args...) + " =====")
 }
 
 func redSeparatorf(s string, args ...any) string {
-	return highRed("===== " + fmt.Sprintf(s, args...) + " =====\n")
+	return highRed("===== " + fmt.Sprintf(s, args...) + " =====")
 }
 
 // highCyan returns a string with the given text in high-intensity cyan color for terminal output.
