@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/testlog"
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/stretchr/testify/require"
 )
@@ -56,71 +57,7 @@ func canRunBubblewrap(t *testing.T) bool {
 func RunTestInBubbleWrap(t *testing.T, args ...string) {
 	t.Helper()
 
-	if !canRunBubblewrap(t) {
-		if (IsDebianPackageBuild() || IsAutoPkgTest()) && !IsCI() {
-			// On launchpad builders, we might not be able to run bubblewrap,
-			// but we don't want to fail the tests in that case.
-			t.Skip("Skipping test: cannot run bubblewrap")
-		}
-		require.Fail(t, "Cannot run bubblewrap")
-	}
-
-	testCommand := []string{os.Args[0], "-test.run", "^" + t.Name() + "$"}
-	if testing.Verbose() {
-		testCommand = append(testCommand, "-test.v")
-	}
-	if c := CoverDirForTests(); c != "" {
-		testCommand = append(testCommand, fmt.Sprintf("-test.gocoverdir=%s", c))
-	}
-	args = append(args, testCommand...)
-
-	t.Logf("Running %s in bubblewrap", t.Name())
-	err := runInBubbleWrap(t, bubbleWrapNeedsSudo, nil, args...)
-	if err != nil {
-		t.Fatalf("Running %s in bubblewrap failed: %v", t.Name(), err)
-	}
-}
-
-func runInBubbleWrap(t *testing.T, withSudo bool, env []string, args ...string) error {
-	t.Helper()
-
-	// Since 25.10 Ubuntu ships the AppArmor profile /etc/apparmor.d/bwrap-userns-restrict
-	// which restricts bwrap and causes chown to fail with "Operation not permitted".
-	// We work around that by copying the bwrap binary to a temporary location so that
-	// the AppArmor profile is not applied.
-	copyBwrapOnce.Do(func() {
-		tempDir, err := os.MkdirTemp("", "authd-bwrap-")
-		require.NoError(t, err, "Setup: could not create temp dir for bwrap test data")
-		copiedBwrapPath = filepath.Join(tempDir, "bwrap")
-		err = fileutils.CopyFile("/usr/bin/bwrap", copiedBwrapPath)
-		require.NoError(t, err, "Setup: could not copy bubblewrap binary to temp location")
-	})
-
-	env = AppendCovEnv(env)
-	env = append(env, bubbleWrapTestEnvVar+"=1")
-
-	var cmd *exec.Cmd
-
-	if withSudo {
-		t.Log("Running bubblewrap with sudo")
-		cmd = exec.Command("sudo", env...)
-		cmd.Args = append(cmd.Args, copiedBwrapPath)
-	} else {
-		// To be able to use chown in bubblewrap, we need to run it in a user namespace
-		// with a uid mapping. Bubblewrap itself only supports mapping a single UID via
-		// --uid, so we use unshare to create a new user namespace with the desired mapping
-		// and run bwrap in that.
-		//nolint:gosec // We're not running untrusted code here.
-		cmd = exec.Command(
-			"unshare",
-			"--user",
-			"--map-root-user",
-			"--map-users=auto",
-			"--map-groups=auto",
-			copiedBwrapPath,
-		)
-		cmd.Env = append(os.Environ(), env...)
-	}
+	RequireBubblewrap(t)
 
 	etcDir := filepath.Join(TempDir(t), "etc")
 	err := os.MkdirAll(etcDir, 0700)
@@ -132,10 +69,15 @@ func runInBubbleWrap(t *testing.T, withSudo bool, env []string, args ...string) 
 		require.NoError(t, err, "Setup: Copying /etc/%s to %s failed", f, etcDir)
 	}
 
+	env := []string{
+		"PATH=" + MinimalPathEnv,
+		bubbleWrapTestEnvVar + "=1",
+	}
+	env = AppendCovEnv(env)
+
+	cmd := bubbleWrapCommand(t, env, bubbleWrapNeedsSudo)
+
 	cmd.Args = append(cmd.Args,
-		"--ro-bind", "/", "/",
-		"--dev", "/dev",
-		"--tmpfs", "/tmp",
 		"--bind", etcDir, "/etc",
 
 		// Bind relevant etc files. We go manual here, since there's no
@@ -167,19 +109,101 @@ func runInBubbleWrap(t *testing.T, withSudo bool, env []string, args ...string) 
 		// Bind the golden directory read-write so that the tests can update it.
 		cmd.Args = append(cmd.Args, "--bind", goldenDir, goldenDir)
 	}
-
 	cmd.Args = append(cmd.Args, args...)
+
+	testCommand := []string{os.Args[0], "-test.run", "^" + t.Name() + "$"}
+	if testing.Verbose() {
+		testCommand = append(testCommand, "-test.v")
+	}
+	if c := CoverDirForTests(); c != "" {
+		testCommand = append(testCommand, fmt.Sprintf("-test.gocoverdir=%s", c))
+	}
+	cmd.Args = append(cmd.Args, testCommand...)
+
+	testlog.LogCommand(t, fmt.Sprintf("Running %s in bubblewrap", t.Name()), cmd)
+	err = cmd.Run()
+	if err != nil {
+		testlog.LogEndSeparator(t, fmt.Sprintf("%s in bubblewrap failed", t.Name()))
+		t.Fatalf("Running %s in bubblewrap failed: %v", t.Name(), err)
+	}
+	testlog.LogEndSeparator(t, fmt.Sprintf("%s in bubblewrap finished", t.Name()))
+}
+
+// RequireBubblewrap ensures that bubblewrap is available and usable for running tests.
+// It skips or fails the test if bubblewrap cannot be used in the current environment.
+func RequireBubblewrap(t *testing.T) {
+	t.Helper()
+
+	if !canRunBubblewrap(t) {
+		if IsAutoPkgTest() && !IsCI() {
+			// On launchpad builders, we might not be able to run bubblewrap,
+			// but we don't want to fail the tests in that case.
+			t.Skip("Skipping test: cannot run bubblewrap")
+		}
+		require.Fail(t, "Cannot run bubblewrap")
+	}
+}
+
+// BubbleWrapCommand returns a command that runs in bubblewrap.
+func BubbleWrapCommand(t *testing.T, env []string) *exec.Cmd {
+	t.Helper()
+
+	RequireBubblewrap(t)
+
+	return bubbleWrapCommand(t, env, bubbleWrapNeedsSudo)
+}
+
+func bubbleWrapCommand(t *testing.T, env []string, withSudo bool) *exec.Cmd {
+	t.Helper()
+	var cmd *exec.Cmd
+
+	// Since 25.10 Ubuntu ships the AppArmor profile /etc/apparmor.d/bwrap-userns-restrict
+	// which restricts bwrap and causes chown to fail with "Operation not permitted".
+	// We work around that by copying the bwrap binary to a temporary location so that
+	// the AppArmor profile is not applied.
+	copyBwrapOnce.Do(func() {
+		tempDir, err := os.MkdirTemp("", "authd-bwrap-")
+		require.NoError(t, err, "Setup: could not create temp dir for bwrap test data")
+		copiedBwrapPath = filepath.Join(tempDir, "bwrap")
+		err = fileutils.CopyFile("/usr/bin/bwrap", copiedBwrapPath)
+		require.NoError(t, err, "Setup: could not copy bubblewrap binary to temp location")
+	})
+
+	if withSudo {
+		t.Log("Running bubblewrap with sudo")
+		cmd = exec.Command("sudo", env...)
+		cmd.Args = append(cmd.Args, copiedBwrapPath)
+	} else {
+		// To be able to use chown in bubblewrap, we need to run it in a user namespace
+		// with a uid mapping. Bubblewrap itself only supports mapping a single UID via
+		// --uid, so we use unshare to create a new user namespace with the desired mapping
+		// and run bwrap in that.
+		//nolint:gosec // We're not running untrusted code here.
+		cmd = exec.Command(
+			"unshare",
+			"--user",
+			"--map-root-user",
+			"--map-users=auto",
+			"--map-groups=auto",
+			copiedBwrapPath,
+		)
+		cmd.Env = env
+	}
+
+	cmd.Args = append(cmd.Args,
+		"--ro-bind", "/", "/",
+		"--dev", "/dev",
+		"--tmpfs", "/tmp",
+	)
+
 	cmd.Stderr = t.Output()
 	cmd.Stdout = t.Output()
 
-	t.Log("Running command:", cmd.String())
-	return cmd.Run()
+	return cmd
 }
 
 func canUseUnprivilegedUserNamespaces(t *testing.T) bool {
 	t.Helper()
-
-	t.Log("Checking if we can use unprivileged user namespaces")
 
 	if IsCI() {
 		// Try enabling unprivileged user namespaces in the CI.
@@ -193,21 +217,31 @@ func canUseUnprivilegedUserNamespaces(t *testing.T) bool {
 		_ = cmd.Run()
 	}
 
+	// We don't try bubbleWrapCommand directly here, because that uses
+	// `unshare --map-user` via exec.Command and connects the process's
+	// stdout and stderr, which causes the command to hang forever if
+	// unprivileged user namespaces are disabled. We avoid that by first
+	// checking via `unshare --map-root-user` if unprivileged user namespaces
+	// are enabled.
 	cmd := exec.Command("unshare", "--map-root-user", "/bin/true")
 	cmd.Stdout = t.Output()
 	cmd.Stderr = t.Output()
-	t.Log("Running command:", cmd.String())
+	testlog.LogCommand(t, "Checking unprivileged user namespaces", cmd)
 	if err := cmd.Run(); err != nil {
-		t.Logf("Can't use unprivileged user namespaces: %v", err)
+		testlog.LogRedEndSeparator(t, "Cannot use unprivileged user namespaces")
+		return false
+	}
+	testlog.LogEndSeparator(t, "Can use unprivileged user namespaces")
+
+	cmd = bubbleWrapCommand(t, nil, false)
+	cmd.Args = append(cmd.Args, "/bin/true")
+	testlog.LogCommand(t, "Checking bubblewrap with unprivileged user namespaces", cmd)
+	if err := cmd.Run(); err != nil {
+		testlog.LogRedEndSeparator(t, "Cannot use bubblewrap with unprivileged user namespaces")
 		return false
 	}
 
-	if err := runInBubbleWrap(t, false, nil, "/bin/true"); err != nil {
-		t.Logf("Can't use user unprivileged user namespaces with bwrap: %v", err)
-		return false
-	}
-
-	t.Log("Can use unprivileged user namespaces")
+	testlog.LogEndSeparator(t, "Can use unprivileged user namespaces")
 	return true
 }
 
@@ -218,11 +252,14 @@ func canUseBwrapWithSudoNonInteractively(t *testing.T) bool {
 		return false
 	}
 
-	if err := runInBubbleWrap(t, true, nil, "/bin/true"); err != nil {
-		t.Logf("Can't use bubblewrap with sudo: %v", err)
+	cmd := bubbleWrapCommand(t, nil, true)
+	cmd.Args = append(cmd.Args, "/bin/true")
+	testlog.LogCommand(t, "Checking bubblewrap with sudo", cmd)
+	if err := cmd.Run(); err != nil {
+		testlog.LogRedEndSeparatorf(t, "Cannot use bubblewrap with sudo: %v", err)
 		return false
 	}
 
-	t.Log("Can use sudo non-interactively")
+	testlog.LogEndSeparator(t, "Can use bubblewrap with sudo")
 	return true
 }
