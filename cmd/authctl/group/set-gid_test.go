@@ -6,11 +6,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/canonical/authd/internal/testutils"
-	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 )
@@ -83,19 +81,7 @@ func TestSetGIDCommand(t *testing.T) {
 
 			//nolint:gosec // G204 it's safe to use exec.Command with a variable here
 			cmd := exec.Command(authctlPath, append([]string{"group"}, tc.args...)...)
-			t.Logf("Running command: %s", strings.Join(cmd.Args, " "))
-			outputBytes, err := cmd.CombinedOutput()
-			output := string(outputBytes)
-			exitCode := cmd.ProcessState.ExitCode()
-
-			t.Logf("Command output:\n%s", output)
-
-			if tc.expectedExitCode == 0 {
-				require.NoError(t, err)
-			}
-			require.Equal(t, tc.expectedExitCode, exitCode, "Expected exit code does not match actual exit code")
-
-			golden.CheckOrUpdate(t, output)
+			testutils.CheckCommand(t, cmd, tc.expectedExitCode)
 		})
 	}
 }
