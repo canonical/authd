@@ -475,6 +475,8 @@ func compileLockerBinary(t *testing.T, tempDir string) {
 func testInBubbleWrapWithLockerBinary(t *testing.T) {
 	t.Helper()
 
+	testutils.RequireBubblewrap(t)
+
 	compileLockerBinaryOnce.Do(func() {
 		compileLockerBinary(t, tempDir)
 	})

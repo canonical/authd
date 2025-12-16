@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/canonical/authd/internal/testlog"
 	"github.com/canonical/authd/internal/testutils/golden"
 )
 
@@ -58,34 +59,30 @@ func RunTestAsRoot(t *testing.T, args ...string) {
 	}
 	args = append(args, testCommand...)
 
-	t.Logf("Running %s as root", t.Name())
-	err := runSudoCommand(t, args...)
+	cmd := exec.Command("sudo", "-n")
+	cmd.Args = append(cmd.Args, args...)
+	cmd.Stdout = t.Output()
+	cmd.Stderr = t.Output()
+	testlog.LogCommand(t, fmt.Sprintf("Running %s as root", t.Name()), cmd)
+	err := cmd.Run()
 	if err != nil {
-		t.Fatalf("Failed to run test %s as root: %v", t.Name(), err)
+		testlog.LogEndSeparator(t, fmt.Sprintf("%s as root failed", t.Name()))
+		t.Fatalf("Running %s as root failed: %v", t.Name(), err)
 	}
-}
-
-func runSudoCommand(t *testing.T, args ...string) error {
-	t.Helper()
-
-	sudoArgs := append([]string{"-n"}, args...)
-	//nolint:gosec // G204 we want to use exec.Command with variables here
-	cmd := exec.Command("sudo", sudoArgs...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	t.Log("Running command:", cmd.String())
-	return cmd.Run()
+	testlog.LogEndSeparator(t, fmt.Sprintf("%s as root finished", t.Name()))
 }
 
 func canUseSudoNonInteractively(t *testing.T) bool {
 	t.Helper()
 
-	t.Log("Checking if we can use sudo non-interactively")
-
 	cmd := exec.Command("sudo", "-n", "true")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Logf("Can't use sudo non-interactively: %v\n%s", err, out)
+	cmd.Stdout = t.Output()
+	cmd.Stderr = t.Output()
+	testlog.LogCommand(t, "Checking if we can use sudo non-interactively", cmd)
+	if err := cmd.Run(); err != nil {
+		testlog.LogRedEndSeparator(t, "Cannot use sudo non-interactively")
 		return false
 	}
+	testlog.LogEndSeparator(t, "Can use sudo non-interactively")
 	return true
 }
