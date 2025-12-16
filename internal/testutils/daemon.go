@@ -296,7 +296,6 @@ func BuildAuthdWithExampleBroker() (execPath string, cleanup func(), err error) 
 	cmd.Args = append(cmd.Args, "-tags=withexamplebroker,integrationtests")
 	cmd.Args = append(cmd.Args, "-o", execPath, "./cmd/authd")
 
-	fmt.Fprintln(os.Stderr, "Running command:", cmd.String())
 	if err := testlog.RunWithTiming(nil, "Building authd", cmd); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("failed to build authd: %v", err)
