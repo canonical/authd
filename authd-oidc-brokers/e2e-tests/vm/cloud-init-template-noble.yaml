@@ -115,6 +115,13 @@ runcmd:
   # Enable our systemd services
   - sudo systemctl enable sshd-vsock.service
   - sudo systemctl enable journal-vsock-export.service
+  # Avoid APT downloads and upgrades during the tests
+  - sudo systemctl mask apt-daily.service
+  - sudo systemctl mask apt-daily.timer
+  - sudo systemctl mask apt-daily-upgrade.service
+  - sudo systemctl mask apt-daily-upgrade.timer
+  - sudo systemctl mask unattended-upgrades.service
+  - sudo rm -f /etc/apt/apt.conf.d/20auto-upgrades /etc/apt/apt.conf.d/50unattended-upgrades
 
 final_message: "Provisioning finished after $UPTIME seconds"
 
