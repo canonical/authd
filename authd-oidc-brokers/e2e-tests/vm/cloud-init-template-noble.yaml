@@ -89,7 +89,6 @@ write_files:
       After=systemd-journald.service
       After=network.target
       Requires=network.target
-      RestartSec=1
       # Disable rate limiting
       StartLimitIntervalSec=0
 
@@ -98,6 +97,7 @@ write_files:
       ExecStart=/bin/bash -o pipefail -c 'journalctl -b --lines=all -o export -f | socat - VSOCK-CONNECT:2:52000'
       OOMScoreAdjust=-1000
       Restart=always
+      RestartSec=1
 
       [Install]
       WantedBy=basic.target
