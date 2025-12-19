@@ -171,6 +171,9 @@ message GetGroupByIDRequest{
 message SetUserIDRequest {
   string name = 1;
   uint32 id = 2;
+  // The language to use for any warnings returned.
+  // Note: This is currently not implemented and warnings are always in English.
+  string lang = 3;
 }
 
 message SetUserIDResponse {
@@ -180,6 +183,9 @@ message SetUserIDResponse {
 message SetGroupIDRequest {
   string name = 1;
   uint32 id = 2;
+  // The language to use for any warnings returned.
+  // Note: This is currently not implemented and warnings are always in English.
+  string lang = 3;
 }
 
 message SetGroupIDResponse {

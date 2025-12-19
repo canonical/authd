@@ -1170,9 +1170,12 @@ func (x *GetGroupByIDRequest) GetId() uint32 {
 }
 
 type SetUserIDRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Id            uint32                 `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Id    uint32                 `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	// The language to use for any warnings returned.
+	// Note: This is currently not implemented and warnings are always in English.
+	Lang          string `protobuf:"bytes,3,opt,name=lang,proto3" json:"lang,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1221,6 +1224,13 @@ func (x *SetUserIDRequest) GetId() uint32 {
 	return 0
 }
 
+func (x *SetUserIDRequest) GetLang() string {
+	if x != nil {
+		return x.Lang
+	}
+	return ""
+}
+
 type SetUserIDResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Warnings      []string               `protobuf:"bytes,1,rep,name=warnings,proto3" json:"warnings,omitempty"`
@@ -1266,9 +1276,12 @@ func (x *SetUserIDResponse) GetWarnings() []string {
 }
 
 type SetGroupIDRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Id            uint32                 `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Id    uint32                 `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	// The language to use for any warnings returned.
+	// Note: This is currently not implemented and warnings are always in English.
+	Lang          string `protobuf:"bytes,3,opt,name=lang,proto3" json:"lang,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1315,6 +1328,13 @@ func (x *SetGroupIDRequest) GetId() uint32 {
 		return x.Id
 	}
 	return 0
+}
+
+func (x *SetGroupIDRequest) GetLang() string {
+	if x != nil {
+		return x.Lang
+	}
+	return ""
 }
 
 type SetGroupIDResponse struct {
@@ -1928,15 +1948,17 @@ const file_authd_proto_rawDesc = "" +
 	"\x15GetGroupByNameRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"%\n" +
 	"\x13GetGroupByIDRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\rR\x02id\"6\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\"J\n" +
 	"\x10SetUserIDRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\rR\x02id\"/\n" +
+	"\x02id\x18\x02 \x01(\rR\x02id\x12\x12\n" +
+	"\x04lang\x18\x03 \x01(\tR\x04lang\"/\n" +
 	"\x11SetUserIDResponse\x12\x1a\n" +
-	"\bwarnings\x18\x01 \x03(\tR\bwarnings\"7\n" +
+	"\bwarnings\x18\x01 \x03(\tR\bwarnings\"K\n" +
 	"\x11SetGroupIDRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\rR\x02id\"0\n" +
+	"\x02id\x18\x02 \x01(\rR\x02id\x12\x12\n" +
+	"\x04lang\x18\x03 \x01(\tR\x04lang\"0\n" +
 	"\x12SetGroupIDResponse\x12\x1a\n" +
 	"\bwarnings\x18\x01 \x03(\tR\bwarnings\"\x84\x01\n" +
 	"\x04User\x12\x12\n" +
