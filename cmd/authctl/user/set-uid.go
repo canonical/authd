@@ -57,6 +57,7 @@ Examples:
 		resp, err := client.SetUserID(context.Background(), &authd.SetUserIDRequest{
 			Name: name,
 			Id:   uint32(uid),
+			Lang: os.Getenv("LANG"),
 		})
 		if err != nil {
 			return err

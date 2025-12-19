@@ -58,6 +58,7 @@ Examples:
 		resp, err := client.SetGroupID(context.Background(), &authd.SetGroupIDRequest{
 			Name: name,
 			Id:   uint32(gid),
+			Lang: os.Getenv("LANG"),
 		})
 		if err != nil {
 			return err
