@@ -162,7 +162,6 @@ robot \
     "${ROBOT_ARGS[@]}" \
     "$@" \
     tests \
-    2> >(grep -v "<video controls style" >&2) || \
-    test_result=$?
+    || test_result=$?
 
 exit "${test_result:-0}"

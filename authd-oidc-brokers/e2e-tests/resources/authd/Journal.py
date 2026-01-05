@@ -23,8 +23,8 @@ class Journal:
         if self.process:
             return
 
-        output_dir = BuiltIn().get_variable_value('${OUTPUT DIR}', default='.')
-        suite_name = BuiltIn().get_variable_value('${SUITE NAME}', default='unknown')
+        output_dir = BuiltIn().get_variable_value('${OUTPUT DIR}', '.')
+        suite_name = BuiltIn().get_variable_value('${SUITE NAME}', 'unknown')
         self.output_dir = os.path.join(output_dir, suite_name, "journal")
         os.makedirs(self.output_dir, exist_ok=True)
 
