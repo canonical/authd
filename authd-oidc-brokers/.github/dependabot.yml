@@ -43,3 +43,11 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "deps(submodule)"
+
+  ## rust-toolchain.toml
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps(rust)"
