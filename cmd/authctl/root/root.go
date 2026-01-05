@@ -2,9 +2,9 @@
 package root
 
 import (
+	"github.com/canonical/authd/cmd/authctl/group"
+	"github.com/canonical/authd/cmd/authctl/user"
 	"github.com/spf13/cobra"
-	"github.com/ubuntu/authd/cmd/authctl/group"
-	"github.com/ubuntu/authd/cmd/authctl/user"
 )
 
 // RootCmd is the root command for authctl.
