@@ -13,7 +13,7 @@ import (
 var unlockCmd = &cobra.Command{
 	Use:               "unlock <user>",
 	Short:             "Unlock (enable) a user managed by authd",
-	Long:              `Unlock a locked user so that it can log in again.`,
+	Long:              `Unlock a locked user so that they can log in again.`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: completion.Users,
 	RunE: func(cmd *cobra.Command, args []string) error {
