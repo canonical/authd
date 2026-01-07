@@ -63,7 +63,7 @@ assert_env_vars RELEASE VM_NAME_BASE BROKERS
 
 IFS=',' read -r -a BROKER_ARRAY <<< "${BROKERS}"
 
-ARTIFACTS_DIR="${DATA_DIR}/${RELEASE}"
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-${DATA_DIR}/${RELEASE}}"
 
 if [ -z "${VM_NAME:-}" ]; then
     VM_NAME="${VM_NAME_BASE}-${RELEASE}"
