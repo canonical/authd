@@ -131,7 +131,7 @@ if [ "${FORCE:-}" = true ]; then
 fi
 
 # Copy and resize the image
-IMAGE="${ARTIFACTS_DIR}/${VM_NAME_BASE}.qcow2"
+IMAGE="${ARTIFACTS_DIR}/${VM_NAME}.qcow2"
 if [ ! -f "${IMAGE}" ]; then
     mkdir -p "${ARTIFACTS_DIR}"
     cp "${SOURCE_IMAGE}" "${IMAGE}"

@@ -70,7 +70,7 @@ if [ -z "${VM_NAME:-}" ]; then
 fi
 
 # Check if we have all required artifacts
-IMAGE="${ARTIFACTS_DIR}/${VM_NAME_BASE}.qcow2"
+IMAGE="${ARTIFACTS_DIR}/${VM_NAME}.qcow2"
 if [ ! -f "${IMAGE}" ]; then
     echo "Image not found: ${IMAGE}. Please run e2e-tests/vm/provision-ubuntu.sh first."
     exit 1
