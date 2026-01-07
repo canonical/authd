@@ -163,10 +163,10 @@ else
 fi
 
 # Install authd stable and create a snapshot
-retry --times 3 --delay 1 -- timeout 30 -- "$SSH" -- \
+retry --times 3 --delay 1 -- timeout 30 "$SSH" -- \
   "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd"
 
-timeout 600 -- \
+timeout 600 \
     "$SSH" -- \
     'sudo apt-get install -y authd && \
      sudo mkdir -p /etc/systemd/system/authd.service.d && \
@@ -187,10 +187,10 @@ virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "authd-stable-install
 restore_snapshot_and_sync_time "$PRE_AUTHD_SNAPSHOT"
 
 # Install authd edge and create a snapshot
-retry --times 3 --delay 1 -- timeout 30 -- "$SSH" -- \
+retry --times 3 --delay 1 -- timeout 30 "$SSH" -- \
   "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd-edge"
 
-timeout 600 -- \
+timeout 600 \
     "$SSH" -- \
     'sudo apt-get install -y authd && \
      sudo mkdir -p /etc/systemd/system/authd.service.d && \
