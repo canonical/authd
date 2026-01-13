@@ -271,7 +271,7 @@ func TestGdmModel(t *testing.T) {
 			},
 			wantGdmAuthRes:     []*authd.IAResponse{{Access: auth.Granted}},
 			wantStage:          proto.Stage_challenge,
-			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id, AuthTok: "gdm-good-password"},
 		},
 		"Authenticated_with_preset_PAM_user_using_legacy_challenge_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -306,7 +306,7 @@ func TestGdmModel(t *testing.T) {
 			},
 			wantGdmAuthRes:     []*authd.IAResponse{{Access: auth.Granted}},
 			wantStage:          proto.Stage_challenge,
-			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id, AuthTok: "gdm-good-password"},
 		},
 		"Authenticated_with_preset_PAM_user_updated_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -362,7 +362,7 @@ func TestGdmModel(t *testing.T) {
 			},
 			wantGdmAuthRes:     []*authd.IAResponse{{Access: auth.Granted}},
 			wantStage:          proto.Stage_challenge,
-			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id, AuthTok: "gdm-good-password"},
 		},
 		"Authenticated_with_message_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(multiBrokerClientOptions),
@@ -406,6 +406,7 @@ func TestGdmModel(t *testing.T) {
 			}},
 			wantPAMReturnValue: PamSuccess{
 				BrokerID: firstBrokerInfo.Id,
+				AuthTok:  "gdm-good-password",
 				msg:      "Hi GDM, it's a pleasure to get you in!",
 			},
 		},
@@ -453,6 +454,7 @@ func TestGdmModel(t *testing.T) {
 			}},
 			wantPAMReturnValue: PamSuccess{
 				BrokerID: firstBrokerInfo.Id,
+				AuthTok:  "gdm-good-password",
 			},
 		},
 		"New_password_changed_after_server_side_broker_and_authMode_selection": {
@@ -496,6 +498,7 @@ func TestGdmModel(t *testing.T) {
 			}},
 			wantPAMReturnValue: PamSuccess{
 				BrokerID: firstBrokerInfo.Id,
+				AuthTok:  "gdm-good-password",
 			},
 		},
 		"New_password_changed_with_message_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
@@ -541,6 +544,7 @@ func TestGdmModel(t *testing.T) {
 			}},
 			wantPAMReturnValue: PamSuccess{
 				BrokerID: firstBrokerInfo.Id,
+				AuthTok:  "gdm-good-password",
 				msg:      "Hi GDM, it's a pleasure to change your password!",
 			},
 		},
@@ -607,6 +611,7 @@ func TestGdmModel(t *testing.T) {
 			},
 			wantPAMReturnValue: PamSuccess{
 				BrokerID: firstBrokerInfo.Id,
+				AuthTok:  "gdm-good-password",
 				msg:      "Hi GDM, it's a pleasure to change your password!",
 			},
 		},
@@ -949,7 +954,7 @@ func TestGdmModel(t *testing.T) {
 				{Access: auth.Granted},
 			},
 			wantStage:          proto.Stage_challenge,
-			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id, AuthTok: "gdm-good-password"},
 		},
 		"Authenticated_after_client_side_user_and_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(multiBrokerClientOptions),
@@ -990,7 +995,7 @@ func TestGdmModel(t *testing.T) {
 			},
 			wantStage:          proto.Stage_challenge,
 			wantGdmAuthRes:     []*authd.IAResponse{{Access: auth.Granted}},
-			wantPAMReturnValue: PamSuccess{BrokerID: secondBrokerInfo.Id},
+			wantPAMReturnValue: PamSuccess{BrokerID: secondBrokerInfo.Id, AuthTok: "gdm-good-password"},
 		},
 		"Authenticated_after_client_side_user_and_broker_and_authMode_selection_and_after_various_retries": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -1053,7 +1058,7 @@ func TestGdmModel(t *testing.T) {
 				{Access: auth.Granted},
 			},
 			wantStage:          proto.Stage_challenge,
-			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id, AuthTok: "gdm-good-password"},
 		},
 		"Cancelled_auth_after_client_side_user_and_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -1288,7 +1293,7 @@ func TestGdmModel(t *testing.T) {
 			wantGdmAuthRes: []*authd.IAResponse{
 				{Access: auth.Granted},
 			},
-			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id, AuthTok: "gdm-good-password"},
 		},
 		"Authenticated_after_auth_selection_stage_from_client_after_client_side_broker_and_auth_mode_selection_with_multiple_auth_modes": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -1355,7 +1360,7 @@ func TestGdmModel(t *testing.T) {
 			wantGdmAuthRes: []*authd.IAResponse{
 				{Access: auth.Granted},
 			},
-			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id, AuthTok: "1234"},
 		},
 		"Authenticated_with_qrcode_after_auth_selection_stage_from_client_after_client_side_broker_and_auth_mode_selection": {
 			supportedLayouts: []*authd.UILayout{
