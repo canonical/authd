@@ -20,6 +20,7 @@ type PamReturnError interface {
 // PamSuccess signals PAM module to return with provided pam.Success and Quit tea.Model.
 type PamSuccess struct {
 	BrokerID string
+	AuthTok  string
 	msg      string
 }
 
