@@ -158,7 +158,6 @@ else
     # Ensure the VM is running to perform initial setup
     boot_system
     # Create a pre-authd setup snapshot
-    PRE_AUTHD_SNAPSHOT=""
     force_create_snapshot "$PRE_AUTHD_SNAPSHOT"
 fi
 
