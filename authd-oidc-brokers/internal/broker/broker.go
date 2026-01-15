@@ -69,12 +69,13 @@ type session struct {
 	attemptsPerMode map[string]int
 	nextAuthModes   []string
 
-	oidcServer   *oidc.Provider
-	oauth2Config oauth2.Config
-	isOffline    bool
-	userDataDir  string
-	passwordPath string
-	tokenPath    string
+	oidcServer              *oidc.Provider
+	oauth2Config            oauth2.Config
+	isOffline               bool
+	providerConnectionError error
+	userDataDir             string
+	passwordPath            string
+	tokenPath               string
 
 	// Data to pass from one request to another.
 	deviceAuthResponse *oauth2.DeviceAuthResponse
@@ -186,6 +187,7 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 	if err != nil {
 		log.Noticef(context.Background(), "Could not connect to the provider: %v. Starting session in offline mode.", err)
 		s.isOffline = true
+		s.providerConnectionError = err
 	}
 
 	scopes := append(consts.DefaultScopes, b.provider.AdditionalScopes()...)
@@ -248,6 +250,13 @@ func (b *Broker) GetAuthenticationModes(sessionID string, supportedUILayouts []m
 	}
 
 	if len(authModesWithLabels) == 0 {
+		// If we can't use a local authentication mode and we failed to connect to the provider,
+		// report the connection error.
+		if session.providerConnectionError != nil {
+			log.Errorf(context.Background(), "Error connecting to provider: %v", session.providerConnectionError)
+			//nolint:staticcheck,revive // ST1005 This error is displayed as is to the user, so it should be capitalized
+			return nil, errors.New("Error connecting to provider. Check your network connection.")
+		}
 		return nil, fmt.Errorf("no authentication modes available for user %q", session.username)
 	}
 
