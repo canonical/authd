@@ -94,3 +94,98 @@ jobs:
         with:
           name: e2e-runner-${{ matrix.release }}
           path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ matrix.release }}.qcow2
+
+  run-tests-authd-msentraid:
+    name: Run E2E tests for authd-msentraid broker
+    runs-on: ubuntu-latest
+    needs: provision-vm
+    permissions:
+      contents: read
+      actions: write
+    strategy:
+      matrix:
+        release: [noble, questing]
+      fail-fast: false
+    steps:
+    - name: Download the artifact VM image
+      uses: actions/download-artifact@v5
+      with:
+        name: e2e-runner-${{ matrix.release }}
+        # We need only to specify the directory, the file will be downloaded there with the provided name
+        path: ${{ env.ARTIFACTS_DIR }}
+
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
+
+    - name: Install APT dependencies for provisioning
+      run: ./${{ env.E2E_TESTS_DIR }}/vm/install-provision-deps.sh
+
+    - name: Set up SSH keys for the VM provisioning
+      uses: ./.github/actions/e2e-tests/set-up-ssh-keys
+      with:
+        E2E_VM_SSH_PRIV_KEY: ${{ secrets.E2E_VM_SSH_PRIV_KEY }}
+        E2E_VM_SSH_PUB_KEY: ${{ secrets.E2E_VM_SSH_PUB_KEY }}
+
+    - name: Provision authd and the broker
+      run: |
+        set -eux
+
+        # Configure PATH to find sudo virsh wrapper
+        sudo chmod +x "${{ env.E2E_TESTS_DIR }}/vm/helpers/virsh"
+        export PATH="${{ env.E2E_TESTS_DIR }}/vm/helpers:${PATH}"
+
+        # Configure the libvirt domain file
+        template="./${{ env.E2E_TESTS_DIR }}/vm/e2e-runner-template.xml"
+        IMAGE_FILE=${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ matrix.release }}.qcow2 \
+          VM_NAME=${{ env.VM_NAME_BASE }}-${{ matrix.release }} \
+          envsubst < "${template}" > "${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}.xml"
+
+        env ARTIFACTS_DIR="${{ env.ARTIFACTS_DIR }}" \
+          SSH_PUBLIC_KEY_FILE="/home/runner/.ssh/id_rsa.pub" \
+          VM_NAME_BASE="${{ env.VM_NAME_BASE }}" \
+          RELEASE="${{ matrix.release }}" \
+          BROKERS="authd-msentraid" \
+          AUTHD_MSENTRAID_ISSUER_ID="${{ secrets.E2E_MSENTRA_ISSUER_ID }}" \
+          AUTHD_MSENTRAID_CLIENT_ID="${{ secrets.E2E_MSENTRA_CLIENT_ID }}" \
+          AUTHD_MSENTRAID_USER="${{ secrets.E2E_MSENTRA_USERNAME }}" \
+          ./${{ env.E2E_TESTS_DIR }}/vm/provision-authd.sh
+
+    - name: Checkout YARF repo
+      uses: actions/checkout@v5
+      with:
+        # TODO: Update this once the changes are merged upstream
+        repository: adombeck/yarf
+        path: ./${{ env.E2E_TESTS_DIR }}/.yarf
+
+    - name: Install APT dependencies for running the E2E tests
+      run: ./${{ env.E2E_TESTS_DIR }}/install-deps.sh
+
+    - name: Configure YARF
+      run: ./${{ env.E2E_TESTS_DIR }}/setup-yarf.sh
+
+    - name: Run tests
+      id: run-tests
+      run: |
+        set -eux
+
+        # Configure PATH to find sudo virsh wrapper
+        sudo chmod +x "${{ env.E2E_TESTS_DIR }}/vm/helpers/virsh"
+        export PATH="${{ env.E2E_TESTS_DIR }}/vm/helpers:${PATH}"
+
+        ./${{ env.E2E_TESTS_DIR }}/run-tests.sh \
+          --user "${{ secrets.E2E_MSENTRA_USERNAME }}" \
+          --password "${{ secrets.E2E_MSENTRA_PASSWORD }}" \
+          --totp-secret "${{ secrets.E2E_MSENTRA_TOTP_SECRET }}" \
+          --release "${{ matrix.release }}" \
+          --broker authd-msentraid \
+          --output-dir /tmp/e2e-testrun-msentraid-${{ matrix.release }}/output
+
+    - name: Upload test results
+      id: upload-results
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: e2e-msentraid-output-${{ matrix.release }}-${{ github.run_id }}
+        path: /tmp/e2e-testrun-msentraid-${{ matrix.release }}/output
