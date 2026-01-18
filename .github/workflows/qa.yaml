@@ -62,8 +62,7 @@ env:
     libpam-dev
     libpwquality-dev
 
-  go_test_dependencies: >-
-    apparmor-profiles
+  go_test_dependencies: >-    
     bubblewrap
     cracklib-runtime
     git-delta
