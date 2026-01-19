@@ -6,6 +6,7 @@ on:
     paths-ignore:
       - '.github/workflows/automatic-doc-checks.yml'
       - '.readthedocs.yaml'
+      - "authd-oidc-brokers/**"
       - 'docs/**'
     tags:
       - "*"
@@ -13,6 +14,7 @@ on:
     paths-ignore:
       - '.github/workflows/automatic-doc-checks.yml'
       - '.readthedocs.yaml'
+      - "authd-oidc-brokers/**"
       - 'docs/**'
 
 concurrency:

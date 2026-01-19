@@ -3,12 +3,18 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "authd-oidc-brokers/**"
   workflow_dispatch:
 concurrency: auto-update-broker-variants
 
 permissions:
     pull-requests: write
     contents: write
+
+defaults:
+  run:
+    working-directory: ./authd-oidc-brokers
 
 env:
     DEBIAN_FRONTEND: noninteractive
@@ -65,7 +71,7 @@ jobs:
           id: check-diff
           uses: canonical/desktop-engineering/gh-actions/common/has-diff@main
           with:
-            working-directory: ./internal/consts/
+            working-directory: ./authd-oidc-brokers/internal/consts/
             fail-on-diff: false
         - name: Commit generated changes
           if: ${{ steps.merge.outputs.has_conflicts == 'false' && steps.check-diff.outputs.diff == 'true' }}
@@ -107,7 +113,7 @@ jobs:
             body: |
               Pull request created due to conflicts found when merging main into ${{ matrix.branch_name }}.
 
-              Remember to run go generate ./internal/consts/ and committing those changes before merging this PR.
+              Remember to run go -C authd-oidc-brokers generate ./internal/consts/ and committing those changes before merging this PR.
             branch: update-${{ matrix.branch_name }}
             delete-branch: true
             token: ${{ secrets.GITHUB_TOKEN }}

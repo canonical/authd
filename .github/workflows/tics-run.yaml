@@ -75,5 +75,8 @@ jobs:
                 find pam -name '*.so' -print -delete
                 go generate -C pam -x
                 go build ./cmd/authd
+                go -C ./authd-oidc-brokers build -o authd-vanilla ./cmd/authd-oidc
+                go -C ./authd-oidc-brokers build -tags=withmsentraid -o authd-msentraid ./cmd/authd-oidc
+                go -C ./authd-oidc-brokers build -tags=withgoogle -o authd-google ./cmd/authd-oidc
 
                 TICSQServer -project authd -tmpdir /tmp/tics -branchdir .

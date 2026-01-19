@@ -1,15 +1,24 @@
-name: QA & sanity checks
+name: Brokers QA & sanity checks
 on:
   push:
     branches:
       - main
     tags:
       - "*"
+    paths:
+      - "authd-oidc-brokers/**"
+
   pull_request:
+    paths:
+      - "authd-oidc-brokers/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: ./authd-oidc-brokers
 
 jobs:
   go-sanity:
@@ -28,7 +37,8 @@ jobs:
         uses: canonical/desktop-engineering/gh-actions/go/code-sanity@v2
         with:
           golangci-lint-configfile: ".golangci.yaml"
-          tools-directory: "tools"
+          working-directory: "./authd-oidc-brokers"
+          tools-directory: "./authd-oidc-brokers/tools"
           go-tags: "withmsentraid"
 
   shell-sanity:
