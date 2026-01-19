@@ -13,11 +13,9 @@ def generate_totp(secret: str) -> str:
     hashed_obj = hmac.new(key, msg, hashlib.sha1).digest()
     o = hashed_obj[19] & 15
 
-    totp_code = str((struct.unpack(">I", hashed_obj[o:o + 4])[0] & 0x7fffffff) % 1000000)
-    while len(totp_code) != 6:
-        totp_code += '0'
+    totp_code = (struct.unpack(">I", hashed_obj[o:o + 4])[0] & 0x7fffffff) % 1000000
 
-    return totp_code
+    return f"{totp_code:06d}"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
