@@ -62,4 +62,5 @@
             <target type='serial' port='0'/>
         </console>
     </devices>
+    <seclabel type="none" model="apparmor"/>
 </domain>
