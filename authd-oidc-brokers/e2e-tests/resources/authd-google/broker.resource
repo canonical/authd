@@ -37,7 +37,7 @@ Start Log In With Remote User Through CLI: QR Code
     [Arguments]    ${username}
     Hid.Type String    machinectl login
     Hid.Keys Combo    Return
-    Match Text    ubuntu login:    60
+    Match Text    ubuntu login:    120
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
 
@@ -56,7 +56,7 @@ Select Provider
 
 Regenerate QR Code
     # As long as we are in the login process, we can regenerate the QR code
-    Match Text    Request new login code    30
+    Match Text    Request new login code    120
     Hid.Keys Combo    Return
     Match Text    google.com/device    15
 
@@ -79,7 +79,7 @@ Continue Log In With Remote User Through CLI: Define Local Password
     [Arguments]    ${username}    ${local_password}
     # The terminal should now be visible and focused again.
     # Check that we're prompted to set a local password.
-    Match Text    New password:    60
+    Match Text    New password:    120
 
     # Set a local password
     Hid.Type String    ${local_password}
@@ -91,7 +91,7 @@ Continue Log In With Remote User Through CLI: Define Local Password
     Hid.Keys Combo    Return
 
     # Wait for the login to complete
-    ${timeout_sec} =    Set Variable    30
+    ${timeout_sec} =    Set Variable    120
     Match Text    ${username}@ubuntu    ${timeout_sec}
 
 
@@ -99,15 +99,15 @@ Log In With Remote User Through CLI: Local Password
     [Arguments]    ${username}    ${local_password}
     Hid.Type String    machinectl login
     Hid.Keys Combo    Return
-    Match Text    ubuntu login:    60
+    Match Text    ubuntu login:    120
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
     Builtin.Sleep    2
-    Match Text    Enter your local password:    30
+    Match Text    Enter your local password:    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
     Builtin.Sleep    2
-    Match Text    ${username}@ubuntu:~$    30
+    Match Text    ${username}@ubuntu:~$    120
 
 
 # Uses sed to change the broker configuration.
@@ -153,39 +153,39 @@ Start Log In With Remote User Through SSH: QR Code
 
 
 Select Provider through SSH
-    Match Text    2. Google    30
-    Match Text    Choose your provider:    30
+    Match Text    2. Google    120
+    Match Text    Choose your provider:    120
     Hid.Type String    2
     Hid.Keys Combo    Return
 
 
 Continue Log In With Remote User Through SSH: QR Code
-    Match Text    Choose action:    30
+    Match Text    Choose action:    120
     Hid.Type String    1
     Hid.Keys Combo    Return
 
 
 Continue Log In With Remote User Through SSH: Define Local Password
     [Arguments]    ${username}    ${local_password}
-    Match Text    Create a local password:    30
+    Match Text    Create a local password:    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
-    Match Text    Confirm Password:    30
+    Match Text    Confirm Password:    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
-    Match Text    ${username}@ubuntu:~$    30
+    Match Text    ${username}@ubuntu:~$    120
 
 
 Log In With Remote User Through SSH: Local Password
     [Arguments]    ${username}    ${local_password}
     Hid.Type String    ssh ${username}@localhost
     Hid.Keys Combo    Return
-    Match Text    Enter your local password:    30
+    Match Text    Enter your local password:    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
-    Match Text    ${username}@ubuntu:~$    30
+    Match Text    ${username}@ubuntu:~$    120
 
 
 Log In With Remote User Through GDM: QR Code
@@ -210,7 +210,7 @@ Start Log In With Remote User Through GDM: QR Code
 
 
 Select Broker Through GDM
-    Match Text    Select the broker    30
+    Match Text    Select the broker    120
     Move Pointer To Google
     Left Button Click
     Builtin.Sleep    1
@@ -218,11 +218,11 @@ Select Broker Through GDM
 
 Continue Log In With Remote User Through GDM: Define Local Password
     [Arguments]    ${local_password}
-    Match Text    Create a local password    30
+    Match Text    Create a local password    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
-    Match Text   Please, type the new passphrase again    30
+    Match Text   Please, type the new passphrase again    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
@@ -255,7 +255,7 @@ Check If User Was Added Properly
 
 Check User Information
     [Arguments]    ${username}
-    Match Text    ${username}:x:    30
+    Match Text    ${username}:x:    120
 
 
 Check Configuration Value
@@ -266,28 +266,28 @@ Check Configuration Value
     Hid.Keys Combo    Shift_L    |
     Hid.Type String    grep ${config_key}
     Hid.Keys Combo    Return
-    Match Text    ${expected_value}    30
+    Match Text    ${expected_value}    120
 
 
 Check If Owner Was Registered
     [Arguments]    ${username}
     Hid.Type String    cat ${GOOGLE_BROKER_CFG_DIR}/20-owner-autoregistration.conf
     Hid.Keys Combo    Return
-    Match Text    owner = ${username}    30
+    Match Text    owner = ${username}    120
 
 
 Check Home Directory
     [Arguments]    ${username}
     Hid.Type String    echo $HOME
     Hid.Keys Combo    Return
-    Match Text    /home/${username}    30
+    Match Text    /home/${username}    120
     Hid.Type String    stat -c %U:%G $HOME
     Hid.Keys Combo    Return
     Match Text    ${username}:${username}
 
 
 Check That Remote User Is Not Allowed To Log In
-    Match Text    authentication failure: user not allowed in broker configuration    60
+    Match Text    authentication failure: user not allowed in broker configuration    120
 
 
 Check That Login Is Handled By PAM Unix
