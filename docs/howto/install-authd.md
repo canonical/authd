@@ -58,8 +58,8 @@ sudo apt install authd
 
 ## Install brokers
 
-The brokers are provided as Snap packages and are available from the Snap
-Store.
+The brokers are provided as Snap packages and are available from the Snap Store.
+Install the broker corresponding to the identity provider that you want to use:
 
 :::::{tab-set}
 :sync-group: broker
@@ -91,17 +91,18 @@ authenticate against Microsoft Entra ID.
 
 ::::
 
-::::{tab-item} OIDC
-:sync: oidc
+::::{tab-item} Keycloak
+:sync: keycloak
 
-To install the generic OIDC broker, run the following command:
+Keycloak can be used with the generic OIDC broker. Install the broker with the
+following command:
 
 ```shell
 sudo snap install authd-oidc
 ```
 
 At this stage, you have installed the main service and an identity broker to
-authenticate against any OIDC provider.
+authenticate against Keycloak or any other OIDC provider.
 
 ::::
 
