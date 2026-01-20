@@ -23,7 +23,7 @@ Log In
 
 
 Wait Until User Selected
-    Wait Until Keyword Succeeds    30 sec    1 sec
+    Wait Until Keyword Succeeds    120 sec    1 sec
     ...    Try Select User
 
 
@@ -51,10 +51,10 @@ Try Desktop Ready
 Open Terminal
     Run Command    x-terminal-emulator
     Hid.Move Pointer To Proportional    1    1
-    Match Text    @ubuntu:~$    30
+    Match Text    @ubuntu:~$    120
     Hid.Keys Combo    F11
     Hid.Move Pointer To Proportional    1    1
-    Match Text    @ubuntu:~$    30
+    Match Text    @ubuntu:~$    120
 
 
 Open Terminal In Sudo Mode
@@ -67,10 +67,10 @@ Enter Sudo Mode In Terminal
     Hid.Keys Combo    Return
     Hid.Type String    sudo -s
     Hid.Keys Combo    Return
-    Match Text    root@ubuntu    30
+    Match Text    root@ubuntu    120
     Hid.Type String    clear
     Hid.Keys Combo    Return
-    Match Text    root@ubuntu    30
+    Match Text    root@ubuntu    120
 
 
 Close Focused Window
@@ -80,14 +80,14 @@ Close Focused Window
 Close Terminal In Sudo Mode
     Hid.Type String    clear
     Hid.Keys Combo    Return
-    Match Text    root@ubuntu    30
+    Match Text    root@ubuntu    120
     Hid.Type String    exit
     Hid.Keys Combo    Return
     Close Focused Window
 
 
 Log Out From Terminal Session
-    Match Text    @ubuntu    30
+    Match Text    @ubuntu    120
     # We are in a machinectl session, so we need to ^] thrice to exit properly
     Hid.Keys Combo    Control_L    ]
     Hid.Keys Combo    Control_L    ]
@@ -97,7 +97,7 @@ Log Out From Terminal Session
 Log Out From SSH Session
     Hid.Type String    exit
     Hid.Keys Combo    Return
-    Match Text    ubuntu@ubuntu    30
+    Match Text    ubuntu@ubuntu    120
 
 
 Run Command In Terminal

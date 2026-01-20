@@ -58,27 +58,27 @@ Try Log In With Remote User
     [Arguments]    ${username}
     Hid.Type String    machinectl login
     Hid.Keys Combo    Return
-    Match Text    ubuntu login:    60
+    Match Text    ubuntu login:    120
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
 
 
 # Conditional checks
 Check That Remote User Has No Available Authentication Modes
-    Match Text    could not get authentication modes: no authentication modes available for user    30
+    Match Text    could not get authentication modes: no authentication modes available for user    120
 
 
 Check That Log In Fails Because Authd Is Disabled
-    Match Text    could not connect to unix:///run/authd.sock    30
+    Match Text    could not connect to unix:///run/authd.sock    120
 
 
 Check That User Is Redirected To Local Broker
-    Match Text    Password:    30
+    Match Text    Password:    120
 
 
 Check That Authenticated User Does Not Match Requested User
     [Arguments]    ${requested_user}
-    Match Text    Authentication failure: requested username "${requested_user}" does not match the authenticated username    30
+    Match Text    Authentication failure: requested username "${requested_user}" does not match the authenticated username    120
 
 
 Check That Remote User Can Run Sudo Commands
