@@ -18,7 +18,7 @@ else
     go generate -x -tags pam_module_generation
 fi
 
-# shellcheck disable=SC2086
+# shellcheck disable=SC2086,SC2046
 # we do want to do word splitting on flags
 ${CC:-cc} -o go-exec/"$exec_libname" \
     go-exec/module.c ${CFLAGS:--Wall} \
