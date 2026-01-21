@@ -1,6 +1,6 @@
 package broker
 
-import "github.com/ubuntu/authd-oidc-brokers/internal/providers"
+import "github.com/canonical/authd/authd-oidc-brokers/internal/providers"
 
 // WithCustomProvider returns an option that sets a custom provider for the broker.
 func WithCustomProvider(p providers.Provider) Option {

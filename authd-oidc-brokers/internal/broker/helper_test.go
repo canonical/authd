@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/broker"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/sessionmode"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
-	"github.com/ubuntu/authd-oidc-brokers/internal/broker/sessionmode"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
-	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
-	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"golang.org/x/oauth2"
 )
 

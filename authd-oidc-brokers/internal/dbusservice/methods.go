@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/broker"
 	"github.com/godbus/dbus/v5"
-	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
 	"github.com/ubuntu/authd/log"
 )
 

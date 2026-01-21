@@ -24,10 +24,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 )
 
 var mockMSServerForDeviceRegistration *mockMSServer

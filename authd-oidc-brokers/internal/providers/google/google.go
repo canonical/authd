@@ -2,7 +2,7 @@
 package google
 
 import (
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/genericprovider"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/genericprovider"
 )
 
 // Provider is the google provider implementation.

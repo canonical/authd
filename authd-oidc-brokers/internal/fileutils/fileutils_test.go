@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/fileutils"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd-oidc-brokers/internal/fileutils"
 )
 
 func TestFileExists(t *testing.T) {

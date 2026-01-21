@@ -1,6 +1,6 @@
 package broker
 
-import "github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+import "github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 
 type isAuthenticatedDataResponse interface {
 	isAuthenticatedDataResponse()

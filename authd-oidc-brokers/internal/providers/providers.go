@@ -4,8 +4,8 @@ package providers
 import (
 	"context"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
 

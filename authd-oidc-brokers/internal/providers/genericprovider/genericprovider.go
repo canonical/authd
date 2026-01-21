@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/authmodes"
+	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/ubuntu/authd-oidc-brokers/internal/broker/authmodes"
-	providerErrors "github.com/ubuntu/authd-oidc-brokers/internal/providers/errors"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
 

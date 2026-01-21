@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/authd-oidc-brokers/cmd/authd-oidc/daemon"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd-oidc-brokers/cmd/authd-oidc/daemon"
-	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
-	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 )
 
 var issuerURL string

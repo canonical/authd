@@ -3,8 +3,8 @@ package google_test
 import (
 	"testing"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/google"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/google"
 )
 
 func TestNew(t *testing.T) {

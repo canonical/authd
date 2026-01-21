@@ -10,9 +10,9 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils/golden"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
-	"github.com/ubuntu/authd-oidc-brokers/internal/testutils/golden"
 )
 
 var configTypes = map[string]string{

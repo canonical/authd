@@ -60,7 +60,7 @@ parts:
       go mod download all
       go mod vendor
       VERSION=$(craftctl get version)
-      export GOFLAGS="-ldflags=-X=github.com/ubuntu/authd-oidc-brokers/internal/consts.Version=${VERSION}"
+      export GOFLAGS="-ldflags=-X=github.com/canonical/authd/authd-oidc-brokers/internal/consts.Version=${VERSION}"
       go build -o ${GOBIN}/authd-oidc ./cmd/authd-oidc
     after:
       - version

@@ -13,13 +13,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils/golden"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
-	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
-	"github.com/ubuntu/authd-oidc-brokers/internal/testutils/golden"
 	"github.com/ubuntu/authd/log"
 	"golang.org/x/oauth2"
 )

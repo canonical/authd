@@ -5,10 +5,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/broker"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
-	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
-	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 )
 
 const intro = `

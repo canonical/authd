@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/broker"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/daemon"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/dbusservice"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/ubuntu/authd-oidc-brokers/internal/broker"
-	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
-	"github.com/ubuntu/authd-oidc-brokers/internal/daemon"
-	"github.com/ubuntu/authd-oidc-brokers/internal/dbusservice"
 	log "github.com/ubuntu/authd/log"
 )
 

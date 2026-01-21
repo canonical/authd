@@ -1,4 +1,4 @@
-module github.com/ubuntu/authd-oidc-brokers/tools
+module github.com/canonical/authd/authd-oidc-brokers/tools
 
 go 1.24.0
 

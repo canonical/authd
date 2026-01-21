@@ -3,8 +3,8 @@ package info_test
 import (
 	"testing"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 )
 
 func TestNewUser(t *testing.T) {

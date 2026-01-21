@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/fileutils"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/password"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd-oidc-brokers/internal/fileutils"
-	"github.com/ubuntu/authd-oidc-brokers/internal/password"
 )
 
 func TestHashAndStorePassword(t *testing.T) {

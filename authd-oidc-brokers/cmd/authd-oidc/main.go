@@ -9,9 +9,9 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/ubuntu/authd-oidc-brokers/cmd/authd-oidc/daemon"
-	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
-	"github.com/ubuntu/authd-oidc-brokers/po"
+	"github.com/canonical/authd/authd-oidc-brokers/cmd/authd-oidc/daemon"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
+	"github.com/canonical/authd/authd-oidc-brokers/po"
 	"github.com/ubuntu/authd/log"
 	"github.com/ubuntu/go-i18n"
 )

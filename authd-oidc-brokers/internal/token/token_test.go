@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
-	"github.com/ubuntu/authd-oidc-brokers/internal/token"
 	"golang.org/x/oauth2"
 )
 

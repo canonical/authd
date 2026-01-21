@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
 

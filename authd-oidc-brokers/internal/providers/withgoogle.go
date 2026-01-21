@@ -2,7 +2,7 @@
 
 package providers
 
-import "github.com/ubuntu/authd-oidc-brokers/internal/providers/google"
+import "github.com/canonical/authd/authd-oidc-brokers/internal/providers/google"
 
 // CurrentProvider returns a Google provider implementation.
 func CurrentProvider() Provider {

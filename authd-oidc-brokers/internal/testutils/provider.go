@@ -17,12 +17,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/genericprovider"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/genericprovider"
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/info"
 	"github.com/ubuntu/authd/log"
 	"golang.org/x/oauth2"
 )

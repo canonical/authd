@@ -3,8 +3,8 @@ package daemon
 import (
 	"fmt"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
 	"github.com/spf13/cobra"
-	"github.com/ubuntu/authd-oidc-brokers/internal/consts"
 )
 
 func (a *App) installVersion() {

@@ -3,7 +3,7 @@
 package providers
 
 import (
-	"github.com/ubuntu/authd-oidc-brokers/internal/providers/msentraid"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid"
 )
 
 // CurrentProvider returns a Microsoft Entra ID provider implementation.

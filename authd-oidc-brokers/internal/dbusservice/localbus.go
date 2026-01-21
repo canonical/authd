@@ -7,8 +7,8 @@ package dbusservice
 import (
 	"os"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
 	"github.com/godbus/dbus/v5"
-	"github.com/ubuntu/authd-oidc-brokers/internal/testutils"
 )
 
 // getBus creates the local bus and returns a connection to the bus.
