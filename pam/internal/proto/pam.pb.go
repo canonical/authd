@@ -87,7 +87,7 @@ const file_pam_proto_rawDesc = "" +
 	"\ruserSelection\x10\x00\x12\x13\n" +
 	"\x0fbrokerSelection\x10\x01\x12\x15\n" +
 	"\x11authModeSelection\x10\x02\x12\r\n" +
-	"\tchallenge\x10\x03B,Z*github.com/ubuntu/authd/pam/internal/protob\x06proto3"
+	"\tchallenge\x10\x03B/Z-github.com/canonical/authd/pam/internal/protob\x06proto3"
 
 var (
 	file_pam_proto_rawDescOnce sync.Once

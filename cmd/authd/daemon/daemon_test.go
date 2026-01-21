@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/cmd/authd/daemon"
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/users"
+	userslocking "github.com/canonical/authd/internal/users/locking"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/cmd/authd/daemon"
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/internal/fileutils"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/users"
-	userslocking "github.com/ubuntu/authd/internal/users/locking"
-	"github.com/ubuntu/authd/log"
 )
 
 func TestHelp(t *testing.T) {

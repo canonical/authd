@@ -3,8 +3,8 @@ package types_test
 import (
 	"testing"
 
+	"github.com/canonical/authd/internal/users/types"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/users/types"
 )
 
 func ptrValue[T any](value T) *T {

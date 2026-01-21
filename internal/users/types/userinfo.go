@@ -1,6 +1,6 @@
 package types
 
-import "github.com/ubuntu/authd/internal/sliceutils"
+import "github.com/canonical/authd/internal/sliceutils"
 
 // Equals checks that two users are equal.
 func (u UserInfo) Equals(other UserInfo) bool {

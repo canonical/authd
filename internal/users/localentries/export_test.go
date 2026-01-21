@@ -1,8 +1,8 @@
 package localentries
 
 import (
-	userslocking "github.com/ubuntu/authd/internal/users/locking"
-	"github.com/ubuntu/authd/internal/users/types"
+	userslocking "github.com/canonical/authd/internal/users/locking"
+	"github.com/canonical/authd/internal/users/types"
 )
 
 // WithGroupPath overrides the default /etc/group path for tests.

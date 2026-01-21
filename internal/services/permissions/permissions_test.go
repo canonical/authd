@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/canonical/authd/internal/services/permissions"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/services/permissions"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"

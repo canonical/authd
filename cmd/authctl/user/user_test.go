@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
 	"google.golang.org/grpc/codes"
 )
 

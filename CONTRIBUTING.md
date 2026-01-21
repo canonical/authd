@@ -43,14 +43,14 @@ We take our community seriously, holding ourselves and other contributors to hig
 Contributions are made to this project via Issues and Pull Requests (PRs). These are some general guidelines that cover both:
 
 * To report security vulnerabilities, use the advisories page of the repository and not a public bug report. Please use [launchpad private bugs](https://bugs.launchpad.net/ubuntu/+source/authd/+filebug), which is monitored by our security team. On an Ubuntu machine, it’s best to use `ubuntu-bug authd` to collect relevant information. <!-- FIXME: snap? -->
-* General issues or feature requests should be reported to the [GitHub Project](https://github.com/ubuntu/authd/issues)
+* General issues or feature requests should be reported to the [GitHub Project](https://github.com/canonical/authd/issues)
 * If you've never contributed before, see [this post on ubuntu.com](https://ubuntu.com/community/contribute) for resources and tips on how to get started.
-* Existing Issues and PRs should be searched for on the [project's repository](https://github.com/ubuntu/authd) before creating your own.
+* Existing Issues and PRs should be searched for on the [project's repository](https://github.com/canonical/authd) before creating your own.
 * While we work hard to ensure that issues are handled in a timely manner, it can take time to investigate the root cause. A friendly ping in the comment thread to the submitter or a contributor can help draw attention if your issue is blocking.
 
 ### Issues
 
-Issues can be used to report problems with the software, request a new feature or discuss potential changes before a PR is created. When you [create a new Issue](https://github.com/ubuntu/authd/issues), a template will be loaded that will guide you through collecting and providing the information that we need to investigate.
+Issues can be used to report problems with the software, request a new feature or discuss potential changes before a PR is created. When you [create a new Issue](https://github.com/canonical/authd/issues), a template will be loaded that will guide you through collecting and providing the information that we need to investigate.
 
 If you find an Issue that addresses the problem you're having, please add your own reproduction information to the existing issue rather than creating a new one. Adding a [reaction](https://github.blog/2016-03-10-add-reactions-to-pull-requests-issues-and-comments/) can also help by indicating to our maintainers that a particular problem is affecting more than just the reporter.
 
@@ -162,7 +162,7 @@ This last command will produce two libraries (`./pam/pam_authd.so` and `./pam/go
 These modules must be copied to `/usr/lib/$(gcc -dumpmachine)/security/` while the executable must be copied to `/usr/libexec/authd-pam`.
 
 For further information about the PAM module architecture and testing see the
-[PAM Hacking](https://github.com/ubuntu/authd/blob/main/pam/Hacking.md) page.
+[PAM Hacking](https://github.com/canonical/authd/blob/main/pam/Hacking.md) page.
 
 #### Building the NSS module only
 
@@ -188,7 +188,7 @@ The test suite must pass before merging the PR to our main branch. Any new featu
 
 #### Tests with dependencies
 
-Some tests, such as the [PAM CLI tests](https://github.com/ubuntu/authd/blob/5ba54c0a573f34e99782fe624b090ab229798fc3/pam/integration-tests/integration_test.go#L21), use external tools such as [VHS](https://github.com/charmbracelet/vhs)
+Some tests, such as the [PAM CLI tests](https://github.com/canonical/authd/blob/5ba54c0a573f34e99782fe624b090ab229798fc3/pam/integration-tests/integration_test.go#L21), use external tools such as [VHS](https://github.com/charmbracelet/vhs)
 to record and run the tape files needed for the tests. Those tools are not included in the project dependencies and must be installed manually.
 
 Information about these tools and their usage will be linked below:

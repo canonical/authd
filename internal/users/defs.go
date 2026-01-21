@@ -1,9 +1,9 @@
 package users
 
 import (
-	"github.com/ubuntu/authd/internal/sliceutils"
-	"github.com/ubuntu/authd/internal/users/db"
-	"github.com/ubuntu/authd/internal/users/types"
+	"github.com/canonical/authd/internal/sliceutils"
+	"github.com/canonical/authd/internal/users/db"
+	"github.com/canonical/authd/internal/users/types"
 )
 
 // userEntryFromUserRow returns a UserEntry from a UserRow.

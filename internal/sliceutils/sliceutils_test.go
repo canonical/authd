@@ -4,8 +4,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/canonical/authd/internal/sliceutils"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/sliceutils"
 )
 
 func TestDifference(t *testing.T) {

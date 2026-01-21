@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/log"
 )
 
 // UserGroups returns all groups for a given user or an error if the database is corrupted or no entry was found.

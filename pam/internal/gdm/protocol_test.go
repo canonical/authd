@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/pam/internal/gdm"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/pam/internal/gdm"
 )
 
 func reformatJSON(t *testing.T, input []byte) []byte {

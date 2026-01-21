@@ -14,8 +14,8 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/ubuntu/authd/internal/decorate"
-	"github.com/ubuntu/authd/internal/users/types"
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/internal/users/types"
 )
 
 var getpwentMu sync.Mutex

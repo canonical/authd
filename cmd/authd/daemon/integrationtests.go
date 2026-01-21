@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ubuntu/authd/internal/testsdetection"
+	"github.com/canonical/authd/internal/testsdetection"
 )
 
 // load any behaviour modifiers from env variable.

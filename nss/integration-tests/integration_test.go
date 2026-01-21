@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/canonical/authd/examplebroker"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/examplebroker"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
 )
 
 var daemonPath string

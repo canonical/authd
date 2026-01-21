@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/canonical/authd/log"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/ubuntu/authd/log"
 )
 
 // reselectionWaitTime is the amount of time that we wait before emitting buttonSelected event.

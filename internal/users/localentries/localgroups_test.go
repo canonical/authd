@@ -8,15 +8,15 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/users/localentries"
+	localentriestestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	userslocking "github.com/canonical/authd/internal/users/locking"
+	"github.com/canonical/authd/internal/users/types"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/fileutils"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	"github.com/ubuntu/authd/internal/users/localentries"
-	localentriestestutils "github.com/ubuntu/authd/internal/users/localentries/testutils"
-	userslocking "github.com/ubuntu/authd/internal/users/locking"
-	"github.com/ubuntu/authd/internal/users/types"
-	"github.com/ubuntu/authd/log"
 )
 
 func TestUpdatelocalentries(t *testing.T) {

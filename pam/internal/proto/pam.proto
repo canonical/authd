@@ -1,7 +1,7 @@
 syntax = "proto3";
 package pam;
 
-option go_package = "github.com/ubuntu/authd/pam/internal/proto";
+option go_package = "github.com/canonical/authd/pam/internal/proto";
 
 // state represents the stage object for the UI.
 enum Stage {

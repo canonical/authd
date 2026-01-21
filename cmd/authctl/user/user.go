@@ -6,9 +6,9 @@ import (
 	"os"
 	"regexp"
 
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/spf13/cobra"
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/internal/proto/authd"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

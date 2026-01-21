@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ubuntu/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils"
 )
 
 var daemonPath string

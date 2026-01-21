@@ -3,8 +3,8 @@ package user
 import (
 	"context"
 
+	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/spf13/cobra"
-	"github.com/ubuntu/authd/internal/proto/authd"
 )
 
 // lockCmd is a command to lock (disable) a user.

@@ -7,10 +7,10 @@ import (
 	"net"
 	"os"
 
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/log"
 	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/coreos/go-systemd/v22/daemon"
-	"github.com/ubuntu/authd/internal/decorate"
-	"github.com/ubuntu/authd/log"
 	"google.golang.org/grpc"
 )
 

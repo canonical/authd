@@ -5,9 +5,9 @@ import (
 	"testing"
 	"unsafe"
 
+	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/msteinert/pam/v2"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/pam/internal/pam_test"
 )
 
 func TestExtension(t *testing.T) {

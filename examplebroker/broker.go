@@ -26,11 +26,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/brokers/layouts/entries"
+	"github.com/canonical/authd/log"
 	"github.com/google/uuid"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/brokers/layouts/entries"
-	"github.com/ubuntu/authd/log"
 	"golang.org/x/exp/slices"
 )
 

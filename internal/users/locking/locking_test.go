@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	userslocking "github.com/canonical/authd/internal/users/locking"
 	"github.com/stretchr/testify/require"
-	userslocking "github.com/ubuntu/authd/internal/users/locking"
 )
 
 func TestUsersLockingOverride(t *testing.T) {

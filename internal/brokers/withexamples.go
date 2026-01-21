@@ -6,9 +6,9 @@ import (
 	"context"
 	"os"
 
-	"github.com/ubuntu/authd/examplebroker"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/examplebroker"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/log"
 )
 
 // useExampleBrokers starts a mock system bus and exports the examplebroker in it.

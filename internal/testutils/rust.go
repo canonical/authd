@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/testlog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/fileutils"
-	"github.com/ubuntu/authd/internal/testlog"
 )
 
 func getCargoPath() (path string, isNightly bool, err error) {

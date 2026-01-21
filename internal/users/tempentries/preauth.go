@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ubuntu/authd/internal/users/db"
-	"github.com/ubuntu/authd/internal/users/types"
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/internal/users/db"
+	"github.com/canonical/authd/internal/users/types"
+	"github.com/canonical/authd/log"
 )
 
 const (

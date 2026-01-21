@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/canonical/authd/internal/testlog"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/testlog"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/pam/internal/pam_test"
 )
 
 func getPkgConfigFlags(t *testing.T, args []string) []string {

@@ -5,8 +5,8 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/canonical/authd/internal/users/types"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/users/types"
 )
 
 func TestGetGroupEntries(t *testing.T) {

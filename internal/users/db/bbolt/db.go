@@ -11,7 +11,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/ubuntu/authd/internal/decorate"
+	"github.com/canonical/authd/internal/decorate"
 	"go.etcd.io/bbolt"
 )
 

@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/log"
 	"go.etcd.io/bbolt"
 )
 

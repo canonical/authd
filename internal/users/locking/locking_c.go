@@ -10,8 +10,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ubuntu/authd/internal/errno"
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/internal/errno"
+	"github.com/canonical/authd/log"
 )
 
 // writeLock is the default locking implementation.

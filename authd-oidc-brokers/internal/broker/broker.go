@@ -590,7 +590,7 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 }
 
 func unexpectedErrMsg(msg string) errorMessage {
-	return errorMessage{Message: fmt.Sprintf("An unexpected error occurred: %s. Please report this error on https://github.com/ubuntu/authd/issues", msg)}
+	return errorMessage{Message: fmt.Sprintf("An unexpected error occurred: %s. Please report this error on https://github.com/canonical/authd/issues", msg)}
 }
 
 func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, authData map[string]string) (access string, data isAuthenticatedDataResponse) {

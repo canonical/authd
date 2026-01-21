@@ -96,7 +96,7 @@ The PAM module has two implementations (see `pam/Hacking.md`):
 3. Register D-Bus service with systemd
 
 ### Debugging
-- Logs via `github.com/ubuntu/authd/log` package (supports systemd journal)
+- Logs via `github.com/canonical/authd/log` package (supports systemd journal)
 - Enable debug: `authd daemon -vvv` (3 levels of verbosity)
 - Socket path: `/run/authd.sock` (override with `AUTHD_NSS_SOCKET` for NSS tests)
 

@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/users"
+	"github.com/canonical/authd/internal/users/localentries"
+	userslocking "github.com/canonical/authd/internal/users/locking"
+	"github.com/canonical/authd/internal/users/tempentries"
+	"github.com/canonical/authd/internal/users/types"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	"github.com/ubuntu/authd/internal/users"
-	"github.com/ubuntu/authd/internal/users/localentries"
-	userslocking "github.com/ubuntu/authd/internal/users/locking"
-	"github.com/ubuntu/authd/internal/users/tempentries"
-	"github.com/ubuntu/authd/internal/users/types"
-	"github.com/ubuntu/authd/log"
 )
 
 func TestPreAuthUser(t *testing.T) {

@@ -3,8 +3,8 @@ package users
 import (
 	"fmt"
 
-	"github.com/ubuntu/authd/internal/testsdetection"
-	"github.com/ubuntu/authd/internal/users/localentries"
+	"github.com/canonical/authd/internal/testsdetection"
+	"github.com/canonical/authd/internal/users/localentries"
 )
 
 // IDGeneratorMock is a mock implementation of the IDGenerator interface.

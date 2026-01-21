@@ -1,8 +1,8 @@
 package users
 
 import (
-	"github.com/ubuntu/authd/internal/users/db"
-	"github.com/ubuntu/authd/internal/users/types"
+	"github.com/canonical/authd/internal/users/db"
+	"github.com/canonical/authd/internal/users/types"
 )
 
 func (m *Manager) DB() *db.Manager {

@@ -9,12 +9,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/log"
+	"github.com/canonical/authd/pam/internal/proto"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/term"
 	"github.com/msteinert/pam/v2"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/authd/pam/internal/proto"
 )
 
 var (

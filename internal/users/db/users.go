@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/log"
 )
 
 const allUserColumns = "name, uid, gid, gecos, dir, shell, broker_id, locked"

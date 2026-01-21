@@ -8,8 +8,8 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/ubuntu/authd/cmd/authd/daemon"
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/cmd/authd/daemon"
+	"github.com/canonical/authd/log"
 )
 
 //FIXME go:generate go run ../generate_completion_documentation.go completion ../../generated

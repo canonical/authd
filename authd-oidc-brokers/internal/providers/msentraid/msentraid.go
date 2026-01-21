@@ -267,7 +267,7 @@ func (p *Provider) fetchUserGroups(token *jwt.Token, msgraphHost string) ([]info
 
 		// Check if there is a name conflict with another group returned by the Graph API. It's not clear in which case
 		// the Graph API returns multiple groups with the same name (or the same group twice), but we've seen it happen
-		// in https://github.com/ubuntu/authd/issues/789.
+		// in https://github.com/canonical/authd/issues/789.
 		if checkGroupIsDuplicate(msGroupName, msGroupNames) {
 			continue
 		}
@@ -419,7 +419,7 @@ func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername strin
 	if !usernameRegexp.MatchString(authenticatedUsername) {
 		// If this error occurs, we should investigate and probably relax the username policy, so we ask the user
 		// explicitly to report this error.
-		msg := fmt.Sprintf("Authentication failure: the authenticated username %q contains invalid characters. Please report this error on https://github.com/ubuntu/authd/issues", authenticatedUsername)
+		msg := fmt.Sprintf("Authentication failure: the authenticated username %q contains invalid characters. Please report this error on https://github.com/canonical/authd/issues", authenticatedUsername)
 		return &providerErrors.ForDisplayError{Message: msg}
 	}
 	if !usernameRegexp.MatchString(requestedUsername) {

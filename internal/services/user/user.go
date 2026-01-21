@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ubuntu/authd/internal/brokers"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/internal/services/permissions"
-	"github.com/ubuntu/authd/internal/users"
-	"github.com/ubuntu/authd/internal/users/types"
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/internal/brokers"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/services/permissions"
+	"github.com/canonical/authd/internal/users"
+	"github.com/canonical/authd/internal/users/types"
+	"github.com/canonical/authd/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

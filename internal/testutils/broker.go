@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/canonical/authd/internal/brokers/layouts"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
 )
 
 const (

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/canonical/authd/log"
 	"github.com/mattn/go-sqlite3"
-	"github.com/ubuntu/authd/log"
 )
 
 // UpdateUserEntry inserts or updates user and group records from the user information.
@@ -88,7 +88,7 @@ func handleGroupsUpdate(db queryable, groups []GroupRow) error {
 
 		// If a group with the same GID exists, we need to ensure that it's the same group or fail the update otherwise.
 		// Ignore the case that the UGID of the existing group is empty, which means that the group was stored without a
-		// UGID, which was the case before https://github.com/ubuntu/authd/pull/647.
+		// UGID, which was the case before https://github.com/canonical/authd/pull/647.
 		if groupExists && existingGroup.UGID != "" && existingGroup.UGID != group.UGID {
 			log.Errorf(context.TODO(), "GID %d for group with UGID %q already in use by a group with UGID %q", group.GID, group.UGID, existingGroup.UGID)
 			return fmt.Errorf("GID for group %q already in use by a different group %q",

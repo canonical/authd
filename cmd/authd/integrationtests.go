@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ubuntu/authd/internal/services/permissions"
-	"github.com/ubuntu/authd/internal/testsdetection"
-	"github.com/ubuntu/authd/internal/users/localentries"
-	userslocking "github.com/ubuntu/authd/internal/users/locking"
+	"github.com/canonical/authd/internal/services/permissions"
+	"github.com/canonical/authd/internal/testsdetection"
+	"github.com/canonical/authd/internal/users/localentries"
+	userslocking "github.com/canonical/authd/internal/users/locking"
 )
 
 // load any behaviour modifiers from env variable.

@@ -14,8 +14,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/msteinert/pam/v2"
-	"github.com/ubuntu/authd/pam/internal/pam_test"
 	"golang.org/x/term"
 )
 

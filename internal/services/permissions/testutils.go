@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ubuntu/authd/internal/testsdetection"
+	"github.com/canonical/authd/internal/testsdetection"
 )
 
 // Z_ForTests_WithCurrentUserAsRoot returns an Option that sets the rootUID to the current user's UID.
