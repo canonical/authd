@@ -35,9 +35,7 @@ Log In With Remote User Through CLI: QR Code
 
 Start Log In With Remote User Through CLI: QR Code
     [Arguments]    ${username}
-    Hid.Type String    machinectl login
-    Hid.Keys Combo    Return
-    Match Text    ubuntu login:    120
+    Try machinectl login Prompt
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
 
@@ -97,9 +95,7 @@ Continue Log In With Remote User Through CLI: Define Local Password
 
 Log In With Remote User Through CLI: Local Password
     [Arguments]    ${username}    ${local_password}
-    Hid.Type String    machinectl login
-    Hid.Keys Combo    Return
-    Match Text    ubuntu login:    120
+    Try machinectl login Prompt
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
     Builtin.Sleep    2

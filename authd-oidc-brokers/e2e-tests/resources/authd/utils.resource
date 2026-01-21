@@ -154,6 +154,23 @@ Wait Until System Time Synced
     ...    Sync System Time
 
 
+Try machinectl login Prompt
+    VAR    ${tries}    3
+    WHILE    ${tries} > 0
+        Hid.Type String    machinectl login
+        Hid.Keys Combo    Return
+        ${match} =     Run Keyword And Return Status
+        ...    Match Text    ubuntu login:    120
+        IF   '${match}' == 'True'
+            BREAK
+        END
+        Hid.Keys Combo    Control_L    ]
+        Hid.Keys Combo    Control_L    ]
+        Hid.Keys Combo    Control_L    ]
+        ${tries} =    Evaluate    ${tries} - 1
+    END
+
+
 ### Setup ###
 
 Restore Snapshot
