@@ -49,7 +49,7 @@ slots:
 
 parts:
   broker:
-    source: .
+    source: authd-oidc-brokers
     source-type: local
     plugin: go
     build-snaps:
@@ -65,7 +65,7 @@ parts:
     after:
       - version
   config:
-    source: conf/
+    source: authd-oidc-brokers/conf/
     source-type: local
     plugin: dump
     organize:
@@ -74,7 +74,7 @@ parts:
       "migrations": "conf/migrations"
   # SemVer comparison helper
   semver:
-    source: tools
+    source: authd-oidc-brokers/tools
     source-type: local
     plugin: go
     override-build: |
