@@ -56,9 +56,7 @@ Change Password
 
 Try Log In With Remote User
     [Arguments]    ${username}
-    Hid.Type String    machinectl login
-    Hid.Keys Combo    Return
-    Match Text    ubuntu login:    120
+    Try machinectl login Prompt
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
 
