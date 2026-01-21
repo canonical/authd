@@ -15,7 +15,7 @@ fi
 
 cargo install cargo-c cbindgen
 
-cd "${GIT_DIR}/third_party/libhimmelblau"
+cd "${GIT_DIR}/authd-oidc-brokers/third_party/libhimmelblau"
 
 mkdir -p himmelblau
 
