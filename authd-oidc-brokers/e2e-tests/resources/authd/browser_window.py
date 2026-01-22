@@ -428,6 +428,7 @@ def ascii_string_to_key_events(string):
 def render_video(screenshot_dir: str, video_path: str, framerate: int = 1):
     ExecUtils.check_call([
         "ffmpeg",
+        "-loglevel", "warning",
         "-y",
         "-framerate", str(framerate),
         "-pattern_type", "glob",
