@@ -61,7 +61,6 @@ class BrowserWindow(Gtk.Window):
                 and event.type != Gdk.EventType.KEY_RELEASE
             ):
                 return
-            print(f"event: ({event}, {event.keyval})")
             return False
 
         self.web_view.add_events(
