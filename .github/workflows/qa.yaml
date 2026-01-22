@@ -1,4 +1,4 @@
-name: QA & sanity checks
+name: authd QA & sanity checks
 on:
   push:
     branches:
