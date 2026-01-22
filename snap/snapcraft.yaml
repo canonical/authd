@@ -8,10 +8,10 @@ description: |
   Ubuntu Desktop and Server — whether through GDM, SSH, or network services like NFS and Samba.
 
   Key Features
-  * Cloud identity provider Integration: Connects with any OpenID Connect compliant identity provider.
-  * Secure Login: authd leverages the OAuth Device Authorization Grant RFC 8628-compliant workflows for reliability
+  * Cloud identity provider integration: Connects with any OpenID Connect compliant identity provider.
+  * Secure login: authd leverages the OAuth Device Authorization Grant RFC 8628-compliant workflows for reliability
     and security.
-  * Open-Source: Free and community-driven, with contributions welcomed.
+  * Open-source: Free and community-driven, with contributions welcomed.
   * Enterprise ready: Ubuntu Pro customers will benefit from the same expanded security and support guarantees.
   * authd is free for all Ubuntu Desktop and Server 24.04 LTS users and is under active development.
     Explore the official documentation for installation and configuration steps, or visit the GitHub repository to
