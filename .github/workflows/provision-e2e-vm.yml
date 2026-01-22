@@ -273,7 +273,7 @@ jobs:
           --user "${{ secrets.E2E_GOOGLE_USERNAME }}" \
           --password "${{ secrets.E2E_GOOGLE_PASSWORD }}" \
           --release "${{ matrix.release }}" \
-          --totp-secret "doesnotmatter" \
+          --totp-secret "${{ secrets.E2E_GOOGLE_TOTP_SECRET }}" \
           --broker authd-google \
           --output-dir /tmp/e2e-testrun-google-${{ matrix.release }}/output
 

@@ -93,12 +93,18 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
     browser.send_key_taps(
         ascii_string_to_key_events(password) + [Gdk.KEY_Return])
 
+    browser.wait_for_pattern("2-Step Verification")
+    browser.wait_for_stable_page()
+    browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
+    browser.send_key_taps(
+        ascii_string_to_key_events(generate_totp(totp_secret)) + [Gdk.KEY_Return])
+
     browser.wait_for_pattern("Choose an account")
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-choose-account")
     browser.send_key_taps([Gdk.KEY_Return])
 
-    browser.wait_for_pattern("signing back in")
+    browser.wait_for_pattern("signing back in", timeout_ms=20000)
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-confirmation")
     # Sadly, just pressing Enter is not enough here, we need to tab to the correct button.
