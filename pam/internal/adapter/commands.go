@@ -6,11 +6,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/canonical/authd/internal/brokers"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/log"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/msteinert/pam/v2"
-	"github.com/ubuntu/authd/internal/brokers"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/log"
 )
 
 // sendEvent sends an event msg to the main event loop.

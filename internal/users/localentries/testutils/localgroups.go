@@ -6,11 +6,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/testsdetection"
+	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/users/localentries"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/fileutils"
-	"github.com/ubuntu/authd/internal/testsdetection"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	"github.com/ubuntu/authd/internal/users/localentries"
 )
 
 func init() {

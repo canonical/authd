@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ubuntu/authd/internal/decorate"
-	"github.com/ubuntu/authd/internal/users/db/bbolt"
-	"github.com/ubuntu/authd/internal/users/localentries"
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/internal/users/db/bbolt"
+	"github.com/canonical/authd/internal/users/localentries"
+	"github.com/canonical/authd/log"
 )
 
 // MigrateFromBBoltToSQLite migrates data from bbolt to SQLite.

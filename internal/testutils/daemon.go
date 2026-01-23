@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/grpcutils"
+	"github.com/canonical/authd/internal/services/errmessages"
+	"github.com/canonical/authd/internal/testlog"
+	"github.com/canonical/authd/internal/users/db"
+	"github.com/canonical/authd/internal/users/localentries"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/grpcutils"
-	"github.com/ubuntu/authd/internal/services/errmessages"
-	"github.com/ubuntu/authd/internal/testlog"
-	"github.com/ubuntu/authd/internal/users/db"
-	"github.com/ubuntu/authd/internal/users/localentries"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

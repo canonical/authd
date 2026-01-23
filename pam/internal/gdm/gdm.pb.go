@@ -7,8 +7,8 @@
 package gdm
 
 import (
-	authd "github.com/ubuntu/authd/internal/proto/authd"
-	proto "github.com/ubuntu/authd/pam/internal/proto"
+	authd "github.com/canonical/authd/internal/proto/authd"
+	proto "github.com/canonical/authd/pam/internal/proto"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -1688,7 +1688,7 @@ const file_gdm_proto_rawDesc = "" +
 	"\x18isAuthenticatedRequested\x10\n" +
 	"\x12\x1c\n" +
 	"\x18isAuthenticatedCancelled\x10\v\x12\x10\n" +
-	"\fstageChanged\x10\fB!Z\x1fgithub.com/ubuntu/authd/pam/gdmb\x06proto3"
+	"\fstageChanged\x10\fB$Z\"github.com/canonical/authd/pam/gdmb\x06proto3"
 
 var (
 	file_gdm_proto_rawDescOnce sync.Once

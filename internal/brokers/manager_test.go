@@ -9,12 +9,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/canonical/authd/internal/brokers"
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/brokers"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	"github.com/ubuntu/authd/log"
 )
 
 var (

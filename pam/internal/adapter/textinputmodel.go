@@ -1,9 +1,9 @@
 package adapter
 
 import (
+	"github.com/canonical/authd/internal/brokers/layouts/entries"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/ubuntu/authd/internal/brokers/layouts/entries"
 )
 
 // textinputModel is a base block for handling textinput.Model, delegating to a tea.Model approach.

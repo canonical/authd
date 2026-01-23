@@ -7,9 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/canonical/authd/internal/decorate"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
-	"github.com/ubuntu/authd/internal/decorate"
 )
 
 const (

@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/log"
 )
 
 // OnError prefixes any error with format/args.

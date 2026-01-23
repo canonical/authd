@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/ubuntu/authd/internal/decorate"
-	"github.com/ubuntu/authd/internal/testsdetection"
-	userslocking "github.com/ubuntu/authd/internal/users/locking"
-	"github.com/ubuntu/authd/internal/users/types"
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/internal/testsdetection"
+	userslocking "github.com/canonical/authd/internal/users/locking"
+	"github.com/canonical/authd/internal/users/types"
+	"github.com/canonical/authd/log"
 )
 
 const (

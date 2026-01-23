@@ -3,8 +3,8 @@ package user
 import (
 	"context"
 
+	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/spf13/cobra"
-	"github.com/ubuntu/authd/internal/proto/authd"
 )
 
 // unlockCmd is a command to unlock (enable) a user.

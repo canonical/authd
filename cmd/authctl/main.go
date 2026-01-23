@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/canonical/authd/cmd/authctl/user"
 	"github.com/spf13/cobra"
-	"github.com/ubuntu/authd/cmd/authctl/user"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

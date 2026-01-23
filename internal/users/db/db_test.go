@@ -8,15 +8,15 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/users/db"
+	"github.com/canonical/authd/internal/users/localentries"
+	localgrouptestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	userslocking "github.com/canonical/authd/internal/users/locking"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/internal/fileutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	"github.com/ubuntu/authd/internal/users/db"
-	"github.com/ubuntu/authd/internal/users/localentries"
-	localgrouptestutils "github.com/ubuntu/authd/internal/users/localentries/testutils"
-	userslocking "github.com/ubuntu/authd/internal/users/locking"
-	"github.com/ubuntu/authd/log"
 )
 
 func TestNew(t *testing.T) {

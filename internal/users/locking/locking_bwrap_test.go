@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/testutils"
+	userslocking "github.com/canonical/authd/internal/users/locking"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/testutils"
-	userslocking "github.com/ubuntu/authd/internal/users/locking"
 )
 
 var tempDir string

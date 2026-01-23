@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/testutils"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/fileutils"
-	"github.com/ubuntu/authd/internal/testutils"
 )
 
 // errAny represents any error type, for testing purposes.

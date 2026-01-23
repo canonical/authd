@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/daemon"
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/internal/services"
+	"github.com/canonical/authd/internal/users"
+	"github.com/canonical/authd/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/internal/daemon"
-	"github.com/ubuntu/authd/internal/decorate"
-	"github.com/ubuntu/authd/internal/services"
-	"github.com/ubuntu/authd/internal/users"
-	"github.com/ubuntu/authd/log"
 )
 
 // cmdName is the binary name for the agent.

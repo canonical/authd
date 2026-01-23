@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 	"unicode"
 
+	"github.com/canonical/authd/log"
 	tea_list "github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/ubuntu/authd/log"
 )
 
 var listIDs atomic.Uint32

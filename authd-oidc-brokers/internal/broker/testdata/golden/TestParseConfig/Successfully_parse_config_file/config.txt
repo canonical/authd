@@ -1,0 +1,14 @@
+clientID=client_id
+clientSecret=
+issuerURL=https://issuer.url.com
+forceProviderAuthentication=false
+registerDevice=false
+allowedUsers=map[]
+allUsersAllowed=false
+ownerAllowed=true
+firstUserBecomesOwner=true
+owner=
+homeBaseDir=
+allowedSSHSuffixes=[]
+extraGroups=[]
+ownerExtraGroups=[]

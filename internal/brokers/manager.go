@@ -12,9 +12,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/log"
 	"github.com/godbus/dbus/v5"
-	"github.com/ubuntu/authd/internal/decorate"
-	"github.com/ubuntu/authd/log"
 )
 
 // Manager is the object that manages the available brokers and the session->broker and user->broker relationships.

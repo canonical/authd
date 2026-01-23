@@ -1777,7 +1777,7 @@ const file_authd_proto_rawDesc = "" +
 	"\x0eGetGroupByName\x12\x1c.authd.GetGroupByNameRequest\x1a\f.authd.Group\x128\n" +
 	"\fGetGroupByID\x12\x1a.authd.GetGroupByIDRequest\x1a\f.authd.Group\x12)\n" +
 	"\n" +
-	"ListGroups\x12\f.authd.Empty\x1a\r.authd.GroupsB.Z,github.com/ubuntu/authd/internal/proto/authdb\x06proto3"
+	"ListGroups\x12\f.authd.Empty\x1a\r.authd.GroupsB1Z/github.com/canonical/authd/internal/proto/authdb\x06proto3"
 
 var (
 	file_authd_proto_rawDescOnce sync.Once

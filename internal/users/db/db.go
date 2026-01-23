@@ -12,11 +12,11 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/log"
 	// sqlite3 driver.
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/internal/fileutils"
-	"github.com/ubuntu/authd/log"
 )
 
 var (

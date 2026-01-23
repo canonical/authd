@@ -1,6 +1,6 @@
 [workspace]
 members = ["nss/"]
-exclude = ["vendor_rust/"]
+exclude = ["vendor_rust/", "authd-oidc-brokers/third_party/libhimmelblau/"]
 resolver = "2"
 
 [profile.release]

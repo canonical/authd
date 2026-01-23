@@ -9,14 +9,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/examplebroker"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
+	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/msteinert/pam/v2"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/examplebroker"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	localgroupstestutils "github.com/ubuntu/authd/internal/users/localentries/testutils"
-	"github.com/ubuntu/authd/pam/internal/pam_test"
 )
 
 const cliTapeBaseCommand = "./pam_authd %s socket=${%s}"

@@ -6,8 +6,8 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
 )
 
 var authctlPath string

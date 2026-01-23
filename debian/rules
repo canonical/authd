@@ -46,6 +46,8 @@ export AUTHD_SKIP_ROOT_TESTS := 1
 # Defines the targets to be built as part of dh_auto_build
 export DH_GOLANG_BUILDPKG := $(AUTHD_GO_PACKAGE)/... \
 	$(NULL)
+export DH_GOLANG_EXCLUDES := authd-oidc-brokers/
+export DH_GOLANG_EXCLUDES_ALL := 1
 
 # We add the required backported version to the $PATH so that if it exists, then
 # we can use it. Otherwise we default to the go installed in original $PATH that

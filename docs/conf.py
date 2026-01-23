@@ -111,7 +111,7 @@ html_context = {
     # TODO: If there's no such website,
     #       remove the {{ product_page }} link from the page header template
     #       (usually .sphinx/_templates/header.html; also, see README.rst).
-    "product_page": "github.com/ubuntu/authd",
+    "product_page": "github.com/canonical/authd",
     # Product tag image; the orange part of your logo, shown in the page header
     #
     # TODO: To add a tag image, uncomment and update as needed.
@@ -137,7 +137,7 @@ html_context = {
     #
     # NOTE: If set, links for viewing the documentation source files
     #       and creating GitHub issues are added at the bottom of each page.
-    "github_url": "https://github.com/ubuntu/authd",
+    "github_url": "https://github.com/canonical/authd",
     # Docs branch in the repo; used in links for viewing the source files
     #
     # TODO: To customise the branch, uncomment and update as needed.
@@ -172,7 +172,7 @@ if os.getenv("OPENAPI", ""):
 # - https://git.launchpad.net/example
 #
 html_theme_options = {
-    "source_edit_link": "https://github.com/ubuntu/authd",
+    "source_edit_link": "https://github.com/canonical/authd",
 }
 
 # Project slug; see https://meta.discourse.org/t/what-is-category-slug/87897

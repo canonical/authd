@@ -1,4 +1,4 @@
-module github.com/ubuntu/authd
+module github.com/canonical/authd
 
 go 1.25.0
 

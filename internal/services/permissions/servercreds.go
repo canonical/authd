@@ -7,7 +7,7 @@ import (
 	"math"
 	"net"
 
-	"github.com/ubuntu/authd/internal/decorate"
+	"github.com/canonical/authd/internal/decorate"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

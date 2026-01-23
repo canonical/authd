@@ -27,7 +27,7 @@ cov_dir="${projectroot}/coverage"
 mkdir -p "${cov_dir}"
 
 # start http server on 6061 if none
-if ! $(nc -z localhost 6061); then
+if ! nc -z localhost 6061; then
     nohup python3 -m http.server --directory "${cov_dir}" 6061 1>/dev/null 2>&1 &
 fi
 
@@ -40,7 +40,7 @@ mkdir -p "${raw_cov_dir}"
 # Overriding the default coverage directory is currently not an exported flag of go test
 # We need to override it using the test.gocoverdir flag instead.
 #TODO: Update when https://go-review.googlesource.com/c/go/+/456595 is merged.
-go test -cover -covermode=set -coverpkg=./... $@  -shuffle=on -args -test.gocoverdir="${raw_cov_dir}"
+go test -cover -covermode=set -coverpkg=./... "$@"  -shuffle=on -args -test.gocoverdir="${raw_cov_dir}"
 
 # Convert the raw coverage data into textfmt so we can merge the Rust one into it
 go tool covdata textfmt -i="${raw_cov_dir}" -o="${cov_dir}/coverage.out"

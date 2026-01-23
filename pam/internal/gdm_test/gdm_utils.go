@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/pam/internal/gdm"
+	"github.com/canonical/authd/pam/internal/proto"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/pam/internal/gdm"
-	"github.com/ubuntu/authd/pam/internal/proto"
 )
 
 // RequireEqualData ensures that data is equal by checking the marshalled values.

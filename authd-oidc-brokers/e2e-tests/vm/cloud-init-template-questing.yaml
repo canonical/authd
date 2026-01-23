@@ -1,0 +1,98 @@
+#cloud-config
+password: ubuntu
+ssh_pwauth: true
+users:
+  - name: ubuntu
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    lock_passwd: false
+    gecos: Ubuntu
+    groups: sudo
+    homedir: /home/ubuntu
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${SSH_PUBLIC_KEY}
+chpasswd:
+  expire: false
+  users:
+    - {name: ubuntu, password: ubuntu, type: text}
+
+package_update: true
+package_upgrade: true
+packages:
+  - fonts-ubuntu
+  - gdm3
+  - gnome-shell
+  - gnome-shell-extension-ubuntu-dock
+  - gsettings-ubuntu-schemas
+  - openssh-server
+  - policykit-desktop-privileges
+  # Default terminal on questing
+  - ptyxis
+  - spice-vdagent
+  # Required for add-apt-repository
+  - software-properties-common
+  - systemd-container
+  - systemd-timesyncd
+  - ubuntu-settings
+  - yaru-theme-gtk
+  - yaru-theme-icon
+
+write_files:
+  - path: /etc/dconf/profile/user
+    content: |
+      user-db:user
+      system-db:local
+
+  # Configure dconf
+  - path: /etc/dconf/db/local.d/00-e2e-tests-requirements
+    content: |
+      # Disable automatic suspend when plugged in
+      [org/gnome/settings-daemon/plugins/power]
+      sleep-inactive-ac-type='nothing'
+      sleep-inactive-ac-timeout=0
+
+      # Disable screen blanking
+      [org/gnome/desktop/session]
+      idle-delay=uint32 0
+
+      # Use larger text for better OCR results
+      [org/gnome/desktop/interface]
+      text-scaling-factor=1.25
+
+  - path: /etc/ssh/sshd_config.d/authd.conf
+    content: |
+      UsePAM yes
+      Match User *@*
+          KbdInteractiveAuthentication yes
+
+    # Export the journal via VSOCK
+  - path: /etc/systemd/journald.conf.d/00-forward-to-vsock.conf
+    content: |
+      [Journal]
+      ForwardToSocket=vsock:2:55000
+
+runcmd:
+  # Disable apport
+  - sed -i 's/enabled=1/enabled=0/' /etc/default/apport
+  - systemctl mask --now apport.service
+  # Increase the default login timeout
+  - sed -i 's/^\(LOGIN_TIMEOUT\t\t\)[0-9]\+/\1360/' /etc/login.defs
+  # Update dconf database
+  - dconf update
+  # Disable systemd-networkd-wait-online to speed up boot time
+  - sudo systemctl mask systemd-networkd-wait-online.service
+  # Avoid APT downloads and upgrades during the tests
+  - sudo systemctl mask apt-daily.service
+  - sudo systemctl mask apt-daily.timer
+  - sudo systemctl mask apt-daily-upgrade.service
+  - sudo systemctl mask apt-daily-upgrade.timer
+  - sudo systemctl mask unattended-upgrades.service
+  - sudo rm -f /etc/apt/apt.conf.d/20auto-upgrades /etc/apt/apt.conf.d/50unattended-upgrades
+
+final_message: "Provisioning finished after $UPTIME seconds"
+
+power_state:
+  mode: poweroff
+  message: Shutting down instance after initial setup
+  condition: True
+  timeout: 30
