@@ -40,6 +40,11 @@ jobs:
 
                 go install honnef.co/go/tools/cmd/staticcheck@latest
 
+            - uses: canonical/desktop-engineering/gh-actions/go/generate@main
+              with:
+                tools-directory: ./tools
+                token: ${{ secrets.GITHUB_TOKEN }}
+
             - name: Fetch last successful QA run id
               env:
                 GITHUB_TOKEN: ${{ github.token }}
@@ -73,7 +78,6 @@ jobs:
                 # toolchain setup by the action is properly updated to the one we defined in go.mod. Prebuilding also
                 # helps to speed up the TICS analysis, as we would already have the build cache populated.
                 find pam -name '*.so' -print -delete
-                go generate -C pam -x
                 go build ./cmd/authd
                 go -C ./authd-oidc-brokers build -o authd-vanilla ./cmd/authd-oidc
                 go -C ./authd-oidc-brokers build -tags=withmsentraid -o authd-msentraid ./cmd/authd-oidc
