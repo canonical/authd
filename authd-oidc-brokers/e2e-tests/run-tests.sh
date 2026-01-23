@@ -113,6 +113,11 @@ if [ -n "${RERUNFAILED:-}" ] && [ -z "${PREVIOUS_TEST_RUN_DIR}" ]; then
     exit 1
 fi
 
+systemd_ver=$(systemctl --version | awk 'NR==1 {print $2}')
+if dpkg --compare-versions "$systemd_ver" "ge" "256"; then
+    SYSTEMD_SUPPORTS_VSOCK=1
+fi
+
 ROBOT_ARGS=()
 if [ -n "${RERUNFAILED:-}" ]; then
     echo "Rerunning failed tests from previous run in ${PREVIOUS_TEST_RUN_DIR}"
@@ -163,19 +168,21 @@ for test_file in $TESTS_TO_RUN; do
     ln -s "${test_file}" tests
 done
 
-E2E_USER="$E2E_USER" \
-E2E_PASSWORD="$E2E_PASSWORD" \
-TOTP_SECRET="$TOTP_SECRET" \
-BROKER="$BROKER" \
-RELEASE="$RELEASE" \
-VNC_PORT="$VNC_PORT" \
-robot \
-    --loglevel DEBUG \
-    --pythonpath "${YARF_DIR}/yarf/rf_libraries/libraries/vnc" \
-    --outputdir "${OUTPUT_DIR}" \
-    "${ROBOT_ARGS[@]}" \
-    "$@" \
-    tests \
-    || test_result=$?
+env \
+    E2E_USER="$E2E_USER" \
+    E2E_PASSWORD="$E2E_PASSWORD" \
+    TOTP_SECRET="$TOTP_SECRET" \
+    BROKER="$BROKER" \
+    RELEASE="$RELEASE" \
+    VNC_PORT="$VNC_PORT" \
+    SYSTEMD_SUPPORTS_VSOCK="${SYSTEMD_SUPPORTS_VSOCK:-}" \
+    robot \
+        --loglevel DEBUG \
+        --pythonpath "${YARF_DIR}/yarf/rf_libraries/libraries/vnc" \
+        --outputdir "${OUTPUT_DIR}" \
+        "${ROBOT_ARGS[@]}" \
+        "$@" \
+        tests \
+        || test_result=$?
 
 exit "${test_result:-0}"
