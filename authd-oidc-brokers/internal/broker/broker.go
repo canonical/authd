@@ -757,8 +757,11 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		return AuthDenied, errorMessage{Message: "This device is disabled in Microsoft Entra ID. Please contact your administrator or try again with a working network connection."}
 	}
 
-	// Refresh the token if we're online even if the token has not expired
-	if b.cfg.forceProviderAuthentication || !session.isOffline {
+	tokenHasExpired := time.Now().After(authInfo.Token.Expiry)
+	// Refresh the token if:-
+	// - force_provider_authentication is enabled or
+	// - we are online and (have a refresh token or the access token has expired).
+	if b.cfg.forceProviderAuthentication || (!session.isOffline && (authInfo.Token.RefreshToken != "" || tokenHasExpired)) {
 		oldAuthInfo := authInfo
 		authInfo, err = b.refreshToken(ctx, session, authInfo)
 		var retrieveErr *oauth2.RetrieveError
