@@ -12,3 +12,4 @@ homeBaseDir=/home
 allowedSSHSuffixes=[]
 extraGroups=[]
 ownerExtraGroups=[]
+extraScopes=[groups offline_access some_other_scope]

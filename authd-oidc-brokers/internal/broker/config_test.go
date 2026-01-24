@@ -27,6 +27,7 @@ client_id = client_id
 issuer = https://issuer.url.com
 client_id = client_id
 force_provider_authentication = true
+extra_scopes = groups,offline_access, some_other_scope
 
 [users]
 home_base_dir = /home

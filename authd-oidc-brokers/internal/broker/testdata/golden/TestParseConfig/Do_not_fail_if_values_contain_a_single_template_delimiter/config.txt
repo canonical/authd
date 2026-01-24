@@ -12,3 +12,4 @@ homeBaseDir=
 allowedSSHSuffixes=[]
 extraGroups=[]
 ownerExtraGroups=[]
+extraScopes=[]
