@@ -346,7 +346,7 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 
 		switch msg.access {
 		case auth.Granted:
-			return m, sendEvent(PamSuccess{BrokerID: m.currentBrokerID, msg: authMsg})
+			return m, sendEvent(PamSuccess{BrokerID: m.currentBrokerID, AuthTok: m.currentSecret, msg: authMsg})
 
 		case auth.Retry:
 			m.errorMsg = authMsg
