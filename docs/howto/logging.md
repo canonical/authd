@@ -62,11 +62,18 @@ You can increase the verbosity of the logs in different ways.
 
 ### PAM module
 
-Append `debug=true` to all the lines with `pam_authd_exec.so` or `pam_authd.so` in the PAM configuration files (`common-auth`, `gdm-authd`...) in `/etc/pam.d/` to increase the verbosity of the PAM messages.
+Append `debug=true` to all the lines with `pam_authd_exec.so` or `pam_authd.so`
+in the PAM configuration files in `/etc/pam.d/` to increase the verbosity of the
+PAM messages:
+
+```shell
+sudo sed -i '/pam_authd_exec\.so\|pam_authd\.so/ s/$/ debug=true/' /etc/pam.d/*
+```
 
 ### NSS module
 
-Export `AUTHD_NSS_INFO=stderr` environment variable on any program using the authd NSS module to get more info on NSS requests to authd.
+Export `AUTHD_NSS_INFO=stderr` environment variable on any program using the
+authd NSS module to get more info on NSS requests to authd.
 
 ### authd service
 
@@ -76,7 +83,8 @@ To increase the verbosity of the service itself, edit the service file:
 sudo systemctl edit authd.service
 ```
 
-Add the following lines to the override file and make sure to add `-vv` at the end of the `authd` command:
+Add the following lines to the override file and make sure to add `-vv` at the
+end of the `authd` command:
 
 ```ini
 [Service]
@@ -124,7 +132,8 @@ sudo systemctl edit snap.authd-msentraid.authd-msentraid.service
 :::
 ::::
 
-Add the following lines to the override file and make sure to add `-vv` to the exec command:
+Add the following lines to the override file and make sure to add `-vv` to the
+exec command:
 
 ::::{tab-set}
 :sync-group: broker
