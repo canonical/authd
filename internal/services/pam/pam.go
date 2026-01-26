@@ -195,7 +195,7 @@ func (s Service) GetAuthenticationModes(ctx context.Context, req *authd.GAMReque
 		supportedLayouts = append(supportedLayouts, layout)
 	}
 
-	authenticationModes, err := broker.GetAuthenticationModes(ctx, sessionID, supportedLayouts)
+	authenticationModes, msg, err := broker.GetAuthenticationModes(ctx, sessionID, supportedLayouts)
 	if err != nil {
 		log.Errorf(ctx, "GetAuthenticationModes: Could not get authentication modes for session %q: %v", sessionID, err)
 		return nil, err
@@ -209,8 +209,14 @@ func (s Service) GetAuthenticationModes(ctx context.Context, req *authd.GAMReque
 		})
 	}
 
+	var msgPtr *string
+	if msg != "" {
+		msgPtr = &msg
+	}
+
 	return &authd.GAMResponse{
 		AuthenticationModes: authModes,
+		Msg:                 msgPtr,
 	}, nil
 }
 

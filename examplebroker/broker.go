@@ -360,10 +360,10 @@ func (b *Broker) NewSession(ctx context.Context, username, lang, mode string) (s
 }
 
 // GetAuthenticationModes returns the list of supported authentication modes for the selected broker depending on session info.
-func (b *Broker) GetAuthenticationModes(ctx context.Context, sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, err error) {
+func (b *Broker) GetAuthenticationModes(ctx context.Context, sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, msg string, err error) {
 	sessionInfo, err := b.sessionInfo(sessionID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	log.Debugf(ctx, "Supported UI layouts by %s, %#v", sessionID, supportedUILayouts)
@@ -376,12 +376,12 @@ func (b *Broker) GetAuthenticationModes(ctx context.Context, sessionID string, s
 	// If the user needs or can reset the password, we only show those authentication modes.
 	if sessionInfo.currentAuthStep == sessionInfo.neededAuthSteps && sessionInfo.pwdChange != noReset {
 		if sessionInfo.currentAuthStep < 2 {
-			return nil, errors.New("password reset is not allowed before authentication")
+			return nil, "", errors.New("password reset is not allowed before authentication")
 		}
 
 		allModes = getPasswdResetModes(sessionInfo, supportedUILayouts)
 		if sessionInfo.pwdChange == mustReset && len(allModes) == 0 {
-			return nil, fmt.Errorf("user %q must reset password, but no mode was provided for it", sessionInfo.username)
+			return nil, "", fmt.Errorf("user %q must reset password, but no mode was provided for it", sessionInfo.username)
 		}
 	}
 
@@ -426,10 +426,10 @@ func (b *Broker) GetAuthenticationModes(ctx context.Context, sessionID string, s
 	sessionInfo.allModes = allModes
 
 	if err := b.updateSession(sessionID, sessionInfo); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
-	return authenticationModes, nil
+	return authenticationModes, "", nil
 }
 
 func getSupportedModes(sessionInfo sessionInfo, supportedUILayouts []map[string]string) map[string]authMode {

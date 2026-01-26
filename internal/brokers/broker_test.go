@@ -126,7 +126,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 				supportedUILayouts = append(supportedUILayouts, supportedLayouts[layout])
 			}
 
-			gotModes, err := b.GetAuthenticationModes(context.Background(), prefixID(t, tc.sessionID), supportedUILayouts)
+			gotModes, _, err := b.GetAuthenticationModes(context.Background(), prefixID(t, tc.sessionID), supportedUILayouts)
 			if tc.wantErr {
 				require.Error(t, err, "GetAuthenticationModes should return an error, but did not")
 				return

@@ -138,26 +138,26 @@ func (b *BrokerBusMock) NewSession(username, lang, mode string) (sessionID, encr
 }
 
 // GetAuthenticationModes returns default values to be used in tests or an error if requested.
-func (b *BrokerBusMock) GetAuthenticationModes(sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, dbusErr *dbus.Error) {
+func (b *BrokerBusMock) GetAuthenticationModes(sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, msg string, dbusErr *dbus.Error) {
 	sessionID = parseSessionID(sessionID)
 	switch sessionID {
 	case "gam_invalid":
 		return []map[string]string{
 			{"invalid": "invalid"},
-		}, nil
+		}, "", nil
 	case "gam_empty":
-		return nil, nil
+		return nil, "", nil
 	case "gam_error":
-		return nil, dbus.MakeFailedError(fmt.Errorf("broker %q: GetAuthenticationModes errored out", b.name))
+		return nil, "", dbus.MakeFailedError(fmt.Errorf("broker %q: GetAuthenticationModes errored out", b.name))
 	case "gam_multiple_modes":
 		return []map[string]string{
 			{layouts.ID: "mode1", layouts.Label: "Mode 1"},
 			{layouts.ID: "mode2", layouts.Label: "Mode 2"},
-		}, nil
+		}, "", nil
 	default:
 		return []map[string]string{
 			{layouts.ID: "mode1", layouts.Label: "Mode 1"},
-		}, nil
+		}, "", nil
 	}
 }
 
