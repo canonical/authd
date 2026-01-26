@@ -406,6 +406,8 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	cmds = append(cmds, m.updateClientModel(msg))
 
+	// Export last selected auth mode to the PAM environment.
+	m.pamMTx.PutEnv("AUTHD_AUTH_LAST_MODE=" + m.authModeSelectionModel.currentAuthModeSelectedID)
 	return m, tea.Batch(cmds...)
 }
 
