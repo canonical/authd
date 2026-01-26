@@ -82,7 +82,7 @@ broker can then use to authenticate users.
 ::::{tab-item} Google IAM
 :sync: google
 
-Register a new application in Google IAM. Once registered, note the `Client ID` and the `Client secret`. These values correspond to `<CLIENT_ID>` and `<CLIENT_SECRET>`, respectively, which are used in the next section.
+Register a new application in Google IAM. Once registered, note the {guilabel}`Client ID` and the {guilabel}`Client secret`. These values correspond to `<CLIENT_ID>` and `<CLIENT_SECRET>`, respectively, which are used in the next section.
 
 To register a new application go to the [Credentials page](https://console.cloud.google.com/apis/credentials).
 
@@ -90,11 +90,11 @@ Click {menuselection}`Create credentials --> OAuth client ID`.
 
 ![Menu showing selection of Create credentials > OAuth client ID.](../assets/google-app-registration.png)
 
-Select the `TVs and Limited Input devices` application type.
+Select the {guilabel}`TVs and Limited Input devices` application type.
 
 ![Menu showing app type.](../assets/google-choose-app-type.png)
 
-Name your OAuth 2.0 client and click `Create`.
+Name your OAuth 2.0 client and click {guilabel}`Create`.
 
 Your app's `Client ID` and `Client Secret` will be shown on your page, store them somewhere as you will need them in the next step.
 
@@ -108,13 +108,13 @@ For more detailed information please refer to the [OAuth 2.0 for TV and Limited-
 ::::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
-Register a new application in the Microsoft Entra admin center. Once registered, note the `Application (client) ID` and the `Directory (tenant) ID` from the `Overview` menu. These IDs correspond to the `<CLIENT_ID>` and `<ISSUER_ID>`, respectively, which are used in the next section.
+Register a new application in the Microsoft Entra admin center. Once registered, note the {guilabel}`Application (client) ID` and the {guilabel}`Directory (tenant) ID` from the {guilabel}`Overview` menu. These IDs correspond to the `<CLIENT_ID>` and `<ISSUER_ID>`, respectively, which are used in the next section.
 
 To register a new application, in Entra, select the menu {menuselection}`Entra ID --> App registrations`:
 
 ![Menu showing selection of App registrations under Applications.](../assets/app-registration.png)
 
-Then `New registration`
+Then {guilabel}`New registration`
 
 ![User interface showing selection of New registration in App registrations.](../assets/new-registration.png)
 
@@ -128,18 +128,18 @@ In {menuselection}`Manage --> API permissions`, set the following **Microsoft Gr
 
 Ensure the API permission type is set to **Delegated** for each permission.
 
-The `GroupMember.Read.All` permission needs admin consent. Click on "Grant admin consent for \<TENANT_NAME\>" to provide this consent.
+The {guilabel}`GroupMember.Read.All` permission needs admin consent. Click on {guilabel}`Grant admin consent for <TENANT_NAME>` to provide this consent.
 
 Finally, as the supported authentication mechanism is the device workflow, you need to allow the public client workflows. 
-In {menuselection}`Manage --> Authentication (Preview) --> Settings`, ensure that `Allow public client flows` is set to **Enabled**.
+In {menuselection}`Manage --> Authentication (Preview) --> Settings`, ensure that {guilabel}`Allow public client flows` is set to **Enabled**.
 
 [The Microsoft documentation](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app) provides detailed instructions for registering an application with the Microsoft identity platform.
 
 ### Redirect URI
 
 If you plan to use the device registration feature (see [configure device registration](#configure-device-registration)),
-you need to configure a redirect URI for the application. Under `Manage`, in the `Authentication (Preview)` menu,
-click on `Add Redirect URI`, then choose `Mobile and desktop applications` and select the following URI:
+you need to configure a redirect URI for the application. Under {guilabel}`Manage`, in the {guilabel}`Authentication (Preview)` menu,
+click on {guilabel}`Add Redirect URI`, then choose {guilabel}`Mobile and desktop applications` and select the following URI:
 
 ```
 https://login.microsoftonline.com/common/oauth2/nativeclient
@@ -157,19 +157,19 @@ Register a new client in Keycloak. Go to {menuselection}`Manage --> Clients` and
 Configure the client as follows:
 
 1. General settings
-    * Set the client type to `OpenID Connect`.
+    * Set the client type to {guilabel}`OpenID Connect`.
     * Pick a valid client ID, for example, `ubuntu-authd`.
       This corresponds to the `<CLIENT_ID>` which is used in the next section.
 2. Capability config
     * (Optional) Enable client authentication
-    * Enable the `OAuth 2.0 Device Authorization Grant` authentication flow.
+    * Enable the {guilabel}`OAuth 2.0 Device Authorization Grant` authentication flow.
 3. Login settings
    * No need to change anything here.
 
-Finally, click on `Save` to create the client.
+Finally, click on {guilabel}`Save` to create the client.
 
 If you enabled client authentication, find the client secret in the 
-`Credentials` tab. This corresponds to the `<CLIENT_SECRET>` in the next section.
+{guilabel}`Credentials` tab. This corresponds to the `<CLIENT_SECRET>` in the next section.
 
 ```{admonition} Set email addresses for users
 :class: tip
