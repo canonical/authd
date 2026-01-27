@@ -49,13 +49,13 @@ slots:
 
 parts:
   libhimmelblau:
-    source: ./third_party/libhimmelblau
+    source: ./authd-oidc-brokers/third_party/libhimmelblau
     plugin: rust
     build-packages:
       - libssl-dev
     override-pull: |
       snapcraftctl pull
-      cp "$SNAPCRAFT_PROJECT_DIR/rust-toolchain.toml" "$SNAPCRAFT_PART_SRC/"
+      cp "$SNAPCRAFT_PROJECT_DIR/authd-oidc-brokers/rust-toolchain.toml" "$SNAPCRAFT_PART_SRC/"
     override-build: |
       cargo install cargo-c
       cargo cbuild --release --lib --features=broker,changepassword,on_behalf_of
@@ -68,7 +68,7 @@ parts:
       - -include/**
       - -lib/**.so
   broker:
-    source: .
+    source: authd-oidc-brokers
     source-type: local
     plugin: go
     go-buildtags: [withmsentraid]
@@ -90,7 +90,7 @@ parts:
       go mod vendor
       go build -tags=withmsentraid -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc
   config:
-    source: conf/
+    source: authd-oidc-brokers/conf/
     source-type: local
     plugin: dump
     organize:
@@ -99,7 +99,7 @@ parts:
       "migrations": "conf/migrations"
   # SemVer comparison helper
   semver:
-    source: tools
+    source: authd-oidc-brokers/tools
     source-type: local
     plugin: go
     override-build: |
