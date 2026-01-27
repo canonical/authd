@@ -46,6 +46,7 @@ jobs:
         run: ./${{ env.E2E_TESTS_DIR }}/vm/install-provision-deps.sh
 
       - name: Set up SSH keys for the VM provisioning
+        id: set-ssh-keys
         if: steps.restore-cache.outputs.cache-hit != 'true'
         uses: ./.github/actions/e2e-tests/set-up-ssh-keys
         with:
@@ -68,7 +69,7 @@ jobs:
           env VM_NAME_BASE="${{ env.VM_NAME_BASE }}" \
             RELEASE="${{ matrix.release }}" \
             ARTIFACTS_DIR="${{ env.ARTIFACTS_DIR }}" \
-            SSH_PUBLIC_KEY_FILE=/home/runner/.ssh/id_rsa.pub \
+            SSH_PUBLIC_KEY_FILE="${{ steps.set-ssh-keys.outputs.keys-path }}/id_rsa.pub" \
             ./${{ env.E2E_TESTS_DIR }}/vm/provision-ubuntu.sh
 
       - name: Clean previous cache
@@ -123,6 +124,7 @@ jobs:
       run: ./${{ env.E2E_TESTS_DIR }}/vm/install-provision-deps.sh
 
     - name: Set up SSH keys for the VM provisioning
+      id: set-ssh-keys
       uses: ./.github/actions/e2e-tests/set-up-ssh-keys
       with:
         E2E_VM_SSH_PRIV_KEY: ${{ secrets.E2E_VM_SSH_PRIV_KEY }}
@@ -143,7 +145,7 @@ jobs:
           envsubst < "${template}" > "${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}.xml"
 
         env ARTIFACTS_DIR="${{ env.ARTIFACTS_DIR }}" \
-          SSH_PUBLIC_KEY_FILE="/home/runner/.ssh/id_rsa.pub" \
+          SSH_PUBLIC_KEY_FILE="${{ steps.set-ssh-keys.outputs.keys-path }}/id_rsa.pub" \
           VM_NAME_BASE="${{ env.VM_NAME_BASE }}" \
           RELEASE="${{ matrix.release }}" \
           BROKERS="authd-msentraid" \
@@ -218,6 +220,7 @@ jobs:
       run: ./${{ env.E2E_TESTS_DIR }}/vm/install-provision-deps.sh
 
     - name: Set up SSH keys for the VM provisioning
+      id: set-ssh-keys
       uses: ./.github/actions/e2e-tests/set-up-ssh-keys
       with:
         E2E_VM_SSH_PRIV_KEY: ${{ secrets.E2E_VM_SSH_PRIV_KEY }}
@@ -238,7 +241,7 @@ jobs:
           envsubst < "${template}" > "${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}.xml"
 
         env ARTIFACTS_DIR="${{ env.ARTIFACTS_DIR }}" \
-          SSH_PUBLIC_KEY_FILE="/home/runner/.ssh/id_rsa.pub" \
+          SSH_PUBLIC_KEY_FILE="${{ steps.set-ssh-keys.outputs.keys-path }}/id_rsa.pub" \
           VM_NAME_BASE="${{ env.VM_NAME_BASE }}" \
           RELEASE="${{ matrix.release }}" \
           BROKERS="authd-google" \
