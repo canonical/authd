@@ -7,6 +7,10 @@ inputs:
   E2E_VM_SSH_PUB_KEY:
     description: "Public SSH key for VM provisioning"
     required: true
+outputs:
+  keys-path:
+    description: "Path to the SSH keys"
+    value: "${{ steps.set-ssh-keys.outputs.keys-path }}"
 runs:
   using: "composite"
   steps:
@@ -17,19 +21,22 @@ runs:
         GITHUB_ACTION_PATH: ${{ github.action_path }}
 
     - name: Set up SSH keys for the VM provisioning
+      id: set-ssh-keys
       shell: bash
       run: |
         set -eu
 
-        mkdir -p /home/runner/.ssh
-        chmod 700 /home/runner/.ssh
+        mkdir -p "${HOME}/.ssh"
+        chmod 700 "${HOME}/.ssh"
 
-        echo "${{ inputs.E2E_VM_SSH_PRIV_KEY }}" > /home/runner/.ssh/id_rsa
-        chmod 600 /home/runner/.ssh/id_rsa
+        echo "${{ inputs.E2E_VM_SSH_PRIV_KEY }}" > "${HOME}/.ssh/id_rsa"
+        chmod 600 "${HOME}/.ssh/id_rsa"
 
-        echo "${{ inputs.E2E_VM_SSH_PUB_KEY }}" > /home/runner/.ssh/id_rsa.pub
-        chmod 644 /home/runner/.ssh/id_rsa.pub
+        echo "${{ inputs.E2E_VM_SSH_PUB_KEY }}" > "${HOME}/.ssh/id_rsa.pub"
+        chmod 644 "${HOME}/.ssh/id_rsa.pub"
 
         eval "$(ssh-agent -s)"
 
-        ssh-add /home/runner/.ssh/id_rsa
+        ssh-add "${HOME}/.ssh/id_rsa"
+
+        echo "keys-path=${HOME}/.ssh" >> "$GITHUB_OUTPUT"
