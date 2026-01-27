@@ -5,6 +5,7 @@ on:
       - main
     paths:
       - "authd-oidc-brokers/**"
+      - "snap/**"
   workflow_dispatch:
 
 concurrency:
