@@ -20,13 +20,6 @@ jobs:
         branch_name: ["google","msentraid","oidc"]
     runs-on: ubuntu-latest
     steps:
-        - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
-        - name: Install dependencies
-          run: |
-            set -eu
-            sudo apt-get update
-            sudo apt-get install -y git
-
         - uses: actions/checkout@v6
           with:
             fetch-depth: 0
