@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -1378,12 +1379,21 @@ func TestGetHomeDirOwner(t *testing.T) {
 			}
 			require.NoError(t, err, "GetHomeDirOwner should not return an error")
 
-			// Verify that UID and GID are valid (non-zero or matching current process)
-			currentUID := uint32(os.Getuid())
-			currentGID := uint32(os.Getgid())
-
-			require.Equal(t, currentUID, uid, "UID should match current process UID")
-			require.Equal(t, currentGID, gid, "GID should match current process GID")
+			// Verify that UID and GID are valid by checking they are reasonable values.
+			// We can't always assume they match the current process UID/GID in all testing
+			// environments (e.g., containers, CI systems), so we just verify the function
+			// successfully retrieves ownership information.
+			
+			// Get actual file info to verify correctness
+			fileInfo, statErr := os.Stat(path)
+			require.NoError(t, statErr, "Setup: failed to stat path")
+			
+			sys, ok := fileInfo.Sys().(*syscall.Stat_t)
+			require.True(t, ok, "Setup: failed to get syscall.Stat_t")
+			
+			// Verify the returned values match what we get from os.Stat
+			require.Equal(t, sys.Uid, uid, "UID should match file's actual UID")
+			require.Equal(t, sys.Gid, gid, "GID should match file's actual GID")
 		})
 	}
 }
