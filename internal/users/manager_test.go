@@ -1383,14 +1383,14 @@ func TestGetHomeDirOwner(t *testing.T) {
 			// We can't always assume they match the current process UID/GID in all testing
 			// environments (e.g., containers, CI systems), so we just verify the function
 			// successfully retrieves ownership information.
-			
+
 			// Get actual file info to verify correctness
 			fileInfo, statErr := os.Stat(path)
 			require.NoError(t, statErr, "Setup: failed to stat path")
-			
+
 			sys, ok := fileInfo.Sys().(*syscall.Stat_t)
 			require.True(t, ok, "Setup: failed to get syscall.Stat_t")
-			
+
 			// Verify the returned values match what we get from os.Stat
 			require.Equal(t, sys.Uid, uid, "UID should match file's actual UID")
 			require.Equal(t, sys.Gid, gid, "GID should match file's actual GID")
