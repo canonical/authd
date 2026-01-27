@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -1303,6 +1304,98 @@ func requireErrorAssertions(t *testing.T, gotErr, wantErrType error, wantErr boo
 		return
 	}
 	require.NoError(t, gotErr, "Error should not be returned")
+}
+
+func TestGetHomeDirOwner(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		setupDir    func(t *testing.T) string
+		wantErr     bool
+		wantErrType error
+	}{
+		"Successfully_get_owner_of_existing_directory": {
+			setupDir: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				return dir
+			},
+		},
+		"Successfully_get_owner_of_file": {
+			setupDir: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				file := filepath.Join(dir, "testfile")
+				err := os.WriteFile(file, []byte("test"), 0644)
+				require.NoError(t, err, "Setup: failed to create test file")
+				return file
+			},
+		},
+		"Error_when_directory_does_not_exist": {
+			setupDir: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				return filepath.Join(dir, "nonexistent")
+			},
+			wantErr:     true,
+			wantErrType: os.ErrNotExist,
+		},
+		"Error_when_directory_is_inaccessible": {
+			setupDir: func(t *testing.T) string {
+				t.Helper()
+				// Skip this test if running as root, as root can access everything
+				if os.Getuid() == 0 {
+					t.Skip("Skipping test when running as root")
+				}
+				dir := t.TempDir()
+				// Create a subdirectory with no read permissions
+				subdir := filepath.Join(dir, "inaccessible")
+				err := os.Mkdir(subdir, 0000)
+				require.NoError(t, err, "Setup: failed to create inaccessible directory")
+				t.Cleanup(func() {
+					// Restore permissions for cleanup
+					os.Chmod(subdir, 0755)
+				})
+				return filepath.Join(subdir, "nested")
+			},
+			wantErr: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			path := tc.setupDir(t)
+
+			uid, gid, err := users.GetHomeDirOwner(path)
+
+			if tc.wantErr {
+				require.Error(t, err, "GetHomeDirOwner should return an error")
+				if tc.wantErrType != nil {
+					require.ErrorIs(t, err, tc.wantErrType, "Error should be of expected type")
+				}
+				return
+			}
+			require.NoError(t, err, "GetHomeDirOwner should not return an error")
+
+			// Verify that UID and GID are valid by checking they are reasonable values.
+			// We can't always assume they match the current process UID/GID in all testing
+			// environments (e.g., containers, CI systems), so we just verify the function
+			// successfully retrieves ownership information.
+
+			// Get actual file info to verify correctness
+			fileInfo, statErr := os.Stat(path)
+			require.NoError(t, statErr, "Setup: failed to stat path")
+
+			sys, ok := fileInfo.Sys().(*syscall.Stat_t)
+			require.True(t, ok, "Setup: failed to get syscall.Stat_t")
+
+			// Verify the returned values match what we get from os.Stat
+			require.Equal(t, sys.Uid, uid, "UID should match file's actual UID")
+			require.Equal(t, sys.Gid, gid, "GID should match file's actual GID")
+		})
+	}
 }
 
 func newManagerForTests(t *testing.T, dbDir string, opts ...users.Option) *users.Manager {

@@ -22,6 +22,10 @@ func CompareNewUserInfoWithUserInfoFromDB(newUserInfo, dbUserInfo types.UserInfo
 	return compareNewUserInfoWithUserInfoFromDB(newUserInfo, dbUserInfo)
 }
 
+func GetHomeDirOwner(home string) (uid uint32, gid uint32, err error) {
+	return getHomeDirOwner(home)
+}
+
 const (
 	SystemdDynamicUIDMin = systemdDynamicUIDMin
 	SystemdDynamicUIDMax = systemdDynamicUIDMax
