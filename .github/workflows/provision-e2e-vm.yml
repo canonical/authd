@@ -97,7 +97,7 @@ jobs:
 
   run-tests-authd-msentraid:
     name: Run E2E tests for authd-msentraid broker
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, noble]
     needs: provision-vm
     permissions:
       contents: read
@@ -192,7 +192,7 @@ jobs:
 
   run-tests-authd-google:
     name: Run E2E tests for authd-google broker
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, noble]
     needs: provision-vm
     permissions:
       contents: read
