@@ -6,7 +6,10 @@ on:
     paths:
       - "authd-oidc-brokers/**"
   workflow_dispatch:
-concurrency: auto-update-broker-variants
+
+concurrency:
+  group: auto-update-broker-variants
+  cancel-in-progress: true
 
 permissions:
     pull-requests: write
