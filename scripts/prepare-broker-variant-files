@@ -1,0 +1,56 @@
+#!/bin/bash
+
+set -euo pipefail
+
+usage() {
+    echo "Usage: $0 --broker <broker> [--copy]"
+    echo
+    echo "Prepare broker-specific variant files for building the specified broker snap."
+    echo
+    echo "Options:"
+    echo "  --broker <broker>  The broker to use (oidc, msentraid or google)."
+    echo "  --copy             Copy files instead of creating symlinks."
+}
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --broker)
+            BROKER="$2"
+            shift 2
+            ;;
+        --copy)
+            COPY=1
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+set -x
+
+if [[ -z "${BROKER:-}" ]]; then
+    echo "Error: --broker is required."
+    usage
+    exit 1
+fi
+
+set -x
+
+DIRS=("authd-oidc-brokers/conf" "snap")
+
+for d in "${DIRS[@]}"; do
+    for f in "$d/variants/${BROKER}"/*; do
+        if ! [ -e "$f" ]; then
+            continue
+        fi
+        if [ -n "${COPY:-}" ]; then
+            cp --target-directory "$d" "$f"
+        else
+            ln -sf --target-directory "$d" "variants/${BROKER}/$(basename "$f")"
+        fi
+    done
+done
