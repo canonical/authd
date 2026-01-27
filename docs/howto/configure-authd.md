@@ -112,7 +112,7 @@ To register a new application, in Entra, select the menu {menuselection}`Entra I
 
 ![Menu showing selection of App registrations under Applications.](../assets/app-registration.png)
 
-Then {guilabel}`New registration`
+Then {guilabel}`New registration`:
 
 ![User interface showing selection of New registration in App registrations.](../assets/new-registration.png)
 
