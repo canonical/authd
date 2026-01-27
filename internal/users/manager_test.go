@@ -1305,6 +1305,89 @@ func requireErrorAssertions(t *testing.T, gotErr, wantErrType error, wantErr boo
 	require.NoError(t, gotErr, "Error should not be returned")
 }
 
+func TestGetHomeDirOwner(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		setupDir    func(t *testing.T) string
+		wantErr     bool
+		wantErrType error
+	}{
+		"Successfully_get_owner_of_existing_directory": {
+			setupDir: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				return dir
+			},
+		},
+		"Successfully_get_owner_of_file": {
+			setupDir: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				file := filepath.Join(dir, "testfile")
+				err := os.WriteFile(file, []byte("test"), 0644)
+				require.NoError(t, err, "Setup: failed to create test file")
+				return file
+			},
+		},
+		"Error_when_directory_does_not_exist": {
+			setupDir: func(t *testing.T) string {
+				t.Helper()
+				dir := t.TempDir()
+				return filepath.Join(dir, "nonexistent")
+			},
+			wantErr:     true,
+			wantErrType: os.ErrNotExist,
+		},
+		"Error_when_directory_is_inaccessible": {
+			setupDir: func(t *testing.T) string {
+				t.Helper()
+				// Skip this test if running as root, as root can access everything
+				if os.Getuid() == 0 {
+					t.Skip("Skipping test when running as root")
+				}
+				dir := t.TempDir()
+				// Create a subdirectory with no read permissions
+				subdir := filepath.Join(dir, "inaccessible")
+				err := os.Mkdir(subdir, 0000)
+				require.NoError(t, err, "Setup: failed to create inaccessible directory")
+				t.Cleanup(func() {
+					// Restore permissions for cleanup
+					os.Chmod(subdir, 0755)
+				})
+				return filepath.Join(subdir, "nested")
+			},
+			wantErr: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			path := tc.setupDir(t)
+
+			uid, gid, err := users.GetHomeDirOwner(path)
+
+			if tc.wantErr {
+				require.Error(t, err, "GetHomeDirOwner should return an error")
+				if tc.wantErrType != nil {
+					require.ErrorIs(t, err, tc.wantErrType, "Error should be of expected type")
+				}
+				return
+			}
+			require.NoError(t, err, "GetHomeDirOwner should not return an error")
+
+			// Verify that UID and GID are valid (non-zero or matching current process)
+			currentUID := uint32(os.Getuid())
+			currentGID := uint32(os.Getgid())
+
+			require.Equal(t, currentUID, uid, "UID should match current process UID")
+			require.Equal(t, currentGID, gid, "GID should match current process GID")
+		})
+	}
+}
+
 func newManagerForTests(t *testing.T, dbDir string, opts ...users.Option) *users.Manager {
 	t.Helper()
 
