@@ -19,7 +19,7 @@ const (
 var (
 	// MicrosoftBrokerAppScopes contains the OIDC scopes that we require for the Microsoft Authentication Broker app.
 	// The ".default" scope for the Azure Portal app is needed to acquire a token for device registration.
-	MicrosoftBrokerAppScopes = []string{"openid", "profile", "offline_access", azurePortalScope}
+	MicrosoftBrokerAppScopes = []string{oidc.ScopeOpenID, "profile", oidc.ScopeOfflineAccess, azurePortalScope}
 
 	// DefaultScopes contains the OIDC scopes that we require for all providers.
 	// Provider implementations can append additional scopes.
