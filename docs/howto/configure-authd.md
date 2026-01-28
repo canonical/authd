@@ -113,17 +113,17 @@ Limited-Input Device Applications documentation](https://developers.google.com/i
 Register a new application in the Microsoft Entra admin center. To register a 
 new application, select the menu {menuselection}`Entra ID --> App registrations`:
 
-![Menu showing selection of App registrations under Applications.](../assets/app-registration.png)
+![Menu showing selection of App registrations under Applications.](../assets/entraid-app-registration.png)
 
 Then {guilabel}`New registration`:
 
-![User interface showing selection of New registration in App registrations.](../assets/new-registration.png)
+![User interface showing selection of New registration in App registrations.](../assets/entraid-new-registration.png)
 
 Choose a name for the application, for example "Ubuntu authd", and the
 appropriate account type for your use case. Then click on {guilabel}`Register`
 to create the application. It should look similar to this:
 
-![Registered application.](../assets/registered-app.png)
+![Registered application.](../assets/entraid-registered-app.png)
 
 Once registered, note the {guilabel}`Application (client) ID` and the
 {guilabel}`Directory (tenant) ID`. These IDs correspond to the `<CLIENT_ID>` and
@@ -132,7 +132,7 @@ Once registered, note the {guilabel}`Application (client) ID` and the
 In {menuselection}`Manage --> API permissions`, set the following **Microsoft
 Graph** permissions:
 
-![Configuration screen for Microsoft Graph permissions.](../assets/graph-permissions.png)
+![Configuration screen for Microsoft Graph permissions.](../assets/entraid-graph-permissions.png)
 
 Ensure the API permission type is set to **Delegated** for each permission.
 
