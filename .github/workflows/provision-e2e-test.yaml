@@ -26,17 +26,21 @@ jobs:
       contents: read
       actions: write
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Restore cached VM image (if available)
         id: restore-cache
         uses: actions/cache/restore@v4
         with:
           path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.release }}.qcow2
-          key: e2e-runner-${{ inputs.release }}
+          key: >-
+            e2e-runner-vm-${{ inputs.release }}-${{ hashFiles(
+              'authd-oidc-brokers/e2e-tests/vm/**',
+              '.github/actions/e2e-tests/set-up-ssh-keys/**',
+              '.github/workflows/provision-e2e-test.yaml'
+            ) }}
           fail-on-cache-miss: false
-
-      - name: Checkout repo
-        if: steps.restore-cache.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
 
       - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
         if: steps.restore-cache.outputs.cache-hit != 'true'
@@ -82,7 +86,12 @@ jobs:
         if: always() && steps.provision-vm.outcome == 'success'
         with:
           path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.release }}.qcow2
-          key: e2e-runner-${{ inputs.release }}
+          key: >-
+            e2e-runner-vm-${{ inputs.release }}-${{ hashFiles(
+              'authd-oidc-brokers/e2e-tests/vm/**',
+              '.github/actions/e2e-tests/set-up-ssh-keys/**',
+              '.github/workflows/provision-e2e-test.yaml'
+            ) }}
 
       - name: Upload cache as artifact
         if: steps.provision-vm.outcome == 'success' || steps.restore-cache.outputs.cache-hit == 'true'
