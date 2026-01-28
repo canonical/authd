@@ -26,6 +26,10 @@ on:
       - '!examplebroker/**'
       - '!gotestcov'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   provision-vm:
     strategy:
