@@ -110,14 +110,8 @@ Limited-Input Device Applications documentation](https://developers.google.com/i
 ::::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
-Register a new application in the Microsoft Entra admin center. Once registered,
-note the {guilabel}`Application (client) ID` and the
-{guilabel}`Directory (tenant) ID` from the {guilabel}`Overview` menu. These IDs
-correspond to the `<CLIENT_ID>` and `<ISSUER_ID>`, respectively, which are used
-in the next section.
-
-To register a new application, in Entra, select the menu
-{menuselection}`Entra ID --> App registrations`:
+Register a new application in the Microsoft Entra admin center. To register a 
+new application, select the menu {menuselection}`Entra ID --> App registrations`:
 
 ![Menu showing selection of App registrations under Applications.](../assets/app-registration.png)
 
@@ -128,6 +122,10 @@ Then {guilabel}`New registration`:
 And configure it as follows:
 
 ![Configuration screen for the new registration.](../assets/configure-registration.png)
+
+Once registered, note the {guilabel}`Application (client) ID` and the
+{guilabel}`Directory (tenant) ID`. These IDs correspond to the `<CLIENT_ID>` and
+`<ISSUER_ID>`, respectively, which are used in the next section.
 
 In {menuselection}`Manage --> API permissions`, set the following **Microsoft
 Graph** permissions:
