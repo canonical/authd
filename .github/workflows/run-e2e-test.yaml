@@ -48,12 +48,25 @@ jobs:
     permissions:
       contents: read
       actions: write
+      packages: read
     steps:
-      - name: Download the artifact VM image
-        uses: actions/download-artifact@v5
-        with:
-          name: e2e-runner-${{ inputs.release }}
-          path: ${{ env.ARTIFACTS_DIR }}
+      - uses: oras-project/setup-oras@v1
+      - name: Download VM image OCI artifact
+        env:
+          OCI_REPO: ghcr.io/${{ github.repository }}/e2e-runner
+          OCI_TAG: ${{ inputs.release }}
+          IMAGE_PATH: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.release }}.qcow2
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$(dirname "$IMAGE_PATH")"
+
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+          oras pull "${OCI_REPO}:${OCI_TAG}"
+          cat chunk-* > "$IMAGE_PATH"
+          rm chunk-*
 
       - name: Checkout repo
         uses: actions/checkout@v4
