@@ -1,4 +1,4 @@
-name: Update translations and Rust packaging related files in main
+name: Update Rust packaging related files in main
 on:
   push:
     branches:
