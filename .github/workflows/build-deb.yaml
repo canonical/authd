@@ -4,19 +4,47 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - .github/workflows/automatic-doc-checks.yml
-      - .readthedocs.yaml
-      - docs/**
-      - authd-oidc-brokers/**
+    paths:
+      - '**'
+      - '!.github/**'
+      - '.github/workflows/build-deb.yaml'
+      - '!.gitignore'
+      - '!.gitmodules'
+      - '!.golangci.yaml'
+      - '!AGENTS.md'
+      - '!CODE_OF_CONDUCT.md'
+      - '!CONTRIBUTING.md'
+      - '!COPYING'
+      - '!COPYING.LESSER'
+      - '!README.md'
+      - '!SECURITY.md'
+      - '!authd-oidc-brokers/**'
+      - '!docs/**'
+      - '!examplebroker/**'
+      - '!gotestcov'
+      - '!snap/**'
     tags:
       - "*"
   pull_request:
-    paths-ignore:
-      - .github/workflows/automatic-doc-checks.yml
-      - .readthedocs.yaml
-      - docs/**
-      - authd-oidc-brokers/**
+    paths:
+      - '**'
+      - '!.github/**'
+      - '.github/workflows/build-deb.yaml'
+      - '!.gitignore'
+      - '!.gitmodules'
+      - '!.golangci.yaml'
+      - '!AGENTS.md'
+      - '!CODE_OF_CONDUCT.md'
+      - '!CONTRIBUTING.md'
+      - '!COPYING'
+      - '!COPYING.LESSER'
+      - '!README.md'
+      - '!SECURITY.md'
+      - '!authd-oidc-brokers/**'
+      - '!docs/**'
+      - '!examplebroker/**'
+      - '!gotestcov'
+      - '!snap/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
