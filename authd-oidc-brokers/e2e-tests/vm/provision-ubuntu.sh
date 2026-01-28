@@ -149,17 +149,12 @@ if [ ! -f "${CLOUD_INIT_ISO}" ]; then
 
     systemd_ver=$(systemctl --version | awk 'NR==1 {print $2}')
     if dpkg --compare-versions "$systemd_ver" "ge" "256"; then
-        JOURNAL_FORWARD_SOCKET="vsock:2:55000"
         SOCAT_ADDRESS="VSOCK-CONNECT:2:55000"
     else
-        iface=$(virsh net-info default | awk '/Bridge:/ {print $2}')
-        ip=$(ip -4 addr show "${iface}" | awk '/inet / {print $2}' | cut -d/ -f1)
-        JOURNAL_FORWARD_SOCKET="${ip}:55000"
         SOCAT_ADDRESS="TCP-LISTEN:55000,bind=0.0.0.0,reuseaddr"
     fi
 
     SSH_PUBLIC_KEY=$(cat "${SSH_PUBLIC_KEY_FILE}") \
-      JOURNAL_FORWARD_SOCKET="${JOURNAL_FORWARD_SOCKET}" \
       SOCAT_ADDRESS="${SOCAT_ADDRESS}" \
       envsubst < "${CLOUD_INIT_TEMPLATE}" > "${CLOUD_INIT_DIR}/user-data"
 
