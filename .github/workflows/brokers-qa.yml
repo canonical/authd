@@ -7,10 +7,16 @@ on:
       - "*"
     paths:
       - "authd-oidc-brokers/**"
+      - "!authd-oidc-brokers/e2e-tests/**"
+      - "!authd-oidc-brokers/po/**"
+      - "!authd-oidc-brokers/.gitignore"
 
   pull_request:
     paths:
       - "authd-oidc-brokers/**"
+      - "!authd-oidc-brokers/e2e-tests/**"
+      - "!authd-oidc-brokers/po/**"
+      - "!authd-oidc-brokers/.gitignore"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
