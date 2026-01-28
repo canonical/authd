@@ -25,6 +25,7 @@ jobs:
     permissions:
       contents: read
       actions: write
+      packages: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -93,9 +94,23 @@ jobs:
               '.github/workflows/provision-e2e-test.yaml'
             ) }}
 
-      - name: Upload cache as artifact
+      - uses: oras-project/setup-oras@v1
+      - name: Upload VM image as OCI artifact
         if: steps.provision-vm.outcome == 'success' || steps.restore-cache.outputs.cache-hit == 'true'
-        uses: actions/upload-artifact@v6
-        with:
-          name: e2e-runner-${{ inputs.release }}
-          path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.release }}.qcow2
+        env:
+          IMAGE_PATH: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.release }}.qcow2
+          OCI_REPO: ghcr.io/${{ github.repository }}/e2e-runner
+          OCI_TAG: ${{ inputs.release }}
+        run: |
+          set -euo pipefail
+          
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+          # Chunk qcow2 into stable fixed-size layers (64 MiB)
+          WORKDIR=$(mktemp -d)
+          split -b 64M "$IMAGE_PATH" "$WORKDIR/chunk-"
+
+          # Push as a layered OCI artifact (each chunk becomes a layer)
+          cd "$WORKDIR"
+          oras push "${OCI_REPO}:${OCI_TAG}" chunk-* --artifact-type application/vnd.qemu.qcow2
