@@ -102,6 +102,15 @@ function cloud_init_finished() {
     sudo guestfish --ro -a "${image}" -i stat /var/lib/cloud/instance/boot-finished &>/dev/null
 }
 
+function cloud_init_successful() {
+    local image=$1
+    if ! sudo guestfish --ro -a "${image}" -i cat /var/lib/cloud/data/result.json | grep -q '"errors": \[\]'; then
+        # Print the result.json to show the errors
+        sudo guestfish --ro -a "${image}" -i cat /var/lib/cloud/data/result.json
+        return 1
+    fi
+}
+
 # Print executed commands to ease debugging
 set -x
 
@@ -206,6 +215,12 @@ if ! cloud_init_finished "${IMAGE}"; then
       sh -c "sudo virsh domstate \"${VM_NAME}\" | grep -q '^shut off'"
 
     kill "${VM_CONSOLE_PID}" || true
+
+    # Check if the cloud-init finished successfully
+    if ! cloud_init_successful "${IMAGE}"; then
+        echo "cloud-init did not finish successfully." >&2
+        exit 1
+    fi
 
     # Detach the cloud-init ISO
     virsh detach-disk "${VM_NAME}" vdb --config
