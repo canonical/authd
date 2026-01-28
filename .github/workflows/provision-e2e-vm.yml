@@ -60,9 +60,8 @@ jobs:
           set -eu
 
           # Configure PATH to find sudo virsh wrapper
-          repo_path="/home/runner/work/authd/authd"
-          sudo chmod +x "${repo_path}/${{ env.E2E_TESTS_DIR }}/vm/helpers/virsh"
-          export PATH="${repo_path}/${{ env.E2E_TESTS_DIR }}/vm/helpers:${PATH}"
+          sudo chmod +x "${{ env.E2E_TESTS_DIR }}/vm/helpers/virsh"
+          export PATH="${{ env.E2E_TESTS_DIR }}/vm/helpers:${PATH}"
 
           # Set up temporary directory for VM artifacts
           mkdir -p ${{ env.ARTIFACTS_DIR }}
