@@ -1,7 +1,9 @@
 ---
 myst:
   html_meta:
-    "description lang=en": "Configure authd and its identity brokers to enable authentication of Ubuntu devices with multiple cloud identity providers, including Google IAM, Microsoft Entra ID, and Keycloak."
+    "description lang=en": "Configure authd and its identity brokers to enable
+    authentication of Ubuntu devices with multiple cloud identity providers,
+    including Google IAM, Microsoft Entra ID, and Keycloak."
 ---
 
 (ref::config)=
@@ -94,11 +96,13 @@ Select the {guilabel}`TVs and Limited Input devices` application type.
 
 Name your OAuth 2.0 client and click {guilabel}`Create`.
 
-Your app's `Client ID` and `Client secret` will be shown on the page, store them somewhere as you will need them in the next step.
+Your app's `Client ID` and `Client secret` will be shown on the page, store them
+somewhere as you will need them in the next step.
 
 ![Screen showing app credentials.](../assets/google-app-credentials.png)
 
-For more detailed information please refer to the [OAuth 2.0 for TV and Limited-Input Device Applications documentation](https://developers.google.com/identity/protocols/oauth2/limited-input-device).
+For more detailed information please refer to the [OAuth 2.0 for TV and
+Limited-Input Device Applications documentation](https://developers.google.com/identity/protocols/oauth2/limited-input-device).
 
 
 ::::
@@ -106,9 +110,14 @@ For more detailed information please refer to the [OAuth 2.0 for TV and Limited-
 ::::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
-Register a new application in the Microsoft Entra admin center. Once registered, note the {guilabel}`Application (client) ID` and the {guilabel}`Directory (tenant) ID` from the {guilabel}`Overview` menu. These IDs correspond to the `<CLIENT_ID>` and `<ISSUER_ID>`, respectively, which are used in the next section.
+Register a new application in the Microsoft Entra admin center. Once registered,
+note the {guilabel}`Application (client) ID` and the
+{guilabel}`Directory (tenant) ID` from the {guilabel}`Overview` menu. These IDs
+correspond to the `<CLIENT_ID>` and `<ISSUER_ID>`, respectively, which are used
+in the next section.
 
-To register a new application, in Entra, select the menu {menuselection}`Entra ID --> App registrations`:
+To register a new application, in Entra, select the menu
+{menuselection}`Entra ID --> App registrations`:
 
 ![Menu showing selection of App registrations under Applications.](../assets/app-registration.png)
 
@@ -120,24 +129,32 @@ And configure it as follows:
 
 ![Configuration screen for the new registration.](../assets/configure-registration.png)
 
-In {menuselection}`Manage --> API permissions`, set the following **Microsoft Graph** permissions:
+In {menuselection}`Manage --> API permissions`, set the following **Microsoft
+Graph** permissions:
 
 ![Configuration screen for Microsoft Graph permissions.](../assets/graph-permissions.png)
 
 Ensure the API permission type is set to **Delegated** for each permission.
 
-The {guilabel}`GroupMember.Read.All` permission needs admin consent. Click on {guilabel}`Grant admin consent for <TENANT_NAME>` to provide this consent.
+The {guilabel}`GroupMember.Read.All` permission needs admin consent. Click on
+{guilabel}`Grant admin consent for <TENANT_NAME>` to provide this consent.
 
-Finally, as the supported authentication mechanism is the device workflow, you need to allow the public client workflows. 
-In {menuselection}`Manage --> Authentication (Preview) --> Settings`, ensure that {guilabel}`Allow public client flows` is set to **Enabled**.
+Finally, as the supported authentication mechanism is the device workflow, you
+need to allow the public client workflows. In {menuselection}`Manage -->
+Authentication (Preview) --> Settings`, ensure that {guilabel}`Allow public
+client flows` is set to **Enabled**.
 
-[The Microsoft documentation](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app) provides detailed instructions for registering an application with the Microsoft identity platform.
+[The Microsoft documentation](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app)
+provides detailed instructions for registering an application with the Microsoft
+identity platform.
 
 ### Redirect URI
 
-If you plan to use the device registration feature (see [configure device registration](#configure-device-registration)),
-you need to configure a redirect URI for the application. Go to {menuselection}`Manage --> Authentication (Preview)`,
-click on {guilabel}`Add Redirect URI`, then choose {guilabel}`Mobile and desktop applications` and select the following URI:
+If you plan to use the device registration feature (see [configure device
+registration](#configure-device-registration)), you need to configure a redirect
+URI for the application. Go to {menuselection}`Manage --> Authentication
+(Preview)`, click on {guilabel}`Add Redirect URI`, then choose {guilabel}`Mobile
+and desktop applications` and select the following URI:
 
 ```
 https://login.microsoftonline.com/common/oauth2/nativeclient
@@ -148,7 +165,8 @@ https://login.microsoftonline.com/common/oauth2/nativeclient
 ::::{tab-item} Keycloak
 :sync: keycloak
 
-Register a new client in Keycloak. Go to {menuselection}`Manage --> Clients` and create the client.
+Register a new client in Keycloak. Go to {menuselection}`Manage --> Clients` and
+create the client.
 
 ![Create client button being clicked.](../assets/keycloak-create-client.png)
 
@@ -160,19 +178,21 @@ Configure the client as follows:
       This corresponds to the `<CLIENT_ID>` which is used in the next section.
 2. Capability config
     * (Optional) Enable client authentication
-    * Enable the {guilabel}`OAuth 2.0 Device Authorization Grant` authentication flow.
+    * Enable the {guilabel}`OAuth 2.0 Device Authorization Grant` authentication
+      flow.
 3. Login settings
    * No need to change anything here.
 
 Finally, click on {guilabel}`Save` to create the client.
 
-If you enabled client authentication, find the client secret in the 
-{guilabel}`Credentials` tab. This corresponds to the `<CLIENT_SECRET>` in the next section.
+If you enabled client authentication, find the client secret in the
+{guilabel}`Credentials` tab. This corresponds to the `<CLIENT_SECRET>` in the
+next section.
 
 ```{admonition} Set email addresses for users
 :class: tip
-Make sure that all users who should be able to log in through this broker have an 
-email address configured in Keycloak.
+Make sure that all users who should be able to log in through this broker have
+an email address configured in Keycloak.
 ```
 
 ::::
@@ -181,7 +201,8 @@ email address configured in Keycloak.
 
 ## Broker configuration
 
-Now we can configure the broker. Note that different brokers can require different configuration data.
+Now we can configure the broker. Note that different brokers can require
+different configuration data.
 
 :::::{tab-set}
 :sync-group: broker
@@ -214,7 +235,8 @@ client_id = <CLIENT_ID>
 ::::{tab-item} Keycloak
 :sync: keycloak
 
-To configure the authd-oidc broker for Keycloak, edit  `/var/snap/authd-oidc/current/broker.conf`:
+To configure the authd-oidc broker for Keycloak, edit
+`/var/snap/authd-oidc/current/broker.conf`:
 
 ```ini
 [oidc]
@@ -234,11 +256,12 @@ client_secret = <CLIENT_SECRET>
 (ref::config-force-provider-auth)=
 ## Force remote authentication with the identity provider
 
-By default, remote authentication with the identity provider only happens
-if there is a working internet connection and the provider is reachable during login.
+By default, remote authentication with the identity provider only happens if
+there is a working internet connection and the provider is reachable during
+login.
 
-If you want to force remote authentication, even when the provider is unreachable,
-enable it as follows:
+If you want to force remote authentication, even when the provider is
+unreachable, enable it as follows:
 
 ```ini
 [oidc]
@@ -288,9 +311,10 @@ identity provider) are configured in the `users` section of the
 #owner =
 ```
 
-By default, the first person to log in to the machine is automatically registered
-as the owner. If you wish to override this behavior then specify a list of allowed
-users with the `allowed_users` option, while omitting the `OWNER` keyword:
+By default, the first person to log in to the machine is automatically
+registered as the owner. If you wish to override this behavior then specify a
+list of allowed users with the `allowed_users` option, while omitting the
+`OWNER` keyword:
 
 ```text
 allowed_users = person1@email.com,person2@email.com
@@ -303,8 +327,8 @@ option:
 owner = your@email.com
 ```
 
-Explicitly setting an empty owner, has the same effect as omitting the `OWNER` keyword
-in `allowed_users`:
+Explicitly setting an empty owner, has the same effect as omitting the `OWNER`
+keyword in `allowed_users`:
 
 ```text
 owner = ""
@@ -357,7 +381,8 @@ removed, it will be regenerated on the next successful login.
 (ref::config-user-groups)=
 ## Configure user groups
 
-Some brokers support adding users to groups that are configured in the identity provider.
+Some brokers support adding users to groups that are configured in the identity
+provider.
 
 > See the [group management reference](reference::group-management) for more details.
 
@@ -374,8 +399,9 @@ configuration file:
 #extra_groups =
 ```
 
-There is also an `owner_extra_groups` option for specifying additional local groups,
-to which only the user with the [owner role](#configure-allowed-users) is added:
+There is also an `owner_extra_groups` option for specifying additional local
+groups, to which only the user with the [owner role](#configure-allowed-users)
+is added:
 
 ```ini
 ## Like 'extra_groups', but only the user assigned the owner role
@@ -446,7 +472,8 @@ When a configuration file is added you have to restart authd:
 sudo systemctl restart authd
 ```
 
-When the configuration of a broker is updated, you also have to restart the broker:
+When the configuration of a broker is updated, you also have to restart the
+broker:
 
 :::::{tab-set}
 :sync-group: broker
@@ -537,4 +564,3 @@ minlen = 14
 
 > The [man pages](https://manpages.ubuntu.com/manpages/noble/man5/pwquality.conf.5.html)
 provide a full list of configuration options for the libpwquality library.
-
