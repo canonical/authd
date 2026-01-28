@@ -1,4 +1,4 @@
-name: Build and Cache Ubuntu VM
+name: Run e2e-tests
 
 on:
   workflow_dispatch:
@@ -97,7 +97,7 @@ jobs:
           path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ matrix.release }}.qcow2
 
   run-tests-authd-msentraid:
-    name: Run E2E tests for authd-msentraid broker
+    name: Run e2e-tests for authd-msentraid broker
     runs-on: [self-hosted, linux, x64, noble]
     needs: provision-vm
     permissions:
@@ -193,7 +193,7 @@ jobs:
         path: /tmp/e2e-testrun-msentraid-${{ matrix.release }}/output
 
   run-tests-authd-google:
-    name: Run E2E tests for authd-google broker
+    name: Run e2e-tests for authd-google broker
     runs-on: [self-hosted, linux, x64, noble]
     needs: provision-vm
     permissions:
