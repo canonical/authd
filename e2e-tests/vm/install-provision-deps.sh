@@ -6,6 +6,7 @@ set -euo pipefail
 sudo apt-get update && sudo apt-get -y install \
     bsdutils \
     cloud-image-utils \
+    guestfish \
     libvirt-clients-qemu \
     libvirt-daemon-system \
     qemu-kvm \
