@@ -12,8 +12,8 @@ Test Teardown   Test Teardown
 
 *** Keywords ***
 Test Setup
-    Journal.Start Receiving Journal
     Restore Snapshot    %{BROKER}-edge-configured
+    Journal.Start Receiving Journal
 
 Test Teardown
     Journal.Stop Receiving Journal
