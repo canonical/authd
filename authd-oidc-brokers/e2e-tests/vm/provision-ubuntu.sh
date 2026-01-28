@@ -155,7 +155,7 @@ if [ ! -f "${CLOUD_INIT_ISO}" ]; then
         iface=$(virsh net-info default | awk '/Bridge:/ {print $2}')
         ip=$(ip -4 addr show "${iface}" | awk '/inet / {print $2}' | cut -d/ -f1)
         JOURNAL_FORWARD_SOCKET="${ip}:55000"
-        SOCAT_ADDRESS="TCP:${ip}:55000"
+        SOCAT_ADDRESS="TCP-LISTEN:55000,bind=0.0.0.0,reuseaddr"
     fi
 
     SSH_PUBLIC_KEY=$(cat "${SSH_PUBLIC_KEY_FILE}") \

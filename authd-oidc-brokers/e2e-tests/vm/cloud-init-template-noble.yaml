@@ -27,7 +27,9 @@ packages:
   - gsettings-ubuntu-schemas
   - openssh-server
   - policykit-desktop-privileges
-  # Required to bind sshd to VSOCK socket
+  # Required to get the VM's IP address
+  - qemu-guest-agent
+  # Required to bind sshd to VSOCK socket and to forward the journal to the host
   - socat
   # Required for add-apt-repository
   - software-properties-common
