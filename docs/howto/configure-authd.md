@@ -119,9 +119,9 @@ Then {guilabel}`New registration`:
 
 ![User interface showing selection of New registration in App registrations.](../assets/new-registration.png)
 
-Choose a name for the application and the appropriate account type for your use
-case. Then click on {guilabel}`Register` to create the application. It should
-look similar to this:
+Choose a name for the application, for example "Ubuntu authd", and the
+appropriate account type for your use case. Then click on {guilabel}`Register`
+to create the application. It should look similar to this:
 
 ![Registered application.](../assets/registered-app.png)
 
