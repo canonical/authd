@@ -4,11 +4,11 @@ on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/automatic-doc-checks.yml'
+      - '.github/workflows/automatic-doc-checks.yaml'
       - 'docs/**'
   pull_request:
     paths:
-      - '.github/workflows/automatic-doc-checks.yml'
+      - '.github/workflows/automatic-doc-checks.yaml'
       - 'docs/**'
   schedule:
     - cron:  '0 12 * * MON'
