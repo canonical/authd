@@ -1,0 +1,148 @@
+name: run-e2e-test (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      release:
+        required: true
+        type: string
+      broker:
+        required: true
+        type: string
+    secrets:
+      E2E_VM_SSH_PRIV_KEY:
+        required: true
+      E2E_VM_SSH_PUB_KEY:
+        required: true
+      E2E_MSENTRA_ISSUER_ID:
+        required: false
+      E2E_MSENTRA_CLIENT_ID:
+        required: false
+      E2E_MSENTRA_USERNAME:
+        required: false
+      E2E_MSENTRA_PASSWORD:
+        required: false
+      E2E_MSENTRA_TOTP_SECRET:
+        required: false
+      E2E_GOOGLE_CLIENT_ID:
+        required: false
+      E2E_GOOGLE_CLIENT_SECRET:
+        required: false
+      E2E_GOOGLE_USERNAME:
+        required: false
+      E2E_GOOGLE_PASSWORD:
+        required: false
+      E2E_GOOGLE_TOTP_SECRET:
+        required: false
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  VM_NAME_BASE: e2e-runner
+  ARTIFACTS_DIR: /tmp/e2e-artifacts
+  E2E_TESTS_DIR: authd-oidc-brokers/e2e-tests
+
+jobs:
+  run-tests:
+    name: Run e2e-tests for ${{ inputs.broker }} on ${{ inputs.release }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Download the artifact VM image
+        uses: actions/download-artifact@v5
+        with:
+          name: e2e-runner-${{ inputs.release }}
+          path: ${{ env.ARTIFACTS_DIR }}
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
+
+      - name: Install APT dependencies for provisioning
+        run: ./${{ env.E2E_TESTS_DIR }}/vm/install-provision-deps.sh
+
+      - name: Set up SSH keys for the VM provisioning
+        id: set-ssh-keys
+        uses: ./.github/actions/e2e-tests/set-up-ssh-keys
+        with:
+          E2E_VM_SSH_PRIV_KEY: ${{ secrets.E2E_VM_SSH_PRIV_KEY }}
+          E2E_VM_SSH_PUB_KEY: ${{ secrets.E2E_VM_SSH_PUB_KEY }}
+
+      - name: Provision authd and the broker
+        run: |
+          set -eux
+          sudo chmod +x "${{ env.E2E_TESTS_DIR }}/vm/helpers/virsh"
+          export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
+          template="./${{ env.E2E_TESTS_DIR }}/vm/e2e-runner-template.xml"
+          IMAGE_FILE=${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.release }}.qcow2 \
+            VM_NAME=${{ env.VM_NAME_BASE }}-${{ inputs.release }} \
+            envsubst < "${template}" > "${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}.xml"
+          if [ "${{ inputs.broker }}" = "authd-msentraid" ]; then
+            env ARTIFACTS_DIR="${{ env.ARTIFACTS_DIR }}" \
+              SSH_PUBLIC_KEY_FILE="${{ steps.set-ssh-keys.outputs.keys-path }}/id_rsa.pub" \
+              VM_NAME_BASE="${{ env.VM_NAME_BASE }}" \
+              RELEASE="${{ inputs.release }}" \
+              BROKERS="authd-msentraid" \
+              AUTHD_MSENTRAID_ISSUER_ID="${{ secrets.E2E_MSENTRA_ISSUER_ID }}" \
+              AUTHD_MSENTRAID_CLIENT_ID="${{ secrets.E2E_MSENTRA_CLIENT_ID }}" \
+              AUTHD_MSENTRAID_USER="${{ secrets.E2E_MSENTRA_USERNAME }}" \
+              ./${{ env.E2E_TESTS_DIR }}/vm/provision-authd.sh
+          elif [ "${{ inputs.broker }}" = "authd-google" ]; then
+            env ARTIFACTS_DIR="${{ env.ARTIFACTS_DIR }}" \
+              SSH_PUBLIC_KEY_FILE="${{ steps.set-ssh-keys.outputs.keys-path }}/id_rsa.pub" \
+              VM_NAME_BASE="${{ env.VM_NAME_BASE }}" \
+              RELEASE="${{ inputs.release }}" \
+              BROKERS="authd-google" \
+              AUTHD_GOOGLE_CLIENT_ID="${{ secrets.E2E_GOOGLE_CLIENT_ID }}" \
+              AUTHD_GOOGLE_CLIENT_SECRET="${{ secrets.E2E_GOOGLE_CLIENT_SECRET }}" \
+              AUTHD_GOOGLE_USER="${{ secrets.E2E_GOOGLE_USERNAME }}" \
+              ./${{ env.E2E_TESTS_DIR }}/vm/provision-authd.sh
+          fi
+
+      - name: Checkout YARF repo
+        uses: actions/checkout@v5
+        with:
+          repository: adombeck/yarf
+          path: ./${{ env.E2E_TESTS_DIR }}/.yarf
+
+      - name: Install APT dependencies for running the E2E tests
+        run: ./${{ env.E2E_TESTS_DIR }}/install-deps.sh
+
+      - name: Configure YARF
+        run: ./${{ env.E2E_TESTS_DIR }}/setup-yarf.sh
+
+      - name: Run tests
+        id: run-tests
+        run: |
+          set -eux
+          sudo chmod +x "${{ env.E2E_TESTS_DIR }}/vm/helpers/virsh"
+          export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
+          if [ "${{ inputs.broker }}" = "authd-msentraid" ]; then
+            ./${{ env.E2E_TESTS_DIR }}/run-tests.sh \
+              --user "${{ secrets.E2E_MSENTRA_USERNAME }}" \
+              --password "${{ secrets.E2E_MSENTRA_PASSWORD }}" \
+              --totp-secret "${{ secrets.E2E_MSENTRA_TOTP_SECRET }}" \
+              --release "${{ inputs.release }}" \
+              --broker authd-msentraid \
+              --output-dir /tmp/e2e-testrun-msentraid-${{ inputs.release }}/output
+          elif [ "${{ inputs.broker }}" = "authd-google" ]; then
+            ./${{ env.E2E_TESTS_DIR }}/run-tests.sh \
+              --user "${{ secrets.E2E_GOOGLE_USERNAME }}" \
+              --password "${{ secrets.E2E_GOOGLE_PASSWORD }}" \
+              --totp-secret "${{ secrets.E2E_GOOGLE_TOTP_SECRET }}" \
+              --release "${{ inputs.release }}" \
+              --broker authd-google \
+              --output-dir /tmp/e2e-testrun-google-${{ inputs.release }}/output
+          fi
+
+      - name: Upload test results
+        id: upload-results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: e2e-${{ inputs.broker }}-output-${{ inputs.release }}-${{ github.run_id }}
+          path: |
+            /tmp/e2e-testrun-msentraid-${{ inputs.release }}/output
+            /tmp/e2e-testrun-google-${{ inputs.release }}/output
