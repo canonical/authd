@@ -71,14 +71,16 @@ jobs:
         run: |
           set -euo pipefail
 
+          echo "Running dh-cargo-vendored-sources"
           VENDORED_SOURCES=$(/usr/share/cargo/bin/dh-cargo-vendored-sources 2>&1) \
             || cmd_status=$?
+          echo "${VENDORED_SOURCES}"
+
           OUTPUT=$(echo "$VENDORED_SOURCES" | grep ^XS-Vendored-Sources-Rust: || true)
           if [ -z "${OUTPUT}" ]; then
             if [ "${cmd_status:-0}" -ne 0 ]; then
               # dh-cargo-vendored-sources failed because of other reason, so let's fail with it!
-              echo "dh-cargo-vendored-sources failed:"
-              echo "${VENDORED_SOURCES}"
+              echo "dh-cargo-vendored-sources failed unexpectedly (exit code ${cmd_status})"
               exit "${cmd_status}"
             fi
 
