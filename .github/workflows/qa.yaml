@@ -6,7 +6,7 @@ on:
     paths:
       - '**'
       - '!.github/**'
-      - '.github/workflows/qa.yml'
+      - '.github/workflows/qa.yaml'
       - '!.gitignore'
       - '!.gitmodules'
       - '!AGENTS.md'
@@ -27,7 +27,7 @@ on:
     paths:
       - '**'
       - '!.github/**'
-      - '.github/workflows/qa.yml'
+      - '.github/workflows/qa.yaml'
       - '!.gitignore'
       - '!.gitmodules'
       - '!AGENTS.md'
