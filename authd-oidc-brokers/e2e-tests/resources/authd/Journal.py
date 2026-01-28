@@ -41,7 +41,6 @@ class Journal:
                     f"--output={self.output_dir}",
                 ],
             )
-
         else:
             self.process = stream_journal_from_vm_via_tcp(output_dir=self.output_dir)
 

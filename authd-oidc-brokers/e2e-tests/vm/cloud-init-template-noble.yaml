@@ -83,11 +83,11 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
-  # Export the journal via VSOCK
-  - path: /etc/systemd/system/journal-vsock-export.service
+  # Export the journal to the host
+  - path: /etc/systemd/system/journal-export.service
     content: |
       [Unit]
-      Description=Exports the journal over VSOCK
+      Description=Exports the journal to the host
       After=systemd-journald.service
       After=network.target
       Requires=network.target
@@ -116,7 +116,7 @@ runcmd:
   - sudo systemctl mask systemd-networkd-wait-online.service
   # Enable our systemd services
   - sudo systemctl enable sshd-vsock.service
-  - sudo systemctl enable journal-vsock-export.service
+  - sudo systemctl enable journal-export.service
   # Avoid APT downloads and upgrades during the tests
   - sudo systemctl mask apt-daily.service
   - sudo systemctl mask apt-daily.timer

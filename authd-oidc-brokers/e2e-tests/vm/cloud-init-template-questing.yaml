@@ -26,8 +26,12 @@ packages:
   - gsettings-ubuntu-schemas
   - openssh-server
   - policykit-desktop-privileges
+  # Required to get the VM's IP address
+  - qemu-guest-agent
   # Default terminal on questing
   - ptyxis
+  # Required to forward the journal to the host
+  - socat
   - spice-vdagent
   # Required for add-apt-repository
   - software-properties-common
@@ -65,11 +69,26 @@ write_files:
       Match User *@*
           KbdInteractiveAuthentication yes
 
-    # Export the journal via VSOCK
-  - path: /etc/systemd/journald.conf.d/00-forward-to-vsock.conf
+  # Export the journal to the host
+  - path: /etc/systemd/system/journal-export.service
     content: |
-      [Journal]
-      ForwardToSocket=${JOURNAL_FORWARD_SOCKET}
+      [Unit]
+      Description=Exports the journal to the host
+      After=systemd-journald.service
+      After=network.target
+      Requires=network.target
+      # Disable rate limiting
+      StartLimitIntervalSec=0
+
+      [Service]
+      Type=simple
+      ExecStart=/bin/bash -o pipefail -c 'journalctl -b --lines=all -o export -f | socat - ${SOCAT_ADDRESS}'
+      OOMScoreAdjust=-1000
+      Restart=always
+      RestartSec=1
+
+      [Install]
+      WantedBy=basic.target
 
 runcmd:
   # Disable apport
@@ -81,6 +100,8 @@ runcmd:
   - dconf update
   # Disable systemd-networkd-wait-online to speed up boot time
   - sudo systemctl mask systemd-networkd-wait-online.service
+  # Enable our systemd services
+  - sudo systemctl enable journal-export.service
   # Avoid APT downloads and upgrades during the tests
   - sudo systemctl mask apt-daily.service
   - sudo systemctl mask apt-daily.timer
