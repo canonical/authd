@@ -39,7 +39,7 @@ env:
   DEBIAN_FRONTEND: noninteractive
   VM_NAME_BASE: e2e-runner
   ARTIFACTS_DIR: /tmp/e2e-artifacts
-  E2E_TESTS_DIR: authd-oidc-brokers/e2e-tests
+  E2E_TESTS_DIR: e2e-tests
 
 jobs:
   run-tests:

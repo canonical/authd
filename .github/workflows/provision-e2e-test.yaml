@@ -16,7 +16,7 @@ env:
   DEBIAN_FRONTEND: noninteractive
   VM_NAME_BASE: e2e-runner
   ARTIFACTS_DIR: /tmp/e2e-artifacts
-  E2E_TESTS_DIR: authd-oidc-brokers/e2e-tests
+  E2E_TESTS_DIR: e2e-tests
 
 jobs:
   provision-vm:
@@ -36,7 +36,7 @@ jobs:
           path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.release }}.qcow2
           key: >-
             e2e-runner-vm-${{ inputs.release }}-${{ hashFiles(
-              'authd-oidc-brokers/e2e-tests/vm/**',
+              'e2e-tests/vm/**',
               '.github/actions/e2e-tests/set-up-ssh-keys/**',
               '.github/workflows/provision-e2e-test.yaml'
             ) }}
@@ -88,7 +88,7 @@ jobs:
           path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.release }}.qcow2
           key: >-
             e2e-runner-vm-${{ inputs.release }}-${{ hashFiles(
-              'authd-oidc-brokers/e2e-tests/vm/**',
+              'e2e-tests/vm/**',
               '.github/actions/e2e-tests/set-up-ssh-keys/**',
               '.github/workflows/provision-e2e-test.yaml'
             ) }}
