@@ -110,7 +110,7 @@ IMAGE_URL="https://cloud-images.ubuntu.com/${RELEASE}/current/${RELEASE}-server-
 SOURCE_IMAGE="${CACHE_DIR}/$(basename "${IMAGE_URL}")"
 if [ ! -f "${SOURCE_IMAGE}" ]; then
     mkdir -p "${CACHE_DIR}"
-    wget -O "${SOURCE_IMAGE}" "${IMAGE_URL}"
+    wget "${CI:+--progress=dot:giga}" -O "${SOURCE_IMAGE}" "${IMAGE_URL}"
 else
     echo "Source image already exists: ${SOURCE_IMAGE}"
 fi
