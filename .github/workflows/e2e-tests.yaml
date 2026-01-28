@@ -5,6 +5,24 @@ on:
   schedule:
     - cron: '0 0 * * 1'  # Runs every Monday at midnight
   pull_request:
+    paths:
+      - '**'
+      - '!.github/workflows/**'
+      - '.github/workflows/e2e-tests.yaml'
+      - '!.gitignore'
+      - '!.golangci.yaml'
+      - '!AGENTS.md'
+      - '!CODE_OF_CONDUCT.md'
+      - '!CONTRIBUTING.md'
+      - '!COPYING'
+      - '!COPYING.LESSER'
+      - '!README.md'
+      - '!SECURITY.md'
+      - "!authd-oidc-brokers/po/**"
+      - "!authd-oidc-brokers/.gitignore"
+      - '!docs/**'
+      - '!examplebroker/**'
+      - '!gotestcov'
 
 env:
   DEBIAN_FRONTEND: noninteractive
