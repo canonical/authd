@@ -35,3 +35,6 @@ snap/icon.svg
 snap/snapcraft.yaml
 authd-oidc-brokers/conf/authd.conf
 authd-oidc-brokers/conf/broker.conf
+
+# Useful for running e2e-tests locally
+e2e-tests/e2e-tests.env
