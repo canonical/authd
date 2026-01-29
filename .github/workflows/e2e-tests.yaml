@@ -61,7 +61,7 @@ jobs:
 
           # Configure PATH to find sudo virsh wrapper
           sudo chmod +x "${{ env.E2E_TESTS_DIR }}/vm/helpers/virsh"
-          export PATH="${{ env.E2E_TESTS_DIR }}/vm/helpers:${PATH}"
+          export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
 
           # Set up temporary directory for VM artifacts
           mkdir -p ${{ env.ARTIFACTS_DIR }}
@@ -136,7 +136,7 @@ jobs:
 
         # Configure PATH to find sudo virsh wrapper
         sudo chmod +x "${{ env.E2E_TESTS_DIR }}/vm/helpers/virsh"
-        export PATH="${{ env.E2E_TESTS_DIR }}/vm/helpers:${PATH}"
+        export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
 
         # Configure the libvirt domain file
         template="./${{ env.E2E_TESTS_DIR }}/vm/e2e-runner-template.xml"
@@ -174,7 +174,7 @@ jobs:
 
         # Configure PATH to find sudo virsh wrapper
         sudo chmod +x "${{ env.E2E_TESTS_DIR }}/vm/helpers/virsh"
-        export PATH="${{ env.E2E_TESTS_DIR }}/vm/helpers:${PATH}"
+        export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
 
         ./${{ env.E2E_TESTS_DIR }}/run-tests.sh \
           --user "${{ secrets.E2E_MSENTRA_USERNAME }}" \
@@ -232,7 +232,7 @@ jobs:
 
         # Configure PATH to find sudo virsh wrapper
         sudo chmod +x "${{ env.E2E_TESTS_DIR }}/vm/helpers/virsh"
-        export PATH="${{ env.E2E_TESTS_DIR }}/vm/helpers:${PATH}"
+        export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
 
         # Configure the libvirt domain file
         template="./${{ env.E2E_TESTS_DIR }}/vm/e2e-runner-template.xml"
@@ -270,7 +270,7 @@ jobs:
 
         # Configure PATH to find sudo virsh wrapper
         sudo chmod +x "${{ env.E2E_TESTS_DIR }}/vm/helpers/virsh"
-        export PATH="${{ env.E2E_TESTS_DIR }}/vm/helpers:${PATH}"
+        export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
 
         ${{ env.E2E_TESTS_DIR }}/run-tests.sh \
           --user "${{ secrets.E2E_GOOGLE_USERNAME }}" \
