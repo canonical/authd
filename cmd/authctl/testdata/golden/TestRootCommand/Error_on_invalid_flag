@@ -4,6 +4,7 @@ Usage:
 
 Available Commands:
   user        Commands related to users
+  group       Commands related to groups
   help        Help about any command
 
 Flags:

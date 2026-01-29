@@ -7,13 +7,18 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/user"
 	"slices"
+	"strconv"
 	"sync"
 	"syscall"
 
 	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/internal/fileutils"
 	"github.com/canonical/authd/internal/users/db"
 	"github.com/canonical/authd/internal/users/localentries"
+	userslocking "github.com/canonical/authd/internal/users/locking"
+	"github.com/canonical/authd/internal/users/proc"
 	"github.com/canonical/authd/internal/users/tempentries"
 	"github.com/canonical/authd/internal/users/types"
 	"github.com/canonical/authd/log"
@@ -314,7 +319,7 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		return err
 	}
 
-	if err = checkHomeDirOwnership(userRow.Dir, userRow.UID, userRow.GID); err != nil {
+	if err = checkHomeDirOwner(userRow.Dir, userRow.UID, userRow.GID); err != nil {
 		log.Warningf(context.Background(), "Failed to check home directory ownership: %v", err)
 	}
 
@@ -364,6 +369,183 @@ func compareNewUserInfoWithUserInfoFromDB(newUserInfo, dbUserInfo types.UserInfo
 	return dbUserInfo.Equals(newUserInfo)
 }
 
+// SetUserID updates the UID of the user with the given name to the specified UID.
+func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err error) {
+	log.Debugf(context.TODO(), "Updating UID for user %q to %d", name, uid)
+
+	if name == "" {
+		return nil, errors.New("empty username")
+	}
+
+	if uid > math.MaxInt32 {
+		return nil, fmt.Errorf("UID %d is too large to convert to int32", uid)
+	}
+
+	m.userManagementMu.Lock()
+	defer m.userManagementMu.Unlock()
+
+	// Call lckpwdf to avoid race conditions with other processes which add UIDs
+	err = userslocking.WriteLock()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { err = errors.Join(err, userslocking.WriteUnlock()) }()
+
+	// Check if the user exists
+	oldUser, err := m.db.UserByName(name)
+	if err != nil {
+		return nil, err
+	}
+	// Check if the user already has the given UID
+	if oldUser.UID == uid {
+		warning := fmt.Sprintf("User %q already has UID %d", name, uid)
+		log.Info(context.Background(), warning)
+		return []string{warning}, nil
+	}
+
+	// Check if another user already has the given UID
+	_, err = user.LookupId(strconv.FormatUint(uint64(uid), 10))
+	var userErr user.UnknownUserIdError
+	if err != nil && !errors.As(err, &userErr) {
+		// Unexpected error
+		return nil, err
+	}
+	if err == nil {
+		return nil, fmt.Errorf("UID %d already exists", uid)
+	}
+
+	// Check if the user has active processes
+	err = proc.CheckUserBusy(name, oldUser.UID)
+	if err != nil {
+		return nil, err
+	}
+
+	err = m.db.SetUserID(name, uid)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the home directory is currently owned by the user.
+	homeUID, _, err := getHomeDirOwner(oldUser.Dir)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		warning := fmt.Sprintf("Could not get owner of home directory %q", oldUser.Dir)
+		log.Warningf(context.Background(), "%s: %v", warning, err)
+		return []string{warning}, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		// The home directory does not exist, so we don't need to change the owner.
+		log.Debugf(context.Background(), "Home directory %q for user %q does not exist, skipping ownership change", oldUser.Dir, name)
+		return nil, nil
+	}
+
+	if homeUID != oldUser.UID {
+		warning := fmt.Sprintf("Not changing ownership of home directory %q, because it is not owned by UID %d (current owner: %d)", oldUser.Dir, oldUser.UID, homeUID)
+		log.Warning(context.Background(), warning)
+		return []string{warning}, nil
+	}
+
+	// Change the ownership of all files in the home directory from the old UID to the new UID.
+	log.Debugf(context.Background(), "Changing ownership of home directory %q from UID %d to UID %d", oldUser.Dir, oldUser.UID, uid)
+	err = fileutils.ChownRecursiveFrom(oldUser.Dir, oldUser.UID, 0, int32(uid), -1)
+	if err != nil {
+		return nil, err
+	}
+
+	return nil, nil
+}
+
+// SetGroupID updates the GID of the group with the given name to the specified GID.
+func (m *Manager) SetGroupID(name string, gid uint32) (warnings []string, err error) {
+	log.Debugf(context.TODO(), "Updating GID for group %q to %d", name, gid)
+
+	if name == "" {
+		return nil, errors.New("empty group name")
+	}
+
+	if gid > math.MaxInt32 {
+		return nil, fmt.Errorf("GID %d is too large to convert to int32", gid)
+	}
+
+	m.userManagementMu.Lock()
+	defer m.userManagementMu.Unlock()
+
+	// Call lckpwdf to avoid race conditions with other processes which add GIDs
+	err = userslocking.WriteLock()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { err = errors.Join(err, userslocking.WriteUnlock()) }()
+
+	// Check if the group already has the given GID
+	oldGroup, err := m.db.GroupByName(name)
+	if err != nil {
+		return nil, err
+	}
+	if oldGroup.GID == gid {
+		warning := fmt.Sprintf("Group %q already has GID %d", name, gid)
+		log.Info(context.Background(), warning)
+		return []string{warning}, nil
+	}
+
+	// Check if another group already has the given GID
+	_, err = user.LookupGroupId(strconv.FormatUint(uint64(gid), 10))
+	var userErr user.UnknownGroupIdError
+	if err != nil && !errors.As(err, &userErr) {
+		// Unexpected error
+		return nil, err
+	}
+	if err == nil {
+		return nil, fmt.Errorf("GID %d already exists", gid)
+	}
+
+	userRows, err := m.db.SetGroupID(name, gid)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, userRow := range userRows {
+		warning, updateErr := m.updateUserHomeDirOwnership(userRow, oldGroup.GID, int32(gid))
+		if updateErr != nil {
+			err = errors.Join(err, updateErr)
+		}
+		if warning != "" {
+			warnings = append(warnings, warning)
+		}
+	}
+
+	return warnings, err
+}
+
+func (m *Manager) updateUserHomeDirOwnership(userRow db.UserRow, oldGID uint32, newGID int32) (warning string, err error) {
+	// Check if the home directory is currently owned by the group
+	_, homeGID, err := getHomeDirOwner(userRow.Dir)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		warning := fmt.Sprintf("Could not get owner of home directory %q for user %q", userRow.Dir, userRow.Name)
+		log.Warningf(context.Background(), "%s: %v", warning, err)
+		return warning, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		// The home directory does not exist, so we don't need to change the owner.
+		log.Debugf(context.Background(), "Home directory %q for user %q does not exist, skipping ownership change", userRow.Dir, userRow.Name)
+		return "", nil
+	}
+
+	if homeGID != oldGID {
+		warning := fmt.Sprintf("Not changing ownership of home directory %q, because it is not owned by GID %d (current owner: %d)", userRow.Dir, oldGID, homeGID)
+		log.Warning(context.Background(), warning)
+		return warning, nil
+	}
+
+	// Change the ownership of all files in the home directory from the old GID to the new GID.
+	log.Debugf(context.Background(), "Changing ownership of home directory %q from GID %d to GID %d", userRow.Dir, oldGID, newGID)
+	err = fileutils.ChownRecursiveFrom(userRow.Dir, 0, oldGID, -1, newGID)
+	if err != nil {
+		return "", err
+	}
+
+	return "", nil
+}
+
 // checkGroupNameConflict checks if a group with the given name already exists.
 // If it does, it checks if it has the same UGID.
 func (m *Manager) checkGroupNameConflict(name string, ugid string) error {
@@ -409,10 +591,24 @@ func (m *Manager) findGroup(group types.GroupInfo) (oldGroup db.GroupRow, err er
 	return m.db.GroupByName(group.Name)
 }
 
-// checkHomeDirOwnership checks if the home directory of the user is owned by the user and the user's group.
-// If not, it logs a warning.
-func checkHomeDirOwnership(home string, uid, gid uint32) error {
+func getHomeDirOwner(home string) (uid uint32, gid uint32, err error) {
 	fileInfo, err := os.Stat(home)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	sys, ok := fileInfo.Sys().(*syscall.Stat_t)
+	if !ok {
+		return 0, 0, errors.New("failed to get file info")
+	}
+
+	return sys.Uid, sys.Gid, nil
+}
+
+// checkHomeDirOwner checks if the home directory of the user is owned by the user and the user's group.
+// If not, it logs a warning.
+func checkHomeDirOwner(home string, uid, gid uint32) error {
+	oldUID, oldGID, err := getHomeDirOwner(home)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
@@ -420,12 +616,6 @@ func checkHomeDirOwnership(home string, uid, gid uint32) error {
 		// The home directory does not exist, so we don't need to check the owner.
 		return nil
 	}
-
-	sys, ok := fileInfo.Sys().(*syscall.Stat_t)
-	if !ok {
-		return errors.New("failed to get file info")
-	}
-	oldUID, oldGID := sys.Uid, sys.Gid
 
 	// Check if the home directory is owned by the user.
 	if oldUID != uid && oldGID != gid {

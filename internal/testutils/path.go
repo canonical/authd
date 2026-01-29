@@ -80,7 +80,17 @@ func TestFamilyPath(t *testing.T) string {
 func TempDir(t *testing.T) string {
 	t.Helper()
 
-	if v := os.Getenv("SKIP_CLEANUP"); v != "" {
+	skipCleanup := os.Getenv("SKIP_CLEANUP") != ""
+
+	if RunningInBubblewrap() {
+		// When running in bubblewrap, we don't need to cleanup temporary directories
+		// because they only exist inside the bubblewrap sandbox anyway, and we don't
+		// want the tests to fail if the temporary directory cannot be removed for
+		// some reason.
+		skipCleanup = true
+	}
+
+	if skipCleanup {
 		tempDir, err := os.MkdirTemp("", "authd-bwrap-testdata-")
 		require.NoError(t, err, "Setup: could not create temp dir for bwrap test data")
 		return tempDir

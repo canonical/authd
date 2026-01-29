@@ -1,0 +1,64 @@
+users:
+    - name: user2
+      uid: 2222
+      gid: 22222
+      gecos: User2
+      dir: /home/user2
+      shell: /bin/dash
+      broker_id: broker-id
+    - name: user3
+      uid: 3333
+      gid: 33333
+      gecos: User3
+      dir: /home/user3
+      shell: /bin/zsh
+      broker_id: broker-id
+    - name: userwithoutbroker
+      uid: 4444
+      gid: 44444
+      gecos: userwithoutbroker
+      dir: /home/userwithoutbroker
+      shell: /bin/sh
+    - name: user1
+      uid: 54321
+      gid: 11111
+      gecos: |-
+        User1 gecos
+        On multiple lines
+      dir: /home/user1
+      shell: /bin/bash
+      broker_id: broker-id
+groups:
+    - name: group1
+      gid: 11111
+      ugid: "12345678"
+    - name: group2withoutugid
+      gid: 22222
+      ugid: ""
+    - name: group3
+      gid: 33333
+      ugid: "34567812"
+    - name: group4
+      gid: 44444
+      ugid: "45678123"
+    - name: commongroup
+      gid: 99999
+      ugid: "87654321"
+users_to_groups:
+    - uid: 2222
+      gid: 22222
+    - uid: 2222
+      gid: 99999
+    - uid: 3333
+      gid: 33333
+    - uid: 3333
+      gid: 99999
+    - uid: 4444
+      gid: 44444
+    - uid: 4444
+      gid: 99999
+    - uid: 54321
+      gid: 11111
+    - uid: 54321
+      gid: 99999
+schema_version: 2
