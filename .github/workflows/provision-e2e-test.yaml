@@ -63,7 +63,6 @@ jobs:
         if: steps.restore-cache.outputs.cache-hit != 'true'
         run: |
           set -eu
-          sudo chmod +x "${{ env.E2E_TESTS_DIR }}/vm/helpers/virsh"
           export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
           mkdir -p ${{ env.ARTIFACTS_DIR }}
           env VM_NAME_BASE="${{ env.VM_NAME_BASE }}" \
