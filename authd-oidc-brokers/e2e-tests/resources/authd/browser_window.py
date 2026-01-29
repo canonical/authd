@@ -61,7 +61,6 @@ class BrowserWindow(Gtk.Window):
                 and event.type != Gdk.EventType.KEY_RELEASE
             ):
                 return
-            print(f"event: ({event}, {event.keyval})")
             return False
 
         self.web_view.add_events(
@@ -428,6 +427,7 @@ def ascii_string_to_key_events(string):
 def render_video(screenshot_dir: str, video_path: str, framerate: int = 1):
     ExecUtils.check_call([
         "ffmpeg",
+        "-loglevel", "warning",
         "-y",
         "-framerate", str(framerate),
         "-pattern_type", "glob",

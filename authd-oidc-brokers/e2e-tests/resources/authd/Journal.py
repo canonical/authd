@@ -10,6 +10,26 @@ import ExecUtils
 HOST_CID = 2 # 2 always refers to the host
 PORT = 55000
 
+def libvirt_host_ip() -> str:
+    # Get the bridge name for the default libvirt network
+    bridge = ExecUtils.check_output(
+        ["virsh", "net-info", "default"],
+        text=True,
+    ).split("Bridge:")[1].split()[0]
+
+    # Get the IPv4 address assigned to that bridge
+    ip = ExecUtils.check_output(
+        ["ip", "-4", "addr", "show", bridge],
+        text=True,
+    )
+
+    host_ip = next(
+        line.split()[1].split("/")[0]
+        for line in ip.splitlines()
+        if line.strip().startswith("inet ")
+    )
+    return host_ip
+
 @library
 class Journal:
     process = None
@@ -28,10 +48,16 @@ class Journal:
         self.output_dir = os.path.join(output_dir, suite_name, "journal")
         os.makedirs(self.output_dir, exist_ok=True)
 
+        if os.getenv("SYSTEMD_SUPPORTS_VSOCK"):
+            listen_address = f"vsock:{HOST_CID}:{PORT}"
+        else:
+            host_ip = libvirt_host_ip()
+            listen_address = f"{host_ip}:{PORT}"
+
         self.process = ExecUtils.Popen(
             [
                 "/lib/systemd/systemd-journal-remote",
-                f"--listen-raw=vsock:{HOST_CID}:{PORT}",
+                f"--listen-raw={listen_address}",
                 f"--output={self.output_dir}"
             ],
         )

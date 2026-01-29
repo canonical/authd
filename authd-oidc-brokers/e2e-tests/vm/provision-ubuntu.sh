@@ -90,7 +90,7 @@ sudo -v
 # Installing all the packages can take some time, so we set the timeout to 15 minutes
 CLOUT_INIT_TIMEOUT=900
 
-ARTIFACTS_DIR="${DATA_DIR}/${RELEASE}"
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-${DATA_DIR}/${RELEASE}}"
 CLOUD_INIT_TEMPLATE="${SCRIPT_DIR}/cloud-init-template-${RELEASE}.yaml"
 
 if [ -z "${VM_NAME:-}" ]; then
@@ -131,7 +131,7 @@ if [ "${FORCE:-}" = true ]; then
 fi
 
 # Copy and resize the image
-IMAGE="${ARTIFACTS_DIR}/${VM_NAME_BASE}.qcow2"
+IMAGE="${ARTIFACTS_DIR}/${VM_NAME}.qcow2"
 if [ ! -f "${IMAGE}" ]; then
     mkdir -p "${ARTIFACTS_DIR}"
     cp "${SOURCE_IMAGE}" "${IMAGE}"
@@ -147,8 +147,21 @@ if [ ! -f "${CLOUD_INIT_ISO}" ]; then
     CLOUD_INIT_DIR="$(mktemp -d)"
     trap 'rm -rf ${CLOUD_INIT_DIR}' EXIT
 
+    systemd_ver=$(systemctl --version | awk 'NR==1 {print $2}')
+    if dpkg --compare-versions "$systemd_ver" "ge" "256"; then
+        JOURNAL_FORWARD_SOCKET="vsock:2:55000"
+        SOCAT_ADDRESS="VSOCK-CONNECT:2:55000"
+    else
+        iface=$(virsh net-info default | awk '/Bridge:/ {print $2}')
+        ip=$(ip -4 addr show "${iface}" | awk '/inet / {print $2}' | cut -d/ -f1)
+        JOURNAL_FORWARD_SOCKET="${ip}:55000"
+        SOCAT_ADDRESS="TCP:${ip}:55000"
+    fi
+
     SSH_PUBLIC_KEY=$(cat "${SSH_PUBLIC_KEY_FILE}") \
-        envsubst < "${CLOUD_INIT_TEMPLATE}" > "${CLOUD_INIT_DIR}/user-data"
+      JOURNAL_FORWARD_SOCKET="${JOURNAL_FORWARD_SOCKET}" \
+      SOCAT_ADDRESS="${SOCAT_ADDRESS}" \
+      envsubst < "${CLOUD_INIT_TEMPLATE}" > "${CLOUD_INIT_DIR}/user-data"
 
     cloud-localds "${CLOUD_INIT_ISO}" "${CLOUD_INIT_DIR}/user-data"
 else
@@ -193,7 +206,10 @@ if ! cloud_init_finished "${IMAGE}"; then
     echo "Waiting for VM to finish cloud-init setup..."
     script -q -e -f /dev/null -c "virsh console $VM_NAME" &
     VM_CONSOLE_PID=$!
-    virsh await "${VM_NAME}" --condition domain-inactive --timeout "${CLOUT_INIT_TIMEOUT}"
+
+    timeout "${CLOUT_INIT_TIMEOUT}" retry --delay 1 -- \
+      sh -c "sudo virsh domstate \"${VM_NAME}\" | grep -q '^shut off'"
+
     kill "${VM_CONSOLE_PID}" || true
 
     # Detach the cloud-init ISO

@@ -94,7 +94,7 @@ write_files:
 
       [Service]
       Type=simple
-      ExecStart=/bin/bash -o pipefail -c 'journalctl -b --lines=all -o export -f | socat - VSOCK-CONNECT:2:55000'
+      ExecStart=/bin/bash -o pipefail -c 'journalctl -b --lines=all -o export -f | socat - ${SOCAT_ADDRESS}'
       OOMScoreAdjust=-1000
       Restart=always
       RestartSec=1

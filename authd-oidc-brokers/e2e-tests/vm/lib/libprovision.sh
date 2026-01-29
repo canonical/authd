@@ -61,7 +61,7 @@ function wait_for_system_running() {
     retry --times 30 --delay 3 -- "$SSH" -- true
     # shellcheck disable=SC2016
     local cmd='output=$(systemctl is-system-running --wait) || [ $output = degraded ]'
-    retry --times 3 --delay 3 -- timeout 30 -- "$SSH" -- "$cmd"
+    retry --times 3 --delay 3 -- timeout 30 "$SSH" -- "$cmd"
 }
 
 function reboot_system() {

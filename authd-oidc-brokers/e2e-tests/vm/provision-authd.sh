@@ -63,14 +63,14 @@ assert_env_vars RELEASE VM_NAME_BASE BROKERS
 
 IFS=',' read -r -a BROKER_ARRAY <<< "${BROKERS}"
 
-ARTIFACTS_DIR="${DATA_DIR}/${RELEASE}"
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-${DATA_DIR}/${RELEASE}}"
 
 if [ -z "${VM_NAME:-}" ]; then
     VM_NAME="${VM_NAME_BASE}-${RELEASE}"
 fi
 
 # Check if we have all required artifacts
-IMAGE="${ARTIFACTS_DIR}/${VM_NAME_BASE}.qcow2"
+IMAGE="${ARTIFACTS_DIR}/${VM_NAME}.qcow2"
 if [ ! -f "${IMAGE}" ]; then
     echo "Image not found: ${IMAGE}. Please run e2e-tests/vm/provision-ubuntu.sh first."
     exit 1
@@ -158,15 +158,14 @@ else
     # Ensure the VM is running to perform initial setup
     boot_system
     # Create a pre-authd setup snapshot
-    PRE_AUTHD_SNAPSHOT=""
     force_create_snapshot "$PRE_AUTHD_SNAPSHOT"
 fi
 
 # Install authd stable and create a snapshot
-retry --times 3 --delay 1 -- timeout 30 -- "$SSH" -- \
+retry --times 3 --delay 1 -- timeout 30 "$SSH" -- \
   "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd"
 
-timeout 600 -- \
+timeout 600 \
     "$SSH" -- \
     'sudo apt-get install -y authd && \
      sudo mkdir -p /etc/systemd/system/authd.service.d && \
@@ -187,10 +186,10 @@ virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "authd-stable-install
 restore_snapshot_and_sync_time "$PRE_AUTHD_SNAPSHOT"
 
 # Install authd edge and create a snapshot
-retry --times 3 --delay 1 -- timeout 30 -- "$SSH" -- \
+retry --times 3 --delay 1 -- timeout 30 "$SSH" -- \
   "sudo add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd-edge"
 
-timeout 600 -- \
+timeout 600 \
     "$SSH" -- \
     'sudo apt-get install -y authd && \
      sudo mkdir -p /etc/systemd/system/authd.service.d && \

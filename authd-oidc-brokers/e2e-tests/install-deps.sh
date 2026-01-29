@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Install packages required for running the e2e tests
-sudo apt-get -y install \
+sudo apt-get update && sudo apt-get -y install \
     bsdutils \
     ffmpeg \
     gir1.2-webkit2-4.1 \
@@ -17,4 +17,5 @@ sudo apt-get -y install \
     python3-gi \
     python3-tk \
     socat \
+    systemd-journal-remote \
     xvfb

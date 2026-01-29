@@ -7,17 +7,24 @@ import hmac
 import struct
 import time
 
+TIME_WINDOW = 5
+
 def generate_totp(secret: str) -> str:
+    # The code is generated according to the current time and is valid for 30 seconds.
+    # This means that if we generate the code just before the time window changes,
+    # it might be invalid by the time we use it. To avoid this, we make sure the time
+    # is safely within a new window before generating the code.
+    while time.time() % 30 > (30 - TIME_WINDOW):
+        continue
+
     key = base64.b32decode(secret, True)
     msg = struct.pack(">Q", int(time.time()) // 30)
     hashed_obj = hmac.new(key, msg, hashlib.sha1).digest()
     o = hashed_obj[19] & 15
 
-    totp_code = str((struct.unpack(">I", hashed_obj[o:o + 4])[0] & 0x7fffffff) % 1000000)
-    while len(totp_code) != 6:
-        totp_code += '0'
+    totp_code = (struct.unpack(">I", hashed_obj[o:o + 4])[0] & 0x7fffffff) % 1000000
 
-    return totp_code
+    return f"{totp_code:06d}"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

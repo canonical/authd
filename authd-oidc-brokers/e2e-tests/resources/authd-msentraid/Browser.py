@@ -1,18 +1,19 @@
 import os
+import subprocess
 
 from robot.api.deco import keyword, library  # type: ignore
-from robot.libraries.Process import Process
 from robot.api import logger
+
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def run_command(args):
-    result = Process().run_process(args[0], *args[1:])
-    if result.rc == 0:
+    result = subprocess.run(args)
+    if result.returncode == 0:
         return
 
     cmd = " ".join(args)
-    logger.error(f"Command '{cmd}' failed:\n{result.stderr}")
+    logger.error(f"Command '{cmd}' failed with code {result.returncode}:\n{result.stderr}")
 
     raise RuntimeError(f"Command '{cmd}' failed")
 
