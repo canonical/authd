@@ -69,7 +69,7 @@ jobs:
           rm chunk-*
 
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
 
@@ -114,7 +114,7 @@ jobs:
           fi
 
       - name: Checkout YARF repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: adombeck/yarf
           path: ./${{ env.E2E_TESTS_DIR }}/.yarf
