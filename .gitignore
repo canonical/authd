@@ -29,3 +29,6 @@ vendor_rust/
 
 # Go workspace file
 go.work
+
+# Useful for running e2e-tests locally
+e2e-tests/e2e-tests.env
