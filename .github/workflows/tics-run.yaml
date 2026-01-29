@@ -18,7 +18,7 @@ env:
 jobs:
     tics:
         name: TIOBE TICS Framework
-        runs-on: ubuntu-latest
+        runs-on: [self-hosted, amd64, tiobe, noble]
         steps:
             - uses: actions/checkout@v6
             - uses: actions/setup-go@v6
@@ -59,19 +59,13 @@ jobs:
                 path: .artifacts/
                 run-id: ${{ env.LAST_QA_ID }}
 
-            - name: TICS Scan
-              env:
-                TICSAUTHTOKEN: ${{ secrets.TICSAUTHTOKEN }}
-                GH_TOKEN: ${{ github.token }}
+            - name: Build artifacts
               run: |
-                set -e
+                set -eu
 
                 # Move coverage to expected directory
                 mkdir coverage
                 mv .artifacts/coverage/Cobertura.xml coverage/coverage.xml
-
-                # Install TICS
-                . <(curl --silent --show-error 'https://canonical.tiobe.com/tiobeweb/TICS/api/public/v1/fapi/installtics/Script?cfg=GoProjects&platform=linux&url=https://canonical.tiobe.com/tiobeweb/TICS/')
 
                 # TICS needs to build the artifacts in order to run the analysis.
                 # Since it uses the GOTOOLCHAIN=local stanza, it's better if we prebuild it to make sure that the Go
@@ -83,4 +77,12 @@ jobs:
                 go -C ./authd-oidc-brokers build -tags=withmsentraid -o authd-msentraid ./cmd/authd-oidc
                 go -C ./authd-oidc-brokers build -tags=withgoogle -o authd-google ./cmd/authd-oidc
 
-                TICSQServer -project authd -tmpdir /tmp/tics -branchdir .
+            - name: TICS Analysis
+              uses: tiobe/tics-github-action@v3
+              with:
+                mode: qserver
+                project: authd
+                branchdir: .
+                viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=default
+                ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
+                installTics: true
