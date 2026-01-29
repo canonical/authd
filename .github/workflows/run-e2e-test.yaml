@@ -86,7 +86,6 @@ jobs:
       - name: Provision authd and the broker
         run: |
           set -eux
-          sudo chmod +x "${{ env.E2E_TESTS_DIR }}/vm/helpers/virsh"
           export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
           template="./${{ env.E2E_TESTS_DIR }}/vm/e2e-runner-template.xml"
           IMAGE_FILE=${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.release }}.qcow2 \
@@ -130,7 +129,6 @@ jobs:
         id: run-tests
         run: |
           set -eux
-          sudo chmod +x "${{ env.E2E_TESTS_DIR }}/vm/helpers/virsh"
           export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
           if [ "${{ inputs.broker }}" = "authd-msentraid" ]; then
             ./${{ env.E2E_TESTS_DIR }}/run-tests.sh \
