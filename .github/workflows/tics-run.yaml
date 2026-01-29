@@ -14,6 +14,7 @@ env:
     libglib2.0-dev
     libpam-dev
     libpwquality-dev
+    rustup
 
 jobs:
     tics:
@@ -25,11 +26,6 @@ jobs:
               with:
                 go-version-file: go.mod
 
-
-            - name: Update Rust version
-              run: |
-                rustup update stable
-
             - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
             - name: Install dependencies
               run: |
@@ -39,6 +35,10 @@ jobs:
                 sudo apt-get install -y ${{ env.build_dependencies }}
 
                 go install honnef.co/go/tools/cmd/staticcheck@latest
+
+            - name: Update Rust version
+              run: |
+                rustup update
 
             - uses: canonical/desktop-engineering/gh-actions/go/generate@main
               with:
