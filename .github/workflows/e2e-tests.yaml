@@ -1,0 +1,55 @@
+name: Run e2e-tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 1'  # Runs every Monday at midnight
+  pull_request:
+    paths:
+      - '**'
+      - '!.github/workflows/**'
+      - '.github/workflows/run-e2e-test.yaml'
+      - '.github/workflows/provision-e2e-test.yaml'
+      - '.github/workflows/e2e-tests.yaml'
+      - '!.gitignore'
+      - '!.golangci.yaml'
+      - '!AGENTS.md'
+      - '!CODE_OF_CONDUCT.md'
+      - '!CONTRIBUTING.md'
+      - '!COPYING'
+      - '!COPYING.LESSER'
+      - '!README.md'
+      - '!SECURITY.md'
+      - "!authd-oidc-brokers/po/**"
+      - "!authd-oidc-brokers/.gitignore"
+      - '!docs/**'
+      - '!examplebroker/**'
+      - '!gotestcov'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provision-vm:
+    strategy:
+      matrix:
+        release: [noble, questing]
+      fail-fast: false
+    uses: ./.github/workflows/provision-e2e-test.yaml
+    with:
+      release: ${{ matrix.release }}
+    secrets: inherit
+
+  e2e-test:
+    needs: provision-vm
+    strategy:
+      matrix:
+        release: [noble, questing]
+        broker: [authd-msentraid, authd-google]
+      fail-fast: false
+    uses: ./.github/workflows/run-e2e-test.yaml
+    with:
+      release: ${{ matrix.release }}
+      broker: ${{ matrix.broker }}
+    secrets: inherit
