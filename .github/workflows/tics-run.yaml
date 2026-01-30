@@ -73,8 +73,13 @@ jobs:
                 find pam -name '*.so' -print -delete
                 go build ./cmd/authd
                 go -C ./authd-oidc-brokers build -o authd-vanilla ./cmd/authd-oidc
-                go -C ./authd-oidc-brokers build -tags=withmsentraid -o authd-msentraid ./cmd/authd-oidc
                 go -C ./authd-oidc-brokers build -tags=withgoogle -o authd-google ./cmd/authd-oidc
+
+                # We also need to build libhimmelblau when building the msentraid variant
+                git submodule update --init
+                cd ./authd-oidc-brokers
+                go generate --tags=withmsentraid ./internal/providers/msentraid/...
+                go build -tags=withmsentraid -o authd-msentraid ./cmd/authd-oidc
 
             - name: TICS Analysis
               uses: tiobe/tics-github-action@v3
