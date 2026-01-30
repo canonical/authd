@@ -649,6 +649,10 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	}
 	log.Debug(ctx, "Exchanged device code for token.")
 
+	if t.RefreshToken == "" {
+		log.Warningf(context.Background(), "No refresh token returned for user during device authentication. You might have to add the 'offline_access' scope to the 'extra_scopes' setting.")
+	}
+
 	rawIDToken, ok := t.Extra("id_token").(string)
 	if !ok {
 		log.Error(context.Background(), "token response does not contain an ID token")
@@ -761,6 +765,14 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 
 	// Refresh the token if we're online even if the token has not expired
 	if b.cfg.forceProviderAuthentication || !session.isOffline {
+		// Check if we have a refresh token before attempting to refresh
+		if authInfo.Token.RefreshToken == "" {
+			log.Warningf(context.Background(), "No refresh token available for user %q", session.username)
+			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
+			return AuthNext, errorMessage{Message: "Remote authentication failed: No refresh token. Please contact your administrator."}
+		}
+
+		// We have a refresh token, attempt to refresh
 		oldAuthInfo := authInfo
 		authInfo, err = b.refreshToken(ctx, session, authInfo)
 		var retrieveErr *oauth2.RetrieveError
