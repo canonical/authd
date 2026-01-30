@@ -629,6 +629,21 @@ func TestIsAuthenticated(t *testing.T) {
 			wantSecondCall:    true,
 			secondMode:        authmodes.DeviceQr,
 		},
+		"Authenticating_with_password_when_no_refresh_token_results_in_device_auth_as_next_mode": {
+			firstMode:         authmodes.Password,
+			token:             &tokenOptions{noRefreshToken: true},
+			wantNextAuthModes: []string{authmodes.Device, authmodes.DeviceQr},
+			wantSecondCall:    true,
+			secondMode:        authmodes.DeviceQr,
+		},
+		"Authenticating_with_password_still_allowed_if_no_refresh_token_and_server_is_unreachable": {
+			firstMode: authmodes.Password,
+			token:     &tokenOptions{noRefreshToken: true, groups: []info.Group{{Name: "old-group"}}},
+			customHandlers: map[string]testutils.EndpointHandler{
+				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
+			},
+			wantGroups: []info.Group{{Name: "old-group"}},
+		},
 		"Authenticating_with_password_when_provider_authentication_is_forced": {
 			firstMode:                   authmodes.Password,
 			token:                       &tokenOptions{},
@@ -701,6 +716,7 @@ func TestIsAuthenticated(t *testing.T) {
 			},
 		},
 		"Error_when_mode_is_password_and_token_is_invalid":       {firstMode: authmodes.Password, token: &tokenOptions{invalid: true}},
+		"Error_when_mode_is_password_and_no_refresh_token":       {firstMode: authmodes.Password, token: &tokenOptions{noRefreshToken: true}},
 		"Error_when_token_is_expired_and_refreshing_token_fails": {firstMode: authmodes.Password, token: &tokenOptions{expired: true, noRefreshToken: true}},
 		"Error_when_mode_is_password_and_token_refresh_times_out": {firstMode: authmodes.Password, token: &tokenOptions{expired: true},
 			customHandlers: map[string]testutils.EndpointHandler{
