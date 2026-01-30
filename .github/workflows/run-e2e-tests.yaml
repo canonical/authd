@@ -44,7 +44,7 @@ env:
 
 jobs:
   run-tests:
-    name: Run e2e-tests for ${{ inputs.broker }} on ${{ inputs.release }}
+    name: Run e2e-tests (${{ inputs.broker }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
