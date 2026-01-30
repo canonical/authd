@@ -20,7 +20,7 @@ env:
 
 jobs:
   provision-vm:
-    name: Provision VM for e2e-tests (${{ inputs.release }})
+    name: Provision VM
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -39,7 +39,7 @@ jobs:
             e2e-runner-vm-${{ inputs.release }}-${{ hashFiles(
               'e2e-tests/vm/**',
               '.github/actions/e2e-tests/set-up-ssh-keys/**',
-              '.github/workflows/provision-e2e-test.yaml'
+              '.github/workflows/provision-and-run-e2e-tests.yaml'
             ) }}
           fail-on-cache-miss: false
 
@@ -90,7 +90,7 @@ jobs:
             e2e-runner-vm-${{ inputs.release }}-${{ hashFiles(
               'e2e-tests/vm/**',
               '.github/actions/e2e-tests/set-up-ssh-keys/**',
-              '.github/workflows/provision-e2e-test.yaml'
+              '.github/workflows/provision-and-run-e2e-tests.yaml'
             ) }}
 
       - uses: oras-project/setup-oras@v1
@@ -113,3 +113,15 @@ jobs:
           # Push as a layered OCI artifact (each chunk becomes a layer)
           cd "$WORKDIR"
           oras push "${OCI_REPO}:${OCI_TAG}" chunk-* --artifact-type application/vnd.qemu.qcow2
+
+  e2e-test:
+    needs: provision-vm
+    strategy:
+      matrix:
+        broker: [authd-msentraid, authd-google]
+      fail-fast: false
+    uses: ./.github/workflows/run-e2e-tests.yaml
+    with:
+      release: ${{ inputs.release }}
+      broker: ${{ matrix.broker }}
+    secrets: inherit

@@ -1,4 +1,4 @@
-name: Run e2e-tests
+name: e2e-tests
 
 on:
   workflow_dispatch:
@@ -8,8 +8,8 @@ on:
     paths:
       - '**'
       - '!.github/workflows/**'
-      - '.github/workflows/run-e2e-test.yaml'
-      - '.github/workflows/provision-e2e-test.yaml'
+      - '.github/workflows/run-e2e-tests.yaml'
+      - '.github/workflows/provision-and-run-e2e-tests.yaml'
       - '.github/workflows/e2e-tests.yaml'
       - '!.gitignore'
       - '!.golangci.yaml'
@@ -31,25 +31,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  provision-vm:
+  provision-and-run-e2e-tests:
     strategy:
       matrix:
         release: [noble, questing]
       fail-fast: false
-    uses: ./.github/workflows/provision-e2e-test.yaml
+    uses: ./.github/workflows/provision-and-run-e2e-tests.yaml
     with:
       release: ${{ matrix.release }}
-    secrets: inherit
-
-  e2e-test:
-    needs: provision-vm
-    strategy:
-      matrix:
-        release: [noble, questing]
-        broker: [authd-msentraid, authd-google]
-      fail-fast: false
-    uses: ./.github/workflows/run-e2e-test.yaml
-    with:
-      release: ${{ matrix.release }}
-      broker: ${{ matrix.broker }}
     secrets: inherit
