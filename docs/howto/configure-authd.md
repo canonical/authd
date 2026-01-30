@@ -121,9 +121,7 @@ Then {guilabel}`New registration`:
 
 Choose a name for the application, for example "Ubuntu authd", and the
 appropriate account type for your use case. Then click on {guilabel}`Register`
-to create the application. It should look similar to this:
-
-![Registered application.](../assets/entraid-registered-app.png)
+to create the application.
 
 Once registered, note the {guilabel}`Application (client) ID` and the
 {guilabel}`Directory (tenant) ID`. These IDs correspond to the `<CLIENT_ID>` and
