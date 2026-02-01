@@ -18,6 +18,8 @@ import (
 const (
 	// forceProviderAuthenticationKey is the key in the config file for the option to force provider authentication during login.
 	forceProviderAuthenticationKey = "force_provider_authentication"
+	// disableLocalPasswordKey is the key in the config file for the option to disable local password authentication.
+	disableLocalPasswordKey = "disable_local_password"
 
 	// oidcSection is the section name in the config file for the OIDC specific configuration.
 	oidcSection = "oidc"
@@ -80,6 +82,7 @@ type userConfig struct {
 	issuerURL    string
 
 	forceProviderAuthentication bool
+	disableLocalPassword        bool
 	registerDevice              bool
 
 	allowedUsers          map[string]struct{}
@@ -232,6 +235,13 @@ func parseConfig(cfgContent []byte, dropInContent []any, p provider) (userConfig
 			cfg.forceProviderAuthentication, err = oidc.Key(forceProviderAuthenticationKey).Bool()
 			if err != nil {
 				return userConfig{}, fmt.Errorf("error parsing '%s': %w", forceProviderAuthenticationKey, err)
+			}
+		}
+
+		if oidc.HasKey(disableLocalPasswordKey) {
+			cfg.disableLocalPassword, err = oidc.Key(disableLocalPasswordKey).Bool()
+			if err != nil {
+				return userConfig{}, fmt.Errorf("error parsing '%s': %w", disableLocalPasswordKey, err)
 			}
 		}
 	}

@@ -305,6 +305,11 @@ func (b *Broker) availableAuthModes(session session) (availableModes []string, e
 func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 	switch authMode {
 	case authmodes.Password:
+		if b.cfg.disableLocalPassword {
+			log.Debugf(context.Background(), "Local password authentication is disabled")
+			return false
+		}
+
 		if !tokenExists(session) {
 			log.Debugf(context.Background(), "Token does not exist for user %q, so local password authentication is not available", session.username)
 			return false
@@ -716,9 +721,14 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	// Store the auth info in the session so that we can use it when handling the
 	// next IsAuthenticated call for the new password mode.
 	session.authInfo = authInfo
-	session.nextAuthModes = []string{authmodes.NewPassword}
 
-	return AuthNext, nil
+	// Only require password creation if local password authentication is not disabled
+	if !b.cfg.disableLocalPassword {
+		session.nextAuthModes = []string{authmodes.NewPassword}
+		return AuthNext, nil
+	}
+
+	return b.finishAuth(session, authInfo)
 }
 
 func (b *Broker) passwordAuth(ctx context.Context, session *session, secret string) (string, isAuthenticatedDataResponse) {
