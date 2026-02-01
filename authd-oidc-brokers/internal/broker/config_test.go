@@ -28,17 +28,25 @@ issuer = https://issuer.url.com
 client_id = client_id
 force_provider_authentication = true
 extra_scopes = groups,offline_access, some_other_scope
+disable_local_password = true
 
 [users]
 home_base_dir = /home
 allowed_ssh_suffixes = @issuer.url.com
 `,
 
-	"invalid_boolean_value": `
+	"invalid_force_provider_authentication_boolean_value": `
 [oidc]
 issuer = https://issuer.url.com
 client_id = client_id
 force_provider_authentication = invalid
+`,
+
+	"invalid_disable_local_password_boolean_value": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+disable_local_password = invalid
 `,
 
 	"singles": `
@@ -82,12 +90,13 @@ func TestParseConfig(t *testing.T) {
 
 		"Do_not_fail_if_values_contain_a_single_template_delimiter": {configType: "singles"},
 
-		"Error_if_file_does_not_exist":             {configType: "inexistent", wantErr: true},
-		"Error_if_file_is_unreadable":              {configType: "unreadable", wantErr: true},
-		"Error_if_file_is_not_updated":             {configType: "template", wantErr: true},
-		"Error_if_drop_in_directory_is_unreadable": {dropInType: "unreadable-dir", wantErr: true},
-		"Error_if_drop_in_file_is_unreadable":      {dropInType: "unreadable-file", wantErr: true},
-		"Error_if_config_contains_invalid_values":  {configType: "invalid_boolean_value", wantErr: true},
+		"Error_if_file_does_not_exist":                                          {configType: "inexistent", wantErr: true},
+		"Error_if_file_is_unreadable":                                           {configType: "unreadable", wantErr: true},
+		"Error_if_file_is_not_updated":                                          {configType: "template", wantErr: true},
+		"Error_if_drop_in_directory_is_unreadable":                              {dropInType: "unreadable-dir", wantErr: true},
+		"Error_if_drop_in_file_is_unreadable":                                   {dropInType: "unreadable-file", wantErr: true},
+		"Error_if_force_provider_authentication_contains_invalid_boolean_value": {configType: "invalid_force_provider_authentication_boolean_value", wantErr: true},
+		"Error_if_disable_local_password_contains_invalid_boolean_value":        {configType: "invalid_disable_local_password_boolean_value", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {

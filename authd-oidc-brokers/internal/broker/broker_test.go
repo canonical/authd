@@ -537,6 +537,7 @@ func TestIsAuthenticated(t *testing.T) {
 		sessionOffline                     bool
 		username                           string
 		forceProviderAuthentication        bool
+		disableLocalPassword               bool
 		userDoesNotBecomeOwner             bool
 		allUsersAllowed                    bool
 		extraGroups                        []string
@@ -700,6 +701,14 @@ func TestIsAuthenticated(t *testing.T) {
 			},
 			address: "127.0.0.1:31315",
 		},
+		"Authenticating_with_device_auth_completes_without_newpassword_when_local_password_is_disabled": {
+			firstSecret:          "-",
+			disableLocalPassword: true,
+		},
+		"Authenticating_with_qrcode_completes_without_newpassword_when_local_password_is_disabled": {
+			firstSecret:          "-",
+			disableLocalPassword: true,
+		},
 
 		"Error_when_authentication_data_is_invalid":         {invalidAuthData: true},
 		"Error_when_secret_can_not_be_decrypted":            {firstMode: authmodes.Password, badFirstKey: true},
@@ -776,6 +785,17 @@ func TestIsAuthenticated(t *testing.T) {
 			token:          &tokenOptions{deviceIsDisabled: true},
 			sessionOffline: true,
 		},
+		"Error_when_mode_is_password_and_local_password_is_disabled": {
+			firstMode:            authmodes.Password,
+			disableLocalPassword: true,
+			token:                &tokenOptions{},
+		},
+		"Error_when_session_is_for_changing_password_and_local_password_is_disabled": {
+			sessionMode:          sessionmode.ChangePassword,
+			firstMode:            authmodes.Password,
+			disableLocalPassword: true,
+			token:                &tokenOptions{},
+		},
 		"Error_when_mode_is_invalid": {firstMode: "invalid"},
 	}
 	for name, tc := range tests {
@@ -805,6 +825,7 @@ func TestIsAuthenticated(t *testing.T) {
 				firstUserBecomesOwner:       !tc.userDoesNotBecomeOwner,
 				allUsersAllowed:             tc.allUsersAllowed,
 				forceProviderAuthentication: tc.forceProviderAuthentication,
+				disableLocalPassword:        tc.disableLocalPassword,
 				extraGroups:                 tc.extraGroups,
 				ownerExtraGroups:            tc.ownerExtraGroups,
 				supportsDeviceRegistration:  tc.providerSupportsDeviceRegistration,
