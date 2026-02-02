@@ -200,6 +200,7 @@ Log In With Remote User Through GDM: QR Code
 Start Log In With Remote User Through GDM: QR Code
     [Arguments]    ${username}
     Match Text    Not listed    180
+    Fail
     Move Pointer To Not listed
     Left Button Click
 
