@@ -50,6 +50,8 @@ jobs:
       contents: read
       actions: write
       packages: read
+      pages: write
+      id-token: write   # required by actions/deploy-pages
     steps:
       - uses: oras-project/setup-oras@v1
       - name: Download VM image OCI artifact
@@ -162,3 +164,25 @@ jobs:
         with:
           name: e2e-${{ inputs.broker }}-output-${{ inputs.release }}-${{ github.run_id }}
           path: ${{ env.OUTPUT_DIR }}
+
+      - name: Prepare Pages directory
+        if: always()
+        run: |
+          mkdir -p pages
+          cd pages
+          target_dir=pr/${{ github.event.pull_request.number }}/run-${{ github.run_id }}
+          mkdir -p "$target_dir"
+          cp ${{ env.OUTPUT_DIR }}/{log,report}.html "$target_dir"
+          OWNER="${{ github.repository_owner }}"
+          REPO="$(basename "${{ github.repository }}")"
+          echo "https://$OWNER.github.io/$REPO/$target_dir"
+
+      - name: Upload Pages artifact
+        if: always()
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages
+
+      - name: Publish test results
+        if: always()
+        uses: actions/deploy-pages@v4
