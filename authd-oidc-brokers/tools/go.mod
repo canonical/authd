@@ -2,7 +2,7 @@ module github.com/canonical/authd/authd-oidc-brokers/tools
 
 go 1.24.0
 
-toolchain go1.24.11
+toolchain go1.24.12
 
 require (
 	github.com/golangci/golangci-lint/v2 v2.8.0
