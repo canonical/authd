@@ -17,6 +17,7 @@ env:
   VM_NAME_BASE: e2e-runner
   ARTIFACTS_DIR: /tmp/e2e-artifacts
   E2E_TESTS_DIR: e2e-tests
+  OCI_REPO: ghcr.io/${{ github.repository }}/e2e-runner
 
 jobs:
   provision-vm:
@@ -29,6 +30,10 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
+
+      - name: Compute OCI tag
+        id: compute-oci-tag
+        run: echo "oci_tag=$(echo ${{ hashFiles('e2e-tests/vm/**','.github/actions/e2e-tests/set-up-ssh-keys/**','.github/workflows/provision-and-run-e2e-tests.yaml') }})" >> $GITHUB_OUTPUT
 
       - name: Restore cached VM image (if available)
         id: restore-cache
@@ -98,8 +103,6 @@ jobs:
         if: steps.provision-vm.outcome == 'success' || steps.restore-cache.outputs.cache-hit == 'true'
         env:
           IMAGE_PATH: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.release }}.qcow2
-          OCI_REPO: ghcr.io/${{ github.repository }}/e2e-runner
-          OCI_TAG: ${{ inputs.release }}
         run: |
           set -euo pipefail
           
@@ -112,6 +115,7 @@ jobs:
 
           # Push as a layered OCI artifact (each chunk becomes a layer)
           cd "$WORKDIR"
+          OCI_TAG=${{ steps.compute-oci-tag.outputs.oci_tag }}
           oras push "${OCI_REPO}:${OCI_TAG}" chunk-* --artifact-type application/vnd.qemu.qcow2
 
   e2e-test:
