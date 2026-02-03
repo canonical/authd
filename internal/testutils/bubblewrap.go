@@ -72,6 +72,7 @@ func RunTestInBubbleWrap(t *testing.T, args ...string) {
 	env := []string{
 		"PATH=" + MinimalPathEnv,
 		bubbleWrapTestEnvVar + "=1",
+		golden.UpdateGoldenFilesEnv + "=" + os.Getenv(golden.UpdateGoldenFilesEnv),
 	}
 	env = AppendCovEnv(env)
 
