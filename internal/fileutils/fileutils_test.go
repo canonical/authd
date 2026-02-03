@@ -405,10 +405,8 @@ func TestChownRecursiveFrom(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		fromUID            uint32
-		fromGID            uint32
-		toUID              int32
-		toGID              int32
+		uidArgs            *fileutils.ChownUIDArgs
+		gidArgs            *fileutils.ChownGIDArgs
 		readOnlyFilesystem bool
 		fileUID            uint32
 		fileGID            uint32
@@ -418,24 +416,74 @@ func TestChownRecursiveFrom(t *testing.T) {
 		wantError      bool
 		wantErrorMatch string
 	}{
-		"Successfully_change_owner":                      {fromUID: 0, fromGID: 0, toUID: 1, toGID: -1},
-		"Successfully_change_group":                      {fromUID: 0, fromGID: 0, toUID: -1, toGID: 1},
-		"Successfully_change_owner_and_group":            {fromUID: 0, fromGID: 0, toUID: 1, toGID: 1},
-		"Group_not_changed_when_GID_does_not_match":      {fromUID: 0, fromGID: 2, toUID: 1, toGID: 1},
-		"Owner_not_changed_when_UID_does_not_match":      {fromUID: 2, fromGID: 0, toUID: 1, toGID: 1},
-		"Change_only_the_file_owner":                     {fromUID: 2, fromGID: 2, toUID: 1, toGID: 1, fileUID: 2},
-		"Change_only_the_file_group":                     {fromUID: 2, fromGID: 2, toUID: 1, toGID: 1, fileGID: 2},
-		"Change_only_the_file_owner_and_group":           {fromUID: 2, fromGID: 2, toUID: 1, toGID: 1, fileUID: 2, fileGID: 2},
-		"Change_only_the_directory_owner":                {fromUID: 2, fromGID: 2, toUID: 1, toGID: 1, dirUID: 2},
-		"Change_only_the_directory_group":                {fromUID: 2, fromGID: 2, toUID: 1, toGID: 1, dirGID: 2},
-		"Change_only_the_directory_owner_and_group":      {fromUID: 2, fromGID: 2, toUID: 1, toGID: 1, dirUID: 2, dirGID: 2},
-		"No_change_if_ownership_is_same_as_current":      {fromUID: 2, fromGID: 2, toUID: 0, toGID: 0},
-		"No_change_if_no_file_matches_fromUID":           {fromUID: 1, toUID: 0, toGID: 0},
-		"No_change_if_no_file_matches_fromGID":           {fromGID: 1, toUID: 0, toGID: 0},
-		"No_change_if_toUID_and_toGID_are_both_negative": {fromUID: 0, fromGID: 0, toUID: -1, toGID: -1},
+		"Successfully_change_owner": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 0, ToUID: 1},
+		},
+		"Successfully_change_group": {
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 0, ToGID: 1},
+		},
+		"Successfully_change_owner_and_group": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 0, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 0, ToGID: 1},
+		},
+		"Group_not_changed_when_GID_does_not_match": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 0, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 1},
+		},
+		"Owner_not_changed_when_UID_does_not_match": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 0, ToGID: 1},
+		},
+		"Change_only_the_file_owner": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 1},
+			fileUID: 2,
+		},
+		"Change_only_the_file_group": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 1},
+			fileGID: 2,
+		},
+		"Change_only_the_file_owner_and_group": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 1},
+			fileUID: 2,
+			fileGID: 2,
+		},
+		"Change_only_the_directory_owner": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 1},
+			dirUID:  2,
+		},
+		"Change_only_the_directory_group": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 1},
+			dirGID:  2,
+		},
+		"Change_only_the_directory_owner_and_group": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 1},
+			dirUID:  2,
+			dirGID:  2,
+		},
+		"No_change_if_ownership_is_same_as_current": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 0},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 0},
+		},
+		"No_change_if_no_file_matches_fromUID": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 1, ToUID: 0},
+		},
+		"No_change_if_no_file_matches_fromGID": {
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 1, ToGID: 0},
+		},
+		"No_change_if_UID_args_and_GID_args_are_both_nil": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 0},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 0},
+		},
 
 		"Error_when_filesystem_is_read_only": {
-			toUID: 1, readOnlyFilesystem: true, wantError: true, wantErrorMatch: "read-only file system",
+			uidArgs:            &fileutils.ChownUIDArgs{FromUID: 0, ToUID: 1},
+			readOnlyFilesystem: true, wantError: true, wantErrorMatch: "read-only file system",
 		},
 	}
 	for name, tc := range tests {
@@ -483,7 +531,7 @@ func TestChownRecursiveFrom(t *testing.T) {
 				}()
 			}
 
-			err = fileutils.ChownRecursiveFrom(targetDir, tc.fromUID, tc.fromGID, tc.toUID, tc.toGID)
+			err = fileutils.ChownRecursiveFrom(targetDir, tc.uidArgs, tc.gidArgs)
 			t.Logf("ChownRecursiveFrom error: %v", err)
 			if tc.wantError {
 				require.Error(t, err)

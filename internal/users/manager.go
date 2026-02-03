@@ -446,7 +446,11 @@ func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err err
 
 	// Change the ownership of all files in the home directory from the old UID to the new UID.
 	log.Debugf(context.Background(), "Changing ownership of home directory %q from UID %d to UID %d", oldUser.Dir, oldUser.UID, uid)
-	err = fileutils.ChownRecursiveFrom(oldUser.Dir, oldUser.UID, 0, int32(uid), -1)
+	err = fileutils.ChownRecursiveFrom(
+		oldUser.Dir,
+		&fileutils.ChownUIDArgs{FromUID: oldUser.UID, ToUID: uid},
+		nil,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -504,7 +508,7 @@ func (m *Manager) SetGroupID(name string, gid uint32) (warnings []string, err er
 	}
 
 	for _, userRow := range userRows {
-		warning, updateErr := m.updateUserHomeDirOwnership(userRow, oldGroup.GID, int32(gid))
+		warning, updateErr := m.updateUserHomeDirOwnership(userRow, oldGroup.GID, gid)
 		if updateErr != nil {
 			err = errors.Join(err, updateErr)
 		}
@@ -516,7 +520,7 @@ func (m *Manager) SetGroupID(name string, gid uint32) (warnings []string, err er
 	return warnings, err
 }
 
-func (m *Manager) updateUserHomeDirOwnership(userRow db.UserRow, oldGID uint32, newGID int32) (warning string, err error) {
+func (m *Manager) updateUserHomeDirOwnership(userRow db.UserRow, oldGID uint32, newGID uint32) (warning string, err error) {
 	// Check if the home directory is currently owned by the group
 	_, homeGID, err := getHomeDirOwner(userRow.Dir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -538,7 +542,11 @@ func (m *Manager) updateUserHomeDirOwnership(userRow db.UserRow, oldGID uint32, 
 
 	// Change the ownership of all files in the home directory from the old GID to the new GID.
 	log.Debugf(context.Background(), "Changing ownership of home directory %q from GID %d to GID %d", userRow.Dir, oldGID, newGID)
-	err = fileutils.ChownRecursiveFrom(userRow.Dir, 0, oldGID, -1, newGID)
+	err = fileutils.ChownRecursiveFrom(
+		userRow.Dir,
+		nil,
+		&fileutils.ChownGIDArgs{FromGID: oldGID, ToGID: newGID},
+	)
 	if err != nil {
 		return "", err
 	}

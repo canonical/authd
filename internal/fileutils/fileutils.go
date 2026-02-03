@@ -132,6 +132,18 @@ func LockDir(dir string) (func() error, error) {
 	return unlock, nil
 }
 
+// ChownUIDArgs is used to specify the UID to change ownership from and to.
+type ChownUIDArgs struct {
+	FromUID uint32
+	ToUID   uint32
+}
+
+// ChownGIDArgs is used to specify the GID to change group ownership from and to.
+type ChownGIDArgs struct {
+	FromGID uint32
+	ToGID   uint32
+}
+
 // ChownRecursiveFrom changes ownership of files and directories under the
 // specified root directory from the current UID/GID (fromUID, fromGID) to the
 // new UID/GID (toUID, toGID).
@@ -141,9 +153,9 @@ func LockDir(dir string) (func() error, error) {
 //
 // Symlinks are not followed.
 //
-// If toUID or toGID is negative, the UID or GID is not changed.
-func ChownRecursiveFrom(root string, fromUID, fromGID uint32, toUID, toGID int32) error {
-	if toUID < 0 && toGID < 0 {
+// If uidArgs/gidArgs is nil, change of ownership for UID/GID is skipped.
+func ChownRecursiveFrom(root string, uidArgs *ChownUIDArgs, gidArgs *ChownGIDArgs) error {
+	if uidArgs == nil && gidArgs == nil {
 		return nil
 	}
 
@@ -161,14 +173,14 @@ func ChownRecursiveFrom(root string, fromUID, fromGID uint32, toUID, toGID int32
 			return fmt.Errorf("failed to get raw stat for %q", path)
 		}
 
-		if toUID >= 0 && stat.Uid == fromUID {
-			if err := os.Lchown(path, int(toUID), -1); err != nil {
+		if uidArgs != nil && stat.Uid == uidArgs.FromUID {
+			if err := os.Lchown(path, int(uidArgs.ToUID), -1); err != nil {
 				return fmt.Errorf("failed to change ownership: %w", err)
 			}
 		}
 
-		if toGID >= 0 && stat.Gid == fromGID {
-			if err := os.Lchown(path, -1, int(toGID)); err != nil {
+		if gidArgs != nil && stat.Gid == gidArgs.FromGID {
+			if err := os.Lchown(path, -1, int(gidArgs.ToGID)); err != nil {
 				return fmt.Errorf("failed to change group ownership: %w", err)
 			}
 		}
