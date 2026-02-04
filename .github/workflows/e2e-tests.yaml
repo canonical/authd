@@ -1,0 +1,42 @@
+name: e2e-tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 1'  # Runs every Monday at midnight
+  pull_request:
+    paths:
+      - '**'
+      - '!.github/workflows/**'
+      - '.github/workflows/run-e2e-tests.yaml'
+      - '.github/workflows/provision-and-run-e2e-tests.yaml'
+      - '.github/workflows/e2e-tests.yaml'
+      - '!.gitignore'
+      - '!.golangci.yaml'
+      - '!AGENTS.md'
+      - '!CODE_OF_CONDUCT.md'
+      - '!CONTRIBUTING.md'
+      - '!COPYING'
+      - '!COPYING.LESSER'
+      - '!README.md'
+      - '!SECURITY.md'
+      - "!authd-oidc-brokers/po/**"
+      - "!authd-oidc-brokers/.gitignore"
+      - '!docs/**'
+      - '!examplebroker/**'
+      - '!gotestcov'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  provision-and-run-e2e-tests:
+    strategy:
+      matrix:
+        release: [noble, questing]
+      fail-fast: false
+    uses: ./.github/workflows/provision-and-run-e2e-tests.yaml
+    with:
+      release: ${{ matrix.release }}
+    secrets: inherit
