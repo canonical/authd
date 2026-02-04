@@ -11,6 +11,9 @@ import (
 
 // UpdateUserEntry inserts or updates user and group records from the user information.
 func (m *Manager) UpdateUserEntry(user UserRow, authdGroups []GroupRow, localGroups []string) (err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// Start a transaction
 	tx, err := m.db.Begin()
 	if err != nil {
@@ -160,6 +163,9 @@ func handleUsersToLocalGroupsUpdate(db queryable, uid uint32, localGroups []stri
 
 // UpdateBrokerForUser updates the last broker the user successfully authenticated with.
 func (m *Manager) UpdateBrokerForUser(username, brokerID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	query := `UPDATE users SET broker_id = ? WHERE name = ?`
 	res, err := m.db.Exec(query, brokerID, username)
 	if err != nil {
@@ -178,6 +184,9 @@ func (m *Manager) UpdateBrokerForUser(username, brokerID string) error {
 
 // UpdateLockedFieldForUser sets the "locked" field of a user record.
 func (m *Manager) UpdateLockedFieldForUser(username string, locked bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	query := `UPDATE users SET locked = ? WHERE name = ?`
 	res, err := m.db.Exec(query, locked, username)
 	if err != nil {
@@ -196,6 +205,9 @@ func (m *Manager) UpdateLockedFieldForUser(username string, locked bool) error {
 
 // SetUserID updates the UID of a user.
 func (m *Manager) SetUserID(username string, newUID uint32) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// Temporarily disable foreign key constraints to allow updating the UID without violating constraints.
 	// SQLite does not allow disabling foreign key constraints in a transaction,
 	// so we do it before starting the transaction. See https://www.sqlite.org/foreignkeys.html#fk_enable
@@ -264,6 +276,9 @@ func (m *Manager) SetUserID(username string, newUID uint32) error {
 
 // SetGroupID updates the GID of a group and returns the list of users whose primary group was updated.
 func (m *Manager) SetGroupID(groupName string, newGID uint32) ([]UserRow, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// Temporarily disable foreign key constraints to allow updating the GID without violating constraints.
 	// SQLite does not allow disabling foreign key constraints in a transaction,
 	// so we do it before starting the transaction. See https://www.sqlite.org/foreignkeys.html#fk_enable
