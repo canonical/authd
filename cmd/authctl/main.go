@@ -2,10 +2,10 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/canonical/authd/cmd/authctl/group"
+	"github.com/canonical/authd/cmd/authctl/internal/log"
 	"github.com/canonical/authd/cmd/authctl/user"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
@@ -44,16 +44,16 @@ func main() {
 		s, ok := status.FromError(err)
 		if !ok {
 			// If the error is not a gRPC status, we print it as is.
-			fmt.Fprintln(os.Stderr, err.Error())
+			log.Error(err.Error())
 			os.Exit(1)
 		}
 
 		// If the error is a gRPC status, we print the message and exit with the gRPC status code.
 		switch s.Code() {
 		case codes.PermissionDenied:
-			fmt.Fprintln(os.Stderr, "Permission denied:", s.Message())
+			log.Errorf("Permission denied: %s", s.Message())
 		default:
-			fmt.Fprintln(os.Stderr, "Error:", s.Message())
+			log.Errorf("Error: %s", s.Message())
 		}
 		code := int(s.Code())
 		if code < 0 || code > 255 {

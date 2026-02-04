@@ -9,6 +9,7 @@ import (
 
 	"github.com/canonical/authd/cmd/authctl/internal/client"
 	"github.com/canonical/authd/cmd/authctl/internal/completion"
+	"github.com/canonical/authd/cmd/authctl/internal/log"
 	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/spf13/cobra"
 )
@@ -65,7 +66,7 @@ Examples:
 
 		// Print any warnings returned by the server.
 		for _, warning := range resp.Warnings {
-			fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
+			log.Warning(warning)
 		}
 
 		return nil
