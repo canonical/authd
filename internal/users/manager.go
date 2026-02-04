@@ -398,7 +398,7 @@ func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err err
 	}
 	// Check if the user already has the given UID
 	if oldUser.UID == uid {
-		warning := fmt.Sprintf("User %q already has UID %d", name, uid)
+		warning := fmt.Sprintf("User '%s' already has UID %d", name, uid)
 		log.Info(context.Background(), warning)
 		return []string{warning}, nil
 	}
@@ -428,7 +428,7 @@ func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err err
 	// Check if the home directory is currently owned by the user.
 	homeUID, _, err := getHomeDirOwner(oldUser.Dir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		warning := fmt.Sprintf("Could not get owner of home directory %q", oldUser.Dir)
+		warning := fmt.Sprintf("Could not get owner of home directory '%s'", oldUser.Dir)
 		log.Warningf(context.Background(), "%s: %v", warning, err)
 		return []string{warning}, nil
 	}
@@ -439,7 +439,7 @@ func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err err
 	}
 
 	if homeUID != oldUser.UID {
-		warning := fmt.Sprintf("Not changing ownership of home directory %q, because it is not owned by UID %d (current owner: %d)", oldUser.Dir, oldUser.UID, homeUID)
+		warning := fmt.Sprintf("Not changing ownership of home directory '%s', because it is not owned by UID %d (current owner: %d)", oldUser.Dir, oldUser.UID, homeUID)
 		log.Warning(context.Background(), warning)
 		return []string{warning}, nil
 	}
@@ -486,7 +486,7 @@ func (m *Manager) SetGroupID(name string, gid uint32) (warnings []string, err er
 		return nil, err
 	}
 	if oldGroup.GID == gid {
-		warning := fmt.Sprintf("Group %q already has GID %d", name, gid)
+		warning := fmt.Sprintf("Group '%s' already has GID %d", name, gid)
 		log.Info(context.Background(), warning)
 		return []string{warning}, nil
 	}
@@ -524,7 +524,7 @@ func (m *Manager) updateUserHomeDirOwnership(userRow db.UserRow, oldGID uint32, 
 	// Check if the home directory is currently owned by the group
 	_, homeGID, err := getHomeDirOwner(userRow.Dir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		warning := fmt.Sprintf("Could not get owner of home directory %q for user %q", userRow.Dir, userRow.Name)
+		warning := fmt.Sprintf("Could not get owner of home directory '%s' for user '%s'", userRow.Dir, userRow.Name)
 		log.Warningf(context.Background(), "%s: %v", warning, err)
 		return warning, nil
 	}
@@ -535,7 +535,7 @@ func (m *Manager) updateUserHomeDirOwnership(userRow db.UserRow, oldGID uint32, 
 	}
 
 	if homeGID != oldGID {
-		warning := fmt.Sprintf("Not changing ownership of home directory %q, because it is not owned by GID %d (current owner: %d)", userRow.Dir, oldGID, homeGID)
+		warning := fmt.Sprintf("Not changing ownership of home directory '%s', because it is not owned by GID %d (current owner: %d)", userRow.Dir, oldGID, homeGID)
 		log.Warning(context.Background(), warning)
 		return warning, nil
 	}

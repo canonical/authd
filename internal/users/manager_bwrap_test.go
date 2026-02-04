@@ -134,11 +134,11 @@ func TestSetUserID(t *testing.T) {
 
 			// To make the tests deterministic, we replace the temporary home directory path with a placeholder
 			for i, w := range warnings {
-				if regexp.MustCompile(`Could not get owner of home directory "([^"]+)"`).MatchString(w) {
-					warnings[i] = `Could not get owner of home directory "{{HOME}}"`
+				if regexp.MustCompile(`Could not get owner of home directory '([^"]+)'`).MatchString(w) {
+					warnings[i] = `Could not get owner of home directory '{{HOME}}'`
 				}
-				if regexp.MustCompile(`Not changing ownership of home directory "([^"]+)", because it is not owned by UID \d+ \(current owner: \d+\)`).MatchString(w) {
-					warnings[i] = `Not changing ownership of home directory "{{HOME}}", because it is not owned by UID {{UID}} (current owner: {{CURR_UID}})`
+				if regexp.MustCompile(`Not changing ownership of home directory '([^"]+)', because it is not owned by UID \d+ \(current owner: \d+\)`).MatchString(w) {
+					warnings[i] = `Not changing ownership of home directory '{{HOME}}', because it is not owned by UID {{UID}} (current owner: {{CURR_UID}})`
 				}
 			}
 
@@ -273,11 +273,11 @@ func TestSetGroupID(t *testing.T) {
 
 			// To make the tests deterministic, we replace the temporary home directory path with a placeholder
 			for i, w := range warnings {
-				if regexp.MustCompile(`Could not get owner of home directory "([^"]+)"`).MatchString(w) {
-					warnings[i] = `Could not get owner of home directory "{{HOME}}"`
+				if regexp.MustCompile(`Could not get owner of home directory '([^"]+)'`).MatchString(w) {
+					warnings[i] = `Could not get owner of home directory '{{HOME}}'`
 				}
-				if regexp.MustCompile(`Not changing ownership of home directory "([^"]+)", because it is not owned by GID \d+ \(current owner: \d+\)`).MatchString(w) {
-					warnings[i] = `Not changing ownership of home directory "{{HOME}}", because it is not owned by GID {{GID}} (current owner: {{CURR_GID}})`
+				if regexp.MustCompile(`Not changing ownership of home directory '([^"]+)', because it is not owned by GID \d+ \(current owner: \d+\)`).MatchString(w) {
+					warnings[i] = `Not changing ownership of home directory '{{HOME}}', because it is not owned by GID {{GID}} (current owner: {{CURR_GID}})`
 				}
 			}
 
