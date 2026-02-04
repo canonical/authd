@@ -1,1 +1,2 @@
 GID of group 'group1' set to 123456.
+Note: Ownership of files outside the user's home directory are not updated and must be changed manually.

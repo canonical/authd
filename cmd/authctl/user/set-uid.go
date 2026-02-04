@@ -69,6 +69,7 @@ Examples:
 			if resp.HomeDirOwnerChanged {
 				log.Info("Updated ownership of the user's home directory.")
 			}
+			log.Info("Note: Ownership of files outside the user's home directory are not updated and must be changed manually.")
 		}
 
 		// Print any warnings returned by the server.
