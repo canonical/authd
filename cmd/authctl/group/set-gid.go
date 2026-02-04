@@ -61,15 +61,22 @@ Examples:
 			Id:   uint32(gid),
 			Lang: os.Getenv("LANG"),
 		})
-		if err != nil {
+		if resp == nil {
 			return err
+		}
+
+		if resp.IdChanged {
+			log.Infof("GID of group '%s' set to %d.", name, gid)
+			if resp.HomeDirOwnerChanged {
+				log.Info("Updated ownership of the user's home directory.")
+			}
 		}
 
 		// Print any warnings returned by the server.
 		for _, warning := range resp.Warnings {
-			log.Warningf("Warning: %s", warning)
+			log.Warning(warning)
 		}
 
-		return nil
+		return err
 	},
 }

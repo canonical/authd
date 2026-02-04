@@ -60,8 +60,15 @@ Examples:
 			Id:   uint32(uid),
 			Lang: os.Getenv("LANG"),
 		})
-		if err != nil {
+		if resp == nil {
 			return err
+		}
+
+		if resp.IdChanged {
+			log.Infof("UID of user '%s' set to %d.", name, uid)
+			if resp.HomeDirOwnerChanged {
+				log.Info("Updated ownership of the user's home directory.")
+			}
 		}
 
 		// Print any warnings returned by the server.
@@ -69,7 +76,7 @@ Examples:
 			log.Warning(warning)
 		}
 
-		return nil
+		return err
 	},
 }
 

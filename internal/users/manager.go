@@ -369,9 +369,17 @@ func compareNewUserInfoWithUserInfoFromDB(newUserInfo, dbUserInfo types.UserInfo
 	return dbUserInfo.Equals(newUserInfo)
 }
 
+// SetUserIDResp is the response type of SetUserID.
+type SetUserIDResp struct {
+	IDChanged           bool
+	HomeDirOwnerChanged bool
+	Warnings            []string
+}
+
 // SetUserID updates the UID of the user with the given name to the specified UID.
-func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err error) {
+func (m *Manager) SetUserID(name string, uid uint32) (resp *SetUserIDResp, err error) {
 	log.Debugf(context.TODO(), "Updating UID for user %q to %d", name, uid)
+	resp = &SetUserIDResp{}
 
 	if name == "" {
 		return nil, errors.New("empty username")
@@ -400,7 +408,8 @@ func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err err
 	if oldUser.UID == uid {
 		warning := fmt.Sprintf("User '%s' already has UID %d.", name, uid)
 		log.Info(context.Background(), warning)
-		return []string{warning}, nil
+		resp.Warnings = append(resp.Warnings, warning)
+		return resp, nil
 	}
 
 	// Check if another user already has the given UID
@@ -424,24 +433,27 @@ func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err err
 	if err != nil {
 		return nil, err
 	}
+	resp.IDChanged = true
 
 	// Check if the home directory is currently owned by the user.
 	homeUID, _, err := getHomeDirOwner(oldUser.Dir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		warning := fmt.Sprintf("Could not get owner of home directory '%s'.", oldUser.Dir)
 		log.Warningf(context.Background(), "%s: %v", warning, err)
-		return []string{warning}, nil
+		resp.Warnings = append(resp.Warnings, warning)
+		return resp, nil
 	}
 	if errors.Is(err, os.ErrNotExist) {
 		// The home directory does not exist, so we don't need to change the owner.
 		log.Debugf(context.Background(), "Home directory %q for user %q does not exist, skipping ownership change", oldUser.Dir, name)
-		return nil, nil
+		return resp, nil
 	}
 
 	if homeUID != oldUser.UID {
 		warning := fmt.Sprintf("Not updating ownership of home directory '%s' because it is not owned by UID %d (current owner: %d).", oldUser.Dir, oldUser.UID, homeUID)
 		log.Warning(context.Background(), warning)
-		return []string{warning}, nil
+		resp.Warnings = append(resp.Warnings, warning)
+		return resp, nil
 	}
 
 	// Change the ownership of all files in the home directory from the old UID to the new UID.
@@ -452,15 +464,24 @@ func (m *Manager) SetUserID(name string, uid uint32) (warnings []string, err err
 		nil,
 	)
 	if err != nil {
-		return nil, err
+		return resp, err
 	}
+	resp.HomeDirOwnerChanged = true
 
-	return nil, nil
+	return resp, nil
+}
+
+// SetGroupIDResp is the response type of SetGroupID.
+type SetGroupIDResp struct {
+	IDChanged           bool
+	HomeDirOwnerChanged bool
+	Warnings            []string
 }
 
 // SetGroupID updates the GID of the group with the given name to the specified GID.
-func (m *Manager) SetGroupID(name string, gid uint32) (warnings []string, err error) {
+func (m *Manager) SetGroupID(name string, gid uint32) (resp *SetGroupIDResp, err error) {
 	log.Debugf(context.TODO(), "Updating GID for group %q to %d", name, gid)
+	resp = &SetGroupIDResp{}
 
 	if name == "" {
 		return nil, errors.New("empty group name")
@@ -488,7 +509,8 @@ func (m *Manager) SetGroupID(name string, gid uint32) (warnings []string, err er
 	if oldGroup.GID == gid {
 		warning := fmt.Sprintf("Group '%s' already has GID %d.", name, gid)
 		log.Info(context.Background(), warning)
-		return []string{warning}, nil
+		resp.Warnings = append(resp.Warnings, warning)
+		return resp, nil
 	}
 
 	// Check if another group already has the given GID
@@ -506,38 +528,40 @@ func (m *Manager) SetGroupID(name string, gid uint32) (warnings []string, err er
 	if err != nil {
 		return nil, err
 	}
+	resp.IDChanged = true
 
 	for _, userRow := range userRows {
-		warning, updateErr := m.updateUserHomeDirOwnership(userRow, oldGroup.GID, gid)
+		changed, warning, updateErr := m.updateUserHomeDirOwnership(userRow, oldGroup.GID, gid)
 		if updateErr != nil {
 			err = errors.Join(err, updateErr)
 		}
 		if warning != "" {
-			warnings = append(warnings, warning)
+			resp.Warnings = append(resp.Warnings, warning)
 		}
+		resp.HomeDirOwnerChanged = changed
 	}
 
-	return warnings, err
+	return resp, err
 }
 
-func (m *Manager) updateUserHomeDirOwnership(userRow db.UserRow, oldGID uint32, newGID uint32) (warning string, err error) {
+func (m *Manager) updateUserHomeDirOwnership(userRow db.UserRow, oldGID uint32, newGID uint32) (changed bool, warning string, err error) {
 	// Check if the home directory is currently owned by the group
 	_, homeGID, err := getHomeDirOwner(userRow.Dir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		warning := fmt.Sprintf("Could not get owner of home directory '%s' for user '%s'.", userRow.Dir, userRow.Name)
 		log.Warningf(context.Background(), "%s: %v", warning, err)
-		return warning, nil
+		return false, warning, nil
 	}
 	if errors.Is(err, os.ErrNotExist) {
 		// The home directory does not exist, so we don't need to change the owner.
 		log.Debugf(context.Background(), "Home directory %q for user %q does not exist, skipping ownership change", userRow.Dir, userRow.Name)
-		return "", nil
+		return false, "", nil
 	}
 
 	if homeGID != oldGID {
 		warning := fmt.Sprintf("Not updating ownership of home directory '%s' because it is not owned by GID %d (current owner: %d).", userRow.Dir, oldGID, homeGID)
 		log.Warning(context.Background(), warning)
-		return warning, nil
+		return false, warning, nil
 	}
 
 	// Change the ownership of all files in the home directory from the old GID to the new GID.
@@ -548,10 +572,10 @@ func (m *Manager) updateUserHomeDirOwnership(userRow db.UserRow, oldGID uint32, 
 		&fileutils.ChownGIDArgs{FromGID: oldGID, ToGID: newGID},
 	)
 	if err != nil {
-		return "", err
+		return false, "", err
 	}
 
-	return "", nil
+	return true, "", nil
 }
 
 // checkGroupNameConflict checks if a group with the given name already exists.

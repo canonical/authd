@@ -231,13 +231,17 @@ func (s Service) SetUserID(ctx context.Context, req *authd.SetUserIDRequest) (*a
 		return nil, status.Error(codes.InvalidArgument, "no user name provided")
 	}
 
-	warnings, err := s.userManager.SetUserID(name, req.GetId())
+	resp, err := s.userManager.SetUserID(name, req.GetId())
 	if err != nil {
 		log.Errorf(ctx, "SetUserID: %v", err)
 		return nil, grpcError(err)
 	}
 
-	return &authd.SetUserIDResponse{Warnings: warnings}, nil
+	return &authd.SetUserIDResponse{
+		IdChanged:           resp.IDChanged,
+		HomeDirOwnerChanged: resp.HomeDirOwnerChanged,
+		Warnings:            resp.Warnings,
+	}, nil
 }
 
 // SetGroupID sets the GID of a group.
@@ -253,13 +257,17 @@ func (s Service) SetGroupID(ctx context.Context, req *authd.SetGroupIDRequest) (
 		return nil, status.Error(codes.InvalidArgument, "no group name provided")
 	}
 
-	warnings, err := s.userManager.SetGroupID(name, req.GetId())
+	resp, err := s.userManager.SetGroupID(name, req.GetId())
 	if err != nil {
 		log.Errorf(ctx, "SetGroupID: %v", err)
 		return nil, grpcError(err)
 	}
 
-	return &authd.SetGroupIDResponse{Warnings: warnings}, nil
+	return &authd.SetGroupIDResponse{
+		IdChanged:           resp.IDChanged,
+		HomeDirOwnerChanged: resp.HomeDirOwnerChanged,
+		Warnings:            resp.Warnings,
+	}, nil
 }
 
 // userToProtobuf converts a types.UserEntry to authd.User.

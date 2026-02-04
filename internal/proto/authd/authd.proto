@@ -177,7 +177,9 @@ message SetUserIDRequest {
 }
 
 message SetUserIDResponse {
-  repeated string warnings = 1;
+  bool id_changed = 1;
+  bool home_dir_owner_changed = 2;
+  repeated string warnings = 3;
 }
 
 message SetGroupIDRequest {
@@ -189,7 +191,9 @@ message SetGroupIDRequest {
 }
 
 message SetGroupIDResponse {
-  repeated string warnings = 1;
+  bool id_changed = 1;
+  bool home_dir_owner_changed = 2;
+  repeated string warnings = 3;
 }
 
 message User {

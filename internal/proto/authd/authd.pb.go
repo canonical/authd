@@ -1232,10 +1232,12 @@ func (x *SetUserIDRequest) GetLang() string {
 }
 
 type SetUserIDResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Warnings      []string               `protobuf:"bytes,1,rep,name=warnings,proto3" json:"warnings,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	IdChanged           bool                   `protobuf:"varint,1,opt,name=id_changed,json=idChanged,proto3" json:"id_changed,omitempty"`
+	HomeDirOwnerChanged bool                   `protobuf:"varint,2,opt,name=home_dir_owner_changed,json=homeDirOwnerChanged,proto3" json:"home_dir_owner_changed,omitempty"`
+	Warnings            []string               `protobuf:"bytes,3,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *SetUserIDResponse) Reset() {
@@ -1266,6 +1268,20 @@ func (x *SetUserIDResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use SetUserIDResponse.ProtoReflect.Descriptor instead.
 func (*SetUserIDResponse) Descriptor() ([]byte, []int) {
 	return file_authd_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *SetUserIDResponse) GetIdChanged() bool {
+	if x != nil {
+		return x.IdChanged
+	}
+	return false
+}
+
+func (x *SetUserIDResponse) GetHomeDirOwnerChanged() bool {
+	if x != nil {
+		return x.HomeDirOwnerChanged
+	}
+	return false
 }
 
 func (x *SetUserIDResponse) GetWarnings() []string {
@@ -1338,10 +1354,12 @@ func (x *SetGroupIDRequest) GetLang() string {
 }
 
 type SetGroupIDResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Warnings      []string               `protobuf:"bytes,1,rep,name=warnings,proto3" json:"warnings,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	IdChanged           bool                   `protobuf:"varint,1,opt,name=id_changed,json=idChanged,proto3" json:"id_changed,omitempty"`
+	HomeDirOwnerChanged bool                   `protobuf:"varint,2,opt,name=home_dir_owner_changed,json=homeDirOwnerChanged,proto3" json:"home_dir_owner_changed,omitempty"`
+	Warnings            []string               `protobuf:"bytes,3,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *SetGroupIDResponse) Reset() {
@@ -1372,6 +1390,20 @@ func (x *SetGroupIDResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use SetGroupIDResponse.ProtoReflect.Descriptor instead.
 func (*SetGroupIDResponse) Descriptor() ([]byte, []int) {
 	return file_authd_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *SetGroupIDResponse) GetIdChanged() bool {
+	if x != nil {
+		return x.IdChanged
+	}
+	return false
+}
+
+func (x *SetGroupIDResponse) GetHomeDirOwnerChanged() bool {
+	if x != nil {
+		return x.HomeDirOwnerChanged
+	}
+	return false
 }
 
 func (x *SetGroupIDResponse) GetWarnings() []string {
@@ -1952,15 +1984,21 @@ const file_authd_proto_rawDesc = "" +
 	"\x10SetUserIDRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\rR\x02id\x12\x12\n" +
-	"\x04lang\x18\x03 \x01(\tR\x04lang\"/\n" +
-	"\x11SetUserIDResponse\x12\x1a\n" +
-	"\bwarnings\x18\x01 \x03(\tR\bwarnings\"K\n" +
+	"\x04lang\x18\x03 \x01(\tR\x04lang\"\x83\x01\n" +
+	"\x11SetUserIDResponse\x12\x1d\n" +
+	"\n" +
+	"id_changed\x18\x01 \x01(\bR\tidChanged\x123\n" +
+	"\x16home_dir_owner_changed\x18\x02 \x01(\bR\x13homeDirOwnerChanged\x12\x1a\n" +
+	"\bwarnings\x18\x03 \x03(\tR\bwarnings\"K\n" +
 	"\x11SetGroupIDRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\rR\x02id\x12\x12\n" +
-	"\x04lang\x18\x03 \x01(\tR\x04lang\"0\n" +
-	"\x12SetGroupIDResponse\x12\x1a\n" +
-	"\bwarnings\x18\x01 \x03(\tR\bwarnings\"\x84\x01\n" +
+	"\x04lang\x18\x03 \x01(\tR\x04lang\"\x84\x01\n" +
+	"\x12SetGroupIDResponse\x12\x1d\n" +
+	"\n" +
+	"id_changed\x18\x01 \x01(\bR\tidChanged\x123\n" +
+	"\x16home_dir_owner_changed\x18\x02 \x01(\bR\x13homeDirOwnerChanged\x12\x1a\n" +
+	"\bwarnings\x18\x03 \x03(\tR\bwarnings\"\x84\x01\n" +
 	"\x04User\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03uid\x18\x02 \x01(\rR\x03uid\x12\x10\n" +

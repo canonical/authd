@@ -17,6 +17,7 @@ import (
 	"github.com/canonical/authd/internal/users"
 	"github.com/canonical/authd/internal/users/db"
 	"github.com/canonical/authd/log"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,25 +38,43 @@ func TestSetUserID(t *testing.T) {
 		homeDirCannotBeAccessed          bool
 		homeDirOwnerCannotBeChanged      bool
 
-		wantErr      bool
-		wantErrType  error
-		wantWarnings int
+		wantErr                 bool
+		wantErrType             error
+		wantIDChanged           bool
+		wantHomeDirOwnerChanged bool
+		wantWarnings            int
 	}{
-		"Successfully_set_UID": {},
-		"Successfully_set_UID_if_ID_is_already_in_use_as_GID_of_system_user": {uidAlreadyInUseAsGIDofSystemUser: true},
-		"Successfully_set_UID_if_ID_is_already_in_use_as_GID_of_authd_user":  {uidAlreadyInUseAsGIDofAuthdUser: true},
-		"Successfully_set_UID_when_home_directory_does_not_exist":            {homeDirDoesNotExist: true},
+		"Successfully_set_UID": {
+			wantIDChanged: true, wantHomeDirOwnerChanged: true,
+		},
+		"Successfully_set_UID_if_ID_is_already_in_use_as_GID_of_system_user": {
+			uidAlreadyInUseAsGIDofSystemUser: true, wantIDChanged: true, wantHomeDirOwnerChanged: true,
+		},
+		"Successfully_set_UID_if_ID_is_already_in_use_as_GID_of_authd_user": {
+			uidAlreadyInUseAsGIDofAuthdUser: true, wantIDChanged: true, wantHomeDirOwnerChanged: true,
+		},
+		"Successfully_set_UID_when_home_directory_does_not_exist": {
+			homeDirDoesNotExist: true, wantIDChanged: true,
+		},
 
-		"Warning_if_user_already_has_given_UID":            {uidAlreadySet: true, wantWarnings: 1},
-		"Warning_if_home_directory_is_owned_by_other_user": {homeDirOwnedByOtherUser: true, wantWarnings: 1},
-		"Warning_if_home_directory_cannot_be_accessed":     {homeDirCannotBeAccessed: true, wantWarnings: 1},
+		"Warning_if_user_already_has_given_UID": {
+			uidAlreadySet: true, wantWarnings: 1,
+		},
+		"Warning_if_home_directory_is_owned_by_other_user": {
+			homeDirOwnedByOtherUser: true, wantWarnings: 1, wantIDChanged: true,
+		},
+		"Warning_if_home_directory_cannot_be_accessed": {
+			homeDirCannotBeAccessed: true, wantWarnings: 1, wantIDChanged: true,
+		},
 
-		"Error_if_username_is_empty":                      {emptyUsername: true, wantErr: true},
-		"Error_if_user_does_not_exist":                    {nonExistentUser: true, wantErrType: db.NoDataFoundError{}},
-		"Error_if_UID_is_already_in_use_by_authd":         {uidAlreadyInUseByAuthdUser: true, wantErr: true},
-		"Error_if_UID_is_already_in_use_by_system":        {uidAlreadyInUseBySystemUser: true, wantErr: true},
-		"Error_if_UID_is_too_large":                       {uidTooLarge: true, wantErr: true},
-		"Error_if_home_directory_owner_cannot_be_changed": {homeDirOwnerCannotBeChanged: true, wantErr: true},
+		"Error_if_username_is_empty":               {emptyUsername: true, wantErr: true},
+		"Error_if_user_does_not_exist":             {nonExistentUser: true, wantErrType: db.NoDataFoundError{}},
+		"Error_if_UID_is_already_in_use_by_authd":  {uidAlreadyInUseByAuthdUser: true, wantErr: true},
+		"Error_if_UID_is_already_in_use_by_system": {uidAlreadyInUseBySystemUser: true, wantErr: true},
+		"Error_if_UID_is_too_large":                {uidTooLarge: true, wantErr: true},
+		"Error_if_home_directory_owner_cannot_be_changed": {
+			homeDirOwnerCannotBeChanged: true, wantErr: true, wantIDChanged: true,
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -109,9 +128,14 @@ func TestSetUserID(t *testing.T) {
 			}
 
 			//nolint:gosec // G115 we set the UID above to values that are valid uint32
-			warnings, err := m.SetUserID(username, uint32(newUID))
+			resp, err := m.SetUserID(username, uint32(newUID))
 			log.Infof(context.Background(), "SetUserID error: %v", err)
-			log.Infof(context.Background(), "SetUserID warnings: %v", warnings)
+			log.Infof(context.Background(), "SetUserID resp: %v", resp)
+
+			if resp != nil {
+				assert.Equal(t, tc.wantIDChanged, resp.IDChanged, "Unexpected IDChanged")
+				assert.Equal(t, tc.wantHomeDirOwnerChanged, resp.HomeDirOwnerChanged, "Unexpected HomeDirOwnerChanged")
+			}
 
 			if tc.wantErrType != nil {
 				require.ErrorIs(t, err, tc.wantErrType, "SetUserID should return expected error")
@@ -122,27 +146,24 @@ func TestSetUserID(t *testing.T) {
 				return
 			}
 			require.NoError(t, err, "SetUserID should not return an error")
-			require.Len(t, warnings, tc.wantWarnings, "Unexpected number of warnings")
+			require.NotNil(t, resp, "SetUserID should return a response")
+			require.Len(t, resp.Warnings, tc.wantWarnings, "Unexpected number of warnings")
 
 			yamlData, err := db.Z_ForTests_DumpNormalizedYAML(m.DB())
 			require.NoError(t, err)
 			golden.CheckOrUpdate(t, yamlData, golden.WithPath("db"))
 
-			if len(warnings) == 0 {
-				return
-			}
-
 			// To make the tests deterministic, we replace the temporary home directory path with a placeholder
-			for i, w := range warnings {
+			for i, w := range resp.Warnings {
 				if regexp.MustCompile(`Could not get owner of home directory '([^"]+)'`).MatchString(w) {
-					warnings[i] = `Could not get owner of home directory '{{HOME}}'`
+					resp.Warnings[i] = `Could not get owner of home directory '{{HOME}}'`
 				}
 				if regexp.MustCompile(`Not updating ownership of home directory '([^"]+)' because it is not owned by UID \d+ \(current owner: \d+\)`).MatchString(w) {
-					warnings[i] = `Not updating ownership of home directory '{{HOME}}' because it is not owned by UID {{UID}} (current owner: {{CURR_UID}})`
+					resp.Warnings[i] = `Not updating ownership of home directory '{{HOME}}' because it is not owned by UID {{UID}} (current owner: {{CURR_UID}})`
 				}
 			}
 
-			golden.CheckOrUpdateYAML(t, warnings, golden.WithPath("warnings"))
+			golden.CheckOrUpdateYAML(t, resp, golden.WithPath("response"))
 		})
 	}
 }
@@ -166,27 +187,47 @@ func TestSetGroupID(t *testing.T) {
 		homeDirCannotBeAccessed          bool
 		homeDirOwnerCannotBeChanged      bool
 
-		wantErr      bool
-		wantErrType  error
-		wantWarnings int
+		wantErr                 bool
+		wantErrType             error
+		wantIDChanged           bool
+		wantHomeDirOwnerChanged bool
+		wantWarnings            int
 	}{
-		"Successfully_set_GID": {},
-		"Successfully_set_GID_if_ID_is_already_in_use_as_UID_of_system_user": {gidAlreadyInUseAsUIDofSystemUser: true},
-		"Successfully_set_GID_if_ID_is_already_in_use_as_UID_of_authd_user":  {gidAlreadyInUseAsUIDofAuthdUser: true},
-		"Successfully_set_GID_when_home_directory_does_not_exist":            {homeDirDoesNotExist: true},
-		"Successfully_set_GID_when_group_is_not_primary_group_of_any_user":   {gidIsNotPrimaryGroupOfAnyUser: true},
-		"Primary_groups_of_multiple_users_are_updated":                       {gidIsPrimaryGroupOfMultipleUsers: true},
+		"Successfully_set_GID": {
+			wantIDChanged: true, wantHomeDirOwnerChanged: true,
+		},
+		"Successfully_set_GID_if_ID_is_already_in_use_as_UID_of_system_user": {
+			gidAlreadyInUseAsUIDofSystemUser: true, wantIDChanged: true, wantHomeDirOwnerChanged: true,
+		},
+		"Successfully_set_GID_if_ID_is_already_in_use_as_UID_of_authd_user": {
+			gidAlreadyInUseAsUIDofAuthdUser: true, wantIDChanged: true, wantHomeDirOwnerChanged: true,
+		},
+		"Successfully_set_GID_when_home_directory_does_not_exist": {
+			homeDirDoesNotExist: true, wantIDChanged: true,
+		},
+		"Successfully_set_GID_when_group_is_not_primary_group_of_any_user": {
+			gidIsNotPrimaryGroupOfAnyUser: true, wantIDChanged: true,
+		},
+		"Primary_groups_of_multiple_users_are_updated": {
+			gidIsPrimaryGroupOfMultipleUsers: true, wantIDChanged: true, wantHomeDirOwnerChanged: true,
+		},
 
-		"Warning_if_group_already_has_given_GID":            {gidAlreadySet: true, wantWarnings: 1},
-		"Warning_if_home_directory_is_owned_by_other_group": {homeDirOwnedByOtherGroup: true, wantWarnings: 1},
-		"Warning_if_home_directory_cannot_be_accessed":      {homeDirCannotBeAccessed: true, wantWarnings: 1},
+		"Warning_if_group_already_has_given_GID": {gidAlreadySet: true, wantWarnings: 1},
+		"Warning_if_home_directory_is_owned_by_other_group": {
+			homeDirOwnedByOtherGroup: true, wantWarnings: 1, wantIDChanged: true,
+		},
+		"Warning_if_home_directory_cannot_be_accessed": {
+			homeDirCannotBeAccessed: true, wantWarnings: 1, wantIDChanged: true,
+		},
 
-		"Error_if_groupname_is_empty":                     {emptyGroupname: true, wantErr: true},
-		"Error_if_group_does_not_exist":                   {nonExistentGroup: true, wantErrType: db.NoDataFoundError{}},
-		"Error_if_GID_is_already_in_use_by_authd":         {gidAlreadyInUseByAuthdGroup: true, wantErr: true},
-		"Error_if_GID_is_already_in_use_by_system":        {gidAlreadyInUseBySystemGroup: true, wantErr: true},
-		"Error_if_GID_is_too_large":                       {gidTooLarge: true, wantErr: true},
-		"Error_if_home_directory_owner_cannot_be_changed": {homeDirOwnerCannotBeChanged: true, wantErr: true},
+		"Error_if_groupname_is_empty":              {emptyGroupname: true, wantErr: true},
+		"Error_if_group_does_not_exist":            {nonExistentGroup: true, wantErrType: db.NoDataFoundError{}},
+		"Error_if_GID_is_already_in_use_by_authd":  {gidAlreadyInUseByAuthdGroup: true, wantErr: true},
+		"Error_if_GID_is_already_in_use_by_system": {gidAlreadyInUseBySystemGroup: true, wantErr: true},
+		"Error_if_GID_is_too_large":                {gidTooLarge: true, wantErr: true},
+		"Error_if_home_directory_owner_cannot_be_changed": {
+			homeDirOwnerCannotBeChanged: true, wantErr: true, wantIDChanged: true,
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -248,9 +289,14 @@ func TestSetGroupID(t *testing.T) {
 			}
 
 			//nolint:gosec // G115 we set the GID above to values that are valid uint32
-			warnings, err := m.SetGroupID(groupname, uint32(newGID))
+			resp, err := m.SetGroupID(groupname, uint32(newGID))
 			log.Infof(context.Background(), "SetGroupID error: %v", err)
-			log.Infof(context.Background(), "SetGroupID warnings: %v", warnings)
+			log.Infof(context.Background(), "SetGroupID resp: %v", resp)
+
+			if resp != nil {
+				assert.Equal(t, tc.wantIDChanged, resp.IDChanged, "Unexpected IDChanged")
+				assert.Equal(t, tc.wantHomeDirOwnerChanged, resp.HomeDirOwnerChanged, "Unexpected HomeDirOwnerChanged")
+			}
 
 			if tc.wantErrType != nil {
 				require.ErrorIs(t, err, tc.wantErrType, "SetGroupID should return expected error")
@@ -261,27 +307,24 @@ func TestSetGroupID(t *testing.T) {
 				return
 			}
 			require.NoError(t, err, "SetGroupID should not return an error")
-			require.Len(t, warnings, tc.wantWarnings, "Unexpected number of warnings")
+			require.NotNil(t, resp, "SetGroupID should return a response")
+			require.Len(t, resp.Warnings, tc.wantWarnings, "Unexpected number of warnings")
 
 			yamlData, err := db.Z_ForTests_DumpNormalizedYAML(m.DB())
 			require.NoError(t, err)
 			golden.CheckOrUpdate(t, yamlData, golden.WithPath("db"))
 
-			if len(warnings) == 0 {
-				return
-			}
-
 			// To make the tests deterministic, we replace the temporary home directory path with a placeholder
-			for i, w := range warnings {
+			for i, w := range resp.Warnings {
 				if regexp.MustCompile(`Could not get owner of home directory '([^"]+)'.`).MatchString(w) {
-					warnings[i] = `Could not get owner of home directory '{{HOME}}'.`
+					resp.Warnings[i] = `Could not get owner of home directory '{{HOME}}'.`
 				}
 				if regexp.MustCompile(`Not updating ownership of home directory '([^"]+)' because it is not owned by GID \d+ \(current owner: \d+\).`).MatchString(w) {
-					warnings[i] = `Not updating ownership of home directory '{{HOME}}' because it is not owned by GID {{GID}} (current owner: {{CURR_GID}}).`
+					resp.Warnings[i] = `Not updating ownership of home directory '{{HOME}}' because it is not owned by GID {{GID}} (current owner: {{CURR_GID}}).`
 				}
 			}
 
-			golden.CheckOrUpdateYAML(t, warnings, golden.WithPath("warnings"))
+			golden.CheckOrUpdateYAML(t, resp, golden.WithPath("response"))
 		})
 	}
 }
