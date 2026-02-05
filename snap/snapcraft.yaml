@@ -1,0 +1,118 @@
+name: authd-msentraid
+summary: authd - Microsoft Entra ID Cloud Authentication for Ubuntu
+description: |
+  authd is a powerful authentication service for Ubuntu, designed to integrate with cloud identity providers like
+  Microsoft Entra ID. It delivers a secure, flexible solution for organizations and individuals who are transitioning
+  to cloud-based identity management on Ubuntu workstations and servers.
+  authd uses the OAuth Device Authorization Grant and ensures a consistent and secure login experience across
+  Ubuntu Desktop and Server — whether through GDM, SSH, or network services like NFS and Samba.
+
+  Key Features
+  * Cloud identity provider integration: Connects with Microsoft Entra ID
+  * Secure login: authd leverages the OAuth Device Authorization Grant RFC 8628-compliant workflows for reliability
+    and security.
+  * Open-source: Free and community-driven, with contributions welcomed.
+  * Enterprise ready: Ubuntu Pro customers will benefit from the same expanded security and support guarantees.
+  * authd is free for all Ubuntu Desktop and Server 24.04 LTS users and is under active development.
+    Explore the official documentation for installation and configuration steps, or visit the GitHub repository to
+    contribute or provide feedback.
+icon: snap/icon.svg
+website:
+  - https://github.com/ubuntu/authd-oidc-brokers
+  - https://github.com/ubuntu/authd
+issues: https://github.com/ubuntu/authd/issues
+source-code: https://github.com/ubuntu/authd-oidc-brokers/tree/msentraid
+adopt-info: version
+grade: stable
+base: core24
+confinement: strict
+license: GPL-3.0
+
+apps:
+  authd-msentraid:
+    command: bin/authd-msentraid
+    daemon: dbus
+    slots:
+      - dbus-authd
+    plugs:
+      - network
+    restart-condition: always
+    activates-on: [dbus-authd]
+    environment:
+      SYSLOG_IDENTIFIER: authd-msentraid
+
+slots:
+  dbus-authd:
+    interface: dbus
+    bus: system
+    name: com.ubuntu.authd.MSEntraID
+
+parts:
+  libhimmelblau:
+    source: ./authd-oidc-brokers/third_party/libhimmelblau
+    plugin: rust
+    build-packages:
+      - libssl-dev
+    override-pull: |
+      snapcraftctl pull
+      cp "$SNAPCRAFT_PROJECT_DIR/authd-oidc-brokers/rust-toolchain.toml" "$SNAPCRAFT_PART_SRC/"
+    override-build: |
+      cargo install cargo-c
+      cargo cbuild --release --lib --features=broker,changepassword,on_behalf_of
+      echo "Installing libhimmelblau.so and himmelblau.h"
+      TARGET_TRIPLE=$(rustc -vV | awk '/host:/ {print $2}')
+      install -D target/${TARGET_TRIPLE}/release/libhimmelblau.so ${CRAFT_PART_INSTALL}/lib/libhimmelblau.so.0
+      ln -s libhimmelblau.so.0 ${CRAFT_PART_INSTALL}/lib/libhimmelblau.so
+      install -D target/${TARGET_TRIPLE}/release/himmelblau.h ${CRAFT_PART_INSTALL}/include/himmelblau.h
+    prime:
+      - -include/**
+      - -lib/**.so
+  broker:
+    source: authd-oidc-brokers
+    source-type: local
+    plugin: go
+    go-buildtags: [withmsentraid]
+    build-snaps:
+      - go
+    after:
+      - libhimmelblau
+      - version
+    build-environment:
+      - GOFLAGS: "-tags=release"
+      # Add libhimmelblau to the CFLAGS and LDFLAGS so that it can be found by the Go linker.
+      - CGO_CFLAGS: -I${CRAFT_STAGE}/include
+      - CGO_LDFLAGS: -L${CRAFT_STAGE}/lib -lhimmelblau
+    override-build: |
+      VERSION=$(craftctl get version)
+      export GOFLAGS="-ldflags=-X=github.com/ubuntu/authd-oidc-brokers/internal/consts.Version=${VERSION}"
+
+      go mod download all
+      go mod vendor
+      go build -tags=withmsentraid -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc
+  config:
+    source: authd-oidc-brokers/conf/
+    source-type: local
+    plugin: dump
+    organize:
+      "authd.conf": "conf/authd/msentraid.conf"
+      "broker.conf": "conf/broker.conf.orig"
+      "migrations": "conf/migrations"
+  # SemVer comparison helper
+  semver:
+    source: authd-oidc-brokers/tools
+    source-type: local
+    plugin: go
+    override-build: |
+      go mod download all
+      go mod vendor
+      go build -o ${GOBIN}/semver semver/semver.go
+  # Build the snap version from the git repository and current tree state.
+  version:
+    source: .
+    plugin: nil
+    build-packages:
+      - git # The script needs Git.
+    override-build: |
+      craftctl set version="$(./snap/version)"
+    after:
+      - semver
