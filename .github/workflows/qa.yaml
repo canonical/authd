@@ -114,6 +114,16 @@ jobs:
           test -e pam/pam_authd.so
           test -e pam/go-exec/pam_authd_exec.so
 
+  shell-sanity:
+    name: "Shell: Code sanity"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          ignore_paths: "./authd-oidc-brokers"
+
   rust-sanity:
     name: "Rust: Code sanity"
     permissions: {}
