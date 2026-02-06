@@ -67,8 +67,8 @@ parts:
     source-type: local
     plugin: dump
     organize:
-      "authd.conf": "conf/authd/oidc.conf"
-      "broker.conf": "conf/broker.conf.orig"
+      "variants/oidc/authd.conf": "conf/authd/oidc.conf"
+      "variants/oidc/broker.conf": "conf/broker.conf.orig"
       "migrations": "conf/migrations"
     stage:
       - conf

@@ -70,8 +70,8 @@ parts:
     source-type: local
     plugin: dump
     organize:
-      "authd.conf": "conf/authd/google.conf"
-      "broker.conf": "conf/broker.conf.orig"
+      "variants/google/authd.conf": "conf/authd/google.conf"
+      "variants/google/broker.conf": "conf/broker.conf.orig"
       "migrations": "conf/migrations"
     stage:
       - conf

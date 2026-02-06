@@ -40,7 +40,7 @@ fi
 
 set -x
 
-DIRS=("authd-oidc-brokers/conf" "snap")
+DIRS=("snap")
 
 for d in "${DIRS[@]}"; do
     for f in "$d/variants/${BROKER}"/*; do

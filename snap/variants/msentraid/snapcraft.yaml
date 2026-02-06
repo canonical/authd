@@ -94,8 +94,8 @@ parts:
     source-type: local
     plugin: dump
     organize:
-      "authd.conf": "conf/authd/msentraid.conf"
-      "broker.conf": "conf/broker.conf.orig"
+      "variants/msentraid/authd.conf": "conf/authd/msentraid.conf"
+      "variants/msentraid/broker.conf": "conf/broker.conf.orig"
       "migrations": "conf/migrations"
     stage:
       - conf
