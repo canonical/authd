@@ -31,10 +31,10 @@ jobs:
           with:
             fetch-depth: 0
 
-        - name: Copy broker variant files
+        - name: Prepare snapcraft.yaml
           # We can't symlink the snapcraft.yaml file here because it causes launchpad to fail with:
           # "The top level of snapcraft.yaml from ~ubuntu-enterprise-desktop/authd/+git/authd:oidc is not a mapping"
-          run: ./scripts/prepare-broker-variant-files --copy --broker ${{ matrix.branch_name }}
+          run: ./snap/scripts/prepare-variant --copy --broker ${{ matrix.branch_name }}
 
         - name: Commit broker variant files
           run: |
