@@ -48,6 +48,10 @@ func (p GenericProvider) GetUserInfo(idToken info.Claimer) (info.User, error) {
 		return info.User{}, err
 	}
 
+	if userClaims.Sub == "" {
+		return info.User{}, fmt.Errorf("authentication failure: sub claim is missing in the ID token")
+	}
+
 	if userClaims.Email == "" {
 		return info.User{}, fmt.Errorf("authentication failure: email claim is missing in the ID token")
 	}
