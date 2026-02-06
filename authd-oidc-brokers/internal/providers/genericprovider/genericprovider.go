@@ -48,6 +48,10 @@ func (p GenericProvider) GetUserInfo(idToken info.Claimer) (info.User, error) {
 		return info.User{}, err
 	}
 
+	if userClaims.Email == "" {
+		return info.User{}, fmt.Errorf("authentication failure: email claim is missing in the ID token")
+	}
+
 	if userClaims.EmailVerified == false {
 		return info.User{}, &providerErrors.ForDisplayError{Message: "Authentication failure: email not verified"}
 	}
