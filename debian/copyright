@@ -68,18 +68,6 @@ Files: vendor/gopkg.in/yaml.v3/*
 Copyright: 2011-2019 Canonical Ltd.
 License: Apache-2.0
 
-Files: vendor/gopkg.in/yaml.v3/apic.go
-       vendor/gopkg.in/yaml.v3/emitterc.go
-       vendor/gopkg.in/yaml.v3/parserc.go
-       vendor/gopkg.in/yaml.v3/readerc.go
-       vendor/gopkg.in/yaml.v3/scannerc.go
-       vendor/gopkg.in/yaml.v3/writerc.go
-       vendor/gopkg.in/yaml.v3/yamlh.go
-       vendor/gopkg.in/yaml.v3/yamlprivateh.go
-Copyright: 2011-2019 Canonical Ltd.
-           2006-2011 Kirill Simonov
-License: MIT
-
 Files: vendor/github.com/atotto/clipboard/*
 Copyright: 2013 Ato Araki.
 License: BSD-3
