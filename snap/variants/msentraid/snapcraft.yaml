@@ -16,7 +16,7 @@ description: |
   * authd is free for all Ubuntu Desktop and Server 24.04 LTS users and is under active development.
     Explore the official documentation for installation and configuration steps, or visit the GitHub repository to
     contribute or provide feedback.
-icon: snap/icon.svg
+icon: snap/variants/msentraid/icon.svg
 website:
   - https://github.com/ubuntu/authd-oidc-brokers
   - https://github.com/ubuntu/authd
