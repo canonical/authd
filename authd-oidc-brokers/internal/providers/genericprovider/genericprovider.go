@@ -48,6 +48,10 @@ func (p GenericProvider) GetUserInfo(idToken info.Claimer) (info.User, error) {
 		return info.User{}, err
 	}
 
+	if userClaims.EmailVerified == false {
+		return info.User{}, &providerErrors.ForDisplayError{Message: "Authentication failure: email not verified"}
+	}
+
 	return info.NewUser(
 		userClaims.Email,
 		userClaims.Home,
@@ -83,11 +87,12 @@ func (p GenericProvider) SupportedOIDCAuthModes() []string {
 }
 
 type claims struct {
-	Email string `json:"email"`
-	Sub   string `json:"sub"`
-	Home  string `json:"home"`
-	Shell string `json:"shell"`
-	Gecos string `json:"gecos"`
+	Email         string `json:"email"`
+	Sub           string `json:"sub"`
+	Home          string `json:"home"`
+	Shell         string `json:"shell"`
+	Gecos         string `json:"gecos"`
+	EmailVerified bool   `json:"email_verified"`
 }
 
 // userClaims returns the user claims parsed from the ID token.
