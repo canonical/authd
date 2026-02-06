@@ -94,7 +94,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Build debian packages and sources
-        uses: canonical/desktop-engineering/gh-actions/common/build-debian@main
+        uses: canonical/desktop-engineering/gh-actions/common/build-debian@faster-lrc
         with:
           docker-image: ubuntu:${{ matrix.ubuntu-version }}
           # Add the Go backports PPA if we're testing a Ubuntu release which
