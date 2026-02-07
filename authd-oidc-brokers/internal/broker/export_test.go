@@ -20,6 +20,10 @@ func (cfg *Config) SetForceProviderAuthentication(value bool) {
 	cfg.forceProviderAuthentication = value
 }
 
+func (cfg *Config) SetDisableLocalPassword(value bool) {
+	cfg.disableLocalPassword = value
+}
+
 func (cfg *Config) SetRegisterDevice(value bool) {
 	cfg.registerDevice = value
 }

@@ -2,6 +2,7 @@ clientID=lower_precedence_client_id
 clientSecret=
 issuerURL=https://higher-precedence-issuer.url.com
 forceProviderAuthentication=true
+disableLocalPassword=true
 registerDevice=false
 allowedUsers=map[]
 allUsersAllowed=false
