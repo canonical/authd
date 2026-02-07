@@ -4,20 +4,19 @@ set -euo pipefail
 
 usage(){
     cat << EOF
+Usage: $0 --release <release> [ssh options]
 
-    Usage: $0 --release <release> [ssh options]
+SSH into the e2e-test VM for the specified Ubuntu release.
 
-    SSH into the e2e-test VM for the specified Ubuntu release.
-
-    Example:
-      $0 --release questing
+Example:
+    $0 --release questing
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         -h|--help)
-            print_usage
+            usage
             exit 0
             ;;
         --release|-r)
