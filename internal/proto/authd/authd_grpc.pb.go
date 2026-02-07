@@ -392,6 +392,8 @@ const (
 	UserService_ListUsers_FullMethodName      = "/authd.UserService/ListUsers"
 	UserService_LockUser_FullMethodName       = "/authd.UserService/LockUser"
 	UserService_UnlockUser_FullMethodName     = "/authd.UserService/UnlockUser"
+	UserService_SetUserID_FullMethodName      = "/authd.UserService/SetUserID"
+	UserService_SetGroupID_FullMethodName     = "/authd.UserService/SetGroupID"
 	UserService_GetGroupByName_FullMethodName = "/authd.UserService/GetGroupByName"
 	UserService_GetGroupByID_FullMethodName   = "/authd.UserService/GetGroupByID"
 	UserService_ListGroups_FullMethodName     = "/authd.UserService/ListGroups"
@@ -406,6 +408,8 @@ type UserServiceClient interface {
 	ListUsers(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Users, error)
 	LockUser(ctx context.Context, in *LockUserRequest, opts ...grpc.CallOption) (*Empty, error)
 	UnlockUser(ctx context.Context, in *UnlockUserRequest, opts ...grpc.CallOption) (*Empty, error)
+	SetUserID(ctx context.Context, in *SetUserIDRequest, opts ...grpc.CallOption) (*SetUserIDResponse, error)
+	SetGroupID(ctx context.Context, in *SetGroupIDRequest, opts ...grpc.CallOption) (*SetGroupIDResponse, error)
 	GetGroupByName(ctx context.Context, in *GetGroupByNameRequest, opts ...grpc.CallOption) (*Group, error)
 	GetGroupByID(ctx context.Context, in *GetGroupByIDRequest, opts ...grpc.CallOption) (*Group, error)
 	ListGroups(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Groups, error)
@@ -469,6 +473,26 @@ func (c *userServiceClient) UnlockUser(ctx context.Context, in *UnlockUserReques
 	return out, nil
 }
 
+func (c *userServiceClient) SetUserID(ctx context.Context, in *SetUserIDRequest, opts ...grpc.CallOption) (*SetUserIDResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetUserIDResponse)
+	err := c.cc.Invoke(ctx, UserService_SetUserID_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) SetGroupID(ctx context.Context, in *SetGroupIDRequest, opts ...grpc.CallOption) (*SetGroupIDResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetGroupIDResponse)
+	err := c.cc.Invoke(ctx, UserService_SetGroupID_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *userServiceClient) GetGroupByName(ctx context.Context, in *GetGroupByNameRequest, opts ...grpc.CallOption) (*Group, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Group)
@@ -508,6 +532,8 @@ type UserServiceServer interface {
 	ListUsers(context.Context, *Empty) (*Users, error)
 	LockUser(context.Context, *LockUserRequest) (*Empty, error)
 	UnlockUser(context.Context, *UnlockUserRequest) (*Empty, error)
+	SetUserID(context.Context, *SetUserIDRequest) (*SetUserIDResponse, error)
+	SetGroupID(context.Context, *SetGroupIDRequest) (*SetGroupIDResponse, error)
 	GetGroupByName(context.Context, *GetGroupByNameRequest) (*Group, error)
 	GetGroupByID(context.Context, *GetGroupByIDRequest) (*Group, error)
 	ListGroups(context.Context, *Empty) (*Groups, error)
@@ -535,6 +561,12 @@ func (UnimplementedUserServiceServer) LockUser(context.Context, *LockUserRequest
 }
 func (UnimplementedUserServiceServer) UnlockUser(context.Context, *UnlockUserRequest) (*Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method UnlockUser not implemented")
+}
+func (UnimplementedUserServiceServer) SetUserID(context.Context, *SetUserIDRequest) (*SetUserIDResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetUserID not implemented")
+}
+func (UnimplementedUserServiceServer) SetGroupID(context.Context, *SetGroupIDRequest) (*SetGroupIDResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetGroupID not implemented")
 }
 func (UnimplementedUserServiceServer) GetGroupByName(context.Context, *GetGroupByNameRequest) (*Group, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetGroupByName not implemented")
@@ -656,6 +688,42 @@ func _UserService_UnlockUser_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_SetUserID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetUserIDRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).SetUserID(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_SetUserID_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).SetUserID(ctx, req.(*SetUserIDRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_SetGroupID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetGroupIDRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).SetGroupID(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_SetGroupID_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).SetGroupID(ctx, req.(*SetGroupIDRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _UserService_GetGroupByName_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetGroupByNameRequest)
 	if err := dec(in); err != nil {
@@ -736,6 +804,14 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UnlockUser",
 			Handler:    _UserService_UnlockUser_Handler,
+		},
+		{
+			MethodName: "SetUserID",
+			Handler:    _UserService_SetUserID_Handler,
+		},
+		{
+			MethodName: "SetGroupID",
+			Handler:    _UserService_SetGroupID_Handler,
 		},
 		{
 			MethodName: "GetGroupByName",

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/canonical/authd/internal/decorate"
 	"google.golang.org/grpc/peer"
 )
 
@@ -41,8 +40,6 @@ func New(args ...Option) Manager {
 // CheckRequestIsFromRoot checks if the current gRPC request is from a root user and returns an error if not.
 // The pid and uid are extracted from peerCredsInfo in the gRPC context.
 func (m Manager) CheckRequestIsFromRoot(ctx context.Context) (err error) {
-	defer decorate.OnError(&err, "permission denied")
-
 	p, ok := peer.FromContext(ctx)
 	if !ok {
 		return errors.New("context request doesn't have gRPC peer information")

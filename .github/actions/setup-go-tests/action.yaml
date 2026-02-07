@@ -26,10 +26,7 @@ runs:
         sudo apt-get install -y protobuf-compiler
 
         sudo apt-get install -y ${{ env.go_build_dependencies }} ${{ env.go_test_dependencies}}
-
-        # Load the apparmor profile for bubblewrap.
-        sudo ln -s /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/
-        sudo apparmor_parser /etc/apparmor.d/bwrap-userns-restrict
+        
         echo "::endgroup::"
 
     - name: Install gotestfmt and our wrapper script
