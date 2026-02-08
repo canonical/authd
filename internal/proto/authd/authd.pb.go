@@ -560,6 +560,7 @@ func (x *UILayout) GetRendersQrcode() bool {
 type GAMResponse struct {
 	state               protoimpl.MessageState            `protogen:"open.v1"`
 	AuthenticationModes []*GAMResponse_AuthenticationMode `protobuf:"bytes,1,rep,name=authentication_modes,json=authenticationModes,proto3" json:"authentication_modes,omitempty"`
+	Msg                 *string                           `protobuf:"bytes,2,opt,name=msg,proto3,oneof" json:"msg,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -599,6 +600,13 @@ func (x *GAMResponse) GetAuthenticationModes() []*GAMResponse_AuthenticationMode
 		return x.AuthenticationModes
 	}
 	return nil
+}
+
+func (x *GAMResponse) GetMsg() string {
+	if x != nil && x.Msg != nil {
+		return *x.Msg
+	}
+	return ""
 }
 
 type SAMRequest struct {
@@ -1691,12 +1699,14 @@ const file_authd_proto_rawDesc = "" +
 	"\n" +
 	"\b_contentB\a\n" +
 	"\x05_codeB\x11\n" +
-	"\x0f_renders_qrcode\"\xa3\x01\n" +
+	"\x0f_renders_qrcode\"\xc2\x01\n" +
 	"\vGAMResponse\x12X\n" +
-	"\x14authentication_modes\x18\x01 \x03(\v2%.authd.GAMResponse.AuthenticationModeR\x13authenticationModes\x1a:\n" +
+	"\x14authentication_modes\x18\x01 \x03(\v2%.authd.GAMResponse.AuthenticationModeR\x13authenticationModes\x12\x15\n" +
+	"\x03msg\x18\x02 \x01(\tH\x00R\x03msg\x88\x01\x01\x1a:\n" +
 	"\x12AuthenticationMode\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
-	"\x05label\x18\x02 \x01(\tR\x05label\"a\n" +
+	"\x05label\x18\x02 \x01(\tR\x05labelB\x06\n" +
+	"\x04_msg\"a\n" +
 	"\n" +
 	"SAMRequest\x12\x1d\n" +
 	"\n" +
@@ -1879,6 +1889,7 @@ func file_authd_proto_init() {
 		return
 	}
 	file_authd_proto_msgTypes[8].OneofWrappers = []any{}
+	file_authd_proto_msgTypes[9].OneofWrappers = []any{}
 	file_authd_proto_msgTypes[26].OneofWrappers = []any{}
 	file_authd_proto_msgTypes[28].OneofWrappers = []any{
 		(*IARequest_AuthenticationData_Secret)(nil),

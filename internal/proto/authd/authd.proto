@@ -83,6 +83,7 @@ message UILayout {
 
 message GAMResponse {
   repeated AuthenticationMode authentication_modes = 1;
+  optional string msg = 2;
 
   message AuthenticationMode {
     string id = 1;

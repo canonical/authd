@@ -85,12 +85,12 @@ func (b *Bus) NewSession(username, lang, mode string) (sessionID, encryptionKey 
 }
 
 // GetAuthenticationModes is the method through which the broker and the daemon will communicate once dbusInterface.GetAuthenticationModes is called.
-func (b *Bus) GetAuthenticationModes(sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, dbusErr *dbus.Error) {
-	authenticationModes, err := b.broker.GetAuthenticationModes(context.Background(), sessionID, supportedUILayouts)
+func (b *Bus) GetAuthenticationModes(sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, msg string, dbusErr *dbus.Error) {
+	authenticationModes, msg, err := b.broker.GetAuthenticationModes(context.Background(), sessionID, supportedUILayouts)
 	if err != nil {
-		return nil, dbus.MakeFailedError(err)
+		return nil, "", dbus.MakeFailedError(err)
 	}
-	return authenticationModes, nil
+	return authenticationModes, msg, nil
 }
 
 // SelectAuthenticationMode is the method through which the broker and the daemon will communicate once dbusInterface.SelectAuthenticationMode is called.
