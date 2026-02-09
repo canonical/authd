@@ -1,0 +1,303 @@
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+>
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 2
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Gimme your password:
+>
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Gimme your password:
+>
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your authentication method:
+>
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Gimme your password:
+>
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your authentication method:
+> r
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Gimme your password:
+>
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your authentication method:
+> r
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+>
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Gimme your password:
+>
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your authentication method:
+> r
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> invalid-ID
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Gimme your password:
+>
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your authentication method:
+> r
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> invalid-ID
+Unsupported input
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+>
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Gimme your password:
+>
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your authentication method:
+> r
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> invalid-ID
+Unsupported input
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 555
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Gimme your password:
+>
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your authentication method:
+> r
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> invalid-ID
+Unsupported input
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 555
+Invalid selection
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+>
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Gimme your password:
+>
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your authentication method:
+> r
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> invalid-ID
+Unsupported input
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 555
+Invalid selection
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 1
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Gimme your password:
+>
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your authentication method:
+> r
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> invalid-ID
+Unsupported input
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 555
+Invalid selection
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Choose your provider:
+> 1
+PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd'
+SSH PAM user 'user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd' using local broker
+(user-integration-pre-check-ssh-authenticate-user-switching-to-local-broker-with-shared-sshd@localhost) Password:
+────────────────────────────────────────────────────────────────────────────────

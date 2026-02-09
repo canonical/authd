@@ -6,11 +6,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/canonical/authd/internal/brokers"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/log"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/msteinert/pam/v2"
-	"github.com/ubuntu/authd/internal/brokers"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/log"
 )
 
 // sendEvent sends an event msg to the main event loop.
@@ -47,7 +47,7 @@ func startBrokerSession(client authd.PAMClient, brokerID, username string, mode 
 
 		sbResp, err := client.SelectBroker(context.TODO(), sbReq)
 		if err != nil {
-			return pamError{status: pam.ErrSystem, msg: fmt.Sprintf("can't select broker: %v", err)}
+			return pamError{status: pam.ErrSystem, msg: err.Error()}
 		}
 
 		sessionID := sbResp.GetSessionId()

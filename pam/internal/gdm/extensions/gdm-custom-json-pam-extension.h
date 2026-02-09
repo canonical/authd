@@ -2,6 +2,8 @@
 
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 8 -*-
  *
+ * Based on https://gitlab.gnome.org/GNOME/gdm/-/blob/8c3fbd5ddefb8097d990a12581453582ec71a32f/pam-extensions/gdm-custom-json-pam-extension.h
+ *
  * Copyright (C) 2023 Canonical Ltd.
  *
  * This program is free software; you can redistribute it and/or modify

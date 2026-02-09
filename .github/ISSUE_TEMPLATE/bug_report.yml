@@ -26,7 +26,7 @@ body:
 
         **Troubleshooting**
 
-        Please read our [Troubleshooting wiki page](https://github.com/ubuntu/authd/wiki/06--Troubleshooting)
+        Please read our [Troubleshooting wiki page](https://documentation.ubuntu.com/authd/stable-docs/reference/troubleshooting/#common-issues-and-limitations)
         and see if you can find a solution to your problem there.
   - type: checkboxes
     attributes:
@@ -97,7 +97,8 @@ body:
           _SYSTEMD_UNIT=snap.authd-google.authd-google.service \+ UNIT=snap.authd-google.authd-google.service \+ SYSLOG_IDENTIFIER=authd-google \+ \
           '_CMDLINE="gdm-session-worker [pam/gdm-authd]"' | sed -E -e 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/<UUID redacted>/g' \
             -e 's/GOCSPX-[0-9a-zA-Z_-]+/<redacted>/g' \
-            -e 's/[0-9a-zA-Z_-]+\.apps\.googleusercontent\.com/<redacted>/g')
+            -e 's/[0-9a-zA-Z_-]+\.apps\.googleusercontent\.com/<redacted>/g' \
+            -e 's/(client_secret = )\S+.*/\1<redacted>/g')
         \`\`\`
 
         #### authd apt history
@@ -106,7 +107,7 @@ body:
         \`\`\`
 
         #### authd broker configuration
-        $(sudo sh -c 'if ! find /etc/authd/brokers.d -name \*.conf | grep -q .; then echo ":warning: No config files in /etc/authd/brokers.d/"; else for f in /etc/authd/brokers.d/*.conf; do echo "#### $f"; echo "\`\`\`";  cat $f; echo "\`\`\`"; done; fi')
+        $(sudo sh -c 'if ! find /etc/authd/brokers.d -name \*.conf | grep -q .; then echo ":warning: No config files in /etc/authd/brokers.d/"; else for f in /etc/authd/brokers.d/*.conf; do echo "#### $f"; echo "\`\`\`";  cat $f; echo "\`\`\`"; done; fi' | sed -E 's/client_secret = .*/client_secret = <redacted>/g')
 
         #### authd-msentraid configuration
         \`\`\`

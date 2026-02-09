@@ -1,3 +1,9 @@
+---
+myst:
+  html_meta:
+    "description lang=en": "Use authd with a Samba server."
+---
+
 # Using authd with Samba
 
 The user identifiers (UIDs) and group identifiers (GIDs) assigned by authd are

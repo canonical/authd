@@ -45,10 +45,19 @@ authd.UserService:
         - name: ListUsers
           isclientstream: false
           isserverstream: false
+        - name: LockUser
+          isclientstream: false
+          isserverstream: false
+        - name: UnlockUser
+          isclientstream: false
+          isserverstream: false
     metadata: authd.proto
 grpc.health.v1.Health:
     methods:
         - name: Check
+          isclientstream: false
+          isserverstream: false
+        - name: List
           isclientstream: false
           isserverstream: false
         - name: Watch

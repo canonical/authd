@@ -26,11 +26,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/brokers/layouts/entries"
+	"github.com/canonical/authd/log"
 	"github.com/google/uuid"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/brokers/layouts/entries"
-	"github.com/ubuntu/authd/log"
 	"golang.org/x/exp/slices"
 )
 
@@ -633,8 +633,15 @@ func (b *Broker) IsAuthenticated(ctx context.Context, sessionID, authenticationD
 	}()
 
 	access, data = b.handleIsAuthenticated(ctx, sessionInfo, authData)
+
+	if ctx.Err() != nil {
+		log.Debugf(ctx, "IsAuthenticated for session %s was cancelled: %v", sessionID, ctx.Err())
+		return auth.Cancelled, `{"message": "authentication request cancelled"}`, ctx.Err()
+	}
+
 	log.Debugf(context.TODO(), "Authentication result on session %s (%s) for user %q: %q - %#v",
 		sessionInfo.sessionMode, sessionID, sessionInfo.username, access, data)
+
 	if access == auth.Granted && sessionInfo.currentAuthStep < sessionInfo.neededAuthSteps {
 		data = ""
 		if sessionInfo.pwdChange != noReset && sessionInfo.sessionMode == auth.SessionModeLogin {
@@ -853,6 +860,7 @@ func (b *Broker) cancelIsAuthenticatedUnlocked(_ context.Context, sessionID stri
 }
 
 // UserPreCheck checks if the user is known to the broker.
+// It returns the user info in JSON format if the user is valid, or an empty string if the user is not allowed.
 func (b *Broker) UserPreCheck(ctx context.Context, username string) (string, error) {
 	if strings.HasPrefix(username, "user-") && strings.Contains(username, "integration") &&
 		strings.Contains(username, fmt.Sprintf("-%s-", UserIntegrationPreCheckValue)) {
@@ -862,7 +870,8 @@ func (b *Broker) UserPreCheck(ctx context.Context, username string) (string, err
 	exampleUsersMu.Lock()
 	defer exampleUsersMu.Unlock()
 	if _, exists := exampleUsers[username]; !exists {
-		return "", fmt.Errorf("user %q does not exist", username)
+		// The username does not match any of the allowed suffixes.
+		return "", nil
 	}
 	return userInfoFromName(username), nil
 }

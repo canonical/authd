@@ -1,6 +1,0 @@
-name: tempuser1
-uid: 0
-gid: 0
-gecos: ""
-dir: /nonexistent
-shell: /usr/sbin/nologin

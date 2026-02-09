@@ -32,9 +32,9 @@ groups:
     - name: group1
       gid: 11111
       ugid: "12345678"
-    - name: group2
+    - name: group2withoutugid
       gid: 22222
-      ugid: "56781234"
+      ugid: ""
     - name: group3
       gid: 33333
       ugid: "34567812"
@@ -61,4 +61,4 @@ users_to_groups:
       gid: 44444
     - uid: 4444
       gid: 99999
-schema_version: 1
+schema_version: 2

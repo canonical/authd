@@ -9,12 +9,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/canonical/authd/internal/brokers"
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/brokers"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	"github.com/ubuntu/authd/log"
 )
 
 var (
@@ -319,9 +319,10 @@ func TestStartAndEndSession(t *testing.T) {
 
 	// Fetches the broker IDs
 	for _, broker := range m.AvailableBrokers() {
-		if broker.Name == b1.Name {
+		switch broker.Name {
+		case b1.Name:
 			b1.ID = broker.ID
-		} else if broker.Name == b2.Name {
+		case b2.Name:
 			b2.ID = broker.ID
 		}
 	}

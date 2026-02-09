@@ -1,4 +1,4 @@
 FIRST CALL:
 	access: 
 	msg: 
-	err: permission denied: this action is only allowed for root users. Current user is XXXX
+	err: permission denied: only root can perform this operation

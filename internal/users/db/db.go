@@ -12,11 +12,11 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/log"
 	// sqlite3 driver.
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/internal/fileutils"
-	"github.com/ubuntu/authd/log"
 )
 
 var (
@@ -175,15 +175,34 @@ func RemoveDB(dbDir string) error {
 	return os.Remove(filepath.Join(dbDir, consts.DefaultDatabaseFileName))
 }
 
+// NewUIDNotFoundError returns a NoDataFoundError for the given user ID.
+func NewUIDNotFoundError(uid uint32) NoDataFoundError {
+	return NoDataFoundError{fmt.Sprintf("user with UID %d not found", uid)}
+}
+
+// NewGIDNotFoundError returns a NoDataFoundError for the given group ID.
+func NewGIDNotFoundError(gid uint32) NoDataFoundError {
+	return NoDataFoundError{fmt.Sprintf("group with GID %d not found", gid)}
+}
+
+// NewUserNotFoundError returns a NoDataFoundError for the given user name.
+func NewUserNotFoundError(name string) NoDataFoundError {
+	return NoDataFoundError{fmt.Sprintf("user %q not found", name)}
+}
+
+// NewGroupNotFoundError returns a NoDataFoundError for the given group name.
+func NewGroupNotFoundError(name string) NoDataFoundError {
+	return NoDataFoundError{fmt.Sprintf("group %q not found", name)}
+}
+
 // NoDataFoundError is returned when we didn’t find a matching entry.
 type NoDataFoundError struct {
-	key   string
-	table string
+	msg string
 }
 
 // Error implements the error interface.
 func (err NoDataFoundError) Error() string {
-	return fmt.Sprintf("no result matching %v in %v", err.key, err.table)
+	return err.msg
 }
 
 // Is makes this error insensitive to the key and table names.

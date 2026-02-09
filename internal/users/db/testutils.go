@@ -5,6 +5,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -12,8 +13,10 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/ubuntu/authd/internal/testsdetection"
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/testsdetection"
+	"github.com/canonical/authd/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -201,18 +204,51 @@ func createDBFromYAMLReader(r io.Reader, destDir string) (err error) {
 	return nil
 }
 
-// Z_ForTests_GetGroupFile returns the path to the group file.
+// Z_ForTests_CreateDBFromDump creates the database from the provided SQLite dump file.
 //
 // nolint:revive,nolintlint // We want to use underscores in the function name here.
-func Z_ForTests_GetGroupFile() string {
+func Z_ForTests_CreateDBFromDump(dumpFile, destDir string) error {
 	testsdetection.MustBeTesting()
 
-	return groupFile
-}
+	dumpFile, err := filepath.Abs(dumpFile)
+	if err != nil {
+		return err
+	}
 
-// Z_ForTests_SetGroupFile sets the group file to the provided path.
-//
-// nolint:revive,nolintlint // We want to use underscores in the function name here.
-func Z_ForTests_SetGroupFile(groupFilePath string) {
-	groupFile = groupFilePath
+	log.Debugf(context.Background(), "Creating SQLite database from dump %s", dumpFile)
+
+	dbPath := filepath.Join(destDir, consts.DefaultDatabaseFileName)
+	if err := os.MkdirAll(destDir, 0700); err != nil {
+		return fmt.Errorf("could not create database directory %s: %w", destDir, err)
+	}
+	if err := fileutils.Touch(dbPath); err != nil {
+		return fmt.Errorf("could not create database file %s: %w", dbPath, err)
+	}
+
+	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?cache=shared", dbPath))
+	if err != nil {
+		return fmt.Errorf("could not open database file %s: %w", dbPath, err)
+	}
+
+	// Enable foreign key support (this needs to be done for each connection, so we can't do it in the schema).
+	_, err = db.Exec("PRAGMA foreign_keys = ON;")
+	if err != nil {
+		return fmt.Errorf("failed to enable foreign keys: %w", err)
+	}
+
+	dumpContent, err := os.ReadFile(dumpFile)
+	if err != nil {
+		return fmt.Errorf("could not read dump file %s: %w", dumpFile, err)
+	}
+	// Execute the dump content.
+	_, err = db.Exec(string(dumpContent))
+	if err != nil {
+		return fmt.Errorf("could not execute dump content: %w", err)
+	}
+
+	if err := db.Close(); err != nil {
+		return fmt.Errorf("could not close database: %w", err)
+	}
+
+	return nil
 }

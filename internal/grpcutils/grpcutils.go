@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/log"
 	"google.golang.org/grpc"
 	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
 )

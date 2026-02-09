@@ -5,10 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/testutils"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/fileutils"
 )
 
 // errAny represents any error type, for testing purposes.
@@ -350,5 +352,47 @@ func TestLrename(t *testing.T) {
 			require.NoError(t, err, "FileExists should not return an error")
 			require.True(t, exists, "Destination file should exist")
 		})
+	}
+}
+
+func TestLockDir(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+
+	// First lock should succeed
+	t.Log("Acquiring first lock")
+	unlock, err := fileutils.LockDir(tempDir)
+	require.NoError(t, err, "LockDir should not return an error")
+
+	// Second lock should block, so we run it in a goroutine and check it doesn't return immediately
+	unlockCh := make(chan func() error, 1)
+	go func() {
+		t.Log("Acquiring second lock (should block)")
+		unlock2, err := fileutils.LockDir(tempDir)
+		t.Logf("Second LockDir returned with error: %v", err)
+		unlockCh <- unlock2
+	}()
+	select {
+	case <-unlockCh:
+		require.Fail(t, "LockDir should block when trying to lock an already locked directory")
+	case <-time.After(testutils.MultipliedSleepDuration(100 * time.Millisecond)):
+		// Expected behavior, LockDir is blocking
+	}
+
+	// Unlock the first lock
+	t.Log("Releasing first lock")
+	err = unlock()
+	require.NoError(t, err, "Unlock should not return an error")
+
+	// Now we should be able to acquire the lock again
+	select {
+	case unlock = <-unlockCh:
+		// Expected behavior, LockDir returned after the first lock was released
+		t.Log("Releasing lock")
+		err = unlock()
+		require.NoError(t, err, "Unlock should not return an error")
+	case <-time.After(testutils.MultipliedSleepDuration(5 * time.Second)):
+		require.Fail(t, "LockDir should have returned after the first lock was released")
 	}
 }

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ubuntu/authd/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -18,7 +17,6 @@ import (
 func RedactErrorInterceptor(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	m, err := handler(ctx, req)
 	if err != nil {
-		log.Warning(context.TODO(), err.Error())
 		var redactedError ToDisplayError
 		if !errors.As(err, &redactedError) {
 			return m, err
@@ -54,6 +52,9 @@ func FormatErrorMessage(ctx context.Context, method string, req, reply any, cc *
 	// likely means that IsAuthenticated got cancelled, so we need to keep the error intact
 	case codes.Canceled:
 		break
+	case codes.PermissionDenied:
+		// permission denied, just format it
+		err = fmt.Errorf("permission denied: %v", st.Message())
 	// grpc error, just format it
 	default:
 		err = fmt.Errorf("error %s from server: %v", st.Code(), st.Message())

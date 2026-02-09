@@ -9,9 +9,9 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/canonical/authd/log"
+	"github.com/canonical/authd/pam/internal/dbusmodule"
 	"github.com/msteinert/pam/v2"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/authd/pam/internal/dbusmodule"
 )
 
 var (

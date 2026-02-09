@@ -1,7 +1,7 @@
 syntax = "proto3";
 package authd;
 
-option go_package = "github.com/ubuntu/authd/internal/proto/authd";
+option go_package = "github.com/canonical/authd/internal/proto/authd";
 
 message Empty {
 }
@@ -133,6 +133,9 @@ service UserService {
   rpc GetUserByName(GetUserByNameRequest) returns (User);
   rpc GetUserByID(GetUserByIDRequest) returns (User);
   rpc ListUsers(Empty) returns (Users);
+  rpc LockUser(LockUserRequest) returns (Empty);
+  rpc UnlockUser(UnlockUserRequest) returns (Empty);
+
   rpc GetGroupByName(GetGroupByNameRequest) returns (Group);
   rpc GetGroupByID(GetGroupByIDRequest) returns (Group);
   rpc ListGroups(Empty) returns (Groups);
@@ -145,6 +148,14 @@ message GetUserByNameRequest{
 
 message GetUserByIDRequest{
   uint32 id = 1;
+}
+
+message LockUserRequest{
+  string name = 1;
+}
+
+message UnlockUserRequest{
+  string name = 1;
 }
 
 message GetGroupByNameRequest{

@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/canonical/authd/internal/brokers/layouts"
+	authd "github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/msteinert/pam/v2"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	authd "github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/pam/internal/pam_test"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 

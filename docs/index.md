@@ -13,8 +13,8 @@ authentication, enabling cloud-based identity management for Ubuntu Desktop and
 Server.
 
 authd has a modular design, comprising an authentication daemon and various
-identity brokers. This enables authd to support a growing list of cloud
-identity providers. Currently, authd supports authentication with both [MS
+identity brokers. This enables authd to support a growing list of identity 
+providers. Currently, authd supports authentication with both [MS
 Entra ID](https://learn.microsoft.com/en-us/entra/fundamentals/whatis) and
 [Google IAM](https://cloud.google.com/iam/docs/overview). An example broker is
 also provided to help developers create new brokers for additional identity
@@ -24,14 +24,7 @@ If an organization is pursuing cloud-based authentication of Ubuntu
 workstations and servers, authd is a secure and versatile service to support a
 full transition to the cloud.
 
-## In this documentation
-
-<!-- NOTE: changed grid layout as there is only three cards -->
-::::::{grid} 1 1 1 1
-
-:::::{grid-item-card} [How-to guides](howto/index)
-
-**Step-by-step guides** covering key operations for your chosen identity provider.
+## Supported identity providers
 
 ::::{tab-set}
 :sync-group: broker
@@ -43,39 +36,30 @@ full transition to the cloud.
 * <a href="howto/configure-authd/?broker=google">Configure the Google IAM broker</a>
 :::
 
-:::{tab-item} MS Entra ID
+:::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
-* <a href="howto/install-authd/?broker=msentraid">Install authd and the MS Entra ID broker</a>
-* <a href="howto/configure-authd/?broker=msentraid">Configure the MS Entra ID broker</a>
+* <a href="howto/install-authd/?broker=msentraid">Install authd and the Microsoft Entra ID broker</a>
+* <a href="howto/configure-authd/?broker=msentraid">Configure the Microsoft Entra ID broker</a>
+:::
+:::{tab-item} Keycloak
+:sync: keycloak
+
+* <a href="howto/install-authd/?broker=keycloak">Install authd and the generic OIDC broker</a>
+* <a href="howto/configure-authd/?broker=keycloak">Configure the generic OIDC broker for Keycloak</a>
 :::
 
-::::::
-
-::::::{grid} 1 1 2 2
-:reverse:
-
-:::::{grid-item-card} [Reference](reference/index)
-:link: reference/index
-:link-type: doc
-
-**Technical information** on supported cloud providers and troubleshooting authd.
 :::::
 
-:::::{grid-item-card} [Explanation](explanation/index)
-:link: explanation/index
-:link-type: doc
+## In this documentation
 
-**Architecture reference for authd**, showing how its brokers interface with multiple cloud
-providers.
-:::::
-
-::::::
-
-Documentation for the [stable](https://canonical-authd.readthedocs-hosted.com/en/stable/) release of authd and the [latest](https://canonical-authd.readthedocs-hosted.com/en/latest/) development version are
-both available.
-
----------
+* **Setup**: [Installing authd](/howto/install-authd/) • [Configuring authd](/howto/configure-authd/) • [Changing authd versions](/howto/changing-versions/)
+* **User login**: [Logging in with GDM](/howto/login-gdm/) • [Logging in with SSH](/howto/login-ssh/)
+* **Deployment**: [Deploying with Landscape](/reference/landscape-deploy/) • [Deploying with cloud-init](/reference/cloud-init-deploy/)
+* **Network file systems**: [Using with NFS](/howto/use-with-nfs/) • [Using with Samba](/howto/use-with-samba/)
+* **authd design**: [Architecture](/explanation/authd-architecture/) • [Security overview](/explanation/security/)
+* **Troubleshooting**: [Accessing logs](/howto/logging/) • [Entering recovery mode on failed login](/howto/enter-recovery-mode/)
+* **Documentation**: [How this documentation is structured](/explanation/structure-of-authd-documentation)
 
 ## Project and community
 

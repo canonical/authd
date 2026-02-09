@@ -385,17 +385,17 @@ Enter 'r' to cancel the request and go back to select the authentication method
 >
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-prevent-user-from-switching-username'
 PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-prevent-user-from-switching-username'
-Environment:
-  USER=user-integration-pre-check-ssh-prevent-user-from-switching-username
-  LOGNAME=user-integration-pre-check-ssh-prevent-user-from-switching-username
+ SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Prevent_user_from_switching_username]
   HOME=${AUTHD_TEST_HOME}
+  LOGNAME=user-integration-pre-check-ssh-prevent-user-from-switching-username
   PATH=${AUTHD_TEST_PATH}
+  PWD=${AUTHD_TEST_PWD}
   SHELL=/bin/sh
-  TERM=xterm-256color
   SSH_CLIENT=${AUTHD_TEST_SSH_CLIENT}
   SSH_CONNECTION=${AUTHD_TEST_SSH_CONNECTION}
   SSH_TTY=${AUTHD_TEST_SSH_TTY}
- SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Prevent_user_from_switching_username]
+  TERM=xterm-256color
+  USER=user-integration-pre-check-ssh-prevent-user-from-switching-username
 Connection to localhost closed.
 >
 ────────────────────────────────────────────────────────────────────────────────

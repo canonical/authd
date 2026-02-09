@@ -1,0 +1,26 @@
+name: 'Setup Go Tests with Coverage Analysis'
+description: 'Additional setup steps for Go tests with coverage analysis'
+runs:
+  using: 'composite'
+  steps:
+    - name: Install grcov
+      uses: baptiste0928/cargo-install@v3
+      with:
+        crate: grcov
+
+    - name: Install coverage collection dependencies
+      shell: bash
+      run: |
+        # Install coverage collection dependencies
+        set -eu
+
+        echo "::group::Install coverage collection dependencies"
+
+        # Dependendencies for C coverage collection
+        sudo apt-get install -y gcovr
+
+        # Dependendencies for Go coverage collection
+        go install github.com/AlekSi/gocov-xml@latest
+        go install github.com/adombeck/gocov/gocov@latest
+        dotnet tool install -g dotnet-reportgenerator-globaltool
+        echo "::endgroup::"

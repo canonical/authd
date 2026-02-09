@@ -1,0 +1,10 @@
+name: 'Upload test artifacts'
+description: 'Uploads test artifacts'
+runs:
+  using: 'composite'
+  steps:
+    - name: Upload test artifacts
+      uses: actions/upload-artifact@v5
+      with:
+        name: authd-${{ github.job }}-artifacts-${{ github.run_attempt }}
+        path: ${{ env.AUTHD_TESTS_ARTIFACTS_PATH }}

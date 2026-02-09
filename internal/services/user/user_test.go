@@ -6,21 +6,22 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/canonical/authd/internal/brokers"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/services/errmessages"
+	"github.com/canonical/authd/internal/services/permissions"
+	"github.com/canonical/authd/internal/services/user"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/users"
+	"github.com/canonical/authd/internal/users/db"
+	userslocking "github.com/canonical/authd/internal/users/locking"
+	userstestutils "github.com/canonical/authd/internal/users/testutils"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/brokers"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/internal/services/errmessages"
-	"github.com/ubuntu/authd/internal/services/permissions"
-	"github.com/ubuntu/authd/internal/services/user"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	"github.com/ubuntu/authd/internal/users"
-	"github.com/ubuntu/authd/internal/users/db"
-	"github.com/ubuntu/authd/internal/users/idgenerator"
-	localgroupstestutils "github.com/ubuntu/authd/internal/users/localentries/testutils"
-	"github.com/ubuntu/authd/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -53,8 +54,8 @@ func TestGetUserByName(t *testing.T) {
 		wantErr          bool
 		wantErrNotExists bool
 	}{
-		"Return_existing_user":                               {username: "user1"},
-		"Return existing user with different capitalization": {username: "USER1"},
+		"Return_existing_user":                {username: "user1"},
+		"Return_existing_user_with_uppercase": {username: "USER1"},
 
 		"Precheck_user_if_not_in_db": {username: "user-pre-check", shouldPreCheck: true},
 		"Prechecked_user_with_upper_cases_in_username_has_same_id_as_lower_case": {username: "User-Pre-Check", shouldPreCheck: true},
@@ -62,18 +63,32 @@ func TestGetUserByName(t *testing.T) {
 		"Error_with_typed_GRPC_notfound_code_on_unexisting_user": {username: "does-not-exists", wantErr: true, wantErrNotExists: true},
 		"Error_on_missing_name":                                  {wantErr: true},
 
-		"Error_if_user_not_in_db_and_precheck_is_disabled": {username: "user-pre-check", wantErr: true, wantErrNotExists: true},
-		"Error_if_user_not_in_db_and_precheck_fails":       {username: "does-not-exist", dbFile: "empty.db.yaml", shouldPreCheck: true, wantErr: true, wantErrNotExists: true},
+		"Error_if_user_not_in_db_and_precheck_is_disabled":             {username: "user-pre-check", wantErr: true, wantErrNotExists: true},
+		"Error_if_user_not_in_db_and_precheck_fails":                   {username: "does-not-exist", dbFile: "empty.db.yaml", shouldPreCheck: true, wantErr: true, wantErrNotExists: true},
+		"Error_if_user_not_in_db_and_precheck_fails_for_existing_user": {username: "local-pre-check", dbFile: "empty.db.yaml", shouldPreCheck: true, wantErr: true, wantErrNotExists: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			// We don't care about gpasswd output here as it's already covered in the db unit tests.
-			_ = localgroupstestutils.SetupGPasswdMock(t, filepath.Join("testdata", "empty.group"))
+			if tc.shouldPreCheck {
+				userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
+			}
 
-			client := newUserServiceClient(t, tc.dbFile)
+			client, _ := newUserServiceClient(t, tc.dbFile)
 
-			got, err := client.GetUserByName(context.Background(), &authd.GetUserByNameRequest{Name: tc.username, ShouldPreCheck: tc.shouldPreCheck})
-			requireExpectedResult(t, "GetUserByName", got, err, tc.wantErr, tc.wantErrNotExists)
+			u, err := client.GetUserByName(context.Background(), &authd.GetUserByNameRequest{Name: tc.username, ShouldPreCheck: tc.shouldPreCheck})
+			requireExpectedResult(t, "GetUserByName", u, err, tc.wantErr, tc.wantErrNotExists)
+
+			// Check that the user name is lowercase
+			if u != nil {
+				require.Equal(t, u.Name, strings.ToLower(u.Name), "User name should be lowercase")
+			}
+
+			if !tc.shouldPreCheck || tc.wantErr {
+				return
+			}
+
+			_, err = client.GetUserByName(context.Background(), &authd.GetUserByNameRequest{Name: tc.username, ShouldPreCheck: false})
+			require.Error(t, err, "GetUserByName should return an error, but did not")
 		})
 	}
 }
@@ -94,10 +109,7 @@ func TestGetUserByID(t *testing.T) {
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			// We don't care about gpasswd output here as it's already covered in the db unit tests.
-			_ = localgroupstestutils.SetupGPasswdMock(t, filepath.Join("testdata", "empty.group"))
-
-			client := newUserServiceClient(t, tc.dbFile)
+			client, _ := newUserServiceClient(t, tc.dbFile)
 
 			got, err := client.GetUserByID(context.Background(), &authd.GetUserByIDRequest{Id: tc.uid})
 			requireExpectedResult(t, "GetUserByID", got, err, tc.wantErr, tc.wantErrNotExists)
@@ -114,20 +126,23 @@ func TestGetGroupByName(t *testing.T) {
 		wantErr          bool
 		wantErrNotExists bool
 	}{
-		"Return_existing_group": {groupname: "group1"},
+		"Return_existing_group":                {groupname: "group1"},
+		"Return_existing_group_with_uppercase": {groupname: "GROUP1"},
 
 		"Error_with_typed_GRPC_notfound_code_on_unexisting_user": {groupname: "does-not-exists", wantErr: true, wantErrNotExists: true},
 		"Error_on_missing_name":                                  {wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			// We don't care about gpasswd output here as it's already covered in the db unit tests.
-			_ = localgroupstestutils.SetupGPasswdMock(t, filepath.Join("testdata", "empty.group"))
+			client, _ := newUserServiceClient(t, tc.dbFile)
 
-			client := newUserServiceClient(t, tc.dbFile)
+			group, err := client.GetGroupByName(context.Background(), &authd.GetGroupByNameRequest{Name: tc.groupname})
+			requireExpectedResult(t, "GetGroupByName", group, err, tc.wantErr, tc.wantErrNotExists)
 
-			got, err := client.GetGroupByName(context.Background(), &authd.GetGroupByNameRequest{Name: tc.groupname})
-			requireExpectedResult(t, "GetGroupByName", got, err, tc.wantErr, tc.wantErrNotExists)
+			// Check that the group name is lowercase
+			if group != nil {
+				require.Equal(t, group.Name, strings.ToLower(group.Name), "Group name should be lowercase")
+			}
 		})
 	}
 }
@@ -148,10 +163,7 @@ func TestGetGroupByID(t *testing.T) {
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			// We don't care about gpasswd output here as it's already covered in the db unit tests.
-			_ = localgroupstestutils.SetupGPasswdMock(t, filepath.Join("testdata", "empty.group"))
-
-			client := newUserServiceClient(t, tc.dbFile)
+			client, _ := newUserServiceClient(t, tc.dbFile)
 
 			got, err := client.GetGroupByID(context.Background(), &authd.GetGroupByIDRequest{Id: tc.gid})
 			requireExpectedResult(t, "GetGroupByID", got, err, tc.wantErr, tc.wantErrNotExists)
@@ -170,14 +182,11 @@ func TestListUsers(t *testing.T) {
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			// We don't care about gpasswd output here as it's already covered in the db unit tests.
-			_ = localgroupstestutils.SetupGPasswdMock(t, filepath.Join("testdata", "empty.group"))
-
 			if tc.dbFile == "" {
 				tc.dbFile = "default.db.yaml"
 			}
 
-			client := newUserServiceClient(t, tc.dbFile)
+			client, _ := newUserServiceClient(t, tc.dbFile)
 
 			resp, err := client.ListUsers(context.Background(), &authd.Empty{})
 			requireExpectedListResult(t, "ListUsers", resp.GetUsers(), err, tc.wantErr)
@@ -196,14 +205,11 @@ func TestListGroups(t *testing.T) {
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			// We don't care about gpasswd output here as it's already covered in the db unit tests.
-			_ = localgroupstestutils.SetupGPasswdMock(t, filepath.Join("testdata", "empty.group"))
-
 			if tc.dbFile == "" {
 				tc.dbFile = "default.db.yaml"
 			}
 
-			client := newUserServiceClient(t, tc.dbFile)
+			client, _ := newUserServiceClient(t, tc.dbFile)
 
 			resp, err := client.ListGroups(context.Background(), &authd.Empty{})
 			if tc.wantErr {
@@ -219,12 +225,80 @@ func TestListGroups(t *testing.T) {
 	}
 }
 
-func TestMockgpasswd(t *testing.T) {
-	localgroupstestutils.Mockgpasswd(t)
+func TestLockUser(t *testing.T) {
+	tests := map[string]struct {
+		sourceDB string
+
+		username           string
+		currentUserNotRoot bool
+
+		wantErr bool
+	}{
+		"Successfully_lock_user":                {username: "user1"},
+		"Successfully_lock_user_with_uppercase": {username: "USER1"},
+
+		"Error_when_username_is_empty":   {wantErr: true},
+		"Error_when_user_does_not_exist": {username: "doesnotexist", wantErr: true},
+		"Error_when_not_root":            {username: "notroot", currentUserNotRoot: true, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			client, m := newUserServiceClient(t, tc.sourceDB)
+
+			_, err := client.LockUser(context.Background(), &authd.LockUserRequest{Name: tc.username})
+			if tc.wantErr {
+				require.Error(t, err, "LockUser should return an error, but did not")
+				return
+			}
+			require.NoError(t, err, "LockUser should not return an error, but did")
+
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			require.NoError(t, err, "Setup: failed to dump database for comparing")
+			golden.CheckOrUpdate(t, dbContent)
+		})
+	}
+}
+
+func TestUnlockUser(t *testing.T) {
+	tests := map[string]struct {
+		sourceDB string
+
+		username           string
+		currentUserNotRoot bool
+
+		wantErr bool
+	}{
+		"Successfully_unlock_user":                {username: "user1"},
+		"Successfully_unlock_user_with_uppercase": {username: "USER1"},
+
+		"Error_when_username_is_empty":   {wantErr: true},
+		"Error_when_user_does_not_exist": {username: "doesnotexist", wantErr: true},
+		"Error_when_not_root":            {username: "notroot", currentUserNotRoot: true, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			if tc.sourceDB == "" {
+				tc.sourceDB = "locked-user.db.yaml"
+			}
+
+			client, m := newUserServiceClient(t, tc.sourceDB)
+
+			_, err := client.UnlockUser(context.Background(), &authd.UnlockUserRequest{Name: tc.username})
+			if tc.wantErr {
+				require.Error(t, err, "UnlockUser should return an error, but did not")
+				return
+			}
+			require.NoError(t, err, "UnlockUser should not return an error, but did")
+
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			require.NoError(t, err, "Setup: failed to dump database for comparing")
+			golden.CheckOrUpdate(t, dbContent)
+		})
+	}
 }
 
 // newUserServiceClient returns a new gRPC client for the CLI service.
-func newUserServiceClient(t *testing.T, dbFile string) (client authd.UserServiceClient) {
+func newUserServiceClient(t *testing.T, dbFile string) (client authd.UserServiceClient, userManager *users.Manager) {
 	t.Helper()
 
 	tmpDir, err := os.MkdirTemp("", "authd-socket-dir")
@@ -241,7 +315,7 @@ func newUserServiceClient(t *testing.T, dbFile string) (client authd.UserService
 		require.NoError(t, err, "Setup: could not create database from testdata")
 	}
 
-	userManager := newUserManagerForTests(t, dbFile)
+	userManager = newUserManagerForTests(t, dbFile)
 	brokerManager := newBrokersManagerForTests(t)
 	permissionsManager := permissions.New(permissions.Z_ForTests_WithCurrentUserAsRoot())
 	service := user.NewService(context.Background(), userManager, brokerManager, &permissionsManager)
@@ -263,7 +337,7 @@ func newUserServiceClient(t *testing.T, dbFile string) (client authd.UserService
 
 	t.Cleanup(func() { _ = conn.Close() }) // We don't care about the error on cleanup
 
-	return authd.NewUserServiceClient(conn)
+	return authd.NewUserServiceClient(conn), userManager
 }
 
 func enableCheckGlobalAccess(s user.Service) grpc.UnaryServerInterceptor {
@@ -288,7 +362,7 @@ func newUserManagerForTests(t *testing.T, dbFile string) *users.Manager {
 	require.NoError(t, err, "Setup: could not create database from testdata")
 
 	managerOpts := []users.Option{
-		users.WithIDGenerator(&idgenerator.IDGeneratorMock{
+		users.WithIDGenerator(&users.IDGeneratorMock{
 			UIDsToGenerate: []uint32{1234},
 		}),
 	}
@@ -325,7 +399,9 @@ func requireExpectedResult[T authd.User | authd.Group](t *testing.T, funcName st
 		require.True(t, ok, "The error is always a gRPC error")
 		if wantErrNotExists {
 			require.Equal(t, codes.NotFound.String(), s.Code().String())
+			return
 		}
+		require.NotEqual(t, codes.NotFound.String(), s.Code().String())
 		return
 	}
 	require.NoError(t, err, fmt.Sprintf("%s should not return an error, but did", funcName))
@@ -350,11 +426,6 @@ func requireExpectedListResult[T authd.User | authd.Group](t *testing.T, funcNam
 }
 
 func TestMain(m *testing.M) {
-	// Needed to skip the test setup when running the gpasswd mock.
-	if os.Getenv("GO_WANT_HELPER_PROCESS") != "" {
-		os.Exit(m.Run())
-	}
-
 	log.SetLevel(log.DebugLevel)
 
 	cleanup, err := testutils.StartSystemBusMock()

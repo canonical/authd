@@ -10,3 +10,7 @@ jobs:
         uses: canonical/has-signed-canonical-cla@v2
         with:
           accept-existing-contributors: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true

@@ -16,13 +16,16 @@ import re
 import subprocess
 import sys
 from requests.exceptions import RequestException
+from packaging.version import parse as parse_version
 
-SPHINX_DIR = os.path.join(os.getcwd(), ".sphinx")
+SPHINX_DIR = os.path.abspath(os.path.dirname(__file__))
+DOCS_DIR = os.path.abspath(os.path.join(SPHINX_DIR, '..'))
+REQUIREMENTS = os.path.join(DOCS_DIR, "requirements.txt")
 SPHINX_UPDATE_DIR = os.path.join(SPHINX_DIR, "update")
 GITHUB_REPO = "canonical/sphinx-docs-starter-pack"
 GITHUB_API_BASE = f"https://api.github.com/repos/{GITHUB_REPO}"
 GITHUB_API_SPHINX_DIR = f"{GITHUB_API_BASE}/contents/docs/.sphinx"
-GITHUB_RAW_BASE = f"https://raw.githubusercontent.com/{GITHUB_REPO}/check-log"
+GITHUB_RAW_BASE = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 
 TIMEOUT = 10  # seconds
 
@@ -36,7 +39,7 @@ def main():
     logging.debug("Checking local version")
     try:
         with open(os.path.join(SPHINX_DIR, "version")) as f:
-            current_version = f.read().strip()
+            local_version = f.read().strip()
     except FileNotFoundError:
         print("WARNING\nWARNING\nWARNING")
         print(
@@ -44,20 +47,20 @@ def main():
         )
         print("You may experience issues using this functionality.")
         logging.debug("No local version found. Setting version to None")
-        current_version = "None"
+        local_version = "None"
     except Exception as e:
         logging.debug(e)
         raise Exception("ERROR executing check local version")
-    logging.debug(f"Local version = {current_version}")
+    logging.debug(f"Local version = {local_version}")
 
     # Check release version
     latest_release = query_api(GITHUB_API_BASE + "/releases/latest").json()["tag_name"]
-    logging.debug(f"current release = {latest_release}")
+    logging.debug(f"Latest release = {latest_release}")
 
-    # Perform actions only if versions are different
+    # Perform actions only if local version is older than release version
     logging.debug("Comparing versions")
-    if current_version != latest_release:
-        logging.debug("Difference identified in current version and release version.")
+    if parse_version(local_version) < parse_version(latest_release):
+        logging.debug("Local version is older than the release version.")
         print("Starter pack is out of date.\n")
 
         # Identify and download '.sphinx' dir files to '.sphinx/update'
@@ -73,7 +76,7 @@ def main():
         # Provide changelog to identify other significant changes
         changelog = query_api(GITHUB_RAW_BASE + "/CHANGELOG.md")
         logging.debug("Changelog obtained")
-        version_regex = re.compile(r"#+ +" + re.escape(current_version) + r" *\n")
+        version_regex = re.compile(r"#+ +" + re.escape(local_version) + r" *\n")
         print("SEE CURRENT CHANGELOG:")
         print(re.split(version_regex, changelog.text)[0])
 
@@ -102,7 +105,7 @@ def main():
     # Check requirements are the same
     new_requirements = []
     try:
-        with open("requirements.txt", "r") as file:
+        with open(REQUIREMENTS, "r") as file:
             logging.debug("Checking requirements")
 
             local_reqs = set(file.read().splitlines()) - {""}
@@ -112,7 +115,7 @@ def main():
 
             new_requirements = requirements - local_reqs
 
-            for req in requirements - local_reqs:
+            for req in new_requirements:
                 logging.debug(f"{req} not found in local requirements.txt")
 
             for req in requirements & local_reqs:
@@ -120,7 +123,7 @@ def main():
 
             if new_requirements != set():
                 print(
-                    "You may need to add the following pacakges to your requirements.txt file:"
+                    "You may need to add the following packages to your requirements.txt file:"
                 )
                 for r in new_requirements:
                     print(f"{r}\n")
@@ -205,7 +208,7 @@ def update_static_files():
     # Writes return value for parent function
     if new_file_list != []:
         # Provides more information on new files
-        with open("NEWFILES.txt", "w") as f:
+        with open(f"{SPHINX_DIR}/NEWFILES.txt", "w") as f:
             for entry in new_file_list:
                 f.write(f"{entry}\n")
         logging.debug("Some downloaded files are new")

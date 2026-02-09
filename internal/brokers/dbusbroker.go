@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/internal/services/errmessages"
+	"github.com/canonical/authd/log"
 	"github.com/godbus/dbus/v5"
-	"github.com/ubuntu/authd/internal/services/errmessages"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/decorate"
 	"gopkg.in/ini.v1"
 )
 
@@ -151,6 +151,9 @@ func (b dbusBroker) call(ctx context.Context, method string, args ...interface{}
 		// user-friendly, so we replace it with a better message.
 		if errors.As(err, &dbusError) && dbusError.Name == "org.freedesktop.DBus.Error.ServiceUnknown" {
 			err = fmt.Errorf("couldn't connect to broker %q. Is it running?", b.name)
+		}
+		if errors.As(err, &dbusError) && dbusError.Name == "com.ubuntu.authd.Canceled" {
+			return nil, context.Canceled
 		}
 		return nil, errmessages.NewToDisplayError(err)
 	}

@@ -40,23 +40,9 @@ Wait+Prompt@${AUTHD_SLEEP_EXAMPLE_BROKER_MFA_WAIT}*1.2 /Enter your new password 
 Show
 
 Hide
-Type "goodpass"
-Enter
-Wait+Nth(1) /The password is the same as the old one/
-Wait+Prompt /Enter your new password \(3 days until mandatory\)/
-Show
-
-Hide
 Type "password"
 Enter
 Wait+Nth(1) /The password fails the dictionary check/
-Wait+Prompt /Enter your new password \(3 days until mandatory\)/
-Show
-
-Hide
-Type "goodpass"
-Enter
-Wait+Nth(2)  /The password is the same as the old one/
 Wait+Prompt /Enter your new password \(3 days until mandatory\)/
 Show
 

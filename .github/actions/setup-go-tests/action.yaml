@@ -1,0 +1,69 @@
+name: 'Setup Go Tests'
+description: 'Common setup steps for Go tests'
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/setup-go@v6
+      with:
+        go-version-file: go.mod
+
+    - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        # Install dependencies
+        set -eu
+        echo "::group::Install dependencies"
+
+        sudo apt-get update
+
+        # Disable the php8.3-fpm.service which is enabled by default on ubuntu-latest-runner
+        # and is restarted when installing the dependencies but times out after 90s.
+        sudo systemctl mask --now php8.3-fpm.service || true
+
+        # The integration tests build the NSS crate, so we need the cargo build dependencies in order to run them.
+        sudo apt-get install -y protobuf-compiler
+
+        sudo apt-get install -y ${{ env.go_build_dependencies }} ${{ env.go_test_dependencies}}
+
+        # Load the apparmor profile for bubblewrap.
+        sudo ln -s /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/
+        sudo apparmor_parser /etc/apparmor.d/bwrap-userns-restrict
+        echo "::endgroup::"
+
+    - name: Install gotestfmt and our wrapper script
+      uses: canonical/desktop-engineering/gh-actions/go/gotestfmt@main
+
+    - name: Install VHS and ttyd for integration tests
+      shell: bash
+      run: |
+        # Install VHS and ttyd for integration tests
+        set -eu
+        echo "::group::Install VHS and ttyd"
+        go install github.com/charmbracelet/vhs@latest
+
+        # VHS requires ttyd >= 1.7.2 to work properly.
+        wget https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
+        chmod +x ttyd.x86_64
+        sudo mv ttyd.x86_64 /usr/bin/ttyd
+
+        # VHS doesn't really use ffmpeg anymore now, but it still checks for it.
+        # Drop this when https://github.com/charmbracelet/vhs/pull/591 is released.
+        sudo ln -s /usr/bin/true /usr/local/bin/ffmpeg
+        echo "::endgroup::"
+
+    - name: Install latest Rust version
+      shell: bash
+      run: rustup update stable
+
+    - name: Prepare tests artifacts path
+      shell: bash
+      run: |
+        # Prepare tests artifacts path
+        set -eu
+
+        artifacts_dir=$(mktemp -d --tmpdir authd-test-artifacts-XXXXXX)
+        echo AUTHD_TESTS_ARTIFACTS_PATH="${artifacts_dir}" >> $GITHUB_ENV
+
+        echo ASAN_OPTIONS="log_path=${artifacts_dir}/asan.log:print_stats=true" >> $GITHUB_ENV

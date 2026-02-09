@@ -1,0 +1,83 @@
+#!/bin/sh
+
+set -eu
+
+# In previous versions, the broker.conf was created with mode 0777 - umask.
+# This is not secure, because the file can contain sensitive information
+# (like the client_secret), so we ensure that the mode is 0600.
+if [ -f "${SNAP_DATA}/broker.conf" ]; then
+  chmod 0600 "${SNAP_DATA}/broker.conf"
+fi
+
+PREVIOUS_VERSION=$(snapctl get previous-version)
+
+# Important: If you add new migrations, make sure to tag the commit which
+# first introduces the change, so that pre-release versions which already
+# contain the change (and which automatically uploaded to the edge channel)
+# will not be migrated.
+INITIAL_ALLOWED_USERS_VERSION="0.2.0-pre1"
+
+log() {
+  logger -t "${SNAP_NAME}" "post-refresh: $*"
+}
+
+version_less_than() {
+  output=$(semver compare "$1" "$2") || exit 1
+  [ "${output}" = "less" ]
+}
+
+valid_semver() {
+  if ! output=$(semver check "$1") && [ "${output}" != "invalid" ]; then
+    exit 1
+  fi
+  [ "${output}" = "valid" ]
+}
+
+should_transition_to_allowed_users() {
+  # Do not transition if the previous version is set but not a valid
+  # semantic version. That's the case for snaps published to the edge
+  # channel before the 0.2.0 release, which already ship the allowed users
+  # configuration.
+  # TODO: We can remove this check once all users have updated to 0.2.0.
+  if [ -n "${PREVIOUS_VERSION}" ] && ! valid_semver "${PREVIOUS_VERSION}"; then
+    return 1
+  fi
+
+  # Transition to allowed users if:
+  # - previous-version is not set (that means that the previous version is
+  #   older than 0.2.0, i.e. the version where we introduced setting the
+  #   previous-version in the pre-refresh hook).
+  # - previous-version is set, but it is less than 0.2.0. That should never
+  #   happen, but we check it to give an example how the previous-version
+  #   can be used to transition data from older versions.
+  [ -z "${PREVIOUS_VERSION}" ] || version_less_than "${PREVIOUS_VERSION}" "${INITIAL_ALLOWED_USERS_VERSION}"
+}
+
+transition_to_allowed_users() {
+  log "Transitioning to allowed users"
+  src_dir="${SNAP}/conf/migrations/pre-${INITIAL_ALLOWED_USERS_VERSION}/broker.conf.d"
+  dest_dir="${SNAP_DATA}/broker.conf.d"
+
+  if [ ! -d "${src_dir}" ]; then
+    log "Error: ${src_dir} does not exist, cannot transition to allowed users"
+    return
+  fi
+
+  # shellcheck disable=SC2174 # it's fine that --mode only applies to the deepest directory, because the SNAP_DATA
+  # directory is created by snapd with the correct permissions.
+  mkdir -p --mode=0700 "${dest_dir}"
+  for f in "${src_dir}"/*; do
+    cp --update=none "${f}" "${dest_dir}"
+    chmod 0600 "${dest_dir}/$(basename "${f}")"
+  done
+}
+
+if [ -z "${PREVIOUS_VERSION}" ]; then
+  log "previous-version: <not set>"
+else
+  log "previous-version: $PREVIOUS_VERSION"
+fi
+
+if should_transition_to_allowed_users; then
+  transition_to_allowed_users
+fi

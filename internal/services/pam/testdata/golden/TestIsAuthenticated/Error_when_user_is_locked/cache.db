@@ -1,0 +1,17 @@
+users:
+    - name: testisauthenticated/error_when_user_is_locked_separator_locked
+      uid: 1111
+      gid: 11111
+      gecos: gecos for other user
+      dir: /home/locked
+      shell: /bin/bash
+      broker_id: broker-id
+      locked: true
+groups:
+    - name: group1
+      gid: 11111
+      ugid: ugid
+users_to_groups:
+    - uid: 1111
+      gid: 11111
+schema_version: 2

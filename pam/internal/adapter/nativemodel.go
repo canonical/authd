@@ -9,18 +9,17 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/canonical/authd/internal/brokers"
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/brokers/layouts/entries"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/log"
+	"github.com/canonical/authd/pam/internal/proto"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/msteinert/pam/v2"
 	"github.com/muesli/termenv"
 	"github.com/skip2/go-qrcode"
-	"github.com/ubuntu/authd/internal/brokers"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/brokers/layouts/entries"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/authd/pam/internal/proto"
-	pam_proto "github.com/ubuntu/authd/pam/internal/proto"
 )
 
 type nativeModel struct {
@@ -55,7 +54,7 @@ const (
 // nativeStageChangeRequest is the internal event to request that a stage change.
 type nativeStageChangeRequest ChangeStage
 
-// nativeUserSelection is the internal event that an user needs to be (re)set.
+// nativeUserSelection is the internal event that a user needs to be (re)set.
 type nativeUserSelection struct{}
 
 // nativeBrokerSelection is the internal event that a broker needs to be (re)selected.
@@ -184,7 +183,7 @@ func (m nativeModel) Update(msg tea.Msg) (nativeModel, tea.Cmd) {
 
 	case userRequired:
 		m.userSelectionAllowed = true
-		return m, m.requestStageChange(pam_proto.Stage_userSelection)
+		return m, m.requestStageChange(proto.Stage_userSelection)
 
 	case nativeUserSelection:
 		if !m.checkStage(proto.Stage_userSelection) {
@@ -233,7 +232,7 @@ func (m nativeModel) Update(msg tea.Msg) (nativeModel, tea.Cmd) {
 		}
 		return m.startAsyncOp(func() tea.Cmd {
 			return m.maybePreCheckUser(user,
-				m.requestStageChange(pam_proto.Stage_brokerSelection))
+				m.requestStageChange(proto.Stage_brokerSelection))
 		})
 
 	case nativeBrokerSelection:
@@ -293,10 +292,10 @@ func (m nativeModel) Update(msg tea.Msg) (nativeModel, tea.Cmd) {
 		m.uiLayout = msg.layout
 
 	case startAuthentication:
-		return m, m.requestStageChange(pam_proto.Stage_challenge)
+		return m, m.requestStageChange(proto.Stage_challenge)
 
 	case nativeChallengeRequested:
-		if !m.checkStage(pam_proto.Stage_challenge) {
+		if !m.checkStage(proto.Stage_challenge) {
 			return m, nil
 		}
 		if m.busy {
@@ -544,7 +543,7 @@ func (m nativeModel) authModeSelection() tea.Cmd {
 		return sendEvent(nativeGoBack{})
 	}
 	if errors.Is(err, errEmptyResponse) {
-		return m.requestStageChange(pam_proto.Stage_challenge)
+		return m.requestStageChange(proto.Stage_challenge)
 	}
 	if err != nil {
 		return sendEvent(pamError{
@@ -691,7 +690,7 @@ func (m nativeModel) promptForSecret(prompt string) (string, error) {
 	case entries.DigitsPassword:
 		return m.promptForNumericInputAsString(pam.PromptEchoOff, prompt)
 	default:
-		return "", fmt.Errorf("Unhandled entry %q", m.uiLayout.GetEntry())
+		return "", fmt.Errorf("unhandled entry %q", m.uiLayout.GetEntry())
 	}
 }
 
@@ -891,7 +890,7 @@ func (m nativeModel) canGoBack() bool {
 	return m.previousStage() > proto.Stage_userSelection
 }
 
-func (m nativeModel) previousStage() pam_proto.Stage {
+func (m nativeModel) previousStage() proto.Stage {
 	if m.currentStage > proto.Stage_authModeSelection && len(m.authModes) > 1 {
 		return proto.Stage_authModeSelection
 	}

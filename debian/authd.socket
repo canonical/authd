@@ -1,5 +1,5 @@
 [Unit]
-Description=Socket activation for Authd daemon
+Description=Socket activation for authd daemon
 # Ensure there's no ordering cycle since authd needs to start after dbus
 DefaultDependencies=No
 Wants=dbus.service

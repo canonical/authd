@@ -3,9 +3,8 @@ package db
 import (
 	"context"
 	"fmt"
-	"strconv"
 
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/log"
 )
 
 // UserGroups returns all groups for a given user or an error if the database is corrupted or no entry was found.
@@ -43,7 +42,7 @@ func userGroups(db queryable, uid uint32) ([]GroupRow, error) {
 	}
 
 	if len(groups) == 0 {
-		return nil, NoDataFoundError{key: strconv.FormatUint(uint64(uid), 10), table: "users_to_groups"}
+		return nil, NewUIDNotFoundError(uid)
 	}
 
 	return groups, nil
@@ -122,7 +121,7 @@ func removeUserFromAllGroups(db queryable, uid uint32) error {
 		return fmt.Errorf("failed to get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return NoDataFoundError{table: "users_to_groups", key: strconv.FormatUint(uint64(uid), 10)}
+		return NoDataFoundError{fmt.Sprintf("no groups found for user with UID %d", uid)}
 	}
 
 	return nil

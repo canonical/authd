@@ -1,0 +1,3 @@
+localgroup1:x:41:user1
+localgroup2:x:44:user2
+localgroup3:x:45:user3

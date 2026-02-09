@@ -5,9 +5,9 @@ import (
 	"os/exec"
 	"testing"
 
+	"github.com/canonical/authd/internal/testsdetection"
+	"github.com/canonical/authd/internal/testutils"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/testsdetection"
-	"github.com/ubuntu/authd/internal/testutils"
 )
 
 func TestMustBeTestingInTests(t *testing.T) {

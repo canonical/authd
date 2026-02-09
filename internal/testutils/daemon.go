@@ -1,33 +1,37 @@
 package testutils
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/grpcutils"
+	"github.com/canonical/authd/internal/services/errmessages"
+	"github.com/canonical/authd/internal/testlog"
+	"github.com/canonical/authd/internal/users/db"
+	"github.com/canonical/authd/internal/users/localentries"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/grpcutils"
-	"github.com/ubuntu/authd/internal/services/errmessages"
-	"github.com/ubuntu/authd/internal/users/db"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 type daemonOptions struct {
-	dbPath     string
-	existentDB string
-	socketPath string
-	pidFile    string
-	outputFile string
-	shared     bool
-	env        []string
+	dbPath                   string
+	existentDB               string
+	socketPath               string
+	pidFile                  string
+	saveOutputAsTestArtifact bool
+	shared                   bool
+	env                      []string
 }
 
 // DaemonOption represents an optional function that can be used to override some of the daemon default values.
@@ -69,10 +73,10 @@ func WithPidFile(pidFile string) DaemonOption {
 	}
 }
 
-// WithOutputFile sets the path where the process log will be saved.
-func WithOutputFile(outputFile string) DaemonOption {
+// WithOutputAsTestArtifact saves the daemon output to a test artifact.
+func WithOutputAsTestArtifact() DaemonOption {
 	return func(o *daemonOptions) {
-		o.outputFile = outputFile
+		o.saveOutputAsTestArtifact = true
 	}
 }
 
@@ -90,9 +94,44 @@ func WithHomeBaseDir(baseDir string) DaemonOption {
 	}
 }
 
-// RunDaemon runs the daemon in a separate process and returns the socket path and a channel that will be closed when
-// the daemon stops.
-func RunDaemon(ctx context.Context, t *testing.T, execPath string, args ...DaemonOption) (socketPath string, stopped chan struct{}) {
+// WithGroupFile sets the group file.
+func WithGroupFile(groupFile string) DaemonOption {
+	return func(o *daemonOptions) {
+		o.env = slices.DeleteFunc(o.env, func(e string) bool {
+			return strings.HasPrefix(e, localentries.Z_ForTests_GroupFilePathEnv+"=")
+		})
+		o.env = append(o.env, fmt.Sprintf("%s=%s", localentries.Z_ForTests_GroupFilePathEnv, groupFile))
+	}
+}
+
+// WithGroupFileOutput sets the group output file.
+func WithGroupFileOutput(groupFile string) DaemonOption {
+	return func(o *daemonOptions) {
+		o.env = slices.DeleteFunc(o.env, func(e string) bool {
+			return strings.HasPrefix(e, localentries.Z_ForTests_GroupFileOutputPathEnv+"=")
+		})
+		o.env = append(o.env, fmt.Sprintf("%s=%s", localentries.Z_ForTests_GroupFileOutputPathEnv, groupFile))
+	}
+}
+
+// WithCurrentUserAsRoot configures authd to accept the current user as root when checking permissions.
+// This is useful for integration tests where the current user is not root, but we want to
+// test the behavior as if it were root.
+var WithCurrentUserAsRoot DaemonOption = func(o *daemonOptions) {
+	o.env = append(o.env, "AUTHD_INTEGRATIONTESTS_CURRENT_USER_AS_ROOT=1")
+}
+
+// StartAuthd starts authd in a separate process and returns the socket path.
+func StartAuthd(t *testing.T, execPath string, args ...DaemonOption) (socketPath string) {
+	t.Helper()
+
+	socketPath, cancelFunc := StartAuthdWithCancel(t, execPath, args...)
+	t.Cleanup(cancelFunc)
+	return socketPath
+}
+
+// StartAuthdWithCancel starts authd in a separate process and returns the socket path and a cancel function.
+func StartAuthdWithCancel(t *testing.T, execPath string, args ...DaemonOption) (socketPath string, cancelFunc func()) {
 	t.Helper()
 
 	opts := &daemonOptions{}
@@ -128,16 +167,18 @@ paths:
 	configPath := filepath.Join(tempDir, "testconfig.yaml")
 	require.NoError(t, os.WriteFile(configPath, []byte(config), 0600), "Setup: failed to create config file for tests")
 
-	var cancel context.CancelCauseFunc
-	if opts.pidFile != "" {
-		ctx, cancel = context.WithCancelCause(ctx)
+	stopped := make(chan struct{})
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancelFunc = func() {
+		t.Log("Stopping authd...")
+		cancel(nil)
+		<-stopped
 	}
 
 	// #nosec:G204 - we control the command arguments in tests
 	cmd := exec.CommandContext(ctx, execPath, "-c", configPath)
-	opts.env = append(opts.env, os.Environ()...)
 	opts.env = append(opts.env, fmt.Sprintf("AUTHD_EXAMPLE_BROKER_SLEEP_MULTIPLIER=%f", SleepMultiplier()))
-	cmd.Env = AppendCovEnv(opts.env)
+	cmd.Env = append(AppendCovEnv(opts.env), MinimalPathEnv)
 
 	// This is the function that is called by CommandContext when the context is cancelled.
 	cmd.Cancel = func() error {
@@ -145,22 +186,38 @@ paths:
 		return cmd.Process.Signal(os.Signal(syscall.SIGTERM))
 	}
 
-	// Start the daemon
-	stopped = make(chan struct{})
+	// Start authd
+	start := time.Now()
 	processPid := make(chan int)
 	go func() {
 		defer close(stopped)
-		var b bytes.Buffer
-		cmd.Stdout = &b
-		cmd.Stderr = &b
+
+		// For shared authd instances, we can't redirect the output to the test log,
+		// because the instance could still be running after the test finishes.
+		if opts.shared {
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+		} else {
+			cmd.Stdout = t.Output()
+			cmd.Stderr = t.Output()
+		}
+
+		if opts.saveOutputAsTestArtifact {
+			authdOutput := &SyncBuffer{}
+			cmd.Stdout = io.MultiWriter(cmd.Stdout, authdOutput)
+			cmd.Stderr = io.MultiWriter(cmd.Stderr, authdOutput)
+			MaybeSaveBufferAsArtifactOnCleanup(t, authdOutput, "authd.log")
+		}
+
+		testlog.LogCommand(t, "Starting authd", cmd)
 		err := cmd.Start()
-		require.NoError(t, err, "Setup: daemon cannot start %v", cmd.Args)
+		require.NoError(t, err, "Setup: authd failed to start")
 		if opts.pidFile != "" {
 			processPid <- cmd.Process.Pid
 		}
 
-		// When using a shared daemon we should not use the test parameter from now on
-		// since the test is referring to may not be the one actually running.
+		// For shared authd instances, stop using `t` beyond this point,
+		// because the test which it refers to might have already finished.
 		t := t
 		logger := t.Logf
 		errorIs := func(err, target error, format string, args ...any) {
@@ -179,30 +236,25 @@ paths:
 		}
 
 		err = cmd.Wait()
-		out := b.Bytes()
-		if opts.outputFile != "" {
-			logger("writing authd log files to %v", opts.outputFile)
-			if err := os.WriteFile(opts.outputFile, out, 0600); err != nil {
-				logger("TearDown: failed to save output file %q: %v", opts.outputFile, err)
-			}
-		}
-		errorIs(err, context.Canceled, "Setup: daemon stopped unexpectedly: %s", out)
+		errorIs(err, context.Canceled, "Setup: authd stopped unexpectedly")
 		if opts.pidFile != "" {
 			defer cancel(nil)
 			if err := os.Remove(opts.pidFile); err != nil {
 				logger("TearDown: failed to remove pid file %q: %v", opts.pidFile, err)
 			}
 		}
-		logger("Daemon stopped (%v)\n ##### Output #####\n %s \n ##### END #####", err, out)
+		logger("authd exited (%v)", err)
 	}()
 
 	conn, err := grpc.NewClient("unix://"+opts.socketPath, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithUnaryInterceptor(errmessages.FormatErrorMessage))
-	require.NoError(t, err, "Setup: could not connect to the daemon on %s", opts.socketPath)
+	require.NoError(t, err, "Setup: could not connect to authd on %s", opts.socketPath)
 	defer conn.Close()
 
-	// Block until the daemon is started and ready to accept connections.
+	// Block until authd has started and is ready to accept connections.
 	err = grpcutils.WaitForConnection(ctx, conn, time.Second*30)
-	require.NoError(t, err, "Setup: wait for daemon to be ready timed out")
+	require.NoError(t, err, "Setup: timeout waiting for authd to start")
+	duration := time.Since(start)
+	testlog.LogEndSeparatorf(t, "authd started in %.3fs", duration.Seconds())
 
 	if opts.pidFile != "" {
 		err := os.WriteFile(opts.pidFile, []byte(fmt.Sprint(<-processPid)), 0600)
@@ -223,11 +275,11 @@ paths:
 		}()
 	}
 
-	return opts.socketPath, stopped
+	return opts.socketPath, cancelFunc
 }
 
-// BuildDaemon builds the daemon executable and returns the binary path.
-func BuildDaemon(extraArgs ...string) (execPath string, cleanup func(), err error) {
+// BuildAuthdWithExampleBroker builds the authd executable and returns the binary path.
+func BuildAuthdWithExampleBroker() (execPath string, cleanup func(), err error) {
 	projectRoot := ProjectRoot()
 
 	tempDir, err := os.MkdirTemp("", "authd-tests-daemon")
@@ -239,23 +291,15 @@ func BuildDaemon(extraArgs ...string) (execPath string, cleanup func(), err erro
 	execPath = filepath.Join(tempDir, "authd")
 	cmd := exec.Command("go", "build")
 	cmd.Dir = projectRoot
-	if CoverDirForTests() != "" {
-		// -cover is a "positional flag", so it needs to come right after the "build" command.
-		cmd.Args = append(cmd.Args, "-cover")
-	}
-	if IsAsan() {
-		cmd.Args = append(cmd.Args, "-asan")
-	}
-	if IsRace() {
-		cmd.Args = append(cmd.Args, "-race")
-	}
+	cmd.Args = append(cmd.Args, GoBuildFlags()...)
 	cmd.Args = append(cmd.Args, "-gcflags=all=-N -l")
-	cmd.Args = append(cmd.Args, extraArgs...)
+	cmd.Args = append(cmd.Args, "-tags=withexamplebroker,integrationtests")
 	cmd.Args = append(cmd.Args, "-o", execPath, "./cmd/authd")
 
-	if out, err := cmd.CombinedOutput(); err != nil {
+	fmt.Fprintln(os.Stderr, "Running command:", cmd.String())
+	if err := testlog.RunWithTiming(nil, "Building authd", cmd); err != nil {
 		cleanup()
-		return "", nil, fmt.Errorf("failed to build daemon(%v): %s", err, out)
+		return "", nil, fmt.Errorf("failed to build authd: %v", err)
 	}
 
 	return execPath, cleanup, err

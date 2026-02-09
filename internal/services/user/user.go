@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ubuntu/authd/internal/brokers"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/internal/services/permissions"
-	"github.com/ubuntu/authd/internal/users"
-	"github.com/ubuntu/authd/internal/users/types"
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/internal/brokers"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/services/permissions"
+	"github.com/canonical/authd/internal/users"
+	"github.com/canonical/authd/internal/users/types"
+	"github.com/canonical/authd/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -40,8 +40,10 @@ func NewService(ctx context.Context, userManager *users.Manager, brokerManager *
 
 // GetUserByName returns the user entry for the given username.
 func (s Service) GetUserByName(ctx context.Context, req *authd.GetUserByNameRequest) (*authd.User, error) {
-	name := req.GetName()
+	// authd usernames are lowercase
+	name := strings.ToLower(req.GetName())
 	if name == "" {
+		log.Warningf(ctx, "GetUserByName: no user name provided")
 		return nil, status.Error(codes.InvalidArgument, "no user name provided")
 	}
 
@@ -50,15 +52,28 @@ func (s Service) GetUserByName(ctx context.Context, req *authd.GetUserByNameRequ
 		return userToProtobuf(user), nil
 	}
 
-	if !errors.Is(err, users.NoDataFoundError{}) || !req.GetShouldPreCheck() {
+	if !errors.Is(err, users.NoDataFoundError{}) {
+		log.Errorf(context.Background(), "GetUserByName: %v", err)
+		return nil, grpcError(err)
+	}
+
+	if !req.GetShouldPreCheck() {
+		// The user was not found in the database and pre-check is not requested.
+		// It often happens that NSS requests are sent for users that are not in the authd database, so to avoid
+		// spamming the logs, we only log this at debug level.
 		log.Debugf(context.Background(), "GetUserByName: %v", err)
 		return nil, grpcError(err)
 	}
 
 	// If the user is not found in the database, we check if it exists in at least one broker.
 	user, err = s.userPreCheck(ctx, name)
+	if errors.Is(err, errUserNotPermitted) {
+		err := fmt.Errorf("user %q is unknown and not authorized to log in via SSH for the first time by any configured broker", name)
+		log.Warningf(context.Background(), "GetUserByName: %v", err)
+		return nil, status.Error(codes.NotFound, err.Error())
+	}
 	if err != nil {
-		log.Debugf(context.Background(), "GetUserByName: %v", err)
+		log.Errorf(context.Background(), "GetUserByName: %v", err)
 		return nil, status.Error(codes.NotFound, err.Error())
 	}
 
@@ -68,11 +83,18 @@ func (s Service) GetUserByName(ctx context.Context, req *authd.GetUserByNameRequ
 // GetUserByID returns the user entry for the given user ID.
 func (s Service) GetUserByID(ctx context.Context, req *authd.GetUserByIDRequest) (*authd.User, error) {
 	if req.GetId() == 0 {
+		log.Warningf(ctx, "GetUserByID: no user ID provided")
 		return nil, status.Error(codes.InvalidArgument, "no user ID provided")
 	}
 
 	u, err := s.userManager.UserByID(req.Id)
+	if errors.Is(err, users.NoDataFoundError{}) {
+		// Only log this at debug level, see GetUserByName for details.
+		log.Debugf(context.Background(), "GetUserByID: %v", err)
+		return nil, grpcError(err)
+	}
 	if err != nil {
+		log.Errorf(context.Background(), "GetUserByID: %v", err)
 		return nil, grpcError(err)
 	}
 
@@ -83,6 +105,7 @@ func (s Service) GetUserByID(ctx context.Context, req *authd.GetUserByIDRequest)
 func (s Service) ListUsers(ctx context.Context, req *authd.Empty) (*authd.Users, error) {
 	allUsers, err := s.userManager.AllUsers()
 	if err != nil {
+		log.Errorf(context.Background(), "ListUsers: %v", err)
 		return nil, grpcError(err)
 	}
 
@@ -94,14 +117,64 @@ func (s Service) ListUsers(ctx context.Context, req *authd.Empty) (*authd.Users,
 	return &res, nil
 }
 
+// LockUser marks a user as locked.
+func (s Service) LockUser(ctx context.Context, req *authd.LockUserRequest) (*authd.Empty, error) {
+	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
+		return nil, err
+	}
+
+	// authd uses lowercase usernames.
+	name := strings.ToLower(req.GetName())
+
+	if name == "" {
+		return nil, status.Error(codes.InvalidArgument, "no user name provided")
+	}
+
+	if err := s.userManager.LockUser(name); err != nil {
+		return nil, grpcError(err)
+	}
+
+	return &authd.Empty{}, nil
+}
+
+// UnlockUser marks a user as unlocked.
+func (s Service) UnlockUser(ctx context.Context, req *authd.UnlockUserRequest) (*authd.Empty, error) {
+	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
+		return nil, err
+	}
+
+	// authd uses lowercase usernames.
+	name := strings.ToLower(req.GetName())
+
+	if name == "" {
+		return nil, status.Error(codes.InvalidArgument, "no user name provided")
+	}
+
+	if err := s.userManager.UnlockUser(name); err != nil {
+		return nil, grpcError(err)
+	}
+
+	return &authd.Empty{}, nil
+}
+
 // GetGroupByName returns the group entry for the given group name.
 func (s Service) GetGroupByName(ctx context.Context, req *authd.GetGroupByNameRequest) (*authd.Group, error) {
-	if req.GetName() == "" {
+	// authd uses lowercase group names.
+	name := strings.ToLower(req.GetName())
+
+	if name == "" {
+		log.Warningf(ctx, "GetGroupByName: no group name provided")
 		return nil, status.Error(codes.InvalidArgument, "no group name provided")
 	}
 
-	g, err := s.userManager.GroupByName(req.GetName())
+	g, err := s.userManager.GroupByName(name)
+	if errors.Is(err, users.NoDataFoundError{}) {
+		// Only log this at debug level, see GetUserByName for details
+		log.Debugf(context.Background(), "GetGroupByName: %v", err)
+		return nil, grpcError(err)
+	}
 	if err != nil {
+		log.Errorf(context.Background(), "GetGroupByName: %v", err)
 		return nil, grpcError(err)
 	}
 
@@ -111,11 +184,18 @@ func (s Service) GetGroupByName(ctx context.Context, req *authd.GetGroupByNameRe
 // GetGroupByID returns the group entry for the given group ID.
 func (s Service) GetGroupByID(ctx context.Context, req *authd.GetGroupByIDRequest) (*authd.Group, error) {
 	if req.GetId() == 0 {
+		log.Warningf(ctx, "GetGroupByID: no group ID provided")
 		return nil, status.Error(codes.InvalidArgument, "no group ID provided")
 	}
 
 	g, err := s.userManager.GroupByID(req.GetId())
+	if errors.Is(err, users.NoDataFoundError{}) {
+		// Only log this at debug level, see GetUserByName for details
+		log.Debugf(context.Background(), "GetGroupByID: %v", err)
+		return nil, grpcError(err)
+	}
 	if err != nil {
+		log.Errorf(context.Background(), "GetGroupByID: %v", err)
 		return nil, grpcError(err)
 	}
 
@@ -126,6 +206,7 @@ func (s Service) GetGroupByID(ctx context.Context, req *authd.GetGroupByIDReques
 func (s Service) ListGroups(ctx context.Context, req *authd.Empty) (*authd.Groups, error) {
 	allGroups, err := s.userManager.AllGroups()
 	if err != nil {
+		log.Errorf(context.Background(), "ListGroups: %v", err)
 		return nil, grpcError(err)
 	}
 
@@ -159,12 +240,13 @@ func groupToProtobuf(g types.GroupEntry) *authd.Group {
 	}
 }
 
-// userPreCheck checks if the user exists in at least one broker.
-func (s Service) userPreCheck(ctx context.Context, username string) (types.UserEntry, error) {
-	// authd uses lowercase usernames.
-	username = strings.ToLower(username)
+var errUserNotPermitted = errors.New("user not permitted to log in via SSH for the first time")
 
-	// Check if the user exists in at least one broker.
+// userPreCheck checks if the user is permitted to log in via SSH for the first time.
+// It returns a types.UserEntry with a unique UID if the user is permitted to log in.
+// If the user is not permitted to log in by any broker, errUserNotPermitted is returned.
+func (s Service) userPreCheck(ctx context.Context, username string) (types.UserEntry, error) {
+	// Check if any broker permits the user to log in via SSH for the first time.
 	var userinfo string
 	var err error
 	for _, b := range s.brokerManager.AvailableBrokers() {
@@ -174,13 +256,23 @@ func (s Service) userPreCheck(ctx context.Context, username string) (types.UserE
 		}
 
 		userinfo, err = b.UserPreCheck(ctx, username)
-		if err == nil && userinfo != "" {
-			break
+		if err != nil {
+			// An unexpected error occurred while checking the user.
+			log.Errorf(ctx, "UserPreCheck: %v", err)
+			continue
 		}
+		if userinfo == "" {
+			// The broker does not permit the user to log in via SSH for the first time.
+			// This is an expected error, so we only log it at debug level.
+			log.Debugf(ctx, "UserPreCheck: %v", err)
+			continue
+		}
+		break
 	}
 
 	if err != nil || userinfo == "" {
-		return types.UserEntry{}, fmt.Errorf("user %q is not known by any broker", username)
+		// No broker permits the user to log in via SSH for the first time.
+		return types.UserEntry{}, errUserNotPermitted
 	}
 
 	var u types.UserEntry
@@ -204,7 +296,7 @@ func (s Service) userPreCheck(ctx context.Context, username string) (types.UserE
 // The NSS module uses this status code to determine the NSS status it should return.
 func grpcError(err error) error {
 	if errors.Is(err, users.NoDataFoundError{}) {
-		return status.Error(codes.NotFound, "")
+		return status.Error(codes.NotFound, err.Error())
 	}
 
 	return err

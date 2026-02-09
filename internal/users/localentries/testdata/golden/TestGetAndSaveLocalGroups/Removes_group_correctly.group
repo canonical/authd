@@ -1,0 +1,4 @@
+localgroup2:x:42:otheruser2
+localgroup3:x:43:otheruser
+cloudgroup1:x:9998:otheruser3
+cloudgroup2:x:9999:otheruser4

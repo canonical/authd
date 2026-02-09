@@ -1,0 +1,3 @@
+access: granted
+data: '{"userinfo":{"name":"user1@example.com","uuid":"user1","dir":"/home/user1@example.com","shell":"/usr/bin/bash","gecos":"user1@example.com","groups":[{"name":"remote-test-group","ugid":"12345"},{"name":"local-test-group","ugid":""}]}}'
+err: <nil>

@@ -26,4 +26,4 @@ users_to_groups:
       gid: 88888
     - uid: 77777
       gid: 88888
-schema_version: 1
+schema_version: 2

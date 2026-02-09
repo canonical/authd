@@ -2,10 +2,10 @@ package main_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
-	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,56 +16,46 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/grpcutils"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/services/errmessages"
+	"github.com/canonical/authd/internal/testlog"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/users/db/bbolt"
+	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/internal/fileutils"
-	"github.com/ubuntu/authd/internal/grpcutils"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/internal/services/errmessages"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	"github.com/ubuntu/authd/internal/users/db/bbolt"
-	localgroupstestutils "github.com/ubuntu/authd/internal/users/localentries/testutils"
-	"github.com/ubuntu/authd/pam/internal/pam_test"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"gorbe.io/go/osrelease"
 )
 
-var (
-	authdTestSessionTime     = time.Now()
-	authdArtifactsDir        string
-	authdArtifactsAlwaysSave bool
-	authdArtifactsDirSync    sync.Once
-)
-
 type authdInstance struct {
-	mu                sync.Mutex
-	refCount          uint64
-	socketPath        string
-	gPasswdOutputPath string
-	groupsFile        string
-	cleanup           func()
+	mu               sync.Mutex
+	refCount         uint64
+	socketPath       string
+	groupsOutputPath string
+	groupsFile       string
+	cleanup          func()
 }
 
 var (
 	sharedAuthdInstance = authdInstance{}
 )
 
-func runAuthdForTesting(t *testing.T, gpasswdOutput, groupsFile string, currentUserAsRoot bool, isSharedDaemon bool, args ...testutils.DaemonOption) (
-	socketPath string, waitFunc func()) {
+func runAuthdForTesting(t *testing.T, isSharedDaemon bool, args ...testutils.DaemonOption) (socketPath string) {
 	t.Helper()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	socketPath, cancelFunc := runAuthdForTestingWithCancel(t, isSharedDaemon, args...)
+	t.Cleanup(cancelFunc)
+	return socketPath
+}
 
-	env := localgroupstestutils.AuthdIntegrationTestsEnvWithGpasswdMock(t, gpasswdOutput, groupsFile)
-	if currentUserAsRoot {
-		env = append(env, authdCurrentUserRootEnvVariableContent)
-	}
-	args = append(args, testutils.WithEnvironment(env...))
+func runAuthdForTestingWithCancel(t *testing.T, isSharedDaemon bool, args ...testutils.DaemonOption) (socketPath string, cancelFunc func()) {
+	t.Helper()
 
-	outputFile := filepath.Join(t.TempDir(), "authd.log")
-	args = append(args, testutils.WithOutputFile(outputFile))
+	args = append(args, testutils.WithOutputAsTestArtifact())
 
 	homeBaseDir := filepath.Join(t.TempDir(), "homes")
 	err := os.MkdirAll(homeBaseDir, 0700)
@@ -75,30 +65,24 @@ func runAuthdForTesting(t *testing.T, gpasswdOutput, groupsFile string, currentU
 	if !isSharedDaemon {
 		database := filepath.Join(t.TempDir(), "db", consts.DefaultDatabaseFileName)
 		args = append(args, testutils.WithDBPath(filepath.Dir(database)))
-		saveArtifactsForDebugOnCleanup(t, []string{database})
+		testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, database)
 	}
-	if isSharedDaemon && authdArtifactsAlwaysSave {
-		database := filepath.Join(authdArtifactsDir, "db", consts.DefaultDatabaseFileName)
+	if isSharedDaemon && os.Getenv("AUTHD_TESTS_ARTIFACTS_ALWAYS_SAVE") != "" {
+		database := filepath.Join(testutils.ArtifactsDir(t), "db", consts.DefaultDatabaseFileName)
 		args = append(args, testutils.WithDBPath(filepath.Dir(database)))
 	}
 
-	socketPath, stopped := testutils.RunDaemon(ctx, t, daemonPath, args...)
-	saveArtifactsForDebugOnCleanup(t, []string{outputFile})
-	return socketPath, func() {
-		cancel()
-		<-stopped
-	}
+	socketPath, cancelFunc = testutils.StartAuthdWithCancel(t, daemonPath, args...)
+	return socketPath, cancelFunc
 }
 
-func runAuthd(t *testing.T, gpasswdOutput, groupsFile string, currentUserAsRoot bool, args ...testutils.DaemonOption) string {
+func runAuthd(t *testing.T, args ...testutils.DaemonOption) string {
 	t.Helper()
 
-	socketPath, waitFunc := runAuthdForTesting(t, gpasswdOutput, groupsFile, currentUserAsRoot, false, args...)
-	t.Cleanup(waitFunc)
-	return socketPath
+	return runAuthdForTesting(t, false, args...)
 }
 
-func sharedAuthd(t *testing.T, args ...testutils.DaemonOption) (socketPath string, gpasswdFile string) {
+func sharedAuthd(t *testing.T, args ...testutils.DaemonOption) (socketPath string, groupFile string) {
 	t.Helper()
 
 	useSharedInstance := testutils.IsRace()
@@ -107,11 +91,15 @@ func sharedAuthd(t *testing.T, args ...testutils.DaemonOption) (socketPath strin
 	}
 
 	if !useSharedInstance {
-		gPasswd := filepath.Join(t.TempDir(), "gpasswd.output")
-		groups := filepath.Join(testutils.TestFamilyPath(t), "gpasswd.group")
-		socket, cleanup := runAuthdForTesting(t, gPasswd, groups, true, useSharedInstance, args...)
-		t.Cleanup(cleanup)
-		return socket, gPasswd
+		groupOutput := filepath.Join(t.TempDir(), "groups")
+		groups := filepath.Join(testutils.TestFamilyPath(t), "groups")
+		args = append(args,
+			testutils.WithGroupFile(groups),
+			testutils.WithGroupFileOutput(groupOutput),
+			testutils.WithCurrentUserAsRoot,
+		)
+		socket := runAuthdForTesting(t, useSharedInstance, args...)
+		return socket, groupOutput
 	}
 
 	sa := &sharedAuthdInstance
@@ -120,8 +108,8 @@ func sharedAuthd(t *testing.T, args ...testutils.DaemonOption) (socketPath strin
 		defer sharedAuthdInstance.mu.Unlock()
 
 		sa.refCount--
-		if testutils.IsVerbose() {
-			t.Logf("Authd shared instances decreased: %v", sa.refCount)
+		if testing.Verbose() {
+			t.Logf("Teardown: authd shared instances decreased: %v", sa.refCount)
 		}
 		if sa.refCount != 0 {
 			return
@@ -129,7 +117,7 @@ func sharedAuthd(t *testing.T, args ...testutils.DaemonOption) (socketPath strin
 		require.NotNil(t, sa.cleanup)
 		cleanup := sa.cleanup
 		sa.socketPath = ""
-		sa.gPasswdOutputPath = ""
+		sa.groupsOutputPath = ""
 		sa.groupsFile = ""
 		sa.cleanup = nil
 		cleanup()
@@ -139,19 +127,23 @@ func sharedAuthd(t *testing.T, args ...testutils.DaemonOption) (socketPath strin
 	defer sharedAuthdInstance.mu.Unlock()
 
 	sa.refCount++
-	if testutils.IsVerbose() {
-		t.Logf("Authd shared instances increased: %v", sa.refCount)
+	if testing.Verbose() {
+		t.Logf("authd shared instances increased: %v", sa.refCount)
 	}
 	if sa.refCount != 1 {
-		return sa.socketPath, sa.gPasswdOutputPath
+		return sa.socketPath, sa.groupsOutputPath
 	}
 
-	args = append(slices.Clone(args), testutils.WithSharedDaemon(true))
-	sa.gPasswdOutputPath = filepath.Join(t.TempDir(), "gpasswd.output")
-	sa.groupsFile = filepath.Join(testutils.TestFamilyPath(t), "gpasswd.group")
-	sa.socketPath, sa.cleanup = runAuthdForTesting(t, sa.gPasswdOutputPath,
-		sa.groupsFile, true, useSharedInstance, args...)
-	return sa.socketPath, sa.gPasswdOutputPath
+	sa.groupsFile = filepath.Join(testutils.TestFamilyPath(t), "groups")
+	sa.groupsOutputPath = filepath.Join(t.TempDir(), "groups")
+	args = append(slices.Clone(args),
+		testutils.WithSharedDaemon(true),
+		testutils.WithCurrentUserAsRoot,
+		testutils.WithGroupFile(sa.groupsFile),
+		testutils.WithGroupFileOutput(sa.groupsOutputPath),
+	)
+	sa.socketPath, sa.cleanup = runAuthdForTestingWithCancel(t, useSharedInstance, args...)
+	return sa.socketPath, sa.groupsOutputPath
 }
 
 func preparePamRunnerTest(t *testing.T, clientPath string) []string {
@@ -177,17 +169,7 @@ func preparePamRunnerTest(t *testing.T, clientPath string) []string {
 func buildPAMRunner(execPath string) (cleanup func(), err error) {
 	cmd := exec.Command("go", "build")
 	cmd.Dir = testutils.ProjectRoot()
-	if testutils.CoverDirForTests() != "" {
-		// -cover is a "positional flag", so it needs to come right after the "build" command.
-		cmd.Args = append(cmd.Args, "-cover")
-	}
-	if testutils.IsAsan() {
-		// -asan is a "positional flag", so it needs to come right after the "build" command.
-		cmd.Args = append(cmd.Args, "-asan")
-	}
-	if testutils.IsRace() {
-		cmd.Args = append(cmd.Args, "-race")
-	}
+	cmd.Args = append(cmd.Args, testutils.GoBuildFlags()...)
 	cmd.Args = append(cmd.Args, "-gcflags=all=-N -l")
 	cmd.Args = append(cmd.Args, "-tags=withpamrunner", "-o", filepath.Join(execPath, "pam_authd"),
 		"./pam/tools/pam-runner")
@@ -201,30 +183,18 @@ func buildPAMRunner(execPath string) (cleanup func(), err error) {
 func buildPAMExecChild(t *testing.T) string {
 	t.Helper()
 
-	cmd := exec.Command("go", "build", "-C", "pam")
-	cmd.Dir = testutils.ProjectRoot()
-	if testutils.CoverDirForTests() != "" {
-		// -cover is a "positional flag", so it needs to come right after the "build" command.
-		cmd.Args = append(cmd.Args, "-cover")
-	}
-	if testutils.IsAsan() {
-		// -asan is a "positional flag", so it needs to come right after the "build" command.
-		cmd.Args = append(cmd.Args, "-asan")
-	}
-	if testutils.IsRace() {
-		cmd.Args = append(cmd.Args, "-race")
-	}
+	cmd := exec.Command("go", "build")
+	cmd.Dir = filepath.Join(testutils.ProjectRoot(), "pam")
+	cmd.Args = append(cmd.Args, testutils.GoBuildFlags()...)
 	cmd.Args = append(cmd.Args, "-gcflags=all=-N -l")
 	cmd.Args = append(cmd.Args, "-tags=pam_debug")
-	cmd.Env = append(os.Environ(), `CGO_CFLAGS=-O0 -g3`)
+	cmd.Env = append(goEnv(t), testutils.MinimalPathEnv, "CGO_CFLAGS=-O0 -g3")
 
 	authdPam := filepath.Join(t.TempDir(), "authd-pam")
-	t.Logf("Compiling Exec child at %s", authdPam)
-	t.Log(strings.Join(cmd.Args, " "))
 
 	cmd.Args = append(cmd.Args, "-o", authdPam)
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "Setup: could not compile PAM exec child: %s", out)
+	err := testlog.RunWithTiming(t, "Building PAM exec child", cmd)
+	require.NoError(t, err, "Setup: Failed to build PAM exec child")
 
 	return authdPam
 }
@@ -233,7 +203,7 @@ func prepareFileLogging(t *testing.T, fileName string) string {
 	t.Helper()
 
 	cliLog := filepath.Join(t.TempDir(), fileName)
-	saveArtifactsForDebugOnCleanup(t, []string{cliLog})
+	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, cliLog)
 	t.Cleanup(func() {
 		out, err := os.ReadFile(cliLog)
 		if errors.Is(err, fs.ErrNotExist) {
@@ -269,104 +239,71 @@ func requirePreviousBrokerForUser(t *testing.T, socketPath string, brokerName st
 	require.Equal(t, prevBroker.PreviousBroker, prevBrokerID)
 }
 
-func artifactsPath(t *testing.T) string {
-	t.Helper()
-
-	authdArtifactsDirSync.Do(func() {
-		defer func() { t.Logf("Saving test artifacts at %s", authdArtifactsDir) }()
-
-		authdArtifactsAlwaysSave = os.Getenv("AUTHD_TESTS_ARTIFACTS_ALWAYS_SAVE") != ""
-
-		// We need to copy the artifacts to another directory, since the test directory will be cleaned up.
-		authdArtifactsDir = os.Getenv("AUTHD_TESTS_ARTIFACTS_PATH")
-		if authdArtifactsDir != "" {
-			if err := os.MkdirAll(authdArtifactsDir, 0750); err != nil && !os.IsExist(err) {
-				require.NoError(t, err, "TearDown: could not create artifacts directory %q", authdArtifactsDir)
-			}
-			return
-		}
-
-		st := authdTestSessionTime
-		folderName := fmt.Sprintf("authd-test-artifacts-%d-%02d-%02dT%02d:%02d:%02d.%d-",
-			st.Year(), st.Month(), st.Day(), st.Hour(), st.Minute(), st.Second(),
-			st.UnixMilli())
-
-		var err error
-		authdArtifactsDir, err = os.MkdirTemp(os.TempDir(), folderName)
-		require.NoError(t, err, "TearDown: could not create artifacts directory %q", authdArtifactsDir)
-	})
-
-	return authdArtifactsDir
-}
-
-// saveArtifactsForDebug saves the specified artifacts to a temporary directory if the test failed.
-func saveArtifactsForDebug(t *testing.T, artifacts []string) {
-	t.Helper()
-	if !t.Failed() && !authdArtifactsAlwaysSave {
-		return
-	}
-
-	tmpDir := filepath.Join(artifactsPath(t), golden.Path(t))
-	err := os.MkdirAll(tmpDir, 0750)
-	require.NoError(t, err, "TearDown: could not create temporary directory %q for artifacts", tmpDir)
-
-	// Copy the artifacts to the temporary directory.
-	for _, artifact := range artifacts {
-		content, err := os.ReadFile(artifact)
-		if err != nil {
-			t.Logf("Could not read artifact %q: %v", artifact, err)
-			continue
-		}
-		if err := os.WriteFile(filepath.Join(tmpDir, filepath.Base(artifact)), content, 0600); err != nil {
-			t.Logf("Could not write artifact %q: %v", artifact, err)
-		}
-	}
-}
-
-func saveArtifactsForDebugOnCleanup(t *testing.T, artifacts []string) {
-	t.Helper()
-	t.Cleanup(func() { saveArtifactsForDebug(t, artifacts) })
-}
-
 func sleepDuration(in time.Duration) time.Duration {
-	return time.Duration(math.Round(float64(in) * testutils.SleepMultiplier()))
+	return testutils.MultipliedSleepDuration(in)
 }
 
-// prependBinToPath returns the value of the GOPATH defined in go env prepended to PATH.
-func prependBinToPath(t *testing.T) string {
+// pathEnvWithGoBin returns the value of the GOPATH defined in go env prepended to PATH.
+func pathEnvWithGoBin(t *testing.T) string {
 	t.Helper()
+
+	pathEnv := testutils.MinimalPathEnv
 
 	cmd := exec.Command("go", "env", "GOPATH")
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "Could not get GOPATH: %v: %s", err, out)
 
-	env := os.Getenv("PATH")
-	return "PATH=" + strings.Join([]string{filepath.Join(strings.TrimSpace(string(out)), "bin"), env}, ":")
+	goPath := strings.TrimSpace(string(out))
+
+	if goPath == "" {
+		return pathEnv
+	}
+
+	goBinPath := filepath.Join(goPath, "bin")
+	return fmt.Sprintf("PATH=%s:%s", goBinPath, strings.TrimPrefix(pathEnv, "PATH="))
 }
 
-func prepareGPasswdFiles(t *testing.T) (string, string) {
+func goEnv(t *testing.T) []string {
+	t.Helper()
+
+	cmd := exec.Command("go", "env", "-json")
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "Could not get go env: %v: %s", err, out)
+
+	var env map[string]string
+	err = json.Unmarshal(out, &env)
+	require.NoError(t, err, "Could not unmarshal go env: %v: %s", err, out)
+
+	var envSlice []string
+	for k, v := range env {
+		envSlice = append(envSlice, fmt.Sprintf("%s=%s", k, v))
+	}
+	return envSlice
+}
+
+func prepareGroupFiles(t *testing.T) (string, string) {
 	t.Helper()
 
 	cwd, err := os.Getwd()
 	require.NoError(t, err, "Cannot get current working directory")
 
-	const groupFileName = "gpasswd.group"
-	gpasswdOutput := filepath.Join(t.TempDir(), "gpasswd.output")
+	const groupFileName = "groups"
+	groupOutputFile := filepath.Join(t.TempDir(), "groups")
 	groupsFile := filepath.Join(cwd, "testdata", t.Name(), groupFileName)
 
 	if ok, _ := fileutils.FileExists(groupsFile); !ok {
 		groupsFile = filepath.Join(cwd, testutils.TestFamilyPath(t), groupFileName)
 	}
 
-	// Do a copy of the original group file, since it may be migrated by authd.
+	// Do a copy of the original group file, since it may be changed by authd.
 	tmpCopy := filepath.Join(t.TempDir(), filepath.Base(groupsFile))
 	err = fileutils.CopyFile(groupsFile, tmpCopy)
 	require.NoError(t, err, "Cannot copy the group file %q", groupsFile)
 	groupsFile = tmpCopy
 
-	saveArtifactsForDebugOnCleanup(t, []string{gpasswdOutput, groupsFile})
+	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, groupOutputFile, groupsFile)
 
-	return gpasswdOutput, groupsFile
+	return groupOutputFile, groupsFile
 }
 
 func getUbuntuVersion(t *testing.T) int {
@@ -452,7 +389,7 @@ func requireNoAuthdUser(t *testing.T, client authd.UserServiceClient, user strin
 
 	_, err := client.GetUserByName(context.Background(),
 		&authd.GetUserByNameRequest{Name: user, ShouldPreCheck: false})
-	require.Error(t, err, "User %q is not expected to exist")
+	require.Error(t, err, "User %q is not expected to exist", user)
 }
 
 func requireAuthdGroup(t *testing.T, client authd.UserServiceClient, gid uint32) *authd.Group {
@@ -484,7 +421,7 @@ func getEntOutput(t *testing.T, nssLibrary, authdSocket, db, key string) string 
 	cmd.Env = nssTestEnv(t, nssLibrary, authdSocket)
 
 	out, err := cmd.Output()
-	require.NoError(t, err, "getent %s should not fail for key %q\n%s", db, key)
+	require.NoError(t, err, "getent %s should not fail for key %q\n%s", db, key, out)
 
 	o := strings.TrimSpace(string(out))
 	t.Log(strings.Join(cmd.Args, " "), "returned:", o)

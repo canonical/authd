@@ -1,0 +1,5 @@
+name: group1
+gid: 11111
+members:
+    - user1
+passwd: ""

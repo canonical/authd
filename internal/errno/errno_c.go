@@ -36,6 +36,8 @@ const (
 	ErrBadf Error = C.EBADF
 	// ErrPerm is the errno EPERM.
 	ErrPerm Error = C.EPERM
+	// ErrIntr is the errno EINTR.
+	ErrIntr Error = C.EINTR
 )
 
 // All these functions are expected to be called while this mutex is locked.

@@ -1,6 +1,6 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: authd
-Source: https://github.com/ubuntu/authd
+Source: https://github.com/canonical/authd
 
 Files: *
 Copyright: 2023 Canonical Ltd.

@@ -1,0 +1,14 @@
+authctl is a command-line tool to interact with the authd service for user and group management.
+
+Usage:
+  authctl [flags]
+  authctl [command]
+
+Available Commands:
+  user        Commands related to users
+  help        Help about any command
+
+Flags:
+  -h, --help   help for authctl
+
+Use "authctl [command] --help" for more information about a command.

@@ -1,0 +1,3 @@
+[submodule "authd-oidc-brokers/third_party/libhimmelblau"]
+	path = authd-oidc-brokers/third_party/libhimmelblau
+	url = https://gitlab.com/samba-team/libhimmelblau.git

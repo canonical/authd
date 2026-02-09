@@ -3,7 +3,7 @@
   users:
     - user1
   passwd: ""
-- name: group2
+- name: group2withoutugid
   gid: 22222
   users:
     - user2

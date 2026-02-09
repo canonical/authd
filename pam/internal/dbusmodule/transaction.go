@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/log"
 	"github.com/godbus/dbus/v5"
 	"github.com/msteinert/pam/v2"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/decorate"
 )
 
 // Transaction is a [pam.Transaction] with dbus support.

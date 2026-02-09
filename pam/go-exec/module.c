@@ -1,26 +1,6 @@
 // TiCS: disabled // This file is compiled indirectly through go generate.
 
-/* A simple PAM wrapper for GO based pam modules
- *
- * Copyright (C) 2024 Canonical Ltd.
- *
- * SPDX-License-Identifier: LGPL-3.0
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 3 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General
- * Public License along with this library; if not, see <http://www.gnu.org/licenses/>.
- *
- * Author: Marco Trevisan <marco.trevisan@canonical.com>
- */
+/* A simple PAM wrapper for Go based pam modules */
 
 #define G_LOG_DOMAIN "authd-pam-exec"
 
@@ -1157,7 +1137,13 @@ do_pam_action_thread (pam_handle_t *pamh,
     }
 
   for (int i = 0; env_variables && env_variables[i]; ++i)
-    g_ptr_array_add (envp, g_strdup (env_variables[i]));
+    {
+      if (strchr (env_variables[i], '='))
+        g_ptr_array_add (envp, g_strdup (env_variables[i]));
+      else
+        maybe_replicate_env (envp, env_variables[i]);
+    }
+
   g_ptr_array_add (envp, g_strdup_printf ("AUTHD_PAM_SERVER_ADDRESS=%s",
                                           g_dbus_server_get_client_address (server)));
   /* FIXME: use g_ptr_array_new_null_terminated when we can use newer GLib. */
@@ -1173,8 +1159,10 @@ do_pam_action_thread (pam_handle_t *pamh,
 
   if (is_debug_logging_enabled ())
     {
+      g_autofree char *exec_env = g_strjoinv ("\n  ", (char **) envp->pdata);
       g_autofree char *exec_str_args = g_strjoinv (" ", (char **) args->pdata);
 
+      g_debug ("Environment:%s%s", exec_env && *exec_env ? "\n  " : "", exec_env);
       g_debug ("Launching '%s'", exec_str_args);
     }
 

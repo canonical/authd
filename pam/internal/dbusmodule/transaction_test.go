@@ -7,12 +7,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/log"
+	"github.com/canonical/authd/pam/internal/dbusmodule"
 	"github.com/godbus/dbus/v5"
 	"github.com/msteinert/pam/v2"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/authd/pam/internal/dbusmodule"
 )
 
 const ifaceName = "com.ubuntu.authd.pam"

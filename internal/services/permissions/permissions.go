@@ -4,13 +4,10 @@ package permissions
 import (
 	"context"
 	"errors"
-	"fmt"
 
-	"github.com/ubuntu/decorate"
+	"github.com/canonical/authd/internal/decorate"
 	"google.golang.org/grpc/peer"
 )
-
-var permErrorFmt = "this action is only allowed for root users. Current user is %d"
 
 // Manager is an abstraction of permission process.
 type Manager struct {
@@ -35,15 +32,15 @@ func New(args ...Option) Manager {
 		arg(&opts)
 	}
 
-	//nolint:gosimple // S1016 Those structs are not the same conceptually.
+	//nolint:staticcheck // S1016 Those structs are not the same conceptually.
 	return Manager{
 		rootUID: opts.rootUID,
 	}
 }
 
-// IsRequestFromRoot returns nil if the request was performed by a root user.
+// CheckRequestIsFromRoot checks if the current gRPC request is from a root user and returns an error if not.
 // The pid and uid are extracted from peerCredsInfo in the gRPC context.
-func (m Manager) IsRequestFromRoot(ctx context.Context) (err error) {
+func (m Manager) CheckRequestIsFromRoot(ctx context.Context) (err error) {
 	defer decorate.OnError(&err, "permission denied")
 
 	p, ok := peer.FromContext(ctx)
@@ -56,7 +53,7 @@ func (m Manager) IsRequestFromRoot(ctx context.Context) (err error) {
 	}
 
 	if pci.uid != m.rootUID {
-		return fmt.Errorf(permErrorFmt, pci.uid)
+		return errors.New("only root can perform this operation")
 	}
 
 	return nil

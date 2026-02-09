@@ -1,0 +1,8 @@
+name: user1
+uid: 1111
+gid: 11111
+gecos: |-
+    User1 gecos
+    On multiple lines
+dir: /home/user1
+shell: /bin/bash

@@ -20,7 +20,7 @@ func InitJournalHandler(force bool) {
 	}
 
 	SetHandler(func(_ context.Context, level Level, format string, args ...interface{}) {
-		journal.Print(mapPriority(level), format, args...)
+		_ = journal.Print(mapPriority(level), format, args...)
 	})
 }
 

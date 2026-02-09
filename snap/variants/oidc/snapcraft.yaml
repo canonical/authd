@@ -1,0 +1,93 @@
+name: authd-oidc
+summary: authd - OIDC Authentication for Ubuntu
+description: |
+  authd is a powerful authentication service for Ubuntu, designed to integrate with OIDC identity providers.
+  It delivers a secure, flexible solution for organizations and individuals who are transitioning
+  to cloud-based identity management on Ubuntu workstations and servers.
+  authd uses the OAuth Device Authorization Grant and ensures a consistent and secure login experience across
+  Ubuntu Desktop and Server — whether through GDM, SSH, or network services like NFS and Samba.
+
+  Key Features
+  * Cloud identity provider integration: Connects with any OpenID Connect compliant identity provider.
+  * Secure login: authd leverages the OAuth Device Authorization Grant RFC 8628-compliant workflows for reliability
+    and security.
+  * Open-source: Free and community-driven, with contributions welcomed.
+  * Enterprise ready: Ubuntu Pro customers will benefit from the same expanded security and support guarantees.
+  * authd is free for all Ubuntu Desktop and Server 24.04 LTS users and is under active development.
+    Explore the official documentation for installation and configuration steps, or visit the GitHub repository to
+    contribute or provide feedback.
+icon: snap/icon.svg
+website: https://documentation.ubuntu.com/authd
+issues: https://github.com/canonical/authd/issues
+source-code: https://github.com/canonical/authd
+adopt-info: version
+grade: stable
+base: core24
+confinement: strict
+license: GPL-3.0
+
+apps:
+  authd-oidc:
+    command: bin/authd-oidc
+    daemon: dbus
+    slots:
+      - dbus-authd
+    plugs:
+      - network
+    restart-condition: always
+    activates-on: [dbus-authd]
+    environment:
+      SYSLOG_IDENTIFIER: authd-oidc
+
+slots:
+  dbus-authd:
+    interface: dbus
+    bus: system
+    name: com.ubuntu.authd.Oidc
+
+parts:
+  broker:
+    source: authd-oidc-brokers
+    source-type: local
+    plugin: go
+    build-snaps:
+      - go
+    build-environment:
+      - GOFLAGS: "-tags=release"
+    override-build: |
+      go mod download all
+      go mod vendor
+      VERSION=$(craftctl get version)
+      export GOFLAGS="-ldflags=-X=github.com/canonical/authd/authd-oidc-brokers/internal/consts.Version=${VERSION}"
+      go build -o ${GOBIN}/authd-oidc ./cmd/authd-oidc
+    after:
+      - version
+  config:
+    source: authd-oidc-brokers/conf/
+    source-type: local
+    plugin: dump
+    organize:
+      "authd.conf": "conf/authd/oidc.conf"
+      "broker.conf": "conf/broker.conf.orig"
+      "migrations": "conf/migrations"
+  # SemVer comparison helper
+  semver:
+    source: authd-oidc-brokers/tools
+    source-type: local
+    plugin: go
+    override-build: |
+      go mod download all
+      go mod vendor
+      go build -o ${GOBIN}/semver semver/semver.go
+  # Build the snap version from the git repository and current tree state.
+  version:
+    source: .
+    plugin: nil
+    build-packages:
+      - git # The script needs Git.
+    override-build: |
+      if [ -z "$(craftctl get version)" ]; then
+        craftctl set version="$(./snap/version)"
+      fi
+    after:
+      - semver

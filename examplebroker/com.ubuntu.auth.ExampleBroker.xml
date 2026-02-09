@@ -36,6 +36,7 @@
     </method>
     <method name="UserPreCheck">
         <arg type="s" direction="in" name="username"/>
+        <arg type="s" direction="out" name="userInfo"/>
   </method>
     <method name="CancelIsAuthenticated">
         <arg type="s" direction="in" name="sessionID"/>

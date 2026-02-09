@@ -1,0 +1,3 @@
+access: denied
+data: '{"message":"This user is disabled in Microsoft Entra ID. Please contact your administrator or try again with a working network connection."}'
+err: <nil>

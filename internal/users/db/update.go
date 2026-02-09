@@ -4,17 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
+	"github.com/canonical/authd/log"
 	"github.com/mattn/go-sqlite3"
-	"github.com/ubuntu/authd/log"
 )
 
 // UpdateUserEntry inserts or updates user and group records from the user information.
 func (m *Manager) UpdateUserEntry(user UserRow, authdGroups []GroupRow, localGroups []string) (err error) {
-	// authd uses lowercase usernames
-	user.Name = strings.ToLower(user.Name)
-
 	// Start a transaction
 	tx, err := m.db.Begin()
 	if err != nil {
@@ -60,8 +56,10 @@ func handleUserUpdate(db queryable, u UserRow) error {
 
 	// If a user with the same UID exists, we need to ensure that it's the same user or fail the update otherwise.
 	if existingUser.Name != "" && existingUser.Name != u.Name {
-		log.Errorf(context.TODO(), "UID for user %q already in use by user %q", u.Name, existingUser.Name)
-		return errors.New("UID already in use by a different user")
+		log.Errorf(context.TODO(), "UID %d for user %q already in use by user %q",
+			u.UID, u.Name, existingUser.Name)
+		return fmt.Errorf("UID for user %q already in use by a different user %q",
+			u.Name, existingUser.Name)
 	}
 
 	// Ensure that we use the same homedir as the one we have in the database.
@@ -90,10 +88,11 @@ func handleGroupsUpdate(db queryable, groups []GroupRow) error {
 
 		// If a group with the same GID exists, we need to ensure that it's the same group or fail the update otherwise.
 		// Ignore the case that the UGID of the existing group is empty, which means that the group was stored without a
-		// UGID, which was the case before https://github.com/ubuntu/authd/pull/647.
+		// UGID, which was the case before https://github.com/canonical/authd/pull/647.
 		if groupExists && existingGroup.UGID != "" && existingGroup.UGID != group.UGID {
 			log.Errorf(context.TODO(), "GID %d for group with UGID %q already in use by a group with UGID %q", group.GID, group.UGID, existingGroup.UGID)
-			return fmt.Errorf("GID for group %q already in use by a different group", group.Name)
+			return fmt.Errorf("GID for group %q already in use by a different group %q",
+				group.Name, existingGroup.Name)
 		}
 
 		log.Debugf(context.Background(), "Updating entry of group %q (%+v)", group.Name, group)
@@ -124,13 +123,13 @@ func handleUsersToGroupsUpdate(db queryable, uid uint32, groups []GroupRow) erro
 				// GID exist.
 				_, userErr := userByID(db, uid)
 				if errors.Is(userErr, NoDataFoundError{}) {
-					err = fmt.Errorf("%w (user with UID %d does not exist)", err, uid)
+					err = fmt.Errorf("%w (%w)", err, userErr)
 				} else if userErr != nil {
 					err = errors.Join(err, fmt.Errorf("failed to check if user with UID %d exists: %w", uid, userErr))
 				}
 				_, groupErr := groupByID(db, group.GID)
 				if errors.Is(groupErr, NoDataFoundError{}) {
-					err = fmt.Errorf("%w (group with GID %d does not exist)", err, group.GID)
+					err = fmt.Errorf("%w (%w)", err, groupErr)
 				} else if groupErr != nil {
 					err = errors.Join(err, fmt.Errorf("failed to check if group with GID %d exists: %w", group.GID, groupErr))
 				}
@@ -161,9 +160,6 @@ func handleUsersToLocalGroupsUpdate(db queryable, uid uint32, localGroups []stri
 
 // UpdateBrokerForUser updates the last broker the user successfully authenticated with.
 func (m *Manager) UpdateBrokerForUser(username, brokerID string) error {
-	// authd uses lowercase usernames
-	username = strings.ToLower(username)
-
 	query := `UPDATE users SET broker_id = ? WHERE name = ?`
 	res, err := m.db.Exec(query, brokerID, username)
 	if err != nil {
@@ -174,7 +170,25 @@ func (m *Manager) UpdateBrokerForUser(username, brokerID string) error {
 		return fmt.Errorf("failed to get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return NoDataFoundError{table: "users", key: username}
+		return NewUserNotFoundError(username)
+	}
+
+	return nil
+}
+
+// UpdateLockedFieldForUser sets the "locked" field of a user record.
+func (m *Manager) UpdateLockedFieldForUser(username string, locked bool) error {
+	query := `UPDATE users SET locked = ? WHERE name = ?`
+	res, err := m.db.Exec(query, locked, username)
+	if err != nil {
+		return fmt.Errorf("failed to update locked field for user: %w", err)
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return NewUserNotFoundError(username)
 	}
 
 	return nil

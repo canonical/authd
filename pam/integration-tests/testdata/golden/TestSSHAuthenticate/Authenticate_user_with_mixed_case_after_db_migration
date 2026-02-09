@@ -11,17 +11,18 @@ Enter 'r' to cancel the request and go back to select the authentication method
 >
 PAM Authenticate() finished for user 'user-integration-with-mixed-case'
 PAM AcctMgmt() finished for user 'user-integration-with-mixed-case'
-Environment:
-  USER=user-integration-with-mixed-case
-  LOGNAME=user-integration-with-mixed-case
+Could not chdir to home directory /home/user-integration-WITH-Mixed-CaSe: No such file or directory
+ SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_with_mixed_case_after_db_migration]
   HOME=${AUTHD_TEST_HOME}
+  LOGNAME=user-integration-with-mixed-case
   PATH=${AUTHD_TEST_PATH}
+  PWD=${AUTHD_TEST_PWD}
   SHELL=/bin/sh
-  TERM=xterm-256color
   SSH_CLIENT=${AUTHD_TEST_SSH_CLIENT}
   SSH_CONNECTION=${AUTHD_TEST_SSH_CONNECTION}
   SSH_TTY=${AUTHD_TEST_SSH_TTY}
- SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_with_mixed_case_after_db_migration]
+  TERM=xterm-256color
+  USER=user-integration-with-mixed-case
 Connection to localhost closed.
 >
 ────────────────────────────────────────────────────────────────────────────────

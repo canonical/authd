@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/testlog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -74,13 +76,14 @@ func BuildRustNSSLib(t *testing.T, disableCoverage bool, features ...string) (li
 	cargo, isNightly, err := getCargoPath()
 	require.NoError(t, err, "Setup: looking for cargo")
 
-	// Note that for developing purposes and avoiding keeping building the rust program dependencies,
-	// TEST_RUST_TARGET environment variable can be set to an absolute path to keep iterative
-	// build artifacts.
+	// Store the build artifacts in a common temp directory, so that they can be reused between tests.
 	target := os.Getenv("TEST_RUST_TARGET")
 	if target == "" {
-		target = t.TempDir()
+		target = filepath.Join(os.TempDir(), "authd-tests-rust-build-artifacts")
 	}
+
+	err = os.MkdirAll(target, 0700)
+	require.NoError(t, err, "Setup: could not create Rust target dir")
 
 	rustDir := filepath.Join(projectRoot, "nss")
 	if !disableCoverage {
@@ -89,10 +92,22 @@ func BuildRustNSSLib(t *testing.T, disableCoverage bool, features ...string) (li
 
 	features = append([]string{"integration_tests", "custom_socket"}, features...)
 
+	t.Logf("Locking Rust target dir %s", target)
+	unlock, err := fileutils.LockDir(target)
+	require.NoError(t, err, "Setup: could not lock Rust target dir")
+	defer func() {
+		require.NoError(t, unlock(), "Setup: could not unlock Rust target dir")
+		t.Logf("Unlocked Rust target dir %s", target)
+	}()
+	t.Logf("Locked Rust target dir %s", target)
+
 	// Builds the nss library.
 	// #nosec:G204 - we control the command arguments in tests
-	cmd := exec.Command(cargo, "build", "--verbose",
-		"--features", strings.Join(features, ","), "--target-dir", target)
+	cmd := exec.Command(cargo, "build", "--features", strings.Join(features, ","), "--target-dir", target)
+	if TestVerbosity() > 0 {
+		cmd.Args = append(cmd.Args, "--verbose")
+	}
+	// dpkg-buildflags sets many relevant environment variables, so we pass the whole environment.
 	cmd.Env = append(os.Environ(), rustCovEnv...)
 	cmd.Dir = projectRoot
 
@@ -100,9 +115,8 @@ func BuildRustNSSLib(t *testing.T, disableCoverage bool, features ...string) (li
 		cmd.Env = append(cmd.Env, "RUSTFLAGS=-Zsanitizer=address")
 	}
 
-	t.Log("Building NSS library...", cmd.Args)
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "Setup: could not build Rust NSS library: %s", out)
+	err = testlog.RunWithTiming(t, "Building NSS library", cmd)
+	require.NoError(t, err, "Setup: could not build Rust NSS library")
 
 	// When building the crate with dh-cargo, this env is set to indicate which architecture the code
 	// is being compiled to. When it's set, the compiled is stored under target/$(DEB_HOST_RUST_TYPE)/debug,
@@ -111,9 +125,10 @@ func BuildRustNSSLib(t *testing.T, disableCoverage bool, features ...string) (li
 	// If the env is not set, the target stays the same.
 	target = filepath.Join(target, os.Getenv("DEB_HOST_RUST_TYPE"))
 
-	// Creates a symlink for the compiled library with the expected versioned name.
-	libPath = filepath.Join(target, "libnss_authd.so.2")
-	if err = os.Symlink(filepath.Join(target, "debug", "libnss_authd.so"), libPath); err != nil {
+	// Copy the library with the expected versioned name to a temporary directory, so that we can safely use
+	// it from there after unlocking the target directory, which allows other tests to rebuild the library.
+	libPath = filepath.Join(t.TempDir(), "libnss_authd.so.2")
+	if err = fileutils.CopyFile(filepath.Join(target, "debug", "libnss_authd.so"), libPath); err != nil {
 		require.ErrorIs(t, err, os.ErrExist, "Setup: failed to create versioned link to the library")
 	}
 

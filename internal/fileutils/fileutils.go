@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"golang.org/x/sys/unix"
 )
 
 // FileExists checks if a file exists at the given path.
@@ -102,4 +104,29 @@ func Lrename(oldPath, newPath string) error {
 	}
 
 	return os.Rename(oldPath, newPath)
+}
+
+// LockDir creates a lock file in the specified directory and acquires an exclusive lock on it.
+// It blocks until the lock is available and returns an unlock function to release the lock.
+func LockDir(dir string) (func() error, error) {
+	lockPath := filepath.Join(dir, ".lock")
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+
+	unlock := func() error {
+		if err := unix.Flock(int(f.Fd()), unix.LOCK_UN); err != nil {
+			_ = f.Close()
+			return err
+		}
+		return f.Close()
+	}
+
+	return unlock, nil
 }

@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/canonical/authd/internal/services/permissions"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/services/permissions"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
@@ -66,13 +66,13 @@ func TestIsRequestFromRoot(t *testing.T) {
 			}
 			pm := permissions.New(opts...)
 
-			err := pm.IsRequestFromRoot(ctx)
+			err := pm.CheckRequestIsFromRoot(ctx)
 
 			if tc.wantErr {
-				require.Error(t, err, "IsRequestFromRoot should deny access but didn't")
+				require.Error(t, err, "CheckRequestIsFromRoot should deny access but didn't")
 				return
 			}
-			require.NoError(t, err, "IsRequestFromRoot should allow access but didn't")
+			require.NoError(t, err, "CheckRequestIsFromRoot should allow access but didn't")
 		})
 	}
 }

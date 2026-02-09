@@ -1,4 +1,4 @@
 FIRST CALL:
 	access: 
 	msg: 
-	err: can't check authentication: no broker found for session "invalid-session"
+	err: no broker found for session "invalid-session"

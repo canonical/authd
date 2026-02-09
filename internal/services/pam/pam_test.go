@@ -14,22 +14,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/brokers"
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/services/errmessages"
+	"github.com/canonical/authd/internal/services/pam"
+	"github.com/canonical/authd/internal/services/permissions"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/users"
+	"github.com/canonical/authd/internal/users/db"
+	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	userslocking "github.com/canonical/authd/internal/users/locking"
+	userstestutils "github.com/canonical/authd/internal/users/testutils"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/brokers"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/internal/services/errmessages"
-	"github.com/ubuntu/authd/internal/services/pam"
-	"github.com/ubuntu/authd/internal/services/permissions"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	"github.com/ubuntu/authd/internal/users"
-	"github.com/ubuntu/authd/internal/users/db"
-	"github.com/ubuntu/authd/internal/users/idgenerator"
-	localgroupstestutils "github.com/ubuntu/authd/internal/users/localentries/testutils"
-	userstestutils "github.com/ubuntu/authd/internal/users/testutils"
-	"github.com/ubuntu/authd/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -137,6 +137,7 @@ func TestGetPreviousBroker(t *testing.T) {
 		"Success_getting_previous_broker":                          {user: "userwithbroker", wantBroker: mockBrokerGeneratedID},
 		"For_local_user,_get_local_broker":                         {user: currentUsername, wantBroker: brokers.LocalBrokerName},
 		"For_unmanaged_user_and_only_one_broker,_get_local_broker": {user: "nonexistent", onlyLocalBroker: true, wantBroker: brokers.LocalBrokerName},
+		"Username_is_case_insensitive":                             {user: "UserWithBroker", wantBroker: mockBrokerGeneratedID},
 
 		"Returns_empty_when_user_does_not_exist":         {user: "nonexistent", wantBroker: ""},
 		"Returns_empty_when_user_does_not_have_a_broker": {user: "userwithoutbroker", wantBroker: ""},
@@ -193,6 +194,7 @@ func TestSelectBroker(t *testing.T) {
 		brokerID    string
 		username    string
 		sessionMode string
+		existingDB  string
 
 		currentUserNotRoot bool
 
@@ -214,8 +216,18 @@ func TestSelectBroker(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
+			cacheDir := t.TempDir()
+			if tc.existingDB != "" {
+				err := db.Z_ForTests_CreateDBFromYAML(filepath.Join(testutils.TestFamilyPath(t), tc.existingDB), cacheDir)
+				require.NoError(t, err, "Setup: could not create database from testdata")
+			}
+
+			m, err := users.NewManager(users.DefaultConfig, cacheDir)
+			require.NoError(t, err, "Setup: could not create user manager")
+			t.Cleanup(func() { _ = m.Stop() })
+
 			pm := newPermissionManager(t, tc.currentUserNotRoot)
-			client := newPamClient(t, nil, globalBrokerManager, &pm)
+			client := newPamClient(t, m, globalBrokerManager, &pm)
 
 			switch tc.brokerID {
 			case "":
@@ -424,16 +436,19 @@ func TestIsAuthenticated(t *testing.T) {
 
 		// There is no wantErr as it's stored in the golden file.
 	}{
-		"Successfully_authenticate":                           {username: "success"},
-		"Successfully_authenticate_if_first_call_is_canceled": {username: "ia_second_call", secondCall: true, cancelFirstCall: true},
-		"Denies_authentication_when_broker_times_out":         {username: "ia_timeout"},
-		"Update_existing_DB_on_success":                       {username: "success", existingDB: "cache-with-user.db"},
-		"Update_local_groups":                                 {username: "success_with_local_groups", localGroupsFile: "valid.group"},
+		"Successfully_authenticate":                            {username: "success"},
+		"Successfully_authenticate_if_first_call_is_canceled":  {username: "ia_second_call", secondCall: true, cancelFirstCall: true},
+		"Denies_authentication_when_broker_times_out":          {username: "ia_timeout"},
+		"Update_existing_DB_on_success":                        {username: "success", existingDB: "cache-with-user.db"},
+		"Update_local_groups":                                  {username: "success_with_local_groups", localGroupsFile: "valid.group"},
+		"Successfully_authenticate_user_with_uppercase":        {username: "SUCCESS"},
+		"Successfully_authenticate_with_groups_with_uppercase": {username: "success_with_uppercase_groups"},
 
 		// service errors
 		"Error_when_not_root":           {username: "success", currentUserNotRoot: true},
 		"Error_when_sessionID_is_empty": {sessionID: "-"},
 		"Error_when_there_is_no_broker": {sessionID: "invalid-session"},
+		"Error_when_user_is_locked":     {username: "locked", existingDB: "cache-with-locked-user.db"},
 
 		// broker errors
 		"Error_when_authenticating":                         {username: "ia_error"},
@@ -452,9 +467,10 @@ func TestIsAuthenticated(t *testing.T) {
 				t.Parallel()
 			}
 
-			var destCmdsFile string
+			var destGroupFile string
 			if tc.localGroupsFile != "" {
-				destCmdsFile = localgroupstestutils.SetupGPasswdMock(t, filepath.Join(testutils.TestFamilyPath(t), tc.localGroupsFile))
+				destGroupFile = localgroupstestutils.SetupGroupMock(t,
+					filepath.Join(testutils.TestFamilyPath(t), tc.localGroupsFile))
 			}
 
 			dbDir := t.TempDir()
@@ -464,9 +480,9 @@ func TestIsAuthenticated(t *testing.T) {
 			}
 
 			managerOpts := []users.Option{
-				users.WithIDGenerator(&idgenerator.IDGeneratorMock{
+				users.WithIDGenerator(&users.IDGeneratorMock{
 					UIDsToGenerate: []uint32{1111},
-					GIDsToGenerate: []uint32{22222},
+					GIDsToGenerate: []uint32{22222, 33333, 44444},
 				}),
 			}
 
@@ -534,12 +550,26 @@ func TestIsAuthenticated(t *testing.T) {
 			got = permissions.Z_ForTests_IdempotentPermissionError(got)
 			golden.CheckOrUpdate(t, got, golden.WithPath("IsAuthenticated"))
 
+			// Check that all usernames in the database are lowercase
+			allUsers, err := m.AllUsers()
+			require.NoError(t, err, "Setup: failed to get users from manager")
+			for _, u := range allUsers {
+				require.Equal(t, strings.ToLower(u.Name), u.Name, "all usernames in the database should be lowercase")
+			}
+
+			// Check that all groups in the database are lowercase
+			groups, err := m.AllGroups()
+			require.NoError(t, err, "Setup: failed to get groups from manager")
+			for _, group := range groups {
+				require.Equal(t, strings.ToLower(group.Name), group.Name, "all groups in the database should be lowercase")
+			}
+
 			// Check that database has been updated too.
 			gotDB, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
 			require.NoError(t, err, "Setup: failed to dump database for comparing")
 			golden.CheckOrUpdate(t, gotDB, golden.WithPath("cache.db"))
 
-			localgroupstestutils.RequireGPasswdOutput(t, destCmdsFile, filepath.Join(golden.Path(t), "gpasswd.output"))
+			localgroupstestutils.RequireGroupFile(t, destGroupFile, golden.Path(t))
 		})
 	}
 }
@@ -558,7 +588,7 @@ func TestIDGeneration(t *testing.T) {
 			t.Parallel()
 
 			managerOpts := []users.Option{
-				users.WithIDGenerator(&idgenerator.IDGeneratorMock{
+				users.WithIDGenerator(&users.IDGeneratorMock{
 					UIDsToGenerate: []uint32{1111},
 					GIDsToGenerate: []uint32{22222},
 				}),
@@ -600,6 +630,7 @@ func TestSetDefaultBrokerForUser(t *testing.T) {
 	}{
 		"Set_default_broker_for_existing_user_with_no_broker":   {username: "usersetbroker"},
 		"Update_default_broker_for_existing_user_with_a_broker": {username: "userupdatebroker"},
+		"Username_is_case_insensitive":                          {username: "UserSetBroker"},
 
 		"Error_when_setting_default_broker_to_local_broker": {username: "userlocalbroker", brokerID: brokers.LocalBrokerName, wantErr: true},
 		"Error_when_not_root":                               {username: "usersetbroker", currentUserNotRoot: true, wantErr: true},
@@ -698,10 +729,6 @@ func TestEndSession(t *testing.T) {
 			require.NoError(t, err, "EndSession should not return an error, but did")
 		})
 	}
-}
-
-func TestMockgpasswd(t *testing.T) {
-	localgroupstestutils.Mockgpasswd(t)
 }
 
 // initBrokers starts dbus mock brokers on the system bus. It returns its config path.
@@ -857,11 +884,10 @@ func setupGlobalBrokerMock() (cleanup func(), err error) {
 }
 
 func TestMain(m *testing.M) {
-	if os.Getenv("GO_WANT_HELPER_PROCESS") != "" {
-		os.Exit(m.Run())
-	}
-
 	log.SetLevel(log.DebugLevel)
+
+	userslocking.Z_ForTests_OverrideLocking()
+	defer userslocking.Z_ForTests_RestoreLocking()
 
 	cleanup, err := setupGlobalBrokerMock()
 	if err != nil {

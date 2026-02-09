@@ -30,6 +30,8 @@ const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 #[cfg(feature = "integration_tests")]
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
+const DEFAULT_SOCKET_PATH: &str = "/run/authd.sock";
+
 /// socket_path returns the socket path to connect to the gRPC server.
 ///
 /// It uses the AUTHD_NSS_SOCKET env value if set and the custom_socket feature is enabled,
@@ -40,12 +42,11 @@ fn socket_path() -> String {
         Ok(s) => return s,
         Err(err) => {
             info!(
-                "AUTHD_NSS_SOCKET not set or badly configured, using default value: {}",
-                err
+                "AUTHD_NSS_SOCKET env variable not set, falling back to default socket path {DEFAULT_SOCKET_PATH}: {err}"
             );
         }
     }
-    "/run/authd.sock".to_string()
+    DEFAULT_SOCKET_PATH.to_string()
 }
 
 /// grpc_status_to_nss_response converts a gRPC status to a NSS response.

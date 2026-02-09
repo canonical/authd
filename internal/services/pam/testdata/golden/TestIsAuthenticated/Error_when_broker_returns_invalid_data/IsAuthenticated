@@ -1,5 +1,5 @@
 FIRST CALL:
 	access: 
 	msg: 
-	err: can't check authentication: response returned by the broker is not a valid json: invalid character 'i' looking for beginning of value
+	err: response returned by the broker is not a valid json: invalid character 'i' looking for beginning of value
 Broker returned: invalid

@@ -1,79 +1,184 @@
-package tempentries
+package tempentries_test
 
 import (
+	"fmt"
+	"slices"
+	"strings"
 	"testing"
 
+	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/users"
+	"github.com/canonical/authd/internal/users/localentries"
+	userslocking "github.com/canonical/authd/internal/users/locking"
+	"github.com/canonical/authd/internal/users/tempentries"
+	"github.com/canonical/authd/internal/users/types"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	"github.com/ubuntu/authd/internal/users/idgenerator"
-	"github.com/ubuntu/authd/internal/users/types"
 )
 
 func TestPreAuthUser(t *testing.T) {
 	t.Parallel()
 
-	loginName := "test"
+	defaultLoginName := t.Name()
 	uidToGenerate := uint32(12345)
 
 	tests := map[string]struct {
+		users          []string
 		maxUsers       bool
 		uidsToGenerate []uint32
-		registerTwice  bool
 
-		wantErr bool
+		wantErr   bool
+		wantPanic []bool
+		wantUIDs  []uint32
 	}{
 		"Successfully_register_a_pre-auth_user": {},
-		"Successfully_register_a_pre-auth_user_if_the_first_generated_UID_is_already_in_use": {
-			uidsToGenerate: []uint32{0, uidToGenerate}, // UID 0 (root) always exists
+		"Panics_registering_a_pre-auth_user_again": {
+			users:          []string{defaultLoginName, defaultLoginName},
+			uidsToGenerate: []uint32{uidToGenerate, uidToGenerate},
+			wantUIDs:       []uint32{uidToGenerate},
+			wantPanic:      []bool{false, true},
 		},
-		"No_error_when_registering_a_pre-auth_user_with_the_same_name": {registerTwice: true},
+		"Panics_registering_a_pre-auth_user_again_with_different_uid": {
+			users:          []string{defaultLoginName, defaultLoginName},
+			uidsToGenerate: []uint32{uidToGenerate, uidToGenerate + 1},
+			wantUIDs:       []uint32{uidToGenerate},
+			wantPanic:      []bool{false, true},
+		},
+		"Panics_registering_a_pre-auth_user_if_the_first_generated_UID_is_already_registered": {
+			users:          []string{defaultLoginName, "other-test"},
+			uidsToGenerate: []uint32{uidToGenerate, uidToGenerate, uidToGenerate + 1},
+			wantUIDs:       []uint32{uidToGenerate, uidToGenerate + 1},
+			wantPanic:      []bool{false, true},
+		},
 
 		"Error_when_maximum_number_of_pre-auth_users_is_reached": {maxUsers: true, wantErr: true},
+		"Error_when_login_name_is_empty": {
+			users:   []string{""},
+			wantErr: true,
+		},
+		"Error_when_login_name_exceeds_maximum_length": {
+			users:   []string{strings.Repeat("a", tempentries.MaxPreAuthUserNameLength+1)},
+			wantErr: true,
+		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if tc.uidsToGenerate == nil {
-				tc.uidsToGenerate = []uint32{uidToGenerate}
+			if len(tc.users) == 0 {
+				tc.users = append(tc.users, defaultLoginName)
 			}
 
-			idGeneratorMock := &idgenerator.IDGeneratorMock{UIDsToGenerate: tc.uidsToGenerate}
-			records := newPreAuthUserRecords(idGeneratorMock)
+			if tc.uidsToGenerate == nil {
+				uid := uidToGenerate
+				for range tc.users {
+					tc.uidsToGenerate = append(tc.uidsToGenerate, uid)
+					uid++
+				}
+			}
+			if tc.wantUIDs == nil {
+				tc.wantUIDs = tc.uidsToGenerate
+			}
+
+			t.Log("UIDs to generate", tc.uidsToGenerate)
+			idGeneratorMock := &users.IDGeneratorMock{UIDsToGenerate: tc.uidsToGenerate}
+			records := tempentries.NewPreAuthUserRecords()
 
 			if tc.maxUsers {
-				records.numUsers = MaxPreAuthUsers
+				users := make(map[uint32]tempentries.PreAuthUser, tempentries.MaxPreAuthUsers)
+				uidByLogin := make(map[string]uint32)
+
+				for i := range uint32(tempentries.MaxPreAuthUsers) {
+					uid := uidToGenerate + i + 1
+					loginName := fmt.Sprintf("pre-auth-%d", uid)
+					users[uid] = tempentries.NewPreAuthUser(uid, loginName)
+					uidByLogin[loginName] = uid
+				}
+
+				records.SetTestUsers(users, uidByLogin)
+			}
+			if tc.wantPanic == nil {
+				tc.wantPanic = make([]bool, len(tc.users))
 			}
 
-			uid, err := records.RegisterPreAuthUser(loginName)
-			if tc.wantErr {
-				require.Error(t, err, "RegisterPreAuthUser should return an error, but did not")
+			wantRegistered := 0
+			var registeredUIDs []uint32
+
+			for idx, loginName := range tc.users {
+				t.Logf("Registering user %q", loginName)
+				uid, _, err := idGeneratorMock.GenerateUID(&localentries.UserDBLocked{}, nil)
+				require.NoError(t, err, "GenerateUID should not return an error, but it did")
+
+				if tc.wantPanic[idx] {
+					require.Panics(t, func() { _ = records.RegisterPreAuthUser(loginName, uid) },
+						"RegisterPreAuthUser should have panic'ed but it did not")
+					continue
+				}
+				err = records.RegisterPreAuthUser(loginName, uid)
+				if tc.wantErr {
+					require.Error(t, err, "RegisterPreAuthUser should return an error, but did not")
+					continue
+				}
+
+				isDuplicated := slices.Contains(tc.users[0:idx], loginName)
+				if !isDuplicated {
+					wantRegistered++
+				}
+
+				wantUID := tc.wantUIDs[wantRegistered-1]
+
+				require.NoError(t, err, "RegisterPreAuthUser should not return an error, but did")
+				require.Equal(t, wantUID, uid, "UID should be the one generated by the IDGenerator")
+				require.Len(t, records.GetUsers(), wantRegistered,
+					"Number of pre-auth registered, users should be %d", wantRegistered)
+
+				if isDuplicated {
+					require.Contains(t, registeredUIDs, uid, "UID %d has been already registered!", uid)
+				} else {
+					require.NotContains(t, registeredUIDs, uid, "UID %d has not been already registered!", uid)
+				}
+
+				registeredUIDs = append(registeredUIDs, uid)
+
+				// Check that the user was registered
+				user, err := records.UserByLogin(loginName)
+				require.NoError(t, err, "UserByID should not return an error, but did")
+
+				var goldenOptions []golden.Option
+				if idx > 0 {
+					userSuffix := fmt.Sprintf("_%s_%d", loginName, idx)
+					goldenOptions = append(goldenOptions, golden.WithSuffix(userSuffix))
+				}
+				checkPreAuthUser(t, user, goldenOptions...)
+			}
+
+			if wantRegistered == 0 {
 				return
 			}
-			require.NoError(t, err, "RegisterPreAuthUser should not return an error, but did")
-			require.Equal(t, uidToGenerate, uid, "UID should be the one generated by the IDGenerator")
-			require.Equal(t, records.numUsers, 1, "Number of pre-auth users should be 1")
 
-			if tc.registerTwice {
-				uid, err = records.RegisterPreAuthUser(loginName)
-				require.NoError(t, err, "RegisterPreAuthUser should not return an error, but did")
-				require.Equal(t, uidToGenerate, uid, "UID should be the one generated by the IDGenerator")
-				require.Equal(t, records.numUsers, 1, "Number of pre-auth users should be 1")
+			for idx, loginName := range tc.users {
+				if tc.wantPanic[idx] {
+					continue
+				}
+				isDuplicated := slices.Contains(tc.users[0:idx], loginName)
+				if !isDuplicated {
+					wantRegistered--
+				}
+
+				removeUID := registeredUIDs[len(registeredUIDs)-wantRegistered-1]
+				t.Logf("Removing user %q for UID %v", loginName, removeUID)
+				preauthUID, cleanup, err := records.MaybeCompletePreauthUser(loginName)
+				require.NoError(t, err, "MaybeCompletePreauthUser should not fail but it did")
+				require.Equal(t, removeUID, preauthUID, "MaybeCompletePreauthUser UID is not matching")
+				cleanup()
+				require.Len(t, records.GetUsers(), wantRegistered,
+					"Number of pre-auth users should be %d", wantRegistered)
+
+				// Check that the user was removed
+				_, err = records.UserByLogin(loginName)
+				require.Error(t, err, "UserByID should return an error, but did not")
 			}
-
-			// Check that the user was registered
-			user, err := records.userByLogin(loginName)
-			require.NoError(t, err, "UserByID should not return an error, but did")
-			checkPreAuthUser(t, user)
-
-			// Remove the user
-			records.deletePreAuthUser(uidToGenerate)
-			require.Equal(t, records.numUsers, 0, "Number of pre-auth users should be 0")
-
-			// Check that the user was removed
-			_, err = records.userByLogin(loginName)
-			require.Error(t, err, "UserByID should return an error, but did not")
 		})
 	}
 }
@@ -81,7 +186,7 @@ func TestPreAuthUser(t *testing.T) {
 func TestPreAuthUserByIDAndName(t *testing.T) {
 	t.Parallel()
 
-	loginName := "test"
+	loginName := t.Name()
 	uidToGenerate := uint32(12345)
 
 	tests := map[string]struct {
@@ -100,22 +205,24 @@ func TestPreAuthUserByIDAndName(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			idGeneratorMock := &idgenerator.IDGeneratorMock{UIDsToGenerate: []uint32{uidToGenerate}}
-			records := newPreAuthUserRecords(idGeneratorMock)
+			idGeneratorMock := &users.IDGeneratorMock{UIDsToGenerate: []uint32{uidToGenerate}}
+			records := tempentries.NewPreAuthUserRecords()
 
 			if tc.registerUser {
-				uid, err := records.RegisterPreAuthUser(loginName)
-				require.NoError(t, err, "RegisterPreAuthUser should not return an error, but did")
-				require.Equal(t, uidToGenerate, uid, "UID should be the one generated by the IDGenerator")
+				uid, _, err := idGeneratorMock.GenerateUID(&localentries.UserDBLocked{}, nil)
+				require.NoError(t, err, "GenerateUID should not return an error, but it did")
+
+				err = records.RegisterPreAuthUser(loginName, uid)
+				require.NoError(t, err, "generatePreAuthUserID should not return an error, but did")
 			}
 
 			if tc.userAlreadyRemoved {
-				records.deletePreAuthUser(uidToGenerate)
+				records.DeletePreAuthUser(uidToGenerate)
 			} else {
-				defer records.deletePreAuthUser(uidToGenerate)
+				defer records.DeletePreAuthUser(uidToGenerate)
 			}
 
-			user, err := records.userByID(uidToGenerate)
+			user, err := records.UserByID(uidToGenerate)
 
 			if tc.wantErr {
 				require.Error(t, err, "UserByID should return an error, but did not")
@@ -123,24 +230,27 @@ func TestPreAuthUserByIDAndName(t *testing.T) {
 			}
 			require.NoError(t, err, "UserByID should not return an error, but did")
 			checkPreAuthUser(t, user)
-
-			user, err = records.userByName(user.Name)
-			if tc.wantErr {
-				require.Error(t, err, "UserByName should return an error, but did not")
-				return
-			}
-			require.NoError(t, err, "UserByName should not return an error, but did")
-			checkPreAuthUser(t, user)
 		})
 	}
 }
 
-func checkPreAuthUser(t *testing.T, user types.UserEntry) {
+func checkPreAuthUser(t *testing.T, user types.UserEntry, options ...golden.Option) {
 	t.Helper()
 
-	// The name field is randomly generated, so unset it before comparing the user with the golden file.
-	require.NotEmpty(t, user.Name, "Name should not be empty")
-	user.Name = ""
+	// The name field contains a randomly generated part, so we replace that part
+	// before comparing the user with the golden file.
+	require.True(t, strings.HasPrefix(user.Name, tempentries.UserPrefix),
+		"Name should have %q prefix", tempentries.UserPrefix)
+	user.Name = tempentries.UserPrefix + "-{RANDOM-ID}"
 
-	golden.CheckOrUpdateYAML(t, user)
+	golden.CheckOrUpdateYAML(t, user, options...)
+}
+
+func TestMain(m *testing.M) {
+	log.SetLevel(log.DebugLevel)
+
+	userslocking.Z_ForTests_OverrideLocking()
+	defer userslocking.Z_ForTests_RestoreLocking()
+
+	m.Run()
 }

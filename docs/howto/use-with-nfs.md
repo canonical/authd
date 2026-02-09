@@ -1,3 +1,9 @@
+---
+myst:
+  html_meta:
+    "description lang=en": "Use authd with an NFS server."
+---
+
 # Using authd with NFS
 
 The user identifiers (UIDs) and group identifiers (GIDs) assigned by authd are

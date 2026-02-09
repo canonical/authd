@@ -1,0 +1,14 @@
+Usage:
+  authctl user [flags]
+  authctl user [command]
+
+Available Commands:
+  lock        Lock (disable) a user managed by authd
+  unlock      Unlock (enable) a user managed by authd
+
+Flags:
+  -h, --help   help for user
+
+Use "authctl user [command] --help" for more information about a command.
+
+unknown command "invalid-command" for "authctl user"

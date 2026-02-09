@@ -2,11 +2,12 @@
 package userstestutils
 
 import (
+	"sync"
 	"unsafe"
 
-	"github.com/ubuntu/authd/internal/testsdetection"
-	"github.com/ubuntu/authd/internal/users"
-	"github.com/ubuntu/authd/internal/users/db"
+	"github.com/canonical/authd/internal/testsdetection"
+	"github.com/canonical/authd/internal/users"
+	"github.com/canonical/authd/internal/users/db"
 )
 
 func init() {
@@ -15,6 +16,8 @@ func init() {
 }
 
 type manager struct {
+	userRegisterMu sync.Mutex
+
 	db *db.Manager
 }
 

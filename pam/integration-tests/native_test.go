@@ -7,19 +7,23 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/canonical/authd/examplebroker"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
+	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/examplebroker"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	localgroupstestutils "github.com/ubuntu/authd/internal/users/localentries/testutils"
-	"github.com/ubuntu/authd/pam/internal/pam_test"
 )
 
 const nativeTapeBaseCommand = "./pam_authd %s socket=${%s} force_native_client=true"
 
 func TestNativeAuthenticate(t *testing.T) {
 	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 
 	clientPath := t.TempDir()
 	cliEnv := preparePamRunnerTest(t, clientPath)
@@ -223,6 +227,13 @@ func TestNativeAuthenticate(t *testing.T) {
 				PamUser: examplebroker.UserIntegrationMfaWithResetPrefix + "pwquality",
 			},
 		},
+		"Authenticate_user_with_mfa_and_reset_same_password": {
+			tape:         "mfa_reset_same_password",
+			tapeSettings: []tapeSetting{{vhsHeight, 3000}},
+			clientOptions: clientOptions{
+				PamUser: examplebroker.UserIntegrationMfaWithResetPrefix + "same-password",
+			},
+		},
 		"Authenticate_user_and_offer_password_reset": {
 			tape: "optional_password_reset_skip",
 			clientOptions: clientOptions{
@@ -401,22 +412,37 @@ func TestNativeAuthenticate(t *testing.T) {
 				filepath.Join(outDir, "pam_authd"))
 			require.NoError(t, err, "Setup: symlinking the pam client")
 
-			var socketPath, gpasswdOutput, groupsFile, pidFile string
+			var socketPath, groupFileOutput, pidFile string
 			if tc.wantLocalGroups || tc.currentUserNotRoot || tc.wantSeparateDaemon ||
 				tc.oldDB != "" {
 				// For the local groups tests we need to run authd again so that it has
-				// special environment that generates a fake gpasswd output for us to test.
+				// special environment that saves the updated group file to a writable
+				// location for us to test.
 				// Similarly for the not-root tests authd has to run in a more restricted way.
 				// In the other cases this is not needed, so we can just use a shared authd.
-				gpasswdOutput, groupsFile = prepareGPasswdFiles(t)
+				var groupFile string
+				groupFileOutput, groupFile = prepareGroupFiles(t)
+
+				if tc.wantLocalGroups || tc.oldDB != "" {
+					// We don't want to use separate input ant output files here.
+					groupFileOutput = groupFile
+				}
 
 				pidFile = filepath.Join(outDir, "authd.pid")
 
-				socketPath = runAuthd(t, gpasswdOutput, groupsFile, !tc.currentUserNotRoot,
+				args := []testutils.DaemonOption{
+					testutils.WithGroupFile(groupFile),
+					testutils.WithGroupFileOutput(groupFileOutput),
 					testutils.WithPidFile(pidFile),
-					testutils.WithEnvironment(useOldDatabaseEnv(t, tc.oldDB)...))
+					testutils.WithEnvironment(useOldDatabaseEnv(t, tc.oldDB)...),
+				}
+				if !tc.currentUserNotRoot {
+					args = append(args, testutils.WithCurrentUserAsRoot)
+				}
+
+				socketPath = runAuthd(t, args...)
 			} else {
-				socketPath, gpasswdOutput = sharedAuthd(t)
+				socketPath, groupFileOutput = sharedAuthd(t)
 			}
 			if tc.socketPath != "" {
 				socketPath = tc.socketPath
@@ -434,24 +460,18 @@ func TestNativeAuthenticate(t *testing.T) {
 				tc.clientOptions.PamUser = vhsTestUserName(t, "native")
 			}
 
-			td := newTapeData(tc.tape, tc.tapeSettings...)
+			td := newTapeData(tc.tape, outDir, tc.tapeSettings...)
 			td.Command = tc.tapeCommand
 			td.Env[vhsTapeSocketVariable] = socketPath
 			td.Env[pam_test.RunnerEnvSupportsConversation] = "1"
 			td.Env["AUTHD_TEST_PID_FILE"] = pidFile
 			td.Variables = tc.tapeVariables
 			td.AddClientOptions(t, tc.clientOptions)
-			td.RunVhs(t, vhsTestTypeNative, outDir, cliEnv)
-			got := td.ExpectedOutput(t, outDir)
+			td.RunVHS(t, vhsTestTypeNative, cliEnv)
+			got := td.SanitizedOutput(t)
 			golden.CheckOrUpdate(t, got)
 
-			if tc.wantLocalGroups || tc.oldDB != "" {
-				actualGroups, err := os.ReadFile(groupsFile)
-				require.NoError(t, err, "Failed to read the groups file")
-				golden.CheckOrUpdate(t, string(actualGroups), golden.WithSuffix(".groups"))
-			}
-
-			localgroupstestutils.RequireGPasswdOutput(t, gpasswdOutput, golden.Path(t)+".gpasswd_out")
+			localgroupstestutils.RequireGroupFile(t, groupFileOutput, golden.Path(t))
 
 			if !tc.skipRunnerCheck {
 				requireRunnerResultForUser(t, authd.SessionMode_LOGIN, tc.clientOptions.PamUser, got)
@@ -462,6 +482,10 @@ func TestNativeAuthenticate(t *testing.T) {
 
 func TestNativeChangeAuthTok(t *testing.T) {
 	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 
 	clientPath := t.TempDir()
 	cliEnv := preparePamRunnerTest(t, clientPath)
@@ -566,7 +590,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 			if tc.currentUserNotRoot {
 				// For the not-root tests authd has to run in a more restricted way.
 				// In the other cases this is not needed, so we can just use a shared authd.
-				socketPath = runAuthd(t, os.DevNull, os.DevNull, false)
+				socketPath = runAuthd(t, testutils.WithGroupFile(filepath.Join(t.TempDir(), "group")))
 			} else {
 				socketPath, _ = sharedAuthd(t)
 			}
@@ -579,14 +603,14 @@ func TestNativeChangeAuthTok(t *testing.T) {
 				tc.tapeVariables[vhsTapeUserVariable] = vhsTestUserName(t, "native-passwd")
 			}
 
-			td := newTapeData(tc.tape, tc.tapeSettings...)
+			td := newTapeData(tc.tape, outDir, tc.tapeSettings...)
 			td.Command = tapeCommand
 			td.Variables = tc.tapeVariables
 			td.Env[vhsTapeSocketVariable] = socketPath
 			td.Env[pam_test.RunnerEnvSupportsConversation] = "1"
 			td.AddClientOptions(t, tc.clientOptions)
-			td.RunVhs(t, vhsTestTypeNative, outDir, cliEnv)
-			got := td.ExpectedOutput(t, outDir)
+			td.RunVHS(t, vhsTestTypeNative, cliEnv)
+			got := td.SanitizedOutput(t)
 			golden.CheckOrUpdate(t, got)
 
 			if !tc.skipRunnerCheck {

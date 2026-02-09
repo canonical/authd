@@ -35,17 +35,17 @@ Enter 'r' to cancel the request and go back to select the authentication method
 >
 PAM Authenticate() finished for user 'user-ssh2'
 PAM AcctMgmt() finished for user 'user-ssh2'
-Environment:
-  USER=user-ssh2
-  LOGNAME=user-ssh2
+ SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_successfully_if_already_registered_with_upper_case]
   HOME=${AUTHD_TEST_HOME}
+  LOGNAME=user-ssh2
   PATH=${AUTHD_TEST_PATH}
+  PWD=${AUTHD_TEST_PWD}
   SHELL=/bin/sh
-  TERM=xterm-256color
   SSH_CLIENT=${AUTHD_TEST_SSH_CLIENT}
   SSH_CONNECTION=${AUTHD_TEST_SSH_CONNECTION}
   SSH_TTY=${AUTHD_TEST_SSH_TTY}
- SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_successfully_if_already_registered_with_upper_case]
+  TERM=xterm-256color
+  USER=user-ssh2
 Connection to localhost closed.
 >
 ────────────────────────────────────────────────────────────────────────────────

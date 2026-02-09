@@ -1,0 +1,12 @@
+name: user2
+uid: 2222
+gecos: User2
+dir: /home/user2
+shell: /bin/dash
+groups:
+    - name: group2withoutugid
+      gid: 22222
+      ugid: ""
+    - name: commongroup
+      gid: 99999
+      ugid: "87654321"

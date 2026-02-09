@@ -1,0 +1,4 @@
+- name: group1
+  ugid: id1
+- name: local1
+  ugid: ""

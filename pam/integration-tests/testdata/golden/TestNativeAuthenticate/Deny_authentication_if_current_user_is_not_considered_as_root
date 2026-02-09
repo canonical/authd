@@ -1,6 +1,6 @@
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-PAM Error Message: could not get current available brokers: permission denied: this action is on
-ly allowed for root users. Current user is XXXX
+PAM Error Message: could not get current available brokers: permission denied: only root can per
+form this operation
 PAM Authenticate()
   User: "user-integration-native-deny-authentication-if-current-user-is-not-considered-as-root"
   Result: error: PAM exit code: 4
@@ -13,8 +13,8 @@ PAM AcctMgmt()
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-PAM Error Message: could not get current available brokers: permission denied: this action is on
-ly allowed for root users. Current user is XXXX
+PAM Error Message: could not get current available brokers: permission denied: only root can per
+form this operation
 PAM Authenticate()
   User: "user-integration-native-deny-authentication-if-current-user-is-not-considered-as-root"
   Result: error: PAM exit code: 4

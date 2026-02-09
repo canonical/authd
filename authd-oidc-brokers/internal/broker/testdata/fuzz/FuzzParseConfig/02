@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("[oidc]\nforce_provider_authentication = nope\n")

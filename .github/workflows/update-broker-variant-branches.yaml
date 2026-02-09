@@ -1,0 +1,49 @@
+name: Auto update broker variant branches
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "authd-oidc-brokers/**"
+      - "!authd-oidc-brokers/e2e-tests/**"
+      - "!authd-oidc-brokers/po/**"
+      - "!authd-oidc-brokers/.gitignore"
+      - "snap/**"
+  workflow_dispatch:
+
+concurrency:
+  group: auto-update-broker-variants
+  cancel-in-progress: true
+
+permissions:
+    pull-requests: write
+    contents: write
+
+jobs:
+  update-snap-branches:
+    name: Update snap branches
+    strategy:
+      matrix:
+        branch_name: ["google","msentraid","oidc"]
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v6
+          with:
+            fetch-depth: 0
+
+        - name: Copy broker variant files
+          # We can't symlink the snapcraft.yaml file here because it causes launchpad to fail with:
+          # "The top level of snapcraft.yaml from ~ubuntu-enterprise-desktop/authd/+git/authd:oidc is not a mapping"
+          run: ./scripts/prepare-broker-variant-files --copy --broker ${{ matrix.branch_name }}
+
+        - name: Commit broker variant files
+          run: |
+            set -eux
+            # We have to use --force because we added the broker variant files to .gitignore
+            git add --force .
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git commit -m "Copy ${{ matrix.branch_name }} variant files"
+
+        - name: Push branch
+          run: git push --force origin HEAD:${{ matrix.branch_name }}

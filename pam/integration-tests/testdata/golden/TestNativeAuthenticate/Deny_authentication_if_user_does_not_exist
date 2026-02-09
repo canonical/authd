@@ -18,7 +18,7 @@ Choose your provider:
   2. ExampleBroker
 Choose your provider:
 > 2
-PAM Error Message: can't select broker: user "user-unexistent" does not exist
+PAM Error Message: user "user-unexistent" does not exist
 PAM Authenticate()
   User: "user-unexistent"
   Result: error: PAM exit code: 4

@@ -160,17 +160,12 @@ func Path(t *testing.T) string {
 	cwd, err := os.Getwd()
 	require.NoError(t, err, "Cannot get current working directory")
 
-	topLevelTest, subtest, subtestFound := strings.Cut(t.Name(), "/")
-	CheckValidGoldenFileName(t, topLevelTest)
-
-	path := filepath.Join(cwd, "testdata", "golden", topLevelTest)
-
-	if !subtestFound {
-		return path
+	parts := strings.Split(t.Name(), "/")
+	for _, part := range parts {
+		CheckValidGoldenFileName(t, part)
 	}
 
-	CheckValidGoldenFileName(t, subtest)
-	return filepath.Join(path, subtest)
+	return filepath.Join(append([]string{cwd, "testdata", "golden"}, parts...)...)
 }
 
 // runDelta pipes the unified diff through the `delta` command for word-level diff and coloring.

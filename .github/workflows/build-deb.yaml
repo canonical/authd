@@ -4,21 +4,55 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - .github/workflows/automatic-doc-checks.yml
-      - .readthedocs.yaml
-      - docs/**
+    paths:
+      - '**'
+      - '!.github/**'
+      - '.github/workflows/build-deb.yaml'
+      - '!.gitignore'
+      - '!.gitmodules'
+      - '!.golangci.yaml'
+      - '!AGENTS.md'
+      - '!CODE_OF_CONDUCT.md'
+      - '!CONTRIBUTING.md'
+      - '!COPYING'
+      - '!COPYING.LESSER'
+      - '!README.md'
+      - '!SECURITY.md'
+      - '!authd-oidc-brokers/**'
+      - '!docs/**'
+      - '!examplebroker/**'
+      - '!gotestcov'
+      - '!snap/**'
     tags:
       - "*"
   pull_request:
-    paths-ignore:
-      - .github/workflows/automatic-doc-checks.yml
-      - .readthedocs.yaml
-      - docs/**
+    paths:
+      - '**'
+      - '!.github/**'
+      - '.github/workflows/build-deb.yaml'
+      - '!.gitignore'
+      - '!.gitmodules'
+      - '!.golangci.yaml'
+      - '!AGENTS.md'
+      - '!CODE_OF_CONDUCT.md'
+      - '!CONTRIBUTING.md'
+      - '!COPYING'
+      - '!COPYING.LESSER'
+      - '!README.md'
+      - '!SECURITY.md'
+      - '!authd-oidc-brokers/**'
+      - '!docs/**'
+      - '!examplebroker/**'
+      - '!gotestcov'
+      - '!snap/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   UBUNTU_VERSIONS: |
-    ["noble", "plucky", "devel"]
+    ["noble", "plucky", "questing", "devel"]
   CARGO_VENDOR_FILTERER_VERSION: 0.5.16
 
 jobs:
@@ -40,26 +74,39 @@ jobs:
         ubuntu-version: ${{ fromJSON(needs.define-versions.outputs.ubuntu-versions) }}
     outputs:
       run-id: ${{ github.run_id }}
+      pkg-name: ${{ steps.outputs.outputs.pkg-name }}
       # FIXME: Use dynamic outputs when possible: https://github.com/actions/runner/pull/2477
+      pkg-version-devel: ${{ steps.outputs.outputs.pkg-version-devel }}
+      pkg-version-questing: ${{ steps.outputs.outputs.pkg-version-questing }}
+      pkg-version-plucky: ${{ steps.outputs.outputs.pkg-version-plucky }}
+      pkg-version-noble: ${{ steps.outputs.outputs.pkg-version-noble }}
       pkg-dsc-devel:  ${{ steps.outputs.outputs.pkg-dsc-devel }}
+      pkg-dsc-questing:  ${{ steps.outputs.outputs.pkg-dsc-questing }}
       pkg-dsc-plucky:  ${{ steps.outputs.outputs.pkg-dsc-plucky }}
       pkg-dsc-noble:  ${{ steps.outputs.outputs.pkg-dsc-noble }}
       pkg-src-changes-devel: ${{ steps.outputs.outputs.pkg-src-changes-devel }}
+      pkg-src-changes-questing: ${{ steps.outputs.outputs.pkg-src-changes-questing }}
       pkg-src-changes-plucky: ${{ steps.outputs.outputs.pkg-src-changes-plucky }}
       pkg-src-changes-noble: ${{ steps.outputs.outputs.pkg-src-changes-noble }}
 
     steps:
       - name: Checkout authd code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Build debian packages and sources
         uses: canonical/desktop-engineering/gh-actions/common/build-debian@main
         with:
           docker-image: ubuntu:${{ matrix.ubuntu-version }}
+          # Add the Go backports PPA if we're testing a Ubuntu release which
+          # doesn't have the required Go version in main.
+          extra-apt-repositories: ${{ (matrix.ubuntu-version == 'noble' || matrix.ubuntu-version == 'plucky' || matrix.ubuntu-version == 'questing') && 'ppa:ubuntu-enterprise-desktop/golang' || '' }}
+          # Extra build dependencies:
+          # - systemd-dev: Required to read compile time variables from systemd via pkg-config.
           extra-source-build-deps: |
             ca-certificates
             git
             libssl-dev
+            systemd-dev
           extra-source-build-script: |
             if [ "${{ matrix.ubuntu-version }}" == noble ]; then
               cargo install --locked --root=/usr \
@@ -72,6 +119,8 @@ jobs:
         id: outputs
         run: |
           (
+            echo "pkg-name=${{ env.PKG_NAME }}"
+            echo "pkg-version-${{ matrix.ubuntu-version }}=${{ env.PKG_VERSION }}"
             echo "pkg-dsc-${{ matrix.ubuntu-version }}=${{ env.PKG_DSC }}"
             echo "pkg-src-changes-${{ matrix.ubuntu-version }}=${{ env.PKG_SOURCE_CHANGES }}"
           ) >> "${GITHUB_OUTPUT}"
@@ -86,7 +135,7 @@ jobs:
 
     steps:
       - name: Checkout authd code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 100
 
@@ -152,7 +201,7 @@ jobs:
         done
 
     - name: Download artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         run-id: ${{ needs.build-deb-package.outputs.run-id }}
         merge-multiple: true
@@ -161,12 +210,12 @@ jobs:
       run: |
         set -euo pipefail
 
-        sudo apt update -y
-        sudo apt install -y --no-install-suggests --no-install-recommends \
+        sudo apt-get update -y
+        sudo apt-get install -y --no-install-suggests --no-install-recommends \
           dpkg-dev devscripts
 
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 100
         path: repo
@@ -257,9 +306,10 @@ jobs:
         done
 
     - name: Download artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         run-id: ${{ needs.build-deb-package.outputs.run-id }}
+        pattern: ${{ needs.build-deb-package.outputs.pkg-name }}_${{ env.pkg_version }}-*
         merge-multiple: true
 
     - name: Run autopkgtests
@@ -267,3 +317,4 @@ jobs:
       with:
         lxd-image: ubuntu:${{ matrix.ubuntu-version }}
         source-changes: ${{ env.pkg_src_changes }}
+        autopkgtest-args: --add-apt-source=ppa:ubuntu-enterprise-desktop/golang

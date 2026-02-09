@@ -1,21 +1,30 @@
+---
+myst:
+  html_meta:
+    "description lang=en":
+      "authd reference pages covering supported providers, troubleshooting, groups management, and deployment."
+---
+
 (reference)=
 
 # Reference
 
+These guides provide technical information about authd.
+
 ## Providers
 
-Find the cloud providers and brokers currently supported by authd.
+Multiple identity providers and brokers are supported by authd:
 
 ```{toctree}
 :titlesonly:
 
-Cloud providers <cloud-providers>
+Identity providers that authd supports <identity-providers>
 ```
 
 ## Troubleshooting
 
-Read tips on troubleshooting the authd authentication service and its identity
-brokers.
+The documentation includes several pages that are helpful when troubleshooting
+authd:
 
 ```{toctree}
 :titlesonly:
@@ -25,10 +34,22 @@ Troubleshooting <troubleshooting>
 
 ## Groups
 
-Learn more about managing groups with authd and MS Entra ID.
+Managing groups of users that need the same access and permissions to resources
+is supported by the Microsoft Entra ID broker for authd:
 
 ```{toctree}
 :titlesonly:
 
 Group management <group-management>
+```
+## Deployment
+
+Deploying authd at scale can be achieved with Landscape or cloud-init.
+The documentation includes snippets to get you started.
+
+```{toctree}
+:titlesonly:
+
+Deploying and configuring authd with Landscape <landscape-deploy>
+Deploying and configuring authd with cloud-init <cloud-init-deploy>
 ```
