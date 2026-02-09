@@ -43,21 +43,23 @@ License: GPL-3
 Files: pam/integration-tests/pam_mkhomedir/pam_mkhomedir.c
 Copyright: 2009 Red Hat, Inc.
 License: LGPL-2+
+ On Debian systems, the complete text of the GNU General
+ Public License version 2 can be found in "/usr/share/common-licenses/GPL-2".
 
 Files: pam/internal/gdm/extensions/gdm-custom-json-pam-extension.h
 Copyright: 2023 Canonical Ltd.
 License: GPL-3+
+ On Debian systems, the complete text of the GNU General
+ Public License version 2 can be found in "/usr/share/common-licenses/GPL-2".
 
 Files: pam/internal/gdm/extensions/gdm-pam-extensions-common.h
 Copyright: 2017 Red Hat, Inc.
 License: GPL-2+
+ On Debian systems, the complete text of the GNU General
+ Public License version 2 can be found in "/usr/share/common-licenses/GPL-2".
 
 Files: vendor/go.etcd.io/bbolt/*
 Copyright: 2013 Ben Johnson
-License: MIT
-
-Files: vendor/go.uber.org/*
-Copyright: 2016-2021 Uber Technologies, Inc.
 License: MIT
 
 Files: vendor/gopkg.in/ini.v1/*
@@ -67,18 +69,6 @@ License: Apache-2.0
 Files: vendor/gopkg.in/yaml.v3/*
 Copyright: 2011-2019 Canonical Ltd.
 License: Apache-2.0
-
-Files: vendor/gopkg.in/yaml.v3/apic.go
-       vendor/gopkg.in/yaml.v3/emitterc.go
-       vendor/gopkg.in/yaml.v3/parserc.go
-       vendor/gopkg.in/yaml.v3/readerc.go
-       vendor/gopkg.in/yaml.v3/scannerc.go
-       vendor/gopkg.in/yaml.v3/writerc.go
-       vendor/gopkg.in/yaml.v3/yamlh.go
-       vendor/gopkg.in/yaml.v3/yamlprivateh.go
-Copyright: 2011-2019 Canonical Ltd.
-           2006-2011 Kirill Simonov
-License: MIT
 
 Files: vendor/github.com/atotto/clipboard/*
 Copyright: 2013 Ato Araki.
@@ -112,10 +102,6 @@ Files: vendor/github.com/google/uuid/*
 Copyright: 2009, 2014-2017, 2021 Google Inc.
 License: BSD-3
 
-Files: vendor/github.com/hashicorp/*
-Copyright: HashiCorp
-License: MPL-2.0
-
 Files: vendor/github.com/inconshreveable/*
 Copyright: 2014 Alan Shreve
 License: Apache-2.0
@@ -124,16 +110,8 @@ Files: vendor/github.com/lucasb-eyer/go-colorful/*
 Copyright: 2013 Lucas Beyer
 License: MIT
 
-Files: vendor/github.com/magiconair/*
-Copyright: 2013-2022 Frank Schroeder.
-License: BSD-2
-
 Files: vendor/github.com/mattn/*
 Copyright: 2016 Yasuhiro MATSUMOTO <mattn.jp@gmail.com>
-License: MIT
-
-Files: vendor/github.com/mitchellh/*
-Copyright: 2013 Mitchell Hashimoto
 License: MIT
 
 Files: vendor/github.com/msteinert/pam/*
@@ -160,20 +138,8 @@ Files: vendor/github.com/sagikazarmark/locafero/*
 Copyright: 2023 Márk Sági-Kazár <mark.sagikazar@gmail.com>
 License: MIT
 
-Files: vendor/github.com/sagikazarmark/slog-shim/*
-Copyright: 2022 The Go Authors.
-License: BSD-3
-
 Files: vendor/github.com/sahilm/fuzzy/*
 Copyright: 2017 Sahil Muthoo
-License: MIT
-
-Files: vendor/github.com/sirupsen/logrus/*
-Copyright: 2014 Simon Eskildsen
-License: MIT
-
-Files: vendor/github.com/sirupsen/logrus/alt_exit.go
-Copyright: 2012 Miki Tebeka <miki.tebeka@gmail.com>.
 License: MIT
 
 Files: vendor/github.com/skip2/go-qrcode/*
@@ -218,10 +184,6 @@ Files: vendor/github.com/subosito/*
 Copyright: 2013 Alif Rachmawadi
 License: MIT
 
-Files: vendor/github.com/ubuntu/*
-Copyright: Canonical
-License: MIT
-
 Files: vendor/*golang.org/*
 Copyright: 2009-2020 The Go Authors.
 License: BSD-3
@@ -229,10 +191,6 @@ License: BSD-3
 Files: vendor_rust/addr2line/*
        vendor_rust/object/*
 Copyright: 2016-2018 The gimli Developers
-License: MIT
-
-Files: vendor_rust/adler/*
-Copyright: Jonas Schievink <jonasschievink@gmail.com>
 License: MIT
 
 Files: vendor_rust/aho-corasick/*
@@ -247,7 +205,6 @@ Files: vendor_rust/anyhow/*
        vendor_rust/equivalent/*
        vendor_rust/fastrand/*
        vendor_rust/fixedbitset/*
-       vendor_rust/hermit-abi/*
        vendor_rust/indexmap/*
        vendor_rust/itertools/*
        vendor_rust/itoa/*
@@ -271,14 +228,6 @@ Files: vendor_rust/anyhow/*
        vendor_rust/unicode-ident/*
        vendor_rust/wasi/*
 Copyright: *No copyright*
-License: MIT
-
-Files: vendor_rust/async-stream*/*
-       vendor_rust/bytes/*
-       vendor_rust/mio/*
-       vendor_rust/slab/*
-Copyright: 2018, 2019 Carl Lerche
-          2014 Carl Lerche and other MIO contributors
 License: MIT
 
 Files: vendor_rust/autocfg/*
@@ -397,22 +346,12 @@ Files: vendor_rust/pin-utils/*
 Copyright: 2018 The pin-utils authors
 License: MIT
 
-Files: vendor_rust/ppv-lite86/*
-Copyright: 2019 The CryptoCorrosion Contributors
-License: MIT
-
 Files: vendor_rust/prost/*
        vendor_rust/prost-build/*
        vendor_rust/prost-derive/*
        vendor_rust/prost-types/*
 Copyright: 2022 Dan Burkert & Tokio Contributors
 License: Apache-2.0
-
-Files: vendor_rust/rand/*
-       vendor_rust/rand_chacha/*
-       vendor_rust/rand_core/*
-Copyright: 2018 Developers of the Rand project / 2014 The Rust Project Developers
-License: MIT
 
 Files: vendor_rust/simple_logger/*
 Copyright: 2015-2021 Sam Clements
