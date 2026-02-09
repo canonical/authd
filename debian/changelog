@@ -1,3 +1,14 @@
+authd (0.5.8) resolute; urgency=medium
+
+  * debian/copyright: Fix more license issues
+  * debian/control: Remove redundant Rules-Requires-Root field
+  * debian/source/options: Exclude docs from source
+  * debian/lintian-overrides: Static-Built-Using is a valid field
+  * debian/lintian-overrides: "Unknwon" is not a typo
+  * needs-packaging: LP: #2136731
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Tue, 10 Feb 2026 00:14:22 +0100
+
 authd (0.5.7) resolute; urgency=medium
 
   * debian/copyright: Add missing licenses
