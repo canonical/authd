@@ -5,4 +5,5 @@ tar-ignore = */.mailmap
 tar-ignore = */.vscode
 tar-ignore = *.so
 tar-ignore = *.o
+tar-ignore = docs/*
 tar-ignore = vendor_rust/*.a
