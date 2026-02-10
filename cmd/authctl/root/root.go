@@ -11,7 +11,7 @@ import (
 var RootCmd = &cobra.Command{
 	Use:   "authctl",
 	Short: "Manage authd users and groups",
-	Long:  "authctl may be used to manage users and groups that are handled by authd.",
+	Long:  "authctl may be used to manage users and groups handled by authd.",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// The command was successfully parsed, so we don't want cobra to print usage information on error.
 		cmd.SilenceUsage = true

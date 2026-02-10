@@ -1,0 +1,52 @@
+.\" Generated from authctl man page generator
+.\" Do not edit manually
+.nh
+.TH "AUTHCTL" "1" "Feb 2026" "authd" "authd"
+.SH NAME
+authctl \- Manage authd users and groups
+.SH SYNOPSIS
+.HP
+\fBauthctl\fP [\fIoptions\fP] \fI<command>\fP [\fIargs\fP]
+.SH DESCRIPTION
+\fBauthctl\fP may be used to manage users and groups handled by authd.
+.SH COMMANDS
+.PP
+\fBuser\fP \fBlock\fP \fI<user>\fP
+.RS 4
+Lock a user so that they cannot log in.
+.RE
+.PP
+\fBuser\fP \fBunlock\fP \fI<user>\fP
+.RS 4
+Unlock a locked user so that they can log in again.
+.RE
+.PP
+\fBuser\fP \fBset-uid\fP \fI<user>\fP \fI<uid>\fP
+.RS 4
+Set the UID of a user managed by authd to the specified value.
+.sp
+The new UID must be unique and non-negative. The command must be run as root.
+.sp
+The ownership of the user's home directory, and any files within the directory that the user owns, will automatically be updated to the new UID.
+.sp
+Files outside the user's home directory are not updated and must be changed manually. Note that changing a UID can be unsafe if files on the system are still owned by the original UID: those files may become accessible to a different account that is later assigned that UID.
+.RE
+.PP
+\fBgroup\fP \fBset-gid\fP \fI<group>\fP \fI<gid>\fP
+.RS 4
+Set the GID of a group managed by authd to the specified value.
+.sp
+The new GID must be unique and non-negative. The command must be run as root.
+.sp
+When a group's GID is changed, any users whose primary group is set to this group will have the GID of their primary group updated. The home directories of these users, and any files within these directories that are owned by the group, will be updated to the new GID.
+.sp
+Files outside users' home directories are not updated and must be changed manually. Note that changing a GID can be unsafe if files on the system are still owned by the original GID: those files may become accessible to a different group that is later assigned that GID.
+.RE
+.SH SEE ALSO
+For more information, please refer to the \m[blue]\fBauthd documentation\fP\m[][1]\&.
+.SH NOTES
+.IP " 1." 4
+authd documentation
+.RS 4
+\%https://documentation.ubuntu.com/authd
+.RE
