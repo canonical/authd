@@ -16,7 +16,7 @@ import (
 
 // setGIDCmd is a command to set the GID of a group managed by authd.
 var setGIDCmd = &cobra.Command{
-	Use:   "set-gid <name> <gid>",
+	Use:   "set-gid <group> <gid>",
 	Short: "Set the GID of a group managed by authd",
 	Long: `Set the GID of a group managed by authd to the specified value.
 
