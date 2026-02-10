@@ -14,6 +14,6 @@ authctl group [flags]
 
 ### SEE ALSO
 
-* [authctl](authctl.md)	 - CLI tool to interact with authd
+* [authctl](authctl.md)	 - Manage authd users and groups
 * [authctl group set-gid](authctl_group_set-gid.md)	 - Set the GID of a group managed by authd
 

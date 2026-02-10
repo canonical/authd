@@ -1,10 +1,10 @@
 ## authctl
 
-CLI tool to interact with authd
+Manage authd users and groups
 
 ### Synopsis
 
-authctl is a command-line tool to interact with the authd service for user and group management.
+authctl is a command-line tool for managing users and groups handled by authd.
 
 ```
 authctl [flags]

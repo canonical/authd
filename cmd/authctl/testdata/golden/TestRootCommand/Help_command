@@ -1,4 +1,4 @@
-authctl is a command-line tool to interact with the authd service for user and group management.
+authctl is a command-line tool for managing users and groups handled by authd.
 
 Usage:
   authctl [flags]
