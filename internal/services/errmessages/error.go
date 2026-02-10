@@ -9,3 +9,7 @@ type ToDisplayError struct {
 func NewToDisplayError(err error) error {
 	return ToDisplayError{err}
 }
+
+func (e ToDisplayError) Unwrap() error {
+	return e.error
+}

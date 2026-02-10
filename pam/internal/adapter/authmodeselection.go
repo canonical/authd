@@ -33,6 +33,7 @@ type supportedUILayoutsSet struct{}
 // authModesReceived is the internal event signalling that the supported authentication modes have been received.
 type authModesReceived struct {
 	authModes []*authd.GAMResponse_AuthenticationMode
+	msg       string
 }
 
 // authModeSelected is the internal event signalling that the an authentication mode has been selected.
@@ -243,8 +244,15 @@ func getAuthenticationModes(client authd.PAMClient, sessionID string, uiLayouts 
 		}
 		log.Debug(context.TODO(), "authModes", authModes)
 
+		var msg string
+		if gamResp.Msg != nil {
+			msg = *gamResp.Msg
+			log.Debugf(context.TODO(), "GetAuthenticationModes message: %q", msg)
+		}
+
 		return authModesReceived{
 			authModes: authModes,
+			msg:       msg,
 		}
 	}
 }

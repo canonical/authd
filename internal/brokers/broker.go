@@ -24,7 +24,7 @@ const LocalBrokerName = "local"
 
 type brokerer interface {
 	NewSession(ctx context.Context, username, lang, mode string) (sessionID, encryptionKey string, err error)
-	GetAuthenticationModes(ctx context.Context, sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, err error)
+	GetAuthenticationModes(ctx context.Context, sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, msg string, err error)
 	SelectAuthenticationMode(ctx context.Context, sessionID, authenticationModeName string) (uiLayoutInfo map[string]string, err error)
 	IsAuthenticated(ctx context.Context, sessionID, authenticationData string) (access, data string, err error)
 	EndSession(ctx context.Context, sessionID string) (err error)
@@ -105,27 +105,27 @@ func (b Broker) newSession(ctx context.Context, username, lang, mode string) (se
 }
 
 // GetAuthenticationModes calls the broker corresponding method, stripping broker ID prefix from sessionID.
-func (b *Broker) GetAuthenticationModes(ctx context.Context, sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, err error) {
+func (b *Broker) GetAuthenticationModes(ctx context.Context, sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, msg string, err error) {
 	sessionID = b.parseSessionID(sessionID)
 
 	b.layoutValidatorsMu.Lock()
 	b.layoutValidators[sessionID] = generateValidators(ctx, sessionID, supportedUILayouts)
 	b.layoutValidatorsMu.Unlock()
 
-	authenticationModes, err = b.brokerer.GetAuthenticationModes(ctx, sessionID, supportedUILayouts)
+	authenticationModes, msg, err = b.brokerer.GetAuthenticationModes(ctx, sessionID, supportedUILayouts)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	for _, a := range authenticationModes {
 		for _, key := range []string{layouts.ID, layouts.Label} {
 			if _, exists := a[key]; !exists {
-				return nil, fmt.Errorf("invalid authentication mode, missing %q key: %v", key, a)
+				return nil, "", fmt.Errorf("invalid authentication mode, missing %q key: %v", key, a)
 			}
 		}
 	}
 
-	return authenticationModes, nil
+	return authenticationModes, msg, nil
 }
 
 // SelectAuthenticationMode calls the broker corresponding method, stripping broker ID prefix from sessionID.

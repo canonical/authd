@@ -72,7 +72,26 @@ func (b dbusBroker) NewSession(ctx context.Context, username, lang, mode string)
 }
 
 // GetAuthenticationModes calls the corresponding method on the broker bus and returns the authentication modes supported by it.
-func (b dbusBroker) GetAuthenticationModes(ctx context.Context, sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, err error) {
+func (b dbusBroker) GetAuthenticationModes(ctx context.Context, sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, msg string, err error) {
+	call, err := b.call(ctx, "GetAuthenticationModesV2", sessionID, supportedUILayouts)
+	var dbusError dbus.Error
+	if errors.As(err, &dbusError) && dbusError.Name == "org.freedesktop.DBus.Error.UnknownMethod" {
+		log.Debugf(ctx, "GetAuthenticationModesV2 not supported, falling back to GetAuthenticationModes")
+		authenticationModes, err = b.getAuthenticationModesV1(ctx, sessionID, supportedUILayouts)
+		return authenticationModes, "", err
+	}
+	if err != nil {
+		return nil, "", err
+	}
+
+	if err = call.Store(&authenticationModes, &msg); err != nil {
+		return nil, "", err
+	}
+
+	return authenticationModes, msg, nil
+}
+
+func (b dbusBroker) getAuthenticationModesV1(ctx context.Context, sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, err error) {
 	call, err := b.call(ctx, "GetAuthenticationModes", sessionID, supportedUILayouts)
 	if err != nil {
 		return nil, err

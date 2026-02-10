@@ -42,13 +42,20 @@ var (
 		Light: "#909090",
 		Dark:  "#7f7f7f",
 	}).Padding(1, 0, 0, 2)
+
+	warningMsgStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
+		// Use a light yellow/orange color for warnings.
+		Light: "#f0c674",
+		Dark:  "#e6bf69",
+	}).Padding(1, 0, 0, 2)
 )
 
 // sessionInfo contains the global broker session information.
 type sessionInfo struct {
-	brokerID      string
-	sessionID     string
-	encryptionKey *rsa.PublicKey
+	brokerID                      string
+	sessionID                     string
+	encryptionKey                 *rsa.PublicKey
+	getAuthenticationModesMessage string
 }
 
 // uiModel is the global models orchestrator.
@@ -281,6 +288,12 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.userSelectionModel.SelectUser()
 
+	case authModesReceived:
+		if msg.msg != "" {
+			safeMessageDebug(msg, "GetAuthenticationModes message: %q", msg.msg)
+			m.currentSession.getAuthenticationModesMessage = msg.msg
+		}
+
 	case UsernameSelected:
 		safeMessageDebug(msg, "user: %q", m.username())
 		if m.username() == "" {
@@ -446,6 +459,11 @@ func (m uiModel) View() string {
 	}
 
 	view := viewBuilder.String()
+
+	if m.currentSession != nil && m.currentSession.getAuthenticationModesMessage != "" {
+		warningMessage := warningMsgStyle.Render(m.currentSession.getAuthenticationModesMessage)
+		view = lipgloss.JoinVertical(lipgloss.Left, view, warningMessage)
+	}
 
 	if len(view) > 0 && m.canGoBack() {
 		infoMessage := infoMsgStyle.Render(fmt.Sprintf("Press escape key to %s",
