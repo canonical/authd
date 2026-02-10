@@ -29,7 +29,10 @@ var (
 type Manager struct {
 	db   *sql.DB
 	path string
-	mu   sync.RWMutex
+	// mu protects concurrent updates of the database. It's needed because some
+	// operations require temporarily disabling the foreign key constraints
+	// during which concurrent updates to the database could violate them.
+	mu sync.Mutex
 }
 
 // queryable is an interface to execute SQL queries. Both sql.DB and sql.Tx implement this interface.
@@ -88,7 +91,7 @@ func New(dbDir string) (*Manager, error) {
 		}
 	}
 
-	m := &Manager{db: db, path: dbPath, mu: sync.RWMutex{}}
+	m := &Manager{db: db, path: dbPath, mu: sync.Mutex{}}
 	err = m.maybeApplyMigrations()
 	if err != nil {
 		return nil, err

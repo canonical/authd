@@ -120,7 +120,7 @@ func (s Service) ListUsers(ctx context.Context, req *authd.Empty) (*authd.Users,
 // LockUser marks a user as locked.
 func (s Service) LockUser(ctx context.Context, req *authd.LockUserRequest) (*authd.Empty, error) {
 	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
-		return nil, err
+		return nil, status.Error(codes.PermissionDenied, err.Error())
 	}
 
 	// authd uses lowercase usernames.
@@ -140,7 +140,7 @@ func (s Service) LockUser(ctx context.Context, req *authd.LockUserRequest) (*aut
 // UnlockUser marks a user as unlocked.
 func (s Service) UnlockUser(ctx context.Context, req *authd.UnlockUserRequest) (*authd.Empty, error) {
 	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
-		return nil, err
+		return nil, status.Error(codes.PermissionDenied, err.Error())
 	}
 
 	// authd uses lowercase usernames.
@@ -216,6 +216,58 @@ func (s Service) ListGroups(ctx context.Context, req *authd.Empty) (*authd.Group
 	}
 
 	return &res, nil
+}
+
+// SetUserID sets the UID of a user.
+func (s Service) SetUserID(ctx context.Context, req *authd.SetUserIDRequest) (*authd.SetUserIDResponse, error) {
+	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
+		return nil, status.Error(codes.PermissionDenied, err.Error())
+	}
+
+	// authd uses lowercase usernames.
+	name := strings.ToLower(req.GetName())
+
+	if name == "" {
+		return nil, status.Error(codes.InvalidArgument, "no user name provided")
+	}
+
+	resp, err := s.userManager.SetUserID(name, req.GetId())
+	if err != nil {
+		log.Errorf(ctx, "SetUserID: %v", err)
+		return nil, grpcError(err)
+	}
+
+	return &authd.SetUserIDResponse{
+		IdChanged:           resp.IDChanged,
+		HomeDirOwnerChanged: resp.HomeDirOwnerChanged,
+		Warnings:            resp.Warnings,
+	}, nil
+}
+
+// SetGroupID sets the GID of a group.
+func (s Service) SetGroupID(ctx context.Context, req *authd.SetGroupIDRequest) (*authd.SetGroupIDResponse, error) {
+	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
+		return nil, status.Error(codes.PermissionDenied, err.Error())
+	}
+
+	// authd uses lowercase group names.
+	name := strings.ToLower(req.GetName())
+
+	if name == "" {
+		return nil, status.Error(codes.InvalidArgument, "no group name provided")
+	}
+
+	resp, err := s.userManager.SetGroupID(name, req.GetId())
+	if err != nil {
+		log.Errorf(ctx, "SetGroupID: %v", err)
+		return nil, grpcError(err)
+	}
+
+	return &authd.SetGroupIDResponse{
+		IdChanged:           resp.IDChanged,
+		HomeDirOwnerChanged: resp.HomeDirOwnerChanged,
+		Warnings:            resp.Warnings,
+	}, nil
 }
 
 // userToProtobuf converts a types.UserEntry to authd.User.

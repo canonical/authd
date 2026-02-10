@@ -113,6 +113,7 @@ jobs:
                 cargo-vendor-filterer@${{ env.CARGO_VENDOR_FILTERER_VERSION }}
               command -v cargo-vendor-filterer
             fi
+          allow-sudo: true
 
         # FIXME: Use dynamic outputs when possible: https://github.com/actions/runner/pull/2477
       - name: Generate outputs

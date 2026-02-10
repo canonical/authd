@@ -1317,6 +1317,11 @@ func newManagerForTests(t *testing.T, dbDir string, opts ...users.Option) *users
 func TestMain(m *testing.M) {
 	log.SetLevel(log.DebugLevel)
 
+	if testutils.RunningInBubblewrap() {
+		m.Run()
+		return
+	}
+
 	userslocking.Z_ForTests_OverrideLocking()
 	defer userslocking.Z_ForTests_RestoreLocking()
 

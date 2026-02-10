@@ -2,13 +2,17 @@ package fileutils_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/canonical/authd/internal/fileutils"
 	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -394,5 +398,167 @@ func TestLockDir(t *testing.T) {
 		require.NoError(t, err, "Unlock should not return an error")
 	case <-time.After(testutils.MultipliedSleepDuration(5 * time.Second)):
 		require.Fail(t, "LockDir should have returned after the first lock was released")
+	}
+}
+
+func TestChownRecursiveFrom(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		uidArgs            *fileutils.ChownUIDArgs
+		gidArgs            *fileutils.ChownGIDArgs
+		readOnlyFilesystem bool
+		fileUID            uint32
+		fileGID            uint32
+		dirUID             uint32
+		dirGID             uint32
+
+		wantError      bool
+		wantErrorMatch string
+	}{
+		"Successfully_change_owner": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 0, ToUID: 1},
+		},
+		"Successfully_change_group": {
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 0, ToGID: 1},
+		},
+		"Successfully_change_owner_and_group": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 0, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 0, ToGID: 1},
+		},
+		"Group_not_changed_when_GID_does_not_match": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 0, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 1},
+		},
+		"Owner_not_changed_when_UID_does_not_match": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 0, ToGID: 1},
+		},
+		"Change_only_the_file_owner": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 1},
+			fileUID: 2,
+		},
+		"Change_only_the_file_group": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 1},
+			fileGID: 2,
+		},
+		"Change_only_the_file_owner_and_group": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 1},
+			fileUID: 2,
+			fileGID: 2,
+		},
+		"Change_only_the_directory_owner": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 1},
+			dirUID:  2,
+		},
+		"Change_only_the_directory_group": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 1},
+			dirGID:  2,
+		},
+		"Change_only_the_directory_owner_and_group": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 1},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 1},
+			dirUID:  2,
+			dirGID:  2,
+		},
+		"No_change_if_ownership_is_same_as_current": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 2, ToUID: 0},
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 2, ToGID: 0},
+		},
+		"No_change_if_no_file_matches_fromUID": {
+			uidArgs: &fileutils.ChownUIDArgs{FromUID: 1, ToUID: 0},
+		},
+		"No_change_if_no_file_matches_fromGID": {
+			gidArgs: &fileutils.ChownGIDArgs{FromGID: 1, ToGID: 0},
+		},
+
+		"Error_if_UID_args_and_GID_args_are_both_nil": {
+			wantError: true, wantErrorMatch: "at least one of uidArgs or gidArgs must be non-nil",
+		},
+		"Error_when_filesystem_is_read_only": {
+			uidArgs:            &fileutils.ChownUIDArgs{FromUID: 0, ToUID: 1},
+			readOnlyFilesystem: true, wantError: true, wantErrorMatch: "read-only file system",
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if !testutils.RunningInBubblewrap() {
+				testutils.RunTestInBubbleWrap(t)
+				return
+			}
+
+			tempDir := testutils.TempDir(t)
+			targetDir := filepath.Join(tempDir, "dir")
+			subDir := filepath.Join(targetDir, "subdir")
+			filePath := filepath.Join(subDir, "file")
+			err := os.MkdirAll(subDir, 0o700)
+			require.NoError(t, err)
+			err = fileutils.Touch(filePath)
+			require.NoError(t, err)
+			err = os.Chown(targetDir, int(tc.dirUID), int(tc.dirGID))
+			require.NoError(t, err)
+			err = os.Chown(subDir, int(tc.dirUID), int(tc.dirGID))
+			require.NoError(t, err)
+			err = os.Chown(filePath, int(tc.fileUID), int(tc.fileGID))
+			require.NoError(t, err)
+
+			symlinkTarget := filepath.Join(tempDir, "symlink_target")
+			err = fileutils.Touch(symlinkTarget)
+			require.NoError(t, err)
+			symlink := filepath.Join(targetDir, "symlink")
+			err = os.Symlink(symlinkTarget, symlink)
+			require.NoError(t, err)
+
+			if tc.readOnlyFilesystem {
+				//nolint:gosec // G204 it's safe to use exec.Command with a variable here
+				cmd := exec.Command("mount", "--read-only", "-t", "tmpfs", "tmpfs", targetDir)
+				cmd.Stderr = os.Stderr
+				err = cmd.Run()
+				require.NoError(t, err)
+				defer func() {
+					//nolint:gosec // G204 it's safe to use exec.Command with a variable here
+					cmd := exec.Command("umount", targetDir)
+					cmd.Stderr = os.Stderr
+					_ = cmd.Run()
+				}()
+			}
+
+			err = fileutils.ChownRecursiveFrom(targetDir, tc.uidArgs, tc.gidArgs)
+			t.Logf("ChownRecursiveFrom error: %v", err)
+			if tc.wantError {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.wantErrorMatch)
+				return
+			}
+			require.NoError(t, err)
+
+			// The symlink target should not be changed
+			fileInfo, err := os.Stat(symlinkTarget)
+			require.NoError(t, err)
+			stat, ok := fileInfo.Sys().(*syscall.Stat_t)
+			require.True(t, ok, "File should have a syscall.Stat_t")
+			require.Equal(t, uint32(0), stat.Uid, "Symlink target UID should not have changed")
+			require.Equal(t, uint32(0), stat.Gid, "Symlink target GID should not have changed")
+
+			// Check ownership
+			var s string
+			for _, f := range []string{targetDir, subDir, filePath} {
+				fileInfo, err := os.Stat(f)
+				require.NoError(t, err)
+				stat, ok := fileInfo.Sys().(*syscall.Stat_t)
+				require.True(t, ok, "File should have a syscall.Stat_t")
+				relPath, err := filepath.Rel(tempDir, f)
+				require.NoError(t, err)
+				s += fmt.Sprintf("%s: %d:%d\n", relPath, stat.Uid, stat.Gid)
+			}
+			golden.CheckOrUpdate(t, s)
+		})
 	}
 }
