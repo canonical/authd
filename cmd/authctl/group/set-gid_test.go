@@ -57,7 +57,7 @@ func TestSetGIDCommand(t *testing.T) {
 			expectedExitCode: int(codes.Unknown),
 		},
 		"Error_when_gid_is_negative": {
-			args:             []string{"set-gid", "group1", "-1000"},
+			args:             []string{"set-gid", "group1", "--", "-1000"},
 			expectedExitCode: 1,
 		},
 		"Error_when_authd_is_unavailable": {

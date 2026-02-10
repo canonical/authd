@@ -13,6 +13,7 @@ import (
 var lockCmd = &cobra.Command{
 	Use:               "lock <user>",
 	Short:             "Lock (disable) a user managed by authd",
+	Long:              `Lock a user so that they cannot log in.`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: completion.Users,
 	RunE: func(cmd *cobra.Command, args []string) error {

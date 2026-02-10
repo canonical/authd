@@ -1,6 +1,7 @@
 alice
 amd
 auth
+authctl
 authd
 authd's
 biometric

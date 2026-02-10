@@ -20,21 +20,17 @@ var setUIDCmd = &cobra.Command{
 	Short: "Set the UID of a user managed by authd",
 	Long: `Set the UID of a user managed by authd to the specified value.
 
-The new UID value must be unique and non-negative.
+The new UID must be unique and non-negative. The command must be run as root.
 
-The user's home directory and any files within it owned by the user will
-automatically have their ownership updated to the new UID.
+The ownership of the user's home directory, and any files within the directory
+that the user owns, will automatically be updated to the new UID.
 
 Files outside the user's home directory are not updated and must be changed
 manually. Note that changing a UID can be unsafe if files on the system are
 still owned by the original UID: those files may become accessible to a
-different account that is later assigned that UID.
-
-This command requires root privileges.
-
-Examples:
-  authctl user set-uid john 15000
-  authctl user set-uid alice 20000`,
+different account that is later assigned that UID.`,
+	Example: `  # Set the UID of user "alice" to 15000
+  authctl user set-uid alice 15000`,
 	Args:              cobra.ExactArgs(2),
 	ValidArgsFunction: setUIDCompletionFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {

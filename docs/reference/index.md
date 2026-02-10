@@ -53,3 +53,15 @@ The documentation includes snippets to get you started.
 Deploying and configuring authd with Landscape <landscape-deploy>
 Deploying and configuring authd with cloud-init <cloud-init-deploy>
 ```
+
+## Command line tool (authctl)
+
+The `authctl` command line tool is used to manage authd users and groups.
+
+Available commands:
+
+```{toctree}
+:titlesonly:
+
+Command line tool (authctl) <cli/index>
+```

@@ -1,7 +1,1 @@
-Usage:
-  authctl user set-uid <name> <uid> [flags]
-
-Flags:
-  -h, --help   help for set-uid
-
-unknown shorthand flag: '1' in -1000
+failed to parse UID "-1000": invalid syntax
