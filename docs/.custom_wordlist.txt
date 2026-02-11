@@ -44,6 +44,7 @@ NFS
 nss
 OAuth
 OIDC
+Okta
 OpenID
 ppa
 PR
