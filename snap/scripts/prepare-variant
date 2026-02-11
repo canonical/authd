@@ -2,10 +2,12 @@
 
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 usage() {
     echo "Usage: $0 --broker <broker> [--copy]"
     echo
-    echo "Prepare broker-specific variant files for building the specified broker snap."
+    echo "Prepare the snapcraft.yaml for building the specified broker snap."
     echo
     echo "Options:"
     echo "  --broker <broker>  The broker to use (oidc, msentraid or google)."
@@ -40,17 +42,17 @@ fi
 
 set -x
 
-DIRS=("authd-oidc-brokers/conf" "snap")
+DEST_DIR="${SCRIPT_DIR}/.."
+cd "$DEST_DIR"
 
-for d in "${DIRS[@]}"; do
-    for f in "$d/variants/${BROKER}"/*; do
-        if ! [ -e "$f" ]; then
-            continue
-        fi
-        if [ -n "${COPY:-}" ]; then
-            cp --target-directory "$d" "$f"
-        else
-            ln -sf --target-directory "$d" "variants/${BROKER}/$(basename "$f")"
-        fi
-    done
-done
+SRC_FILE="variants/${BROKER}/snapcraft.yaml"
+if ! [ -e "$SRC_FILE" ]; then
+    echo "Error: $SRC_FILE does not exist."
+    exit 1
+fi
+
+if [ -n "${COPY:-}" ]; then
+    cp --target-directory "$DEST_DIR" "$SRC_FILE"
+else
+    ln -sf --target-directory "$DEST_DIR" "$SRC_FILE"
+fi

@@ -16,7 +16,7 @@ description: |
   * authd is free for all Ubuntu Desktop and Server 24.04 LTS users and is under active development.
     Explore the official documentation for installation and configuration steps, or visit the GitHub repository to
     contribute or provide feedback.
-icon: snap/icon.svg
+icon: snap/variants/google/icon.svg
 website:
   - https://github.com/ubuntu/authd-oidc-brokers
   - https://github.com/ubuntu/authd
@@ -70,9 +70,11 @@ parts:
     source-type: local
     plugin: dump
     organize:
-      "authd.conf": "conf/authd/google.conf"
-      "broker.conf": "conf/broker.conf.orig"
+      "variants/google/authd.conf": "conf/authd/google.conf"
+      "variants/google/broker.conf": "conf/broker.conf.orig"
       "migrations": "conf/migrations"
+    stage:
+      - conf
   # SemVer comparison helper
   semver:
     source: authd-oidc-brokers/tools
@@ -89,6 +91,6 @@ parts:
     build-packages:
       - git # The script needs Git.
     override-build: |
-      craftctl set version="$(./snap/version)"
+      craftctl set version="$(./snap/scripts/version)"
     after:
       - semver
