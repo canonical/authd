@@ -92,10 +92,14 @@ body:
 
         #### Logs
         \`\`\`
-        $(sudo journalctl -o short-monotonic --lines 500  _SYSTEMD_UNIT=authd.service \+ UNIT=authd.service \+ \
+        $(sudo journalctl -o short-monotonic --lines 500  \
+          _SYSTEMD_UNIT=authd.service \+ UNIT=authd.service \+ \
           _SYSTEMD_UNIT=snap.authd-msentraid.authd-msentraid.service \+ UNIT=snap.authd-msentraid.authd-msentraid.service \+ SYSLOG_IDENTIFIER=authd-msentraid \+ \
           _SYSTEMD_UNIT=snap.authd-google.authd-google.service \+ UNIT=snap.authd-google.authd-google.service \+ SYSLOG_IDENTIFIER=authd-google \+ \
-          '_CMDLINE="gdm-session-worker [pam/gdm-authd]"' | sed -E -e 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/<UUID redacted>/g' \
+          _SYSTEMD_UNIT=snap.authd-oidc.authd-oidc.service \+ UNIT=snap.authd-oidc.authd-oidc.service \+ SYSLOG_IDENTIFIER=authd-oidc \+ \
+          _COMM=authd-pam \+ \
+          '_CMDLINE="gdm-session-worker [pam/gdm-authd]"' \
+          | sed -E -e 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/<UUID redacted>/g' \
             -e 's/GOCSPX-[0-9a-zA-Z_-]+/<redacted>/g' \
             -e 's/[0-9a-zA-Z_-]+\.apps\.googleusercontent\.com/<redacted>/g' \
             -e 's/(client_secret = )\S+.*/\1<redacted>/g')
