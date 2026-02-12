@@ -1,0 +1,96 @@
+name: authd-google
+summary: authd - Google IAM Cloud Authentication for Ubuntu
+description: |
+  authd is a powerful authentication service for Ubuntu, designed to integrate with cloud identity providers like
+  Google IAM. It delivers a secure, flexible solution for organizations and individuals who are transitioning
+  to cloud-based identity management on Ubuntu workstations and servers.
+  authd uses the OAuth Device Authorization Grant and ensures a consistent and secure login experience across
+  Ubuntu Desktop and Server — whether through GDM, SSH, or network services like NFS and Samba.
+
+  Key Features
+  * Cloud identity provider integration: Connects with Google IAM
+  * Secure login: authd leverages the OAuth Device Authorization Grant RFC 8628-compliant workflows for reliability
+    and security.
+  * Open-source: Free and community-driven, with contributions welcomed.
+  * Enterprise ready: Ubuntu Pro customers will benefit from the same expanded security and support guarantees.
+  * authd is free for all Ubuntu Desktop and Server 24.04 LTS users and is under active development.
+    Explore the official documentation for installation and configuration steps, or visit the GitHub repository to
+    contribute or provide feedback.
+icon: snap/variants/google/icon.svg
+website:
+  - https://github.com/ubuntu/authd-oidc-brokers
+  - https://github.com/ubuntu/authd
+issues: https://github.com/ubuntu/authd/issues
+source-code: https://github.com/ubuntu/authd-oidc-brokers/tree/google
+adopt-info: version
+grade: stable
+base: core24
+confinement: strict
+license: GPL-3.0
+
+apps:
+  authd-google:
+    command: bin/authd-google
+    daemon: dbus
+    slots:
+      - dbus-authd
+    plugs:
+      - network
+    restart-condition: always
+    activates-on: [dbus-authd]
+    environment:
+      SYSLOG_IDENTIFIER: authd-google
+
+slots:
+  dbus-authd:
+    interface: dbus
+    bus: system
+    name: com.ubuntu.authd.Google
+
+parts:
+  broker:
+    source: authd-oidc-brokers
+    source-type: local
+    plugin: go
+    go-buildtags: [withgoogle]
+    build-snaps:
+      - go
+    build-environment:
+      - GOFLAGS: "-tags=release"
+    override-build: |
+      go mod download all
+      go mod vendor
+      VERSION=$(craftctl get version)
+      export GOFLAGS="-ldflags=-X=github.com/ubuntu/authd-oidc-brokers/internal/consts.Version=${VERSION}"
+      go build -tags=withgoogle -o ${GOBIN}/authd-google ./cmd/authd-oidc
+    after:
+      - version
+  config:
+    source: authd-oidc-brokers/conf/
+    source-type: local
+    plugin: dump
+    organize:
+      "variants/google/authd.conf": "conf/authd/google.conf"
+      "variants/google/broker.conf": "conf/broker.conf.orig"
+      "migrations": "conf/migrations"
+    stage:
+      - conf
+  # SemVer comparison helper
+  semver:
+    source: authd-oidc-brokers/tools
+    source-type: local
+    plugin: go
+    override-build: |
+      go mod download all
+      go mod vendor
+      go build -o ${GOBIN}/semver semver/semver.go
+  # Build the snap version from the git repository and current tree state.
+  version:
+    source: .
+    plugin: nil
+    build-packages:
+      - git # The script needs Git.
+    override-build: |
+      craftctl set version="$(./snap/scripts/version)"
+    after:
+      - semver
