@@ -486,22 +486,16 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 		session.deviceAuthResponse = response
 		log.Debug(ctx, "Retrieved device code.")
 
-		label := fmt.Sprintf(
-			"Access %q and use the provided login code",
-			response.VerificationURI,
-		)
+		label := "Open the URL and enter the code below."
 		if authModeID == authmodes.DeviceQr {
-			label = fmt.Sprintf(
-				"Scan the QR code or access %q and use the provided login code",
-				response.VerificationURI,
-			)
+			label = "Scan the QR code or open the URL and enter the code below."
 		}
 
 		uiLayout = map[string]string{
 			"type":    "qrcode",
 			"label":   label,
 			"wait":    "true",
-			"button":  "Request new login code",
+			"button":  "Request new code",
 			"content": response.VerificationURI,
 			"code":    response.UserCode,
 		}

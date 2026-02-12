@@ -54,7 +54,7 @@ Select Provider
 
 Regenerate QR Code
     # As long as we are in the login process, we can regenerate the QR code
-    Match Text    Request new login code    120
+    Match Text    Request new code    120
     Hid.Keys Combo    Return
     Match Text    google.com/device    15
 
