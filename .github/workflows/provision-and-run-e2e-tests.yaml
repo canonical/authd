@@ -32,7 +32,7 @@ jobs:
 
       - name: Restore cached VM image (if available)
         id: restore-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.release }}.qcow2
           key: >-
@@ -82,7 +82,7 @@ jobs:
           echo "Previous cache (if any) deleted"
 
       - name: Cache the VM image
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         if: always() && steps.provision-vm.outcome == 'success'
         with:
           path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.release }}.qcow2
