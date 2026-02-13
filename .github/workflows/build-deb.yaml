@@ -113,6 +113,15 @@ jobs:
                 cargo-vendor-filterer@${{ env.CARGO_VENDOR_FILTERER_VERSION }}
               command -v cargo-vendor-filterer
             fi
+
+            if [ "${{ matrix.ubuntu-version }}" == noble ] || \
+               [ "${{ matrix.ubuntu-version }}" == plucky ]; then
+              # Avoid lintian warnings on Noble and Plucky by disabling the 
+              # silent-on-rules-requiring-root tag. That tag doesn't exist in
+              # newer versions of lintian so we must only disable it on Noble
+              # and Plucky.
+              echo "authd source: silent-on-rules-requiring-root [debian/control]" >> debian/source/lintian-overrides
+            fi
           allow-sudo: true
           lintian: --fail-on error,warning,info,pedantic --verbose
 
