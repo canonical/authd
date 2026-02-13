@@ -83,11 +83,10 @@ parts:
       - CGO_LDFLAGS: -L${CRAFT_STAGE}/lib -lhimmelblau
       - GOBIN: ${CRAFT_PART_INSTALL}/bin
     override-build: |
-      VERSION=$(craftctl get version)
-      export GOFLAGS="-ldflags=-X=github.com/ubuntu/authd-oidc-brokers/internal/consts.Version=${VERSION}"
-
       go mod download all
       go mod vendor
+      VERSION=$(craftctl get version)
+      export GOFLAGS="-ldflags=-X=github.com/ubuntu/authd-oidc-brokers/internal/consts.Version=${VERSION}"
       go build -tags=withmsentraid -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc
   config:
     source: authd-oidc-brokers/conf/
