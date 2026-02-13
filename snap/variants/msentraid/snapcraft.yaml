@@ -118,6 +118,8 @@ parts:
     build-packages:
       - git # The script needs Git.
     override-build: |
-      craftctl set version="$(./snap/scripts/version)"
+      if [ -z "$(craftctl get version)" ]; then
+        craftctl set version="$(./snap/scripts/version)"
+      fi
     after:
       - semver
