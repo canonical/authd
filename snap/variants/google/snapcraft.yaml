@@ -51,12 +51,12 @@ parts:
   broker:
     source: authd-oidc-brokers
     source-type: local
-    plugin: go
-    go-buildtags: [withgoogle]
+    plugin: nil
     build-snaps:
       - go
     build-environment:
       - GOFLAGS: "-tags=release"
+      - GOBIN: ${CRAFT_PART_INSTALL}/bin
     override-build: |
       go mod download all
       go mod vendor
@@ -79,7 +79,11 @@ parts:
   semver:
     source: authd-oidc-brokers/tools
     source-type: local
-    plugin: go
+    plugin: nil
+    build-snaps:
+      - go
+    build-environment:
+      - GOBIN: ${CRAFT_PART_INSTALL}/bin
     override-build: |
       go mod download all
       go mod vendor
@@ -91,6 +95,8 @@ parts:
     build-packages:
       - git # The script needs Git.
     override-build: |
-      craftctl set version="$(./snap/scripts/version)"
+      if [ -z "$(craftctl get version)" ]; then
+        craftctl set version="$(./snap/scripts/version)"
+      fi
     after:
       - semver

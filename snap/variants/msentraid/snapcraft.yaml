@@ -70,8 +70,7 @@ parts:
   broker:
     source: authd-oidc-brokers
     source-type: local
-    plugin: go
-    go-buildtags: [withmsentraid]
+    plugin: nil
     build-snaps:
       - go
     after:
@@ -82,12 +81,12 @@ parts:
       # Add libhimmelblau to the CFLAGS and LDFLAGS so that it can be found by the Go linker.
       - CGO_CFLAGS: -I${CRAFT_STAGE}/include
       - CGO_LDFLAGS: -L${CRAFT_STAGE}/lib -lhimmelblau
+      - GOBIN: ${CRAFT_PART_INSTALL}/bin
     override-build: |
-      VERSION=$(craftctl get version)
-      export GOFLAGS="-ldflags=-X=github.com/ubuntu/authd-oidc-brokers/internal/consts.Version=${VERSION}"
-
       go mod download all
       go mod vendor
+      VERSION=$(craftctl get version)
+      export GOFLAGS="-ldflags=-X=github.com/ubuntu/authd-oidc-brokers/internal/consts.Version=${VERSION}"
       go build -tags=withmsentraid -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc
   config:
     source: authd-oidc-brokers/conf/
@@ -103,7 +102,11 @@ parts:
   semver:
     source: authd-oidc-brokers/tools
     source-type: local
-    plugin: go
+    plugin: nil
+    build-snaps:
+      - go
+    build-environment:
+      - GOBIN: ${CRAFT_PART_INSTALL}/bin
     override-build: |
       go mod download all
       go mod vendor
@@ -115,6 +118,8 @@ parts:
     build-packages:
       - git # The script needs Git.
     override-build: |
-      craftctl set version="$(./snap/scripts/version)"
+      if [ -z "$(craftctl get version)" ]; then
+        craftctl set version="$(./snap/scripts/version)"
+      fi
     after:
       - semver
