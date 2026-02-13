@@ -9,12 +9,10 @@ users:
     groups: sudo
     homedir: /home/ubuntu
     shell: /bin/bash
-    ssh_authorized_keys:
-      - ${SSH_PUBLIC_KEY}
 chpasswd:
   expire: false
   users:
-    - {name: ubuntu, password: ubuntu, type: text}
+    - {name: ubuntu, password: '', type: text}
 
 package_update: true
 package_upgrade: true
