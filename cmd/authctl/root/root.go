@@ -10,8 +10,8 @@ import (
 // RootCmd is the root command for authctl.
 var RootCmd = &cobra.Command{
 	Use:   "authctl",
-	Short: "CLI tool to interact with authd",
-	Long:  "authctl is a command-line tool to interact with the authd service for user and group management.",
+	Short: "Manage authd users and groups",
+	Long:  "authctl may be used to manage users and groups handled by authd.",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// The command was successfully parsed, so we don't want cobra to print usage information on error.
 		cmd.SilenceUsage = true
