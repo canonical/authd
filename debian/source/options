@@ -6,3 +6,4 @@ tar-ignore = */.vscode
 tar-ignore = *.so
 tar-ignore = *.o
 tar-ignore = vendor_rust/*.a
+tar-ignore = docs/.sphinx

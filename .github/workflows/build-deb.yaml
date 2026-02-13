@@ -220,6 +220,7 @@ jobs:
       with:
         fetch-depth: 100
         path: repo
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Extract the debian sources
       run: |
