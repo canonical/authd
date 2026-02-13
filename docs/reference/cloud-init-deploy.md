@@ -16,7 +16,7 @@ YAML files to deploy and configure authd on Ubuntu at scale.
 ## Setup
 
 If using these snippets as part of a
-[cloud config](https://cloudinit.readthedocs.io/en/latest/explanation/about-cloud-config.html)
+[cloud config](https://docs.cloud-init.io/en/latest/explanation/format/cloud-config.html#user-data-formats-cloud-config)
 file, set the appropriate header, identifying the file to cloud-init with
 `#cloud-config` and enabling Jinja templating with `## template: jinja`.
 
