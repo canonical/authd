@@ -270,6 +270,29 @@ func (s Service) SetGroupID(ctx context.Context, req *authd.SetGroupIDRequest) (
 	}, nil
 }
 
+// SetShell sets the shell of a user.
+func (s Service) SetShell(ctx context.Context, req *authd.SetShellRequest) (*authd.SetShellResponse, error) {
+	user, err := s.userManager.UserByName(req.GetName())
+	if errors.Is(err, users.NoDataFoundError{}) {
+		return nil, status.Errorf(codes.NotFound, "user %q not found", req.GetName())
+	}
+	if err != nil {
+		return nil, grpcError(err)
+	}
+
+	if err := s.permissionManager.CheckRequestIsFromRootOrUID(ctx, user.UID); err != nil {
+		return nil, status.Error(codes.PermissionDenied, err.Error())
+	}
+
+	warnings, err := s.userManager.SetShell(req.GetName(), req.GetShell())
+	if err != nil {
+		log.Errorf(ctx, "SetShell: %v", err)
+		return nil, grpcError(err)
+	}
+
+	return &authd.SetShellResponse{Warnings: warnings}, nil
+}
+
 // userToProtobuf converts a types.UserEntry to authd.User.
 func userToProtobuf(u types.UserEntry) *authd.User {
 	return &authd.User{

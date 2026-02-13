@@ -51,6 +51,9 @@ authd.UserService:
         - name: SetGroupID
           isclientstream: false
           isserverstream: false
+        - name: SetShell
+          isclientstream: false
+          isserverstream: false
         - name: SetUserID
           isclientstream: false
           isserverstream: false

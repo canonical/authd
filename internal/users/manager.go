@@ -664,6 +664,33 @@ func checkHomeDirOwner(home string, uid, gid uint32) error {
 	return nil
 }
 
+// SetShell sets the shell for the given user.
+func (m *Manager) SetShell(username, shell string) (warnings []string, err error) {
+	if username == "" {
+		return nil, errors.New("empty username")
+	}
+
+	if err := m.db.SetShell(username, shell); err != nil {
+		return nil, err
+	}
+
+	// Check if shell exists
+	stat, err := os.Stat(shell)
+	if errors.Is(err, os.ErrNotExist) {
+		warning := fmt.Sprintf("Shell %q does not exist", shell)
+		log.Warning(context.Background(), warning)
+		return []string{warning}, nil
+	}
+	// Return a warning if the shell is a directory or not executable
+	if stat.IsDir() || stat.Mode()&0111 == 0 {
+		warning := fmt.Sprintf("Shell %q is not an executable file", shell)
+		log.Warning(context.Background(), warning)
+		return []string{warning}, nil
+	}
+
+	return nil, nil
+}
+
 // BrokerForUser returns the broker ID for the given user.
 func (m *Manager) BrokerForUser(username string) (string, error) {
 	u, err := m.db.UserByName(username)

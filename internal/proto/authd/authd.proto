@@ -137,6 +137,7 @@ service UserService {
   rpc UnlockUser(UnlockUserRequest) returns (Empty);
   rpc SetUserID(SetUserIDRequest) returns (SetUserIDResponse);
   rpc SetGroupID(SetGroupIDRequest) returns (SetGroupIDResponse);
+  rpc SetShell(SetShellRequest) returns (SetShellResponse);
 
   rpc GetGroupByName(GetGroupByNameRequest) returns (Group);
   rpc GetGroupByID(GetGroupByIDRequest) returns (Group);
@@ -194,6 +195,15 @@ message SetGroupIDResponse {
   bool id_changed = 1;
   bool home_dir_owner_changed = 2;
   repeated string warnings = 3;
+}
+
+message SetShellRequest {
+  string name = 1;
+  string shell = 2;
+}
+
+message SetShellResponse {
+  repeated string warnings = 1;
 }
 
 message User {
