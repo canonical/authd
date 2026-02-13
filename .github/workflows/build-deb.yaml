@@ -114,7 +114,7 @@ jobs:
               command -v cargo-vendor-filterer
             fi
           allow-sudo: true
-          lintian: --fail-on error,warning,info,pedantic
+          lintian: --fail-on error,warning,info,pedantic --verbose
 
         # FIXME: Use dynamic outputs when possible: https://github.com/actions/runner/pull/2477
       - name: Generate outputs
