@@ -1,0 +1,73 @@
+#!/bin/bash
+
+set -euo pipefail
+
+usage() {
+        cat << EOF
+Usage: $0 --broker <broker> [--build-dir <dir>] [snapcraft options]
+
+Build the broker snap. The snap is extracted into a squashfs root directory
+after building, which can be installed via 'sudo snap try <squashfs-root-dir>'.
+
+Options:
+  --broker <broker>
+      The broker to use. Valid values are 'oidc', 'msentraid' and 'google'.
+      This option is required.
+  --build-dir <dir>
+      Directory to place the built snap and the extracted squashfs root directory.
+      Defaults to ../build.
+
+All other options are passed to snapcraft.
+EOF
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --broker)
+            BROKER="$2"
+            shift 2
+            ;;
+        --build-dir)
+            BUILD_DIR="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+if [ -z "${BROKER:-}" ]; then
+    echo >&2 "Error: --broker option is required"
+    usage
+    exit 1
+fi
+
+BUILD_DIR=${BUILD_DIR:-"../build"}
+
+set -x
+
+go mod vendor
+
+./snap/scripts/prepare-variant --broker "${BROKER}"
+
+time snapcraft pack --output "${BUILD_DIR}" "$@"
+
+# shellcheck disable=SC2012 # The .snap file doesn't contain non-alphanumeric characters
+SNAP_FILE=$(ls -t "${BUILD_DIR}"/*.snap | head -n1)
+
+# Use the snap name before the first underscore (drop version/arch) for squashfs root
+SNAP_BASENAME=$(basename "${SNAP_FILE}" .snap)
+SNAP_BASENAME=${SNAP_BASENAME%%_*}
+squashfs_root_dir="${BUILD_DIR}/${SNAP_BASENAME}-squashfs-root"
+
+# Remove any existing directory
+rm -rf "${squashfs_root_dir}"
+
+# Extract the snap file
+unsquashfs -dest "${squashfs_root_dir}" "${SNAP_FILE}"
