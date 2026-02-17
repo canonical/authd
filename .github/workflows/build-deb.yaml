@@ -124,6 +124,7 @@ jobs:
             fi
           allow-sudo: true
           lintian: --fail-on error,warning,info,pedantic --verbose
+          run-lrc: true
 
         # FIXME: Use dynamic outputs when possible: https://github.com/actions/runner/pull/2477
       - name: Generate outputs
