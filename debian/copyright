@@ -3,58 +3,113 @@ Upstream-Name: authd
 Source: https://github.com/canonical/authd
 
 Files: *
-Copyright: 2023, Canonical Ltd
+Copyright: 2023, Canonical Ltd.
 License: LGPL-3+
 
 Files: cmd/*
-Copyright: 2023, Canonical Ltd
+Copyright: 2023, Canonical Ltd.
 License: GPL-3+
 
 Files: debian/*
 License: LGPL-3+
 
 Files: pam/integration-tests/pam_mkhomedir/pam_mkhomedir.c
-Copyright: 2009, Red Hat, Inc
+Copyright: 2009, Red Hat, Inc.
 License: LGPL-2+
 
 Files: pam/internal/gdm/extensions/*
-Copyright: 2023, Canonical Ltd
+Copyright: 2023, Canonical Ltd.
 License: GPL-3+
 
 Files: pam/internal/gdm/extensions/gdm-pam-extensions-common.h
-Copyright: 2017, Red Hat, Inc
+Copyright: 2017, Red Hat, Inc.
 License: GPL-2+
 
 Files: CODE_OF_CONDUCT.md
-License: CC-BY-SA-3
+License: CC-BY-SA-3.0
 
 # Vendored files
 
-Files: vendor/github.com/davecgh/go-spew/*
-Copyright: 2012-2016, Dave Collins <dave@davec.name>
+Files: vendor/github.com/atotto/*
+Copyright: 2013 Ato Araki.
+License: BSD-3-clause
+
+Files: vendor/github.com/atotto/clipboard/clipboard.go
+       vendor/github.com/atotto/clipboard/clipboard_darwin.go
+       vendor/github.com/atotto/clipboard/clipboard_plan9.go
+       vendor/github.com/atotto/clipboard/clipboard_unix.go
+       vendor/github.com/atotto/clipboard/clipboard_windows.go
+Copyright: 2013 @atotto.
+License: BSD-3-clause
+
+Files: vendor/github.com/aymanbagabas/*
+Copyright: 2022 Ayman Bagabas
+License: Expat
+
+Files: vendor/github.com/charmbracelet/*
+Copyright: 2020-2024 Charmbracelet, Inc.
+License: Expat
+
+Files: vendor/github.com/coreos/*
+Copyright: 2015-2018 CoreOS, Inc.
+License: Apache-2.0
+
+Files: vendor/github.com/coreos/go-systemd/v22/activation/files.go
+Copyright: 2026 RedHat, Inc.
+License: Apache-2.0
+
+Files: vendor/github.com/coreos/go-systemd/v22/daemon/sdnotify.go
+Copyright: 2014 Docker, Inc.
+           2015-2018 CoreOS, Inc.
+License: Apache-2.0
+
+Files: vendor/github.com/cpuguy83/*
+Copyright: 2014 Brian Goff
+License: Expat
+
+Files: vendor/github.com/davecgh/*
+Copyright: 2012-2016 Dave Collins <dave@davec.name>
 License: ISC
 
-Files: vendor/github.com/spf13/*
-Copyright: 2014, Steve Francia <spf@spf13.com>
+Files: vendor/github.com/erikgeiser/*
+Copyright: 2021 Erik G.
 License: Expat
 
-Files: vendor/github.com/spf13/viper/*
-Copyright: 2014, Steve Francia <spf@spf13.com>
+Files: vendor/github.com/fsnotify/*
+Copyright: 2012 The Go Authors.
+           fsnotify Authors.
+License: BSD-3-clause
+
+Files: vendor/github.com/go-viper/*
+Copyright: 2013 Mitchell Hashimoto
 License: Expat
 
-Files: vendor/github.com/spf13/cobra/*
-Copyright: 2013-2023, The Cobra Authors
-License: Apache-2
+Files: vendor/github.com/go-viper/mapstructure/v2/internal/*
+Copyright: 2022 The Go Authors.
+License: Expat
+
+Files: vendor/github.com/godbus/*
+Copyright: 2013 Georg Reinke (<guelfey at gmail dot com>), Google
+License: BSD-2-clause
+
+Files: vendor/github.com/google/*
+Copyright: 2009-2023 Google Inc.
+License: BSD-3-clause
+
+Files: vendor/github.com/inconshreveable/*
+License: Apache-2.0
+
+Files: vendor/github.com/lucasb-eyer/*
+Copyright: 2013 Lucas Beyer
+License: Expat
 
 Files: vendor/github.com/mattn/*
-Copyright: 2018-2022, Yasuhiro Matsumoto <mattn.jp@gmail.com>
+Copyright: 2014-2022 Yasuhiro Matsumoto <mattn.jp@gmail.com>
 License: Expat
-Comment: No explicit license found, using license(s) from:
- vendor/github.com/mattn/go-sqlite3/LICENSE
 
-Files: vendor/gopkg.in/*
-Copyright: 2014-2019, Unknwon
-License: Apache-2
+Files: vendor/github.com/mattn/go-sqlite3/convert.go
+Copyright: 2011 The Go Authors.
+License: Expat
 
 Files: vendor/github.com/mattn/go-sqlite3/sqlite3.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_opt_allow_uri_authority.go
@@ -66,822 +121,717 @@ Files: vendor/github.com/mattn/go-sqlite3/sqlite3.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_opt_stat4.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_opt_vacuum_full.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_opt_vacuum_incr.go
-Copyright: 2018, G.J.R. Timmer <gjr.timmer@gmail.com>
-           2019, Yasuhiro Matsumoto <mattn.jp@gmail.com>
+Copyright: 2018 G.J.R. Timmer <gjr.timmer@gmail.com>
+           2019 Yasuhiro Matsumoto <mattn.jp@gmail.com>
 License: Expat
-Comment: No explicit license found, using license(s) from:
- vendor/github.com/mattn/go-sqlite3/LICENSE
-
-Files: vendor/github.com/spf13/afero/*
-Copyright: 2014-2022, Steve Francia <spf@spf13.com>
-License: Apache-2
-
-Files: vendor/go.yaml.in/*
-Copyright: 2011-2019, Canonical Ltd
-           2006-2010, Kirill Simonov
-License: Expat
-
-Files: vendor/gopkg.in/yaml.v3/*
-Copyright: 2011-2019, Canonical Ltd
-           2006-2010, Kirill Simonov
-License: Expat
-
-Files: vendor_rust/pulldown-cmark/*
-Copyright: 2015-2017, Google Inc
-License: Expat
-
-Files: vendor_rust/petgraph/*
-Copyright: No copyright, use freely
-License: CC-BY-SA-4
-Comment: No explicit license found, using license(s) from:
- vendor_rust/petgraph/assets/LICENSE.md
-
-Files: vendor/go.yaml.in/yaml/v3/NOTICE
-       vendor/go.yaml.in/yaml/v3/decode.go
-       vendor/go.yaml.in/yaml/v3/encode.go
-       vendor/go.yaml.in/yaml/v3/resolve.go
-       vendor/go.yaml.in/yaml/v3/sorter.go
-       vendor/go.yaml.in/yaml/v3/yaml.go
-Copyright: 2011-2019, Canonical Ltd
-License: Apache-2
-
-Files: vendor/gopkg.in/yaml.v3/NOTICE
-       vendor/gopkg.in/yaml.v3/decode.go
-       vendor/gopkg.in/yaml.v3/encode.go
-       vendor/gopkg.in/yaml.v3/resolve.go
-       vendor/gopkg.in/yaml.v3/sorter.go
-       vendor/gopkg.in/yaml.v3/yaml.go
-Copyright: 2011-2019, Canonical Ltd
-License: Apache-2
-
-Files: vendor/github.com/russross/*
-Copyright: 2011, Russ Ross <russ@russross.com>
-License: BSD-2-clause
-Comment: No explicit license found, using license(s) from:
- vendor/github.com/russross/blackfriday/v2/LICENSE.txt
-
-Files: vendor_rust/socket2/*
-Copyright: 2014, Alex Crichton
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/socket2/LICENSE-APACHE
- vendor_rust/socket2/LICENSE-MIT
-
-Files: vendor_rust/socket2/src/socket.rs
-       vendor_rust/socket2/src/lib.rs
-       vendor_rust/socket2/src/sys/unix.rs
-       vendor_rust/socket2/src/sys/windows.rs
-Copyright: 2015, The Rust Project Developers
-License: Apache-2 or Expat
 
 Files: vendor/github.com/mattn/go-sqlite3/sqlite3_func_crypt.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_opt_userauth.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_opt_userauth_omit.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_usleep_windows.go
-Copyright: 2018, G.J.R. Timmer <gjr.timmer@gmail.com>
+Copyright: 2018 G.J.R. Timmer <gjr.timmer@gmail.com>
 License: Expat
-Comment: No explicit license found, using license(s) from:
- vendor/github.com/mattn/go-sqlite3/LICENSE
-
-Files: vendor/github.com/spf13/afero/afero.go
-       vendor/github.com/spf13/afero/mem/file.go
-       vendor/github.com/spf13/afero/os.go
-Copyright: 2014-2015, Steve Francia <spf@spf13.com>
-           2013, tsuru authors
-License: Apache-2
-
-Files: vendor/github.com/spf13/afero/ioutil.go
-       vendor/github.com/spf13/afero/match.go
-       vendor/github.com/spf13/afero/path.go
-Copyright: 2014-2015, Steve Francia <spf@spf13.com>
-           2009-2015, The Go Authors
-License: Apache-2
 
 Files: vendor/github.com/mattn/go-sqlite3/sqlite3_opt_preupdate.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_opt_preupdate_hook.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_opt_preupdate_omit.go
-Copyright: 2019, G.J.R. Timmer <gjr.timmer@gmail.com>
-           2018, segment.com <friends@segment.com>
+Copyright: 2018 segment.com <friends@segment.com>
+           2019 G.J.R. Timmer <gjr.timmer@gmail.com>
 License: Expat
-Comment: No explicit license found, using license(s) from:
- vendor/github.com/mattn/go-sqlite3/LICENSE
-
-Files: vendor/google.golang.org/grpc/*
-License: Apache-2
-Copyright: 2014-2024, The gRPC Authors
-
-Files: vendor_rust/shlex/*
-Copyright: 2015, Nicholas Allegra (comex)
-License: Apache-2 or Expat
-
-Files: vendor_rust/miniz_oxide/*
-Copyright: 2017-2020, Frommi
-           2013-2014, RAD Game Tools and Valve Software
-           2010-2014, Rich Geldreich and Tenacious Software LLC
-           2017-2024, oyvindln
-License: Expat
-
-Files: vendor/github.com/sahilm/*
-Copyright: 2017, Sahil Muthoo
-License: Expat
-
-Files: vendor/github.com/mattn/go-sqlite3/sqlite3-binding.c
-Copyright: All of the following are true:
-           Column "a" has an affinity other than NONE or BLOB
-           The page number is greater than the largest page that existed in
-           The system is under memory pressure and wants to avoid
-           Unique index that do use OE_Replace by default
-           above
-           an exclusive lock
-           map regions of the *-shm file into memory using MapViewOfFile()
-           ordering does not matter because this is the last round
-           start of the transaction
-           2015, t1.x=t2.y OR (t1.x=t2.z AND t1.y=
-           the database <file@the>
-           the file system is read-only, then enable no-locking access
-           the solver
-           to sqlite3_autovacuum_pages(D,C,P,X) is a NULL pointer
-           unnecessary pages cache entry allocations
-License: Expat
-Comment: No explicit license found, using license(s) from:
- vendor/github.com/mattn/go-sqlite3/LICENSE
-
-Files: vendor_rust/procfs/*
-Copyright: Andrew Chin
-           2003, Binh Nguyen
-           1994-1995, Daniel Quinlan <quinlan@yggdrasil.com>
-           2000-2002, Free Software Foundation, Inc
-           2002-2017, Michael Kerrisk <mtk.manpages@gmail.com>
-           2019, other contributors
-License: GFDL-NIV-1.2 or GPL-2+
-
-Files: vendor_rust/procfs-core/*
-Copyright: Andrew Chin
-           2003, Binh Nguyen
-           1994-1995, Daniel Quinlan <quinlan@yggdrasil.com>
-           2000-2002, Free Software Foundation, Inc
-           2002-2017, Michael Kerrisk <mtk.manpages@gmail.com>
-           2019, other contributors
-License: GFDL-NIV-1.2 or GPL-2+
-
-Files: vendor_rust/pulldown-cmark-to-cmark/*
-Copyright: 2891, <235+caizixian@users.noreply.github.com>
-           2018, Alessandro Ogier <alessandro.ogier@gmail.com>
-           2018, Dylan Owen <dyltotheo@gmail.com>
-           2018, Sebastian Thiel <byronimo@gmail.com>
-           2018, Zixian Cai >
-License: Apache-2
-
-Files: vendor_rust/miniz_oxide/LICENSE-ZLIB.md
-Copyright: 2017-2020, Frommi
-           2013-2014, RAD Game Tools and Valve Software
-           2010-2014, Rich Geldreich and Tenacious Software LLC
-           2017-2024, oyvindln
-License: Zlib
-
-Files: vendor/github.com/spf13/afero/util.go
-Copyright: 2015, Steve Francia <spf@spf13.com>
-           2015, The Hugo Authors
-           2016, present Bjørn Erik Pedersen <bjorn.erik.pedersen@gmail.com>
-License: Apache-2
-
-Files: vendor/github.com/coreos/*
-Copyright: 2015-2018, CoreOS, Inc
-           2014, Docker, Inc
-License: Apache-2
-
-Files: vendor_rust/futures-channel/*
-Copyright: 2016, Alex Crichton
-           2017, The Tokio Authors
-License: Apache-2
-
-Files: vendor_rust/futures-core/*
-Copyright: 2016, Alex Crichton
-           2017, The Tokio Authors
-License: Apache-2
-
-Files: vendor_rust/futures-sink/*
-Copyright: 2016, Alex Crichton
-           2017, The Tokio Authors
-License: Apache-2
-
-Files: vendor_rust/futures-task/*
-Copyright: 2016, Alex Crichton
-           2017, The Tokio Authors
-License: Apache-2
-
-Files: vendor_rust/futures-util/*
-Copyright: 2016, Alex Crichton
-           2017, The Tokio Authors
-License: Apache-2
-
-Files: vendor/go.yaml.in/yaml/v3/LICENSE
-       vendor/go.yaml.in/yaml/v3/README.md
-Copyright: 2011-2019, Canonical Ltd
-           2006-2011, Kirill Simonov
-License: Apache-2 or Expat
-
-Files: vendor/gopkg.in/yaml.v3/LICENSE
-       vendor/gopkg.in/yaml.v3/README.md
-Copyright: 2011-2019, Canonical Ltd
-           2006-2011, Kirill Simonov
-License: Apache-2 or Expat
-
-Files: vendor_rust/atomic-waker/*
-Copyright: 2016, Alex Crichton
-           2017, The Tokio Authors
-License: Apache-2 or Expat
-
-Files: vendor/github.com/godbus/*
-Copyright: 2013, ), Google
-           2013, Georg Reinke ( <guelfey@gmail.com>
-License: BSD-2-clause
 
 Files: vendor/github.com/msteinert/*
-Copyright: 2015, Michael Steinert <mike.steinert@gmail.com>
-           2011, krockot
+Copyright: 2011 krockot
+           2015 Michael Steinert <mike.steinert@gmail.com>
 License: BSD-2-clause
-
-Files: vendor/github.com/spf13/pflag/*
-Copyright: 2012, Alex Ogier
-           2012, The Go Authors
-License: BSD-3-clause
-
-Files: vendor_rust/futures-channel/LICENSE-MIT
-Copyright: 2016, Alex Crichton
-           2017, The Tokio Authors
-License: Expat
-
-Files: vendor_rust/futures-core/LICENSE-MIT
-Copyright: 2016, Alex Crichton
-           2017, The Tokio Authors
-License: Expat
-
-Files: vendor_rust/futures-sink/LICENSE-MIT
-Copyright: 2016, Alex Crichton
-           2017, The Tokio Authors
-License: Expat
-
-Files: vendor_rust/futures-task/LICENSE-MIT
-Copyright: 2016, Alex Crichton
-           2017, The Tokio Authors
-License: Expat
-
-Files: vendor_rust/futures-util/LICENSE-MIT
-Copyright: 2016, Alex Crichton
-           2017, The Tokio Authors
-License: Expat
-
-Files: vendor_rust/getrandom/*
-Copyright: 2014, The Rust Project Developers
-           2018-2025, The rust-random Project Developers
-License: Apache-2 or Expat
-
-Files: vendor_rust/hex/*
-Copyright: 2013-2014, The Rust Project Developers
-           2015-2020, The rust-hex Developers
-License: Expat
-
-Files: vendor_rust/hostname/*
-Copyright: 2016, fengcen
-           2019, svartalf
-License: Expat
-
-Files: vendor_rust/tokio-macros/*
-Copyright: Tokio Contributors
-           2019, Yoshua Wuyts
-License: Expat
-
-Files: vendor_rust/try-lock/*
-Copyright: 2016, Alex Crichton
-           2018-2023, Sean McArthur
-License: Expat
-
-Files: vendor_rust/pulldown-cmark/tests/suite/spec.rs
-Copyright: &AElig; &Dcaron
-           Æ Ď
-License: Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/pulldown-cmark/LICENSE
-
-Files: vendor/github.com/mattn/go-sqlite3/sqlite3_context.go
-Copyright: 2019, Yasuhiro Matsumoto <mattn.jp@gmail.com>
-           cs, l
-License: Expat
-Comment: No explicit license found, using license(s) from:
- vendor/github.com/mattn/go-sqlite3/LICENSE
-
-Files: vendor/github.com/spf13/cast/indirect.go
-Copyright: 2014, Steve Francia <spf@spf13.com>
-           2011, The Go Authors
-License: Expat
-Comment: No explicit license found, using license(s) from:
- vendor/github.com/spf13/cast/LICENSE
-
-Files: vendor/github.com/coreos/go-systemd/v22/activation/*
-Copyright: 2026, RedHat, Inc
-License: Apache-2
-
-Files: vendor/github.com/inconshreveable/*
-Copyright: 2022, Alan Shreve (@inconshreveable)
-License: Apache-2
-
-Files: vendor/google.golang.org/genproto/*
-Copyright: 2025, Google LLC
-License: Apache-2
-
-Files: vendor_rust/deranged/*
-Copyright: 2024, Jacob Pratt
-License: Apache-2 or Expat
-
-Files: vendor_rust/http/*
-Copyright: 2017, http-rs authors
-License: Apache-2
-
-Files: vendor_rust/iana-time-zone/*
-Copyright: 2020, Andrew Straw
-License: Apache-2
-
-Files: vendor_rust/num-conv/*
-Copyright: 2023, Jacob Pratt
-License: Apache-2
-
-Files: vendor_rust/num_threads/*
-Copyright: 2021, Jacob Pratt
-License: Apache-2
-
-Files: vendor_rust/pin-utils/*
-Copyright: 2018, The pin-utils authors
-License: Apache-2
-
-Files: vendor_rust/powerfmt/*
-Copyright: 2023, Jacob Pratt
-License: Apache-2
-
-Files: vendor_rust/sync_wrapper/*
-Copyright: 2020, Actyx AG
-License: Apache-2
-
-Files: vendor_rust/chrono/*
-Copyright: 2014-2025, Kang Seonghoon
-License: Apache-2 or Expat
-
-Files: vendor/github.com/coreos/go-systemd/v22/NOTICE
-       vendor/github.com/coreos/go-systemd/v22/activation/files_stub.go
-       vendor/github.com/coreos/go-systemd/v22/activation/files_unix.go
-       vendor/github.com/coreos/go-systemd/v22/activation/listeners.go
-       vendor/github.com/coreos/go-systemd/v22/activation/packetconns.go
-       vendor/github.com/coreos/go-systemd/v22/daemon/watchdog.go
-       vendor/github.com/coreos/go-systemd/v22/journal/*
-Copyright: 2015-2018, CoreOS, Inc
-License: Apache-2
-Comment: No explicit license found, using license(s) from:
- vendor/github.com/coreos/go-systemd/v22/LICENSE
-
-Files: vendor_rust/prost/*
-Copyright: 2022, Dan Burkert & Tokio Contributors
-License: Apache-2
-Comment: No explicit license found, using license(s) from:
- vendor_rust/prost/LICENSE
-
-Files: vendor_rust/prost-build/*
-Copyright: 2017, Dan Burkert
-License: Apache-2
-Comment: No explicit license found, using license(s) from:
- vendor_rust/prost-build/LICENSE
-
-Files: vendor_rust/prost-derive/*
-Copyright: 2017, Dan Burkert
-License: Apache-2
-Comment: No explicit license found, using license(s) from:
- vendor_rust/prost-derive/LICENSE
-
-Files: vendor_rust/prost-types/*
-Copyright: 2017, Dan Burkert
-License: Apache-2
-Comment: No explicit license found, using license(s) from:
- vendor_rust/prost-types/LICENSE
-
-Files: vendor/github.com/mattn/go-sqlite3/convert.go
-Copyright: 2011, The Go Authors
-License: BSD-3-clause
-
-Files: vendor/github.com/russross/blackfriday/v2/.travis.yml
-       vendor/github.com/russross/blackfriday/v2/LICENSE.txt
-       vendor/github.com/russross/blackfriday/v2/README.md
-       vendor/github.com/russross/blackfriday/v2/doc.go
-       vendor/github.com/russross/blackfriday/v2/entities.go
-       vendor/github.com/russross/blackfriday/v2/esc.go
-       vendor/github.com/russross/blackfriday/v2/node.go
-Copyright: 2011, Russ Ross
-License: BSD-2-clause
-
-Files: vendor_rust/futures-channel/src/*
-Copyright: 2010-2011, Dmitry Vyukov
-License: BSD-2-clause
-
-Files: vendor/github.com/atotto/*
-Copyright: 2013, Ato Araki
-License: BSD-3-clause
-
-Files: vendor_rust/petgraph/assets/LICENSE.md
-       vendor_rust/petgraph/assets/graphosaurus.svg
-       vendor_rust/petgraph/assets/pridosaurus.svg
-Copyright: the petgraph project
-License: CC-BY-SA-4
-
-Files: vendor/github.com/aymanbagabas/*
-Copyright: 2022, Ayman Bagabas
-License: Expat
-
-Files: vendor/github.com/charmbracelet/*
-Copyright: 2020-2023, Charmbracelet, Inc
-License: Expat
-
-Files: vendor/github.com/charmbracelet/bubbletea/*
-Copyright: 2020-2023, Charmbracelet, Inc
-License: Expat
-
-Files: vendor/github.com/charmbracelet/colorprofile/*
-Copyright: 2020-2024, Charmbracelet, Inc
-License: Expat
-
-Files: vendor/github.com/charmbracelet/lipgloss/*
-Copyright: 2021-2023, Charmbracelet, Inc
-License: Expat
-
-Files: vendor/github.com/charmbracelet/x/*
-Copyright: 2023, Charmbracelet, Inc
-License: Expat
-
-Files: vendor/github.com/charmbracelet/x/cellbuf/*
-Copyright: 2023, Charmbracelet, Inc
-License: Expat
-
-Files: vendor/github.com/charmbracelet/x/term/*
-Copyright: 2023, Charmbracelet, Inc
-License: Expat
-
-Files: vendor/github.com/cpuguy83/*
-Copyright: 2014, Brian Goff
-License: Expat
-
-Files: vendor/github.com/erikgeiser/*
-Copyright: 2021, Erik G
-License: Expat
-
-Files: vendor/github.com/go-viper/*
-Copyright: 2013, Mitchell Hashimoto
-License: Expat
-
-Files: vendor/github.com/lucasb-eyer/*
-Copyright: 2013, Lucas Beyer
-License: Expat
-
-Files: vendor/github.com/mattn/go-isatty/*
-Copyright: Yasuhiro MATSUMOTO <mattn.jp@gmail.com>
-License: Expat
-
-Files: vendor/github.com/mattn/go-runewidth/*
-Copyright: 2016, Yasuhiro Matsumoto
-License: Expat
-
-Files: vendor/github.com/mattn/go-sqlite3/.codecov.yml
-       vendor/github.com/mattn/go-sqlite3/LICENSE
-       vendor/github.com/mattn/go-sqlite3/README.md
-       vendor/github.com/mattn/go-sqlite3/doc.go
-       vendor/github.com/mattn/go-sqlite3/sqlite3_opt_column_metadata.go
-       vendor/github.com/mattn/go-sqlite3/sqlite3_opt_serialize.go
-       vendor/github.com/mattn/go-sqlite3/sqlite3_opt_serialize_omit.go
-       vendor/github.com/mattn/go-sqlite3/sqlite3ext.h
-Copyright: 2014, Yasuhiro Matsumoto
-License: Expat
 
 Files: vendor/github.com/muesli/*
-Copyright: 2021, Christian Muehlhaeuser
+Copyright: 2019-2021 Christian Muehlhaeuser
 License: Expat
 
 Files: vendor/github.com/muesli/cancelreader/*
-Copyright: 2022, Erik Geiser and Christian Muehlhaeuser
+Copyright: 2022 Erik Geiser and Christian Muehlhaeuser
 License: Expat
 
-Files: vendor/github.com/muesli/termenv/*
-Copyright: 2019, Christian Muehlhaeuser
-License: Expat
-
-Files: vendor/github.com/otiai10/*
-Copyright: 2018, otiai10
+Files: vendor/github.com/otiai10/copy/*
+Copyright: 2018 otiai10
 License: Expat
 
 Files: vendor/github.com/otiai10/mint/*
-Copyright: 2017, otiai10 (Hiromu OCHIAI)
+Copyright: 2017 otiai10 (Hiromu OCHIAI)
 License: Expat
 
 Files: vendor/github.com/pelletier/*
-Copyright: 2021-2023, Thomas Pelletier
+Copyright: 2021-2023 Thomas Pelletier
 License: Expat
+
+Files: vendor/github.com/pmezard/*
+Copyright: 2013 Patrick Mezard
+License: BSD-3-clause
 
 Files: vendor/github.com/rivo/*
-Copyright: 2019, Oliver Kuederle
+Copyright: 2019 Oliver Kuederle
 License: Expat
 
+Files: vendor/github.com/russross/*
+Copyright: 2011 Russ Ross <russ@russross.com>
+License: BSD-2-clause
+
 Files: vendor/github.com/sagikazarmark/*
-Copyright: 2023, Márk Sági-Kazár <mark.sagikazar@gmail.com>
+Copyright: 2023 Márk Sági-Kazár <mark.sagikazar@gmail.com>
+License: Expat
+
+Files: vendor/github.com/sahilm/*
+Copyright: 2017 Sahil Muthoo
 License: Expat
 
 Files: vendor/github.com/skip2/*
-Copyright: 2014, Tom Harwood
+Copyright: 2014 Tom Harwood
 License: Expat
 
 Files: vendor/github.com/sourcegraph/*
-Copyright: 2023, Sourcegraph
+Copyright: 2023 Sourcegraph
 License: Expat
 
-Files: vendor/github.com/spf13/cast/LICENSE
-       vendor/github.com/spf13/cast/Makefile
-       vendor/github.com/spf13/cast/README.md
-       vendor/github.com/spf13/cast/internal/*
-       vendor/github.com/spf13/cast/zz_generated.go
-Copyright: 2014, Steve Francia
+Files: vendor/github.com/spf13/afero/*
+Copyright: 2014-2022 Steve Francia <spf@spf13.com>
+License: Apache-2.0
+
+Files: vendor/github.com/spf13/afero/afero.go
+       vendor/github.com/spf13/afero/os.go
+Copyright: 2013 tsuru authors.
+           2014 Steve Francia <spf@spf13.com>
+License: Apache-2.0
+
+Files: vendor/github.com/spf13/afero/ioutil.go
+       vendor/github.com/spf13/afero/match.go
+       vendor/github.com/spf13/afero/path.go
+Copyright: 2015 Steve Francia <spf@spf13.com>
+           2015 The Go Authors
+License: Apache-2.0
+
+Files: vendor/github.com/spf13/afero/mem/file.go
+Copyright: 2013 tsuru authors.
+           2015 Steve Francia <spf@spf13.com>
+License: Apache-2.0
+
+Files: vendor/github.com/spf13/afero/util.go
+Copyright: 2015 Steve Francia <spf@spf13.com>
+           2015 The Hugo Authors
+License: Apache-2.0
+
+Files: vendor/github.com/spf13/cast/*
+Copyright: 2014 Steve Francia <spf@spf13.com>
 License: Expat
 
-Files: vendor/github.com/spf13/viper/.envrc
-       vendor/github.com/spf13/viper/.yamlignore
-       vendor/github.com/spf13/viper/.yamllint.yaml
-       vendor/github.com/spf13/viper/LICENSE
-       vendor/github.com/spf13/viper/Makefile
-       vendor/github.com/spf13/viper/README.md
-       vendor/github.com/spf13/viper/TROUBLESHOOTING.md
-       vendor/github.com/spf13/viper/UPGRADE.md
-       vendor/github.com/spf13/viper/encoding.go
-       vendor/github.com/spf13/viper/experimental.go
-       vendor/github.com/spf13/viper/file.go
-       vendor/github.com/spf13/viper/finder.go
-       vendor/github.com/spf13/viper/flags.go
-       vendor/github.com/spf13/viper/flake.lock
-       vendor/github.com/spf13/viper/flake.nix
-       vendor/github.com/spf13/viper/internal/*
-       vendor/github.com/spf13/viper/logger.go
-       vendor/github.com/spf13/viper/remote.go
-Copyright: 2014, Steve Francia
+Files: vendor/github.com/spf13/cobra/*
+Copyright: 2013-2023 The Cobra Authors
+License: Apache-2.0
+
+Files: vendor/github.com/spf13/pflag/*
+Copyright: 2012 Alex Ogier.
+           2012 The Go Authors.
+License: BSD-3-clause
+
+Files: vendor/github.com/spf13/pflag/flag.go
+       vendor/github.com/spf13/pflag/golangflag.go
+Copyright: 2009 The Go Authors.
+License: BSD-3-clause
+
+Files: vendor/github.com/spf13/viper/*
+Copyright: 2014 Steve Francia <spf@spf13.com>
 License: Expat
 
 Files: vendor/github.com/stretchr/*
-Copyright: 2012-2020, Mat Ryer, Tyler Bunnell
+Copyright: 2012-2020 Mat Ryer, Tyler Bunnell and contributors.
 License: Expat
 
 Files: vendor/github.com/subosito/*
-Copyright: 2013, Alif Rachmawadi
+Copyright: 2013 Alif Rachmawadi
 License: Expat
 
 Files: vendor/github.com/xo/*
-Copyright: 2016, Anmol Sethi
+Copyright: 2016 Anmol Sethi
 License: Expat
 
 Files: vendor/go.etcd.io/*
-Copyright: 2013, Ben Johnson
+Copyright: 2013 Ben Johnson
 License: Expat
+
+Files: vendor/go.yaml.in/*
+Copyright: 2006-2011 Kirill Simonov
+           2011 staring in  when the project was ported over:
+           2011-2016 Canonical Ltd.
+License: Apache-2.0 or Expat
+
+Files: vendor/go.yaml.in/yaml/v3/README.md
+Copyright: 2006-2011 Kirill Simonov
+           2011 staring in  when the project was ported over:
+           2011-2016 Canonical Ltd.
+License: Expat
+
+Files: vendor/go.yaml.in/yaml/v3/apic.go
+       vendor/go.yaml.in/yaml/v3/emitterc.go
+       vendor/go.yaml.in/yaml/v3/parserc.go
+       vendor/go.yaml.in/yaml/v3/readerc.go
+       vendor/go.yaml.in/yaml/v3/scannerc.go
+       vendor/go.yaml.in/yaml/v3/writerc.go
+       vendor/go.yaml.in/yaml/v3/yamlh.go
+       vendor/go.yaml.in/yaml/v3/yamlprivateh.go
+Copyright: 2006-2010 Kirill Simonov
+           2011-2019 Canonical Ltd
+License: Expat
+
+Files: vendor/go.yaml.in/yaml/v3/decode.go
+       vendor/go.yaml.in/yaml/v3/encode.go
+       vendor/go.yaml.in/yaml/v3/resolve.go
+       vendor/go.yaml.in/yaml/v3/sorter.go
+       vendor/go.yaml.in/yaml/v3/yaml.go
+Copyright: 2011-2019 Canonical Ltd
+License: Apache-2.0
+
+Files: vendor/golang.org/*
+Copyright: 2009-2025 The Go Authors.
+License: BSD-3-clause
+
+Files: vendor/google.golang.org/genproto/*
+Copyright: 2025 Google LLC
+License: Apache-2.0
+
+Files: vendor/google.golang.org/grpc/*
+Copyright: 2014-2025 The gRPC Authors
+License: Apache-2.0
+
+Files: vendor/google.golang.org/grpc/CONTRIBUTING.md
+Copyright: message*
+License: Apache-2.0
+
+Files: vendor/google.golang.org/protobuf/*
+Copyright: 2018-2025 The Go Authors.
+License: BSD-3-clause
+
+Files: vendor/google.golang.org/protobuf/types/*
+Copyright: 2008 Google Inc.
+License: BSD-3-clause
+
+Files: vendor/gopkg.in/ini.v1/*
+Copyright: 2014-2019 Unknwon
+License: Apache-2.0
+
+Files: vendor/gopkg.in/yaml.v3/*
+Copyright: 2006-2011 Kirill Simonov
+           2011 staring in  when the project was ported over:
+           2011-2016 Canonical Ltd.
+License: Apache-2.0 or Expat
+
+Files: vendor/gopkg.in/yaml.v3/apic.go
+       vendor/gopkg.in/yaml.v3/emitterc.go
+       vendor/gopkg.in/yaml.v3/parserc.go
+       vendor/gopkg.in/yaml.v3/readerc.go
+       vendor/gopkg.in/yaml.v3/scannerc.go
+       vendor/gopkg.in/yaml.v3/writerc.go
+       vendor/gopkg.in/yaml.v3/yamlh.go
+       vendor/gopkg.in/yaml.v3/yamlprivateh.go
+Copyright: 2006-2010 Kirill Simonov
+           2011-2019 Canonical Ltd
+License: Expat
+
+Files: vendor/gopkg.in/yaml.v3/decode.go
+       vendor/gopkg.in/yaml.v3/encode.go
+       vendor/gopkg.in/yaml.v3/resolve.go
+       vendor/gopkg.in/yaml.v3/sorter.go
+       vendor/gopkg.in/yaml.v3/yaml.go
+Copyright: 2011-2019 Canonical Ltd
+License: Apache-2.0
 
 Files: vendor/gorbe.io/*
-Copyright: 2021, Dániel Görbe
+Copyright: 2021 Dániel Görbe
 License: Expat
+
+Files: vendor_rust/adler2/*
+Copyright: Jonas Schievink <jonasschievink@gmail.com>
+License: 0BSD or Apache-2.0 or Expat
 
 Files: vendor_rust/aho-corasick/*
-Copyright: 2015, Andrew Gallant
+Copyright: 2015 Andrew Gallant
+License: Expat or Unlicense
+
+Files: vendor_rust/aho-corasick/README.md
+Copyright: 2015 Andrew Gallant
 License: Expat
 
+Files: vendor_rust/anyhow/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/async-trait/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/atomic-waker/*
+Copyright: 2016 Alex Crichton
+           2017 The Tokio Authors
+License: Apache-2.0 or Expat
+
 Files: vendor_rust/autocfg/*
-Copyright: 2018, Josh Stone
-License: Apache-2 or Expat
+Copyright: 2018 Josh Stone
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/axum/*
-Copyright: 2019, axum Contributors
+Copyright: 2019 axum Contributors
 License: Expat
 
 Files: vendor_rust/axum-core/*
-Copyright: 2021, axum Contributors
+Copyright: 2021 axum Contributors
 License: Expat
 
 Files: vendor_rust/base64/*
-Copyright: 2015, Alice Maz
-License: Apache-2 or Expat
+Copyright: 2015 Alice Maz
+License: Apache-2.0 or Expat
 
-Files: vendor_rust/bitflags/*
-Copyright: 2014, The Rust Project Developers
+Files: vendor_rust/base64/README.md
+Copyright: 2015 Alice Maz
 License: Expat
 
+Files: vendor_rust/bitflags/*
+Copyright: 2014 The Rust Project Developers
+License: Apache-2.0 or Expat
+
 Files: vendor_rust/bytes/*
-Copyright: 2018, Carl Lerche
+Copyright: 2018 Carl Lerche
 License: Expat
 
 Files: vendor_rust/cc/*
-Copyright: 2014, Alex Crichton
-License: Expat
+Copyright: 2014 Alex Crichton
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/cc/src/*
+Copyright: 2015-2017 winapi-rs developers
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/cc/src/windows/find_tools.rs
+       vendor_rust/cc/src/windows/registry.rs
+Copyright: 2015 The Rust Project Developers
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/cfg-if/*
-Copyright: 2014, Alex Crichton
-License: Expat
+Copyright: 2014 Alex Crichton
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/chrono/*
+Copyright: 2012-2014 The Rust Project Developers
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/chrono/CITATION.cff
+Copyright: 2012-2014 The Rust Project Developers
+License: Apache-2.0
+
+Files: vendor_rust/chrono/src/format/*
+Copyright: 2015 John Nagle.
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/colored/*
+License: MPL-2.0
 
 Files: vendor_rust/crc32fast/*
-Copyright: 2018, Sam Rijs, Alex Crichton
-License: Expat
+Copyright: 2018 Sam Rijs, Alex Crichton and contributors
+License: Apache-2.0 or Expat
 
-Files: vendor_rust/deranged/LICENSE-MIT
-Copyright: 2024, Jacob Pratt
-License: Expat
+Files: vendor_rust/ctor/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/ctor-proc-macro/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/deranged/*
+Copyright: 2024 Jacob Pratt et al.
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/dtor/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/dtor-proc-macro/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/either/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/equivalent/*
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/errno/*
-Copyright: 2014, Chris Wong
-License: Expat
+Copyright: 2014 Chris Wong
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/errno/src/*
+Copyright: 2014-2015 The Rust Project Developers
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/fastrand/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/fixedbitset/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/fixedbitset/README.md
+License: Apache-2.0
 
 Files: vendor_rust/flate2/*
-Copyright: 2014-2025, Alex Crichton
-License: Expat
+Copyright: 2014-2025 Alex Crichton
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/flate2/src/*
+Copyright: 2013 The Rust Project Developers
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/fnv/*
-Copyright: 2017, Contributors
-License: Apache-2 or Expat
+Copyright: 2017 Contributors
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/futures-channel/*
+Copyright: 2016 Alex Crichton
+           2017 The Tokio Authors
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/futures-channel/src/*
+Copyright: 2010-2011 Dmitry Vyukov.
+License: BSD-2-Clause-Views
+
+Files: vendor_rust/futures-core/*
+Copyright: 2016 Alex Crichton
+           2017 The Tokio Authors
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/futures-sink/*
+Copyright: 2016 Alex Crichton
+           2017 The Tokio Authors
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/futures-task/*
+Copyright: 2016 Alex Crichton
+           2017 The Tokio Authors
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/futures-util/*
+Copyright: 2016 Alex Crichton
+           2017 The Tokio Authors
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/getrandom/*
+Copyright: 2014 The Rust Project Developers
+           2018-2025 The rust-random Project Developers
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/h2/*
-Copyright: 2017, h2 authors
+Copyright: 2017 h2 authors
 License: Expat
 
 Files: vendor_rust/hashbrown/*
-Copyright: 2016, Amanieu d'Antras
-License: Apache-2 or Expat
+Copyright: 2016 Amanieu d'Antras
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/heck/*
-Copyright: 2015, The Rust Project Developers
-License: Apache-2 or Expat
+Copyright: 2015 The Rust Project Developers
+License: Apache-2.0 or Expat
 
-Files: vendor_rust/http/.cargo-checksum.json
-       vendor_rust/http/CHANGELOG.md
-       vendor_rust/http/Cargo.toml
-       vendor_rust/http/LICENSE-MIT
-       vendor_rust/http/README.md
-       vendor_rust/http/src/*
-       vendor_rust/http/tests/*
-Copyright: 2017, http-rs authors
-License: Apache-2 or Expat
+Files: vendor_rust/hex/*
+Copyright: 2013-2014 The Rust Project Developers.
+           2015-2020 The rust-hex Developers.
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/hostname/*
+Copyright: 2016 fengcen
+           2019 svartalf
+License: Expat
+
+Files: vendor_rust/http/*
+Copyright: 2017 http-rs authors
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/http-body/*
-Copyright: 2019-2024, Sean McArthur & Hyper Contributors
+Copyright: 2019-2024 Sean McArthur & Hyper Contributors
 License: Expat
 
 Files: vendor_rust/http-body-util/*
-Copyright: 2019-2025, Sean McArthur & Hyper Contributors
+Copyright: 2019-2025 Sean McArthur & Hyper Contributors
 License: Expat
+
+Files: vendor_rust/http/src/*
+Copyright: is a valid method character"
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/httparse/*
-Copyright: 2015-2025, Sean McArthur
-License: Expat
+Copyright: 2015-2025 Sean McArthur
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/httpdate/*
-Copyright: 2016, Pyfisch
-License: Apache-2 or Expat
+Copyright: 2016 Pyfisch
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/hyper/*
-Copyright: 2014-2025, Sean McArthur
+Copyright: 2014-2025 Sean McArthur
 License: Expat
 
 Files: vendor_rust/hyper-timeout/*
-Copyright: 2016, The weldr Project Developers
-License: Apache-2 or Expat
+Copyright: 2016 The weldr Project Developers
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/hyper-util/*
-Copyright: 2023-2025, Sean McArthur
+Copyright: 2023-2025 Sean McArthur
 License: Expat
 
-Files: vendor_rust/iana-time-zone/LICENSE-MIT
-Copyright: 2020, Andrew D. Straw
-License: Expat
+Files: vendor_rust/iana-time-zone/*
+Copyright: 2020 Andrew D. Straw
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/indexmap/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/itertools/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/itoa/*
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/lazy_static/*
-Copyright: 2010, The Rust Project Developers
-License: Expat
+Copyright: 2010 The Rust Project Developers
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/lazy_static/src/*
+Copyright: 2016 lazy-static.rs Developers
+License: Apache-2.0
 
 Files: vendor_rust/libc/*
-Copyright: 2014-2020, The Rust Project Developers
-License: Expat
+Copyright: 2014-2020 The Rust Project Developers
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/linux-raw-sys/*
+Copyright: violation or misattribution of any kind.
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/linux-raw-sys-0.4.15/*
+Copyright: violation or misattribution of any kind.
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/log/*
-Copyright: 2014, The Rust Project Developers
-License: Expat
+Copyright: 2014-2015 The Rust Project Developers
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/matchit/*
-Copyright: 2022, Ibraheem Ahmed
-License: Expat
+Copyright: 2013 Julien Schmidt
+           2022 Ibraheem Ahmed
+License: BSD-3-clause or Expat
 
 Files: vendor_rust/memchr/*
-Copyright: 2015, Andrew Gallant
+Copyright: 2015 Andrew Gallant
+License: Expat or Unlicense
+
+Files: vendor_rust/memchr/README.md
+Copyright: 2015 Andrew Gallant
 License: Expat
 
 Files: vendor_rust/mime/*
-Copyright: 2014, Sean McArthur
-License: Expat
+Copyright: 2014 Sean McArthur
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/miniz_oxide/*
+Copyright: 2010-2014 Rich Geldreich and Tenacious Software LLC
+           2013-2014 RAD Game Tools and Valve Software
+           2017-2020 Frommi
+           2017-2024 oyvindln
+License: Apache-2.0 or Expat or Zlib
 
 Files: vendor_rust/mio/*
-Copyright: 2014, Carl Lerche and other MIO contributors
+Copyright: 2014 Carl Lerche and other MIO contributors
 License: Expat
 
 Files: vendor_rust/multimap/*
-Copyright: 2016, multimap developers
-License: Apache-2 or Expat
+Copyright: 2016 multimap developers
+License: Apache-2.0 or Expat
 
-Files: vendor_rust/num-conv/LICENSE-MIT
-Copyright: 2023, Jacob Pratt
-License: Expat
+Files: vendor_rust/num-conv/*
+Copyright: 2023 Jacob Pratt
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/num-traits/*
-Copyright: 2014, The Rust Project Developers
-License: Expat
+Copyright: 2013-2014 The Rust Project Developers
+License: Apache-2.0 or Expat
 
-Files: vendor_rust/num_threads/.cargo-checksum.json
-       vendor_rust/num_threads/Cargo.toml
-       vendor_rust/num_threads/LICENSE-MIT
-       vendor_rust/num_threads/src/*
-Copyright: 2021, Jacob Pratt
-License: Apache-2 or Expat
+Files: vendor_rust/num_threads/*
+Copyright: 2021 Jacob Pratt
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/once_cell/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/paste/*
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/percent-encoding/*
-Copyright: 2013-2025, The rust-url developers
-License: Apache-2 or Expat
+Copyright: 2013-2025 The rust-url developers.
+License: Apache-2.0 or Expat
 
-Files: vendor_rust/pin-utils/.cargo-checksum.json
-       vendor_rust/pin-utils/Cargo.toml
-       vendor_rust/pin-utils/LICENSE-MIT
-       vendor_rust/pin-utils/README.md
-       vendor_rust/pin-utils/src/*
-       vendor_rust/pin-utils/tests/*
-Copyright: 2018, The pin-utils authors
-License: Apache-2 or Expat
+Files: vendor_rust/petgraph/*
+Copyright: the petgraph project.
+License: Apache-2.0 or Expat
 
-Files: vendor_rust/powerfmt/LICENSE-MIT
-Copyright: 2023, Jacob Pratt
+Files: vendor_rust/pin-project/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/pin-project-internal/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/pin-project-lite/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/pin-utils/*
+Copyright: 2018 The pin-utils authors
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/powerfmt/*
+Copyright: 2023 Jacob Pratt et al.
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/prettyplease/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/proc-macro2/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/procfs/*
+Copyright: 2015 The procfs Developers
+           2019 Andrew Chin, , and other contributors.
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/procfs-core/*
+Copyright: 2015 The procfs Developers
+           2019 Andrew Chin, , and other contributors.
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/prost/*
+Copyright: 2022 Dan Burkert & Tokio Contributors
+License: Apache-2.0
+
+Files: vendor_rust/prost-build/*
+Copyright: 2017 Dan Burkert
+License: Apache-2.0
+
+Files: vendor_rust/prost-derive/*
+Copyright: 2017 Dan Burkert
+License: Apache-2.0
+
+Files: vendor_rust/prost-types/*
+Copyright: 2017 Dan Burkert
+License: Apache-2.0
+
+Files: vendor_rust/pulldown-cmark/*
+Copyright: 2015-2017 Google Inc.
 License: Expat
 
-Files: vendor_rust/procfs/LICENSE-MIT
-Copyright: 2015, The procfs Developers
+Files: vendor_rust/pulldown-cmark-to-cmark/*
+License: Apache-2.0
+
+Files: vendor_rust/pulldown-cmark/src/linklabel.rs
+       vendor_rust/pulldown-cmark/src/tree.rs
+Copyright: 2018 Google LLC
 License: Expat
 
-Files: vendor_rust/procfs-core/LICENSE-MIT
-Copyright: 2015, The procfs Developers
-License: Expat
+Files: vendor_rust/quote/*
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/regex/*
-Copyright: 2014, The Rust Project Developers
-License: Expat
+Copyright: 2014 The Rust Project Developers
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/regex-automata/*
-Copyright: 2014, The Rust Project Developers
-License: Expat
+Copyright: 2014 The Rust Project Developers
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/regex-syntax/*
-Copyright: 2014, The Rust Project Developers
-License: Expat
+Copyright: 2014 The Rust Project Developers
+License: Apache-2.0 or Expat
 
-Files: vendor_rust/shlex/LICENSE-MIT
-Copyright: 2015, Nicholas Allegra (comex)
-License: Expat
+Files: vendor_rust/regex-syntax/src/*
+Copyright: 1991-2018 Unicode, Inc.
+License: Unicode-DFS-2016
+
+Files: vendor_rust/rustix/*
+Copyright: violation or misattribution of any kind.
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/rustix-0.38.44/*
+Copyright: violation or misattribution of any kind.
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/rustversion/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/serde/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/shlex/*
+Copyright: 2015 Nicholas Allegra (comex).
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/simple_logger/*
-Copyright: 2015-2021, Sam Clements
+Copyright: 2015-2021 Sam Clements
 License: Expat
 
 Files: vendor_rust/slab/*
-Copyright: 2019, Carl Lerche
+Copyright: 2019 Carl Lerche
 License: Expat
 
 Files: vendor_rust/smallvec/*
-Copyright: 2018, The Servo Project Developers
-License: Expat
+Copyright: 2018 The Servo Project Developers
+License: Apache-2.0 or Expat
 
-Files: vendor_rust/socket2/LICENSE-MIT
-Copyright: 2014, Alex Crichton
-License: Expat
+Files: vendor_rust/socket2/*
+Copyright: 2014 Alex Crichton
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/socket2/src/*
+Copyright: 2015 The Rust Project Developers.
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/syn/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/sync_wrapper/*
+Copyright: 2020 Actyx AG
+License: Apache-2.0
 
 Files: vendor_rust/syslog/*
-Copyright: 2014-2024, Geoffroy Couprie
+Copyright: 2014-2024 Geoffroy Couprie
 License: Expat
 
 Files: vendor_rust/tempfile/*
-Copyright: 2015, Steven Allen
-License: Apache-2 or Expat
+Copyright: 2015 Steven Allen
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/tempfile/src/dir/mod.rs
+Copyright: 2015 The Rust Project Developers
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/tempfile/tests/*
+Copyright: 2013-2014 The Rust Project Developers
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/time/*
-Copyright: Jacob Pratt
-License: Expat
+Copyright: Jacob Pratt et al.
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/time-core/*
-Copyright: Jacob Pratt
-License: Expat
+Copyright: Jacob Pratt et al.
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/time-macros/*
-Copyright: Jacob Pratt
-License: Expat
+Copyright: Jacob Pratt et al.
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/tokio/*
 Copyright: Tokio Contributors
+License: Expat
+
+Files: vendor_rust/tokio-macros/*
+Copyright: 2019 Yoshua Wuyts
+           Tokio Contributors
 License: Expat
 
 Files: vendor_rust/tokio-stream/*
@@ -893,1741 +843,116 @@ Copyright: Tokio Contributors
 License: Expat
 
 Files: vendor_rust/tonic/*
-Copyright: 2025, Lucio Franco
+Copyright: 2025 Lucio Franco
 License: Expat
 
 Files: vendor_rust/tonic-build/*
-Copyright: 2025, Lucio Franco
+Copyright: 2025 Lucio Franco
 License: Expat
 
 Files: vendor_rust/tower/*
-Copyright: 2019, Tower Contributors
+Copyright: 2019 Tower Contributors
 License: Expat
 
 Files: vendor_rust/tower-0.4.13/*
-Copyright: 2019, Tower Contributors
+Copyright: 2019 Tower Contributors
 License: Expat
 
+Files: vendor_rust/tower-0.4.13/src/*
+Copyright: 2017 Twitter Inc.
+License: Apache-2.0
+
 Files: vendor_rust/tower-layer/*
-Copyright: 2019, Tower Contributors
+Copyright: 2019 Tower Contributors
 License: Expat
 
 Files: vendor_rust/tower-service/*
-Copyright: 2019, Tower Contributors
+Copyright: 2019 Tower Contributors
 License: Expat
 
+Files: vendor_rust/tower/src/*
+Copyright: 2017 Twitter Inc.
+License: Apache-2.0
+
 Files: vendor_rust/tracing/*
-Copyright: 2019, Tokio Contributors
+Copyright: 2019 Tokio Contributors
 License: Expat
 
 Files: vendor_rust/tracing-attributes/*
-Copyright: 2019, Tokio Contributors
+Copyright: 2019 Tokio Contributors
 License: Expat
 
 Files: vendor_rust/tracing-core/*
-Copyright: 2019, Tokio Contributors
+Copyright: 2019 Tokio Contributors
 License: Expat
 
-Files: vendor_rust/tracing-core/src/spin/*
-Copyright: 2014, Mathijs van de Nes
+Files: vendor_rust/tracing-core/src/*
+Copyright: 2014 Mathijs van de Nes
+License: Expat
+
+Files: vendor_rust/try-lock/*
+Copyright: 2016 Alex Crichton
+           2018-2023 Sean McArthur
 License: Expat
 
 Files: vendor_rust/unicase/*
-Copyright: 2014-2017, Sean McArthur
-License: Expat
-
-Files: vendor_rust/want/*
-Copyright: 2018-2019, Sean McArthur
-License: Expat
-
-Files: vendor_rust/adler2/*
-Copyright: Jonas Schievink <jonasschievink@gmail.com>
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/adler2/LICENSE-APACHE
- vendor_rust/adler2/LICENSE-MIT
-
-Files: vendor_rust/chrono/src/format/parse.rs
-Copyright: 2015, John Nagle
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/chrono/LICENSE.txt
-
-Files: vendor_rust/linux-raw-sys-0.4.15/*
-Copyright: assignment is required to contribute to the `linux-raw-sys`
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/linux-raw-sys-0.4.15/LICENSE-APACHE
- vendor_rust/linux-raw-sys-0.4.15/LICENSE-Apache-2.0_WITH_LLVM-exception
- vendor_rust/linux-raw-sys-0.4.15/LICENSE-MIT
-
-Files: vendor_rust/linux-raw-sys-0.4.15/ORG_CODE_OF_CONDUCT.md
-Copyright: violation or misattribution of any kind
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/linux-raw-sys-0.4.15/LICENSE-APACHE
- vendor_rust/linux-raw-sys-0.4.15/LICENSE-Apache-2.0_WITH_LLVM-exception
- vendor_rust/linux-raw-sys-0.4.15/LICENSE-MIT
-
-Files: vendor_rust/pulldown-cmark/src/linklabel.rs
-       vendor_rust/pulldown-cmark/src/tree.rs
-Copyright: 2018, Google LLC
-License: Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/pulldown-cmark/LICENSE
-
-Files: vendor_rust/rustix-0.38.44/*
-Copyright: assignment is required to contribute to the `rustix`
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/rustix-0.38.44/LICENSE-APACHE
- vendor_rust/rustix-0.38.44/LICENSE-Apache-2.0_WITH_LLVM-exception
- vendor_rust/rustix-0.38.44/LICENSE-MIT
-
-Files: vendor_rust/rustix-0.38.44/ORG_CODE_OF_CONDUCT.md
-Copyright: violation or misattribution of any kind
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/rustix-0.38.44/LICENSE-APACHE
- vendor_rust/rustix-0.38.44/LICENSE-Apache-2.0_WITH_LLVM-exception
- vendor_rust/rustix-0.38.44/LICENSE-MIT
-
-Files: vendor/github.com/mattn/go-sqlite3/sqlite3-binding.h
-Copyright: to sqlite3_autovacuum_pages(D,C,P,X) is a NULL pointer
-License: Expat
-Comment: No explicit license found, using license(s) from:
- vendor/github.com/mattn/go-sqlite3/LICENSE
-
-Files: vendor_rust/linux-raw-sys/*
-Copyright: assignment is required to contribute to the `linux-raw-sys`
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/linux-raw-sys/LICENSE-APACHE
- vendor_rust/linux-raw-sys/LICENSE-Apache-2.0_WITH_LLVM-exception
- vendor_rust/linux-raw-sys/LICENSE-MIT
-
-Files: vendor_rust/linux-raw-sys/ORG_CODE_OF_CONDUCT.md
-Copyright: violation or misattribution of any kind
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/linux-raw-sys/LICENSE-APACHE
- vendor_rust/linux-raw-sys/LICENSE-Apache-2.0_WITH_LLVM-exception
- vendor_rust/linux-raw-sys/LICENSE-MIT
-
-Files: vendor_rust/quote/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/quote/LICENSE-APACHE
- vendor_rust/quote/LICENSE-MIT
-
-Files: vendor_rust/regex-syntax/src/*
-Copyright: 1991-2018, Unicode, Inc
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/regex-syntax/LICENSE-APACHE
- vendor_rust/regex-syntax/LICENSE-MIT
-
-Files: vendor_rust/rustix/*
-Copyright: assignment is required to contribute to the `rustix`
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/rustix/LICENSE-APACHE
- vendor_rust/rustix/LICENSE-Apache-2.0_WITH_LLVM-exception
- vendor_rust/rustix/LICENSE-MIT
-
-Files: vendor_rust/rustix/ORG_CODE_OF_CONDUCT.md
-Copyright: violation or misattribution of any kind
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/rustix/LICENSE-APACHE
- vendor_rust/rustix/LICENSE-Apache-2.0_WITH_LLVM-exception
- vendor_rust/rustix/LICENSE-MIT
+Copyright: 2014-2017 Sean McArthur
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/unicode-ident/*
-Copyright: 1991-2023, Unicode, Inc
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/unicode-ident/LICENSE-APACHE
- vendor_rust/unicode-ident/LICENSE-MIT
+Copyright: 1991-2023 Unicode, Inc.
+License: Apache-2.0 or Expat or Unicode-DFS-2016
 
-Files: vendor_rust/multimap/LICENSE-APACHE
-Copyright: 2016, multimap developers
-License: Apache-2
-Comment: No explicit copyright found, using copyright(s) from:
- vendor_rust/multimap/LICENSE-APACHE
- vendor_rust/multimap/LICENSE-MIT
-
-Files: vendor_rust/percent-encoding/LICENSE-APACHE
-Copyright: 2013-2016, The rust-url developers
-License: Apache-2
-Comment: No explicit copyright found, using copyright(s) from:
- vendor_rust/percent-encoding/LICENSE-APACHE
- vendor_rust/percent-encoding/LICENSE-MIT
-
-Files: vendor/google.golang.org/protobuf/*
-Copyright: 2008, Google Inc
-License: BSD-3-clause
-
-Files: vendor_rust/hex/LICENSE-APACHE
-Copyright: 2013-2014, The Rust Project Developers
-           2015-2020, The rust-hex Developers
-License: Apache-2
-Comment: No explicit copyright found, using copyright(s) from:
- vendor_rust/hex/LICENSE-APACHE
- vendor_rust/hex/LICENSE-MIT
-
-Files: vendor_rust/tower/src/load/peak_ewma.rs
-Copyright: 2017, Twitter Inc
+Files: vendor_rust/want/*
+Copyright: 2018-2019 Sean McArthur
 License: Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/tower/LICENSE
-
-Files: vendor_rust/tower-0.4.13/src/load/peak_ewma.rs
-Copyright: 2017, Twitter Inc
-License: Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/tower-0.4.13/LICENSE
-
-Files: vendor_rust/lazy_static/src/*
-Copyright: 2016, lazy-static.rs Developers
-License: Apache-2 or Expat
-
-Files: vendor/github.com/fsnotify/*
-Copyright: 2012, The Go Authors
-           fsnotify Authors
-License: BSD-3-clause
-
-Files: vendor_rust/getrandom/LICENSE-MIT
-Copyright: 2014, The Rust Project Developers
-           2018-2025, The rust-random Project Developers
-License: Expat
-
-Files: vendor_rust/deranged/LICENSE-Apache
-Copyright: 2024, Jacob Pratt
-License: Apache-2
-
-Files: vendor_rust/shlex/LICENSE-APACHE
-Copyright: 2015, Nicholas Allegra (comex)
-License: Apache-2
-
-Files: vendor/github.com/google/*
-Copyright: 2009-2023, Google Inc
-License: BSD-3-clause
-
-Files: vendor/github.com/pmezard/*
-Copyright: 2013, Patrick Mezard
-License: BSD-3-clause
-
-Files: vendor/golang.org/x/term/*
-Copyright: 2009-2021, The Go Authors
-License: BSD-3-clause
-
-Files: vendor_rust/matchit/LICENSE.httprouter
-Copyright: 2013, Julien Schmidt
-License: BSD-3-clause
-
-Files: vendor_rust/autocfg/LICENSE-MIT
-Copyright: 2018, Josh Stone
-License: Expat
-
-Files: vendor_rust/base64/LICENSE-MIT
-Copyright: 2015, Alice Maz
-License: Expat
-
-Files: vendor_rust/fnv/LICENSE-MIT
-Copyright: 2017, Contributors
-License: Expat
-
-Files: vendor_rust/hashbrown/LICENSE-MIT
-Copyright: 2016, Amanieu d'Antras
-License: Expat
-
-Files: vendor_rust/heck/LICENSE-MIT
-Copyright: 2015, The Rust Project Developers
-License: Expat
-
-Files: vendor_rust/httpdate/LICENSE-MIT
-Copyright: 2016, Pyfisch
-License: Expat
-
-Files: vendor_rust/hyper-timeout/LICENSE-MIT
-Copyright: 2016, The weldr Project Developers
-License: Expat
-
-Files: vendor_rust/multimap/LICENSE-MIT
-Copyright: 2016, multimap developers
-License: Expat
-
-Files: vendor_rust/percent-encoding/LICENSE-MIT
-Copyright: 2013-2025, The rust-url developers
-License: Expat
-
-Files: vendor_rust/bitflags/.cargo-checksum.json
-       vendor_rust/bitflags/CHANGELOG.md
-       vendor_rust/bitflags/CODE_OF_CONDUCT.md
-       vendor_rust/bitflags/CONTRIBUTING.md
-       vendor_rust/bitflags/Cargo.toml
-       vendor_rust/bitflags/README.md
-       vendor_rust/bitflags/SECURITY.md
-       vendor_rust/bitflags/benches/*
-       vendor_rust/bitflags/examples/*
-       vendor_rust/bitflags/spec.md
-       vendor_rust/bitflags/src/*
-Copyright: 2014, The Rust Project Developers
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/bitflags/LICENSE-APACHE
- vendor_rust/bitflags/LICENSE-MIT
- .
- No explicit copyright found, using copyright(s) from:
- vendor_rust/bitflags/LICENSE-APACHE
- vendor_rust/bitflags/LICENSE-MIT
-
-Files: vendor_rust/num-traits/.cargo-checksum.json
-       vendor_rust/num-traits/Cargo.toml
-       vendor_rust/num-traits/README.md
-       vendor_rust/num-traits/RELEASES.md
-       vendor_rust/num-traits/build.rs
-       vendor_rust/num-traits/src/*
-       vendor_rust/num-traits/tests/*
-Copyright: 2013-2014, The Rust Project Developers
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/num-traits/LICENSE-APACHE
- vendor_rust/num-traits/LICENSE-MIT
- .
- No explicit copyright found, using copyright(s) from:
- vendor_rust/num-traits/LICENSE-APACHE
- vendor_rust/num-traits/LICENSE-MIT
-
-Files: vendor_rust/log/.cargo-checksum.json
-       vendor_rust/log/CHANGELOG.md
-       vendor_rust/log/Cargo.toml
-       vendor_rust/log/README.md
-       vendor_rust/log/benches/*
-       vendor_rust/log/src/*
-       vendor_rust/log/triagebot.toml
-Copyright: 2014-2015, The Rust Project Developers
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/log/LICENSE-APACHE
- vendor_rust/log/LICENSE-MIT
- .
- No explicit copyright found, using copyright(s) from:
- vendor_rust/log/LICENSE-APACHE
- vendor_rust/log/LICENSE-MIT
-
-Files: vendor_rust/hex/.cargo-checksum.json
-       vendor_rust/hex/Cargo.toml
-       vendor_rust/hex/README.md
-       vendor_rust/hex/benches/*
-       vendor_rust/hex/src/*
-       vendor_rust/hex/tests/*
-Copyright: 2013-2014, The Rust Project Developers
-           2015-2020, The rust-hex Developers
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/hex/LICENSE-APACHE
- vendor_rust/hex/LICENSE-MIT
- .
- No explicit copyright found, using copyright(s) from:
- vendor_rust/hex/LICENSE-APACHE
- vendor_rust/hex/LICENSE-MIT
-
-Files: vendor_rust/errno/src/*
-Copyright: 2014-2015, The Rust Project Developers
-License: Apache-2 or Expat
-
-Files: vendor_rust/chrono/src/offset/local/unix.rs
-       vendor_rust/chrono/src/offset/local/windows.rs
-       vendor_rust/chrono/src/time_delta.rs
-Copyright: 2012-2014, The Rust Project Developers
-License: Apache-2 or Expat
-
-Files: vendor_rust/cc/src/*
-Copyright: 2015-2017, winapi-rs developers
-License: Apache-2 or Expat
-
-Files: vendor_rust/cc/src/windows/find_tools.rs
-       vendor_rust/cc/src/windows/registry.rs
-Copyright: 2015, The Rust Project Developers
-License: Apache-2 or Expat
-
-Files: vendor_rust/tempfile/src/dir/mod.rs
-       vendor_rust/tempfile/tests/tempdir.rs
-Copyright: 2013-2015, The Rust Project Developers
-License: Apache-2 or Expat
-
-Files: vendor_rust/linux-raw-sys/COPYRIGHT
-       vendor_rust/linux-raw-sys/LICENSE-MIT
-Copyright: assignment is required to contribute to the `linux-raw-sys`
-License: Expat
-Comment: No explicit copyright found, using copyright(s) from:
- vendor_rust/linux-raw-sys/COPYRIGHT
- vendor_rust/linux-raw-sys/LICENSE-APACHE
- vendor_rust/linux-raw-sys/LICENSE-Apache-2.0_WITH_LLVM-exception
- vendor_rust/linux-raw-sys/LICENSE-MIT
-
-Files: vendor_rust/linux-raw-sys-0.4.15/COPYRIGHT
-       vendor_rust/linux-raw-sys-0.4.15/LICENSE-MIT
-Copyright: assignment is required to contribute to the `linux-raw-sys`
-License: Expat
-Comment: No explicit copyright found, using copyright(s) from:
- vendor_rust/linux-raw-sys-0.4.15/COPYRIGHT
- vendor_rust/linux-raw-sys-0.4.15/LICENSE-APACHE
- vendor_rust/linux-raw-sys-0.4.15/LICENSE-Apache-2.0_WITH_LLVM-exception
- vendor_rust/linux-raw-sys-0.4.15/LICENSE-MIT
-
-Files: vendor_rust/rustix/COPYRIGHT
-       vendor_rust/rustix/LICENSE-MIT
-Copyright: assignment is required to contribute to the `rustix`
-License: Expat
-Comment: No explicit copyright found, using copyright(s) from:
- vendor_rust/rustix/COPYRIGHT
- vendor_rust/rustix/LICENSE-APACHE
- vendor_rust/rustix/LICENSE-Apache-2.0_WITH_LLVM-exception
- vendor_rust/rustix/LICENSE-MIT
-
-Files: vendor_rust/rustix-0.38.44/COPYRIGHT
-       vendor_rust/rustix-0.38.44/LICENSE-MIT
-Copyright: assignment is required to contribute to the `rustix`
-License: Expat
-Comment: No explicit copyright found, using copyright(s) from:
- vendor_rust/rustix-0.38.44/COPYRIGHT
- vendor_rust/rustix-0.38.44/LICENSE-APACHE
- vendor_rust/rustix-0.38.44/LICENSE-Apache-2.0_WITH_LLVM-exception
- vendor_rust/rustix-0.38.44/LICENSE-MIT
-
-Files: vendor_rust/flate2/src/*
-Copyright: 2013, The Rust Project Developers
-License: Apache-2 or Expat
-
-Files: vendor_rust/tempfile/LICENSE-MIT
-Copyright: 2015, Steven Allen
-License: Expat
-
-Files: vendor/google.golang.org/protobuf/LICENSE
-       vendor/google.golang.org/protobuf/PATENTS
-       vendor/google.golang.org/protobuf/internal/*
-Copyright: 2018-2025, The Go Authors
-License: BSD-3-clause
-
-Files: vendor/golang.org/x/net/*
-Copyright: 2009-2025, The Go Authors
-License: BSD-3-clause
-
-Files: vendor/golang.org/x/text/*
-Copyright: 2009-2016, The Go Authors
-License: BSD-3-clause
-
-Files: vendor/golang.org/x/exp/*
-Copyright: 2009-2023, The Go Authors
-License: BSD-3-clause
-
-Files: vendor/github.com/atotto/clipboard/clipboard.go
-       vendor/github.com/atotto/clipboard/clipboard_darwin.go
-       vendor/github.com/atotto/clipboard/clipboard_plan9.go
-       vendor/github.com/atotto/clipboard/clipboard_unix.go
-       vendor/github.com/atotto/clipboard/clipboard_windows.go
-Copyright: 2013, atotto
-License: BSD-3-clause
-
-Files: vendor/github.com/spf13/pflag/flag.go
-       vendor/github.com/spf13/pflag/golangflag.go
-Copyright: 2009, The Go Authors
-License: BSD-3-clause
-
-Files: vendor/golang.org/x/sync/*
-Copyright: 2009-2017, The Go Authors
-License: BSD-3-clause
-
-Files: vendor/github.com/go-viper/mapstructure/v2/internal/errors/join_go1_19.go
-Copyright: 2022, The Go Authors
-License: BSD-3-clause
-
-Files: vendor_rust/libc/.cargo-checksum.json
-       vendor_rust/libc/CHANGELOG.md
-       vendor_rust/libc/CONTRIBUTING.md
-       vendor_rust/libc/Cargo.toml
-       vendor_rust/libc/README.md
-       vendor_rust/libc/build.rs
-       vendor_rust/libc/rustfmt.toml
-       vendor_rust/libc/src/*
-       vendor_rust/libc/tests/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/libc/LICENSE-APACHE
- vendor_rust/libc/LICENSE-MIT
-
-Files: vendor_rust/futures-util/.cargo-checksum.json
-       vendor_rust/futures-util/Cargo.toml
-       vendor_rust/futures-util/README.md
-       vendor_rust/futures-util/benches/*
-       vendor_rust/futures-util/src/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/futures-util/LICENSE-APACHE
- vendor_rust/futures-util/LICENSE-MIT
-
-Files: vendor/golang.org/x/sys/plan9/asm.s
-       vendor/golang.org/x/sys/plan9/asm_plan9_386.s
-       vendor/golang.org/x/sys/plan9/asm_plan9_amd64.s
-       vendor/golang.org/x/sys/plan9/asm_plan9_arm.s
-       vendor/golang.org/x/sys/plan9/dir_plan9.go
-       vendor/golang.org/x/sys/plan9/env_plan9.go
-       vendor/golang.org/x/sys/plan9/errors_plan9.go
-       vendor/golang.org/x/sys/plan9/mkall.sh
-       vendor/golang.org/x/sys/plan9/mkerrors.sh
-       vendor/golang.org/x/sys/plan9/mksysnum_plan9.sh
-       vendor/golang.org/x/sys/plan9/pwd_plan9.go
-       vendor/golang.org/x/sys/plan9/race.go
-       vendor/golang.org/x/sys/plan9/race0.go
-       vendor/golang.org/x/sys/plan9/str.go
-       vendor/golang.org/x/sys/plan9/syscall.go
-       vendor/golang.org/x/sys/plan9/syscall_plan9.go
-       vendor/golang.org/x/sys/unix/affinity_linux.go
-       vendor/golang.org/x/sys/unix/aliases.go
-       vendor/golang.org/x/sys/unix/asm_aix_ppc64.s
-       vendor/golang.org/x/sys/unix/asm_bsd_386.s
-       vendor/golang.org/x/sys/unix/asm_bsd_amd64.s
-       vendor/golang.org/x/sys/unix/asm_bsd_arm.s
-       vendor/golang.org/x/sys/unix/asm_bsd_arm64.s
-       vendor/golang.org/x/sys/unix/asm_bsd_ppc64.s
-       vendor/golang.org/x/sys/unix/asm_bsd_riscv64.s
-       vendor/golang.org/x/sys/unix/asm_linux_386.s
-       vendor/golang.org/x/sys/unix/asm_linux_amd64.s
-       vendor/golang.org/x/sys/unix/asm_linux_arm.s
-       vendor/golang.org/x/sys/unix/asm_linux_arm64.s
-       vendor/golang.org/x/sys/unix/asm_linux_loong64.s
-       vendor/golang.org/x/sys/unix/asm_linux_mips64x.s
-       vendor/golang.org/x/sys/unix/asm_linux_mipsx.s
-       vendor/golang.org/x/sys/unix/asm_linux_ppc64x.s
-       vendor/golang.org/x/sys/unix/asm_linux_riscv64.s
-       vendor/golang.org/x/sys/unix/asm_linux_s390x.s
-       vendor/golang.org/x/sys/unix/asm_openbsd_mips64.s
-       vendor/golang.org/x/sys/unix/asm_solaris_amd64.s
-       vendor/golang.org/x/sys/unix/asm_zos_s390x.s
-       vendor/golang.org/x/sys/unix/auxv.go
-       vendor/golang.org/x/sys/unix/auxv_unsupported.go
-       vendor/golang.org/x/sys/unix/bluetooth_linux.go
-       vendor/golang.org/x/sys/unix/bpxsvc_zos.go
-       vendor/golang.org/x/sys/unix/bpxsvc_zos.s
-       vendor/golang.org/x/sys/unix/cap_freebsd.go
-       vendor/golang.org/x/sys/unix/constants.go
-       vendor/golang.org/x/sys/unix/dev_aix_ppc.go
-       vendor/golang.org/x/sys/unix/dev_aix_ppc64.go
-       vendor/golang.org/x/sys/unix/dev_darwin.go
-       vendor/golang.org/x/sys/unix/dev_dragonfly.go
-       vendor/golang.org/x/sys/unix/dev_freebsd.go
-       vendor/golang.org/x/sys/unix/dev_linux.go
-       vendor/golang.org/x/sys/unix/dev_netbsd.go
-       vendor/golang.org/x/sys/unix/dev_openbsd.go
-       vendor/golang.org/x/sys/unix/dev_zos.go
-       vendor/golang.org/x/sys/unix/dirent.go
-       vendor/golang.org/x/sys/unix/endian_big.go
-       vendor/golang.org/x/sys/unix/endian_little.go
-       vendor/golang.org/x/sys/unix/env_unix.go
-       vendor/golang.org/x/sys/unix/fcntl.go
-       vendor/golang.org/x/sys/unix/fcntl_darwin.go
-       vendor/golang.org/x/sys/unix/fcntl_linux_32bit.go
-       vendor/golang.org/x/sys/unix/fdset.go
-       vendor/golang.org/x/sys/unix/gccgo.go
-       vendor/golang.org/x/sys/unix/gccgo_c.c
-       vendor/golang.org/x/sys/unix/gccgo_linux_amd64.go
-       vendor/golang.org/x/sys/unix/ifreq_linux.go
-       vendor/golang.org/x/sys/unix/ioctl_linux.go
-       vendor/golang.org/x/sys/unix/ioctl_signed.go
-       vendor/golang.org/x/sys/unix/ioctl_unsigned.go
-       vendor/golang.org/x/sys/unix/ioctl_zos.go
-       vendor/golang.org/x/sys/unix/mkall.sh
-       vendor/golang.org/x/sys/unix/mkerrors.sh
-       vendor/golang.org/x/sys/unix/mmap_nomremap.go
-       vendor/golang.org/x/sys/unix/mremap.go
-       vendor/golang.org/x/sys/unix/pagesize_unix.go
-       vendor/golang.org/x/sys/unix/pledge_openbsd.go
-       vendor/golang.org/x/sys/unix/ptrace_darwin.go
-       vendor/golang.org/x/sys/unix/ptrace_ios.go
-       vendor/golang.org/x/sys/unix/race.go
-       vendor/golang.org/x/sys/unix/race0.go
-       vendor/golang.org/x/sys/unix/readdirent_getdents.go
-       vendor/golang.org/x/sys/unix/readdirent_getdirentries.go
-       vendor/golang.org/x/sys/unix/sockcmsg_dragonfly.go
-       vendor/golang.org/x/sys/unix/sockcmsg_linux.go
-       vendor/golang.org/x/sys/unix/sockcmsg_unix.go
-       vendor/golang.org/x/sys/unix/sockcmsg_unix_other.go
-       vendor/golang.org/x/sys/unix/sockcmsg_zos.go
-       vendor/golang.org/x/sys/unix/symaddr_zos_s390x.s
-       vendor/golang.org/x/sys/unix/syscall.go
-       vendor/golang.org/x/sys/unix/syscall_aix.go
-       vendor/golang.org/x/sys/unix/syscall_aix_ppc.go
-       vendor/golang.org/x/sys/unix/syscall_aix_ppc64.go
-       vendor/golang.org/x/sys/unix/syscall_bsd.go
-       vendor/golang.org/x/sys/unix/syscall_darwin.go
-       vendor/golang.org/x/sys/unix/syscall_darwin_amd64.go
-       vendor/golang.org/x/sys/unix/syscall_darwin_arm64.go
-       vendor/golang.org/x/sys/unix/syscall_darwin_libSystem.go
-       vendor/golang.org/x/sys/unix/syscall_dragonfly.go
-       vendor/golang.org/x/sys/unix/syscall_dragonfly_amd64.go
-       vendor/golang.org/x/sys/unix/syscall_freebsd.go
-       vendor/golang.org/x/sys/unix/syscall_freebsd_386.go
-       vendor/golang.org/x/sys/unix/syscall_freebsd_amd64.go
-       vendor/golang.org/x/sys/unix/syscall_freebsd_arm.go
-       vendor/golang.org/x/sys/unix/syscall_freebsd_arm64.go
-       vendor/golang.org/x/sys/unix/syscall_freebsd_riscv64.go
-       vendor/golang.org/x/sys/unix/syscall_hurd.go
-       vendor/golang.org/x/sys/unix/syscall_hurd_386.go
-       vendor/golang.org/x/sys/unix/syscall_illumos.go
-       vendor/golang.org/x/sys/unix/syscall_linux.go
-       vendor/golang.org/x/sys/unix/syscall_linux_386.go
-       vendor/golang.org/x/sys/unix/syscall_linux_alarm.go
-       vendor/golang.org/x/sys/unix/syscall_linux_amd64.go
-       vendor/golang.org/x/sys/unix/syscall_linux_amd64_gc.go
-       vendor/golang.org/x/sys/unix/syscall_linux_arm.go
-       vendor/golang.org/x/sys/unix/syscall_linux_arm64.go
-       vendor/golang.org/x/sys/unix/syscall_linux_gc.go
-       vendor/golang.org/x/sys/unix/syscall_linux_gc_386.go
-       vendor/golang.org/x/sys/unix/syscall_linux_gc_arm.go
-       vendor/golang.org/x/sys/unix/syscall_linux_gccgo_386.go
-       vendor/golang.org/x/sys/unix/syscall_linux_gccgo_arm.go
-       vendor/golang.org/x/sys/unix/syscall_linux_loong64.go
-       vendor/golang.org/x/sys/unix/syscall_linux_mips64x.go
-       vendor/golang.org/x/sys/unix/syscall_linux_mipsx.go
-       vendor/golang.org/x/sys/unix/syscall_linux_ppc.go
-       vendor/golang.org/x/sys/unix/syscall_linux_ppc64x.go
-       vendor/golang.org/x/sys/unix/syscall_linux_riscv64.go
-       vendor/golang.org/x/sys/unix/syscall_linux_s390x.go
-       vendor/golang.org/x/sys/unix/syscall_linux_sparc64.go
-       vendor/golang.org/x/sys/unix/syscall_netbsd.go
-       vendor/golang.org/x/sys/unix/syscall_netbsd_386.go
-       vendor/golang.org/x/sys/unix/syscall_netbsd_amd64.go
-       vendor/golang.org/x/sys/unix/syscall_netbsd_arm.go
-       vendor/golang.org/x/sys/unix/syscall_netbsd_arm64.go
-       vendor/golang.org/x/sys/unix/syscall_openbsd.go
-       vendor/golang.org/x/sys/unix/syscall_openbsd_386.go
-       vendor/golang.org/x/sys/unix/syscall_openbsd_amd64.go
-       vendor/golang.org/x/sys/unix/syscall_openbsd_arm.go
-       vendor/golang.org/x/sys/unix/syscall_openbsd_arm64.go
-       vendor/golang.org/x/sys/unix/syscall_openbsd_libc.go
-       vendor/golang.org/x/sys/unix/syscall_openbsd_mips64.go
-       vendor/golang.org/x/sys/unix/syscall_openbsd_ppc64.go
-       vendor/golang.org/x/sys/unix/syscall_openbsd_riscv64.go
-       vendor/golang.org/x/sys/unix/syscall_solaris.go
-       vendor/golang.org/x/sys/unix/syscall_solaris_amd64.go
-       vendor/golang.org/x/sys/unix/syscall_unix.go
-       vendor/golang.org/x/sys/unix/syscall_unix_gc.go
-       vendor/golang.org/x/sys/unix/syscall_unix_gc_ppc64x.go
-       vendor/golang.org/x/sys/unix/syscall_zos_s390x.go
-       vendor/golang.org/x/sys/unix/sysvshm_linux.go
-       vendor/golang.org/x/sys/unix/sysvshm_unix.go
-       vendor/golang.org/x/sys/unix/sysvshm_unix_other.go
-       vendor/golang.org/x/sys/unix/timestruct.go
-       vendor/golang.org/x/sys/unix/unveil_openbsd.go
-       vendor/golang.org/x/sys/unix/vgetrandom_linux.go
-       vendor/golang.org/x/sys/unix/vgetrandom_unsupported.go
-       vendor/golang.org/x/sys/unix/xattr_bsd.go
-       vendor/golang.org/x/sys/unix/zerrors_zos_s390x.go
-       vendor/golang.org/x/sys/unix/ztypes_zos_s390x.go
-       vendor/golang.org/x/sys/windows/aliases.go
-       vendor/golang.org/x/sys/windows/dll_windows.go
-       vendor/golang.org/x/sys/windows/env_windows.go
-       vendor/golang.org/x/sys/windows/eventlog.go
-       vendor/golang.org/x/sys/windows/exec_windows.go
-       vendor/golang.org/x/sys/windows/memory_windows.go
-       vendor/golang.org/x/sys/windows/mkerrors.bash
-       vendor/golang.org/x/sys/windows/mkknownfolderids.bash
-       vendor/golang.org/x/sys/windows/mksyscall.go
-       vendor/golang.org/x/sys/windows/race.go
-       vendor/golang.org/x/sys/windows/race0.go
-       vendor/golang.org/x/sys/windows/security_windows.go
-       vendor/golang.org/x/sys/windows/service.go
-       vendor/golang.org/x/sys/windows/setupapi_windows.go
-       vendor/golang.org/x/sys/windows/str.go
-       vendor/golang.org/x/sys/windows/syscall.go
-       vendor/golang.org/x/sys/windows/syscall_windows.go
-       vendor/golang.org/x/sys/windows/types_windows.go
-       vendor/golang.org/x/sys/windows/types_windows_386.go
-       vendor/golang.org/x/sys/windows/types_windows_amd64.go
-       vendor/golang.org/x/sys/windows/types_windows_arm.go
-       vendor/golang.org/x/sys/windows/types_windows_arm64.go
-Copyright: 2009-2025, The Go Authors
-License: BSD-3-clause
-
-Files: vendor/google.golang.org/protobuf/encoding/*
-       vendor/google.golang.org/protobuf/internal/descfmt/*
-       vendor/google.golang.org/protobuf/internal/descopts/*
-       vendor/google.golang.org/protobuf/internal/detrand/*
-       vendor/google.golang.org/protobuf/internal/editiondefaults/defaults.go
-       vendor/google.golang.org/protobuf/internal/encoding/*
-       vendor/google.golang.org/protobuf/internal/errors/*
-       vendor/google.golang.org/protobuf/internal/filedesc/*
-       vendor/google.golang.org/protobuf/internal/filetype/*
-       vendor/google.golang.org/protobuf/internal/flags/*
-       vendor/google.golang.org/protobuf/internal/genid/*
-       vendor/google.golang.org/protobuf/internal/impl/*
-       vendor/google.golang.org/protobuf/internal/order/*
-       vendor/google.golang.org/protobuf/internal/pragma/*
-       vendor/google.golang.org/protobuf/internal/protolazy/*
-       vendor/google.golang.org/protobuf/internal/set/*
-       vendor/google.golang.org/protobuf/internal/strs/*
-       vendor/google.golang.org/protobuf/internal/version/*
-       vendor/google.golang.org/protobuf/proto/*
-       vendor/google.golang.org/protobuf/protoadapt/*
-       vendor/google.golang.org/protobuf/reflect/*
-       vendor/google.golang.org/protobuf/runtime/*
-Copyright: 2018-2025, The Go Authors
-License: BSD-3-clause
-
-Files: vendor_rust/regex-automata/.cargo-checksum.json
-       vendor_rust/regex-automata/Cargo.toml
-       vendor_rust/regex-automata/README.md
-       vendor_rust/regex-automata/src/*
-       vendor_rust/regex-automata/test
-       vendor_rust/regex-automata/tests/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/regex-automata/LICENSE-APACHE
- vendor_rust/regex-automata/LICENSE-MIT
-
-Files: vendor_rust/pin-project/*
-License: Apache-2
-
-Files: vendor_rust/petgraph/.cargo-checksum.json
-       vendor_rust/petgraph/CONTRIBUTING.rst
-       vendor_rust/petgraph/Cargo.toml
-       vendor_rust/petgraph/LICENSE-APACHE
-       vendor_rust/petgraph/Makefile
-       vendor_rust/petgraph/README.md
-       vendor_rust/petgraph/RELEASES.rst
-       vendor_rust/petgraph/benches/*
-       vendor_rust/petgraph/clippy.toml
-       vendor_rust/petgraph/custom.css
-       vendor_rust/petgraph/graph-example.dot
-       vendor_rust/petgraph/src/*
-       vendor_rust/petgraph/tests/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/petgraph/LICENSE-APACHE
- vendor_rust/petgraph/LICENSE-MIT
-
-Files: vendor_rust/syn/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/syn/LICENSE-APACHE
- vendor_rust/syn/LICENSE-MIT
-
-Files: vendor_rust/pin-project/.cargo-checksum.json
-       vendor_rust/pin-project/CHANGELOG.md
-       vendor_rust/pin-project/Cargo.lock
-       vendor_rust/pin-project/Cargo.toml
-       vendor_rust/pin-project/README.md
-       vendor_rust/pin-project/examples/README.md
-       vendor_rust/pin-project/tests/expand/default/enum.expanded.rs
-       vendor_rust/pin-project/tests/expand/default/struct.expanded.rs
-       vendor_rust/pin-project/tests/expand/default/tuple_struct.expanded.rs
-       vendor_rust/pin-project/tests/expand/multifields/enum.expanded.rs
-       vendor_rust/pin-project/tests/expand/multifields/struct.expanded.rs
-       vendor_rust/pin-project/tests/expand/multifields/tuple_struct.expanded.rs
-       vendor_rust/pin-project/tests/expand/naming/enum-all.expanded.rs
-       vendor_rust/pin-project/tests/expand/naming/enum-mut.expanded.rs
-       vendor_rust/pin-project/tests/expand/naming/enum-none.expanded.rs
-       vendor_rust/pin-project/tests/expand/naming/enum-own.expanded.rs
-       vendor_rust/pin-project/tests/expand/naming/enum-ref.expanded.rs
-       vendor_rust/pin-project/tests/expand/naming/struct-all.expanded.rs
-       vendor_rust/pin-project/tests/expand/naming/struct-mut.expanded.rs
-       vendor_rust/pin-project/tests/expand/naming/struct-none.expanded.rs
-       vendor_rust/pin-project/tests/expand/naming/struct-own.expanded.rs
-       vendor_rust/pin-project/tests/expand/naming/struct-ref.expanded.rs
-       vendor_rust/pin-project/tests/expand/naming/tuple_struct-all.expanded.rs
-       vendor_rust/pin-project/tests/expand/naming/tuple_struct-mut.expanded.rs
-       vendor_rust/pin-project/tests/expand/naming/tuple_struct-none.expanded.rs
-       vendor_rust/pin-project/tests/expand/naming/tuple_struct-own.expanded.rs
-       vendor_rust/pin-project/tests/expand/naming/tuple_struct-ref.expanded.rs
-       vendor_rust/pin-project/tests/expand/not_unpin/enum.expanded.rs
-       vendor_rust/pin-project/tests/expand/not_unpin/struct.expanded.rs
-       vendor_rust/pin-project/tests/expand/not_unpin/tuple_struct.expanded.rs
-       vendor_rust/pin-project/tests/expand/pinned_drop/enum.expanded.rs
-       vendor_rust/pin-project/tests/expand/pinned_drop/struct.expanded.rs
-       vendor_rust/pin-project/tests/expand/pinned_drop/tuple_struct.expanded.rs
-       vendor_rust/pin-project/tests/expand/project_replace/enum.expanded.rs
-       vendor_rust/pin-project/tests/expand/project_replace/struct.expanded.rs
-       vendor_rust/pin-project/tests/expand/project_replace/tuple_struct.expanded.rs
-       vendor_rust/pin-project/tests/expand/pub/enum.expanded.rs
-       vendor_rust/pin-project/tests/expand/pub/struct.expanded.rs
-       vendor_rust/pin-project/tests/expand/pub/tuple_struct.expanded.rs
-       vendor_rust/pin-project/tests/expand/unsafe_unpin/enum.expanded.rs
-       vendor_rust/pin-project/tests/expand/unsafe_unpin/struct.expanded.rs
-       vendor_rust/pin-project/tests/expand/unsafe_unpin/tuple_struct.expanded.rs
-       vendor_rust/pin-project/tests/ui/cfg/cfg_attr-resolve.stderr
-       vendor_rust/pin-project/tests/ui/cfg/cfg_attr-type-mismatch.stderr
-       vendor_rust/pin-project/tests/ui/cfg/packed_sneaky-span-issue-1.stderr
-       vendor_rust/pin-project/tests/ui/cfg/packed_sneaky-span-issue-2.stderr
-       vendor_rust/pin-project/tests/ui/cfg/packed_sneaky.stderr
-       vendor_rust/pin-project/tests/ui/cfg/unsupported.stderr
-       vendor_rust/pin-project/tests/ui/not_unpin/conflict-unpin.stderr
-       vendor_rust/pin-project/tests/ui/not_unpin/impl-unsafe-unpin.stderr
-       vendor_rust/pin-project/tests/ui/not_unpin/negative_impls_stable.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/add-attr-to-struct.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/add-pinned-field.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/conflict-drop.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/conflict-unpin.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/impl-unsafe-unpin.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/import_unnamed.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/invalid.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/negative_impls_stable.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/overlapping_unpin_struct.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/override-priv-mod.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/packed-enum.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/packed-name-value.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/packed.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/packed_sneaky-1.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/packed_sneaky-2.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/packed_sneaky-3.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/packed_sneaky-4.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/project_replace_unsized.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/project_replace_unsized_fn_params.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/remove-attr-from-field.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/remove-attr-from-struct.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/safe_packed_borrows.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/unaligned_references.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/unpin_sneaky.stderr
-       vendor_rust/pin-project/tests/ui/pin_project/visibility.stderr
-       vendor_rust/pin-project/tests/ui/pinned_drop/call-drop-inner.stderr
-       vendor_rust/pin-project/tests/ui/pinned_drop/conditional-drop-impl.stderr
-       vendor_rust/pin-project/tests/ui/pinned_drop/forget-pinned-drop-impl.stderr
-       vendor_rust/pin-project/tests/ui/pinned_drop/invalid-self.stderr
-       vendor_rust/pin-project/tests/ui/pinned_drop/invalid.stderr
-       vendor_rust/pin-project/tests/ui/pinned_drop/pinned-drop-no-attr-arg.stderr
-       vendor_rust/pin-project/tests/ui/pinned_drop/self.stderr
-       vendor_rust/pin-project/tests/ui/pinned_drop/unsafe-call.stderr
-       vendor_rust/pin-project/tests/ui/unsafe_unpin/conflict-unpin.stderr
-       vendor_rust/pin-project/tests/ui/unsafe_unpin/negative_impls_stable.stderr
-       vendor_rust/pin-project/tests/ui/unstable-features/README.md
-       vendor_rust/pin-project/tests/ui/unstable-features/marker_trait_attr-feature-gate.stderr
-       vendor_rust/pin-project/tests/ui/unstable-features/marker_trait_attr.stderr
-       vendor_rust/pin-project/tests/ui/unstable-features/negative_impls.stderr
-       vendor_rust/pin-project/tests/ui/unstable-features/overlapping_marker_traits-feature-gate.stderr
-       vendor_rust/pin-project/tests/ui/unstable-features/overlapping_marker_traits.stderr
-       vendor_rust/pin-project/tests/ui/unstable-features/trivial_bounds-feature-gate.stderr
-       vendor_rust/pin-project/tests/ui/unstable-features/trivial_bounds.stderr
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/pin-project/LICENSE-APACHE
- vendor_rust/pin-project/LICENSE-MIT
-
-Files: vendor_rust/time/.cargo-checksum.json
-       vendor_rust/time/Cargo.toml
-       vendor_rust/time/README.md
-       vendor_rust/time/src/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/time/LICENSE-Apache
- vendor_rust/time/LICENSE-MIT
-
-Files: vendor_rust/itertools/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/itertools/LICENSE-APACHE
- vendor_rust/itertools/LICENSE-MIT
-
-Files: vendor_rust/regex/.cargo-checksum.json
-       vendor_rust/regex/CHANGELOG.md
-       vendor_rust/regex/Cargo.toml
-       vendor_rust/regex/Cross.toml
-       vendor_rust/regex/README.md
-       vendor_rust/regex/UNICODE.md
-       vendor_rust/regex/bench/*
-       vendor_rust/regex/rustfmt.toml
-       vendor_rust/regex/src/*
-       vendor_rust/regex/test
-       vendor_rust/regex/testdata/*
-       vendor_rust/regex/tests/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/regex/LICENSE-APACHE
- vendor_rust/regex/LICENSE-MIT
-
-Files: vendor_rust/flate2/.cargo-checksum.json
-       vendor_rust/flate2/Cargo.toml
-       vendor_rust/flate2/MAINTENANCE.md
-       vendor_rust/flate2/README.md
-       vendor_rust/flate2/examples/*
-       vendor_rust/flate2/src/crc.rs
-       vendor_rust/flate2/src/deflate/*
-       vendor_rust/flate2/src/ffi/*
-       vendor_rust/flate2/src/gz/*
-       vendor_rust/flate2/src/lib.rs
-       vendor_rust/flate2/src/mem.rs
-       vendor_rust/flate2/src/zio.rs
-       vendor_rust/flate2/src/zlib/*
-       vendor_rust/flate2/tests/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/flate2/LICENSE-APACHE
- vendor_rust/flate2/LICENSE-MIT
-
-Files: vendor_rust/anyhow/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/anyhow/LICENSE-APACHE
- vendor_rust/anyhow/LICENSE-MIT
-
-Files: vendor_rust/async-trait/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/async-trait/LICENSE-APACHE
- vendor_rust/async-trait/LICENSE-MIT
-
-Files: vendor_rust/procfs/.cargo-checksum.json
-       vendor_rust/procfs/Cargo.lock
-       vendor_rust/procfs/Cargo.toml
-       vendor_rust/procfs/README.md
-       vendor_rust/procfs/benches/*
-       vendor_rust/procfs/build.rs
-       vendor_rust/procfs/examples/*
-       vendor_rust/procfs/src/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/procfs/LICENSE-APACHE
- vendor_rust/procfs/LICENSE-MIT
-
-Files: vendor/golang.org/x/net/http/*
-       vendor/golang.org/x/net/http2/ascii.go
-       vendor/golang.org/x/net/http2/ciphers.go
-       vendor/golang.org/x/net/http2/client_conn_pool.go
-       vendor/golang.org/x/net/http2/config.go
-       vendor/golang.org/x/net/http2/config_go125.go
-       vendor/golang.org/x/net/http2/config_go126.go
-       vendor/golang.org/x/net/http2/databuffer.go
-       vendor/golang.org/x/net/http2/errors.go
-       vendor/golang.org/x/net/http2/flow.go
-       vendor/golang.org/x/net/http2/frame.go
-       vendor/golang.org/x/net/http2/gotrack.go
-       vendor/golang.org/x/net/http2/hpack/encode.go
-       vendor/golang.org/x/net/http2/hpack/hpack.go
-       vendor/golang.org/x/net/http2/hpack/huffman.go
-       vendor/golang.org/x/net/http2/hpack/tables.go
-       vendor/golang.org/x/net/http2/http2.go
-       vendor/golang.org/x/net/http2/pipe.go
-       vendor/golang.org/x/net/http2/server.go
-       vendor/golang.org/x/net/http2/transport.go
-       vendor/golang.org/x/net/http2/unencrypted.go
-       vendor/golang.org/x/net/http2/write.go
-       vendor/golang.org/x/net/http2/writesched.go
-       vendor/golang.org/x/net/http2/writesched_priority_rfc7540.go
-       vendor/golang.org/x/net/http2/writesched_priority_rfc9218.go
-       vendor/golang.org/x/net/http2/writesched_random.go
-       vendor/golang.org/x/net/http2/writesched_roundrobin.go
-       vendor/golang.org/x/net/idna/go118.go
-       vendor/golang.org/x/net/idna/idna10.0.0.go
-       vendor/golang.org/x/net/idna/idna9.0.0.go
-       vendor/golang.org/x/net/idna/pre_go118.go
-       vendor/golang.org/x/net/idna/punycode.go
-       vendor/golang.org/x/net/idna/trie.go
-       vendor/golang.org/x/net/idna/trie12.0.0.go
-       vendor/golang.org/x/net/idna/trie13.0.0.go
-       vendor/golang.org/x/net/internal/*
-       vendor/golang.org/x/net/trace/*
-Copyright: 2014-2025, The Go Authors
-License: BSD-3-clause
-
-Files: vendor_rust/pin-project-lite/*
-License: Apache-2
-
-Files: vendor_rust/paste/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/paste/LICENSE-APACHE
- vendor_rust/paste/LICENSE-MIT
-
-Files: vendor_rust/regex-syntax/.cargo-checksum.json
-       vendor_rust/regex-syntax/Cargo.toml
-       vendor_rust/regex-syntax/README.md
-       vendor_rust/regex-syntax/benches/*
-       vendor_rust/regex-syntax/src/ast/*
-       vendor_rust/regex-syntax/src/debug.rs
-       vendor_rust/regex-syntax/src/either.rs
-       vendor_rust/regex-syntax/src/error.rs
-       vendor_rust/regex-syntax/src/hir/*
-       vendor_rust/regex-syntax/src/lib.rs
-       vendor_rust/regex-syntax/src/parser.rs
-       vendor_rust/regex-syntax/src/rank.rs
-       vendor_rust/regex-syntax/src/unicode.rs
-       vendor_rust/regex-syntax/src/unicode_tables/age.rs
-       vendor_rust/regex-syntax/src/unicode_tables/case_folding_simple.rs
-       vendor_rust/regex-syntax/src/unicode_tables/general_category.rs
-       vendor_rust/regex-syntax/src/unicode_tables/grapheme_cluster_break.rs
-       vendor_rust/regex-syntax/src/unicode_tables/mod.rs
-       vendor_rust/regex-syntax/src/unicode_tables/perl_decimal.rs
-       vendor_rust/regex-syntax/src/unicode_tables/perl_space.rs
-       vendor_rust/regex-syntax/src/unicode_tables/perl_word.rs
-       vendor_rust/regex-syntax/src/unicode_tables/property_bool.rs
-       vendor_rust/regex-syntax/src/unicode_tables/property_names.rs
-       vendor_rust/regex-syntax/src/unicode_tables/property_values.rs
-       vendor_rust/regex-syntax/src/unicode_tables/script.rs
-       vendor_rust/regex-syntax/src/unicode_tables/script_extension.rs
-       vendor_rust/regex-syntax/src/unicode_tables/sentence_break.rs
-       vendor_rust/regex-syntax/src/unicode_tables/word_break.rs
-       vendor_rust/regex-syntax/src/utf8.rs
-       vendor_rust/regex-syntax/test
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/regex-syntax/LICENSE-APACHE
- vendor_rust/regex-syntax/LICENSE-MIT
-
-Files: vendor_rust/indexmap/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/indexmap/LICENSE-APACHE
- vendor_rust/indexmap/LICENSE-MIT
-
-Files: vendor_rust/pin-project-lite/.cargo-checksum.json
-       vendor_rust/pin-project-lite/CHANGELOG.md
-       vendor_rust/pin-project-lite/Cargo.toml
-       vendor_rust/pin-project-lite/README.md
-       vendor_rust/pin-project-lite/tests/expand/default/enum.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/default/struct.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/multifields/enum.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/multifields/struct.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/naming/enum-all.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/naming/enum-mut.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/naming/enum-none.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/naming/enum-ref.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/naming/struct-all.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/naming/struct-mut.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/naming/struct-none.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/naming/struct-ref.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/not_unpin/enum.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/not_unpin/struct.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/pinned_drop/enum.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/pinned_drop/struct.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/pub/enum.expanded.rs
-       vendor_rust/pin-project-lite/tests/expand/pub/struct.expanded.rs
-       vendor_rust/pin-project-lite/tests/ui/not_unpin/conflict-unpin.stderr
-       vendor_rust/pin-project-lite/tests/ui/not_unpin/negative_impls_stable.stderr
-       vendor_rust/pin-project-lite/tests/ui/pin_project/conflict-drop.stderr
-       vendor_rust/pin-project-lite/tests/ui/pin_project/conflict-unpin.stderr
-       vendor_rust/pin-project-lite/tests/ui/pin_project/invalid-bounds.stderr
-       vendor_rust/pin-project-lite/tests/ui/pin_project/invalid.stderr
-       vendor_rust/pin-project-lite/tests/ui/pin_project/negative_impls_stable.stderr
-       vendor_rust/pin-project-lite/tests/ui/pin_project/overlapping_lifetime_names.stderr
-       vendor_rust/pin-project-lite/tests/ui/pin_project/overlapping_unpin_struct.stderr
-       vendor_rust/pin-project-lite/tests/ui/pin_project/packed.stderr
-       vendor_rust/pin-project-lite/tests/ui/pin_project/unpin_sneaky.stderr
-       vendor_rust/pin-project-lite/tests/ui/pin_project/unsupported.stderr
-       vendor_rust/pin-project-lite/tests/ui/pinned_drop/call-drop-inner.stderr
-       vendor_rust/pin-project-lite/tests/ui/pinned_drop/conditional-drop-impl.stderr
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/pin-project-lite/LICENSE-APACHE
- vendor_rust/pin-project-lite/LICENSE-MIT
-
-Files: vendor_rust/prettyplease/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/prettyplease/LICENSE-APACHE
- vendor_rust/prettyplease/LICENSE-MIT
-
-Files: vendor_rust/rustversion/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/rustversion/LICENSE-APACHE
- vendor_rust/rustversion/LICENSE-MIT
-
-Files: vendor_rust/procfs-core/.cargo-checksum.json
-       vendor_rust/procfs-core/Cargo.toml
-       vendor_rust/procfs-core/README.md
-       vendor_rust/procfs-core/src/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/procfs-core/LICENSE-APACHE
- vendor_rust/procfs-core/LICENSE-MIT
-
-Files: vendor_rust/cc/.cargo-checksum.json
-       vendor_rust/cc/CHANGELOG.md
-       vendor_rust/cc/Cargo.toml
-       vendor_rust/cc/README.md
-       vendor_rust/cc/clippy.toml
-       vendor_rust/cc/src/command_helpers.rs
-       vendor_rust/cc/src/detect_compiler_family.c
-       vendor_rust/cc/src/flags.rs
-       vendor_rust/cc/src/lib.rs
-       vendor_rust/cc/src/parallel/*
-       vendor_rust/cc/src/target.rs
-       vendor_rust/cc/src/target/*
-       vendor_rust/cc/src/tempfile.rs
-       vendor_rust/cc/src/tool.rs
-       vendor_rust/cc/src/utilities.rs
-       vendor_rust/cc/src/windows/mod.rs
-       vendor_rust/cc/src/windows/vs_instances.rs
-       vendor_rust/cc/src/windows/windows_link.rs
-       vendor_rust/cc/src/windows/windows_sys.rs
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/cc/LICENSE-APACHE
- vendor_rust/cc/LICENSE-MIT
-
-Files: vendor_rust/iana-time-zone/.cargo-checksum.json
-       vendor_rust/iana-time-zone/CHANGELOG.md
-       vendor_rust/iana-time-zone/Cargo.lock
-       vendor_rust/iana-time-zone/Cargo.toml
-       vendor_rust/iana-time-zone/README.md
-       vendor_rust/iana-time-zone/bindings.txt
-       vendor_rust/iana-time-zone/deny.toml
-       vendor_rust/iana-time-zone/examples/*
-       vendor_rust/iana-time-zone/src/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/iana-time-zone/LICENSE-APACHE
- vendor_rust/iana-time-zone/LICENSE-MIT
-
-Files: vendor_rust/proc-macro2/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/proc-macro2/LICENSE-APACHE
- vendor_rust/proc-macro2/LICENSE-MIT
-
-Files: vendor_rust/serde/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/serde/LICENSE-APACHE
- vendor_rust/serde/LICENSE-MIT
-
-Files: vendor/github.com/mattn/go-localereader/*
-       vendor_rust/addr2line/*
-       vendor_rust/backtrace/*
-       vendor_rust/gimli/*
-       vendor_rust/object/*
-       vendor_rust/rustc-demangle/*
-       vendor_rust/serde_derive/*
-       vendor_rust/wasi/*
-License: GPL-3+ or LGPL-3+
-Comment: No explicit license found, using license(s) from:
- COPYING
- COPYING.LESSER
-
-Files: vendor/golang.org/x/text/encoding/encoding.go
-       vendor/golang.org/x/text/encoding/internal/identifier/identifier.go
-       vendor/golang.org/x/text/encoding/internal/internal.go
-       vendor/golang.org/x/text/encoding/unicode/*
-       vendor/golang.org/x/text/internal/*
-       vendor/golang.org/x/text/runes/*
-       vendor/golang.org/x/text/secure/*
-       vendor/golang.org/x/text/transform/*
-       vendor/golang.org/x/text/unicode/bidi/bidi.go
-       vendor/golang.org/x/text/unicode/bidi/bracket.go
-       vendor/golang.org/x/text/unicode/bidi/core.go
-       vendor/golang.org/x/text/unicode/bidi/prop.go
-       vendor/golang.org/x/text/unicode/norm/composition.go
-       vendor/golang.org/x/text/unicode/norm/forminfo.go
-       vendor/golang.org/x/text/unicode/norm/input.go
-       vendor/golang.org/x/text/unicode/norm/iter.go
-       vendor/golang.org/x/text/unicode/norm/normalize.go
-       vendor/golang.org/x/text/unicode/norm/readwriter.go
-       vendor/golang.org/x/text/unicode/norm/transform.go
-       vendor/golang.org/x/text/unicode/norm/trie.go
-Copyright: 2011-2016, The Go Authors
-License: BSD-3-clause
-
-Files: vendor_rust/once_cell/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/once_cell/LICENSE-APACHE
- vendor_rust/once_cell/LICENSE-MIT
-
-Files: vendor_rust/colored/*
-License: MPL-2
-Comment: No explicit license found, using license(s) from:
- vendor_rust/colored/LICENSE
-
-Files: vendor_rust/time-macros/.cargo-checksum.json
-       vendor_rust/time-macros/Cargo.toml
-       vendor_rust/time-macros/src/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/time-macros/LICENSE-Apache
- vendor_rust/time-macros/LICENSE-MIT
-
-Files: vendor_rust/miniz_oxide/.cargo-checksum.json
-       vendor_rust/miniz_oxide/Cargo.toml
-       vendor_rust/miniz_oxide/Readme.md
-       vendor_rust/miniz_oxide/src/*
-License: Apache-2 or Expat or Zlib
-Comment: No explicit license found, using license(s) from:
- vendor_rust/miniz_oxide/LICENSE
- vendor_rust/miniz_oxide/LICENSE-APACHE.md
- vendor_rust/miniz_oxide/LICENSE-MIT.md
- vendor_rust/miniz_oxide/LICENSE-ZLIB.md
-
-Files: vendor/github.com/google/uuid/dce.go
-       vendor/github.com/google/uuid/doc.go
-       vendor/github.com/google/uuid/hash.go
-       vendor/github.com/google/uuid/marshal.go
-       vendor/github.com/google/uuid/node.go
-       vendor/github.com/google/uuid/node_js.go
-       vendor/github.com/google/uuid/node_net.go
-       vendor/github.com/google/uuid/null.go
-       vendor/github.com/google/uuid/sql.go
-       vendor/github.com/google/uuid/time.go
-       vendor/github.com/google/uuid/util.go
-       vendor/github.com/google/uuid/uuid.go
-       vendor/github.com/google/uuid/version1.go
-       vendor/github.com/google/uuid/version4.go
-       vendor/github.com/google/uuid/version6.go
-       vendor/github.com/google/uuid/version7.go
-Copyright: 2016-2023, Google Inc
-License: BSD-3-clause
-
-Files: vendor_rust/httparse/.cargo-checksum.json
-       vendor_rust/httparse/Cargo.toml
-       vendor_rust/httparse/README.md
-       vendor_rust/httparse/benches/*
-       vendor_rust/httparse/build.rs
-       vendor_rust/httparse/clippy.toml
-       vendor_rust/httparse/src/*
-       vendor_rust/httparse/tests/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/httparse/LICENSE-APACHE
- vendor_rust/httparse/LICENSE-MIT
-
-Files: vendor_rust/matchit/.cargo-checksum.json
-       vendor_rust/matchit/Cargo.lock
-       vendor_rust/matchit/Cargo.toml
-       vendor_rust/matchit/README.md
-       vendor_rust/matchit/benches/*
-       vendor_rust/matchit/examples/*
-       vendor_rust/matchit/src/*
-       vendor_rust/matchit/tests/*
-License: BSD-3-clause or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/matchit/LICENSE
- vendor_rust/matchit/LICENSE.httprouter
-
-Files: vendor_rust/fixedbitset/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/fixedbitset/LICENSE-APACHE
- vendor_rust/fixedbitset/LICENSE-MIT
-
-Files: vendor_rust/futures-channel/.cargo-checksum.json
-       vendor_rust/futures-channel/Cargo.toml
-       vendor_rust/futures-channel/README.md
-       vendor_rust/futures-channel/benches/*
-       vendor_rust/futures-channel/src/lib.rs
-       vendor_rust/futures-channel/src/lock.rs
-       vendor_rust/futures-channel/src/mpsc/mod.rs
-       vendor_rust/futures-channel/src/mpsc/sink_impl.rs
-       vendor_rust/futures-channel/src/oneshot.rs
-       vendor_rust/futures-channel/tests/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/futures-channel/LICENSE-APACHE
- vendor_rust/futures-channel/LICENSE-MIT
-
-Files: vendor_rust/lazy_static/.cargo-checksum.json
-       vendor_rust/lazy_static/Cargo.toml
-       vendor_rust/lazy_static/README.md
-       vendor_rust/lazy_static/examples/*
-       vendor_rust/lazy_static/tests/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/lazy_static/LICENSE-APACHE
- vendor_rust/lazy_static/LICENSE-MIT
-
-Files: vendor_rust/smallvec/.cargo-checksum.json
-       vendor_rust/smallvec/Cargo.toml
-       vendor_rust/smallvec/README.md
-       vendor_rust/smallvec/benches/*
-       vendor_rust/smallvec/debug_metadata/*
-       vendor_rust/smallvec/scripts/*
-       vendor_rust/smallvec/src/*
-       vendor_rust/smallvec/tests/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/smallvec/LICENSE-APACHE
- vendor_rust/smallvec/LICENSE-MIT
-
-Files: vendor_rust/crc32fast/.cargo-checksum.json
-       vendor_rust/crc32fast/Cargo.toml
-       vendor_rust/crc32fast/README.md
-       vendor_rust/crc32fast/benches/*
-       vendor_rust/crc32fast/build.rs
-       vendor_rust/crc32fast/src/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/crc32fast/LICENSE-APACHE
- vendor_rust/crc32fast/LICENSE-MIT
-
-Files: vendor_rust/either/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/either/LICENSE-APACHE
- vendor_rust/either/LICENSE-MIT
-
-Files: vendor/github.com/spf13/afero/LICENSE.txt
-       vendor/github.com/spf13/afero/README.md
-       vendor/github.com/spf13/afero/appveyor.yml
-       vendor/github.com/spf13/afero/basepath.go
-       vendor/github.com/spf13/afero/cacheOnReadFs.go
-       vendor/github.com/spf13/afero/copyOnWriteFs.go
-       vendor/github.com/spf13/afero/iofs.go
-       vendor/github.com/spf13/afero/readonlyfs.go
-       vendor/github.com/spf13/afero/regexpfs.go
-       vendor/github.com/spf13/afero/unionFile.go
-License: Apache-2
-Comment: No explicit license found, using license(s) from:
- vendor/github.com/spf13/afero/LICENSE.txt
-
-Files: vendor_rust/futures-core/.cargo-checksum.json
-       vendor_rust/futures-core/Cargo.toml
-       vendor_rust/futures-core/README.md
-       vendor_rust/futures-core/src/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/futures-core/LICENSE-APACHE
- vendor_rust/futures-core/LICENSE-MIT
-
-Files: vendor_rust/futures-task/.cargo-checksum.json
-       vendor_rust/futures-task/Cargo.toml
-       vendor_rust/futures-task/README.md
-       vendor_rust/futures-task/src/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/futures-task/LICENSE-APACHE
- vendor_rust/futures-task/LICENSE-MIT
-
-Files: vendor_rust/pin-project-internal/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/pin-project-internal/LICENSE-APACHE
- vendor_rust/pin-project-internal/LICENSE-MIT
-
-Files: vendor_rust/fastrand/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/fastrand/LICENSE-APACHE
- vendor_rust/fastrand/LICENSE-MIT
-
-Files: vendor_rust/mime/.cargo-checksum.json
-       vendor_rust/mime/CONTRIBUTING.md
-       vendor_rust/mime/Cargo.toml
-       vendor_rust/mime/README.md
-       vendor_rust/mime/benches/*
-       vendor_rust/mime/src/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/mime/LICENSE-APACHE
- vendor_rust/mime/LICENSE-MIT
-
-Files: vendor/golang.org/x/term/term.go
-       vendor/golang.org/x/term/term_plan9.go
-       vendor/golang.org/x/term/term_unix.go
-       vendor/golang.org/x/term/term_unix_bsd.go
-       vendor/golang.org/x/term/term_unix_other.go
-       vendor/golang.org/x/term/term_unsupported.go
-       vendor/golang.org/x/term/term_windows.go
-       vendor/golang.org/x/term/terminal.go
-Copyright: 2011-2021, The Go Authors
-License: BSD-3-clause
-
-Files: vendor_rust/itoa/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/itoa/LICENSE-APACHE
- vendor_rust/itoa/LICENSE-MIT
-
-Files: vendor_rust/powerfmt/.cargo-checksum.json
-       vendor_rust/powerfmt/Cargo.toml
-       vendor_rust/powerfmt/README.md
-       vendor_rust/powerfmt/src/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/powerfmt/LICENSE-Apache
- vendor_rust/powerfmt/LICENSE-MIT
-
-Files: vendor/golang.org/x/exp/constraints/*
-       vendor/golang.org/x/exp/maps/*
-       vendor/golang.org/x/exp/slices/*
-Copyright: 2021-2023, The Go Authors
-License: BSD-3-clause
-
-Files: vendor/github.com/spf13/cobra/CONDUCT.md
-       vendor/github.com/spf13/cobra/CONTRIBUTING.md
-       vendor/github.com/spf13/cobra/LICENSE.txt
-       vendor/github.com/spf13/cobra/MAINTAINERS
-       vendor/github.com/spf13/cobra/Makefile
-       vendor/github.com/spf13/cobra/README.md
-       vendor/github.com/spf13/cobra/SECURITY.md
-License: Apache-2
-Comment: No explicit license found, using license(s) from:
- vendor/github.com/spf13/cobra/LICENSE.txt
-
-Files: vendor_rust/ctor/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/ctor/LICENSE-APACHE
- vendor_rust/ctor/LICENSE-MIT
-
-Files: vendor_rust/dtor/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/dtor/LICENSE-APACHE
- vendor_rust/dtor/LICENSE-MIT
-
-Files: vendor_rust/unicase/.cargo-checksum.json
-       vendor_rust/unicase/Cargo.toml
-       vendor_rust/unicase/README.md
-       vendor_rust/unicase/src/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/unicase/LICENSE-APACHE
- vendor_rust/unicase/LICENSE-MIT
-
-Files: vendor_rust/cfg-if/.cargo-checksum.json
-       vendor_rust/cfg-if/CHANGELOG.md
-       vendor_rust/cfg-if/Cargo.toml
-       vendor_rust/cfg-if/README.md
-       vendor_rust/cfg-if/src/*
-       vendor_rust/cfg-if/tests/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/cfg-if/LICENSE-APACHE
- vendor_rust/cfg-if/LICENSE-MIT
-
-Files: vendor_rust/time-core/.cargo-checksum.json
-       vendor_rust/time-core/Cargo.toml
-       vendor_rust/time-core/src/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/time-core/LICENSE-Apache
- vendor_rust/time-core/LICENSE-MIT
-
-Files: vendor_rust/ctor-proc-macro/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/ctor-proc-macro/LICENSE-APACHE
- vendor_rust/ctor-proc-macro/LICENSE-MIT
-
-Files: vendor_rust/dtor-proc-macro/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/dtor-proc-macro/LICENSE-APACHE
- vendor_rust/dtor-proc-macro/LICENSE-MIT
-
-Files: vendor_rust/equivalent/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/equivalent/LICENSE-APACHE
- vendor_rust/equivalent/LICENSE-MIT
-
-Files: vendor_rust/sync_wrapper/.cargo-checksum.json
-       vendor_rust/sync_wrapper/Cargo.toml
-       vendor_rust/sync_wrapper/LICENSE
-       vendor_rust/sync_wrapper/README.md
-License: Apache-2
-Comment: No explicit license found, using license(s) from:
- vendor_rust/sync_wrapper/LICENSE
-
-Files: vendor_rust/futures-sink/.cargo-checksum.json
-       vendor_rust/futures-sink/Cargo.toml
-       vendor_rust/futures-sink/README.md
-       vendor_rust/futures-sink/src/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/futures-sink/LICENSE-APACHE
- vendor_rust/futures-sink/LICENSE-MIT
-
-Files: vendor/github.com/coreos/go-systemd/v22/LICENSE
-       vendor/github.com/coreos/go-systemd/v22/daemon/sdnotify_other.go
-       vendor/github.com/coreos/go-systemd/v22/daemon/sdnotify_unix.go
-License: Apache-2
-
-Files: vendor_rust/num-conv/.cargo-checksum.json
-       vendor_rust/num-conv/Cargo.toml
-       vendor_rust/num-conv/src/*
-License: Apache-2 or Expat
-Comment: No explicit license found, using license(s) from:
- vendor_rust/num-conv/LICENSE-Apache
- vendor_rust/num-conv/LICENSE-MIT
-
-Files: vendor/golang.org/x/sync/errgroup/*
-       vendor/golang.org/x/sync/semaphore/*
-Copyright: 2016-2017, The Go Authors
-License: BSD-3-clause
-
-Files: vendor_rust/linux-raw-sys/LICENSE-APACHE
-       vendor_rust/linux-raw-sys/LICENSE-Apache-2.0_WITH_LLVM-exception
-License: Apache-2
-
-Files: vendor_rust/linux-raw-sys-0.4.15/LICENSE-APACHE
-       vendor_rust/linux-raw-sys-0.4.15/LICENSE-Apache-2.0_WITH_LLVM-exception
-License: Apache-2
-
-Files: vendor_rust/rustix/LICENSE-APACHE
-       vendor_rust/rustix/LICENSE-Apache-2.0_WITH_LLVM-exception
-License: Apache-2
-
-Files: vendor_rust/rustix-0.38.44/LICENSE-APACHE
-       vendor_rust/rustix-0.38.44/LICENSE-Apache-2.0_WITH_LLVM-exception
-License: Apache-2
-
-Files: vendor/google.golang.org/genproto/googleapis/rpc/LICENSE
-License: Apache-2
-
-Files: vendor_rust/adler2/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/anyhow/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/async-trait/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/atomic-waker/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/autocfg/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/base64/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/bitflags/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/cc/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/cfg-if/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/crc32fast/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/ctor/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/ctor-proc-macro/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/dtor/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/dtor-proc-macro/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/equivalent/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/errno/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/fastrand/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/flate2/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/fnv/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/getrandom/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/hashbrown/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/heck/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/httparse/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/httpdate/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/hyper-timeout/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/indexmap/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/itoa/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/lazy_static/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/libc/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/log/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/mime/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/miniz_oxide/LICENSE-APACHE.md
-License: Apache-2
-
-Files: vendor_rust/num-traits/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/once_cell/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/paste/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/prettyplease/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/proc-macro2/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/procfs/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/procfs-core/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/quote/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/regex/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/regex-automata/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/regex-syntax/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/rustversion/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/serde/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/smallvec/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/socket2/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/syn/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/tempfile/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/time/LICENSE-Apache
-License: Apache-2
-
-Files: vendor_rust/time-core/LICENSE-Apache
-License: Apache-2
-
-Files: vendor_rust/time-macros/LICENSE-Apache
-License: Apache-2
-
-Files: vendor_rust/unicase/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/unicode-ident/LICENSE-APACHE
-License: Apache-2
-
-Files: vendor_rust/adler2/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/anyhow/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/async-trait/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/atomic-waker/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/ctor/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/ctor-proc-macro/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/dtor/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/dtor-proc-macro/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/either/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/equivalent/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/fastrand/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/fixedbitset/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/indexmap/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/itertools/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/itoa/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/once_cell/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/paste/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/petgraph/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/pin-project/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/pin-project-internal/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/pin-project-lite/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/prettyplease/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/proc-macro2/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/quote/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/rustversion/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/serde/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/syn/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/unicode-ident/LICENSE-MIT
-License: Expat
-
-Files: vendor_rust/libnss/Cargo.toml
-License: LGPL-3
 
 # License texts
 
-License: Apache-2
+License: 0BSD
+ Copyright (C) Jonas Schievink <jonasschievink@gmail.com>
+ .
+ Permission to use, copy, modify, and/or distribute this software for
+ any purpose with or without fee is hereby granted.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN
+ AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
+ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+License: Apache-2.0
   On Debian systems, the complete text of the Apache License Version 2.0
   can be found in "/usr/share/common-licenses/Apache-2.0".
+
+License: BSD-2-Clause-Views
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions
+  are met:
+  .
+  1. Redistributions of source code must retain the above copyright notice,
+     this list of conditions and the following disclaimer.
+  2. Redistributions in binary form must reproduce the above copyright
+     notice, this list of conditions and the following disclaimer in the
+     documentation and/or other materials provided with the distribution.
+  .
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+  FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  .
+  The views and conclusions contained in the software and documentation are
+  those of the authors and should not be interpreted as representing official
+  policies, either expressed or implied, of the copyright holders or
+  contributors.
 
 License: BSD-2-clause
  Redistribution and use in source and binary forms, with or without
@@ -2653,7 +978,7 @@ License: BSD-3-clause
      may be used to endorse or promote products derived from this software
      without specific prior written permission.
 
-License: CC-BY-SA-3
+License: CC-BY-SA-3.0
     Creative Commons Legal Code
   .
   Attribution-ShareAlike 3.0 Unported
@@ -3014,7 +1339,7 @@ License: CC-BY-SA-3
   .
       Creative Commons may be contacted at https://creativecommons.org/.
 
-License: CC-BY-SA-4
+License: CC-BY-SA-4.0
   Attribution-ShareAlike 4.0 International
   .
   =======================================================================
@@ -3463,16 +1788,16 @@ License: Expat
  THE SOFTWARE.
 
 License: GFDL-NIV-1.2
- On Debian systems, the complete text of the GNU General
- Public License version 3 can be found in "/usr/share/common-licenses/GPL-3".
-
-License: GPL-2+
  On Debian systems, the complete text of the GNU Free Documentation License
  version 1.2 can be found in "/usr/share/common-licenses/GFDL-1.2".
 
+License: GPL-2+
+ On Debian systems, the complete text of the GNU General Public License
+ version 2 can be found in "/usr/share/common-licenses/GPL-2".
+
 License: GPL-3+
- On Debian systems, the complete text of the GNU General
- Public License version 3 can be found in "/usr/share/common-licenses/GPL-3".
+ On Debian systems, the complete text of the GNU General Public License
+ version 3 can be found in "/usr/share/common-licenses/GPL-3".
 
 License: ISC
  Permission to use, copy, modify, and/or distribute this software for any
@@ -3492,19 +1817,6 @@ License: LGPL-2+
  Public License version 2 can be found in "/usr/share/common-licenses/LGPL-2".
 
 License: LGPL-3
- This library is free software; you can redistribute it and/or
- modify it under the terms of the GNU Lesser General Public
- License as published by the Free Software Foundation; either
- version 3 of the License, or (at your option) any later version.
- .
- This library is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
- Lesser General Public License for more details.
- .
- You should have received a copy of the GNU Lesser General Public
- License along with this library; if not, see <http://www.gnu.org/licenses/>.
- .
  On Debian systems, the complete text of the GNU Lesser General
  Public License version 3 can be found in "/usr/share/common-licenses/LGPL-3".
 
@@ -3512,9 +1824,73 @@ License: LGPL-3+
  On Debian systems, the complete text of the GNU Lesser General
  Public License version 3 can be found in "/usr/share/common-licenses/LGPL-3".
 
-License: MPL-2
+License: MPL-2.0
  On Debian systems, the complete text of the Mozilla Public License Version
  2.0 can be found in "/usr/share/common-licenses/MPL-2.0".
+
+License: Unicode-DFS-2016
+ UNICODE, INC. LICENSE AGREEMENT - DATA FILES AND SOFTWARE
+ .
+ Unicode Data Files include all data files under the directories
+ http://www.unicode.org/Public/, http://www.unicode.org/reports/,
+ http://www.unicode.org/cldr/data/, http://source.icu-project.org/repos/icu/, and
+ http://www.unicode.org/utility/trac/browser/.
+ .
+ Unicode Data Files do not include PDF online code charts under the
+ directory http://www.unicode.org/Public/.
+ .
+ Software includes any source code published in the Unicode Standard
+ or under the directories
+ http://www.unicode.org/Public/, http://www.unicode.org/reports/,
+ http://www.unicode.org/cldr/data/, http://source.icu-project.org/repos/icu/, and
+ http://www.unicode.org/utility/trac/browser/.
+ .
+ NOTICE TO USER: Carefully read the following legal agreement.
+ BY DOWNLOADING, INSTALLING, COPYING OR OTHERWISE USING UNICODE INC.'S
+ DATA FILES ("DATA FILES"), AND/OR SOFTWARE ("SOFTWARE"),
+ YOU UNEQUIVOCALLY ACCEPT, AND AGREE TO BE BOUND BY, ALL OF THE
+ TERMS AND CONDITIONS OF THIS AGREEMENT.
+ IF YOU DO NOT AGREE, DO NOT DOWNLOAD, INSTALL, COPY, DISTRIBUTE OR USE
+ THE DATA FILES OR SOFTWARE.
+ .
+ COPYRIGHT AND PERMISSION NOTICE
+ .
+ Copyright © 1991-2018 Unicode, Inc. All rights reserved.
+ Distributed under the Terms of Use in http://www.unicode.org/copyright.html.
+ .
+ Permission is hereby granted, free of charge, to any person obtaining
+ a copy of the Unicode data files and any associated documentation
+ (the "Data Files") or Unicode software and any associated documentation
+ (the "Software") to deal in the Data Files or Software
+ without restriction, including without limitation the rights to use,
+ copy, modify, merge, publish, distribute, and/or sell copies of
+ the Data Files or Software, and to permit persons to whom the Data Files
+ or Software are furnished to do so, provided that either
+ (a) this copyright and permission notice appear with all copies
+ of the Data Files or Software, or
+ (b) this copyright and permission notice appear in associated
+ Documentation.
+ .
+ THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF
+ ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+ WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ NONINFRINGEMENT OF THIRD PARTY RIGHTS.
+ IN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS INCLUDED IN THIS
+ NOTICE BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR CONSEQUENTIAL
+ DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE,
+ DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+ PERFORMANCE OF THE DATA FILES OR SOFTWARE.
+ .
+ Except as contained in this notice, the name of a copyright holder
+ shall not be used in advertising or otherwise to promote the sale,
+ use or other dealings in these Data Files or Software without prior
+ written authorization of the copyright holder.
+
+License: Unlicense
+ This project is dual-licensed under the Unlicense and MIT licenses.
+ .
+ You may use this code under the terms of either license.
 
 License: Zlib
   This software is provided 'as-is', without any express or implied warranty. In
