@@ -3,14 +3,15 @@ Upstream-Name: authd
 Source: https://github.com/canonical/authd
 
 Files: *
-Copyright: 2023, Canonical Ltd.
+Copyright: 2026, Canonical Ltd.
 License: LGPL-3+
 
 Files: cmd/*
-Copyright: 2023, Canonical Ltd.
+Copyright: 2026, Canonical Ltd.
 License: GPL-3+
 
 Files: debian/*
+Copyright: 2026, Canonical Ltd.
 License: LGPL-3+
 
 Files: pam/integration-tests/pam_mkhomedir/pam_mkhomedir.c
