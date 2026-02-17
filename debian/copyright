@@ -3,27 +3,27 @@ Upstream-Name: authd
 Source: https://github.com/canonical/authd
 
 Files: *
-Copyright: 2026, Canonical Ltd.
+Copyright: 2026 Canonical Ltd.
 License: LGPL-3+
 
 Files: cmd/*
-Copyright: 2026, Canonical Ltd.
+Copyright: 2026 Canonical Ltd.
 License: GPL-3+
 
 Files: debian/*
-Copyright: 2026, Canonical Ltd.
+Copyright: 2026 Canonical Ltd.
 License: LGPL-3+
 
 Files: pam/integration-tests/pam_mkhomedir/pam_mkhomedir.c
-Copyright: 2009, Red Hat, Inc.
+Copyright: 2009 Red Hat, Inc.
 License: LGPL-2+
 
 Files: pam/internal/gdm/extensions/*
-Copyright: 2023, Canonical Ltd.
+Copyright: 2023 Canonical Ltd.
 License: GPL-3+
 
 Files: pam/internal/gdm/extensions/gdm-pam-extensions-common.h
-Copyright: 2017, Red Hat, Inc.
+Copyright: 2017 Red Hat, Inc.
 License: GPL-2+
 
 Files: CODE_OF_CONDUCT.md
