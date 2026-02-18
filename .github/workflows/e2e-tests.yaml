@@ -25,6 +25,9 @@ on:
       - '!docs/**'
       - '!examplebroker/**'
       - '!gotestcov'
+      - '!*_test.go'
+      - '!**/testdata/**'
+      - '!**/testutils/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
