@@ -239,11 +239,11 @@ func TestLockUser(t *testing.T) {
 
 		"Error_when_username_is_empty":   {wantErr: true},
 		"Error_when_user_does_not_exist": {username: "doesnotexist", wantErr: true},
-		"Error_when_not_root":            {username: "notroot", currentUserNotRoot: true, wantErr: true},
+		"Error_when_not_root":            {username: "user1", currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			client, m := newUserServiceClient(t, tc.sourceDB)
+			client, m := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
 
 			_, err := client.LockUser(context.Background(), &authd.LockUserRequest{Name: tc.username})
 			if tc.wantErr {
@@ -273,7 +273,7 @@ func TestUnlockUser(t *testing.T) {
 
 		"Error_when_username_is_empty":   {wantErr: true},
 		"Error_when_user_does_not_exist": {username: "doesnotexist", wantErr: true},
-		"Error_when_not_root":            {username: "notroot", currentUserNotRoot: true, wantErr: true},
+		"Error_when_not_root":            {username: "user1", currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -281,7 +281,7 @@ func TestUnlockUser(t *testing.T) {
 				tc.sourceDB = "locked-user.db.yaml"
 			}
 
-			client, m := newUserServiceClient(t, tc.sourceDB)
+			client, m := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
 
 			_, err := client.UnlockUser(context.Background(), &authd.UnlockUserRequest{Name: tc.username})
 			if tc.wantErr {
@@ -321,7 +321,7 @@ func TestSetUserID(t *testing.T) {
 				userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
 			}
 
-			client, _ := newUserServiceClient(t, tc.sourceDB)
+			client, _ := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
 
 			resp, err := client.SetUserID(context.Background(), &authd.SetUserIDRequest{Name: tc.username, Id: tc.newUID})
 			if tc.wantErr {
@@ -359,7 +359,7 @@ func TestSetGroupID(t *testing.T) {
 				userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
 			}
 
-			client, _ := newUserServiceClient(t, tc.sourceDB)
+			client, _ := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
 
 			resp, err := client.SetGroupID(context.Background(), &authd.SetGroupIDRequest{Name: tc.groupname, Id: tc.newGID})
 			if tc.wantErr {
@@ -374,7 +374,7 @@ func TestSetGroupID(t *testing.T) {
 }
 
 // newUserServiceClient returns a new gRPC client for the CLI service.
-func newUserServiceClient(t *testing.T, dbFile string) (client authd.UserServiceClient, userManager *users.Manager) {
+func newUserServiceClient(t *testing.T, dbFile string, currentUserNotRoot ...bool) (client authd.UserServiceClient, userManager *users.Manager) {
 	t.Helper()
 
 	tmpDir, err := os.MkdirTemp("", "authd-socket-dir")
@@ -393,7 +393,13 @@ func newUserServiceClient(t *testing.T, dbFile string) (client authd.UserService
 
 	userManager = newUserManagerForTests(t, dbFile)
 	brokerManager := newBrokersManagerForTests(t)
-	permissionsManager := permissions.New(permissions.Z_ForTests_WithCurrentUserAsRoot())
+
+	var permissionsManager permissions.Manager
+	if len(currentUserNotRoot) > 0 && currentUserNotRoot[0] {
+		permissionsManager = permissions.New()
+	} else {
+		permissionsManager = permissions.New(permissions.Z_ForTests_WithCurrentUserAsRoot())
+	}
 	service := user.NewService(context.Background(), userManager, brokerManager, &permissionsManager)
 
 	grpcServer := grpc.NewServer(permissions.WithUnixPeerCreds(), grpc.ChainUnaryInterceptor(enableCheckGlobalAccess(service), errmessages.RedactErrorInterceptor))
