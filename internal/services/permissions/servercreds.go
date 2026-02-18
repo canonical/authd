@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
-// WithUnixPeerCreds returns the credentials of the caller.
+// WithUnixPeerCreds returns a ServerOption that sets credentials for server connections.
 func WithUnixPeerCreds() grpc.ServerOption {
 	return grpc.Creds(serverPeerCreds{})
 }
@@ -57,7 +57,7 @@ func (serverPeerCreds) ServerHandshake(conn net.Conn) (n net.Conn, c credentials
 		return nil, nil, fmt.Errorf("Control() error: %v", err)
 	}
 
-	return conn, peerCredsInfo{uid: cred.Uid, pid: cred.Pid}, nil
+	return conn, peerAuthInfo{uid: cred.Uid, pid: cred.Pid}, nil
 }
 func (serverPeerCreds) ClientHandshake(_ context.Context, _ string, conn net.Conn) (net.Conn, credentials.AuthInfo, error) {
 	return conn, nil, nil
@@ -66,12 +66,12 @@ func (serverPeerCreds) Info() credentials.ProtocolInfo          { return credent
 func (serverPeerCreds) Clone() credentials.TransportCredentials { return nil }
 func (serverPeerCreds) OverrideServerName(_ string) error       { return nil }
 
-type peerCredsInfo struct {
+type peerAuthInfo struct {
 	uid uint32
 	pid int32
 }
 
 // AuthType returns a string containing the uid and pid of caller.
-func (p peerCredsInfo) AuthType() string {
+func (p peerAuthInfo) AuthType() string {
 	return fmt.Sprintf("uid: %d, pid: %d", p.uid, p.pid)
 }
