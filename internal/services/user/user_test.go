@@ -423,6 +423,48 @@ func TestSetGroupID(t *testing.T) {
 	}
 }
 
+func TestSetShell(t *testing.T) {
+	tests := map[string]struct {
+		sourceDB string
+
+		username           string
+		newShell           string
+		closeDB            bool
+		currentUserNotRoot bool
+
+		wantErr bool
+	}{
+		"Successfully_set_shell":                                  {username: "user1", newShell: "/bin/sh"},
+		"Successfully_set_shell_when_username_has_uppercase_char": {username: "USER1", newShell: "/bin/sh"},
+
+		"Error_when_user_does_not_exist":     {username: "doesnotexist", newShell: "/bin/sh", wantErr: true},
+		"Error_on_database_error":            {username: "user1", newShell: "/bin/sh", closeDB: true, wantErr: true},
+		"Error_when_shell_does_not_exist":    {username: "user1", newShell: "/nonexistent/shell", wantErr: true},
+		"Error_when_shell_is_not_executable": {username: "user1", newShell: "/etc/passwd", wantErr: true},
+		"Error_when_shell_is_a_directory":    {username: "user1", newShell: "/tmp", wantErr: true},
+		"Error_when_shell_path_is_not_valid": {username: "user1", newShell: "notabsolutepath", wantErr: true},
+		"Error_when_not_root_and_not_owner":  {username: "user1", newShell: "/bin/sh", currentUserNotRoot: true, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			client, m := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
+
+			if tc.closeDB {
+				// Close the database to trigger a database error
+				err := userstestutils.DBManager(m).Close()
+				require.NoError(t, err, "Setup: failed to close database")
+			}
+
+			_, err := client.SetShell(context.Background(), &authd.SetShellRequest{Name: tc.username, Shell: tc.newShell})
+			if tc.wantErr {
+				require.Error(t, err, "SetShell should return an error, but did not")
+				return
+			}
+			require.NoError(t, err, "SetShell should not return an error, but did")
+		})
+	}
+}
+
 // newUserServiceClient returns a new gRPC client for the CLI service.
 func newUserServiceClient(t *testing.T, dbFile string, currentUserNotRoot ...bool) (client authd.UserServiceClient, userManager *users.Manager) {
 	t.Helper()
