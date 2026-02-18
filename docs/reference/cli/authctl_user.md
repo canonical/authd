@@ -16,6 +16,7 @@ authctl user [flags]
 
 * [authctl](authctl.md)	 - CLI tool to interact with authd
 * [authctl user lock](authctl_user_lock.md)	 - Lock (disable) a user managed by authd
+* [authctl user set-shell](authctl_user_set-shell.md)	 - Set the login shell for a user
 * [authctl user set-uid](authctl_user_set-uid.md)	 - Set the UID of a user managed by authd
 * [authctl user unlock](authctl_user_unlock.md)	 - Unlock (enable) a user managed by authd
 
