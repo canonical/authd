@@ -21,8 +21,8 @@ type manager struct {
 	db *db.Manager
 }
 
-// GetManagerDB returns the database of the manager.
-func GetManagerDB(m *users.Manager) *db.Manager {
+// DBManager returns the database of the manager.
+func DBManager(m *users.Manager) *db.Manager {
 	//#nosec:G103 // This is only used in tests.
 	mTest := *(*manager)(unsafe.Pointer(m))
 

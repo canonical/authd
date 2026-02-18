@@ -252,7 +252,7 @@ func TestLockUser(t *testing.T) {
 			}
 			require.NoError(t, err, "LockUser should not return an error, but did")
 
-			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Setup: failed to dump database for comparing")
 			golden.CheckOrUpdate(t, dbContent)
 		})
@@ -290,7 +290,7 @@ func TestUnlockUser(t *testing.T) {
 			}
 			require.NoError(t, err, "UnlockUser should not return an error, but did")
 
-			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Setup: failed to dump database for comparing")
 			golden.CheckOrUpdate(t, dbContent)
 		})
