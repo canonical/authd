@@ -21,7 +21,7 @@ func TestNew(t *testing.T) {
 	require.NotNil(t, pm, "New permission manager is created")
 }
 
-func TestIsRequestFromRoot(t *testing.T) {
+func TestCheckRequestIsFromRoot(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
