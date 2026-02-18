@@ -21,6 +21,7 @@ authctl_user
 authctl_user_lock
 authctl_user_unlock
 authctl_user_set-uid
+authctl_user_set-shell
 ```
 
 ```{toctree}
