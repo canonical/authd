@@ -670,7 +670,6 @@ Copyright: 2013-2025 The rust-url developers.
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/petgraph/*
-Copyright: the petgraph project.
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/pin-project/*
@@ -808,10 +807,6 @@ License: Apache-2.0 or Expat
 
 Files: vendor_rust/tempfile/src/dir/mod.rs
 Copyright: 2015 The Rust Project Developers
-License: Apache-2.0 or Expat
-
-Files: vendor_rust/tempfile/tests/*
-Copyright: 2013-2014 The Rust Project Developers
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/time/*
