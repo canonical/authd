@@ -465,6 +465,57 @@ func TestSetShell(t *testing.T) {
 	}
 }
 
+func TestSetUserName(t *testing.T) {
+	tests := map[string]struct {
+		sourceDB string
+
+		oldName            string
+		newName            string
+		closeDB            bool
+		currentUserNotRoot bool
+
+		wantErr bool
+	}{
+		"Successfully_rename_user":                {oldName: "user1", newName: "user1-renamed"},
+		"Successfully_rename_user_with_uppercase": {oldName: "USER1", newName: "USER1-RENAMED"},
+
+		"Error_when_old_username_is_empty":       {oldName: "", newName: "newname", wantErr: true},
+		"Error_when_new_username_is_empty":       {oldName: "user1", newName: "", wantErr: true},
+		"Error_when_user_does_not_exist":         {oldName: "doesnotexist", newName: "newname", wantErr: true},
+		"Error_when_new_username_already_exists": {oldName: "user1", newName: "user2", wantErr: true},
+		"Error_when_old_and_new_names_are_same":  {oldName: "user1", newName: "user1", wantErr: true},
+		"Error_on_database_error":                {oldName: "user1", newName: "newname", closeDB: true, wantErr: true},
+		"Error_when_not_root":                    {oldName: "user1", newName: "newname", currentUserNotRoot: true, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			if !tc.wantErr {
+				userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
+			}
+
+			client, m := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
+
+			if tc.closeDB {
+				// Close the database to trigger a database error
+				err := userstestutils.DBManager(m).Close()
+				require.NoError(t, err, "Setup: failed to close database")
+			}
+
+			_, err := client.SetUserName(context.Background(), &authd.SetUserNameRequest{OldName: tc.oldName, NewName: tc.newName})
+			if tc.wantErr {
+				require.Error(t, err, "SetUserName should return an error, but did not")
+				return
+			}
+			require.NoError(t, err, "SetUserName should not return an error, but did")
+
+			// Verify the rename was successful by checking the database
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
+			require.NoError(t, err, "Setup: failed to dump database for comparing")
+			golden.CheckOrUpdate(t, dbContent)
+		})
+	}
+}
+
 // newUserServiceClient returns a new gRPC client for the CLI service.
 func newUserServiceClient(t *testing.T, dbFile string, currentUserNotRoot ...bool) (client authd.UserServiceClient, userManager *users.Manager) {
 	t.Helper()

@@ -395,3 +395,37 @@ func (l *UserDBLocked) IsUniqueGID(gid uint32) (unique bool, err error) {
 
 	return true, nil
 }
+
+// RenameUserInGroups renames a user in all local groups where they are a member.
+func (l *UserDBLocked) RenameUserInGroups(oldName, newName string) (err error) {
+	defer decorate.OnError(&err, "could not rename user %q to %q in local groups", oldName, newName)
+
+	log.Debugf(context.Background(), "Renaming user %q to %q in local groups", oldName, newName)
+
+	l.MustBeLocked()
+
+	unlock := l.lockGroupFile()
+	defer unlock()
+
+	allGroups, err := l.GetLocalGroupEntries()
+	if err != nil {
+		return err
+	}
+
+	modified := false
+	for i := range allGroups {
+		for j, username := range allGroups[i].Users {
+			if username == oldName {
+				allGroups[i].Users[j] = newName
+				modified = true
+			}
+		}
+	}
+
+	if !modified {
+		log.Debugf(context.Background(), "User %q is not a member of any local groups", oldName)
+		return nil
+	}
+
+	return saveLocalGroups(l, allGroups)
+}

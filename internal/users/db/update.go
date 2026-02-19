@@ -390,3 +390,51 @@ func (m *Manager) SetShell(username, shell string) error {
 	}
 	return nil
 }
+
+// SetUserName updates the username of a user. The home directory is not renamed.
+func (m *Manager) SetUserName(oldName, newName string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Start a transaction
+	tx, err := m.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+
+	// Ensure the transaction is committed or rolled back
+	defer func() {
+		err = commitOrRollBackTransaction(err, tx)
+	}()
+
+	// Check if the old user exists
+	_, err = userByName(tx, oldName)
+	if errors.Is(err, NoDataFoundError{}) {
+		return err
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get user by name: %w", err)
+	}
+
+	// Check if a user with the new name already exists
+	_, err = userByName(tx, newName)
+	if err != nil && !errors.Is(err, NoDataFoundError{}) {
+		return fmt.Errorf("failed to check if new username already exists: %w", err)
+	}
+	if err == nil {
+		log.Errorf(context.TODO(), "Username %q already in use", newName)
+		return fmt.Errorf("username %q already in use", newName)
+	}
+
+	// Update the users table
+	if _, err := tx.Exec(`UPDATE users SET name = ? WHERE name = ?`, newName, oldName); err != nil {
+		return fmt.Errorf("failed to update username: %w", err)
+	}
+
+	// Update the users_to_local_groups table
+	if _, err := tx.Exec(`UPDATE users_to_local_groups SET group_name = ? WHERE group_name = ?`, newName, oldName); err != nil {
+		return fmt.Errorf("failed to update user private group in local groups: %w", err)
+	}
+
+	return nil
+}

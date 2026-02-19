@@ -295,6 +295,31 @@ func (s Service) SetShell(ctx context.Context, req *authd.SetShellRequest) (*aut
 	return &authd.Empty{}, nil
 }
 
+// SetUserName renames a user. It does not rename the user's home directory.
+func (s Service) SetUserName(ctx context.Context, req *authd.SetUserNameRequest) (*authd.Empty, error) {
+	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
+		return nil, status.Error(codes.PermissionDenied, err.Error())
+	}
+
+	// authd uses lowercase usernames.
+	oldName := strings.ToLower(req.GetOldName())
+	newName := strings.ToLower(req.GetNewName())
+
+	if oldName == "" {
+		return nil, status.Error(codes.InvalidArgument, "old username is empty")
+	}
+	if newName == "" {
+		return nil, status.Error(codes.InvalidArgument, "new username is empty")
+	}
+
+	if err := s.userManager.SetUserName(oldName, newName); err != nil {
+		log.Errorf(ctx, "SetUserName: %v", err)
+		return nil, grpcError(err)
+	}
+
+	return &authd.Empty{}, nil
+}
+
 // userToProtobuf converts a types.UserEntry to authd.User.
 func userToProtobuf(u types.UserEntry) *authd.User {
 	return &authd.User{

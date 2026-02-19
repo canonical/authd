@@ -634,6 +634,60 @@ func TestValidateChangedGroups(t *testing.T) {
 	}
 }
 
+func TestRenameUserInGroups(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		groupFilePath string
+		oldName       string
+		newName       string
+
+		wantErr bool
+	}{
+		"Successfully_rename_user_in_groups":           {groupFilePath: "user_in_both_groups.group", oldName: "myuser", newName: "myuser-renamed"},
+		"Successfully_rename_user_in_single_group":     {groupFilePath: "user_in_one_group.group", oldName: "myuser", newName: "myuser-renamed"},
+		"Successfully_rename_user_with_multiple_users": {groupFilePath: "user_and_others_in_one_groups.group", oldName: "myuser", newName: "myuser-renamed"},
+		"No-Op_when_user_not_in_any_group":             {groupFilePath: "no_users_in_our_groups.group", oldName: "myuser", newName: "myuser-renamed"},
+		"Successfully_handle_user_in_many_groups":      {groupFilePath: "user_in_many_groups.group", oldName: "myuser", newName: "myuser-renamed"},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			inputGroupFilePath := filepath.Join("testdata", tc.groupFilePath)
+			outputGroupFilePath := filepath.Join(t.TempDir(), "group")
+
+			if exists, _ := fileutils.FileExists(inputGroupFilePath); exists {
+				tempGroupFile := filepath.Join(t.TempDir(), "group")
+				err := fileutils.CopyFile(inputGroupFilePath, tempGroupFile)
+				require.NoError(t, err, "failed to copy group file for testing")
+				inputGroupFilePath = tempGroupFile
+			}
+
+			defer localentriestestutils.RequireGroupFile(t, outputGroupFilePath, golden.Path(t))
+
+			entries, entriesUnlock, err := localentries.WithUserDBLock(
+				localentries.WithGroupInputPath(inputGroupFilePath),
+				localentries.WithGroupOutputPath(outputGroupFilePath),
+				localentries.WithMockUserDBLocking(),
+			)
+			require.NoError(t, err, "Failed to lock the local entries")
+			t.Cleanup(func() {
+				err := entriesUnlock()
+				require.NoError(t, err, "entriesUnlock should not fail to unlock the local entries")
+			})
+
+			err = entries.RenameUserInGroups(tc.oldName, tc.newName)
+			if tc.wantErr {
+				require.Error(t, err, "RenameUserInGroups should have failed")
+			} else {
+				require.NoError(t, err, "RenameUserInGroups should not have failed")
+			}
+		})
+	}
+}
+
 func TestMain(m *testing.M) {
 	log.SetLevel(log.DebugLevel)
 

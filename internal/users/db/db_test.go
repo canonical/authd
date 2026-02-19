@@ -1052,6 +1052,81 @@ func TestSetShell(t *testing.T) {
 	}
 }
 
+func TestSetUserName(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		dbFile          string
+		oldName         string
+		newName         string
+		wantErr         bool
+		wantErrType     error
+		wantUnchangedDB bool
+	}{
+		"Successfully_rename_user": {
+			dbFile:  "one_user_and_group",
+			oldName: "user1",
+			newName: "user1-renamed",
+		},
+		"Successfully_rename_user_with_local_groups": {
+			dbFile:  "one_user_and_group_with_local_groups",
+			oldName: "user1",
+			newName: "user1-renamed",
+		},
+
+		"Error_when_old_user_does_not_exist": {
+			dbFile:      "one_user_and_group",
+			oldName:     "nonexistent",
+			newName:     "newname",
+			wantErr:     true,
+			wantErrType: db.NoDataFoundError{},
+		},
+		"Error_when_new_username_already_exists": {
+			dbFile:          "multiple_users_and_groups",
+			oldName:         "user1",
+			newName:         "user2",
+			wantErr:         true,
+			wantUnchangedDB: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			m := initDB(t, tc.dbFile)
+
+			oldDBContent := ""
+			if tc.wantUnchangedDB {
+				var err error
+				oldDBContent, err = db.Z_ForTests_DumpNormalizedYAML(m)
+				require.NoError(t, err)
+			}
+
+			err := m.SetUserName(tc.oldName, tc.newName)
+			if tc.wantErrType != nil {
+				require.ErrorIs(t, err, tc.wantErrType, "SetUserName should return expected error")
+				return
+			}
+			if tc.wantErr {
+				require.Error(t, err, "SetUserName should return an error for case %q", name)
+				return
+			}
+			require.NoError(t, err, "SetUserName should not return an error for case %q", name)
+
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(m)
+			require.NoError(t, err)
+
+			if tc.wantUnchangedDB {
+				require.Equal(t, oldDBContent, dbContent, "SetUserName should not change the database content")
+				return
+			}
+
+			golden.CheckOrUpdate(t, dbContent)
+		})
+	}
+}
+
 func TestRemoveDb(t *testing.T) {
 	t.Parallel()
 

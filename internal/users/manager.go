@@ -435,6 +435,7 @@ func (m *Manager) SetUserID(name string, uid uint32) (resp *SetUserIDResp, err e
 		return nil, err
 	}
 
+	// Update the database
 	err = m.db.SetUserID(name, uid)
 	if err != nil {
 		return nil, err
@@ -693,6 +694,64 @@ func (m *Manager) SetShell(username, shell string) (err error) {
 	}
 
 	if err = m.db.SetShell(username, shell); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// SetUserName renames a user.
+func (m *Manager) SetUserName(oldName, newName string) (err error) {
+	if oldName == "" {
+		return errors.New("empty old username")
+	}
+	if newName == "" {
+		return errors.New("empty new username")
+	}
+
+	if oldName == newName {
+		return errors.New("old and new usernames are the same")
+	}
+
+	m.userManagementMu.Lock()
+	defer m.userManagementMu.Unlock()
+
+	// Lock local entries which also locks the user database
+	lockedEntries, unlockEntries, err := localentries.WithUserDBLock()
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, unlockEntries()) }()
+
+	// Check if the old user exists
+	oldUser, err := m.db.UserByName(oldName)
+	if err != nil {
+		return err
+	}
+
+	// Check if a user with the new name already exists in the system
+	unique, err := lockedEntries.IsUniqueUserName(newName)
+	if err != nil {
+		return err
+	}
+	if !unique {
+		return fmt.Errorf("username %q already exists in the system", newName)
+	}
+
+	// Check if the user has active processes
+	err = proc.CheckUserBusy(oldName, oldUser.UID)
+	if err != nil {
+		return err
+	}
+
+	// Update the database
+	err = m.db.SetUserName(oldName, newName)
+	if err != nil {
+		return err
+	}
+
+	// Update local groups
+	if err := lockedEntries.RenameUserInGroups(oldName, newName); err != nil {
 		return err
 	}
 

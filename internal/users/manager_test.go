@@ -1464,6 +1464,116 @@ func TestSetShell(t *testing.T) {
 	}
 }
 
+func TestSetUserName(t *testing.T) {
+	tests := map[string]struct {
+		oldName         string
+		newName         string
+		dbFile          string
+		groupsFile      string
+		nonExistentUser bool
+		emptyOldName    bool
+		emptyNewName    bool
+		sameNames       bool
+		existingNewName bool
+
+		wantErr     bool
+		wantErrType error
+	}{
+		"Successfully_rename_user": {
+			oldName:    "user1",
+			newName:    "user1-renamed",
+			groupsFile: "users_in_groups.group",
+		},
+		"Successfully_rename_user_not_in_local_groups": {
+			oldName:    "user1",
+			newName:    "user1-renamed",
+			groupsFile: "empty.group",
+		},
+
+		// Empty names
+		"Error_if_old_username_is_empty": {
+			emptyOldName: true,
+			newName:      "newname",
+			wantErr:      true,
+		},
+		"Error_if_new_username_is_empty": {
+			oldName:      "user1",
+			emptyNewName: true,
+			wantErr:      true,
+		},
+
+		// Same names
+		"Error_if_old_and_new_names_are_the_same": {
+			oldName:   "user1",
+			sameNames: true,
+			wantErr:   true,
+		},
+
+		// Non-existent user
+		"Error_if_user_does_not_exist": {
+			oldName:         "nonexistent",
+			newName:         "newname",
+			nonExistentUser: true,
+			wantErr:         true,
+			wantErrType:     db.NoDataFoundError{},
+		},
+
+		// Existing new name
+		"Error_if_new_username_already_exists": {
+			dbFile:          "multiple_users_and_groups",
+			oldName:         "user1",
+			existingNewName: true,
+			wantErr:         true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			if tc.groupsFile == "" {
+				tc.groupsFile = "empty.group"
+			}
+			destGroupFile := localgroupstestutils.SetupGroupMock(t,
+				filepath.Join("testdata", "groups", tc.groupsFile))
+
+			if tc.dbFile == "" {
+				tc.dbFile = "one_user_and_group"
+			}
+
+			dbDir := t.TempDir()
+			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
+			require.NoError(t, err, "Setup: could not create database from testdata")
+
+			m := newManagerForTests(t, dbDir)
+
+			oldName := tc.oldName
+			if tc.emptyOldName {
+				oldName = ""
+			}
+
+			newName := tc.newName
+			if tc.emptyNewName {
+				newName = ""
+			} else if tc.sameNames {
+				newName = oldName
+			} else if tc.existingNewName {
+				newName = "user2"
+			}
+
+			err = m.SetUserName(oldName, newName)
+			requireErrorAssertions(t, err, tc.wantErrType, tc.wantErr)
+			if tc.wantErr {
+				return
+			}
+
+			yamlData, err := db.Z_ForTests_DumpNormalizedYAML(m.DB())
+			require.NoError(t, err)
+			golden.CheckOrUpdate(t, yamlData, golden.WithPath("db"))
+
+			localgroupstestutils.RequireGroupFile(t, destGroupFile, filepath.Join(golden.Path(t), "groups"))
+		})
+	}
+}
+
 func requireErrorAssertions(t *testing.T, gotErr, wantErrType error, wantErr bool) {
 	t.Helper()
 

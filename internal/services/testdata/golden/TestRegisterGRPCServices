@@ -57,6 +57,9 @@ authd.UserService:
         - name: SetUserID
           isclientstream: false
           isserverstream: false
+        - name: SetUserName
+          isclientstream: false
+          isserverstream: false
         - name: UnlockUser
           isclientstream: false
           isserverstream: false
