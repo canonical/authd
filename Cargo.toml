@@ -9,3 +9,11 @@ lto = "thin"
 [workspace.metadata.vendor-filter]
 platforms = ["*-unknown-linux-gnu"]
 tier = "2"
+exclude-crate-paths = [
+    { name = "*", exclude = "assets" },
+    { name = "*", exclude = "docs" },
+    { name = "*", exclude = "examples" },
+    { name = "*", exclude = "tests" },
+    { name = "*", exclude = "*.svg" },
+    { name = "*", exclude = "*.png" },
+]
