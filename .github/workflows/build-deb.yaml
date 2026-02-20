@@ -94,7 +94,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Build debian packages and sources
-        uses: canonical/desktop-engineering/gh-actions/common/build-debian@main
+        uses: canonical/desktop-engineering/gh-actions/common/build-debian@debug-bwrap-tests
         with:
           docker-image: ubuntu:${{ matrix.ubuntu-version }}
           # Add the Go backports PPA if we're testing a Ubuntu release which
@@ -325,7 +325,7 @@ jobs:
         merge-multiple: true
 
     - name: Run autopkgtests
-      uses: canonical/desktop-engineering/gh-actions/common/run-autopkgtest@main
+      uses: canonical/desktop-engineering/gh-actions/common/run-autopkgtest@debug-bwrap-tests
       with:
         lxd-image: ubuntu:${{ matrix.ubuntu-version }}
         source-changes: ${{ env.pkg_src_changes }}
