@@ -135,12 +135,12 @@ func RunTestInBubbleWrap(t *testing.T, args ...string) {
 func RequireBubblewrap(t *testing.T) {
 	t.Helper()
 
+	if IsAutoPkgTest() {
+		// The bubblewrap tests currently don't work with autopkgtest
+		t.Skip("Skipping test: cannot run bubblewrap")
+	}
+
 	if !canRunBubblewrap(t) {
-		if IsAutoPkgTest() && !IsCI() {
-			// On launchpad builders, we might not be able to run bubblewrap,
-			// but we don't want to fail the tests in that case.
-			t.Skip("Skipping test: cannot run bubblewrap")
-		}
 		require.Fail(t, "Cannot run bubblewrap")
 	}
 }
