@@ -52,7 +52,7 @@ concurrency:
 
 env:
   UBUNTU_VERSIONS: |
-    ["noble", "plucky", "questing", "devel"]
+    ["noble"]
   CARGO_VENDOR_FILTERER_VERSION: 0.5.16
 
 jobs:
