@@ -609,7 +609,10 @@ func TestConcurrentUserUpdate(t *testing.T) {
 
 			require.GreaterOrEqual(t, g.GID, idGenerator.GIDMin,
 				"Generated GID should be an ID greater or equal to the minimum")
-			require.LessOrEqual(t, g.GID, idGenerator.GIDMax,
+			// The GID of user private groups is set to the same value as the UID, even if GIDMax is smaller,
+			// so we need to check that the generated GID is less or equal to the maximum between GIDMax and UIDMax.
+			gidMax := max(idGenerator.GIDMax, idGenerator.UIDMax)
+			require.LessOrEqual(t, g.GID, gidMax,
 				"Generate GID should be an ID less or equal to the maximum")
 		}
 	})
