@@ -1,13 +1,11 @@
 package user_test
 
 import (
-	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 
 	"github.com/canonical/authd/internal/testutils"
-	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 )
 
@@ -20,8 +18,10 @@ func TestUserLockCommand(t *testing.T) {
 		testutils.WithCurrentUserAsRoot,
 	)
 
-	err := os.Setenv("AUTHD_SOCKET", daemonSocket)
-	require.NoError(t, err, "Failed to set AUTHD_SOCKET environment variable")
+	authctlEnv := []string{
+		"AUTHD_SOCKET=" + daemonSocket,
+		testutils.CoverDirEnv(),
+	}
 
 	tests := map[string]struct {
 		args             []string
@@ -38,6 +38,7 @@ func TestUserLockCommand(t *testing.T) {
 
 			//nolint:gosec // G204 it's safe to use exec.Command with a variable here
 			cmd := exec.Command(authctlPath, append([]string{"user"}, tc.args...)...)
+			cmd.Env = authctlEnv
 			testutils.CheckCommand(t, cmd, tc.expectedExitCode)
 		})
 	}
