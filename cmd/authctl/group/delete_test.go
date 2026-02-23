@@ -1,12 +1,12 @@
 package group_test
 
 import (
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/canonical/authd/internal/envutils"
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -19,8 +19,10 @@ func TestGroupDeleteCommand(t *testing.T) {
 		testutils.WithCurrentUserAsRoot,
 	)
 
-	err := os.Setenv("AUTHD_SOCKET", daemonSocket)
-	require.NoError(t, err, "Failed to set AUTHD_SOCKET environment variable")
+	authctlEnv := []string{
+		"AUTHD_SOCKET=" + daemonSocket,
+		testutils.CoverDirEnv(),
+	}
 
 	tests := map[string]struct {
 		args             []string
@@ -77,18 +79,16 @@ func TestGroupDeleteCommand(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			authctlEnv := append([]string{}, authctlEnv...)
 			if tc.authdUnavailable {
-				origValue := os.Getenv("AUTHD_SOCKET")
-				err := os.Setenv("AUTHD_SOCKET", "/non-existent")
+				var err error
+				authctlEnv, err = envutils.Setenv(authctlEnv, "AUTHD_SOCKET", "/non-existent")
 				require.NoError(t, err, "Failed to set AUTHD_SOCKET environment variable")
-				t.Cleanup(func() {
-					err := os.Setenv("AUTHD_SOCKET", origValue)
-					require.NoError(t, err, "Failed to restore AUTHD_SOCKET environment variable")
-				})
 			}
 
 			//nolint:gosec // G204 it's safe to use exec.Command with a variable here
 			cmd := exec.Command(authctlPath, append([]string{"group"}, tc.args...)...)
+			cmd.Env = authctlEnv
 			if tc.stdin != "" {
 				cmd.Stdin = strings.NewReader(tc.stdin)
 			}
