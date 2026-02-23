@@ -104,7 +104,7 @@ func TestNewManager(t *testing.T) {
 			}
 			require.NoError(t, err, "NewManager should not return an error, but did")
 
-			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Created database should be valid yaml content")
 
 			golden.CheckOrUpdate(t, got)
@@ -131,7 +131,7 @@ func TestStop(t *testing.T) {
 	require.NoError(t, m.Stop(), "Stop should not return an error, but did")
 
 	// Should fail, because the db is closed
-	_, err := userstestutils.GetManagerDB(m).AllUsers()
+	_, err := userstestutils.DBManager(m).AllUsers()
 
 	require.Error(t, err, "AllUsers should return an error, but did not")
 }
@@ -269,7 +269,7 @@ func TestUpdateUser(t *testing.T) {
 				require.Equal(t, oldUID, newUser.UID, "UID should not have changed")
 			}
 
-			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Created database should be valid yaml content")
 
 			golden.CheckOrUpdate(t, got)
@@ -762,7 +762,7 @@ func TestUpdateBrokerForUser(t *testing.T) {
 				return
 			}
 
-			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Created database should be valid yaml content")
 
 			golden.CheckOrUpdate(t, got)
@@ -808,7 +808,7 @@ func TestLockUser(t *testing.T) {
 				return
 			}
 
-			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Created database should be valid yaml content")
 
 			golden.CheckOrUpdate(t, got)
@@ -854,7 +854,7 @@ func TestUnlockUser(t *testing.T) {
 				return
 			}
 
-			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Created database should be valid yaml content")
 
 			golden.CheckOrUpdate(t, got)

@@ -50,6 +50,7 @@ func TestGetUserByName(t *testing.T) {
 
 		dbFile         string
 		shouldPreCheck bool
+		closeDB        bool
 
 		wantErr          bool
 		wantErrNotExists bool
@@ -62,6 +63,7 @@ func TestGetUserByName(t *testing.T) {
 
 		"Error_with_typed_GRPC_notfound_code_on_unexisting_user": {username: "does-not-exists", wantErr: true, wantErrNotExists: true},
 		"Error_on_missing_name":                                  {wantErr: true},
+		"Error_on_database_error":                                {username: "user1", closeDB: true, wantErr: true},
 
 		"Error_if_user_not_in_db_and_precheck_is_disabled":             {username: "user-pre-check", wantErr: true, wantErrNotExists: true},
 		"Error_if_user_not_in_db_and_precheck_fails":                   {username: "does-not-exist", dbFile: "empty.db.yaml", shouldPreCheck: true, wantErr: true, wantErrNotExists: true},
@@ -73,7 +75,13 @@ func TestGetUserByName(t *testing.T) {
 				userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
 			}
 
-			client, _ := newUserServiceClient(t, tc.dbFile)
+			client, m := newUserServiceClient(t, tc.dbFile)
+
+			if tc.closeDB {
+				// Close the database to trigger a database error
+				err := userstestutils.DBManager(m).Close()
+				require.NoError(t, err, "Setup: failed to close database")
+			}
 
 			u, err := client.GetUserByName(context.Background(), &authd.GetUserByNameRequest{Name: tc.username, ShouldPreCheck: tc.shouldPreCheck})
 			requireExpectedResult(t, "GetUserByName", u, err, tc.wantErr, tc.wantErrNotExists)
@@ -93,11 +101,13 @@ func TestGetUserByName(t *testing.T) {
 	}
 }
 
+//nolint:dupl // This is not a duplicate test
 func TestGetUserByID(t *testing.T) {
 	tests := map[string]struct {
 		uid uint32
 
-		dbFile string
+		dbFile  string
+		closeDB bool
 
 		wantErr          bool
 		wantErrNotExists bool
@@ -105,11 +115,18 @@ func TestGetUserByID(t *testing.T) {
 		"Return_existing_user": {uid: 1111},
 
 		"Error_with_typed_GRPC_notfound_code_on_unexisting_user": {uid: 4242, wantErr: true, wantErrNotExists: true},
-		"Error_on_missing_uid": {wantErr: true},
+		"Error_on_missing_uid":    {wantErr: true},
+		"Error_on_database_error": {uid: 1111, closeDB: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			client, _ := newUserServiceClient(t, tc.dbFile)
+			client, m := newUserServiceClient(t, tc.dbFile)
+
+			if tc.closeDB {
+				// Close the database to trigger a database error
+				err := userstestutils.DBManager(m).Close()
+				require.NoError(t, err, "Setup: failed to close database")
+			}
 
 			got, err := client.GetUserByID(context.Background(), &authd.GetUserByIDRequest{Id: tc.uid})
 			requireExpectedResult(t, "GetUserByID", got, err, tc.wantErr, tc.wantErrNotExists)
@@ -121,7 +138,8 @@ func TestGetGroupByName(t *testing.T) {
 	tests := map[string]struct {
 		groupname string
 
-		dbFile string
+		dbFile  string
+		closeDB bool
 
 		wantErr          bool
 		wantErrNotExists bool
@@ -131,10 +149,17 @@ func TestGetGroupByName(t *testing.T) {
 
 		"Error_with_typed_GRPC_notfound_code_on_unexisting_user": {groupname: "does-not-exists", wantErr: true, wantErrNotExists: true},
 		"Error_on_missing_name":                                  {wantErr: true},
+		"Error_on_database_error":                                {groupname: "group1", closeDB: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			client, _ := newUserServiceClient(t, tc.dbFile)
+			client, m := newUserServiceClient(t, tc.dbFile)
+
+			if tc.closeDB {
+				// Close the database to trigger a database error
+				err := userstestutils.DBManager(m).Close()
+				require.NoError(t, err, "Setup: failed to close database")
+			}
 
 			group, err := client.GetGroupByName(context.Background(), &authd.GetGroupByNameRequest{Name: tc.groupname})
 			requireExpectedResult(t, "GetGroupByName", group, err, tc.wantErr, tc.wantErrNotExists)
@@ -147,11 +172,13 @@ func TestGetGroupByName(t *testing.T) {
 	}
 }
 
+//nolint:dupl // This is not a duplicate test
 func TestGetGroupByID(t *testing.T) {
 	tests := map[string]struct {
 		gid uint32
 
-		dbFile string
+		dbFile  string
+		closeDB bool
 
 		wantErr          bool
 		wantErrNotExists bool
@@ -159,11 +186,18 @@ func TestGetGroupByID(t *testing.T) {
 		"Return_existing_group": {gid: 11111},
 
 		"Error_with_typed_GRPC_notfound_code_on_unexisting_user": {gid: 4242, wantErr: true, wantErrNotExists: true},
-		"Error_on_missing_uid": {wantErr: true},
+		"Error_on_missing_uid":    {wantErr: true},
+		"Error_on_database_error": {gid: 11111, closeDB: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			client, _ := newUserServiceClient(t, tc.dbFile)
+			client, m := newUserServiceClient(t, tc.dbFile)
+
+			if tc.closeDB {
+				// Close the database to trigger a database error
+				err := userstestutils.DBManager(m).Close()
+				require.NoError(t, err, "Setup: failed to close database")
+			}
 
 			got, err := client.GetGroupByID(context.Background(), &authd.GetGroupByIDRequest{Id: tc.gid})
 			requireExpectedResult(t, "GetGroupByID", got, err, tc.wantErr, tc.wantErrNotExists)
@@ -173,12 +207,14 @@ func TestGetGroupByID(t *testing.T) {
 
 func TestListUsers(t *testing.T) {
 	tests := map[string]struct {
-		dbFile string
+		dbFile  string
+		closeDB bool
 
 		wantErr bool
 	}{
-		"Return_all_users": {},
-		"Return_no_users":  {dbFile: "empty.db.yaml"},
+		"Return_all_users":        {},
+		"Return_no_users":         {dbFile: "empty.db.yaml"},
+		"Error_on_database_error": {closeDB: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -186,7 +222,13 @@ func TestListUsers(t *testing.T) {
 				tc.dbFile = "default.db.yaml"
 			}
 
-			client, _ := newUserServiceClient(t, tc.dbFile)
+			client, m := newUserServiceClient(t, tc.dbFile)
+
+			if tc.closeDB {
+				// Close the database to trigger a database error
+				err := userstestutils.DBManager(m).Close()
+				require.NoError(t, err, "Setup: failed to close database")
+			}
 
 			resp, err := client.ListUsers(context.Background(), &authd.Empty{})
 			requireExpectedListResult(t, "ListUsers", resp.GetUsers(), err, tc.wantErr)
@@ -196,12 +238,14 @@ func TestListUsers(t *testing.T) {
 
 func TestListGroups(t *testing.T) {
 	tests := map[string]struct {
-		dbFile string
+		dbFile  string
+		closeDB bool
 
 		wantErr bool
 	}{
-		"Return_all_groups": {},
-		"Return_no_groups":  {dbFile: "empty.db.yaml"},
+		"Return_all_groups":       {},
+		"Return_no_groups":        {dbFile: "empty.db.yaml"},
+		"Error_on_database_error": {closeDB: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -209,7 +253,13 @@ func TestListGroups(t *testing.T) {
 				tc.dbFile = "default.db.yaml"
 			}
 
-			client, _ := newUserServiceClient(t, tc.dbFile)
+			client, m := newUserServiceClient(t, tc.dbFile)
+
+			if tc.closeDB {
+				// Close the database to trigger a database error
+				err := userstestutils.DBManager(m).Close()
+				require.NoError(t, err, "Setup: failed to close database")
+			}
 
 			resp, err := client.ListGroups(context.Background(), &authd.Empty{})
 			if tc.wantErr {
@@ -239,11 +289,11 @@ func TestLockUser(t *testing.T) {
 
 		"Error_when_username_is_empty":   {wantErr: true},
 		"Error_when_user_does_not_exist": {username: "doesnotexist", wantErr: true},
-		"Error_when_not_root":            {username: "notroot", currentUserNotRoot: true, wantErr: true},
+		"Error_when_not_root":            {username: "user1", currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			client, m := newUserServiceClient(t, tc.sourceDB)
+			client, m := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
 
 			_, err := client.LockUser(context.Background(), &authd.LockUserRequest{Name: tc.username})
 			if tc.wantErr {
@@ -252,7 +302,7 @@ func TestLockUser(t *testing.T) {
 			}
 			require.NoError(t, err, "LockUser should not return an error, but did")
 
-			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Setup: failed to dump database for comparing")
 			golden.CheckOrUpdate(t, dbContent)
 		})
@@ -273,7 +323,7 @@ func TestUnlockUser(t *testing.T) {
 
 		"Error_when_username_is_empty":   {wantErr: true},
 		"Error_when_user_does_not_exist": {username: "doesnotexist", wantErr: true},
-		"Error_when_not_root":            {username: "notroot", currentUserNotRoot: true, wantErr: true},
+		"Error_when_not_root":            {username: "user1", currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -281,7 +331,7 @@ func TestUnlockUser(t *testing.T) {
 				tc.sourceDB = "locked-user.db.yaml"
 			}
 
-			client, m := newUserServiceClient(t, tc.sourceDB)
+			client, m := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
 
 			_, err := client.UnlockUser(context.Background(), &authd.UnlockUserRequest{Name: tc.username})
 			if tc.wantErr {
@@ -290,15 +340,91 @@ func TestUnlockUser(t *testing.T) {
 			}
 			require.NoError(t, err, "UnlockUser should not return an error, but did")
 
-			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Setup: failed to dump database for comparing")
 			golden.CheckOrUpdate(t, dbContent)
 		})
 	}
 }
 
+//nolint:dupl // This is not a duplicate test
+func TestSetUserID(t *testing.T) {
+	tests := map[string]struct {
+		sourceDB string
+
+		username           string
+		newUID             uint32
+		currentUserNotRoot bool
+
+		wantErr bool
+	}{
+		"Successfully_set_user_id":                {username: "user1", newUID: 5555},
+		"Successfully_set_user_id_with_uppercase": {username: "USER1", newUID: 5555},
+
+		"Error_when_username_is_empty":   {wantErr: true},
+		"Error_when_user_does_not_exist": {username: "doesnotexist", newUID: 5555, wantErr: true},
+		"Error_when_not_root":            {username: "user1", newUID: 5555, currentUserNotRoot: true, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			if !tc.wantErr {
+				userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
+			}
+
+			client, _ := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
+
+			resp, err := client.SetUserID(context.Background(), &authd.SetUserIDRequest{Name: tc.username, Id: tc.newUID})
+			if tc.wantErr {
+				require.Error(t, err, "SetUserID should return an error, but did not")
+				return
+			}
+			require.NoError(t, err, "SetUserID should not return an error, but did")
+
+			golden.CheckOrUpdateYAML(t, resp)
+		})
+	}
+}
+
+//nolint:dupl // This is not a duplicate test
+func TestSetGroupID(t *testing.T) {
+	tests := map[string]struct {
+		sourceDB string
+
+		groupname          string
+		newGID             uint32
+		currentUserNotRoot bool
+
+		wantErr bool
+	}{
+		"Successfully_set_group_id":                {groupname: "group1", newGID: 6666},
+		"Successfully_set_group_id_with_uppercase": {groupname: "GROUP1", newGID: 6666},
+
+		"Error_when_groupname_is_empty":   {wantErr: true},
+		"Error_when_group_does_not_exist": {groupname: "doesnotexist", newGID: 6666, wantErr: true},
+		"Error_when_not_root":             {groupname: "group1", newGID: 6666, currentUserNotRoot: true, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			if !tc.wantErr {
+				userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
+			}
+
+			client, _ := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
+
+			resp, err := client.SetGroupID(context.Background(), &authd.SetGroupIDRequest{Name: tc.groupname, Id: tc.newGID})
+			if tc.wantErr {
+				require.Error(t, err, "SetGroupID should return an error, but did not")
+				return
+			}
+			require.NoError(t, err, "SetGroupID should not return an error, but did")
+
+			golden.CheckOrUpdateYAML(t, resp)
+		})
+	}
+}
+
 // newUserServiceClient returns a new gRPC client for the CLI service.
-func newUserServiceClient(t *testing.T, dbFile string) (client authd.UserServiceClient, userManager *users.Manager) {
+func newUserServiceClient(t *testing.T, dbFile string, currentUserNotRoot ...bool) (client authd.UserServiceClient, userManager *users.Manager) {
 	t.Helper()
 
 	tmpDir, err := os.MkdirTemp("", "authd-socket-dir")
@@ -317,7 +443,13 @@ func newUserServiceClient(t *testing.T, dbFile string) (client authd.UserService
 
 	userManager = newUserManagerForTests(t, dbFile)
 	brokerManager := newBrokersManagerForTests(t)
-	permissionsManager := permissions.New(permissions.Z_ForTests_WithCurrentUserAsRoot())
+
+	var permissionsManager permissions.Manager
+	if len(currentUserNotRoot) > 0 && currentUserNotRoot[0] {
+		permissionsManager = permissions.New()
+	} else {
+		permissionsManager = permissions.New(permissions.Z_ForTests_WithCurrentUserAsRoot())
+	}
 	service := user.NewService(context.Background(), userManager, brokerManager, &permissionsManager)
 
 	grpcServer := grpc.NewServer(permissions.WithUnixPeerCreds(), grpc.ChainUnaryInterceptor(enableCheckGlobalAccess(service), errmessages.RedactErrorInterceptor))
