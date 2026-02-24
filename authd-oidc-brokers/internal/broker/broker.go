@@ -478,13 +478,13 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 			authOpts = append(authOpts, oauth2.SetAuthURLParam("client_secret", secret))
 		}
 
-		log.Debug(ctx, "Retrieving device code...")
+		log.Debug(ctx, "Sending Device Authorization Request to retrieve device code...")
 		response, err := session.oauth2Config.DeviceAuth(ctx, authOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("could not generate Device Authentication code layout: %v", err)
 		}
+		log.Debugf(ctx, "Retrieved device code. Device Authorization Response: %#v", response)
 		session.deviceAuthResponse = response
-		log.Debug(ctx, "Retrieved device code.")
 
 		label := "Open the URL and enter the code below."
 		if authModeID == authmodes.DeviceQr {
