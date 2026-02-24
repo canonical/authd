@@ -158,6 +158,12 @@ jobs:
               --broker "${{ inputs.broker }}" \
               --output-dir "${{ env.OUTPUT_DIR }}"
 
+          # Redact secrets from the test output
+          for file in "${{ env.OUTPUT_DIR }}"/{log,report}.html; do
+            sed -i "s/${E2E_PASSWORD}/<redacted-password>/g" "$file"
+            sed -i "s/${TOTP_SECRET}/<redacted-totp-secret>/g" "$file"
+          done
+
       - name: Upload test results as artifact
         id: upload-results
         if: always()
