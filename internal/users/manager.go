@@ -671,6 +671,12 @@ func (m *Manager) SetShell(username, shell string) (err error) {
 		return errors.New("empty username")
 	}
 
+	// Check if the user exists
+	_, err = m.db.UserByName(username)
+	if err != nil {
+		return err
+	}
+
 	err = checkValidShell(shell)
 	if err != nil {
 		return err

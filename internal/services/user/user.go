@@ -275,19 +275,11 @@ func (s Service) SetShell(ctx context.Context, req *authd.SetShellRequest) (*aut
 	// authd uses lowercase group names.
 	name := strings.ToLower(req.GetName())
 
-	user, err := s.userManager.UserByName(name)
-	if errors.Is(err, users.NoDataFoundError{}) {
-		return nil, status.Errorf(codes.NotFound, "user %q not found", name)
-	}
-	if err != nil {
-		return nil, grpcError(err)
-	}
-
-	if err := s.permissionManager.CheckRequestIsFromRootOrUID(ctx, user.UID); err != nil {
+	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
 		return nil, status.Error(codes.PermissionDenied, err.Error())
 	}
 
-	if err = s.userManager.SetShell(name, req.GetShell()); err != nil {
+	if err := s.userManager.SetShell(name, req.GetShell()); err != nil {
 		log.Errorf(ctx, "SetShell: %v", err)
 		return nil, grpcError(err)
 	}
