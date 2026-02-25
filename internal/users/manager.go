@@ -281,9 +281,10 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 			if err != nil {
 				return err
 			}
+			// If a system group with that name already exists, we log a warning and skip the creation of this group.
 			if !unique {
-				log.Warningf(context.Background(), "Group %q already exists", g.Name)
-				return fmt.Errorf("another system group exists with %q name", g.Name)
+				log.Warningf(context.Background(), "Group '%[1]s' already exists on the system, skipping creation. To have the user added to this local group, add them to the IdP group 'linux-%[1]s'.", g.Name)
+				continue
 			}
 
 			gid, cleanupGID, err := m.idGenerator.GenerateGID(lockedEntries, m)
