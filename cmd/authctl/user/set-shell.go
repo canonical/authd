@@ -5,6 +5,7 @@ import (
 
 	"github.com/canonical/authd/cmd/authctl/internal/client"
 	"github.com/canonical/authd/cmd/authctl/internal/completion"
+	"github.com/canonical/authd/cmd/authctl/internal/log"
 	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/spf13/cobra"
 )
@@ -26,15 +27,20 @@ func runSetShell(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	_, err = svc.SetShell(context.Background(), &authd.SetShellRequest{
+	resp, err := svc.SetShell(context.Background(), &authd.SetShellRequest{
 		Name:  name,
 		Shell: shell,
 	})
-	if err != nil {
+	if resp == nil {
 		return err
 	}
 
-	return nil
+	// Print any warnings returned by the server.
+	for _, warning := range resp.Warnings {
+		log.Warning(warning)
+	}
+
+	return err
 }
 
 func setShellCompletionFunc(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
