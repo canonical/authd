@@ -267,7 +267,8 @@ func checkGoldenFileEqualsString(t *testing.T, got, goldenPath string) {
 	checkFileContent(t, got, string(goldenContent), "Actual", goldenPath)
 }
 
-// CheckOrUpdateFileTree allows comparing a goldPath directory to p. Those can be updated via the dedicated flag.
+// CheckOrUpdateFileTree compares the content and attributes of the files in the provided directory with the golden directory.
+// If the update environment variable is set, the golden directory is updated with the content of the provided directory.
 func CheckOrUpdateFileTree(t *testing.T, path string, options ...Option) {
 	t.Helper()
 
