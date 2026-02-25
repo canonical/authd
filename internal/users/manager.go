@@ -666,36 +666,33 @@ func checkHomeDirOwner(home string, uid, gid uint32) error {
 }
 
 // SetShell sets the shell for the given user.
-func (m *Manager) SetShell(username, shell string) (err error) {
+func (m *Manager) SetShell(username, shell string) (warnings []string, err error) {
 	if username == "" {
-		return errors.New("empty username")
+		return nil, errors.New("empty username")
 	}
 
 	// Check if the user exists
 	_, err = m.db.UserByName(username)
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	err = checkValidShellPath(shell)
+	if err != nil {
+		return nil, err
 	}
 
 	err = checkValidShell(shell)
 	if err != nil {
-		return err
-	}
-
-	stat, err := os.Stat(shell)
-	if errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("shell %q does not exist", shell)
-	}
-
-	if stat.IsDir() || stat.Mode()&0111 == 0 {
-		return fmt.Errorf("shell %q is not executable", shell)
+		// We allow root to set an invalid shell but print a warning
+		warnings = append(warnings, fmt.Sprintf("Warning: %s", err.Error()))
 	}
 
 	if err = m.db.SetShell(username, shell); err != nil {
-		return err
+		return warnings, err
 	}
 
-	return nil
+	return warnings, nil
 }
 
 // BrokerForUser returns the broker ID for the given user.

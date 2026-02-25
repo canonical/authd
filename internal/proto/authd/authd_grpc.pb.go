@@ -411,7 +411,7 @@ type UserServiceClient interface {
 	UnlockUser(ctx context.Context, in *UnlockUserRequest, opts ...grpc.CallOption) (*Empty, error)
 	SetUserID(ctx context.Context, in *SetUserIDRequest, opts ...grpc.CallOption) (*SetUserIDResponse, error)
 	SetGroupID(ctx context.Context, in *SetGroupIDRequest, opts ...grpc.CallOption) (*SetGroupIDResponse, error)
-	SetShell(ctx context.Context, in *SetShellRequest, opts ...grpc.CallOption) (*Empty, error)
+	SetShell(ctx context.Context, in *SetShellRequest, opts ...grpc.CallOption) (*SetShellResponse, error)
 	GetGroupByName(ctx context.Context, in *GetGroupByNameRequest, opts ...grpc.CallOption) (*Group, error)
 	GetGroupByID(ctx context.Context, in *GetGroupByIDRequest, opts ...grpc.CallOption) (*Group, error)
 	ListGroups(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Groups, error)
@@ -495,9 +495,9 @@ func (c *userServiceClient) SetGroupID(ctx context.Context, in *SetGroupIDReques
 	return out, nil
 }
 
-func (c *userServiceClient) SetShell(ctx context.Context, in *SetShellRequest, opts ...grpc.CallOption) (*Empty, error) {
+func (c *userServiceClient) SetShell(ctx context.Context, in *SetShellRequest, opts ...grpc.CallOption) (*SetShellResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Empty)
+	out := new(SetShellResponse)
 	err := c.cc.Invoke(ctx, UserService_SetShell_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -546,7 +546,7 @@ type UserServiceServer interface {
 	UnlockUser(context.Context, *UnlockUserRequest) (*Empty, error)
 	SetUserID(context.Context, *SetUserIDRequest) (*SetUserIDResponse, error)
 	SetGroupID(context.Context, *SetGroupIDRequest) (*SetGroupIDResponse, error)
-	SetShell(context.Context, *SetShellRequest) (*Empty, error)
+	SetShell(context.Context, *SetShellRequest) (*SetShellResponse, error)
 	GetGroupByName(context.Context, *GetGroupByNameRequest) (*Group, error)
 	GetGroupByID(context.Context, *GetGroupByIDRequest) (*Group, error)
 	ListGroups(context.Context, *Empty) (*Groups, error)
@@ -581,7 +581,7 @@ func (UnimplementedUserServiceServer) SetUserID(context.Context, *SetUserIDReque
 func (UnimplementedUserServiceServer) SetGroupID(context.Context, *SetGroupIDRequest) (*SetGroupIDResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetGroupID not implemented")
 }
-func (UnimplementedUserServiceServer) SetShell(context.Context, *SetShellRequest) (*Empty, error) {
+func (UnimplementedUserServiceServer) SetShell(context.Context, *SetShellRequest) (*SetShellResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetShell not implemented")
 }
 func (UnimplementedUserServiceServer) GetGroupByName(context.Context, *GetGroupByNameRequest) (*Group, error) {

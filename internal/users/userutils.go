@@ -2,6 +2,7 @@ package users
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path"
 	"strings"
@@ -32,21 +33,38 @@ func checkValidPasswdField(value string) (err error) {
 	return nil
 }
 
-func checkValidShell(shell string) (err error) {
+func checkValidShellPath(shell string) (err error) {
 	// Do the same checks as systemd-homed in shell_is_ok:
 	// https://github.com/systemd/systemd/blob/ba67af7efb7b743ba1974ef9ceb53fba0e3f9e21/src/home/homectl.c#L2812
 	if err = checkValidPasswdField(shell); err != nil {
 		return err
 	}
+
 	if !path.IsAbs(shell) {
 		return errors.New("shell must be an absolute path")
 	}
+
 	if shell != path.Clean(shell) {
 		return errors.New("shell path must be normalized")
 	}
+
 	// PATH_MAX is counted with the terminating null byte
 	if unix.PathMax-1 < len(shell) {
 		return errors.New("shell path is too long")
+	}
+
+	return nil
+}
+
+func checkValidShell(shell string) (err error) {
+	// Check if the shell exists and is executable
+	stat, err := os.Stat(shell)
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("shell '%s' does not exist", shell)
+	}
+
+	if stat.IsDir() || stat.Mode()&0111 == 0 {
+		return fmt.Errorf("shell '%s' is not an executable file", shell)
 	}
 
 	// Check if the shell is in the list of allowed shells in /etc/shells
@@ -54,8 +72,9 @@ func checkValidShell(shell string) (err error) {
 	if err != nil {
 		return err
 	}
+
 	for _, allowedShell := range strings.Split(string(shells), "\n") {
-		if allowedShell[0] == '#' {
+		if len(allowedShell) > 0 && allowedShell[0] == '#' {
 			// Skip comments
 			continue
 		}
@@ -64,5 +83,5 @@ func checkValidShell(shell string) (err error) {
 		}
 	}
 
-	return errors.New("shell is not allowed in /etc/shells")
+	return fmt.Errorf("shell '%s' is not allowed in /etc/shells", shell)
 }

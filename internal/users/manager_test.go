@@ -1310,9 +1310,27 @@ func TestSetShell(t *testing.T) {
 		emptyShell      bool
 		shell           string
 
-		wantErr bool
+		wantWarnings int
+		wantErr      bool
 	}{
 		"Successfully_set_shell": {},
+
+		"Warning_if_shell_is_not_in_etc_shells": {
+			shell:        "/bin/ls",
+			wantWarnings: 1,
+		},
+		"Warning_if_shell_does_not_exist": {
+			shell:        "/doesnotexist",
+			wantWarnings: 1,
+		},
+		"Warning_if_shell_is_directory": {
+			shell:        "/etc",
+			wantWarnings: 1,
+		},
+		"Warning_if_shell_is_not_executable": {
+			shell:        "/etc/passwd",
+			wantWarnings: 1,
+		},
 
 		// checkValidPasswdField error cases
 		"Error_if_shell_is_empty": {
@@ -1344,7 +1362,7 @@ func TestSetShell(t *testing.T) {
 			wantErr: true,
 		},
 
-		// checkValidShell error cases
+		// checkValidShellPath error cases
 		"Error_if_shell_is_not_absolute_path": {
 			shell:   "bin/sh",
 			wantErr: true,
@@ -1362,19 +1380,7 @@ func TestSetShell(t *testing.T) {
 			wantErr: true,
 		},
 
-		// Other error cases
-		"Error_if_shell_does_not_exist": {
-			shell:   "/doesnotexist",
-			wantErr: true,
-		},
-		"Error_if_shell_is_directory": {
-			shell:   "/etc",
-			wantErr: true,
-		},
-		"Error_if_shell_is_not_executable": {
-			shell:   "/etc/passwd",
-			wantErr: true,
-		},
+		// other error cases
 		"Error_if_user_does_not_exist": {
 			nonExistentUser: true,
 			wantErr:         true,
@@ -1409,15 +1415,20 @@ func TestSetShell(t *testing.T) {
 				shell = tc.shell
 			}
 
-			err = m.SetShell(username, shell)
+			warnings, err := m.SetShell(username, shell)
 			requireErrorAssertions(t, err, nil, tc.wantErr)
+
+			require.Len(t, warnings, tc.wantWarnings, "Number of warnings mismatch")
+
 			if tc.wantErr {
 				return
 			}
 
 			yamlData, err := db.Z_ForTests_DumpNormalizedYAML(m.DB())
 			require.NoError(t, err)
-			golden.CheckOrUpdate(t, yamlData)
+			golden.CheckOrUpdate(t, yamlData, golden.WithPath("db"))
+
+			golden.CheckOrUpdateYAML(t, warnings, golden.WithPath("warnings"))
 		})
 	}
 }
