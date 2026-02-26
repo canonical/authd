@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/msteinert/pam/v2"
-	"github.com/ubuntu/authd/internal/proto/authd"
 )
 
 const (

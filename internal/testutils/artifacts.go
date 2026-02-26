@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/fileutils"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/fileutils"
 )
 
 const (

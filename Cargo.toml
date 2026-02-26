@@ -1,6 +1,6 @@
 [workspace]
 members = ["nss/"]
-exclude = ["vendor_rust/"]
+exclude = ["vendor_rust/", "authd-oidc-brokers/third_party/libhimmelblau/", "parts/libhimmelblau/build"]
 resolver = "2"
 
 [profile.release]
@@ -9,3 +9,11 @@ lto = "thin"
 [workspace.metadata.vendor-filter]
 platforms = ["*-unknown-linux-gnu"]
 tier = "2"
+exclude-crate-paths = [
+    { name = "*", exclude = "assets" },
+    { name = "*", exclude = "docs" },
+    { name = "*", exclude = "examples" },
+    { name = "*", exclude = "tests" },
+    { name = "*", exclude = "*.svg" },
+    { name = "*", exclude = "*.png" },
+]

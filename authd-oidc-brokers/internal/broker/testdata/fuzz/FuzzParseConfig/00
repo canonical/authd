@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("clientID = client_id\nclientSecret = client_secret\nissuerURL = https://issuer.url.com\nhomeBaseDir = /home\nallowedSSHSuffixes = []\n")

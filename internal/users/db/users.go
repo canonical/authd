@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/log"
 )
 
 const allUserColumns = "name, uid, gid, gecos, dir, shell, broker_id, locked"
@@ -172,6 +172,9 @@ func updateUserByID(db queryable, u UserRow) error {
 
 // DeleteUser removes the user from the database.
 func (m *Manager) DeleteUser(uid uint32) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	query := `DELETE FROM users WHERE uid = ?`
 	res, err := m.db.Exec(query, uid)
 	if err != nil {

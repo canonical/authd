@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ubuntu/authd/internal/testsdetection"
+	"github.com/canonical/authd/internal/testsdetection"
 	"go.etcd.io/bbolt"
 	"gopkg.in/yaml.v3"
 )
