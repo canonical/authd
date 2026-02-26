@@ -63,6 +63,9 @@ func RunTestInBubbleWrap(t *testing.T, args ...string) {
 	err := os.MkdirAll(etcDir, 0700)
 	require.NoError(t, err, "Setup: could not create etc dir")
 
+	cwd, err := os.Getwd()
+	require.NoError(t, err, "Setup: could not get current working directory")
+
 	// Copy files needed to create users and groups inside bubblewrap.
 	for _, f := range []string{"passwd", "group", "subgid"} {
 		err := fileutils.CopyFile("/etc/"+f, filepath.Join(etcDir, f))
@@ -94,6 +97,7 @@ func RunTestInBubbleWrap(t *testing.T, args ...string) {
 		"--ro-bind-try", "/etc/timezone", "/etc/timezone",
 		"--ro-bind", "/etc/pam.d", "/etc/pam.d",
 		"--ro-bind", "/etc/security", "/etc/security",
+		"--bind", cwd, cwd,
 
 		// Bind the test binary itself so that it can be run in bubblewrap.
 		"--bind", os.Args[0], os.Args[0],
