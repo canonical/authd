@@ -1,0 +1,14 @@
+name: user1
+uid: 1111
+gecos: |-
+    User1 gecos
+    On multiple lines
+dir: /home/user1
+shell: /bin/bash
+groups:
+    - name: group1
+      gid: 11111
+      ugid: "12345678"
+    - name: commongroup
+      gid: 99999
+      ugid: "87654321"

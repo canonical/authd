@@ -7,15 +7,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
 
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/godbus/dbus/v5"
 	"github.com/msteinert/pam/v2"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/pam/internal/pam_test"
 )
 
 var execModuleSources = []string{"./pam/go-exec/module.c"}
@@ -331,7 +332,7 @@ func TestExecModule(t *testing.T) {
 	}{
 		"Set_user": {
 			item:  pam.User,
-			value: ptrValue("an user"),
+			value: ptrValue("a user"),
 		},
 		"Returns_empty_when_getting_an_unset_user": {
 			item:      pam.User,
@@ -860,9 +861,16 @@ func getModuleArgs(t *testing.T, clientPath string, args []string) []string {
 	if env := testutils.CoverDirEnv(); env != "" {
 		moduleArgs = append(moduleArgs, "--exec-env", env)
 	}
+	if testutils.IsRace() {
+		moduleArgs = append(moduleArgs, "--exec-env", "GORACE")
+	}
+	if testutils.IsAsan() {
+		moduleArgs = append(moduleArgs, "--exec-env", "ASAN_OPTIONS")
+		moduleArgs = append(moduleArgs, "--exec-env", "LSAN_OPTIONS")
+	}
 
 	logFile := os.Stderr.Name()
-	if !testutils.IsVerbose() {
+	if !testing.Verbose() {
 		logFile = prepareFileLogging(t, "exec-module.log")
 	}
 	moduleArgs = append(moduleArgs, "--exec-log", logFile)
@@ -878,7 +886,7 @@ func getModuleArgs(t *testing.T, clientPath string, args []string) []string {
 			clientArgsPath := filepath.Join(t.TempDir(), "client-args-file")
 			require.NoError(t, os.WriteFile(clientArgsPath, []byte(strings.Join(args, "\t")), 0600),
 				"Setup: Creation of client args file failed")
-			saveArtifactsForDebugOnCleanup(t, []string{clientArgsPath})
+			testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, clientArgsPath)
 			return append(moduleArgs, "-client-args-file", clientArgsPath)
 		}
 	}
@@ -916,13 +924,16 @@ func preparePamTransactionForServiceFile(t *testing.T, serviceFile string, user 
 	var tx *pam.Transaction
 	var err error
 
+	runtime.LockOSThread()
+	t.Cleanup(runtime.UnlockOSThread)
+
 	// FIXME: pam.Transaction doesn't handle well pam.ConversationHandler(nil)
 	if conv != nil && !reflect.ValueOf(conv).IsNil() {
 		tx, err = pam.StartConfDir(filepath.Base(serviceFile), user, conv, filepath.Dir(serviceFile))
 	} else {
 		tx, err = pam.StartConfDir(filepath.Base(serviceFile), user, nil, filepath.Dir(serviceFile))
 	}
-	saveArtifactsForDebugOnCleanup(t, []string{serviceFile})
+	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
 	require.NoError(t, err, "PAM: Error to initialize module")
 	require.NotNil(t, tx, "PAM: Transaction is not set")
 	t.Cleanup(func() { require.NoError(t, tx.End(), "PAM: can't end transaction") })
@@ -954,27 +965,17 @@ func buildExecModuleWithCFlags(t *testing.T, cFlags []string, forPreload bool) s
 
 	pkgConfigDeps := []string{"gio-2.0", "gio-unix-2.0"}
 	// t.Name() can be a subtest, so replace the directory slash to get a valid filename.
-	return buildCPAMModule(t, execModuleSources, pkgConfigDeps, cFlags,
-		"pam_authd_exec"+strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_")),
+	return buildSharedModule(t, "Building PAM module", execModuleSources, pkgConfigDeps, cFlags,
+		[]string{"-lpam"}, "pam_authd_exec"+strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_")),
 		forPreload)
 }
 
 func buildExecClient(t *testing.T) string {
 	t.Helper()
 
-	cmd := exec.Command("go", "build", "-C", "cmd/exec-client")
-	cmd.Dir = filepath.Join(testutils.CurrentDir())
-	if testutils.CoverDirForTests() != "" {
-		// -cover is a "positional flag", so it needs to come right after the "build" command.
-		cmd.Args = append(cmd.Args, "-cover")
-	}
-	if testutils.IsAsan() {
-		// -asan is a "positional flag", so it needs to come right after the "build" command.
-		cmd.Args = append(cmd.Args, "-asan")
-	}
-	if testutils.IsRace() {
-		cmd.Args = append(cmd.Args, "-race")
-	}
+	cmd := exec.Command("go", "build")
+	cmd.Dir = filepath.Join(testutils.CurrentDir(), "cmd/exec-client")
+	cmd.Args = append(cmd.Args, testutils.GoBuildFlags()...)
 	cmd.Args = append(cmd.Args, "-gcflags=all=-N -l")
 	cmd.Args = append(cmd.Args, "-tags=pam_tests_exec_client")
 	cmd.Env = append(os.Environ(), `CGO_CFLAGS=-O0 -g3`)

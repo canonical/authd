@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strconv"
 )
 
 // GroupRow represents a group in the database.
@@ -46,7 +45,7 @@ func groupByID(db queryable, gid uint32) (GroupRow, error) {
 	var g GroupRow
 	err := row.Scan(&g.Name, &g.GID, &g.UGID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return GroupRow{}, NoDataFoundError{key: strconv.FormatUint(uint64(gid), 10), table: "groups"}
+		return GroupRow{}, NewGIDNotFoundError(gid)
 	}
 	if err != nil {
 		return GroupRow{}, fmt.Errorf("query error: %w", err)
@@ -93,7 +92,7 @@ func groupByName(db queryable, name string) (GroupRow, error) {
 	var g GroupRow
 	err := row.Scan(&g.Name, &g.GID, &g.UGID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return GroupRow{}, NoDataFoundError{key: name, table: "groups"}
+		return GroupRow{}, NewGroupNotFoundError(name)
 	}
 	if err != nil {
 		return GroupRow{}, fmt.Errorf("query error: %w", err)
@@ -140,7 +139,7 @@ func groupByUGID(db queryable, ugid string) (GroupRow, error) {
 	var g GroupRow
 	err := row.Scan(&g.Name, &g.GID, &g.UGID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return GroupRow{}, NoDataFoundError{key: ugid, table: "groups"}
+		return GroupRow{}, NewGroupNotFoundError(ugid)
 	}
 	if err != nil {
 		return GroupRow{}, fmt.Errorf("query error: %w", err)

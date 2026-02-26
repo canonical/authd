@@ -9,20 +9,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/examplebroker"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
+	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/msteinert/pam/v2"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/examplebroker"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	localgroupstestutils "github.com/ubuntu/authd/internal/users/localentries/testutils"
-	"github.com/ubuntu/authd/pam/internal/pam_test"
 )
 
 const cliTapeBaseCommand = "./pam_authd %s socket=${%s}"
 
 func TestCLIAuthenticate(t *testing.T) {
 	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 
 	clientPath := t.TempDir()
 	cliEnv := preparePamRunnerTest(t, clientPath)
@@ -243,43 +247,52 @@ func TestCLIAuthenticate(t *testing.T) {
 				filepath.Join(outDir, "pam_authd"))
 			require.NoError(t, err, "Setup: symlinking the pam client")
 
-			var socketPath, gpasswdOutput, groupsFile, pidFile string
+			var socketPath, groupFileOutput, pidFile string
 			if tc.wantLocalGroups || tc.currentUserNotRoot || tc.stopDaemonAfter > 0 || tc.oldDB != "" {
 				// For the local groups tests we need to run authd again so that it has
-				// special environment that generates a fake gpasswd output for us to test.
+				// special environment that saves the updated group file to a writable
+				// location for us to test.
 				// Similarly for the not-root tests authd has to run in a more restricted way.
 				// In the other cases this is not needed, so we can just use a shared authd.
-				gpasswdOutput, groupsFile = prepareGPasswdFiles(t)
+				var groupFile string
+				groupFileOutput, groupFile = prepareGroupFiles(t)
+
+				if tc.wantLocalGroups || tc.oldDB != "" {
+					// We don't want to use separate input ant output files here.
+					groupFileOutput = groupFile
+				}
 
 				pidFile = filepath.Join(outDir, "authd.pid")
 
-				socketPath = runAuthd(t, gpasswdOutput, groupsFile, !tc.currentUserNotRoot,
+				args := []testutils.DaemonOption{
+					testutils.WithGroupFile(groupFile),
+					testutils.WithGroupFileOutput(groupFileOutput),
 					testutils.WithPidFile(pidFile),
-					testutils.WithEnvironment(useOldDatabaseEnv(t, tc.oldDB)...))
+					testutils.WithEnvironment(useOldDatabaseEnv(t, tc.oldDB)...),
+				}
+				if !tc.currentUserNotRoot {
+					args = append(args, testutils.WithCurrentUserAsRoot)
+				}
+
+				socketPath = runAuthd(t, args...)
 			} else {
-				socketPath, gpasswdOutput = sharedAuthd(t)
+				socketPath, groupFileOutput = sharedAuthd(t)
 			}
 			if tc.socketPath != "" {
 				socketPath = tc.socketPath
 			}
 
-			td := newTapeData(tc.tape, tc.tapeSettings...)
+			td := newTapeData(tc.tape, outDir, tc.tapeSettings...)
 			td.Command = tapeCommand
 			td.Variables = tc.tapeVariables
 			td.Env[vhsTapeSocketVariable] = socketPath
 			td.Env["AUTHD_TEST_PID_FILE"] = pidFile
 			td.AddClientOptions(t, tc.clientOptions)
-			td.RunVhs(t, vhsTestTypeCLI, outDir, cliEnv)
-			got := td.ExpectedOutput(t, outDir)
+			td.RunVHS(t, vhsTestTypeCLI, cliEnv)
+			got := td.SanitizedOutput(t)
 			golden.CheckOrUpdate(t, got)
 
-			if tc.wantLocalGroups || tc.oldDB != "" {
-				actualGroups, err := os.ReadFile(groupsFile)
-				require.NoError(t, err, "Failed to read the groups file")
-				golden.CheckOrUpdate(t, string(actualGroups), golden.WithSuffix(".groups"))
-			}
-
-			localgroupstestutils.RequireGPasswdOutput(t, gpasswdOutput, golden.Path(t)+".gpasswd_out")
+			localgroupstestutils.RequireGroupFile(t, groupFileOutput, golden.Path(t))
 
 			requireRunnerResultForUser(t, authd.SessionMode_LOGIN, tc.clientOptions.PamUser, got)
 		})
@@ -288,6 +301,10 @@ func TestCLIAuthenticate(t *testing.T) {
 
 func TestCLIChangeAuthTok(t *testing.T) {
 	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 
 	clientPath := t.TempDir()
 	cliEnv := preparePamRunnerTest(t, clientPath)
@@ -376,7 +393,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 			if tc.currentUserNotRoot {
 				// For the not-root tests authd has to run in a more restricted way.
 				// In the other cases this is not needed, so we can just use a shared authd.
-				socketPath = runAuthd(t, os.DevNull, os.DevNull, false)
+				socketPath = runAuthd(t, testutils.WithGroupFile(filepath.Join(t.TempDir(), "group")))
 			} else {
 				socketPath, _ = sharedAuthd(t)
 			}
@@ -388,13 +405,13 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				tc.tapeVariables[vhsTapeUserVariable] = vhsTestUserName(t, "cli-passwd")
 			}
 
-			td := newTapeData(tc.tape, tc.tapeSettings...)
+			td := newTapeData(tc.tape, outDir, tc.tapeSettings...)
 			td.Command = tapeCommand
 			td.Variables = tc.tapeVariables
 			td.Env[vhsTapeSocketVariable] = socketPath
 			td.AddClientOptions(t, clientOptions{})
-			td.RunVhs(t, vhsTestTypeCLI, outDir, cliEnv)
-			got := td.ExpectedOutput(t, outDir)
+			td.RunVHS(t, vhsTestTypeCLI, cliEnv)
+			got := td.SanitizedOutput(t)
 			golden.CheckOrUpdate(t, got)
 
 			requireRunnerResult(t, authd.SessionMode_CHANGE_PASSWORD, got)
@@ -404,6 +421,10 @@ func TestCLIChangeAuthTok(t *testing.T) {
 
 func TestPamCLIRunStandalone(t *testing.T) {
 	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
 
 	clientPath := t.TempDir()
 	pamCleanup, err := buildPAMRunner(clientPath)
@@ -435,10 +456,10 @@ func TestPamCLIRunStandalone(t *testing.T) {
 	outStr := string(out)
 	t.Log(outStr)
 
-	require.Contains(t, outStr, pam.ErrAuthinfoUnavail.Error())
-	require.Contains(t, outStr, pam.ErrIgnore.Error())
-}
-
-func TestMockgpasswd(t *testing.T) {
-	localgroupstestutils.Mockgpasswd(t)
+	if !strings.Contains(outStr, pam.ErrAuthinfoUnavail.Error()) {
+		t.Errorf("Expected output to contain %s", pam.ErrAuthinfoUnavail.Error())
+	}
+	if !strings.Contains(outStr, pam.ErrIgnore.Error()) {
+		t.Errorf("Expected output to contain %s", pam.ErrIgnore.Error())
+	}
 }

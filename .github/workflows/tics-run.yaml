@@ -1,0 +1,116 @@
+name: TICS QA Analysis
+
+on:
+    schedule:
+        - cron: '0 0 * * 1'  # Runs every Monday at midnight
+    workflow_dispatch:
+
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  build_dependencies: >-
+    clang-tools
+    clang
+    dotnet8
+    libglib2.0-dev
+    libpam-dev
+    libpwquality-dev
+    rustup
+
+jobs:
+    tics:
+        name: TIOBE TICS Framework
+        runs-on: [self-hosted, amd64, tiobe, noble]
+        steps:
+            - uses: actions/checkout@v6
+            - uses: actions/setup-go@v6
+              with:
+                go-version-file: go.mod
+
+            - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
+            - name: Install dependencies
+              run: |
+                set -eu
+
+                sudo apt-get update
+                sudo apt-get install -y ${{ env.build_dependencies }}
+
+                go install honnef.co/go/tools/cmd/staticcheck@latest
+
+            - name: Update Rust version
+              run: |
+                rustup update stable
+
+            - uses: canonical/desktop-engineering/gh-actions/go/generate@main
+              with:
+                tools-directory: ./tools
+
+            - name: Fetch last successful QA runs ids
+              env:
+                GITHUB_TOKEN: ${{ github.token }}
+              run: |
+                set -eu
+                echo "LAST_AUTHD_QA_ID=$(gh run list --workflow 'authd QA & sanity checks' --limit 1 --status success --json databaseId -b main | jq '.[].databaseId')" >> $GITHUB_ENV
+                echo "LAST_BROKERS_QA_ID=$(gh run list --workflow 'Brokers QA & sanity checks' --limit 1 --status success --json databaseId -b main | jq '.[].databaseId')" >> $GITHUB_ENV
+
+            - name: Download coverage artifact from authd QA
+              uses: actions/download-artifact@v7
+              with:
+                github-token: ${{ github.token }}
+                path: .artifacts/authd
+                run-id: ${{ env.LAST_AUTHD_QA_ID }}
+
+            - name: Download coverage artifact from brokers QA
+              uses: actions/download-artifact@v7
+              with:
+                github-token: ${{ github.token }}
+                path: .artifacts/brokers
+                run-id: ${{ env.LAST_BROKERS_QA_ID }}
+
+            - name: Merge coverage reports
+              run: |
+                set -eu
+
+                dotnet tool install -g dotnet-reportgenerator-globaltool
+
+                export PATH="$PATH:/home/ubuntu/.dotnet/tools"
+
+                mv .artifacts/authd/coverage/Cobertura.xml .artifacts/authd-coverage.xml
+                mv .artifacts/brokers/Cobertura.xml .artifacts/broker-coverage.xml
+
+                # TICS expects the coverage report to:
+                # - be in a directory named 'coverage' in the current working directory
+                mkdir -p coverage
+
+                # - have a single report named coverage.xml
+                reportgenerator -reports:.artifacts/*.xml -targetdir:coverage -reporttypes:Cobertura
+                mv coverage/Cobertura.xml coverage/coverage.xml
+
+            - name: Build artifacts
+              run: |
+                set -eu
+
+                # TICS needs to build the artifacts in order to run the analysis.
+                # Since it uses the GOTOOLCHAIN=local stanza, it's better if we prebuild it to make sure that the Go
+                # toolchain setup by the action is properly updated to the one we defined in go.mod. Prebuilding also
+                # helps to speed up the TICS analysis, as we would already have the build cache populated.
+                find pam -name '*.so' -print -delete
+                go build ./cmd/authd
+                go -C ./authd-oidc-brokers build -o authd-oidc ./cmd/authd-oidc
+                go -C ./authd-oidc-brokers build -tags=withgoogle -o authd-google ./cmd/authd-oidc
+
+                # We also need to build libhimmelblau when building the msentraid variant
+                git submodule update --init
+                cd ./authd-oidc-brokers
+                go generate --tags=withmsentraid ./internal/providers/msentraid/...
+                go build -tags=withmsentraid -o authd-msentraid ./cmd/authd-oidc
+
+            - name: TICS Analysis
+              uses: tiobe/tics-github-action@v3
+              with:
+                mode: qserver
+                project: authd
+                branchdir: .
+                viewerUrl: https://canonical.tiobe.com/tiobeweb/TICS/api/cfg?name=GoProjects
+                ticsAuthToken: ${{ secrets.TICSAUTHTOKEN }}
+                installTics: true

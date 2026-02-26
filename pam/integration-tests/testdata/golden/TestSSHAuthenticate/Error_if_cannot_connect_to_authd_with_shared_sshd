@@ -1,0 +1,8 @@
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+could not connect to unix:///some-path/not-existent-socket: service took too long to respond. Disconnecting client
+PAM Authenticate() finished for user 'user-integration-pre-check-ssh-error-if-cannot-connect-to-authd-with-shared-sshd'
+SSH PAM user 'user-integration-pre-check-ssh-error-if-cannot-connect-to-authd-with-shared-sshd' using local broker
+(user-integration-pre-check-ssh-error-if-cannot-connect-to-authd-with-shared-sshd@localhost) Password:
+────────────────────────────────────────────────────────────────────────────────

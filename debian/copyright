@@ -55,10 +55,18 @@ Files: vendor/github.com/coreos/*
 Copyright: 2015-2018 CoreOS, Inc.
 License: Apache-2.0
 
+Files: vendor/github.com/coreos/go-systemd/v22/activation/files.go
+Copyright: 2026 RedHat, Inc.
+License: Apache-2.0
+
 Files: vendor/github.com/coreos/go-systemd/v22/daemon/sdnotify.go
 Copyright: 2014 Docker, Inc.
            2015-2018 CoreOS, Inc.
 License: Apache-2.0
+
+Files: vendor/github.com/cpuguy83/*
+Copyright: 2014 Brian Goff
+License: Expat
 
 Files: vendor/github.com/davecgh/*
 Copyright: 2012-2016 Dave Collins <dave@davec.name>
@@ -165,20 +173,16 @@ Files: vendor/github.com/rivo/*
 Copyright: 2019 Oliver Kuederle
 License: Expat
 
+Files: vendor/github.com/russross/*
+Copyright: 2011 Russ Ross <russ@russross.com>
+License: BSD-2-clause
+
 Files: vendor/github.com/sagikazarmark/*
 Copyright: 2023 Márk Sági-Kazár <mark.sagikazar@gmail.com>
 License: Expat
 
 Files: vendor/github.com/sahilm/*
 Copyright: 2017 Sahil Muthoo
-License: Expat
-
-Files: vendor/github.com/sirupsen/*
-Copyright: 2014 Simon Eskildsen
-License: Expat
-
-Files: vendor/github.com/sirupsen/logrus/alt_exit.go
-Copyright: 2012 Miki Tebeka <miki.tebeka@gmail.com>
 License: Expat
 
 Files: vendor/github.com/skip2/*
@@ -246,10 +250,6 @@ Files: vendor/github.com/subosito/*
 Copyright: 2013 Alif Rachmawadi
 License: Expat
 
-Files: vendor/github.com/ubuntu/*
-Copyright: 2022-2023 Canonical Ltd.
-License: Expat
-
 Files: vendor/github.com/xo/*
 Copyright: 2016 Anmol Sethi
 License: Expat
@@ -258,28 +258,56 @@ Files: vendor/go.etcd.io/*
 Copyright: 2013 Ben Johnson
 License: Expat
 
-Files: vendor/go.uber.org/*
-Copyright: 2016-2021 Uber Technologies, Inc.
+Files: vendor/go.yaml.in/*
+Copyright: 2006-2011 Kirill Simonov
+           2011 staring in  when the project was ported over:
+           2011-2016 Canonical Ltd.
+License: Apache-2.0 or Expat
+
+Files: vendor/go.yaml.in/yaml/v3/README.md
+Copyright: 2006-2011 Kirill Simonov
+           2011 staring in  when the project was ported over:
+           2011-2016 Canonical Ltd.
 License: Expat
+
+Files: vendor/go.yaml.in/yaml/v3/apic.go
+       vendor/go.yaml.in/yaml/v3/emitterc.go
+       vendor/go.yaml.in/yaml/v3/parserc.go
+       vendor/go.yaml.in/yaml/v3/readerc.go
+       vendor/go.yaml.in/yaml/v3/scannerc.go
+       vendor/go.yaml.in/yaml/v3/writerc.go
+       vendor/go.yaml.in/yaml/v3/yamlh.go
+       vendor/go.yaml.in/yaml/v3/yamlprivateh.go
+Copyright: 2006-2010 Kirill Simonov
+           2011-2019 Canonical Ltd
+License: Expat
+
+Files: vendor/go.yaml.in/yaml/v3/decode.go
+       vendor/go.yaml.in/yaml/v3/encode.go
+       vendor/go.yaml.in/yaml/v3/resolve.go
+       vendor/go.yaml.in/yaml/v3/sorter.go
+       vendor/go.yaml.in/yaml/v3/yaml.go
+Copyright: 2011-2019 Canonical Ltd
+License: Apache-2.0
 
 Files: vendor/golang.org/*
 Copyright: 2009-2025 The Go Authors.
 License: BSD-3-clause
 
 Files: vendor/google.golang.org/genproto/*
-Copyright: 2024 Google LLC
+Copyright: 2025 Google LLC
 License: Apache-2.0
 
 Files: vendor/google.golang.org/grpc/*
-Copyright: 2014-2024 The gRPC Authors
+Copyright: 2014-2025 The gRPC Authors
 License: Apache-2.0
 
 Files: vendor/google.golang.org/grpc/CONTRIBUTING.md
-Copyright: message template
+Copyright: message*
 License: Apache-2.0
 
 Files: vendor/google.golang.org/protobuf/*
-Copyright: 2018-2024 The Go Authors.
+Copyright: 2018-2025 The Go Authors.
 License: BSD-3-clause
 
 Files: vendor/google.golang.org/protobuf/types/*
@@ -410,8 +438,17 @@ License: Apache-2.0 or Expat
 Files: vendor_rust/ctor/*
 License: Apache-2.0 or Expat
 
+Files: vendor_rust/ctor-proc-macro/*
+License: Apache-2.0 or Expat
+
 Files: vendor_rust/deranged/*
 Copyright: 2024 Jacob Pratt et al.
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/dtor/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/dtor-proc-macro/*
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/either/*
@@ -629,7 +666,7 @@ Files: vendor_rust/paste/*
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/percent-encoding/*
-Copyright: 2013-2022 The rust-url developers.
+Copyright: 2013-2025 The rust-url developers.
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/petgraph/*
@@ -683,6 +720,18 @@ License: Apache-2.0
 Files: vendor_rust/prost-types/*
 Copyright: 2017 Dan Burkert
 License: Apache-2.0
+
+Files: vendor_rust/pulldown-cmark/*
+Copyright: 2015-2017 Google Inc.
+License: Expat
+
+Files: vendor_rust/pulldown-cmark-to-cmark/*
+License: Apache-2.0
+
+Files: vendor_rust/pulldown-cmark/src/linklabel.rs
+       vendor_rust/pulldown-cmark/src/tree.rs
+Copyright: 2018 Google LLC
+License: Expat
 
 Files: vendor_rust/quote/*
 License: Apache-2.0 or Expat
@@ -841,6 +890,10 @@ Files: vendor_rust/try-lock/*
 Copyright: 2016 Alex Crichton
            2018-2023 Sean McArthur
 License: Expat
+
+Files: vendor_rust/unicase/*
+Copyright: 2014-2017 Sean McArthur
+License: Apache-2.0 or Expat
 
 Files: vendor_rust/unicode-ident/*
 Copyright: 1991-2023 Unicode, Inc.

@@ -1,0 +1,6 @@
+name: authd-pre-auth-user-{{random-suffix}}
+uid: 1111
+gid: 1111
+gecos: user1
+dir: /nonexistent
+shell: /usr/sbin/nologin

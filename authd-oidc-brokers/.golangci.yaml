@@ -1,0 +1,77 @@
+# This is for linting. To run it, please use:
+# golangci-lint run ${MODULE}/... [--fix]
+
+version: "2"
+linters:
+  # linters to run in addition to default ones
+  enable:
+    - copyloopvar
+    - dupl
+    - durationcheck
+    - errname
+    - errorlint
+    - forbidigo
+    - forcetypeassert
+    - godot
+    - gosec
+    - misspell
+    - nakedret
+    - nolintlint
+    - revive
+    - tparallel
+    - unconvert
+    - unparam
+    - whitespace
+  settings:
+    # Forbid the usage of deprecated ioutil and debug prints
+    forbidigo:
+      forbid:
+        - pattern: ioutil\.
+        - pattern: ^print.*$
+    # Never have naked return ever
+    nakedret:
+      max-func-lines: 1
+    nolintlint:
+      # Require an explanation of nonzero length after each nolint directive.
+      require-explanation: true
+      # Require nolint directives to mention the specific linter being suppressed.
+      require-specific: true
+  exclusions:
+    generated: lax
+    rules:
+      # EXC0001 errcheck: most errors are in defer calls, which are safe to ignore and idiomatic Go (would be good to only ignore defer ones though)
+      - path: (.+)\.go$
+        text: Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*print(f|ln)?|os\.(Un)?Setenv|w\.Stop). is not checked
+      # EXC0008 gosec: duplicated of errcheck
+      - path: (.+)\.go$
+        text: (G104|G307)
+      # EXC0010 gosec: False positive is triggered by 'src, err := ioutil.ReadFile(filename)'
+      - path: (.+)\.go$
+        text: Potential file inclusion via variable
+      # We don't wrap errors on purpose
+      - path: (.+)\.go$
+        text: non-wrapping format verb for fmt.Errorf. Use `%w` to format errors
+      # We want named parameters even if unused, as they help better document the function
+      - path: (.+)\.go$
+        text: unused-parameter
+      # Sometimes it is more readable it do a `if err:=a(); err != nil` tha simpy `return a()`
+      - path: (.+)\.go$
+        text: if-return
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  fix: false
+formatters:
+  enable:
+    - gci
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

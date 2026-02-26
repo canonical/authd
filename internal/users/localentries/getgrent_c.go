@@ -1,108 +1,100 @@
 // Package localentries provides functions to access the local user and group database.
-//
-//nolint:dupl // This it not a duplicate of getpwent_c.go
 package localentries
 
 /*
+#define _GNU_SOURCE
+
 #include <stdlib.h>
 #include <pwd.h>
 #include <grp.h>
-#include <errno.h>
+
+// Return the length of a NULL-terminated array of strings.
+size_t strv_len(const char * const * strv) {
+    size_t n = 0;
+    while (strv[n]) n++;
+    return n;
+}
+
 */
 import "C"
 
 import (
 	"errors"
-	"fmt"
+	"runtime"
 	"sync"
+	"syscall"
+	"unsafe"
 
-	"github.com/ubuntu/authd/internal/errno"
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/internal/users/types"
 )
 
-// Group represents a group entry.
-type Group struct {
-	Name   string
-	GID    uint32
-	Passwd string
-}
-
+// types.GroupEntry represents a group entry.
 var getgrentMu sync.Mutex
 
-func getGroupEntry() (*C.struct_group, error) {
-	errno.Lock()
-	defer errno.Unlock()
+// getGroupEntries returns all group entries.
+func getGroupEntries() (entries []types.GroupEntry, err error) {
+	decorate.OnError(&err, "getgrent_r")
 
-	cGroup := C.getgrent()
-	if cGroup != nil {
-		return cGroup, nil
-	}
-
-	err := errno.Get()
-	// It's not documented in the man page, but apparently getgrent sets errno to ENOENT when there are no more
-	// entries in the group database.
-	if errors.Is(err, errno.ErrNoEnt) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("getgrent: %v", err)
-	}
-	return cGroup, nil
-}
-
-// GetGroupEntries returns all group entries.
-func GetGroupEntries() ([]Group, error) {
-	// This function repeatedly calls getgrent, which iterates over the records in the group database.
+	// This function repeatedly calls getgrent_r, which iterates over the records in the group database.
 	// Use a mutex to avoid that parallel calls to this function interfere with each other.
+	// It would be nice to use fgetgrent_r, that is thread safe, but it can only
+	// iterate over a stream, while we want to iterate over all the NSS sources too.
 	getgrentMu.Lock()
 	defer getgrentMu.Unlock()
 
 	C.setgrent()
 	defer C.endgrent()
 
-	var entries []Group
+	var group C.struct_group
+	var groupPtr *C.struct_group
+	buf := make([]C.char, 1024)
+
+	pinner := runtime.Pinner{}
+	defer pinner.Unpin()
+
+	pinner.Pin(&group)
+	pinner.Pin(&buf[0])
+
 	for {
-		cGroup, err := getGroupEntry()
-		if err != nil {
-			return nil, err
+		ret := C.getgrent_r(&group, &buf[0], C.size_t(len(buf)), &groupPtr)
+		errno := syscall.Errno(ret)
+
+		if errors.Is(errno, syscall.ERANGE) {
+			buf = make([]C.char, len(buf)*2)
+			pinner.Pin(&buf[0])
+			continue
 		}
-		if cGroup == nil {
-			// No more entries in the group database.
-			break
+		if errors.Is(errno, syscall.ENOENT) {
+			return entries, nil
+		}
+		if !errors.Is(errno, syscall.Errno(0)) {
+			return nil, errno
 		}
 
-		entries = append(entries, Group{
-			Name:   C.GoString(cGroup.gr_name),
-			GID:    uint32(cGroup.gr_gid),
-			Passwd: C.GoString(cGroup.gr_passwd),
+		entries = append(entries, types.GroupEntry{
+			Name:   C.GoString(groupPtr.gr_name),
+			Passwd: C.GoString(groupPtr.gr_passwd),
+			GID:    uint32(groupPtr.gr_gid),
+			Users:  strvToSlice(groupPtr.gr_mem),
 		})
 	}
-
-	return entries, nil
 }
 
-// ErrGroupNotFound is returned when a group is not found.
-var ErrGroupNotFound = errors.New("group not found")
-
-// GetGroupByName returns the group with the given name.
-func GetGroupByName(name string) (Group, error) {
-	errno.Lock()
-	defer errno.Unlock()
-
-	cGroup := C.getgrnam(C.CString(name))
-	if cGroup == nil {
-		err := errno.Get()
-		if err == nil ||
-			errors.Is(err, errno.ErrNoEnt) ||
-			errors.Is(err, errno.ErrSrch) ||
-			errors.Is(err, errno.ErrBadf) ||
-			errors.Is(err, errno.ErrPerm) {
-			return Group{}, ErrGroupNotFound
-		}
-		return Group{}, fmt.Errorf("getgrnam: %v", err)
+func strvToSlice(strv **C.char) []string {
+	if strv == nil {
+		return nil
+	}
+	n := C.strv_len(strv)
+	if n == 0 {
+		return nil
 	}
 
-	return Group{
-		Name: C.GoString(cGroup.gr_name),
-		GID:  uint32(cGroup.gr_gid),
-	}, nil
+	cStrings := unsafe.Slice(strv, int(n))
+
+	out := make([]string, int(n))
+	for i := 0; i < int(n); i++ {
+		out[i] = C.GoString(cStrings[i])
+	}
+	return out
 }

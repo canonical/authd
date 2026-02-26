@@ -58,4 +58,4 @@ users_to_groups:
       gid: 44444
     - uid: 4444
       gid: 99999
-schema_version: 1
+schema_version: 2

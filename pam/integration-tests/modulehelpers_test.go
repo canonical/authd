@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/canonical/authd/internal/testlog"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/pam/internal/pam_test"
 )
 
 func getPkgConfigFlags(t *testing.T, args []string) []string {
@@ -20,7 +21,7 @@ func getPkgConfigFlags(t *testing.T, args []string) []string {
 	return strings.Split(strings.TrimSpace(string(out)), " ")
 }
 
-func buildCModule(t *testing.T, sources []string, pkgConfigDeps []string, cFlags []string, ldFlags []string, soname string, forPreload bool) string {
+func buildSharedModule(t *testing.T, logMsg string, sources []string, pkgConfigDeps []string, cFlags []string, ldFlags []string, soname string, forPreload bool) string {
 	t.Helper()
 
 	compiler := os.Getenv("CC")
@@ -35,7 +36,6 @@ func buildCModule(t *testing.T, sources []string, pkgConfigDeps []string, cFlags
 
 	require.NoError(t, os.MkdirAll(filepath.Dir(libPath), 0700),
 		"Setup: Can't create loader build path")
-	t.Logf("Compiling C Module library at %s", libPath)
 	cmd.Args = append(cmd.Args, "-o", libPath)
 	cmd.Args = append(cmd.Args, sources...)
 	cmd.Args = append(cmd.Args,
@@ -58,7 +58,7 @@ func buildCModule(t *testing.T, sources []string, pkgConfigDeps []string, cFlags
 	// if testutils.IsRace() {
 	// 	cmd.Args = append(cmd.Args, "-fsanitize=thread")
 	// }
-	if cflags := os.Getenv("CFLAGS"); cflags != "" && os.Getenv("DEB_BUILD_ARCH") == "" {
+	if cflags := os.Getenv("CFLAGS"); cflags != "" && !testutils.IsDebianPackageBuild() {
 		cmd.Args = append(cmd.Args, strings.Split(cflags, " ")...)
 	}
 
@@ -76,7 +76,7 @@ func buildCModule(t *testing.T, sources []string, pkgConfigDeps []string, cFlags
 	}
 	cmd.Args = append(cmd.Args, ldFlags...)
 
-	if ldflags := os.Getenv("LDFLAGS"); ldflags != "" && os.Getenv("DEB_BUILD_ARCH") == "" {
+	if ldflags := os.Getenv("LDFLAGS"); ldflags != "" && !testutils.IsDebianPackageBuild() {
 		cmd.Args = append(cmd.Args, strings.Split(ldflags, " ")...)
 	}
 
@@ -93,18 +93,15 @@ func buildCModule(t *testing.T, sources []string, pkgConfigDeps []string, cFlags
 		require.NoError(t, err, "TearDown: Impossible to create path %q", gcovDir)
 
 		t.Cleanup(func() {
-			t.Log("Running gcov...")
 			gcov := exec.Command("gcov")
 			gcov.Args = append(gcov.Args,
 				"-pb", "-o", libDir,
 				notesFilename)
 			gcov.Dir = gcovDir
-			out, err := gcov.CombinedOutput()
+			err := testlog.RunWithTiming(t, "Running gcov", gcov,
+				testlog.OnlyPrintStdoutAndStderrOnError())
 			require.NoError(t, err,
-				"Teardown: Can't get coverage report on C library: %s", out)
-			if string(out) != "" {
-				t.Log(string(out))
-			}
+				"Teardown: Can't get coverage report on C library")
 
 			// Also keep track of notes and data files as they're useful to generate
 			// an html output locally using geninfo + genhtml.
@@ -119,19 +116,10 @@ func buildCModule(t *testing.T, sources []string, pkgConfigDeps []string, cFlags
 		})
 	}
 
-	t.Logf("Running compiler command: %s %s", cmd.Path, strings.Join(cmd.Args[1:], " "))
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "Setup: could not compile C module %s: %s", soname, out)
-	if string(out) != "" {
-		t.Log(string(out))
-	}
+	err := testlog.RunWithTiming(t, logMsg, cmd)
+	require.NoError(t, err, "Setup: Failed to build PAM module")
 
 	return libPath
-}
-
-func buildCPAMModule(t *testing.T, sources []string, pkgConfigDeps []string, cFlags []string, soname string, forPreload bool) string {
-	t.Helper()
-	return buildCModule(t, sources, pkgConfigDeps, cFlags, []string{"-lpam"}, soname, forPreload)
 }
 
 type actionArgsMap = map[pam_test.Action][]string

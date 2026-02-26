@@ -2,6 +2,7 @@ package main_test
 
 import (
 	"fmt"
+	"io"
 	"maps"
 	"math"
 	"os"
@@ -12,17 +13,19 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode/utf8"
 
+	"github.com/canonical/authd/examplebroker"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/services/permissions"
+	"github.com/canonical/authd/internal/testlog"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/msteinert/pam/v2"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/examplebroker"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/internal/services/permissions"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/pam/internal/pam_test"
 )
 
 const (
@@ -69,12 +72,16 @@ type tapeSetting struct {
 }
 
 type tapeData struct {
-	Name      string
-	Command   string
-	Outputs   []string
-	Settings  map[string]any
-	Env       map[string]string
-	Variables map[string]string
+	Name           string
+	Command        string
+	OutputDir      string
+	OutputFilename string
+	Settings       map[string]any
+	Env            map[string]string
+	Variables      map[string]string
+
+	sanitizeOutputOnce sync.Once
+	sanitizedOutput    string
 }
 
 type vhsTestType int
@@ -125,7 +132,7 @@ var (
 )
 
 var (
-	// vhsWaitRegex catches Wait(@timeout)? /Pattern/ commands to re-implement default vhs
+	// vhsWaitRegex catches Wait(@timeout)? /Pattern/ commands to re-implement default VHS
 	// Wait /Pattern/ command with full context on errors.
 	vhsWaitRegex = regexp.MustCompile(`\bWait(\+Line)?(@\S+)?[\t ]+(/(.+)/|(.+))`)
 	// vhsWaitLineRegex catches Wait(@timeout) commands to re-implement default Wait command
@@ -165,7 +172,17 @@ var (
 	vhsClearTape = regexp.MustCompile(`\bClearTerminal\b`)
 )
 
-func newTapeData(tapeName string, settings ...tapeSetting) tapeData {
+func init() {
+	if v := os.Getenv("AUTHD_TESTS_VHS_WAIT_TIMEOUT"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil {
+			panic(err)
+		}
+		defaultSleepValues[authdWaitDefault] = d
+	}
+}
+
+func newTapeData(tapeName string, outputDir string, settings ...tapeSetting) *tapeData {
 	m := map[string]any{
 		vhsWidth:  800,
 		vhsHeight: 500,
@@ -182,13 +199,12 @@ func newTapeData(tapeName string, settings ...tapeSetting) tapeData {
 	for _, s := range settings {
 		m[s.Key] = s.Value
 	}
-	return tapeData{
-		Name: tapeName,
-		Outputs: []string{
-			tapeName + ".txt",
-		},
-		Settings: m,
-		Env:      make(map[string]string),
+	return &tapeData{
+		Name:           tapeName,
+		OutputDir:      outputDir,
+		OutputFilename: tapeName + ".txt",
+		Settings:       m,
+		Env:            make(map[string]string),
 	}
 }
 
@@ -238,21 +254,46 @@ func (td *tapeData) AddClientOptions(t *testing.T, opts clientOptions) {
 	}
 }
 
-func (td tapeData) RunVhs(t *testing.T, testType vhsTestType, outDir string, cliEnv []string) {
+func (td *tapeData) RunVHS(t *testing.T, testType vhsTestType, cliEnv []string) {
 	t.Helper()
 
 	cmd := exec.Command("env", "vhs")
-	cmd.Env = append(testutils.AppendCovEnv(cmd.Env), cliEnv...)
-	cmd.Dir = outDir
 
-	// If vhs is installed with "go install", we need to add GOPATH to PATH.
-	cmd.Env = append(cmd.Env, prependBinToPath(t))
+	var outBuf testutils.SyncBuffer
+	// Write stdout/stderr both to our stdout/stderr and to the buffer
+	cmd.Stdout = io.MultiWriter(t.Output(), &outBuf)
+	cmd.Stderr = io.MultiWriter(t.Output(), &outBuf)
+
+	cmd.Env = append(testutils.AppendCovEnv(cmd.Env), cliEnv...)
+	cmd.Dir = td.OutputDir
+
+	cmd.Env = append(cmd.Env,
+		// If vhs is installed with "go install", we need to add GOPATH to PATH.
+		pathEnvWithGoBin(t),
+		// vhs uses rod, which downloads chromium to $HOME/.cache/rod,
+		// so $HOME needs to be set to avoid that it downloads it every time.
+		// TODO: Set XDG_CACHE_HOME instead once https://github.com/go-rod/rod/pull/1213 was merged
+		"HOME="+os.Getenv("HOME"),
+		// Avoid VHS printing "Host your GIF on vhs.charm.sh: vhs publish <file>.gif"
+		"VHS_PUBLISH=false",
+	)
+
+	// Force VHS to use color because it makes it a lot easier to find the error
+	// message in the VHS output. The only case where we don't want color is when
+	// building a Debian package, because when viewing the logs of a launchpad build
+	// in the browser, ANSI colors are not rendered.
+	if !testutils.IsDebianPackageBuild() {
+		cmd.Env = append(cmd.Env, "CLICOLOR_FORCE=1")
+	}
 
 	u, err := user.Current()
 	require.NoError(t, err, "Setup: getting current user")
 	if u.Name == "root" || os.Getenv("SCHROOT_CHROOT_NAME") != "" {
 		cmd.Env = append(cmd.Env, "VHS_NO_SANDBOX=1")
 	}
+
+	// Set a temporary HOME directory to avoid interference with the user's home directory.
+	td.Env["HOME"] = t.TempDir()
 
 	// Move some of the environment specific-variables from the tape to the launched process
 	if e, ok := td.Env[pam_test.RunnerEnvLogFile]; ok {
@@ -266,37 +307,49 @@ func (td tapeData) RunVhs(t *testing.T, testType vhsTestType, outDir string, cli
 		cmd.Env = append(cmd.Env, fmt.Sprintf("GORACE=log_path=%s exitcode=0", raceLog))
 	}
 
-	cmd.Args = append(cmd.Args, td.PrepareTape(t, testType, outDir))
-	out, err := cmd.CombinedOutput()
+	if testutils.IsAsan() {
+		if asanOptions := os.Getenv("ASAN_OPTIONS"); asanOptions != "" {
+			cmd.Env = append(cmd.Env, fmt.Sprintf("ASAN_OPTIONS=%s", asanOptions))
+		}
+		if lsanOptions := os.Getenv("LSAN_OPTIONS"); lsanOptions != "" {
+			cmd.Env = append(cmd.Env, fmt.Sprintf("LSAN_OPTIONS=%s", lsanOptions))
+		}
+	}
+
+	tapePath := td.PrepareTape(t, testType)
+	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, tapePath, filepath.Join(td.OutputDir, td.OutputFilename))
+	cmd.Args = append(cmd.Args, tapePath)
+
+	err = testlog.RunWithTiming(t, fmt.Sprintf("VHS tape %q", td.Name), cmd, testlog.DoNotSetStdoutAndStderr())
 	if raceLog != "" {
 		checkDataRaces(t, raceLog)
 	}
 
-	isSSHError := func(processOut []byte) bool {
+	sanitizedOutputFilename := strings.TrimSuffix(td.OutputFilename, ".txt") + ".sanitized.txt"
+	testutils.MaybeSaveBytesAsArtifactOnCleanup(t, []byte(td.SanitizedOutput(t)), sanitizedOutputFilename)
+
+	isSSHError := func() bool {
+		out := outBuf.String()
 		const sshConnectionResetByPeer = "Connection reset by peer"
 		const sshConnectionClosed = "Connection closed by"
-		output := string(processOut)
-		return strings.Contains(output, sshConnectionResetByPeer) ||
-			strings.Contains(output, sshConnectionClosed)
+		return strings.Contains(out, sshConnectionResetByPeer) ||
+			strings.Contains(out, sshConnectionClosed)
 	}
-	if err != nil && testType == vhsTestTypeSSH && isSSHError(out) {
-		t.Logf("SSH Connection failed on tape %q: %v: %s", td.Name, err, out)
+	if err != nil && testType == vhsTestTypeSSH && isSSHError() {
+		t.Logf("SSH Connection failed on tape %q: %v", td.Name, err)
 		// We've sometimes (but rarely) seen SSH connection errors which were resolved on retry, so we retry once.
 		// If it fails again, something might actually be broken.
 		//nolint:gosec // G204 it's a test and we explicitly set the parameters before.
 		newCmd := exec.Command(cmd.Args[0], cmd.Args[1:]...)
 		newCmd.Dir = cmd.Dir
 		newCmd.Env = slices.Clone(cmd.Env)
-		out, err = newCmd.CombinedOutput()
+		err = testlog.RunWithTiming(t, fmt.Sprintf("VHS tape %q (second try)", td.Name), newCmd, testlog.DoNotSetStdoutAndStderr())
 	}
-	require.NoError(t, err, "Failed to run tape %q: %v: %s", td.Name, err, out)
+	require.NoError(t, err, "Failed to run tape %q, see vhs output above", td.Name)
 }
 
-func (td tapeData) String() string {
-	var str string
-	for _, o := range td.Outputs {
-		str += fmt.Sprintf("Output %q\n", o)
-	}
+func (td *tapeData) String() string {
+	str := fmt.Sprintf("Output %q\n", td.OutputFilename)
 	for s, v := range td.Settings {
 		switch vv := v.(type) {
 		case time.Duration:
@@ -314,16 +367,6 @@ func (td tapeData) String() string {
 		str += fmt.Sprintf(`Env %s %q`+"\n", s, v)
 	}
 	return str
-}
-
-func (td tapeData) Output() string {
-	var txt string
-	for _, o := range td.Outputs {
-		if strings.HasSuffix(o, ".txt") {
-			txt = o
-		}
-	}
-	return txt
 }
 
 func checkDataRaces(t *testing.T, raceLog string) {
@@ -348,7 +391,7 @@ func checkDataRaces(t *testing.T, raceLog string) {
 		})
 
 	require.NoError(t, err, "TearDown: Check for races")
-	saveArtifactsForDebugOnCleanup(t, raceLogs)
+	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, raceLogs...)
 	for _, raceLog := range raceLogs {
 		checkDataRace(t, raceLog)
 	}
@@ -368,18 +411,28 @@ func checkDataRace(t *testing.T, raceLog string) {
 	t.Fatalf("Got a GO Race on vhs child:\n%s", out)
 }
 
-func (td tapeData) ExpectedOutput(t *testing.T, outputDir string) string {
+func (td *tapeData) SanitizedOutput(t *testing.T) string {
 	t.Helper()
 
-	outPath := filepath.Join(outputDir, td.Output())
+	td.sanitizeOutputOnce.Do(func() {
+		td.sanitizedOutput = td.sanitizeOutput(t)
+	})
+
+	return td.sanitizedOutput
+}
+
+func (td *tapeData) sanitizeOutput(t *testing.T) string {
+	t.Helper()
+
+	outPath := filepath.Join(td.OutputDir, td.OutputFilename)
 	out, err := os.ReadFile(outPath)
 	require.NoError(t, err, "Could not read output file of tape %q (%s)", td.Name, outPath)
-	got := string(out)
+	s := string(out)
 
 	// We need to format the output a little bit, since the txt file can have some noise at the beginning.
 	command := "> " + td.Command
 	maxCommandLen := 0
-	splitTmp := strings.Split(got, "\n")
+	splitTmp := strings.Split(s, "\n")
 	for _, str := range splitTmp {
 		maxCommandLen = max(maxCommandLen, utf8.RuneCountInString(str))
 	}
@@ -388,46 +441,34 @@ func (td tapeData) ExpectedOutput(t *testing.T, outputDir string) string {
 	}
 	for i, str := range splitTmp {
 		if strings.Contains(str, command) {
-			got = strings.Join(splitTmp[i:], "\n")
+			s = strings.Join(splitTmp[i:], "\n")
 			break
 		}
 	}
 
-	got = permissions.Z_ForTests_IdempotentPermissionError(got)
+	s = permissions.Z_ForTests_IdempotentPermissionError(s)
 
 	// Remove consecutive equal frames from vhs tapes.
 	framesSeparator := strings.Repeat(string(vhsFrameSeparator), vhsFrameSeparatorLength)
-	frames := slices.Compact(strings.Split(got, framesSeparator))
+	frames := slices.Compact(strings.Split(s, framesSeparator))
 	// Drop all the empty lines before each page separator, to remove the clutter.
 	for i, f := range frames {
 		frames[i] = vhsEmptyTrailingLinesRegex.ReplaceAllString(f, "\n")
 	}
-	got = strings.Join(frames, framesSeparator)
+	s = strings.Join(frames, framesSeparator)
 
 	// Drop all the socket references.
-	got = vhsUnixTargetRegex.ReplaceAllLiteralString(got, "unix:///authd/test_socket.sock")
+	s = vhsUnixTargetRegex.ReplaceAllLiteralString(s, "unix:///authd/test_socket.sock")
 
 	// Username may be split in multiple lines, so fix this not to break further checks.
-	got = vhsUserCheckRegex.ReplaceAllStringFunc(got, func(s string) string {
+	s = vhsUserCheckRegex.ReplaceAllStringFunc(s, func(s string) string {
 		return strings.ReplaceAll(s, "\n", "")
 	})
 
-	// Save the sanitized result on cleanup
-	t.Cleanup(func() {
-		if !t.Failed() {
-			return
-		}
-		baseName, _ := strings.CutSuffix(td.Output(), ".txt")
-		tempOutput := filepath.Join(t.TempDir(), fmt.Sprintf("%s_sanitized.txt", baseName))
-		require.NoError(t, os.WriteFile(tempOutput, []byte(got), 0600),
-			"TearDown: Saving sanitized output file %q", tempOutput)
-		saveArtifactsForDebug(t, []string{tempOutput})
-	})
-
-	return got
+	return s
 }
 
-func (td tapeData) PrepareTape(t *testing.T, testType vhsTestType, outputPath string) string {
+func (td *tapeData) PrepareTape(t *testing.T, testType vhsTestType) string {
 	t.Helper()
 
 	currentDir, err := os.Getwd()
@@ -464,24 +505,14 @@ func (td tapeData) PrepareTape(t *testing.T, testType vhsTestType, outputPath st
 			sleepDuration(defaultSleepValues[authdSleepDefault]).Milliseconds()),
 	}, "\n"))
 
-	tapePath := filepath.Join(outputPath, td.Name)
+	tapePath := filepath.Join(td.OutputDir, td.Name+".tape")
 	err = os.WriteFile(tapePath, tape, 0600)
 	require.NoError(t, err, "Setup: write tape file")
-
-	if testutils.IsVerbose() {
-		t.Logf("Tape %q is now:\n%s", td.Name, tape)
-	}
-
-	artifacts := []string{tapePath}
-	for _, o := range td.Outputs {
-		artifacts = append(artifacts, filepath.Join(outputPath, o))
-	}
-	saveArtifactsForDebugOnCleanup(t, artifacts)
 
 	return tapePath
 }
 
-func evaluateTapeVariables(t *testing.T, tapeString string, td tapeData, testType vhsTestType) string {
+func evaluateTapeVariables(t *testing.T, tapeString string, td *tapeData, testType vhsTestType) string {
 	t.Helper()
 
 	for _, m := range vhsSleepOrWaitRegex.FindAllStringSubmatch(tapeString, -1) {

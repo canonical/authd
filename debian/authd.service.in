@@ -1,5 +1,5 @@
 [Unit]
-Description=Authd daemon service
+Description=authd daemon service
 After=authd.socket
 Requires=authd.socket
 PartOf=authd.socket
@@ -34,7 +34,6 @@ StateDirectoryMode=0700
 
 # This always corresponds to /etc/authd
 ConfigurationDirectory=authd
-ConfigurationDirectoryMode=0700
 
 # Prevent writing to /usr and bootloader paths.
 # We don't use "full" or "strict", because home paths can be anywhere and so we need
@@ -87,5 +86,11 @@ SystemCallFilter=@system-service
 # This makes all files and directories not associated with process management invisible in /proc
 ProcSubset=pid
 
-# gpasswd requires this specific capability to alter the shadow files
-CapabilityBoundingSet=CAP_CHOWN
+# CAP_CHOWN: Required by gpasswd to alter the shadow files.
+# CAP_DAC_READ_SEARCH: Required by the chown system call to change ownership of
+#                      files not owned by the user. We need this to change the
+#                      ownership of the user's home directory when changing the
+#                      user's UID.
+# CAP_SYS_PTRACE: Required by CheckUserBusy used by SetUserID to check if any
+#                 running processes are owned by the UID being modified.
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_READ_SEARCH CAP_SYS_PTRACE

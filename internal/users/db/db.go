@@ -12,11 +12,11 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/log"
 	// sqlite3 driver.
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/internal/fileutils"
-	"github.com/ubuntu/authd/log"
 )
 
 var (
@@ -29,7 +29,10 @@ var (
 type Manager struct {
 	db   *sql.DB
 	path string
-	mu   sync.RWMutex
+	// mu protects concurrent updates of the database. It's needed because some
+	// operations require temporarily disabling the foreign key constraints
+	// during which concurrent updates to the database could violate them.
+	mu sync.Mutex
 }
 
 // queryable is an interface to execute SQL queries. Both sql.DB and sql.Tx implement this interface.
@@ -88,7 +91,7 @@ func New(dbDir string) (*Manager, error) {
 		}
 	}
 
-	m := &Manager{db: db, path: dbPath, mu: sync.RWMutex{}}
+	m := &Manager{db: db, path: dbPath, mu: sync.Mutex{}}
 	err = m.maybeApplyMigrations()
 	if err != nil {
 		return nil, err
@@ -175,15 +178,34 @@ func RemoveDB(dbDir string) error {
 	return os.Remove(filepath.Join(dbDir, consts.DefaultDatabaseFileName))
 }
 
+// NewUIDNotFoundError returns a NoDataFoundError for the given user ID.
+func NewUIDNotFoundError(uid uint32) NoDataFoundError {
+	return NoDataFoundError{fmt.Sprintf("user with UID %d not found", uid)}
+}
+
+// NewGIDNotFoundError returns a NoDataFoundError for the given group ID.
+func NewGIDNotFoundError(gid uint32) NoDataFoundError {
+	return NoDataFoundError{fmt.Sprintf("group with GID %d not found", gid)}
+}
+
+// NewUserNotFoundError returns a NoDataFoundError for the given user name.
+func NewUserNotFoundError(name string) NoDataFoundError {
+	return NoDataFoundError{fmt.Sprintf("user %q not found", name)}
+}
+
+// NewGroupNotFoundError returns a NoDataFoundError for the given group name.
+func NewGroupNotFoundError(name string) NoDataFoundError {
+	return NoDataFoundError{fmt.Sprintf("group %q not found", name)}
+}
+
 // NoDataFoundError is returned when we didn’t find a matching entry.
 type NoDataFoundError struct {
-	key   string
-	table string
+	msg string
 }
 
 // Error implements the error interface.
 func (err NoDataFoundError) Error() string {
-	return fmt.Sprintf("no result matching %v in %v", err.key, err.table)
+	return err.msg
 }
 
 // Is makes this error insensitive to the key and table names.

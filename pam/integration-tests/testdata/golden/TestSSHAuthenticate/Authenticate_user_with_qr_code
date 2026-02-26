@@ -673,17 +673,17 @@ Or enter 'r' to go back to select the authentication method
 > 1
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-with-qr-code'
 PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-with-qr-code'
-Environment:
-  USER=user-integration-pre-check-ssh-authenticate-user-with-qr-code
-  LOGNAME=user-integration-pre-check-ssh-authenticate-user-with-qr-code
+ SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_with_qr_code]
   HOME=${AUTHD_TEST_HOME}
+  LOGNAME=user-integration-pre-check-ssh-authenticate-user-with-qr-code
   PATH=${AUTHD_TEST_PATH}
+  PWD=${AUTHD_TEST_PWD}
   SHELL=/bin/sh
-  TERM=xterm-256color
   SSH_CLIENT=${AUTHD_TEST_SSH_CLIENT}
   SSH_CONNECTION=${AUTHD_TEST_SSH_CONNECTION}
   SSH_TTY=${AUTHD_TEST_SSH_TTY}
- SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_with_qr_code]
+  TERM=xterm-256color
+  USER=user-integration-pre-check-ssh-authenticate-user-with-qr-code
 Connection to localhost closed.
 >
 ────────────────────────────────────────────────────────────────────────────────

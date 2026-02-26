@@ -3,6 +3,9 @@
 # Install daemon
 usr/bin/authd ${env:AUTHD_DAEMONS_PATH}
 
+# Install CLI tool
+usr/bin/authctl /usr/bin/
+
 # Install authd config file
 debian/authd-config/authd.yaml /etc/authd/
 
@@ -18,3 +21,8 @@ ${env:BUILT_PAM_LIBS_PATH}/go-exec/pam_authd_exec.so ${env:AUTHD_PAM_MODULES_PAT
 
 # Install NSS library with right soname
 target/${DEB_HOST_RUST_TYPE}/release/libnss_authd.so => /usr/lib/${DEB_TARGET_GNU_TYPE}/libnss_authd.so.2
+
+# Shell completion scripts
+shell-completion/bash/authctl /usr/share/bash-completion/completions/
+shell-completion/zsh/_authctl /usr/share/zsh/vendor-completions/
+shell-completion/fish/authctl.fish /usr/share/fish/vendor_completions.d/

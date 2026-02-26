@@ -1,0 +1,20 @@
+users:
+    - name: testisauthenticated/successfully_authenticate_user_with_uppercase_separator_success
+      uid: 1111
+      gid: 1111
+      gecos: gecos for success
+      dir: /home/success
+      shell: /bin/sh/success
+groups:
+    - name: testisauthenticated/successfully_authenticate_user_with_uppercase_separator_success
+      gid: 1111
+      ugid: testisauthenticated/successfully_authenticate_user_with_uppercase_separator_success
+    - name: group-success
+      gid: 22222
+      ugid: ugid-success
+users_to_groups:
+    - uid: 1111
+      gid: 1111
+    - uid: 1111
+      gid: 22222
+schema_version: 2

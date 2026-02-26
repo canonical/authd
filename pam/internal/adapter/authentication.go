@@ -12,14 +12,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/log"
+	pam_proto "github.com/canonical/authd/pam/internal/proto"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/msteinert/pam/v2"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/log"
-	pam_proto "github.com/ubuntu/authd/pam/internal/proto"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -68,7 +68,7 @@ func sendIsAuthenticated(ctx context.Context, client authd.PAMClient, sessionID 
 			}
 			return pamError{
 				status: pam.ErrSystem,
-				msg:    fmt.Sprintf("authentication status failure: %v", err),
+				msg:    err.Error(),
 			}
 		}
 
@@ -122,6 +122,7 @@ type authenticationComponent interface {
 type authenticationModel struct {
 	client     authd.PAMClient
 	clientType PamClientType
+	mode       authd.SessionMode
 
 	inProgress       bool
 	currentModel     authenticationComponent
@@ -168,10 +169,11 @@ type newPasswordCheckResult struct {
 }
 
 // newAuthenticationModel initializes a authenticationModel which needs to be Compose then.
-func newAuthenticationModel(client authd.PAMClient, clientType PamClientType) authenticationModel {
+func newAuthenticationModel(client authd.PAMClient, clientType PamClientType, mode authd.SessionMode) authenticationModel {
 	return authenticationModel{
 		client:      client,
 		clientType:  clientType,
+		mode:        mode,
 		authTracker: &authTracker{cond: sync.NewCond(&sync.Mutex{})},
 	}
 }
@@ -222,10 +224,18 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 
 	case newPasswordCheck:
 		safeMessageDebug(msg)
-		currentSecret := m.currentSecret
+		var oldPassword string
+		if m.mode == authd.SessionMode_CHANGE_PASSWORD {
+			// Only compare the new password with the current one if the session is for changing the password.
+			// If the session is for authentication, we allow the user to set the same password again, to avoid
+			// that the user is forced to change their password if e.g. device authentication is forced when
+			// the refresh token is expired.
+			oldPassword = m.currentSecret
+		}
+
 		return m, func() tea.Msg {
 			res := newPasswordCheckResult{ctx: msg.ctx, password: msg.password}
-			if err := checkPasswordQuality(currentSecret, msg.password); err != nil {
+			if err := checkPasswordQuality(oldPassword, msg.password); err != nil {
 				res.msg = err.Error()
 			}
 			return res

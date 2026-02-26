@@ -1,0 +1,17 @@
+/* Use subtle bg with strongly contrasting fg */
+.version-warning {
+    padding: 5px;
+    width: 100%;
+    text-align: center;
+    font-size: var(--font-size--small);
+    background-color: #EAE9E7;
+    color: #111;
+}
+
+/* Fix one fg color as only one bg color */
+.version-warning a {
+    color: #06C;
+}
+.version-warning a:visited {
+    color: #872EE0;
+}

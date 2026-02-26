@@ -14,3 +14,6 @@ authd: unknown-field Static-Built-Using
 
 # "Unknwon" is the actual name/username of the copyright holder for gopkg.in/ini.v1, not a typo
 authd: spelling-error-in-copyright Unknwon Unknown
+
+# We don't have a manpage for authctl yet
+authd: no-manual-page [usr/bin/authctl]

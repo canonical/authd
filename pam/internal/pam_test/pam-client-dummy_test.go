@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/proto/authd"
 )
 
 var errTest = errors.New("an error")

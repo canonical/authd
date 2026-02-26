@@ -1,6 +1,6 @@
-name: ""
+name: authd-pre-auth-user-{RANDOM-ID}
 uid: 12345
 gid: 12345
-gecos: test
+gecos: TestPreAuthUserByIDAndName
 dir: /nonexistent
 shell: /usr/sbin/nologin

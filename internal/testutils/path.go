@@ -12,6 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// MinimalPathEnv is the minimal PATH environment variable used to run tests.
+const MinimalPathEnv = "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+
 // CurrentDir returns the current file directory.
 func CurrentDir() string {
 	// p is the path to the caller file
@@ -69,4 +72,29 @@ func TestFamilyPath(t *testing.T) string {
 	topLevelTest, _, _ := strings.Cut(t.Name(), "/")
 
 	return filepath.Join("testdata", topLevelTest)
+}
+
+// TempDir returns a temporary directory for the test.
+// If the SKIP_CLEANUP environment variable is set, it creates a temp dir
+// that is not automatically removed after the test.
+func TempDir(t *testing.T) string {
+	t.Helper()
+
+	skipCleanup := os.Getenv("SKIP_CLEANUP") != ""
+
+	if RunningInBubblewrap() {
+		// When running in bubblewrap, we don't need to cleanup temporary directories
+		// because they only exist inside the bubblewrap sandbox anyway, and we don't
+		// want the tests to fail if the temporary directory cannot be removed for
+		// some reason.
+		skipCleanup = true
+	}
+
+	if skipCleanup {
+		tempDir, err := os.MkdirTemp("", "authd-bwrap-testdata-")
+		require.NoError(t, err, "Setup: could not create temp dir for bwrap test data")
+		return tempDir
+	}
+
+	return t.TempDir()
 }

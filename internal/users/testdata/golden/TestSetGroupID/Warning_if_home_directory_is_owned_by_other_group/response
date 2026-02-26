@@ -1,0 +1,4 @@
+idchanged: true
+homedirownerchanged: false
+warnings:
+    - 'Not updating ownership of home directory ''{{HOME}}'' because it is not owned by GID {{GID}} (current owner: {{CURR_GID}}).'

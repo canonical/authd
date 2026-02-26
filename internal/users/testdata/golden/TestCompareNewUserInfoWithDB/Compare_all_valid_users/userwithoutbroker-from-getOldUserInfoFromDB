@@ -1,0 +1,12 @@
+name: userwithoutbroker
+uid: 4444
+gecos: userwithoutbroker
+dir: /home/userwithoutbroker
+shell: /bin/sh
+groups:
+    - name: group4
+      gid: 44444
+      ugid: "45678123"
+    - name: commongroup
+      gid: 99999
+      ugid: "87654321"

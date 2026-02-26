@@ -1,4 +1,4 @@
 FIRST CALL:
 	access: 
 	msg: 
-	err: can't check authentication: failed to update user "testisauthenticated/error_on_updating_local_groups_with_unexisting_file_separator_success_with_local_groups": could not update local groups for user "testisauthenticated/error_on_updating_local_groups_with_unexisting_file_separator_success_with_local_groups": could not fetch existing local group: open testdata/TestIsAuthenticated/does_not_exists.group: no such file or directory
+	err: failed to update user "testisauthenticated/error_on_updating_local_groups_with_unexisting_file_separator_success_with_local_groups": could not update local groups for user "testisauthenticated/error_on_updating_local_groups_with_unexisting_file_separator_success_with_local_groups": could not fetch existing local group: open : no such file or directory

@@ -33,7 +33,7 @@ func TestSetGetItem(t *testing.T) {
 	}{
 		"Set_user": {
 			item:  pam.User,
-			value: ptrValue("an user"),
+			value: ptrValue("a user"),
 		},
 		"Returns_empty_when_getting_an_unset_user": {
 			item:      pam.User,

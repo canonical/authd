@@ -27,7 +27,7 @@ var (
 )
 
 const (
-	// UserIntegrationPrefix is the prefix for an user for integration tests.
+	// UserIntegrationPrefix is the prefix for a user for integration tests.
 	UserIntegrationPrefix = "user-integration-"
 	// UserIntegrationMfaPrefix is the prefix for an mfa user for integration tests.
 	UserIntegrationMfaPrefix = "user-mfa-integration-"
@@ -49,7 +49,7 @@ const (
 	UserIntegrationPreCheckPrefix = UserIntegrationPrefix + UserIntegrationPreCheckValue + "-"
 	// UserIntegrationUnexistent is an unexistent user leading to a non-existent user error.
 	UserIntegrationUnexistent = "user-unexistent"
-	// UserIntegrationAuthModesPrefix is the prefix for an user listing for supported auth modes.
+	// UserIntegrationAuthModesPrefix is the prefix for a user listing for supported auth modes.
 	// The modes can be exposed as list, in the form: `user-auth-modes-id1,id2,id3-integration-whatever`.
 	UserIntegrationAuthModesPrefix = "user-auth-modes-"
 )

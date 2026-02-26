@@ -1,0 +1,4 @@
+FIRST CALL:
+	access: 
+	msg: 
+	err: permission denied: user testisauthenticated/error_when_user_is_locked_separator_locked is locked

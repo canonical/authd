@@ -7,10 +7,10 @@ import (
 	"net"
 	"os"
 
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/log"
 	"github.com/coreos/go-systemd/v22/activation"
 	"github.com/coreos/go-systemd/v22/daemon"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/decorate"
 	"google.golang.org/grpc"
 )
 
@@ -132,13 +132,12 @@ func (d *Daemon) Serve(ctx context.Context) (err error) {
 // Quit gracefully quits listening loop and stops the grpc server.
 // It can drops any existing connexion is force is true.
 func (d Daemon) Quit(ctx context.Context, force bool) {
-	log.Infof(ctx, "Stopping daemon requested for socket %s.", d.lis.Addr())
 	if force {
 		d.grpcServer.Stop()
 		return
 	}
 
-	log.Info(ctx, "Wait for active requests to close.")
+	log.Info(ctx, "Waiting for pending requests to finish")
 	d.grpcServer.GracefulStop()
-	log.Debug(ctx, "All connections have now ended.")
+	log.Info(ctx, "gRPC server gracefully stopped")
 }

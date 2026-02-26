@@ -3528,17 +3528,17 @@ Enter 'r' to cancel the request and go back to select the authentication method
 > 4242
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-switching-auth-mode'
 PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-switching-auth-mode'
-Environment:
-  USER=user-integration-pre-check-ssh-authenticate-user-switching-auth-mode
-  LOGNAME=user-integration-pre-check-ssh-authenticate-user-switching-auth-mode
+ SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_switching_auth_mode]
   HOME=${AUTHD_TEST_HOME}
+  LOGNAME=user-integration-pre-check-ssh-authenticate-user-switching-auth-mode
   PATH=${AUTHD_TEST_PATH}
+  PWD=${AUTHD_TEST_PWD}
   SHELL=/bin/sh
-  TERM=xterm-256color
   SSH_CLIENT=${AUTHD_TEST_SSH_CLIENT}
   SSH_CONNECTION=${AUTHD_TEST_SSH_CONNECTION}
   SSH_TTY=${AUTHD_TEST_SSH_TTY}
- SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_switching_auth_mode]
+  TERM=xterm-256color
+  USER=user-integration-pre-check-ssh-authenticate-user-switching-auth-mode
 Connection to localhost closed.
 >
 ────────────────────────────────────────────────────────────────────────────────

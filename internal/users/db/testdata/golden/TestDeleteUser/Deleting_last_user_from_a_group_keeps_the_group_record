@@ -4,4 +4,4 @@ groups:
       gid: 11111
       ugid: "12345678"
 users_to_groups: []
-schema_version: 1
+schema_version: 2

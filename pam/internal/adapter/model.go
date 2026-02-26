@@ -10,14 +10,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/log"
+	"github.com/canonical/authd/pam/internal/proto"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/msteinert/pam/v2"
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/authd/pam/internal/proto"
-	pam_proto "github.com/ubuntu/authd/pam/internal/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	healthgrpc "google.golang.org/grpc/health/grpc_health_v1"
@@ -54,6 +53,8 @@ type sessionInfo struct {
 
 // uiModel is the global models orchestrator.
 type uiModel struct {
+	width int
+
 	// pamMTx is the [pam.ModuleTransaction] used to communicate with PAM.
 	pamMTx pam.ModuleTransaction
 	// conn is the [grpc.ClientConn] opened with authd daemon.
@@ -120,7 +121,7 @@ type SessionEnded struct{}
 
 // ChangeStage signals that the model requires a stage change.
 type ChangeStage struct {
-	Stage pam_proto.Stage
+	Stage proto.Stage
 }
 
 // StageChanged signals that the model just finished a stage change.
@@ -162,7 +163,7 @@ func newUIModelForClients(mTx pam.ModuleTransaction, clientType PamClientType, m
 	m.userSelectionModel = newUserSelectionModel(m.pamMTx, m.clientType)
 	m.brokerSelectionModel = newBrokerSelectionModel(m.client, m.clientType)
 	m.authModeSelectionModel = newAuthModeSelectionModel(m.clientType)
-	m.authenticationModel = newAuthenticationModel(m.client, m.clientType)
+	m.authenticationModel = newAuthenticationModel(m.client, m.clientType, mode)
 	m.healthCheckCancel = func() {}
 
 	return m
@@ -235,6 +236,9 @@ func (m *uiModel) startHealthCheck() tea.Cmd {
 // Update handles events and actions to be done from the main model orchestrator.
 func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+
 	// Key presses
 	case tea.KeyMsg:
 		safeMessageDebugWithPrefix("Key", msg, "in stage %q", m.currentStage())
@@ -343,7 +347,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, tea.Sequence(
 			getAuthenticationModes(m.client, m.currentSession.sessionID, m.authModeSelectionModel.SupportedUILayouts()),
-			sendEvent(ChangeStage{pam_proto.Stage_authModeSelection}),
+			sendEvent(ChangeStage{proto.Stage_authModeSelection}),
 		)
 
 	case AuthModeSelected:
@@ -422,84 +426,90 @@ func (m uiModel) View() string {
 		return ""
 	}
 
-	var view strings.Builder
+	var viewBuilder strings.Builder
 
 	switch m.currentStage() {
-	case pam_proto.Stage_userSelection:
-		view.WriteString(m.userSelectionModel.View())
-	case pam_proto.Stage_brokerSelection:
-		view.WriteString(m.brokerSelectionModel.View())
-	case pam_proto.Stage_authModeSelection:
-		view.WriteString(m.authModeSelectionModel.View())
-	case pam_proto.Stage_challenge:
-		view.WriteString(m.authenticationModel.View())
+	case proto.Stage_userSelection:
+		viewBuilder.WriteString(m.userSelectionModel.View())
+	case proto.Stage_brokerSelection:
+		viewBuilder.WriteString(m.brokerSelectionModel.View())
+	case proto.Stage_authModeSelection:
+		viewBuilder.WriteString(m.authModeSelectionModel.View())
+	case proto.Stage_challenge:
+		viewBuilder.WriteString(m.authenticationModel.View())
 	default:
-		view.WriteString("INVALID STAGE")
+		viewBuilder.WriteString("INVALID STAGE")
 	}
 
 	if debug != "" {
-		view.WriteString(debug)
+		viewBuilder.WriteString(debug)
 	}
 
-	if view.Len() > 0 && m.canGoBack() {
+	view := viewBuilder.String()
+
+	if len(view) > 0 && m.canGoBack() {
 		infoMessage := infoMsgStyle.Render(fmt.Sprintf("Press escape key to %s",
 			goBackLabel(m.previousStage())))
-		return lipgloss.JoinVertical(lipgloss.Left, view.String(), infoMessage)
+		view = lipgloss.JoinVertical(lipgloss.Left, view, infoMessage)
 	}
 
-	return view.String()
+	if m.width == 0 {
+		return view
+	}
+	// Wrap the view to the terminal width.
+	return lipgloss.NewStyle().Width(m.width).Render(view)
 }
 
 // currentStage returns our current stage step.
-func (m uiModel) currentStage() pam_proto.Stage {
+func (m uiModel) currentStage() proto.Stage {
 	if m.userSelectionModel.Focused() {
-		return pam_proto.Stage_userSelection
+		return proto.Stage_userSelection
 	}
 	if m.brokerSelectionModel.Focused() {
-		return pam_proto.Stage_brokerSelection
+		return proto.Stage_brokerSelection
 	}
 	if m.authModeSelectionModel.Focused() {
-		return pam_proto.Stage_authModeSelection
+		return proto.Stage_authModeSelection
 	}
 	if m.authenticationModel.Focused() {
-		return pam_proto.Stage_challenge
+		return proto.Stage_challenge
 	}
-	return pam_proto.Stage_userSelection
+	return proto.Stage_userSelection
 }
 
 // changeStage returns a command acting to change the current stage and reset any previous views.
-func (m *uiModel) changeStage(s pam_proto.Stage) tea.Cmd {
+func (m *uiModel) changeStage(s proto.Stage) tea.Cmd {
 	var commands []tea.Cmd
 	currentStage := m.currentStage()
 
 	if currentStage != s {
 		switch currentStage {
-		case pam_proto.Stage_userSelection:
+		case proto.Stage_userSelection:
 			m.userSelectionModel.Blur()
-		case pam_proto.Stage_brokerSelection:
+		case proto.Stage_brokerSelection:
 			m.brokerSelectionModel.Blur()
-		case pam_proto.Stage_authModeSelection:
+		case proto.Stage_authModeSelection:
 			m.authModeSelectionModel.Blur()
-		case pam_proto.Stage_challenge:
+		case proto.Stage_challenge:
 			m.authenticationModel.Blur()
 			commands = append(commands, m.authenticationModel.Reset())
 		}
 	}
 
 	switch s {
-	case pam_proto.Stage_userSelection:
+	case proto.Stage_userSelection:
 		// The session should be ended when going back to previous state, but we don’t quit the stage immediately
 		// and so, we should always ensure we cancel previous session.
 		commands = append(commands, endSession(m.client, m.currentSession), m.userSelectionModel.Focus())
 
-	case pam_proto.Stage_brokerSelection:
+	case proto.Stage_brokerSelection:
 		m.authModeSelectionModel.Reset()
 		commands = append(commands, endSession(m.client, m.currentSession), m.brokerSelectionModel.Focus())
 
-	case pam_proto.Stage_authModeSelection:
+	case proto.Stage_authModeSelection:
 		commands = append(commands, m.authModeSelectionModel.Focus())
 
-	case pam_proto.Stage_challenge:
+	case proto.Stage_challenge:
 		commands = append(commands, m.authenticationModel.Focus())
 
 	default:
@@ -516,7 +526,7 @@ func (m *uiModel) changeStage(s pam_proto.Stage) tea.Cmd {
 	return tea.Sequence(commands...)
 }
 
-func (m uiModel) previousStage() pam_proto.Stage {
+func (m uiModel) previousStage() proto.Stage {
 	currentStage := m.currentStage()
 	if currentStage > proto.Stage_authModeSelection && len(m.availableAuthModes()) > 1 {
 		return proto.Stage_authModeSelection

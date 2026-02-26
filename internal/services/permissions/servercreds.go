@@ -7,7 +7,7 @@ import (
 	"math"
 	"net"
 
-	"github.com/ubuntu/decorate"
+	"github.com/canonical/authd/internal/decorate"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -71,7 +71,7 @@ type peerCredsInfo struct {
 	pid int32
 }
 
-// AuthType returns a string encrypting uid and pid of caller.
+// AuthType returns a string containing the uid and pid of caller.
 func (p peerCredsInfo) AuthType() string {
 	return fmt.Sprintf("uid: %d, pid: %d", p.uid, p.pid)
 }

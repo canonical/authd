@@ -3,6 +3,7 @@ package testutils
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"os"
@@ -11,9 +12,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/canonical/authd/internal/brokers/layouts"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
 )
 
 const (
@@ -95,9 +96,12 @@ func StartBusBrokerMock(cfgDir string, brokerName string) (string, func(), error
 	}
 
 	reply, err := conn.RequestName(busName, dbus.NameFlagDoNotQueue)
-	if err != nil || reply != dbus.RequestNameReplyPrimaryOwner {
+	if err != nil {
 		conn.Close()
-		return "", nil, err
+		return "", nil, fmt.Errorf("can't get the D-Bus name %s: %w", busName, err)
+	}
+	if reply != dbus.RequestNameReplyPrimaryOwner {
+		return "", nil, errors.New("not a D-Bus primary name owner")
 	}
 
 	configPath, err := writeConfig(cfgDir, brokerName)
@@ -272,6 +276,13 @@ func (b *BrokerBusMock) IsAuthenticated(sessionID, authenticationData string) (a
 		extragroups := []groupJSONInfo{{Name: "localgroup1"}, {Name: "localgroup3"}}
 		data = fmt.Sprintf(`{"userinfo": %s}`, userInfoFromName(sessionID, extragroups))
 
+	case "success_with_uppercase_groups":
+		extragroups := []groupJSONInfo{
+			{Name: "GROUP1", UGID: "12345678"},
+			{Name: "GROUP2", UGID: "87654321"},
+		}
+		data = fmt.Sprintf(`{"userinfo": %s}`, userInfoFromName(sessionID, extragroups))
+
 	case "ia_invalid_access":
 		access = "invalid"
 
@@ -331,7 +342,7 @@ func (b *BrokerBusMock) CancelIsAuthenticated(sessionID string) (dbusErr *dbus.E
 
 // UserPreCheck returns default values to be used in tests or an error if requested.
 func (b *BrokerBusMock) UserPreCheck(username string) (userinfo string, dbusErr *dbus.Error) {
-	if strings.ToLower(username) != "user-pre-check" {
+	if username != "user-pre-check" && username != "local-pre-check" {
 		return "", dbus.MakeFailedError(fmt.Errorf("broker %q: UserPreCheck errored out", b.name))
 	}
 	return userInfoFromName(username, nil), nil
@@ -383,6 +394,9 @@ func userInfoFromName(sessionID string, extraGroups []groupJSONInfo) string {
 		home = "this is not a homedir"
 	case "ia_info_invalid_shell":
 		shell = "this is not a valid shell"
+	case "local-pre-check":
+		name = "root"
+		home = "/root"
 	}
 
 	groups := []groupJSONInfo{{Name: group, UGID: ugid}}

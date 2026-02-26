@@ -33,7 +33,7 @@ static MockPasswd passwd_entities[512];
 __attribute__((constructor))
 void constructor (void)
 {
-  fprintf (stderr, "sshd_preloader [%d]: Library loaded\n", getpid ());
+  fprintf (stderr, "sshd_preloader[%d]: Library loaded\n", getpid ());
 }
 
 __attribute__((destructor))
@@ -42,7 +42,7 @@ void destructor (void)
   for (size_t i = 0; i < SIZE_OF_ARRAY (passwd_entities); ++i)
     free (passwd_entities[i].authd_name);
 
-  fprintf (stderr, "sshd_preloader [%d]: Library unloaded\n", getpid ());
+  fprintf (stderr, "sshd_preloader[%d]: Library unloaded\n", getpid ());
 }
 
 static const char *
@@ -153,7 +153,12 @@ getpwnam (const char *name)
       /* Ensure the GID we got matches the UID.
        * See: https://wiki.debian.org/UserPrivateGroups#UPGs
        */
-      assert (passwd_entity->pw_gid == passwd_entity->pw_uid);
+      if (passwd_entity->pw_uid != passwd_entity->pw_gid)
+        {
+          fprintf (stderr, "sshd_preloader[%d]: User %s has different UID and GID (%d:%d)\n",
+                   getpid (), name, passwd_entity->pw_uid, passwd_entity->pw_gid);
+          abort();
+        }
     }
   else if (!is_supported_test_fake_user (name))
     {
@@ -205,7 +210,7 @@ getpwnam (const char *name)
           mock_passwd->authd_name = n;
           passwd_entity->pw_name = mock_passwd->authd_name;
 
-          fprintf (stderr, "sshd_preloader [%d]: User %s converted to %s\n",
+          fprintf (stderr, "sshd_preloader[%d]: User %s converted to %s\n",
                   getpid (), name, passwd_entity->pw_name);
         }
     }
@@ -220,7 +225,7 @@ getpwnam (const char *name)
   passwd_entity->pw_uid = getuid ();
   passwd_entity->pw_gid = getgid ();
 
-  fprintf (stderr, "sshd_preloader [%d]: Simulating to be fake user %s (%d:%d)\n",
+  fprintf (stderr, "sshd_preloader[%d]: Simulating to be fake user %s (%d:%d)\n",
            getpid (), passwd_entity->pw_name, passwd_entity->pw_uid,
            passwd_entity->pw_gid);
 
@@ -244,7 +249,7 @@ fopen (const char *pathname, const char *mode)
   if (strcmp (pathname, "/etc/pam.d/" AUTHD_DEFAULT_SSH_PAM_SERVICE_NAME) == 0 ||
       strcmp (pathname, "/usr/lib/pam.d/" AUTHD_DEFAULT_SSH_PAM_SERVICE_NAME) == 0)
     {
-      fprintf (stderr, "sshd_preloader [%d]: Trying to open '%s', "
+      fprintf (stderr, "sshd_preloader[%d]: Trying to open '%s', "
                "but redirecting instead to '%s'\n",
                getpid (), pathname, service_path);
       pathname = service_path;

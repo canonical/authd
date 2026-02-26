@@ -1,7 +1,7 @@
 // Package consts defines the constants used by the project
 package consts
 
-import log "github.com/ubuntu/authd/log"
+import log "github.com/canonical/authd/log"
 
 var (
 	// Version is the version of the executable.
@@ -23,6 +23,9 @@ const (
 
 	// DefaultDatabaseDir is the default directory for the database.
 	DefaultDatabaseDir = "/var/lib/authd/"
+
+	// DefaultConfigDir is the default configuration directory.
+	DefaultConfigDir = "/etc/authd/"
 
 	// DefaultDatabaseFileName is the default file name for the database.
 	DefaultDatabaseFileName = "authd.sqlite3"

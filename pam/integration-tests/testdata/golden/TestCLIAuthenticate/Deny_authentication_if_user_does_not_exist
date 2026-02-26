@@ -18,7 +18,7 @@ Username: user-unexistent
   1. local
 > 2. ExampleBroker
 
-PAM Error Message: can't select broker: user "user-unexistent" does not exist
+PAM Error Message: user "user-unexistent" does not exist
 PAM Authenticate()
   User: "user-unexistent"
   Result: error: PAM exit code: 4

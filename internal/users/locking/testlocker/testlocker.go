@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	userslocking "github.com/ubuntu/authd/internal/users/locking"
+	userslocking "github.com/canonical/authd/internal/users/locking"
 )
 
 func main() {

@@ -474,17 +474,17 @@ Press Enter to wait for authentication or enter 'r' to go back to select the aut
 >
 PAM Authenticate() finished for user 'user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa'
 PAM AcctMgmt() finished for user 'user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa'
-Environment:
-  USER=user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa
-  LOGNAME=user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa
+ SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_with_mfa]
   HOME=${AUTHD_TEST_HOME}
+  LOGNAME=user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa
   PATH=${AUTHD_TEST_PATH}
+  PWD=${AUTHD_TEST_PWD}
   SHELL=/bin/sh
-  TERM=xterm-256color
   SSH_CLIENT=${AUTHD_TEST_SSH_CLIENT}
   SSH_CONNECTION=${AUTHD_TEST_SSH_CONNECTION}
   SSH_TTY=${AUTHD_TEST_SSH_TTY}
- SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_with_mfa]
+  TERM=xterm-256color
+  USER=user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa
 Connection to localhost closed.
 >
 ────────────────────────────────────────────────────────────────────────────────

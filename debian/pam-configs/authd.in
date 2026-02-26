@@ -1,4 +1,4 @@
-Name: Authd authentication
+Name: authd authentication
 Default: yes
 Priority: 1050
 

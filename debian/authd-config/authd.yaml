@@ -11,13 +11,14 @@
 ## These define the minimum and maximum UID and GID values assigned
 ## to users and groups by authd.
 ##
-## Ensure that these ranges do not overlap with other ID ranges in use,
-## such as those specified in /etc/subuid or /etc/subgid.
+## Ensure these ranges do not overlap with other UID/GID ranges in use.
+## For common ranges typically used on Linux, see:
+## https://systemd.io/UIDS-GIDS/#summary
 ##
 ## Note: The user private group (the group named after the user) is always
 ## created with the same GID as the user’s UID, regardless of the GID_MIN
 ## and GID_MAX values.
-#UID_MIN: 1000000000
-#UID_MAX: 1999999999
-#GID_MIN: 1000000000
-#GID_MAX: 1999999999
+#UID_MIN: 10000
+#UID_MAX: 60000
+#GID_MIN: 10000
+#GID_MAX: 60000

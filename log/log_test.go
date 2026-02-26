@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/log"
 )
 
 var supportedLevels = []log.Level{

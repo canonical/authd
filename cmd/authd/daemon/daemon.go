@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/daemon"
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/internal/services"
+	"github.com/canonical/authd/internal/users"
+	"github.com/canonical/authd/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/internal/daemon"
-	"github.com/ubuntu/authd/internal/services"
-	"github.com/ubuntu/authd/internal/users"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/decorate"
 )
 
 // cmdName is the binary name for the agent.
@@ -48,22 +48,41 @@ type daemonConfig struct {
 	UsersConfig *users.Config `mapstructure:",squash" yaml:",inline"`
 }
 
+type options struct {
+	configDir string
+}
+
+// Option is a function that modifies configuration options for the daemon.
+type Option func(*options)
+
+// WithConfigDir sets the configuration directory for the daemon.
+func WithConfigDir(configDir string) Option {
+	return func(o *options) {
+		o.configDir = configDir
+	}
+}
+
 // New registers commands and return a new App.
-func New() *App {
+func New(args ...Option) *App {
+	opts := &options{configDir: consts.DefaultConfigDir}
+	for _, arg := range args {
+		arg(opts)
+	}
+
 	a := App{ready: make(chan struct{})}
 	a.rootCmd = cobra.Command{
 		Use:                                                                                 fmt.Sprintf("%s COMMAND", cmdName),
 		Short:/*i18n.G(*/ "Authentication daemon",                                           /*)*/
 		Long:/*i18n.G(*/ "Authentication daemon bridging the system with external brokers.", /*)*/
 		Args:                                                                                cobra.NoArgs,
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			// First thing, initialize the journal handler
 			log.InitJournalHandler(false)
 
 			// Command parsing has been successful. Returns to not print usage anymore.
 			a.rootCmd.SilenceUsage = true
-			// TODO: before or after?  cmd.LocalFlags()
-
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
 			// Set config defaults
 			a.config = daemonConfig{
 				Paths: systemPaths{
@@ -75,7 +94,7 @@ func New() *App {
 			}
 
 			// Install and unmarshall configuration
-			if err := initViperConfig(cmdName, &a.rootCmd, a.viper); err != nil {
+			if err := initViperConfig(cmdName, &a.rootCmd, a.viper, opts.configDir); err != nil {
 				return err
 			}
 			if err := a.viper.Unmarshal(&a.config); err != nil {
@@ -85,6 +104,11 @@ func New() *App {
 			setVerboseMode(a.config.Verbosity)
 			log.Debugf(context.Background(), "Verbosity: %d", a.config.Verbosity)
 
+			// If we are only checking the configuration, we exit now.
+			if check, _ := cmd.Flags().GetBool("check-config"); check {
+				return nil
+			}
+
 			if err := maybeMigrateOldDBDir(oldDBDir, a.config.Paths.Database); err != nil {
 				return err
 			}
@@ -93,13 +117,14 @@ func New() *App {
 				return err
 			}
 
-			return nil
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
 			return a.serve(a.config)
 		},
 		// We display usage error ourselves
 		SilenceErrors: true,
+		// Don't add a completion subcommand, authd is not a CLI tool.
+		CompletionOptions: cobra.CompletionOptions{
+			DisableDefaultCmd: true,
+		},
 	}
 	viper := viper.New()
 
@@ -107,6 +132,8 @@ func New() *App {
 
 	installVerbosityFlag(&a.rootCmd, a.viper)
 	installConfigFlag(&a.rootCmd)
+	// Install the --check-config flag to check the configuration and exit.
+	a.rootCmd.Flags().Bool("check-config", false /*i18n.G(*/, "check configuration and exit" /*)*/)
 
 	// subcommands
 	a.installVersion()

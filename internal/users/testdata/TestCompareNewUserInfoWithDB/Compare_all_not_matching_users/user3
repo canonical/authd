@@ -1,0 +1,12 @@
+name: user3
+uid: 3333
+gecos: User3
+dir: /home/user3
+shell: /bin/zsh
+groups:
+    - name: group3
+      gid: 33333
+      ugid: "my-new-ugid-is-better!"
+    - name: commongroup
+      gid: 99999
+      ugid: "87654321"

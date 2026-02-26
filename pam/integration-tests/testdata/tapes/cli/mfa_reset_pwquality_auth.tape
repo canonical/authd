@@ -46,30 +46,12 @@ Wait+CLIPrompt@${AUTHD_SLEEP_EXAMPLE_BROKER_MFA_WAIT} * 1.2 /New password/ /\[ S
 Show
 
 Hide
-TypeCLIPassword "goodpass"
-Show
-
-Hide
-Enter
-Wait+CLIPrompt@${AUTHD_WAIT_DEFAULT}*2 /New password/ /\[ Skip \]/ /The password is the same as the old one[\n]+[ ]*Press escape key to go back to choose the provider/
-Show
-
-Hide
 TypeCLIPassword "password"
 Show
 
 Hide
 Enter
 Wait+CLIPrompt@${AUTHD_WAIT_DEFAULT}*2 /New password/ /\[ Skip \]\nThe password fails the dictionary check[^\n]+[\n]+[ ]*Press escape key to go back to choose the provider/
-Show
-
-Hide
-TypeCLIPassword "goodpass"
-Show
-
-Hide
-Enter
-Wait+CLIPrompt@${AUTHD_WAIT_DEFAULT}*2 /New password/ /\[ Skip \]\nThe password is the same as the old one[\n]+[ ]*Press escape key to go back to choose the provider/
 Show
 
 Hide

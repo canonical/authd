@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/canonical/authd/internal/errno"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/errno"
 )
 
 func TestNoError(t *testing.T) {

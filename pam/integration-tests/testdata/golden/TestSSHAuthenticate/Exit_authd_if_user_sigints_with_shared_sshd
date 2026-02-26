@@ -1,0 +1,53 @@
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-exit-authd-if-user-sigints-with-shared-sshd@localhost) Choose your provider:
+>
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-exit-authd-if-user-sigints-with-shared-sshd@localhost) Choose your provider:
+> 2
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-exit-authd-if-user-sigints-with-shared-sshd@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(user-integration-pre-check-ssh-exit-authd-if-user-sigints-with-shared-sshd@localhost) Gimme your password:
+>
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-exit-authd-if-user-sigints-with-shared-sshd@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(user-integration-pre-check-ssh-exit-authd-if-user-sigints-with-shared-sshd@localhost) Gimme your password:
+>
+
+>
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-exit-authd-if-user-sigints-with-shared-sshd@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(user-integration-pre-check-ssh-exit-authd-if-user-sigints-with-shared-sshd@localhost) Gimme your password:
+>
+
+> echo $TERM
+xterm-256color
+>
+────────────────────────────────────────────────────────────────────────────────

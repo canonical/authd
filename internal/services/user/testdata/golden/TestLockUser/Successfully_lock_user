@@ -1,0 +1,50 @@
+users:
+    - name: user1
+      uid: 1111
+      gid: 11111
+      gecos: |-
+        User1 gecos
+        On multiple lines
+      dir: /home/user1
+      shell: /bin/bash
+      broker_id: broker-id
+      locked: true
+    - name: user2
+      uid: 2222
+      gid: 22222
+      gecos: User2
+      dir: /home/user2
+      shell: /bin/dash
+      broker_id: broker-id
+    - name: user3
+      uid: 3333
+      gid: 33333
+      gecos: User3
+      dir: /home/user3
+      shell: /bin/zsh
+      broker_id: broker-id
+groups:
+    - name: group1
+      gid: 11111
+      ugid: group1
+    - name: group2
+      gid: 22222
+      ugid: group2
+    - name: group3
+      gid: 33333
+      ugid: group3
+    - name: commongroup
+      gid: 99999
+      ugid: commongroup
+users_to_groups:
+    - uid: 1111
+      gid: 11111
+    - uid: 2222
+      gid: 22222
+    - uid: 2222
+      gid: 99999
+    - uid: 3333
+      gid: 33333
+    - uid: 3333
+      gid: 99999
+schema_version: 2

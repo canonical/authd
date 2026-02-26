@@ -1,15 +1,25 @@
+---
+myst:
+  html_meta:
+    "description lang=en": "Management of groups using authd with Microsoft Entra ID."
+---
+
+(reference::group-management)=
 # Group management
 
 Groups are used to manage users that all need the same access and permissions to resources.
 Groups from the remote provider can be mapped into local Linux groups for the user.
 
+In addition, you can configure extra groups
+[in the broker configuration file](ref::config-user-groups).
+
 ```{note}
   Groups are currently supported for the `msentraid` broker.
 ```
 
-## MS Entra ID
+## Microsoft Entra ID
 
-MS Entra ID supports creating groups and adding users to them.
+Microsoft Entra ID supports creating groups and adding users to them.
 
 > See [Manage Microsoft Entra groups and group membership](https://learn.microsoft.com/en-us/entra/fundamentals/how-to-manage-groups)
 

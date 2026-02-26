@@ -1,108 +1,72 @@
 // Package localentries provides functions to access local passwd entries.
-//
-//nolint:dupl // This it not a duplicate of getgrent_c.go
 package localentries
 
 /*
 #include <stdlib.h>
 #include <pwd.h>
 #include <grp.h>
-#include <errno.h>
 */
 import "C"
 
 import (
 	"errors"
-	"fmt"
+	"runtime"
 	"sync"
+	"syscall"
 
-	"github.com/ubuntu/authd/internal/errno"
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/internal/users/types"
 )
-
-// Passwd represents a passwd entry.
-type Passwd struct {
-	Name  string
-	UID   uint32
-	Gecos string
-}
 
 var getpwentMu sync.Mutex
 
-func getPasswdEntry() (*C.struct_passwd, error) {
-	errno.Lock()
-	defer errno.Unlock()
+// getUserEntries returns all passwd entries.
+func getUserEntries() (entries []types.UserEntry, err error) {
+	decorate.OnError(&err, "getpwent_r")
 
-	cPasswd := C.getpwent()
-	if cPasswd != nil {
-		return cPasswd, nil
-	}
-
-	err := errno.Get()
-	// It's not documented in the man page, but apparently getpwent sets errno to ENOENT when there are no more
-	// entries in the passwd database.
-	if errors.Is(err, errno.ErrNoEnt) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("getpwent: %v", err)
-	}
-	return cPasswd, nil
-}
-
-// GetPasswdEntries returns all passwd entries.
-func GetPasswdEntries() ([]Passwd, error) {
-	// This function repeatedly calls getpwent, which iterates over the records in the passwd database.
+	// This function repeatedly calls getpwent_r, which iterates over the records in the passwd database.
 	// Use a mutex to avoid that parallel calls to this function interfere with each other.
+	// It would be nice to use fgetpwent_r, that is thread safe, but it can only
+	// iterate over a stream, while we want to iterate over all the NSS sources too.
 	getpwentMu.Lock()
 	defer getpwentMu.Unlock()
 
 	C.setpwent()
 	defer C.endpwent()
 
-	var entries []Passwd
+	var passwd C.struct_passwd
+	var passwdPtr *C.struct_passwd
+	buf := make([]C.char, 1024)
+
+	pinner := runtime.Pinner{}
+	defer pinner.Unpin()
+
+	pinner.Pin(&passwd)
+	pinner.Pin(&buf[0])
+
 	for {
-		cPasswd, err := getPasswdEntry()
-		if err != nil {
-			return nil, err
+		ret := C.getpwent_r(&passwd, &buf[0], C.size_t(len(buf)), &passwdPtr)
+		errno := syscall.Errno(ret)
+
+		if errors.Is(errno, syscall.ERANGE) {
+			buf = make([]C.char, len(buf)*2)
+			pinner.Pin(&buf[0])
+			continue
 		}
-		if cPasswd == nil {
-			// No more entries in the passwd database.
-			break
+		if errors.Is(errno, syscall.ENOENT) {
+			return entries, nil
+		}
+		if !errors.Is(errno, syscall.Errno(0)) {
+			return nil, errno
 		}
 
-		entries = append(entries, Passwd{
-			Name:  C.GoString(cPasswd.pw_name),
-			UID:   uint32(cPasswd.pw_uid),
-			Gecos: C.GoString(cPasswd.pw_gecos),
+		entries = append(entries, types.UserEntry{
+			Name:  C.GoString(passwdPtr.pw_name),
+			UID:   uint32(passwdPtr.pw_uid),
+			GID:   uint32(passwdPtr.pw_gid),
+			Gecos: C.GoString(passwdPtr.pw_gecos),
+			Dir:   C.GoString(passwdPtr.pw_dir),
+			Shell: C.GoString(passwdPtr.pw_shell),
 		})
 	}
-
-	return entries, nil
-}
-
-// ErrUserNotFound is returned when a user is not found.
-var ErrUserNotFound = errors.New("user not found")
-
-// GetPasswdByName returns the user with the given name.
-func GetPasswdByName(name string) (Passwd, error) {
-	errno.Lock()
-	defer errno.Unlock()
-
-	cPasswd := C.getpwnam(C.CString(name))
-	if cPasswd == nil {
-		err := errno.Get()
-		if err == nil ||
-			errors.Is(err, errno.ErrNoEnt) ||
-			errors.Is(err, errno.ErrSrch) ||
-			errors.Is(err, errno.ErrBadf) ||
-			errors.Is(err, errno.ErrPerm) {
-			return Passwd{}, ErrUserNotFound
-		}
-		return Passwd{}, fmt.Errorf("getpwnam: %v", err)
-	}
-
-	return Passwd{
-		Name: C.GoString(cPasswd.pw_name),
-		UID:  uint32(cPasswd.pw_uid),
-	}, nil
 }

@@ -1,32 +1,32 @@
 package localentries
 
 import (
+	"fmt"
+	"slices"
 	"testing"
 
+	"github.com/canonical/authd/internal/users/types"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGetGroupEntries(t *testing.T) {
 	t.Parallel()
 
-	got, err := GetGroupEntries()
-	require.NoError(t, err, "GetGroupEntries should never return an error")
-	require.NotEmpty(t, got, "GetGroupEntries should never return an empty list")
-}
+	// Ensure the requests can be parallelized
+	for idx := range 10 {
+		t.Run(fmt.Sprintf("iteration_%d", idx), func(t *testing.T) {
+			t.Parallel()
 
-func TestGetGroupByName(t *testing.T) {
-	t.Parallel()
+			got, err := getGroupEntries()
+			require.NoError(t, err, "GetGroupEntries should never return an error")
+			require.NotEmpty(t, got, "GetGroupEntries should never return an empty list")
+			require.True(t, slices.ContainsFunc(got, func(g types.GroupEntry) bool {
+				return g.Name == "root" && g.GID == 0
+			}), "GetGroupEntries should return root")
 
-	got, err := GetGroupByName("root")
-	require.NoError(t, err, "GetGroupByName should not return an error")
-	require.Equal(t, got.Name, "root")
-	require.Equal(t, got.GID, uint32(0))
-}
-
-func TestGetGroupByName_NotFound(t *testing.T) {
-	t.Parallel()
-
-	got, err := GetGroupByName("nonexistent")
-	require.ErrorIs(t, err, ErrGroupNotFound)
-	require.Equal(t, got.Name, "")
+			require.True(t, slices.ContainsFunc(got, func(g types.GroupEntry) bool {
+				return len(g.Users) > 0
+			}), "GetGroupEntries should returns at least one group that have users")
+		})
+	}
 }

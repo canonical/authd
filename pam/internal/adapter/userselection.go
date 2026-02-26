@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/canonical/authd/log"
+	"github.com/canonical/authd/pam/internal/proto"
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/msteinert/pam/v2"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/authd/pam/internal/proto"
 )
 
-// userSelectionModel allows selecting from PAM or interactively an user.
+// userSelectionModel allows selecting from PAM or interactively a user.
 type userSelectionModel struct {
 	textinput.Model
 
@@ -154,7 +154,7 @@ func (m userSelectionModel) Username() string {
 		return ""
 	}
 	// authd uses lowercase usernames
-	return strings.ToLower(m.Model.Value())
+	return strings.ToLower(m.Value())
 }
 
 // Focus sets the focus state on the model. We also mark as the user is not

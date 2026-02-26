@@ -157,20 +157,21 @@ func CheckValidGoldenFileName(t *testing.T, name string) {
 func Path(t *testing.T) string {
 	t.Helper()
 
+	for _, part := range strings.Split(t.Name(), "/") {
+		CheckValidGoldenFileName(t, part)
+	}
+
+	return filepath.Join(Dir(t), t.Name())
+}
+
+// Dir returns the golden directory for the provided test.
+func Dir(t *testing.T) string {
+	t.Helper()
+
 	cwd, err := os.Getwd()
 	require.NoError(t, err, "Cannot get current working directory")
 
-	topLevelTest, subtest, subtestFound := strings.Cut(t.Name(), "/")
-	CheckValidGoldenFileName(t, topLevelTest)
-
-	path := filepath.Join(cwd, "testdata", "golden", topLevelTest)
-
-	if !subtestFound {
-		return path
-	}
-
-	CheckValidGoldenFileName(t, subtest)
-	return filepath.Join(path, subtest)
+	return filepath.Join(cwd, "testdata", "golden")
 }
 
 // runDelta pipes the unified diff through the `delta` command for word-level diff and coloring.

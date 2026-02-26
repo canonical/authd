@@ -1,0 +1,3 @@
+access: retry
+data: '{"message":"An unexpected error occurred: empty secret. Please report this error on https://github.com/canonical/authd/issues"}'
+err: <nil>
