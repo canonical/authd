@@ -28,7 +28,6 @@ XS-Vendored-Sources-Rust: adler2@2.0.0, aho-corasick@1.1.3, anyhow@1.0.98, async
 Homepage: https://github.com/ubuntu/authd
 Vcs-Browser: https://github.com/ubuntu/authd
 Vcs-Git: https://github.com/ubuntu/authd.git
-Rules-Requires-Root: no
 Description: Authentication daemon for cloud-based identity provider
  Authd is a versatile authentication service designed to seamlessly integrate
  with cloud identity providers like OpenID Connect and Entra ID. It offers a
