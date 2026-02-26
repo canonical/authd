@@ -1,0 +1,58 @@
+#!/bin/bash
+
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+usage() {
+    echo "Usage: $0 --broker <broker> [--copy]"
+    echo
+    echo "Prepare the snapcraft.yaml for building the specified broker snap."
+    echo
+    echo "Options:"
+    echo "  --broker <broker>  The broker to use (oidc, msentraid or google)."
+    echo "  --copy             Copy files instead of creating symlinks."
+}
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --broker)
+            BROKER="$2"
+            shift 2
+            ;;
+        --copy)
+            COPY=1
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+set -x
+
+if [[ -z "${BROKER:-}" ]]; then
+    echo "Error: --broker is required."
+    usage
+    exit 1
+fi
+
+set -x
+
+DEST_DIR="${SCRIPT_DIR}/.."
+cd "$DEST_DIR"
+
+SRC_FILE="variants/${BROKER}/snapcraft.yaml"
+if ! [ -e "$SRC_FILE" ]; then
+    echo "Error: $SRC_FILE does not exist."
+    exit 1
+fi
+
+if [ -n "${COPY:-}" ]; then
+    cp --target-directory "$DEST_DIR" "$SRC_FILE"
+else
+    ln -sf --target-directory "$DEST_DIR" "$SRC_FILE"
+fi

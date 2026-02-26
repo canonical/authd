@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/internal/services/errmessages"
+	"github.com/canonical/authd/log"
 	"github.com/godbus/dbus/v5"
-	"github.com/ubuntu/authd/internal/services/errmessages"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/decorate"
 	"gopkg.in/ini.v1"
 )
 

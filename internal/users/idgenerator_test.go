@@ -6,8 +6,8 @@ import (
 	"math"
 	"testing"
 
+	"github.com/canonical/authd/internal/users/localentries"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/users/localentries"
 )
 
 func TestGetIDCandidate(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/log"
 )
 
 // UserGroups returns all groups for a given user or an error if the database is corrupted or no entry was found.
@@ -50,6 +50,9 @@ func userGroups(db queryable, uid uint32) ([]GroupRow, error) {
 
 // RemoveUserFromGroup removes a user from a group.
 func (m *Manager) RemoveUserFromGroup(uid, gid uint32) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	query := `DELETE FROM users_to_groups WHERE uid = ? AND gid = ?`
 	_, err := m.db.Exec(query, uid, gid)
 	return err
