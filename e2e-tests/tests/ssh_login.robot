@@ -12,7 +12,7 @@ Test Teardown   Test Teardown
 
 *** Keywords ***
 Test Setup
-    Restore Snapshot    %{BROKER}-edge-configured
+    Restore Snapshot    %{BROKER}-installed
     Journal.Start Receiving Journal
     Change Broker Configuration    ssh_allowed_suffixes_first_auth    %{E2E_USER}
 

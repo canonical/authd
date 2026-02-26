@@ -4,7 +4,6 @@
 export SSH_PUBLIC_KEY_FILE="${HOME}/.ssh/id_rsa.pub"
 export VM_NAME_BASE=e2e-runner
 export RELEASE=questing
-export BROKERS=authd-msentraid,authd-google
 
 # authd-msentraid broker configuration
 export AUTHD_MSENTRAID_ISSUER_ID=

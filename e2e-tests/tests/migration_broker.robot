@@ -13,7 +13,7 @@ Test Teardown   Test Teardown
 *** Keywords ***
 Test Setup
     Journal.Start Receiving Journal
-    Restore Snapshot    %{BROKER}-stable-configured
+    Restore Snapshot    %{BROKER}-stable-installed
 
 Test Teardown
     Journal.Stop Receiving Journal

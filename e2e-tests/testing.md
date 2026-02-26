@@ -164,7 +164,7 @@ Now that the VM is ready, we need to install authd and the brokers we want to te
 3. Create a snapshot of this state, so we can revert to it later when we proceed to configure the brokers.
 
     ```bash
-    virsh snapshot-create-as e2e-runner --name authd-edge-installed --reuse-external
+    virsh snapshot-create-as e2e-runner --name authd-installed --reuse-external
     ```
 
 4. Repeat the above steps for the stable version of authd, just changing the PPA to `ppa:ubuntu-enterprise-desktop/authd` and naming the snapshot `authd-stable-installed`.
@@ -222,7 +222,7 @@ Repeat the following steps for each version of each broker you want to test;
 7. Create a snapshot of this state, so we can revert to it later when running the tests.
 
     ```bash
-    virsh snapshot-create-as e2e-runner --name "${broker}-${channel}-configured" --reuse-external
+    virsh snapshot-create-as e2e-runner --name "${broker}-${channel}-installed" --reuse-external
     ```
 
 #### Scripts to automate the installation and configuration of authd and brokers
@@ -287,7 +287,7 @@ for channel in "${channels[@]}"; do
     retry --times 10 --delay 3 -- ssh_vm "systemctl is-system-running --wait"
 
     # Create snapshot for broker configured state
-    virsh snapshot-create-as e2e-runner --name "$broker-$channel-configured" --reuse-external
+    virsh snapshot-create-as e2e-runner --name "$broker-$channel-installed" --reuse-external
 done
 ```
 

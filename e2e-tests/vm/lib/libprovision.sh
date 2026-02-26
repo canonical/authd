@@ -35,7 +35,9 @@ function force_create_snapshot() {
     if virsh domstate "${VM_NAME}" | grep -q '^running'; then
         # If the VM is running, we have to use --memspec to create the snapshot
         local memfile="${IMAGE%.qcow2}-${snapshot_name}.mem"
-        time virsh snapshot-create-as --domain "${VM_NAME}" --name "${snapshot_name}" \
+        time virsh snapshot-create-as \
+          --domain "${VM_NAME}" \
+          --name "${snapshot_name}" \
           --memspec "${memfile},snapshot=external"
         return
     fi

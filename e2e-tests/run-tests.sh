@@ -19,8 +19,9 @@ Required environment variables (or use the corresponding command-line options):
 
 Prerequisites:
   - A libvirt domain as set up by the vm/provision.sh script, with the snapshots:
-      \${BROKER}-stable-configured
-      \${BROKER}-edge-configured
+      \${BROKER}-installed
+      \${BROKER}-stable-installed
+
   - YARF must be installed via the setup_yarf.sh script
 
 Options:
@@ -130,7 +131,7 @@ if ! virsh domstate "${VM_NAME}" | grep -q '^running'; then
     # `virsh start` fails with a permission denied error.
     # Reverting to a snapshot first fixes this (and since it's a live snapshot,
     # we don't need to start the VM afterwards).
-    virsh snapshot-revert "${VM_NAME}" "${BROKER}-stable-configured"
+    virsh snapshot-revert "${VM_NAME}" "${BROKER}-installed"
 fi
 VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2)
 
