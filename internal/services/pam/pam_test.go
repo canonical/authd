@@ -14,22 +14,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/brokers"
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/services/errmessages"
+	"github.com/canonical/authd/internal/services/pam"
+	"github.com/canonical/authd/internal/services/permissions"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/users"
+	"github.com/canonical/authd/internal/users/db"
+	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	userslocking "github.com/canonical/authd/internal/users/locking"
+	userstestutils "github.com/canonical/authd/internal/users/testutils"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/brokers"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/internal/services/errmessages"
-	"github.com/ubuntu/authd/internal/services/pam"
-	"github.com/ubuntu/authd/internal/services/permissions"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	"github.com/ubuntu/authd/internal/users"
-	"github.com/ubuntu/authd/internal/users/db"
-	localgroupstestutils "github.com/ubuntu/authd/internal/users/localentries/testutils"
-	userslocking "github.com/ubuntu/authd/internal/users/locking"
-	userstestutils "github.com/ubuntu/authd/internal/users/testutils"
-	"github.com/ubuntu/authd/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -565,7 +565,7 @@ func TestIsAuthenticated(t *testing.T) {
 			}
 
 			// Check that database has been updated too.
-			gotDB, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			gotDB, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Setup: failed to dump database for comparing")
 			golden.CheckOrUpdate(t, gotDB, golden.WithPath("cache.db"))
 
@@ -611,7 +611,7 @@ func TestIDGeneration(t *testing.T) {
 			require.NoError(t, err, "Setup: could not authenticate user")
 			require.Equal(t, "granted", resp.GetAccess(), "Setup: authentication should be granted")
 
-			gotDB, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			gotDB, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Setup: failed to dump database for comparing")
 			golden.CheckOrUpdate(t, gotDB, golden.WithPath("cache.db"))
 		})
@@ -672,7 +672,7 @@ func TestSetDefaultBrokerForUser(t *testing.T) {
 			require.Equal(t, tc.brokerID, gpbResp.GetPreviousBroker(), "SetDefaultBrokerForUser should set the default broker as expected")
 
 			// Check that database has been updated too.
-			gotDB, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			gotDB, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Setup: failed to dump database for comparing")
 			golden.CheckOrUpdate(t, gotDB, golden.WithPath("cache.db"))
 		})

@@ -3,8 +3,8 @@ package adapter
 import (
 	"context"
 
+	"github.com/canonical/authd/log"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/ubuntu/authd/log"
 )
 
 type focusTrackerModel struct {

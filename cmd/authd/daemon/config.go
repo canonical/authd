@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/decorate"
 )
 
 // initViperConfig sets verbosity level and add config env variables and file support based on name prefix.

@@ -13,10 +13,10 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/internal/fileutils"
-	"github.com/ubuntu/authd/internal/testsdetection"
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/testsdetection"
+	"github.com/canonical/authd/log"
 	"gopkg.in/yaml.v3"
 )
 

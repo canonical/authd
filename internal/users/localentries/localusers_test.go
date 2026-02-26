@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/canonical/authd/internal/users/localentries"
+	"github.com/canonical/authd/internal/users/types"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/users/localentries"
-	"github.com/ubuntu/authd/internal/users/types"
 )
 
 func TestParseLocalPasswdFile(t *testing.T) {

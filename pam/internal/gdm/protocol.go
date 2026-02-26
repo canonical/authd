@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"slices"
 
-	"github.com/ubuntu/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/proto/authd"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 

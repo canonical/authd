@@ -1,0 +1,11 @@
+Usage:
+  authctl group [flags]
+  authctl group [command]
+
+Available Commands:
+  set-gid     Set the GID of a group managed by authd
+
+Flags:
+  -h, --help   help for group
+
+Use "authctl group [command] --help" for more information about a command.

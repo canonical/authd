@@ -8,8 +8,8 @@ import (
 	"slices"
 	"sort"
 
-	"github.com/ubuntu/authd/internal/users/localentries"
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/internal/users/localentries"
+	"github.com/canonical/authd/log"
 )
 
 // IDGeneratorIface is the interface that must be implemented by the ID generator.
