@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/testsdetection"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/testsdetection"
-	"github.com/ubuntu/authd/log"
 )
 
 var (

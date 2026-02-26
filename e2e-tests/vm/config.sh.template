@@ -1,0 +1,17 @@
+# Provisioning configuration file for authd end-to-end tests
+# Copy this template to config.sh and customize the values for your environment.
+
+export SSH_PUBLIC_KEY_FILE="${HOME}/.ssh/id_rsa.pub"
+export VM_NAME_BASE=e2e-runner
+export RELEASE=questing
+export BROKERS=authd-msentraid,authd-google
+
+# authd-msentraid broker configuration
+export AUTHD_MSENTRAID_ISSUER_ID=
+export AUTHD_MSENTRAID_CLIENT_ID=
+export AUTHD_MSENTRAID_USER=
+
+# authd-google broker configuration
+export AUTHD_GOOGLE_CLIENT_ID=
+export AUTHD_GOOGLE_CLIENT_SECRET=
+export AUTHD_GOOGLE_USER=

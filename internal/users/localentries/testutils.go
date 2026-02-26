@@ -1,7 +1,7 @@
 package localentries
 
 import (
-	"github.com/ubuntu/authd/internal/testsdetection"
+	"github.com/canonical/authd/internal/testsdetection"
 )
 
 var originalDefaultOptions = defaultOptions

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 if [ -v DEB_HOST_GNU_TYPE ]; then
-    echo "Proto files should not be regenerated during package building"
+    echo "generate-proto.sh: Package build environment detected, skipping proto generation"
     exit 0
 fi
 

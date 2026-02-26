@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/brokers/layouts/entries"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/brokers/layouts/entries"
 )
 
 func TestOptionalItems(t *testing.T) {

@@ -22,22 +22,6 @@ Show
 ClearTerminal
 
 Hide
-TypeInPrompt+Shell "${AUTHCTL_PATH} --help"
-Enter
-Wait
-Show
-
-ClearTerminal
-
-Hide
-TypeInPrompt+Shell "echo $?"
-Enter
-Wait
-Show
-
-ClearTerminal
-
-Hide
 TypeInPrompt+Shell "${AUTHCTL_PATH} user lock ${AUTHD_PAM_SSH_USER}"
 Enter
 Wait

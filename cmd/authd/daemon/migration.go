@@ -6,11 +6,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/internal/fileutils"
-	"github.com/ubuntu/authd/internal/users/db"
-	"github.com/ubuntu/authd/internal/users/db/bbolt"
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/users/db"
+	"github.com/canonical/authd/internal/users/db/bbolt"
+	"github.com/canonical/authd/log"
 )
 
 func maybeMigrateOldDBDir(oldPath, newPath string) error {

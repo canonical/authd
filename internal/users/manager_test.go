@@ -13,19 +13,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/users"
+	"github.com/canonical/authd/internal/users/db"
+	"github.com/canonical/authd/internal/users/localentries"
+	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	userslocking "github.com/canonical/authd/internal/users/locking"
+	"github.com/canonical/authd/internal/users/tempentries"
+	userstestutils "github.com/canonical/authd/internal/users/testutils"
+	"github.com/canonical/authd/internal/users/types"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	"github.com/ubuntu/authd/internal/users"
-	"github.com/ubuntu/authd/internal/users/db"
-	"github.com/ubuntu/authd/internal/users/localentries"
-	localgroupstestutils "github.com/ubuntu/authd/internal/users/localentries/testutils"
-	userslocking "github.com/ubuntu/authd/internal/users/locking"
-	"github.com/ubuntu/authd/internal/users/tempentries"
-	userstestutils "github.com/ubuntu/authd/internal/users/testutils"
-	"github.com/ubuntu/authd/internal/users/types"
-	"github.com/ubuntu/authd/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -104,7 +104,7 @@ func TestNewManager(t *testing.T) {
 			}
 			require.NoError(t, err, "NewManager should not return an error, but did")
 
-			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Created database should be valid yaml content")
 
 			golden.CheckOrUpdate(t, got)
@@ -131,7 +131,7 @@ func TestStop(t *testing.T) {
 	require.NoError(t, m.Stop(), "Stop should not return an error, but did")
 
 	// Should fail, because the db is closed
-	_, err := userstestutils.GetManagerDB(m).AllUsers()
+	_, err := userstestutils.DBManager(m).AllUsers()
 
 	require.Error(t, err, "AllUsers should return an error, but did not")
 }
@@ -195,13 +195,13 @@ func TestUpdateUser(t *testing.T) {
 		"GID_does_not_change_if_group_with_same_UGID_exists":                {groupsCase: "different-name-same-ugid", dbFile: "one_user_and_group"},
 		"GID_does_not_change_if_group_with_same_name_and_empty_UGID_exists": {groupsCase: "authd-group", dbFile: "group-with-empty-UGID"},
 		"Removing_last_user_from_a_group_keeps_the_group_record":            {groupsCase: "no-groups", dbFile: "one_user_and_group"},
+		"Allow_login_with_existing_group_on_system":                         {groupsCase: "group-exists-on-system"},
 
 		"Error_if_user_has_no_username":                           {userCase: "nameless", wantErr: true, noOutput: true},
 		"Error_if_group_has_no_name":                              {groupsCase: "nameless-group", wantErr: true, noOutput: true},
 		"Error_if_group_has_conflicting_gid":                      {groupsCase: "different-name-same-gid", dbFile: "one_user_and_group", wantErr: true, noOutput: true},
 		"Error_if_group_with_same_name_but_different_UGID_exists": {groupsCase: "authd-group", dbFile: "one_user_and_group", wantErr: true, noOutput: true},
 		"Error_if_user_exists_on_system":                          {userCase: "user-exists-on-system", wantErr: true, noOutput: true},
-		"Error_if_group_exists_on_system":                         {groupsCase: "group-exists-on-system", wantErr: true, noOutput: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -269,7 +269,7 @@ func TestUpdateUser(t *testing.T) {
 				require.Equal(t, oldUID, newUser.UID, "UID should not have changed")
 			}
 
-			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Created database should be valid yaml content")
 
 			golden.CheckOrUpdate(t, got)
@@ -389,10 +389,10 @@ func TestConcurrentUserUpdate(t *testing.T) {
 	idGenerator := &users.IDGenerator{
 		UIDMin: 0,
 		//nolint: gosec // we're in tests, overflow is very unlikely to happen.
-		UIDMax: uint32(len(systemPasswd)) + nIterations*preAuthIterations,
+		UIDMax: uint32(len(systemPasswd)) + nIterations*preAuthIterations + uint32(len(systemGroups)),
 		GIDMin: 0,
 		//nolint: gosec // we're in tests, overflow is very unlikely to happen.
-		GIDMax: uint32(len(systemGroups)) + nIterations*perUserGroups,
+		GIDMax: uint32(len(systemGroups)) + nIterations*perUserGroups + uint32(len(systemGroups)),
 	}
 	m := newManagerForTests(t, dbDir, users.WithIDGenerator(idGenerator))
 
@@ -482,8 +482,9 @@ func TestConcurrentUserUpdate(t *testing.T) {
 		})
 	}
 
+	// Test that adding users with the same name as system users fails
 	for _, u := range systemPasswd {
-		t.Run(fmt.Sprintf("Error_updating_user_%s", u.Name), func(t *testing.T) {
+		t.Run(fmt.Sprintf("Error_updating_user_with_name_conflict_%s", u.Name), func(t *testing.T) {
 			t.Parallel()
 
 			err := m.UpdateUser(types.UserInfo{
@@ -495,11 +496,12 @@ func TestConcurrentUserUpdate(t *testing.T) {
 		})
 	}
 
+	// Test that adding users with groups with the same name as local groups does not fail (we print a warning instead).
 	for idx, g := range systemGroups {
-		t.Run(fmt.Sprintf("Error_updating_user_with_non_local_group_%s", g.Name), func(t *testing.T) {
+		t.Run(fmt.Sprintf("Allow_updating_user_with_group_name_conflict_%s", g.Name), func(t *testing.T) {
 			t.Parallel()
 
-			userName := fmt.Sprintf("%s-with-invalid-groups%d", registeredUserPrefix, idx)
+			userName := fmt.Sprintf("%s-with-group-name-conflict%d", registeredUserPrefix, idx)
 			err := m.UpdateUser(types.UserInfo{
 				Name:  userName,
 				Dir:   "/home-prefixes/" + g.Name,
@@ -507,9 +509,12 @@ func TestConcurrentUserUpdate(t *testing.T) {
 				Groups: []types.GroupInfo{{
 					Name: g.Name,
 					UGID: fmt.Sprintf("authd-test-ugid-for-%s", g.Name),
+				}, {
+					Name: fmt.Sprintf("authd-test-local-group%d", idx),
 				}},
 			})
-			require.Error(t, err, "Updating user %q must fail but it does not", g.Name)
+			// UpdateUser call should pass although the user would not be added to the system group
+			require.NoError(t, err, "Updating user %q with group name conflict %q should not fail but it did", userName, g.Name)
 		})
 	}
 
@@ -520,15 +525,17 @@ func TestConcurrentUserUpdate(t *testing.T) {
 		// since this is actually a test.
 		wg.Wait()
 
-		// This includes the extra user that was already in the DB.
+		// This includes the extra user that was already in the DB and the
+		// users registered via non-local groups loop.
 		users, err := m.AllUsers()
 		require.NoError(t, err, "AllUsers should not fail but it did")
-		require.Len(t, users, nIterations+1, "Number of registered users mismatch")
+		require.Len(t, users, nIterations+1+len(systemGroups), "Number of registered users mismatch")
 
-		// This includes the extra group that was already in the DB.
+		// This includes the extra group that was already in the DB and the
+		// private groups for users registered via the non-local groups loop.
 		groups, err := m.AllGroups()
 		require.NoError(t, err, "AllGroups should not fail but it did")
-		require.Len(t, groups, nIterations*3+1, "Number of registered groups mismatch")
+		require.Len(t, groups, nIterations*3+1+len(systemGroups), "Number of registered groups mismatch")
 
 		lockedEntries, entriesUnlock, err := localentries.WithUserDBLock()
 		require.NoError(t, err, "Failed to lock the local entries")
@@ -609,7 +616,10 @@ func TestConcurrentUserUpdate(t *testing.T) {
 
 			require.GreaterOrEqual(t, g.GID, idGenerator.GIDMin,
 				"Generated GID should be an ID greater or equal to the minimum")
-			require.LessOrEqual(t, g.GID, idGenerator.GIDMax,
+			// The GID of user private groups is set to the same value as the UID, even if GIDMax is smaller,
+			// so we need to check that the generated GID is less or equal to the maximum between GIDMax and UIDMax.
+			gidMax := max(idGenerator.GIDMax, idGenerator.UIDMax)
+			require.LessOrEqual(t, g.GID, gidMax,
 				"Generate GID should be an ID less or equal to the maximum")
 		}
 	})
@@ -762,7 +772,7 @@ func TestUpdateBrokerForUser(t *testing.T) {
 				return
 			}
 
-			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Created database should be valid yaml content")
 
 			golden.CheckOrUpdate(t, got)
@@ -808,7 +818,7 @@ func TestLockUser(t *testing.T) {
 				return
 			}
 
-			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Created database should be valid yaml content")
 
 			golden.CheckOrUpdate(t, got)
@@ -854,7 +864,7 @@ func TestUnlockUser(t *testing.T) {
 				return
 			}
 
-			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Created database should be valid yaml content")
 
 			golden.CheckOrUpdate(t, got)
@@ -1316,6 +1326,11 @@ func newManagerForTests(t *testing.T, dbDir string, opts ...users.Option) *users
 
 func TestMain(m *testing.M) {
 	log.SetLevel(log.DebugLevel)
+
+	if testutils.RunningInBubblewrap() {
+		m.Run()
+		return
+	}
 
 	userslocking.Z_ForTests_OverrideLocking()
 	defer userslocking.Z_ForTests_RestoreLocking()
