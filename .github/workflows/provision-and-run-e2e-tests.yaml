@@ -28,8 +28,7 @@ jobs:
       # Needed to push OCI artifact to ghcr.io
       packages: write
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
       - name: Restore cached VM image (if available)
         id: restore-cache

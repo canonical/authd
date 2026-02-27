@@ -97,8 +97,7 @@ jobs:
       pkg-src-changes-noble: ${{ steps.outputs.outputs.pkg-src-changes-noble }}
 
     steps:
-      - name: Checkout authd code
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
       - name: Build Debian package and sources
         uses: canonical/desktop-engineering/gh-actions/common/build-debian@main
@@ -153,8 +152,7 @@ jobs:
       list: ${{ fromJSON(steps.git-diff.outputs.modified_files) }}
 
     steps:
-      - name: Checkout authd code
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 100
 
@@ -233,8 +231,7 @@ jobs:
         sudo apt-get install -y --no-install-suggests --no-install-recommends \
           dpkg-dev devscripts
 
-    - name: Checkout code
-      uses: actions/checkout@v6
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 100
         path: repo
