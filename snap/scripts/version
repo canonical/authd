@@ -49,8 +49,8 @@ get_version() {
 
     version="${tag}"
     if [ -z "${version}" ]; then
-        # No tag found, use "notag" as version.
-        version="notag"
+        # No tag found, use "0.0.0"
+        version="0.0.0"
     fi
     version=$(strip_branch_tag_prefix "${version}")
 
