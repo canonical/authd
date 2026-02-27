@@ -43,8 +43,15 @@ env:
   OUTPUT_DIR: /tmp/e2e-${{ inputs.broker }}-${{ inputs.ubuntu-version }}/output
 
 jobs:
+  build-broker-snap:
+    uses: ./.github/workflows/build-broker-snap.yaml
+    with:
+      broker: ${{ inputs.broker }}
+    secrets: inherit
+
   run-tests:
     name: Run e2e-tests (${{ inputs.broker }})
+    needs: build-broker-snap
     runs-on: ubuntu-latest
     permissions:
       # Needed by JamesIves/github-pages-deploy-action
@@ -54,8 +61,60 @@ jobs:
       # Needed to use the commit statuses API to show a PR check for the e2e-test logs
       statuses: write
     steps:
+      - uses: actions/checkout@v6
+
       - uses: oras-project/setup-oras@v1
-      - name: Download VM image OCI artifact
+
+      - name: Download the broker snap
+        id: download-broker-snap
+        env:
+          OCI_REPO: ghcr.io/${{ github.repository }}/${{ inputs.broker }}-snap
+          OCI_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+          oras pull "${OCI_REPO}:${OCI_TAG}"
+
+          SNAP=$(find . -maxdepth 1 -name '*.snap')
+          if [ -z "$SNAP" ] || [ ! -f "$SNAP" ]; then
+            echo "Error: Snap file not found after pulling from OCI registry"
+            exit 1
+          fi
+
+          mkdir -p "${{ env.ARTIFACTS_DIR }}"
+          mv "$SNAP" "${{ env.ARTIFACTS_DIR }}"
+          SNAP=$(realpath "${{ env.ARTIFACTS_DIR }}/$SNAP")
+          echo "snap=${SNAP}" >> $GITHUB_OUTPUT
+
+      - name: Download the authd deb
+        id: download-authd-deb
+        env:
+          OCI_REPO: ghcr.io/${{ github.repository }}/authd-deb-${{ inputs.ubuntu-version }}
+          OCI_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+          oras pull "${OCI_REPO}:${OCI_TAG}"
+
+          DEB=$(find . -maxdepth 1 -name 'authd_*.deb')
+          if [ -z "$DEB" ] || [ ! -f "$DEB" ]; then
+            echo "Error: Deb not found after pulling from OCI registry"
+            exit 1
+          fi
+
+          mkdir -p "${{ env.ARTIFACTS_DIR }}"
+          mv "$DEB" "${{ env.ARTIFACTS_DIR }}"
+          DEB=$(realpath "${{ env.ARTIFACTS_DIR }}/$DEB")
+          echo "deb=${DEB}" >> $GITHUB_OUTPUT
+
+      - name: Download the VM image
+        id: download-vm-image
         env:
           OCI_REPO: ghcr.io/${{ github.repository }}/e2e-runner
           OCI_TAG: ${{ inputs.ubuntu-version }}
@@ -71,9 +130,7 @@ jobs:
           oras pull "${OCI_REPO}:${OCI_TAG}"
           cat chunk-* > "$IMAGE_PATH"
           rm chunk-*
-
-      - name: Checkout repo
-        uses: actions/checkout@v6
+          echo "image-path=${IMAGE_PATH}" >> $GITHUB_OUTPUT
 
       - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
 
@@ -95,7 +152,7 @@ jobs:
           # Generate the libvirt domain XML file
           template="${{ env.E2E_TESTS_DIR }}/vm/e2e-runner-template.xml"
           env \
-            IMAGE_FILE=${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-version }}.qcow2 \
+            IMAGE_FILE=${{ steps.download-vm-image.outputs.image-path }} \
             VM_NAME=${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-version }} \
             envsubst \
               < "${template}" \
@@ -106,7 +163,7 @@ jobs:
             export SSH_PUBLIC_KEY_FILE=${{ steps.set-ssh-keys.outputs.keys-path }}/id_rsa.pub
             export VM_NAME_BASE=${{ env.VM_NAME_BASE }}
             export RELEASE=${{ inputs.ubuntu-version }}
-            export BROKERS=${{ inputs.broker }}
+            export BROKER=${{ inputs.broker }}
 
             export AUTHD_MSENTRAID_ISSUER_ID=${{ secrets.E2E_MSENTRA_ISSUER_ID }}
             export AUTHD_MSENTRAID_CLIENT_ID=${{ secrets.E2E_MSENTRA_CLIENT_ID }}
@@ -118,7 +175,9 @@ jobs:
           EOF
 
           # Provision the VM
-          ${{ env.E2E_TESTS_DIR }}/vm/provision-authd.sh
+          ${{ env.E2E_TESTS_DIR }}/vm/provision-authd.sh \
+            --authd-deb "${{ steps.download-authd-deb.outputs.deb }}" \
+            --broker-snap "${{ steps.download-broker-snap.outputs.snap }}"
 
       - name: Checkout YARF repo
         uses: actions/checkout@v6

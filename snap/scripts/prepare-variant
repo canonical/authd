@@ -46,6 +46,9 @@ if [[ -z "${BROKER:-}" ]]; then
     exit 1
 fi
 
+# Strip "authd-" prefix from the broker name if present
+BROKER="${BROKER#authd-}"
+
 set -x
 
 DEST_DIR="${SCRIPT_DIR}/.."
