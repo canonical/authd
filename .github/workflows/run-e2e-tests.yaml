@@ -47,8 +47,9 @@ jobs:
     name: Run e2e-tests (${{ inputs.broker }})
     runs-on: ubuntu-latest
     permissions:
+      # Needed by actions/checkout
       contents: read
-      actions: write
+      # Needed to pull OCI artifacts from ghcr.io
       packages: read
     steps:
       - uses: oras-project/setup-oras@v1

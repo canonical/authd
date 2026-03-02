@@ -23,8 +23,9 @@ jobs:
     name: Provision VM
     runs-on: ubuntu-latest
     permissions:
+      # Needed by actions/checkout
       contents: read
-      actions: write
+      # Needed to push OCI artifact to ghcr.io
       packages: write
     steps:
       - name: Checkout repo
