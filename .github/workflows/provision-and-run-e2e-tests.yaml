@@ -3,7 +3,7 @@ name: provision-e2e-test (reusable)
 on:
   workflow_call:
     inputs:
-      release:
+      ubuntu-version:
         required: true
         type: string
     secrets:
@@ -34,9 +34,9 @@ jobs:
         id: restore-cache
         uses: actions/cache/restore@v5
         with:
-          path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.release }}.qcow2
+          path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-version }}.qcow2
           key: >-
-            e2e-runner-vm-${{ inputs.release }}-${{ hashFiles(
+            e2e-runner-vm-${{ inputs.ubuntu-version }}-${{ hashFiles(
               'e2e-tests/vm/**',
               '.github/actions/e2e-tests/set-up-ssh-keys/**',
               '.github/workflows/provision-and-run-e2e-tests.yaml'
@@ -66,7 +66,7 @@ jobs:
           export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
           mkdir -p ${{ env.ARTIFACTS_DIR }}
           env VM_NAME_BASE="${{ env.VM_NAME_BASE }}" \
-            RELEASE="${{ inputs.release }}" \
+            RELEASE="${{ inputs.ubuntu-version }}" \
             ARTIFACTS_DIR="${{ env.ARTIFACTS_DIR }}" \
             SSH_PUBLIC_KEY_FILE="${{ steps.set-ssh-keys.outputs.keys-path }}/id_rsa.pub" \
             ./${{ env.E2E_TESTS_DIR }}/vm/provision-ubuntu.sh
@@ -78,16 +78,16 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -eu
-          gh cache delete e2e-runner-${{ inputs.release }} || true
+          gh cache delete e2e-runner-${{ inputs.ubuntu-version }} || true
           echo "Previous cache (if any) deleted"
 
       - name: Cache the VM image
         uses: actions/cache/save@v5
         if: always() && steps.provision-vm.outcome == 'success'
         with:
-          path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.release }}.qcow2
+          path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-version }}.qcow2
           key: >-
-            e2e-runner-vm-${{ inputs.release }}-${{ hashFiles(
+            e2e-runner-vm-${{ inputs.ubuntu-version }}-${{ hashFiles(
               'e2e-tests/vm/**',
               '.github/actions/e2e-tests/set-up-ssh-keys/**',
               '.github/workflows/provision-and-run-e2e-tests.yaml'
@@ -97,9 +97,9 @@ jobs:
       - name: Upload VM image as OCI artifact
         if: steps.provision-vm.outcome == 'success' || steps.restore-cache.outputs.cache-hit == 'true'
         env:
-          IMAGE_PATH: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.release }}.qcow2
+          IMAGE_PATH: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-version }}.qcow2
           OCI_REPO: ghcr.io/${{ github.repository }}/e2e-runner
-          OCI_TAG: ${{ inputs.release }}
+          OCI_TAG: ${{ inputs.ubuntu-version }}
         run: |
           set -euo pipefail
           
@@ -118,10 +118,10 @@ jobs:
     needs: provision-vm
     strategy:
       matrix:
-        broker: [authd-msentraid, authd-google]
+        broker: [ authd-msentraid, authd-google ]
       fail-fast: false
     uses: ./.github/workflows/run-e2e-tests.yaml
     with:
-      release: ${{ inputs.release }}
+      ubuntu-version: ${{ inputs.ubuntu-version }}
       broker: ${{ matrix.broker }}
     secrets: inherit
