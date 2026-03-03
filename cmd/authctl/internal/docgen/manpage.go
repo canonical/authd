@@ -30,7 +30,7 @@ func genManPage(cmd *cobra.Command, path string) error {
 	fmt.Fprintf(buf, ".\\\" Do not edit manually\n")
 	fmt.Fprintf(buf, ".nh\n")
 	fmt.Fprintf(buf, ".TH \"%s\" \"%s\" \"%s\" \"%s\"\n",
-		header.Title, header.Section, header.Date.Format("Jan 2006"), header.Source)
+		header.Title, header.Section, header.Date.Format("2006-01-02"), header.Source)
 
 	// NAME
 	fmt.Fprintf(buf, ".SH NAME\n")
