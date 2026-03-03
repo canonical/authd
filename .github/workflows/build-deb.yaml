@@ -118,7 +118,7 @@ jobs:
 
             if [ "${{ matrix.ubuntu-version }}" == noble ] || \
                [ "${{ matrix.ubuntu-version }}" == plucky ]; then
-              # Avoid lintian warnings on Noble and Plucky by disabling the 
+              # Avoid lintian warnings on Noble and Plucky by disabling the
               # silent-on-rules-requiring-root tag. That tag doesn't exist in
               # newer versions of lintian so we must only disable it on Noble
               # and Plucky.
@@ -263,14 +263,14 @@ jobs:
         mv debian/changelog.sanitized debian/changelog
         dpkg-parsechangelog
 
-        git config --global user.name "Ubuntu Enterprise Desktop"
-        git config --global user.email "ubuntu-devel-discuss@lists.ubuntu.com"
+        git config user.name "Ubuntu Enterprise Desktop"
+        git config user.email "ubuntu-devel-discuss@lists.ubuntu.com"
 
         git add --all
         git commit \
           --allow-empty \
           -m "Update ubuntu ${{ matrix.ubuntu-version }} package sources" \
-          -m "Use upstream commit ${GITHUB_SHA}"
+          -m "Use upstream commit ${{ github.sha }}"
 
     - name: Push to packaging branch
       run: |
