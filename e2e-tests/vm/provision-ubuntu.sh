@@ -4,6 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 LIB_DIR="${SCRIPT_DIR}/lib"
+SSH="${SCRIPT_DIR}/ssh.sh"
 LIBVIRT_XML_TEMPLATE="${SCRIPT_DIR}/e2e-runner-template.xml"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/authd-e2e-tests"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/authd-e2e-tests"
