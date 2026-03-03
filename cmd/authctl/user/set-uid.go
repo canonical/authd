@@ -16,7 +16,7 @@ import (
 
 // setUIDCmd is a command to set the UID of a user managed by authd.
 var setUIDCmd = &cobra.Command{
-	Use:   "set-uid <name> <uid>",
+	Use:   "set-uid <user> <uid>",
 	Short: "Set the UID of a user managed by authd",
 	Long: `Set the UID of a user managed by authd to the specified value.
 

@@ -4,7 +4,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,21 +12,40 @@ import (
 	"github.com/spf13/cobra/doc"
 )
 
+func logf(format string, v ...any) {
+	fmt.Fprintf(os.Stderr, format+"\n", v...)
+}
+
+func fatalf(format string, v ...any) {
+	logf(format, v...)
+	os.Exit(1)
+}
+
+func fatal(v ...any) {
+	fatalf("%v", v...)
+}
+
 func main() {
-	out := flag.String("out", "./docs/cli", "output directory")
+	out := flag.String("out", "", "output path (directory for markdown/rest, file for man)")
 	format := flag.String("format", "markdown", "markdown|man|rest")
 	front := flag.Bool("frontmatter", false, "prepend simple YAML front matter to markdown")
 	flag.Parse()
 
-	if err := os.MkdirAll(*out, 0o750); err != nil {
-		log.Fatal(err)
+	if *out == "" {
+		fatal("-out is required")
 	}
 
 	rootCmd := root.RootCmd
 	rootCmd.DisableAutoGenTag = true // stable, reproducible files (no timestamp footer)
 
+	logf("generating %s documentation in %s", *format, *out)
+
 	switch *format {
 	case "markdown":
+		if err := os.MkdirAll(*out, 0o750); err != nil {
+			fatal(err)
+		}
+
 		if *front {
 			prep := func(filename string) string {
 				base := filepath.Base(filename)
@@ -37,23 +55,25 @@ func main() {
 			}
 			link := func(name string) string { return strings.ToLower(name) }
 			if err := doc.GenMarkdownTreeCustom(rootCmd, *out, prep, link); err != nil {
-				log.Fatal(err)
+				fatal(err)
 			}
 		} else {
 			if err := doc.GenMarkdownTree(rootCmd, *out); err != nil {
-				log.Fatal(err)
+				fatal(err)
 			}
 		}
-	case "man":
-		hdr := &doc.GenManHeader{Title: strings.ToUpper(rootCmd.Name()), Section: "1"}
-		if err := doc.GenManTree(rootCmd, hdr, *out); err != nil {
-			log.Fatal(err)
-		}
 	case "rest":
+		if err := os.MkdirAll(*out, 0o750); err != nil {
+			fatal(err)
+		}
 		if err := doc.GenReSTTree(rootCmd, *out); err != nil {
-			log.Fatal(err)
+			fatal(err)
+		}
+	case "man":
+		if err := genManPage(rootCmd, *out); err != nil {
+			fatal(err)
 		}
 	default:
-		log.Fatalf("unknown format: %s", *format)
+		fatalf("unknown format: %s", *format)
 	}
 }
