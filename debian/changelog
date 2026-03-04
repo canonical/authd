@@ -1,8 +1,8 @@
-authd (0.5.8+git260304+1834+47597e8c) plucky; urgency=medium
+authd (0.5.8+git260304+1836+55473c88) plucky; urgency=medium
 
-  * Github build. Run id: 22669141232. Run number: 1834.
+  * Github build. Run id: 22672119611. Run number: 1836.
 
- -- Denison <denison.barbosa@canonical.com>  Wed, 04 Mar 2026 12:23:18 +0000
+ -- adombeck <18482300+adombeck@users.noreply.github.com>  Wed, 04 Mar 2026 13:48:03 +0000
 
 authd (0.5.8) resolute; urgency=medium
 
