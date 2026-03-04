@@ -238,7 +238,6 @@ jobs:
       uses: actions/checkout@v6
       with:
         path: packaging-branch
-        fetch-depth: 0
 
     - name: Prepare packaging branch
       run: |
