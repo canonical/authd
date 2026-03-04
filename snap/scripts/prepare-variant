@@ -5,13 +5,17 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 usage() {
-    echo "Usage: $0 --broker <broker> [--copy]"
-    echo
-    echo "Prepare the snapcraft.yaml for building the specified broker snap."
-    echo
-    echo "Options:"
-    echo "  --broker <broker>  The broker to use (oidc, msentraid or google)."
-    echo "  --copy             Copy files instead of creating symlinks."
+    cat << EOF
+Usage: $0 --broker <broker> [--copy]
+
+Prepare the snapcraft.yaml for building the specified broker snap.
+
+Options:
+  --broker <broker>  The broker to use (oidc, msentraid or google).
+  --copy             Copy files instead of creating symlinks.
+                     This is needed by the 'update-snap-branches' CI job but
+                     should not be necessary locally.
+EOF
 }
 
 while [[ $# -gt 0 ]]; do
@@ -24,6 +28,10 @@ while [[ $# -gt 0 ]]; do
             COPY=1
             shift
             ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
         *)
             echo "Unknown option: $1"
             usage
@@ -31,8 +39,6 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-
-set -x
 
 if [[ -z "${BROKER:-}" ]]; then
     echo "Error: --broker is required."

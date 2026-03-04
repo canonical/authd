@@ -16,6 +16,10 @@ func logf(format string, v ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", v...)
 }
 
+func log(v ...any) {
+	logf("%v", v...)
+}
+
 func fatalf(format string, v ...any) {
 	logf(format, v...)
 	os.Exit(1)
@@ -38,10 +42,9 @@ func main() {
 	rootCmd := root.RootCmd
 	rootCmd.DisableAutoGenTag = true // stable, reproducible files (no timestamp footer)
 
-	logf("generating %s documentation in %s", *format, *out)
-
 	switch *format {
 	case "markdown":
+		logf("Generating markdown documentation in %s", *out)
 		if err := os.MkdirAll(*out, 0o750); err != nil {
 			fatal(err)
 		}
@@ -63,6 +66,7 @@ func main() {
 			}
 		}
 	case "rest":
+		logf("Generating reStructuredText documentation in %s", *out)
 		if err := os.MkdirAll(*out, 0o750); err != nil {
 			fatal(err)
 		}
@@ -70,6 +74,7 @@ func main() {
 			fatal(err)
 		}
 	case "man":
+		logf("Generating man page in %s", *out)
 		if err := genManPage(rootCmd, *out); err != nil {
 			fatal(err)
 		}
