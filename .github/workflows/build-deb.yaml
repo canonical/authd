@@ -233,14 +233,11 @@ jobs:
       with:
         fetch-depth: 100
         path: repo
-        persist-credentials: true
 
     - name: Checkout packaging branch
       uses: actions/checkout@v6
       with:
         path: packaging-branch
-        persist-credentials: true
-        fetch-depth: 0
 
     - name: Prepare packaging branch
       run: |
