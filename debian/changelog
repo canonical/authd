@@ -1,8 +1,8 @@
-authd (0.5.8+git260303+1828+2842f7ed) noble; urgency=medium
+authd (0.5.8+git260304+1834+47597e8c) noble; urgency=medium
 
-  * Github build. Run id: 22622136237. Run number: 1828.
+  * Github build. Run id: 22669141232. Run number: 1834.
 
- -- Denison <denison.barbosa@canonical.com>  Tue, 03 Mar 2026 12:04:39 +0000
+ -- Denison <denison.barbosa@canonical.com>  Wed, 04 Mar 2026 12:23:22 +0000
 
 authd (0.5.8) resolute; urgency=medium
 
