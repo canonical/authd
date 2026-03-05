@@ -14,9 +14,11 @@ Test Teardown   Test Teardown
 Test Setup
     Restore Snapshot    %{BROKER}-installed
     Journal.Start Receiving Journal
+    VNCRecorder.Start Recording
     Change Broker Configuration    ssh_allowed_suffixes_first_auth    %{E2E_USER}
 
 Test Teardown
+    VNCRecorder.Stop Recording
     Journal.Stop Receiving Journal
     Journal.Log Journal
     Log Videos On Error

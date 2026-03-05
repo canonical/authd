@@ -12,10 +12,12 @@ Test Teardown   Test Teardown
 
 *** Keywords ***
 Test Setup
-    Journal.Start Receiving Journal
     Restore Snapshot    %{BROKER}-stable-installed
+    Journal.Start Receiving Journal
+    VNCRecorder.Start Recording
 
 Test Teardown
+    VNCRecorder.Stop Recording
     Journal.Stop Receiving Journal
     Journal.Log Journal
     Log Videos On Error

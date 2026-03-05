@@ -5,6 +5,7 @@ Resource            ../kvm.resource
 Library             ./Journal.py    AS    Journal
 Library             ./StringUtils.py    AS    StringUtils
 Library             ./VideoLogger.py    AS    VideoLogger
+Library             ./VNCRecorder.py   AS    VNCRecorder
 Library             ./Snapshot.py    AS    Snapshot
 Library             ./SSH.py    AS    SSH
 Library             Process

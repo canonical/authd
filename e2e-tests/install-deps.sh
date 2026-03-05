@@ -18,4 +18,6 @@ sudo apt-get update && sudo apt-get -y install \
     python3-tk \
     socat \
     systemd-journal-remote \
+    unclutter \
+    xtightvncviewer \
     xvfb
