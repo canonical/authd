@@ -23,6 +23,7 @@ These are mostly guidelines, not rules. Use your best judgment and feel free to 
       - [Building authd only](#building-authd-only)
       - [Building the PAM module only](#building-the-pam-module-only)
       - [Building the NSS module only](#building-the-nss-module-only)
+    - [Building the broker](#building-the-broker)
     - [About the test suite](#about-the-testsuite)
       - [Tests with dependencies](#tests-with-dependencies)
     - [Code style](#code-style)
@@ -175,6 +176,41 @@ cargo build
 This will build a debug release of the NSS module.
 
 The library resulting from the build is located in `./target/debug/libnss_authd.so`. This module must be copied to `/usr/lib/$(gcc -dumpmachine)/libnss_authd.so.2`.
+
+### Building the broker
+
+The authd brokers are packaged as separate snaps that are built and released
+independently from authd. The source code for the brokers is located in
+`./authd-oidc-brokers` and the snap packaging files are located in `./snap`.
+
+To build the broker snap for a specific broker variant, follow these steps from the top of the source tree:
+
+1. Ensure that the submodules are checked out:
+
+   ```shell
+   git submodule update --init --recursive
+   ```
+
+2. Prepare the `snapcraft.yaml` for the desired broker variant:
+
+   ```shell
+   ./snap/scripts/prepare-variant --broker <broker>
+   ```
+
+   where `<broker>` is one of `oidc`, `msentraid`, or `google`.
+
+3. Build the broker snap:
+
+   ```shell
+   snapcraft pack
+   ```
+
+When the build succeeds, the resulting `.snap` file is created in the current working directory.
+You can install the locally built broker snap for development with a command such as:
+
+```shell
+snap install --dangerous ./path/to/broker.snap
+```
 
 ### About the test suite
 
