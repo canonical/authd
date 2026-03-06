@@ -210,12 +210,13 @@ jobs:
 
           # Run the tests
           ${{ env.E2E_TESTS_DIR }}/run-tests.sh \
-              --user "${E2E_USER}" \
-              --password "${E2E_PASSWORD}" \
-              --totp-secret "${TOTP_SECRET}" \
-              --release "${{ inputs.ubuntu-version }}" \
-              --broker "${{ inputs.broker }}" \
-              --output-dir "${{ env.OUTPUT_DIR }}"
+            --user "${E2E_USER}" \
+            --password "${E2E_PASSWORD}" \
+            --totp-secret "${TOTP_SECRET}" \
+            --release "${{ inputs.ubuntu-version }}" \
+            --broker "${{ inputs.broker }}" \
+            --output-dir "${{ env.OUTPUT_DIR }}" \
+            || exit_code=$?
 
           # Redact secrets from the test output
           for file in "${{ env.OUTPUT_DIR }}"/{log,report}.html; do
@@ -223,9 +224,21 @@ jobs:
             sed -i "s/${TOTP_SECRET}/<redacted-totp-secret>/g" "$file"
           done
 
+          if [ -n "${exit_code:-}" ]; then
+            state="failure"
+          else
+            state="success"
+          fi
+
+          echo "log=${{ env.OUTPUT_DIR }}/log.html" >> "$GITHUB_OUTPUT"
+          echo "report=${{ env.OUTPUT_DIR }}/report.html" >> "$GITHUB_OUTPUT"
+          echo "state=${state}" >> "$GITHUB_OUTPUT"
+          echo "exit-code=${exit_code:-0}" >> "$GITHUB_OUTPUT"
+          echo "Exit code: ${exit_code:-0}"
+
       - name: Upload test results as artifact
-        id: upload-results
         if: always()
+        id: upload-results
         uses: actions/upload-artifact@v6
         with:
           name: e2e-${{ inputs.broker }}-output-${{ inputs.ubuntu-version }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -233,12 +246,14 @@ jobs:
 
       - name: Prepare upload to Pages
         id: prepare-pages
-        if: always()
+        # Only run if either the log or the report file exists
+        if: always() && (steps.run-tests.outputs.log != '' || steps.run-tests.outputs.report != '')
         run: |
           set -euo pipefail
           TARGET_DIR="pr/${{ github.event.pull_request.number }}/${{ github.run_id }}/${{ github.run_attempt }}/e2e-tests/${{ inputs.ubuntu-version }}/${{ inputs.broker }}"
           mkdir -p "pages/${TARGET_DIR}"
-          cp "${{ env.OUTPUT_DIR }}"/*.html "pages/${TARGET_DIR}/"
+          cp "${{ steps.run-tests.outputs.log }}" "pages/${TARGET_DIR}/log.html"
+          cp "${{ steps.run-tests.outputs.report }}" "pages/${TARGET_DIR}/report.html"
           echo "target-dir=${TARGET_DIR}" >> "$GITHUB_OUTPUT"
 
           OWNER="${{ github.repository_owner }}"
@@ -273,3 +288,17 @@ jobs:
               context: 'e2e-tests (${{ inputs.ubuntu-version }}) (${{ inputs.broker }})',
             });
             console.log(JSON.stringify(response, null, 2));
+
+      - name: Check the test result
+        uses: actions/github-script@v7
+        if: always()
+        with:
+          script: |
+            const state = '${{ steps.run-tests.outputs.state }}';
+            const logUrl = '${{ steps.prepare-pages.outputs.log-url }}';
+
+            if (state === 'failure') {
+              core.setFailed(`e2e-tests failed with exit code ${{ steps.run-tests.outputs.exit-code }}. See the logs at ${logUrl}`);
+            } else {
+              console.log(`::notice::e2e-tests passed, see the logs at ${logUrl}`);
+            }
