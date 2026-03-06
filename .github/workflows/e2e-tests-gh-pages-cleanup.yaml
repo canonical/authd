@@ -1,0 +1,49 @@
+name: Clean up e2e-test logs from GitHub Pages after PR close
+
+on:
+  pull_request:
+    types: [ closed ]
+  workflow_dispatch:
+    inputs:
+      pr-number:
+        required: true
+        type: string
+        description: PR number to clean up
+
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+
+      - name: Remove PR directory and rewrite history
+        run: |
+          set -euo pipefail
+
+          PR_NUMBER="${{ github.event.pull_request.number || inputs.pr-number }}"
+
+          if [ ! -d "pr/${PR_NUMBER}" ]; then
+            echo "No pages directory found for PR ${PR_NUMBER}, skipping"
+            exit 0
+          fi
+
+          pip install git-filter-repo --break-system-packages
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git filter-repo \
+            --path "pr/${PR_NUMBER}/" \
+            --invert-paths \
+            --force
+
+          git push origin gh-pages --force
