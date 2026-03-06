@@ -54,12 +54,13 @@ jobs:
     needs: build-broker-snap
     runs-on: ubuntu-latest
     permissions:
-      # Needed by JamesIves/github-pages-deploy-action
-      contents: write
+      # Needed by actions/checkout
+      contents: read
       # Needed to pull OCI artifacts from ghcr.io
       packages: read
-      # Needed to use the commit statuses API to show a PR check for the e2e-test logs
-      statuses: write
+    outputs:
+      tests-outcome: ${{ steps.run-tests.outcome }}
+      upload-artifact-outcome: ${{ steps.upload-results.outcome }}
     steps:
       - uses: actions/checkout@v6
 
@@ -225,21 +226,38 @@ jobs:
 
       - name: Upload test results as artifact
         id: upload-results
-        if: always()
+        if: always() && steps.run-tests.outcome != 'skipped'
         uses: actions/upload-artifact@v6
         with:
-          name: e2e-${{ inputs.broker }}-output-${{ inputs.ubuntu-version }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: e2e-tests-${{ inputs.ubuntu-version }}-${{ inputs.broker }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.OUTPUT_DIR }}
+
+  deploy-pages:
+    needs: run-tests
+    if: always() && needs.run-tests.outputs.upload-artifact-outcome == 'success'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: gh-pages
+      cancel-in-progress: false
+    permissions:
+      # Needed by JamesIves/github-pages-deploy-action
+      contents: write
+      # Needed to use the commit statuses API to show a PR check for the e2e-test logs
+      statuses: write
+    steps:
+      - name: Download pages artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: e2e-tests-${{ inputs.ubuntu-version }}-${{ inputs.broker }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: raw/
 
       - name: Prepare upload to Pages
         id: prepare-pages
-        if: always()
         run: |
           set -euo pipefail
           TARGET_DIR="pr/${{ github.event.pull_request.number }}/${{ github.run_id }}/${{ github.run_attempt }}/e2e-tests/${{ inputs.ubuntu-version }}/${{ inputs.broker }}"
           mkdir -p "pages/${TARGET_DIR}"
-          cp "${{ env.OUTPUT_DIR }}"/*.html "pages/${TARGET_DIR}/"
-          echo "target-dir=${TARGET_DIR}" >> "$GITHUB_OUTPUT"
+          cp raw/*.html "pages/${TARGET_DIR}/"
 
           OWNER="${{ github.repository_owner }}"
           REPO="$(basename "${{ github.repository }}")"
@@ -247,13 +265,10 @@ jobs:
 
       - name: Deploy to GitHub Pages
         id: deploy-pages
-        if: always() && steps.prepare-pages.outcome == 'success'
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: pages/
-          # Don't delete the existing pages, so we don't overwrite other PRs' test results
+          folder: pages
           clean: false
-          # Rebase instead of force-push, so concurrent PRs don't overwrite each other
           force: false
 
       - name: Post link to logs as a PR check
@@ -265,7 +280,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.sha,
-              state: '${{ steps.run-tests.outcome }}',
+              state: '${{ needs.run-tests.outputs.tests-outcome }}',
               target_url: '${{ steps.prepare-pages.outputs.log-url }}',
               description: 'View logs',
               context: 'e2e-tests (${{ inputs.ubuntu-version }}) (${{ inputs.broker }})',
