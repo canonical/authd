@@ -27,17 +27,20 @@ from generate_totp import generate_totp # type: ignore # This is resolved at run
 
 SNAPSHOT_INDEX = 0
 
-
 def main():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("username")
-    parser.add_argument("password")
     parser.add_argument("device_code")
-    parser.add_argument("totp_secret")
     parser.add_argument("--output-dir", required=False, default=os.path.realpath(os.curdir))
     parser.add_argument("--show-webview", action="store_true")
     args = parser.parse_args()
+
+    username = os.getenv("E2E_USER")
+    password = os.getenv("E2E_PASSWORD")
+    totp_secret = os.getenv("TOTP_SECRET")
+    if username is None or password is None or totp_secret is None:
+        print("E2E_USER, E2E_PASSWORD, and TOTP_SECRET environment variables must be set", file=sys.stderr)
+        sys.exit(1)
 
     locale.setlocale(locale.LC_ALL, "C")
 
@@ -56,7 +59,7 @@ def main():
         browser.start_recording()
 
         try:
-            login(browser, args.username, args.password, args.device_code, args.totp_secret, screenshot_dir)
+            login(browser, username, password, args.device_code, totp_secret, screenshot_dir)
         except TimeoutError:
             # Sometimes the page can't be loaded due to TLS errors, retry once
             if not retried_tls_error:

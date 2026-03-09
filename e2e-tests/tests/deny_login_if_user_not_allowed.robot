@@ -41,5 +41,5 @@ Test that changing owner prevents remote logins
     Open Terminal
     Start Log In With Remote User Through CLI: QR Code    ${username}
     Select Provider
-    Continue Log In With Remote User: Authenticate In External Browser    ${username}
+    Continue Log In With Remote User: Authenticate In External Browser
     Check That Remote User Is Not Allowed To Log In

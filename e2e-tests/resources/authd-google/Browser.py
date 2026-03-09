@@ -6,8 +6,11 @@ from robot.api import logger
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-def run_command(args):
-    result = subprocess.run(args, stderr=subprocess.PIPE, text=True)
+def run_command(args, env=None):
+    if env is None:
+        env = os.environ
+
+    result = subprocess.run(args, env=env, stderr=subprocess.PIPE, text=True)
     if result.returncode == 0:
         return
 
@@ -21,17 +24,15 @@ class Browser:
     """
 
     @keyword
-    async def login(self, username: str, password: str, usercode: str, totp_secret: str, output_dir: str = "."):
+    async def login(self, usercode: str, output_dir: str = "."):
         """Perform device authentication with the given username, password and
         usercode using a browser automation script. The window opened by the
         script is run off screen using Xvfb.
         """
+
         command = [
             os.path.join(SCRIPT_DIR, "browser_login.py"),
-            username,
-            password,
             usercode,
-            totp_secret,
             "--output-dir", output_dir,
         ]
 

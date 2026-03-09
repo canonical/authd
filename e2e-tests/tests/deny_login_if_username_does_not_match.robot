@@ -40,5 +40,5 @@ Test that login fails if usernames do not match
     Open Terminal
     Start Log In With Remote User Through CLI: QR Code   different_user
     Select Provider
-    Continue Log In With Remote User: Authenticate In External Browser   ${username}
+    Continue Log In With Remote User: Authenticate In External Browser
     Check That Authenticated User Does Not Match Requested User    different_user
