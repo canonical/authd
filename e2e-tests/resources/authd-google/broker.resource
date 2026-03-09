@@ -64,7 +64,10 @@ Continue Log In With Remote User: Authenticate In External Browser
     Match Text    google.com/device
     # Read the user code.
     ${text} =    Read Text
-    ${user_code} =    StringUtils.First Match    (https:\/\/)?google.com\/device\n((Login code: )?(([A-Za-z\-]+)))    ${text}
+    ${user_code} =    StringUtils.First Match    (https:\/\/)?google.com\/device\n((Login code: )?(([A-Za-z\- ]+)))    ${text}
+    # The OCR sometimes reads spaces in the user code, even though there are none,
+    # so remove any spaces.
+    ${user_code} =    Remove String    ${user_code}    ${SPACE}
     # The user code is all uppercase, but sometimes the OCR reads some letters as lowercase,
     # so convert it to uppercase to handle that.
     ${user_code} =    String.Convert To Upper Case    ${user_code}
