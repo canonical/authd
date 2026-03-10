@@ -26,7 +26,7 @@ runs:
         sudo apt-get install -y protobuf-compiler
 
         sudo apt-get install -y ${{ env.go_build_dependencies }} ${{ env.go_test_dependencies}}
-        
+
         echo "::endgroup::"
 
     - name: Install gotestfmt and our wrapper script

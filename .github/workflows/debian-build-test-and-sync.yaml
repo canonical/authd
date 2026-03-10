@@ -114,9 +114,9 @@ jobs:
       - name: Prepare packaging branch
         run: |
           set -euo pipefail
-          
+
           cd packaging-branch
-          
+
           # Checkout to the packaging branch if it exists, otherwise create a new orphan branch with a clean state to make
           # sure we don't accidentally include files from the repository that are not part of the package sources.
           if git ls-remote --exit-code --heads origin "${{ env.PACKAGING_BRANCH }}" >/dev/null 2>&1; then
@@ -134,13 +134,13 @@ jobs:
       - name: Commit packaging sources
         run: |
           set -exuo pipefail
-          
+
           # Replace the repository content with the package sources
           find packaging-branch -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           cp --force --recursive sources/. packaging-branch/
-          
+
           cd packaging-branch
-          
+
           # Drop the ubuntu version, as the PPA recipe will add it anyways
           version=$(dpkg-parsechangelog -SVersion)
           sanitized_version=$(echo "${version}" | sed "s,~[0-9.]\+\$,,")
@@ -148,10 +148,10 @@ jobs:
             debian/changelog.sanitized
           mv debian/changelog.sanitized debian/changelog
           dpkg-parsechangelog
-          
+
           git config user.name "Ubuntu Enterprise Desktop"
           git config user.email "ubuntu-devel-discuss@lists.ubuntu.com"
-          
+
           git add --all
           git commit \
             --allow-empty \
