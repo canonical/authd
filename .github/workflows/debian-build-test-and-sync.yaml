@@ -42,14 +42,14 @@ jobs:
       github.event_name == 'release' }}
 
     steps:
+      - uses: ./.github/actions/setup-oras
+
       - name: Download the Debian sources
         env:
           OCI_REPO: ghcr.io/${{ github.repository }}/authd-deb-sources-${{ inputs.ubuntu-version }}
           OCI_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail
-
-          go install oras.land/oras/cmd/oras@v1.3.0
 
           echo "${{ secrets.GITHUB_TOKEN }}" \
           | oras login ghcr.io -u "${{ github.actor }}" --password-stdin

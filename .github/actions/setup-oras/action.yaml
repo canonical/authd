@@ -1,0 +1,25 @@
+name: 'Setup oras'
+description: 'Setup oras CLI tool for pushing and pulling OCI artifacts.'
+inputs:
+  version:
+    description: 'Version of oras to install'
+    required: false
+    default: '1.3.0'
+runs:
+  using: 'composite'
+  steps:
+    - name: Install oras
+      shell: bash
+      run: |
+        # Install oras CLI
+        set -eu
+
+        VERSION="${{ inputs.version }}"
+        curl -fsSL \
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          -o "oras_${VERSION}_linux_amd64.tar.gz" \
+          "https://github.com/oras-project/oras/releases/download/v${VERSION}/oras_${VERSION}_linux_amd64.tar.gz"
+        mkdir -p oras-install/
+        tar -zxf "oras_${VERSION}_linux_amd64.tar.gz" -C oras-install/
+        sudo mv oras-install/oras /usr/local/bin/
+        rm -rf "oras_${VERSION}_linux_amd64.tar.gz" oras-install/
