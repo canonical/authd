@@ -241,7 +241,7 @@ jobs:
         id: upload-results
         uses: actions/upload-artifact@v6
         with:
-          name: e2e-${{ inputs.broker }}-output-${{ inputs.ubuntu-version }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: e2e-tests-${{ inputs.ubuntu-version }}-${{ inputs.broker }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.OUTPUT_DIR }}
 
       - name: Prepare upload to Pages
