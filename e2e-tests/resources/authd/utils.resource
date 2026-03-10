@@ -190,8 +190,17 @@ Restore Snapshot
     Snapshot.Restore    ${snapshot_name}
     Wait Until System Time Synced
 
+Common Test Setup
+    Journal.Start Receiving Journal
+    VNCRecorder.Start Recording
 
 ### Teardown ###
 
 Log Videos On Error
     Run Keyword If    '${TEST STATUS}' == 'FAIL'    VideoLogger.Log videos
+
+Common Test Teardown
+    VNCRecorder.Stop Recording
+    Journal.Stop Receiving Journal
+    Journal.Log Journal
+    Log Videos On Error

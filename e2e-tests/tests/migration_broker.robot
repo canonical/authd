@@ -13,14 +13,10 @@ Test Teardown   Test Teardown
 *** Keywords ***
 Test Setup
     Restore Snapshot    %{BROKER}-stable-installed
-    Journal.Start Receiving Journal
-    VNCRecorder.Start Recording
+    Common Test Setup
 
 Test Teardown
-    VNCRecorder.Stop Recording
-    Journal.Stop Receiving Journal
-    Journal.Log Journal
-    Log Videos On Error
+    Common Test Teardown
 
 
 *** Variables ***
