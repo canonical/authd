@@ -12,6 +12,10 @@ Library             Process
 Library             OperatingSystem
 
 
+*** Variables ***
+${SUITE_OUTPUT_DIR}    ${OUTPUT DIR}/${SUITE NAME}
+
+
 *** Keywords ***
 Log In
     Set OCR Confidence Threshold    0.94

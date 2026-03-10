@@ -28,9 +28,8 @@ class Journal:
         if self.process:
             return
 
-        output_dir = BuiltIn().get_variable_value('${OUTPUT DIR}', '.')
-        suite_name = BuiltIn().get_variable_value('${SUITE NAME}', 'unknown')
-        self.output_dir = os.path.join(output_dir, suite_name, "journal")
+        suite_output_dir = BuiltIn().get_variable_value('${SUITE_OUTPUT_DIR}')
+        self.output_dir = os.path.join(suite_output_dir, "journal")
         os.makedirs(self.output_dir, exist_ok=True)
 
         if os.getenv("SYSTEMD_SUPPORTS_VSOCK"):

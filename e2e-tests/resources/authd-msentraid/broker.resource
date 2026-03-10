@@ -73,7 +73,7 @@ Continue Log In With Remote User: Authenticate In External Browser
     # so convert it to uppercase to handle that.
     ${user_code} =    String.Convert To Upper Case    ${user_code}
 
-    Browser.Login    ${user_code}    ${OUTPUT DIR}
+    Browser.Login    ${user_code}    ${SUITE_OUTPUT_DIR}
 
 
 Continue Log In With Remote User Through CLI: Define Local Password

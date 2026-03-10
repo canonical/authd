@@ -11,7 +11,7 @@ class VideoLogger:
 
     @keyword
     def log_videos(self):
-        output_dir = BuiltIn().get_variable_value('${OUTPUT DIR}', '.')
+        output_dir = BuiltIn().get_variable_value('${SUITE_OUTPUT_DIR}')
         pattern = os.path.join(output_dir, '*.webm')
         videos = glob.glob(pattern)
         for path in videos:
