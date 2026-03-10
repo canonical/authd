@@ -191,6 +191,8 @@ Restore Snapshot
     Wait Until System Time Synced
 
 Common Test Setup
+    Set Suite Metadata    Ubuntu Version   %{RELEASE}    top=True
+    Set Suite Metadata    Broker    %{BROKER}    top=True
     Journal.Start Receiving Journal
     VNCRecorder.Start Recording
 
