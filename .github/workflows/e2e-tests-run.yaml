@@ -256,6 +256,11 @@ jobs:
           cp "${{ steps.run-tests.outputs.report }}" "pages/${TARGET_DIR}/report.html"
           echo "target-dir=${TARGET_DIR}" >> "$GITHUB_OUTPUT"
 
+          # Add a link to the parent directory to the log and report pages
+          for page in "pages/${TARGET_DIR}"/*.html; do
+            sed -i 's|<div id="header"></div>|<div style="padding:8px;background:#333;"><a href=".." style="color:#aaa;font-family:sans-serif;font-size:14px;">← Back to parent directory</a></div><div id="header"></div>|' "$page"
+          done
+
           # We can't pass this as a secret because then it's masked in the logs
           # and we can't pass it as an Action variable because those are not
           # available in called reusable workflows.
