@@ -14,4 +14,9 @@ exclude-crate-paths = [
     { name = "*", exclude = "docs" },
     { name = "*", exclude = "examples" },
     { name = "*", exclude = "tests" },
+
+    # For some reason, this file is excluded from the source tarball. Exclude
+    # it here to exclude it from the checksum calculation to avoid build
+    # failures due to checksum mismatches.
+    { name = "*", exclude = "Cargo.toml.orig" },
 ]
