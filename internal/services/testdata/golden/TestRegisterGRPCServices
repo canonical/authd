@@ -51,6 +51,9 @@ grpc.health.v1.Health:
         - name: Check
           isclientstream: false
           isserverstream: false
+        - name: List
+          isclientstream: false
+          isserverstream: false
         - name: Watch
           isclientstream: false
           isserverstream: true
