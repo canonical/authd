@@ -12,8 +12,6 @@ on:
         type: string
         required: true
     outputs:
-      run-id:
-        value: ${{ jobs.build-deb.outputs.run-id }}
       pkg-name:
         value: ${{ jobs.build-deb.outputs.pkg-name }}
       pkg-version:
@@ -38,7 +36,6 @@ jobs:
     name: Build Debian package
     runs-on: ubuntu-latest
     outputs:
-      run-id: ${{ github.run_id }}
       pkg-name: ${{ steps.outputs.outputs.pkg-name }}
       pkg-version: ${{ steps.outputs.outputs.pkg-version }}
       pkg-dsc: ${{ steps.outputs.outputs.pkg-dsc }}
