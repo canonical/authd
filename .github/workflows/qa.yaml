@@ -183,7 +183,7 @@ jobs:
             -lpam -shared -fPIC \
             pam/go-exec/module.c
       - name: Upload scan build reports
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: authd-${{ github.job }}-artifacts-${{ github.run_attempt }}
           path: ${{ env.SCAN_BUILD_REPORTS_PATH }}
@@ -229,7 +229,7 @@ jobs:
       # the failed tests.
       - name: Upload JSON test output on failure
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-test-output
           path: ${{ env.AUTHD_TESTS_ARTIFACTS_PATH }}/gotestfmt.cover.stdout
@@ -239,7 +239,7 @@ jobs:
       # retry).
       - name: Upload raw coverage on failure
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: raw-coverage-data
           path: ${{ env.RAW_COVERAGE_DIR }}
@@ -269,13 +269,13 @@ jobs:
       #   continue-on-error: true
 
       - name: Download JSON output of failed tests
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: coverage-test-output
           path: /tmp/coverage-test-output
 
       - name: Download raw coverage data
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: raw-coverage-data
           path: ${{ env.RAW_COVERAGE_DIR }}

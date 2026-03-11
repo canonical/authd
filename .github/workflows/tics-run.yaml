@@ -54,14 +54,14 @@ jobs:
                 echo "LAST_BROKERS_QA_ID=$(gh run list --workflow 'Brokers QA & sanity checks' --limit 1 --status success --json databaseId -b main | jq '.[].databaseId')" >> $GITHUB_ENV
 
             - name: Download coverage artifact from authd QA
-              uses: actions/download-artifact@v7
+              uses: actions/download-artifact@v8
               with:
                 github-token: ${{ github.token }}
                 path: .artifacts/authd
                 run-id: ${{ env.LAST_AUTHD_QA_ID }}
 
             - name: Download coverage artifact from brokers QA
-              uses: actions/download-artifact@v7
+              uses: actions/download-artifact@v8
               with:
                 github-token: ${{ github.token }}
                 path: .artifacts/brokers
