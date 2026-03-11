@@ -11,9 +11,15 @@ platforms = ["*-unknown-linux-gnu"]
 tier = "2"
 exclude-crate-paths = [
     { name = "*", exclude = "assets" },
+    { name = "*", exclude = "Cargo.toml.orig" },
     { name = "*", exclude = "docs" },
     { name = "*", exclude = "examples" },
     { name = "*", exclude = "tests" },
-    { name = "*", exclude = "*.svg" },
+    { name = "*", exclude = ".editorconfig" },
+    { name = "*", exclude = ".git-blame-ignore-revs" },
+    { name = "*", exclude = ".github" },
+    { name = "*", exclude = ".gitignore" },
+    { name = "*", exclude = ".gitlab-ci.yml" },
     { name = "*", exclude = "*.png" },
+    { name = "*", exclude = "*.svg" },
 ]
