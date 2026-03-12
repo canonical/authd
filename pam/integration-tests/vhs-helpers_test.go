@@ -724,8 +724,9 @@ func vhsTestUserNameFull(t *testing.T, userPrefix string, namePrefix string) str
 	if namePrefix != "" && namePrefix[len(namePrefix)-1] != '-' {
 		namePrefix += "-"
 	}
-	return userPrefix + namePrefix + strings.ReplaceAll(
-		strings.ToLower(filepath.Base(t.Name())), "_", "-")
+
+	username := userPrefix + namePrefix + strings.ReplaceAll(strings.ToLower(filepath.Base(t.Name())), "_", "-")
+	return username + "@example.com"
 }
 
 func vhsTestUserName(t *testing.T, prefix string) string {

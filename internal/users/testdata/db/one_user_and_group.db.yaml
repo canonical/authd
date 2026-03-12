@@ -1,15 +1,15 @@
 users:
-    - name: user1
+    - name: user1@example.com
       uid: 1111
       gid: 11111
       gecos: |-
         User1 gecos
         On multiple lines
-      dir: /home/user1
+      dir: /home/user1@example.com
       shell: /bin/bash
       broker_id: broker-id
 groups:
-    - name: group1
+    - name: group1@example.com
       gid: 11111
       ugid: "12345678"
 users_to_groups:

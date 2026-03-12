@@ -342,7 +342,7 @@ func (b *BrokerBusMock) CancelIsAuthenticated(sessionID string) (dbusErr *dbus.E
 
 // UserPreCheck returns default values to be used in tests or an error if requested.
 func (b *BrokerBusMock) UserPreCheck(username string) (userinfo string, dbusErr *dbus.Error) {
-	if username != "user-pre-check" && username != "local-pre-check" {
+	if username != "user-pre-check@example.com" && username != "local-pre-check" {
 		return "", dbus.MakeFailedError(fmt.Errorf("broker %q: UserPreCheck errored out", b.name))
 	}
 	return userInfoFromName(username, nil), nil
@@ -357,7 +357,9 @@ func parseSessionID(sessionID string) string {
 	if len(cut) == 0 {
 		return ""
 	}
-	return strings.TrimSuffix(cut[len(cut)-1], "-session_id")
+
+	parsedID := strings.TrimSuffix(cut[len(cut)-1], "-session_id")
+	return strings.TrimSuffix(parsedID, "@example.com")
 }
 
 type groupJSONInfo struct {
@@ -370,18 +372,18 @@ func userInfoFromName(sessionID string, extraGroups []groupJSONInfo) string {
 	// Default values
 	parsedID := parseSessionID(sessionID)
 
-	name := strings.TrimSuffix(sessionID, "-session_id")
-	group := "group-" + parsedID
-	home := "/home/" + parsedID
-	shell := "/bin/sh/" + parsedID
-	gecos := "gecos for " + parsedID
-	ugid := "ugid-" + parsedID
+	name := parsedID + "@example.com"
+	group := "group-" + name
+	home := "/home/" + name
+	shell := "/bin/sh/" + name
+	gecos := "gecos for " + name
+	ugid := "ugid-" + name
 
 	switch parsedID {
 	case "ia_info_empty_user_name":
 		name = ""
 	case "ia_info_mismatching_user_name":
-		name = "different_username"
+		name = "different_username@example.com"
 	case "ia_info_empty_group_name":
 		group = ""
 	case "ia_info_empty_ugid":

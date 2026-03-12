@@ -156,7 +156,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		sshdEnv = append(sshdEnv, fmt.Sprintf("AUTHD_NSS_SOCKET=%s", sharedAuthdSocket))
 
 		sharedSSHDPort, sharedSSHDUserHome = startSSHDForTest(t, serviceFile, sshdHostKeyPath,
-			"authd-test-user-sshd-accept-all", sshdPreloadLibraries, sshdEnv, false)
+			"authd-test-user-sshd-accept-all@example.com", sshdPreloadLibraries, sshdEnv, false)
 
 		if !t.Failed() {
 			t.Log("Prepared SSH tests with shared sshd")
@@ -167,7 +167,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 	const pamSSHUserEnv = "AUTHD_PAM_SSH_USER"
 	const baseTapeCommand = "ssh ${%s}@localhost ${AUTHD_PAM_SSH_ARGS}"
 	tapeCommand := fmt.Sprintf(baseTapeCommand, pamSSHUserEnv)
-	defaultTapeSettings := []tapeSetting{{vhsHeight, 1000}, {vhsWidth, 1500}}
+	defaultTapeSettings := []tapeSetting{{vhsHeight, 1000}, {vhsWidth, 2000}}
 
 	sshEnvVariablesRegex = regexp.MustCompile(`(?m)  (PATH|HOME|PWD|SSH_[A-Z]+)=.*(\n*)($[^ ]{2}.*)?$`)
 	sshHostPortRegex = regexp.MustCompile(`([\d\.:]+) port ([\d:]+)`)
@@ -197,7 +197,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			tape: "simple_auth",
 		},
 		"Authenticate_user_successfully_if_already_registered": {
-			user: "user-ssh",
+			user: "user-ssh@example.com",
 			tape: "simple_auth",
 		},
 		"Authenticate_user_successfully_and_enters_shell": {
@@ -210,26 +210,26 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 				examplebroker.UserIntegrationPreCheckPrefix, "upper-case")),
 		},
 		"Authenticate_user_successfully_if_already_registered_with_upper_case": {
-			user: "USER-SSH2",
+			user: "USER-SSH2@example.com",
 			tape: "simple_auth",
 		},
 		"Authenticate_user_successfully_after_db_migration": {
 			tape:                 "simple_auth_with_auto_selected_broker",
 			oldDB:                "authd_0.4.1_bbolt_with_mixed_case_users",
 			wantUserAlreadyExist: true,
-			user:                 "user-integration-cached",
+			user:                 "user-integration-cached@example.com",
 		},
 		"Authenticate_user_with_upper_case_using_lower_case_after_db_migration": {
 			tape:                 "simple_auth_with_auto_selected_broker",
 			oldDB:                "authd_0.4.1_bbolt_with_mixed_case_users",
 			wantUserAlreadyExist: true,
-			user:                 "user-integration-upper-case",
+			user:                 "user-integration-upper-case@example.com",
 		},
 		"Authenticate_user_with_mixed_case_after_db_migration": {
 			tape:                 "simple_auth_with_auto_selected_broker",
 			oldDB:                "authd_0.4.1_bbolt_with_mixed_case_users",
 			wantUserAlreadyExist: true,
-			user:                 "user-integration-WITH-Mixed-CaSe",
+			user:                 "user-integration-WITH-Mixed-CaSe@example.com",
 		},
 		"Authenticate_user_with_mfa": {
 			tape:         "mfa_auth",
@@ -374,7 +374,7 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 		},
 		"Exit_if_user_is_not_pre-checked_on_ssh_service": {
 			tape:                "local_ssh",
-			user:                examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed",
+			user:                examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed@example.com",
 			pamServiceName:      "sshd",
 			wantNotLoggedInUser: true,
 			tapeVariables: map[string]string{

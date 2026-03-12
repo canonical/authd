@@ -23,15 +23,15 @@ GroupToUsers:
   "44444": '{"GID":33333,"UIDs":[4444]}'
   "99999": '{"GID":99999,"UIDs":[1111,2222,3333,4444]}'
 UserByID:
-  "1111": '{"Name":"user1","UID":1111,"GID":11111,"Gecos":"User1 gecos\nOn multiple lines","Dir":"/home/user1","Shell":"/bin/bash","LastPwdChange":-1,"MaxPwdAge":-1,"PwdWarnPeriod":-1,"PwdInactivity":-1,"MinPwdAge":-1,"ExpirationDate":-1}'
-  "2222": '{"Name":"user2","UID":2222,"GID":22222,"Gecos":"User2","Dir":"/home/user2","Shell":"/bin/dash","LastPwdChange":-1,"MaxPwdAge":-1,"PwdWarnPeriod":-1,"PwdInactivity":-1,"MinPwdAge":-1,"ExpirationDate":-1}'
-  "3333": '{"Name":"User3","UID":3333,"GID":33333,"Gecos":"User3","Dir":"/home/user3","Shell":"/bin/zsh","LastPwdChange":-1,"MaxPwdAge":-1,"PwdWarnPeriod":-1,"PwdInactivity":-1,"MinPwdAge":-1,"ExpirationDate":-1}'
-  "4444": '{"Name":"userwithoutbroker","UID":4444,"GID":44444,"Gecos":"userwithoutbroker","Dir":"/home/userwithoutbroker","Shell":"/bin/sh","LastPwdChange":-1,"MaxPwdAge":-1,"PwdWarnPeriod":-1,"PwdInactivity":-1,"MinPwdAge":-1,"ExpirationDate":-1}'
+  "1111": '{"Name":"user1@example.com","UID":1111,"GID":11111,"Gecos":"User1 gecos\nOn multiple lines","Dir":"/home/user1@example.com","Shell":"/bin/bash","LastPwdChange":-1,"MaxPwdAge":-1,"PwdWarnPeriod":-1,"PwdInactivity":-1,"MinPwdAge":-1,"ExpirationDate":-1}'
+  "2222": '{"Name":"user2@example.com","UID":2222,"GID":22222,"Gecos":"User2","Dir":"/home/user2@example.com","Shell":"/bin/dash","LastPwdChange":-1,"MaxPwdAge":-1,"PwdWarnPeriod":-1,"PwdInactivity":-1,"MinPwdAge":-1,"ExpirationDate":-1}'
+  "3333": '{"Name":"User3@example.com","UID":3333,"GID":33333,"Gecos":"User3","Dir":"/home/user3@example.com","Shell":"/bin/zsh","LastPwdChange":-1,"MaxPwdAge":-1,"PwdWarnPeriod":-1,"PwdInactivity":-1,"MinPwdAge":-1,"ExpirationDate":-1}'
+  "4444": '{"Name":"userwithoutbroker@example.com","UID":4444,"GID":44444,"Gecos":"userwithoutbroker","Dir":"/home/userwithoutbroker@example.com","Shell":"/bin/sh","LastPwdChange":-1,"MaxPwdAge":-1,"PwdWarnPeriod":-1,"PwdInactivity":-1,"MinPwdAge":-1,"ExpirationDate":-1}'
 UserByName:
-  user1: '{"Name":"user1","UID":1111,"GID":11111,"Gecos":"User1 gecos\nOn multiple lines","Dir":"/home/user1","Shell":"/bin/bash","LastPwdChange":-1,"MaxPwdAge":-1,"PwdWarnPeriod":-1,"PwdInactivity":-1,"MinPwdAge":-1,"ExpirationDate":-1}'
-  user2: '{"Name":"user2","UID":2222,"GID":22222,"Gecos":"User2","Dir":"/home/user2","Shell":"/bin/dash","LastPwdChange":-1,"MaxPwdAge":-1,"PwdWarnPeriod":-1,"PwdInactivity":-1,"MinPwdAge":-1,"ExpirationDate":-1}'
-  User3: '{"Name":"User3","UID":3333,"GID":33333,"Gecos":"User3","Dir":"/home/user3","Shell":"/bin/zsh","LastPwdChange":-1,"MaxPwdAge":-1,"PwdWarnPeriod":-1,"PwdInactivity":-1,"MinPwdAge":-1,"ExpirationDate":-1}'
-  userwithoutbroker: '{"Name":"userwithoutbroker","UID":4444,"GID":44444,"Gecos":"userwithoutbroker","Dir":"/home/userwithoutbroker","Shell":"/bin/sh","LastPwdChange":-1,"MaxPwdAge":-1,"PwdWarnPeriod":-1,"PwdInactivity":-1,"MinPwdAge":-1,"ExpirationDate":-1}'
+  user1@example.com: '{"Name":"user1@example.com","UID":1111,"GID":11111,"Gecos":"User1 gecos\nOn multiple lines","Dir":"/home/user1@example.com","Shell":"/bin/bash","LastPwdChange":-1,"MaxPwdAge":-1,"PwdWarnPeriod":-1,"PwdInactivity":-1,"MinPwdAge":-1,"ExpirationDate":-1}'
+  user2@example.com: '{"Name":"user2@example.com","UID":2222,"GID":22222,"Gecos":"User2","Dir":"/home/user2@example.com","Shell":"/bin/dash","LastPwdChange":-1,"MaxPwdAge":-1,"PwdWarnPeriod":-1,"PwdInactivity":-1,"MinPwdAge":-1,"ExpirationDate":-1}'
+  User3@example.com: '{"Name":"User3@example.com","UID":3333,"GID":33333,"Gecos":"User3","Dir":"/home/user3@example.com","Shell":"/bin/zsh","LastPwdChange":-1,"MaxPwdAge":-1,"PwdWarnPeriod":-1,"PwdInactivity":-1,"MinPwdAge":-1,"ExpirationDate":-1}'
+  userwithoutbroker@example.com: '{"Name":"userwithoutbroker@example.com","UID":4444,"GID":44444,"Gecos":"userwithoutbroker","Dir":"/home/userwithoutbroker@example.com","Shell":"/bin/sh","LastPwdChange":-1,"MaxPwdAge":-1,"PwdWarnPeriod":-1,"PwdInactivity":-1,"MinPwdAge":-1,"ExpirationDate":-1}'
 UserToGroups:
   "1111": '{"UID":1111,"GIDs":[11111,99999]}'
   "2222": '{"UID":2222,"GIDs":[22222,99999]}'

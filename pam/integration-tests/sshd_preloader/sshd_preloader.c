@@ -18,7 +18,7 @@
 #define AUTHD_TEST_SHELL "/bin/sh"
 #define AUTHD_TEST_GECOS ""
 #define AUTHD_DEFAULT_SSH_PAM_SERVICE_NAME "sshd"
-#define AUTHD_SPECIAL_USER_ACCEPT_ALL "authd-test-user-sshd-accept-all"
+#define AUTHD_SPECIAL_USER_ACCEPT_ALL "authd-test-user-sshd-accept-all@example.com"
 
 #define SIZE_OF_ARRAY(a) (sizeof ((a)) / sizeof (*(a)))
 
