@@ -1013,6 +1013,45 @@ func TestSetGroupID(t *testing.T) {
 	}
 }
 
+func TestSetShell(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		nonExistentUser bool
+
+		wantErr bool
+	}{
+		"Update_existing_user_shell": {},
+
+		"Error_on_nonexistent_user": {nonExistentUser: true, wantErr: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			m := initDB(t, "one_user_and_group")
+
+			username := "user1"
+			if tc.nonExistentUser {
+				username = "nonexistent"
+			}
+
+			err := m.SetShell(username, "/bin/new-shell")
+			if tc.wantErr {
+				require.Error(t, err, "SetShell should return an error for case %q", name)
+				return
+			}
+			require.NoError(t, err, "SetShell should not return an error for case %q", name)
+
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(m)
+			require.NoError(t, err)
+
+			golden.CheckOrUpdate(t, dbContent)
+		})
+	}
+}
+
 func TestRemoveDb(t *testing.T) {
 	t.Parallel()
 

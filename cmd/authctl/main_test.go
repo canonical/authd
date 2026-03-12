@@ -33,6 +33,7 @@ func TestRootCommand(t *testing.T) {
 
 			//nolint:gosec // G204 it's safe to use exec.Command with a variable here
 			cmd := exec.Command(authctlPath, tc.args...)
+			cmd.Env = []string{testutils.CoverDirEnv()}
 			testutils.CheckCommand(t, cmd, tc.expectedExitCode)
 		})
 	}

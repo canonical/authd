@@ -155,12 +155,11 @@ func TestSetUserID(t *testing.T) {
 
 			// To make the tests deterministic, we replace the temporary home directory path with a placeholder
 			for i, w := range resp.Warnings {
-				if regexp.MustCompile(`Could not get owner of home directory '([^"]+)'`).MatchString(w) {
-					resp.Warnings[i] = `Could not get owner of home directory '{{HOME}}'`
-				}
-				if regexp.MustCompile(`Not updating ownership of home directory '([^"]+)' because it is not owned by UID \d+ \(current owner: \d+\)`).MatchString(w) {
-					resp.Warnings[i] = `Not updating ownership of home directory '{{HOME}}' because it is not owned by UID {{UID}} (current owner: {{CURR_UID}})`
-				}
+				// Replace home directory path with placeholder
+				w = regexp.MustCompile(`home directory '([^']+)'`).ReplaceAllString(w, `home directory '{{HOME}}'`)
+				// Replace UID and current owner UID with placeholders
+				w = regexp.MustCompile(`UID (\d+) \(current owner: (\d+)\)`).ReplaceAllString(w, `UID {{UID}} (current owner: {{CURR_UID}})`)
+				resp.Warnings[i] = w
 			}
 
 			golden.CheckOrUpdateYAML(t, resp, golden.WithPath("response"))

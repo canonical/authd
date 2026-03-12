@@ -2,12 +2,12 @@ package user_test
 
 import (
 	"math"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"testing"
 
+	"github.com/canonical/authd/internal/envutils"
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -19,15 +19,16 @@ func TestSetUIDCommand(t *testing.T) {
 	// which makes userslocking.WriteLock() return an error immediately when the lock
 	// is already held - unlike the normal behavior which tries to acquire the lock
 	// for 15 seconds before returning an error.
-
 	daemonSocket := testutils.StartAuthd(t, daemonPath,
 		testutils.WithGroupFile(filepath.Join("testdata", "empty.group")),
 		testutils.WithPreviousDBState("one_user_and_group"),
 		testutils.WithCurrentUserAsRoot,
 	)
 
-	err := os.Setenv("AUTHD_SOCKET", daemonSocket)
-	require.NoError(t, err, "Failed to set AUTHD_SOCKET environment variable")
+	authctlEnv := []string{
+		"AUTHD_SOCKET=" + daemonSocket,
+		testutils.CoverDirEnv(),
+	}
 
 	tests := map[string]struct {
 		args             []string
@@ -69,18 +70,17 @@ func TestSetUIDCommand(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			// Copy authctlEnv to avoid modifying the original slice.
+			authctlEnv := append([]string{}, authctlEnv...)
 			if tc.authdUnavailable {
-				origValue := os.Getenv("AUTHD_SOCKET")
-				err := os.Setenv("AUTHD_SOCKET", "/non-existent")
+				var err error
+				authctlEnv, err = envutils.Setenv(authctlEnv, "AUTHD_SOCKET", "/non-existent")
 				require.NoError(t, err, "Failed to set AUTHD_SOCKET environment variable")
-				t.Cleanup(func() {
-					err := os.Setenv("AUTHD_SOCKET", origValue)
-					require.NoError(t, err, "Failed to restore AUTHD_SOCKET environment variable")
-				})
 			}
 
 			//nolint:gosec // G204 it's safe to use exec.Command with a variable here
 			cmd := exec.Command(authctlPath, append([]string{"user"}, tc.args...)...)
+			cmd.Env = authctlEnv
 			testutils.CheckCommand(t, cmd, tc.expectedExitCode)
 		})
 	}

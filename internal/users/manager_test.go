@@ -1301,6 +1301,138 @@ func TestUpdateUserAfterUnlock(t *testing.T) {
 	require.NoError(t, err, "UpdateUser should not fail")
 }
 
+func TestSetShell(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		nonExistentUser bool
+		emptyUsername   bool
+		emptyShell      bool
+		shell           string
+
+		wantWarnings int
+		wantErr      bool
+	}{
+		"Successfully_set_shell": {},
+
+		"Warning_if_shell_is_not_in_etc_shells": {
+			shell:        "/bin/ls",
+			wantWarnings: 1,
+		},
+		"Warning_if_shell_does_not_exist": {
+			shell:        "/doesnotexist",
+			wantWarnings: 1,
+		},
+		"Warning_if_shell_is_directory": {
+			shell:        "/etc",
+			wantWarnings: 1,
+		},
+		"Warning_if_shell_is_not_executable": {
+			shell:        "/etc/passwd",
+			wantWarnings: 1,
+		},
+
+		// checkValidPasswdField error cases
+		"Error_if_shell_is_empty": {
+			emptyShell: true,
+			wantErr:    true,
+		},
+		"Error_if_shell_contains_invalid_utf8": {
+			shell:   "/bin/\xff\xfeinvalid",
+			wantErr: true,
+		},
+		"Error_if_shell_contains_colon": {
+			shell:   "/bin/sh:bash",
+			wantErr: true,
+		},
+		"Error_if_shell_contains_control_characters": {
+			shell:   "/bin/sh\x00",
+			wantErr: true,
+		},
+		"Error_if_shell_contains_control_character_tab": {
+			shell:   "/bin/sh\t",
+			wantErr: true,
+		},
+		"Error_if_shell_contains_control_character_newline": {
+			shell:   "/bin/sh\n",
+			wantErr: true,
+		},
+		"Error_if_shell_contains_control_character_del": {
+			shell:   "/bin/sh\x7f",
+			wantErr: true,
+		},
+
+		// checkValidShellPath error cases
+		"Error_if_shell_is_not_absolute_path": {
+			shell:   "bin/sh",
+			wantErr: true,
+		},
+		"Error_if_shell_path_is_not_normalized": {
+			shell:   "/bin/../bin/sh",
+			wantErr: true,
+		},
+		"Error_if_shell_path_is_not_normalized_with_dot": {
+			shell:   "/bin/./sh",
+			wantErr: true,
+		},
+		"Error_if_shell_path_is_too_long": {
+			shell:   "/" + strings.Repeat("a", 4096),
+			wantErr: true,
+		},
+
+		// other error cases
+		"Error_if_user_does_not_exist": {
+			nonExistentUser: true,
+			wantErr:         true,
+		},
+		"Error_if_username_is_empty": {
+			emptyUsername: true,
+			wantErr:       true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dbDir := t.TempDir()
+			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_and_group.db.yaml"), dbDir)
+			require.NoError(t, err, "Setup: could not create database from testdata")
+
+			m := newManagerForTests(t, dbDir)
+
+			username := "user1"
+			if tc.nonExistentUser {
+				username = "nonexistent"
+			} else if tc.emptyUsername {
+				username = ""
+			}
+
+			shell := "/bin/sh"
+			if tc.emptyShell {
+				shell = ""
+			} else if tc.shell != "" {
+				shell = tc.shell
+			}
+
+			warnings, err := m.SetShell(username, shell)
+			requireErrorAssertions(t, err, nil, tc.wantErr)
+
+			require.Len(t, warnings, tc.wantWarnings, "Number of warnings mismatch")
+
+			if tc.wantErr {
+				return
+			}
+
+			yamlData, err := db.Z_ForTests_DumpNormalizedYAML(m.DB())
+			require.NoError(t, err)
+			golden.CheckOrUpdate(t, yamlData, golden.WithPath("db"))
+
+			golden.CheckOrUpdateYAML(t, warnings, golden.WithPath("warnings"))
+		})
+	}
+}
+
 func requireErrorAssertions(t *testing.T, gotErr, wantErrType error, wantErr bool) {
 	t.Helper()
 

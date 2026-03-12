@@ -16,7 +16,7 @@ import (
 func TestPeerCredsInfoAuthType(t *testing.T) {
 	t.Parallel()
 
-	p := peerCredsInfo{
+	p := peerAuthInfo{
 		uid: 11111,
 		pid: 22222,
 	}
