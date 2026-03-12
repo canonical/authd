@@ -56,6 +56,8 @@ var (
 	sshdEnv                                   []string
 	sshdHostKeyPath                           string
 	sshdHostPubKey                            []byte
+
+	sshTestsHomeBase = filepath.Join(os.TempDir(), "authd-tests", "home")
 )
 
 func TestSSHAuthenticate(t *testing.T) {
@@ -448,10 +450,21 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 
 				authdEnv = append(authdEnv, useOldDatabaseEnv(t, tc.oldDB)...)
 
+				// Since we are migrating users, we need to make sure that we can replicate
+				// the homedir they have in the database.
+				err := os.MkdirAll(sshTestsHomeBase, 0700)
+				require.NoError(t, err, "Setup: failed to create home directory")
+
+				t.Cleanup(func() {
+					_ = os.RemoveAll(sshTestsHomeBase)
+				})
+
 				socketPath = runAuthd(t,
 					testutils.WithCurrentUserAsRoot,
 					testutils.WithGroupFile(groupOutput),
-					testutils.WithEnvironment(authdEnv...))
+					testutils.WithEnvironment(authdEnv...),
+					testutils.WithHomeBaseDir(sshTestsHomeBase),
+				)
 			} else if !sharedSSHD {
 				socketPath, groupOutput = sharedAuthd(t,
 					testutils.WithGroupFileOutput(sharedAuthdGroupOutput),
@@ -668,10 +681,9 @@ func startSSHDForTest(t *testing.T, serviceFile, hostKey, user string, preloadLi
 		sshdConnectCommand += "&& /bin/sh"
 	}
 
-	homeBase := t.TempDir()
-	userHome := filepath.Join(homeBase, user)
+	userHome := filepath.Join(sshTestsHomeBase, user)
 	sshdPort := startSSHD(t, hostKey, sshdConnectCommand, append([]string{
-		fmt.Sprintf("HOME=%s", homeBase),
+		fmt.Sprintf("HOME=%s", sshTestsHomeBase),
 		fmt.Sprintf("LD_PRELOAD=%s", strings.Join(preloadLibraries, ":")),
 		fmt.Sprintf("AUTHD_TEST_SSH_USER=%s", user),
 		fmt.Sprintf("AUTHD_TEST_SSH_HOME=%s", userHome),
