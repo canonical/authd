@@ -1,17 +1,17 @@
 users:
-    - name: testisauthenticated/update_local_groups_separator_success_with_local_groups
+    - name: success_with_local_groups@example.com
       uid: 1111
       gid: 1111
-      gecos: gecos for success_with_local_groups
-      dir: /home/success_with_local_groups
-      shell: /bin/sh/success_with_local_groups
+      gecos: gecos for success_with_local_groups@example.com
+      dir: /home/success_with_local_groups@example.com
+      shell: /bin/sh/success_with_local_groups@example.com
 groups:
-    - name: testisauthenticated/update_local_groups_separator_success_with_local_groups
+    - name: success_with_local_groups@example.com
       gid: 1111
-      ugid: testisauthenticated/update_local_groups_separator_success_with_local_groups
-    - name: group-success_with_local_groups
+      ugid: success_with_local_groups@example.com
+    - name: group-success_with_local_groups@example.com
       gid: 22222
-      ugid: ugid-success_with_local_groups
+      ugid: ugid-success_with_local_groups@example.com
 users_to_groups:
     - uid: 1111
       gid: 1111

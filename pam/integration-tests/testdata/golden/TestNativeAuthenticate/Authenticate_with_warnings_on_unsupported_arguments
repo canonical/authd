@@ -1,21 +1,18 @@
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo force_native_client=true b
-ar
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo force_native_client=true bar
 == Provider selection ==
   1. local
   2. ExampleBroker
 Choose your provider:
 >
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo force_native_client=true b
-ar
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo force_native_client=true bar
 == Provider selection ==
   1. local
   2. ExampleBroker
 Choose your provider:
 > 2
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo force_native_client=true b
-ar
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo force_native_client=true bar
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -26,8 +23,7 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo force_native_client=true b
-ar
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo force_native_client=true bar
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -38,10 +34,10 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 PAM Authenticate()
-  User: "user-integration-native-authenticate-with-warnings-on-unsupported-arguments"
+  User: "user-integration-native-authenticate-with-warnings-on-unsupported-arguments@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-native-authenticate-with-warnings-on-unsupported-arguments"
+  User: "user-integration-native-authenticate-with-warnings-on-unsupported-arguments@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

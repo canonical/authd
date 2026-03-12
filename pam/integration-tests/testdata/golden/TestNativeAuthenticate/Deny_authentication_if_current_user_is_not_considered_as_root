@@ -1,27 +1,25 @@
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-PAM Error Message: could not get current available brokers: permission denied: only root can per
-form this operation
+PAM Error Message: could not get current available brokers: permission denied: only root can perform this operation
 PAM Authenticate()
-  User: "user-integration-native-deny-authentication-if-current-user-is-not-considered-as-root"
+  User: "user-integration-native-deny-authentication-if-current-user-is-not-considered-as-root@example.com"
   Result: error: PAM exit code: 4
     System error
 acct=incomplete
 PAM AcctMgmt()
-  User: "user-integration-native-deny-authentication-if-current-user-is-not-considered-as-root"
+  User: "user-integration-native-deny-authentication-if-current-user-is-not-considered-as-root@example.com"
   Result: error: PAM exit code: 25
     The return value should be ignored by PAM dispatch
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-PAM Error Message: could not get current available brokers: permission denied: only root can per
-form this operation
+PAM Error Message: could not get current available brokers: permission denied: only root can perform this operation
 PAM Authenticate()
-  User: "user-integration-native-deny-authentication-if-current-user-is-not-considered-as-root"
+  User: "user-integration-native-deny-authentication-if-current-user-is-not-considered-as-root@example.com"
   Result: error: PAM exit code: 4
     System error
 acct=incomplete
 PAM AcctMgmt()
-  User: "user-integration-native-deny-authentication-if-current-user-is-not-considered-as-root"
+  User: "user-integration-native-deny-authentication-if-current-user-is-not-considered-as-root@example.com"
   Result: error: PAM exit code: 25
     The return value should be ignored by PAM dispatch
 >

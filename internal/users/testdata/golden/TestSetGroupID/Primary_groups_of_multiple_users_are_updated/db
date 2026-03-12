@@ -1,5 +1,5 @@
 users:
-    - name: user1
+    - name: user1@example.com
       uid: 1111
       gid: 54321
       gecos: |-
@@ -8,25 +8,25 @@ users:
       dir: /tmp/home/user-1111
       shell: /bin/bash
       broker_id: broker-id
-    - name: user2
+    - name: user2@example.com
       uid: 2222
       gid: 54321
       gecos: User2
-      dir: /home/user2
+      dir: /home/user2@example.com
       shell: /bin/dash
       broker_id: broker-id
-    - name: user3
+    - name: user3@example.com
       uid: 3333
       gid: 33333
       gecos: User3
-      dir: /home/user3
+      dir: /home/user3@example.com
       shell: /bin/zsh
       broker_id: broker-id
-    - name: userwithoutbroker
+    - name: userwithoutbroker@example.com
       uid: 4444
       gid: 44444
       gecos: userwithoutbroker
-      dir: /home/userwithoutbroker
+      dir: /home/userwithoutbroker@example.com
       shell: /bin/sh
 groups:
     - name: group2withoutugid

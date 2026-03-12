@@ -61,7 +61,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@gmail.com
+  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -87,7 +87,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@gmail.com
+  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -113,7 +113,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@gmail.com
+  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -144,7 +144,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@gmail.com
+  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -175,7 +175,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@gmail.com
+  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -209,7 +209,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@gmail.com
+  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -243,7 +243,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@gmail.com
+  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -280,7 +280,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@gmail.com
+  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -317,7 +317,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@gmail.com
+  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -358,7 +358,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@gmail.com
+  2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -384,10 +384,10 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 PAM Authenticate()
-  User: "user-integration-native-prevent-preset-user-from-switching-username"
+  User: "user-integration-native-prevent-preset-user-from-switching-username@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-native-prevent-preset-user-from-switching-username"
+  User: "user-integration-native-prevent-preset-user-from-switching-username@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

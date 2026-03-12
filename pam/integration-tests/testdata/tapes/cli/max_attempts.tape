@@ -5,7 +5,7 @@ Wait /Username: user name\n/
 Show
 
 Hide
-TypeUsername "user-integration-max-attempts"
+TypeUsername "user-integration-max-attempts@example.com"
 Show
 
 Hide

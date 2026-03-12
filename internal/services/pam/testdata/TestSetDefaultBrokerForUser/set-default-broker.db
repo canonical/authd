@@ -1,37 +1,37 @@
 users:
-    - name: userwithbroker
+    - name: userwithbroker@example.com
       uid: 1111
       gid: 11111
       gecos: |-
         userwithbroker gecos
         On multiple lines
-      dir: /home/userwithbroker
+      dir: /home/userwithbroker@example.com
       shell: /bin/bash
       broker_id: broker-id
-    - name: userwithinactivebroker
+    - name: userwithinactivebroker@example.com
       uid: 2222
       gid: 22222
       gecos: userwithinactivebroker
-      dir: /home/userwithinactivebroker
+      dir: /home/userwithinactivebroker@example.com
       shell: /bin/dash
       broker_id: inactive-broker-id
-    - name: userlocalbroker
+    - name: userlocalbroker@example.com
       uid: 3333
       gid: 33333
       gecos: userlocalbroker
-      dir: /home/userlocalbroker
+      dir: /home/userlocalbroker@example.com
       shell: /bin/zsh
-    - name: usersetbroker
+    - name: usersetbroker@example.com
       uid: 4444
       gid: 44444
       gecos: usersetbroker
-      dir: /home/usersetbroker
+      dir: /home/usersetbroker@example.com
       shell: /bin/dash
-    - name: userupdatebroker
+    - name: userupdatebroker@example.com
       uid: 5555
       gid: 55555
       gecos: userupdatebroker
-      dir: /home/userupdatebroker
+      dir: /home/userupdatebroker@example.com
       shell: /bin/zsh
       broker_id: tobereplaced-broker-id
 groups:

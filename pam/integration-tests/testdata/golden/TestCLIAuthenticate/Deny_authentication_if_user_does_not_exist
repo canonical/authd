@@ -2,7 +2,7 @@
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user-unexistent
+Username: user-unexistent@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your provider
@@ -18,14 +18,14 @@ Username: user-unexistent
   1. local
 > 2. ExampleBroker
 
-PAM Error Message: user "user-unexistent" does not exist
+PAM Error Message: user "user-unexistent@example.com" does not exist
 PAM Authenticate()
-  User: "user-unexistent"
+  User: "user-unexistent@example.com"
   Result: error: PAM exit code: 4
     System error
 PAM Info Message: acct=incomplete
 PAM AcctMgmt()
-  User: "user-unexistent"
+  User: "user-unexistent@example.com"
   Result: error: PAM exit code: 25
     The return value should be ignored by PAM dispatch
 >

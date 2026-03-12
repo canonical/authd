@@ -90,14 +90,14 @@ func TestSetDefaultBrokerForUser(t *testing.T) {
 				want.ID = "does not exist"
 			}
 
-			err = m.SetDefaultBrokerForUser(want.ID, "user")
+			err = m.SetDefaultBrokerForUser(want.ID, "user@example.com")
 			if tc.wantErr {
 				require.Error(t, err, "SetDefaultBrokerForUser should return an error, but did not")
 				return
 			}
 			require.NoError(t, err, "SetDefaultBrokerForUser should not return an error, but did")
 
-			got := m.BrokerForUser("user")
+			got := m.BrokerForUser("user@example.com")
 			require.Equal(t, want.ID, got.ID, "SetDefaultBrokerForUser should have assiged the expected broker, but did not")
 		})
 	}
@@ -109,11 +109,11 @@ func TestBrokerForUser(t *testing.T) {
 	m, err := brokers.NewManager(context.Background(), filepath.Join(brokerConfFixtures, "valid_brokers"), nil)
 	require.NoError(t, err, "Setup: could not create manager")
 
-	err = m.SetDefaultBrokerForUser(brokers.LocalBrokerName, "user")
+	err = m.SetDefaultBrokerForUser(brokers.LocalBrokerName, "user@example.com")
 	require.NoError(t, err, "Setup: could not set default broker")
 
 	// Broker for user should return the assigned broker
-	got := m.BrokerForUser("user")
+	got := m.BrokerForUser("user@example.com")
 	require.Equal(t, brokers.LocalBrokerName, got.ID, "BrokerForUser should return the assigned broker, but did not")
 
 	// Broker for user should return nil if no broker is assigned
@@ -334,7 +334,7 @@ func TestStartAndEndSession(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		id, key, err := m.NewSession(b1.ID, "user1", "some_lang", "auth")
+		id, key, err := m.NewSession(b1.ID, "user1@example.com", "some_lang", "auth")
 		firstID, firstKey, firstErr = &id, &key, &err
 	}()
 	wg.Add(1)
@@ -348,7 +348,7 @@ func TestStartAndEndSession(t *testing.T) {
 	require.NoError(t, *firstErr, "First NewSession should not return an error, but did")
 	require.NoError(t, *secondErr, "Second NewSession should not return an error, but did")
 
-	require.Equal(t, b1.ID+"-"+testutils.GenerateSessionID("user1"),
+	require.Equal(t, b1.ID+"-"+testutils.GenerateSessionID("user1@example.com"),
 		*firstID, "First NewSession should return the expected session ID, but did not")
 	require.Equal(t, testutils.GenerateEncryptionKey(b1.Name),
 		*firstKey, "First NewSession should return the expected encryption key, but did not")

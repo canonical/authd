@@ -1,26 +1,26 @@
-- name: user1
+- name: user1@example.com
   uid: 1111
   gid: 11111
   gecos: |-
     User1 gecos
     On multiple lines
-  dir: /home/user1
+  dir: /home/user1@example.com
   shell: /bin/bash
-- name: user2
+- name: user2@example.com
   uid: 2222
   gid: 22222
   gecos: User2
-  dir: /home/user2
+  dir: /home/user2@example.com
   shell: /bin/dash
-- name: user3
+- name: user3@example.com
   uid: 3333
   gid: 33333
   gecos: User3
-  dir: /home/user3
+  dir: /home/user3@example.com
   shell: /bin/zsh
-- name: userwithoutbroker
+- name: userwithoutbroker@example.com
   uid: 4444
   gid: 44444
   gecos: userwithoutbroker
-  dir: /home/userwithoutbroker
+  dir: /home/userwithoutbroker@example.com
   shell: /bin/sh

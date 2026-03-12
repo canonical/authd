@@ -5,7 +5,7 @@ Wait /Username: user name\n/
 Show
 
 Hide
-TypeUsername "user-mfa-with-reset"
+TypeUsername "user-mfa-with-reset@example.com"
 Show
 
 Hide

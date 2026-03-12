@@ -4,5 +4,5 @@ FIRST CALL:
 	err: <nil>
 SECOND CALL:
 	access: granted
-	data: {"Name":"TestIsAuthenticated/Successfully_authenticate_after_cancelling_first_call_separator_ia_second_call","UID":0,"Gecos":"gecos for ia_second_call","Dir":"/home/ia_second_call","Shell":"/bin/sh/ia_second_call","Groups":[{"Name":"group-ia_second_call","GID":null,"UGID":"ugid-ia_second_call"}]}
+	data: {"Name":"ia_second_call@example.com","UID":0,"Gecos":"gecos for ia_second_call@example.com","Dir":"/home/ia_second_call@example.com","Shell":"/bin/sh/ia_second_call@example.com","Groups":[{"Name":"group-ia_second_call@example.com","GID":null,"UGID":"ugid-ia_second_call@example.com"}]}
 	err: <nil>
