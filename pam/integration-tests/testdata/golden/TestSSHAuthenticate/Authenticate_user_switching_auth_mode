@@ -1494,8 +1494,9 @@ Or enter 'r' to go back to choose the provider
 > 2
 == Use a Login code ==
 Enter the code in the login page
-https://ubuntu.com
-       1337
+
+URL:  https://ubuntu.com
+Code: 1337
 
   1. Wait for authentication result
   2. Regenerate code
@@ -1608,8 +1609,9 @@ Or enter 'r' to go back to choose the provider
 > 2
 == Use a Login code ==
 Enter the code in the login page
-https://ubuntu.com
-       1337
+
+URL:  https://ubuntu.com
+Code: 1337
 
   1. Wait for authentication result
   2. Regenerate code
@@ -1722,8 +1724,9 @@ Or enter 'r' to go back to choose the provider
 > 2
 == Use a Login code ==
 Enter the code in the login page
-https://ubuntu.com
-       1337
+
+URL:  https://ubuntu.com
+Code: 1337
 
   1. Wait for authentication result
   2. Regenerate code
@@ -1848,134 +1851,9 @@ Or enter 'r' to go back to choose the provider
 > 2
 == Use a Login code ==
 Enter the code in the login page
-https://ubuntu.com
-       1337
 
-  1. Wait for authentication result
-  2. Regenerate code
-Or enter 'r' to go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose action:
-> r
-== Authentication method selection ==
-  1. Password authentication
-  2. Use a Login code
-  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
-  4. Use your fido device foo
-  5. Use your phone +33...
-  6. Use your phone +1...
-  7. Pin code
-  8. Authentication code
-Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
-> 8
-────────────────────────────────────────────────────────────────────────────────
-> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
-== Provider selection ==
-  1. local
-  2. ExampleBroker
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your provider:
-> 2
-== Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Gimme your password:
->
-== Authentication method selection ==
-  1. Password authentication
-  2. Use a Login code
-  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
-  4. Use your fido device foo
-  5. Use your phone +33...
-  6. Use your phone +1...
-  7. Pin code
-  8. Authentication code
-Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
-> 3
-== Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Click on the link received at user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmai
-l.com or enter the code:
-> r
-== Authentication method selection ==
-  1. Password authentication
-  2. Use a Login code
-  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
-  4. Use your fido device foo
-  5. Use your phone +33...
-  6. Use your phone +1...
-  7. Pin code
-  8. Authentication code
-Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
-> 4
-== Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Plug your fido device and press with your thumb:
-> r
-== Authentication method selection ==
-  1. Password authentication
-  2. Use a Login code
-  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
-  4. Use your fido device foo
-  5. Use your phone +33...
-  6. Use your phone +1...
-  7. Pin code
-  8. Authentication code
-Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
-> 5
-== Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Unlock your phone +33... or accept request on web interface:
-> r
-== Authentication method selection ==
-  1. Password authentication
-  2. Use a Login code
-  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
-  4. Use your fido device foo
-  5. Use your phone +33...
-  6. Use your phone +1...
-  7. Pin code
-  8. Authentication code
-Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
-> 6
-== Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Unlock your phone +1... or accept request on web interface:
-> r
-== Authentication method selection ==
-  1. Password authentication
-  2. Use a Login code
-  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
-  4. Use your fido device foo
-  5. Use your phone +33...
-  6. Use your phone +1...
-  7. Pin code
-  8. Authentication code
-Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
-> 7
-== Pin code ==
-Enter 'r' to cancel the request and go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Enter your pin code:
-> r
-== Authentication method selection ==
-  1. Password authentication
-  2. Use a Login code
-  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
-  4. Use your fido device foo
-  5. Use your phone +33...
-  6. Use your phone +1...
-  7. Pin code
-  8. Authentication code
-Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
-> 2
-== Use a Login code ==
-Enter the code in the login page
-https://ubuntu.com
-       1337
+URL:  https://ubuntu.com
+Code: 1337
 
   1. Wait for authentication result
   2. Regenerate code
@@ -1994,12 +1872,6 @@ Or enter 'r' to go back to select the authentication method
 Or enter 'r' to go back to choose the provider
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
 > 8
-== Authentication code ==
-  1. Proceed with Authentication code
-  2. Resend SMS (1 sent)
-Or enter 'r' to go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose action:
->
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Provider selection ==
@@ -2106,8 +1978,9 @@ Or enter 'r' to go back to choose the provider
 > 2
 == Use a Login code ==
 Enter the code in the login page
-https://ubuntu.com
-       1337
+
+URL:  https://ubuntu.com
+Code: 1337
 
   1. Wait for authentication result
   2. Regenerate code
@@ -2131,7 +2004,7 @@ Or enter 'r' to go back to choose the provider
   2. Resend SMS (1 sent)
 Or enter 'r' to go back to select the authentication method
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose action:
-> r
+>
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Provider selection ==
@@ -2238,8 +2111,9 @@ Or enter 'r' to go back to choose the provider
 > 2
 == Use a Login code ==
 Enter the code in the login page
-https://ubuntu.com
-       1337
+
+URL:  https://ubuntu.com
+Code: 1337
 
   1. Wait for authentication result
   2. Regenerate code
@@ -2264,18 +2138,6 @@ Or enter 'r' to go back to choose the provider
 Or enter 'r' to go back to select the authentication method
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose action:
 > r
-== Authentication method selection ==
-  1. Password authentication
-  2. Use a Login code
-  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
-  4. Use your fido device foo
-  5. Use your phone +33...
-  6. Use your phone +1...
-  7. Pin code
-  8. Authentication code
-Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
->
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Provider selection ==
@@ -2382,8 +2244,9 @@ Or enter 'r' to go back to choose the provider
 > 2
 == Use a Login code ==
 Enter the code in the login page
-https://ubuntu.com
-       1337
+
+URL:  https://ubuntu.com
+Code: 1337
 
   1. Wait for authentication result
   2. Regenerate code
@@ -2419,7 +2282,7 @@ Or enter 'r' to go back to select the authentication method
   8. Authentication code
 Or enter 'r' to go back to choose the provider
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
-> invalid-selection
+>
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Provider selection ==
@@ -2526,8 +2389,9 @@ Or enter 'r' to go back to choose the provider
 > 2
 == Use a Login code ==
 Enter the code in the login page
-https://ubuntu.com
-       1337
+
+URL:  https://ubuntu.com
+Code: 1337
 
   1. Wait for authentication result
   2. Regenerate code
@@ -2564,9 +2428,6 @@ Or enter 'r' to go back to select the authentication method
 Or enter 'r' to go back to choose the provider
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
 > invalid-selection
-Unsupported input
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
->
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Provider selection ==
@@ -2673,8 +2534,9 @@ Or enter 'r' to go back to choose the provider
 > 2
 == Use a Login code ==
 Enter the code in the login page
-https://ubuntu.com
-       1337
+
+URL:  https://ubuntu.com
+Code: 1337
 
   1. Wait for authentication result
   2. Regenerate code
@@ -2713,7 +2575,7 @@ Or enter 'r' to go back to choose the provider
 > invalid-selection
 Unsupported input
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
-> -1
+>
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Provider selection ==
@@ -2820,8 +2682,9 @@ Or enter 'r' to go back to choose the provider
 > 2
 == Use a Login code ==
 Enter the code in the login page
-https://ubuntu.com
-       1337
+
+URL:  https://ubuntu.com
+Code: 1337
 
   1. Wait for authentication result
   2. Regenerate code
@@ -2861,19 +2724,6 @@ Or enter 'r' to go back to choose the provider
 Unsupported input
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
 > -1
-Invalid selection
-== Authentication method selection ==
-  1. Password authentication
-  2. Use a Login code
-  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
-  4. Use your fido device foo
-  5. Use your phone +33...
-  6. Use your phone +1...
-  7. Pin code
-  8. Authentication code
-Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
->
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Provider selection ==
@@ -2980,8 +2830,9 @@ Or enter 'r' to go back to choose the provider
 > 2
 == Use a Login code ==
 Enter the code in the login page
-https://ubuntu.com
-       1337
+
+URL:  https://ubuntu.com
+Code: 1337
 
   1. Wait for authentication result
   2. Regenerate code
@@ -3033,7 +2884,7 @@ Invalid selection
   8. Authentication code
 Or enter 'r' to go back to choose the provider
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
-> 7
+>
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Provider selection ==
@@ -3140,8 +2991,9 @@ Or enter 'r' to go back to choose the provider
 > 2
 == Use a Login code ==
 Enter the code in the login page
-https://ubuntu.com
-       1337
+
+URL:  https://ubuntu.com
+Code: 1337
 
   1. Wait for authentication result
   2. Regenerate code
@@ -3194,6 +3046,167 @@ Invalid selection
 Or enter 'r' to go back to choose the provider
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
 > 7
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Gimme your password:
+>
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
+> 3
+== Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Click on the link received at user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmai
+l.com or enter the code:
+> r
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
+> 4
+== Use your fido device foo ==
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Plug your fido device and press with your thumb:
+> r
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
+> 5
+== Use your phone +33... ==
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Unlock your phone +33... or accept request on web interface:
+> r
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
+> 6
+== Use your phone +1... ==
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Unlock your phone +1... or accept request on web interface:
+> r
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
+> 7
+== Pin code ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Enter your pin code:
+> r
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
+> 2
+== Use a Login code ==
+Enter the code in the login page
+
+URL:  https://ubuntu.com
+Code: 1337
+
+  1. Wait for authentication result
+  2. Regenerate code
+Or enter 'r' to go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose action:
+> r
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
+> 8
+== Authentication code ==
+  1. Proceed with Authentication code
+  2. Resend SMS (1 sent)
+Or enter 'r' to go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose action:
+> r
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
+> invalid-selection
+Unsupported input
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
+> -1
+Invalid selection
+== Authentication method selection ==
+  1. Password authentication
+  2. Use a Login code
+  3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@gmail.com
+  4. Use your fido device foo
+  5. Use your phone +33...
+  6. Use your phone +1...
+  7. Pin code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Choose your authentication method:
+> 7
 == Pin code ==
 Enter 'r' to cancel the request and go back to select the authentication method
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@localhost) Enter your pin code:
@@ -3304,8 +3317,9 @@ Or enter 'r' to go back to choose the provider
 > 2
 == Use a Login code ==
 Enter the code in the login page
-https://ubuntu.com
-       1337
+
+URL:  https://ubuntu.com
+Code: 1337
 
   1. Wait for authentication result
   2. Regenerate code
@@ -3468,8 +3482,9 @@ Or enter 'r' to go back to choose the provider
 > 2
 == Use a Login code ==
 Enter the code in the login page
-https://ubuntu.com
-       1337
+
+URL:  https://ubuntu.com
+Code: 1337
 
   1. Wait for authentication result
   2. Regenerate code
