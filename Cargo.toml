@@ -22,4 +22,6 @@ exclude-crate-paths = [
     { name = "*", exclude = ".gitlab-ci.yml" },
     { name = "*", exclude = "*.png" },
     { name = "*", exclude = "*.svg" },
+
+    { name = "regex", exclude = "record" },
 ]
