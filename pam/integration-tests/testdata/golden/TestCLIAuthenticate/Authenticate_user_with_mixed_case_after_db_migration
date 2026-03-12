@@ -12,10 +12,10 @@ Gimme your password:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 PAM Authenticate()
-  User: "user-integration-with-mixed-case"
+  User: "user-integration-with-mixed-case@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-with-mixed-case"
+  User: "user-integration-with-mixed-case@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

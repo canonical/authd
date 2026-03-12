@@ -1,21 +1,24 @@
 users:
-    - name: testisauthenticated/update_existing_db_on_success_separator_success
+    - name: success@example.com
       uid: 1111
       gid: 1111
-      gecos: gecos for success
-      dir: /home/success
-      shell: /bin/sh/success
-    - name: otheruser
+      gecos: gecos for success@example.com
+      dir: /home/success@example.com
+      shell: /bin/sh/success@example.com
+    - name: otheruser@example.com
       uid: 77777
       gid: 88888
       gecos: gecos for other user
-      dir: /home/otheruser
+      dir: /home/otheruser@example.com
       shell: /bin/sh/otheruser
       broker_id: broker-id
 groups:
-    - name: testisauthenticated/update_existing_db_on_success_separator_success
+    - name: success@example.com
       gid: 1111
-      ugid: testisauthenticated/update_existing_db_on_success_separator_success
+      ugid: success@example.com
+    - name: group-success@example.com
+      gid: 22222
+      ugid: ugid-success@example.com
     - name: group-success
       gid: 88888
       ugid: ugid-success
@@ -23,7 +26,7 @@ users_to_groups:
     - uid: 1111
       gid: 1111
     - uid: 1111
-      gid: 88888
+      gid: 22222
     - uid: 77777
       gid: 88888
 schema_version: 2

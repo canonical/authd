@@ -2,7 +2,7 @@
 Username:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-mfa-integration-native-passwd
+Username: user-mfa-integration-native-passwd@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -11,7 +11,7 @@ Choose your provider:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-mfa-integration-native-passwd
+Username: user-mfa-integration-native-passwd@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -20,7 +20,7 @@ Choose your provider:
 > 2
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-mfa-integration-native-passwd
+Username: user-mfa-integration-native-passwd@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -33,7 +33,7 @@ Gimme your password:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-mfa-integration-native-passwd
+Username: user-mfa-integration-native-passwd@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -46,7 +46,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-mfa-integration-native-passwd@gmail.com
+  2. Send URL to user-mfa-integration-native-passwd@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -58,7 +58,7 @@ Choose your authentication method:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-mfa-integration-native-passwd
+Username: user-mfa-integration-native-passwd@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -71,7 +71,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-mfa-integration-native-passwd@gmail.com
+  2. Send URL to user-mfa-integration-native-passwd@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -87,7 +87,7 @@ Gimme your password:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-mfa-integration-native-passwd
+Username: user-mfa-integration-native-passwd@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -100,7 +100,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-mfa-integration-native-passwd@gmail.com
+  2. Send URL to user-mfa-integration-native-passwd@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -115,13 +115,12 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-mfa-integration-native-passwd
+Username: user-mfa-integration-native-passwd@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -134,7 +133,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-mfa-integration-native-passwd@gmail.com
+  2. Send URL to user-mfa-integration-native-passwd@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -149,13 +148,12 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-mfa-integration-native-passwd
+Username: user-mfa-integration-native-passwd@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -168,7 +166,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-mfa-integration-native-passwd@gmail.com
+  2. Send URL to user-mfa-integration-native-passwd@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -183,8 +181,7 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
@@ -196,7 +193,7 @@ Choose your authentication method:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-mfa-integration-native-passwd
+Username: user-mfa-integration-native-passwd@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -209,7 +206,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-mfa-integration-native-passwd@gmail.com
+  2. Send URL to user-mfa-integration-native-passwd@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -224,8 +221,7 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
@@ -236,13 +232,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 1
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-mfa-integration-native-passwd
+Username: user-mfa-integration-native-passwd@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -255,7 +250,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-mfa-integration-native-passwd@gmail.com
+  2. Send URL to user-mfa-integration-native-passwd@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -270,8 +265,7 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
@@ -282,18 +276,16 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 1
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 >
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-mfa-integration-native-passwd
+Username: user-mfa-integration-native-passwd@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -306,7 +298,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-mfa-integration-native-passwd@gmail.com
+  2. Send URL to user-mfa-integration-native-passwd@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -321,8 +313,7 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
@@ -333,18 +324,16 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 1
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 >
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-mfa-integration-native-passwd
+Username: user-mfa-integration-native-passwd@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -357,7 +346,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-mfa-integration-native-passwd@gmail.com
+  2. Send URL to user-mfa-integration-native-passwd@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -372,8 +361,7 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
@@ -384,13 +372,11 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 1
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 >
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
@@ -401,7 +387,7 @@ Choose your authentication method:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-mfa-integration-native-passwd
+Username: user-mfa-integration-native-passwd@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -414,7 +400,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-mfa-integration-native-passwd@gmail.com
+  2. Send URL to user-mfa-integration-native-passwd@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -429,8 +415,7 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
@@ -441,13 +426,11 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 1
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 >
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
@@ -457,13 +440,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 1
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-mfa-integration-native-passwd
+Username: user-mfa-integration-native-passwd@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -476,7 +458,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-mfa-integration-native-passwd@gmail.com
+  2. Send URL to user-mfa-integration-native-passwd@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -491,8 +473,7 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
@@ -503,13 +484,11 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 1
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 >
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
@@ -519,8 +498,7 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 1
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 >
 == Password reset ==
@@ -529,7 +507,7 @@ Enter your new password:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-mfa-integration-native-passwd
+Username: user-mfa-integration-native-passwd@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -542,7 +520,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-mfa-integration-native-passwd@gmail.com
+  2. Send URL to user-mfa-integration-native-passwd@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -557,8 +535,7 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
@@ -569,13 +546,11 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 1
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 >
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
@@ -585,8 +560,7 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 1
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 >
 == Password reset ==
@@ -597,7 +571,7 @@ Confirm Password:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-mfa-integration-native-passwd
+Username: user-mfa-integration-native-passwd@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -610,7 +584,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-mfa-integration-native-passwd@gmail.com
+  2. Send URL to user-mfa-integration-native-passwd@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -625,8 +599,7 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
@@ -637,13 +610,11 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 1
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 >
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
@@ -653,8 +624,7 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 1
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 >
 == Password reset ==
@@ -664,10 +634,10 @@ Enter your new password:
 Confirm Password:
 >
 PAM ChangeAuthTok()
-  User: "user-mfa-integration-native-passwd"
+  User: "user-mfa-integration-native-passwd@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-mfa-integration-native-passwd"
+  User: "user-mfa-integration-native-passwd@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

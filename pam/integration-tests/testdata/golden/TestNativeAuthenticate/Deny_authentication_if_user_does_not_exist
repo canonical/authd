@@ -18,14 +18,14 @@ Choose your provider:
   2. ExampleBroker
 Choose your provider:
 > 2
-PAM Error Message: user "user-unexistent" does not exist
+PAM Error Message: user "user-unexistent@example.com" does not exist
 PAM Authenticate()
-  User: "user-unexistent"
+  User: "user-unexistent@example.com"
   Result: error: PAM exit code: 4
     System error
 acct=incomplete
 PAM AcctMgmt()
-  User: "user-unexistent"
+  User: "user-unexistent@example.com"
   Result: error: PAM exit code: 25
     The return value should be ignored by PAM dispatch
 >

@@ -2,7 +2,7 @@
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user-integration-qrcode-static-regenerate
+Username: user-integration-qrcode-static-regenerate@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your provider
@@ -22,7 +22,7 @@ Gimme your password:
   Select your authentication method
 
 > 1. Password authentication
-  2. Send URL to user-integration-qrcode-static-regenerate@gmail.com
+  2. Send URL to user-integration-qrcode-static-regenerate@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -60,10 +60,10 @@ Scan the qrcode or enter the code in the login page
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 PAM Authenticate()
-  User: "user-integration-qrcode-static-regenerate"
+  User: "user-integration-qrcode-static-regenerate@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-qrcode-static-regenerate"
+  User: "user-integration-qrcode-static-regenerate@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

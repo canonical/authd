@@ -2,7 +2,7 @@
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user-integration-cli-passwd-exit-authd-if-local-broker-is-selected
+Username: user-integration-cli-passwd-exit-authd-if-local-broker-is-selected@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your provider
@@ -20,11 +20,11 @@ Username: user-integration-cli-passwd-exit-authd-if-local-broker-is-selected
 
 PAM Info Message: chauthtok=incomplete
 PAM ChangeAuthTok()
-  User: "user-integration-cli-passwd-exit-authd-if-local-broker-is-selected"
+  User: "user-integration-cli-passwd-exit-authd-if-local-broker-is-selected@example.com"
   Result: error: PAM exit code: 25
     The return value should be ignored by PAM dispatch
 PAM AcctMgmt()
-  User: "user-integration-cli-passwd-exit-authd-if-local-broker-is-selected"
+  User: "user-integration-cli-passwd-exit-authd-if-local-broker-is-selected@example.com"
   Result: error: PAM exit code: 26
     Critical error - immediate abort
 >

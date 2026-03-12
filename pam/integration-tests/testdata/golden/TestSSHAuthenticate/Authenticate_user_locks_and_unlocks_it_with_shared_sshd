@@ -2,42 +2,42 @@
 == Provider selection ==
   1. local
   2. ExampleBroker
-(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@localhost) Choose your provider:
+(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com@localhost) Choose your provider:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Provider selection ==
   1. local
   2. ExampleBroker
-(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@localhost) Choose your provider:
+(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com@localhost) Choose your provider:
 > 2
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Provider selection ==
   1. local
   2. ExampleBroker
-(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@localhost) Choose your provider:
-> 2
-== Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@localhost) Gimme your password:
->
-────────────────────────────────────────────────────────────────────────────────
-> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
-== Provider selection ==
-  1. local
-  2. ExampleBroker
-(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@localhost) Choose your provider:
+(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com@localhost) Choose your provider:
 > 2
 == Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@localhost) Gimme your password:
+(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com@localhost) Gimme your password:
 >
-PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd'
-PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd'
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com@localhost) Gimme your password:
+>
+PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com'
+PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate]
   HOME=${AUTHD_TEST_HOME}
-  LOGNAME=user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd
+  LOGNAME=user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com
   PATH=${AUTHD_TEST_PATH}
   PWD=${AUTHD_TEST_PWD}
   SHELL=/bin/sh
@@ -45,7 +45,7 @@ PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-us
   SSH_CONNECTION=${AUTHD_TEST_SSH_CONNECTION}
   SSH_TTY=${AUTHD_TEST_SSH_TTY}
   TERM=xterm-256color
-  USER=user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd
+  USER=user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com
 Connection to localhost closed.
 >
 ────────────────────────────────────────────────────────────────────────────────
@@ -59,15 +59,15 @@ Connection to localhost closed.
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@localhost) Gimme your password:
+(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com@localhost) Gimme your password:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@localhost) Gimme your password:
+(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com@localhost) Gimme your password:
 >
-permission denied: user user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd is locked
+permission denied: user user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com is locked
 Received disconnect from ${SSH_HOST} port ${SSH_PORT} Too many authentication failures
 Disconnected from ${SSH_HOST} port ${SSH_PORT}
 >
@@ -86,20 +86,20 @@ Disconnected from ${SSH_HOST} port ${SSH_PORT}
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@localhost) Gimme your password:
+(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com@localhost) Gimme your password:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ${AUTHCTL_PATH} user unlock ${AUTHD_PAM_SSH_USER}
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@localhost) Gimme your password:
+(user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com@localhost) Gimme your password:
 >
-PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd'
-PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd'
+PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com'
+PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate]
   HOME=${AUTHD_TEST_HOME}
-  LOGNAME=user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd
+  LOGNAME=user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com
   PATH=${AUTHD_TEST_PATH}
   PWD=${AUTHD_TEST_PWD}
   SHELL=/bin/sh
@@ -107,7 +107,7 @@ PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-us
   SSH_CONNECTION=${AUTHD_TEST_SSH_CONNECTION}
   SSH_TTY=${AUTHD_TEST_SSH_TTY}
   TERM=xterm-256color
-  USER=user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd
+  USER=user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com
 Connection to localhost closed.
 >
 ────────────────────────────────────────────────────────────────────────────────

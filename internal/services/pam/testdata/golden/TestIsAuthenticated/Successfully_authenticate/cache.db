@@ -1,17 +1,17 @@
 users:
-    - name: testisauthenticated/successfully_authenticate_separator_success
+    - name: success@example.com
       uid: 1111
       gid: 1111
-      gecos: gecos for success
-      dir: /home/success
-      shell: /bin/sh/success
+      gecos: gecos for success@example.com
+      dir: /home/success@example.com
+      shell: /bin/sh/success@example.com
 groups:
-    - name: testisauthenticated/successfully_authenticate_separator_success
+    - name: success@example.com
       gid: 1111
-      ugid: testisauthenticated/successfully_authenticate_separator_success
-    - name: group-success
+      ugid: success@example.com
+    - name: group-success@example.com
       gid: 22222
-      ugid: ugid-success
+      ugid: ugid-success@example.com
 users_to_groups:
     - uid: 1111
       gid: 1111

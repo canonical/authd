@@ -1,1 +1,1 @@
-user-integration-pre-check-simple:x:{{UID}}:{{GID}}:gecos for user-integration-pre-check-simple:/home/user-integration-pre-check-simple:/bin/sh
+user-pre-check@example.com:x:{{UID}}:{{GID}}:gecos for user-pre-check@example.com:/home/user-pre-check@example.com:/bin/sh

@@ -2,13 +2,13 @@
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user-integration-not-empty
+Username: user-integration-not-empty@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user-integration-was-empty
+Username: user-integration-was-empty@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your provider
@@ -26,10 +26,10 @@ Gimme your password:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 PAM Authenticate()
-  User: "user-integration-was-empty"
+  User: "user-integration-was-empty@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-was-empty"
+  User: "user-integration-was-empty@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────
