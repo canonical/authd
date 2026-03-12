@@ -34,10 +34,10 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 PAM Authenticate()
-  User: "user-integration-upper-case-testnativeauthenticate"
+  User: "user-integration-upper-case-native-testnativeauthenticate"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-upper-case-testnativeauthenticate"
+  User: "user-integration-upper-case-native-testnativeauthenticate"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

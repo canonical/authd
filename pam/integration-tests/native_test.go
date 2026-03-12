@@ -39,7 +39,6 @@ func TestNativeAuthenticate(t *testing.T) {
 		clientOptions      clientOptions
 		currentUserNotRoot bool
 		userSelection      bool
-		userSuffixSkip     bool
 		oldDB              string
 		wantLocalGroups    bool
 		wantSeparateDaemon bool
@@ -52,7 +51,7 @@ func TestNativeAuthenticate(t *testing.T) {
 		"Authenticate_user_successfully_with_upper_case": {
 			tape: "simple_auth",
 			clientOptions: clientOptions{
-				PamUser: strings.ToUpper(vhsTestUserName(t, "upper-case")),
+				PamUser: strings.ToUpper(vhsTestUserName(t, "upper-case-native")),
 			},
 		},
 		"Authenticate_user_successfully_with_user_selection": {
@@ -66,13 +65,13 @@ func TestNativeAuthenticate(t *testing.T) {
 			tape:          "simple_auth_with_user_selection",
 			userSelection: true,
 			tapeVariables: map[string]string{
-				vhsTapeUserVariable: strings.ToUpper(vhsTestUserName(t, "selection-upper-case")),
+				vhsTapeUserVariable: strings.ToUpper(vhsTestUserName(t, "selection-upper-case-native")),
 			},
 		},
 		"Authenticate_user_successfully_with_invalid_connection_timeout": {
 			tape: "simple_auth",
 			clientOptions: clientOptions{
-				PamUser:    "user-integration-simple-auth-invalid-timeout",
+				PamUser:    "user-integration-simple-auth-invalid-timeout-native",
 				PamTimeout: "invalid",
 			},
 		},
@@ -87,29 +86,26 @@ func TestNativeAuthenticate(t *testing.T) {
 			clientOptions: clientOptions{
 				PamServiceName: "polkit-1",
 				PamUser: vhsTestUserNameFull(t,
-					examplebroker.UserIntegrationAuthModesPrefix, "password-integration-polkit"),
+					examplebroker.UserIntegrationAuthModesPrefix, "password-integration-polkit-native"),
 			},
 		},
 		"Authenticate_user_successfully_after_db_migration": {
-			tape:           "simple_auth_with_auto_selected_broker",
-			oldDB:          "authd_0.4.1_bbolt_with_mixed_case_users",
-			userSuffixSkip: true,
+			tape:  "simple_auth_with_auto_selected_broker",
+			oldDB: "authd_0.4.1_bbolt_with_mixed_case_users",
 			clientOptions: clientOptions{
 				PamUser: "user-integration-cached",
 			},
 		},
 		"Authenticate_user_with_upper_case_using_lower_case_after_db_migration": {
-			tape:           "simple_auth_with_auto_selected_broker",
-			oldDB:          "authd_0.4.1_bbolt_with_mixed_case_users",
-			userSuffixSkip: true,
+			tape:  "simple_auth_with_auto_selected_broker",
+			oldDB: "authd_0.4.1_bbolt_with_mixed_case_users",
 			clientOptions: clientOptions{
 				PamUser: "user-integration-upper-case",
 			},
 		},
 		"Authenticate_user_with_mixed_case_after_db_migration": {
-			tape:           "simple_auth_with_auto_selected_broker",
-			oldDB:          "authd_0.4.1_bbolt_with_mixed_case_users",
-			userSuffixSkip: true,
+			tape:  "simple_auth_with_auto_selected_broker",
+			oldDB: "authd_0.4.1_bbolt_with_mixed_case_users",
 			clientOptions: clientOptions{
 				PamUser: "user-integration-WITH-Mixed-CaSe",
 			},
@@ -118,7 +114,7 @@ func TestNativeAuthenticate(t *testing.T) {
 			tape:         "mfa_auth",
 			tapeSettings: []tapeSetting{{vhsHeight, 1200}},
 			clientOptions: clientOptions{
-				PamUser: examplebroker.UserIntegrationMfaPrefix + "auth",
+				PamUser: examplebroker.UserIntegrationMfaPrefix + "auth-native",
 			},
 		},
 		"Authenticate_user_with_form_mode_with_button": {
@@ -195,7 +191,7 @@ func TestNativeAuthenticate(t *testing.T) {
 				"AUTHD_QRCODE_TAPE_ITEM_NAME": "Login code",
 			},
 			clientOptions: clientOptions{
-				PamUser:        examplebroker.UserIntegrationPreCheckPrefix + "ssh-service-qr-code",
+				PamUser:        examplebroker.UserIntegrationPreCheckPrefix + "ssh-service-qr-code-native",
 				PamServiceName: "sshd",
 			},
 		},
@@ -203,7 +199,7 @@ func TestNativeAuthenticate(t *testing.T) {
 			tape:         "mandatory_password_reset",
 			tapeSettings: []tapeSetting{{vhsHeight, 550}},
 			clientOptions: clientOptions{
-				PamUser: examplebroker.UserIntegrationNeedsResetPrefix + "mandatory",
+				PamUser: examplebroker.UserIntegrationNeedsResetPrefix + "mandatory-native",
 			},
 		},
 		"Authenticate_user_and_reset_password_with_case_insensitive_user_selection": {
@@ -212,44 +208,44 @@ func TestNativeAuthenticate(t *testing.T) {
 			userSelection: true,
 			tapeVariables: map[string]string{
 				vhsTapeUserVariable: vhsTestUserNameFull(t,
-					examplebroker.UserIntegrationNeedsResetPrefix, "case-insensitive"),
+					examplebroker.UserIntegrationNeedsResetPrefix, "case-insensitive-native"),
 				"AUTHD_TEST_TAPE_UPPER_CASE_USERNAME": strings.ToUpper(
 					vhsTestUserNameFull(t,
-						examplebroker.UserIntegrationNeedsResetPrefix, "Case-INSENSITIVE")),
+						examplebroker.UserIntegrationNeedsResetPrefix, "CASE-INSENSITIVE-NATIVE")),
 				"AUTHD_TEST_TAPE_MIXED_CASE_USERNAME": vhsTestUserNameFull(t,
-					examplebroker.UserIntegrationNeedsResetPrefix, "Case-INSENSITIVE"),
+					examplebroker.UserIntegrationNeedsResetPrefix, "Case-INSENSITIVE-native"),
 			},
 		},
 		"Authenticate_user_with_mfa_and_reset_password_while_enforcing_policy": {
 			tape:         "mfa_reset_pwquality_auth",
 			tapeSettings: []tapeSetting{{vhsHeight, 3000}},
 			clientOptions: clientOptions{
-				PamUser: examplebroker.UserIntegrationMfaWithResetPrefix + "pwquality",
+				PamUser: examplebroker.UserIntegrationMfaWithResetPrefix + "pwquality-native",
 			},
 		},
 		"Authenticate_user_with_mfa_and_reset_same_password": {
 			tape:         "mfa_reset_same_password",
 			tapeSettings: []tapeSetting{{vhsHeight, 3000}},
 			clientOptions: clientOptions{
-				PamUser: examplebroker.UserIntegrationMfaWithResetPrefix + "same-password",
+				PamUser: examplebroker.UserIntegrationMfaWithResetPrefix + "same-password-native",
 			},
 		},
 		"Authenticate_user_and_offer_password_reset": {
 			tape: "optional_password_reset_skip",
 			clientOptions: clientOptions{
-				PamUser: examplebroker.UserIntegrationCanResetPrefix + "skip",
+				PamUser: examplebroker.UserIntegrationCanResetPrefix + "skip-native",
 			},
 		},
 		"Authenticate_user_and_accept_password_reset": {
 			tape: "optional_password_reset_accept",
 			clientOptions: clientOptions{
-				PamUser: examplebroker.UserIntegrationCanResetPrefix + "accept",
+				PamUser: examplebroker.UserIntegrationCanResetPrefix + "accept-native",
 			},
 		},
 		"Authenticate_user_switching_auth_mode": {
 			tape:          "switch_auth_mode",
 			tapeSettings:  []tapeSetting{{vhsHeight, 3000}},
-			clientOptions: clientOptions{PamUser: "user-integration-switch-mode"},
+			clientOptions: clientOptions{PamUser: "user-integration-switch-mode-native"},
 			tapeVariables: map[string]string{
 				"AUTHD_SWITCH_AUTH_MODE_TAPE_SEND_URL_TO_EMAIL_ITEM":   "2",
 				"AUTHD_SWITCH_AUTH_MODE_TAPE_FIDO_DEVICE_FOO_ITEM":     "3",
@@ -279,27 +275,27 @@ func TestNativeAuthenticate(t *testing.T) {
 			tapeSettings:    []tapeSetting{{vhsHeight, 700}},
 			wantLocalGroups: true,
 			clientOptions: clientOptions{
-				PamUser: examplebroker.UserIntegrationLocalGroupsPrefix + "auth",
+				PamUser: examplebroker.UserIntegrationLocalGroupsPrefix + "auth-native",
 			},
 		},
 		"Authenticate_user_on_ssh_service": {
 			tape: "simple_ssh_auth",
 			clientOptions: clientOptions{
-				PamUser:        examplebroker.UserIntegrationPreCheckPrefix + "ssh-service",
+				PamUser:        examplebroker.UserIntegrationPreCheckPrefix + "ssh-service-native",
 				PamServiceName: "sshd",
 			},
 		},
 		"Authenticate_user_on_ssh_service_with_custom_name_and_connection_env": {
 			tape: "simple_ssh_auth",
 			clientOptions: clientOptions{
-				PamUser: examplebroker.UserIntegrationPreCheckPrefix + "ssh-connection",
+				PamUser: examplebroker.UserIntegrationPreCheckPrefix + "ssh-connection-native",
 				PamEnv:  []string{"SSH_CONNECTION=foo-connection"},
 			},
 		},
 		"Authenticate_user_on_ssh_service_with_custom_name_and_auth_info_env": {
 			tape: "simple_ssh_auth",
 			clientOptions: clientOptions{
-				PamUser: examplebroker.UserIntegrationPreCheckPrefix + "ssh-auth-info",
+				PamUser: examplebroker.UserIntegrationPreCheckPrefix + "ssh-auth-info-native",
 				PamEnv:  []string{"SSH_AUTH_INFO_0=foo-authinfo"},
 			},
 		},
@@ -358,7 +354,7 @@ func TestNativeAuthenticate(t *testing.T) {
 			tape:         "bad_password",
 			tapeSettings: []tapeSetting{{vhsHeight, 800}},
 			clientOptions: clientOptions{
-				PamUser: examplebroker.UserIntegrationNeedsResetPrefix + "bad-password",
+				PamUser: examplebroker.UserIntegrationNeedsResetPrefix + "bad-password-native",
 			},
 		},
 
@@ -452,10 +448,6 @@ func TestNativeAuthenticate(t *testing.T) {
 				tc.tapeCommand = tapeCommand
 			}
 
-			if u := tc.clientOptions.PamUser; !tc.userSuffixSkip &&
-				strings.Contains(u, "integration") && !strings.Contains(u, "native") {
-				tc.clientOptions.PamUser += "-native"
-			}
 			if tc.clientOptions.PamUser == "" && !tc.userSelection {
 				tc.clientOptions.PamUser = vhsTestUserName(t, "native")
 			}
