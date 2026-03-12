@@ -1,3 +1,15 @@
+authd (0.5.9) resolute; urgency=medium
+
+  * Update gRPC to 1.72.2. This version contains a fix for an issue where
+    locally-resolved addresses are resolved via a proxy. We encountered that
+    issue in the autopkgtests run during proposed-migration.
+  * Use safer getpwent_r and getgrent_r implementations. The old
+    implementations were subject to a race condition which also occurred
+    during the autopkgtests.
+  * Cargo.toml: Exclude vendored files which cause build failures.
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Wed, 11 Mar 2026 17:43:36 +0100
+
 authd (0.5.8) resolute; urgency=medium
 
   * Add scripts/generate-vendored-copyright
