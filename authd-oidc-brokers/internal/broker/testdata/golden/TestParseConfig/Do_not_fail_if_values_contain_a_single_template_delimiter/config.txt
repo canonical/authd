@@ -2,6 +2,7 @@ clientID=<CLIENT_ID
 clientSecret=
 issuerURL=https://ISSUER_URL>
 forceProviderAuthentication=false
+disableLocalPassword=false
 registerDevice=false
 allowedUsers=map[]
 allUsersAllowed=false
