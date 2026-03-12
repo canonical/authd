@@ -42,6 +42,8 @@ jobs:
       github.event_name == 'release' }}
 
     steps:
+      - uses: actions/checkout@v6
+
       - uses: ./.github/actions/setup-oras
 
       - name: Download the Debian sources
@@ -79,6 +81,11 @@ jobs:
       github.event_name == 'release' }}
 
     steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 100
+          path: repo
+
       - uses: ./.github/actions/setup-oras
 
       - name: Download the Debian sources
@@ -100,11 +107,6 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y --no-install-suggests --no-install-recommends \
             dpkg-dev devscripts
-
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 100
-          path: repo
 
       - name: Checkout packaging branch
         uses: actions/checkout@v6
