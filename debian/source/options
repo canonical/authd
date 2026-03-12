@@ -1,9 +1,13 @@
+tar-ignore = */.editor*
 tar-ignore = */.git*
 tar-ignore = */.go*
-tar-ignore = */.editor*
 tar-ignore = */.mailmap
 tar-ignore = */.vscode
 tar-ignore = *.so
 tar-ignore = *.o
-tar-ignore = authd/docs
 tar-ignore = vendor_rust/*.a
+
+tar-ignore = authd/authd-oidc-brokers
+tar-ignore = authd/docs
+tar-ignore = authd/e2e-tests
+tar-ignore = authd/snap
