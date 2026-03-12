@@ -55,24 +55,24 @@ func runAuthdForTesting(t *testing.T, isSharedDaemon bool, args ...testutils.Dae
 func runAuthdForTestingWithCancel(t *testing.T, isSharedDaemon bool, args ...testutils.DaemonOption) (socketPath string, cancelFunc func()) {
 	t.Helper()
 
-	args = append(args, testutils.WithOutputAsTestArtifact())
+	defaultArgs := []testutils.DaemonOption{testutils.WithOutputAsTestArtifact()}
 
 	homeBaseDir := filepath.Join(t.TempDir(), "homes")
 	err := os.MkdirAll(homeBaseDir, 0700)
 	require.NoError(t, err, "Setup: Creating home base dir %q", homeBaseDir)
-	args = append(args, testutils.WithHomeBaseDir(homeBaseDir))
+	defaultArgs = append(defaultArgs, testutils.WithHomeBaseDir(homeBaseDir))
 
 	if !isSharedDaemon {
 		database := filepath.Join(t.TempDir(), "db", consts.DefaultDatabaseFileName)
-		args = append(args, testutils.WithDBPath(filepath.Dir(database)))
+		defaultArgs = append(defaultArgs, testutils.WithDBPath(filepath.Dir(database)))
 		testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, database)
 	}
 	if isSharedDaemon && os.Getenv("AUTHD_TESTS_ARTIFACTS_ALWAYS_SAVE") != "" {
 		database := filepath.Join(testutils.ArtifactsDir(t), "db", consts.DefaultDatabaseFileName)
-		args = append(args, testutils.WithDBPath(filepath.Dir(database)))
+		defaultArgs = append(defaultArgs, testutils.WithDBPath(filepath.Dir(database)))
 	}
 
-	socketPath, cancelFunc = testutils.StartAuthdWithCancel(t, daemonPath, args...)
+	socketPath, cancelFunc = testutils.StartAuthdWithCancel(t, daemonPath, append(defaultArgs, args...)...)
 	return socketPath, cancelFunc
 }
 

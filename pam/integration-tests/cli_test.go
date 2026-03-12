@@ -79,7 +79,7 @@ func TestCLIAuthenticate(t *testing.T) {
 		"Authenticate_user_successfully_with_password_only_supported_method": {
 			tape: "simple_auth",
 			tapeVariables: map[string]string{
-				vhsTapeUserVariable: examplebroker.UserIntegrationAuthModesPrefix + "password-integration-cli",
+				vhsTapeUserVariable: examplebroker.UserIntegrationAuthModesPrefix + "password-integration-cli@example.com",
 			},
 		},
 		"Authenticate_user_successfully_after_trying_empty_user": {
@@ -89,21 +89,21 @@ func TestCLIAuthenticate(t *testing.T) {
 			tape:  "simple_auth_with_auto_selected_broker",
 			oldDB: "authd_0.4.1_bbolt_with_mixed_case_users",
 			clientOptions: clientOptions{
-				PamUser: "user-integration-cached",
+				PamUser: "user-integration-cached@example.com",
 			},
 		},
 		"Authenticate_user_with_upper_case_using_lower_case_after_db_migration": {
 			tape:  "simple_auth_with_auto_selected_broker",
 			oldDB: "authd_0.4.1_bbolt_with_mixed_case_users",
 			clientOptions: clientOptions{
-				PamUser: "user-integration-upper-case",
+				PamUser: "user-integration-upper-case@example.com",
 			},
 		},
 		"Authenticate_user_with_mixed_case_after_db_migration": {
 			tape:  "simple_auth_with_auto_selected_broker",
 			oldDB: "authd_0.4.1_bbolt_with_mixed_case_users",
 			clientOptions: clientOptions{
-				PamUser: "user-integration-WITH-Mixed-CaSe",
+				PamUser: "user-integration-WITH-Mixed-CaSe@example.com",
 			},
 		},
 		"Authenticate_user_with_mfa": {
@@ -115,14 +115,14 @@ func TestCLIAuthenticate(t *testing.T) {
 		"Authenticate_user_with_qr_code": {
 			tape: "qr_code",
 			clientOptions: clientOptions{
-				PamUser: examplebroker.UserIntegrationPrefix + "qr-code",
+				PamUser: examplebroker.UserIntegrationPrefix + "qr-code@example.com",
 			},
 		},
 		"Authenticate_user_with_qr_code_in_a_TTY": {
 			tape:         "qr_code",
 			tapeSettings: []tapeSetting{{vhsHeight, 800}},
 			clientOptions: clientOptions{
-				PamUser: examplebroker.UserIntegrationPrefix + "qr-code-tty",
+				PamUser: examplebroker.UserIntegrationPrefix + "qr-code-tty@example.com",
 				Term:    "linux",
 			},
 		},
@@ -130,7 +130,7 @@ func TestCLIAuthenticate(t *testing.T) {
 			tape:         "qr_code",
 			tapeSettings: []tapeSetting{{vhsHeight, 800}},
 			clientOptions: clientOptions{
-				PamUser: examplebroker.UserIntegrationPrefix + "qr-code-tty-session",
+				PamUser: examplebroker.UserIntegrationPrefix + "qr-code-tty-session@example.com",
 				Term:    "xterm-256color", SessionType: "tty",
 			},
 		},
@@ -138,7 +138,7 @@ func TestCLIAuthenticate(t *testing.T) {
 			tape:         "qr_code",
 			tapeSettings: []tapeSetting{{vhsHeight, 800}},
 			clientOptions: clientOptions{
-				PamUser: examplebroker.UserIntegrationPrefix + "qr-code-screen",
+				PamUser: examplebroker.UserIntegrationPrefix + "qr-code-screen@example.com",
 				Term:    "screen",
 			},
 		},
@@ -202,7 +202,7 @@ func TestCLIAuthenticate(t *testing.T) {
 		"Prevent_user_from_switching_username": {
 			tape: "switch_preset_username",
 			clientOptions: clientOptions{
-				PamUser: examplebroker.UserIntegrationPrefix + "pam-preset",
+				PamUser: examplebroker.UserIntegrationPrefix + "pam-preset@example.com",
 			},
 		},
 
@@ -340,7 +340,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 		"Change_passwd_after_MFA_auth": {
 			tape: "passwd_mfa",
 			tapeVariables: map[string]string{
-				vhsTapeUserVariable: examplebroker.UserIntegrationMfaPrefix + "cli-passwd",
+				vhsTapeUserVariable: examplebroker.UserIntegrationMfaPrefix + "cli-passwd@example.com",
 			},
 		},
 

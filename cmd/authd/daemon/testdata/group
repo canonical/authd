@@ -1,5 +1,5 @@
 root:x:0:
 other-local-group:x:1234:
-other-local-group-with-users:x:4321:user-foo,user-bar
-group1:x:11111:user1
-UpperCaseGroup:x:11112:user1,User3
+other-local-group-with-users:x:4321:user-foo@example.com,user-bar@example.com
+group1:x:11111:user1@example.com
+UpperCaseGroup:x:11112:user1@example.com,User3@example.com

@@ -1,6 +1,6 @@
-name: user-pre-check
+name: user-pre-check@example.com
 uid: 1234
 gid: 1234
-gecos: gecos for user-pre-check
-homedir: /home/user-pre-check
-shell: /bin/sh/user-pre-check
+gecos: gecos for user-pre-check@example.com
+homedir: /home/user-pre-check@example.com
+shell: /bin/sh/user-pre-check@example.com

@@ -2,10 +2,10 @@
 Username:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-integration-native-username
+Username: user-integration-native-username@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-integration-native-username
+Username: user-integration-native-username@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -14,7 +14,7 @@ Choose your provider:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-integration-native-username
+Username: user-integration-native-username@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -23,7 +23,7 @@ Choose your provider:
 > r
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-integration-native-username
+Username: user-integration-native-username@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -33,24 +33,24 @@ Choose your provider:
 Username:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-integration-native-username
+Username: user-integration-native-username@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
 Or enter 'r' to go back to user selection
 Choose your provider:
 > r
-Username: user-integration-native-username-switched
+Username: user-integration-native-username-switched@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-integration-native-username
+Username: user-integration-native-username@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
 Or enter 'r' to go back to user selection
 Choose your provider:
 > r
-Username: user-integration-native-username-switched
+Username: user-integration-native-username-switched@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -59,14 +59,14 @@ Choose your provider:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-integration-native-username
+Username: user-integration-native-username@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
 Or enter 'r' to go back to user selection
 Choose your provider:
 > r
-Username: user-integration-native-username-switched
+Username: user-integration-native-username-switched@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -75,14 +75,14 @@ Choose your provider:
 > 2
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-integration-native-username
+Username: user-integration-native-username@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
 Or enter 'r' to go back to user selection
 Choose your provider:
 > r
-Username: user-integration-native-username-switched
+Username: user-integration-native-username-switched@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -95,14 +95,14 @@ Gimme your password:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-integration-native-username
+Username: user-integration-native-username@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
 Or enter 'r' to go back to user selection
 Choose your provider:
 > r
-Username: user-integration-native-username-switched
+Username: user-integration-native-username-switched@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -114,10 +114,10 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 PAM Authenticate()
-  User: "user-integration-native-username-switched"
+  User: "user-integration-native-username-switched@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-native-username-switched"
+  User: "user-integration-native-username-switched@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

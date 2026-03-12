@@ -2,7 +2,7 @@
 Username:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-integration-native-passwd-exit-authd-if-user-sigints
+Username: user-integration-native-passwd-exit-authd-if-user-sigints@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -11,7 +11,7 @@ Choose your provider:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-integration-native-passwd-exit-authd-if-user-sigints
+Username: user-integration-native-passwd-exit-authd-if-user-sigints@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -20,7 +20,7 @@ Choose your provider:
 > 2
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-integration-native-passwd-exit-authd-if-user-sigints
+Username: user-integration-native-passwd-exit-authd-if-user-sigints@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -33,7 +33,7 @@ Gimme your password:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-integration-native-passwd-exit-authd-if-user-sigints
+Username: user-integration-native-passwd-exit-authd-if-user-sigints@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker

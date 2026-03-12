@@ -34,10 +34,10 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 PAM Authenticate()
-  User: "user-local-groups-integration-auth-native"
+  User: "user-local-groups-integration-auth-native@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-local-groups-integration-auth-native"
+  User: "user-local-groups-integration-auth-native@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

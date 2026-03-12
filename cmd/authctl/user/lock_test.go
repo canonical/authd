@@ -27,7 +27,7 @@ func TestUserLockCommand(t *testing.T) {
 		args             []string
 		expectedExitCode int
 	}{
-		"Lock_user_success": {args: []string{"lock", "user1"}, expectedExitCode: 0},
+		"Lock_user_success": {args: []string{"lock", "user1@example.com"}, expectedExitCode: 0},
 
 		"Error_locking_invalid_user": {args: []string{"lock", "invaliduser"}, expectedExitCode: int(codes.NotFound)},
 	}

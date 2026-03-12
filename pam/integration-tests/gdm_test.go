@@ -200,7 +200,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticate_user_successfully_with_password_only_supported_method": {
-			pamUser: ptrValue(examplebroker.UserIntegrationAuthModesPrefix + "password-integration-gdm"),
+			pamUser: ptrValue(examplebroker.UserIntegrationAuthModesPrefix + "password-integration-gdm@example.com"),
 			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
 				gdm.EventType_startAuthentication: {
 					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Secret{

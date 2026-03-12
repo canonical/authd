@@ -2,7 +2,7 @@
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo bar
-Username: user2
+Username: user2@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo bar
   Select your provider
@@ -26,10 +26,10 @@ Gimme your password:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo bar
 PAM Authenticate()
-  User: "user2"
+  User: "user2@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user2"
+  User: "user2@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────
