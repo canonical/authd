@@ -1,0 +1,83 @@
+#!/bin/bash
+
+set -euo pipefail
+
+usage(){
+    cat << EOF
+Usage: $0 [options]
+
+Build the authd source deb, extract it and run licenserecon on it.
+
+Options:
+  --build-dir <dir>
+      Directory to use for building the package and extracting the source package.
+      Defaults to ../build/authd.
+
+  --skip-build
+      Skip building the source package and just run lrc on the existing source
+      package in the build directory.
+
+  --no-lintian
+      Don't run lintian when building the source package.
+      Ignored if --skip-build is used.
+
+  --dist <distribution>
+      The target distribution to build the package for (default: noble).
+      Ignored if --skip-build is used.
+EOF
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --build-dir)
+            BUILD_DIR="$2"
+            shift 2
+            ;;
+        --skip-build)
+            SKIP_BUILD=1
+            shift
+            ;;
+        --no-lintian)
+            NO_LINTIAN=1
+            shift
+            ;;
+        --dist)
+            DIST="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+BUILD_DIR=${BUILD_DIR:-"../build/authd/"}
+DIST=${DIST:-"noble"}
+
+set -x
+
+if [ -z "${SKIP_BUILD:-}" ]; then
+     # Build the source package
+    "${SCRIPT_DIR}/build-authd-deb" \
+      --build-dir "${BUILD_DIR}" \
+      ${NO_LINTIAN:+--no-lintian} \
+      --only-source \
+      --dist "${DIST}"
+fi
+
+# Extract the source package
+tarball=$(ls -t1 "$(dirname "${BUILD_DIR}")"/authd_*.tar*)
+rm -rf "${BUILD_DIR}"
+tar xf "${tarball}" -C "$(dirname "${BUILD_DIR}")"
+
+# Run lrc on the extracted source package
+cd "$(dirname "${BUILD_DIR}")/authd"
+lrc

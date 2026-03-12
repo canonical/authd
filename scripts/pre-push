@@ -1,0 +1,64 @@
+#!/bin/sh
+
+set -eu
+set -x
+
+go mod vendor
+
+if cargo metadata --no-deps --frozen --quiet >/dev/null 2>&1; then
+    if ! cargo help fmt >/dev/null 2>&1; then
+        set +x
+        echo >&2 "pre-push: Warning: The installed cargo version does not support \`cargo fmt\`"
+        set -x
+    elif ! cargo fmt --check; then
+        set +x
+        echo >&2 "pre-push: Error: cargo fmt failed"
+        FAILED=1
+    fi
+fi
+
+
+run_golangci_lint() {
+    # Check if the .golangci.yaml is v2
+    if grep -q 'version: "2"' .golangci.yaml; then
+        golangci-lint run
+    else
+        golangci-lint-v1 run
+    fi
+}
+
+if ! run_golangci_lint; then
+    set +x
+    echo >&2 "pre-push: Error: golangci-lint failed"
+    FAILED=1
+fi
+
+if [ -d ./authd-oidc-brokers/cmd/authd-oidc ]; then
+    # Check if we can build all the brokers
+    go -C authd-oidc-brokers build -o /dev/null ./cmd/authd-oidc
+    go -C authd-oidc-brokers build -tags=withgoogle -o /dev/null ./cmd/authd-oidc
+    go -C authd-oidc-brokers build -tags=withmsentraid -o /dev/null ./cmd/authd-oidc
+fi
+
+if [ -d internal/services ]; then
+    # Check if the golden files containing the registered gRPC services are up to date
+    TESTS_UPDATE_GOLDEN=1 go test -C internal/services -run TestRegisterGRPCServices
+    # Check if any files were modified
+    if [ -n "$(git status --porcelain)" ]; then
+        set +x
+        echo >&2 "pre-push: Error: internal/services: golden files were updated, please commit the changes"
+        FAILED=1
+    fi
+fi
+
+# Check if the strings "DO-NOT-PUSH" are present in the diff with main
+if git diff main | grep -e DO-NOT-PUSH | grep -v "mktemp"; then
+    set +x
+    echo >&2 "pre-push: Error: Found string DO-NOT-PUSH"
+    FAILED=1
+fi
+
+set +x
+if [ -n "${FAILED:-}" ]; then
+    exit 1
+fi
