@@ -346,7 +346,13 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 
 		switch msg.access {
 		case auth.Granted:
-			return m, sendEvent(PamSuccess{BrokerID: m.currentBrokerID, msg: authMsg})
+			var secret string
+			if msg.secret != nil {
+				secret = *msg.secret
+			} else {
+				log.Warningf(context.Background(), "authentication granted, but no secret returned, cannot set PAM_AUTHTOK")
+			}
+			return m, sendEvent(PamSuccess{BrokerID: m.currentBrokerID, AuthTok: secret, msg: authMsg})
 
 		case auth.Retry:
 			m.errorMsg = authMsg
