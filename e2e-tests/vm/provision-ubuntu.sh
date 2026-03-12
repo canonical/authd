@@ -71,18 +71,7 @@ fi
 # shellcheck source=lib/libprovision.sh
 source "${LIB_DIR}/libprovision.sh"
 
-assert_env_vars RELEASE VM_NAME_BASE SSH_PUBLIC_KEY_FILE
-
-# Validate SSH public key file
-if [ ! -f "${SSH_PUBLIC_KEY_FILE}" ]; then
-    echo "SSH public key file not found: ${SSH_PUBLIC_KEY_FILE}"
-    exit 1
-fi
-
-if [[ "${SSH_PUBLIC_KEY_FILE}" != *.pub ]]; then
-    echo "SSH public key file must have a .pub extension"
-    exit 1
-fi
+assert_env_vars RELEASE VM_NAME_BASE
 
 # Cache sudo password early
 sudo -v
@@ -163,7 +152,7 @@ if [ ! -f "${CLOUD_INIT_ISO}" ]; then
         SOCAT_ADDRESS="TCP-LISTEN:55000,bind=0.0.0.0,reuseaddr"
     fi
 
-    SSH_PUBLIC_KEY=$(cat "${SSH_PUBLIC_KEY_FILE}") \
+    env \
       SOCAT_ADDRESS="${SOCAT_ADDRESS}" \
       envsubst < "${CLOUD_INIT_TEMPLATE}" > "${CLOUD_INIT_DIR}/user-data"
 
