@@ -290,6 +290,7 @@ func CheckOrUpdateFileTree(t *testing.T, path string, options ...Option) {
 			// copy file
 			data, err := os.ReadFile(path)
 			require.NoError(t, err, "Cannot read file %s", path)
+			//nolint:gosec // G703 - test-only code; path is from golden file test fixtures.
 			err = os.WriteFile(opts.path, data, info.Mode())
 			require.NoError(t, err, "Cannot write golden file")
 		} else {

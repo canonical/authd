@@ -506,6 +506,7 @@ func (td *tapeData) PrepareTape(t *testing.T, testType vhsTestType) string {
 	}, "\n"))
 
 	tapePath := filepath.Join(td.OutputDir, td.Name+".tape")
+	//nolint:gosec // G703 - test-only code; tapePath is built from test OutputDir.
 	err = os.WriteFile(tapePath, tape, 0600)
 	require.NoError(t, err, "Setup: write tape file")
 

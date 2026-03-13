@@ -82,6 +82,7 @@ func BuildRustNSSLib(t *testing.T, disableCoverage bool, features ...string) (li
 		target = filepath.Join(os.TempDir(), "authd-tests-rust-build-artifacts")
 	}
 
+	//nolint:gosec // G703 - test-only code; target is from TEST_RUST_TARGET env or os.TempDir().
 	err = os.MkdirAll(target, 0700)
 	require.NoError(t, err, "Setup: could not create Rust target dir")
 
@@ -102,7 +103,7 @@ func BuildRustNSSLib(t *testing.T, disableCoverage bool, features ...string) (li
 	t.Logf("Locked Rust target dir %s", target)
 
 	// Builds the nss library.
-	// #nosec:G204 - we control the command arguments in tests
+	//nolint:gosec // G204 - test-only code; cargo path is from getCargoPath(), args are controlled.
 	cmd := exec.Command(cargo, "build", "--features", strings.Join(features, ","), "--target-dir", target)
 	if TestVerbosity() > 0 {
 		cmd.Args = append(cmd.Args, "--verbose")

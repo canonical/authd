@@ -281,6 +281,7 @@ func TestAutoDetectConfig(t *testing.T) {
 
 	configPath := daemon.GenerateTestConfig(t, &config)
 	configNextToBinaryPath := filepath.Join(filepath.Dir(os.Args[0]), "authd.yaml")
+	//nolint:gosec // G703 - test-only code; configPath is from GenerateTestConfig (t.TempDir-based).
 	err := os.Rename(configPath, configNextToBinaryPath)
 	require.NoError(t, err, "Could not relocate authd configuration file in the binary directory")
 	// Remove configuration next binary for other tests to not pick it up.

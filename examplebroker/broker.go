@@ -627,6 +627,7 @@ func (b *Broker) IsAuthenticated(ctx context.Context, sessionID, authenticationD
 
 	// Cleans up the IsAuthenticated context when the call is done.
 	defer func() {
+		cancel()
 		b.isAuthenticatedCallsMu.Lock()
 		delete(b.isAuthenticatedCalls, sessionID)
 		b.isAuthenticatedCallsMu.Unlock()
