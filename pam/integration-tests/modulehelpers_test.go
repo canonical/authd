@@ -16,6 +16,7 @@ import (
 func getPkgConfigFlags(t *testing.T, args []string) []string {
 	t.Helper()
 
+	//nolint:gosec // G204 - test-only code; args are controlled test arguments for pkg-config.
 	out, err := exec.Command("pkg-config", args...).CombinedOutput()
 	require.NoError(t, err, "Can't run pkg-config: %s", out)
 	return strings.Split(strings.TrimSpace(string(out)), " ")

@@ -127,7 +127,6 @@ func TestSetUserID(t *testing.T) {
 				addGroupToSystem(t, newUID)
 			}
 
-			//nolint:gosec // G115 we set the UID above to values that are valid uint32
 			resp, err := m.SetUserID(username, uint32(newUID))
 			log.Infof(context.Background(), "SetUserID error: %v", err)
 			log.Infof(context.Background(), "SetUserID resp: %v", resp)
@@ -288,7 +287,6 @@ func TestSetGroupID(t *testing.T) {
 				setPrimaryGroup(t, m, "user2", 11111)
 			}
 
-			//nolint:gosec // G115 we set the GID above to values that are valid uint32
 			resp, err := m.SetGroupID(groupname, uint32(newGID))
 			log.Infof(context.Background(), "SetGroupID error: %v", err)
 			log.Infof(context.Background(), "SetGroupID resp: %v", resp)
@@ -404,7 +402,7 @@ func setUID(t *testing.T, m *users.Manager, username string, uid int) {
 	if uid < 0 || uid > math.MaxUint32 {
 		require.Fail(t, "Setup: invalid UID %d", uid)
 	}
-
+	//nolint:gosec // G115 - bounds-checked above: uid is in [0, MaxUint32].
 	err := m.DB().SetUserID(username, uint32(uid))
 	require.NoError(t, err, "Setup: could not set user ID")
 }
@@ -416,6 +414,7 @@ func setGID(t *testing.T, m *users.Manager, groupname string, gid int) {
 		require.Fail(t, "Setup: invalid GID %d", gid)
 	}
 
+	//nolint:gosec // G115 - bounds-checked above: gid is in [0, MaxUint32].
 	_, err := m.DB().SetGroupID(groupname, uint32(gid))
 	require.NoError(t, err, "Setup: could not set group ID")
 }

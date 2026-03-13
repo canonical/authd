@@ -444,6 +444,7 @@ func TestLockingLockedDatabaseWorksAfterUnlock(t *testing.T) {
 func runCmd(t *testing.T, command string, args ...string) (string, error) {
 	t.Helper()
 
+	//nolint:gosec // G204 - test-only code; command and args are controlled by test setup.
 	cmd := exec.Command(command, args...)
 	cmd.Env = append(os.Environ(), "LANG=C", "LC_ALL=C")
 

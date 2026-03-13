@@ -210,6 +210,7 @@ func TestNewSession(t *testing.T) {
 				// We need to manually configure the broker without exporting it on the bus.
 				content, err := os.ReadFile(filepath.Join(brokerConfFixtures, "not_on_bus", "not_on_bus.conf"))
 				require.NoError(t, err, "Setup: could not read broker configuration file")
+				//nolint:gosec // G703 - test-only code; brokersConfPath is from t.TempDir().
 				err = os.WriteFile(filepath.Join(brokersConfPath, "not_on_bus.conf"), content, 0600)
 				require.NoError(t, err, "Setup: could not write broker configuration file")
 				wantBroker = brokers.Broker{Name: "OfflineBroker"}

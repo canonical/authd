@@ -212,6 +212,7 @@ func TokenHandler(serverURL string, opts *TokenHandlerOptions) EndpointHandler {
 		log.Debugf(context.Background(), "/token endpoint request:\n%s", s)
 
 		// Handle expired refresh token
+		//nolint:gosec // G120 - test-only mock handler; request bodies are controlled by tests.
 		refreshToken := r.FormValue("refresh_token")
 		if refreshToken == ExpiredRefreshToken {
 			w.Header().Add("Content-Type", "application/json")

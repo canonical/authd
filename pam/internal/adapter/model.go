@@ -204,6 +204,7 @@ func (m *uiModel) startHealthCheck() tea.Cmd {
 	}
 
 	var ctx context.Context
+	//nolint:gosec // G118 - cancel is stored in m.healthCheckCancel and called in MsgFilter() on quit.
 	ctx, m.healthCheckCancel = context.WithCancel(context.Background())
 	healthClient := healthgrpc.NewHealthClient(m.conn)
 	hcReq := &healthgrpc.HealthCheckRequest{Service: consts.ServiceName}

@@ -39,6 +39,7 @@ func createArtifactsDir(t *testing.T) string {
 
 	// We need to copy the artifacts to another directory, since the test directory will be cleaned up.
 	if dir := os.Getenv("AUTHD_TESTS_ARTIFACTS_PATH"); dir != "" {
+		//nolint:gosec // G703 - the path comes from a test environment variable, not user input.
 		if err := os.MkdirAll(dir, 0750); err != nil && !os.IsExist(err) {
 			require.NoError(t, err, "Teardown: could not create artifacts directory %q", authdArtifactsDir)
 		}
