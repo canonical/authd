@@ -58,6 +58,9 @@ linters:
       # Sometimes it is more readable it do a `if err:=a(); err != nil` tha simpy `return a()`
       - path: (.+)\.go$
         text: if-return
+      # gosec G101: hardcoded credentials - false positive for test data (fake passwords, tokens).
+      - path: _test\.go$
+        text: G101
       # We don't want to rename this package at this point
       - path: internal/users/types/(.+)\.go$
         text: "var-naming: avoid meaningless package names"
