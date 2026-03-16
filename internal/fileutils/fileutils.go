@@ -116,12 +116,14 @@ func LockDir(dir string) (func() error, error) {
 		return nil, err
 	}
 
+	//nolint:gosec // G115 - file descriptors are small non-negative integers; uintptr→int is safe here.
 	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX); err != nil {
 		_ = f.Close()
 		return nil, err
 	}
 
 	unlock := func() error {
+		//nolint:gosec // G115 - file descriptors are small non-negative integers; uintptr→int is safe here.
 		if err := unix.Flock(int(f.Fd()), unix.LOCK_UN); err != nil {
 			_ = f.Close()
 			return err
