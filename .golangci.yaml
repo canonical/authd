@@ -61,6 +61,9 @@ linters:
       # gosec G101: hardcoded credentials - false positive for test data (fake passwords, tokens).
       - path: _test\.go$
         text: G101
+      # gosec G703: path traversal via taint analysis - false positive in test code where file operation arguments are test-controlled.
+      - path: (_test\.go$|internal/testutils/)
+        text: G703
       # We don't want to rename this package at this point
       - path: internal/users/types/(.+)\.go$
         text: "var-naming: avoid meaningless package names"
