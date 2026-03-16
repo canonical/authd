@@ -28,6 +28,11 @@ func TestCLIAuthenticate(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
+	// This test is flaky, see https://github.com/canonical/authd/issues/1329
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
+
 	clientPath := t.TempDir()
 	cliEnv := preparePamRunnerTest(t, clientPath)
 	tapeCommand := fmt.Sprintf(cliTapeBaseCommand, pam_test.RunnerActionLogin,
