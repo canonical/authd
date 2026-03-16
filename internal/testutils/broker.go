@@ -239,6 +239,7 @@ func (b *BrokerBusMock) IsAuthenticated(sessionID, authenticationData string) (a
 
 	// Cleans the call after it's done
 	defer func() {
+		cancel()
 		b.isAuthenticatedCallsMu.Lock()
 		delete(b.isAuthenticatedCalls, sessionID)
 		b.isAuthenticatedCallsMu.Unlock()
