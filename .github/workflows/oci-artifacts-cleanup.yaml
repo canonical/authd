@@ -17,7 +17,7 @@ jobs:
       - name: Delete broker snap OCI artifacts
         uses: actions/delete-package-versions@v5
         with:
-          package-name: ghcr.io/${{ github.repository }}/${{ matrix.broker }}-snap
+          package-name: authd/${{ matrix.broker }}-snap
           package-type: container
           min-versions-to-keep: 10
 
@@ -32,14 +32,14 @@ jobs:
       - name: Delete deb OCI artifacts
         uses: actions/delete-package-versions@v5
         with:
-          package-name: ghcr.io/${{ github.repository }}/authd-deb-${{ matrix.ubuntu-version }}
+          package-name: authd/authd-deb-${{ matrix.ubuntu-version }}
           package-type: container
           min-versions-to-keep: 10
 
       - name: Delete deb sources OCI artifacts
         uses: actions/delete-package-versions@v5
         with:
-          package-name: ghcr.io/${{ github.repository }}/authd-deb-sources-${{ matrix.ubuntu-version }}
+          package-name: authd/authd-deb-sources-${{ matrix.ubuntu-version }}
           package-type: container
           min-versions-to-keep: 10
 
@@ -51,6 +51,6 @@ jobs:
       - name: Delete e2e-test VM image OCI artifacts
         uses: actions/delete-package-versions@v5
         with:
-          package-name: ghcr.io/${{ github.repository }}/e2e-runner
+          package-name: authd/e2e-runner
           package-type: container
           min-versions-to-keep: 10

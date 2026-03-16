@@ -79,7 +79,7 @@ jobs:
       github.event_name == 'release' }}
 
     steps:
-      - uses: oras-project/setup-oras@v1
+      - uses: ./.github/actions/setup-oras
 
       - name: Download the Debian sources
         env:

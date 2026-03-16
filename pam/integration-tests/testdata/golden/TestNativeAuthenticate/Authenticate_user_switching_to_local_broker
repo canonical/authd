@@ -35,7 +35,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@gmail.com
+  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -58,30 +58,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@gmail.com
-  3. Use your fido device foo
-  4. Use your phone +33...
-  5. Use your phone +1...
-  6. Pin code
-  7. Use a QR code
-  8. Authentication code
-Or enter 'r' to go back to choose the provider
-Choose your authentication method:
-> r
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-== Provider selection ==
-  1. local
-  2. ExampleBroker
-Choose your provider:
-> 2
-== Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
-Gimme your password:
->
-== Authentication method selection ==
-  1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@gmail.com
+  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -91,6 +68,29 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > r
+────────────────────────────────────────────────────────────────────────────────
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+Gimme your password:
+>
+== Authentication method selection ==
+  1. Password authentication
+  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@example.com
+  3. Use your fido device foo
+  4. Use your phone +33...
+  5. Use your phone +1...
+  6. Pin code
+  7. Use a QR code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+Choose your authentication method:
+> r
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -109,7 +109,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@gmail.com
+  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -137,7 +137,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@gmail.com
+  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -168,7 +168,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@gmail.com
+  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -199,7 +199,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@gmail.com
+  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -236,7 +236,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@gmail.com
+  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -273,7 +273,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@gmail.com
+  2. Send URL to user-integration-native-authenticate-user-switching-to-local-broker@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -299,11 +299,11 @@ Choose your provider:
 > 1
 auth=incomplete
 PAM Authenticate()
-  User: "user-integration-native-authenticate-user-switching-to-local-broker"
+  User: "user-integration-native-authenticate-user-switching-to-local-broker@example.com"
   Result: error: PAM exit code: 25
     The return value should be ignored by PAM dispatch
 PAM AcctMgmt()
-  User: "user-integration-native-authenticate-user-switching-to-local-broker"
+  User: "user-integration-native-authenticate-user-switching-to-local-broker@example.com"
   Result: error: PAM exit code: 26
     Critical error - immediate abort
 >

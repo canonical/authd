@@ -1,8 +1,8 @@
-name: user1
+name: user1@example.com
 uid: 1111
 gid: 11111
 gecos: |-
     User1 gecos
     On multiple lines
-dir: /home/user1
+dir: /home/user1@example.com
 shell: /bin/bash

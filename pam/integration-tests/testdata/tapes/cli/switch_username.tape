@@ -6,7 +6,7 @@ Show
 
 Hide
 Escape
-TypeUsername "user-integration-switch-username"
+TypeUsername "user-integration-switch-username@example.com"
 Show
 
 Hide
@@ -16,11 +16,11 @@ Show
 
 Hide
 Escape
-Wait /Username: user-integration-switch-username\n/
-Backspace 15
+Wait /Username: user-integration-switch-username@example.com\n/
+Backspace 27
 Wait /Username: user-integration-\n/
-Type "username-switched"
-Wait /Username: user-integration-username-switched\n/
+Type "username-switched@example.com"
+Wait /Username: user-integration-username-switched@example.com\n/
 Show
 
 Hide

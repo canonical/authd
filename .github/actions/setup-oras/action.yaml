@@ -15,11 +15,12 @@ runs:
         set -eu
 
         VERSION="${{ inputs.version }}"
+        FILENAME="oras_${VERSION}_linux_$(dpkg --print-architecture).tar.gz"
         curl -fsSL \
           -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-          -o "oras_${VERSION}_linux_amd64.tar.gz" \
-          "https://github.com/oras-project/oras/releases/download/v${VERSION}/oras_${VERSION}_linux_amd64.tar.gz"
+          -o "${FILENAME}" \
+          "https://github.com/oras-project/oras/releases/download/v${VERSION}/${FILENAME}"
         mkdir -p oras-install/
-        tar -zxf "oras_${VERSION}_linux_amd64.tar.gz" -C oras-install/
+        tar -zxf "${FILENAME}" -C oras-install/
         sudo mv oras-install/oras /usr/local/bin/
-        rm -rf "oras_${VERSION}_linux_amd64.tar.gz" oras-install/
+        rm -rf "${FILENAME}" oras-install/

@@ -260,10 +260,10 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Enter your one time credential:
 > temporary pass00
 PAM Authenticate()
-  User: "user-auth-modes-totp_with_button,password-integration-native"
+  User: "user-auth-modes-totp_with_button,password-integration-native@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-auth-modes-totp_with_button,password-integration-native"
+  User: "user-auth-modes-totp_with_button,password-integration-native@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

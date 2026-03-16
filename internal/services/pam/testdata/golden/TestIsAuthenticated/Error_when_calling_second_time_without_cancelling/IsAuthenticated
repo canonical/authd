@@ -5,4 +5,4 @@ FIRST CALL:
 SECOND CALL:
 	access: 
 	msg: 
-	err: broker "BrokerMock": IsAuthenticated already running for session "testisauthenticated/error_when_calling_second_time_without_cancelling_separator_ia_second_call-session_id"
+	err: broker "BrokerMock": IsAuthenticated already running for session "testisauthenticated/error_when_calling_second_time_without_cancelling_separator_ia_second_call@example.com-session_id"

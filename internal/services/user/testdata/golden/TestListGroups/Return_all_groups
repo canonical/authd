@@ -2,21 +2,21 @@ groups:
     - name: group1
       gid: 11111
       members:
-        - user1
+        - user1@example.com
       passwd: ""
     - name: group2
       gid: 22222
       members:
-        - user2
+        - user2@example.com
       passwd: ""
     - name: group3
       gid: 33333
       members:
-        - user3
+        - user3@example.com
       passwd: ""
     - name: commongroup
       gid: 99999
       members:
-        - user2
-        - user3
+        - user2@example.com
+        - user3@example.com
       passwd: ""

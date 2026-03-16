@@ -2,7 +2,7 @@
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user-integration-switch-broker
+Username: user-integration-switch-broker@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your provider
@@ -22,7 +22,7 @@ Gimme your password:
   Select your authentication method
 
 > 1. Password authentication
-  2. Send URL to user-integration-switch-broker@gmail.com
+  2. Send URL to user-integration-switch-broker@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -47,11 +47,11 @@ Gimme your password:
 
 PAM Info Message: auth=incomplete
 PAM Authenticate()
-  User: "user-integration-switch-broker"
+  User: "user-integration-switch-broker@example.com"
   Result: error: PAM exit code: 25
     The return value should be ignored by PAM dispatch
 PAM AcctMgmt()
-  User: "user-integration-switch-broker"
+  User: "user-integration-switch-broker@example.com"
   Result: error: PAM exit code: 26
     Critical error - immediate abort
 >

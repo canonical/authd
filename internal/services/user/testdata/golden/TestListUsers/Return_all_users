@@ -1,20 +1,20 @@
-- name: user1
+- name: user1@example.com
   uid: 1111
   gid: 11111
   gecos: |-
     User1 gecos
     On multiple lines
-  homedir: /home/user1
+  homedir: /home/user1@example.com
   shell: /bin/bash
-- name: user2
+- name: user2@example.com
   uid: 2222
   gid: 22222
   gecos: User2
-  homedir: /home/user2
+  homedir: /home/user2@example.com
   shell: /bin/dash
-- name: user3
+- name: user3@example.com
   uid: 3333
   gid: 33333
   gecos: User3
-  homedir: /home/user3
+  homedir: /home/user3@example.com
   shell: /bin/zsh

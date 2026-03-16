@@ -19,7 +19,7 @@ Show
 Hide
 TypeInPrompt+SH "echo $USER"
 Enter
-Wait /user-integration[\w-]+\n\$\n/
+Wait /user-integration[\w-]+@[\w-.]+\n\$\n/
 Show
 
 Hide

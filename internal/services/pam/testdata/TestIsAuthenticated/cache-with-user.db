@@ -1,9 +1,9 @@
 users:
-    - name: otheruser
+    - name: otheruser@example.com
       uid: 77777
       gid: 88888
       gecos: gecos for other user
-      dir: /home/otheruser
+      dir: /home/otheruser@example.com
       shell: /bin/sh/otheruser
       broker_id: broker-id
 groups:

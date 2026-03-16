@@ -38,3 +38,6 @@ authd-oidc-brokers/conf/broker.conf
 
 # Useful for running e2e-tests locally
 e2e-tests/e2e-tests.env
+
+# e2e tests python cache
+__pycache__/

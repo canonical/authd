@@ -35,8 +35,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@gmail.c
-om
+  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -59,8 +58,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@gmail.c
-om
+  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -83,8 +81,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@gmail.c
-om
+  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -150,8 +147,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@gmail.c
-om
+  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -217,118 +213,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@gmail.c
-om
-  3. Use your fido device foo
-  4. Use your phone +33...
-  5. Use your phone +1...
-  6. Pin code
-  7. Use a QR code
-  8. Authentication code
-Or enter 'r' to go back to choose the provider
-Choose your authentication method:
-> 7
-== Use a QR code ==
-Scan the qrcode or enter the code in the login page
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-████████              ██    ██████  ████  ██              ████████
-████████  ██████████  ██        ████████  ██  ██████████  ████████
-████████  ██      ██  ████  ████        ████  ██      ██  ████████
-████████  ██      ██  ██  ██████  ██████████  ██      ██  ████████
-████████  ██      ██  ████    ██          ██  ██      ██  ████████
-████████  ██████████  ██████  ██  ██  ██████  ██████████  ████████
-████████              ██  ██  ██  ██  ██  ██              ████████
-████████████████████████    ██  ██      ██████████████████████████
-████████  ██    ██      ████  ████    ██  ██  ████  ██    ████████
-████████████  ████  ██    ████    ██████  ████  ██████  ██████████
-████████████████          ██████████  ████  ██    ████████████████
-██████████  ██  ██  ██  ██  ██          ████  ████    ████████████
-████████      ██████      ████  ██████████        ██      ████████
-██████████    ██  ████████████  ██  ██  ████      ██████  ████████
-██████████      ██    ██      ██  ██  ████  ████  ██    ██████████
-████████  ██      ██████  ██████    ██            ██████  ████████
-██████████████    ██  ██    ██  ████████                  ████████
-████████████████████████      ██    ██    ██████  ██  ██  ████████
-████████              ██    ██    ██████  ██  ██  ██      ████████
-████████  ██████████  ██    ████  ████    ██████  ████    ████████
-████████  ██      ██  ████          ████            ██████████████
-████████  ██      ██  ██  ██  ██        ██    ██          ████████
-████████  ██      ██  ██  ██        ██  ██    ██  ██    ██████████
-████████  ██████████  ████████████████  ██    ██  ██  ████████████
-████████              ██  ██  ██  ██  ████████            ████████
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-                        https://ubuntu.com
-                               1337
-
-  1. Wait for authentication result
-  2. Regenerate code
-Or enter 'r' to go back to select the authentication method
-Choose action:
-> 2
-== Use a QR code ==
-Scan the qrcode or enter the code in the login page
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-████████              ██    ██  ██  ████████              ████████
-████████  ██████████  ██  ██████    ████████  ██████████  ████████
-████████  ██      ██  ████████  ██        ██  ██      ██  ████████
-████████  ██      ██  ██  ████████████    ██  ██      ██  ████████
-████████  ██      ██  ██████  ██          ██  ██      ██  ████████
-████████  ██████████  ████    ██████  ██  ██  ██████████  ████████
-████████              ██  ██  ██  ██  ██  ██              ████████
-████████████████████████        ██        ████████████████████████
-████████  ██    ██      ████  ██      ██  ██  ████  ██    ████████
-████████  ██  ██  ████  ██  ████████████  ████  ██████  ██████████
-████████    ██                ██  ██  ████  ██    ████████████████
-████████    ████  ██████                ████  ████    ████████████
-████████  ████  ████  ██  ████  ██████████        ██      ████████
-████████████    ██  ████        ██  ██  ████      ██████  ████████
-██████████  ████████  ██    ████  ██  ████  ████  ██    ██████████
-████████  ██  ██  ██████  ██  ██    ██            ██████  ████████
-██████████████    ██  ████████  ████████                  ████████
-████████████████████████  ██████    ██    ██████  ██  ██  ████████
-████████              ██          ██████  ██  ██  ██      ████████
-████████  ██████████  ██    ████  ████    ██████  ████    ████████
-████████  ██      ██  ████████      ████            ██████████████
-████████  ██      ██  ██  ██  ██        ██    ██          ████████
-████████  ██      ██  ██            ██  ██    ██  ██    ██████████
-████████  ██████████  ████    ████████  ██    ██  ██  ████████████
-████████              ██  ██████  ██  ████████            ████████
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-                        https://ubuntu.fr/
-                               1338
-
-  1. Wait for authentication result
-  2. Regenerate code
-Or enter 'r' to go back to select the authentication method
-Choose action:
->
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-== Provider selection ==
-  1. local
-  2. ExampleBroker
-Choose your provider:
-> 2
-== Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
-Gimme your password:
->
-== Authentication method selection ==
-  1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@gmail.c
-om
+  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -423,7 +308,7 @@ Scan the qrcode or enter the code in the login page
   2. Regenerate code
 Or enter 'r' to go back to select the authentication method
 Choose action:
-> 2
+>
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
 == Provider selection ==
@@ -437,8 +322,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@gmail.c
-om
+  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -534,53 +418,6 @@ Scan the qrcode or enter the code in the login page
 Or enter 'r' to go back to select the authentication method
 Choose action:
 > 2
-== Use a QR code ==
-Scan the qrcode or enter the code in the login page
-██████████████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████████████
-████████              ██        ██████          ████              ████████
-████████  ██████████  ██  ████    ██    ████  ██  ██  ██████████  ████████
-████████  ██      ██  ████████  ██      ████████████  ██      ██  ████████
-████████  ██      ██  ██      ██████████    ████  ██  ██      ██  ████████
-████████  ██      ██  ████████  ██  ██████████  ████  ██      ██  ████████
-████████  ██████████  ██████  ██████  ████      ████  ██████████  ████████
-████████              ██  ██  ██  ██  ██  ██  ██  ██              ████████
-████████████████████████        ██    ████        ████████████████████████
-████████  ██    ██      ████  ██      ██        ████  ████  ██    ████████
-████████  ████  ██████████        ████    ████    ██      ██████  ████████
-████████████████  ██        ████  ██    ██████████  ██    ██    ██████████
-████████      ████████  ██████  ██      ██████    ██      ██████  ████████
-████████████████  ██  ██    ██  ████████    ██  ██████████    ████████████
-████████████████  ████    ████████  ██████  ██        ██████      ████████
-██████████      ██    ██  ██████████  ████              ████      ████████
-████████  ██  ██  ████████████████  ██  ████████  ████    ████  ██████████
-██████████  ██  ██      ██  ██    ████████████      ████    ██  ██████████
-████████████  ██    ██████████      ██████  ████  ████  ██      ██████████
-████████  ██  ██          ████████████████  ████  ██████████  ████████████
-████████████      ████  ██  ██    ████        ██████    ████  ████████████
-██████████  ████  ██        ████    ██  ██████                ████████████
-████████████████████████    ██████      ██        ██████          ████████
-████████              ██  ██████    ████  ██      ██  ██    ██  ██████████
-████████  ██████████  ██  ████    ██████    ████  ██████    ██  ██████████
-████████  ██      ██  ██████      ██    ████████          ██      ████████
-████████  ██      ██  ██    ████████  ██    ██████  ██      ██  ██████████
-████████  ██      ██  ██    ██  ████      ████  ██████  ████  ██  ████████
-████████  ██████████  ████    ██████  ██  ████    ██        ██  ██████████
-████████              ██    ██    ██        ██        ████  ██  ██████████
-██████████████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████████████
-                       https://ubuntuforum-br.org/
-                                   1339
-
-  1. Wait for authentication result
-  2. Regenerate code
-Or enter 'r' to go back to select the authentication method
-Choose action:
->
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
 == Provider selection ==
@@ -594,8 +431,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@gmail.c
-om
+  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -737,7 +573,7 @@ Scan the qrcode or enter the code in the login page
   2. Regenerate code
 Or enter 'r' to go back to select the authentication method
 Choose action:
-> 2
+>
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
 == Provider selection ==
@@ -751,8 +587,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@gmail.c
-om
+  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -895,49 +730,6 @@ Scan the qrcode or enter the code in the login page
 Or enter 'r' to go back to select the authentication method
 Choose action:
 > 2
-== Use a QR code ==
-Scan the qrcode or enter the code in the login page
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-████████              ████  ████  ████  ████              ████████
-████████  ██████████  ██  ██            ████  ██████████  ████████
-████████  ██      ██  ████  ██  ████████████  ██      ██  ████████
-████████  ██      ██  ██████  ██  ████    ██  ██      ██  ████████
-████████  ██      ██  ██  ██    ██      ████  ██      ██  ████████
-████████  ██████████  ████  ██          ████  ██████████  ████████
-████████              ██  ██  ██  ██  ██  ██              ████████
-██████████████████████████  ██  ██    ██  ████████████████████████
-████████  ██  ██  ██  ██████  ████  ██    ██████  ████  ██████████
-██████████████  ██  ██    ████    ██████  ██  ██████████  ████████
-██████████  ██  ██      ████  ██████  ████      ████      ████████
-████████████    ██████  ██  ██████        ██  ████████  ██████████
-██████████      ████      ██        ██████      ██  ██    ████████
-██████████    ████  ████  ██    ██    ██  ██  ████  ████  ████████
-████████  ██████        ██  ████████████        ████      ████████
-██████████      ████████  ██  ██    ████████  ██  ████  ██████████
-████████  ██████      ██████          ██            ██████████████
-████████████████████████  ██  ████████    ██████    ██    ████████
-████████              ████████████  ██    ██  ██    ██    ████████
-████████  ██████████  ████  ████    ████  ██████    ██    ████████
-████████  ██      ██  ██      ██    ████            ██████████████
-████████  ██      ██  ████    ██  ████████  ██        ████████████
-████████  ██      ██  ██      ██    ██    ██████  ██████  ████████
-████████  ██████████  ████    ████    ██  ██  ██    ██  ██████████
-████████              ██    ██████  ██    ████  ██████    ████████
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-██████████████████████████████████████████████████████████████████
-                    https://www.ubuntu-it.org/
-                               1340
-
-  1. Wait for authentication result
-  2. Regenerate code
-Or enter 'r' to go back to select the authentication method
-Choose action:
->
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
 == Provider selection ==
@@ -951,8 +743,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@gmail.c
-om
+  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1137,6 +928,205 @@ Scan the qrcode or enter the code in the login page
   2. Regenerate code
 Or enter 'r' to go back to select the authentication method
 Choose action:
+>
+────────────────────────────────────────────────────────────────────────────────
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+Gimme your password:
+>
+== Authentication method selection ==
+  1. Password authentication
+  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com
+  3. Use your fido device foo
+  4. Use your phone +33...
+  5. Use your phone +1...
+  6. Pin code
+  7. Use a QR code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+Choose your authentication method:
+> 7
+== Use a QR code ==
+Scan the qrcode or enter the code in the login page
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+████████              ██    ██████  ████  ██              ████████
+████████  ██████████  ██        ████████  ██  ██████████  ████████
+████████  ██      ██  ████  ████        ████  ██      ██  ████████
+████████  ██      ██  ██  ██████  ██████████  ██      ██  ████████
+████████  ██      ██  ████    ██          ██  ██      ██  ████████
+████████  ██████████  ██████  ██  ██  ██████  ██████████  ████████
+████████              ██  ██  ██  ██  ██  ██              ████████
+████████████████████████    ██  ██      ██████████████████████████
+████████  ██    ██      ████  ████    ██  ██  ████  ██    ████████
+████████████  ████  ██    ████    ██████  ████  ██████  ██████████
+████████████████          ██████████  ████  ██    ████████████████
+██████████  ██  ██  ██  ██  ██          ████  ████    ████████████
+████████      ██████      ████  ██████████        ██      ████████
+██████████    ██  ████████████  ██  ██  ████      ██████  ████████
+██████████      ██    ██      ██  ██  ████  ████  ██    ██████████
+████████  ██      ██████  ██████    ██            ██████  ████████
+██████████████    ██  ██    ██  ████████                  ████████
+████████████████████████      ██    ██    ██████  ██  ██  ████████
+████████              ██    ██    ██████  ██  ██  ██      ████████
+████████  ██████████  ██    ████  ████    ██████  ████    ████████
+████████  ██      ██  ████          ████            ██████████████
+████████  ██      ██  ██  ██  ██        ██    ██          ████████
+████████  ██      ██  ██  ██        ██  ██    ██  ██    ██████████
+████████  ██████████  ████████████████  ██    ██  ██  ████████████
+████████              ██  ██  ██  ██  ████████            ████████
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+                        https://ubuntu.com
+                               1337
+
+  1. Wait for authentication result
+  2. Regenerate code
+Or enter 'r' to go back to select the authentication method
+Choose action:
+> 2
+== Use a QR code ==
+Scan the qrcode or enter the code in the login page
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+████████              ██    ██  ██  ████████              ████████
+████████  ██████████  ██  ██████    ████████  ██████████  ████████
+████████  ██      ██  ████████  ██        ██  ██      ██  ████████
+████████  ██      ██  ██  ████████████    ██  ██      ██  ████████
+████████  ██      ██  ██████  ██          ██  ██      ██  ████████
+████████  ██████████  ████    ██████  ██  ██  ██████████  ████████
+████████              ██  ██  ██  ██  ██  ██              ████████
+████████████████████████        ██        ████████████████████████
+████████  ██    ██      ████  ██      ██  ██  ████  ██    ████████
+████████  ██  ██  ████  ██  ████████████  ████  ██████  ██████████
+████████    ██                ██  ██  ████  ██    ████████████████
+████████    ████  ██████                ████  ████    ████████████
+████████  ████  ████  ██  ████  ██████████        ██      ████████
+████████████    ██  ████        ██  ██  ████      ██████  ████████
+██████████  ████████  ██    ████  ██  ████  ████  ██    ██████████
+████████  ██  ██  ██████  ██  ██    ██            ██████  ████████
+██████████████    ██  ████████  ████████                  ████████
+████████████████████████  ██████    ██    ██████  ██  ██  ████████
+████████              ██          ██████  ██  ██  ██      ████████
+████████  ██████████  ██    ████  ████    ██████  ████    ████████
+████████  ██      ██  ████████      ████            ██████████████
+████████  ██      ██  ██  ██  ██        ██    ██          ████████
+████████  ██      ██  ██            ██  ██    ██  ██    ██████████
+████████  ██████████  ████    ████████  ██    ██  ██  ████████████
+████████              ██  ██████  ██  ████████            ████████
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+                        https://ubuntu.fr/
+                               1338
+
+  1. Wait for authentication result
+  2. Regenerate code
+Or enter 'r' to go back to select the authentication method
+Choose action:
+> 2
+== Use a QR code ==
+Scan the qrcode or enter the code in the login page
+██████████████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████████████
+████████              ██        ██████          ████              ████████
+████████  ██████████  ██  ████    ██    ████  ██  ██  ██████████  ████████
+████████  ██      ██  ████████  ██      ████████████  ██      ██  ████████
+████████  ██      ██  ██      ██████████    ████  ██  ██      ██  ████████
+████████  ██      ██  ████████  ██  ██████████  ████  ██      ██  ████████
+████████  ██████████  ██████  ██████  ████      ████  ██████████  ████████
+████████              ██  ██  ██  ██  ██  ██  ██  ██              ████████
+████████████████████████        ██    ████        ████████████████████████
+████████  ██    ██      ████  ██      ██        ████  ████  ██    ████████
+████████  ████  ██████████        ████    ████    ██      ██████  ████████
+████████████████  ██        ████  ██    ██████████  ██    ██    ██████████
+████████      ████████  ██████  ██      ██████    ██      ██████  ████████
+████████████████  ██  ██    ██  ████████    ██  ██████████    ████████████
+████████████████  ████    ████████  ██████  ██        ██████      ████████
+██████████      ██    ██  ██████████  ████              ████      ████████
+████████  ██  ██  ████████████████  ██  ████████  ████    ████  ██████████
+██████████  ██  ██      ██  ██    ████████████      ████    ██  ██████████
+████████████  ██    ██████████      ██████  ████  ████  ██      ██████████
+████████  ██  ██          ████████████████  ████  ██████████  ████████████
+████████████      ████  ██  ██    ████        ██████    ████  ████████████
+██████████  ████  ██        ████    ██  ██████                ████████████
+████████████████████████    ██████      ██        ██████          ████████
+████████              ██  ██████    ████  ██      ██  ██    ██  ██████████
+████████  ██████████  ██  ████    ██████    ████  ██████    ██  ██████████
+████████  ██      ██  ██████      ██    ████████          ██      ████████
+████████  ██      ██  ██    ████████  ██    ██████  ██      ██  ██████████
+████████  ██      ██  ██    ██  ████      ████  ██████  ████  ██  ████████
+████████  ██████████  ████    ██████  ██  ████    ██        ██  ██████████
+████████              ██    ██    ██        ██        ████  ██  ██████████
+██████████████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████████████
+                       https://ubuntuforum-br.org/
+                                   1339
+
+  1. Wait for authentication result
+  2. Regenerate code
+Or enter 'r' to go back to select the authentication method
+Choose action:
+> 2
+== Use a QR code ==
+Scan the qrcode or enter the code in the login page
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+████████              ████  ████  ████  ████              ████████
+████████  ██████████  ██  ██            ████  ██████████  ████████
+████████  ██      ██  ████  ██  ████████████  ██      ██  ████████
+████████  ██      ██  ██████  ██  ████    ██  ██      ██  ████████
+████████  ██      ██  ██  ██    ██      ████  ██      ██  ████████
+████████  ██████████  ████  ██          ████  ██████████  ████████
+████████              ██  ██  ██  ██  ██  ██              ████████
+██████████████████████████  ██  ██    ██  ████████████████████████
+████████  ██  ██  ██  ██████  ████  ██    ██████  ████  ██████████
+██████████████  ██  ██    ████    ██████  ██  ██████████  ████████
+██████████  ██  ██      ████  ██████  ████      ████      ████████
+████████████    ██████  ██  ██████        ██  ████████  ██████████
+██████████      ████      ██        ██████      ██  ██    ████████
+██████████    ████  ████  ██    ██    ██  ██  ████  ████  ████████
+████████  ██████        ██  ████████████        ████      ████████
+██████████      ████████  ██  ██    ████████  ██  ████  ██████████
+████████  ██████      ██████          ██            ██████████████
+████████████████████████  ██  ████████    ██████    ██    ████████
+████████              ████████████  ██    ██  ██    ██    ████████
+████████  ██████████  ████  ████    ████  ██████    ██    ████████
+████████  ██      ██  ██      ██    ████            ██████████████
+████████  ██      ██  ████    ██  ████████  ██        ████████████
+████████  ██      ██  ██      ██    ██    ██████  ██████  ████████
+████████  ██████████  ████    ████    ██  ██  ██    ██  ██████████
+████████              ██    ██████  ██    ████  ██████    ████████
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████
+                    https://www.ubuntu-it.org/
+                               1340
+
+  1. Wait for authentication result
+  2. Regenerate code
+Or enter 'r' to go back to select the authentication method
+Choose action:
 > 2
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
@@ -1151,8 +1141,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@gmail.c
-om
+  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1394,8 +1383,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@gmail.c
-om
+  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1637,8 +1625,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@gmail.c
-om
+  2. Send URL to user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1868,10 +1855,10 @@ Or enter 'r' to go back to select the authentication method
 Choose action:
 > 1
 PAM Authenticate()
-  User: "user-integration-native-authenticate-user-with-qr-code-in-a-tty-session"
+  User: "user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-native-authenticate-user-with-qr-code-in-a-tty-session"
+  User: "user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────
