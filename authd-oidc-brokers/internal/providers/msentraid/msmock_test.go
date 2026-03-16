@@ -193,15 +193,14 @@ func (m *mockMSServer) handleAuthorizeRequest(t *testing.T, w http.ResponseWrite
 	redir.RawQuery = params.Encode()
 	redirectStr := redir.String()
 
-	// The client’s success branch looks for:
-	//   document.location.replace("...")  (with \u0026 allowed for '&')
-	jsURL := strings.ReplaceAll(redirectStr, "&", `\u0026`)
+	jsURL, err := json.Marshal(redirectStr)
+	require.NoError(t, err, "failed to encode redirect URI for javascript")
 
 	htmlBody := fmt.Sprintf(`<!doctype html>
 <html>
   <head><meta charset="utf-8"><title>Working…</title></head>
   <body>
-    <script>document.location.replace("%s")</script>
+    <script>document.location.replace(%s)</script>
     <noscript><a href="%s">Continue</a></noscript>
   </body>
 </html>`, jsURL, html.EscapeString(redirectStr))
