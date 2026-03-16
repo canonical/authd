@@ -137,6 +137,7 @@ func isAuthorizeEndpoint(path, tenantID string) bool {
 // ----- handlers -----
 
 func (m *mockMSServer) handleTokenRequest(t *testing.T, w http.ResponseWriter, r *http.Request) {
+	//nolint:gosec // G120 - test mock server, no untrusted input.
 	err := r.ParseForm()
 	require.NoError(t, err, "failed to parse form")
 
