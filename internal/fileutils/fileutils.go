@@ -177,12 +177,14 @@ func ChownRecursiveFrom(root string, uidArgs *ChownUIDArgs, gidArgs *ChownGIDArg
 		}
 
 		if uidArgs != nil && stat.Uid == uidArgs.FromUID {
+			//nolint:gosec // G122 - Lchown does not follow symlinks, mitigating TOCTOU. os.Root doesn't support recursive chown.
 			if err := os.Lchown(path, int(uidArgs.ToUID), -1); err != nil {
 				return fmt.Errorf("failed to change ownership: %w", err)
 			}
 		}
 
 		if gidArgs != nil && stat.Gid == gidArgs.FromGID {
+			//nolint:gosec // G122 - Lchown does not follow symlinks, mitigating TOCTOU. os.Root doesn't support recursive chown.
 			if err := os.Lchown(path, -1, int(gidArgs.ToGID)); err != nil {
 				return fmt.Errorf("failed to change group ownership: %w", err)
 			}
