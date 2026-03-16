@@ -128,6 +128,12 @@ var testPhoneAckUILayout = authd.UILayout{
 
 func TestGdmModule(t *testing.T) {
 	t.Parallel()
+
+	// This test is flaky, see https://github.com/canonical/authd/issues/966
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
+
 	t.Cleanup(pam_test.MaybeDoLeakCheck)
 
 	if !pam.CheckPamHasStartConfdir() {

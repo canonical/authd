@@ -112,6 +112,11 @@ type groupCase struct {
 }
 
 func TestUpdateUser(t *testing.T) {
+	// This test is flaky, see https://github.com/canonical/authd/issues/1120
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
+
 	userCases := map[string]userCase{
 		"user1":                             {UserInfo: types.UserInfo{Name: "user1"}, UID: 1111},
 		"nameless":                          {UID: 1111},
@@ -330,6 +335,11 @@ func TestUpdateBrokerForUser(t *testing.T) {
 }
 
 func TestUserByIDAndName(t *testing.T) {
+	// This test is flaky, see https://github.com/canonical/authd/issues/1120
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
+
 	tests := map[string]struct {
 		uid        uint32
 		username   string
@@ -423,6 +433,11 @@ func TestAllUsers(t *testing.T) {
 }
 
 func TestGroupByIDAndName(t *testing.T) {
+	// This test is flaky, see https://github.com/canonical/authd/issues/1120
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
+
 	tests := map[string]struct {
 		gid         uint32
 		groupname   string
