@@ -21,6 +21,11 @@ const nativeTapeBaseCommand = "./pam_authd %s socket=${%s} force_native_client=t
 func TestNativeAuthenticate(t *testing.T) {
 	t.Parallel()
 
+	// This test is flaky, see https://github.com/canonical/authd/issues/966
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
+
 	clientPath := t.TempDir()
 	cliEnv := preparePamRunnerTest(t, clientPath)
 	tapeCommand := fmt.Sprintf(nativeTapeBaseCommand, pam_test.RunnerActionLogin,
