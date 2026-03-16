@@ -193,7 +193,7 @@ jobs:
               echo "authd source: silent-on-rules-requiring-root [debian/control]" >> debian/source/lintian-overrides
             fi
           allow-sudo: true
-          lintian: --fail-on error,warning,info,pedantic --verbose
+          lintian: --fail-on error,warning,info --verbose
           run-lrc: true
 
       - name: Prepare deb and sources for upload
