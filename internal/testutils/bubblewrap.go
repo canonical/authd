@@ -176,7 +176,8 @@ func bubbleWrapCommand(t *testing.T, env []string, withSudo bool) *exec.Cmd {
 
 	if withSudo {
 		t.Log("Running bubblewrap with sudo")
-		cmd = exec.Command("sudo", env...)
+		cmd = exec.Command("sudo")
+		cmd.Args = append(cmd.Args, env...)
 		cmd.Args = append(cmd.Args, copiedBwrapPath)
 	} else {
 		// To be able to use chown in bubblewrap, we need to run it in a user namespace
