@@ -2,7 +2,7 @@
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user-integration-remember-mode
+Username: user-integration-remember-mode@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your provider
@@ -16,7 +16,7 @@ Username: user-integration-remember-mode
   Select your authentication method
 
 > 1. Password authentication
-  2. Send URL to user-integration-remember-mode@gmail.com
+  2. Send URL to user-integration-remember-mode@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -35,10 +35,10 @@ Enter your one time credential:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 PAM Authenticate()
-  User: "user-integration-remember-mode"
+  User: "user-integration-remember-mode@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-remember-mode"
+  User: "user-integration-remember-mode@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ PAM AcctMgmt()
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user-integration-remember-mode
+Username: user-integration-remember-mode@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 Enter your one time credential:
@@ -60,10 +60,10 @@ Enter your one time credential:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 PAM Authenticate()
-  User: "user-integration-remember-mode"
+  User: "user-integration-remember-mode@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-remember-mode"
+  User: "user-integration-remember-mode@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

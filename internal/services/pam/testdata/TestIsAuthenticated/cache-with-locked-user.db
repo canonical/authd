@@ -1,9 +1,9 @@
 users:
-    - name: testisauthenticated/error_when_user_is_locked_separator_locked
+    - name: locked@example.com
       uid: 1111
       gid: 11111
       gecos: gecos for other user
-      dir: /home/locked
+      dir: /home/locked@example.com
       shell: /bin/bash
       broker_id: broker-id
       locked: true

@@ -1,3 +1,3 @@
-user1:x:1111:11111:User1 gecos On multiple lines:/home/user1:/bin/bash
-user2:x:2222:22222:User2:/home/user2:/bin/dash
-user3:x:3333:33333:User3:/home/user3:/bin/zsh
+user1@example.com:x:1111:11111:User1 gecos On multiple lines:/home/user1@example.com:/bin/bash
+user2@example.com:x:2222:22222:User2:/home/user2@example.com:/bin/dash
+user3@example.com:x:3333:33333:User3:/home/user3@example.com:/bin/zsh

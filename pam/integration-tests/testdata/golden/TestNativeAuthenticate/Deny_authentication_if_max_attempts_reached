@@ -149,12 +149,12 @@ Gimme your password:
 >
 PAM Error Message: invalid password 'wrongpass', should be 'goodpass'
 PAM Authenticate()
-  User: "user-integration-native-deny-authentication-if-max-attempts-reached"
+  User: "user-integration-native-deny-authentication-if-max-attempts-reached@example.com"
   Result: error: PAM exit code: 7
     Authentication failure
 acct=incomplete
 PAM AcctMgmt()
-  User: "user-integration-native-deny-authentication-if-max-attempts-reached"
+  User: "user-integration-native-deny-authentication-if-max-attempts-reached@example.com"
   Result: error: PAM exit code: 25
     The return value should be ignored by PAM dispatch
 >

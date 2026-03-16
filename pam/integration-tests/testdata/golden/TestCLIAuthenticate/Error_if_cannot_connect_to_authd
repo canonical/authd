@@ -1,8 +1,7 @@
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-PAM Error Message: could not connect to unix:///some-path/not-existent-socket: service took too
-long to respond. Disconnecting client
+PAM Error Message: could not connect to unix:///some-path/not-existent-socket: service took too long to respond. Disconnecting client
 PAM Authenticate()
   User: "<unset>"
   Result: error: PAM exit code: 9

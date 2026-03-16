@@ -91,7 +91,7 @@ func TestSetUserID(t *testing.T) {
 
 			m := newManagerForTests(t, dbDir)
 
-			username := "user1"
+			username := "user1@example.com"
 			if tc.nonExistentUser {
 				username = "nonexistent"
 			} else if tc.emptyUsername {
@@ -115,7 +115,7 @@ func TestSetUserID(t *testing.T) {
 				setUID(t, m, username, newUID)
 			}
 			if tc.uidAlreadyInUseByAuthdUser {
-				setUID(t, m, "user2", newUID)
+				setUID(t, m, "user2@example.com", newUID)
 			}
 			if tc.uidAlreadyInUseAsGIDofAuthdUser {
 				newUID = 22222
@@ -256,7 +256,7 @@ func TestSetGroupID(t *testing.T) {
 					gid = 2222
 				}
 				home := createTemporaryHome(t, uid, gid, tc.homeDirCannotBeAccessed, tc.homeDirOwnerCannotBeChanged)
-				setHome(t, m, "user1", home)
+				setHome(t, m, "user1@example.com", home)
 			}
 
 			newGID := 54321
@@ -271,7 +271,7 @@ func TestSetGroupID(t *testing.T) {
 				setGID(t, m, "group3", newGID)
 			}
 			if tc.gidAlreadyInUseAsUIDofAuthdUser {
-				setUID(t, m, "user2", newGID)
+				setUID(t, m, "user2@example.com", newGID)
 			}
 			if tc.gidAlreadyInUseBySystemGroup {
 				addGroupToSystem(t, newGID)
@@ -280,12 +280,12 @@ func TestSetGroupID(t *testing.T) {
 				addUserToSystem(t, newGID)
 			}
 			if tc.gidIsNotPrimaryGroupOfAnyUser {
-				// Change the primary group of "user1" to another group
-				setPrimaryGroup(t, m, "user1", 22222)
+				// Change the primary group of "user1@example.com" to another group
+				setPrimaryGroup(t, m, "user1@example.com", 22222)
 			}
 			if tc.gidIsPrimaryGroupOfMultipleUsers {
-				// Change the primary group of "user2" to the group we want to change
-				setPrimaryGroup(t, m, "user2", 11111)
+				// Change the primary group of "user2@example.com" to the group we want to change
+				setPrimaryGroup(t, m, "user2@example.com", 11111)
 			}
 
 			//nolint:gosec // G115 we set the GID above to values that are valid uint32

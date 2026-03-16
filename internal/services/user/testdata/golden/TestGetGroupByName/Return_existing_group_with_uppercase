@@ -1,5 +1,5 @@
 name: group1
 gid: 11111
 members:
-    - user1
+    - user1@example.com
 passwd: ""

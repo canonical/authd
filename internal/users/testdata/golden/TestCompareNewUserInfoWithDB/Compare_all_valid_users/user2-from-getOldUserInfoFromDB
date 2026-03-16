@@ -1,7 +1,7 @@
-name: user2
+name: user2@example.com
 uid: 2222
 gecos: User2
-dir: /home/user2
+dir: /home/user2@example.com
 shell: /bin/dash
 groups:
     - name: group2withoutugid

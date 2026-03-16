@@ -20,7 +20,7 @@ Gimme your password:
   Select your authentication method
 
 > 1. Password authentication
-  2. Send URL to user-integration-pam-preset@gmail.com
+  2. Send URL to user-integration-pam-preset@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -49,10 +49,10 @@ Gimme your password:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 PAM Authenticate()
-  User: "user-integration-pam-preset"
+  User: "user-integration-pam-preset@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-pam-preset"
+  User: "user-integration-pam-preset@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

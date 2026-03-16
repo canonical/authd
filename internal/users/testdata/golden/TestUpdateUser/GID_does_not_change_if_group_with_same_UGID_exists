@@ -1,14 +1,14 @@
 users:
-    - name: user1
+    - name: user1@example.com
       uid: 1111
       gid: 1111
-      gecos: gecos for user1
-      dir: /home/user1
+      gecos: gecos for user1@example.com
+      dir: /home/user1@example.com
       shell: /bin/bash
 groups:
-    - name: user1
+    - name: user1@example.com
       gid: 1111
-      ugid: user1
+      ugid: user1@example.com
     - name: renamed-group
       gid: 11111
       ugid: "12345678"
