@@ -1,8 +1,26 @@
-authd (0.5.8+git260304+1836+55473c88) resolute; urgency=medium
+authd (0.5.10+git260317+90+b56e9392) resolute; urgency=medium
 
-  * Github build. Run id: 22672119611. Run number: 1836.
+  * Github build. Run id: 23205748477. Run number: 90.
 
- -- adombeck <18482300+adombeck@users.noreply.github.com>  Wed, 04 Mar 2026 13:48:23 +0000
+ -- adombeck <18482300+adombeck@users.noreply.github.com>  Tue, 17 Mar 2026 16:49:05 +0000
+
+authd (0.5.10) resolute; urgency=medium
+
+  * New upload
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Thu, 12 Mar 2026 16:58:32 +0100
+
+authd (0.5.9) resolute; urgency=medium
+
+  * Update gRPC to 1.72.2. This version contains a fix for an issue where
+    locally-resolved addresses are resolved via a proxy. We encountered that
+    issue in the autopkgtests run during proposed-migration.
+  * Use safer getpwent_r and getgrent_r implementations. The old
+    implementations were subject to a race condition which also occurred
+    during the autopkgtests.
+  * Cargo.toml: Exclude vendored files which cause build failures.
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Wed, 11 Mar 2026 17:43:36 +0100
 
 authd (0.5.8) resolute; urgency=medium
 
@@ -19,7 +37,7 @@ authd (0.5.8) resolute; urgency=medium
     many of our vendored dependencies do not declare a copyright holder.
   * needs-packaging: LP: #2136731
 
- -- Adrian Dombeck <adrian.dombeck@canonical.com>  Tue, 23 Feb 2026 11:58:00 +0100
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Mon, 23 Feb 2026 11:58:00 +0100
 
 authd (0.5.7) resolute; urgency=medium
 

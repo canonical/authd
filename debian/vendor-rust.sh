@@ -12,6 +12,10 @@ if ! command -v cargo-vendor-filterer 2>/dev/null; then
     exit 3
 fi
 
+# Print the versions of cargo and cargo-vendor-filterer for debugging purposes.
+echo "Using cargo version: $(${CARGO_PATH} --version)"
+echo "Using cargo-vendor-filterer version: $(cargo-vendor-filterer --version)"
+
 # Some crates are shipped with .a files, which get removed by the helpers during the package build as a safety measure.
 # This results in cargo failing to compile, since the files (which are listed in the checksums) are not there anymore.
 # For those crates, we need to replace their checksum with a more general one that only lists the crate checksum, instead of each file.

@@ -1,3 +1,0 @@
-access: denied
-data: '{}'
-err: 'authentication data is not a valid json value: invalid character ''i'' looking for beginning of value'

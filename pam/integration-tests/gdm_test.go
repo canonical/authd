@@ -132,6 +132,12 @@ func TestGdmModule(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
 	}
+
+	// This test is flaky, see https://github.com/canonical/authd/issues/966
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
+
 	t.Cleanup(pam_test.MaybeDoLeakCheck)
 
 	if !pam.CheckPamHasStartConfdir() {
@@ -200,7 +206,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticate_user_successfully_with_password_only_supported_method": {
-			pamUser: ptrValue(examplebroker.UserIntegrationAuthModesPrefix + "password-integration-gdm"),
+			pamUser: ptrValue(examplebroker.UserIntegrationAuthModesPrefix + "password-integration-gdm@example.com"),
 			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
 				gdm.EventType_startAuthentication: {
 					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Secret{

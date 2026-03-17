@@ -1,25 +1,25 @@
 users:
-    - name: userwithbroker
+    - name: userwithbroker@example.com
       uid: 1111
       gid: 11111
       gecos: |-
         userwithbroker gecos
         On multiple lines
-      dir: /home/userwithbroker
+      dir: /home/userwithbroker@example.com
       shell: /bin/bash
       broker_id: MOCKBROKERID
-    - name: userwithinactivebroker
+    - name: userwithinactivebroker@example.com
       uid: 2222
       gid: 22222
       gecos: userwithinactivebroker
-      dir: /home/userwithinactivebroker
+      dir: /home/userwithinactivebroker@example.com
       shell: /bin/dash
       broker_id: inactive-broker-id
-    - name: userwithoutbroker
+    - name: userwithoutbroker@example.com
       uid: 3333
       gid: 33333
       gecos: userwithoutbroker
-      dir: /home/userwithoutbroker
+      dir: /home/userwithoutbroker@example.com
       shell: /bin/zsh
 groups:
     - name: group1

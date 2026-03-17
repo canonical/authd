@@ -1,1 +1,1 @@
-user1:x:1111:11111:User1 gecos On multiple lines:/home/user1:/bin/bash
+user1@example.com:x:1111:11111:User1 gecos On multiple lines:/home/user1@example.com:/bin/bash

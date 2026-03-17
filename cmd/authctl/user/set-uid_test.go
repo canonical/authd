@@ -36,7 +36,7 @@ func TestSetUIDCommand(t *testing.T) {
 		expectedExitCode int
 	}{
 		"Set_user_uid_success": {
-			args:             []string{"set-uid", "user1", "123456"},
+			args:             []string{"set-uid", "user1@example.com", "123456"},
 			expectedExitCode: 0,
 		},
 
@@ -45,23 +45,23 @@ func TestSetUIDCommand(t *testing.T) {
 			expectedExitCode: int(codes.NotFound),
 		},
 		"Error_when_uid_is_invalid": {
-			args:             []string{"set-uid", "user1", "invaliduid"},
+			args:             []string{"set-uid", "user1@example.com", "invaliduid"},
 			expectedExitCode: 1,
 		},
 		"Error_when_uid_is_too_large": {
-			args:             []string{"set-uid", "user1", strconv.Itoa(math.MaxInt32 + 1)},
+			args:             []string{"set-uid", "user1@example.com", strconv.Itoa(math.MaxInt32 + 1)},
 			expectedExitCode: int(codes.Unknown),
 		},
 		"Error_when_uid_is_already_taken": {
-			args:             []string{"set-uid", "user1", "0"},
+			args:             []string{"set-uid", "user1@example.com", "0"},
 			expectedExitCode: int(codes.Unknown),
 		},
 		"Error_when_uid_is_negative": {
-			args:             []string{"set-uid", "user1", "--", "-1000"},
+			args:             []string{"set-uid", "user1@example.com", "--", "-1000"},
 			expectedExitCode: 1,
 		},
 		"Error_when_authd_is_unavailable": {
-			args:             []string{"set-uid", "user1", "123456"},
+			args:             []string{"set-uid", "user1@example.com", "123456"},
 			authdUnavailable: true,
 			expectedExitCode: int(codes.Unavailable),
 		},

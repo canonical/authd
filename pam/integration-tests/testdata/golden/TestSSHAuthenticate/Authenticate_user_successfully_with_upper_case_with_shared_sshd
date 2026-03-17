@@ -2,42 +2,42 @@
 == Provider selection ==
   1. local
   2. ExampleBroker
-(USER-INTEGRATION-PRE-CHECK-UPPER-CASE-TESTSSHAUTHENTICATE@localhost) Choose your provider:
+(USER-INTEGRATION-PRE-CHECK-UPPER-CASE-TESTSSHAUTHENTICATE@EXAMPLE.COM@localhost) Choose your provider:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Provider selection ==
   1. local
   2. ExampleBroker
-(USER-INTEGRATION-PRE-CHECK-UPPER-CASE-TESTSSHAUTHENTICATE@localhost) Choose your provider:
+(USER-INTEGRATION-PRE-CHECK-UPPER-CASE-TESTSSHAUTHENTICATE@EXAMPLE.COM@localhost) Choose your provider:
 > 2
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Provider selection ==
   1. local
   2. ExampleBroker
-(USER-INTEGRATION-PRE-CHECK-UPPER-CASE-TESTSSHAUTHENTICATE@localhost) Choose your provider:
-> 2
-== Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
-(USER-INTEGRATION-PRE-CHECK-UPPER-CASE-TESTSSHAUTHENTICATE@localhost) Gimme your password:
->
-────────────────────────────────────────────────────────────────────────────────
-> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
-== Provider selection ==
-  1. local
-  2. ExampleBroker
-(USER-INTEGRATION-PRE-CHECK-UPPER-CASE-TESTSSHAUTHENTICATE@localhost) Choose your provider:
+(USER-INTEGRATION-PRE-CHECK-UPPER-CASE-TESTSSHAUTHENTICATE@EXAMPLE.COM@localhost) Choose your provider:
 > 2
 == Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication method
-(USER-INTEGRATION-PRE-CHECK-UPPER-CASE-TESTSSHAUTHENTICATE@localhost) Gimme your password:
+(USER-INTEGRATION-PRE-CHECK-UPPER-CASE-TESTSSHAUTHENTICATE@EXAMPLE.COM@localhost) Gimme your password:
 >
-PAM Authenticate() finished for user 'user-integration-pre-check-upper-case-testsshauthenticate'
-PAM AcctMgmt() finished for user 'user-integration-pre-check-upper-case-testsshauthenticate'
+────────────────────────────────────────────────────────────────────────────────
+> ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(USER-INTEGRATION-PRE-CHECK-UPPER-CASE-TESTSSHAUTHENTICATE@EXAMPLE.COM@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+(USER-INTEGRATION-PRE-CHECK-UPPER-CASE-TESTSSHAUTHENTICATE@EXAMPLE.COM@localhost) Gimme your password:
+>
+PAM Authenticate() finished for user 'user-integration-pre-check-upper-case-testsshauthenticate@example.com'
+PAM AcctMgmt() finished for user 'user-integration-pre-check-upper-case-testsshauthenticate@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate]
   HOME=${AUTHD_TEST_HOME}
-  LOGNAME=user-integration-pre-check-upper-case-testsshauthenticate
+  LOGNAME=user-integration-pre-check-upper-case-testsshauthenticate@example.com
   PATH=${AUTHD_TEST_PATH}
   PWD=${AUTHD_TEST_PWD}
   SHELL=/bin/sh
@@ -45,7 +45,7 @@ PAM AcctMgmt() finished for user 'user-integration-pre-check-upper-case-testssha
   SSH_CONNECTION=${AUTHD_TEST_SSH_CONNECTION}
   SSH_TTY=${AUTHD_TEST_SSH_TTY}
   TERM=xterm-256color
-  USER=user-integration-pre-check-upper-case-testsshauthenticate
+  USER=user-integration-pre-check-upper-case-testsshauthenticate@example.com
 Connection to localhost closed.
 >
 ────────────────────────────────────────────────────────────────────────────────
