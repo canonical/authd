@@ -1,3 +1,9 @@
+authd (0.5.10ubuntu1) UNRELEASED; urgency=medium
+
+  * Skip flaky tests in autopkgtests
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Tue, 17 Mar 2026 12:27:02 +0100
+
 authd (0.5.10) resolute; urgency=medium
 
   * New upload
