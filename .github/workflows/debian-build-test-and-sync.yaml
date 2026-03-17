@@ -82,9 +82,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: 100
-          path: repo
 
       - uses: ./.github/actions/setup-oras
 
