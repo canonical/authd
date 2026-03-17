@@ -158,4 +158,4 @@ jobs:
             -m "Use upstream commit ${{ github.sha }}"
 
       - name: Push to packaging branch
-        run: git -C sources push origin "${{ env.PACKAGING_BRANCH }}:${{ env.PACKAGING_BRANCH }}"
+        run: git -C packaging-branch push origin "${{ env.PACKAGING_BRANCH }}:${{ env.PACKAGING_BRANCH }}"
