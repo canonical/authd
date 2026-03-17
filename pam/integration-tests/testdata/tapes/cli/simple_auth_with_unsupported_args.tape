@@ -5,7 +5,7 @@ Wait /Username: user name\n/
 Show
 
 Hide
-TypeUsername "user2"
+TypeUsername "user2@example.com"
 Show
 
 Hide

@@ -5,7 +5,7 @@ Wait /Username: user name\n/
 Show
 
 Hide
-TypeUsername "user-integration-qrcode-static-regenerate"
+TypeUsername "user-integration-qrcode-static-regenerate@example.com"
 Show
 
 Hide

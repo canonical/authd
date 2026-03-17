@@ -5,7 +5,7 @@ Wait /Username: user name\n/
 Show
 
 Hide
-TypeUsername "user-needs-reset"
+TypeUsername "user-needs-reset@example.com"
 Show
 
 Hide

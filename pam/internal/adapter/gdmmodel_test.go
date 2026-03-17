@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -35,6 +36,11 @@ func TestGdmModel(t *testing.T) {
 
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
+	}
+
+	// // These tests are flaky, see https://github.com/canonical/authd/issues/1092
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
 	}
 
 	// This is not technically an error, as it means that during the tests

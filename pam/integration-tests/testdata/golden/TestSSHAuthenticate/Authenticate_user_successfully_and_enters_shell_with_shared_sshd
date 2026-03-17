@@ -2,35 +2,35 @@
 == Provider selection ==
   1. local
   2. ExampleBroker
-(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@localhost) Choose your provider:
+(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com@localhost) Choose your provider:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Provider selection ==
   1. local
   2. ExampleBroker
-(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@localhost) Choose your provider:
+(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com@localhost) Choose your provider:
 > 2
 == Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@localhost) Gimme your password:
+(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com@localhost) Gimme your password:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Provider selection ==
   1. local
   2. ExampleBroker
-(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@localhost) Choose your provider:
+(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com@localhost) Choose your provider:
 > 2
 == Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@localhost) Gimme your password:
+(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com@localhost) Gimme your password:
 >
-PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd'
-PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd'
+PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com'
+PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_successfully_and_enters_shell_with_shared_sshd]
   HOME=${AUTHD_TEST_HOME}
-  LOGNAME=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd
+  LOGNAME=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com
   PATH=${AUTHD_TEST_PATH}
   PWD=${AUTHD_TEST_PWD}
   SHELL=/bin/sh
@@ -38,24 +38,24 @@ PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-us
   SSH_CONNECTION=${AUTHD_TEST_SSH_CONNECTION}
   SSH_TTY=${AUTHD_TEST_SSH_TTY}
   TERM=xterm-256color
-  USER=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd
+  USER=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com
 $
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Provider selection ==
   1. local
   2. ExampleBroker
-(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@localhost) Choose your provider:
+(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com@localhost) Choose your provider:
 > 2
 == Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@localhost) Gimme your password:
+(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com@localhost) Gimme your password:
 >
-PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd'
-PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd'
+PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com'
+PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_successfully_and_enters_shell_with_shared_sshd]
   HOME=${AUTHD_TEST_HOME}
-  LOGNAME=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd
+  LOGNAME=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com
   PATH=${AUTHD_TEST_PATH}
   PWD=${AUTHD_TEST_PWD}
   SHELL=/bin/sh
@@ -63,26 +63,26 @@ PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-us
   SSH_CONNECTION=${AUTHD_TEST_SSH_CONNECTION}
   SSH_TTY=${AUTHD_TEST_SSH_TTY}
   TERM=xterm-256color
-  USER=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd
+  USER=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com
 $ echo $USER
-user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd
+user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com
 $
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
 == Provider selection ==
   1. local
   2. ExampleBroker
-(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@localhost) Choose your provider:
+(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com@localhost) Choose your provider:
 > 2
 == Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@localhost) Gimme your password:
+(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com@localhost) Gimme your password:
 >
-PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd'
-PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd'
+PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com'
+PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_successfully_and_enters_shell_with_shared_sshd]
   HOME=${AUTHD_TEST_HOME}
-  LOGNAME=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd
+  LOGNAME=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com
   PATH=${AUTHD_TEST_PATH}
   PWD=${AUTHD_TEST_PWD}
   SHELL=/bin/sh
@@ -90,9 +90,9 @@ PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-us
   SSH_CONNECTION=${AUTHD_TEST_SSH_CONNECTION}
   SSH_TTY=${AUTHD_TEST_SSH_TTY}
   TERM=xterm-256color
-  USER=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd
+  USER=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com
 $ echo $USER
-user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd
+user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com
 $ [ -n "${SSH_CONNECTION}" ] && echo "Inside SSH"
 Inside SSH
 $
@@ -101,17 +101,17 @@ $
 == Provider selection ==
   1. local
   2. ExampleBroker
-(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@localhost) Choose your provider:
+(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com@localhost) Choose your provider:
 > 2
 == Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@localhost) Gimme your password:
+(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com@localhost) Gimme your password:
 >
-PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd'
-PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd'
+PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com'
+PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_successfully_and_enters_shell_with_shared_sshd]
   HOME=${AUTHD_TEST_HOME}
-  LOGNAME=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd
+  LOGNAME=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com
   PATH=${AUTHD_TEST_PATH}
   PWD=${AUTHD_TEST_PWD}
   SHELL=/bin/sh
@@ -119,9 +119,9 @@ PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-us
   SSH_CONNECTION=${AUTHD_TEST_SSH_CONNECTION}
   SSH_TTY=${AUTHD_TEST_SSH_TTY}
   TERM=xterm-256color
-  USER=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd
+  USER=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com
 $ echo $USER
-user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd
+user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com
 $ [ -n "${SSH_CONNECTION}" ] && echo "Inside SSH"
 Inside SSH
 $
@@ -132,17 +132,17 @@ Connection to localhost closed.
 == Provider selection ==
   1. local
   2. ExampleBroker
-(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@localhost) Choose your provider:
+(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com@localhost) Choose your provider:
 > 2
 == Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication method
-(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@localhost) Gimme your password:
+(user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com@localhost) Gimme your password:
 >
-PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd'
-PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd'
+PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com'
+PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_successfully_and_enters_shell_with_shared_sshd]
   HOME=${AUTHD_TEST_HOME}
-  LOGNAME=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd
+  LOGNAME=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com
   PATH=${AUTHD_TEST_PATH}
   PWD=${AUTHD_TEST_PWD}
   SHELL=/bin/sh
@@ -150,9 +150,9 @@ PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-us
   SSH_CONNECTION=${AUTHD_TEST_SSH_CONNECTION}
   SSH_TTY=${AUTHD_TEST_SSH_TTY}
   TERM=xterm-256color
-  USER=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd
+  USER=user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com
 $ echo $USER
-user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd
+user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell-with-shared-sshd@example.com
 $ [ -n "${SSH_CONNECTION}" ] && echo "Inside SSH"
 Inside SSH
 $

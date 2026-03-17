@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/canonical/authd/examplebroker"
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/stretchr/testify/require"
@@ -50,16 +49,16 @@ func TestIntegration(t *testing.T) {
 		"Get_all_entries_from_group":  {getentDB: "group"},
 		"Get_all_entries_from_shadow": {getentDB: "shadow"},
 
-		"Get_entry_from_passwd_by_name":               {getentDB: "passwd", key: "user1"},
-		"Get_entry_from_passwd_by_name_in_upper_case": {getentDB: "passwd", key: "USER1"},
+		"Get_entry_from_passwd_by_name":               {getentDB: "passwd", key: "user1@example.com"},
+		"Get_entry_from_passwd_by_name_in_upper_case": {getentDB: "passwd", key: "USER1@EXAMPLE.COM"},
 		"Get_entry_from_group_by_name":                {getentDB: "group", key: "group1"},
-		"Get_entry_from_shadow_by_name":               {getentDB: "shadow", key: "user1"},
+		"Get_entry_from_shadow_by_name":               {getentDB: "shadow", key: "user1@example.com"},
 
 		"Get_entry_from_passwd_by_id": {getentDB: "passwd", key: "1111"},
 		"Get_entry_from_group_by_id":  {getentDB: "group", key: "11111"},
 
-		"Check_user_with_broker_if_not_found_in_db":               {getentDB: "passwd", key: examplebroker.UserIntegrationPreCheckPrefix + "simple", shouldPreCheck: true},
-		"Check_user_with_broker_if_not_found_in_db_in_upper_case": {getentDB: "passwd", key: strings.ToUpper(examplebroker.UserIntegrationPreCheckPrefix + "simple"), shouldPreCheck: true},
+		"Check_user_with_broker_if_not_found_in_db":               {getentDB: "passwd", key: "user-pre-check@example.com", shouldPreCheck: true},
+		"Check_user_with_broker_if_not_found_in_db_in_upper_case": {getentDB: "passwd", key: strings.ToUpper("user-pre-check@example.com"), shouldPreCheck: true},
 
 		// Even though those are "error" cases, the getent command won't fail when trying to list content of a service.
 		"Returns_empty_when_getting_all_entries_from_passwd_and_daemon_is_not_available": {getentDB: "passwd", noDaemon: true},
@@ -68,16 +67,16 @@ func TestIntegration(t *testing.T) {
 
 		/* Error cases */
 		"Error_when_getting_passwd_by_name_and_entry_does_not_exist":                        {getentDB: "passwd", key: "doesnotexit", wantStatus: codeNotFound},
-		"Error_when_getting_passwd_by_name_entry_exists_in_broker_but_precheck_is_disabled": {getentDB: "passwd", key: examplebroker.UserIntegrationPreCheckPrefix + "simple", wantStatus: codeNotFound},
+		"Error_when_getting_passwd_by_name_entry_exists_in_broker_but_precheck_is_disabled": {getentDB: "passwd", key: "user-pre-check@example.com", wantStatus: codeNotFound},
 		"Error_when_getting_group_by_name_and_entry_does_not_exist":                         {getentDB: "group", key: "doesnotexit", wantStatus: codeNotFound},
 		"Error_when_getting_shadow_by_name_and_entry_does_not_exist":                        {getentDB: "shadow", key: "doesnotexit", wantStatus: codeNotFound},
 
 		"Error_when_getting_passwd_by_id_and_entry_does_not_exist": {getentDB: "passwd", key: "404", wantStatus: codeNotFound},
 		"Error_when_getting_group_by_id_and_entry_does_not_exist":  {getentDB: "group", key: "404", wantStatus: codeNotFound},
 
-		"Error_when_getting_passwd_by_name_and_daemon_is_not_available": {getentDB: "passwd", key: "user1", noDaemon: true, wantStatus: codeNotFound},
+		"Error_when_getting_passwd_by_name_and_daemon_is_not_available": {getentDB: "passwd", key: "user1@example.com", noDaemon: true, wantStatus: codeNotFound},
 		"Error_when_getting_group_by_name_and_daemon_is_not_available":  {getentDB: "group", key: "group1", noDaemon: true, wantStatus: codeNotFound},
-		"Error_when_getting_shadow_by_name_and_daemon_is_not_available": {getentDB: "shadow", key: "user1", noDaemon: true, wantStatus: codeNotFound},
+		"Error_when_getting_shadow_by_name_and_daemon_is_not_available": {getentDB: "shadow", key: "user1@example.com", noDaemon: true, wantStatus: codeNotFound},
 
 		"Error_when_getting_passwd_by_id_and_daemon_is_not_available": {getentDB: "passwd", key: "1111", noDaemon: true, wantStatus: codeNotFound},
 		"Error_when_getting_group_by_id_and_daemon_is_not_available":  {getentDB: "group", key: "11111", noDaemon: true, wantStatus: codeNotFound},

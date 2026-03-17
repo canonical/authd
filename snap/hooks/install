@@ -1,6 +1,0 @@
-#!/bin/sh
-
-set -eu
-
-cp --update=none "${SNAP}/conf/broker.conf.orig" "${SNAP_DATA}/broker.conf"
-chmod 0600 "${SNAP_DATA}/broker.conf"

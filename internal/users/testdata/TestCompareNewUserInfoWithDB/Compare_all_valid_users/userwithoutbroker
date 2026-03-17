@@ -1,7 +1,7 @@
-name: userwithoutbroker
+name: userwithoutbroker@example.com
 uid: 0
 gecos: userwithoutbroker
-dir: /home/userwithoutbroker
+dir: /home/userwithoutbroker@example.com
 shell: /bin/sh
 groups:
     - name: group4

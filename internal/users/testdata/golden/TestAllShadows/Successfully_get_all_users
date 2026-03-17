@@ -1,25 +1,25 @@
-- name: user1
+- name: user1@example.com
   lastpwdchange: -1
   maxpwdage: -1
   pwdwarnperiod: -1
   pwdinactivity: -1
   minpwdage: -1
   expirationdate: -1
-- name: user2
+- name: user2@example.com
   lastpwdchange: -1
   maxpwdage: -1
   pwdwarnperiod: -1
   pwdinactivity: -1
   minpwdage: -1
   expirationdate: -1
-- name: user3
+- name: user3@example.com
   lastpwdchange: -1
   maxpwdage: -1
   pwdwarnperiod: -1
   pwdinactivity: -1
   minpwdage: -1
   expirationdate: -1
-- name: userwithoutbroker
+- name: userwithoutbroker@example.com
   lastpwdchange: -1
   maxpwdage: -1
   pwdwarnperiod: -1

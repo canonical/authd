@@ -6,4 +6,3 @@ authd source: package-does-not-install-examples [vendor_rust/*]
 
 # Many of our vendored dependencies do not declare a copyrightholder.
 authd source: missing-field-in-dep5-copyright Copyright [debian/copyright:*]
-authd source: silent-on-rules-requiring-root [debian/control]

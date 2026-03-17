@@ -34,7 +34,6 @@ func currentUserUID() uint32 {
 		panic(fmt.Sprintf("current uid is not a valid uint32: %v", uid))
 	}
 
-	//nolint:gosec // G115 we checked for an integer overflow above.
 	return uint32(uid)
 }
 

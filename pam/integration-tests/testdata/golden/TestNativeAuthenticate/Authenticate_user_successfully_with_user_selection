@@ -7,11 +7,11 @@ Username:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
 Username:
-Username: user-integration-native-user-selection
+Username: user-integration-native-user-selection@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
 Username:
-Username: user-integration-native-user-selection
+Username: user-integration-native-user-selection@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -21,7 +21,7 @@ Choose your provider:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
 Username:
-Username: user-integration-native-user-selection
+Username: user-integration-native-user-selection@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -31,7 +31,7 @@ Choose your provider:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
 Username:
-Username: user-integration-native-user-selection
+Username: user-integration-native-user-selection@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -45,7 +45,7 @@ Gimme your password:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
 Username:
-Username: user-integration-native-user-selection
+Username: user-integration-native-user-selection@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -57,10 +57,10 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 PAM Authenticate()
-  User: "user-integration-native-user-selection"
+  User: "user-integration-native-user-selection@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-native-user-selection"
+  User: "user-integration-native-user-selection@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────
