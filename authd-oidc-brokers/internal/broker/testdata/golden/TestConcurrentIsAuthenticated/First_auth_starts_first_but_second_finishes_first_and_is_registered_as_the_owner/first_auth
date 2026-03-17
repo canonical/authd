@@ -1,3 +1,0 @@
-access: denied
-data: '{"message":"Authentication failure: user not allowed in broker configuration"}'
-err: <nil>

@@ -55,19 +55,19 @@ func TestGetUserByName(t *testing.T) {
 		wantErr          bool
 		wantErrNotExists bool
 	}{
-		"Return_existing_user":                {username: "user1"},
-		"Return_existing_user_with_uppercase": {username: "USER1"},
+		"Return_existing_user":                {username: "user1@example.com"},
+		"Return_existing_user_with_uppercase": {username: "user1@example.com"},
 
-		"Precheck_user_if_not_in_db": {username: "user-pre-check", shouldPreCheck: true},
-		"Prechecked_user_with_upper_cases_in_username_has_same_id_as_lower_case": {username: "User-Pre-Check", shouldPreCheck: true},
+		"Precheck_user_if_not_in_db": {username: "user-pre-check@example.com", shouldPreCheck: true},
+		"Prechecked_user_with_upper_cases_in_username_has_same_id_as_lower_case": {username: "User-Pre-Check@Example.com", shouldPreCheck: true},
 
-		"Error_with_typed_GRPC_notfound_code_on_unexisting_user": {username: "does-not-exists", wantErr: true, wantErrNotExists: true},
+		"Error_with_typed_GRPC_notfound_code_on_unexisting_user": {username: "does-not-exist@example.com", wantErr: true, wantErrNotExists: true},
 		"Error_on_missing_name":                                  {wantErr: true},
 		"Error_on_database_error":                                {username: "user1", closeDB: true, wantErr: true},
 
-		"Error_if_user_not_in_db_and_precheck_is_disabled":             {username: "user-pre-check", wantErr: true, wantErrNotExists: true},
-		"Error_if_user_not_in_db_and_precheck_fails":                   {username: "does-not-exist", dbFile: "empty.db.yaml", shouldPreCheck: true, wantErr: true, wantErrNotExists: true},
-		"Error_if_user_not_in_db_and_precheck_fails_for_existing_user": {username: "local-pre-check", dbFile: "empty.db.yaml", shouldPreCheck: true, wantErr: true, wantErrNotExists: true},
+		"Error_if_user_not_in_db_and_precheck_is_disabled":             {username: "user-pre-check@example.com", wantErr: true, wantErrNotExists: true},
+		"Error_if_user_not_in_db_and_precheck_fails":                   {username: "does-not-exist@example.com", dbFile: "empty.db.yaml", shouldPreCheck: true, wantErr: true, wantErrNotExists: true},
+		"Error_if_user_not_in_db_and_precheck_fails_for_existing_user": {username: "local-pre-check@example.com", dbFile: "empty.db.yaml", shouldPreCheck: true, wantErr: true, wantErrNotExists: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -284,12 +284,12 @@ func TestLockUser(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Successfully_lock_user":                {username: "user1"},
-		"Successfully_lock_user_with_uppercase": {username: "USER1"},
+		"Successfully_lock_user":                {username: "user1@example.com"},
+		"Successfully_lock_user_with_uppercase": {username: "user1@example.com"},
 
 		"Error_when_username_is_empty":   {wantErr: true},
-		"Error_when_user_does_not_exist": {username: "doesnotexist", wantErr: true},
-		"Error_when_not_root":            {username: "user1", currentUserNotRoot: true, wantErr: true},
+		"Error_when_user_does_not_exist": {username: "doesnotexist@example.com", wantErr: true},
+		"Error_when_not_root":            {username: "notroot@example.com", currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -318,12 +318,12 @@ func TestUnlockUser(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Successfully_unlock_user":                {username: "user1"},
-		"Successfully_unlock_user_with_uppercase": {username: "USER1"},
+		"Successfully_unlock_user":                {username: "user1@example.com"},
+		"Successfully_unlock_user_with_uppercase": {username: "user1@example.com"},
 
 		"Error_when_username_is_empty":   {wantErr: true},
-		"Error_when_user_does_not_exist": {username: "doesnotexist", wantErr: true},
-		"Error_when_not_root":            {username: "user1", currentUserNotRoot: true, wantErr: true},
+		"Error_when_user_does_not_exist": {username: "doesnotexist@example.com", wantErr: true},
+		"Error_when_not_root":            {username: "notroot@example.com", currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -358,12 +358,12 @@ func TestSetUserID(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Successfully_set_user_id":                {username: "user1", newUID: 5555},
-		"Successfully_set_user_id_with_uppercase": {username: "USER1", newUID: 5555},
+		"Successfully_set_user_id":                {username: "user1@example.com", newUID: 5555},
+		"Successfully_set_user_id_with_uppercase": {username: "USER1@EXAMPLE.COM", newUID: 5555},
 
 		"Error_when_username_is_empty":   {wantErr: true},
-		"Error_when_user_does_not_exist": {username: "doesnotexist", newUID: 5555, wantErr: true},
-		"Error_when_not_root":            {username: "user1", newUID: 5555, currentUserNotRoot: true, wantErr: true},
+		"Error_when_user_does_not_exist": {username: "doesnotexist@example.com", newUID: 5555, wantErr: true},
+		"Error_when_not_root":            {username: "user1@example.com", newUID: 5555, currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {

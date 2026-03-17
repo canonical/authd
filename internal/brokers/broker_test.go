@@ -326,9 +326,9 @@ func TestUserPreCheck(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Successfully_pre-check_user": {username: "user-pre-check"},
+		"Successfully_pre-check_user": {username: "user-pre-check@example.com"},
 
-		"Error_if_user_is_not_available": {username: "unexistent", wantErr: true},
+		"Error_if_user_is_not_available": {username: "unexistent@example.com", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {

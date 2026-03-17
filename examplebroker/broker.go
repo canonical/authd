@@ -186,12 +186,12 @@ var (
 
 	emailMode = func(userName string) authMode {
 		return authMode{
-			id:             fmt.Sprintf("entry_or_wait_for_%s_gmail.com", userName),
-			selectionLabel: fmt.Sprintf("Send URL to %s@gmail.com", userName),
-			email:          fmt.Sprintf("%s@gmail.com", userName),
+			id:             fmt.Sprintf("entry_or_wait_for_%s", userName),
+			selectionLabel: fmt.Sprintf("Send URL to %s", userName),
+			email:          userName,
 			ui: map[string]string{
 				layouts.Type: layouts.Form,
-				layouts.Label: fmt.Sprintf("Click on the link received at %s@gmail.com or enter the code:",
+				layouts.Label: fmt.Sprintf("Click on the link received at %s or enter the code:",
 					userName),
 				layouts.Entry: entries.Chars,
 				layouts.Wait:  layouts.True,
@@ -275,19 +275,19 @@ func (b *Broker) NewSession(ctx context.Context, username, lang, mode string) (s
 	}
 
 	switch username {
-	case "user-mfa":
+	case "user-mfa@example.com":
 		info.neededAuthSteps = 3
-	case "user-needs-reset":
+	case "user-needs-reset@example.com":
 		fallthrough
-	case "user-needs-reset2":
+	case "user-needs-reset2@example.com":
 		info.neededAuthSteps = 2
 		info.pwdChange = mustReset
-	case "user-can-reset":
+	case "user-can-reset@example.com":
 		fallthrough
-	case "user-can-reset2":
+	case "user-can-reset2@example.com":
 		info.neededAuthSteps = 2
 		info.pwdChange = canReset
-	case "user-mfa-with-reset":
+	case "user-mfa-with-reset@example.com":
 		info.neededAuthSteps = 3
 		info.pwdChange = canReset
 	case UserIntegrationUnexistent:
@@ -627,6 +627,7 @@ func (b *Broker) IsAuthenticated(ctx context.Context, sessionID, authenticationD
 
 	// Cleans up the IsAuthenticated context when the call is done.
 	defer func() {
+		cancel()
 		b.isAuthenticatedCallsMu.Lock()
 		delete(b.isAuthenticatedCalls, sessionID)
 		b.isAuthenticatedCallsMu.Unlock()
@@ -974,10 +975,10 @@ func userInfoFromName(name string) string {
 	}
 
 	switch name {
-	case "user-local-groups":
+	case "user-local-groups@example.com":
 		user.Groups = append(user.Groups, groupJSONInfo{Name: "localgroup", UGID: ""})
 
-	case "user-sudo":
+	case "user-sudo@example.com":
 		user.Groups = append(user.Groups, groupJSONInfo{Name: "sudo", UGID: ""}, groupJSONInfo{Name: "admin", UGID: ""})
 	}
 

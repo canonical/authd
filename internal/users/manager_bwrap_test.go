@@ -91,7 +91,7 @@ func TestSetUserID(t *testing.T) {
 
 			m := newManagerForTests(t, dbDir)
 
-			username := "user1"
+			username := "user1@example.com"
 			if tc.nonExistentUser {
 				username = "nonexistent"
 			} else if tc.emptyUsername {
@@ -115,7 +115,7 @@ func TestSetUserID(t *testing.T) {
 				setUID(t, m, username, newUID)
 			}
 			if tc.uidAlreadyInUseByAuthdUser {
-				setUID(t, m, "user2", newUID)
+				setUID(t, m, "user2@example.com", newUID)
 			}
 			if tc.uidAlreadyInUseAsGIDofAuthdUser {
 				newUID = 22222
@@ -127,7 +127,6 @@ func TestSetUserID(t *testing.T) {
 				addGroupToSystem(t, newUID)
 			}
 
-			//nolint:gosec // G115 we set the UID above to values that are valid uint32
 			resp, err := m.SetUserID(username, uint32(newUID))
 			log.Infof(context.Background(), "SetUserID error: %v", err)
 			log.Infof(context.Background(), "SetUserID resp: %v", resp)
@@ -256,7 +255,7 @@ func TestSetGroupID(t *testing.T) {
 					gid = 2222
 				}
 				home := createTemporaryHome(t, uid, gid, tc.homeDirCannotBeAccessed, tc.homeDirOwnerCannotBeChanged)
-				setHome(t, m, "user1", home)
+				setHome(t, m, "user1@example.com", home)
 			}
 
 			newGID := 54321
@@ -271,7 +270,7 @@ func TestSetGroupID(t *testing.T) {
 				setGID(t, m, "group3", newGID)
 			}
 			if tc.gidAlreadyInUseAsUIDofAuthdUser {
-				setUID(t, m, "user2", newGID)
+				setUID(t, m, "user2@example.com", newGID)
 			}
 			if tc.gidAlreadyInUseBySystemGroup {
 				addGroupToSystem(t, newGID)
@@ -280,15 +279,14 @@ func TestSetGroupID(t *testing.T) {
 				addUserToSystem(t, newGID)
 			}
 			if tc.gidIsNotPrimaryGroupOfAnyUser {
-				// Change the primary group of "user1" to another group
-				setPrimaryGroup(t, m, "user1", 22222)
+				// Change the primary group of "user1@example.com" to another group
+				setPrimaryGroup(t, m, "user1@example.com", 22222)
 			}
 			if tc.gidIsPrimaryGroupOfMultipleUsers {
-				// Change the primary group of "user2" to the group we want to change
-				setPrimaryGroup(t, m, "user2", 11111)
+				// Change the primary group of "user2@example.com" to the group we want to change
+				setPrimaryGroup(t, m, "user2@example.com", 11111)
 			}
 
-			//nolint:gosec // G115 we set the GID above to values that are valid uint32
 			resp, err := m.SetGroupID(groupname, uint32(newGID))
 			log.Infof(context.Background(), "SetGroupID error: %v", err)
 			log.Infof(context.Background(), "SetGroupID resp: %v", resp)
@@ -404,7 +402,7 @@ func setUID(t *testing.T, m *users.Manager, username string, uid int) {
 	if uid < 0 || uid > math.MaxUint32 {
 		require.Fail(t, "Setup: invalid UID %d", uid)
 	}
-
+	//nolint:gosec // G115 - bounds-checked above: uid is in [0, MaxUint32].
 	err := m.DB().SetUserID(username, uint32(uid))
 	require.NoError(t, err, "Setup: could not set user ID")
 }
@@ -416,6 +414,7 @@ func setGID(t *testing.T, m *users.Manager, groupname string, gid int) {
 		require.Fail(t, "Setup: invalid GID %d", gid)
 	}
 
+	//nolint:gosec // G115 - bounds-checked above: gid is in [0, MaxUint32].
 	_, err := m.DB().SetGroupID(groupname, uint32(gid))
 	require.NoError(t, err, "Setup: could not set group ID")
 }

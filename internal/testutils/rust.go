@@ -102,7 +102,7 @@ func BuildRustNSSLib(t *testing.T, disableCoverage bool, features ...string) (li
 	t.Logf("Locked Rust target dir %s", target)
 
 	// Builds the nss library.
-	// #nosec:G204 - we control the command arguments in tests
+	//nolint:gosec // G702 - test-only code; cargo path is from getCargoPath(), args are controlled.
 	cmd := exec.Command(cargo, "build", "--features", strings.Join(features, ","), "--target-dir", target)
 	if TestVerbosity() > 0 {
 		cmd.Args = append(cmd.Args, "--verbose")

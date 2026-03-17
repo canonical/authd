@@ -5,7 +5,7 @@ Wait /Username: user name\n/
 Show
 
 Hide
-TypeUsername "user-needs-reset-integration-mandatory"
+TypeUsername "user-needs-reset-integration-mandatory@example.com"
 Show
 
 Hide

@@ -91,6 +91,8 @@ override_dh_auto_configure:
 		env DEB_CARGO_CRATE="$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM)" \
 		  $(CARGO_PATH) prepare-debian "$(CARGO_VENDOR_DIR)"; \
 	else \
+	    echo "cargo version: $$(cargo --version)"; \
+	    echo "cargo-vendor-filterer version: $$(cargo-vendor-filterer --version)"; \
 		dh_auto_configure --buildsystem=cargo; \
 	fi
 

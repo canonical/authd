@@ -10,10 +10,10 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 PAM Authenticate()
-  User: "user-integration-cached"
+  User: "user-integration-cached@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-cached"
+  User: "user-integration-cached@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

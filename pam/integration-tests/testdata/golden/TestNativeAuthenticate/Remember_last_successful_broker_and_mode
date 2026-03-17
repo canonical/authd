@@ -35,7 +35,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-remember-last-successful-broker-and-mode@gmail.com
+  2. Send URL to user-integration-native-remember-last-successful-broker-and-mode@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -58,30 +58,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-remember-last-successful-broker-and-mode@gmail.com
-  3. Use your fido device foo
-  4. Use your phone +33...
-  5. Use your phone +1...
-  6. Pin code
-  7. Use a QR code
-  8. Authentication code
-Or enter 'r' to go back to choose the provider
-Choose your authentication method:
-> 8
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-== Provider selection ==
-  1. local
-  2. ExampleBroker
-Choose your provider:
-> 2
-== Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
-Gimme your password:
->
-== Authentication method selection ==
-  1. Password authentication
-  2. Send URL to user-integration-native-remember-last-successful-broker-and-mode@gmail.com
+  2. Send URL to user-integration-native-remember-last-successful-broker-and-mode@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -91,12 +68,6 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 8
-== Authentication code ==
-  1. Proceed with Authentication code
-  2. Resend SMS (1 sent)
-Or enter 'r' to go back to select the authentication method
-Choose action:
->
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
 == Provider selection ==
@@ -110,7 +81,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-remember-last-successful-broker-and-mode@gmail.com
+  2. Send URL to user-integration-native-remember-last-successful-broker-and-mode@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -125,10 +96,6 @@ Choose your authentication method:
   2. Resend SMS (1 sent)
 Or enter 'r' to go back to select the authentication method
 Choose action:
-> 1
-== Authentication code ==
-Enter 'r' to cancel the request and go back to select the authentication method
-Enter your one time credential:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
@@ -143,7 +110,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-remember-last-successful-broker-and-mode@gmail.com
+  2. Send URL to user-integration-native-remember-last-successful-broker-and-mode@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -162,7 +129,7 @@ Choose action:
 == Authentication code ==
 Enter 'r' to cancel the request and go back to select the authentication method
 Enter your one time credential:
-> temporary pass0
+>
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
 == Provider selection ==
@@ -176,7 +143,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-native-remember-last-successful-broker-and-mode@gmail.com
+  2. Send URL to user-integration-native-remember-last-successful-broker-and-mode@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -196,51 +163,29 @@ Choose action:
 Enter 'r' to cancel the request and go back to select the authentication method
 Enter your one time credential:
 > temporary pass0
-PAM Authenticate()
-  User: "user-integration-native-remember-last-successful-broker-and-mode"
-  Result: success
-PAM AcctMgmt()
-  User: "user-integration-native-remember-last-successful-broker-and-mode"
-  Result: success
->
-────────────────────────────────────────────────────────────────────────────────
->
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-== Authentication code ==
-  1. Proceed with Authentication code
-  2. Resend SMS (1 sent)
-Or enter 'r' to go back to select the authentication method
-Choose action:
->
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-== Authentication code ==
-  1. Proceed with Authentication code
-  2. Resend SMS (1 sent)
-Or enter 'r' to go back to select the authentication method
-Choose action:
-> 1
-== Authentication code ==
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
+> 2
+== Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication method
-Enter your one time credential:
+Gimme your password:
 >
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-== Authentication code ==
-  1. Proceed with Authentication code
-  2. Resend SMS (1 sent)
-Or enter 'r' to go back to select the authentication method
-Choose action:
-> 1
-== Authentication code ==
-Enter 'r' to cancel the request and go back to select the authentication method
-Enter your one time credential:
-> temporary pass0
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
+== Authentication method selection ==
+  1. Password authentication
+  2. Send URL to user-integration-native-remember-last-successful-broker-and-mode@example.com
+  3. Use your fido device foo
+  4. Use your phone +33...
+  5. Use your phone +1...
+  6. Pin code
+  7. Use a QR code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+Choose your authentication method:
+> 8
 == Authentication code ==
   1. Proceed with Authentication code
   2. Resend SMS (1 sent)
@@ -252,10 +197,65 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Enter your one time credential:
 > temporary pass0
 PAM Authenticate()
-  User: "user-integration-native-remember-last-successful-broker-and-mode"
+  User: "user-integration-native-remember-last-successful-broker-and-mode@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-native-remember-last-successful-broker-and-mode"
+  User: "user-integration-native-remember-last-successful-broker-and-mode@example.com"
+  Result: success
+>
+────────────────────────────────────────────────────────────────────────────────
+>
+────────────────────────────────────────────────────────────────────────────────
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
+────────────────────────────────────────────────────────────────────────────────
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
+== Authentication code ==
+  1. Proceed with Authentication code
+  2. Resend SMS (1 sent)
+Or enter 'r' to go back to select the authentication method
+Choose action:
+>
+────────────────────────────────────────────────────────────────────────────────
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
+== Authentication code ==
+  1. Proceed with Authentication code
+  2. Resend SMS (1 sent)
+Or enter 'r' to go back to select the authentication method
+Choose action:
+> 1
+== Authentication code ==
+Enter 'r' to cancel the request and go back to select the authentication method
+Enter your one time credential:
+>
+────────────────────────────────────────────────────────────────────────────────
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
+== Authentication code ==
+  1. Proceed with Authentication code
+  2. Resend SMS (1 sent)
+Or enter 'r' to go back to select the authentication method
+Choose action:
+> 1
+== Authentication code ==
+Enter 'r' to cancel the request and go back to select the authentication method
+Enter your one time credential:
+> temporary pass0
+────────────────────────────────────────────────────────────────────────────────
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
+== Authentication code ==
+  1. Proceed with Authentication code
+  2. Resend SMS (1 sent)
+Or enter 'r' to go back to select the authentication method
+Choose action:
+> 1
+== Authentication code ==
+Enter 'r' to cancel the request and go back to select the authentication method
+Enter your one time credential:
+> temporary pass0
+PAM Authenticate()
+  User: "user-integration-native-remember-last-successful-broker-and-mode@example.com"
+  Result: success
+PAM AcctMgmt()
+  User: "user-integration-native-remember-last-successful-broker-and-mode@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

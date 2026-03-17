@@ -2,7 +2,7 @@
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user-integration-switch-username
+Username: user-integration-switch-username@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your provider
@@ -13,7 +13,7 @@ Username: user-integration-switch-username
   Press escape key to go back to user selection
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user-integration-username-switched
+Username: user-integration-username-switched@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your provider
@@ -37,10 +37,10 @@ Gimme your password:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 PAM Authenticate()
-  User: "user-integration-username-switched"
+  User: "user-integration-username-switched@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-username-switched"
+  User: "user-integration-username-switched@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

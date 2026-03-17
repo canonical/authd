@@ -408,6 +408,7 @@ func TestChownRecursiveFrom(t *testing.T) {
 		uidArgs            *fileutils.ChownUIDArgs
 		gidArgs            *fileutils.ChownGIDArgs
 		readOnlyFilesystem bool
+		rootDoesNotExist   bool
 		fileUID            uint32
 		fileGID            uint32
 		dirUID             uint32
@@ -484,6 +485,10 @@ func TestChownRecursiveFrom(t *testing.T) {
 			uidArgs:            &fileutils.ChownUIDArgs{FromUID: 0, ToUID: 1},
 			readOnlyFilesystem: true, wantError: true, wantErrorMatch: "read-only file system",
 		},
+		"Error_when_root_does_not_exist": {
+			uidArgs:          &fileutils.ChownUIDArgs{FromUID: 0, ToUID: 1},
+			rootDoesNotExist: true, wantError: true, wantErrorMatch: "no such file or directory",
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -516,6 +521,11 @@ func TestChownRecursiveFrom(t *testing.T) {
 			err = os.Symlink(symlinkTarget, symlink)
 			require.NoError(t, err)
 
+			root := targetDir
+			if tc.rootDoesNotExist {
+				root = filepath.Join(tempDir, "nonexistent_dir")
+			}
+
 			if tc.readOnlyFilesystem {
 				//nolint:gosec // G204 it's safe to use exec.Command with a variable here
 				cmd := exec.Command("mount", "--read-only", "-t", "tmpfs", "tmpfs", targetDir)
@@ -530,7 +540,7 @@ func TestChownRecursiveFrom(t *testing.T) {
 				}()
 			}
 
-			err = fileutils.ChownRecursiveFrom(targetDir, tc.uidArgs, tc.gidArgs)
+			err = fileutils.ChownRecursiveFrom(root, tc.uidArgs, tc.gidArgs)
 			t.Logf("ChownRecursiveFrom error: %v", err)
 			if tc.wantError {
 				require.Error(t, err)

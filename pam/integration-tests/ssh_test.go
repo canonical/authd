@@ -56,6 +56,8 @@ var (
 	sshdEnv                                   []string
 	sshdHostKeyPath                           string
 	sshdHostPubKey                            []byte
+
+	sshTestsHomeBase = filepath.Join(os.TempDir(), "authd-tests", "home")
 )
 
 func TestSSHAuthenticate(t *testing.T) {
@@ -82,6 +84,11 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 	// can't install the dependencies there. So we need to be able to skip these tests on-demand.
 	if os.Getenv("AUTHD_SKIP_EXTERNAL_DEPENDENT_TESTS") != "" {
 		t.Skip("Skipping tests with external dependencies as requested")
+	}
+
+	// These tests are flaky, see https://github.com/canonical/authd/issues/1328
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
 	}
 
 	if uv := getUbuntuVersion(t); uv == 0 || uv < 2404 {
@@ -154,7 +161,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		sshdEnv = append(sshdEnv, fmt.Sprintf("AUTHD_NSS_SOCKET=%s", sharedAuthdSocket))
 
 		sharedSSHDPort, sharedSSHDUserHome = startSSHDForTest(t, serviceFile, sshdHostKeyPath,
-			"authd-test-user-sshd-accept-all", sshdPreloadLibraries, sshdEnv, false)
+			"authd-test-user-sshd-accept-all@example.com", sshdPreloadLibraries, sshdEnv, false)
 
 		if !t.Failed() {
 			t.Log("Prepared SSH tests with shared sshd")
@@ -165,7 +172,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 	const pamSSHUserEnv = "AUTHD_PAM_SSH_USER"
 	const baseTapeCommand = "ssh ${%s}@localhost ${AUTHD_PAM_SSH_ARGS}"
 	tapeCommand := fmt.Sprintf(baseTapeCommand, pamSSHUserEnv)
-	defaultTapeSettings := []tapeSetting{{vhsHeight, 1000}, {vhsWidth, 1500}}
+	defaultTapeSettings := []tapeSetting{{vhsHeight, 1000}, {vhsWidth, 2000}}
 
 	sshEnvVariablesRegex = regexp.MustCompile(`(?m)  (PATH|HOME|PWD|SSH_[A-Z]+)=.*(\n*)($[^ ]{2}.*)?$`)
 	sshHostPortRegex = regexp.MustCompile(`([\d\.:]+) port ([\d:]+)`)
@@ -195,7 +202,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			tape: "simple_auth",
 		},
 		"Authenticate_user_successfully_if_already_registered": {
-			user: "user-ssh",
+			user: "user-ssh@example.com",
 			tape: "simple_auth",
 		},
 		"Authenticate_user_successfully_and_enters_shell": {
@@ -208,26 +215,26 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 				examplebroker.UserIntegrationPreCheckPrefix, "upper-case")),
 		},
 		"Authenticate_user_successfully_if_already_registered_with_upper_case": {
-			user: "USER-SSH2",
+			user: "USER-SSH2@example.com",
 			tape: "simple_auth",
 		},
 		"Authenticate_user_successfully_after_db_migration": {
 			tape:                 "simple_auth_with_auto_selected_broker",
 			oldDB:                "authd_0.4.1_bbolt_with_mixed_case_users",
 			wantUserAlreadyExist: true,
-			user:                 "user-integration-cached",
+			user:                 "user-integration-cached@example.com",
 		},
 		"Authenticate_user_with_upper_case_using_lower_case_after_db_migration": {
 			tape:                 "simple_auth_with_auto_selected_broker",
 			oldDB:                "authd_0.4.1_bbolt_with_mixed_case_users",
 			wantUserAlreadyExist: true,
-			user:                 "user-integration-upper-case",
+			user:                 "user-integration-upper-case@example.com",
 		},
 		"Authenticate_user_with_mixed_case_after_db_migration": {
 			tape:                 "simple_auth_with_auto_selected_broker",
 			oldDB:                "authd_0.4.1_bbolt_with_mixed_case_users",
 			wantUserAlreadyExist: true,
-			user:                 "user-integration-WITH-Mixed-CaSe",
+			user:                 "user-integration-WITH-Mixed-CaSe@example.com",
 		},
 		"Authenticate_user_with_mfa": {
 			tape:         "mfa_auth",
@@ -372,7 +379,7 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 		},
 		"Exit_if_user_is_not_pre-checked_on_ssh_service": {
 			tape:                "local_ssh",
-			user:                examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed",
+			user:                examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed@example.com",
 			pamServiceName:      "sshd",
 			wantNotLoggedInUser: true,
 			tapeVariables: map[string]string{
@@ -448,10 +455,21 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 
 				authdEnv = append(authdEnv, useOldDatabaseEnv(t, tc.oldDB)...)
 
+				// Since we are migrating users, we need to make sure that we can replicate
+				// the homedir they have in the database.
+				err := os.MkdirAll(sshTestsHomeBase, 0700)
+				require.NoError(t, err, "Setup: failed to create home directory")
+
+				t.Cleanup(func() {
+					_ = os.RemoveAll(sshTestsHomeBase)
+				})
+
 				socketPath = runAuthd(t,
 					testutils.WithCurrentUserAsRoot,
 					testutils.WithGroupFile(groupOutput),
-					testutils.WithEnvironment(authdEnv...))
+					testutils.WithEnvironment(authdEnv...),
+					testutils.WithHomeBaseDir(sshTestsHomeBase),
+				)
 			} else if !sharedSSHD {
 				socketPath, groupOutput = sharedAuthd(t,
 					testutils.WithGroupFileOutput(sharedAuthdGroupOutput),
@@ -668,10 +686,9 @@ func startSSHDForTest(t *testing.T, serviceFile, hostKey, user string, preloadLi
 		sshdConnectCommand += "&& /bin/sh"
 	}
 
-	homeBase := t.TempDir()
-	userHome := filepath.Join(homeBase, user)
+	userHome := filepath.Join(sshTestsHomeBase, user)
 	sshdPort := startSSHD(t, hostKey, sshdConnectCommand, append([]string{
-		fmt.Sprintf("HOME=%s", homeBase),
+		fmt.Sprintf("HOME=%s", sshTestsHomeBase),
 		fmt.Sprintf("LD_PRELOAD=%s", strings.Join(preloadLibraries, ":")),
 		fmt.Sprintf("AUTHD_TEST_SSH_USER=%s", user),
 		fmt.Sprintf("AUTHD_TEST_SSH_HOME=%s", userHome),

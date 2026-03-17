@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -116,12 +117,14 @@ func LockDir(dir string) (func() error, error) {
 		return nil, err
 	}
 
+	//nolint:gosec // G115 - file descriptors are small non-negative integers; uintptr→int is safe here.
 	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX); err != nil {
 		_ = f.Close()
 		return nil, err
 	}
 
 	unlock := func() error {
+		//nolint:gosec // G115 - file descriptors are small non-negative integers; uintptr→int is safe here.
 		if err := unix.Flock(int(f.Fd()), unix.LOCK_UN); err != nil {
 			_ = f.Close()
 			return err
@@ -160,7 +163,13 @@ func ChownRecursiveFrom(root string, uidArgs *ChownUIDArgs, gidArgs *ChownGIDArg
 		return fmt.Errorf("ChownRecursiveFrom: at least one of uidArgs or gidArgs must be non-nil")
 	}
 
-	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	return fs.WalkDir(r.FS(), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -175,13 +184,13 @@ func ChownRecursiveFrom(root string, uidArgs *ChownUIDArgs, gidArgs *ChownGIDArg
 		}
 
 		if uidArgs != nil && stat.Uid == uidArgs.FromUID {
-			if err := os.Lchown(path, int(uidArgs.ToUID), -1); err != nil {
+			if err := r.Lchown(path, int(uidArgs.ToUID), -1); err != nil {
 				return fmt.Errorf("failed to change ownership: %w", err)
 			}
 		}
 
 		if gidArgs != nil && stat.Gid == gidArgs.FromGID {
-			if err := os.Lchown(path, -1, int(gidArgs.ToGID)); err != nil {
+			if err := r.Lchown(path, -1, int(gidArgs.ToGID)); err != nil {
 				return fmt.Errorf("failed to change group ownership: %w", err)
 			}
 		}

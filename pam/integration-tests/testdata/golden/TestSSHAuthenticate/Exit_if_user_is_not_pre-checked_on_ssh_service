@@ -1,10 +1,10 @@
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
-PAM Authenticate() finished for user 'user-integration-ssh-service-not-allowed'
-SSH PAM user 'user-integration-ssh-service-not-allowed' using local broker
-(user-integration-ssh-service-not-allowed@localhost) Password:
+PAM Authenticate() finished for user 'user-integration-ssh-service-not-allowed@example.com'
+SSH PAM user 'user-integration-ssh-service-not-allowed@example.com' using local broker
+(user-integration-ssh-service-not-allowed@example.com@localhost) Password:
 ────────────────────────────────────────────────────────────────────────────────
 > ssh ${AUTHD_PAM_SSH_USER}@localhost ${AUTHD_PAM_SSH_ARGS}
-PAM Authenticate() finished for user 'user-integration-ssh-service-not-allowed'
-SSH PAM user 'user-integration-ssh-service-not-allowed' using local broker
-(user-integration-ssh-service-not-allowed@localhost) Password:
+PAM Authenticate() finished for user 'user-integration-ssh-service-not-allowed@example.com'
+SSH PAM user 'user-integration-ssh-service-not-allowed@example.com' using local broker
+(user-integration-ssh-service-not-allowed@example.com@localhost) Password:
 ────────────────────────────────────────────────────────────────────────────────

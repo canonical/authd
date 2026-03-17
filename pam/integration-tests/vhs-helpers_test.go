@@ -184,7 +184,7 @@ func init() {
 
 func newTapeData(tapeName string, outputDir string, settings ...tapeSetting) *tapeData {
 	m := map[string]any{
-		vhsWidth:  800,
+		vhsWidth:  1200,
 		vhsHeight: 500,
 		// TODO: Ideally, we should use Ubuntu Mono. However, the github runner is still on Jammy, which does not have it.
 		// We should update this to use Ubuntu Mono once the runner is updated.
@@ -724,8 +724,9 @@ func vhsTestUserNameFull(t *testing.T, userPrefix string, namePrefix string) str
 	if namePrefix != "" && namePrefix[len(namePrefix)-1] != '-' {
 		namePrefix += "-"
 	}
-	return userPrefix + namePrefix + strings.ReplaceAll(
-		strings.ToLower(filepath.Base(t.Name())), "_", "-")
+
+	username := userPrefix + namePrefix + strings.ReplaceAll(strings.ToLower(filepath.Base(t.Name())), "_", "-")
+	return username + "@example.com"
 }
 
 func vhsTestUserName(t *testing.T, prefix string) string {
