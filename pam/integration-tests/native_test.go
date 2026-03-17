@@ -25,6 +25,12 @@ func TestNativeAuthenticate(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
+	// Due to external dependencies such as `vhs`, we can't run the tests in some environments (like LP builders), as we
+	// can't install the dependencies there. So we need to be able to skip these tests on-demand.
+	if os.Getenv("AUTHD_SKIP_EXTERNAL_DEPENDENT_TESTS") != "" {
+		t.Skip("Skipping tests with external dependencies as requested")
+	}
+
 	clientPath := t.TempDir()
 	cliEnv := preparePamRunnerTest(t, clientPath)
 	tapeCommand := fmt.Sprintf(nativeTapeBaseCommand, pam_test.RunnerActionLogin,
@@ -477,6 +483,12 @@ func TestNativeChangeAuthTok(t *testing.T) {
 
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
+	}
+
+	// Due to external dependencies such as `vhs`, we can't run the tests in some environments (like LP builders), as we
+	// can't install the dependencies there. So we need to be able to skip these tests on-demand.
+	if os.Getenv("AUTHD_SKIP_EXTERNAL_DEPENDENT_TESTS") != "" {
+		t.Skip("Skipping tests with external dependencies as requested")
 	}
 
 	// This test is flaky, see https://github.com/canonical/authd/issues/1330

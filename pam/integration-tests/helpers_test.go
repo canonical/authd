@@ -149,12 +149,6 @@ func sharedAuthd(t *testing.T, args ...testutils.DaemonOption) (socketPath strin
 func preparePamRunnerTest(t *testing.T, clientPath string) []string {
 	t.Helper()
 
-	// Due to external dependencies such as `vhs`, we can't run the tests in some environments (like LP builders), as we
-	// can't install the dependencies there. So we need to be able to skip these tests on-demand.
-	if os.Getenv("AUTHD_SKIP_EXTERNAL_DEPENDENT_TESTS") != "" {
-		t.Skip("Skipping tests with external dependencies as requested")
-	}
-
 	pamCleanup, err := buildPAMRunner(clientPath)
 	require.NoError(t, err, "Setup: Failed to build PAM executable")
 	t.Cleanup(pamCleanup)
