@@ -128,7 +128,7 @@ jobs:
           fi
 
       - name: Extract the debian sources
-        run: dpkg-source -x ${{ env.pkg_dsc }} sources
+        run: dpkg-source -x ${{ needs.build-deb.outputs.pkg-dsc }} sources
 
       - name: Commit packaging sources
         run: |
