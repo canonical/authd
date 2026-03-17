@@ -1,3 +1,4 @@
+// Package msentraid is the Microsoft Entra ID specific extension.
 package msentraid
 
 // This file is here to make the build pass. It doesn't have any build tags,

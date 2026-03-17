@@ -15,8 +15,8 @@ import (
 func getentOutputForLib(t *testing.T, libPath, socketPath string, rustCovEnv []string, shouldPreCheck bool, cmds ...string) (got string, exitCode int) {
 	t.Helper()
 
-	// #nosec:G204 - we control the command arguments in tests
 	cmds = append(cmds, "--service", "authd")
+	//nolint:gosec // G204 - test-only code; cmds are controlled test arguments.
 	cmd := exec.Command("getent", cmds...)
 	cmd.Env = append(cmd.Env,
 		"AUTHD_NSS_INFO=stderr",
