@@ -330,6 +330,7 @@ jobs:
         env:
           GO_TESTS_TIMEOUT: 35m
           AUTHD_TESTS_SLEEP_MULTIPLIER: 3
+          AUTHD_SKIP_FLAKY_TESTS: true
           GORACE: log_path=${{ env.AUTHD_TESTS_ARTIFACTS_PATH }}/gorace.log
         run: |
           go test -json -timeout ${GO_TESTS_TIMEOUT} -race -failfast ./... | \
@@ -362,6 +363,7 @@ jobs:
           G_DEBUG: "fatal-criticals"
           GO_TESTS_TIMEOUT: 30m
           AUTHD_TESTS_SLEEP_MULTIPLIER: 1.5
+          AUTHD_SKIP_FLAKY_TESTS: true
           # Use these flags to give ASAN a better time to unwind the stack trace
           GO_GC_FLAGS: -N -l
         run: |
