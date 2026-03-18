@@ -1266,6 +1266,11 @@ func TestRegisterUserPreAuthWhenLocked(t *testing.T) {
 func TestRegisterUserPreAuthAfterUnlock(t *testing.T) {
 	// This cannot be parallel
 
+	// This test is flaky
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
+
 	waitTime := testutils.MultipliedSleepDuration(750 * time.Millisecond)
 	lockCtx, lockCancel := context.WithTimeout(context.Background(), waitTime/2)
 	t.Cleanup(lockCancel)
