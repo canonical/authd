@@ -294,23 +294,12 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		uInfo.Groups[i].Name = strings.ToLower(g.Name)
 	}
 
-	// Check if the user is locked. We can only do this after the broker has granted access, because we want to avoid
-	// leaking whether a user exists or not to unauthenticated users.
-	// TODO: We might want to let the broker know whether the user is locked or not, so that it can avoid storing any
-	//       updated tokens or user info on disk.
-	userIsLocked, err := s.userManager.IsUserLocked(uInfo.Name)
-	if err != nil && !errors.Is(err, users.NoDataFoundError{}) {
-		log.Errorf(ctx, "IsAuthenticated: Could not check if user %q is locked: %v", uInfo.Name, err)
-		return nil, fmt.Errorf("could not check if user %q is locked: %w", uInfo.Name, err)
-	}
-	// Throw an error if the user trying to authenticate already exists in the database and is locked
-	if err == nil && userIsLocked {
-		log.Noticef(ctx, "Authentication failure: user %q is locked", uInfo.Name)
-		return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("user %s is locked", uInfo.Name))
-	}
-
 	// Update database and local groups on granted auth.
 	if err := s.userManager.UpdateUser(uInfo); err != nil {
+		if errors.Is(err, users.UserIsLockedError{}) {
+			log.Noticef(ctx, "Authentication failure: user %q is locked", uInfo.Name)
+			return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("user %s is locked", uInfo.Name))
+		}
 		log.Errorf(ctx, "IsAuthenticated: Could not update user %q in database: %v", uInfo.Name, err)
 		return nil, err
 	}

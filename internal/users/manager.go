@@ -150,6 +150,21 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		return errors.New("empty username")
 	}
 
+	// Check if the user is locked. We can only do this after the broker has granted access, because we want to avoid
+	// leaking whether a user exists or not to unauthenticated users.
+	// TODO: We might want to let the broker know whether the user is locked or not, so that it can avoid storing any
+	//       updated tokens or user info on disk.
+	userIsLocked, err := m.isUserLocked(u.Name)
+	if err != nil && !errors.Is(err, NoDataFoundError{}) {
+		log.Errorf(context.TODO(), "IsAuthenticated: Could not check if user %q is locked: %v", u.Name, err)
+		return fmt.Errorf("could not check if user %q is locked: %w", u.Name, err)
+	}
+	// Throw an error if the user trying to authenticate already exists in the database and is locked
+	if err == nil && userIsLocked {
+		log.Noticef(context.TODO(), "Authentication failure: user %q is locked", u.Name)
+		return UserIsLockedError{fmt.Sprintf("user %q is locked", u.Name)}
+	}
+
 	// Prepend the user private group
 	u.Groups = append([]types.GroupInfo{{Name: u.Name, UGID: u.Name}}, u.Groups...)
 	userPrivateGroup := &u.Groups[0]
@@ -707,8 +722,8 @@ func (m *Manager) UnlockUser(username string) error {
 	return nil
 }
 
-// IsUserLocked returns true if the user with the given user name is locked, false otherwise.
-func (m *Manager) IsUserLocked(username string) (bool, error) {
+// isUserLocked returns true if the user with the given user name is locked, false otherwise.
+func (m *Manager) isUserLocked(username string) (bool, error) {
 	u, err := m.db.UserByName(username)
 	if err != nil {
 		return false, err

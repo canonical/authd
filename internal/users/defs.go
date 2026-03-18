@@ -68,3 +68,14 @@ func groupEntryFromGroupWithMembers(g db.GroupWithMembers) types.GroupEntry {
 
 // NoDataFoundError is the error returned when no entry is found in the db.
 type NoDataFoundError = db.NoDataFoundError
+
+// UserIsLockedError is the error returned when a user is locked in the db.
+type UserIsLockedError struct {
+	msg string
+}
+
+func (err UserIsLockedError) Error() string {
+	return err.msg
+}
+
+func (UserIsLockedError) Is(target error) bool { return target == UserIsLockedError{} }
