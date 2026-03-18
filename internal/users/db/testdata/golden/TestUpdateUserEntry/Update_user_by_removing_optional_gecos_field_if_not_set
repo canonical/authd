@@ -5,6 +5,7 @@ users:
       gecos: ""
       dir: /home/user1
       shell: /bin/bash
+      full_username: ""
 groups:
     - name: group1
       gid: 11111

@@ -5,12 +5,14 @@ users:
       gecos: gecos for success@example.com
       dir: /home/success@example.com
       shell: /bin/sh/success@example.com
+      full_username: success@example.com
     - name: otheruser@example.com
       uid: 77777
       gid: 88888
       gecos: gecos for other user
       dir: /home/otheruser@example.com
       shell: /bin/sh/otheruser
+      full_username: otheruser@example.com
       broker_id: broker-id
 groups:
     - name: success@example.com

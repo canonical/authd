@@ -5,6 +5,7 @@ users:
       gecos: gecos for success_with_local_groups@example.com
       dir: /home/success_with_local_groups@example.com
       shell: /bin/sh/success_with_local_groups@example.com
+      full_username: success_with_local_groups@example.com
 groups:
     - name: success_with_local_groups@example.com
       gid: 1111

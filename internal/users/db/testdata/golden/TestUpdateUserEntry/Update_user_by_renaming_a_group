@@ -7,6 +7,7 @@ users:
         On multiple lines
       dir: /home/user1
       shell: /bin/bash
+      full_username: ""
 groups:
     - name: new-group-same-gid
       gid: 11111

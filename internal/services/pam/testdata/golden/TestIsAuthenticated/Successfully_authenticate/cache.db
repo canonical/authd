@@ -5,6 +5,7 @@ users:
       gecos: gecos for success@example.com
       dir: /home/success@example.com
       shell: /bin/sh/success@example.com
+      full_username: success@example.com
 groups:
     - name: success@example.com
       gid: 1111

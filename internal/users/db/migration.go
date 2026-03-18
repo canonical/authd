@@ -195,3 +195,12 @@ func removeGroupsWithNameConflicts(db queryable) error {
 
 	return nil
 }
+
+func (m *Manager) fillFullUsernameColumns() error {
+	// Since we didn't have the full_username column before, we need to update the database right after opening it,
+	// to ensure that we don't have any user with an empty full_username field.
+	query := `UPDATE users SET full_username = name WHERE full_username IS NULL OR full_username = ''`
+	_, err := m.db.Exec(query)
+
+	return err
+}

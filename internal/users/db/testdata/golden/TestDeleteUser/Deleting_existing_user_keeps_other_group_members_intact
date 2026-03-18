@@ -5,6 +5,7 @@ users:
       gecos: User2
       dir: /home/user2
       shell: /bin/dash
+      full_username: user2
       broker_id: broker-id
     - name: user3
       uid: 3333
@@ -12,6 +13,7 @@ users:
       gecos: User3
       dir: /home/user3
       shell: /bin/zsh
+      full_username: user3
       broker_id: broker-id
     - name: userwithoutbroker
       uid: 4444
@@ -19,6 +21,7 @@ users:
       gecos: userwithoutbroker
       dir: /home/userwithoutbroker
       shell: /bin/sh
+      full_username: userwithoutbroker
 groups:
     - name: group1
       gid: 11111
