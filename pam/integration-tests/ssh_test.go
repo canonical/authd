@@ -62,6 +62,11 @@ func testSSHAuthenticate(t *testing.T, sharedSSHd bool) {
 		t.Skip("Skipping tests with external dependencies as requested")
 	}
 
+	// These tests are flaky, see https://github.com/canonical/authd/issues/1328
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
+
 	if uv := getUbuntuVersion(t); uv == 0 || uv < 2404 {
 		require.Empty(t, os.Getenv("GITHUB_REPOSITORY"),
 			"Golden files need to be updated to run tests on Ubuntu %v", uv)

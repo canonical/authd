@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -33,6 +34,11 @@ const gdmTestIgnoredMessage string = "<ignored>"
 
 func TestGdmModel(t *testing.T) {
 	t.Parallel()
+
+	// This test is flaky, see https://github.com/canonical/authd/issues/966
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
 
 	// This is not technically an error, as it means that during the tests
 	// we've stopped the program with a Quit request.

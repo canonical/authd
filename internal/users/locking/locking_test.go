@@ -4,6 +4,7 @@ package userslocking_test
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -18,6 +19,10 @@ import (
 
 func TestUsersLockingInBubbleWrap(t *testing.T) {
 	t.Parallel()
+
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
 
 	testutils.SkipIfCannotRunBubbleWrap(t)
 
@@ -117,6 +122,10 @@ func compileLockerBinary(t *testing.T) string {
 
 func TestUsersLockingOverride(t *testing.T) {
 	// This cannot be parallel.
+
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
 
 	userslocking.Z_ForTests_OverrideLocking()
 	t.Cleanup(userslocking.Z_ForTests_RestoreLocking)
