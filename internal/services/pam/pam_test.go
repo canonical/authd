@@ -639,6 +639,7 @@ func TestSetBroker(t *testing.T) {
 		"Error_when_username_is_empty":              {wantErr: true},
 		"Error_when_user_does_not_exist_":           {username: "doesnotexist@example.com", wantErr: true},
 		"Error_when_broker_does_not_exist":          {username: "userwithbroker@example.com", brokerID: "does not exist", wantErr: true},
+		"Error_when_caller_is_not_root":             {username: "usersetbroker@example.com", currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -780,7 +781,7 @@ func newPamClient(t *testing.T, m *users.Manager, brokerManager *brokers.Manager
 
 	service := pam.NewService(context.Background(), m, brokerManager, pm)
 
-	grpcServer := grpc.NewServer(permissions.WithUnixPeerCreds(), grpc.ChainUnaryInterceptor(enableCheckGlobalAccess(service), errmessages.RedactErrorInterceptor))
+	grpcServer := grpc.NewServer(permissions.WithUnixPeerCreds(), grpc.ChainUnaryInterceptor(errmessages.RedactErrorInterceptor))
 	authd.RegisterPAMServer(grpcServer, service)
 	done := make(chan struct{})
 	go func() {
@@ -810,17 +811,6 @@ func newPermissionManager(t *testing.T, currentUserNotRoot bool) permissions.Man
 		opts = append(opts, permissions.Z_ForTests_WithCurrentUserAsRoot())
 	}
 	return permissions.New(opts...)
-}
-
-// enableCheckGlobalAccess returns the middleware hooking up in CheckGlobalAccess for the given service.
-func enableCheckGlobalAccess(s pam.Service) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		if err := s.CheckGlobalAccess(ctx, info.FullMethod); err != nil {
-			return nil, err
-		}
-
-		return handler(ctx, req)
-	}
 }
 
 // getMockBrokerGeneratedID returns the generated ID for the mock broker.
