@@ -75,7 +75,6 @@ parts:
       - libhimmelblau
       - version
     build-environment:
-      - GOFLAGS: "-tags=release"
       # Add libhimmelblau to the CFLAGS and LDFLAGS so that it can be found by the Go linker.
       - CGO_CFLAGS: -I${CRAFT_STAGE}/include
       - CGO_LDFLAGS: -L${CRAFT_STAGE}/lib -lhimmelblau
@@ -84,8 +83,7 @@ parts:
       go mod download all
       go mod vendor
       VERSION=$(craftctl get version)
-      export GOFLAGS="-ldflags=-X=github.com/canonical/authd/authd-oidc-brokers/internal/consts.Version=${VERSION}"
-      go build -tags=withmsentraid -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc
+      go build -tags=withmsentraid,release -ldflags "-X=github.com/canonical/authd/authd-oidc-brokers/internal/consts.Version=${VERSION}" -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc
   config:
     source: authd-oidc-brokers/conf/
     source-type: local
