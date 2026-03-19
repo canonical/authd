@@ -17,11 +17,9 @@ description: |
     Explore the official documentation for installation and configuration steps, or visit the GitHub repository to
     contribute or provide feedback.
 icon: snap/variants/msentraid/icon.svg
-website:
-  - https://github.com/ubuntu/authd-oidc-brokers
-  - https://github.com/ubuntu/authd
-issues: https://github.com/ubuntu/authd/issues
-source-code: https://github.com/ubuntu/authd-oidc-brokers/tree/msentraid
+website: https://documentation.ubuntu.com/authd
+issues: https://github.com/canonical/authd/issues
+source-code: https://github.com/canonical/authd/tree/main/authd-oidc-brokers
 adopt-info: version
 grade: stable
 base: core24
@@ -86,7 +84,7 @@ parts:
       go mod download all
       go mod vendor
       VERSION=$(craftctl get version)
-      export GOFLAGS="-ldflags=-X=github.com/ubuntu/authd-oidc-brokers/internal/consts.Version=${VERSION}"
+      export GOFLAGS="-ldflags=-X=github.com/canonical/authd/authd-oidc-brokers/internal/consts.Version=${VERSION}"
       go build -tags=withmsentraid -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc
   config:
     source: authd-oidc-brokers/conf/

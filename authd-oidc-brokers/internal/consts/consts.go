@@ -2,8 +2,8 @@
 package consts
 
 import (
+	"github.com/canonical/authd/log"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/ubuntu/authd/log"
 )
 
 var (

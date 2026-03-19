@@ -19,7 +19,7 @@ description: |
 icon: snap/variants/oidc/icon.svg
 website: https://documentation.ubuntu.com/authd
 issues: https://github.com/canonical/authd/issues
-source-code: https://github.com/canonical/authd
+source-code: https://github.com/canonical/authd/tree/main/authd-oidc-brokers
 adopt-info: version
 grade: stable
 base: core24

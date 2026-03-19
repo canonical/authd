@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/log"
 	"golang.org/x/oauth2"
 )
 
