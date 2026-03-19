@@ -14,7 +14,6 @@ import (
 	"github.com/canonical/authd/internal/brokers/layouts"
 	"github.com/canonical/authd/internal/decorate"
 	"github.com/canonical/authd/internal/proto/authd"
-	"github.com/canonical/authd/internal/services/permissions"
 	"github.com/canonical/authd/internal/users"
 	"github.com/canonical/authd/internal/users/types"
 	"github.com/canonical/authd/log"
@@ -27,21 +26,19 @@ var _ authd.PAMServer = Service{}
 
 // Service is the implementation of the PAM module service.
 type Service struct {
-	userManager       *users.Manager
-	brokerManager     *brokers.Manager
-	permissionManager *permissions.Manager
+	userManager   *users.Manager
+	brokerManager *brokers.Manager
 
 	authd.UnimplementedPAMServer
 }
 
 // NewService returns a new PAM GRPC service.
-func NewService(ctx context.Context, userManager *users.Manager, brokerManager *brokers.Manager, permissionManager *permissions.Manager) Service {
+func NewService(ctx context.Context, userManager *users.Manager, brokerManager *brokers.Manager) Service {
 	log.Debug(ctx, "Building new gRPC PAM service")
 
 	return Service{
-		userManager:       userManager,
-		brokerManager:     brokerManager,
-		permissionManager: permissionManager,
+		userManager:   userManager,
+		brokerManager: brokerManager,
 	}
 }
 

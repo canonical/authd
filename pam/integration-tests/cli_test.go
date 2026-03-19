@@ -36,7 +36,6 @@ func TestCLIAuthenticate(t *testing.T) {
 		username string // typed at the Username: prompt (empty = use pamUser as preset)
 
 		clientOptions      clientOptions
-		currentUserNotRoot bool
 		wantLocalGroups    bool
 		expectedExitCode   int
 		extraArgs          []string
@@ -557,14 +556,6 @@ func TestCLIAuthenticate(t *testing.T) {
 			},
 		},
 
-		"Deny_authentication_if_current_user_is_not_considered_as_root": {
-			currentUserNotRoot: true,
-			expectedExitCode:   0,
-			test: func(t *testing.T, c *ptytest.Console) {
-				t.Helper()
-				cliWaitForResult(t, c)
-			},
-		},
 		"Deny_authentication_if_max_attempts_reached": {
 			username:         "user-integration-max-attempts@example.com",
 			expectedExitCode: 0,
@@ -702,7 +693,7 @@ func TestCLIAuthenticate(t *testing.T) {
 
 			var socketPath, groupFileOutput string
 			var cancelAuthd func()
-			if tc.wantLocalGroups || tc.currentUserNotRoot || tc.useCancelableAuthd {
+			if tc.wantLocalGroups || tc.useCancelableAuthd {
 				var groupFile string
 				groupFileOutput, groupFile = prepareGroupFiles(t)
 
@@ -713,9 +704,7 @@ func TestCLIAuthenticate(t *testing.T) {
 				args := []testutils.DaemonOption{
 					testutils.WithGroupFile(groupFile),
 					testutils.WithGroupFileOutput(groupFileOutput),
-				}
-				if !tc.currentUserNotRoot {
-					args = append(args, testutils.WithCurrentUserAsRoot)
+					testutils.WithCurrentUserAsRoot,
 				}
 
 				if tc.useCancelableAuthd {
@@ -905,8 +894,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 	cliEnv := preparePamRunnerTest(t, clientPath)
 
 	tests := map[string]struct {
-		username           string
-		currentUserNotRoot bool
+		username string
 
 		test func(t *testing.T, socketPath, username string) string
 	}{
@@ -1138,16 +1126,6 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				return ptySanitizeSnapshots(t, c)
 			},
 		},
-		"Prevent_change_password_if_current_user_is_not_root_as_can_not_authenticate": {
-			currentUserNotRoot: true,
-			test: func(t *testing.T, socketPath, username string) string {
-				t.Helper()
-				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
-				cliWaitForResult(t, c)
-				c.RequireSuccessfulExit(t)
-				return ptySanitizeSnapshots(t, c)
-			},
-		},
 		"Exit_authd_if_local_broker_is_selected": {
 			test: func(t *testing.T, socketPath, username string) string {
 				t.Helper()
@@ -1197,19 +1175,14 @@ func TestCLIChangeAuthTok(t *testing.T) {
 			if err := os.WriteFile(groupFile, nil, 0o600); err != nil {
 				t.Fatalf("Setup: could not create group file: %v", err)
 			}
-			var socketPath string
-			if tc.currentUserNotRoot {
-				socketPath = runAuthd(t, testutils.WithGroupFile(groupFile))
-			} else {
-				socketPath = runAuthd(t,
-					testutils.WithCurrentUserAsRoot,
-					testutils.WithGroupFile(groupFile),
-					testutils.WithGroupFileOutput(groupFile),
-				)
-			}
+			socketPath := runAuthd(t,
+				testutils.WithCurrentUserAsRoot,
+				testutils.WithGroupFile(groupFile),
+				testutils.WithGroupFileOutput(groupFile),
+			)
 
 			username := tc.username
-			if username == "" && !tc.currentUserNotRoot {
+			if username == "" {
 				username = testUserName(t, "cli-passwd")
 			}
 

@@ -100,10 +100,10 @@ func TestAccessAuthorization(t *testing.T) {
 	conn, err := grpc.NewClient("unix://"+socketPath, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithUnaryInterceptor(errmessages.FormatErrorMessage))
 	require.NoError(t, err, "Setup: could not dial the server")
 
-	// Global authorization for PAM is always denied for non root user.
+	// PAM calls are allowed for non-root users.
 	pamClient := authd.NewPAMClient(conn)
 	_, err = pamClient.AvailableBrokers(context.Background(), &authd.Empty{})
-	require.Error(t, err, "PAM calls are not allowed to any random user")
+	require.NoError(t, err, "PAM calls should be allowed for non-root users")
 
 	// Global authorization for the user service is always granted for non root user.
 	userServiceClient := authd.NewUserServiceClient(conn)
