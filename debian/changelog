@@ -1,8 +1,14 @@
-authd (0.5.10+git260319+106+9e67c081) resolute; urgency=medium
+authd (0.5.11+git260319+108+6085fe42) resolute; urgency=medium
 
-  * Github build. Run id: 23293793300. Run number: 106.
+  * Github build. Run id: 23296106693. Run number: 108.
 
- -- adombeck <18482300+adombeck@users.noreply.github.com>  Thu, 19 Mar 2026 12:01:06 +0000
+ -- Adrian <adrian.dombeck@canonical.com>  Thu, 19 Mar 2026 13:02:17 +0000
+
+authd (0.5.11) resolute; urgency=medium
+
+  * Skip flaky tests in autopkgtests and during deb build.
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Tue, 17 Mar 2026 12:27:02 +0100
 
 authd (0.5.10) resolute; urgency=medium
 
