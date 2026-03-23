@@ -185,6 +185,11 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 
 	// Construct an OIDC provider via OIDC discovery.
 	s.oidcServer, err = b.connectToOIDCServer(context.Background())
+	if err != nil && b.cfg.forceProviderAuthentication {
+		log.Errorf(context.Background(), "Could not connect to the provider and force_provider_authentication is set, denying authentication: %v", err)
+		//nolint:staticcheck,revive // ST1005 This error is displayed as is to the user, so it should be capitalized
+		return "", "", errors.New("Error connecting to provider. Check your network connection.")
+	}
 	if err != nil {
 		log.Noticef(context.Background(), "Could not connect to the provider, starting session in offline mode: %v", err)
 		s.isOffline = true
@@ -741,11 +746,6 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		session.authInfo = authInfo
 		session.nextAuthModes = []string{authmodes.NewPassword}
 		return AuthNext, nil
-	}
-
-	if b.cfg.forceProviderAuthentication && session.isOffline {
-		log.Error(context.Background(), "Remote authentication failed: force_provider_authentication is enabled, but the identity provider is not reachable")
-		return AuthDenied, errorMessage{Message: "Remote authentication failed: identity provider is not reachable"}
 	}
 
 	if authInfo.UserIsDisabled && session.isOffline {

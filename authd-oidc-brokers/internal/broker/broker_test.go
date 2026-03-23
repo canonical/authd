@@ -770,12 +770,6 @@ func TestIsAuthenticated(t *testing.T) {
 		"Error_when_mode_is_newpassword_and_session_has_no_token": {firstMode: authmodes.NewPassword},
 		// This test case also tests that errors with double quotes are marshaled to JSON correctly.
 		"Error_when_selected_username_does_not_match_the_provider_one": {username: "not-matching", firstSecret: "-"},
-		"Error_when_provider_authentication_is_forced_and_session_is_offline": {
-			firstMode:                   authmodes.Password,
-			token:                       &tokenOptions{},
-			forceProviderAuthentication: true,
-			sessionOffline:              true,
-		},
 		"Error_when_user_is_disabled_and_session_is_offline": {
 			firstMode:      authmodes.Password,
 			token:          &tokenOptions{userIsDisabled: true},
