@@ -30,7 +30,6 @@ import (
 	"github.com/canonical/authd/log"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
-	"github.com/ubuntu/decorate"
 	"golang.org/x/oauth2"
 )
 
@@ -158,8 +157,6 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 
 // NewSession creates a new session for the user.
 func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionKey string, err error) {
-	defer decorate.OnError(&err, "could not create new session for user %q", username)
-
 	sessionID = uuid.New().String()
 	s := session{
 		username: username,
@@ -171,7 +168,7 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 
 	pubASN1, err := x509.MarshalPKIXPublicKey(&b.privateKey.PublicKey)
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("failed to marshal broker public key: %v", err)
 	}
 
 	_, issuer, _ := strings.Cut(b.cfg.issuerURL, "://")
