@@ -190,9 +190,10 @@ Restore Snapshot
     Snapshot.Restore    ${snapshot_name}
     Wait Until System Time Synced
 
-Common Test Setup
+Test Setup
     Set Suite Metadata    Ubuntu Version   %{RELEASE}    top=True
     Set Suite Metadata    Broker    %{BROKER}    top=True
+    Restore Snapshot    ${snapshot}
     Journal.Start Receiving Journal
     VNCRecorder.Start Recording
 
@@ -201,7 +202,7 @@ Common Test Setup
 Log Videos On Error
     Run Keyword If    '${TEST STATUS}' == 'FAIL'    VideoLogger.Log videos
 
-Common Test Teardown
+Test Teardown
     VNCRecorder.Stop Recording
     Journal.Stop Receiving Journal
     Journal.Log Journal
