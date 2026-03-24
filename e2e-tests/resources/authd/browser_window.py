@@ -262,7 +262,7 @@ class BrowserWindow(Gtk.Window):
         cancellable.disconnect(connect_id)
 
         if not found:
-            raise TimeoutError(f"Timed out waiting for text: \"{pattern}\"")
+            raise TimeoutError(f"Timed out after {timeout_ms}ms waiting for pattern '{pattern}'")
 
         return found
 
