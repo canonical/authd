@@ -73,6 +73,10 @@ source "${LIB_DIR}/libprovision.sh"
 
 assert_env_vars RELEASE VM_NAME_BASE SSH_PUBLIC_KEY_FILE
 
+# Resolve the actual release name if "devel" is specified
+# shellcheck disable=SC2153 # RELEASE is not misspelled
+RELEASE_NAME=$(resolve_devel_release "${RELEASE}")
+
 # Validate SSH public key file
 if [ ! -f "${SSH_PUBLIC_KEY_FILE}" ]; then
     echo "SSH public key file not found: ${SSH_PUBLIC_KEY_FILE}"
@@ -91,7 +95,7 @@ sudo -v
 CLOUT_INIT_TIMEOUT=900
 
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-${DATA_DIR}/${RELEASE}}"
-CLOUD_INIT_TEMPLATE="${SCRIPT_DIR}/cloud-init-template-${RELEASE}.yaml"
+CLOUD_INIT_TEMPLATE="${SCRIPT_DIR}/cloud-init-template-${RELEASE_NAME}.yaml"
 
 if [ -z "${VM_NAME:-}" ]; then
     VM_NAME="${VM_NAME_BASE}-${RELEASE}"
@@ -115,7 +119,7 @@ function cloud_init_successful() {
 set -x
 
 # Download the image
-IMAGE_URL="https://cloud-images.ubuntu.com/${RELEASE}/current/${RELEASE}-server-cloudimg-amd64.img"
+IMAGE_URL="https://cloud-images.ubuntu.com/${RELEASE_NAME}/current/${RELEASE_NAME}-server-cloudimg-amd64.img"
 SOURCE_IMAGE="${CACHE_DIR}/$(basename "${IMAGE_URL}")"
 if [ ! -f "${SOURCE_IMAGE}" ]; then
     mkdir -p "${CACHE_DIR}"
