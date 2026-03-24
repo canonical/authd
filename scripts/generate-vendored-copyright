@@ -17,7 +17,7 @@ The script:
 
 Requirements:
     - python3-anytree
-    - licensecheck (from devscripts package)
+    - licensecheck
 """
 
 import os
@@ -363,7 +363,7 @@ class VendorLicenseScanner:
                 logger.error(f"  Error output: {e.stderr}")
             raise
         except FileNotFoundError:
-            logger.error("Error: licensecheck not found - please install the devscripts package")
+            logger.error("Error: licensecheck not found, please install it (e.g. apt install licensecheck)")
             sys.exit(1)
 
         for line in result.stdout.split('\n'):
@@ -969,4 +969,3 @@ Examples:
 
 if __name__ == '__main__':
     main()
-
