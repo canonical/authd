@@ -22,7 +22,7 @@ packages:
   - fonts-ubuntu
   - gdm3
   - gnome-shell
-  - gnome-shell-extension-ubuntu-dock
+  - gnome-shell-ubuntu-extensions
   - gsettings-ubuntu-schemas
   - openssh-server
   - policykit-desktop-privileges
