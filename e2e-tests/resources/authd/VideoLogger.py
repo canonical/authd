@@ -16,8 +16,6 @@ class VideoLogger:
         videos = sorted(glob.glob(pattern))
         for path in videos:
             title = os.path.basename(path).removesuffix('.webm').replace('_', ' ')
-            with open(path, 'rb') as f:
-                data = f.read()
-            b64 = base64.b64encode(data).decode('utf-8')
-            html = f'<video controls style="max-width: 50%" src="data:video/webm;base64,{b64}"></video>'
+            relpath = os.path.relpath(path, os.path.dirname(output_dir))
+            html = f'<video controls style="max-width: 50%;"><source src="{relpath}" type="video/webm"></video>'
             BuiltIn().set_test_message(f'*HTML*<h3>{title}</h3>{html}', append=True, separator='\n')
