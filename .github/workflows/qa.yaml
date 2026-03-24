@@ -20,6 +20,7 @@ on:
       - '!docs/**'
       - '!examplebroker/**'
       - '!gotestcov'
+      - '!scripts/**'
       - '!snap/**'
     tags:
       - "*"
@@ -41,6 +42,7 @@ on:
       - '!docs/**'
       - '!examplebroker/**'
       - '!gotestcov'
+      - '!scripts/**'
       - '!snap/**'
 
 concurrency:
