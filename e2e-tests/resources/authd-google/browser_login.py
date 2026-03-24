@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 import argparse
 import locale
+import logging
+import os
+import sys
 
-import gi, os, sys
+import gi
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
@@ -23,10 +26,12 @@ from browser_window import (
     ascii_string_to_key_events,
 )  # type: ignore # This is resolved at runtime
 
+logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%H:%M:%S')
+logger = logging.getLogger(__name__)
+
 from generate_totp import generate_totp # type: ignore # This is resolved at runtime
 
 SNAPSHOT_INDEX = 0
-
 
 def main():
     parser = argparse.ArgumentParser()
@@ -40,7 +45,7 @@ def main():
     password = os.getenv("E2E_PASSWORD")
     totp_secret = os.getenv("TOTP_SECRET")
     if username is None or password is None or totp_secret is None:
-        print("E2E_USER, E2E_PASSWORD, and TOTP_SECRET environment variables must be set", file=sys.stderr)
+        logger.error("E2E_USER, E2E_PASSWORD, and TOTP_SECRET environment variables must be set")
         sys.exit(1)
 
     locale.setlocale(locale.LC_ALL, "C")
@@ -80,7 +85,9 @@ def main():
 
 
 def login(browser, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):
-    browser.web_view.load_uri("https://accounts.google.com/o/oauth2/device/usercode?hl=en&flowName=DeviceOAuth")
+    url = "https://accounts.google.com/o/oauth2/device/usercode?hl=en&flowName=DeviceOAuth"
+    logger.info(f"Loading URL: {url}")
+    browser.web_view.load_uri(url)
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "page-loaded")
 

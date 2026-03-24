@@ -1,6 +1,7 @@
 import cairo
 import json
 import gi
+import logging
 import os
 import tempfile
 import traceback
@@ -19,6 +20,9 @@ from gi.repository import (
     Gio,
     WebKit2 as WebKit
 )  # type: ignore
+
+logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%H:%M:%S')
+logger = logging.getLogger(__name__)
 
 
 class BrowserWindow(Gtk.Window):
@@ -151,7 +155,9 @@ class BrowserWindow(Gtk.Window):
         self.web_view.disconnect(signal_id)
 
     def wait_for_stable_page(self):
+        logger.info("Waiting for stable page state...")
         self.wait_for_page_loaded()
+        logger.info("Stable page state reached")
 
         # This overlay serves us to ensure that focus-related elements of the
         # page (such as the cursor blinking) aren't affecting our page changes
@@ -188,6 +194,7 @@ class BrowserWindow(Gtk.Window):
     def wait_for_pattern(self, pattern, timeout_ms=5000,
                          poll_interval_ms=100) -> str|None:
         """Wait until `text` is present in the page's visible text and return the matched substring."""
+        logger.info(f"Waiting for pattern '{pattern}'...")
         loop = GLib.MainLoop()
         cancellable = Gio.Cancellable()
         inject_delay_id = 0
@@ -264,6 +271,7 @@ class BrowserWindow(Gtk.Window):
         if not found:
             raise TimeoutError(f"Timed out after {timeout_ms}ms waiting for pattern '{pattern}'")
 
+        logger.info(f"Pattern '{pattern}' found")
         return found
 
     def send_key(self, event_type, key):
@@ -291,6 +299,7 @@ class BrowserWindow(Gtk.Window):
         self.send_key(Gdk.EventType.KEY_RELEASE, key)
 
     def send_key_taps(self, key_taps):
+        logger.info(f"Sending key taps: {key_taps}")
         for kt in key_taps:
             self.send_key_tap(kt)
 
