@@ -299,3 +299,6 @@ Check That Remote User Is Not Allowed To Log In
 
 Check That Login Is Handled By PAM Unix
     Match Text    Password:
+
+Check That SSH Connection Is Closed
+    Match Text    Connection closed
