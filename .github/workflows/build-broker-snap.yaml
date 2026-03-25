@@ -36,6 +36,8 @@ jobs:
           echo "hash=${hash}" >> "${GITHUB_OUTPUT}"
 
       - uses: ./.github/actions/setup-oras
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Try to restore broker snap from OCI registry cache
         id: restore-cache
