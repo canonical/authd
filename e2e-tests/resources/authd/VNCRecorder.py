@@ -68,7 +68,7 @@ class VNCRecorder:
     def start_recording(self, host='localhost', port=5901, resolution='1280x800'):
         """Start recording the VNC session to a video file."""
         output_dir = str(BuiltIn().get_variable_value('${SUITE_OUTPUT_DIR}'))
-        output_path = os.path.join(output_dir, 'VM_Recording.webm')
+        output_path = os.path.join(output_dir, 'VM_Recording.mp4')
 
         display_num = find_unused_display()
         display = f':{display_num}'
@@ -113,17 +113,30 @@ class VNCRecorder:
         time.sleep(0.1)
 
         # Record the VNC session to a video file
-        cmd = ['ffmpeg',
-               '-loglevel', 'warning',
-               '-y',
-               '-f', 'x11grab',
-               '-r', '25',
-               '-s', resolution,
-               '-i', f'{display}.0',
-               '-codec:v', 'libvpx-vp9',
-               '-preset', 'fast',
-               '-crf', '23',
-               output_path]
+        cmd = [
+            'ffmpeg',
+            '-loglevel', 'warning',
+            # Overwrite output file if it already exists
+            '-y',
+            # Use X11 screen capture as input
+            '-f', 'x11grab',
+            # Capture at 25 frames per second, so we don't miss any quick screen updates
+            '-r', '25',
+            '-s', resolution,
+            '-i', f'{display}.0',
+            # H.265 encoder: better compression than VP9, supported in Firefox 130+, Chrome 107+
+            '-codec:v', 'libx265',
+            # Constant Rate Factor: quality scale 0-51, lower = better; 32 is good for screen content
+            '-crf', '32',
+            # Encoding speed preset; 'fast' gives good compression with acceptable encoding time
+            '-preset', 'fast',
+            # Force 8-bit pixel format: browsers require yuv420p and won't play 10-bit H.265
+            '-pix_fmt', 'yuv420p',
+            # Tag the stream as hvc1 (instead of default hev1) for broader browser compatibility
+            '-tag:v', 'hvc1',
+            output_path,
+        ]
+
         logger.info(f"Starting ffmpeg with command: {' '.join(cmd)}")
         self._ffmpeg_proc = subprocess.Popen(
             cmd,

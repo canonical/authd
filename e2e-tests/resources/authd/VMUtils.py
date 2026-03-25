@@ -31,4 +31,4 @@ def vm_ip(timeout=60):
 
         time.sleep(1)
 
-    raise RuntimeError(f"Timed out waiting for IPv4 address of VM '{vm_name()}'")
+    raise RuntimeError(f"Timed out after {timeout} seconds waiting for IPv4 address of VM '{vm_name()}'")

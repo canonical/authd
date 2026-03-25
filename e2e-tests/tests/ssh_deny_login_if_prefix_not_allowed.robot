@@ -7,19 +7,17 @@ Resource        ./resources/broker/broker.resource
 # Test Tags       robot:exit-on-failure
 
 Test Setup    Test Setup
-Test Teardown   Test Teardown
+Test Teardown   utils.Test Teardown
 
 
 *** Keywords ***
 Test Setup
-    Restore Snapshot    %{BROKER}-installed
-    Common Test Setup
+    utils.Test Setup
     Change Broker Configuration    ssh_allowed_suffixes_first_auth    %{E2E_USER}
 
-Test Teardown
-    Common Test Teardown
 
 *** Variables ***
+${snapshot}    %{BROKER}-installed
 ${local_password}    qwer1234
 ${remote_group}    %{E2E_USER}-group
 
