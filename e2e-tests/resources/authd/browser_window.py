@@ -437,9 +437,22 @@ def render_video(screenshot_dir: str, video_path: str, framerate: int = 1):
     ExecUtils.check_call([
         "ffmpeg",
         "-loglevel", "warning",
+        # Overwrite output file if it already exists
         "-y",
+        # Set the frame rate of the input image sequence
         "-framerate", str(framerate),
+        # Allow glob patterns in the input path
         "-pattern_type", "glob",
         "-i", f"{screenshot_dir}/*.png",
+        # H.265 encoder: better compression than VP9, supported in Firefox 130+, Chrome 107+
+        "-codec:v", "libx265",
+        # Constant Rate Factor: quality scale 0-51, lower = better; 32 is good for screen content
+        "-crf", "32",
+        # Encoding speed preset; 'medium' gives better compression since this is post-processing
+        "-preset", "medium",
+        # Force 8-bit pixel format: browsers require yuv420p and won't play 10-bit H.265
+        "-pix_fmt", "yuv420p",
+        # Tag the stream as hvc1 (instead of default hev1) for broader browser compatibility
+        "-tag:v", "hvc1",
         video_path,
     ])

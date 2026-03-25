@@ -80,7 +80,7 @@ def main():
         finally:
             if browser.get_mapped():
                 browser.capture_snapshot(screenshot_dir, "failure")
-            browser.stop_recording(os.path.join(args.output_dir, "Webview_Recording.webm"))
+            browser.stop_recording(os.path.join(args.output_dir, "Webview_Recording.mp4"))
             browser.destroy()
 
 
