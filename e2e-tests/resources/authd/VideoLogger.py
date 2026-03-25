@@ -17,5 +17,7 @@ class VideoLogger:
         for path in videos:
             title = os.path.basename(path).removesuffix('.webm').replace('_', ' ')
             relpath = os.path.relpath(path, os.path.dirname(output_dir))
-            html = f'<video controls style="max-width: 50%;"><source src="{relpath}" type="video/webm"></video>'
+            # preload="metadata" fetches only the video duration and first frame without
+            # downloading the full video, keeping the HTML log page fast to load.
+            html = f'<video controls style="max-width: 50%;" preload="metadata"><source src="{relpath}" type="video/webm"></video>'
             BuiltIn().set_test_message(f'*HTML*<h3>{title}</h3>{html}', append=True, separator='\n')
