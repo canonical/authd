@@ -80,6 +80,11 @@ body:
         $(snap info authd-msentraid 2>/dev/null)
         \`\`\`
 
+        #### authd-google broker version
+        \`\`\`
+        $(snap info authd-google 2>/dev/null)
+        \`\`\`
+
         #### gnome-shell version
         \`\`\`
         $(apt policy gnome-shell 2>/dev/null)
