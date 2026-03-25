@@ -1,7 +1,7 @@
 [workspace]
 members = ["nss/"]
 exclude = ["vendor_rust/", "authd-oidc-brokers/third_party/libhimmelblau/", "parts/libhimmelblau/build"]
-resolver = "2"
+resolver = "3"
 
 [profile.release]
 lto = "thin"
