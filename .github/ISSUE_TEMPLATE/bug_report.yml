@@ -85,6 +85,11 @@ body:
         $(snap info authd-google 2>/dev/null)
         \`\`\`
 
+        #### authd-oidc broker version
+        \`\`\`
+        $(snap info authd-oidc 2>/dev/null)
+        \`\`\`
+
         #### gnome-shell version
         \`\`\`
         $(apt policy gnome-shell 2>/dev/null)
@@ -126,6 +131,11 @@ body:
         #### authd-google configuration
         \`\`\`
         $(sudo cat 2>&1 /var/snap/authd-google/current/broker.conf | sed -E 's/client_id = .*/client_id = <redacted>/g' | sed -E 's/client_secret = .*/client_secret = <redacted>/g')
+        \`\`\`
+
+        #### authd-oidc configuration
+        \`\`\`
+        $(sudo cat 2>&1 /var/snap/authd-oidc/current/broker.conf | sed -E 's/client_id = .*/client_id = <redacted>/g' | sed -E 's/client_secret = .*/client_secret = <redacted>/g')
         \`\`\`
 
         EOF
