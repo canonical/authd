@@ -27,7 +27,7 @@ func TestGetUserInfo(t *testing.T) {
 				"email_verified": true,
 				"home":           "/home/user",
 				"shell":          "/bin/bash",
-				"gecos":          "Test User",
+				"name":           "Test User",
 			},
 			wantUser: info.NewUser("user@example.com", "/home/user", "sub123", "/bin/bash", "Test User", nil),
 		},
