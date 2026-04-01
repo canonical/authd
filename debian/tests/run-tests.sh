@@ -12,7 +12,7 @@ export AUTHD_SKIP_FLAKY_TESTS=1
 export GOPROXY=off
 export GOTOOLCHAIN=local
 
-PATH=$PATH:$("$(dirname "$0")"/../get-depends-go-bin-path.sh)
+PATH=$("$(dirname "$0")"/../get-depends-cargo-bin-path.sh):$("$(dirname "$0")"/../get-depends-go-bin-path.sh):$PATH
 export PATH
 
 go test ./...
