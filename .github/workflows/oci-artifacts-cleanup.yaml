@@ -45,12 +45,15 @@ jobs:
 
   cleanup-e2e-test-vm-image:
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
     steps:
+      - uses: actions/checkout@v6
       - name: Delete e2e-test VM image OCI artifacts
         uses: actions/delete-package-versions@v5
         with:
+          # Deleting this internal package requires a token with the
+          # delete:packages scope, which is not available to the GITHUB_TOKEN,
+          # so we need to use a PAT stored in the repository secrets.
+          token: ${{ secrets.DELETE_PACKAGE_PAT }}
           package-name: authd/e2e-runner
           package-type: container
           min-versions-to-keep: 10
