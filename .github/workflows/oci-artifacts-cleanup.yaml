@@ -4,6 +4,9 @@ on:
     # run every day at 5am UTC
     - cron: '0 5 * * *'
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/oci-artifacts-cleanup.yaml"
 
 jobs:
   cleanup-broker-snap:
