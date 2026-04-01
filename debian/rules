@@ -106,6 +106,8 @@ override_dh_auto_build:
 	DH_GOLANG_GO_GENERATE=1 dh_auto_build -- $(AUTHD_GO_PACKAGE)/pam
 
 	# Build the NSS library
+	echo "PATH: $(PATH)"
+	echo "Building NSS library with $$(which cargo) ($$(cargo --version))"
 	cargo build --release
 
 	# Build the daemon
