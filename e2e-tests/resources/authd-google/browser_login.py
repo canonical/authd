@@ -115,7 +115,7 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
     browser.send_key_taps(
         ascii_string_to_key_events(generate_totp(totp_secret)) + [Gdk.KEY_Return])
 
-    browser.wait_for_pattern("Choose an account")
+    browser.wait_for_pattern("Choose an account", timeout_ms=20000)
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-choose-account")
     browser.send_key_taps([Gdk.KEY_Return])

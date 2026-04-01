@@ -65,8 +65,9 @@ class VNCRecorder:
         self._ffmpeg_proc = None
 
     @keyword
-    def start_recording(self, host='localhost', port=5901, resolution='1280x800'):
+    def start_recording(self, host='localhost', resolution='1280x800'):
         """Start recording the VNC session to a video file."""
+        port = os.getenv('VNC_PORT', 5901)
         output_dir = str(BuiltIn().get_variable_value('${SUITE_OUTPUT_DIR}'))
         output_path = os.path.join(output_dir, 'VM_Recording.mp4')
 
