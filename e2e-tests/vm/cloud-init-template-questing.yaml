@@ -107,16 +107,16 @@ runcmd:
   # Update dconf database
   - dconf update
   # Disable systemd-networkd-wait-online to speed up boot time
-  - sudo systemctl mask systemd-networkd-wait-online.service
+  - systemctl mask systemd-networkd-wait-online.service
   # Enable our systemd services
-  - sudo systemctl enable journal-export.service
+  - systemctl enable journal-export.service
   # Avoid APT downloads and upgrades during the tests
-  - sudo systemctl mask apt-daily.service
-  - sudo systemctl mask apt-daily.timer
-  - sudo systemctl mask apt-daily-upgrade.service
-  - sudo systemctl mask apt-daily-upgrade.timer
-  - sudo systemctl mask unattended-upgrades.service
-  - sudo rm -f /etc/apt/apt.conf.d/20auto-upgrades /etc/apt/apt.conf.d/50unattended-upgrades
+  - systemctl mask apt-daily.service
+  - systemctl mask apt-daily.timer
+  - systemctl mask apt-daily-upgrade.service
+  - systemctl mask apt-daily-upgrade.timer
+  - systemctl mask unattended-upgrades.service
+  - rm -f /etc/apt/apt.conf.d/20auto-upgrades /etc/apt/apt.conf.d/50unattended-upgrades
 
 final_message: "Provisioning finished after $UPTIME seconds"
 
