@@ -1,4 +1,4 @@
-authd (0.6.0~pre2) UNRELEASED; urgency=medium
+authd (0.6.0) UNRELEASED; urgency=medium
 
   * Change default UID/GID range to 10000:60000.
   * Add authctl, a command-line tool to manage authd users and groups.
