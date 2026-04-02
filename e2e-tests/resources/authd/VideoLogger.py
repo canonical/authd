@@ -12,12 +12,12 @@ class VideoLogger:
     @keyword
     def log_videos(self):
         output_dir = str(BuiltIn().get_variable_value('${SUITE_OUTPUT_DIR}'))
-        pattern = os.path.join(output_dir, '*.webm')
+        pattern = os.path.join(output_dir, '*.mp4')
         videos = sorted(glob.glob(pattern))
         for path in videos:
-            title = os.path.basename(path).removesuffix('.webm').replace('_', ' ')
-            with open(path, 'rb') as f:
-                data = f.read()
-            b64 = base64.b64encode(data).decode('utf-8')
-            html = f'<video controls style="max-width: 50%" src="data:video/webm;base64,{b64}"></video>'
+            title = os.path.basename(path).removesuffix('.mp4').replace('_', ' ')
+            relpath = os.path.relpath(path, os.path.dirname(output_dir))
+            # preload="metadata" fetches only the video duration and first frame without
+            # downloading the full video, keeping the HTML log page fast to load.
+            html = f'<video controls style="max-width: 50%;" preload="metadata"><source src="{relpath}" type="video/mp4"></video>'
             BuiltIn().set_test_message(f'*HTML*<h3>{title}</h3>{html}', append=True, separator='\n')

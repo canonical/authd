@@ -394,7 +394,29 @@ removed, it will be regenerated on the next successful login.
 
 :::::
 
+(ref::config-home-base-dir)=
+
+## Configure the home directory location
+
+By default, home directories for new authd users are created under `/home`, in
+the format `/home/<username>`.
+
+You can change the base directory for new users' home directories with the
+`home_base_dir` option in the `users` section of the broker configuration file:
+
+```ini
+[users]
+## The directory where home directories are created when users log in for the first time.
+## Paths are created in the format <home_base_dir>/<username>
+home_base_dir = /home
+```
+
+:::{note}
+Changing the base directory only affects users logging in for the first time.
+:::
+
 (ref::config-user-groups)=
+
 ## Configure user groups
 
 Some brokers support adding users to groups that are configured in the identity

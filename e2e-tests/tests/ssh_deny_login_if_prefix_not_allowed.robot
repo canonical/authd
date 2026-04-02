@@ -7,19 +7,17 @@ Resource        ./resources/broker/broker.resource
 # Test Tags       robot:exit-on-failure
 
 Test Setup    Test Setup
-Test Teardown   Test Teardown
+Test Teardown   utils.Test Teardown
 
 
 *** Keywords ***
 Test Setup
-    Restore Snapshot    %{BROKER}-installed
-    Common Test Setup
+    utils.Test Setup
     Change Broker Configuration    ssh_allowed_suffixes_first_auth    %{E2E_USER}
 
-Test Teardown
-    Common Test Teardown
 
 *** Variables ***
+${snapshot}    %{BROKER}-installed
 ${local_password}    qwer1234
 ${remote_group}    %{E2E_USER}-group
 
@@ -36,4 +34,11 @@ Test that login is denied if user is not allowed to log in via SSH
     ${username} =    Set Variable    other-user@${domain}
     Open Terminal
     Start Log In With Remote User Through SSH: QR Code    ${username}
-    Check That Login Is Handled By PAM Unix
+    # On Noble and Questing, the SSH login for not allowed users is handled by PAM Unix, which returns a generic "Permission denied" message without specifying the reason.
+    # In newer versions, the login attempt is blocked and the connection closed before reaching PAM.
+    # Check the %{RELEASE} variable to determine the expected behavior.
+    IF    '%{RELEASE}' in ['noble', 'questing']
+        Check That Login Is Handled By PAM Unix
+    ELSE
+        Check That SSH Connection Is Closed
+    END

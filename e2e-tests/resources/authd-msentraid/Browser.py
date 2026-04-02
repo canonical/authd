@@ -6,14 +6,6 @@ from robot.api import logger
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-def run_command(args):
-    result = subprocess.run(args, stderr=subprocess.PIPE, text=True)
-    if result.returncode == 0:
-        return
-
-    cmd = " ".join(args)
-    raise RuntimeError(f"Command '{cmd}' failed with exit code {result.returncode}:\n{result.stderr}")
-
 
 @library
 class Browser:
@@ -40,4 +32,9 @@ class Browser:
                           "--",
                       ] + command
 
-        run_command(command)
+        result = subprocess.run(command, stderr=subprocess.PIPE, text=True)
+        if result.returncode == 0:
+            return
+
+        logger.error(f"Command '{' '.join(command)}' failed with exit code {result.returncode}")
+        raise RuntimeError(f"Browser login failed\n{result.stderr}")

@@ -20,6 +20,7 @@ on:
       - '!docs/**'
       - '!examplebroker/**'
       - '!gotestcov'
+      - '!scripts/**'
       - '!**_test.go'
       - '!**/testdata/**'
       - '!**/testutils/**'
@@ -43,6 +44,7 @@ on:
       - '!docs/**'
       - '!examplebroker/**'
       - '!gotestcov'
+      - '!scripts/**'
       - '!**_test.go'
       - '!**/testdata/**'
       - '!**/testutils/**'
@@ -72,7 +74,7 @@ jobs:
     needs: compute-hash
     strategy:
       matrix:
-        ubuntu-version: [ 'noble', 'questing' ]
+        ubuntu-version: [ 'noble', 'questing', 'devel' ]
       fail-fast: false
     uses: ./.github/workflows/e2e-tests-provision-and-run.yaml
     with:

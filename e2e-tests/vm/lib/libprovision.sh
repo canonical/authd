@@ -21,6 +21,28 @@ function assert_env_vars() {
     fi
 }
 
+function resolve_devel_release() {
+    local release="$1"
+
+    # If the release is set to "devel", we need to get the actual codename of the devel release.
+    if [ "${release}" != "devel" ]; then
+        echo "${release}"
+        return
+    fi
+
+    # Temporarily disable pipefail because wget exits with a "broken pipe"
+    # error (exit code 3) when awk exits early after finding the first match.
+    set +o pipefail
+    codename=$(wget -qO- http://archive.ubuntu.com/ubuntu/dists/devel/Release | awk -F': ' '$1 == "Codename" { print $2; exit }')
+    set -o pipefail
+    if [ -z "${codename}" ]; then
+        echo >&2 "Error: Failed to resolve devel release codename"
+        exit 1
+    fi
+
+    echo "${codename}"
+}
+
 function has_snapshot() {
     local snapshot_name="$1"
     virsh snapshot-list "${VM_NAME}" | grep -q "${snapshot_name}"

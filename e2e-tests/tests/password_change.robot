@@ -6,20 +6,12 @@ Resource        ./resources/broker/broker.resource
 
 # Test Tags       robot:exit-on-failure
 
-Test Setup    Test Setup
-Test Teardown   Test Teardown
-
-
-*** Keywords ***
-Test Setup
-    Restore Snapshot    %{BROKER}-installed
-    Common Test Setup
-
-Test Teardown
-    Common Test Teardown
+Test Setup    utils.Test Setup
+Test Teardown   utils.Test Teardown
 
 
 *** Variables ***
+${snapshot}    %{BROKER}-installed
 ${username}    %{E2E_USER}
 ${local_password}    qwer1234
 ${new_password}    passwd1234

@@ -45,6 +45,8 @@ jobs:
       - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-oras
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download the Debian sources
         env:
@@ -84,6 +86,8 @@ jobs:
       - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-oras
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download the Debian sources
         env:
@@ -128,7 +132,7 @@ jobs:
           fi
 
       - name: Extract the debian sources
-        run: dpkg-source -x ${{ env.pkg_dsc }} sources
+        run: dpkg-source -x ${{ needs.build-deb.outputs.pkg-dsc }} sources
 
       - name: Commit packaging sources
         run: |
@@ -158,4 +162,4 @@ jobs:
             -m "Use upstream commit ${{ github.sha }}"
 
       - name: Push to packaging branch
-        run: git -C sources push origin "${{ env.PACKAGING_BRANCH }}:${{ env.PACKAGING_BRANCH }}"
+        run: git -C packaging-branch push origin "${{ env.PACKAGING_BRANCH }}:${{ env.PACKAGING_BRANCH }}"
