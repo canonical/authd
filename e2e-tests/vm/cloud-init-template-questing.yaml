@@ -6,7 +6,7 @@ users:
     ssh_authorized_keys:
       - ${SSH_PUBLIC_KEY}
   - name: ubuntu
-    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    sudo: [ 'ALL=(ALL) NOPASSWD:ALL' ]
     lock_passwd: false
     gecos: Ubuntu
     groups: sudo
@@ -17,7 +17,7 @@ users:
 chpasswd:
   expire: false
   users:
-    - {name: ubuntu, password: ubuntu, type: text}
+    - { name: ubuntu, password: ubuntu, type: text }
 
 package_update: true
 package_upgrade: true
