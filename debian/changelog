@@ -1,8 +1,25 @@
-authd (0.5.11+git260330+132+35073fbf) questing; urgency=medium
+authd (0.6.0+git260402+147+2bfc261a) questing; urgency=medium
 
-  * Github build. Run id: 23734376367. Run number: 132.
+  * Github build. Run id: 23897516275. Run number: 147.
 
- -- Noor <nooreldeen.mansour@canonical.com>  Mon, 30 Mar 2026 08:05:53 +0000
+ -- Adrian <adrian.dombeck@canonical.com>  Thu, 02 Apr 2026 11:10:39 +0000
+
+authd (0.6.0) resolute; urgency=medium
+
+  * Change default UID/GID range to 10000:60000.
+  * Add authctl, a command-line tool to manage authd users and groups.
+  * Deny login if session is offline and user or device is disabled.
+  * Allow setting the same local password when redoing device authentication.
+  * Make errors when checking home dir owner during startup non-fatal.
+  * Fix authentication behaviour when refresh token is missing.
+  * Fix GDM broken when authd is uninstalled.
+  * Avoid races when getting user and group entries.
+  * Use lckpwdf to lock the database when manipulating users or groups.
+  * Improve error messages.
+  * debian/control: Install missing build dependency systemd-dev.
+  * debian/postrm: Remove /etc/pam.d/gdm-authd.
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Thu, 02 Apr 2026 12:44:28 +0200
 
 authd (0.5.11) resolute; urgency=medium
 
