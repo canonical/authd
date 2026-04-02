@@ -51,4 +51,4 @@ exec ssh \
   -o UserKnownHostsFile=/dev/null \
   -o StrictHostKeyChecking=no \
   -o LogLevel=ERROR \
-  ubuntu@localhost "$@"
+  root@localhost "$@"

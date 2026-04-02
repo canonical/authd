@@ -2,6 +2,9 @@
 password: ubuntu
 ssh_pwauth: true
 users:
+  - name: root
+    ssh_authorized_keys:
+      - ${SSH_PUBLIC_KEY}
   - name: ubuntu
     sudo: [ 'ALL=(ALL) NOPASSWD:ALL' ]
     lock_passwd: false

@@ -193,7 +193,7 @@ function scp_to_vm() {
       -o UserKnownHostsFile=/dev/null \
       -o StrictHostKeyChecking=no \
       -o LogLevel=ERROR \
-      "${local_path}" "ubuntu@localhost:${remote_path}"
+      "${local_path}" "root@localhost:${remote_path}"
 }
 
 # Print executed commands to ease debugging
