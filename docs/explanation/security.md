@@ -1,3 +1,10 @@
+---
+myst:
+  html_meta:
+    "description lang=en":
+      "Design decisions, security practices, and configurations affecting authd security."
+---
+
 # Security overview for authd
 
 authd lets Ubuntu systems verify user identities through trusted cloud identity
@@ -200,5 +207,5 @@ still be exploited to gain full root privileges.
 
 ## Reporting a vulnerability
 
-See the [authd security policy](https://github.com/ubuntu/authd?tab=security-ov-file#security-ov-file)
+See the [authd security policy](https://github.com/canonical/authd?tab=security-ov-file#security-ov-file)
 for details on how to report security vulnerabilities in authd.

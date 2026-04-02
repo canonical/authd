@@ -8,9 +8,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/canonical/authd/internal/users/localentries"
+	"github.com/canonical/authd/internal/users/types"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/users/localentries"
-	"github.com/ubuntu/authd/internal/users/types"
 )
 
 func TestEntriesWithLockInvalidActions(t *testing.T) {

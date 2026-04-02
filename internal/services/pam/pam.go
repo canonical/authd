@@ -9,15 +9,15 @@ import (
 	"os/user"
 	"strings"
 
-	"github.com/ubuntu/authd/internal/brokers"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/internal/services/permissions"
-	"github.com/ubuntu/authd/internal/users"
-	"github.com/ubuntu/authd/internal/users/types"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/decorate"
+	"github.com/canonical/authd/internal/brokers"
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/services/permissions"
+	"github.com/canonical/authd/internal/users"
+	"github.com/canonical/authd/internal/users/types"
+	"github.com/canonical/authd/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -63,13 +63,16 @@ func (s Service) AvailableBrokers(ctx context.Context, _ *authd.Empty) (*authd.A
 // GetPreviousBroker returns the previous broker set for a given user, if any.
 // If the user is not in our cache/database, it will try to check if it’s on the system, and return then "local".
 func (s Service) GetPreviousBroker(ctx context.Context, req *authd.GPBRequest) (*authd.GPBResponse, error) {
+	// authd usernames are lowercase
+	username := strings.ToLower(req.GetUsername())
+
 	// Use in memory cache first
-	if b := s.brokerManager.BrokerForUser(req.GetUsername()); b != nil {
+	if b := s.brokerManager.BrokerForUser(username); b != nil {
 		return &authd.GPBResponse{PreviousBroker: b.ID}, nil
 	}
 
 	// Load from database.
-	brokerID, err := s.userManager.BrokerForUser(req.GetUsername())
+	brokerID, err := s.userManager.BrokerForUser(username)
 	// User is not in our database.
 	if err != nil && errors.Is(err, users.NoDataFoundError{}) {
 		// FIXME: this part will not be here in the v2 API version, as we won’t have GetPreviousBroker and handle
@@ -81,8 +84,8 @@ func (s Service) GetPreviousBroker(ctx context.Context, req *authd.GPBRequest) (
 		}
 
 		// User not accessible through NSS, first time login or no valid user. Anyway, no broker selected.
-		if _, err := user.Lookup(req.GetUsername()); err != nil {
-			log.Debugf(ctx, "GetPreviousBroker: User %q not found", req.GetUsername())
+		if _, err := user.Lookup(username); err != nil {
+			log.Debugf(ctx, "GetPreviousBroker: User %q not found", username)
 			return &authd.GPBResponse{}, nil
 		}
 
@@ -90,16 +93,18 @@ func (s Service) GetPreviousBroker(ctx context.Context, req *authd.GPBRequest) (
 		// service (passwd, winbind, sss…) is handling that user.
 		brokerID = brokers.LocalBrokerName
 	} else if err != nil {
-		log.Infof(ctx, "GetPreviousBroker: Could not get broker for user %q from database: %v", req.GetUsername(), err)
+		log.Infof(ctx, "GetPreviousBroker: Could not get broker for user %q from database: %v", username, err)
 		return &authd.GPBResponse{}, nil
 	}
 
 	// No error but the brokerID is empty (broker in database but default broker not stored yet due no successful login)
 	if brokerID == "" {
-		log.Infof(ctx, "GetPreviousBroker: No broker set for user %q, letting the user select a new one", req.GetUsername())
+		log.Infof(ctx, "GetPreviousBroker: No broker set for user %q, letting the user select a new one", username)
 		return &authd.GPBResponse{}, nil
 	}
 
+	// Check if the broker still exists. Its config file might have been removed from the config directory after the
+	// user logged in the last time, in which case we let the user select a new broker.
 	if !s.brokerManager.BrokerExists(brokerID) {
 		log.Warningf(ctx, "GetPreviousBroker: Broker %q set for user %q does not exist, letting the user select a new one", brokerID, req.GetUsername())
 		return &authd.GPBResponse{}, nil
@@ -111,8 +116,8 @@ func (s Service) GetPreviousBroker(ctx context.Context, req *authd.GPBRequest) (
 	if brokerID == brokers.LocalBrokerName {
 		return &authd.GPBResponse{PreviousBroker: brokerID}, nil
 	}
-	if err = s.brokerManager.SetDefaultBrokerForUser(brokerID, req.GetUsername()); err != nil {
-		log.Warningf(ctx, "GetPreviousBroker: Could not cache broker %q for user %q: %v", brokerID, req.GetUsername(), err)
+	if err = s.brokerManager.SetDefaultBrokerForUser(brokerID, username); err != nil {
+		log.Warningf(ctx, "GetPreviousBroker: Could not cache broker %q for user %q: %v", brokerID, username, err)
 		return &authd.GPBResponse{}, nil
 	}
 
@@ -123,14 +128,10 @@ func (s Service) GetPreviousBroker(ctx context.Context, req *authd.GPBRequest) (
 
 // SelectBroker starts a new session and selects the requested broker for the user.
 func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *authd.SBResponse, err error) {
-	defer decorate.OnError(&err, "can't start authentication transaction")
-
-	username := req.GetUsername()
+	// authd usernames are lowercase
+	username := strings.ToLower(req.GetUsername())
 	brokerID := req.GetBrokerId()
 	lang := req.GetLang()
-
-	// authd usernames are lowercase
-	username = strings.ToLower(username)
 
 	if username == "" {
 		log.Errorf(ctx, "SelectBroker: No user name provided")
@@ -248,8 +249,6 @@ func (s Service) SelectAuthenticationMode(ctx context.Context, req *authd.SAMReq
 
 // IsAuthenticated returns broker answer to authentication request.
 func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (resp *authd.IAResponse, err error) {
-	defer decorate.OnError(&err, "can't check authentication")
-
 	sessionID := req.GetSessionId()
 	if sessionID == "" {
 		log.Errorf(ctx, "IsAuthenticated: No session ID provided")
@@ -289,6 +288,27 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		return nil, fmt.Errorf("user data from broker invalid: %v", err)
 	}
 
+	// authd uses lowercase user and group names
+	uInfo.Name = strings.ToLower(uInfo.Name)
+	for i, g := range uInfo.Groups {
+		uInfo.Groups[i].Name = strings.ToLower(g.Name)
+	}
+
+	// Check if the user is locked. We can only do this after the broker has granted access, because we want to avoid
+	// leaking whether a user exists or not to unauthenticated users.
+	// TODO: We might want to let the broker know whether the user is locked or not, so that it can avoid storing any
+	//       updated tokens or user info on disk.
+	userIsLocked, err := s.userManager.IsUserLocked(uInfo.Name)
+	if err != nil && !errors.Is(err, users.NoDataFoundError{}) {
+		log.Errorf(ctx, "IsAuthenticated: Could not check if user %q is locked: %v", uInfo.Name, err)
+		return nil, fmt.Errorf("could not check if user %q is locked: %w", uInfo.Name, err)
+	}
+	// Throw an error if the user trying to authenticate already exists in the database and is locked
+	if err == nil && userIsLocked {
+		log.Noticef(ctx, "Authentication failure: user %q is locked", uInfo.Name)
+		return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("user %s is locked", uInfo.Name))
+	}
+
 	// Update database and local groups on granted auth.
 	if err := s.userManager.UpdateUser(uInfo); err != nil {
 		log.Errorf(ctx, "IsAuthenticated: Could not update user %q in database: %v", uInfo.Name, err)
@@ -305,25 +325,29 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 func (s Service) SetDefaultBrokerForUser(ctx context.Context, req *authd.SDBFURequest) (empty *authd.Empty, err error) {
 	defer decorate.OnError(&err, "can't set default broker %q for user %q", req.GetBrokerId(), req.GetUsername())
 
-	if req.GetUsername() == "" {
+	// authd usernames are lowercase
+	username := strings.ToLower(req.GetUsername())
+	brokerID := req.GetBrokerId()
+
+	if username == "" {
 		log.Errorf(ctx, "SetDefaultBrokerForUser: No user name given")
 		return nil, status.Error(codes.InvalidArgument, "no user name given")
 	}
 
 	// Don't allow setting the default broker to the local broker, because the decision to use the local broker should
 	// be made each time the user tries to log in, based on whether the user is provided by any other NSS service.
-	if req.GetBrokerId() == brokers.LocalBrokerName {
-		log.Errorf(ctx, "SetDefaultBrokerForUser: Can't set local broker as default for user %q", req.GetUsername())
+	if brokerID == brokers.LocalBrokerName {
+		log.Errorf(ctx, "SetDefaultBrokerForUser: Can't set local broker as default for user %q", username)
 		return nil, status.Error(codes.InvalidArgument, "can't set local broker as default")
 	}
 
-	if err = s.brokerManager.SetDefaultBrokerForUser(req.GetBrokerId(), req.GetUsername()); err != nil {
-		log.Errorf(ctx, "SetDefaultBrokerForUser: Could not set default broker %q for user %q: %v", req.GetBrokerId(), req.GetUsername(), err)
+	if err = s.brokerManager.SetDefaultBrokerForUser(brokerID, username); err != nil {
+		log.Errorf(ctx, "SetDefaultBrokerForUser: Could not set default broker %q for user %q: %v", brokerID, username, err)
 		return &authd.Empty{}, err
 	}
 
-	if err = s.userManager.UpdateBrokerForUser(req.GetUsername(), req.GetBrokerId()); err != nil {
-		log.Errorf(ctx, "SetDefaultBrokerForUser: Could not update broker for user %q in database: %v", req.GetUsername(), err)
+	if err = s.userManager.UpdateBrokerForUser(username, brokerID); err != nil {
+		log.Errorf(ctx, "SetDefaultBrokerForUser: Could not update broker for user %q in database: %v", username, err)
 		return &authd.Empty{}, err
 	}
 

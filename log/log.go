@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"maps"
+	"os"
 	"sync"
 	"sync/atomic"
 )
@@ -20,7 +21,7 @@ type (
 )
 
 var logLevelMu = sync.RWMutex{}
-var logLevel slog.Level
+var logLevel = NoticeLevel
 
 var hasCustomOutput atomic.Pointer[io.Writer]
 
@@ -63,6 +64,10 @@ var defaultHandlers = map[Level]Handler{
 }
 var handlers = maps.Clone(defaultHandlers)
 var handlersMu = sync.RWMutex{}
+
+func init() {
+	SetOutput(os.Stderr)
+}
 
 // GetLevel gets the standard logger level.
 func GetLevel() Level {

@@ -8,15 +8,15 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/users/db"
+	"github.com/canonical/authd/internal/users/localentries"
+	localgrouptestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	userslocking "github.com/canonical/authd/internal/users/locking"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/internal/fileutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	"github.com/ubuntu/authd/internal/users/db"
-	"github.com/ubuntu/authd/internal/users/localentries"
-	localgrouptestutils "github.com/ubuntu/authd/internal/users/localentries/testutils"
-	userslocking "github.com/ubuntu/authd/internal/users/locking"
-	"github.com/ubuntu/authd/log"
 )
 
 func TestNew(t *testing.T) {
@@ -118,8 +118,8 @@ func TestDatabaseRemovedWhenSchemaCreationFails(t *testing.T) {
 func TestMigrationToLowercaseUserAndGroupNames(t *testing.T) {
 	// Create a database from the testdata
 	dbDir := t.TempDir()
-	dbFile := "one_users_multiple_groups_with_uppercase.db.yaml"
-	err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", dbFile), dbDir)
+	sqlDump := "TestMigrationToLowercaseUserAndGroupNames/one_users_multiple_groups_with_uppercase.sql"
+	err := db.Z_ForTests_CreateDBFromDump(filepath.Join("testdata", sqlDump), dbDir)
 	require.NoError(t, err, "Setup: could not create database from testdata")
 
 	// Create a temporary user group file for testing
@@ -189,8 +189,8 @@ func TestMigrationToLowercaseUserAndGroupNamesEmptyDB(t *testing.T) {
 func TestMigrationToLowercaseUserAndGroupNamesAlreadyUpdated(t *testing.T) {
 	// Create a database from the testdata
 	dbDir := t.TempDir()
-	dbFile := "one_users_multiple_groups_with_uppercase.db.yaml"
-	err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", dbFile), dbDir)
+	sqlDump := "TestMigrationToLowercaseUserAndGroupNames/one_users_multiple_groups_with_uppercase.sql"
+	err := db.Z_ForTests_CreateDBFromDump(filepath.Join("testdata", sqlDump), dbDir)
 	require.NoError(t, err, "Setup: could not create database from testdata")
 
 	// Create a temporary user group file for testing
@@ -220,8 +220,8 @@ func TestMigrationToLowercaseUserAndGroupNamesAlreadyUpdated(t *testing.T) {
 func TestMigrationToLowercaseUserAndGroupNamesWithSymlinkedGroupFile(t *testing.T) {
 	// Create a database from the testdata
 	dbDir := t.TempDir()
-	dbFile := "one_users_multiple_groups_with_uppercase.db.yaml"
-	err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", dbFile), dbDir)
+	sqlDump := "TestMigrationToLowercaseUserAndGroupNames/one_users_multiple_groups_with_uppercase.sql"
+	err := db.Z_ForTests_CreateDBFromDump(filepath.Join("testdata", sqlDump), dbDir)
 	require.NoError(t, err, "Setup: could not create database from testdata")
 
 	// Create a temporary user group file for testing
@@ -271,8 +271,8 @@ func TestMigrationToLowercaseUserAndGroupNamesWithSymlinkedGroupFile(t *testing.
 func TestMigrationToLowercaseUserAndGroupNamesWithPreviousBackup(t *testing.T) {
 	// Create a database from the testdata
 	dbDir := t.TempDir()
-	dbFile := "one_users_multiple_groups_fully_uppercase.db.yaml"
-	err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", dbFile), dbDir)
+	sqlDump := "TestMigrationToLowercaseUserAndGroupNames/one_users_multiple_groups_fully_uppercase.sql"
+	err := db.Z_ForTests_CreateDBFromDump(filepath.Join("testdata", sqlDump), dbDir)
 	require.NoError(t, err, "Setup: could not create database from testdata")
 
 	// Create a temporary user group file for testing
@@ -318,8 +318,8 @@ func TestMigrationToLowercaseUserAndGroupNamesWithPreviousBackup(t *testing.T) {
 func TestMigrationToLowercaseUserAndGroupNamesWithSymlinkedPreviousBackup(t *testing.T) {
 	// Create a database from the testdata
 	dbDir := t.TempDir()
-	dbFile := "one_users_multiple_groups_fully_uppercase.db.yaml"
-	err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", dbFile), dbDir)
+	sqlDump := "TestMigrationToLowercaseUserAndGroupNames/one_users_multiple_groups_fully_uppercase.sql"
+	err := db.Z_ForTests_CreateDBFromDump(filepath.Join("testdata", sqlDump), dbDir)
 	require.NoError(t, err, "Setup: could not create database from testdata")
 
 	// Create a temporary user group file for testing
@@ -375,8 +375,8 @@ func TestMigrationToLowercaseUserAndGroupNamesWithSymlinkedPreviousBackup(t *tes
 func TestMigrationToLowercaseUserAndGroupNamesFails(t *testing.T) {
 	// Create a database from the testdata
 	dbDir := t.TempDir()
-	dbFile := "one_users_multiple_groups_fully_uppercase.db.yaml"
-	err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", dbFile), dbDir)
+	sqlDump := "TestMigrationToLowercaseUserAndGroupNames/one_users_multiple_groups_fully_uppercase.sql"
+	err := db.Z_ForTests_CreateDBFromDump(filepath.Join("testdata", sqlDump), dbDir)
 	require.NoError(t, err, "Setup: could not create database from testdata")
 
 	// Create a temporary user group file for testing
@@ -413,8 +413,8 @@ func TestMigrationToLowercaseUserAndGroupNamesFails(t *testing.T) {
 func TestMigrationToLowercaseUserAndGroupNamesWithBackupFailure(t *testing.T) {
 	// Create a database from the testdata
 	dbDir := t.TempDir()
-	dbFile := "one_users_multiple_groups_with_uppercase.db.yaml"
-	err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", dbFile), dbDir)
+	sqlDump := "TestMigrationToLowercaseUserAndGroupNames/one_users_multiple_groups_with_uppercase.sql"
+	err := db.Z_ForTests_CreateDBFromDump(filepath.Join("testdata", sqlDump), dbDir)
 	require.NoError(t, err, "Setup: could not create database from testdata")
 
 	// Create a temporary user group file for testing
@@ -453,6 +453,24 @@ func TestMigrationToLowercaseUserAndGroupNamesWithBackupFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	golden.CheckOrUpdate(t, string(userGroupContent), golden.WithPath("groups"))
+}
+
+func TestMigrationAddLockedColumnToUsersTable(t *testing.T) {
+	// Create a database from the testdata
+	dbDir := t.TempDir()
+	sqlDump := "TestMigrationAddLockedColumnToUsersTable/one_user_and_group_without_locked_column.sql"
+	err := db.Z_ForTests_CreateDBFromDump(filepath.Join("testdata", sqlDump), dbDir)
+	require.NoError(t, err, "Setup: could not create database from testdata")
+
+	// Run the migrations
+	m, err := db.New(dbDir)
+	require.NoError(t, err)
+
+	// Check the content of the SQLite database
+	dbContent, err := db.Z_ForTests_DumpNormalizedYAML(m)
+	require.NoError(t, err)
+
+	golden.CheckOrUpdate(t, dbContent)
 }
 
 func TestUpdateUserEntry(t *testing.T) {
@@ -500,13 +518,6 @@ func TestUpdateUserEntry(t *testing.T) {
 			Dir:   "/home/user1",
 			Shell: "/bin/bash",
 		},
-		"user1-with-capitalization": {
-			Name:  "User1",
-			UID:   1111,
-			Gecos: "User1 gecos\nOn multiple lines",
-			Dir:   "/home/user1",
-			Shell: "/bin/bash",
-		},
 		"user3": {
 			Name:  "user3",
 			UID:   3333,
@@ -544,7 +555,6 @@ func TestUpdateUserEntry(t *testing.T) {
 		"Update_user_does_not_change_homedir_if_it_exists":        {userCase: "user1-new-homedir", dbFile: "one_user_and_group"},
 		"Update_user_does_not_change_shell_if_it_exists":          {userCase: "user1-new-shell", dbFile: "one_user_and_group"},
 		"Update_user_by_removing_optional_gecos_field_if_not_set": {userCase: "user1-without-gecos", dbFile: "one_user_and_group"},
-		"Updating_user_with_different_capitalization":             {userCase: "user1-with-capitalization", dbFile: "one_user_and_group"},
 
 		// Group updates
 		"Update_user_by_adding_a_new_group":         {groupCases: []string{"group1", "group2"}, dbFile: "one_user_and_group"},
@@ -842,6 +852,167 @@ func TestUpdateBrokerForUser(t *testing.T) {
 	require.Error(t, err, "UpdateBrokerForUser for a nonexistent user should return an error")
 }
 
+func TestUpdateLockedFieldForUser(t *testing.T) {
+	t.Parallel()
+
+	c := initDB(t, "one_user_and_group")
+
+	// Update broker for existent user
+	err := c.UpdateLockedFieldForUser("user1", true)
+	require.NoError(t, err, "UpdateLockedFieldForUser for an existent user should not return an error")
+
+	// Error when updating broker for nonexistent user
+	err = c.UpdateLockedFieldForUser("nonexistent", false)
+	require.Error(t, err, "UpdateLockedFieldForUser for a nonexistent user should return an error")
+}
+
+func TestSetUserID(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		nonExistentUser bool
+		uidAlreadyInUse bool
+		uidAlreadySet   bool
+
+		wantErr         bool
+		wantErrType     error
+		wantUnchangedDB bool
+	}{
+		"Set_user_id_for_existing_user": {},
+		"No_op_if_uid_is_already_set":   {uidAlreadySet: true, wantUnchangedDB: true},
+
+		"Error_on_nonexistent_user":   {nonExistentUser: true, wantErrType: db.NoDataFoundError{}},
+		"Error_if_uid_already_in_use": {uidAlreadyInUse: true, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			m := initDB(t, "multiple_users_and_groups")
+
+			username := "user1"
+			if tc.nonExistentUser {
+				username = "nonexistent"
+			}
+
+			var newUID uint32 = 1234
+			if tc.uidAlreadyInUse {
+				newUID = 2222
+			}
+			if tc.uidAlreadySet {
+				newUID = 1111
+			}
+
+			var oldDBContent string
+			var err error
+			if tc.wantUnchangedDB {
+				oldDBContent, err = db.Z_ForTests_DumpNormalizedYAML(m)
+				require.NoError(t, err)
+			}
+
+			err = m.SetUserID(username, newUID)
+			log.Infof(context.Background(), "SetUserID error: %v", err)
+
+			if tc.wantErrType != nil {
+				require.ErrorIs(t, err, tc.wantErrType, "SetUserID should return expected error")
+				return
+			}
+			if tc.wantErr {
+				require.Error(t, err, "SetUserID should return an error but didn't")
+				return
+			}
+			require.NoError(t, err, "SetUserID should not return an error on existing user")
+
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(m)
+			require.NoError(t, err)
+
+			if tc.wantUnchangedDB {
+				require.Equal(t, oldDBContent, dbContent, "SetUserID should not change the database content")
+				return
+			}
+
+			golden.CheckOrUpdate(t, dbContent)
+		})
+	}
+}
+
+func TestSetGroupID(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		nonExistentGroup bool
+		gidAlreadyInUse  bool
+		gidAlreadySet    bool
+
+		wantErr         bool
+		wantErrType     error
+		wantUnchangedDB bool
+	}{
+		"Set_group_id_for_existing_group": {},
+		"No_op_if_gid_is_already_set":     {gidAlreadySet: true, wantUnchangedDB: true},
+
+		"Error_on_nonexistent_group":  {nonExistentGroup: true, wantErrType: db.NoDataFoundError{}},
+		"Error_if_gid_already_in_use": {gidAlreadyInUse: true, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			m := initDB(t, "multiple_users_and_groups")
+
+			groupName := "group1"
+			if tc.nonExistentGroup {
+				groupName = "nonexistent"
+			}
+
+			var newGID uint32 = 12345
+			if tc.gidAlreadyInUse {
+				newGID = 22222 // gid used by group2 in test data
+			}
+			if tc.gidAlreadySet {
+				newGID = 11111 // current gid of group1 in test data
+			}
+
+			var oldDBContent string
+			var err error
+			if tc.wantUnchangedDB {
+				oldDBContent, err = db.Z_ForTests_DumpNormalizedYAML(m)
+				require.NoError(t, err)
+			}
+
+			users, err := m.SetGroupID(groupName, newGID)
+			log.Infof(context.Background(), "SetGroupID error: %v", err)
+
+			if tc.wantErrType != nil {
+				require.ErrorIs(t, err, tc.wantErrType, "SetGroupID should return expected error")
+				return
+			}
+			if tc.wantErr {
+				require.Error(t, err, "SetGroupID should return an error but didn't")
+				return
+			}
+			require.NoError(t, err, "SetGroupID should not return an error on existing group")
+
+			// Check the returned users list
+			if tc.gidAlreadySet {
+				require.Nil(t, users, "SetGroupID should return nil users list if gid was already set")
+			} else {
+				require.Len(t, users, 1, "SetGroupID should return a non-empty users list")
+			}
+
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(m)
+			require.NoError(t, err)
+
+			if tc.wantUnchangedDB {
+				require.Equal(t, oldDBContent, dbContent, "SetGroupID should not change the database content")
+				return
+			}
+
+			golden.CheckOrUpdate(t, dbContent)
+		})
+	}
+}
+
 func TestRemoveDb(t *testing.T) {
 	t.Parallel()
 
@@ -891,6 +1062,55 @@ func TestDeleteUser(t *testing.T) {
 			got, err := db.Z_ForTests_DumpNormalizedYAML(c)
 			require.NoError(t, err)
 			golden.CheckOrUpdate(t, got)
+		})
+	}
+}
+
+// TestBackwardCompatibilityAndMigrations covers loading legacy schemas (e.g., v2 with INT ugid)
+// and migrating older schemas (e.g., v1 without 'locked' column) to the latest schema.
+func TestBackwardCompatibilityAndMigrations(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		dump string
+	}{
+		"SchemaV2_IntUGID":        {dump: filepath.Join("testdata", "TestLoadSchemaV2WithIntUGID", "one_user_and_group_v2.sql")},
+		"SchemaV1_NoLockedColumn": {dump: filepath.Join("testdata", "TestMigrationAddLockedColumnToUsersTable", "one_user_and_group_without_locked_column.sql")},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			tempDir := t.TempDir()
+
+			err := db.Z_ForTests_CreateDBFromDump(tc.dump, tempDir)
+			require.NoError(t, err, "Setup: could not create database from dump")
+
+			// Open using current manager, it'll trigger a migration depending on schema_version.
+			m, err := db.New(tempDir)
+			require.NoError(t, err, "Setup: could not open manager for database")
+			t.Cleanup(func() { _ = m.Close() })
+
+			// Validate user can be read and that locked is false (either set or default).
+			u, err := m.UserByID(1111)
+			require.NoError(t, err, "Should read user from DB")
+			require.Equal(t, "user1", u.Name)
+			require.EqualValues(t, 11111, u.GID)
+			require.False(t, u.Locked, "locked should be false in both old and migrated schemas")
+
+			// Validate group and members. ugid should read as string regardless of underlying type.
+			g, err := m.GroupWithMembersByID(11111)
+			require.NoError(t, err, "Should read group from DB")
+			require.Equal(t, "group1", g.Name)
+			require.Equal(t, "12345678", g.UGID)
+			require.Len(t, g.Users, 1)
+			require.Equal(t, "user1", g.Users[0])
+
+			// Also ensure lookup by UGID works with string input.
+			gByUGID, err := m.GroupByUGID("12345678")
+			require.NoError(t, err)
+			require.EqualValues(t, 11111, gByUGID.GID)
 		})
 	}
 }

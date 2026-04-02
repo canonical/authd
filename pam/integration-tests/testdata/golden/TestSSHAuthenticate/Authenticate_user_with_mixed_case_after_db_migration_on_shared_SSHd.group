@@ -1,6 +1,0 @@
-localgroup:x:41:user-integration-with-mixed-case,user-integration-cached,user-integration-pre-check-with-upper-case,user-integration-upper-case,user-pre-check
-some-group-for-user-integration-WITH-Mixed-CaSe:x:101:user-integration-with-mixed-case
-some-group-for-user-integration-cached:x:102:user-integration-cached
-some-group-for-user-integration-pre-check-WITH-UPPER-CASE:x:103:user-integration-pre-check-with-upper-case
-some-group-for-user-integration-UPPER-CASE:x:104:user-integration-upper-case
-some-group-for-user-pre-check:x:105:user-pre-check

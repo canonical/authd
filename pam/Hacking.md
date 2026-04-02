@@ -12,7 +12,7 @@ it.
  2. When used in normal PAM transactions by any other PAM application we
     instead compile the module as an executable application that is launched
     by our [`go-exec`](./go-exec/module.c) PAM module implemented in C
-    and that does some DBus communication over a private bus with the actual
+    and that does some D-Bus communication over a private bus with the actual
     PAM application.
 
 
@@ -40,9 +40,9 @@ hanging when loaded by some applications (such as `sshd`).
 As mentioned in order to make our Go PAM implementation of the PAM module to be
 reliable, we relied on a simpler C module that only acts as a wrapper between
 the actual PAM APIs and a go program that is called and that communicates with
-the actual module using a DBus private connection (where the security of that
+the actual module using a D-Bus private connection (where the security of that
 is both grantee by the fact that it's almost impossible to predict its address,
-but also by native DBus credentials checks and on child PID verification).
+but also by native D-Bus credentials checks and on child PID verification).
 
 In order to build the module and its relative companion PAM program you can do:
 

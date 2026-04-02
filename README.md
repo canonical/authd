@@ -1,18 +1,18 @@
 # authd: an authentication daemon for cloud identity providers
 
-[actions-image]: https://github.com/ubuntu/authd/actions/workflows/qa.yaml/badge.svg
-[actions-url]: https://github.com/ubuntu/authd/actions?query=workflow%3AQA
+[actions-image]: https://github.com/canonical/authd/actions/workflows/qa.yaml/badge.svg
+[actions-url]: https://github.com/canonical/authd/actions?query=workflow%3AQA
 
 [license-image]: https://img.shields.io/badge/License-GPL3.0-blue.svg
 
 [codecov-image]: https://codecov.io/gh/ubuntu/authd/graph/badge.svg
 [codecov-url]: https://codecov.io/gh/ubuntu/authd
 
-[reference-documentation-image]: https://pkg.go.dev/badge/github.com/ubuntu/authd.svg
-[reference-documentation-url]: https://pkg.go.dev/github.com/ubuntu/authd
+[reference-documentation-image]: https://pkg.go.dev/badge/github.com/canonical/authd.svg
+[reference-documentation-url]: https://pkg.go.dev/github.com/canonical/authd
 
-[goreport-image]: https://goreportcard.com/badge/github.com/ubuntu/authd
-[goreport-url]: https://goreportcard.com/report/github.com/ubuntu/authd
+[goreport-image]: https://goreportcard.com/badge/github.com/canonical/authd
+[goreport-url]: https://goreportcard.com/report/github.com/canonical/authd
 
 [docs-image]: https://readthedocs.com/projects/canonical-authd/badge/?version=edge-docs
 [docs-url-stable]: https://documentation.ubuntu.com/authd/stable-docs/
@@ -47,7 +47,7 @@ in addition to information about authd architecture and troubleshooting.
 ## Brokers
 
 authd uses brokers to interface with cloud identity providers through a
-[DBus API](https://github.com/ubuntu/authd/blob/HEAD/examplebroker/com.ubuntu.auth.ExampleBroker.xml).
+[DBus API](https://github.com/canonical/authd/blob/HEAD/examplebroker/com.ubuntu.auth.ExampleBroker.xml).
 
 Currently [MS Entra ID](https://learn.microsoft.com/en-us/entra/fundamentals/whatis)
 and [Google IAM](https://cloud.google.com/iam/docs/overview)
@@ -55,7 +55,7 @@ are supported as identity providers.
 They allow you to authenticate using MFA and the device authentication flow.
 
 For development purposes, authd also provides an
-[example broker](https://github.com/ubuntu/authd/tree/main/examplebroker)
+[example broker](https://github.com/canonical/authd/tree/main/examplebroker)
 to help you develop your own.
 
 ## Get involved
@@ -66,12 +66,12 @@ contributing, please take a look at our [contribution guidelines](CONTRIBUTING.m
 first.
 
 When reporting an issue you can
-[choose from several templates](https://github.com/ubuntu/authd/issues/new/choose):
+[choose from several templates](https://github.com/canonical/authd/issues/new/choose):
 
 - To report an issue, please file a bug report against our repository, using the
-  [report an issue](https://github.com/ubuntu/authd/issues/new?assignees=&labels=bug&projects=&template=bug_report.yml&title=Issue%3A+) template.
+  [report an issue](https://github.com/canonical/authd/issues/new?assignees=&labels=bug&projects=&template=bug_report.yml&title=Issue%3A+) template.
 - For suggestions and constructive feedback, report a feature request bug report, using the
-  [request a feature](https://github.com/ubuntu/authd/issues/new?assignees=&labels=feature&projects=&template=feature_request.yml&title=Feature%3A+) template.
+  [request a feature](https://github.com/canonical/authd/issues/new?assignees=&labels=feature&projects=&template=feature_request.yml&title=Feature%3A+) template.
 
 ## Get in touch
 

@@ -1,11 +1,13 @@
 alice
 amd
 auth
+authctl
 authd
 authd's
 biometric
 cleartext
 Center
+config
 DBus
 entra
 filesystem
@@ -22,9 +24,13 @@ hostname
 https
 IDMAP
 IdP
+init
 io
+jinja
 KDC
 Kerberos
+Keycloak
+keycloak
 keytab
 Keytab
 Keytabs
@@ -38,6 +44,7 @@ NFS
 nss
 OAuth
 OIDC
+Okta
 OpenID
 ppa
 PR
@@ -50,6 +57,7 @@ sshd
 styleguide
 sudo
 systemd
+templating
 TPM
 ubuntu
 UEFI

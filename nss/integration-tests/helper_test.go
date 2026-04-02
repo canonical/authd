@@ -15,8 +15,8 @@ import (
 func getentOutputForLib(t *testing.T, libPath, socketPath string, rustCovEnv []string, shouldPreCheck bool, cmds ...string) (got string, exitCode int) {
 	t.Helper()
 
-	// #nosec:G204 - we control the command arguments in tests
 	cmds = append(cmds, "--service", "authd")
+	//nolint:gosec // G204 - test-only code; cmds are controlled test arguments.
 	cmd := exec.Command("getent", cmds...)
 	cmd.Env = append(cmd.Env,
 		"AUTHD_NSS_INFO=stderr",
@@ -35,8 +35,8 @@ func getentOutputForLib(t *testing.T, libPath, socketPath string, rustCovEnv []s
 	}
 
 	var out bytes.Buffer
-	cmd.Stdout = io.MultiWriter(os.Stdout, &out)
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = io.MultiWriter(t.Output(), &out)
+	cmd.Stderr = t.Output()
 
 	// We are only interested in the output and the exit code of the command, so we can ignore the error.
 	_ = cmd.Run()

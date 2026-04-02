@@ -14,8 +14,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/msteinert/pam/v2"
-	"github.com/ubuntu/authd/pam/internal/pam_test"
 	"golang.org/x/term"
 )
 
@@ -81,7 +81,7 @@ func main() {
 	args = append(defaultArgs, args...)
 
 	if pamService == "" {
-		pamService = "authd-cli"
+		pamService = "authd-pam-runner-service"
 	}
 	serviceFile, err := pam_test.CreateService(tmpDir, pamService, []pam_test.ServiceLine{
 		{Action: pam_test.Auth, Control: pam_test.SufficientRequisite, Module: execModule, Args: args},

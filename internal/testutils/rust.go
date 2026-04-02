@@ -11,9 +11,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/testlog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/fileutils"
 )
 
 func getCargoPath() (path string, isNightly bool, err error) {
@@ -91,29 +92,30 @@ func BuildRustNSSLib(t *testing.T, disableCoverage bool, features ...string) (li
 
 	features = append([]string{"integration_tests", "custom_socket"}, features...)
 
+	t.Logf("Locking Rust target dir %s", target)
 	unlock, err := fileutils.LockDir(target)
 	require.NoError(t, err, "Setup: could not lock Rust target dir")
 	defer func() {
 		require.NoError(t, unlock(), "Setup: could not unlock Rust target dir")
+		t.Logf("Unlocked Rust target dir %s", target)
 	}()
+	t.Logf("Locked Rust target dir %s", target)
 
 	// Builds the nss library.
-	// #nosec:G204 - we control the command arguments in tests
+	//nolint:gosec // G702 - test-only code; cargo path is from getCargoPath(), args are controlled.
 	cmd := exec.Command(cargo, "build", "--features", strings.Join(features, ","), "--target-dir", target)
 	if TestVerbosity() > 0 {
 		cmd.Args = append(cmd.Args, "--verbose")
 	}
+	// dpkg-buildflags sets many relevant environment variables, so we pass the whole environment.
 	cmd.Env = append(os.Environ(), rustCovEnv...)
 	cmd.Dir = projectRoot
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
 	if isNightly && IsAsan() {
 		cmd.Env = append(cmd.Env, "RUSTFLAGS=-Zsanitizer=address")
 	}
 
-	t.Log("Building NSS library...", cmd.Args)
-	err = cmd.Run()
+	err = testlog.RunWithTiming(t, "Building NSS library", cmd)
 	require.NoError(t, err, "Setup: could not build Rust NSS library")
 
 	// When building the crate with dh-cargo, this env is set to indicate which architecture the code

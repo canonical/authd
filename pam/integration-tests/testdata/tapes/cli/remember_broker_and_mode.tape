@@ -5,7 +5,7 @@ Wait /Username: user name\n/
 Show
 
 Hide
-TypeUsername "user-integration-remember-mode"
+TypeUsername "user-integration-remember-mode@example.com"
 Show
 
 Hide
@@ -42,7 +42,7 @@ Wait /Username: user name\n/
 Show
 
 Hide
-TypeUsername "user-integration-remember-mode"
+TypeUsername "user-integration-remember-mode@example.com"
 Show
 
 Hide

@@ -1,3 +1,9 @@
+---
+myst:
+  html_meta:
+    "description lang=en": "Use authd for cloud-based login to Ubuntu with SSH."
+---
+
 # Log in with SSH
 
 ## Server configuration
@@ -45,7 +51,7 @@ ssh_allowed_suffixes = @example.com,@ubuntu.com
 
 Once this is all set up, you can ssh to the server in the same way that you would do with any server: `ssh <username>@<host>`. The format of `<username>` is the user handle on the provider, such as `user@domain.tld`.
 
-For instance, here is an example using MS Entra ID as a provider:
+For instance, here is an example using Microsoft Entra ID as a provider:
 
 ```shell
 ssh user@domain.tld@remote.host

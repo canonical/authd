@@ -9,19 +9,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/examplebroker"
+	"github.com/canonical/authd/internal/brokers"
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/brokers/layouts/entries"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/pam/internal/gdm"
+	"github.com/canonical/authd/pam/internal/gdm_test"
+	"github.com/canonical/authd/pam/internal/pam_test"
+	"github.com/canonical/authd/pam/internal/proto"
 	"github.com/msteinert/pam/v2"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/examplebroker"
-	"github.com/ubuntu/authd/internal/brokers"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/brokers/layouts/entries"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/pam/internal/gdm"
-	"github.com/ubuntu/authd/pam/internal/gdm_test"
-	"github.com/ubuntu/authd/pam/internal/pam_test"
-	"github.com/ubuntu/authd/pam/internal/proto"
 )
 
 func enableGdmExtension() {
@@ -128,6 +128,16 @@ var testPhoneAckUILayout = authd.UILayout{
 
 func TestGdmModule(t *testing.T) {
 	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	// This test is flaky, see https://github.com/canonical/authd/issues/966
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
+
 	t.Cleanup(pam_test.MaybeDoLeakCheck)
 
 	if !pam.CheckPamHasStartConfdir() {
@@ -196,7 +206,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticate_user_successfully_with_password_only_supported_method": {
-			pamUser: ptrValue(examplebroker.UserIntegrationAuthModesPrefix + "password-integration-gdm"),
+			pamUser: ptrValue(examplebroker.UserIntegrationAuthModesPrefix + "password-integration-gdm@example.com"),
 			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
 				gdm.EventType_startAuthentication: {
 					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Secret{
@@ -787,7 +797,7 @@ func TestGdmModule(t *testing.T) {
 				},
 			},
 			wantPamErrorMessages: []string{
-				"can't select broker: error InvalidArgument from server: can't start authentication transaction: rpc error: code = InvalidArgument desc = no user name provided",
+				"error InvalidArgument from server: no user name provided",
 			},
 			wantError:       pam.ErrSystem,
 			wantAcctMgmtErr: pam_test.ErrIgnore,
@@ -938,7 +948,7 @@ func TestGdmModule(t *testing.T) {
 			moduleArgs = append(moduleArgs, tc.moduleArgs...)
 
 			serviceFile := createServiceFile(t, "gdm-authd", libPath, moduleArgs)
-			saveArtifactsForDebugOnCleanup(t, []string{serviceFile})
+			testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
 
 			pamUser := vhsTestUserName(t, "gdm")
 			if tc.pamUserPrefix != "" {
@@ -1047,6 +1057,10 @@ func TestGdmModule(t *testing.T) {
 }
 
 func TestGdmModuleAuthenticateWithoutGdmExtension(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
 	// This cannot be parallel!
 	t.Cleanup(pam_test.MaybeDoLeakCheck)
 
@@ -1060,7 +1074,7 @@ func TestGdmModuleAuthenticateWithoutGdmExtension(t *testing.T) {
 	moduleArgs = append(moduleArgs, "debug=true", "logfile="+gdmLog)
 
 	serviceFile := createServiceFile(t, "gdm-authd", libPath, moduleArgs)
-	saveArtifactsForDebugOnCleanup(t, []string{serviceFile})
+	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
 	pamUser := vhsTestUserName(t, "gdm")
 	gh := newGdmTestModuleHandler(t, serviceFile, pamUser)
 	t.Cleanup(func() { require.NoError(t, gh.tx.End(), "PAM: can't end transaction") })
@@ -1081,6 +1095,10 @@ func TestGdmModuleAuthenticateWithoutGdmExtension(t *testing.T) {
 }
 
 func TestGdmModuleAcctMgmtWithoutGdmExtension(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
 	// This cannot be parallel!
 	t.Cleanup(pam_test.MaybeDoLeakCheck)
 
@@ -1094,7 +1112,7 @@ func TestGdmModuleAcctMgmtWithoutGdmExtension(t *testing.T) {
 	moduleArgs = append(moduleArgs, "debug=true", "logfile="+gdmLog)
 
 	serviceFile := createServiceFile(t, "gdm-authd", libPath, moduleArgs)
-	saveArtifactsForDebugOnCleanup(t, []string{serviceFile})
+	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
 	pamUser := vhsTestUserName(t, "gdm")
 	gh := newGdmTestModuleHandler(t, serviceFile, pamUser)
 	t.Cleanup(func() { require.NoError(t, gh.tx.End(), "PAM: can't end transaction") })

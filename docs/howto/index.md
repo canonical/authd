@@ -1,3 +1,10 @@
+---
+myst:
+  html_meta:
+    "description lang=en":
+      "authd how-to guides covering installation, configuration, user login, network file systems, and contributing."
+---
+
 (howtos)=
 
 # How-to guides

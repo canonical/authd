@@ -23,6 +23,7 @@ These are mostly guidelines, not rules. Use your best judgment and feel free to 
       - [Building authd only](#building-authd-only)
       - [Building the PAM module only](#building-the-pam-module-only)
       - [Building the NSS module only](#building-the-nss-module-only)
+    - [Building the broker](#building-the-broker)
     - [About the test suite](#about-the-testsuite)
       - [Tests with dependencies](#tests-with-dependencies)
     - [Code style](#code-style)
@@ -43,14 +44,14 @@ We take our community seriously, holding ourselves and other contributors to hig
 Contributions are made to this project via Issues and Pull Requests (PRs). These are some general guidelines that cover both:
 
 * To report security vulnerabilities, use the advisories page of the repository and not a public bug report. Please use [launchpad private bugs](https://bugs.launchpad.net/ubuntu/+source/authd/+filebug), which is monitored by our security team. On an Ubuntu machine, it’s best to use `ubuntu-bug authd` to collect relevant information. <!-- FIXME: snap? -->
-* General issues or feature requests should be reported to the [GitHub Project](https://github.com/ubuntu/authd/issues)
+* General issues or feature requests should be reported to the [GitHub Project](https://github.com/canonical/authd/issues)
 * If you've never contributed before, see [this post on ubuntu.com](https://ubuntu.com/community/contribute) for resources and tips on how to get started.
-* Existing Issues and PRs should be searched for on the [project's repository](https://github.com/ubuntu/authd) before creating your own.
+* Existing Issues and PRs should be searched for on the [project's repository](https://github.com/canonical/authd) before creating your own.
 * While we work hard to ensure that issues are handled in a timely manner, it can take time to investigate the root cause. A friendly ping in the comment thread to the submitter or a contributor can help draw attention if your issue is blocking.
 
 ### Issues
 
-Issues can be used to report problems with the software, request a new feature or discuss potential changes before a PR is created. When you [create a new Issue](https://github.com/ubuntu/authd/issues), a template will be loaded that will guide you through collecting and providing the information that we need to investigate.
+Issues can be used to report problems with the software, request a new feature or discuss potential changes before a PR is created. When you [create a new Issue](https://github.com/canonical/authd/issues), a template will be loaded that will guide you through collecting and providing the information that we need to investigate.
 
 If you find an Issue that addresses the problem you're having, please add your own reproduction information to the existing issue rather than creating a new one. Adding a [reaction](https://github.blog/2016-03-10-add-reactions-to-pull-requests-issues-and-comments/) can also help by indicating to our maintainers that a particular problem is affecting more than just the reporter.
 
@@ -79,6 +80,11 @@ In general, we follow the ["fork-and-pull" Git workflow](https://github.com/susa
 > PRs will trigger unit and integration tests with and without race detection, linting and formatting validations, static and security checks, and freshness of generated files verification. All these tests must pass before any merge into the main branch.
 
 Once merged into the main branch, `po` files and any documentation change will be automatically updated. Updates to these files are therefore not necessary in the pull request itself, which helps minimize diff review.
+
+The authd documentation is published in **edge-docs** and **stable-docs** versions. Only the edge version is updated when documentation changes are merged into the main branch.
+If a documentation change should be applied to the stable documentation *before* the next release, create a separate PR
+against the `stable-docs` branch after your main PR has been merged, with the changes to the documentation cherry-picked
+from your main PR.
 
 ## Contributing to the code
 
@@ -157,7 +163,7 @@ This last command will produce two libraries (`./pam/pam_authd.so` and `./pam/go
 These modules must be copied to `/usr/lib/$(gcc -dumpmachine)/security/` while the executable must be copied to `/usr/libexec/authd-pam`.
 
 For further information about the PAM module architecture and testing see the
-[PAM Hacking](https://github.com/ubuntu/authd/blob/main/pam/Hacking.md) page.
+[PAM Hacking](https://github.com/canonical/authd/blob/main/pam/Hacking.md) page.
 
 #### Building the NSS module only
 
@@ -171,6 +177,41 @@ This will build a debug release of the NSS module.
 
 The library resulting from the build is located in `./target/debug/libnss_authd.so`. This module must be copied to `/usr/lib/$(gcc -dumpmachine)/libnss_authd.so.2`.
 
+### Building the broker
+
+The authd brokers are packaged as separate snaps that are built and released
+independently from authd. The source code for the brokers is located in
+`./authd-oidc-brokers` and the snap packaging files are located in `./snap`.
+
+To build the broker snap for a specific broker variant, follow these steps from the top of the source tree:
+
+1. Ensure that the submodules are checked out:
+
+   ```shell
+   git submodule update --init --recursive
+   ```
+
+2. Prepare the `snapcraft.yaml` for the desired broker variant:
+
+   ```shell
+   ./snap/scripts/prepare-variant --broker <broker>
+   ```
+
+   where `<broker>` is one of `oidc`, `msentraid`, or `google`.
+
+3. Build the broker snap:
+
+   ```shell
+   snapcraft pack
+   ```
+
+When the build succeeds, the resulting `.snap` file is created in the current working directory.
+You can install the locally built broker snap for development with a command such as:
+
+```shell
+snap install --dangerous ./path/to/broker.snap
+```
+
 ### About the test suite
 
 The project includes a comprehensive test suite made of unit and integration tests. All the tests must pass before the review is considered. If you have troubles with the test suite, feel free to mention it in your PR description.
@@ -183,12 +224,12 @@ The test suite must pass before merging the PR to our main branch. Any new featu
 
 #### Tests with dependencies
 
-Some tests, such as the [PAM CLI tests](https://github.com/ubuntu/authd/blob/5ba54c0a573f34e99782fe624b090ab229798fc3/pam/integration-tests/integration_test.go#L21), use external tools such as [vhs](https://github.com/charmbracelet/vhs)
+Some tests, such as the [PAM CLI tests](https://github.com/canonical/authd/blob/5ba54c0a573f34e99782fe624b090ab229798fc3/pam/integration-tests/integration_test.go#L21), use external tools such as [VHS](https://github.com/charmbracelet/vhs)
 to record and run the tape files needed for the tests. Those tools are not included in the project dependencies and must be installed manually.
 
 Information about these tools and their usage will be linked below:
 
-- [vhs](https://github.com/charmbracelet/vhs?tab=readme-ov-file#tutorial): tutorial on using vhs as a CLI-based video recorder
+- [VHS](https://github.com/charmbracelet/vhs?tab=readme-ov-file#tutorial): tutorial on using VHS as a CLI-based video recorder
 
 ### Code style
 

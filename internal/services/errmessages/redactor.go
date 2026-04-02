@@ -52,6 +52,9 @@ func FormatErrorMessage(ctx context.Context, method string, req, reply any, cc *
 	// likely means that IsAuthenticated got cancelled, so we need to keep the error intact
 	case codes.Canceled:
 		break
+	case codes.PermissionDenied:
+		// permission denied, just format it
+		err = fmt.Errorf("permission denied: %v", st.Message())
 	// grpc error, just format it
 	default:
 		err = fmt.Errorf("error %s from server: %v", st.Code(), st.Message())

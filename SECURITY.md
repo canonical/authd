@@ -17,7 +17,7 @@ If you discover a security vulnerability within this repository, we encourage re
 
 ### Private Vulnerability Reporting
 
-The most straightforward way to report a security vulnerability is via [GitHub](https://github.com/ubuntu/authd/security/advisories/new).
+The most straightforward way to report a security vulnerability is via [GitHub](https://github.com/canonical/authd/security/advisories/new).
 For detailed instructions, please review the [Privately reporting a security vulnerability](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability) documentation.
 This method enables you to communicate vulnerabilities directly and confidentially with the `authd` maintainers.
 
@@ -28,7 +28,7 @@ The [Ubuntu Security disclosure and embargo policy](https://ubuntu.com/security/
 
 #### Steps to Report a Vulnerability
 
-1. Go to the [Security Advisories Page](https://github.com/ubuntu/authd/security/advisories) of the `authd` repository.
+1. Go to the [Security Advisories Page](https://github.com/canonical/authd/security/advisories) of the `authd` repository.
 2. Click "Report a Vulnerability."
 3. Provide detailed information about the vulnerability, including steps to reproduce, affected versions, and potential impact.
 

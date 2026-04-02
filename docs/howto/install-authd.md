@@ -5,7 +5,7 @@ myst:
 ---
 
 (howto::install)=
-# Install authd and brokers for cloud identity providers
+# Install authd and brokers for identity providers
 
 This project consists of two components:
 * **authd**: The authentication daemon responsible for managing access to the authentication mechanism.
@@ -58,8 +58,8 @@ sudo apt install authd
 
 ## Install brokers
 
-The brokers are provided as Snap packages and are available from the Snap
-Store.
+The brokers are provided as snap packages and are available from the Snap Store.
+Install the broker corresponding to the identity provider that you want to use:
 
 :::::{tab-set}
 :sync-group: broker
@@ -80,7 +80,7 @@ authenticate against Google IAM.
 ::::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
-To install the MS Entra ID broker, run the following command:
+To install the Microsoft Entra ID broker, run the following command:
 
 ```shell
 sudo snap install authd-msentraid
@@ -90,4 +90,20 @@ At this stage, you have installed the main service and an identity broker to
 authenticate against Microsoft Entra ID.
 
 ::::
+
+::::{tab-item} Keycloak
+:sync: keycloak
+
+Keycloak can be used with the generic OIDC broker. Install the broker with the
+following command:
+
+```shell
+sudo snap install authd-oidc
+```
+
+At this stage, you have installed the main service and an identity broker to
+authenticate against Keycloak or any other OIDC provider.
+
+::::
+
 :::::

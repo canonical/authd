@@ -2,7 +2,7 @@
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user-integration-switch-mode
+Username: user-integration-switch-mode@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your provider
@@ -22,7 +22,7 @@ Gimme your password:
   Select your authentication method
 
 > 1. Password authentication
-  2. Send URL to user-integration-switch-mode@gmail.com
+  2. Send URL to user-integration-switch-mode@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -32,7 +32,7 @@ Gimme your password:
   Press escape key to go back to choose the provider
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Click on the link received at user-integration-switch-mode@gmail.com or enter the code:
+Click on the link received at user-integration-switch-mode@example.com or enter the code:
 >
 
   Press escape key to go back to select the authentication method
@@ -41,7 +41,7 @@ Click on the link received at user-integration-switch-mode@gmail.com or enter th
   Select your authentication method
 
   1. Password authentication
-> 2. Send URL to user-integration-switch-mode@gmail.com
+> 2. Send URL to user-integration-switch-mode@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -59,7 +59,7 @@ Plug your fido device and press with your thumb
   Select your authentication method
 
   1. Password authentication
-  2. Send URL to user-integration-switch-mode@gmail.com
+  2. Send URL to user-integration-switch-mode@example.com
 > 3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -82,10 +82,10 @@ Gimme your password:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 PAM Authenticate()
-  User: "user-integration-switch-mode"
+  User: "user-integration-switch-mode@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-switch-mode"
+  User: "user-integration-switch-mode@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

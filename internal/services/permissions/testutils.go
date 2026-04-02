@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ubuntu/authd/internal/testsdetection"
+	"github.com/canonical/authd/internal/testsdetection"
 )
 
 // Z_ForTests_WithCurrentUserAsRoot returns an Option that sets the rootUID to the current user's UID.
@@ -34,7 +34,6 @@ func currentUserUID() uint32 {
 		panic(fmt.Sprintf("current uid is not a valid uint32: %v", uid))
 	}
 
-	//nolint:gosec // G115 we checked for an integer overflow above.
 	return uint32(uid)
 }
 

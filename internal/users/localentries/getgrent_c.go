@@ -7,6 +7,14 @@ package localentries
 #include <stdlib.h>
 #include <pwd.h>
 #include <grp.h>
+
+// Return the length of a NULL-terminated array of strings.
+size_t strv_len(const char * const * strv) {
+    size_t n = 0;
+    while (strv[n]) n++;
+    return n;
+}
+
 */
 import "C"
 
@@ -17,8 +25,8 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/ubuntu/authd/internal/users/types"
-	"github.com/ubuntu/decorate"
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/internal/users/types"
 )
 
 // types.GroupEntry represents a group entry.
@@ -74,15 +82,19 @@ func getGroupEntries() (entries []types.GroupEntry, err error) {
 }
 
 func strvToSlice(strv **C.char) []string {
-	var users []string
-	for i := C.uint(0); ; i++ {
-		s := *(**C.char)(unsafe.Pointer(uintptr(unsafe.Pointer(strv)) +
-			uintptr(i)*unsafe.Sizeof(*strv)))
-		if s == nil {
-			break
-		}
-
-		users = append(users, C.GoString(s))
+	if strv == nil {
+		return nil
 	}
-	return users
+	n := C.strv_len(strv)
+	if n == 0 {
+		return nil
+	}
+
+	cStrings := unsafe.Slice(strv, int(n))
+
+	out := make([]string, int(n))
+	for i := 0; i < int(n); i++ {
+		out[i] = C.GoString(cStrings[i])
+	}
+	return out
 }

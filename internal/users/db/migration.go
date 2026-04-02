@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ubuntu/authd/internal/users/db/bbolt"
-	"github.com/ubuntu/authd/internal/users/localentries"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/decorate"
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/internal/users/db/bbolt"
+	"github.com/canonical/authd/internal/users/localentries"
+	"github.com/canonical/authd/log"
 )
 
 // MigrateFromBBoltToSQLite migrates data from bbolt to SQLite.
@@ -171,15 +171,20 @@ var schemaMigrations = []schemaMigration{
 				err = commitOrRollBackTransaction(err, tx)
 			}()
 
-			users, err := allUsers(tx)
+			rows, err := tx.Query(`SELECT name FROM users`)
 			if err != nil {
 				return fmt.Errorf("failed to get users from database: %w", err)
 			}
+			defer rows.Close()
 
 			var oldNames, newNames []string
-			for _, u := range users {
-				oldNames = append(oldNames, u.Name)
-				newNames = append(newNames, strings.ToLower(u.Name))
+			for rows.Next() {
+				var name string
+				if err := rows.Scan(&name); err != nil {
+					return fmt.Errorf("failed to scan user name: %w", err)
+				}
+				oldNames = append(oldNames, name)
+				newNames = append(newNames, strings.ToLower(name))
 			}
 
 			if err := renameUsersInGroupFile(oldNames, newNames); err != nil {
@@ -197,6 +202,40 @@ var schemaMigrations = []schemaMigration{
 					  UPDATE groups SET name = LOWER(name);`
 			_, err = tx.Exec(query)
 			return err
+		},
+	},
+	{
+		description: "Add column 'locked' to users table",
+		migrate: func(m *Manager) error {
+			// Start a transaction to ensure atomicity
+			tx, err := m.db.Begin()
+			if err != nil {
+				return fmt.Errorf("failed to start transaction: %w", err)
+			}
+
+			// Ensure the transaction is committed or rolled back
+			defer func() {
+				err = commitOrRollBackTransaction(err, tx)
+			}()
+
+			// Check if the 'locked' column already exists
+			var exists bool
+			err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM pragma_table_info('users') WHERE name = 'locked')").Scan(&exists)
+			if err != nil {
+				return fmt.Errorf("failed to check if 'locked' column exists: %w", err)
+			}
+			if exists {
+				log.Debug(context.Background(), "'locked' column already exists in users table, skipping migration")
+				return nil
+			}
+
+			// Add the 'locked' column to the users table
+			_, err = tx.Exec("ALTER TABLE users ADD COLUMN locked BOOLEAN DEFAULT FALSE")
+			if err != nil {
+				return fmt.Errorf("failed to add 'locked' column to users table: %w", err)
+			}
+
+			return nil
 		},
 	},
 }

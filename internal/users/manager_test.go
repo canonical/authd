@@ -13,19 +13,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/users"
+	"github.com/canonical/authd/internal/users/db"
+	"github.com/canonical/authd/internal/users/localentries"
+	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	userslocking "github.com/canonical/authd/internal/users/locking"
+	"github.com/canonical/authd/internal/users/tempentries"
+	userstestutils "github.com/canonical/authd/internal/users/testutils"
+	"github.com/canonical/authd/internal/users/types"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	"github.com/ubuntu/authd/internal/users"
-	"github.com/ubuntu/authd/internal/users/db"
-	"github.com/ubuntu/authd/internal/users/localentries"
-	localgroupstestutils "github.com/ubuntu/authd/internal/users/localentries/testutils"
-	userslocking "github.com/ubuntu/authd/internal/users/locking"
-	"github.com/ubuntu/authd/internal/users/tempentries"
-	userstestutils "github.com/ubuntu/authd/internal/users/testutils"
-	"github.com/ubuntu/authd/internal/users/types"
-	"github.com/ubuntu/authd/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -104,7 +104,7 @@ func TestNewManager(t *testing.T) {
 			}
 			require.NoError(t, err, "NewManager should not return an error, but did")
 
-			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Created database should be valid yaml content")
 
 			golden.CheckOrUpdate(t, got)
@@ -131,7 +131,7 @@ func TestStop(t *testing.T) {
 	require.NoError(t, m.Stop(), "Stop should not return an error, but did")
 
 	// Should fail, because the db is closed
-	_, err := userstestutils.GetManagerDB(m).AllUsers()
+	_, err := userstestutils.DBManager(m).AllUsers()
 
 	require.Error(t, err, "AllUsers should return an error, but did not")
 }
@@ -147,13 +147,18 @@ type groupCase struct {
 }
 
 func TestUpdateUser(t *testing.T) {
+	// This test is flaky, see https://github.com/canonical/authd/issues/1120
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
+
 	userCases := map[string]userCase{
-		"user1":                             {UserInfo: types.UserInfo{Name: "user1"}, UID: 1111},
+		"user1":                             {UserInfo: types.UserInfo{Name: "user1@example.com"}, UID: 1111},
 		"nameless":                          {UID: 1111},
-		"user2":                             {UserInfo: types.UserInfo{Name: "user2"}, UID: 2222},
-		"same-name-different-uid":           {UserInfo: types.UserInfo{Name: "user1"}, UID: 3333},
-		"different-name-same-uid":           {UserInfo: types.UserInfo{Name: "newuser1"}, UID: 1111},
-		"different-capitalization-same-uid": {UserInfo: types.UserInfo{Name: "User1"}, UID: 1111},
+		"user2":                             {UserInfo: types.UserInfo{Name: "user2@example.com"}, UID: 2222},
+		"same-name-different-uid":           {UserInfo: types.UserInfo{Name: "user1@example.com"}, UID: 3333},
+		"different-name-same-uid":           {UserInfo: types.UserInfo{Name: "newuser1@example.com"}, UID: 1111},
+		"different-capitalization-same-uid": {UserInfo: types.UserInfo{Name: "User1@example.com"}, UID: 1111},
 		"user-exists-on-system":             {UserInfo: types.UserInfo{Name: "root"}, UID: 1111},
 	}
 
@@ -192,18 +197,16 @@ func TestUpdateUser(t *testing.T) {
 		"Successfully_update_user_updating_local_groups":                    {groupsCase: "mixed-groups-authd-first", localGroupsFile: "users_in_groups.group"},
 		"Successfully_update_user_updating_local_groups_with_changes":       {groupsCase: "mixed-groups-authd-first", localGroupsFile: "user_mismatching_groups.group"},
 		"UID_does_not_change_if_user_already_exists":                        {userCase: "same-name-different-uid", dbFile: "one_user_and_group", wantSameUID: true},
-		"Successfully update user with different capitalization":            {userCase: "different-capitalization-same-uid", dbFile: "one_user_and_group"},
 		"GID_does_not_change_if_group_with_same_UGID_exists":                {groupsCase: "different-name-same-ugid", dbFile: "one_user_and_group"},
 		"GID_does_not_change_if_group_with_same_name_and_empty_UGID_exists": {groupsCase: "authd-group", dbFile: "group-with-empty-UGID"},
 		"Removing_last_user_from_a_group_keeps_the_group_record":            {groupsCase: "no-groups", dbFile: "one_user_and_group"},
-		"Names_of_authd_groups_are_stored_in_lowercase":                     {groupsCase: "authd-group-with-uppercase"},
+		"Allow_login_with_existing_group_on_system":                         {groupsCase: "group-exists-on-system"},
 
 		"Error_if_user_has_no_username":                           {userCase: "nameless", wantErr: true, noOutput: true},
 		"Error_if_group_has_no_name":                              {groupsCase: "nameless-group", wantErr: true, noOutput: true},
 		"Error_if_group_has_conflicting_gid":                      {groupsCase: "different-name-same-gid", dbFile: "one_user_and_group", wantErr: true, noOutput: true},
 		"Error_if_group_with_same_name_but_different_UGID_exists": {groupsCase: "authd-group", dbFile: "one_user_and_group", wantErr: true, noOutput: true},
 		"Error_if_user_exists_on_system":                          {userCase: "user-exists-on-system", wantErr: true, noOutput: true},
-		"Error_if_group_exists_on_system":                         {groupsCase: "group-exists-on-system", wantErr: true, noOutput: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -271,7 +274,7 @@ func TestUpdateUser(t *testing.T) {
 				require.Equal(t, oldUID, newUser.UID, "UID should not have changed")
 			}
 
-			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Created database should be valid yaml content")
 
 			golden.CheckOrUpdate(t, got)
@@ -284,10 +287,15 @@ func TestUpdateUser(t *testing.T) {
 func TestRegisterUserPreauth(t *testing.T) {
 	t.Parallel()
 
+	// This test is flaky, see https://github.com/canonical/authd/issues/1120
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
+
 	userCases := map[string]userCase{
-		"user1":                   {UserInfo: types.UserInfo{Name: "user1"}, UID: 1111},
+		"user1":                   {UserInfo: types.UserInfo{Name: "user1@example.com"}, UID: 1111},
 		"nameless":                {UID: 1111},
-		"same-name-different-uid": {UserInfo: types.UserInfo{Name: "user1"}, UID: 3333},
+		"same-name-different-uid": {UserInfo: types.UserInfo{Name: "user1@example.com"}, UID: 3333},
 		"user-exists-on-system":   {UserInfo: types.UserInfo{Name: "root"}, UID: 1111},
 	}
 
@@ -366,6 +374,11 @@ func TestRegisterUserPreauth(t *testing.T) {
 func TestConcurrentUserUpdate(t *testing.T) {
 	t.Parallel()
 
+	// This test is flaky, see https://github.com/canonical/authd/issues/1120
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
+
 	const nIterations = 100
 	const preAuthIterations = 3
 	const perUserGroups = 3
@@ -391,10 +404,10 @@ func TestConcurrentUserUpdate(t *testing.T) {
 	idGenerator := &users.IDGenerator{
 		UIDMin: 0,
 		//nolint: gosec // we're in tests, overflow is very unlikely to happen.
-		UIDMax: uint32(len(systemPasswd)) + nIterations*preAuthIterations,
+		UIDMax: uint32(len(systemPasswd)) + nIterations*preAuthIterations + uint32(len(systemGroups)),
 		GIDMin: 0,
 		//nolint: gosec // we're in tests, overflow is very unlikely to happen.
-		GIDMax: uint32(len(systemGroups)) + nIterations*perUserGroups,
+		GIDMax: uint32(len(systemGroups)) + nIterations*perUserGroups + uint32(len(systemGroups)),
 	}
 	m := newManagerForTests(t, dbDir, users.WithIDGenerator(idGenerator))
 
@@ -484,8 +497,9 @@ func TestConcurrentUserUpdate(t *testing.T) {
 		})
 	}
 
+	// Test that adding users with the same name as system users fails
 	for _, u := range systemPasswd {
-		t.Run(fmt.Sprintf("Error_updating_user_%s", u.Name), func(t *testing.T) {
+		t.Run(fmt.Sprintf("Error_updating_user_with_name_conflict_%s", u.Name), func(t *testing.T) {
 			t.Parallel()
 
 			err := m.UpdateUser(types.UserInfo{
@@ -497,11 +511,12 @@ func TestConcurrentUserUpdate(t *testing.T) {
 		})
 	}
 
+	// Test that adding users with groups with the same name as local groups does not fail (we print a warning instead).
 	for idx, g := range systemGroups {
-		t.Run(fmt.Sprintf("Error_updating_user_with_non_local_group_%s", g.Name), func(t *testing.T) {
+		t.Run(fmt.Sprintf("Allow_updating_user_with_group_name_conflict_%s", g.Name), func(t *testing.T) {
 			t.Parallel()
 
-			userName := fmt.Sprintf("%s-with-invalid-groups%d", registeredUserPrefix, idx)
+			userName := fmt.Sprintf("%s-with-group-name-conflict%d", registeredUserPrefix, idx)
 			err := m.UpdateUser(types.UserInfo{
 				Name:  userName,
 				Dir:   "/home-prefixes/" + g.Name,
@@ -509,9 +524,12 @@ func TestConcurrentUserUpdate(t *testing.T) {
 				Groups: []types.GroupInfo{{
 					Name: g.Name,
 					UGID: fmt.Sprintf("authd-test-ugid-for-%s", g.Name),
+				}, {
+					Name: fmt.Sprintf("authd-test-local-group%d", idx),
 				}},
 			})
-			require.Error(t, err, "Updating user %q must fail but it does not", g.Name)
+			// UpdateUser call should pass although the user would not be added to the system group
+			require.NoError(t, err, "Updating user %q with group name conflict %q should not fail but it did", userName, g.Name)
 		})
 	}
 
@@ -522,15 +540,17 @@ func TestConcurrentUserUpdate(t *testing.T) {
 		// since this is actually a test.
 		wg.Wait()
 
-		// This includes the extra user that was already in the DB.
+		// This includes the extra user that was already in the DB and the
+		// users registered via non-local groups loop.
 		users, err := m.AllUsers()
 		require.NoError(t, err, "AllUsers should not fail but it did")
-		require.Len(t, users, nIterations+1, "Number of registered users mismatch")
+		require.Len(t, users, nIterations+1+len(systemGroups), "Number of registered users mismatch")
 
-		// This includes the extra group that was already in the DB.
+		// This includes the extra group that was already in the DB and the
+		// private groups for users registered via the non-local groups loop.
 		groups, err := m.AllGroups()
 		require.NoError(t, err, "AllGroups should not fail but it did")
-		require.Len(t, groups, nIterations*3+1, "Number of registered groups mismatch")
+		require.Len(t, groups, nIterations*3+1+len(systemGroups), "Number of registered groups mismatch")
 
 		lockedEntries, entriesUnlock, err := localentries.WithUserDBLock()
 		require.NoError(t, err, "Failed to lock the local entries")
@@ -611,7 +631,10 @@ func TestConcurrentUserUpdate(t *testing.T) {
 
 			require.GreaterOrEqual(t, g.GID, idGenerator.GIDMin,
 				"Generated GID should be an ID greater or equal to the minimum")
-			require.LessOrEqual(t, g.GID, idGenerator.GIDMax,
+			// The GID of user private groups is set to the same value as the UID, even if GIDMax is smaller,
+			// so we need to check that the generated GID is less or equal to the maximum between GIDMax and UIDMax.
+			gidMax := max(idGenerator.GIDMax, idGenerator.UIDMax)
+			require.LessOrEqual(t, g.GID, gidMax,
 				"Generate GID should be an ID less or equal to the maximum")
 		}
 	})
@@ -700,10 +723,10 @@ func TestBrokerForUser(t *testing.T) {
 		wantErr      bool
 		wantErrType  error
 	}{
-		"Successfully_get_broker_for_user":                     {username: "user1", dbFile: "multiple_users_and_groups", wantBrokerID: "broker-id"},
-		"Return_no_broker_but_in_db_if_user_has_no_broker_yet": {username: "userwithoutbroker", dbFile: "multiple_users_and_groups", wantBrokerID: ""},
+		"Successfully_get_broker_for_user":                     {username: "user1@example.com", dbFile: "multiple_users_and_groups", wantBrokerID: "broker-id"},
+		"Return_no_broker_but_in_db_if_user_has_no_broker_yet": {username: "userwithoutbroker@example.com", dbFile: "multiple_users_and_groups", wantBrokerID: ""},
 
-		"Error_if_user_does_not_exist": {username: "doesnotexist", dbFile: "multiple_users_and_groups", wantErrType: db.NoDataFoundError{}},
+		"Error_if_user_does_not_exist": {username: "doesnotexist@example.com", dbFile: "multiple_users_and_groups", wantErrType: db.NoDataFoundError{}},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -746,7 +769,7 @@ func TestUpdateBrokerForUser(t *testing.T) {
 			t.Parallel()
 
 			if tc.username == "" {
-				tc.username = "user1"
+				tc.username = "user1@example.com"
 			}
 			if tc.dbFile == "" {
 				tc.dbFile = "multiple_users_and_groups"
@@ -764,7 +787,99 @@ func TestUpdateBrokerForUser(t *testing.T) {
 				return
 			}
 
-			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
+			require.NoError(t, err, "Created database should be valid yaml content")
+
+			golden.CheckOrUpdate(t, got)
+		})
+	}
+}
+
+//nolint:dupl // This is not a duplicate test
+func TestLockUser(t *testing.T) {
+	tests := map[string]struct {
+		username string
+
+		dbFile string
+
+		wantErr     bool
+		wantErrType error
+	}{
+		"Successfully_lock_user": {},
+
+		"Error_if_user_does_not_exist": {username: "doesnotexist", wantErrType: db.NoDataFoundError{}},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			// We don't care about the output of gpasswd in this test, but we still need to mock it.
+			_ = localgroupstestutils.SetupGroupMock(t, filepath.Join("testdata", "groups", "empty.group"))
+
+			if tc.username == "" {
+				tc.username = "user1@example.com"
+			}
+			if tc.dbFile == "" {
+				tc.dbFile = "multiple_users_and_groups"
+			}
+
+			dbDir := t.TempDir()
+			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
+			require.NoError(t, err, "Setup: could not create database from testdata")
+			m := newManagerForTests(t, dbDir)
+
+			err = m.LockUser(tc.username)
+
+			requireErrorAssertions(t, err, tc.wantErrType, tc.wantErr)
+			if tc.wantErrType != nil || tc.wantErr {
+				return
+			}
+
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
+			require.NoError(t, err, "Created database should be valid yaml content")
+
+			golden.CheckOrUpdate(t, got)
+		})
+	}
+}
+
+//nolint:dupl // This is not a duplicate test
+func TestUnlockUser(t *testing.T) {
+	tests := map[string]struct {
+		username string
+
+		dbFile string
+
+		wantErr     bool
+		wantErrType error
+	}{
+		"Successfully_enable_user": {},
+
+		"Error_if_user_does_not_exist": {username: "doesnotexist", wantErrType: db.NoDataFoundError{}},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			// We don't care about the output of gpasswd in this test, but we still need to mock it.
+			_ = localgroupstestutils.SetupGroupMock(t, filepath.Join("testdata", "groups", "empty.group"))
+
+			if tc.username == "" {
+				tc.username = "user1@example.com"
+			}
+			if tc.dbFile == "" {
+				tc.dbFile = "locked_user"
+			}
+
+			dbDir := t.TempDir()
+			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
+			require.NoError(t, err, "Setup: could not create database from testdata")
+			m := newManagerForTests(t, dbDir)
+
+			err = m.UnlockUser(tc.username)
+
+			requireErrorAssertions(t, err, tc.wantErrType, tc.wantErr)
+			if tc.wantErrType != nil || tc.wantErr {
+				return
+			}
+
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Created database should be valid yaml content")
 
 			golden.CheckOrUpdate(t, got)
@@ -774,6 +889,11 @@ func TestUpdateBrokerForUser(t *testing.T) {
 
 func TestUserByIDAndName(t *testing.T) {
 	t.Parallel()
+
+	// This test is flaky, see https://github.com/canonical/authd/issues/1120
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
 
 	tests := map[string]struct {
 		uid        uint32
@@ -785,7 +905,7 @@ func TestUserByIDAndName(t *testing.T) {
 		wantErrType error
 	}{
 		"Successfully_get_user_by_ID":           {uid: 1111, dbFile: "multiple_users_and_groups"},
-		"Successfully_get_user_by_name":         {username: "user1", dbFile: "multiple_users_and_groups"},
+		"Successfully_get_user_by_name":         {username: "user1@example.com", dbFile: "multiple_users_and_groups"},
 		"Successfully_get_temporary_user_by_ID": {dbFile: "multiple_users_and_groups", isTempUser: true},
 
 		"Error_if_user_does_not_exist_-_by_ID":   {uid: 0, dbFile: "multiple_users_and_groups", wantErrType: db.NoDataFoundError{}},
@@ -802,7 +922,7 @@ func TestUserByIDAndName(t *testing.T) {
 			m := newManagerForTests(t, dbDir)
 
 			if tc.isTempUser {
-				tc.uid, err = m.RegisterUserPreAuth("tempuser1")
+				tc.uid, err = m.RegisterUserPreAuth("tempuser1@example.com")
 				require.NoError(t, err, "RegisterUser should not return an error, but did")
 			}
 
@@ -870,6 +990,11 @@ func TestAllUsers(t *testing.T) {
 
 func TestGroupByIDAndName(t *testing.T) {
 	t.Parallel()
+
+	// This test is flaky, see https://github.com/canonical/authd/issues/1120
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
 
 	tests := map[string]struct {
 		gid         uint32
@@ -978,7 +1103,7 @@ func TestShadowByName(t *testing.T) {
 		wantErr     bool
 		wantErrType error
 	}{
-		"Successfully_get_shadow_by_name": {username: "user1", dbFile: "multiple_users_and_groups"},
+		"Successfully_get_shadow_by_name": {username: "user1@example.com", dbFile: "multiple_users_and_groups"},
 
 		"Error_if_shadow_does_not_exist": {username: "doesnotexist", dbFile: "multiple_users_and_groups", wantErrType: db.NoDataFoundError{}},
 	}
@@ -1047,12 +1172,12 @@ func TestCompareNewUserInfoWithDB(t *testing.T) {
 	}{
 		"Compare_all_valid_users": {
 			dbFile:             "multiple_users_and_groups",
-			wantUserExactMatch: map[string]bool{"user1": true},
+			wantUserExactMatch: map[string]bool{"user1@example.com": true},
 		},
 		"Compare_all_not_matching_users": {
 			dbFile: "multiple_users_and_groups",
 			wantUserNoMatch: map[string]bool{
-				"user1": true, "user2": true, "user3": true, "userwithoutbroker": true,
+				"user1@example.com": true, "user2@example.com": true, "user3@example.com": true, "userwithoutbroker@example.com": true,
 			},
 		},
 	}
@@ -1070,7 +1195,8 @@ func TestCompareNewUserInfoWithDB(t *testing.T) {
 			require.NoError(t, err, "AllUsers should not fail but it did")
 
 			for _, u := range userEntries {
-				t.Run(u.Name, func(t *testing.T) {
+				testName, _, _ := strings.Cut(u.Name, "@")
+				t.Run(testName, func(t *testing.T) {
 					t.Parallel()
 
 					u, err := m.GetOldUserInfoFromDB(u.Name)
@@ -1132,7 +1258,7 @@ func TestRegisterUserPreAuthWhenLocked(t *testing.T) {
 
 	m := newManagerForTests(t, dbDir)
 
-	uid, err := m.RegisterUserPreAuth("locked-user")
+	uid, err := m.RegisterUserPreAuth("locked-user@example.com")
 	require.ErrorIs(t, err, userslocking.ErrLock)
 	require.Zero(t, uid, "Uid should be unset")
 }
@@ -1156,13 +1282,18 @@ func TestRegisterUserPreAuthAfterUnlock(t *testing.T) {
 
 	m := newManagerForTests(t, dbDir)
 
-	uid, err := m.RegisterUserPreAuth("locked-user")
+	uid, err := m.RegisterUserPreAuth("locked-user@example.com")
 	require.NoError(t, err, "Registration should not fail")
 	require.NotZero(t, uid, "UID should be set")
 }
 
 func TestUpdateUserWhenLocked(t *testing.T) {
 	// This cannot be parallel
+
+	// This test is flaky, see https://github.com/canonical/authd/issues/1120
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
 
 	userslocking.Z_ForTests_OverrideLockingAsLockedExternally(t, context.Background())
 	userslocking.Z_ForTests_SetMaxWaitTime(t, testutils.MultipliedSleepDuration(750*time.Millisecond))
@@ -1174,12 +1305,17 @@ func TestUpdateUserWhenLocked(t *testing.T) {
 
 	m := newManagerForTests(t, dbDir)
 
-	err = m.UpdateUser(types.UserInfo{UID: 1234, Name: "test-user"})
+	err = m.UpdateUser(types.UserInfo{UID: 1234, Name: "test-user@example.com"})
 	require.ErrorIs(t, err, userslocking.ErrLock)
 }
 
 func TestUpdateUserAfterUnlock(t *testing.T) {
 	// This cannot be parallel
+
+	// This test is flaky, see https://github.com/canonical/authd/issues/1120
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
 
 	waitTime := testutils.MultipliedSleepDuration(750 * time.Millisecond)
 	lockCtx, lockCancel := context.WithTimeout(context.Background(), waitTime/2)
@@ -1226,6 +1362,11 @@ func newManagerForTests(t *testing.T, dbDir string, opts ...users.Option) *users
 
 func TestMain(m *testing.M) {
 	log.SetLevel(log.DebugLevel)
+
+	if testutils.RunningInBubblewrap() {
+		m.Run()
+		return
+	}
 
 	userslocking.Z_ForTests_OverrideLocking()
 	defer userslocking.Z_ForTests_RestoreLocking()

@@ -1,9 +1,9 @@
 {
-		"name": "user-pre-check",
+		"name": "user-pre-check@example.com",
 		"uuid": "",
-		"gecos": "gecos for user-pre-check",
-		"dir": "/home/user-pre-check",
-		"shell": "/bin/sh/user-pre-check",
-		"avatar": "avatar for user-pre-check",
-		"groups": [ {"name": "group-user-pre-check", "ugid": "ugid-user-pre-check"} ]
+		"gecos": "gecos for user-pre-check@example.com",
+		"dir": "/home/user-pre-check@example.com",
+		"shell": "/bin/sh/user-pre-check@example.com",
+		"avatar": "avatar for user-pre-check@example.com",
+		"groups": [ {"name": "group-user-pre-check@example.com", "ugid": "ugid-user-pre-check@example.com"} ]
 	}

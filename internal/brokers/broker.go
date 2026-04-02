@@ -10,12 +10,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/internal/users/types"
+	"github.com/canonical/authd/log"
 	"github.com/godbus/dbus/v5"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/users/types"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/decorate"
 	"golang.org/x/exp/slices"
 )
 
@@ -171,7 +171,7 @@ func (b Broker) IsAuthenticated(ctx context.Context, sessionID, authenticationDa
 
 	// Validate access authentication.
 	if !slices.Contains(auth.Replies, access) {
-		return "", "", fmt.Errorf("invalid access authentication key: %v", access)
+		return "", "", fmt.Errorf("invalid broker response: %q", access)
 	}
 
 	if data == "" {

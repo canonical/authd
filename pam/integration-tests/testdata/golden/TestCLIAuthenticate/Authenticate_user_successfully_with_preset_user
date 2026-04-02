@@ -18,10 +18,10 @@ Gimme your password:
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 PAM Authenticate()
-  User: "user-integration-preset-testcliauthenticate"
+  User: "user-integration-preset-testcliauthenticate@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-preset-testcliauthenticate"
+  User: "user-integration-preset-testcliauthenticate@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

@@ -67,6 +67,26 @@ func IsRace() bool {
 	return isRace
 }
 
+// GoBuildFlags returns the Go build flags that should be used when building binaries in tests.
+// It includes flags for coverage, address sanitizer, and race detection if they are enabled
+// in the current test environment.
+//
+// Note: The flags returned by this function must be the first arguments to the `go build` command,
+// because -cover is a "positional flag".
+func GoBuildFlags() []string {
+	var flags []string
+	if CoverDirForTests() != "" {
+		flags = append(flags, "-cover")
+	}
+	if IsAsan() {
+		flags = append(flags, "-asan")
+	}
+	if IsRace() {
+		flags = append(flags, "-race")
+	}
+	return flags
+}
+
 // SleepMultiplier returns the sleep multiplier to be used in tests.
 func SleepMultiplier() float64 {
 	sleepMultiplierOnce.Do(func() {
@@ -99,3 +119,21 @@ func SleepMultiplier() float64 {
 func MultipliedSleepDuration(in time.Duration) time.Duration {
 	return time.Duration(math.Round(float64(in) * SleepMultiplier()))
 }
+
+// IsCI returns whether the test is running in CI environment.
+var IsCI = sync.OnceValue(func() bool {
+	_, ok := os.LookupEnv("GITHUB_ACTIONS")
+	return ok
+})
+
+// IsDebianPackageBuild returns true if the tests are running in a Debian package build environment.
+var IsDebianPackageBuild = sync.OnceValue(func() bool {
+	_, ok := os.LookupEnv("DEB_BUILD_ARCH")
+	return ok
+})
+
+// IsAutoPkgTest returns true if the tests are running in an autopkgtest environment.
+var IsAutoPkgTest = sync.OnceValue(func() bool {
+	_, ok := os.LookupEnv("AUTOPKGTEST_TEST_ARCH")
+	return ok
+})

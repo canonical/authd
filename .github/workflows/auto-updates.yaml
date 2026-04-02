@@ -1,9 +1,10 @@
-name: Update translations and Rust packaging related files in main
+name: Update Rust packaging related files in main
 on:
   push:
     branches:
       - main
-    paths-ignore:
+    paths:
+      - 'Cargo.lock'
       - 'debian/control'
 concurrency: auto-update
 
@@ -53,7 +54,7 @@ jobs:
           fi
 
       - name: Checkout the code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ matrix.branch }}
 
@@ -71,14 +72,16 @@ jobs:
         run: |
           set -euo pipefail
 
+          echo "Running dh-cargo-vendored-sources"
           VENDORED_SOURCES=$(/usr/share/cargo/bin/dh-cargo-vendored-sources 2>&1) \
             || cmd_status=$?
+          echo "${VENDORED_SOURCES}"
+
           OUTPUT=$(echo "$VENDORED_SOURCES" | grep ^XS-Vendored-Sources-Rust: || true)
           if [ -z "${OUTPUT}" ]; then
             if [ "${cmd_status:-0}" -ne 0 ]; then
               # dh-cargo-vendored-sources failed because of other reason, so let's fail with it!
-              echo "dh-cargo-vendored-sources failed:"
-              echo "${VENDORED_SOURCES}"
+              echo "dh-cargo-vendored-sources failed unexpectedly (exit code ${cmd_status})"
               exit "${cmd_status}"
             fi
 
@@ -92,7 +95,7 @@ jobs:
 
       - name: Create Pull Request
         if: ${{ env.modified == 'true' }}
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: Auto update packaging related Rust files
           title: |

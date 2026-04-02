@@ -1,0 +1,30 @@
+name: 'Install debug symbols for glibc, PAM and GLib'
+description: 'Installs debug symbols for glibc, PAM and GLib for better stack traces'
+runs:
+  using: 'composite'
+  steps:
+    - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
+
+    - name: Install glibc, PAM and GLib debug symbols
+      shell: bash
+      run: |
+        # Install glibc, PAM and GLib debug symbols
+        set -eu
+
+        sudo apt-get install -y ubuntu-dbgsym-keyring libc6-dbg
+        echo "deb http://ddebs.ubuntu.com $(lsb_release -cs) main restricted universe multiverse
+        deb http://ddebs.ubuntu.com $(lsb_release -cs)-updates main restricted universe multiverse
+        deb http://ddebs.ubuntu.com $(lsb_release -cs)-proposed main restricted universe multiverse" | \
+        sudo tee -a /etc/apt/sources.list.d/ddebs.list
+        # Sometimes ddebs archive is stuck, so in case of failure we need to go manual
+        sudo apt-get update -y || true
+        if ! sudo apt-get install -y libpam-modules-dbgsym libpam0*-dbgsym libglib2.0-0*-dbgsym; then
+          sudo apt-get install -y ubuntu-dev-tools
+          for pkg in pam glib2.0; do
+            pull-lp-debs "${pkg}" $(lsb_release -cs)
+            pull-lp-ddebs "${pkg}" $(lsb_release -cs)
+          done
+          sudo apt-get install -y ./libpam0*.*deb ./libpam-modules*.*deb ./libglib2.0-0*-dbgsym*.ddeb
+          sudo apt-get remove -y ubuntu-dev-tools
+          sudo apt-get autoremove -y
+        fi

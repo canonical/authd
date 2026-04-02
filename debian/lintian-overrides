@@ -7,3 +7,10 @@ authd: lacks-versioned-link-to-shared-library usr/lib/*/libnss_authd.so [usr/lib
 # done in the dh_auto_install step.
 # With this approach, libnss is not using soname to track compatibility, so this override is safe.
 authd: shared-library-lacks-version usr/lib/*/libnss_authd.so.2 libnss_authd.so
+
+# Static-Built-Using is a valid field introduced in dpkg 1.21.0 but not yet recognized by lintian
+# in Ubuntu Noble (24.04).
+authd: unknown-field Static-Built-Using
+
+# "Unknwon" is the actual name/username of the copyright holder for gopkg.in/ini.v1, not a typo
+authd: spelling-error-in-copyright Unknwon Unknown

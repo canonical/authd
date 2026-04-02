@@ -14,22 +14,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/brokers"
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/services/errmessages"
+	"github.com/canonical/authd/internal/services/pam"
+	"github.com/canonical/authd/internal/services/permissions"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/users"
+	"github.com/canonical/authd/internal/users/db"
+	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	userslocking "github.com/canonical/authd/internal/users/locking"
+	userstestutils "github.com/canonical/authd/internal/users/testutils"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/brokers"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/internal/services/errmessages"
-	"github.com/ubuntu/authd/internal/services/pam"
-	"github.com/ubuntu/authd/internal/services/permissions"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
-	"github.com/ubuntu/authd/internal/users"
-	"github.com/ubuntu/authd/internal/users/db"
-	localgroupstestutils "github.com/ubuntu/authd/internal/users/localentries/testutils"
-	userslocking "github.com/ubuntu/authd/internal/users/locking"
-	userstestutils "github.com/ubuntu/authd/internal/users/testutils"
-	"github.com/ubuntu/authd/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -134,15 +134,16 @@ func TestGetPreviousBroker(t *testing.T) {
 		wantBroker string
 		wantErr    bool
 	}{
-		"Success_getting_previous_broker":                          {user: "userwithbroker", wantBroker: mockBrokerGeneratedID},
+		"Success_getting_previous_broker":                          {user: "userwithbroker@example.com", wantBroker: mockBrokerGeneratedID},
 		"For_local_user,_get_local_broker":                         {user: currentUsername, wantBroker: brokers.LocalBrokerName},
-		"For_unmanaged_user_and_only_one_broker,_get_local_broker": {user: "nonexistent", onlyLocalBroker: true, wantBroker: brokers.LocalBrokerName},
+		"For_unmanaged_user_and_only_one_broker,_get_local_broker": {user: "nonexistent@example.com", onlyLocalBroker: true, wantBroker: brokers.LocalBrokerName},
+		"Username_is_case_insensitive":                             {user: "UserWithBroker@example.com", wantBroker: mockBrokerGeneratedID},
 
-		"Returns_empty_when_user_does_not_exist":         {user: "nonexistent", wantBroker: ""},
-		"Returns_empty_when_user_does_not_have_a_broker": {user: "userwithoutbroker", wantBroker: ""},
-		"Returns_empty_when_broker_is_not_available":     {user: "userwithinactivebroker", wantBroker: ""},
+		"Returns_empty_when_user_does_not_exist":         {user: "nonexistent@example.com", wantBroker: ""},
+		"Returns_empty_when_user_does_not_have_a_broker": {user: "userwithoutbroker@example.com", wantBroker: ""},
+		"Returns_empty_when_broker_is_not_available":     {user: "userwithinactivebroker@example.com", wantBroker: ""},
 
-		"Error_when_not_root": {user: "userwithbroker", currentUserNotRoot: true, wantErr: true},
+		"Error_when_not_root": {user: "userwithbroker@example.com", currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -193,29 +194,40 @@ func TestSelectBroker(t *testing.T) {
 		brokerID    string
 		username    string
 		sessionMode string
+		existingDB  string
 
 		currentUserNotRoot bool
 
 		wantErr bool
 	}{
-		"Successfully_select_a_broker_and_creates_auth_session":   {username: "success", sessionMode: auth.SessionModeLogin},
-		"Successfully_select_a_broker_and_creates_passwd_session": {username: "success", sessionMode: auth.SessionModeChangePassword},
+		"Successfully_select_a_broker_and_creates_auth_session":   {username: "success@example.com", sessionMode: auth.SessionModeLogin},
+		"Successfully_select_a_broker_and_creates_passwd_session": {username: "success@example.com", sessionMode: auth.SessionModeChangePassword},
 
-		"Error_when_not_root":                             {username: "success", currentUserNotRoot: true, wantErr: true},
+		"Error_when_not_root":                             {username: "success@example.com", currentUserNotRoot: true, wantErr: true},
 		"Error_when_username_is_empty":                    {wantErr: true},
 		"Error_when_mode_is_empty":                        {sessionMode: "-", wantErr: true},
 		"Error_when_mode_does_not_exist":                  {sessionMode: "does not exist", wantErr: true},
-		"Error_when_brokerID_is_empty":                    {username: "empty broker", brokerID: "-", wantErr: true},
-		"Error_when_broker_does_not_exist":                {username: "no broker", brokerID: "does not exist", wantErr: true},
-		"Error_when_broker_does_not_provide_a_session_ID": {username: "ns_no_id", wantErr: true},
-		"Error_when_starting_the_session":                 {username: "ns_error", wantErr: true},
+		"Error_when_brokerID_is_empty":                    {username: "empty broker@example.com", brokerID: "-", wantErr: true},
+		"Error_when_broker_does_not_exist":                {username: "no broker@example.com", brokerID: "does not exist", wantErr: true},
+		"Error_when_broker_does_not_provide_a_session_ID": {username: "ns_no_id@example.com", wantErr: true},
+		"Error_when_starting_the_session":                 {username: "ns_error@example.com", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
+			cacheDir := t.TempDir()
+			if tc.existingDB != "" {
+				err := db.Z_ForTests_CreateDBFromYAML(filepath.Join(testutils.TestFamilyPath(t), tc.existingDB), cacheDir)
+				require.NoError(t, err, "Setup: could not create database from testdata")
+			}
+
+			m, err := users.NewManager(users.DefaultConfig, cacheDir)
+			require.NoError(t, err, "Setup: could not create user manager")
+			t.Cleanup(func() { _ = m.Stop() })
+
 			pm := newPermissionManager(t, tc.currentUserNotRoot)
-			client := newPamClient(t, nil, globalBrokerManager, &pm)
+			client := newPamClient(t, m, globalBrokerManager, &pm)
 
 			switch tc.brokerID {
 			case "":
@@ -271,14 +283,14 @@ func TestGetAuthenticationModes(t *testing.T) {
 		wantErr bool
 	}{
 		"Successfully_get_authentication_modes":          {},
-		"Successfully_get_multiple_authentication_modes": {username: "gam_multiple_modes"},
+		"Successfully_get_multiple_authentication_modes": {username: "gam_multiple_modes@example.com"},
 
 		"Error_when_not_root":                     {currentUserNotRoot: true, wantErr: true},
 		"Error_when_sessionID_is_empty":           {sessionID: "-", wantErr: true},
 		"Error_when_passing_invalid_layout":       {supportedUILayouts: []*authd.UILayout{emptyType}, wantErr: true},
 		"Error_when_sessionID_is_invalid":         {sessionID: "invalid-session", wantErr: true},
-		"Error_when_getting_authentication_modes": {username: "gam_error", wantErr: true},
-		"Error_when_broker_returns_invalid_modes": {username: "gam_invalid", wantErr: true},
+		"Error_when_getting_authentication_modes": {username: "gam_error@example.com", wantErr: true},
+		"Error_when_broker_returns_invalid_modes": {username: "gam_invalid@example.com", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -336,24 +348,24 @@ func TestSelectAuthenticationMode(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Successfully_select_mode_with_required_value":         {username: "sam_success_required_entry", supportedUILayouts: []*authd.UILayout{requiredEntry}},
-		"Successfully_select_mode_with_missing_optional_value": {username: "sam_missing_optional_entry", supportedUILayouts: []*authd.UILayout{optionalEntry}},
+		"Successfully_select_mode_with_required_value":         {username: "sam_success_required_entry@example.com", supportedUILayouts: []*authd.UILayout{requiredEntry}},
+		"Successfully_select_mode_with_missing_optional_value": {username: "sam_missing_optional_entry@example.com", supportedUILayouts: []*authd.UILayout{optionalEntry}},
 
 		// service errors
-		"Error_when_not_root":                {username: "sam_success_required_entry", currentUserNotRoot: true, wantErr: true},
+		"Error_when_not_root":                {username: "sam_success_required_entry@example.com", currentUserNotRoot: true, wantErr: true},
 		"Error_when_sessionID_is_empty":      {sessionID: "-", wantErr: true},
 		"Error_when_session_ID_is_invalid":   {sessionID: "invalid-session", wantErr: true},
 		"Error_when_no_authmode_is_selected": {sessionID: "no auth mode", authMode: "-", wantErr: true},
 
 		// broker errors
-		"Error_when_selecting_invalid_auth_mode":                     {username: "sam_error", supportedUILayouts: []*authd.UILayout{requiredEntry}, wantErr: true},
-		"Error_when_broker_does_not_have_validators_for_the_session": {username: "does not matter", noValidators: true, wantErr: true},
+		"Error_when_selecting_invalid_auth_mode":                     {username: "sam_error@example.com", supportedUILayouts: []*authd.UILayout{requiredEntry}, wantErr: true},
+		"Error_when_broker_does_not_have_validators_for_the_session": {username: "does not matter@example.com", noValidators: true, wantErr: true},
 
 		/* Layout errors */
-		"Error_when_returns_no_layout":                     {username: "sam_no_layout", supportedUILayouts: []*authd.UILayout{requiredEntry}, wantErr: true},
-		"Error_when_returns_layout_with_no_type":           {username: "sam_no_layout_type", supportedUILayouts: []*authd.UILayout{requiredEntry}, wantErr: true},
-		"Error_when_returns_layout_without_required_value": {username: "sam_missing_required_entry", supportedUILayouts: []*authd.UILayout{requiredEntry}, wantErr: true},
-		"Error_when_returns_layout_with_unknown_field":     {username: "sam_unknown_field", supportedUILayouts: []*authd.UILayout{requiredEntry}, wantErr: true},
+		"Error_when_returns_no_layout":                     {username: "sam_no_layout@example.com", supportedUILayouts: []*authd.UILayout{requiredEntry}, wantErr: true},
+		"Error_when_returns_layout_with_no_type":           {username: "sam_no_layout_type@example.com", supportedUILayouts: []*authd.UILayout{requiredEntry}, wantErr: true},
+		"Error_when_returns_layout_without_required_value": {username: "sam_missing_required_entry@example.com", supportedUILayouts: []*authd.UILayout{requiredEntry}, wantErr: true},
+		"Error_when_returns_layout_with_unknown_field":     {username: "sam_unknown_field@example.com", supportedUILayouts: []*authd.UILayout{requiredEntry}, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -424,27 +436,30 @@ func TestIsAuthenticated(t *testing.T) {
 
 		// There is no wantErr as it's stored in the golden file.
 	}{
-		"Successfully_authenticate":                           {username: "success"},
-		"Successfully_authenticate_if_first_call_is_canceled": {username: "ia_second_call", secondCall: true, cancelFirstCall: true},
-		"Denies_authentication_when_broker_times_out":         {username: "ia_timeout"},
-		"Update_existing_DB_on_success":                       {username: "success", existingDB: "cache-with-user.db"},
-		"Update_local_groups":                                 {username: "success_with_local_groups", localGroupsFile: "valid.group"},
+		"Successfully_authenticate":                            {username: "success@example.com"},
+		"Successfully_authenticate_if_first_call_is_canceled":  {username: "ia_second_call@example.com", secondCall: true, cancelFirstCall: true},
+		"Denies_authentication_when_broker_times_out":          {username: "ia_timeout@example.com"},
+		"Update_existing_DB_on_success":                        {username: "success@example.com", existingDB: "cache-with-user.db"},
+		"Update_local_groups":                                  {username: "success_with_local_groups@example.com", localGroupsFile: "valid.group"},
+		"Successfully_authenticate_user_with_uppercase":        {username: "SUCCESS@example.com"},
+		"Successfully_authenticate_with_groups_with_uppercase": {username: "success_with_uppercase_groups@example.com"},
 
 		// service errors
-		"Error_when_not_root":           {username: "success", currentUserNotRoot: true},
+		"Error_when_not_root":           {username: "success@example.com", currentUserNotRoot: true},
 		"Error_when_sessionID_is_empty": {sessionID: "-"},
 		"Error_when_there_is_no_broker": {sessionID: "invalid-session"},
+		"Error_when_user_is_locked":     {username: "locked@example.com", existingDB: "cache-with-locked-user.db"},
 
 		// broker errors
-		"Error_when_authenticating":                         {username: "ia_error"},
-		"Error_on_empty_data_even_if_granted":               {username: "ia_empty_data"},
-		"Error_when_broker_returns_invalid_access":          {username: "ia_invalid_access"},
-		"Error_when_broker_returns_invalid_data":            {username: "ia_invalid_data"},
-		"Error_when_broker_returns_invalid_userinfo":        {username: "ia_invalid_userinfo"},
-		"Error_when_calling_second_time_without_cancelling": {username: "ia_second_call", secondCall: true},
+		"Error_when_authenticating":                         {username: "ia_error@example.com"},
+		"Error_on_empty_data_even_if_granted":               {username: "ia_empty_data@example.com"},
+		"Error_when_broker_returns_invalid_access":          {username: "ia_invalid_access@example.com"},
+		"Error_when_broker_returns_invalid_data":            {username: "ia_invalid_data@example.com"},
+		"Error_when_broker_returns_invalid_userinfo":        {username: "ia_invalid_userinfo@example.com"},
+		"Error_when_calling_second_time_without_cancelling": {username: "ia_second_call@example.com", secondCall: true},
 
 		// local group error
-		"Error_on_updating_local_groups_with_unexisting_file": {username: "success_with_local_groups", localGroupsFile: "does_not_exists.group"},
+		"Error_on_updating_local_groups_with_unexisting_file": {username: "success_with_local_groups@example.com", localGroupsFile: "does_not_exists.group"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -467,7 +482,7 @@ func TestIsAuthenticated(t *testing.T) {
 			managerOpts := []users.Option{
 				users.WithIDGenerator(&users.IDGeneratorMock{
 					UIDsToGenerate: []uint32{1111},
-					GIDsToGenerate: []uint32{22222},
+					GIDsToGenerate: []uint32{22222, 33333, 44444},
 				}),
 			}
 
@@ -535,8 +550,22 @@ func TestIsAuthenticated(t *testing.T) {
 			got = permissions.Z_ForTests_IdempotentPermissionError(got)
 			golden.CheckOrUpdate(t, got, golden.WithPath("IsAuthenticated"))
 
+			// Check that all usernames in the database are lowercase
+			allUsers, err := m.AllUsers()
+			require.NoError(t, err, "Setup: failed to get users from manager")
+			for _, u := range allUsers {
+				require.Equal(t, strings.ToLower(u.Name), u.Name, "all usernames in the database should be lowercase")
+			}
+
+			// Check that all groups in the database are lowercase
+			groups, err := m.AllGroups()
+			require.NoError(t, err, "Setup: failed to get groups from manager")
+			for _, group := range groups {
+				require.Equal(t, strings.ToLower(group.Name), group.Name, "all groups in the database should be lowercase")
+			}
+
 			// Check that database has been updated too.
-			gotDB, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			gotDB, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Setup: failed to dump database for comparing")
 			golden.CheckOrUpdate(t, gotDB, golden.WithPath("cache.db"))
 
@@ -552,7 +581,7 @@ func TestIDGeneration(t *testing.T) {
 	tests := map[string]struct {
 		username string
 	}{
-		"Generate_ID": {username: "success"},
+		"Generate_ID": {username: "success@example.com"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -582,7 +611,7 @@ func TestIDGeneration(t *testing.T) {
 			require.NoError(t, err, "Setup: could not authenticate user")
 			require.Equal(t, "granted", resp.GetAccess(), "Setup: authentication should be granted")
 
-			gotDB, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			gotDB, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Setup: failed to dump database for comparing")
 			golden.CheckOrUpdate(t, gotDB, golden.WithPath("cache.db"))
 		})
@@ -599,14 +628,15 @@ func TestSetDefaultBrokerForUser(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Set_default_broker_for_existing_user_with_no_broker":   {username: "usersetbroker"},
-		"Update_default_broker_for_existing_user_with_a_broker": {username: "userupdatebroker"},
+		"Set_default_broker_for_existing_user_with_no_broker":   {username: "usersetbroker@example.com"},
+		"Update_default_broker_for_existing_user_with_a_broker": {username: "userupdatebroker@example.com"},
+		"Username_is_case_insensitive":                          {username: "UserSetBroker@example.com"},
 
-		"Error_when_setting_default_broker_to_local_broker": {username: "userlocalbroker", brokerID: brokers.LocalBrokerName, wantErr: true},
-		"Error_when_not_root":                               {username: "usersetbroker", currentUserNotRoot: true, wantErr: true},
+		"Error_when_setting_default_broker_to_local_broker": {username: "userlocalbroker@example.com", brokerID: brokers.LocalBrokerName, wantErr: true},
+		"Error_when_not_root":                               {username: "usersetbroker@example.com", currentUserNotRoot: true, wantErr: true},
 		"Error_when_username_is_empty":                      {wantErr: true},
-		"Error_when_user_does_not_exist_":                   {username: "doesnotexist", wantErr: true},
-		"Error_when_broker_does_not_exist":                  {username: "userwithbroker", brokerID: "does not exist", wantErr: true},
+		"Error_when_user_does_not_exist_":                   {username: "doesnotexist@example.com", wantErr: true},
+		"Error_when_broker_does_not_exist":                  {username: "userwithbroker@example.com", brokerID: "does not exist", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -642,7 +672,7 @@ func TestSetDefaultBrokerForUser(t *testing.T) {
 			require.Equal(t, tc.brokerID, gpbResp.GetPreviousBroker(), "SetDefaultBrokerForUser should set the default broker as expected")
 
 			// Check that database has been updated too.
-			gotDB, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.GetManagerDB(m))
+			gotDB, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Setup: failed to dump database for comparing")
 			golden.CheckOrUpdate(t, gotDB, golden.WithPath("cache.db"))
 		})
@@ -660,12 +690,12 @@ func TestEndSession(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Successfully_end_session": {username: "success"},
+		"Successfully_end_session": {username: "success@example.com"},
 
-		"Error_when_not_root":             {username: "success", currentUserNotRoot: true, wantErr: true},
+		"Error_when_not_root":             {username: "success@example.com", currentUserNotRoot: true, wantErr: true},
 		"Error_when_sessionID_is_empty":   {sessionID: "-", wantErr: true},
 		"Error_when_sessionID_is_invalid": {sessionID: "invalid-session", wantErr: true},
-		"Error_when_ending_session":       {username: "es_error", wantErr: true},
+		"Error_when_ending_session":       {username: "es_error@example.com", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -805,6 +835,10 @@ func getMockBrokerGeneratedID(brokerManager *brokers.Manager) (string, error) {
 // startSession is a helper that starts a session on the mock broker.
 func startSession(t *testing.T, client authd.PAMClient, username string) string {
 	t.Helper()
+
+	if username == "" {
+		username = "user@example.com"
+	}
 
 	// Prefixes the username to avoid concurrency issues.
 	username = t.Name() + testutils.IDSeparator + username

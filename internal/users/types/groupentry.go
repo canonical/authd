@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ubuntu/authd/internal/sliceutils"
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/internal/sliceutils"
+	"github.com/canonical/authd/log"
 )
 
 // Validate validates the group entry values.

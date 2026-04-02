@@ -35,7 +35,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -58,7 +58,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -81,7 +81,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -91,10 +91,9 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 >
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
@@ -109,7 +108,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -119,10 +118,9 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
@@ -137,7 +135,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -147,14 +145,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -177,7 +174,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -187,14 +184,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -217,7 +213,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -227,14 +223,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -245,8 +240,7 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 >
 ────────────────────────────────────────────────────────────────────────────────
@@ -262,7 +256,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -272,14 +266,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -290,8 +283,7 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 ────────────────────────────────────────────────────────────────────────────────
@@ -307,7 +299,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -317,14 +309,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -335,13 +326,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -364,7 +354,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -374,14 +364,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -392,13 +381,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -421,7 +409,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -431,14 +419,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -449,13 +436,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -466,8 +452,7 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 >
 ────────────────────────────────────────────────────────────────────────────────
@@ -483,7 +468,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -493,14 +478,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -511,13 +495,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -528,8 +511,7 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 ────────────────────────────────────────────────────────────────────────────────
@@ -545,7 +527,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -555,14 +537,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -573,13 +554,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -590,13 +570,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -619,7 +598,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -629,14 +608,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -647,13 +625,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -664,13 +641,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -693,7 +669,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -703,14 +679,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -721,13 +696,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -738,13 +712,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -755,8 +728,7 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 >
 ────────────────────────────────────────────────────────────────────────────────
@@ -772,7 +744,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -782,14 +754,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -800,13 +771,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -817,13 +787,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -834,8 +803,7 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 ────────────────────────────────────────────────────────────────────────────────
@@ -851,7 +819,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -861,14 +829,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -879,13 +846,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -896,13 +862,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -913,13 +878,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -942,7 +906,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -952,14 +916,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -970,13 +933,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -987,13 +949,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1004,13 +965,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1033,7 +993,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1043,14 +1003,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1061,13 +1020,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1078,13 +1036,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1095,13 +1052,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1128,7 +1084,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1138,14 +1094,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1156,13 +1111,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1173,13 +1127,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1190,13 +1143,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1223,7 +1175,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1233,14 +1185,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1251,13 +1202,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1268,13 +1218,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1285,13 +1234,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1307,7 +1255,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1330,7 +1278,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1340,14 +1288,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1358,13 +1305,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1375,13 +1321,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1392,13 +1337,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1414,7 +1358,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1437,7 +1381,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1447,14 +1391,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1465,13 +1408,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1482,13 +1424,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1499,13 +1440,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1521,7 +1461,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1571,7 +1511,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1581,14 +1521,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1599,13 +1538,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1616,13 +1554,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1633,13 +1570,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1655,7 +1591,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1705,7 +1641,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1715,14 +1651,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1733,13 +1668,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1750,13 +1684,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1767,13 +1700,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1789,7 +1721,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1828,7 +1760,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1851,7 +1783,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1861,14 +1793,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1879,13 +1810,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1896,13 +1826,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1913,13 +1842,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1935,7 +1863,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1974,7 +1902,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -1997,7 +1925,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2007,14 +1935,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2025,13 +1952,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2042,13 +1968,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2059,13 +1984,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2081,7 +2005,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2120,7 +2044,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2149,7 +2073,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2159,14 +2083,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2177,13 +2100,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2194,13 +2116,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2211,13 +2132,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2233,7 +2153,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2272,7 +2192,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2301,7 +2221,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2311,14 +2231,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2329,13 +2248,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2346,13 +2264,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2363,13 +2280,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2385,7 +2301,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2424,7 +2340,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2442,7 +2358,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2465,7 +2381,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2475,14 +2391,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2493,13 +2408,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2510,13 +2424,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2527,13 +2440,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2549,7 +2461,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2588,7 +2500,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2606,7 +2518,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2629,7 +2541,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2639,14 +2551,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2657,13 +2568,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2674,13 +2584,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2691,13 +2600,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2713,7 +2621,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2752,7 +2660,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2770,7 +2678,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2796,7 +2704,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2806,14 +2714,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2824,13 +2731,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2841,13 +2747,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2858,13 +2763,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2880,7 +2784,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2919,7 +2823,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2937,7 +2841,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2963,7 +2867,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2973,14 +2877,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -2991,13 +2894,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3008,13 +2910,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3025,13 +2926,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3047,7 +2947,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3086,7 +2986,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3104,7 +3004,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3120,7 +3020,7 @@ Choose your authentication method:
 PAM Error Message: Invalid selection
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3143,7 +3043,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3153,14 +3053,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3171,13 +3070,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3188,13 +3086,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3205,13 +3102,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3227,7 +3123,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3266,7 +3162,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3284,7 +3180,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3300,7 +3196,7 @@ Choose your authentication method:
 PAM Error Message: Invalid selection
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3323,7 +3219,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3333,14 +3229,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3351,13 +3246,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3368,13 +3262,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3385,13 +3278,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3407,7 +3299,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3446,7 +3338,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3464,7 +3356,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3480,7 +3372,7 @@ Choose your authentication method:
 PAM Error Message: Invalid selection
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3507,7 +3399,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3517,14 +3409,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3535,13 +3426,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3552,13 +3442,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3569,13 +3458,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3591,7 +3479,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3630,7 +3518,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3648,7 +3536,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3664,7 +3552,7 @@ Choose your authentication method:
 PAM Error Message: Invalid selection
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3691,7 +3579,7 @@ Gimme your password:
 >
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3701,14 +3589,13 @@ Gimme your password:
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
-== Send URL to user-integration-switch-mode-native@gmail.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go
- back to select the authentication method
-Click on the link received at user-integration-switch-mode-native@gmail.com or enter the code:
+== Send URL to user-integration-switch-mode-native@example.com ==
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Click on the link received at user-integration-switch-mode-native@example.com or enter the code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3719,13 +3606,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3736,13 +3622,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3753,13 +3638,12 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication meth
-od
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3775,7 +3659,7 @@ Enter your pin code:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3814,7 +3698,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3832,7 +3716,7 @@ Choose action:
 > r
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3848,7 +3732,7 @@ Choose your authentication method:
 PAM Error Message: Invalid selection
 == Authentication method selection ==
   1. Password authentication
-  2. Send URL to user-integration-switch-mode-native@gmail.com
+  2. Send URL to user-integration-switch-mode-native@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -3863,10 +3747,10 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Enter your pin code:
 > 4242
 PAM Authenticate()
-  User: "user-integration-switch-mode-native"
+  User: "user-integration-switch-mode-native@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-switch-mode-native"
+  User: "user-integration-switch-mode-native@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

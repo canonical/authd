@@ -1,0 +1,81 @@
+name: e2e-tests
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**'
+      - '!.github/**'
+      - '.github/workflows/build-broker-snap.yaml'
+      - '.github/workflows/e2e-tests.yaml'
+      - '.github/workflows/e2e-tests-provision-and-run.yaml'
+      - '.github/workflows/e2e-tests-run.yaml'
+      - '.github/workflows/debian-build.yaml'
+      - '!.gitignore'
+      - '!.gitmodules'
+      - '!.golangci.yaml'
+      - '!*.md'
+      - '!COPYING*'
+      - '!docs/**'
+      - '!examplebroker/**'
+      - '!gotestcov'
+      - '!**_test.go'
+      - '!**/testdata/**'
+      - '!**/testutils/**'
+
+    tags:
+      - "*"
+  pull_request:
+    paths:
+      - '**'
+      - '!.github/**'
+      - '.github/workflows/build-broker-snap.yaml'
+      - '.github/workflows/e2e-tests.yaml'
+      - '.github/workflows/e2e-tests-provision-and-run.yaml'
+      - '.github/workflows/e2e-tests-run.yaml'
+      - '.github/workflows/debian-build.yaml'
+      - '!.gitignore'
+      - '!.gitmodules'
+      - '!.golangci.yaml'
+      - '!*.md'
+      - '!COPYING*'
+      - '!docs/**'
+      - '!examplebroker/**'
+      - '!gotestcov'
+      - '!**_test.go'
+      - '!**/testdata/**'
+      - '!**/testutils/**'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 1'  # Runs every Monday at midnight
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compute-hash:
+    name: Compute hash of build-relevant files
+    runs-on: ubuntu-latest
+    outputs:
+      files-hash: ${{ steps.hash.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Compute hash of build-relevant files
+        id: hash
+        run: |
+          hash=$(bash .github/scripts/compute-deb-build-hash.sh)
+          echo "hash=${hash}" >> "${GITHUB_OUTPUT}"
+
+  provision-and-run:
+    needs: compute-hash
+    strategy:
+      matrix:
+        ubuntu-version: [ 'noble', 'questing' ]
+      fail-fast: false
+    uses: ./.github/workflows/e2e-tests-provision-and-run.yaml
+    with:
+      ubuntu-version: ${{ matrix.ubuntu-version }}
+      files-hash: ${{ needs.compute-hash.outputs.files-hash }}
+    secrets: inherit

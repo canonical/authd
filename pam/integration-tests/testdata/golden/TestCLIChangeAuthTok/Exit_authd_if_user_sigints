@@ -2,7 +2,7 @@
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user-integration-cli-passwd-exit-authd-if-user-sigints
+Username: user-integration-cli-passwd-exit-authd-if-user-sigints@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your provider
@@ -24,12 +24,12 @@ Gimme your password:
 
 PAM Error Message: cancel requested
 PAM ChangeAuthTok()
-  User: "user-integration-cli-passwd-exit-authd-if-user-sigints"
+  User: "user-integration-cli-passwd-exit-authd-if-user-sigints@example.com"
   Result: error: PAM exit code: 26
     Critical error - immediate abort
 PAM Info Message: acct=incomplete
 PAM AcctMgmt()
-  User: "user-integration-cli-passwd-exit-authd-if-user-sigints"
+  User: "user-integration-cli-passwd-exit-authd-if-user-sigints@example.com"
   Result: error: PAM exit code: 25
     The return value should be ignored by PAM dispatch
 >

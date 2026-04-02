@@ -2,7 +2,7 @@
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user-mfa
+Username: user-mfa@example.com
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your provider
@@ -22,7 +22,7 @@ Gimme your password:
   Select your authentication method
 
 > 1. Password authentication
-  2. Send URL to user-mfa@gmail.com
+  2. Send URL to user-mfa@example.com
   3. Use your fido device foo
   4. Use your phone +33...
   5. Use your phone +1...
@@ -82,10 +82,10 @@ Unlock your phone +33... or accept request on web interface
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 PAM Authenticate()
-  User: "user-mfa"
+  User: "user-mfa@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-mfa"
+  User: "user-mfa@example.com"
   Result: success
 >
 ────────────────────────────────────────────────────────────────────────────────

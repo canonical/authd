@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/log"
+	"github.com/canonical/authd/pam/internal/proto"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/authd/pam/internal/proto"
 )
 
 func TestDebugMessageFormatter(t *testing.T) {

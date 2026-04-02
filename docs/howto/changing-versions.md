@@ -53,7 +53,7 @@ sudo snap refresh authd-google
 ```
 :::
 
-:::{tab-item} MS Entra ID
+:::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
 ```shell
@@ -79,7 +79,7 @@ sudo snap refresh authd-google
 ```
 :::
 
-:::{tab-item} MS Entra ID
+:::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
 ```shell

@@ -1,0 +1,49 @@
+name: 'Generate and upload coverage report'
+description: 'Generates and uploads the coverage report for Go tests'
+inputs:
+  codecov-token:
+    description: 'Codecov token for uploading coverage'
+    required: true
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate coverage report
+      shell: bash
+      run: |
+        # Generate coverage report
+        set -eu
+
+        tmp_dir=$(mktemp -d)
+
+        # Convert the raw coverage data into textfmt so we can merge the Rust one into it
+        go tool covdata textfmt -i="${RAW_COVERAGE_DIR}" -o="${tmp_dir}/coverage.out"
+
+        # Append the Rust coverage data to the Go one
+        cat "${RAW_COVERAGE_DIR}/rust-cov/rust2go_coverage" >>"${tmp_dir}/coverage.out"
+
+        # Filter out the testutils package and the pb.go file
+        grep -v -e "testutils" -e "pb.go" -e "testsdetection" "${tmp_dir}/coverage.out" >"${tmp_dir}/coverage.out.filtered"
+
+        # Generate the Cobertura report for Go and Rust
+        gocov convert "${tmp_dir}/coverage.out.filtered" | gocov-xml > "${tmp_dir}/coverage.xml"
+        reportgenerator -reports:"${tmp_dir}/coverage.xml" -targetdir:"${tmp_dir}" -reporttypes:Cobertura
+
+        # Generate the Cobertura report for C
+        gcovr --cobertura "${tmp_dir}/Cobertura_C.xml" "${RAW_COVERAGE_DIR}"
+
+        # Merge Cobertura reports into a single one
+        reportgenerator -reports:"${tmp_dir}/Cobertura.xml;${tmp_dir}/Cobertura_C.xml" \
+          -targetdir:"${COVERAGE_DIR}" -reporttypes:Cobertura
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        directory: ${{ env.COVERAGE_DIR }}
+        files: ${{ env.COVERAGE_DIR }}/Cobertura.xml
+        token: ${{ inputs.codecov-token }}
+
+    - name: Upload coverage artifacts
+      uses: actions/upload-artifact@v5
+      with:
+        name: coverage
+        path: ${{ env.COVERAGE_DIR }}

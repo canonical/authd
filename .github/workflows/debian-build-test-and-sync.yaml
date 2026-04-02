@@ -1,0 +1,161 @@
+name: build-deb-and-test (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      files-hash:
+        description: 'Hash of build-relevant files, used as cache key and concurrency group'
+        type: string
+        required: true
+      ubuntu-version:
+        description: 'Ubuntu version to build and test the Debian package for'
+        type: string
+        required: true
+      modified-files:
+        description: 'JSON array of files modified since the last commit, used to decide whether to run autopkgtests'
+        type: string
+        required: true
+
+jobs:
+  build-deb:
+    uses: ./.github/workflows/debian-build.yaml
+    with:
+      files-hash: ${{ inputs.files-hash }}
+      ubuntu-version: ${{ inputs.ubuntu-version }}
+    secrets: inherit
+
+  run-autopkgtests:
+    name: Run autopkgtests
+    runs-on: ubuntu-latest
+    needs: build-deb
+
+    # Run autopkgtests only on:
+    #  - Push events to main
+    #  - When a file in the debian subdir is modified
+    #  - When this file is modified
+    #  - On new tags
+    #  - On github release
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      contains(inputs.modified-files, 'debian/') ||
+      contains(inputs.modified-files, '.github/workflows/debian.yaml') ||
+      startsWith(github.ref, 'refs/tags/') ||
+      github.event_name == 'release' }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-oras
+
+      - name: Download the Debian sources
+        env:
+          OCI_REPO: ghcr.io/${{ github.repository }}/authd-deb-sources-${{ inputs.ubuntu-version }}
+          OCI_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+          | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+          oras pull "${OCI_REPO}:${OCI_TAG}"
+
+      - name: Run autopkgtests
+        uses: canonical/desktop-engineering/gh-actions/common/run-autopkgtest@main
+        with:
+          lxd-image: ubuntu:${{ inputs.ubuntu-version }}
+          source-changes: ${{ needs.build-deb.outputs.pkg-src-changes }}
+          autopkgtest-args: --add-apt-source=ppa:ubuntu-enterprise-desktop/golang
+
+  synchronize-packaging-branches:
+    name: Update packaging branch
+    runs-on: ubuntu-latest
+    needs: build-deb
+    permissions:
+      contents: write
+    env:
+      PACKAGING_BRANCH: ubuntu-packaging-${{ inputs.ubuntu-version }}
+
+    # Run only on:
+    #  - Push events to main
+    #  - On github release
+    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      github.event_name == 'release' }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-oras
+
+      - name: Download the Debian sources
+        env:
+          OCI_REPO: ghcr.io/${{ github.repository }}/authd-deb-sources-${{ inputs.ubuntu-version }}
+          OCI_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+          | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+          oras pull "${OCI_REPO}:${OCI_TAG}"
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-suggests --no-install-recommends \
+            dpkg-dev devscripts
+
+      - name: Checkout packaging branch
+        uses: actions/checkout@v6
+        with:
+          path: packaging-branch
+
+      - name: Prepare packaging branch
+        run: |
+          set -euo pipefail
+
+          cd packaging-branch
+
+          # Checkout to the packaging branch if it exists, otherwise create a new orphan branch with a clean state to make
+          # sure we don't accidentally include files from the repository that are not part of the package sources.
+          if git ls-remote --exit-code --heads origin "${{ env.PACKAGING_BRANCH }}" >/dev/null 2>&1; then
+            git fetch origin "${{ env.PACKAGING_BRANCH }}"
+            git checkout -B "${{ env.PACKAGING_BRANCH }}" "origin/${{ env.PACKAGING_BRANCH }}"
+          else
+            git checkout --orphan "${{ env.PACKAGING_BRANCH }}"
+            git rm -rf . >/dev/null 2>&1 || true
+            git clean -fdx
+          fi
+
+      - name: Extract the debian sources
+        run: dpkg-source -x ${{ env.pkg_dsc }} sources
+
+      - name: Commit packaging sources
+        run: |
+          set -exuo pipefail
+
+          # Replace the repository content with the package sources
+          find packaging-branch -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp --force --recursive sources/. packaging-branch/
+
+          cd packaging-branch
+
+          # Drop the ubuntu version, as the PPA recipe will add it anyways
+          version=$(dpkg-parsechangelog -SVersion)
+          sanitized_version=$(echo "${version}" | sed "s,~[0-9.]\+\$,,")
+          perl -pe "s|\Q${version}\E|${sanitized_version}|" debian/changelog > \
+            debian/changelog.sanitized
+          mv debian/changelog.sanitized debian/changelog
+          dpkg-parsechangelog
+
+          git config user.name "Ubuntu Enterprise Desktop"
+          git config user.email "ubuntu-devel-discuss@lists.ubuntu.com"
+
+          git add --all
+          git commit \
+            --allow-empty \
+            -m "Update ubuntu ${{ matrix.ubuntu-version }} package sources" \
+            -m "Use upstream commit ${{ github.sha }}"
+
+      - name: Push to packaging branch
+        run: git -C sources push origin "${{ env.PACKAGING_BRANCH }}:${{ env.PACKAGING_BRANCH }}"

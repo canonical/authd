@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"sync/atomic"
 
+	"github.com/canonical/authd/log"
 	"github.com/msteinert/pam/v2"
-	"github.com/ubuntu/authd/log"
 )
 
 var conversations atomic.Int32

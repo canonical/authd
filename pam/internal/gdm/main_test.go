@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/authd/pam/internal/pam_test"
+	"github.com/canonical/authd/log"
+	"github.com/canonical/authd/pam/internal/pam_test"
 )
 
 func TestMain(m *testing.M) {

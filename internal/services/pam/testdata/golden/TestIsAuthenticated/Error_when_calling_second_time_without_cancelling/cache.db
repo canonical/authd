@@ -1,20 +1,20 @@
 users:
-    - name: testisauthenticated/error_when_calling_second_time_without_cancelling_separator_ia_second_call
+    - name: ia_second_call@example.com
       uid: 1111
       gid: 1111
-      gecos: gecos for ia_second_call
-      dir: /home/ia_second_call
-      shell: /bin/sh/ia_second_call
+      gecos: gecos for ia_second_call@example.com
+      dir: /home/ia_second_call@example.com
+      shell: /bin/sh/ia_second_call@example.com
 groups:
-    - name: testisauthenticated/error_when_calling_second_time_without_cancelling_separator_ia_second_call
+    - name: ia_second_call@example.com
       gid: 1111
-      ugid: testisauthenticated/error_when_calling_second_time_without_cancelling_separator_ia_second_call
-    - name: group-ia_second_call
+      ugid: ia_second_call@example.com
+    - name: group-ia_second_call@example.com
       gid: 22222
-      ugid: ugid-ia_second_call
+      ugid: ugid-ia_second_call@example.com
 users_to_groups:
     - uid: 1111
       gid: 1111
     - uid: 1111
       gid: 22222
-schema_version: 1
+schema_version: 2
