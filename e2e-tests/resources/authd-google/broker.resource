@@ -16,13 +16,13 @@ ${GOOGLE_BROKER_CFG_DIR}    /var/snap/authd-google/current/broker.conf.d
 
 *** Keywords ***
 Enable Edge Broker
-    SSH.Execute    sudo snap refresh authd-google --edge
+    SSH.Execute    snap refresh authd-google --edge
 
 
 Disable Broker And Purge Config
-    SSH.Execute    sudo snap stop authd-google
-    SSH.Execute    sudo rm ${AUTHD_BROKER_CFG}
-    SSH.Execute    sudo systemctl restart authd.service
+    SSH.Execute    snap stop authd-google
+    SSH.Execute    rm ${AUTHD_BROKER_CFG}
+    SSH.Execute    systemctl restart authd.service
 
 
 Log In With Remote User Through CLI: QR Code
@@ -114,22 +114,22 @@ Log In With Remote User Through CLI: Local Password
 #     sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${GOOGLE_BROKER_CFG}
 Change Broker Configuration
     [Arguments]    ${config_key}    ${config_value}
-    SSH.Execute    sudo sed -i 's/^#*${config_key} =.*/${config_key} = ${config_value}/g' ${GOOGLE_BROKER_CFG}
-    SSH.Execute    sudo snap restart authd-google
+    SSH.Execute    sed -i 's/^#*${config_key} =.*/${config_key} = ${config_value}/g' ${GOOGLE_BROKER_CFG}
+    SSH.Execute    snap restart authd-google
 
 
 # Pretty much the same as the function above, but since YARF does not have support for
 # shifted characters yet, we need to do some workarounds.
 Change allowed_users In Broker Configuration
     [Arguments]    ${config_value}
-    SSH.Execute    sudo sed -i 's/^#*allowed_users =.*/allowed_users = ${config_value}/g' ${GOOGLE_BROKER_CFG}
-    SSH.Execute    sudo snap restart authd-google
+    SSH.Execute    sed -i 's/^#*allowed_users =.*/allowed_users = ${config_value}/g' ${GOOGLE_BROKER_CFG}
+    SSH.Execute    snap restart authd-google
 
 
 Comment Key In Broker Configuration
     [Arguments]    ${config_key}
-    SSH.Execute    sudo sed -i 's/^#*${config_key} =.*/#${config_key} = .*/g' ${GOOGLE_BROKER_CFG}
-    SSH.Execute    sudo snap restart authd-google
+    SSH.Execute    sed -i 's/^#*${config_key} =.*/#${config_key} = .*/g' ${GOOGLE_BROKER_CFG}
+    SSH.Execute    snap restart authd-google
 
 
 Log In With Remote User Through SSH: QR Code

@@ -75,7 +75,7 @@ function restore_snapshot_and_sync_time() {
 
 function sync_time() {
     local cmd="nm-online -q && \
-sudo systemctl restart systemd-timesyncd.service && \
+systemctl restart systemd-timesyncd.service && \
 timedatectl show -p NTPSynchronized --value | grep -q yes"
     retry --times 10 --delay 3 -- "$SSH" -- "$cmd"
 }
