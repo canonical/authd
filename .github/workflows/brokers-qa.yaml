@@ -185,7 +185,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: matrix.test == 'coverage'
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           directory: ${{ env.COVERAGE_DIR }}
           files: ${{ env.COVERAGE_DIR }}/Cobertura.xml
