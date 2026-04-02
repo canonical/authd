@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -792,7 +793,17 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		}
 		if err != nil {
 			log.Errorf(context.Background(), "Failed to refresh token: %s", err)
-			return AuthDenied, errorMessage{Message: "Failed to refresh token"}
+
+			// Fall back to offline mode for transient network failures (e.g. timeout, DNS,
+			// connection refused). Unless provider authentication is forced.
+			var netErr net.Error
+			if errors.As(err, &netErr) && !b.cfg.forceProviderAuthentication {
+				log.Warningf(context.Background(), "Network error during token refresh for user %q, skipping token refresh", session.username)
+				authInfo = oldAuthInfo
+				session.isOffline = true
+			} else {
+				return AuthDenied, errorMessage{Message: "Failed to refresh token"}
+			}
 		}
 	}
 
@@ -1095,7 +1106,7 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 func (b *Broker) userInfoFromIDToken(ctx context.Context, session *session, rawIDToken string) (info.User, error) {
 	idToken, err := session.oidcServer.Verifier(&b.oidcCfg).Verify(ctx, rawIDToken)
 	if err != nil {
-		return info.User{}, fmt.Errorf("could not verify token: %v", err)
+		return info.User{}, fmt.Errorf("could not verify token: %w", err)
 	}
 
 	userInfo, err := b.provider.GetUserInfo(idToken)
