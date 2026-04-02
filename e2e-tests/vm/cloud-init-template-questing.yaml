@@ -66,6 +66,10 @@ write_files:
       [org/gnome/desktop/interface]
       text-scaling-factor=1.25
 
+  - path: /etc/ssh/sshd_config.d/root.conf
+    content: |
+      ${CI_ROOT_SSHD_CONFIG}
+
   - path: /etc/ssh/sshd_config.d/authd.conf
     content: |
       UsePAM yes
@@ -99,6 +103,7 @@ write_files:
     content: ""
 
 runcmd:
+  ${CI_ROOT_PASSWD_CMD}
   # Disable apport
   - sed -i 's/enabled=1/enabled=0/' /etc/default/apport
   - systemctl mask --now apport.service
