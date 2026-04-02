@@ -1,4 +1,4 @@
-authd (0.6.0) UNRELEASED; urgency=medium
+authd (0.6.0) resolute; urgency=medium
 
   * Change default UID/GID range to 10000:60000.
   * Add authctl, a command-line tool to manage authd users and groups.
@@ -13,7 +13,7 @@ authd (0.6.0) UNRELEASED; urgency=medium
   * debian/control: Install missing build dependency systemd-dev.
   * debian/postrm: Remove /etc/pam.d/gdm-authd.
 
- -- Adrian Dombeck <adrian.dombeck@canonical.com>  Thu, 19 Mar 2026 13:04:09 +0100
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Thu, 02 Apr 2026 12:44:28 +0200
 
 authd (0.5.11) resolute; urgency=medium
 
