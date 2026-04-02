@@ -1,0 +1,30 @@
+users:
+    - name: success_with_uppercase_groups@example.com
+      uid: 1111
+      gid: 1111
+      gecos: gecos for success_with_uppercase_groups@example.com
+      dir: /home/success_with_uppercase_groups@example.com
+      shell: /bin/sh/success_with_uppercase_groups@example.com
+groups:
+    - name: success_with_uppercase_groups@example.com
+      gid: 1111
+      ugid: success_with_uppercase_groups@example.com
+    - name: group-success_with_uppercase_groups@example.com
+      gid: 22222
+      ugid: ugid-success_with_uppercase_groups@example.com
+    - name: group1
+      gid: 33333
+      ugid: "12345678"
+    - name: group2
+      gid: 44444
+      ugid: "87654321"
+users_to_groups:
+    - uid: 1111
+      gid: 1111
+    - uid: 1111
+      gid: 22222
+    - uid: 1111
+      gid: 33333
+    - uid: 1111
+      gid: 44444
+schema_version: 2

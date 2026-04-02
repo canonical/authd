@@ -9,13 +9,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/log"
+	"github.com/canonical/authd/pam/internal/proto"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/term"
 	"github.com/msteinert/pam/v2"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/authd/pam/internal/proto"
-	pam_proto "github.com/ubuntu/authd/pam/internal/proto"
 )
 
 var (
@@ -239,7 +238,7 @@ func safeMessageDebugWithPrefix(prefix string, msg tea.Msg, formatAndArgs ...any
 	log.Debugf(context.Background(), "%s, %s", m, fmt.Sprintf(format, args...))
 }
 
-func goBackLabel(previousStage pam_proto.Stage) string {
+func goBackLabel(previousStage proto.Stage) string {
 	switch previousStage {
 	case proto.Stage_authModeSelection:
 		return "go back to select the authentication method"

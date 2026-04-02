@@ -1,7 +1,7 @@
 syntax = "proto3";
 package gdm;
 
-option go_package = "github.com/ubuntu/authd/pam/gdm";
+option go_package = "github.com/canonical/authd/pam/gdm";
 
 import "authd.proto";
 import "pam.proto";
@@ -85,7 +85,7 @@ message ResponseData {
 enum EventType {
     // EventType_unknownEvent is an unknown EventType.
     unknownEvent = 0;
-    // EventType_userSelected is an user selected EventType.
+    // EventType_userSelected is a user selected EventType.
     userSelected = 1;
     // EventType_brokersReceived is a broker received EventType.
     brokersReceived = 2;

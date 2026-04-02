@@ -6,11 +6,10 @@ package permissions
 import (
 	"fmt"
 	"math"
-	"os/user"
-	"strconv"
+	"os"
 	"strings"
 
-	"github.com/ubuntu/authd/internal/testsdetection"
+	"github.com/canonical/authd/internal/testsdetection"
 )
 
 // Z_ForTests_WithCurrentUserAsRoot returns an Option that sets the rootUID to the current user's UID.
@@ -29,13 +28,10 @@ func Z_ForTests_WithCurrentUserAsRoot() Option {
 func currentUserUID() uint32 {
 	testsdetection.MustBeTesting()
 
-	u, err := user.Current()
-	if err != nil {
-		panic(fmt.Sprintf("could not get current user: %v", err))
-	}
-	uid, err := strconv.ParseUint(u.Uid, 10, 0)
-	if err != nil || uid > math.MaxUint32 {
-		panic(fmt.Sprintf("current uid is not an uint32 (%v): %v", u.Uid, err))
+	uid := os.Geteuid()
+
+	if uid < 0 || uint64(uid) > math.MaxUint32 {
+		panic(fmt.Sprintf("current uid is not a valid uint32: %v", uid))
 	}
 
 	return uint32(uid)

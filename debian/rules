@@ -44,7 +44,10 @@ export AUTHD_SKIP_EXTERNAL_DEPENDENT_TESTS=1
 export AUTHD_SKIP_ROOT_TESTS := 1
 
 # Defines the targets to be built as part of dh_auto_build
-export DH_GOLANG_BUILDPKG := $(AUTHD_GO_PACKAGE)/... \
+export DH_GOLANG_BUILDPKG := \
+    $(AUTHD_GO_PACKAGE)/cmd/authctl \
+    $(AUTHD_GO_PACKAGE)/cmd/authd \
+	$(AUTHD_GO_PACKAGE)/pam \
 	$(NULL)
 
 # We add the required backported version to the $PATH so that if it exists, then
@@ -88,6 +91,8 @@ override_dh_auto_configure:
 		env DEB_CARGO_CRATE="$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM)" \
 		  $(CARGO_PATH) prepare-debian "$(CARGO_VENDOR_DIR)"; \
 	else \
+	    echo "cargo version: $$(cargo --version)"; \
+	    echo "cargo-vendor-filterer version: $$(cargo-vendor-filterer --version)"; \
 		dh_auto_configure --buildsystem=cargo; \
 	fi
 

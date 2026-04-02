@@ -92,6 +92,6 @@ func CoverDirForTests() string {
 func writeGoCoverageLine(t *testing.T, w io.Writer, file string, lineNum, lineLength int, covered string) {
 	t.Helper()
 
-	_, err := w.Write([]byte(fmt.Sprintf("%s:%d.1,%d.%d 1 %s\n", file, lineNum, lineNum, lineLength, covered)))
+	_, err := fmt.Fprintf(w, "%s:%d.1,%d.%d 1 %s\n", file, lineNum, lineNum, lineLength, covered)
 	require.NoErrorf(t, err, "Teardown: can't write a write to golang compatible cover file : %v", err)
 }

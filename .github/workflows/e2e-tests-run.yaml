@@ -1,0 +1,310 @@
+name: run-e2e-test (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      ubuntu-version:
+        required: true
+        type: string
+      broker:
+        required: true
+        type: string
+    secrets:
+      E2E_VM_SSH_PRIV_KEY:
+        required: true
+      E2E_VM_SSH_PUB_KEY:
+        required: true
+      E2E_MSENTRA_ISSUER_ID:
+        required: false
+      E2E_MSENTRA_CLIENT_ID:
+        required: false
+      E2E_MSENTRA_USERNAME:
+        required: false
+      E2E_MSENTRA_PASSWORD:
+        required: false
+      E2E_MSENTRA_TOTP_SECRET:
+        required: false
+      E2E_GOOGLE_CLIENT_ID:
+        required: false
+      E2E_GOOGLE_CLIENT_SECRET:
+        required: false
+      E2E_GOOGLE_USERNAME:
+        required: false
+      E2E_GOOGLE_PASSWORD:
+        required: false
+      E2E_GOOGLE_TOTP_SECRET:
+        required: false
+      R2_ACCESS_KEY_ID:
+        required: true
+      R2_SECRET_ACCESS_KEY:
+        required: true
+      R2_ACCOUNT_ID:
+        required: true
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  VM_NAME_BASE: e2e-runner
+  ARTIFACTS_DIR: /tmp/e2e-artifacts
+  E2E_TESTS_DIR: e2e-tests
+  OUTPUT_DIR: /tmp/e2e-${{ inputs.broker }}-${{ inputs.ubuntu-version }}/output
+
+jobs:
+  build-broker-snap:
+    uses: ./.github/workflows/build-broker-snap.yaml
+    with:
+      broker: ${{ inputs.broker }}
+    secrets: inherit
+
+  run-tests:
+    name: Run e2e-tests (${{ inputs.broker }})
+    needs: build-broker-snap
+    runs-on: ubuntu-latest
+    permissions:
+      # Needed by actions/checkout
+      contents: read
+      # Needed to pull OCI artifacts from ghcr.io
+      packages: read
+      # Needed to use the commit statuses API to show a PR check for the e2e-test logs
+      statuses: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-oras
+
+      - name: Download the broker snap
+        id: download-broker-snap
+        env:
+          OCI_REPO: ghcr.io/${{ github.repository }}/${{ inputs.broker }}-snap
+          OCI_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+          oras pull "${OCI_REPO}:${OCI_TAG}"
+
+          SNAP=$(find . -maxdepth 1 -name '*.snap')
+          if [ -z "$SNAP" ] || [ ! -f "$SNAP" ]; then
+            echo "Error: Snap file not found after pulling from OCI registry"
+            exit 1
+          fi
+
+          mkdir -p "${{ env.ARTIFACTS_DIR }}"
+          mv "$SNAP" "${{ env.ARTIFACTS_DIR }}"
+          SNAP=$(realpath "${{ env.ARTIFACTS_DIR }}/$SNAP")
+          echo "snap=${SNAP}" >> $GITHUB_OUTPUT
+
+      - name: Download the authd deb
+        id: download-authd-deb
+        env:
+          OCI_REPO: ghcr.io/${{ github.repository }}/authd-deb-${{ inputs.ubuntu-version }}
+          OCI_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+          oras pull "${OCI_REPO}:${OCI_TAG}"
+
+          DEB=$(find . -maxdepth 1 -name 'authd_*.deb')
+          if [ -z "$DEB" ] || [ ! -f "$DEB" ]; then
+            echo "Error: Deb not found after pulling from OCI registry"
+            exit 1
+          fi
+
+          mkdir -p "${{ env.ARTIFACTS_DIR }}"
+          mv "$DEB" "${{ env.ARTIFACTS_DIR }}"
+          DEB=$(realpath "${{ env.ARTIFACTS_DIR }}/$DEB")
+          echo "deb=${DEB}" >> $GITHUB_OUTPUT
+
+      - name: Download the VM image
+        id: download-vm-image
+        env:
+          OCI_REPO: ghcr.io/${{ github.repository }}/e2e-runner
+          OCI_TAG: ${{ inputs.ubuntu-version }}
+          IMAGE_PATH: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-version }}.qcow2
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$(dirname "$IMAGE_PATH")"
+
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+          oras pull "${OCI_REPO}:${OCI_TAG}"
+          cat chunk-* > "$IMAGE_PATH"
+          rm chunk-*
+          echo "image-path=${IMAGE_PATH}" >> $GITHUB_OUTPUT
+
+      - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
+
+      - name: Install APT dependencies for provisioning
+        run: ${{ env.E2E_TESTS_DIR }}/vm/install-provision-deps.sh
+
+      - name: Set up SSH keys for the VM provisioning
+        id: set-ssh-keys
+        uses: ./.github/actions/e2e-tests/set-up-ssh-keys
+        with:
+          E2E_VM_SSH_PRIV_KEY: ${{ secrets.E2E_VM_SSH_PRIV_KEY }}
+          E2E_VM_SSH_PUB_KEY: ${{ secrets.E2E_VM_SSH_PUB_KEY }}
+
+      - name: Provision authd and the broker
+        run: |
+          set -eux
+          export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
+
+          # Generate the libvirt domain XML file
+          template="${{ env.E2E_TESTS_DIR }}/vm/e2e-runner-template.xml"
+          env \
+            IMAGE_FILE=${{ steps.download-vm-image.outputs.image-path }} \
+            VM_NAME=${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-version }} \
+            envsubst \
+              < "${template}" \
+              > "${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}.xml"
+
+          # Create the provisioning config file
+          cat > "${{ env.E2E_TESTS_DIR }}/vm/config.sh" <<-EOF
+            export SSH_PUBLIC_KEY_FILE=${{ steps.set-ssh-keys.outputs.keys-path }}/id_rsa.pub
+            export VM_NAME_BASE=${{ env.VM_NAME_BASE }}
+            export RELEASE=${{ inputs.ubuntu-version }}
+            export BROKER=${{ inputs.broker }}
+
+            export AUTHD_MSENTRAID_ISSUER_ID=${{ secrets.E2E_MSENTRA_ISSUER_ID }}
+            export AUTHD_MSENTRAID_CLIENT_ID=${{ secrets.E2E_MSENTRA_CLIENT_ID }}
+            export AUTHD_MSENTRAID_USER=${{ secrets.E2E_MSENTRA_USERNAME }}
+
+            export AUTHD_GOOGLE_CLIENT_ID=${{ secrets.E2E_GOOGLE_CLIENT_ID }}
+            export AUTHD_GOOGLE_CLIENT_SECRET=${{ secrets.E2E_GOOGLE_CLIENT_SECRET }}
+            export AUTHD_GOOGLE_USER=${{ secrets.E2E_GOOGLE_USERNAME }}
+          EOF
+
+          # Provision the VM
+          ${{ env.E2E_TESTS_DIR }}/vm/provision-authd.sh \
+            --authd-deb "${{ steps.download-authd-deb.outputs.deb }}" \
+            --broker-snap "${{ steps.download-broker-snap.outputs.snap }}"
+
+      - name: Checkout YARF repo
+        uses: actions/checkout@v6
+        with:
+          repository: adombeck/yarf
+          path: ${{ env.E2E_TESTS_DIR }}/.yarf
+
+      - name: Install APT dependencies for running the E2E tests
+        run: ${{ env.E2E_TESTS_DIR }}/install-deps.sh
+
+      - name: Configure YARF
+        run: ${{ env.E2E_TESTS_DIR }}/setup-yarf.sh
+
+      - name: Run tests
+        id: run-tests
+        run: |
+          set -eux
+          export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
+
+          # Set the credentials for the broker
+          if [ "${{ inputs.broker }}" = "authd-msentraid" ]; then
+            E2E_USER=${{ secrets.E2E_MSENTRA_USERNAME }}
+            E2E_PASSWORD=${{ secrets.E2E_MSENTRA_PASSWORD }}
+            TOTP_SECRET=${{ secrets.E2E_MSENTRA_TOTP_SECRET }}
+          elif [ "${{ inputs.broker }}" = "authd-google" ]; then
+            E2E_USER=${{ secrets.E2E_GOOGLE_USERNAME }}
+            E2E_PASSWORD=${{ secrets.E2E_GOOGLE_PASSWORD }}
+            TOTP_SECRET=${{ secrets.E2E_GOOGLE_TOTP_SECRET }}
+          fi
+
+          # Run the tests
+          ${{ env.E2E_TESTS_DIR }}/run-tests.sh \
+            --user "${E2E_USER}" \
+            --password "${E2E_PASSWORD}" \
+            --totp-secret "${TOTP_SECRET}" \
+            --release "${{ inputs.ubuntu-version }}" \
+            --broker "${{ inputs.broker }}" \
+            --output-dir "${{ env.OUTPUT_DIR }}" \
+            || exit_code=$?
+
+          if [ -n "${exit_code:-}" ]; then
+            state="failure"
+          else
+            state="success"
+          fi
+
+          echo "log=${{ env.OUTPUT_DIR }}/log.html" >> "$GITHUB_OUTPUT"
+          echo "report=${{ env.OUTPUT_DIR }}/report.html" >> "$GITHUB_OUTPUT"
+          echo "state=${state}" >> "$GITHUB_OUTPUT"
+          echo "exit-code=${exit_code:-0}" >> "$GITHUB_OUTPUT"
+          echo "Exit code: ${exit_code:-0}"
+
+      - name: Upload test results as artifact
+        if: always()
+        id: upload-results
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-tests-${{ inputs.ubuntu-version }}-${{ inputs.broker }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.OUTPUT_DIR }}
+
+      - name: Prepare upload to Pages
+        id: prepare-pages
+        # Only run if either the log or the report file exists
+        if: always() && (steps.run-tests.outputs.log != '' || steps.run-tests.outputs.report != '')
+        run: |
+          set -euo pipefail
+          TARGET_DIR="pr-${{ github.event.pull_request.number }}/run-${{ github.run_id }}-${{ github.run_attempt }}/${{ inputs.ubuntu-version }}-${{ inputs.broker }}"
+          mkdir -p "pages/${TARGET_DIR}"
+          cp "${{ steps.run-tests.outputs.log }}" "pages/${TARGET_DIR}/log.html"
+          cp "${{ steps.run-tests.outputs.report }}" "pages/${TARGET_DIR}/report.html"
+          echo "target-dir=${TARGET_DIR}" >> "$GITHUB_OUTPUT"
+
+          # Add a link to the parent directory to the log and report pages
+          for page in "pages/${TARGET_DIR}"/*.html; do
+            sed -i 's|<div id="header"></div>|<div style="padding:8px;background:#333;"><a href=".." style="color:#aaa;font-family:sans-serif;font-size:14px;">← Back to parent directory</a></div><div id="header"></div>|' "$page"
+          done
+
+          # We can't pass this as a secret because then it's masked in the logs
+          # and we can't pass it as an Action variable because those are not
+          # available in called reusable workflows.
+          R2_E2E_TEST_DOMAIN="authd-e2e-test-logs.adrian-dombeck.workers.dev"
+          echo "log-url=https://${R2_E2E_TEST_DOMAIN}/${TARGET_DIR}/log.html" >> "$GITHUB_OUTPUT"
+
+      - name: Upload test logs
+        id: upload-pages
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          aws s3 sync pages/ s3://authd-e2e-test-logs/ \
+            --endpoint-url https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com \
+            --region auto
+
+      - name: Create commit status with link to the logs
+        id: create-commit-status
+        uses: actions/github-script@v8
+        if: always() && steps.upload-pages.outcome == 'success'
+        with:
+          retries: 3
+          script: |
+            const response = await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: '${{ steps.run-tests.outputs.state }}',
+              target_url: '${{ steps.prepare-pages.outputs.log-url }}',
+              description: 'View logs',
+              context: 'e2e-tests (${{ inputs.ubuntu-version }}) (${{ inputs.broker }})',
+            });
+            console.log(JSON.stringify(response, null, 2));
+
+      - name: Check the test result
+        uses: actions/github-script@v8
+        if: always()
+        with:
+          script: |
+            const state = '${{ steps.run-tests.outputs.state }}';
+            const logUrl = '${{ steps.prepare-pages.outputs.log-url }}';
+
+            if (state === 'failure') {
+              core.setFailed(`e2e-tests failed with exit code ${{ steps.run-tests.outputs.exit-code }}. See the logs at ${logUrl}`);
+            } else {
+              console.log(`::notice::e2e-tests passed, see the logs at ${logUrl}`);
+            }

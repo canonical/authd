@@ -1,0 +1,5 @@
+name: authd-pre-auth-user-{{RANDOM_ID}}
+gid: 12345
+users:
+    - authd-pre-auth-user-{{RANDOM_ID}}
+passwd: x

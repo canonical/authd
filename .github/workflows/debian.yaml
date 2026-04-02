@@ -1,0 +1,117 @@
+name: Debian Packaging
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**'
+      - '!.github/**'
+      - '.github/workflows/debian.yaml'
+      - '.github/workflows/debian-build.yaml'
+      - '.github/workflows/debian-build-test-and-sync.yaml'
+      - '!.gitignore'
+      - '!.gitmodules'
+      - '!.golangci.yaml'
+      - '!*.md'
+      - '!COPYING*'
+      - '!authd-oidc-brokers/**'
+      - '!docs/**'
+      - '!e2e-tests/**'
+      - '!examplebroker/**'
+      - '!gotestcov'
+      - '!snap/**'
+      - '!**_test.go'
+      - '!**/testdata/**'
+      - '!**/testutils/**'
+
+    tags:
+      - "*"
+  pull_request:
+    paths:
+      - '**'
+      - '!.github/**'
+      - '.github/workflows/debian.yaml'
+      - '.github/workflows/debian-build.yaml'
+      - '.github/workflows/debian-build-test-and-sync.yaml'
+      - '!.gitignore'
+      - '!.gitmodules'
+      - '!.golangci.yaml'
+      - '!*.md'
+      - '!COPYING*'
+      - '!authd-oidc-brokers/**'
+      - '!docs/**'
+      - '!e2e-tests/**'
+      - '!examplebroker/**'
+      - '!gotestcov'
+      - '!snap/**'
+      - '!**_test.go'
+      - '!**/testdata/**'
+      - '!**/testutils/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compute-hash:
+    name: Compute hash of build-relevant files
+    runs-on: ubuntu-latest
+    outputs:
+      files-hash: ${{ steps.hash.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Compute hash of build-relevant files
+        id: hash
+        run: |
+          hash=$(bash .github/scripts/compute-deb-build-hash.sh)
+          echo "hash=${hash}" >> "${GITHUB_OUTPUT}"
+
+  get-modified-files:
+    name: Get modified files
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ fromJSON(steps.git-diff.outputs.modified_files) }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 100
+
+      - id: git-diff
+        name: Get modified files
+        run: |
+          set -ue
+
+          base_ref=${{ github.event.pull_request.base.sha }}
+          if [ -z "${base_ref}" ]; then
+            base_ref=${{ github.event.before }}
+          fi
+          if [ -z "${base_ref}" ]; then
+            base_ref=$(git log --root --reverse -n1 --format=%H)
+          fi
+
+          # Build a JSON array of modified paths.
+          modified_files=$(git diff --name-only "${base_ref}" HEAD | \
+            while read line; do
+              jq -n --arg path "$line" '$path'
+            done | jq -n '. |= [inputs]')
+          echo "${modified_files}"
+
+          escaped_json=$(echo "${modified_files}" | jq '.| tostring')
+          echo "modified_files=${escaped_json}" >> "${GITHUB_OUTPUT}"
+
+  build-deb-and-test:
+    needs:
+      - compute-hash
+      - get-modified-files
+    strategy:
+      matrix:
+        ubuntu-version: [ 'noble', 'questing', 'devel' ]
+      fail-fast: false
+    uses: ./.github/workflows/debian-build-test-and-sync.yaml
+    with:
+      files-hash: ${{ needs.compute-hash.outputs.files-hash }}
+      ubuntu-version: ${{ matrix.ubuntu-version }}
+      modified-files: ${{ needs.get-modified-files.outputs.list }}
+    secrets: inherit

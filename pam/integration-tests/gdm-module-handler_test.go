@@ -8,13 +8,13 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/log"
+	"github.com/canonical/authd/pam/internal/gdm"
+	"github.com/canonical/authd/pam/internal/gdm_test"
+	"github.com/canonical/authd/pam/internal/proto"
 	"github.com/msteinert/pam/v2"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/authd/pam/internal/gdm"
-	"github.com/ubuntu/authd/pam/internal/gdm_test"
-	"github.com/ubuntu/authd/pam/internal/proto"
 )
 
 type gdmTestModuleHandler struct {

@@ -1,0 +1,56 @@
+name: Clean up OCI artifacts
+on:
+  schedule:
+    # run every day at 5am UTC
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+
+jobs:
+  cleanup-broker-snap:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        broker: [ authd-msentraid, authd-google ]
+    steps:
+      - name: Delete broker snap OCI artifacts
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: authd/${{ matrix.broker }}-snap
+          package-type: container
+          min-versions-to-keep: 10
+
+  cleanup-deb:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        ubuntu-version: [ 'noble', 'questing', 'devel' ]
+    steps:
+      - name: Delete deb OCI artifacts
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: authd/authd-deb-${{ matrix.ubuntu-version }}
+          package-type: container
+          min-versions-to-keep: 10
+
+      - name: Delete deb sources OCI artifacts
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: authd/authd-deb-sources-${{ matrix.ubuntu-version }}
+          package-type: container
+          min-versions-to-keep: 10
+
+  cleanup-e2e-test-vm-image:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Delete e2e-test VM image OCI artifacts
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: authd/e2e-runner
+          package-type: container
+          min-versions-to-keep: 10

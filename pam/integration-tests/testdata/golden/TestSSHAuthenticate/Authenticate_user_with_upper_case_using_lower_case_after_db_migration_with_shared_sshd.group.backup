@@ -1,0 +1,6 @@
+localgroup:x:41:user-integration-WITH-Mixed-CaSe@example.com,user-integration-cached@example.com,user-integration-pre-check-WITH-UPPER-CASE@example.com,user-integration-UPPER-CASE@example.com,user-pre-check@example.com
+some-group-for-user-integration-WITH-Mixed-CaSe@example.com:x:101:user-integration-WITH-Mixed-CaSe@example.com
+some-group-for-user-integration-cached@example.com:x:102:user-integration-cached@example.com
+some-group-for-user-integration-pre-check-WITH-UPPER-CASE@example.com:x:103:user-integration-pre-check-WITH-UPPER-CASE@example.com
+some-group-for-user-integration-UPPER-CASE@example.com:x:104:user-integration-UPPER-CASE@example.com
+some-group-for-user-pre-check@example.com:x:105:user-pre-check@example.com

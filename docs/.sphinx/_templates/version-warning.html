@@ -1,0 +1,20 @@
+{# define the current page and strip the index from the URL #}
+{% set clean_pagename = pagename | replace('/index', '') | replace('index', '') %}
+
+<header id="header" class="p-navigation">
+
+  <div class="p-navigation__nav">
+
+        {% if version == "edge-docs" %}
+        <div class="version-warning">
+          <p class="version-warning-content">
+          This is the <strong>edge</strong> version. Some features may not be available in the stable release.
+          Read the <a href="{{ ogp_site_url }}/{{ clean_pagename }}"><strong>stable</strong></a> version of the documentation.
+          </p>
+        </div>
+        {% else %}
+        {# Show no warning for non-edge versions — no HTML output #}
+        {% endif %}
+
+  </div>
+</header>

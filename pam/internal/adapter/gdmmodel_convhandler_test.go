@@ -9,13 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/log"
+	"github.com/canonical/authd/pam/internal/gdm"
+	"github.com/canonical/authd/pam/internal/proto"
 	"github.com/msteinert/pam/v2"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/authd/pam/internal/gdm"
-	"github.com/ubuntu/authd/pam/internal/proto"
-	pam_proto "github.com/ubuntu/authd/pam/internal/proto"
 )
 
 type gdmConvHandler struct {
@@ -40,9 +39,9 @@ type gdmConvHandler struct {
 	selectedBrokerID string
 
 	currentStageChanged sync.Cond
-	currentStage        pam_proto.Stage
-	stageChanges        []pam_proto.Stage
-	lastNotifiedStage   *pam_proto.Stage
+	currentStage        proto.Stage
+	stageChanges        []proto.Stage
+	lastNotifiedStage   *proto.Stage
 
 	startAuthRequested chan struct{}
 	authEvents         []*authd.IAResponse
@@ -244,7 +243,7 @@ func (h *gdmConvHandler) handleEvent(event *gdm.EventData) error {
 		}
 
 	case *gdm.EventData_StartAuthentication:
-		require.Equal(h.t, pam_proto.Stage_challenge, h.currentStage,
+		require.Equal(h.t, proto.Stage_challenge, h.currentStage,
 			"Authentication started when we're not in challenge phase but in %s",
 			h.currentStage)
 

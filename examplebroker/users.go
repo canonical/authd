@@ -9,25 +9,25 @@ type userInfoBroker struct {
 var (
 	exampleUsersMu = sync.RWMutex{}
 	exampleUsers   = map[string]userInfoBroker{
-		"user1":               {Password: "goodpass"},
-		"user2":               {Password: "goodpass"},
-		"user3":               {Password: "goodpass"},
-		"user-ssh":            {Password: "goodpass"},
-		"user-ssh2":           {Password: "goodpass"},
-		"user-mfa":            {Password: "goodpass"},
-		"user-mfa-with-reset": {Password: "goodpass"},
-		"user-needs-reset":    {Password: "goodpass"},
-		"user-needs-reset2":   {Password: "goodpass"},
-		"user-can-reset":      {Password: "goodpass"},
-		"user-can-reset2":     {Password: "goodpass"},
-		"user-local-groups":   {Password: "goodpass"},
-		"user-pre-check":      {Password: "goodpass"},
-		"user-sudo":           {Password: "goodpass"},
+		"user1@example.com":               {Password: "goodpass"},
+		"user2@example.com":               {Password: "goodpass"},
+		"user3@example.com":               {Password: "goodpass"},
+		"user-ssh@example.com":            {Password: "goodpass"},
+		"user-ssh2@example.com":           {Password: "goodpass"},
+		"user-mfa@example.com":            {Password: "goodpass"},
+		"user-mfa-with-reset@example.com": {Password: "goodpass"},
+		"user-needs-reset@example.com":    {Password: "goodpass"},
+		"user-needs-reset2@example.com":   {Password: "goodpass"},
+		"user-can-reset@example.com":      {Password: "goodpass"},
+		"user-can-reset2@example.com":     {Password: "goodpass"},
+		"user-local-groups@example.com":   {Password: "goodpass"},
+		"user-pre-check@example.com":      {Password: "goodpass"},
+		"user-sudo@example.com":           {Password: "goodpass"},
 	}
 )
 
 const (
-	// UserIntegrationPrefix is the prefix for an user for integration tests.
+	// UserIntegrationPrefix is the prefix for a user for integration tests.
 	UserIntegrationPrefix = "user-integration-"
 	// UserIntegrationMfaPrefix is the prefix for an mfa user for integration tests.
 	UserIntegrationMfaPrefix = "user-mfa-integration-"
@@ -48,8 +48,8 @@ const (
 	// UserIntegrationPreCheckPrefix is the prefix for a pre-check user for integration tests.
 	UserIntegrationPreCheckPrefix = UserIntegrationPrefix + UserIntegrationPreCheckValue + "-"
 	// UserIntegrationUnexistent is an unexistent user leading to a non-existent user error.
-	UserIntegrationUnexistent = "user-unexistent"
-	// UserIntegrationAuthModesPrefix is the prefix for an user listing for supported auth modes.
+	UserIntegrationUnexistent = "user-unexistent@example.com"
+	// UserIntegrationAuthModesPrefix is the prefix for a user listing for supported auth modes.
 	// The modes can be exposed as list, in the form: `user-auth-modes-id1,id2,id3-integration-whatever`.
 	UserIntegrationAuthModesPrefix = "user-auth-modes-"
 )

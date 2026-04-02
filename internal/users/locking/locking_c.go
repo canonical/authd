@@ -6,9 +6,12 @@ package userslocking
 import "C"
 
 import (
+	"context"
+	"errors"
 	"fmt"
 
-	"github.com/ubuntu/authd/internal/errno"
+	"github.com/canonical/authd/internal/errno"
+	"github.com/canonical/authd/log"
 )
 
 // writeLock is the default locking implementation.
@@ -17,10 +20,16 @@ func writeLock() error {
 	defer errno.Unlock()
 
 	if C.lckpwdf() == 0 {
+		log.Debug(context.Background(), "glibc lckpwdf: Local entries locked!")
 		return nil
 	}
 
-	if err := errno.Get(); err != nil {
+	err := errno.Get()
+	if errors.Is(err, errno.ErrIntr) {
+		// lckpwdf sets errno to EINTR when a SIGALRM is received, which is expected when the lock times out.
+		return ErrLockTimeout
+	}
+	if err != nil {
 		return fmt.Errorf("%w: %w", ErrLock, err)
 	}
 
@@ -33,6 +42,7 @@ func writeUnlock() error {
 	defer errno.Unlock()
 
 	if C.ulckpwdf() == 0 {
+		log.Debug(context.Background(), "glibc lckpwdf: Local entries unlocked!")
 		return nil
 	}
 

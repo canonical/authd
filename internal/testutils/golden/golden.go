@@ -122,6 +122,9 @@ func LoadWithUpdate(t *testing.T, data string, options ...Option) string {
 	}
 
 	want, err := os.ReadFile(opts.path)
+	if errors.Is(err, fs.ErrNotExist) {
+		require.Fail(t, fmt.Sprintf("Golden file does not exist: %s", opts.path))
+	}
 	require.NoError(t, err, "Cannot load golden file")
 
 	return string(want)
@@ -157,20 +160,21 @@ func CheckValidGoldenFileName(t *testing.T, name string) {
 func Path(t *testing.T) string {
 	t.Helper()
 
+	for _, part := range strings.Split(t.Name(), "/") {
+		CheckValidGoldenFileName(t, part)
+	}
+
+	return filepath.Join(Dir(t), t.Name())
+}
+
+// Dir returns the golden directory for the provided test.
+func Dir(t *testing.T) string {
+	t.Helper()
+
 	cwd, err := os.Getwd()
 	require.NoError(t, err, "Cannot get current working directory")
 
-	topLevelTest, subtest, subtestFound := strings.Cut(t.Name(), "/")
-	CheckValidGoldenFileName(t, topLevelTest)
-
-	path := filepath.Join(cwd, "testdata", "golden", topLevelTest)
-
-	if !subtestFound {
-		return path
-	}
-
-	CheckValidGoldenFileName(t, subtest)
-	return filepath.Join(path, subtest)
+	return filepath.Join(cwd, "testdata", "golden")
 }
 
 // runDelta pipes the unified diff through the `delta` command for word-level diff and coloring.
@@ -220,6 +224,7 @@ func checkFileContent(t *testing.T, actual, expected, actualPath, expectedPath s
 	if actualPath != "Actual" {
 		msg += fmt.Sprintf("\nFile: %s", actualPath)
 	}
+	msg += "\n" + updateGoldenFileMessage
 
 	require.Failf(t, strings.Join([]string{
 		"Golden file content mismatch",
@@ -240,8 +245,12 @@ func checkGoldenFileEqualsFile(t *testing.T, path, goldenPath string) {
 
 	fileContent, err := os.ReadFile(path)
 	require.NoError(t, err, "Cannot read file %s", path)
+
 	goldenContent, err := os.ReadFile(goldenPath)
-	require.NoError(t, err, "Cannot read golden file %s", goldenPath)
+	if errors.Is(err, fs.ErrNotExist) {
+		require.Fail(t, fmt.Sprintf("Golden file does not exist: %s", goldenPath), createGoldenFileMessage)
+	}
+	require.NoError(t, err, "Cannot read golden file")
 
 	checkFileContent(t, string(fileContent), string(goldenContent), path, goldenPath)
 }
@@ -250,12 +259,16 @@ func checkGoldenFileEqualsString(t *testing.T, got, goldenPath string) {
 	t.Helper()
 
 	goldenContent, err := os.ReadFile(goldenPath)
-	require.NoError(t, err, "Cannot read golden file %s", goldenPath)
+	if errors.Is(err, fs.ErrNotExist) {
+		require.Fail(t, fmt.Sprintf("Golden file does not exist: %s", goldenPath), createGoldenFileMessage)
+	}
+	require.NoError(t, err, "Cannot read golden file")
 
 	checkFileContent(t, got, string(goldenContent), "Actual", goldenPath)
 }
 
-// CheckOrUpdateFileTree allows comparing a goldPath directory to p. Those can be updated via the dedicated flag.
+// CheckOrUpdateFileTree compares the content and attributes of the files in the provided directory with the golden directory.
+// If the update environment variable is set, the golden directory is updated with the content of the provided directory.
 func CheckOrUpdateFileTree(t *testing.T, path string, options ...Option) {
 	t.Helper()
 
@@ -304,7 +317,7 @@ func CheckOrUpdateFileTree(t *testing.T, path string, options ...Option) {
 
 		goldenFile, err := os.Stat(goldenFilePath)
 		if errors.Is(err, fs.ErrNotExist) {
-			require.Failf(t, "Unexpected file %s", p)
+			require.Fail(t, fmt.Sprintf("Golden file does not exist: %s", goldenFilePath), createGoldenFileMessage)
 		}
 		require.NoError(t, err, "Cannot get golden file %s", goldenFilePath)
 
@@ -388,3 +401,19 @@ func addEmptyMarker(p string) error {
 func UpdateEnabled() bool {
 	return update
 }
+
+func yellow(a ...any) string {
+	return fmt.Sprint("\033[0;93m", fmt.Sprint(a...), "\033[0m")
+}
+
+var createGoldenFileMessage = yellow(fmt.Sprintf(
+	"Run the tests with %s=true to create the golden file.\n"+
+		"Manually inspect its content afterwards to ensure it is correct.",
+	UpdateGoldenFilesEnv,
+))
+
+var updateGoldenFileMessage = yellow(fmt.Sprintf(
+	"Run the tests withs %s=true to update the golden file.\n"+
+		"Manually inspect its content afterwards to ensure it is correct.",
+	UpdateGoldenFilesEnv,
+))

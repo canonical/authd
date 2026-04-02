@@ -11,13 +11,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/cmd/authd/daemon"
+	"github.com/canonical/authd/internal/consts"
+	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/users"
+	userslocking "github.com/canonical/authd/internal/users/locking"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/cmd/authd/daemon"
-	"github.com/ubuntu/authd/internal/consts"
-	"github.com/ubuntu/authd/internal/fileutils"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/users"
-	"github.com/ubuntu/authd/log"
 )
 
 func TestHelp(t *testing.T) {
@@ -27,15 +28,6 @@ func TestHelp(t *testing.T) {
 
 	err := a.Run()
 	require.NoErrorf(t, err, "Run should not return an error with argument --help. Stdout: %v", getStdout())
-}
-
-func TestCompletion(t *testing.T) {
-	a := daemon.NewForTests(t, nil, "completion", "bash")
-
-	getStdout := captureStdout(t)
-
-	err := a.Run()
-	require.NoError(t, err, "Completion should not start the daemon. Stdout: %v", getStdout())
 }
 
 func TestVersion(t *testing.T) {
@@ -58,7 +50,7 @@ func TestVersion(t *testing.T) {
 }
 
 func TestNoUsageError(t *testing.T) {
-	a := daemon.NewForTests(t, nil, "completion", "bash")
+	a := daemon.NewForTests(t, nil, "version")
 
 	getStdout := captureStdout(t)
 	err := a.Run()
@@ -284,10 +276,8 @@ func TestConfigLoad(t *testing.T) {
 }
 
 func TestAutoDetectConfig(t *testing.T) {
-	customizedSocketPath := filepath.Join(t.TempDir(), "mysocket")
 	var config daemon.DaemonConfig
 	config.Verbosity = 1
-	config.Paths.Socket = customizedSocketPath
 
 	configPath := daemon.GenerateTestConfig(t, &config)
 	configNextToBinaryPath := filepath.Join(filepath.Dir(os.Args[0]), "authd.yaml")
@@ -296,31 +286,23 @@ func TestAutoDetectConfig(t *testing.T) {
 	// Remove configuration next binary for other tests to not pick it up.
 	defer os.Remove(configNextToBinaryPath)
 
-	a := daemon.New()
+	// Avoid that an existing config file in the config directory is picked up.
+	opt := daemon.WithConfigDir(t.TempDir())
 
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		err := a.Run()
-		require.NoError(t, err, "Run should exits without any error")
-	}()
-	a.WaitReady()
-	time.Sleep(50 * time.Millisecond)
+	a := daemon.New(opt)
+	a.SetArgs("--check-config")
 
-	defer wg.Wait()
-	defer a.Quit()
+	err = a.Run()
+	require.NoError(t, err, "Run should not return an error")
 
-	_, err = os.Stat(customizedSocketPath)
-	require.NoError(t, err, "Socket should exist")
 	require.Equal(t, 1, a.Config().Verbosity, "Verbosity is set from config")
 	require.Equal(t, &users.DefaultConfig, a.Config().UsersConfig, "Default Users Config")
 }
 
 func TestNoConfigSetDefaults(t *testing.T) {
 	a := daemon.New()
-	// Use version to still run preExec to load no config but without running server
-	a.SetArgs("version")
+
+	a.SetArgs("--check-config")
 
 	err := a.Run()
 	require.NoError(t, err, "Run should not return an error")
@@ -334,8 +316,7 @@ func TestNoConfigSetDefaults(t *testing.T) {
 
 func TestBadConfigReturnsError(t *testing.T) {
 	a := daemon.New()
-	// Use version to still run preExec to load no config but without running server
-	a.SetArgs("version", "--config", "/does/not/exist.yaml")
+	a.SetArgs("--check-config", "--config", "/does/not/exist.yaml")
 
 	err := a.Run()
 	require.Error(t, err, "Run should return an error on config file")
@@ -419,6 +400,9 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	defer cleanup()
+
+	userslocking.Z_ForTests_OverrideLocking()
+	defer userslocking.Z_ForTests_RestoreLocking()
 
 	m.Run()
 }

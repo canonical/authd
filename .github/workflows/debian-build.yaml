@@ -1,0 +1,256 @@
+name: build-deb (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      files-hash:
+        description: 'Hash of build-relevant files, used as cache key'
+        type: string
+        required: true
+      ubuntu-version:
+        description: 'Ubuntu version to build the Debian package for'
+        type: string
+        required: true
+    outputs:
+      pkg-name:
+        value: ${{ jobs.build-deb.outputs.pkg-name }}
+      pkg-version:
+        value: ${{ jobs.build-deb.outputs.pkg-version }}
+      pkg-dsc:
+        value: ${{ jobs.build-deb.outputs.pkg-dsc }}
+      pkg-src-changes:
+        value: ${{ jobs.build-deb.outputs.pkg-src-changes }}
+
+
+env:
+  CARGO_VENDOR_FILTERER_VERSION: 0.5.16
+
+jobs:
+  build-deb:
+    name: Build Debian package (${{ inputs.files-hash }})
+    runs-on: ubuntu-latest
+    outputs:
+      pkg-name: ${{ steps.outputs.outputs.pkg-name }}
+      pkg-version: ${{ steps.outputs.outputs.pkg-version }}
+      pkg-dsc: ${{ steps.outputs.outputs.pkg-dsc }}
+      pkg-src-changes: ${{ steps.outputs.outputs.pkg-src-changes }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./.github/actions/setup-oras
+
+      - name: Try to restore deb and sources from OCI registry
+        id: restore-cache
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          set -x
+
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+          OCI_DEB=ghcr.io/${{ github.repository }}/authd-deb-${{ inputs.ubuntu-version }}
+          OCI_SOURCES=ghcr.io/${{ github.repository }}/authd-deb-sources-${{ inputs.ubuntu-version }}
+          OCI_TAG=${{ inputs.files-hash }}
+
+          try_restore() {
+            # Try to restore the deb
+            if ! oras pull "${OCI_DEB}:${OCI_TAG}" 2>/dev/null; then
+              return 1
+            fi
+            PKG_DEB=$(find . -maxdepth 1 -name "authd_*.deb")
+            [ -n "${PKG_DEB}" ] || return 1
+
+            # Try to restore the sources
+            if ! oras pull "${OCI_SOURCES}:${OCI_TAG}" 2>/dev/null; then
+              echo "cache-hit=false" >> "${GITHUB_OUTPUT}"
+              return 0
+            fi
+            PKG_DSC=$(find . -maxdepth 1 -name "authd_*.dsc")
+            PKG_SOURCE_CHANGES=$(find . -maxdepth 1 -name "authd_*.changes")
+            PKG_TARBALL=$(find . -maxdepth 1 -name "authd_*.tar*")
+            [ -n "${PKG_DSC}" ] || return 1
+            [ -n "${PKG_SOURCE_CHANGES}" ] || return 1
+            [ -n "${PKG_TARBALL}" ] || return 1
+
+            echo "PKG_NAME=$(dpkg-parsechangelog --show-field source)" >> "${GITHUB_ENV}"
+            echo "PKG_VERSION=$(dpkg-parsechangelog --show-field version)" >> "${GITHUB_ENV}"
+            echo "PKG_DEB=${PKG_DEB}" >> "${GITHUB_ENV}"
+            echo "PKG_DSC=${PKG_DSC}" >> "${GITHUB_ENV}"
+            echo "PKG_SOURCE_CHANGES=${PKG_SOURCE_CHANGES}" >> "${GITHUB_ENV}"
+            echo "PKG_TARBALL=${PKG_TARBALL}" >> "${GITHUB_ENV}"
+            echo "cache-hit=true" >> "${GITHUB_OUTPUT}"
+            return 0
+          }
+
+          # Fast path: artifact already in OCI registry
+          if try_restore; then
+            exit 0
+          fi
+
+          # Check if another run is already building the same package.
+          # We identify a builder run as any other non-completed workflow run
+          # with a lower run_id that:
+          #   1. references debian-build.yaml (i.e. calls the same reusable workflow), and
+          #   2. has an in-progress or queued job with the same name as ours
+          #      (which encodes ubuntu-version and files-hash).
+          BUILDER_JOB_ID=$(gh api \
+            "/repos/${{ github.repository }}/actions/runs?status=in_progress" \
+            --paginate \
+            --jq '.workflow_runs[]
+               | select(
+                   .id != ${{ github.run_id }}
+                   and .id < ${{ github.run_id }}
+                   and .status != "completed"
+                   and ([.referenced_workflows[]?.path // "" | contains("debian-build.yaml")] | any)
+                 )
+               | .id' \
+            | while read -r other_run_id; do
+                # Confirm this run has a job matching our exact job name
+                # (same files-hash and ubuntu-version), to avoid waiting for
+                # a run that builds a different ubuntu-version or from a
+                # different branch. Also emit the job ID so we can poll it
+                # directly rather than waiting for the entire run to finish.
+                gh api "/repos/${{ github.repository }}/actions/runs/${other_run_id}/jobs" \
+                  --jq '.jobs[] | select(.name | (contains("(${{ inputs.ubuntu-version }})") and contains("(${{ inputs.files-hash }})"))) | .id' \
+                  2>/dev/null || true
+              done | head -1)
+
+          if [ -z "${BUILDER_JOB_ID}" ]; then
+            # No earlier run is building this package: we are the builder.
+            echo "cache-hit=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          # Another run (with a lower run_id) is already building this package.
+          # Wait for the specific build job to finish, then restore from OCI.
+          # We poll the job (not the run) so we don't wait for autopkgtests or
+          # other jobs in that run.
+          # TODO: Use GitHub's 'concurrency' keyword instead of busy-waiting
+          # once https://github.com/orgs/community/discussions/12835 is implemented.
+          echo "Job ${BUILDER_JOB_ID} is already building this package, waiting..."
+          DEADLINE=$(( SECONDS + 30 * 60 ))
+          while [ "${SECONDS}" -lt "${DEADLINE}" ]; do
+            sleep 10
+
+            # Check builder job status to detect completion, failure or cancellation.
+            BUILDER_JOB=$(gh api "/repos/${{ github.repository }}/actions/jobs/${BUILDER_JOB_ID}" \
+              --jq '{status: .status, conclusion: .conclusion}')
+            BUILDER_STATUS=$(echo "${BUILDER_JOB}" | jq -r '.status')
+            BUILDER_CONCLUSION=$(echo "${BUILDER_JOB}" | jq -r '.conclusion')
+
+            if [ "${BUILDER_STATUS}" != "completed" ]; then
+              REMAINING=$(( DEADLINE - SECONDS ))
+              echo "Still waiting... (${REMAINING}s remaining)"
+              continue
+            fi
+
+            if [ "${BUILDER_CONCLUSION}" = "success" ]; then
+              if try_restore; then
+                echo "Restored artifact after builder job succeeded."
+                exit 0
+              fi
+              echo "Builder job succeeded but artifact not found. Proceeding to build ourselves."
+            else
+              echo "Builder job finished with conclusion '${BUILDER_CONCLUSION}'. Proceeding to build ourselves."
+            fi
+            echo "cache-hit=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+
+          done
+
+          echo "Timed out waiting for builder job. Proceeding to build ourselves."
+          echo "cache-hit=false" >> "${GITHUB_OUTPUT}"
+
+      - name: Build Debian package and sources
+        if: steps.restore-cache.outputs.cache-hit != 'true'
+        uses: canonical/desktop-engineering/gh-actions/common/build-debian@main
+        with:
+          docker-image: ubuntu:${{ inputs.ubuntu-version }}
+          # Add the Go backports PPA if we're testing a Ubuntu release which
+          # doesn't have the required Go version in main.
+          extra-apt-repositories: ${{ (inputs.ubuntu-version == 'noble' || inputs.ubuntu-version == 'questing') && 'ppa:ubuntu-enterprise-desktop/golang' || '' }}
+          # Extra build dependencies:
+          # - systemd-dev: Required to read compile time variables from systemd via pkg-config.
+          extra-source-build-deps: |
+            ca-certificates
+            git
+            libssl-dev
+            systemd-dev
+          extra-source-build-script: |
+            if [ "${{ inputs.ubuntu-version }}" == noble ]; then
+              cargo install --locked --root=/usr \
+                cargo-vendor-filterer@${{ env.CARGO_VENDOR_FILTERER_VERSION }}
+              command -v cargo-vendor-filterer
+            fi
+          allow-sudo: true
+          lintian: --fail-on error,warning,info --verbose
+          run-lrc: true
+
+      - name: Prepare deb and sources for upload
+        if: steps.restore-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          set -x
+
+          # In the next step we upload the deb and sources with 'oras push'.
+          # When using a relative file path with that command, that path is
+          # preserved and the directory structure is recreated when downloading
+          # the file. To avoid that, we copy the files to be uploaded to the
+          # working directory and upload them from there.
+
+          # Copy binary deb to working directory. In contrast to the dsc and
+          # changes files, the path to the binary deb is not set in the
+          # environment by the build-debian action, so we have to find it first.
+          DEB_PATH=$(find "${{ env.BUILD_OUTPUT_DIR }}" -maxdepth 1 -name "authd_*.deb")
+          PKG_DEB=$(basename "${DEB_PATH}")
+          cp "${DEB_PATH}" "${PKG_DEB}"
+          echo "PKG_DEB=${PKG_DEB}" >> ${GITHUB_ENV}
+
+          # Copy sources to working directory
+          TARBALL_PATH=$(find "${{ env.SOURCE_OUTPUT_DIR }}" -maxdepth 1 -name "authd_*.tar*")
+          PKG_TARBALL=$(basename "${TARBALL_PATH}")
+          cp "${TARBALL_PATH}" "${PKG_TARBALL}"
+          cp "${{ env.SOURCE_OUTPUT_DIR }}/${{ env.PKG_DSC }}" .
+          cp "${{ env.SOURCE_OUTPUT_DIR }}/${{ env.PKG_SOURCE_CHANGES }}" .
+          echo "PKG_TARBALL=${PKG_TARBALL}" >> ${GITHUB_ENV}
+
+      - name: Upload deb and sources as OCI artifacts
+        run: |
+          set -euo pipefail
+          set -x
+
+          OCI_REPO=ghcr.io/${{ github.repository }}/authd-deb-${{ inputs.ubuntu-version }}
+          OCI_TAG=${{ inputs.files-hash }}
+          oras push "${OCI_REPO}:${OCI_TAG}" \
+            "${{ env.PKG_DEB }}" \
+            --artifact-type=application/vnd.debian.binary-package \
+            --annotation "org.opencontainers.image.title=authd debian package" \
+            --annotation "org.opencontainers.image.version=${{ env.PKG_VERSION }}"
+          oras tag "${OCI_REPO}:${OCI_TAG}" "${{ github.sha }}"
+          rm "${{ env.PKG_DEB }}"
+
+          OCI_REPO=ghcr.io/${{ github.repository }}/authd-deb-sources-${{ inputs.ubuntu-version }}
+          oras push "${OCI_REPO}:${OCI_TAG}" \
+            "${{ env.PKG_DSC }}" \
+            "${{ env.PKG_SOURCE_CHANGES }}" \
+            "${{ env.PKG_TARBALL }}" \
+            --artifact-type=application/vnd.debian.source-package \
+            --annotation "org.opencontainers.image.title=authd source debian package" \
+            --annotation "org.opencontainers.image.version=${{ env.PKG_VERSION }}"
+          oras tag "${OCI_REPO}:${OCI_TAG}" "${{ github.sha }}"
+          rm "${{ env.PKG_DSC }}" \
+             "${{ env.PKG_SOURCE_CHANGES }}" \
+             "${{ env.PKG_TARBALL }}"
+
+      - name: Generate outputs
+        id: outputs
+        run: |
+          (
+            echo "pkg-name=${{ env.PKG_NAME }}"
+            echo "pkg-version=${{ env.PKG_VERSION }}"
+            echo "pkg-dsc=${{ env.PKG_DSC }}"
+            echo "pkg-src-changes=${{ env.PKG_SOURCE_CHANGES }}"
+          ) >> "${GITHUB_OUTPUT}"

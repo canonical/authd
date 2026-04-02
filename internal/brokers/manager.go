@@ -12,9 +12,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/canonical/authd/internal/decorate"
+	"github.com/canonical/authd/log"
 	"github.com/godbus/dbus/v5"
-	"github.com/ubuntu/authd/log"
-	"github.com/ubuntu/decorate"
 )
 
 // Manager is the object that manages the available brokers and the session->broker and user->broker relationships.
@@ -132,9 +132,6 @@ func (m *Manager) SetDefaultBrokerForUser(brokerID, username string) error {
 		return fmt.Errorf("invalid broker: %v", err)
 	}
 
-	// authd uses lowercase usernames
-	username = strings.ToLower(username)
-
 	m.usersToBrokerMu.Lock()
 	defer m.usersToBrokerMu.Unlock()
 	m.usersToBroker[username] = broker
@@ -166,7 +163,7 @@ func (m *Manager) BrokerFromSessionID(id string) (broker *Broker, err error) {
 	return broker, nil
 }
 
-// NewSession create a new session for the broker and store the sesssionID on the manager.
+// NewSession create a new session for the broker and store the sessionID on the manager.
 func (m *Manager) NewSession(brokerID, username, lang, mode string) (sessionID string, encryptionKey string, err error) {
 	broker, err := m.brokerFromID(brokerID)
 	if err != nil {
@@ -206,9 +203,7 @@ func (m *Manager) EndSession(sessionID string) error {
 	return nil
 }
 
-// BrokerExists returns true if the brokerID is known by the manager. It can
-// happen that a broker which was stored in the database is not available anymore
-// because the user removed the configuration file.
+// BrokerExists returns true if the brokerID is known by the manager.
 func (m *Manager) BrokerExists(brokerID string) bool {
 	_, exists := m.brokers[brokerID]
 	return exists

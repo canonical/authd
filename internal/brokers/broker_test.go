@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/brokers"
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/brokers"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/internal/testutils/golden"
 )
 
 var supportedLayouts = map[string]map[string]string{
@@ -326,9 +326,9 @@ func TestUserPreCheck(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Successfully_pre-check_user": {username: "user-pre-check"},
+		"Successfully_pre-check_user": {username: "user-pre-check@example.com"},
 
-		"Error_if_user_is_not_available": {username: "unexistent", wantErr: true},
+		"Error_if_user_is_not_available": {username: "unexistent@example.com", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {

@@ -1,6 +1,6 @@
 [workspace]
 members = ["nss/"]
-exclude = ["vendor_rust/"]
+exclude = ["vendor_rust/", "authd-oidc-brokers/third_party/libhimmelblau/", "parts/libhimmelblau/build"]
 resolver = "2"
 
 [profile.release]
@@ -11,17 +11,12 @@ platforms = ["*-unknown-linux-gnu"]
 tier = "2"
 exclude-crate-paths = [
     { name = "*", exclude = "assets" },
-    { name = "*", exclude = "Cargo.toml.orig" },
     { name = "*", exclude = "docs" },
     { name = "*", exclude = "examples" },
     { name = "*", exclude = "tests" },
-    { name = "*", exclude = ".editorconfig" },
-    { name = "*", exclude = ".git-blame-ignore-revs" },
-    { name = "*", exclude = ".github" },
-    { name = "*", exclude = ".gitignore" },
-    { name = "*", exclude = ".gitlab-ci.yml" },
-    { name = "*", exclude = "*.png" },
-    { name = "*", exclude = "*.svg" },
 
-    { name = "regex", exclude = "record" },
+    # For some reason, this file is excluded from the source tarball. Exclude
+    # it here to exclude it from the checksum calculation to avoid build
+    # failures due to checksum mismatches.
+    { name = "*", exclude = "Cargo.toml.orig" },
 ]

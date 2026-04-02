@@ -5,11 +5,11 @@ Wait /Username: user name\n/
 Show
 
 Hide
-TypeUsername "user-integration-not-empty"
+TypeUsername "user-integration-not-empty@example.com"
 Show
 
 Hide
-Backspace 26
+Backspace 38
 Wait /Username: user name\n/
 Show
 
@@ -21,7 +21,7 @@ Show
 Hide
 Escape
 Backspace
-TypeUsername "user-integration-was-empty"
+TypeUsername "user-integration-was-empty@example.com"
 Show
 
 Hide

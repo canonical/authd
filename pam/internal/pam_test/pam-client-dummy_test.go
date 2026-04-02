@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/proto/authd"
 )
 
 var errTest = errors.New("an error")
@@ -100,9 +100,9 @@ func TestGetPreviousBroker(t *testing.T) {
 		"With_predefined_default_for_user_empty_return_value": {
 			client: NewDummyClient(nil,
 				WithPreviousBrokerForUser("user0", "broker0"),
-				WithPreviousBrokerForUser("user1", "broker1"),
+				WithPreviousBrokerForUser("user1@example.com", "broker1"),
 			),
-			args:    &authd.GPBRequest{Username: "user1"},
+			args:    &authd.GPBRequest{Username: "user1@example.com"},
 			wantRet: &authd.GPBResponse{PreviousBroker: "broker1"},
 		},
 

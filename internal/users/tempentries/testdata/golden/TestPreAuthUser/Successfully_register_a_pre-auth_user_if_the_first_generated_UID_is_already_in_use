@@ -1,6 +1,0 @@
-name: ""
-uid: 12345
-gid: 12345
-gecos: test
-dir: /nonexistent
-shell: /usr/sbin/nologin

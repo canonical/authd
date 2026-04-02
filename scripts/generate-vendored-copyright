@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+
+# SPDX-License-Identifier: GPL-3.0-or-later OR LGPL-3.0-or-later
+
 """
 Generate Debian copyright files from vendored dependencies.
 

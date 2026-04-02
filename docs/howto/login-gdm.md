@@ -1,9 +1,15 @@
+---
+myst:
+  html_meta:
+    "description lang=en": "Use authd for cloud-based login to Ubuntu with GDM."
+---
+
 # Log in with GDM
 
 ## Logging in with a remote provider
 
 Once the system is configured you can log into your system using your remote provider credentials and the device code flow.
-In this example, we are going to use MS Entra ID as the remote provider but the process is equivalent for other providers.
+In this example, we are going to use Microsoft Entra ID as the remote provider but the process is equivalent for other providers.
 
 > See all the available providers: [Install brokers](./install-authd.md#install-brokers)
 

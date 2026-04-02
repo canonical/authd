@@ -9,19 +9,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/examplebroker"
+	"github.com/canonical/authd/internal/brokers"
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/brokers/layouts/entries"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/pam/internal/gdm"
+	"github.com/canonical/authd/pam/internal/gdm_test"
+	"github.com/canonical/authd/pam/internal/pam_test"
+	"github.com/canonical/authd/pam/internal/proto"
 	"github.com/msteinert/pam/v2"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/examplebroker"
-	"github.com/ubuntu/authd/internal/brokers"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/brokers/layouts/entries"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/internal/testutils"
-	"github.com/ubuntu/authd/pam/internal/gdm"
-	"github.com/ubuntu/authd/pam/internal/gdm_test"
-	"github.com/ubuntu/authd/pam/internal/pam_test"
-	"github.com/ubuntu/authd/pam/internal/proto"
 )
 
 func enableGdmExtension() {
@@ -129,6 +129,10 @@ var testPhoneAckUILayout = authd.UILayout{
 func TestGdmModule(t *testing.T) {
 	t.Parallel()
 
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
 	// This test is flaky, see https://github.com/canonical/authd/issues/966
 	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
 		t.Skip("skipping flaky test")
@@ -202,7 +206,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticate_user_successfully_with_password_only_supported_method": {
-			pamUser: ptrValue(examplebroker.UserIntegrationAuthModesPrefix + "password-integration-gdm"),
+			pamUser: ptrValue(examplebroker.UserIntegrationAuthModesPrefix + "password-integration-gdm@example.com"),
 			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
 				gdm.EventType_startAuthentication: {
 					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Secret{
@@ -425,7 +429,6 @@ func TestGdmModule(t *testing.T) {
 				newPasswordAuthID,
 				newPasswordAuthID,
 				newPasswordAuthID,
-				newPasswordAuthID,
 			},
 			supportedLayouts: []*authd.UILayout{
 				pam_test.FormUILayout(pam_test.WithWait(true)),
@@ -449,10 +452,6 @@ func TestGdmModule(t *testing.T) {
 					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Secret{
 						Secret: "noble2404",
 					}),
-					// Use previous one
-					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Secret{
-						Secret: "goodpass",
-					}),
 					// Finally change the password
 					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Secret{
 						Secret: "authd2404",
@@ -462,7 +461,6 @@ func TestGdmModule(t *testing.T) {
 			wantUILayouts: []*authd.UILayout{
 				&testPasswordUILayout,
 				&testFidoDeviceUILayout,
-				&testNewPasswordUILayout,
 				&testNewPasswordUILayout,
 				&testNewPasswordUILayout,
 				&testNewPasswordUILayout,
@@ -478,10 +476,6 @@ func TestGdmModule(t *testing.T) {
 					Access: auth.Retry,
 					Msg:    "new password does not match criteria: must be 'authd2404'",
 				},
-				{
-					Access: auth.Retry,
-					Msg:    "The password is the same as the old one",
-				},
 				{Access: auth.Granted},
 			},
 		},
@@ -489,7 +483,6 @@ func TestGdmModule(t *testing.T) {
 			pamUserPrefix: examplebroker.UserIntegrationNeedsResetPrefix,
 			wantAuthModeIDs: []string{
 				passwordAuthID,
-				newPasswordAuthID,
 				newPasswordAuthID,
 				newPasswordAuthID,
 				newPasswordAuthID,
@@ -506,9 +499,6 @@ func TestGdmModule(t *testing.T) {
 					}),
 					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Secret{
 						Secret: "authd",
-					}),
-					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Secret{
-						Secret: "goodpass",
 					}),
 					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Secret{
 						Secret: "password",
@@ -530,10 +520,6 @@ func TestGdmModule(t *testing.T) {
 				{
 					Access: auth.Retry,
 					Msg:    "The password is shorter than 8 characters",
-				},
-				{
-					Access: auth.Retry,
-					Msg:    "The password is the same as the old one",
 				},
 				{
 					Access: auth.Retry,
@@ -811,7 +797,7 @@ func TestGdmModule(t *testing.T) {
 				},
 			},
 			wantPamErrorMessages: []string{
-				"can't select broker: error InvalidArgument from server: can't start authentication transaction: rpc error: code = InvalidArgument desc = no user name provided",
+				"error InvalidArgument from server: no user name provided",
 			},
 			wantError:       pam.ErrSystem,
 			wantAcctMgmtErr: pam_test.ErrIgnore,
@@ -962,7 +948,7 @@ func TestGdmModule(t *testing.T) {
 			moduleArgs = append(moduleArgs, tc.moduleArgs...)
 
 			serviceFile := createServiceFile(t, "gdm-authd", libPath, moduleArgs)
-			saveArtifactsForDebugOnCleanup(t, []string{serviceFile})
+			testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
 
 			pamUser := vhsTestUserName(t, "gdm")
 			if tc.pamUserPrefix != "" {
@@ -1019,7 +1005,7 @@ func TestGdmModule(t *testing.T) {
 			}
 
 			var pamFlags pam.Flags
-			if !testutils.IsVerbose() {
+			if !testing.Verbose() {
 				pamFlags = pam.Silent
 			}
 
@@ -1071,6 +1057,10 @@ func TestGdmModule(t *testing.T) {
 }
 
 func TestGdmModuleAuthenticateWithoutGdmExtension(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
 	// This cannot be parallel!
 	t.Cleanup(pam_test.MaybeDoLeakCheck)
 
@@ -1084,7 +1074,7 @@ func TestGdmModuleAuthenticateWithoutGdmExtension(t *testing.T) {
 	moduleArgs = append(moduleArgs, "debug=true", "logfile="+gdmLog)
 
 	serviceFile := createServiceFile(t, "gdm-authd", libPath, moduleArgs)
-	saveArtifactsForDebugOnCleanup(t, []string{serviceFile})
+	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
 	pamUser := vhsTestUserName(t, "gdm")
 	gh := newGdmTestModuleHandler(t, serviceFile, pamUser)
 	t.Cleanup(func() { require.NoError(t, gh.tx.End(), "PAM: can't end transaction") })
@@ -1095,7 +1085,7 @@ func TestGdmModuleAuthenticateWithoutGdmExtension(t *testing.T) {
 	t.Cleanup(enableGdmExtension)
 
 	var pamFlags pam.Flags
-	if !testutils.IsVerbose() {
+	if !testing.Verbose() {
 		pamFlags = pam.Silent
 	}
 
@@ -1105,6 +1095,10 @@ func TestGdmModuleAuthenticateWithoutGdmExtension(t *testing.T) {
 }
 
 func TestGdmModuleAcctMgmtWithoutGdmExtension(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
 	// This cannot be parallel!
 	t.Cleanup(pam_test.MaybeDoLeakCheck)
 
@@ -1118,7 +1112,7 @@ func TestGdmModuleAcctMgmtWithoutGdmExtension(t *testing.T) {
 	moduleArgs = append(moduleArgs, "debug=true", "logfile="+gdmLog)
 
 	serviceFile := createServiceFile(t, "gdm-authd", libPath, moduleArgs)
-	saveArtifactsForDebugOnCleanup(t, []string{serviceFile})
+	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
 	pamUser := vhsTestUserName(t, "gdm")
 	gh := newGdmTestModuleHandler(t, serviceFile, pamUser)
 	t.Cleanup(func() { require.NoError(t, gh.tx.End(), "PAM: can't end transaction") })
@@ -1136,7 +1130,7 @@ func TestGdmModuleAcctMgmtWithoutGdmExtension(t *testing.T) {
 	}
 
 	var pamFlags pam.Flags
-	if !testutils.IsVerbose() {
+	if !testing.Verbose() {
 		pamFlags = pam.Silent
 	}
 

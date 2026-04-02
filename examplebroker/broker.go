@@ -26,11 +26,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/canonical/authd/internal/brokers/auth"
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/brokers/layouts/entries"
+	"github.com/canonical/authd/log"
 	"github.com/google/uuid"
-	"github.com/ubuntu/authd/internal/brokers/auth"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/brokers/layouts/entries"
-	"github.com/ubuntu/authd/log"
 	"golang.org/x/exp/slices"
 )
 
@@ -186,12 +186,12 @@ var (
 
 	emailMode = func(userName string) authMode {
 		return authMode{
-			id:             fmt.Sprintf("entry_or_wait_for_%s_gmail.com", userName),
-			selectionLabel: fmt.Sprintf("Send URL to %s@gmail.com", userName),
-			email:          fmt.Sprintf("%s@gmail.com", userName),
+			id:             fmt.Sprintf("entry_or_wait_for_%s", userName),
+			selectionLabel: fmt.Sprintf("Send URL to %s", userName),
+			email:          userName,
 			ui: map[string]string{
 				layouts.Type: layouts.Form,
-				layouts.Label: fmt.Sprintf("Click on the link received at %s@gmail.com or enter the code:",
+				layouts.Label: fmt.Sprintf("Click on the link received at %s or enter the code:",
 					userName),
 				layouts.Entry: entries.Chars,
 				layouts.Wait:  layouts.True,
@@ -275,19 +275,19 @@ func (b *Broker) NewSession(ctx context.Context, username, lang, mode string) (s
 	}
 
 	switch username {
-	case "user-mfa":
+	case "user-mfa@example.com":
 		info.neededAuthSteps = 3
-	case "user-needs-reset":
+	case "user-needs-reset@example.com":
 		fallthrough
-	case "user-needs-reset2":
+	case "user-needs-reset2@example.com":
 		info.neededAuthSteps = 2
 		info.pwdChange = mustReset
-	case "user-can-reset":
+	case "user-can-reset@example.com":
 		fallthrough
-	case "user-can-reset2":
+	case "user-can-reset2@example.com":
 		info.neededAuthSteps = 2
 		info.pwdChange = canReset
-	case "user-mfa-with-reset":
+	case "user-mfa-with-reset@example.com":
 		info.neededAuthSteps = 3
 		info.pwdChange = canReset
 	case UserIntegrationUnexistent:
@@ -627,14 +627,22 @@ func (b *Broker) IsAuthenticated(ctx context.Context, sessionID, authenticationD
 
 	// Cleans up the IsAuthenticated context when the call is done.
 	defer func() {
+		cancel()
 		b.isAuthenticatedCallsMu.Lock()
 		delete(b.isAuthenticatedCalls, sessionID)
 		b.isAuthenticatedCallsMu.Unlock()
 	}()
 
 	access, data = b.handleIsAuthenticated(ctx, sessionInfo, authData)
+
+	if ctx.Err() != nil {
+		log.Debugf(ctx, "IsAuthenticated for session %s was cancelled: %v", sessionID, ctx.Err())
+		return auth.Cancelled, `{"message": "authentication request cancelled"}`, ctx.Err()
+	}
+
 	log.Debugf(context.TODO(), "Authentication result on session %s (%s) for user %q: %q - %#v",
 		sessionInfo.sessionMode, sessionID, sessionInfo.username, access, data)
+
 	if access == auth.Granted && sessionInfo.currentAuthStep < sessionInfo.neededAuthSteps {
 		data = ""
 		if sessionInfo.pwdChange != noReset && sessionInfo.sessionMode == auth.SessionModeLogin {
@@ -853,6 +861,7 @@ func (b *Broker) cancelIsAuthenticatedUnlocked(_ context.Context, sessionID stri
 }
 
 // UserPreCheck checks if the user is known to the broker.
+// It returns the user info in JSON format if the user is valid, or an empty string if the user is not allowed.
 func (b *Broker) UserPreCheck(ctx context.Context, username string) (string, error) {
 	if strings.HasPrefix(username, "user-") && strings.Contains(username, "integration") &&
 		strings.Contains(username, fmt.Sprintf("-%s-", UserIntegrationPreCheckValue)) {
@@ -862,7 +871,8 @@ func (b *Broker) UserPreCheck(ctx context.Context, username string) (string, err
 	exampleUsersMu.Lock()
 	defer exampleUsersMu.Unlock()
 	if _, exists := exampleUsers[username]; !exists {
-		return "", fmt.Errorf("user %q does not exist", username)
+		// The username does not match any of the allowed suffixes.
+		return "", nil
 	}
 	return userInfoFromName(username), nil
 }
@@ -965,10 +975,10 @@ func userInfoFromName(name string) string {
 	}
 
 	switch name {
-	case "user-local-groups":
+	case "user-local-groups@example.com":
 		user.Groups = append(user.Groups, groupJSONInfo{Name: "localgroup", UGID: ""})
 
-	case "user-sudo":
+	case "user-sudo@example.com":
 		user.Groups = append(user.Groups, groupJSONInfo{Name: "sudo", UGID: ""}, groupJSONInfo{Name: "admin", UGID: ""})
 	}
 

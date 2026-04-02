@@ -2,11 +2,12 @@
 package userstestutils
 
 import (
+	"sync"
 	"unsafe"
 
-	"github.com/ubuntu/authd/internal/testsdetection"
-	"github.com/ubuntu/authd/internal/users"
-	"github.com/ubuntu/authd/internal/users/db"
+	"github.com/canonical/authd/internal/testsdetection"
+	"github.com/canonical/authd/internal/users"
+	"github.com/canonical/authd/internal/users/db"
 )
 
 func init() {
@@ -15,11 +16,13 @@ func init() {
 }
 
 type manager struct {
+	userRegisterMu sync.Mutex
+
 	db *db.Manager
 }
 
-// GetManagerDB returns the database of the manager.
-func GetManagerDB(m *users.Manager) *db.Manager {
+// DBManager returns the database of the manager.
+func DBManager(m *users.Manager) *db.Manager {
 	//#nosec:G103 // This is only used in tests.
 	mTest := *(*manager)(unsafe.Pointer(m))
 

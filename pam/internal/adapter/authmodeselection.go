@@ -2,15 +2,14 @@ package adapter
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/canonical/authd/internal/brokers/layouts"
+	"github.com/canonical/authd/internal/brokers/layouts/entries"
+	"github.com/canonical/authd/internal/proto/authd"
+	"github.com/canonical/authd/log"
 	tea_list "github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/msteinert/pam/v2"
-	"github.com/ubuntu/authd/internal/brokers/layouts"
-	"github.com/ubuntu/authd/internal/brokers/layouts/entries"
-	"github.com/ubuntu/authd/internal/proto/authd"
-	"github.com/ubuntu/authd/log"
 )
 
 // authModeSelectionModel is the model list to select supported authentication modes.
@@ -231,7 +230,7 @@ func getAuthenticationModes(client authd.PAMClient, sessionID string, uiLayouts 
 		if err != nil {
 			return pamError{
 				status: pam.ErrSystem,
-				msg:    fmt.Sprintf("could not get authentication modes: %v", err),
+				msg:    err.Error(),
 			}
 		}
 

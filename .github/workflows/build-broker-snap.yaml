@@ -1,0 +1,92 @@
+name: build-broker-snap (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      broker:
+        description: 'Name of the broker snap to build'
+        required: true
+        type: string
+
+jobs:
+  build-broker-snap:
+    name: Build broker snap (${{ inputs.broker }})
+    runs-on: ubuntu-latest
+    permissions:
+      # Needed by actions/checkout
+      contents: read
+      # Needed to push/pull OCI artifact to/from ghcr.io
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The authd-msentraid broker requires the libhimmelblau submodule.
+          submodules: recursive
+
+      - name: Compute hash of build-relevant files
+        id: files-hash
+        run: |
+          set -euo pipefail
+
+          hash=${{ hashFiles('authd-oidc-brokers/**', 'snap/**') }}
+
+          # Print the hash for debugging purposes.
+          echo "Hash: ${hash}"
+
+          echo "hash=${hash}" >> "${GITHUB_OUTPUT}"
+
+      - uses: ./.github/actions/setup-oras
+
+      - name: Try to restore broker snap from OCI registry cache
+        id: restore-cache
+        run: |
+          set -euo pipefail
+
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+          OCI_REPO=ghcr.io/${{ github.repository }}/${{ inputs.broker }}-snap
+          OCI_TAG=${{ steps.files-hash.outputs.hash }}
+          if oras pull "${OCI_REPO}:${OCI_TAG}"; then
+            echo "cache-hit=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "cache-hit=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Prepare build of the broker snap
+        if: steps.restore-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          set -x
+
+          # Tags and main branch are needed by the snap/scripts/version script
+          # which is used during the build of the broker snap.
+          git fetch --tags --unshallow
+          git fetch origin main:main
+
+          ./snap/scripts/prepare-variant --broker "${{ inputs.broker }}"
+
+      - name: Build broker snap
+        if: steps.restore-cache.outputs.cache-hit != 'true'
+        id: build-broker-snap
+        uses: snapcore/action-build@v1
+
+      - name: Rename snap to canonical name
+        if: steps.restore-cache.outputs.cache-hit != 'true'
+        run: mv "${{ steps.build-broker-snap.outputs.snap }}" "${{ inputs.broker }}.snap"
+
+      - name: Upload snap as OCI artifact
+        run: |
+          set -euo pipefail
+
+          # Upload the snap to the OCI registry with the following tags:
+          # - The current commit hash. This is used by subsequent workflows to
+          #   download the snap for this run.
+          # - The hash of the files that affect the build. This allows us to
+          #   use it as a cache key, avoiding unnecessary rebuilds.
+          OCI_REPO=ghcr.io/${{ github.repository }}/${{ inputs.broker }}-snap
+          OCI_TAG=${{ steps.files-hash.outputs.hash }}
+          oras push "${OCI_REPO}:${OCI_TAG}" \
+            "${{ inputs.broker }}.snap" \
+            --artifact-type application/vnd.snap
+          oras tag "${OCI_REPO}:${OCI_TAG}" "${{ github.sha }}"
