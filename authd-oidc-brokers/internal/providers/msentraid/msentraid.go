@@ -61,6 +61,11 @@ func (p *Provider) AdditionalScopes() []string {
 	return []string{oidc.ScopeOfflineAccess, "GroupMember.Read.All", "User.Read"}
 }
 
+// DisplayName returns the display name of the provider.
+func (p *Provider) DisplayName() string {
+	return "Microsoft Entra ID"
+}
+
 // AuthOptions returns the generic auth options required by the EntraID provider.
 func (p *Provider) AuthOptions() []oauth2.AuthCodeOption {
 	return []oauth2.AuthCodeOption{}
