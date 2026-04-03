@@ -107,7 +107,7 @@ jobs:
       - get-modified-files
     strategy:
       matrix:
-        ubuntu-version: [ 'noble', 'questing', 'devel' ]
+        ubuntu-version: [ 'devel' ]
       fail-fast: false
     uses: ./.github/workflows/debian-build-test-and-sync.yaml
     with:

@@ -72,7 +72,7 @@ jobs:
     needs: compute-hash
     strategy:
       matrix:
-        ubuntu-version: [ 'noble', 'questing' ]
+        ubuntu-version: [ 'devel' ]
       fail-fast: false
     uses: ./.github/workflows/e2e-tests-provision-and-run.yaml
     with:
