@@ -1,8 +1,8 @@
-authd (0.6.0+git260402+147+2bfc261a) resolute; urgency=medium
+authd (0.6.0+git260403+156+e1fae746) resolute; urgency=medium
 
-  * Github build. Run id: 23897516275. Run number: 147.
+  * Github build. Run id: 23944461713. Run number: 156.
 
- -- Adrian <adrian.dombeck@canonical.com>  Thu, 02 Apr 2026 11:10:44 +0000
+ -- adombeck <18482300+adombeck@users.noreply.github.com>  Fri, 03 Apr 2026 11:21:47 +0000
 
 authd (0.6.0) resolute; urgency=medium
 
@@ -18,6 +18,50 @@ authd (0.6.0) resolute; urgency=medium
   * Improve error messages.
   * debian/control: Install missing build dependency systemd-dev.
   * debian/postrm: Remove /etc/pam.d/gdm-authd.
+  * Update Go dependencies:
+    - toolchain go1.25.8
+    - github.com/charmbracelet/x/term v0.2.2
+    - github.com/coreos/go-systemd/v22 v22.7.0
+    - github.com/godbus/dbus/v5 v5.2.2
+    - github.com/mattn/go-sqlite3 v1.14.34
+    - github.com/spf13/cobra v1.10.2
+    - github.com/spf13/pflag v1.0.10
+    - github.com/spf13/viper v1.21.0
+    - github.com/stretchr/testify v1.11.1
+    - go.etcd.io/bbolt v1.4.3
+    - golang.org/x/sys v0.41.0
+    - golang.org/x/term v0.40.0
+    - google.golang.org/grpc v1.79.1
+    - google.golang.org/protobuf v1.36.11
+    - gopkg.in/ini.v1 v1.67.1
+    Indirect dependencies:
+    - github.com/cpuguy83/go-md2man/v2 v2.0.6
+    - github.com/fsnotify/fsnotify v1.9.0
+    - github.com/go-viper/mapstructure/v2 v2.4.0
+    - github.com/pelletier/go-toml/v2 v2.2.4
+    - github.com/russross/blackfriday/v2 v2.1.0
+    - github.com/sagikazarmark/locafero v0.11.0
+    - github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8
+    - github.com/spf13/afero v1.15.0
+    - github.com/spf13/cast v1.10.0
+    - go.yaml.in/yaml/v3 v3.0.4
+    - golang.org/x/net v0.48.0
+    - golang.org/x/sync v0.19.0
+    - golang.org/x/text v0.32.0
+    - google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217
+  * Update Rust dependencies:
+    - cc ^1.2.34
+    - ctor ^0.5.0
+    - hyper-util ^0.1.16
+    - libc ^0.2.174
+    - once_cell ^1.21.3
+    - prost 0.14.*
+    - rustix ^1.0.8
+    - time ^0.3.41
+    - tokio ^1.47.0
+    - tonic 0.14.*
+    - tonic-prost 0.14.*
+    - tonic-prost-build 0.14.*
 
  -- Adrian Dombeck <adrian.dombeck@canonical.com>  Thu, 02 Apr 2026 12:44:28 +0200
 
