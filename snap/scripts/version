@@ -25,7 +25,7 @@ get_version() {
     tags=$(git tag --points-at HEAD)
     for tag in ${tags}; do
         if echo "${tag}" | grep -qE "^${current_branch}-"; then
-            version="${tag#${current_branch}-}"
+            version="${tag#"${current_branch}"-}"
             echo "${version}"
             return
         fi
