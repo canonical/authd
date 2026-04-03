@@ -638,11 +638,6 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	log.Debug(ctx, "Polling to exchange device code for token...")
 	t, err := session.oauth2Config.DeviceAccessToken(expiryCtx, response, b.provider.AuthOptions()...)
 	if err != nil {
-		var retrieveErr *oauth2.RetrieveError
-		if errors.As(err, &retrieveErr) && b.provider.IsUserDisabledError(retrieveErr) {
-			log.Errorf(context.Background(), "Login failed: User %q is disabled, please contact your administrator.", session.username)
-			return AuthDenied, errorMessage{Message: fmt.Sprintf("Your user account is disabled in %s, please contact your administrator.", b.provider.DisplayName())}
-		}
 		log.Errorf(context.Background(), "Error retrieving access token: %s", err)
 		return AuthRetry, errorMessage{Message: "Error retrieving access token. Please try again."}
 	}

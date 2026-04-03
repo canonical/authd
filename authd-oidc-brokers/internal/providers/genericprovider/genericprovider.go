@@ -124,11 +124,9 @@ func (p GenericProvider) IsTokenExpiredError(err *oauth2.RetrieveError) bool {
 	return err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50173:")
 }
 
-// IsUserDisabledError returns true if the reason for the error is that the user account is disabled.
-func (p GenericProvider) IsUserDisabledError(err *oauth2.RetrieveError) bool {
-	// TODO: This is an msentraid specific error code and description.
-	//       Change it to the ones from Google once we know them.
-	return err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50057:")
+// IsUserDisabledError returns false, as the generic provider does not support disabling users.
+func (p GenericProvider) IsUserDisabledError(_ *oauth2.RetrieveError) bool {
+	return false
 }
 
 // SupportsDeviceRegistration returns false, as the generic provider does not support device registration.

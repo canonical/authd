@@ -198,7 +198,6 @@ type tokenOptions struct {
 	expired                   bool
 	noRefreshToken            bool
 	refreshTokenExpired       bool
-	userIsDisabledOnline      bool
 	noIDToken                 bool
 	invalid                   bool
 	invalidClaims             bool
@@ -254,9 +253,6 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 	}
 	if options.refreshTokenExpired {
 		tok.Token.RefreshToken = testutils.ExpiredRefreshToken
-	}
-	if options.userIsDisabledOnline {
-		tok.Token.RefreshToken = testutils.DisabledUserRefreshToken
 	}
 	if !options.noIsForDeviceRegistration {
 		tok.ExtraFields = map[string]any{testutils.IsForDeviceRegistrationClaim: options.isForDeviceRegistration}

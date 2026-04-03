@@ -30,8 +30,6 @@ import (
 const (
 	// ExpiredRefreshToken is used to test the expired refresh token error.
 	ExpiredRefreshToken = "expired-refresh-token"
-	// DisabledUserRefreshToken is used to test the user-disabled error.
-	DisabledUserRefreshToken = "disabled-user-refresh-token"
 	// IsForDeviceRegistrationClaim is the claim used to indicate to the mock provider if the token is for device registration.
 	IsForDeviceRegistrationClaim = "is_for_device_registration"
 )
@@ -223,13 +221,6 @@ func TokenHandler(serverURL string, opts *TokenHandlerOptions) EndpointHandler {
 			_, _ = w.Write([]byte(`{"error": "invalid_grant", "error_description": "AADSTS50173: The refresh token has expired."}`))
 			return
 		}
-		if refreshToken == DisabledUserRefreshToken {
-			w.Header().Add("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			// This is an msentraid specific error code and description.
-			_, _ = w.Write([]byte(`{"error": "invalid_grant", "error_description": "AADSTS50057: The user account is disabled."}`))
-			return
-		}
 
 		// Mimics user going through auth process
 		time.Sleep(2 * time.Second)
@@ -315,16 +306,6 @@ func UnavailableHandler() EndpointHandler {
 func BadRequestHandler() EndpointHandler {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-	}
-}
-
-// DisabledUserTokenHandler returns a handler that returns the user-disabled error response.
-func DisabledUserTokenHandler() EndpointHandler {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Add("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		// This is an msentraid specific error code and description.
-		_, _ = w.Write([]byte(`{"error": "invalid_grant", "error_description": "AADSTS50057: The user account is disabled."}`))
 	}
 }
 
