@@ -1,4 +1,4 @@
-authd (0.6.1) UNRELEASED; urgency=medium
+authd (0.6.1+ubuntu25.10) questing; urgency=medium
 
   * Update Go dependencies:
     - github.com/mattn/go-sqlite3 v1.14.38
@@ -11,7 +11,7 @@ authd (0.6.1) UNRELEASED; urgency=medium
     - google.golang.org/genproto/googleapis/rpc
       v0.0.0-20260120221211-b8f7ae30c516
 
- -- Adrian Dombeck <adrian.dombeck@canonical.com>  Fri, 03 Apr 2026 12:43:33 +0200
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Fri, 03 Apr 2026 20:33:08 +0200
 
 authd (0.6.0) resolute; urgency=medium
 
