@@ -1,8 +1,23 @@
-authd (0.6.0+git260403+156+e1fae746) questing; urgency=medium
+authd (0.6.1+git260403+164+00641178) questing; urgency=medium
 
-  * Github build. Run id: 23944461713. Run number: 156.
+  * Github build. Run id: 23955715337. Run number: 164.
 
- -- adombeck <18482300+adombeck@users.noreply.github.com>  Fri, 03 Apr 2026 11:21:47 +0000
+ -- Adrian <adrian.dombeck@canonical.com>  Fri, 03 Apr 2026 17:39:17 +0000
+
+authd (0.6.1) resolute; urgency=medium
+
+  * Update Go dependencies:
+    - github.com/mattn/go-sqlite3 v1.14.38
+    - golang.org/x/sys v0.42.0
+    - golang.org/x/term v0.41.0
+    - google.golang.org/grpc v1.80.0
+    Indirect dependencies:
+    - golang.org/x/net v0.49.0
+    - golang.org/x/text v0.33.0
+    - google.golang.org/genproto/googleapis/rpc
+      v0.0.0-20260120221211-b8f7ae30c516
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Fri, 03 Apr 2026 19:36:26 +0200
 
 authd (0.6.0) resolute; urgency=medium
 
