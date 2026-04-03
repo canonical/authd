@@ -25,8 +25,9 @@ BUILDDIR := $(CURDIR)/obj-$(DEB_HOST_GNU_TYPE)
 override_dh_auto_clean:
 	dh_auto_clean --buildsystem=cargo
 
-	# Vendor Rust dependencies when building the source package
-	[ -d vendor_rust/ ] || debian/vendor-rust.sh
+	# Ensure the vendor dir exists (it doesn't need to be populated to reproduce
+	# the cargo wrapper issue)
+	[ -d vendor_rust/ ] || mkdir -p "$(CARGO_VENDOR_DIR)"
 
 	# Cleanup empty cargo-checksum
 	rm -f debian/cargo-checksum.json
@@ -36,17 +37,8 @@ override_dh_auto_configure:
 
 	touch debian/cargo-checksum.json
 
-	# Go manual if cargo-vendor-filterer is not around, otherwise dh-cargo will
-	# ensure that what we've filtered won't be still listed in debian/control.
-	# TODO: Drop this when we won't care about noble anymore.
-	if ! command -v cargo-vendor-filterer 2>/dev/null; then \
-		env DEB_CARGO_CRATE="$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM)" \
-		  cargo prepare-debian "$(CARGO_VENDOR_DIR)"; \
-	else \
-	    echo "cargo version: $$(cargo --version)"; \
-	    echo "cargo-vendor-filterer version: $$(cargo-vendor-filterer --version)"; \
-		dh_auto_configure --buildsystem=cargo; \
-	fi
+	env DEB_CARGO_CRATE="$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM)" \
+      cargo prepare-debian "$(CARGO_VENDOR_DIR)"
 
 override_dh_auto_build:
 	# Build the NSS library
