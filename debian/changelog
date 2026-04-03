@@ -1,3 +1,26 @@
+authd (0.6.1) UNRELEASED; urgency=medium
+
+  * Update Go dependencies:
+    - github.com/mattn/go-sqlite3 v1.14.38
+    - golang.org/x/sys v0.42.0
+    - golang.org/x/term v0.41.0
+    - google.golang.org/grpc v1.80.0
+    Indirect dependencies:
+    - golang.org/x/net v0.49.0
+    - golang.org/x/text v0.33.0
+    - google.golang.org/genproto/googleapis/rpc v0.0.0-20260120221211-b8f7ae30c516
+  * Update Rust dependencies:
+    - cc ^1.2.57
+    - hyper-util ^0.1.20
+    - libc ^0.2.183
+    - log ^0.4.29
+    - once_cell ^1.21.4
+    - rustix ^1.1.4
+    - simple_logger ^5.2.0
+    - tokio ^1.50.0
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Fri, 03 Apr 2026 12:43:33 +0200
+
 authd (0.6.0) resolute; urgency=medium
 
   * Change default UID/GID range to 10000:60000.
