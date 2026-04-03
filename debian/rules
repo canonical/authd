@@ -4,23 +4,6 @@
 include /usr/share/dpkg/pkg-info.mk
 include /usr/share/rustc/architecture.mk
 
-# The package name for authd, used only locally to avoid repetitions
-AUTHD_GO_PACKAGE := $(shell grep-dctrl -s XS-Go-Import-Path -n - ./debian/control)
-
-export GOFLAGS := -ldflags=-X=$(AUTHD_GO_PACKAGE)/internal/consts.Version=$(DEB_VERSION_UPSTREAM) --mod=vendor -buildmode=pie
-
-export DEB_BUILD_MAINT_OPTIONS := optimize=-lto
-
-# Strict symbols checking
-export DPKG_GENSYMBOLS_CHECK_LEVEL := 4
-
-# Copy in build directory all content to embed
-export DH_GOLANG_INSTALL_ALL := 1
-
-# We want to take whatever ubuntu propose to us (as it won’t download a newer version),
-# as long as it matches the go.mod go stenza which is the language requirement.
-export GOTOOLCHAIN := local
-
 # Needed for Rust vendored sources tracking
 export CARGO_VENDOR_DIR := $(CURDIR)/vendor_rust
 
@@ -28,57 +11,25 @@ export CARGO_VENDOR_DIR := $(CURDIR)/vendor_rust
 export DEB_HOST_GNU_TYPE DEB_HOST_RUST_TYPE
 export CARGO_HOME = $(CURDIR)/debian/cargo_home
 
-# Used not to hardcode the daemons and PAM module paths
-export AUTHD_DAEMONS_PATH := /usr/libexec
-export AUTHD_PAM_MODULES_PATH = /usr/lib/$(DEB_TARGET_GNU_TYPE)/security
-
-# Skip some tests that rely on external dependencies when building package:
-# they need external commands (e.g. `vhs`) that are not available in the build environment.
-export AUTHD_SKIP_EXTERNAL_DEPENDENT_TESTS=1
-
-# Skip some tests that fail when running as root as it may happen when building the packages
-# in sbuild or similar environments.
-export AUTHD_SKIP_ROOT_TESTS := 1
-
-# Defines the targets to be built as part of dh_auto_build
-export DH_GOLANG_BUILDPKG := \
-    $(AUTHD_GO_PACKAGE)/cmd/authctl \
-    $(AUTHD_GO_PACKAGE)/cmd/authd \
-	$(AUTHD_GO_PACKAGE)/pam \
-	$(NULL)
-
 # Prepend the following paths to PATH:
 # * The cargo wrapper. This will either be the path to the wrapper installed by
 #   dh-cargo, or the path to the wrapper installed by the cargo-$VERSION package.
-# * The Go executable from the backported Go package. It's possible that no
-#   backported Go package is installed, because the golang-go package already
-#   satisfies the dependency. It's still fine to also add the path in that case,
-#   it will be ignored if it doesn't exist.
-export PATH := $(shell ./debian/get-depends-cargo-bin-path.sh):$(shell ./debian/get-depends-go-bin-path.sh):$(shell printenv PATH)
+export PATH := $(shell ./debian/get-depends-cargo-bin-path.sh):$(shell printenv PATH)
 
 BUILDDIR := $(CURDIR)/obj-$(DEB_HOST_GNU_TYPE)
-
-export BUILT_PAM_LIBS_PATH := obj-$(DEB_HOST_GNU_TYPE)/src/$(AUTHD_GO_PACKAGE)/pam
 
 %:
 	# --without=single-binary can be removed with dh 15.
 	dh $@ --buildsystem=golang --with=golang,apport --without=single-binary
 
 override_dh_auto_clean:
-	dh_auto_clean
 	dh_auto_clean --buildsystem=cargo
-
-	# Vendor Go dependencies when building the source package
-	[ -d vendor/ ] || go mod vendor
 
 	# Vendor Rust dependencies when building the source package
 	[ -d vendor_rust/ ] || debian/vendor-rust.sh
 
 	# Cleanup empty cargo-checksum
 	rm -f debian/cargo-checksum.json
-
-	# Cleanup generated service files
-	rm -f debian/*.service
 
 override_dh_auto_configure:
 	dh_auto_configure
@@ -97,30 +48,8 @@ override_dh_auto_configure:
 		dh_auto_configure --buildsystem=cargo; \
 	fi
 
-	for i in debian/*.service.in debian/pam-configs/*.in; do \
-		sed s,@AUTHD_DAEMONS_PATH@,$(AUTHD_DAEMONS_PATH),g $$i > $${i%.*}; \
-	done
-
 override_dh_auto_build:
-	# Build PAM library & Go loader
-	DH_GOLANG_GO_GENERATE=1 dh_auto_build -- $(AUTHD_GO_PACKAGE)/pam
-
 	# Build the NSS library
-	echo "PATH: $(PATH)"
-	echo "Building NSS library with $$(which cargo) ($$(cargo --version))"
+	@echo "PATH: $(PATH)"
+	@echo "Building NSS library with $$(which cargo) ($$(cargo --version))"
 	cargo build --release
-
-	# Build the daemon
-	dh_auto_build -- $(AUTHD_GO_PACKAGE)/cmd/authd
-
-override_dh_auto_test:
-	AUTHD_SKIP_FLAKY_TESTS=1 dh_auto_test
-
-override_dh_auto_install:
-	dh_auto_install --destdir=debian/tmp -- --no-source
-
-	# Fills the built-using variables for rust
-	/usr/share/cargo/bin/dh-cargo-built-using authd
-
-	# Install gdm-PAM config file
-	dh_installpam -pauthd --name=gdm-authd
