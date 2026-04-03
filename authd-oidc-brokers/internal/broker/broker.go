@@ -783,7 +783,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 			}
 			if b.provider.IsUserDisabledError(retrieveErr) {
 				log.Error(context.Background(), retrieveErr.Error())
-				log.Errorf(context.Background(), "Login failed: User %q is disabled in Microsoft Entra ID, please contact your administrator.", session.username)
+				log.Errorf(context.Background(), "Login failed: User %q is disabled, please contact your administrator.", session.username)
 
 				// Store the information that the user is disabled, so that we can deny login on subsequent offline attempts.
 				oldAuthInfo.UserIsDisabled = true
@@ -792,7 +792,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 					return AuthDenied, unexpectedErrMsg("failed to store token")
 				}
 
-				return AuthDenied, errorMessage{Message: "This user is disabled in Microsoft Entra ID, please contact your administrator."}
+				return AuthDenied, errorMessage{Message: "Your user account is disabled, please contact your administrator."}
 			}
 		}
 		if err != nil {
