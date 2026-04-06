@@ -110,7 +110,7 @@ def stream_journal_from_vm_via_tcp(output_dir, timeout=60):
                 break
 
         if not connected:
-            logger.error("socat failed to connect, retrying...\n" + "".join(stderr_buf))
+            logger.info("socat failed to connect, retrying...\n" + "".join(stderr_buf))
             stderr_buf.clear()
             socat.kill()
             time.sleep(1)
