@@ -92,7 +92,7 @@ fi
 # shellcheck source=lib/libprovision.sh
 source "${LIB_DIR}/libprovision.sh"
 
-assert_env_vars RELEASE VM_NAME_BASE
+assert_env_vars RELEASE VM_NAME_BASE BROKER
 
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-${DATA_DIR}/${RELEASE}}"
 
