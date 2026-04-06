@@ -11,6 +11,7 @@ Usage: $0 [--config-file <config file>] [--force]
 
 Options:
   --config-file <config file>  Path to the configuration file (default: config.sh)
+  --broker <broker>            The broker to install ("authd-google", "authd-msentraid", ...)
   --force                      Force provisioning: remove existing VM and artifacts and create a fresh VM
   -h, --help                   Show this help message and exit
 
@@ -28,6 +29,10 @@ while [[ $# -gt 0 ]]; do
         --force)
             FORCE="true"
             shift
+            ;;
+        --b|--broker)
+            BROKER="$2"
+            shift 2
             ;;
         -h|--help)
             usage
@@ -47,7 +52,12 @@ done
 set -x
 
 # Provision the VM with Ubuntu
-"${SCRIPT_DIR}/provision-ubuntu.sh" --config-file "${CONFIG_FILE}" ${FORCE:+--force}
+"${SCRIPT_DIR}/provision-ubuntu.sh" \
+  --config-file "${CONFIG_FILE}" \
+  ${FORCE:+--force}
 
 # Provision authd in the VM
-"${SCRIPT_DIR}/provision-authd.sh" --config-file "${CONFIG_FILE}"
+"${SCRIPT_DIR}/provision-authd.sh" \
+  --config-file "${CONFIG_FILE}" \
+  ${BROKER:+--broker "${BROKER}"} \
+  ${FORCE:+--force}
