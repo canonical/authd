@@ -1,0 +1,197 @@
+#cloud-config
+# authd Development Environment - Cloud-Init Configuration
+#
+# Single cloud-init user-data for the LXD VM dev environment.
+# Installs all build/test dependencies, Go, Rust, and a minimal GNOME desktop
+# for GDM login testing.
+#
+# Placeholders replaced at launch time by dev-env.sh:
+#   __SSH_PUBLIC_KEY__  - your SSH public key
+#   __GO_VERSION__      - Go toolchain version (from go.mod)
+#   __RUST_CHANNEL__    - Rust toolchain channel (from rust-toolchain.toml)
+#   __VM_PASSWORD__     - randomly generated VM password
+
+ssh_authorized_keys:
+  - __SSH_PUBLIC_KEY__
+
+package_update: true
+# Intentionally false (unlike e2e cloud-init which uses true) to speed up
+# VM provisioning. Dev VMs are short-lived and don't need full upgrades.
+package_upgrade: false
+
+packages:
+  # ── Build dependencies (from debian/control) ──
+  - protobuf-compiler
+  - pkgconf
+  - gcc
+  - make
+  - git
+  - libpam0g-dev
+  - libglib2.0-dev
+  - libpwquality-dev
+  - libc6-dev
+  - libssl-dev
+  - systemd-dev
+  # ── Test dependencies (from .github/workflows/qa.yaml) ──
+  - bubblewrap
+  - cracklib-runtime
+  - dbus
+  - openssh-server
+  - uidmap
+  - openssh-client
+  - apparmor-profiles
+  - gdm3
+  - gnome-shell
+  - spice-vdagent
+  # ── Dev ergonomics ──
+  - shellcheck            # Shell script linting (used in CI qa.yaml)
+  # ── Runtime / Utilities ──
+  - systemd-timesyncd
+  - curl
+  - wget
+  - jq
+  - vim
+  - tree
+  - ripgrep
+  - htop
+  - software-properties-common
+
+write_files:
+  # SSH config for authd PAM testing (matches e2e-tests/vm/cloud-init-template)
+  - path: /etc/ssh/sshd_config.d/authd.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      UsePAM yes
+      Match User *@*
+          KbdInteractiveAuthentication yes
+
+  # PATH setup for Go and Rust toolchains
+  - path: /etc/profile.d/authd-dev.sh
+    owner: root:root
+    permissions: "0644"
+    content: |
+      # Go (installed to /usr/local/go from go.dev)
+      export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
+      # Rust (rustup, installed per-user)
+      if [ -d "$HOME/.cargo/bin" ]; then
+        export PATH="$HOME/.cargo/bin:$PATH"
+      fi
+
+  # Suppress login banner noise (from e2e-tests/vm/cloud-init-template)
+  - path: /etc/skel/.hushlogin
+    content: ""
+
+  # dconf profile for the desktop session
+  - path: /etc/dconf/profile/user
+    content: |
+      user-db:user
+      system-db:local
+
+  # Prevent the desktop from suspending or blanking the screen
+  # (from e2e-tests/vm/cloud-init-template-questing.yaml)
+  - path: /etc/dconf/db/local.d/00-authd-dev
+    content: |
+      [org/gnome/settings-daemon/plugins/power]
+      sleep-inactive-ac-type='nothing'
+      sleep-inactive-ac-timeout=0
+
+      [org/gnome/desktop/session]
+      idle-delay=uint32 0
+
+runcmd:
+  # --- Configure swap (4GB) to prevent OOM during large Go builds ---
+  # msgraph-sdk-go/models requires >3GB during compilation; 4GB swap provides insurance.
+  - |
+    set -e
+    echo "Configuring 4GB swap file..."
+    fallocate -l 4G /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    echo 'vm.swappiness=10' >> /etc/sysctl.d/99-swap.conf
+    sysctl -p /etc/sysctl.d/99-swap.conf 2>/dev/null | grep swappiness || true
+    echo "Swap configured (4GB, swappiness=10 to prefer memory)"
+
+  # --- Install Go from go.dev ---
+  # System Go is too old for authd; version is injected from go.mod by dev-env.sh.
+  - |
+    set -e
+    GO_VERSION="__GO_VERSION__"
+    ARCH=$(dpkg --print-architecture)
+    case "$ARCH" in
+      amd64) GO_ARCH="amd64" ;;
+      arm64) GO_ARCH="arm64" ;;
+      *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+    esac
+    echo "Installing Go ${GO_VERSION} (${GO_ARCH})..."
+    wget -q "https://go.dev/dl/go${GO_VERSION}.linux-${GO_ARCH}.tar.gz" -O /tmp/go.tar.gz
+    # Verify download succeeded and is non-empty
+    if [ ! -s /tmp/go.tar.gz ]; then
+      echo "ERROR: Go download failed or is empty"; exit 1
+    fi
+    rm -rf /usr/local/go
+    tar -C /usr/local -xzf /tmp/go.tar.gz
+    rm -f /tmp/go.tar.gz
+    echo "Go installed: $(/usr/local/go/bin/go version)"
+
+  # --- Install Rust via rustup (for ubuntu user) ---
+  # RUSTUP_INIT_SKIP_PATH_CHECK: required because dh-cargo may pull in
+  # system Rust, which causes rustup to error.
+  # Toolchain channel is injected from rust-toolchain.toml by dev-env.sh.
+  - |
+    set -e
+    su - ubuntu -c 'export RUSTUP_INIT_SKIP_PATH_CHECK=yes && curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain __RUST_CHANNEL__'
+    su - ubuntu -c '. "$HOME/.cargo/env" && rustup default __RUST_CHANNEL__ && echo "Rust: $(rustc --version), $(cargo --version)"'
+
+  # --- Set PATH in ubuntu's .bashrc for non-interactive SSH sessions ---
+  # /etc/profile.d only applies to login shells. Non-interactive SSH commands
+  # (ssh vm 'go build ...') need PATH set in .bashrc.
+  - |
+    cat >> /home/ubuntu/.bashrc <<'BASHRC'
+
+    # authd dev environment PATH (added by cloud-init)
+    export PATH="/usr/local/go/bin:$HOME/go/bin:$HOME/.cargo/bin:$PATH"
+    BASHRC
+
+  # --- Install Go protobuf tools (mirrors CONTRIBUTING.md method) ---
+  - |
+    su - ubuntu -c '
+      export PATH="/usr/local/go/bin:$HOME/go/bin:$HOME/.cargo/bin:$PATH"
+      cd /workspace/authd/tools
+      grep -o "_ \"[^\"]*\"" *.go | cut -d "\"" -f 2 | sort -u | xargs -r go install
+    '
+    echo "Go protobuf tools installed"
+
+  # --- AppArmor bubblewrap profile (required by tests) ---
+  - |
+    if [ -f /usr/share/apparmor/extra-profiles/bwrap-userns-restrict ]; then
+      ln -sf /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/
+      apparmor_parser -r /etc/apparmor.d/bwrap-userns-restrict 2>/dev/null || true
+      echo "AppArmor bubblewrap profile loaded"
+    fi
+
+  # --- System hardening for dev comfort ---
+  - sed -i 's/^LOGIN_TIMEOUT.*/LOGIN_TIMEOUT 360/' /etc/login.defs
+  - systemctl mask systemd-networkd-wait-online.service || true
+  - systemctl mask apt-daily.service apt-daily.timer || true
+  - systemctl mask apt-daily-upgrade.service apt-daily-upgrade.timer || true
+  - systemctl mask unattended-upgrades.service || true
+  - rm -f /etc/apt/apt.conf.d/20auto-upgrades /etc/apt/apt.conf.d/50unattended-upgrades
+
+  # --- Desktop configuration ---
+  # graphical.target enables GDM for desktop login testing.
+  # SSH still works — GDM does not block SSH access.
+  - systemctl set-default graphical.target
+  - dconf update
+  - sed -i 's/enabled=1/enabled=0/' /etc/default/apport 2>/dev/null || true
+  - systemctl mask --now apport.service || true
+  # Password for GDM console login (SSH uses key auth).
+  # Generated randomly by dev-env.sh at VM creation time.
+  - echo 'ubuntu:__VM_PASSWORD__' | chpasswd
+
+  # --- Restart SSH to pick up authd PAM config ---
+  - systemctl restart ssh
+
+  - echo "=== authd development environment provisioning complete ==="

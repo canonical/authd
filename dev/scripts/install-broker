@@ -1,0 +1,445 @@
+#!/usr/bin/env bash
+# Install and configure an OIDC broker for authd (from source).
+#
+# Builds the broker from authd-oidc-brokers/, registers it on D-Bus,
+# creates the authd discovery config, writes broker.conf with your
+# credentials, and installs a systemd service to manage the broker
+# daemon.
+#
+# Configuration files (authd.conf, broker.conf) are copied from the
+# upstream templates in authd-oidc-brokers/conf/variants/ and
+# customized with your credentials, keeping them in sync with the
+# broker source automatically.
+#
+# Run inside the VM:
+#   cd /workspace/authd && ./dev/scripts/install-broker google \
+#       --issuer https://accounts.google.com \
+#       --client-id YOUR_CLIENT_ID \
+#       --client-secret YOUR_CLIENT_SECRET \
+#       --ssh-suffixes '@gmail.com'
+#
+# Supported variants: google, msentraid, oidc (generic/Keycloak)
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../lib/common.sh"
+
+ensure_path
+
+# --- Usage ---
+
+usage() {
+    cat <<EOF
+${BOLD}Install and configure an OIDC broker for authd${NC}
+
+${BOLD}Usage:${NC}
+  ./dev/scripts/install-broker <variant> [options]
+
+${BOLD}Variants:${NC}
+  google          Google IAM (build tag: withgoogle)
+  msentraid       Microsoft Entra ID (build tag: withmsentraid)
+  oidc            Generic OIDC / Keycloak (no build tag)
+
+${BOLD}Credential options:${NC}
+  --client-id ID        OAuth2 client ID
+  --client-secret SEC   OAuth2 client secret
+  --issuer URL          OIDC issuer URL (defaults: google → accounts.google.com)
+  --ssh-suffixes LIST   Comma-separated suffixes for first-time SSH login
+                        (e.g., '@gmail.com,@company.org' or '*' for all)
+  --allowed-users LIST  Who can log in: OWNER (default in dev), ALL, or usernames
+
+${BOLD}Install options:${NC}
+  --rebuild             Rebuild the broker binary from source and reinstall the D-Bus
+                        policy and systemd service. Does NOT touch broker.conf — all
+                        credentials are preserved as-is. Cannot be combined with any
+                        credential flags. To update credentials instead, use:
+                        './dev/dev-env.sh broker <variant> conf'
+
+${BOLD}Examples:${NC}
+
+  # First-time install (auto-detects, builds from source):
+  ./dev/scripts/install-broker google \\
+      --client-id 843411...googleusercontent.com \\
+      --client-secret GOCSPX-... \\
+      --ssh-suffixes '@gmail.com'
+
+  # Update a credential (auto-detects existing binary, skips rebuild):
+  ./dev/scripts/install-broker google --client-secret NEW_SECRET
+
+  # Force a full rebuild after changing broker source:
+  ./dev/scripts/install-broker google --rebuild
+
+  # Microsoft Entra ID:
+  ./dev/scripts/install-broker msentraid \\
+      --issuer https://login.microsoftonline.com/TENANT_ID/v2.0 \\
+      --client-id YOUR_CLIENT_ID \\
+      --ssh-suffixes '@yourdomain.com'
+
+EOF
+    exit "${1:-0}"
+}
+
+# --- Parse arguments ---
+
+VARIANT="${1:-}"
+[[ -n "$VARIANT" ]] || usage 1
+[[ "$VARIANT" == "--help" || "$VARIANT" == "-h" ]] && usage 0
+shift
+
+ISSUER=""
+CLIENT_ID=""
+CLIENT_SECRET=""
+SSH_SUFFIXES=""
+ALLOWED_USERS="OWNER"   # Default to OWNER in dev environments
+REBUILD=false
+_has_creds=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --issuer)           ISSUER="$2"; _has_creds=true; shift 2 ;;
+        --client-id)        CLIENT_ID="$2"; _has_creds=true; shift 2 ;;
+        --client-secret)    CLIENT_SECRET="$2"; _has_creds=true; shift 2 ;;
+        --ssh-suffixes)     SSH_SUFFIXES="$2"; _has_creds=true; shift 2 ;;
+        --allowed-users)    ALLOWED_USERS="$2"; _has_creds=true; shift 2 ;;
+        --rebuild)          REBUILD=true; shift ;;
+        --help|-h)          usage 0 ;;
+        *)                  die "Unknown option: $1" ;;
+    esac
+done
+
+# --- Load variant config from upstream templates ---
+
+ensure_workspace
+load_variant_config "$VARIANT"
+
+# --rebuild cannot be combined with credential flags.
+if $REBUILD && $_has_creds; then
+    die "--rebuild only rebuilds the binary; credential flags are not accepted. To update credentials: ./dev/dev-env.sh broker ${VARIANT} conf"
+fi
+
+# Apply default issuer if variant defines one and user didn't specify
+ISSUER="${ISSUER:-${DEFAULT_ISSUER}}"
+
+# Auto-detect whether to do a full install or reconfigure-only.
+# Skip the build when the broker binary and discovery config are already present.
+# (--rebuild bypasses auto-detection and always enters the build path.)
+CONFIGURE_ONLY=false
+if ! $REBUILD && [[ -x "/usr/libexec/${BINARY_NAME}" ]] && sudo test -f "/etc/authd/brokers.d/${VARIANT}.conf"; then
+    CONFIGURE_ONLY=true
+fi
+
+# Warn when --ssh-suffixes is absent on a fresh install: without
+# ssh_allowed_suffixes_first_auth set, authd rejects first-time SSH users and PAM
+# falls through to the generic password prompt instead of broker selection.
+if [[ -z "$SSH_SUFFIXES" ]] && ! $CONFIGURE_ONLY && ! $REBUILD; then
+    warn "No --ssh-suffixes provided: new users will NOT be able to log in via SSH for"
+    warn "the first time.  Re-run with --ssh-suffixes '@yourdomain.com'"
+    warn "(or '*' for any domain) to enable first-time SSH login."
+fi
+
+# --- Validate ---
+
+[[ -n "$DBUS_NAME" ]] || die "Could not determine D-Bus name for variant '${VARIANT}'"
+
+if $REBUILD; then
+    [[ -x "/usr/libexec/${BINARY_NAME}" ]] && sudo test -f "${CONF_DIR}/broker.conf" || \
+        die "Broker '${VARIANT}' is not installed. Run without --rebuild for a first-time install."
+elif $CONFIGURE_ONLY; then
+    sudo test -f "${CONF_DIR}/broker.conf" || \
+        die "${CONF_DIR}/broker.conf not found. Check the install."
+    info "Patching credentials in existing ${CONF_DIR}/broker.conf..."
+fi
+
+if $REBUILD; then
+    printf '\n%s\n' "${BOLD}Rebuilding ${DISPLAY_NAME} broker from source${NC}"
+elif $CONFIGURE_ONLY; then
+    printf '\n%s\n' "${BOLD}Reconfiguring ${DISPLAY_NAME} broker${NC}"
+else
+    printf '\n%s\n' "${BOLD}Installing ${DISPLAY_NAME} broker from source${NC}"
+fi
+echo "  Variant:     ${VARIANT}"
+echo "  Build tag:   ${BUILD_TAG:-none}"
+echo "  D-Bus name:  ${DBUS_NAME}"
+echo "  Issuer:      ${ISSUER:-(not set)}"
+if [[ -n "$CLIENT_ID" ]]; then
+    echo "  Client ID:   ${CLIENT_ID:0:20}..."
+else
+    echo "  Client ID:   (not set)"
+fi
+echo ""
+
+# ============================================================
+# Step 1: Build the broker binary
+# ============================================================
+
+if ! $CONFIGURE_ONLY; then
+
+BROKER_SRC="${WORKSPACE}/authd-oidc-brokers"
+[[ -d "$BROKER_SRC" ]] || die "Broker source not found: ${BROKER_SRC}"
+
+info "Ensuring git submodules are initialized..."
+ensure_git_submodules
+
+# For msentraid, we need to build libhimmelblau first
+if [[ "$VARIANT" == "msentraid" ]]; then
+    info "Pre-building libhimmelblau C library (required for msentraid)..."
+    if [[ -f "${BROKER_SRC}/internal/providers/msentraid/himmelblau/generate.sh" ]]; then
+        (cd "${BROKER_SRC}" && bash ./internal/providers/msentraid/himmelblau/generate.sh) || \
+            warn "Failed to generate libhimmelblau (it may already be built)"
+        ok "libhimmelblau build complete"
+    else
+        warn "generate.sh script not found"
+    fi
+fi
+
+info "Building broker binary (${BINARY_NAME})..."
+BUILD_DIR=$(mktemp -d /tmp/authd-broker-build.XXXXXX)
+trap 'rm -rf "$BUILD_DIR"' EXIT
+
+local_build_flags=()
+if [[ -n "$BUILD_TAG" ]]; then
+    local_build_flags=("-tags=${BUILD_TAG}")
+fi
+
+(cd "$BROKER_SRC" && go build "${local_build_flags[@]+"${local_build_flags[@]}"}" -o "${BUILD_DIR}/${BINARY_NAME}" ./cmd/authd-oidc)
+ok "Broker binary built"
+
+# ============================================================
+# Step 2: Install binary
+# ============================================================
+
+info "Installing broker binary..."
+sudo install -m 755 "${BUILD_DIR}/${BINARY_NAME}" "/usr/libexec/${BINARY_NAME}"
+ok "Installed to /usr/libexec/${BINARY_NAME}"
+
+# ============================================================
+# Step 3: D-Bus system policy
+# ============================================================
+
+info "Installing D-Bus policy..."
+sudo tee "/usr/share/dbus-1/system.d/${DBUS_NAME}.conf" > /dev/null <<DBUS_EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE busconfig PUBLIC
+ "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+
+<busconfig>
+  <!-- Only root can own the service -->
+  <policy user="root">
+    <allow own="${DBUS_NAME}"/>
+  </policy>
+
+  <!-- Allow anyone to invoke methods -->
+  <policy context="default">
+    <allow send_destination="${DBUS_NAME}"
+           send_interface="com.ubuntu.authd.Broker"/>
+    <allow send_destination="${DBUS_NAME}"
+           send_interface="org.freedesktop.DBus.Introspectable"/>
+  </policy>
+</busconfig>
+DBUS_EOF
+ok "D-Bus policy installed"
+
+# Reload D-Bus to pick up the new policy
+sudo systemctl reload dbus 2>/dev/null || true
+
+# ============================================================
+# Step 4: authd broker discovery config (from upstream template)
+# ============================================================
+
+info "Creating authd discovery config..."
+sudo mkdir -p /etc/authd/brokers.d
+
+local_authd_conf="${VARIANT_CONF_DIR}/authd.conf"
+[[ -f "$local_authd_conf" ]] || die "Missing upstream template: ${local_authd_conf}"
+
+# Copy upstream template and clear the snap-specific brand_icon path
+sudo install -m 644 "$local_authd_conf" "/etc/authd/brokers.d/${VARIANT}.conf"
+sudo sed -i 's|^brand_icon = .*|brand_icon =|' "/etc/authd/brokers.d/${VARIANT}.conf"
+ok "Discovery config: /etc/authd/brokers.d/${VARIANT}.conf (from upstream template)"
+
+fi # end: ! $CONFIGURE_ONLY
+
+# ============================================================
+# Step 5: Broker configuration (from upstream template)
+# ============================================================
+
+# --rebuild preserves broker.conf exactly as-is; skip this step entirely.
+if ! $REBUILD; then
+
+info "Configuring broker credentials..."
+
+local_broker_conf="${VARIANT_CONF_DIR}/broker.conf"
+[[ -f "$local_broker_conf" ]] || die "Missing upstream template: ${local_broker_conf}"
+
+sudo mkdir -p -m 700 "${CONF_DIR}"
+
+if $CONFIGURE_ONLY; then
+    # Reconfigure path: broker.conf already exists; the sed substitutions below apply directly.
+    true
+else
+    # Fresh install: copy the upstream template as the starting point for sed substitutions.
+    sudo install -m 600 "$local_broker_conf" "${CONF_DIR}/broker.conf"
+fi
+
+# Substitute credential placeholders and set the issuer URL.
+# sed_escape handles special characters (|, &, /, \) in user-provided values.
+if [[ -n "$ISSUER" ]]; then
+    sudo sed -i "s|^issuer = .*|issuer = $(sed_escape "$ISSUER")|" "${CONF_DIR}/broker.conf"
+fi
+if [[ -n "$CLIENT_ID" ]]; then
+    sudo sed -i "s|^client_id = .*|client_id = $(sed_escape "$CLIENT_ID")|" "${CONF_DIR}/broker.conf"
+fi
+
+# Handle client_secret: update if present (uncommented or commented).
+# broker.conf is mode 600 (root-only), so grep must be run with sudo.
+if [[ -n "$CLIENT_SECRET" ]]; then
+    secret_esc=$(sed_escape "$CLIENT_SECRET")
+    if sudo grep -q '^client_secret = ' "${CONF_DIR}/broker.conf"; then
+        sudo sed -i "s|^client_secret = .*|client_secret = ${secret_esc}|" "${CONF_DIR}/broker.conf"
+    elif sudo grep -qE '^#\s*client_secret' "${CONF_DIR}/broker.conf"; then
+        sudo sed -i -E "s|^#\s*client_secret.*|client_secret = ${secret_esc}|" "${CONF_DIR}/broker.conf"
+    fi
+fi
+
+# Uncomment and set SSH suffixes if provided.
+# Match both commented (#ssh_allowed...) and already-live (ssh_allowed...) lines
+# so re-running with a new value actually updates it.
+if [[ -n "$SSH_SUFFIXES" ]]; then
+    if sudo grep -qE '^ssh_allowed_suffixes_first_auth = ' "${CONF_DIR}/broker.conf"; then
+        sudo sed -i -E "s|^ssh_allowed_suffixes_first_auth = .*|ssh_allowed_suffixes_first_auth = $(sed_escape "$SSH_SUFFIXES")|" "${CONF_DIR}/broker.conf"
+    else
+        sudo sed -i -E "s|^#\s*ssh_allowed_suffixes_first_auth.*|ssh_allowed_suffixes_first_auth = $(sed_escape "$SSH_SUFFIXES")|" "${CONF_DIR}/broker.conf"
+    fi
+fi
+
+# Uncomment and set allowed_users if provided.
+# Match both commented and already-live lines.
+if [[ -n "$ALLOWED_USERS" ]]; then
+    if sudo grep -qE '^allowed_users = ' "${CONF_DIR}/broker.conf"; then
+        sudo sed -i -E "s|^allowed_users = .*|allowed_users = $(sed_escape "$ALLOWED_USERS")|" "${CONF_DIR}/broker.conf"
+    else
+        sudo sed -i -E "s|^#\s*allowed_users.*|allowed_users = $(sed_escape "$ALLOWED_USERS")|" "${CONF_DIR}/broker.conf"
+    fi
+fi
+# Clear any unfilled angle-bracket placeholders (e.g. <CLIENT_ID>) left over
+# when credentials weren't provided. The config parser rejects '<' and '>'.
+sudo sed -i -E 's/^([a-z_]+ = ).*<[^>]+>.*$/\1/' "${CONF_DIR}/broker.conf"
+ok "Broker config: ${CONF_DIR}/broker.conf (from upstream template)"
+
+fi # end: ! $REBUILD
+
+# ============================================================
+# Step 6: Systemd service
+# ============================================================
+
+# Guard against empty SERVICE_NAME (would produce a broken unit file).
+[[ -n "$SERVICE_NAME" ]] || die "BUG: SERVICE_NAME is empty for variant '${VARIANT}' — check load_variant_config in common.sh"
+
+if ! $CONFIGURE_ONLY; then
+    info "Installing systemd service..."
+    sudo tee "/etc/systemd/system/${SERVICE_NAME}.service" > /dev/null <<SERVICE_EOF
+[Unit]
+Description=${DISPLAY_NAME} Broker for authd
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/libexec/${BINARY_NAME} --config ${CONF_DIR}/broker.conf -vv
+Restart=on-failure
+RestartSec=5
+WatchdogSec=60
+
+# Basic hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+StateDirectory=${SERVICE_NAME}
+ReadWritePaths=${CONF_DIR}
+ReadWritePaths=/var/lib/${SERVICE_NAME}
+
+[Install]
+WantedBy=multi-user.target
+SERVICE_EOF
+
+    sudo systemctl daemon-reload
+fi # end: ! $CONFIGURE_ONLY
+
+# Enable/start or disable/stop depending on whether credentials are in broker.conf.
+# Without a client_id the broker exits on startup, triggering restart-loops.
+# CLIENT_ID may not be provided (reconfigure / rebuild), so always fall back to
+# reading the value directly from the already-written broker.conf.
+_effective_client_id="$CLIENT_ID"
+if [[ -z "$_effective_client_id" ]]; then
+    _effective_client_id=$(sudo sed -n 's/^client_id = //p' "${CONF_DIR}/broker.conf" 2>/dev/null || true)
+fi
+
+if [[ -n "$_effective_client_id" ]]; then
+    sudo systemctl enable "${SERVICE_NAME}.service"
+    sudo systemctl restart "${SERVICE_NAME}.service"
+    ok "Service ${SERVICE_NAME}.service enabled and started"
+else
+    # Disable (in case a previous run had enabled it) so it doesn't auto-start
+    # on reboot before credentials are in place.
+    sudo systemctl disable "${SERVICE_NAME}.service" 2>/dev/null || true
+    sudo systemctl stop "${SERVICE_NAME}.service" 2>/dev/null || true
+    warn "${SERVICE_NAME} installed but NOT enabled — no credentials provided"
+    warn "Configure ${CONF_DIR}/broker.conf then:"
+    warn "  sudo systemctl enable --now ${SERVICE_NAME}"
+fi
+
+# ============================================================
+# Step 7: Restart authd to discover the new broker
+# ============================================================
+
+info "Restarting authd to discover new broker..."
+sudo systemctl restart authd.service 2>/dev/null || \
+    sudo systemctl restart authd.socket 2>/dev/null || true
+ok "authd restarted"
+
+# ============================================================
+# Step 8: Verify
+# ============================================================
+
+echo ""
+info "Verification:"
+
+if sudo systemctl is-active --quiet "${SERVICE_NAME}.service"; then
+    ok "${SERVICE_NAME}.service is active"
+else
+    warn "${SERVICE_NAME}.service is NOT active"
+    warn "Check logs: sudo journalctl -u ${SERVICE_NAME}.service -e"
+fi
+
+# Check if authd can see the broker via its discovery config.
+# /etc/authd/ is mode 700 (root-only), so sudo is required for the test.
+echo ""
+info "Current broker discovery configs:"
+if sudo test -f "/etc/authd/brokers.d/${VARIANT}.conf"; then
+    ok "Broker config installed: /etc/authd/brokers.d/${VARIANT}.conf"
+else
+    warn "Broker config missing: /etc/authd/brokers.d/${VARIANT}.conf (internal error)"
+fi
+
+echo ""
+printf '%s\n' "${GREEN}${BOLD}${DISPLAY_NAME} broker installed successfully!${NC}"
+echo ""
+printf '%s\n' "${BOLD}Configuration:${NC}"
+echo "  Edit the configuration file to set your client ID and secret:"
+echo "  sudo nano ${CONF_DIR}/broker.conf"
+echo ""
+echo "  Then restart the broker:"
+echo "  sudo systemctl restart ${SERVICE_NAME}"
+echo ""
+printf '%s\n' "${BOLD}Test SSH login from your host:${NC}"
+echo "  ssh user@domain.com@\$(./dev/dev-env.sh ip)"
+echo ""
+printf '%s\n' "${BOLD}Useful commands:${NC}"
+echo "  sudo journalctl -u ${SERVICE_NAME} -f    # Broker logs"
+echo "  sudo journalctl -u authd -f              # authd logs"
+echo "  ls /etc/authd/brokers.d/                  # List registered brokers"
+echo "  sudo systemctl restart ${SERVICE_NAME}    # Restart broker"
+echo ""
