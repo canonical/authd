@@ -17,6 +17,11 @@ func New() Provider {
 	}
 }
 
+// DisplayName returns the display name of the provider.
+func (Provider) DisplayName() string {
+	return "Google IAM"
+}
+
 // AdditionalScopes returns the generic scopes required by the provider.
 // Note that we do not return oidc.ScopeOfflineAccess, as for TV/limited input devices, the API call will fail as not
 // supported by this application type. However, the refresh token will be acquired and is functional to refresh without
