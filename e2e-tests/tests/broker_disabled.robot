@@ -34,5 +34,3 @@ Test that disabling broker prevents remote logins
     Open Terminal In Sudo Mode
     Try Log In With Remote User    ${username}
     Check That User Is Redirected To Local Broker
-    Cancel Operation
-    Close Terminal In Sudo Mode
