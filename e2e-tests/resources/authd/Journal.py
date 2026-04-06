@@ -99,7 +99,7 @@ def stream_journal_from_vm_via_tcp(output_dir, timeout=60):
     while time.time() < deadline:
         # Start socat to connect to the VM's TCP port
         socat = subprocess.Popen(
-            ["socat", "-d", "-d", f"TCP:{vm_ip}:{PORT}", "-"],
+            ["socat", "-u", "-d", "-d", f"TCP:{vm_ip}:{PORT}", "STDOUT"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=False, # `journalctl -o export` produces binary output
