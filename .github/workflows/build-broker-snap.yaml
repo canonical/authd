@@ -64,7 +64,9 @@ jobs:
           # Tags and main branch are needed by the snap/scripts/version script
           # which is used during the build of the broker snap.
           git fetch --tags --unshallow
-          git fetch origin main:main
+          if [ "$(git branch --show-current)" != "main" ]; then
+            git fetch origin main:main
+          fi
 
           ./snap/scripts/prepare-variant --broker "${{ inputs.broker }}"
 
