@@ -44,6 +44,25 @@ Log Out
 Wait Until Desktop Ready
     Wait Until Keyword Succeeds    1 min    1 sec
     ...    Try Desktop Ready
+    # Before 26.04, GNOME Shell sometimes starts with the Activities overview
+    # opened, see https://bugs.launchpad.net/ubuntu/+source/gnome-shell/+bug/2145704.
+    # That causes the next steps to fail, so we need to ensure the overview is
+    # closed before proceeding.
+    ${matches}=    Find Text    Type to search
+    IF    ${matches}
+        Log    Activities Overview is open, closing it
+        Close Activities Overview
+    END
+
+Close Activities Overview
+    WHILE    True
+        Hid.Keys Combo    Escape
+        BuiltIn.Sleep    1
+        ${matches}=    Find Text    Type to search
+        IF    not ${matches}
+            BREAK
+        END
+    END
 
 
 Try Desktop Ready
