@@ -164,7 +164,7 @@ if [ ! -f "${CLOUD_INIT_ISO}" ]; then
     trap 'rm -rf ${CLOUD_INIT_DIR}' EXIT
 
     systemd_ver=$(systemctl --version | awk 'NR==1 {print $2}')
-    if dpkg --compare-versions "$systemd_ver" "ge" "256"; then
+    if dpkg --compare-versions "$systemd_ver" "ge" "256" && [ -z "${FORCE_JOURNAL_TCP:-}" ]; then
         SOCAT_ADDRESS="VSOCK-CONNECT:2:55000"
     else
         SOCAT_ADDRESS="TCP-LISTEN:55000,bind=0.0.0.0,reuseaddr"

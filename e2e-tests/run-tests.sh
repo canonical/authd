@@ -115,7 +115,7 @@ if [ -n "${RERUNFAILED:-}" ] && [ -z "${PREVIOUS_TEST_RUN_DIR}" ]; then
 fi
 
 systemd_ver=$(systemctl --version | awk 'NR==1 {print $2}')
-if dpkg --compare-versions "$systemd_ver" "ge" "256"; then
+if dpkg --compare-versions "$systemd_ver" "ge" "256" && [ -z "${FORCE_JOURNAL_TCP:-}" ]; then
     SYSTEMD_SUPPORTS_VSOCK=1
 fi
 
