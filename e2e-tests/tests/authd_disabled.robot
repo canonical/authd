@@ -19,11 +19,11 @@ ${username}    %{E2E_USER}
 Test that disabling authd prevents remote logins
     [Documentation]    This test verifies that when authd is disabled, remote users cannot log in, while local users can still access the system.
 
-    # Log in with local user
-    Log In
-
     # Disable authd
     Disable Authd Socket And Service
+
+    # Check that local user can still log in
+    Log In
 
     # Ensure local sudo user can still log in
     Open Terminal
