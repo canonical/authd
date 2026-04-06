@@ -12,9 +12,9 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/daemon"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/dbusservice"
+	log "github.com/canonical/authd/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	log "github.com/ubuntu/authd/log"
 )
 
 // App encapsulate commands and options of the daemon, which can be controlled by env variables and config files.

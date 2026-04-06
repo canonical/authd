@@ -5,8 +5,8 @@ import (
 	"errors"
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker"
+	"github.com/canonical/authd/log"
 	"github.com/godbus/dbus/v5"
-	"github.com/ubuntu/authd/log"
 )
 
 // NewSession is the method through which the broker and the daemon will communicate once dbusInterface.NewSession is called.

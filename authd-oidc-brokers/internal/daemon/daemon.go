@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/canonical/authd/log"
 	"github.com/coreos/go-systemd/daemon"
-	"github.com/ubuntu/authd/log"
 	"github.com/ubuntu/decorate"
 )
 
