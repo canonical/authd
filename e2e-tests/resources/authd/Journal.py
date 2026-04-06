@@ -109,6 +109,7 @@ def stream_journal_from_vm_via_tcp(output_dir, timeout=60):
 
         if not connected:
             logger.error("".join(stderr_buf))
+            stderr_buf.clear()
             socat.kill()
             time.sleep(1)
             continue
