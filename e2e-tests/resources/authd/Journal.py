@@ -82,8 +82,8 @@ def stream_journal_from_vm_via_tcp(output_dir, timeout=60):
             ["socat", "-d", "-d", f"TCP:{vm_ip}:{PORT}", "-"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
+            text=False, # `journalctl -o export` produces binary output
+            bufsize=0,
         )
 
         connected = False
@@ -97,7 +97,7 @@ def stream_journal_from_vm_via_tcp(output_dir, timeout=60):
                     break
                 continue
 
-            line = socat.stderr.readline()
+            line = socat.stderr.readline().decode(errors="replace")
             if not line:
                 break
 
