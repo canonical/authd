@@ -150,12 +150,12 @@ Cancel Operation
 
 
 Update And Upgrade Packages
-    SSH.Execute    sudo apt-get update
-    SSH.Execute    sudo apt-get upgrade -y    timeout=1200
+    SSH.Execute    apt-get update
+    SSH.Execute    apt-get upgrade -y    timeout=1200
 
 
 Sync System Time
-    ${output} =    SSH.Execute    nm-online -q && sudo systemctl restart systemd-timesyncd
+    ${output} =    SSH.Execute    nm-online -q && systemctl restart systemd-timesyncd
     Log    ${output}    level=DEBUG
     ${output} =   SSH.Execute    timedatectl show -p NTPSynchronized | grep -q NTPSynchronized=yes
     Log    ${output}    level=DEBUG

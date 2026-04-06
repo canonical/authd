@@ -157,24 +157,24 @@ function install_broker() {
         local remote_snap
         remote_snap="/home/ubuntu/$(basename "${snap_file}")"
         scp_to_vm "${snap_file}" "${remote_snap}"
-        $SSH sudo snap install --dangerous "${remote_snap}"
+        $SSH snap install --dangerous "${remote_snap}"
     else
         # Install the snap from the specified channel
-        $SSH sudo snap install "${broker}" --channel="${channel}"
+        $SSH snap install "${broker}" --channel="${channel}"
     fi
 
     # Configure broker and restart services
     $SSH bash -euo pipefail -s <<-EOF
-		sudo mkdir -p /etc/authd/brokers.d
-		sudo cp /snap/${broker}/current/conf/authd/${broker_config} /etc/authd/brokers.d/
-		sudo sed -i \
+		mkdir -p /etc/authd/brokers.d
+		cp /snap/${broker}/current/conf/authd/${broker_config} /etc/authd/brokers.d/
+		sed -i \
 			-e "s|<ISSUER_ID>|${issuer_id}|g" \
 			-e "s|<CLIENT_ID>|${client_id}|g" \
 			-e "s|<CLIENT_SECRET>|${client_secret}|g" \
 			/var/snap/${broker}/current/broker.conf
-		echo 'verbosity: 2' | sudo tee /var/snap/${broker}/current/${broker}.yaml
-		sudo systemctl restart authd.service
-		sudo snap restart "${broker}"
+		echo 'verbosity: 2' > /var/snap/${broker}/current/${broker}.yaml
+		systemctl restart authd.service
+		snap restart "${broker}"
 	EOF
 
     # Reboot VM and wait until it's back
@@ -193,7 +193,7 @@ function scp_to_vm() {
       -o UserKnownHostsFile=/dev/null \
       -o StrictHostKeyChecking=no \
       -o LogLevel=ERROR \
-      "${local_path}" "ubuntu@localhost:${remote_path}"
+      "${local_path}" "root@localhost:${remote_path}"
 }
 
 # Print executed commands to ease debugging
@@ -224,8 +224,8 @@ if [ -z "${FORCE:-}" ] && has_snapshot "${AUTHD_STABLE_SNAPSHOT}"; then
 else
     # Install authd stable and create a snapshot
     PPA="ubuntu-enterprise-desktop/authd"
-    $SSH "sudo add-apt-repository -y ppa:${PPA}"
-    $SSH "sudo apt-get install -y authd"
+    $SSH "add-apt-repository -y ppa:${PPA}"
+    $SSH "apt-get install -y authd"
     force_create_snapshot "${AUTHD_STABLE_SNAPSHOT}"
 fi
 
@@ -246,13 +246,13 @@ restore_snapshot_and_sync_time "$PRE_AUTHD_SNAPSHOT"
 # Add the edge PPA. We also need that when installing authd from a deb file,
 # because it depends on gnome-shell from the edge PPA.
 PPA="ubuntu-enterprise-desktop/authd-edge"
-$SSH "sudo add-apt-repository -y ppa:${PPA}"
+$SSH "add-apt-repository -y ppa:${PPA}"
 
 # Configure authd to be verbose. We do this before installing authd to avoid
 # having to restart the service after installation (just a simple optimization).
 $SSH bash -euo pipefail -s <<-EOF
-    sudo mkdir -p /etc/systemd/system/authd.service.d
-    cat <<-UNIT | sudo tee /etc/systemd/system/authd.service.d/override.conf
+    mkdir -p /etc/systemd/system/authd.service.d
+    cat <<-UNIT > /etc/systemd/system/authd.service.d/override.conf
 		[Service]
 		ExecStart=
 		ExecStart=/usr/libexec/authd -vv
@@ -262,9 +262,9 @@ EOF
 # Install the version of authd to test
 if [ -n "${AUTHD_DEB:-}" ]; then
     scp_to_vm "${AUTHD_DEB}" "/home/ubuntu/$(basename "${AUTHD_DEB}")"
-    $SSH sudo apt-get install -y "/home/ubuntu/$(basename "${AUTHD_DEB}")"
+    $SSH apt-get install -y "/home/ubuntu/$(basename "${AUTHD_DEB}")"
 else
-    $SSH "sudo apt-get install -y authd"
+    $SSH "apt-get install -y authd"
 fi
 
 force_create_snapshot "${AUTHD_SNAPSHOT}"
