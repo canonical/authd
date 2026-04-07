@@ -1,7 +1,7 @@
 *** Settings ***
-Resource        ./resources/authd/utils.resource
-Resource        ./resources/authd/authd.resource
-Resource        ./resources/broker/broker.resource
+Resource        resources/authd/utils.resource
+Resource        resources/authd/authd.resource
+Resource        resources/broker/broker.resource
 
 # Test Tags       robot:exit-on-failure
 
