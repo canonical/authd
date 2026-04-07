@@ -28,6 +28,12 @@ Then restart the SSH server:
 sudo systemctl restart ssh
 ```
 
+```{admonition} Managing SSH securely for authd deployments
+:class: tip
+More detail on securely managing SSH authentication is provided in the [SSH
+section of the security overview](/explanation/security.md#login-via-ssh).
+```
+
 ### Broker configuration
 
 To configure the broker edit the file `/var/snap/authd-<broker_name>/current/broker.conf` and set the key `ssh_allowed_suffixes` with the list of domains that you want to allow.
