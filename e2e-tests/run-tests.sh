@@ -43,7 +43,6 @@ TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
 
 # Parse command line arguments
 TESTS_TO_RUN=()
-OUTPUT_DIR=""
 while [[ $# -gt 0 ]]; do
     key="$1"
 
@@ -136,18 +135,18 @@ if ! virsh domstate "${VM_NAME}" | grep -q '^running'; then
 fi
 VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2)
 
-# Create a temporary test run directory
-mkdir -p "${TEST_RUNS_DIR}"
-TEST_RUN_DIR=$(mktemp -d --tmpdir="${TEST_RUNS_DIR}" "${BROKER}-XXXXXX")
-ln -sf --no-target-directory "${TEST_RUN_DIR}" "${TEST_RUNS_DIR}/${BROKER}-latest"
-cd "${TEST_RUN_DIR}"
-
 if [ -z "${OUTPUT_DIR:-}" ]; then
-    OUTPUT_DIR=output
-    echo "No output directory specified, using current test run directory."
+    # Create a temporary output directory
+    mkdir -p "${TEST_RUNS_DIR}"
+    OUTPUT_DIR=$(mktemp -d --tmpdir="${TEST_RUNS_DIR}" "${BROKER}-XXXXXX")
+else
+    mkdir -p "${OUTPUT_DIR}"
 fi
 
-mkdir -p "${OUTPUT_DIR}"
+# Create a symlink to the output directory for easier access and to keep the
+# latest test results available for rerunning failed tests.
+mkdir -p "${TEST_RUNS_DIR}"
+ln -sf --no-target-directory "${OUTPUT_DIR}" "${TEST_RUNS_DIR}/${BROKER}-latest"
 
 # Activate YARF environment
 YARF_DIR="${ROOT_DIR}/.yarf"
