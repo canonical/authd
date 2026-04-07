@@ -3,6 +3,7 @@
 
 import os
 import sys
+import time
 
 import gi  # noqa: E402
 
@@ -19,6 +20,8 @@ from base import (
     run_browser_login,
 )
 
+
+TOTP_CODE_MAX_TRIES = 3
 
 def login(browser, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):
     url = "https://accounts.google.com/o/oauth2/device/usercode?hl=en&flowName=DeviceOAuth"
@@ -45,13 +48,32 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
     browser.send_key_taps(
         ascii_string_to_key_events(password) + [Gdk.KEY_Return])
 
-    browser.wait_for_pattern("2-Step Verification", timeout_ms=20000)
-    browser.wait_for_stable_page()
-    browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
-    browser.send_key_taps(
-        ascii_string_to_key_events(generate_totp(totp_secret)) + [Gdk.KEY_Return])
+    num_tries = 1
+    while True:
+        browser.wait_for_pattern("2-Step Verification", timeout_ms=20000)
+        browser.wait_for_stable_page()
+        browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
+        totp = generate_totp(totp_secret)
+        browser.send_key_taps(ascii_string_to_key_events(totp) + [Gdk.KEY_Return])
 
-    browser.wait_for_pattern("Choose an account")
+        try:
+            browser.wait_for_pattern("Choose an account", timeout_ms=20000)
+            break
+        except TimeoutError:
+            # The TOTP code may expire between generation and submission; retry if
+            # Google reports it as wrong.
+            browser.wait_for_pattern("Wrong code. Try again")
+            if num_tries == TOTP_CODE_MAX_TRIES:
+                raise RuntimeError(f"Failed to log in: TOTP code was rejected too many times ({TOTP_CODE_MAX_TRIES})")
+
+            logger.info("TOTP code was rejected, retrying with a new code")
+            # Delete the wrong code
+            browser.send_key_taps(len(totp) * [Gdk.KEY_BackSpace])
+            # Wait until we get a new TOTP code
+            while generate_totp(totp_secret) == totp:
+                time.sleep(1)
+            num_tries += 1
+
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-choose-account")
     browser.send_key_taps([Gdk.KEY_Return])
