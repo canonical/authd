@@ -267,6 +267,11 @@ else
     $SSH "apt-get install -y authd"
 fi
 
+# Configure the PAM module to be verbose as well
+$SSH bash -euo pipefail -s <<-EOF
+    sed -i '/pam_authd_exec\.so\|pam_authd\.so/ s/$/ debug=true/' /etc/pam.d/*
+EOF
+
 force_create_snapshot "${AUTHD_SNAPSHOT}"
 
 # Install the brokers for the version of authd to test.
