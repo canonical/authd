@@ -2,7 +2,11 @@
 package google
 
 import (
+	"slices"
+	"strings"
+
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/genericprovider"
+	"golang.org/x/oauth2"
 )
 
 // Provider is the google provider implementation.
@@ -30,4 +34,19 @@ func (Provider) DisplayName() string {
 // More info on https://developers.google.com/identity/protocols/oauth2/limited-input-device#allowedscopes.
 func (Provider) AdditionalScopes() []string {
 	return []string{}
+}
+
+// IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.
+func (Provider) IsTokenExpiredError(err *oauth2.RetrieveError) bool {
+	if err.ErrorCode != "invalid_grant" {
+		return false
+	}
+
+	expiredDescriptions := []string{
+		"Token has been expired or revoked",
+	}
+
+	return slices.ContainsFunc(expiredDescriptions, func(desc string) bool {
+		return strings.Contains(err.ErrorDescription, desc)
+	})
 }
