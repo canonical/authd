@@ -4,7 +4,6 @@ package genericprovider
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/authmodes"
 	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
@@ -113,10 +112,9 @@ func (p GenericProvider) userClaims(idToken info.Claimer) (claims, error) {
 }
 
 // IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.
-func (p GenericProvider) IsTokenExpiredError(err *oauth2.RetrieveError) bool {
-	// TODO: This is an msentraid specific error code and description.
-	//       Change it to the ones from Google once we know them.
-	return err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50173:")
+func (p GenericProvider) IsTokenExpiredError(_ *oauth2.RetrieveError) bool {
+	// TODO: Determine the correct error codes used for generic OIDC providers (e.g., Keycloak).
+	return false
 }
 
 // IsUserDisabledError returns false, as the generic provider does not support disabling users.
