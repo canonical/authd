@@ -69,7 +69,7 @@ authd uses libpwquality to enforce password complexity requirements. See the
 #### Force provider authentication
 
 If the identity provider is reachable during login, authd verifies that the user
-is still allowed to authenticate with the identity provider. If the user’s
+is still allowed to authenticate with the identity provider. If the user's
 account has been disabled or removed, login is denied.
 
 By default, if the identity provider cannot be reached (for example, due to
@@ -177,6 +177,7 @@ The secrets that authd stores are described below.
 
 A salted Argon2id hash of the local password is stored for verification. Hashing
 parameters:
+
 * Memory: 64 KB
 * Iterations: 1
 * Parallelism: 1
