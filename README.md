@@ -5,8 +5,8 @@
 
 [license-image]: https://img.shields.io/badge/License-GPL3.0-blue.svg
 
-[codecov-image]: https://codecov.io/gh/ubuntu/authd/graph/badge.svg
-[codecov-url]: https://codecov.io/gh/ubuntu/authd
+[codecov-image]: https://codecov.io/gh/canonical/authd/graph/badge.svg
+[codecov-url]: https://codecov.io/gh/canonical/authd
 
 [reference-documentation-image]: https://pkg.go.dev/badge/github.com/canonical/authd.svg
 [reference-documentation-url]: https://pkg.go.dev/github.com/canonical/authd
