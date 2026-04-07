@@ -14,7 +14,6 @@ Test Teardown   utils.Test Teardown
 ${snapshot}    %{BROKER}-installed
 ${username}    %{E2E_USER}
 ${local_password}    qwer1234
-${remote_group}    %{E2E_USER}-group
 
 
 *** Test Cases ***

@@ -15,7 +15,6 @@ ${snapshot}    %{BROKER}-installed
 ${username}    %{E2E_USER}
 ${local_password}    qwer1234
 ${new_password}    passwd1234
-${remote_group}    %{E2E_USER}-group
 
 
 *** Test Cases ***
