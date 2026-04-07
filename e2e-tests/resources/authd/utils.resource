@@ -205,11 +205,12 @@ Try machinectl login Prompt
 ### Setup ###
 
 Restore Snapshot
-    [Arguments]    ${snapshot_name}
-    Snapshot.Restore    ${snapshot_name}
+    [Arguments]    ${snapshot}
+    Snapshot.Restore    ${snapshot}
     Wait Until System Time Synced
 
 Test Setup
+    [Arguments]    ${snapshot}
     Set Suite Metadata    Ubuntu Version   %{RELEASE}    top=True
     Set Suite Metadata    Broker    %{BROKER}    top=True
     Restore Snapshot    ${snapshot}

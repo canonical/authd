@@ -12,12 +12,11 @@ Test Teardown   utils.Test Teardown
 
 *** Keywords ***
 Test Setup
-    utils.Test Setup
+    utils.Test Setup    snapshot=%{BROKER}-installed
     Change Broker Configuration    ssh_allowed_suffixes_first_auth    %{E2E_USER}
 
 
 *** Variables ***
-${snapshot}    %{BROKER}-installed
 ${local_password}    qwer1234
 
 
