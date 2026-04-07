@@ -384,6 +384,38 @@ func maybeRegisterDevice(
 	)
 }
 
+func TestIsTokenExpiredError(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		errorCode        string
+		errorDescription string
+
+		wantExpired bool
+	}{
+		"AADSTS50173_token_expired":                    {errorCode: "invalid_grant", errorDescription: "AADSTS50173: The provided grant has expired", wantExpired: true},
+		"AADSTS70043_token_expired":                    {errorCode: "invalid_grant", errorDescription: "AADSTS70043: The refresh token has expired or is invalid", wantExpired: true},
+		"AADSTS700082_token_expired_due_to_inactivity": {errorCode: "invalid_grant", errorDescription: "AADSTS700082: The refresh token has expired due to inactivity.", wantExpired: true},
+
+		"AADSTS50057_user_disabled": {errorCode: "invalid_grant", errorDescription: "AADSTS50057: The user account is disabled.", wantExpired: false},
+		"Other_invalid_grant":       {errorCode: "invalid_grant", errorDescription: "AADSTS65001: The user or administrator has not consented to use the application.", wantExpired: false},
+		"Non_invalid_grant_error":   {errorCode: "access_denied", errorDescription: "AADSTS50173: The provided grant has expired", wantExpired: false},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			p := msentraid.New()
+			err := &oauth2.RetrieveError{
+				ErrorCode:        tc.errorCode,
+				ErrorDescription: tc.errorDescription,
+			}
+			got := p.IsTokenExpiredError(err)
+			require.Equal(t, tc.wantExpired, got, "IsTokenExpiredError returned unexpected result")
+		})
+	}
+}
+
 func TestMain(m *testing.M) {
 	log.SetLevel(log.DebugLevel)
 
