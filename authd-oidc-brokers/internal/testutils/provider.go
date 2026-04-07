@@ -30,6 +30,10 @@ import (
 const (
 	// ExpiredRefreshToken is used to test the expired refresh token error.
 	ExpiredRefreshToken = "expired-refresh-token"
+	// InactiveExpiredRefreshToken is used to test the expired refresh token due to inactivity error (AADSTS700082).
+	InactiveExpiredRefreshToken = "inactive-expired-refresh-token"
+	// CAExpiredRefreshToken is used to test the expired refresh token due to sign-in frequency (Conditional Access) error (AADSTS70043).
+	CAExpiredRefreshToken = "ca-expired-refresh-token"
 	// IsForDeviceRegistrationClaim is the claim used to indicate to the mock provider if the token is for device registration.
 	IsForDeviceRegistrationClaim = "is_for_device_registration"
 )
@@ -219,6 +223,18 @@ func TokenHandler(serverURL string, opts *TokenHandlerOptions) EndpointHandler {
 			w.WriteHeader(http.StatusBadRequest)
 			// This is an msentraid specific error code and description.
 			_, _ = w.Write([]byte(`{"error": "invalid_grant", "error_description": "AADSTS50173: The refresh token has expired."}`))
+			return
+		}
+		if refreshToken == InactiveExpiredRefreshToken {
+			w.Header().Add("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error": "invalid_grant", "error_description": "AADSTS700082: The refresh token has expired due to inactivity."}`))
+			return
+		}
+		if refreshToken == CAExpiredRefreshToken {
+			w.Header().Add("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error": "invalid_grant", "error_description": "AADSTS70043: The refresh token has expired or is invalid due to sign-in frequency checks by conditional access."}`))
 			return
 		}
 
@@ -452,6 +468,18 @@ func (p *MockProvider) IsTokenForDeviceRegistration(token *oauth2.Token) (bool, 
 	}
 
 	return isForDeviceRegistration, nil
+}
+
+// IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.
+// This checks for the AADSTS error codes that the mock token handler generates.
+func (p *MockProvider) IsTokenExpiredError(err *oauth2.RetrieveError) bool {
+	if err.ErrorCode != "invalid_grant" {
+		return false
+	}
+
+	return strings.HasPrefix(err.ErrorDescription, "AADSTS50173:") ||
+		strings.HasPrefix(err.ErrorDescription, "AADSTS70043:") ||
+		strings.HasPrefix(err.ErrorDescription, "AADSTS700082:")
 }
 
 // SupportsDeviceRegistration checks if the provider supports device registration.

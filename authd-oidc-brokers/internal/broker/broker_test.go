@@ -629,6 +629,20 @@ func TestIsAuthenticated(t *testing.T) {
 			wantSecondCall:    true,
 			secondMode:        authmodes.DeviceQr,
 		},
+		"Authenticating_with_password_when_refresh_token_is_expired_due_to_inactivity_results_in_device_auth_as_next_mode": {
+			firstMode:         authmodes.Password,
+			token:             &tokenOptions{refreshTokenInactiveExpired: true},
+			wantNextAuthModes: []string{authmodes.Device, authmodes.DeviceQr},
+			wantSecondCall:    true,
+			secondMode:        authmodes.DeviceQr,
+		},
+		"Authenticating_with_password_when_refresh_token_is_expired_due_to_ca_sign_in_frequency_results_in_device_auth_as_next_mode": {
+			firstMode:         authmodes.Password,
+			token:             &tokenOptions{refreshTokenCAExpired: true},
+			wantNextAuthModes: []string{authmodes.Device, authmodes.DeviceQr},
+			wantSecondCall:    true,
+			secondMode:        authmodes.DeviceQr,
+		},
 		"Authenticating_with_password_when_no_refresh_token_results_in_device_auth_as_next_mode": {
 			firstMode:         authmodes.Password,
 			token:             &tokenOptions{noRefreshToken: true},

@@ -195,17 +195,19 @@ type tokenOptions struct {
 	issuer   string
 	groups   []info.Group
 
-	expired                   bool
-	noRefreshToken            bool
-	refreshTokenExpired       bool
-	noIDToken                 bool
-	invalid                   bool
-	invalidClaims             bool
-	noUserInfo                bool
-	isForDeviceRegistration   bool
-	noIsForDeviceRegistration bool
-	deviceIsDisabled          bool
-	userIsDisabled            bool
+	expired                     bool
+	noRefreshToken              bool
+	refreshTokenExpired         bool
+	refreshTokenInactiveExpired bool
+	refreshTokenCAExpired       bool
+	noIDToken                   bool
+	invalid                     bool
+	invalidClaims               bool
+	noUserInfo                  bool
+	isForDeviceRegistration     bool
+	noIsForDeviceRegistration   bool
+	deviceIsDisabled            bool
+	userIsDisabled              bool
 }
 
 func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInfo {
@@ -253,6 +255,12 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 	}
 	if options.refreshTokenExpired {
 		tok.Token.RefreshToken = testutils.ExpiredRefreshToken
+	}
+	if options.refreshTokenInactiveExpired {
+		tok.Token.RefreshToken = testutils.InactiveExpiredRefreshToken
+	}
+	if options.refreshTokenCAExpired {
+		tok.Token.RefreshToken = testutils.CAExpiredRefreshToken
 	}
 	if !options.noIsForDeviceRegistration {
 		tok.ExtraFields = map[string]any{testutils.IsForDeviceRegistrationClaim: options.isForDeviceRegistration}
