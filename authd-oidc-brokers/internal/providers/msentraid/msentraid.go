@@ -533,7 +533,19 @@ func (c azureTokenCredential) GetToken(_ context.Context, _ policy.TokenRequestO
 
 // IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.
 func (p *Provider) IsTokenExpiredError(err *oauth2.RetrieveError) bool {
-	return err.ErrorCode == "invalid_grant" && (strings.HasPrefix(err.ErrorDescription, "AADSTS50173:") || strings.HasPrefix(err.ErrorDescription, "AADSTS70043:"))
+	if err.ErrorCode != "invalid_grant" {
+		return false
+	}
+
+	expiredPrefixes := []string{
+		"AADSTS50173:",  // grant revoked (password change/reset)
+		"AADSTS70043:",  // refresh token expired due to sign-in frequency (Conditional Access)
+		"AADSTS700082:", // refresh token expired due to inactivity
+	}
+
+	return slices.ContainsFunc(expiredPrefixes, func(prefix string) bool {
+		return strings.HasPrefix(err.ErrorDescription, prefix)
+	})
 }
 
 // IsUserDisabledError returns true if the reason for the error is that the user is disabled.
