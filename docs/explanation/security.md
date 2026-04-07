@@ -89,9 +89,8 @@ at the identity provider can still log in using their SSH keys. This is because
 SSH key authentication does not involve authd.
 
 To prevent users with revoked access from logging in with SSH, disable public
-key authentication for users managed by authd, by adding the following to by
-adding the following to `/etc/ssh/sshd_config.d/authd.conf` or directly to
-`/etc/ssh/sshd_config`:
+key authentication for users managed by authd, by adding the following to
+`/etc/ssh/sshd_config.d/authd.conf` or directly to `/etc/ssh/sshd_config`:
 
 ```text
 Match User *@example.com
