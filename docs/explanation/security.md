@@ -75,10 +75,11 @@ account has been disabled or removed, login is denied.
 By default, if the identity provider cannot be reached (for example, due to
 network issues), users can still log in with their local password. This is to
 prevent accidental lockouts, but it also allows users whose access has been
-revoked at the identity provider to log in while offline.
+revoked at the identity provider to log in while the provider is unreachable.
 
-To enforce verification with the identity provider even when offline, enable the
-[force_provider_authentication](ref::config-force-provider-auth) setting.
+To enforce verification with the identity provider even when it is unreachable,
+enable the [force_provider_authentication](ref::config-force-provider-auth)
+setting.
 
 ### Login via SSH
 
@@ -196,8 +197,8 @@ to protect these secrets in case of device theft or loss.
 authd uses sandboxing to limit system exposure:
 
 * The authd brokers run as [strictly confined](https://snapcraft.io/docs/snap-confinement)
-  snaps. Their only granted interface is network, required to communicate with
-  the identity provider.
+  snaps. The only snap interface granted to them is `network`, which is required to
+  communicate with the identity provider.
 * The authd service uses
   [systemd sandboxing options](https://manpages.ubuntu.com/manpages/noble/en/man5/systemd.exec.5.html#sandboxing)
   to restrict access to system resources.
