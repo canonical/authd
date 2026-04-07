@@ -13,7 +13,7 @@ Library             OperatingSystem
 
 
 *** Variables ***
-${SUITE_OUTPUT_DIR}    ${OUTPUT DIR}/${SUITE NAME}
+${SUITE_OUTPUT_DIR}    ${OUTPUT_DIR}/${SUITE_NAME.rsplit('.')[-1]}
 
 
 *** Keywords ***
