@@ -1,3 +1,6 @@
+import subprocess
+
+from robot.api import logger
 from robot.api.deco import keyword, library  # type: ignore
 
 import ExecUtils
@@ -15,7 +18,11 @@ class Snapshot:
             name: The name of the snapshot to revert to.
         """
         vm_name = VMUtils.vm_name()
-        ExecUtils.run(
+        process = ExecUtils.run(
             ["virsh", "snapshot-revert", vm_name, name],
             check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
         )
+        logger.info("snapshot-revert output:\n" + process.stdout)
