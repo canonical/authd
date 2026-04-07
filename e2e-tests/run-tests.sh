@@ -160,6 +160,9 @@ source "${YARF_DIR}/.venv/bin/activate"
 # Make YARF not log videos, we log them ourselves in the test case error message.
 YARF_LOG_VIDEO=0
 
+# Make YARF log the image where it found a text match, for debugging
+YARF_LOG_LEVEL=DEBUG
+
 env \
     E2E_USER="$E2E_USER" \
     E2E_PASSWORD="$E2E_PASSWORD" \
@@ -169,6 +172,7 @@ env \
     VNC_PORT="$VNC_PORT" \
     SYSTEMD_SUPPORTS_VSOCK="${SYSTEMD_SUPPORTS_VSOCK:-}" \
     YARF_LOG_VIDEO="${YARF_LOG_VIDEO}" \
+    YARF_LOG_LEVEL="${YARF_LOG_LEVEL}" \
     robot \
         --consolecolors on \
         --loglevel DEBUG \
