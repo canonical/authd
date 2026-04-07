@@ -18,6 +18,7 @@ PORT = 55000
 @library
 class Journal:
     process = None
+    socat_process = None
     output_dir = None
 
     @keyword
@@ -39,18 +40,37 @@ class Journal:
                     f"--listen-raw=vsock:{HOST_CID}:{PORT}",
                     f"--output={self.output_dir}",
                 ],
+                stderr=subprocess.PIPE,
             )
         else:
-            self.process = stream_journal_from_vm_via_tcp(output_dir=self.output_dir)
+            self.process, self.socat_process = stream_journal_from_vm_via_tcp(output_dir=self.output_dir)
 
     @keyword
     async def stop_receiving_journal(self) -> None:
         """
         Stop receiving journal entries from the VM.
         """
-        if self.process:
+        if self.socat_process:
+            logger.info("Terminating socat")
+            self.socat_process.terminate()
+            self.socat_process.wait()
+            logger.info("socat stderr:\n" + self.socat_process.stderr.read().decode())
+            self.socat_process = None
+            # The systemd-journal-remote process should exit on its own when socat terminates
+            try:
+                self.process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                logger.error("systemd-journal-remote did not exit after socat termination, killing it")
+                self.process.kill()
+                self.process.wait()
+
+            logger.info("systemd-journal-remote stderr:\n" + self.process.stderr.read().decode())
+            self.process = None
+
+        elif self.process:
             self.process.terminate()
             self.process.wait()
+            logger.info("systemd-journal-remote stderr:\n" + self.process.stderr.read().decode())
             self.process = None
 
     @keyword
@@ -79,11 +99,11 @@ def stream_journal_from_vm_via_tcp(output_dir, timeout=60):
     while time.time() < deadline:
         # Start socat to connect to the VM's TCP port
         socat = subprocess.Popen(
-            ["socat", "-d", "-d", f"TCP:{vm_ip}:{PORT}", "-"],
+            ["socat", "-u", "-d", "-d", f"TCP:{vm_ip}:{PORT}", "STDOUT"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
+            text=False, # `journalctl -o export` produces binary output
+            bufsize=0,
         )
 
         connected = False
@@ -97,34 +117,39 @@ def stream_journal_from_vm_via_tcp(output_dir, timeout=60):
                     break
                 continue
 
-            line = socat.stderr.readline()
+            line = socat.stderr.readline().decode(errors="replace")
             if not line:
                 break
 
             stderr_buf.append(line)
 
             if "successfully connected" in line:
+                logger.info("socat successfully connected to VM journal stream\n" + "".join(stderr_buf))
+                stderr_buf.clear()
                 connected = True
                 break
 
         if not connected:
-            logger.error("".join(stderr_buf))
+            logger.info("socat failed to connect, retrying...\n" + "".join(stderr_buf))
+            stderr_buf.clear()
             socat.kill()
             time.sleep(1)
             continue
 
-        # TCP connection confirmed
+        # TCP connection confirmed, start systemd-journal-remote to read from
+        # socat's stdout
         journal_remote = subprocess.Popen(
             [
                 "/lib/systemd/systemd-journal-remote",
                 f"--output={output_dir}/{vm_name}.journal",
                 "-",
             ],
+            stderr=subprocess.PIPE,
             stdin=socat.stdout,
         )
 
         socat.stdout.close()
-        return journal_remote
+        return journal_remote, socat
 
     raise RuntimeError(
         f"Failed to connect to VM journal stream within {timeout}s"

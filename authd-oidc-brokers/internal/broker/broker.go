@@ -749,13 +749,13 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 	}
 
 	if authInfo.UserIsDisabled && session.isOffline {
-		log.Errorf(context.Background(), "Login denied: user %q is disabled in Microsoft Entra ID and session is offline", session.username)
-		return AuthDenied, errorMessage{Message: "This user is disabled in Microsoft Entra ID. Please contact your administrator or try again with a working network connection."}
+		log.Errorf(context.Background(), "Login denied: user %q is disabled in %s and session is offline", session.username, b.provider.DisplayName())
+		return AuthDenied, errorMessage{Message: fmt.Sprintf("Your user account is disabled in %s. Please contact your administrator or try again with a working network connection.", b.provider.DisplayName())}
 	}
 
 	if authInfo.DeviceIsDisabled && session.isOffline {
-		log.Errorf(context.Background(), "Login denied: device %q is disabled in Microsoft Entra ID and session is offline", session.username)
-		return AuthDenied, errorMessage{Message: "This device is disabled in Microsoft Entra ID. Please contact your administrator or try again with a working network connection."}
+		log.Errorf(context.Background(), "Login denied: device %q is disabled in %s and session is offline", session.username, b.provider.DisplayName())
+		return AuthDenied, errorMessage{Message: fmt.Sprintf("This device is disabled in %s. Please contact your administrator or try again with a working network connection.", b.provider.DisplayName())}
 	}
 
 	// Refresh the token if we're online even if the token has not expired
@@ -779,7 +779,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 			}
 			if b.provider.IsUserDisabledError(retrieveErr) {
 				log.Error(context.Background(), retrieveErr.Error())
-				log.Errorf(context.Background(), "Login failed: User %q is disabled in Microsoft Entra ID, please contact your administrator.", session.username)
+				log.Errorf(context.Background(), "Login denied: User %q is disabled in %s, please contact your administrator.", session.username, b.provider.DisplayName())
 
 				// Store the information that the user is disabled, so that we can deny login on subsequent offline attempts.
 				oldAuthInfo.UserIsDisabled = true
@@ -788,7 +788,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 					return AuthDenied, unexpectedErrMsg("failed to store token")
 				}
 
-				return AuthDenied, errorMessage{Message: "This user is disabled in Microsoft Entra ID, please contact your administrator."}
+				return AuthDenied, errorMessage{Message: fmt.Sprintf("Your user account is disabled in %s, please contact your administrator.", b.provider.DisplayName())}
 			}
 		}
 		if err != nil {
@@ -842,7 +842,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 			return AuthDenied, unexpectedErrMsg("failed to store token")
 		}
 
-		return AuthDenied, errorMessage{Message: "This device is disabled in Microsoft Entra ID, please contact your administrator."}
+		return AuthDenied, errorMessage{Message: fmt.Sprintf("This device is disabled in %s, please contact your administrator.", b.provider.DisplayName())}
 	}
 	if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
 		// Deny login if the redirect URI is invalid, so that users and administrators are aware of the issue.
