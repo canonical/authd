@@ -421,6 +421,8 @@ Changing the base directory only affects users logging in for the first time.
 
 Some brokers support adding users to groups that are configured in the identity
 provider.
+Group membership can be used to manage user privileges, including **sudo** and
+**docker** rights.
 
 > See the [group management reference](reference::group-management) for more details.
 

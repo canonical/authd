@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
+	"github.com/canonical/authd/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/ubuntu/authd/log"
 	"github.com/ubuntu/decorate"
 )
 

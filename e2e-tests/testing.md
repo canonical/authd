@@ -140,7 +140,7 @@ Now that the VM is ready, we need to install authd and the brokers we want to te
 - The VM uses `socat` to forward the SSH port over VSOCK, so the SSH command will look like this:
 
     ```bash
-    ssh -o ProxyCommand="socat - VSOCK-CONNECT:1000:22" -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR ubuntu@localhost
+    ssh -o ProxyCommand="socat - VSOCK-CONNECT:1000:22" -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR root@localhost
     ```
 
 - From now on, the command will be referred to as `ssh_vm` for simplicity. You can use the `e2e-tests/vm/ssh.sh` script instead of typing the full command every time.

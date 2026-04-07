@@ -2,6 +2,9 @@
 password: ubuntu
 ssh_pwauth: true
 users:
+  - name: root
+    ssh_authorized_keys:
+      - ${SSH_PUBLIC_KEY}
   - name: ubuntu
     sudo: [ 'ALL=(ALL) NOPASSWD:ALL' ]
     lock_passwd: false
@@ -63,6 +66,10 @@ write_files:
       [org/gnome/desktop/interface]
       text-scaling-factor=1.25
 
+  - path: /etc/ssh/sshd_config.d/root.conf
+    content: |
+      ${CI_ROOT_SSHD_CONFIG}
+
   - path: /etc/ssh/sshd_config.d/authd.conf
     content: |
       UsePAM yes
@@ -96,6 +103,7 @@ write_files:
     content: ""
 
 runcmd:
+  ${CI_ROOT_PASSWD_CMD}
   # Disable apport
   - sed -i 's/enabled=1/enabled=0/' /etc/default/apport
   - systemctl mask --now apport.service
@@ -104,16 +112,16 @@ runcmd:
   # Update dconf database
   - dconf update
   # Disable systemd-networkd-wait-online to speed up boot time
-  - sudo systemctl mask systemd-networkd-wait-online.service
+  - systemctl mask systemd-networkd-wait-online.service
   # Enable our systemd services
-  - sudo systemctl enable journal-export.service
+  - systemctl enable journal-export.service
   # Avoid APT downloads and upgrades during the tests
-  - sudo systemctl mask apt-daily.service
-  - sudo systemctl mask apt-daily.timer
-  - sudo systemctl mask apt-daily-upgrade.service
-  - sudo systemctl mask apt-daily-upgrade.timer
-  - sudo systemctl mask unattended-upgrades.service
-  - sudo rm -f /etc/apt/apt.conf.d/20auto-upgrades /etc/apt/apt.conf.d/50unattended-upgrades
+  - systemctl mask apt-daily.service
+  - systemctl mask apt-daily.timer
+  - systemctl mask apt-daily-upgrade.service
+  - systemctl mask apt-daily-upgrade.timer
+  - systemctl mask unattended-upgrades.service
+  - rm -f /etc/apt/apt.conf.d/20auto-upgrades /etc/apt/apt.conf.d/50unattended-upgrades
 
 final_message: "Provisioning finished after $UPTIME seconds"
 

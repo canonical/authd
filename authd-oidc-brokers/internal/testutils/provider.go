@@ -20,10 +20,10 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/genericprovider"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
+	"github.com/canonical/authd/log"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/ubuntu/authd/log"
 	"golang.org/x/oauth2"
 )
 
@@ -464,7 +464,7 @@ type claims struct {
 	Sub   string `json:"sub"`
 	Home  string `json:"home"`
 	Shell string `json:"shell"`
-	Gecos string `json:"gecos"`
+	Gecos string `json:"name"`
 }
 
 // userClaims returns the user claims parsed from the ID token.

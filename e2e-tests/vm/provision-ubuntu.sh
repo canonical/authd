@@ -71,22 +71,25 @@ fi
 # shellcheck source=lib/libprovision.sh
 source "${LIB_DIR}/libprovision.sh"
 
-assert_env_vars RELEASE VM_NAME_BASE SSH_PUBLIC_KEY_FILE
+assert_env_vars RELEASE VM_NAME_BASE
+
+if [ -z "${CI:-}" ]; then
+    assert_env_vars SSH_PUBLIC_KEY_FILE
+
+    if [ ! -f "${SSH_PUBLIC_KEY_FILE}" ]; then
+        echo "SSH public key file not found: ${SSH_PUBLIC_KEY_FILE}"
+        exit 1
+    fi
+
+    if [[ "${SSH_PUBLIC_KEY_FILE}" != *.pub ]]; then
+        echo "SSH public key file must have a .pub extension"
+        exit 1
+    fi
+fi
 
 # Resolve the actual release name if "devel" is specified
 # shellcheck disable=SC2153 # RELEASE is not misspelled
 RELEASE_NAME=$(resolve_devel_release "${RELEASE}")
-
-# Validate SSH public key file
-if [ ! -f "${SSH_PUBLIC_KEY_FILE}" ]; then
-    echo "SSH public key file not found: ${SSH_PUBLIC_KEY_FILE}"
-    exit 1
-fi
-
-if [[ "${SSH_PUBLIC_KEY_FILE}" != *.pub ]]; then
-    echo "SSH public key file must have a .pub extension"
-    exit 1
-fi
 
 # Cache sudo password early
 sudo -v
@@ -167,8 +170,29 @@ if [ ! -f "${CLOUD_INIT_ISO}" ]; then
         SOCAT_ADDRESS="TCP-LISTEN:55000,bind=0.0.0.0,reuseaddr"
     fi
 
-    SSH_PUBLIC_KEY=$(cat "${SSH_PUBLIC_KEY_FILE}") \
+    # In CI environments, we want to allow the root user to log in without a
+    # password to avoid having to create a secret SSH key which must be shared
+    # between the job that provisions the VM and the jobs that run the tests.
+    if [ -n "${CI:-}" ]; then
+        CI_ROOT_SSHD_CONFIG="$(cat <<-EOF
+			Match User root
+		        PasswordAuthentication yes
+		        PermitEmptyPasswords yes
+		        PermitRootLogin yes
+		EOF
+        )"
+        CI_ROOT_PASSWD_CMD="- passwd -d root"
+        SSH_PUBLIC_KEY=""
+    else
+        CI_ROOT_SSHD_CONFIG=""
+        CI_ROOT_PASSWD_CMD=""
+        SSH_PUBLIC_KEY=$(cat "${SSH_PUBLIC_KEY_FILE}")
+    fi
+
+    SSH_PUBLIC_KEY="${SSH_PUBLIC_KEY}" \
       SOCAT_ADDRESS="${SOCAT_ADDRESS}" \
+      CI_ROOT_SSHD_CONFIG="${CI_ROOT_SSHD_CONFIG}" \
+      CI_ROOT_PASSWD_CMD="${CI_ROOT_PASSWD_CMD}" \
       envsubst < "${CLOUD_INIT_TEMPLATE}" > "${CLOUD_INIT_DIR}/user-data"
 
     cloud-localds "${CLOUD_INIT_ISO}" "${CLOUD_INIT_DIR}/user-data"

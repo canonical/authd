@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/log"
 )
 
 // decodeRawSecret extract the base64 secret and try to decrypt it with the private key.

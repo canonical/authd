@@ -18,8 +18,8 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils/golden"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"github.com/ubuntu/authd/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -564,6 +564,7 @@ func TestIsAuthenticated(t *testing.T) {
 		readOnlyDataDir      bool
 		wantGroups           []info.Group
 		wantNextAuthModes    []string
+		wantOffline          bool
 	}{
 		"Successfully_authenticate_user_with_device_auth_and_newpassword": {firstSecret: "-", wantSecondCall: true},
 		"Successfully_authenticate_user_with_password":                    {firstMode: authmodes.Password, token: &tokenOptions{}},
@@ -718,7 +719,16 @@ func TestIsAuthenticated(t *testing.T) {
 		"Error_when_mode_is_password_and_token_is_invalid":       {firstMode: authmodes.Password, token: &tokenOptions{invalid: true}},
 		"Error_when_mode_is_password_and_no_refresh_token":       {firstMode: authmodes.Password, token: &tokenOptions{noRefreshToken: true}},
 		"Error_when_token_is_expired_and_refreshing_token_fails": {firstMode: authmodes.Password, token: &tokenOptions{expired: true, noRefreshToken: true}},
-		"Error_when_mode_is_password_and_token_refresh_times_out": {firstMode: authmodes.Password, token: &tokenOptions{expired: true},
+		"Authenticating_with_password_skips_token_refresh_network_error": {firstMode: authmodes.Password, token: &tokenOptions{expired: true},
+			customHandlers: map[string]testutils.EndpointHandler{
+				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
+			},
+			wantOffline: true,
+		},
+		"Error_when_mode_is_password_and_token_refresh_times_out_with_forced_provider_auth": {
+			firstMode:                   authmodes.Password,
+			token:                       &tokenOptions{expired: true},
+			forceProviderAuthentication: true,
 			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
@@ -904,6 +914,21 @@ func TestIsAuthenticated(t *testing.T) {
 
 			if !tc.dontWaitForFirstCall {
 				<-firstCallDone
+			}
+
+			if tc.wantOffline {
+				gotOffline, err := b.IsOffline(sessionID)
+				require.NoError(t, err, "IsOffline should not have returned an error")
+				require.True(t, gotOffline, "Session should be offline after token refresh network error")
+			}
+
+			// When forceProviderAuthentication is set, offline fallback must never happen,
+			// even for transient network errors. Verify the session was not flipped to offline.
+			// (Skip if the session was already offline at creation, which is a separate scenario.)
+			if tc.forceProviderAuthentication && !tc.sessionOffline {
+				gotOffline, err := b.IsOffline(sessionID)
+				require.NoError(t, err, "IsOffline should not have returned an error")
+				require.False(t, gotOffline, "Session should not be offline when forceProviderAuthentication is true")
 			}
 
 			if tc.wantSecondCall {

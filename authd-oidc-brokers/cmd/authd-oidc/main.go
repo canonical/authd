@@ -12,7 +12,7 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/cmd/authd-oidc/daemon"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
 	"github.com/canonical/authd/authd-oidc-brokers/po"
-	"github.com/ubuntu/authd/log"
+	"github.com/canonical/authd/log"
 	"github.com/ubuntu/go-i18n"
 )
 
