@@ -174,6 +174,8 @@ env \
         --loglevel DEBUG \
         --pythonpath "${ROOT_DIR}" \
         --pythonpath "${YARF_DIR}/yarf/rf_libraries/libraries/vnc" \
+        --pythonpath "${YARF_DIR}/yarf/rf_libraries/resources" \
+        --pythonpath "${YARF_DIR}/yarf/rf_libraries/variables" \
         --outputdir "${OUTPUT_DIR}" \
         "${ROBOT_ARGS[@]}" \
         "$@" \

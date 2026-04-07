@@ -1,7 +1,7 @@
 *** Settings ***
 Documentation       authd test resources
 
-Resource            ../kvm.resource
+Resource            kvm.resource
 Library             ./Journal.py    AS    Journal
 Library             ./StringUtils.py    AS    StringUtils
 Library             ./VideoLogger.py    AS    VideoLogger

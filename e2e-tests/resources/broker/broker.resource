@@ -5,7 +5,7 @@ Documentation       Broker resource for the e2e tests.
 ...                 broker-specific variables (loaded from broker_vars.py based
 ...                 on the BROKER environment variable) and all broker keywords.
 
-Resource            ../kvm.resource
+Resource            kvm.resource
 Resource            resources/authd/utils.resource
 Resource            resources/authd/authd.resource
 Library             ./Browser.py    AS    Browser
