@@ -40,7 +40,7 @@ is supported by the Microsoft Entra ID broker for authd:
 ```{toctree}
 :titlesonly:
 
-Group management <group-management>
+Group and privilege management <group-management>
 ```
 ## Deployment
 

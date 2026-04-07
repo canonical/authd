@@ -55,6 +55,7 @@ full transition to the cloud.
 
 * **Setup**: [Installing authd](/howto/install-authd/) • [Configuring authd](/howto/configure-authd/) • [Changing authd versions](/howto/changing-versions/)
 * **User login**: [Logging in with GDM](/howto/login-gdm/) • [Logging in with SSH](/howto/login-ssh/)
+* **Groups and privileges (sudo, docker)**: [Configure user groups](ref::config-user-groups) • [Group management reference](/reference/group-management)
 * **Deployment**: [Deploying with Landscape](/reference/landscape-deploy/) • [Deploying with cloud-init](/reference/cloud-init-deploy/)
 * **Network file systems**: [Using with NFS](/howto/use-with-nfs/) • [Using with Samba](/howto/use-with-samba/)
 * **authd design**: [Architecture](/explanation/authd-architecture/) • [Security overview](/explanation/security/)
