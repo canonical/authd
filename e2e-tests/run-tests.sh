@@ -38,6 +38,7 @@ EOF
 
 ROOT_DIR=$(dirname "$(readlink -f "$0")")
 TESTS_DIR="${ROOT_DIR}/tests"
+LISTENER_DIR="${ROOT_DIR}/listener"
 TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
 
 # Parse command line arguments
@@ -177,6 +178,8 @@ env \
         --pythonpath "${YARF_DIR}/yarf/rf_libraries/resources" \
         --pythonpath "${YARF_DIR}/yarf/rf_libraries/variables" \
         --outputdir "${OUTPUT_DIR}" \
+        --listener "${LISTENER_DIR}/Listener.py" \
+        --console quiet \
         "${ROBOT_ARGS[@]}" \
         "$@" \
         "${TESTS_TO_RUN[@]}" \
