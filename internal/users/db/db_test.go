@@ -1066,6 +1066,46 @@ func TestDeleteUser(t *testing.T) {
 	}
 }
 
+func TestDeleteGroup(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		dbFile string
+		gid    uint32
+
+		wantErr     bool
+		wantErrType error
+	}{
+		"Deleting_sole_group_of_a_user_removes_group_and_memberships_but_keeps_user": {dbFile: "one_user_and_group", gid: 11111},
+		"Deleting_shared_group_removes_only_that_group_and_its_memberships":          {dbFile: "multiple_users_and_groups", gid: 99999},
+
+		"Error_on_nonexistent_group": {gid: 11111, wantErrType: db.NoDataFoundError{}},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			c := initDB(t, tc.dbFile)
+
+			err := c.DeleteGroup(tc.gid)
+			log.Debugf(context.Background(), "DeleteGroup error: %v", err)
+			if tc.wantErr {
+				require.Error(t, err, "DeleteGroup should return an error but didn't")
+				return
+			}
+			if tc.wantErrType != nil {
+				require.ErrorIs(t, err, tc.wantErrType, "DeleteGroup should return expected error")
+				return
+			}
+			require.NoError(t, err)
+
+			got, err := db.Z_ForTests_DumpNormalizedYAML(c)
+			require.NoError(t, err)
+			golden.CheckOrUpdate(t, got)
+		})
+	}
+}
+
 // TestBackwardCompatibilityAndMigrations covers loading legacy schemas (e.g., v2 with INT ugid)
 // and migrating older schemas (e.g., v1 without 'locked' column) to the latest schema.
 func TestBackwardCompatibilityAndMigrations(t *testing.T) {

@@ -346,6 +346,33 @@ func TestUserPreCheck(t *testing.T) {
 	}
 }
 
+func TestDeleteUser(t *testing.T) {
+	t.Parallel()
+
+	b := newBrokerForTests(t, "", "")
+
+	tests := map[string]struct {
+		username string
+
+		wantErr bool
+	}{
+		"Successfully_delete_user":        {username: "user1@example.com"},
+		"Error_when_broker_returns_error": {username: "delete_error@example.com", wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			err := b.DeleteUser(context.Background(), tc.username)
+			if tc.wantErr {
+				require.Error(t, err, "DeleteUser should return an error, but did not")
+				return
+			}
+			require.NoError(t, err, "DeleteUser should not return an error, but did")
+		})
+	}
+}
+
 func newBrokerForTests(t *testing.T, cfgDir, brokerCfg string) (b brokers.Broker) {
 	t.Helper()
 
