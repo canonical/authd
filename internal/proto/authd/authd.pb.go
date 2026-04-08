@@ -1081,6 +1081,103 @@ func (x *UnlockUserRequest) GetName() string {
 	return ""
 }
 
+type DeleteUserRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// If true, remove the user's home directory.
+	RemoveHome    bool `protobuf:"varint,2,opt,name=remove_home,json=removeHome,proto3" json:"remove_home,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteUserRequest) Reset() {
+	*x = DeleteUserRequest{}
+	mi := &file_authd_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteUserRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteUserRequest) ProtoMessage() {}
+
+func (x *DeleteUserRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_authd_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteUserRequest.ProtoReflect.Descriptor instead.
+func (*DeleteUserRequest) Descriptor() ([]byte, []int) {
+	return file_authd_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *DeleteUserRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DeleteUserRequest) GetRemoveHome() bool {
+	if x != nil {
+		return x.RemoveHome
+	}
+	return false
+}
+
+type DeleteGroupRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteGroupRequest) Reset() {
+	*x = DeleteGroupRequest{}
+	mi := &file_authd_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteGroupRequest) ProtoMessage() {}
+
+func (x *DeleteGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_authd_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteGroupRequest.ProtoReflect.Descriptor instead.
+func (*DeleteGroupRequest) Descriptor() ([]byte, []int) {
+	return file_authd_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *DeleteGroupRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 type GetGroupByNameRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -1090,7 +1187,7 @@ type GetGroupByNameRequest struct {
 
 func (x *GetGroupByNameRequest) Reset() {
 	*x = GetGroupByNameRequest{}
-	mi := &file_authd_proto_msgTypes[20]
+	mi := &file_authd_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1102,7 +1199,7 @@ func (x *GetGroupByNameRequest) String() string {
 func (*GetGroupByNameRequest) ProtoMessage() {}
 
 func (x *GetGroupByNameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_authd_proto_msgTypes[20]
+	mi := &file_authd_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1115,7 +1212,7 @@ func (x *GetGroupByNameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGroupByNameRequest.ProtoReflect.Descriptor instead.
 func (*GetGroupByNameRequest) Descriptor() ([]byte, []int) {
-	return file_authd_proto_rawDescGZIP(), []int{20}
+	return file_authd_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetGroupByNameRequest) GetName() string {
@@ -1134,7 +1231,7 @@ type GetGroupByIDRequest struct {
 
 func (x *GetGroupByIDRequest) Reset() {
 	*x = GetGroupByIDRequest{}
-	mi := &file_authd_proto_msgTypes[21]
+	mi := &file_authd_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1146,7 +1243,7 @@ func (x *GetGroupByIDRequest) String() string {
 func (*GetGroupByIDRequest) ProtoMessage() {}
 
 func (x *GetGroupByIDRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_authd_proto_msgTypes[21]
+	mi := &file_authd_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1159,7 +1256,7 @@ func (x *GetGroupByIDRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetGroupByIDRequest.ProtoReflect.Descriptor instead.
 func (*GetGroupByIDRequest) Descriptor() ([]byte, []int) {
-	return file_authd_proto_rawDescGZIP(), []int{21}
+	return file_authd_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *GetGroupByIDRequest) GetId() uint32 {
@@ -1182,7 +1279,7 @@ type SetUserIDRequest struct {
 
 func (x *SetUserIDRequest) Reset() {
 	*x = SetUserIDRequest{}
-	mi := &file_authd_proto_msgTypes[22]
+	mi := &file_authd_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1194,7 +1291,7 @@ func (x *SetUserIDRequest) String() string {
 func (*SetUserIDRequest) ProtoMessage() {}
 
 func (x *SetUserIDRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_authd_proto_msgTypes[22]
+	mi := &file_authd_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1207,7 +1304,7 @@ func (x *SetUserIDRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetUserIDRequest.ProtoReflect.Descriptor instead.
 func (*SetUserIDRequest) Descriptor() ([]byte, []int) {
-	return file_authd_proto_rawDescGZIP(), []int{22}
+	return file_authd_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SetUserIDRequest) GetName() string {
@@ -1242,7 +1339,7 @@ type SetUserIDResponse struct {
 
 func (x *SetUserIDResponse) Reset() {
 	*x = SetUserIDResponse{}
-	mi := &file_authd_proto_msgTypes[23]
+	mi := &file_authd_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1254,7 +1351,7 @@ func (x *SetUserIDResponse) String() string {
 func (*SetUserIDResponse) ProtoMessage() {}
 
 func (x *SetUserIDResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_authd_proto_msgTypes[23]
+	mi := &file_authd_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1267,7 +1364,7 @@ func (x *SetUserIDResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetUserIDResponse.ProtoReflect.Descriptor instead.
 func (*SetUserIDResponse) Descriptor() ([]byte, []int) {
-	return file_authd_proto_rawDescGZIP(), []int{23}
+	return file_authd_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *SetUserIDResponse) GetIdChanged() bool {
@@ -1304,7 +1401,7 @@ type SetGroupIDRequest struct {
 
 func (x *SetGroupIDRequest) Reset() {
 	*x = SetGroupIDRequest{}
-	mi := &file_authd_proto_msgTypes[24]
+	mi := &file_authd_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1316,7 +1413,7 @@ func (x *SetGroupIDRequest) String() string {
 func (*SetGroupIDRequest) ProtoMessage() {}
 
 func (x *SetGroupIDRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_authd_proto_msgTypes[24]
+	mi := &file_authd_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1329,7 +1426,7 @@ func (x *SetGroupIDRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetGroupIDRequest.ProtoReflect.Descriptor instead.
 func (*SetGroupIDRequest) Descriptor() ([]byte, []int) {
-	return file_authd_proto_rawDescGZIP(), []int{24}
+	return file_authd_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *SetGroupIDRequest) GetName() string {
@@ -1364,7 +1461,7 @@ type SetGroupIDResponse struct {
 
 func (x *SetGroupIDResponse) Reset() {
 	*x = SetGroupIDResponse{}
-	mi := &file_authd_proto_msgTypes[25]
+	mi := &file_authd_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1376,7 +1473,7 @@ func (x *SetGroupIDResponse) String() string {
 func (*SetGroupIDResponse) ProtoMessage() {}
 
 func (x *SetGroupIDResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_authd_proto_msgTypes[25]
+	mi := &file_authd_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1389,7 +1486,7 @@ func (x *SetGroupIDResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetGroupIDResponse.ProtoReflect.Descriptor instead.
 func (*SetGroupIDResponse) Descriptor() ([]byte, []int) {
-	return file_authd_proto_rawDescGZIP(), []int{25}
+	return file_authd_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *SetGroupIDResponse) GetIdChanged() bool {
@@ -1427,7 +1524,7 @@ type User struct {
 
 func (x *User) Reset() {
 	*x = User{}
-	mi := &file_authd_proto_msgTypes[26]
+	mi := &file_authd_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1439,7 +1536,7 @@ func (x *User) String() string {
 func (*User) ProtoMessage() {}
 
 func (x *User) ProtoReflect() protoreflect.Message {
-	mi := &file_authd_proto_msgTypes[26]
+	mi := &file_authd_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1452,7 +1549,7 @@ func (x *User) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use User.ProtoReflect.Descriptor instead.
 func (*User) Descriptor() ([]byte, []int) {
-	return file_authd_proto_rawDescGZIP(), []int{26}
+	return file_authd_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *User) GetName() string {
@@ -1506,7 +1603,7 @@ type Users struct {
 
 func (x *Users) Reset() {
 	*x = Users{}
-	mi := &file_authd_proto_msgTypes[27]
+	mi := &file_authd_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1518,7 +1615,7 @@ func (x *Users) String() string {
 func (*Users) ProtoMessage() {}
 
 func (x *Users) ProtoReflect() protoreflect.Message {
-	mi := &file_authd_proto_msgTypes[27]
+	mi := &file_authd_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1531,7 +1628,7 @@ func (x *Users) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Users.ProtoReflect.Descriptor instead.
 func (*Users) Descriptor() ([]byte, []int) {
-	return file_authd_proto_rawDescGZIP(), []int{27}
+	return file_authd_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *Users) GetUsers() []*User {
@@ -1554,7 +1651,7 @@ type Group struct {
 
 func (x *Group) Reset() {
 	*x = Group{}
-	mi := &file_authd_proto_msgTypes[28]
+	mi := &file_authd_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1566,7 +1663,7 @@ func (x *Group) String() string {
 func (*Group) ProtoMessage() {}
 
 func (x *Group) ProtoReflect() protoreflect.Message {
-	mi := &file_authd_proto_msgTypes[28]
+	mi := &file_authd_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1579,7 +1676,7 @@ func (x *Group) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Group.ProtoReflect.Descriptor instead.
 func (*Group) Descriptor() ([]byte, []int) {
-	return file_authd_proto_rawDescGZIP(), []int{28}
+	return file_authd_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *Group) GetName() string {
@@ -1619,7 +1716,7 @@ type Groups struct {
 
 func (x *Groups) Reset() {
 	*x = Groups{}
-	mi := &file_authd_proto_msgTypes[29]
+	mi := &file_authd_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1631,7 +1728,7 @@ func (x *Groups) String() string {
 func (*Groups) ProtoMessage() {}
 
 func (x *Groups) ProtoReflect() protoreflect.Message {
-	mi := &file_authd_proto_msgTypes[29]
+	mi := &file_authd_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1644,7 +1741,7 @@ func (x *Groups) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Groups.ProtoReflect.Descriptor instead.
 func (*Groups) Descriptor() ([]byte, []int) {
-	return file_authd_proto_rawDescGZIP(), []int{29}
+	return file_authd_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *Groups) GetGroups() []*Group {
@@ -1665,7 +1762,7 @@ type ABResponse_BrokerInfo struct {
 
 func (x *ABResponse_BrokerInfo) Reset() {
 	*x = ABResponse_BrokerInfo{}
-	mi := &file_authd_proto_msgTypes[30]
+	mi := &file_authd_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1677,7 +1774,7 @@ func (x *ABResponse_BrokerInfo) String() string {
 func (*ABResponse_BrokerInfo) ProtoMessage() {}
 
 func (x *ABResponse_BrokerInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_authd_proto_msgTypes[30]
+	mi := &file_authd_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1724,7 +1821,7 @@ type GAMResponse_AuthenticationMode struct {
 
 func (x *GAMResponse_AuthenticationMode) Reset() {
 	*x = GAMResponse_AuthenticationMode{}
-	mi := &file_authd_proto_msgTypes[31]
+	mi := &file_authd_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1736,7 +1833,7 @@ func (x *GAMResponse_AuthenticationMode) String() string {
 func (*GAMResponse_AuthenticationMode) ProtoMessage() {}
 
 func (x *GAMResponse_AuthenticationMode) ProtoReflect() protoreflect.Message {
-	mi := &file_authd_proto_msgTypes[31]
+	mi := &file_authd_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1781,7 +1878,7 @@ type IARequest_AuthenticationData struct {
 
 func (x *IARequest_AuthenticationData) Reset() {
 	*x = IARequest_AuthenticationData{}
-	mi := &file_authd_proto_msgTypes[32]
+	mi := &file_authd_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1793,7 +1890,7 @@ func (x *IARequest_AuthenticationData) String() string {
 func (*IARequest_AuthenticationData) ProtoMessage() {}
 
 func (x *IARequest_AuthenticationData) ProtoReflect() protoreflect.Message {
-	mi := &file_authd_proto_msgTypes[32]
+	mi := &file_authd_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1976,6 +2073,12 @@ const file_authd_proto_rawDesc = "" +
 	"\x0fLockUserRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"'\n" +
 	"\x11UnlockUserRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"H\n" +
+	"\x11DeleteUserRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
+	"\vremove_home\x18\x02 \x01(\bR\n" +
+	"removeHome\"(\n" +
+	"\x12DeleteGroupRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"+\n" +
 	"\x15GetGroupByNameRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"%\n" +
@@ -2028,7 +2131,7 @@ const file_authd_proto_rawDesc = "" +
 	"\x0fIsAuthenticated\x12\x10.authd.IARequest\x1a\x11.authd.IAResponse\x12,\n" +
 	"\n" +
 	"EndSession\x12\x10.authd.ESRequest\x1a\f.authd.Empty\x12<\n" +
-	"\x17SetDefaultBrokerForUser\x12\x13.authd.SDBFURequest\x1a\f.authd.Empty2\xb6\x04\n" +
+	"\x17SetDefaultBrokerForUser\x12\x13.authd.SDBFURequest\x1a\f.authd.Empty2\xa4\x05\n" +
 	"\vUserService\x129\n" +
 	"\rGetUserByName\x12\x1b.authd.GetUserByNameRequest\x1a\v.authd.User\x125\n" +
 	"\vGetUserByID\x12\x19.authd.GetUserByIDRequest\x1a\v.authd.User\x12'\n" +
@@ -2038,7 +2141,10 @@ const file_authd_proto_rawDesc = "" +
 	"UnlockUser\x12\x18.authd.UnlockUserRequest\x1a\f.authd.Empty\x12>\n" +
 	"\tSetUserID\x12\x17.authd.SetUserIDRequest\x1a\x18.authd.SetUserIDResponse\x12A\n" +
 	"\n" +
-	"SetGroupID\x12\x18.authd.SetGroupIDRequest\x1a\x19.authd.SetGroupIDResponse\x12<\n" +
+	"SetGroupID\x12\x18.authd.SetGroupIDRequest\x1a\x19.authd.SetGroupIDResponse\x124\n" +
+	"\n" +
+	"DeleteUser\x12\x18.authd.DeleteUserRequest\x1a\f.authd.Empty\x126\n" +
+	"\vDeleteGroup\x12\x19.authd.DeleteGroupRequest\x1a\f.authd.Empty\x12<\n" +
 	"\x0eGetGroupByName\x12\x1c.authd.GetGroupByNameRequest\x1a\f.authd.Group\x128\n" +
 	"\fGetGroupByID\x12\x1a.authd.GetGroupByIDRequest\x1a\f.authd.Group\x12)\n" +
 	"\n" +
@@ -2057,7 +2163,7 @@ func file_authd_proto_rawDescGZIP() []byte {
 }
 
 var file_authd_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_authd_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_authd_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
 var file_authd_proto_goTypes = []any{
 	(SessionMode)(0),                       // 0: authd.SessionMode
 	(*Empty)(nil),                          // 1: authd.Empty
@@ -2080,29 +2186,31 @@ var file_authd_proto_goTypes = []any{
 	(*GetUserByIDRequest)(nil),             // 18: authd.GetUserByIDRequest
 	(*LockUserRequest)(nil),                // 19: authd.LockUserRequest
 	(*UnlockUserRequest)(nil),              // 20: authd.UnlockUserRequest
-	(*GetGroupByNameRequest)(nil),          // 21: authd.GetGroupByNameRequest
-	(*GetGroupByIDRequest)(nil),            // 22: authd.GetGroupByIDRequest
-	(*SetUserIDRequest)(nil),               // 23: authd.SetUserIDRequest
-	(*SetUserIDResponse)(nil),              // 24: authd.SetUserIDResponse
-	(*SetGroupIDRequest)(nil),              // 25: authd.SetGroupIDRequest
-	(*SetGroupIDResponse)(nil),             // 26: authd.SetGroupIDResponse
-	(*User)(nil),                           // 27: authd.User
-	(*Users)(nil),                          // 28: authd.Users
-	(*Group)(nil),                          // 29: authd.Group
-	(*Groups)(nil),                         // 30: authd.Groups
-	(*ABResponse_BrokerInfo)(nil),          // 31: authd.ABResponse.BrokerInfo
-	(*GAMResponse_AuthenticationMode)(nil), // 32: authd.GAMResponse.AuthenticationMode
-	(*IARequest_AuthenticationData)(nil),   // 33: authd.IARequest.AuthenticationData
+	(*DeleteUserRequest)(nil),              // 21: authd.DeleteUserRequest
+	(*DeleteGroupRequest)(nil),             // 22: authd.DeleteGroupRequest
+	(*GetGroupByNameRequest)(nil),          // 23: authd.GetGroupByNameRequest
+	(*GetGroupByIDRequest)(nil),            // 24: authd.GetGroupByIDRequest
+	(*SetUserIDRequest)(nil),               // 25: authd.SetUserIDRequest
+	(*SetUserIDResponse)(nil),              // 26: authd.SetUserIDResponse
+	(*SetGroupIDRequest)(nil),              // 27: authd.SetGroupIDRequest
+	(*SetGroupIDResponse)(nil),             // 28: authd.SetGroupIDResponse
+	(*User)(nil),                           // 29: authd.User
+	(*Users)(nil),                          // 30: authd.Users
+	(*Group)(nil),                          // 31: authd.Group
+	(*Groups)(nil),                         // 32: authd.Groups
+	(*ABResponse_BrokerInfo)(nil),          // 33: authd.ABResponse.BrokerInfo
+	(*GAMResponse_AuthenticationMode)(nil), // 34: authd.GAMResponse.AuthenticationMode
+	(*IARequest_AuthenticationData)(nil),   // 35: authd.IARequest.AuthenticationData
 }
 var file_authd_proto_depIdxs = []int32{
-	31, // 0: authd.ABResponse.brokers_infos:type_name -> authd.ABResponse.BrokerInfo
+	33, // 0: authd.ABResponse.brokers_infos:type_name -> authd.ABResponse.BrokerInfo
 	0,  // 1: authd.SBRequest.mode:type_name -> authd.SessionMode
 	9,  // 2: authd.GAMRequest.supported_ui_layouts:type_name -> authd.UILayout
-	32, // 3: authd.GAMResponse.authentication_modes:type_name -> authd.GAMResponse.AuthenticationMode
+	34, // 3: authd.GAMResponse.authentication_modes:type_name -> authd.GAMResponse.AuthenticationMode
 	9,  // 4: authd.SAMResponse.ui_layout_info:type_name -> authd.UILayout
-	33, // 5: authd.IARequest.authentication_data:type_name -> authd.IARequest.AuthenticationData
-	27, // 6: authd.Users.users:type_name -> authd.User
-	29, // 7: authd.Groups.groups:type_name -> authd.Group
+	35, // 5: authd.IARequest.authentication_data:type_name -> authd.IARequest.AuthenticationData
+	29, // 6: authd.Users.users:type_name -> authd.User
+	31, // 7: authd.Groups.groups:type_name -> authd.Group
 	1,  // 8: authd.PAM.AvailableBrokers:input_type -> authd.Empty
 	2,  // 9: authd.PAM.GetPreviousBroker:input_type -> authd.GPBRequest
 	6,  // 10: authd.PAM.SelectBroker:input_type -> authd.SBRequest
@@ -2116,31 +2224,35 @@ var file_authd_proto_depIdxs = []int32{
 	1,  // 18: authd.UserService.ListUsers:input_type -> authd.Empty
 	19, // 19: authd.UserService.LockUser:input_type -> authd.LockUserRequest
 	20, // 20: authd.UserService.UnlockUser:input_type -> authd.UnlockUserRequest
-	23, // 21: authd.UserService.SetUserID:input_type -> authd.SetUserIDRequest
-	25, // 22: authd.UserService.SetGroupID:input_type -> authd.SetGroupIDRequest
-	21, // 23: authd.UserService.GetGroupByName:input_type -> authd.GetGroupByNameRequest
-	22, // 24: authd.UserService.GetGroupByID:input_type -> authd.GetGroupByIDRequest
-	1,  // 25: authd.UserService.ListGroups:input_type -> authd.Empty
-	4,  // 26: authd.PAM.AvailableBrokers:output_type -> authd.ABResponse
-	3,  // 27: authd.PAM.GetPreviousBroker:output_type -> authd.GPBResponse
-	7,  // 28: authd.PAM.SelectBroker:output_type -> authd.SBResponse
-	10, // 29: authd.PAM.GetAuthenticationModes:output_type -> authd.GAMResponse
-	12, // 30: authd.PAM.SelectAuthenticationMode:output_type -> authd.SAMResponse
-	14, // 31: authd.PAM.IsAuthenticated:output_type -> authd.IAResponse
-	1,  // 32: authd.PAM.EndSession:output_type -> authd.Empty
-	1,  // 33: authd.PAM.SetDefaultBrokerForUser:output_type -> authd.Empty
-	27, // 34: authd.UserService.GetUserByName:output_type -> authd.User
-	27, // 35: authd.UserService.GetUserByID:output_type -> authd.User
-	28, // 36: authd.UserService.ListUsers:output_type -> authd.Users
-	1,  // 37: authd.UserService.LockUser:output_type -> authd.Empty
-	1,  // 38: authd.UserService.UnlockUser:output_type -> authd.Empty
-	24, // 39: authd.UserService.SetUserID:output_type -> authd.SetUserIDResponse
-	26, // 40: authd.UserService.SetGroupID:output_type -> authd.SetGroupIDResponse
-	29, // 41: authd.UserService.GetGroupByName:output_type -> authd.Group
-	29, // 42: authd.UserService.GetGroupByID:output_type -> authd.Group
-	30, // 43: authd.UserService.ListGroups:output_type -> authd.Groups
-	26, // [26:44] is the sub-list for method output_type
-	8,  // [8:26] is the sub-list for method input_type
+	25, // 21: authd.UserService.SetUserID:input_type -> authd.SetUserIDRequest
+	27, // 22: authd.UserService.SetGroupID:input_type -> authd.SetGroupIDRequest
+	21, // 23: authd.UserService.DeleteUser:input_type -> authd.DeleteUserRequest
+	22, // 24: authd.UserService.DeleteGroup:input_type -> authd.DeleteGroupRequest
+	23, // 25: authd.UserService.GetGroupByName:input_type -> authd.GetGroupByNameRequest
+	24, // 26: authd.UserService.GetGroupByID:input_type -> authd.GetGroupByIDRequest
+	1,  // 27: authd.UserService.ListGroups:input_type -> authd.Empty
+	4,  // 28: authd.PAM.AvailableBrokers:output_type -> authd.ABResponse
+	3,  // 29: authd.PAM.GetPreviousBroker:output_type -> authd.GPBResponse
+	7,  // 30: authd.PAM.SelectBroker:output_type -> authd.SBResponse
+	10, // 31: authd.PAM.GetAuthenticationModes:output_type -> authd.GAMResponse
+	12, // 32: authd.PAM.SelectAuthenticationMode:output_type -> authd.SAMResponse
+	14, // 33: authd.PAM.IsAuthenticated:output_type -> authd.IAResponse
+	1,  // 34: authd.PAM.EndSession:output_type -> authd.Empty
+	1,  // 35: authd.PAM.SetDefaultBrokerForUser:output_type -> authd.Empty
+	29, // 36: authd.UserService.GetUserByName:output_type -> authd.User
+	29, // 37: authd.UserService.GetUserByID:output_type -> authd.User
+	30, // 38: authd.UserService.ListUsers:output_type -> authd.Users
+	1,  // 39: authd.UserService.LockUser:output_type -> authd.Empty
+	1,  // 40: authd.UserService.UnlockUser:output_type -> authd.Empty
+	26, // 41: authd.UserService.SetUserID:output_type -> authd.SetUserIDResponse
+	28, // 42: authd.UserService.SetGroupID:output_type -> authd.SetGroupIDResponse
+	1,  // 43: authd.UserService.DeleteUser:output_type -> authd.Empty
+	1,  // 44: authd.UserService.DeleteGroup:output_type -> authd.Empty
+	31, // 45: authd.UserService.GetGroupByName:output_type -> authd.Group
+	31, // 46: authd.UserService.GetGroupByID:output_type -> authd.Group
+	32, // 47: authd.UserService.ListGroups:output_type -> authd.Groups
+	28, // [28:48] is the sub-list for method output_type
+	8,  // [8:28] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name
 	8,  // [8:8] is the sub-list for extension extendee
 	0,  // [0:8] is the sub-list for field type_name
@@ -2152,8 +2264,8 @@ func file_authd_proto_init() {
 		return
 	}
 	file_authd_proto_msgTypes[8].OneofWrappers = []any{}
-	file_authd_proto_msgTypes[30].OneofWrappers = []any{}
-	file_authd_proto_msgTypes[32].OneofWrappers = []any{
+	file_authd_proto_msgTypes[32].OneofWrappers = []any{}
+	file_authd_proto_msgTypes[34].OneofWrappers = []any{
 		(*IARequest_AuthenticationData_Secret)(nil),
 		(*IARequest_AuthenticationData_Wait)(nil),
 		(*IARequest_AuthenticationData_Skip)(nil),
@@ -2165,7 +2277,7 @@ func file_authd_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_authd_proto_rawDesc), len(file_authd_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   33,
+			NumMessages:   35,
 			NumExtensions: 0,
 			NumServices:   2,
 		},
