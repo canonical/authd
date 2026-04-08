@@ -2,7 +2,7 @@ module github.com/canonical/authd
 
 go 1.25.0
 
-toolchain go1.25.8
+toolchain go1.25.9
 
 require (
 	github.com/charmbracelet/bubbles v0.20.0
