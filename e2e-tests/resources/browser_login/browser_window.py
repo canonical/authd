@@ -42,7 +42,7 @@ class BrowserWindow(Gtk.Window):
         self._recording_path = None
         self._recording_fps = 0
         self._recording_cancellable = None
-        self._recoding_cancellable_id = 0
+        self._recording_cancellable_id = 0
 
         self.web_view = WebKit.WebView()
         self.web_view.get_settings().enableJavascript = True
@@ -423,7 +423,7 @@ class BrowserWindow(Gtk.Window):
 
             self._recording_cancellable = None
 
-        self._recoding_cancellable_id = cancellable.connect(on_cancelled)
+        self._recording_cancellable_id = cancellable.connect(on_cancelled)
         self._recording_cancellable = cancellable
         self._recording_fps = fps
 
@@ -433,8 +433,8 @@ class BrowserWindow(Gtk.Window):
 
         cancellable = self._recording_cancellable
         self._recording_cancellable.cancel()
-        cancellable.disconnect(self._recoding_cancellable_id)
-        self._recoding_cancellable_id = 0
+        cancellable.disconnect(self._recording_cancellable_id)
+        self._recording_cancellable_id = 0
 
         if rendered_output:
             self._run_async_task(lambda: render_video(self._recording_path.name,
