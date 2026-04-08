@@ -1,7 +1,7 @@
 *** Settings ***
 Documentation       authd test resources
 
-Resource            ../kvm.resource
+Resource            kvm.resource
 Library             ./Journal.py    AS    Journal
 Library             ./StringUtils.py    AS    StringUtils
 Library             ./VideoLogger.py    AS    VideoLogger
@@ -13,7 +13,7 @@ Library             OperatingSystem
 
 
 *** Variables ***
-${SUITE_OUTPUT_DIR}    ${OUTPUT DIR}/${SUITE NAME}
+${SUITE_OUTPUT_DIR}    ${OUTPUT_DIR}/${SUITE_NAME.rsplit('.')[-1]}
 
 
 *** Keywords ***
@@ -205,11 +205,12 @@ Try machinectl login Prompt
 ### Setup ###
 
 Restore Snapshot
-    [Arguments]    ${snapshot_name}
-    Snapshot.Restore    ${snapshot_name}
+    [Arguments]    ${snapshot}
+    Snapshot.Restore    ${snapshot}
     Wait Until System Time Synced
 
 Test Setup
+    [Arguments]    ${snapshot}
     Set Suite Metadata    Ubuntu Version   %{RELEASE}    top=True
     Set Suite Metadata    Broker    %{BROKER}    top=True
     Restore Snapshot    ${snapshot}

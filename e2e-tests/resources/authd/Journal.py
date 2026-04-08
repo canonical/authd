@@ -124,7 +124,7 @@ def stream_journal_from_vm_via_tcp(output_dir, timeout=60):
             stderr_buf.append(line)
 
             if "successfully connected" in line:
-                logger.info("socat successfully connected to VM journal stream\n" + "".join(stderr_buf))
+                logger.info("socat successfully connected to VM journal stream:\n" + "".join(stderr_buf))
                 stderr_buf.clear()
                 connected = True
                 break

@@ -38,11 +38,11 @@ EOF
 
 ROOT_DIR=$(dirname "$(readlink -f "$0")")
 TESTS_DIR="${ROOT_DIR}/tests"
+LISTENER_DIR="${ROOT_DIR}/listener"
 TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
 
 # Parse command line arguments
-TESTS_TO_RUN=""
-OUTPUT_DIR=""
+TESTS_TO_RUN=()
 while [[ $# -gt 0 ]]; do
     key="$1"
 
@@ -89,7 +89,7 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
         *)
-            TESTS_TO_RUN="${TESTS_TO_RUN} ${TESTS_DIR}/$(basename "${1}")"
+            TESTS_TO_RUN+=("${TESTS_DIR}/$(basename "${1}")")
             shift
             ;;
     esac
@@ -103,9 +103,9 @@ fi
 
 VM_NAME=${VM_NAME:-"e2e-runner-${RELEASE}"}
 
-if [ -z "${TESTS_TO_RUN}" ]; then
+if [ ${#TESTS_TO_RUN[@]} -eq 0 ]; then
     echo "Running all tests in ${TESTS_DIR}"
-    TESTS_TO_RUN=$(find "${TESTS_DIR}" -type f -name "*.robot")
+    TESTS_TO_RUN=("${TESTS_DIR}")
 fi
 
 PREVIOUS_TEST_RUN_DIR=$(readlink -f "${TEST_RUNS_DIR}/${BROKER}-latest" || true)
@@ -135,18 +135,18 @@ if ! virsh domstate "${VM_NAME}" | grep -q '^running'; then
 fi
 VNC_PORT=$(virsh vncdisplay "${VM_NAME}" | cut -d':' -f2)
 
-# Create a temporary test run directory
-mkdir -p "${TEST_RUNS_DIR}"
-TEST_RUN_DIR=$(mktemp -d --tmpdir="${TEST_RUNS_DIR}" "${BROKER}-XXXXXX")
-ln -sf --no-target-directory "${TEST_RUN_DIR}" "${TEST_RUNS_DIR}/${BROKER}-latest"
-cd "${TEST_RUN_DIR}"
-
 if [ -z "${OUTPUT_DIR:-}" ]; then
-    OUTPUT_DIR=output
-    echo "No output directory specified, using current test run directory."
+    # Create a temporary output directory
+    mkdir -p "${TEST_RUNS_DIR}"
+    OUTPUT_DIR=$(mktemp -d --tmpdir="${TEST_RUNS_DIR}" "${BROKER}-XXXXXX")
+else
+    mkdir -p "${OUTPUT_DIR}"
 fi
 
-mkdir -p "${OUTPUT_DIR}" resources
+# Create a symlink to the output directory for easier access and to keep the
+# latest test results available for rerunning failed tests.
+mkdir -p "${TEST_RUNS_DIR}"
+ln -sf --no-target-directory "${OUTPUT_DIR}" "${TEST_RUNS_DIR}/${BROKER}-latest"
 
 # Activate YARF environment
 YARF_DIR="${ROOT_DIR}/.yarf"
@@ -156,18 +156,6 @@ if [ ! -d "${YARF_DIR}" ]; then
 fi
 # shellcheck disable=SC1091 # Avoid info message about not following sourced file
 source "${YARF_DIR}/.venv/bin/activate"
-
-# Create symlinks to the resources directory
-mkdir -p tests/resources
-for resource in "${ROOT_DIR}/resources/"*; do
-    ln -s "${resource}" "tests/resources/$(basename "${resource}")"
-done
-ln -sf --no-target-directory "${BROKER}" tests/resources/broker
-
-# Create symlinks to the test files
-for test_file in $TESTS_TO_RUN; do
-    ln -s "${test_file}" tests
-done
 
 # Make YARF not log videos, we log them ourselves in the test case error message.
 YARF_LOG_VIDEO=0
@@ -184,11 +172,16 @@ env \
     robot \
         --consolecolors on \
         --loglevel DEBUG \
+        --pythonpath "${ROOT_DIR}" \
         --pythonpath "${YARF_DIR}/yarf/rf_libraries/libraries/vnc" \
+        --pythonpath "${YARF_DIR}/yarf/rf_libraries/resources" \
+        --pythonpath "${YARF_DIR}/yarf/rf_libraries/variables" \
         --outputdir "${OUTPUT_DIR}" \
+        --listener "${LISTENER_DIR}/Listener.py" \
+        --console quiet \
         "${ROBOT_ARGS[@]}" \
         "$@" \
-        tests \
+        "${TESTS_TO_RUN[@]}" \
         | grep -v "<video controls style" \
         || test_result=$?
 

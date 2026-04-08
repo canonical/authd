@@ -1,8 +1,8 @@
 *** Settings ***
-Resource        ./resources/authd/utils.resource
-Resource        ./resources/authd/authd.resource
+Resource        resources/authd/utils.resource
+Resource        resources/authd/authd.resource
 
-Resource        ./resources/broker/broker.resource
+Resource        resources/broker/broker.resource
 
 # Test Tags       robot:exit-on-failure
 
@@ -12,14 +12,12 @@ Test Teardown   utils.Test Teardown
 
 *** Keywords ***
 Test Setup
-    utils.Test Setup
+    utils.Test Setup    snapshot=%{BROKER}-installed
     Change Broker Configuration    ssh_allowed_suffixes_first_auth    %{E2E_USER}
 
 
 *** Variables ***
-${snapshot}    %{BROKER}-installed
 ${local_password}    qwer1234
-${remote_group}    %{E2E_USER}-group
 
 
 *** Test Cases ***
