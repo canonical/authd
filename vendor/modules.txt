@@ -168,12 +168,6 @@ github.com/subosito/gotenv
 # github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e
 ## explicit; go 1.19
 github.com/xo/terminfo
-# go.etcd.io/bbolt v1.4.3
-## explicit; go 1.23
-go.etcd.io/bbolt
-go.etcd.io/bbolt/errors
-go.etcd.io/bbolt/internal/common
-go.etcd.io/bbolt/internal/freelist
 # go.yaml.in/yaml/v3 v3.0.4
 ## explicit; go 1.16
 go.yaml.in/yaml/v3
