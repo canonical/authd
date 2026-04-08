@@ -4,12 +4,12 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"html/template"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"text/template"
 
 	"gopkg.in/ini.v1"
 )
