@@ -1,0 +1,2 @@
+could not find broker "nonexistent" for user "delete_error@example.com", skipping broker-side cleanup: no broker found matching "nonexistent"
+User "delete_error@example.com" has been deleted from the authd database.
