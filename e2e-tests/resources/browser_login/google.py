@@ -4,20 +4,20 @@
 import os
 import sys
 
+import gi  # noqa: E402
+
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk  # type: ignore  # noqa: E402
+
 # Allow imports from this package when executed as a script.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from base import (  # noqa: E402
+from base import (
     ascii_string_to_key_events,
     generate_totp,
     logger,
     run_browser_login,
 )
-
-import gi  # noqa: E402
-
-gi.require_version("Gdk", "3.0")
-from gi.repository import Gdk  # type: ignore  # noqa: E402
 
 
 def login(browser, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):

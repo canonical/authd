@@ -3,11 +3,11 @@ import json
 import gi
 import logging
 import os
+import subprocess
 import tempfile
 import traceback
 import sys
 
-import ExecUtils
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
@@ -434,7 +434,7 @@ def ascii_string_to_key_events(string):
 
 
 def render_video(screenshot_dir: str, video_path: str, framerate: int = 1):
-    ExecUtils.check_call([
+    subprocess.check_call([
         "ffmpeg",
         "-loglevel", "warning",
         # Overwrite output file if it already exists
