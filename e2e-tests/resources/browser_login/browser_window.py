@@ -394,7 +394,7 @@ class BrowserWindow(Gtk.Window):
 
         cancellable = Gio.Cancellable()
         timeout = 0
-        max_delay_ms = 1000 / fps
+        max_delay_ms = 1000 // fps
 
         self._recording_path = tempfile.TemporaryDirectory(prefix="authd-browser")
 
