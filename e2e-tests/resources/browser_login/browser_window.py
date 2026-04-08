@@ -283,13 +283,21 @@ class BrowserWindow(Gtk.Window):
             else:
                 logger.info(f"Key: {Gdk.keyval_name(key)}")
 
-        default_seat = Gdk.Display.get_default().get_default_seat()
+        display = self.get_display()
+        default_seat = display.get_default_seat()
         event = Gdk.Event.new(event_type)
         event.set_device(default_seat.get_keyboard())
         event.set_source_device(default_seat.get_keyboard())
         event.window = self.web_view.get_window()
         event.send_event = True
         event.keyval = key
+
+        # Set the hardware keycode so that WebKit correctly handles special
+        # keys such as BackSpace and Delete, which rely on it for editing.
+        keymap = Gdk.Keymap.get_for_display(display)
+        found, keys = keymap.get_entries_for_keyval(key)
+        if found and keys:
+            event.hardware_keycode = keys[0].keycode
 
         loop = GLib.MainLoop()
 
