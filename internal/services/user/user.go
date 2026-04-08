@@ -270,6 +270,68 @@ func (s Service) SetGroupID(ctx context.Context, req *authd.SetGroupIDRequest) (
 	}, nil
 }
 
+// DeleteUser removes the user with the given name from the authd database.
+func (s Service) DeleteUser(ctx context.Context, req *authd.DeleteUserRequest) (*authd.DeleteUserResponse, error) {
+	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
+		return nil, status.Error(codes.PermissionDenied, err.Error())
+	}
+
+	// authd uses lowercase usernames.
+	name := strings.ToLower(req.GetName())
+	if name == "" {
+		return nil, status.Error(codes.InvalidArgument, "no user name provided")
+	}
+
+	// Look up which broker owns this user before removing them from the DB, so
+	// we can attempt broker-side cleanup afterwards. A failure here is non-fatal
+	// for the deletion itself.
+	var warnings []string
+	brokerID, err := s.userManager.BrokerForUser(name)
+	if err != nil {
+		warnings = append(warnings, fmt.Sprintf("could not determine broker for user %q, skipping broker-side cleanup: %v", name, err))
+	}
+
+	if err := s.userManager.DeleteUser(name, req.GetRemoveHome()); err != nil {
+		log.Errorf(ctx, "DeleteUser: %v", err)
+		return nil, grpcError(err)
+	}
+
+	// Notify the broker so it can clean up any broker side data (tokens, cached
+	// passwords, etc.) stored for this user. Failures here are non-fatal. The
+	// user has already been removed from the authd DB, so we return a warning and
+	// still return success. The local broker has no remote data, so skip it.
+	if brokerID != "" && brokerID != brokers.LocalBrokerName {
+		broker, err := s.brokerManager.BrokerFromID(brokerID)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("could not find broker %q for user %q, skipping broker-side cleanup: %v", brokerID, name, err))
+		} else if err := broker.DeleteUser(ctx, name); err != nil {
+			warnings = append(warnings, fmt.Sprintf("broker-side cleanup for user %q failed: %v", name, err))
+		}
+	}
+
+	return &authd.DeleteUserResponse{Warnings: warnings}, nil
+}
+
+// DeleteGroup removes the group with the given name from the authd database.
+func (s Service) DeleteGroup(ctx context.Context, req *authd.DeleteGroupRequest) (*authd.Empty, error) {
+	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
+		return nil, status.Error(codes.PermissionDenied, err.Error())
+	}
+
+	// authd uses lowercase group names.
+	name := strings.ToLower(req.GetName())
+	if name == "" {
+		return nil, status.Error(codes.InvalidArgument, "no group name provided")
+	}
+
+	if err := s.userManager.DeleteGroup(name); err != nil {
+		log.Errorf(ctx, "DeleteGroup: %v", err)
+		return nil, grpcError(err)
+	}
+
+	return &authd.Empty{}, nil
+}
+
 // userToProtobuf converts a types.UserEntry to authd.User.
 func userToProtobuf(u types.UserEntry) *authd.User {
 	return &authd.User{
@@ -344,11 +406,16 @@ func (s Service) userPreCheck(ctx context.Context, username string) (types.UserE
 	return u, nil
 }
 
-// grpcError converts a data not found to proper GRPC status code.
-// The NSS module uses this status code to determine the NSS status it should return.
+// grpcError converts well-known user manager errors to their proper gRPC status codes.
+// The NSS module uses these status codes to determine the NSS status it should return.
 func grpcError(err error) error {
 	if errors.Is(err, users.NoDataFoundError{}) {
 		return status.Error(codes.NotFound, err.Error())
+	}
+
+	var primaryErr users.GroupIsPrimaryError
+	if errors.As(err, &primaryErr) {
+		return status.Error(codes.FailedPrecondition, err.Error())
 	}
 
 	return err

@@ -260,3 +260,24 @@ func updateGroupByID(db queryable, g GroupRow) error {
 
 	return nil
 }
+
+// DeleteGroup removes the group from the database.
+func (m *Manager) DeleteGroup(gid uint32) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	query := `DELETE FROM groups WHERE gid = ?`
+	res, err := m.db.Exec(query, gid)
+	if err != nil {
+		return fmt.Errorf("failed to delete group: %w", err)
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return NewGIDNotFoundError(gid)
+	}
+
+	return nil
+}
