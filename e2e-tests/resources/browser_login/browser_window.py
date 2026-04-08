@@ -224,9 +224,9 @@ class BrowserWindow(Gtk.Window):
             except GLib.Error as e:
                 if e.matches(Gio.io_error_quark(), Gio.IOErrorEnum.CANCELLED):
                     return
-                raise e
-            except Exception as e:
-                raise e
+                raise
+            except Exception:
+                raise
             finally:
                 final_action()
 
@@ -325,8 +325,8 @@ class BrowserWindow(Gtk.Window):
             except GLib.Error as e:
                 if e.matches(Gio.io_error_quark(), Gio.IOErrorEnum.CANCELLED):
                     return
-            except Exception as e:
-                raise e
+            except Exception:
+                raise
             finally:
                 if loop:
                     loop.quit()
