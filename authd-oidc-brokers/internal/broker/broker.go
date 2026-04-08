@@ -30,7 +30,6 @@ import (
 	"github.com/canonical/authd/log"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
-	"github.com/ubuntu/decorate"
 	"golang.org/x/oauth2"
 )
 
@@ -158,8 +157,6 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 
 // NewSession creates a new session for the user.
 func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionKey string, err error) {
-	defer decorate.OnError(&err, "could not create new session for user %q", username)
-
 	sessionID = uuid.New().String()
 	s := session{
 		username: username,
@@ -171,7 +168,7 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 
 	pubASN1, err := x509.MarshalPKIXPublicKey(&b.privateKey.PublicKey)
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("failed to marshal broker public key: %v", err)
 	}
 
 	_, issuer, _ := strings.Cut(b.cfg.issuerURL, "://")
@@ -185,8 +182,13 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 
 	// Construct an OIDC provider via OIDC discovery.
 	s.oidcServer, err = b.connectToOIDCServer(context.Background())
+	if err != nil && b.cfg.forceProviderAuthentication {
+		log.Errorf(context.Background(), "Could not connect to the provider and force_provider_authentication is set, denying authentication: %v", err)
+		//nolint:staticcheck,revive // ST1005 This error is displayed as is to the user, so it should be capitalized
+		return "", "", errors.New("Error connecting to provider. Check your network connection.")
+	}
 	if err != nil {
-		log.Noticef(context.Background(), "Could not connect to the provider: %v. Starting session in offline mode.", err)
+		log.Noticef(context.Background(), "Could not connect to the provider, starting session in offline mode: %v", err)
 		s.isOffline = true
 		s.providerConnectionError = err
 	}
@@ -741,11 +743,6 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		session.authInfo = authInfo
 		session.nextAuthModes = []string{authmodes.NewPassword}
 		return AuthNext, nil
-	}
-
-	if b.cfg.forceProviderAuthentication && session.isOffline {
-		log.Error(context.Background(), "Remote authentication failed: force_provider_authentication is enabled, but the identity provider is not reachable")
-		return AuthDenied, errorMessage{Message: "Remote authentication failed: identity provider is not reachable"}
 	}
 
 	if authInfo.UserIsDisabled && session.isOffline {

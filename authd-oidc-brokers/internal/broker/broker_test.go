@@ -83,9 +83,11 @@ func TestNewSession(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		customHandlers map[string]testutils.EndpointHandler
+		customHandlers              map[string]testutils.EndpointHandler
+		forceProviderAuthentication bool
 
 		wantOffline bool
+		wantErr     bool
 	}{
 		"Successfully_create_new_session": {},
 		"Creates_new_session_in_offline_mode_if_provider_is_not_available": {
@@ -100,16 +102,29 @@ func TestNewSession(t *testing.T) {
 			},
 			wantOffline: true,
 		},
+
+		"Error_when_provider_authentication_is_forced_and_provider_is_not_available": {
+			customHandlers: map[string]testutils.EndpointHandler{
+				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
+			},
+			forceProviderAuthentication: true,
+			wantErr:                     true,
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
 			b := newBrokerForTests(t, &brokerForTestConfig{
-				customHandlers: tc.customHandlers,
+				customHandlers:              tc.customHandlers,
+				forceProviderAuthentication: tc.forceProviderAuthentication,
 			})
 
 			id, _, err := b.NewSession("test-user", "lang", sessionmode.Login)
+			if tc.wantErr {
+				require.Error(t, err, "NewSession should have returned an error")
+				return
+			}
 			require.NoError(t, err, "NewSession should not have returned an error")
 
 			gotOffline, err := b.IsOffline(id)
@@ -784,12 +799,6 @@ func TestIsAuthenticated(t *testing.T) {
 		"Error_when_mode_is_newpassword_and_session_has_no_token": {firstMode: authmodes.NewPassword},
 		// This test case also tests that errors with double quotes are marshaled to JSON correctly.
 		"Error_when_selected_username_does_not_match_the_provider_one": {username: "not-matching", firstSecret: "-"},
-		"Error_when_provider_authentication_is_forced_and_session_is_offline": {
-			firstMode:                   authmodes.Password,
-			token:                       &tokenOptions{},
-			forceProviderAuthentication: true,
-			sessionOffline:              true,
-		},
 		"Error_when_user_is_disabled_and_session_is_offline": {
 			firstMode:      authmodes.Password,
 			token:          &tokenOptions{userIsDisabled: true},
