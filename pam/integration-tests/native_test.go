@@ -45,7 +45,6 @@ func TestNativeAuthenticate(t *testing.T) {
 		clientOptions      clientOptions
 		currentUserNotRoot bool
 		userSelection      bool
-		oldDB              string
 		wantLocalGroups    bool
 		wantSeparateDaemon bool
 		skipRunnerCheck    bool
@@ -93,27 +92,6 @@ func TestNativeAuthenticate(t *testing.T) {
 				PamServiceName: "polkit-1",
 				PamUser: vhsTestUserNameFull(t,
 					examplebroker.UserIntegrationAuthModesPrefix, "password-integration-polkit-native@example.com"),
-			},
-		},
-		"Authenticate_user_successfully_after_db_migration": {
-			tape:  "simple_auth_with_auto_selected_broker",
-			oldDB: "authd_0.4.1_bbolt_with_mixed_case_users",
-			clientOptions: clientOptions{
-				PamUser: "user-integration-cached@example.com",
-			},
-		},
-		"Authenticate_user_with_upper_case_using_lower_case_after_db_migration": {
-			tape:  "simple_auth_with_auto_selected_broker",
-			oldDB: "authd_0.4.1_bbolt_with_mixed_case_users",
-			clientOptions: clientOptions{
-				PamUser: "user-integration-upper-case@example.com",
-			},
-		},
-		"Authenticate_user_with_mixed_case_after_db_migration": {
-			tape:  "simple_auth_with_auto_selected_broker",
-			oldDB: "authd_0.4.1_bbolt_with_mixed_case_users",
-			clientOptions: clientOptions{
-				PamUser: "user-integration-WITH-Mixed-CaSe@example.com",
 			},
 		},
 		"Authenticate_user_with_mfa": {
@@ -415,8 +393,7 @@ func TestNativeAuthenticate(t *testing.T) {
 			require.NoError(t, err, "Setup: symlinking the pam client")
 
 			var socketPath, groupFileOutput, pidFile string
-			if tc.wantLocalGroups || tc.currentUserNotRoot || tc.wantSeparateDaemon ||
-				tc.oldDB != "" {
+			if tc.wantLocalGroups || tc.currentUserNotRoot || tc.wantSeparateDaemon {
 				// For the local groups tests we need to run authd again so that it has
 				// special environment that saves the updated group file to a writable
 				// location for us to test.
@@ -425,7 +402,7 @@ func TestNativeAuthenticate(t *testing.T) {
 				var groupFile string
 				groupFileOutput, groupFile = prepareGroupFiles(t)
 
-				if tc.wantLocalGroups || tc.oldDB != "" {
+				if tc.wantLocalGroups {
 					// We don't want to use separate input ant output files here.
 					groupFileOutput = groupFile
 				}
@@ -436,7 +413,6 @@ func TestNativeAuthenticate(t *testing.T) {
 					testutils.WithGroupFile(groupFile),
 					testutils.WithGroupFileOutput(groupFileOutput),
 					testutils.WithPidFile(pidFile),
-					testutils.WithEnvironment(useOldDatabaseEnv(t, tc.oldDB)...),
 				}
 				if !tc.currentUserNotRoot {
 					args = append(args, testutils.WithCurrentUserAsRoot)

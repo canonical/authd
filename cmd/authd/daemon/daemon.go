@@ -113,10 +113,6 @@ func New(args ...Option) *App {
 				return err
 			}
 
-			if _, err := maybeMigrateBBoltToSQLite(a.config.Paths.Database); err != nil {
-				return err
-			}
-
 			return a.serve(a.config)
 		},
 		// We display usage error ourselves

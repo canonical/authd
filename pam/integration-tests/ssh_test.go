@@ -192,7 +192,6 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		pamServiceName   string
 		socketPath       string
 		interactiveShell bool
-		oldDB            string
 
 		wantUserAlreadyExist bool
 		wantNotLoggedInUser  bool
@@ -217,24 +216,6 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		"Authenticate_user_successfully_if_already_registered_with_upper_case": {
 			user: "USER-SSH2@example.com",
 			tape: "simple_auth",
-		},
-		"Authenticate_user_successfully_after_db_migration": {
-			tape:                 "simple_auth_with_auto_selected_broker",
-			oldDB:                "authd_0.4.1_bbolt_with_mixed_case_users",
-			wantUserAlreadyExist: true,
-			user:                 "user-integration-cached@example.com",
-		},
-		"Authenticate_user_with_upper_case_using_lower_case_after_db_migration": {
-			tape:                 "simple_auth_with_auto_selected_broker",
-			oldDB:                "authd_0.4.1_bbolt_with_mixed_case_users",
-			wantUserAlreadyExist: true,
-			user:                 "user-integration-upper-case@example.com",
-		},
-		"Authenticate_user_with_mixed_case_after_db_migration": {
-			tape:                 "simple_auth_with_auto_selected_broker",
-			oldDB:                "authd_0.4.1_bbolt_with_mixed_case_users",
-			wantUserAlreadyExist: true,
-			user:                 "user-integration-WITH-Mixed-CaSe@example.com",
 		},
 		"Authenticate_user_with_mfa": {
 			tape:         "mfa_auth",
@@ -447,13 +428,11 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 				authdEnv = append(authdEnv, nssTestEnv(t, nssLibrary, authdSocketLink)...)
 			}
 
-			if tc.wantLocalGroups || tc.oldDB != "" {
+			if tc.wantLocalGroups {
 				// For the local groups tests we need to run authd again so that it has
 				// special environment that saves the updated group file to a writable
 				// location for us to test.
 				_, groupOutput = prepareGroupFiles(t)
-
-				authdEnv = append(authdEnv, useOldDatabaseEnv(t, tc.oldDB)...)
 
 				// Since we are migrating users, we need to make sure that we can replicate
 				// the homedir they have in the database.
@@ -512,8 +491,7 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 
 			sshdPort := sharedSSHDPort
 			userHome := sharedSSHDUserHome
-			if !sharedSSHD || tc.wantLocalGroups || tc.oldDB != "" ||
-				tc.interactiveShell || tc.socketPath != "" {
+			if !sharedSSHD || tc.wantLocalGroups || tc.interactiveShell || tc.socketPath != "" {
 				sshdEnv := sshdEnv
 				if nssLibrary != "" {
 					sshdEnv = slices.Clone(sshdEnv)
