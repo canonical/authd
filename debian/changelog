@@ -1,8 +1,8 @@
-authd (0.6.2) UNRELEASED; urgency=medium
+authd (0.6.2) resolute; urgency=medium
 
   * New upload
 
- -- Adrian Dombeck <adrian.dombeck@canonical.com>  Wed, 08 Apr 2026 18:22:45 +0200
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Wed, 08 Apr 2026 18:29:02 +0200
 
 authd (0.6.1) resolute; urgency=medium
 
