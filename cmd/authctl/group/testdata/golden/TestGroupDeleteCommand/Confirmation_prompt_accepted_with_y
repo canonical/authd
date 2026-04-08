@@ -1,0 +1,6 @@
+
+WARNING: Deleting a group that still owns files on the filesystem can lead to
+security issues. Any existing files owned by this group's GID may become
+accessible to a different group that is later assigned the same GID.
+
+Are you sure you want to delete group "group4-nonprimary"? [y/N] Group "group4-nonprimary" has been deleted from the authd database.

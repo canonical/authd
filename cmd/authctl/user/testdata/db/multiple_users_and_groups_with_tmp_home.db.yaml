@@ -1,0 +1,89 @@
+users:
+    - name: user1@example.com
+      uid: 1111
+      gid: 11111
+      gecos: |-
+        User1 gecos
+        On multiple lines
+      dir: /tmp/authd-delete-cmd-test/home/user1@example.com
+      shell: /bin/bash
+      broker_id: "2221040704"
+    - name: user2@example.com
+      uid: 2222
+      gid: 22222
+      gecos: User2
+      dir: /tmp/authd-delete-cmd-test/home/user2@example.com
+      shell: /bin/dash
+      broker_id: "2221040704"
+    - name: user3@example.com
+      uid: 3333
+      gid: 33333
+      gecos: User3
+      dir: /tmp/authd-delete-cmd-test/home/user3@example.com
+      shell: /bin/zsh
+      broker_id: "2221040704"
+    - name: user4@example.com
+      uid: 4444
+      gid: 44444
+      gecos: User4
+      dir: /tmp/authd-delete-cmd-test/home/user4@example.com
+      shell: /bin/sh
+      broker_id: "2221040704"
+    - name: user5@example.com
+      uid: 5555
+      gid: 55555
+      gecos: User5
+      dir: /tmp/authd-delete-cmd-test/home/user5@example.com
+      shell: /bin/sh
+      broker_id: "2221040704"
+    - name: user6@example.com
+      uid: 6666
+      gid: 66666
+      gecos: User6
+      dir: /tmp/authd-delete-cmd-test/home/user6@example.com
+      shell: /bin/sh
+      broker_id: "2221040704"
+    - name: user7@example.com
+      uid: 7777
+      gid: 77777
+      gecos: User7
+      dir: /tmp/authd-delete-cmd-test/home/user7@example.com
+      shell: /bin/sh
+      broker_id: "2221040704"
+groups:
+    - name: group1
+      gid: 11111
+      ugid: "12345678"
+    - name: group2
+      gid: 22222
+      ugid: "23456781"
+    - name: group3
+      gid: 33333
+      ugid: "34567812"
+    - name: group4
+      gid: 44444
+      ugid: "45678123"
+    - name: group5
+      gid: 55555
+      ugid: "56781234"
+    - name: group6
+      gid: 66666
+      ugid: "67812345"
+    - name: group7
+      gid: 77777
+      ugid: "78123456"
+users_to_groups:
+    - uid: 1111
+      gid: 11111
+    - uid: 2222
+      gid: 22222
+    - uid: 3333
+      gid: 33333
+    - uid: 4444
+      gid: 44444
+    - uid: 5555
+      gid: 55555
+    - uid: 6666
+      gid: 66666
+    - uid: 7777
+      gid: 77777
