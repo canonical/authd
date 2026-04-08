@@ -23,7 +23,6 @@ import (
 	"github.com/canonical/authd/internal/services/errmessages"
 	"github.com/canonical/authd/internal/testlog"
 	"github.com/canonical/authd/internal/testutils"
-	"github.com/canonical/authd/internal/users/db/bbolt"
 	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -482,21 +481,4 @@ func requireGetEntExists(t *testing.T, nssLibrary, authdSocket, user string, exi
 		return
 	}
 	require.NoError(t, err, "getent should not fail for user %q\n%s", user, out)
-}
-
-func useOldDatabaseEnv(t *testing.T, oldDB string) []string {
-	t.Helper()
-
-	if oldDB == "" {
-		return nil
-	}
-
-	tempDir := t.TempDir()
-	oldDBDir, err := os.MkdirTemp(tempDir, "old-db-path")
-	require.NoError(t, err, "Cannot create db directory in %q", tempDir)
-
-	err = bbolt.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", oldDB+".db.yaml"), oldDBDir)
-	require.NoError(t, err, "Setup: creating old database")
-
-	return []string{fmt.Sprintf("AUTHD_INTEGRATIONTESTS_OLD_DB_DIR=%s", oldDBDir)}
 }

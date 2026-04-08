@@ -5,13 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/canonical/authd/internal/consts"
 	"github.com/canonical/authd/internal/fileutils"
-	"github.com/canonical/authd/internal/testutils/golden"
-	"github.com/canonical/authd/internal/users/db"
-	"github.com/canonical/authd/internal/users/db/bbolt"
-	localgrouptestutils "github.com/canonical/authd/internal/users/localentries/testutils"
-	userslocking "github.com/canonical/authd/internal/users/locking"
 	"github.com/stretchr/testify/require"
 )
 
@@ -117,109 +111,6 @@ func TestMaybeMigrateOldDBDir(t *testing.T) {
 				_, err := os.Stat(filepath.Join(newDir, dbFilename))
 				require.NoError(t, err, "db file does not exist in new dir")
 			}
-		})
-	}
-}
-
-func TestMaybeMigrateBBoltToSQLite(t *testing.T) {
-	validTestdata := "testdata/multiple_users_and_groups.db.yaml"
-	invalidTestdata := "testdata/invalid.db.yaml"
-	groupFile := "testdata/group"
-
-	// Make the userslocking package use a locking mechanism which doesn't
-	// require root privileges.
-	userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
-
-	testCases := map[string]struct {
-		bboltExists      bool
-		sqliteExists     bool
-		bboltUnreadable  bool
-		sqliteUnreadable bool
-		bboltInvalid     bool
-
-		wantMigrated bool
-		wantError    bool
-	}{
-		"Migration_if_bbolt_exists_and_sqlite_does_not_exist": {bboltExists: true, wantMigrated: true},
-
-		"No_migration_if_bbolt_does_not_exist":        {bboltExists: false, wantMigrated: false},
-		"No_migration_if_both_bbolt_and_sqlite_exist": {bboltExists: true, sqliteExists: true},
-		"No_migration_if_bbolt_is_unreadable":         {bboltUnreadable: true, wantMigrated: false},
-
-		"Error_if_bbolt_contains_invalid_data": {bboltInvalid: true, wantError: true},
-	}
-
-	for name, tc := range testCases {
-		t.Run(name, func(t *testing.T) {
-			// These tests can't be run in parallel, because they set the group file
-			// used by the db package, which is a global variable.
-
-			dbDir := t.TempDir()
-
-			if tc.bboltExists {
-				err := bbolt.Z_ForTests_CreateDBFromYAML(validTestdata, dbDir)
-				require.NoError(t, err, "failed to create bbolt database")
-			}
-
-			if tc.bboltInvalid {
-				err := bbolt.Z_ForTests_CreateDBFromYAML(invalidTestdata, dbDir)
-				require.NoError(t, err, "failed to create bbolt database")
-			}
-
-			if tc.sqliteExists {
-				err := fileutils.Touch(filepath.Join(dbDir, consts.DefaultDatabaseFileName))
-				require.NoError(t, err, "failed to create sqlite file")
-			}
-
-			if tc.bboltUnreadable {
-				err := os.Chmod(dbDir, 0000)
-				require.NoError(t, err, "failed to make bbolt dir unreadable")
-				// Ensure that the directory is readable after the test, to avoid issues with cleanup
-				defer func() {
-					//nolint:gosec // G302 Permissions 0700 are not insecure for a directory
-					err := os.Chmod(dbDir, 0700)
-					require.NoError(t, err, "failed to make bbolt dir readable")
-				}()
-			}
-
-			// Create a temporary user group file for testing
-			tempGroupFile := filepath.Join(t.TempDir(), "groups")
-			err := fileutils.CopyFile(groupFile, tempGroupFile)
-			require.NoError(t, err, "failed to copy group file for testing")
-
-			// Make the localentries package use the test group file.
-			tempGroupFile = localgrouptestutils.SetupGroupMock(t, tempGroupFile)
-
-			migrated, err := maybeMigrateBBoltToSQLite(dbDir)
-			if tc.wantError {
-				require.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			require.Equal(t, tc.wantMigrated, migrated)
-
-			if !migrated {
-				return
-			}
-
-			// Check that the bbolt database has been removed
-			exists, err := fileutils.FileExists(filepath.Join(dbDir, bbolt.DBFilename()))
-			require.NoError(t, err)
-			require.False(t, exists)
-
-			// Check the content of the SQLite database
-			database, err := db.New(dbDir)
-			t.Cleanup(func() {
-				err := database.Close()
-				require.NoError(t, err)
-			})
-			require.NoError(t, err)
-
-			yamlData, err := db.Z_ForTests_DumpNormalizedYAML(database)
-			require.NoError(t, err)
-			golden.CheckOrUpdate(t, yamlData, golden.WithPath("db"))
-
-			golden.CheckOrUpdateFileTree(t, tempGroupFile, golden.WithPath("group"))
 		})
 	}
 }
