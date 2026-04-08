@@ -183,8 +183,8 @@ class BrowserWindow(Gtk.Window):
         self.web_view.grab_focus()
 
     def wait_for_pattern(self, pattern, timeout_ms=5000,
-                         poll_interval_ms=100) -> str|None:
-        """Wait until `text` is present in the page's visible text and return the matched substring."""
+                         poll_interval_ms=100) -> str | None:
+        """Wait until `pattern` is present in the page's visible text and return the matched substring."""
         logger.info(f"Waiting for pattern '{pattern}'...")
         loop = GLib.MainLoop()
         cancellable = Gio.Cancellable()
