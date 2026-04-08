@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
 	"maps"
 	"math"
 	"os"
@@ -24,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	"github.com/canonical/authd/internal/brokers/auth"

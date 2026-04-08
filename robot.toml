@@ -1,0 +1,28 @@
+# This file configures RobotCode, a plugin for Robot Framework in VS Code and
+# IntelliJ. It is only used for code completion and IntelliSense, and does not
+# affect the actual execution of tests.
+
+# Extend the Python path to include the directories where Robot Framework
+# libraries are located.
+extend-python-path = [
+    # We follow the recommended project structure for Robot Framework tests [1],
+    # which is to put resources in a "resources" directory, import them
+    # from there (e.g. "Resource  ../resources/my_resource.robot"), and add the
+    # project root (in this case the "e2e-tests" directory) to the Python path.
+    # [1] https://docs.robotframework.org/docs/examples/project_structure
+    "e2e-tests",
+    # Add the directories where the Robot Framework libraries of YARF are located.
+    "e2e-tests/.yarf/yarf/rf_libraries/libraries/vnc",
+    "e2e-tests/.yarf/yarf/rf_libraries/resources",
+    "e2e-tests/.yarf/yarf/rf_libraries/variables",
+]
+
+[env]
+# These environment variables are used in our Robot Framework libraries to
+# determine which broker and release to test against. Setting them here allows
+# RobotCode to provide code completion for them. It does not affect the actual
+# execution of tests, which is determined by the environment variables set by
+# the run-tests.sh script.
+BROKER = "authd-msentraid"
+RELEASE = "resolute"
+E2E_USER = "e2e-test-user"
