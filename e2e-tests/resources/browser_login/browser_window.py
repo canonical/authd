@@ -356,7 +356,7 @@ class BrowserWindow(Gtk.Window):
         return True
 
     def capture_snapshot(self, path: str, filename: str = "snapshot", ext: str = "png",
-                         sync: bool = True, cancellable: Gio.Cancellable = None):
+                         sync: bool = True, cancellable: Gio.Cancellable = None) -> str:
         view_window = self.web_view.get_window()
         scale = view_window.get_scale_factor()
         width = view_window.get_width() * scale
@@ -419,7 +419,7 @@ class BrowserWindow(Gtk.Window):
         self._recording_cancellable = cancellable
         self._recording_fps = fps
 
-    def stop_recording(self, rendered_output: str = None):
+    def stop_recording(self, rendered_output: str | None = None):
         if not self._recording_cancellable:
             return
 
