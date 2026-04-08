@@ -59,19 +59,10 @@ class BrowserWindow(Gtk.Window):
             Gtk.StateFlags.ACTIVE | Gtk.StateFlags.FOCUSED, True
         )
 
-        def on_event(_, event):
-            if (
-                event.type != Gdk.EventType.KEY_PRESS
-                and event.type != Gdk.EventType.KEY_RELEASE
-            ):
-                return
-            return False
-
         self.web_view.add_events(
             Gdk.EventMask.ALL_EVENTS_MASK
             & ~(Gdk.EventMask.EXPOSURE_MASK | Gdk.EventMask.STRUCTURE_MASK)
         )
-        self.web_view.connect("event", on_event)
 
         self.load_state = WebKit.LoadEvent.STARTED
 
