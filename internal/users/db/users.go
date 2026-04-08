@@ -191,6 +191,36 @@ func (m *Manager) DeleteUser(uid uint32) error {
 	return nil
 }
 
+// UsersWithPrimaryGroup returns all users whose primary GID matches the given GID.
+func (m *Manager) UsersWithPrimaryGroup(gid uint32) ([]UserRow, error) {
+	return usersWithPrimaryGroup(m.db, gid)
+}
+
+func usersWithPrimaryGroup(db queryable, gid uint32) ([]UserRow, error) {
+	query := fmt.Sprintf(`SELECT %s FROM users WHERE gid = ?`, publicUserColumns)
+	rows, err := db.Query(query, gid)
+	if err != nil {
+		return nil, fmt.Errorf("query error: %w", err)
+	}
+	defer closeRows(rows)
+
+	var users []UserRow
+	for rows.Next() {
+		var u UserRow
+		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked)
+		if err != nil {
+			return nil, fmt.Errorf("scan error: %w", err)
+		}
+		users = append(users, u)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+
+	return users, nil
+}
+
 // UserWithGroups returns a user and their groups, including local groups, in a single transaction.
 func (m *Manager) UserWithGroups(name string) (u UserRow, groups []GroupRow, localGroups []string, err error) {
 	// Start a transaction

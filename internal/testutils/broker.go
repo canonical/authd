@@ -349,6 +349,14 @@ func (b *BrokerBusMock) UserPreCheck(username string) (userinfo string, dbusErr 
 	return userInfoFromName(username, nil), nil
 }
 
+// DeleteUser removes broker side user data or returns an error if requested.
+func (b *BrokerBusMock) DeleteUser(username string) (dbusErr *dbus.Error) {
+	if strings.Contains(username, "delete_error") {
+		return dbus.MakeFailedError(fmt.Errorf("broker %q: DeleteUser errored out", b.name))
+	}
+	return nil
+}
+
 // parseSessionID is wrapper around the sessionID to remove some values appended during the tests.
 //
 // The sessionID can have multiple values appended to differentiate between subtests and avoid concurrency conflicts,

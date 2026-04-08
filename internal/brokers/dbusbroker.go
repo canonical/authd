@@ -140,6 +140,14 @@ func (b dbusBroker) UserPreCheck(ctx context.Context, username string) (userinfo
 	return userinfo, nil
 }
 
+// DeleteUser calls the corresponding method on the broker bus to delete broker side user data.
+func (b dbusBroker) DeleteUser(ctx context.Context, username string) error {
+	if _, err := b.call(ctx, "DeleteUser", username); err != nil {
+		return err
+	}
+	return nil
+}
+
 // call is an abstraction over dbus calls to ensure we wrap the returned error to an ErrorToDisplay.
 // All wrapped errors will be logged, but not returned to the UI.
 func (b dbusBroker) call(ctx context.Context, method string, args ...interface{}) (*dbus.Call, error) {

@@ -137,6 +137,8 @@ service UserService {
   rpc UnlockUser(UnlockUserRequest) returns (Empty);
   rpc SetUserID(SetUserIDRequest) returns (SetUserIDResponse);
   rpc SetGroupID(SetGroupIDRequest) returns (SetGroupIDResponse);
+  rpc DeleteUser(DeleteUserRequest) returns (Empty);
+  rpc DeleteGroup(DeleteGroupRequest) returns (Empty);
 
   rpc GetGroupByName(GetGroupByNameRequest) returns (Group);
   rpc GetGroupByID(GetGroupByIDRequest) returns (Group);
@@ -157,6 +159,16 @@ message LockUserRequest{
 }
 
 message UnlockUserRequest{
+  string name = 1;
+}
+
+message DeleteUserRequest{
+  string name = 1;
+  // If true, remove the user's home directory.
+  bool remove_home = 2;
+}
+
+message DeleteGroupRequest{
   string name = 1;
 }
 
