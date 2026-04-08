@@ -1,8 +1,8 @@
-authd (0.6.1+git260408+188+bfe1e43f) noble; urgency=medium
+authd (0.6.1+git260408+189+d5d6f6f4) noble; urgency=medium
 
-  * Github build. Run id: 24133362523. Run number: 188.
+  * Github build. Run id: 24143149598. Run number: 189.
 
- -- adombeck <18482300+adombeck@users.noreply.github.com>  Wed, 08 Apr 2026 11:40:01 +0000
+ -- adombeck <18482300+adombeck@users.noreply.github.com>  Wed, 08 Apr 2026 15:19:28 +0000
 
 authd (0.6.1) resolute; urgency=medium
 
