@@ -165,7 +165,6 @@ function install_broker() {
 
     # Configure broker and restart services
     $SSH bash -euo pipefail -s <<-EOF
-		mkdir -p /etc/authd/brokers.d
 		cp /snap/${broker}/current/conf/authd/${broker_config} /etc/authd/brokers.d/
 		sed -i \
 			-e "s|<ISSUER_ID>|${issuer_id}|g" \

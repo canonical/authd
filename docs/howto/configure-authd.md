@@ -27,14 +27,8 @@ The steps you need to follow when allowing more users are outlined in
 
 ## Broker discovery
 
-Create the directory that will contain the declaration files of the broker(s):
-
-```shell
-sudo mkdir -p /etc/authd/brokers.d/
-```
-
-Then copy the `.conf` file from the broker snap package corresponding to the
-identity provider you want to use:
+Copy the `.conf` file from the broker snap to the directory used to declare
+which brokers are available on the system:
 
 :::::{tab-set}
 :sync-group: broker
@@ -66,8 +60,6 @@ sudo cp /snap/authd-oidc/current/conf/authd/oidc.conf /etc/authd/brokers.d/
 
 ::::
 :::::
-
-This file is used to declare the brokers available on the system.
 
 ```{note}
 Several brokers can be enabled at the same time.

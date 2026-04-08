@@ -116,7 +116,6 @@ runcmd:
   - sed -i 's|<CLIENT_ID>|{{ CLIENT_ID }}|g; s|<ISSUER_ID>|{{ ISSUER_ID }}|g' /var/snap/authd-google/current/broker.conf
   - echo 'ssh_allowed_suffixes = @example.com' >> /var/snap/authd-google/current/broker.conf
   - sed -i 's/^\(LOGIN_TIMEOUT\t\t\)[0-9]\+/\1360/' /etc/login.defs
-  - mkdir -p /etc/authd/brokers.d/
   - cp /snap/authd-google/current/conf/authd/google.conf /etc/authd/brokers.d/
   - snap restart authd-google
   - systemctl restart authd ssh
