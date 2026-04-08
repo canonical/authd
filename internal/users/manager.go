@@ -753,10 +753,10 @@ func (m *Manager) DeleteUser(username string, removeHome bool) error {
 
 // isGroupPrimaryForUsers returns the names of users for which the given GID is
 // their primary group. It returns an empty slice when no such users exist.
-func (m *Manager) isGroupPrimaryForUsers(groupname string, gid uint32) ([]string, error) {
+func (m *Manager) isGroupPrimaryForUsers(gid uint32) ([]string, error) {
 	primaryUsers, err := m.db.UsersWithPrimaryGroup(gid)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check for users with primary group %q: %w", groupname, err)
+		return nil, err
 	}
 
 	names := make([]string, 0, len(primaryUsers))
@@ -776,9 +776,9 @@ func (m *Manager) DeleteGroup(groupname string) error {
 		return err
 	}
 
-	primaryUserNames, err := m.isGroupPrimaryForUsers(groupname, groupRow.GID)
+	primaryUserNames, err := m.isGroupPrimaryForUsers(groupRow.GID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to check for users with primary group %q: %w", groupname, err)
 	}
 	if len(primaryUserNames) > 0 {
 		return GroupIsPrimaryError{GroupName: groupname, Users: primaryUserNames}

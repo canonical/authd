@@ -796,6 +796,153 @@ func TestUpdateBrokerForUser(t *testing.T) {
 	}
 }
 
+func TestDeleteUser(t *testing.T) {
+	tests := map[string]struct {
+		username string
+
+		localGroupsFile string
+		removeHome      bool
+
+		wantErr     bool
+		wantErrType error
+	}{
+		"Successfully_delete_user":                                   {},
+		"Successfully_delete_user_removes_them_from_local_groups":    {localGroupsFile: "users_in_groups.group"},
+		"Successfully_delete_user_keeps_other_users_in_shared_group": {username: "user2@example.com"},
+		"Successfully_delete_user_and_remove_home":                   {removeHome: true},
+
+		"Error_if_user_does_not_exist": {username: "doesnotexist@example.com", wantErrType: db.NoDataFoundError{}},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			groupFile := tc.localGroupsFile
+			if tc.localGroupsFile == "" {
+				groupFile = "empty.group"
+			}
+			destGroupFile := localgroupstestutils.SetupGroupMock(t, filepath.Join("testdata", "groups", groupFile))
+
+			if tc.username == "" {
+				tc.username = "user1@example.com"
+			}
+
+			dbDir := t.TempDir()
+			dbFile := "multiple_users_and_groups_with_tmp_home"
+			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", dbFile+".db.yaml"), dbDir)
+			require.NoError(t, err, "Setup: could not create database from testdata")
+			m := newManagerForTests(t, dbDir)
+
+			var userHome string
+			if tc.username != "doesnotexist@example.com" {
+				user, err := m.UserByName(tc.username)
+				require.NoError(t, err, "Setup: could not look up user")
+				userHome = user.Dir
+				if userHome != "" {
+					err = os.MkdirAll(userHome, 0o700)
+					require.NoError(t, err, "Setup: could not create home directory for %s", tc.username)
+				}
+			}
+			// We expect db file to have user home directories under
+			// /tmp/authd-delete-user-test to keep the cleanup logic simple
+			t.Cleanup(func() { _ = os.RemoveAll("/tmp/authd-delete-user-test/") })
+
+			err = m.DeleteUser(tc.username, tc.removeHome)
+			log.Debugf(context.Background(), "DeleteUser error: %v", err)
+
+			requireErrorAssertions(t, err, tc.wantErrType, tc.wantErr)
+			if tc.wantErrType != nil || tc.wantErr {
+				return
+			}
+
+			if tc.removeHome {
+				require.NoDirExists(t, userHome, "Home directory should have been removed")
+			} else {
+				require.DirExists(t, userHome, "Home directory should still exist")
+			}
+
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
+			require.NoError(t, err, "Created database should be valid yaml content")
+
+			golden.CheckOrUpdate(t, got)
+
+			localgroupstestutils.RequireGroupFile(t, destGroupFile, golden.Path(t))
+		})
+	}
+}
+
+func TestDeleteGroup(t *testing.T) {
+	tests := map[string]struct {
+		groupname string
+		dbFile    string
+
+		wantErr     bool
+		wantErrType error
+	}{
+		"Successfully_delete_group_keeps_its_members_in_the_db":       {groupname: "nonprimarygroup", dbFile: "multiple_users_and_groups_with_non_primary_group"},
+		"Successfully_delete_shared_group_leaves_other_groups_intact": {groupname: "commongroup", dbFile: "multiple_users_and_groups"},
+
+		"Error_if_group_does_not_exist":                       {groupname: "doesnotexist", dbFile: "multiple_users_and_groups", wantErrType: db.NoDataFoundError{}},
+		"Error_if_group_is_primary_group_of_an_existing_user": {groupname: "group1", dbFile: "multiple_users_and_groups", wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			// We don't care about the output of gpasswd in this test, but we still need to mock it.
+			_ = localgroupstestutils.SetupGroupMock(t, filepath.Join("testdata", "groups", "empty.group"))
+
+			dbDir := t.TempDir()
+			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
+			require.NoError(t, err, "Setup: could not create database from testdata")
+			m := newManagerForTests(t, dbDir)
+
+			err = m.DeleteGroup(tc.groupname)
+			log.Debugf(context.Background(), "DeleteGroup error: %v", err)
+
+			requireErrorAssertions(t, err, tc.wantErrType, tc.wantErr)
+			if tc.wantErrType != nil || tc.wantErr {
+				return
+			}
+
+			got, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
+			require.NoError(t, err, "Created database should be valid yaml content")
+
+			golden.CheckOrUpdate(t, got)
+		})
+	}
+}
+
+func TestIsGroupPrimaryForUsers(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		gid uint32
+
+		wantErr bool
+	}{
+		"Returns_users_for_which_the_group_is_primary":             {gid: 11111},
+		"Returns_empty_slice_when_no_user_has_it_as_primary":       {gid: 88888},
+		"Returns_empty_slice_for_shared_group_that_is_not_primary": {gid: 99999},
+		"Returns_multiple_users_when_group_is_primary_for_several": {gid: 55555},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dbDir := t.TempDir()
+			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "group_primary_check.db.yaml"), dbDir)
+			require.NoError(t, err, "Setup: could not create database from testdata")
+			m := newManagerForTests(t, dbDir)
+
+			got, err := m.IsGroupPrimaryForUsers(tc.gid)
+
+			requireErrorAssertions(t, err, nil, tc.wantErr)
+			if tc.wantErr {
+				return
+			}
+
+			golden.CheckOrUpdateYAML(t, got)
+		})
+	}
+}
+
 //nolint:dupl // This is not a duplicate test
 func TestLockUser(t *testing.T) {
 	tests := map[string]struct {

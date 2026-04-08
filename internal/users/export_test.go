@@ -22,6 +22,10 @@ func CompareNewUserInfoWithUserInfoFromDB(newUserInfo, dbUserInfo types.UserInfo
 	return compareNewUserInfoWithUserInfoFromDB(newUserInfo, dbUserInfo)
 }
 
+func (m *Manager) IsGroupPrimaryForUsers(gid uint32) ([]string, error) {
+	return m.isGroupPrimaryForUsers(gid)
+}
+
 const (
 	SystemdDynamicUIDMin = systemdDynamicUIDMin
 	SystemdDynamicUIDMax = systemdDynamicUIDMax
