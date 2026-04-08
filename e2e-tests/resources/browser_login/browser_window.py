@@ -274,7 +274,15 @@ class BrowserWindow(Gtk.Window):
         logger.info(f"Pattern '{pattern}' found")
         return found
 
-    def send_key(self, event_type, key):
+    def send_key(self, event_type, key, silent=False):
+        if not silent:
+            if event_type == Gdk.EventType.KEY_PRESS:
+                logger.info(f"Pressing key: {Gdk.keyval_name(key)}")
+            elif event_type == Gdk.EventType.KEY_RELEASE:
+                logger.info(f"Releasing key: {Gdk.keyval_name(key)}")
+            else:
+                logger.info(f"Key: {Gdk.keyval_name(key)}")
+
         default_seat = Gdk.Display.get_default().get_default_seat()
         event = Gdk.Event.new(event_type)
         event.set_device(default_seat.get_keyboard())
@@ -294,14 +302,16 @@ class BrowserWindow(Gtk.Window):
         event.put()
         loop.run()
 
-    def send_key_tap(self, key):
-        self.send_key(Gdk.EventType.KEY_PRESS, key)
-        self.send_key(Gdk.EventType.KEY_RELEASE, key)
+    def send_key_tap(self, key, silent=False):
+        if not silent:
+            logger.info(f"Tapping key: {Gdk.keyval_name(key)}")
+        self.send_key(Gdk.EventType.KEY_PRESS, key, silent=True)
+        self.send_key(Gdk.EventType.KEY_RELEASE, key, silent=True)
 
     def send_key_taps(self, key_taps):
-        logger.info(f"Sending key taps: {key_taps}")
+        logger.info(f"Tapping keys: {[Gdk.keyval_name(key) for key in key_taps]}")
         for kt in key_taps:
-            self.send_key_tap(kt)
+            self.send_key_tap(kt, silent=True)
 
     def _run_async_task(self, task_function, cancellable: Gio.Cancellable = None,
                         wait: bool = True):
