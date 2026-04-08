@@ -90,7 +90,7 @@ func Z_ForTests_DumpNormalizedYAML(c *Manager) (string, error) {
 	return string(yamlData), nil
 }
 
-// Z_ForTests_CreateDBFromYAML creates the bbolt database inside destDir and loads the src file content into it.
+// Z_ForTests_CreateDBFromYAML creates the database inside destDir and loads the src file content into it.
 //
 // nolint:revive,nolintlint // We want to use underscores in the function name here.
 func Z_ForTests_CreateDBFromYAML(src, destDir string) error {
@@ -111,7 +111,7 @@ func Z_ForTests_CreateDBFromYAML(src, destDir string) error {
 	return createDBFromYAMLReader(f, destDir)
 }
 
-// Z_ForTests_CreateDBFromYAML creates the bbolt database inside destDir and loads the src file content into it.
+// Z_ForTests_CreateDBFromYAML creates the database inside destDir and loads the src file content into it.
 //
 // nolint:revive,nolintlint // We want to use underscores in the function name here.
 func Z_ForTests_CreateDBFromYAMLReader(r io.Reader, destDir string) error {

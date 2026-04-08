@@ -254,10 +254,6 @@ Files: vendor/github.com/xo/*
 Copyright: 2016 Anmol Sethi
 License: Expat
 
-Files: vendor/go.etcd.io/*
-Copyright: 2013 Ben Johnson
-License: Expat
-
 Files: vendor/go.yaml.in/*
 Copyright: 2006-2011 Kirill Simonov
            2011 staring in  when the project was ported over:
