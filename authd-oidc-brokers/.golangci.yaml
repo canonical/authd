@@ -58,7 +58,7 @@ linters:
       - path: (.+)\.go$
         text: if-return
       # gosec G101: hardcoded credentials - false positive for test data (fake passwords, tokens).
-      - path: _test\.go$
+      - path: (_test\.go$|internal/testutils/)
         text: G101
       # gosec G703: path traversal via taint analysis - false positive in test code where file operation arguments are test-controlled.
       - path: (_test\.go$|internal/testutils/)
