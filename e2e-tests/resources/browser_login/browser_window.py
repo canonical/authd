@@ -297,9 +297,10 @@ class BrowserWindow(Gtk.Window):
                 loop.quit()
             return False
 
-        self.web_view.connect("event", on_event)
+        signal_id = self.web_view.connect("event", on_event)
         event.put()
         loop.run()
+        self.web_view.disconnect(signal_id)
 
     def send_key_tap(self, key, silent=False):
         if not silent:
