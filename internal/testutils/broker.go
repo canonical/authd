@@ -5,11 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"html/template"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"text/template"
 	"time"
 
 	"github.com/canonical/authd/internal/brokers/layouts"
