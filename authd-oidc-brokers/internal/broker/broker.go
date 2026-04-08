@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -155,6 +156,45 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 	return b, nil
 }
 
+// normalizedIssuer converts an issuer URL into a filesystem-safe directory name
+// by stripping the scheme and replacing path/port separators with underscores.
+func normalizedIssuer(issuerURL string) string {
+	_, issuer, found := strings.Cut(issuerURL, "://")
+	if !found {
+		// If the issuer URL does not contain a scheme, use the whole issuer URL as the issuer.
+		issuer = issuerURL
+	}
+	issuer = strings.ReplaceAll(issuer, "/", "_")
+	issuer = strings.ReplaceAll(issuer, ":", "_")
+
+	return issuer
+}
+
+// userDataDir returns the path to the broker's data directory for the given user.
+// If the issuer URL or the username contains path traversal characters, an error is returned.
+func (b *Broker) userDataDir(username string) (string, error) {
+	if username == "" {
+		return "", errors.New("username cannot be empty")
+	}
+
+	issuer := normalizedIssuer(b.cfg.issuerURL)
+	issuerDataDir := filepath.Join(b.cfg.DataDir, issuer)
+	// Check that the issuer does not contain path traversal characters by verifying that the resulting path is within
+	// the data directory and the basename matches the issuer.
+	if !strings.HasPrefix(issuerDataDir, b.cfg.DataDir) || filepath.Base(issuerDataDir) != issuer {
+		return "", fmt.Errorf("invalid issuer URL %q: path traversal detected", b.cfg.issuerURL)
+	}
+
+	dir := filepath.Join(issuerDataDir, username)
+	// Check that the username does not contain path traversal characters by verifying that the resulting path is within
+	// the issuer data directory and the basename matches the username.
+	if !strings.HasPrefix(dir, issuerDataDir) || filepath.Base(dir) != username {
+		return "", fmt.Errorf("invalid username %q: path traversal detected", username)
+	}
+
+	return dir, nil
+}
+
 // NewSession creates a new session for the user.
 func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionKey string, err error) {
 	if username == "" {
@@ -175,27 +215,11 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 		return "", "", fmt.Errorf("failed to marshal broker public key: %v", err)
 	}
 
-	_, issuer, found := strings.Cut(b.cfg.issuerURL, "://")
-	if !found {
-		// If the issuer URL does not contain a scheme, use the whole issuer URL as the issuer.
-		issuer = b.cfg.issuerURL
-	}
-	issuer = strings.ReplaceAll(issuer, "/", "_")
-	issuer = strings.ReplaceAll(issuer, ":", "_")
-
-	issuerDataDir := filepath.Join(b.cfg.DataDir, issuer)
-	// Check that the issuer does not contain path traversal characters by verifying that the resulting path is within
-	// the data directory and the basename matches the issuer.
-	if !strings.HasPrefix(issuerDataDir, b.cfg.DataDir) || filepath.Base(issuerDataDir) != issuer {
-		return "", "", fmt.Errorf("invalid issuer URL %q: path traversal detected", b.cfg.issuerURL)
+	s.userDataDir, err = b.userDataDir(username)
+	if err != nil {
+		return "", "", err
 	}
 
-	s.userDataDir = filepath.Join(issuerDataDir, username)
-	// Check that the username does not contain path traversal characters by verifying that the resulting path is within
-	// the issuer data directory and the basename matches the username.
-	if !strings.HasPrefix(s.userDataDir, issuerDataDir) || filepath.Base(s.userDataDir) != username {
-		return "", "", fmt.Errorf("invalid username %q: path traversal detected", username)
-	}
 	// The token is stored in $DATA_DIR/$ISSUER/$USERNAME/token.json.
 	s.tokenPath = filepath.Join(s.userDataDir, "token.json")
 	// The password is stored in $DATA_DIR/$ISSUER/$USERNAME/password.
@@ -1030,6 +1054,21 @@ func (b *Broker) CancelIsAuthenticated(sessionID string) {
 	if err := b.updateSession(sessionID, session); err != nil {
 		log.Errorf(context.Background(), "Error when cancelling IsAuthenticated: %v", err)
 	}
+}
+
+// DeleteUser removes all broker side data stored for the given user
+// from the broker's data directory.
+func (b *Broker) DeleteUser(username string) error {
+	userDataDir, err := b.userDataDir(username)
+	if err != nil {
+		return err
+	}
+
+	if err := os.RemoveAll(userDataDir); err != nil {
+		return fmt.Errorf("could not remove user data directory %q: %w", userDataDir, err)
+	}
+	log.Infof(context.Background(), "Deleted broker data for user %q at %q", username, userDataDir)
+	return nil
 }
 
 // UserPreCheck checks if the user is valid and can be allowed to authenticate.

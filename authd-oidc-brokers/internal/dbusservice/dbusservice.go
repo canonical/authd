@@ -47,6 +47,9 @@ const intro = `
 			<arg type="s" direction="in" name="username"/>
 			<arg type="s" direction="out" name="userInfo"/>
 		</method>
+		<method name="DeleteUser">
+			<arg type="s" direction="in" name="username"/>
+		</method>
 	</interface>` + introspect.IntrospectDataString + `</node> `
 
 // Service is the handler exposing our broker methods on the system bus.
