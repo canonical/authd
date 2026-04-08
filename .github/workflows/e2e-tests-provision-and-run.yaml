@@ -98,6 +98,8 @@ jobs:
             ) }}
 
       - uses: ./.github/actions/setup-oras
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload VM image as OCI artifact
         if: steps.provision-vm.outcome == 'success' || steps.restore-cache.outputs.cache-hit == 'true'

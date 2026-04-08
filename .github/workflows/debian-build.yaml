@@ -39,6 +39,8 @@ jobs:
       - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-oras
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Try to restore deb and sources from OCI registry
         id: restore-cache

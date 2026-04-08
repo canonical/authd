@@ -11,16 +11,8 @@ export default {
       return new Response(object.body, { headers });
     }
 
-    // Try to serve the log.html file
+    // List the directory
     const prefix = path ? path.replace(/\/?$/, "/") : "";
-    const logObject = await env.BUCKET.get(`${prefix}log.html`);
-    if (logObject) {
-      const headers = new Headers();
-      logObject.writeHttpMetadata(headers);
-      return new Response(logObject.body, { headers });
-    }
-
-    // Otherwise, list the directory
     const listing = await env.BUCKET.list({ prefix, delimiter: "/" });
 
     if (!listing.objects.length && !listing.delimitedPrefixes.length) {

@@ -20,6 +20,17 @@ set -eu
 get_version() {
     current_branch=$(git branch --show-current)
 
+    # If the current commit is tagged with a "$broker-*" tag, where $broker is
+    # the name of the current branch, use that tag as the version after stripping the prefix.
+    tags=$(git tag --points-at HEAD)
+    for tag in ${tags}; do
+        if echo "${tag}" | grep -qE "^${current_branch}-"; then
+            version="${tag#"${current_branch}"-}"
+            echo "${version}"
+            return
+        fi
+    done
+
     # Get the highest version tag which is prefixed with "broker-"
     tag=$(git -c "versionsort.suffix=-pre" tag --sort=-v:refname --merged="${current_branch}" | grep -E '^broker-' | head -n 1)
     version="${tag}"

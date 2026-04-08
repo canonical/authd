@@ -70,6 +70,8 @@ jobs:
       - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-oras
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download the broker snap
         id: download-broker-snap
@@ -230,8 +232,7 @@ jobs:
             state="success"
           fi
 
-          echo "log=${{ env.OUTPUT_DIR }}/log.html" >> "$GITHUB_OUTPUT"
-          echo "report=${{ env.OUTPUT_DIR }}/report.html" >> "$GITHUB_OUTPUT"
+          echo "output-dir=${{ env.OUTPUT_DIR }}" >> "$GITHUB_OUTPUT"
           echo "state=${state}" >> "$GITHUB_OUTPUT"
           echo "exit-code=${exit_code:-0}" >> "$GITHUB_OUTPUT"
           echo "Exit code: ${exit_code:-0}"
@@ -244,20 +245,25 @@ jobs:
           name: e2e-tests-${{ inputs.ubuntu-version }}-${{ inputs.broker }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.OUTPUT_DIR }}
 
-      - name: Prepare upload to Pages
+      - name: Prepare upload of test logs
         id: prepare-pages
-        # Only run if either the log or the report file exists
-        if: always() && (steps.run-tests.outputs.log != '' || steps.run-tests.outputs.report != '')
+        if: always() && (steps.run-tests.outputs.output-dir != '')
         run: |
           set -euo pipefail
           TARGET_DIR="pr-${{ github.event.pull_request.number }}/run-${{ github.run_id }}-${{ github.run_attempt }}/${{ inputs.ubuntu-version }}-${{ inputs.broker }}"
-          mkdir -p "pages/${TARGET_DIR}"
-          cp "${{ steps.run-tests.outputs.log }}" "pages/${TARGET_DIR}/log.html"
-          cp "${{ steps.run-tests.outputs.report }}" "pages/${TARGET_DIR}/report.html"
-          echo "target-dir=${TARGET_DIR}" >> "$GITHUB_OUTPUT"
+          PAGES_DIR="$(pwd)/pages/${TARGET_DIR}"
+          mkdir -p "${PAGES_DIR}"
+
+          # Upload the log and report
+          cd "${{ steps.run-tests.outputs.output-dir }}"
+          cp "./log.html" "${PAGES_DIR}/log.html"
+          cp "./report.html" "${PAGES_DIR}/report.html"
+          # Upload any recordings (.mp4 files), preserving the directory
+          # structure so that the links in the log still work
+          find . -name '*.mp4' -exec cp --parents {} "${PAGES_DIR}/" \;
 
           # Add a link to the parent directory to the log and report pages
-          for page in "pages/${TARGET_DIR}"/*.html; do
+          for page in "${PAGES_DIR}"/*.html; do
             sed -i 's|<div id="header"></div>|<div style="padding:8px;background:#333;"><a href=".." style="color:#aaa;font-family:sans-serif;font-size:14px;">← Back to parent directory</a></div><div id="header"></div>|' "$page"
           done
 
