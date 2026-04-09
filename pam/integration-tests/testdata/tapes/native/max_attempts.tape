@@ -44,6 +44,6 @@ Show
 Hide
 Type "wrongpass"
 Enter
-Wait+Nth(5)  /invalid password 'wrongpass', should be/
+Wait+Screen  /Maximum number of authentication attempts reached/
 ${AUTHD_TEST_TAPE_COMMAND_AUTH_FINAL_WAIT}
 Show

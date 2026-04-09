@@ -358,6 +358,12 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 			}
 			return m, sendEvent(pamError{status: pam.ErrAuth, msg: authMsg})
 
+		case auth.DeniedMaxTries:
+			if authMsg == "" {
+				authMsg = "Maximum number of tries exceeded"
+			}
+			return m, sendEvent(pamError{status: pam.ErrMaxtries, msg: authMsg})
+
 		case auth.Next:
 			if authMsg != "" {
 				m.errorMsg = authMsg

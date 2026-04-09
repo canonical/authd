@@ -654,7 +654,8 @@ func (b *Broker) IsAuthenticated(ctx context.Context, sessionID, authenticationD
 	} else if access == auth.Retry {
 		sessionInfo.attemptsPerMode[sessionInfo.currentAuthMode]++
 		if sessionInfo.attemptsPerMode[sessionInfo.currentAuthMode] >= maxAttempts {
-			access = auth.Denied
+			access = auth.DeniedMaxTries
+			data = `{"message": "Maximum number of authentication attempts reached"}`
 		}
 	}
 

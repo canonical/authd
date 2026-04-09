@@ -61,6 +61,6 @@ Show
 
 Hide
 Enter
-Wait+Screen /invalid password 'wrongpass', should be[^\n]+/
+Wait+Screen /Maximum number of authentication attempts reached/
 ${AUTHD_TEST_TAPE_COMMAND_AUTH_FINAL_WAIT}
 Show

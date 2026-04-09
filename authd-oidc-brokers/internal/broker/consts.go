@@ -6,6 +6,8 @@ const (
 	AuthGranted = "granted"
 	// AuthDenied is the response when the authentication is denied.
 	AuthDenied = "denied"
+	// AuthDeniedMaxTries is the response when the maximum number of tries has been exceeded.
+	AuthDeniedMaxTries = "denied-max-tries"
 	// AuthCancelled is the response when the authentication is cancelled.
 	AuthCancelled = "cancelled"
 	// AuthRetry is the response when the authentication needs to be retried (another chance).
@@ -15,7 +17,7 @@ const (
 )
 
 // AuthReplies is the list of all possible authentication replies.
-var AuthReplies = []string{AuthGranted, AuthDenied, AuthCancelled, AuthRetry, AuthNext}
+var AuthReplies = []string{AuthGranted, AuthDenied, AuthDeniedMaxTries, AuthCancelled, AuthRetry, AuthNext}
 
 const (
 	// AuthDataSecret is the key for the secret in the authentication data.
