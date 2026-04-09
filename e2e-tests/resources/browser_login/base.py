@@ -94,5 +94,6 @@ def run_browser_login(login_func: LoginFunc) -> None:
         finally:
             if browser.get_mapped():
                 browser.capture_snapshot(screenshot_dir, "failure")
+            logger.info("Stopping recording and closing browser")
             browser.stop_recording(os.path.join(args.output_dir, "Webview_Recording.mp4"))
             browser.destroy()

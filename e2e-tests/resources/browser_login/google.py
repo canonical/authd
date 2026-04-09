@@ -94,6 +94,7 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
     browser.wait_for_pattern("Continue on your device")
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-success")
+    logger.info("Successfully logged in")
 
 
 if __name__ == "__main__":

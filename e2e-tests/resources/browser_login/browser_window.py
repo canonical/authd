@@ -444,6 +444,7 @@ def ascii_string_to_key_events(string):
 
 
 def render_video(screenshot_dir: str, video_path: str, framerate: int = 1):
+    logger.info(f"Rendering video from screenshots in {screenshot_dir} to {video_path} at {framerate} fps...")
     subprocess.check_call([
         "ffmpeg",
         "-loglevel", "warning",
