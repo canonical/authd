@@ -54,7 +54,7 @@ export DH_GOLANG_BUILDPKG := \
 #   backported Go package is installed, because the golang-go package already
 #   satisfies the dependency. It's still fine to also add the path in that case,
 #   it will be ignored if it doesn't exist.
-export PATH := $(shell ./debian/get-depends-cargo-bin-path.sh):$(shell ./debian/get-depends-go-bin-path.sh):$(shell printenv PATH)
+export PATH := $(shell ./debian/get-depends-cargo-bin-paths.sh):$(shell ./debian/get-depends-go-bin-path.sh):$(shell printenv PATH)
 
 BUILDDIR := $(CURDIR)/obj-$(DEB_HOST_GNU_TYPE)
 
