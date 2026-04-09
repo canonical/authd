@@ -21,7 +21,7 @@ from gi.repository import (
     WebKit2 as WebKit
 )  # type: ignore
 
-logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%H:%M:%S', level=logging.INFO)
+logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%H:%M:%S', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
@@ -67,7 +67,7 @@ class BrowserWindow(Gtk.Window):
         self.load_state = WebKit.LoadEvent.STARTED
 
         def on_load_changed(_, load_event):
-            logger.info(f"Load event: {load_event.value_name}")
+            logger.debug(f"Load event: {load_event.value_name}")
             self.load_state = load_event
 
         self.web_view.connect("load-changed", on_load_changed)
@@ -140,7 +140,7 @@ class BrowserWindow(Gtk.Window):
         timed_out = False
 
         def on_load_changed(_, load_event):
-            logger.info(f"Load event during wait: {load_event.value_name}")
+            logger.debug(f"Load event during wait: {load_event.value_name}")
             if load_event != WebKit.LoadEvent.FINISHED:
                 return
 
@@ -166,15 +166,26 @@ class BrowserWindow(Gtk.Window):
         self.wait_for_page_loaded(timeout_ms=timeout_ms)
         logger.info("Waiting for page to stabilize")
 
-        # This overlay serves us to ensure that focus-related elements of the
-        # page (such as the cursor blinking) aren't affecting our page changes
-        # check mechanism.
-        # So we add an overlay and temporarily steal the focus.
-        overlay = Gtk.Button()
-        overlay.set_opacity(0)
-        self._overlay.add_overlay(overlay)
-        overlay.show()
-        overlay.grab_focus()
+        # Suppress cursor-blink draw events by hiding the caret via CSS, so
+        # that blinking doesn't reset the stability timer.  This avoids having
+        # to steal focus (which would cause the first key tap after this call
+        # to be dropped because WebKit needs time to re-focus the input element
+        # after the widget regains focus).
+        hide_caret_js = """
+            (function() {
+                var style = document.createElement('style');
+                style.id = '__authd_hide_caret__';
+                style.textContent = '* { caret-color: transparent !important; }';
+                document.head.appendChild(style);
+            })()
+        """
+        show_caret_js = """
+            (function() {
+                var el = document.getElementById('__authd_hide_caret__');
+                if (el) el.parentNode.removeChild(el);
+            })()
+        """
+        self.web_view.run_javascript(hide_caret_js, None, None)
 
         loop = GLib.MainLoop()
         timed_out = False
@@ -189,7 +200,7 @@ class BrowserWindow(Gtk.Window):
             loop.quit()
             return False
 
-        draw_timeout = 750
+        draw_timeout = 600
         timeout = GLib.timeout_add(draw_timeout, on_timeout)
         stable_timeout_id = GLib.timeout_add(timeout_ms, on_stable_timeout)
 
@@ -203,8 +214,7 @@ class BrowserWindow(Gtk.Window):
         loop.run()
         self.draw_event_disconnect(on_draw_event)
 
-        overlay.destroy()
-        self.web_view.grab_focus()
+        self.web_view.run_javascript(show_caret_js, None, None)
 
         if timed_out:
             GLib.source_remove(stable_timeout_id)
@@ -214,8 +224,8 @@ class BrowserWindow(Gtk.Window):
         logger.info("Page is stable now")
 
     def wait_for_pattern(self, pattern, timeout_ms=5000,
-                         poll_interval_ms=100) -> str | None:
-        """Wait until `pattern` is present in the page's visible text and return the matched substring."""
+                         poll_interval_ms=100) -> list[str]:
+        """Wait until `pattern` is present in the page's visible text and return all matched substrings."""
         logger.info(f"Waiting for pattern '{pattern}'...")
         loop = GLib.MainLoop()
         cancellable = Gio.Cancellable()
@@ -223,15 +233,16 @@ class BrowserWindow(Gtk.Window):
         timeout_id = 0
         found = None
 
-        # Use json.dumps / JSON.parse to safely escape the text into a JS string literal
-        # Return the first match (or empty string if none)
+        # Use json.dumps / JSON.parse to safely escape the text into a JS string literal.
+        # Use the global flag to collect all matches; return a JSON-encoded array so
+        # multiple results can be transferred as a single JS string.
         js = """(function(){
                         try {
                             var pattern = JSON.parse(`%s`);
-                            var re = new RegExp(pattern);
+                            var re = new RegExp(pattern, 'g');
                             var body = document && document.body && document.body.innerText ? document.body.innerText : '';
                             var m = body.match(re);
-                            return m ? m[0] : '';
+                            return m ? JSON.stringify(m) : '';
                         } catch (e) {
                             return '';
                         }
@@ -251,7 +262,7 @@ class BrowserWindow(Gtk.Window):
                     inject_javascript()
                     return
 
-                found = match_str
+                found = json.loads(match_str)
             except GLib.Error as e:
                 if e.matches(Gio.io_error_quark(), Gio.IOErrorEnum.CANCELLED):
                     return
@@ -293,7 +304,7 @@ class BrowserWindow(Gtk.Window):
         if not found:
             raise TimeoutError(f"Timed out after {timeout_ms}ms waiting for pattern '{pattern}'")
 
-        logger.info(f"Pattern '{pattern}' found")
+        logger.info(f"Found strings matching pattern: {found!r}")
         return found
 
     def send_key(self, event_type, key, silent=False):

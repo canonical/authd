@@ -45,9 +45,9 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
     browser.send_key_taps(
         ascii_string_to_key_events(password) + [Gdk.KEY_Return])
 
-    match = browser.wait_for_pattern(r"(Enter code|Are you trying to sign in)")
+    matches = browser.wait_for_pattern(r"(Enter code|Are you trying to sign in)")
     browser.wait_for_stable_page()
-    if match == "Enter code":
+    if "Enter code" in matches:
         browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
         browser.send_key_taps(
             ascii_string_to_key_events(generate_totp(totp_secret)) + [Gdk.KEY_Return])
