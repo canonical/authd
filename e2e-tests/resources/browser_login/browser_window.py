@@ -129,11 +129,12 @@ class BrowserWindow(Gtk.Window):
         if not self._draw_monitors and self._draw_monitors_cancellable:
             self._draw_monitors_cancellable.cancel()
 
-    def wait_for_page_loaded(self):
+    def wait_for_page_loaded(self, timeout_ms=60000):
         if self.load_state == WebKit.LoadEvent.FINISHED:
             return
 
         loop = GLib.MainLoop()
+        timed_out = False
 
         def on_load_changed(_, load_event):
             if load_event != WebKit.LoadEvent.FINISHED:
@@ -141,14 +142,23 @@ class BrowserWindow(Gtk.Window):
 
             loop.quit()
 
+        def on_timeout():
+            nonlocal timed_out
+            timed_out = True
+            loop.quit()
+            return False
+
         signal_id = self.web_view.connect("load-changed", on_load_changed)
+        timeout_id = GLib.timeout_add(timeout_ms, on_timeout)
         loop.run()
         self.web_view.disconnect(signal_id)
 
-    def wait_for_stable_page(self):
-        logger.info("Waiting for stable page state...")
-        self.wait_for_page_loaded()
-        logger.info("Stable page state reached")
+        if timed_out:
+            GLib.source_remove(timeout_id)
+            raise TimeoutError(f"Timed out after {timeout_ms}ms waiting for page to load")
+
+    def wait_for_stable_page(self, timeout_ms=60000):
+        self.wait_for_page_loaded(timeout_ms=timeout_ms)
 
         # This overlay serves us to ensure that focus-related elements of the
         # page (such as the cursor blinking) aren't affecting our page changes
@@ -161,13 +171,21 @@ class BrowserWindow(Gtk.Window):
         overlay.grab_focus()
 
         loop = GLib.MainLoop()
+        timed_out = False
 
         def on_timeout():
             loop.quit()
             return False
 
+        def on_stable_timeout():
+            nonlocal timed_out
+            timed_out = True
+            loop.quit()
+            return False
+
         draw_timeout = 750
         timeout = GLib.timeout_add(draw_timeout, on_timeout)
+        stable_timeout_id = GLib.timeout_add(timeout_ms, on_stable_timeout)
 
         def on_draw_event():
             nonlocal timeout
@@ -181,6 +199,12 @@ class BrowserWindow(Gtk.Window):
 
         overlay.destroy()
         self.web_view.grab_focus()
+
+        if timed_out:
+            GLib.source_remove(stable_timeout_id)
+            raise TimeoutError(f"Timed out after {timeout_ms}ms waiting for page to stabilize")
+
+        GLib.source_remove(stable_timeout_id)
 
     def wait_for_pattern(self, pattern, timeout_ms=5000,
                          poll_interval_ms=100) -> str | None:
