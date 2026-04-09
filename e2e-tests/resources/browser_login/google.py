@@ -48,6 +48,8 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
     browser.send_key_taps(
         ascii_string_to_key_events(password) + [Gdk.KEY_Return])
 
+    choose_an_account_pattern = "Choose an account"
+    signing_back_in_pattern = "signing back in"
     num_tries = 1
     while True:
         browser.wait_for_pattern("2-Step Verification", timeout_ms=20000)
@@ -57,7 +59,10 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
         browser.send_key_taps(ascii_string_to_key_events(totp) + [Gdk.KEY_Return])
 
         try:
-            browser.wait_for_pattern("Choose an account", timeout_ms=20000)
+            # Sometimes the "Choose an account" page is automatically skipped,
+            # so we also have to check for the "signing back in" page that comes
+            # after it.
+            match = browser.wait_for_pattern(f"{choose_an_account_pattern}|{signing_back_in_pattern}", timeout_ms=20000)
             break
         except TimeoutError:
             # The TOTP code may expire between generation and submission; retry if
@@ -74,11 +79,12 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
                 time.sleep(1)
             num_tries += 1
 
-    browser.wait_for_stable_page()
-    browser.capture_snapshot(screenshot_dir, "device-login-choose-account")
-    browser.send_key_taps([Gdk.KEY_Return])
+    if match == choose_an_account_pattern:
+        browser.wait_for_stable_page()
+        browser.capture_snapshot(screenshot_dir, "device-login-choose-account")
+        browser.send_key_taps([Gdk.KEY_Return])
+        browser.wait_for_pattern("signing back in", timeout_ms=20000)
 
-    browser.wait_for_pattern("signing back in", timeout_ms=20000)
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-confirmation")
     # Sadly, just pressing Enter is not enough here, we need to tab to the correct button.
