@@ -4,6 +4,7 @@ set -eu
 
 debian_path=$(dirname "$0")
 min_cargo_version=$(grep-dctrl -s Build-Depends -n - "${debian_path}"/control | \
+    grep -v '^\s*#' | \
     sed -n "s,.*\bcargo-\([0-9.]\+\)\b.*,\1,p")
 
 if [ -z "${min_cargo_version}" ]; then
