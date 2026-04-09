@@ -60,19 +60,22 @@ def try_login(browser, username: str, password: str, device_code: str, totp_secr
     browser.send_key_taps(
         ascii_string_to_key_events(device_code) + [Gdk.KEY_Return])
 
-    browser.wait_for_pattern("Sign in", timeout_ms=20000)
-    browser.wait_for_stable_page()
-    browser.capture_snapshot(screenshot_dir, "device-login-enter-username")
-    browser.send_key_taps(
-        ascii_string_to_key_events(username) + [Gdk.KEY_Return])
+    match = browser.wait_for_pattern("Sign in|Verify it's you", timeout_ms=20000)
+    if match == "Sign in":
+        browser.wait_for_stable_page()
+        browser.capture_snapshot(screenshot_dir, "device-login-enter-username")
+        browser.send_key_taps(
+            ascii_string_to_key_events(username) + [Gdk.KEY_Return])
 
-    browser.wait_for_pattern("Enter your password")
-    browser.wait_for_stable_page()
-    browser.capture_snapshot(screenshot_dir, "device-login-enter-password")
-    browser.send_key_taps(
-        ascii_string_to_key_events(password) + [Gdk.KEY_Return])
+        browser.wait_for_pattern("Enter your password")
+        browser.wait_for_stable_page()
+        browser.capture_snapshot(screenshot_dir, "device-login-enter-password")
+        browser.send_key_taps(
+            ascii_string_to_key_events(password) + [Gdk.KEY_Return])
 
-    browser.wait_for_pattern("2-Step Verification", timeout_ms=20000)
+        browser.wait_for_pattern("2-Step Verification", timeout_ms=20000)
+
+    # Enter the TOTP code
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
     global totp_code
@@ -94,6 +97,7 @@ def try_login(browser, username: str, password: str, device_code: str, totp_secr
         browser.send_key_taps([Gdk.KEY_Return])
         browser.wait_for_pattern("signing back in", timeout_ms=20000)
 
+    # Click on "Continue" on the "You're signing back in" page.
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-confirmation")
     # Sadly, just pressing Enter is not enough here, we need to tab to the correct button.
