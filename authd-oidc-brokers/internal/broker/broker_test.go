@@ -1353,6 +1353,61 @@ func TestCancelIsAuthenticated(t *testing.T) {
 	<-stopped
 }
 
+func TestIsAuthenticatedMaxAttempts(t *testing.T) {
+	t.Parallel()
+
+	correctPassword := "password"
+
+	tests := map[string]struct {
+		apiVersion uint
+		wantAccess string
+	}{
+		"Returns_denied-max-tries_when_api_version_is_2": {
+			apiVersion: 2,
+			wantAccess: broker.AuthDeniedMaxTries,
+		},
+		"Returns_denied-max-tries_when_api_version_is_greater_than_2": {
+			apiVersion: 3,
+			wantAccess: broker.AuthDeniedMaxTries,
+		},
+		"Returns_denied_when_api_version_is_less_than_2": {
+			apiVersion: 1,
+			wantAccess: broker.AuthDenied,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				issuerURL:  defaultIssuerURL,
+				apiVersion: tc.apiVersion,
+			})
+
+			sessionID, key := newSessionForTests(t, b, "", "")
+
+			// Store a valid token and password so that password auth mode is available.
+			generateAndStoreCachedInfo(t, tokenOptions{}, b.TokenPathForSession(sessionID))
+			err := password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID))
+			require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
+
+			wrongSecret := encryptSecret(t, "wrongpassword", key)
+			authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, wrongSecret)
+
+			err = b.SetAttemptsPerMode(sessionID, authmodes.Password, broker.MaxAuthAttempts-1)
+			require.NoError(t, err, "Setup: Failed to set auth attempts")
+			updateAuthModes(t, b, sessionID, authmodes.Password)
+
+			access, data, err := b.IsAuthenticated(sessionID, authData)
+			require.NoError(t, err, "IsAuthenticated should not have returned an error")
+
+			require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be valid JSON")
+			require.Equal(t, tc.wantAccess, access, "Final attempt should return %s", tc.wantAccess)
+			golden.CheckOrUpdateYAML(t, isAuthenticatedResponse{Access: access, Data: data, Err: ""})
+		})
+	}
+}
+
 func TestEndSession(t *testing.T) {
 	t.Parallel()
 

@@ -874,14 +874,14 @@ func TestGdmModule(t *testing.T) {
 					Msg:    "invalid password 'not yet goodpass', should be 'goodpass'",
 				},
 				{
-					Access: auth.Denied,
-					Msg:    "invalid password 'really, it's not a goodpass!', should be 'goodpass'",
+					Access: auth.DeniedMaxTries,
+					Msg:    "Maximum number of authentication attempts reached",
 				},
 			},
 			wantPamErrorMessages: []string{
-				"invalid password 'really, it's not a goodpass!', should be 'goodpass'",
+				"Maximum number of authentication attempts reached",
 			},
-			wantError:       pam.ErrAuth,
+			wantError:       pam.ErrMaxtries,
 			wantAcctMgmtErr: pam_test.ErrIgnore,
 		},
 		"Error_on_authenticating_unknown_user": {

@@ -1,0 +1,3 @@
+access: denied-max-tries
+data: '{"message":"Maximum number of authentication attempts reached"}'
+err: ""

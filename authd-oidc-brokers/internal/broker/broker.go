@@ -618,8 +618,11 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 
 	if access == AuthRetry {
 		session.attemptsPerMode[session.selectedMode]++
-		if session.attemptsPerMode[session.selectedMode] == maxAuthAttempts {
-			access = AuthDenied
+		if session.attemptsPerMode[session.selectedMode] >= maxAuthAttempts {
+			access = AuthDeniedMaxTries
+			if b.apiVersion < 2 {
+				access = AuthDenied
+			}
 			iadResponse = errorMessage{Message: "Maximum number of authentication attempts reached"}
 		}
 	}
