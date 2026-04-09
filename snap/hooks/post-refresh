@@ -11,6 +11,12 @@ fi
 
 PREVIOUS_VERSION=$(snapctl get previous-version)
 
+# Important: If you add new migrations, make sure to tag the commit which
+# first introduces the change, so that pre-release versions which already
+# contain the change (and which were automatically uploaded to the edge channel)
+# will not be migrated.
+INITIAL_WORLD_READABLE_BROKER_CONF_DIR="0.5.0-pre1"
+
 log() {
   logger -t "${SNAP_NAME}" "post-refresh: $*"
 }
@@ -27,8 +33,35 @@ valid_semver() {
   [ "${output}" = "valid" ]
 }
 
+should_transition_to_world_readable_broker_conf_dir() {
+  version_less_than "${PREVIOUS_VERSION}" "${INITIAL_WORLD_READABLE_BROKER_CONF_DIR}"
+}
+
+transition_to_world_readable_broker_conf_dir() {
+  log "Transitioning to world-readable broker.conf.d directory"
+  dir="${SNAP_DATA}/broker.conf.d"
+
+  # shellcheck disable=SC2174 # it's fine that --mode only applies to the deepest directory, because the SNAP_DATA
+  # directory is created by snapd with the correct permissions.
+  mkdir -p --mode=0755 "${dir}"
+
+  # Ensure that the files in the broker config directory are *not* world-readable,
+  # because they can contain sensitive information (like the client_secret).
+  find "${dir}" -type f -exec chmod 0600 {} \;
+
+  # Change the permissions of the broker config directory itself to be world-readable,
+  # so that its files can be listed by non-root users, allowing tab-completion
+  # to work correctly.
+  chmod 0755 "${dir}"
+}
+
 if [ -z "${PREVIOUS_VERSION}" ]; then
   log "previous-version: <not set>"
+elif ! valid_semver "${PREVIOUS_VERSION}"; then
+  log "previous-version: ${PREVIOUS_VERSION} (invalid semver)"
 else
   log "previous-version: $PREVIOUS_VERSION"
+  if should_transition_to_world_readable_broker_conf_dir; then
+    transition_to_world_readable_broker_conf_dir
+  fi
 fi

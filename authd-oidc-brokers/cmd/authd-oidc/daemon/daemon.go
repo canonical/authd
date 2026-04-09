@@ -136,7 +136,7 @@ func (a *App) serve(config daemonConfig) error {
 	}
 
 	brokerConfigDir := broker.GetDropInDir(config.Paths.BrokerConf)
-	if err := ensureDirWithPerms(brokerConfigDir, 0700, os.Geteuid()); err != nil {
+	if err := ensureDirWithPerms(brokerConfigDir, 0755, os.Geteuid()); err != nil {
 		return fmt.Errorf("error initializing broker configuration directory %q: %v", brokerConfigDir, err)
 	}
 
