@@ -67,6 +67,7 @@ class BrowserWindow(Gtk.Window):
         self.load_state = WebKit.LoadEvent.STARTED
 
         def on_load_changed(_, load_event):
+            logger.info(f"Load event: {load_event.value_name}")
             self.load_state = load_event
 
         self.web_view.connect("load-changed", on_load_changed)
@@ -130,13 +131,16 @@ class BrowserWindow(Gtk.Window):
             self._draw_monitors_cancellable.cancel()
 
     def wait_for_page_loaded(self, timeout_ms=60000):
+        logger.info("Waiting for page to load...")
         if self.load_state == WebKit.LoadEvent.FINISHED:
+            logger.info("Page already loaded")
             return
 
         loop = GLib.MainLoop()
         timed_out = False
 
         def on_load_changed(_, load_event):
+            logger.info(f"Load event during wait: {load_event.value_name}")
             if load_event != WebKit.LoadEvent.FINISHED:
                 return
 
@@ -156,9 +160,11 @@ class BrowserWindow(Gtk.Window):
         if timed_out:
             GLib.source_remove(timeout_id)
             raise TimeoutError(f"Timed out after {timeout_ms}ms waiting for page to load")
+        logger.info("Page loaded")
 
     def wait_for_stable_page(self, timeout_ms=60000):
         self.wait_for_page_loaded(timeout_ms=timeout_ms)
+        logger.info("Waiting for page to stabilize")
 
         # This overlay serves us to ensure that focus-related elements of the
         # page (such as the cursor blinking) aren't affecting our page changes
@@ -205,6 +211,7 @@ class BrowserWindow(Gtk.Window):
             raise TimeoutError(f"Timed out after {timeout_ms}ms waiting for page to stabilize")
 
         GLib.source_remove(stable_timeout_id)
+        logger.info("Page is stable now")
 
     def wait_for_pattern(self, pattern, timeout_ms=5000,
                          poll_interval_ms=100) -> str | None:
