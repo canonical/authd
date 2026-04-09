@@ -20,10 +20,34 @@ from base import (
     run_browser_login,
 )
 
-
 TOTP_CODE_MAX_TRIES = 3
+totp_code = None
+
+
+class WrongTOTPCodeError(Exception):
+    pass
+
 
 def login(browser, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):
+    num_tries = 0
+    while True:
+        try:
+            try_login(browser, username, password, device_code, totp_secret, screenshot_dir)
+            break
+        except WrongTOTPCodeError:
+            # Google sometimes rejects the TOTP code for an unclear reason. It's
+            # not enough to just wait until we get a new TOTP code and enter that
+            # on the page. Instead, we have to redo the whole login flow.
+            if num_tries == TOTP_CODE_MAX_TRIES:
+                raise RuntimeError(
+                    f"Failed to log in: TOTP code was rejected too many times ({TOTP_CODE_MAX_TRIES})")
+            logger.info("TOTP code was rejected, retrying with a new code")
+            # Wait until we get a new TOTP code
+            while generate_totp(totp_secret) == totp_code:
+                time.sleep(1)
+            num_tries += 1
+
+def try_login(browser, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):
     url = "https://accounts.google.com/o/oauth2/device/usercode?hl=en&flowName=DeviceOAuth"
     logger.info(f"Loading URL: {url}")
     browser.web_view.load_uri(url)
@@ -48,38 +72,23 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
     browser.send_key_taps(
         ascii_string_to_key_events(password) + [Gdk.KEY_Return])
 
-    choose_an_account_pattern = "Choose an account"
-    signing_back_in_pattern = "signing back in"
-    num_tries = 1
-    while True:
-        browser.wait_for_pattern("2-Step Verification", timeout_ms=20000)
-        browser.wait_for_stable_page()
-        browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
-        totp = generate_totp(totp_secret)
-        browser.send_key_taps(ascii_string_to_key_events(totp) + [Gdk.KEY_Return])
+    browser.wait_for_pattern("2-Step Verification", timeout_ms=20000)
+    browser.wait_for_stable_page()
+    browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
+    global totp_code
+    totp_code = generate_totp(totp_secret)
+    browser.send_key_taps(ascii_string_to_key_events(totp_code) + [Gdk.KEY_Return])
 
-        try:
-            # Sometimes the "Choose an account" page is automatically skipped,
-            # so we also have to check for the "signing back in" page that comes
-            # after it.
-            match = browser.wait_for_pattern(f"{choose_an_account_pattern}|{signing_back_in_pattern}", timeout_ms=20000)
-            break
-        except TimeoutError:
-            # The TOTP code may expire between generation and submission; retry if
-            # Google reports it as wrong.
-            browser.wait_for_pattern("Wrong code. Try again")
-            if num_tries == TOTP_CODE_MAX_TRIES:
-                raise RuntimeError(f"Failed to log in: TOTP code was rejected too many times ({TOTP_CODE_MAX_TRIES})")
-
-            logger.info("TOTP code was rejected, retrying with a new code")
-            # Delete the wrong code
-            browser.send_key_taps(len(totp) * [Gdk.KEY_BackSpace])
-            # Wait until we get a new TOTP code
-            while generate_totp(totp_secret) == totp:
-                time.sleep(1)
-            num_tries += 1
-
-    if match == choose_an_account_pattern:
+    # Sometimes the "Choose an account" page is automatically skipped,
+    # so we also have to check for the "signing back in" page that comes
+    # after it.
+    match = browser.wait_for_pattern(
+        f"Choose an account|signing back in|Wrong code. Try again",
+        timeout_ms=20000,
+    )
+    if match == "Wrong code. Try again":
+        raise WrongTOTPCodeError("TOTP code was rejected")
+    if match == "Choose an account":
         browser.wait_for_stable_page()
         browser.capture_snapshot(screenshot_dir, "device-login-choose-account")
         browser.send_key_taps([Gdk.KEY_Return])
