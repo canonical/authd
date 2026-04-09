@@ -15,7 +15,7 @@ def generate_totp(secret: str) -> str:
     # it might be invalid by the time we use it. To avoid this, we make sure the time
     # is safely within a new window before generating the code.
     while time.time() % 30 > (30 - TIME_WINDOW):
-        continue
+        time.sleep(0.1)
 
     key = base64.b32decode(secret, True)
     msg = struct.pack(">Q", int(time.time()) // 30)
