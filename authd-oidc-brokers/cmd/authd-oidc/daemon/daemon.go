@@ -140,6 +140,32 @@ func (a *App) serve(config daemonConfig) error {
 		return fmt.Errorf("error initializing broker configuration directory %q: %v", brokerConfigDir, err)
 	}
 
+	// Ensure that the broker configuration files have secure permissions
+	if err := checkFilePerms(config.Paths.BrokerConf, 0600); err != nil && !os.IsNotExist(err) {
+		// The error returned by checkFilePerms already contains the file path,
+		// so we don't need to wrap it with more context here.
+		return err
+	}
+
+	// Iterate over the drop-in directory and check permissions of each
+	// configuration file. We ignore subdirectories because we don't load
+	// them, so they don't represent a security risk.
+	entries, err := os.ReadDir(brokerConfigDir)
+	if err != nil {
+		return fmt.Errorf("error reading broker configuration directory %q: %v", brokerConfigDir, err)
+	}
+	for _, entry := range entries {
+		path := filepath.Join(brokerConfigDir, entry.Name())
+
+		if entry.IsDir() {
+			continue
+		}
+
+		if err := checkFilePerms(path, 0600); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+
 	b, err := broker.New(broker.Config{
 		ConfigFile: config.Paths.BrokerConf,
 		DataDir:    config.Paths.DataDir,

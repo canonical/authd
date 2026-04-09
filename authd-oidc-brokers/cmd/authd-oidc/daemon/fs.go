@@ -30,3 +30,19 @@ func ensureDirWithPerms(path string, perm os.FileMode, owner int) error {
 	}
 	return os.Mkdir(path, perm)
 }
+
+func checkFilePerms(path string, perm os.FileMode) error {
+	dir, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+
+	if !dir.Mode().IsRegular() {
+		return fmt.Errorf("path %v is not a regular file", path)
+	}
+
+	if dir.Mode() != perm {
+		return fmt.Errorf("file %v has insecure permissions: %v (should be %v)", path, dir.Mode(), perm)
+	}
+	return nil
+}
