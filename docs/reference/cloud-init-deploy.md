@@ -36,17 +36,24 @@ Define the necessary environmental variables:
 
 ## Install authd
 
-Add the authd PPA to the system's software sources and install authd:
+`authd` is available directly from the Ubuntu archive:
+
+```yaml
+packages:
+  - authd
+```
+
+:::{admonition} Add PPA before installing on Ubuntu 24.04
+:class: note
+On Ubuntu 24.04 LTS, `authd` must be installed from the stable PPA. Add the following to your cloud config, before the `packages` block:
 
 ```yaml
 apt:
   sources:
       source1:
           source: 'ppa:ubuntu-enterprise-desktop/authd'
-
-packages:
-  - authd
 ```
+:::
 
 ## Install broker
 
