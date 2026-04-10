@@ -88,7 +88,7 @@ Configure authd and the broker:
 
 ```shell
 sed -i "s|<CLIENT_ID>|$CLIENT_ID|g; s|<ISSUER_ID>|$ISSUER_ID|g" /var/snap/authd-google/current/broker.conf
-echo "ssh_allowed_suffixes = @example.com" >> /var/snap/authd-google/current/broker.conf
+echo "ssh_allowed_suffixes_first_auth = @example.com" >> /var/snap/authd-google/current/broker.conf
 mkdir -p /etc/authd/brokers.d/
 cp /snap/authd-google/current/conf/authd/google.conf /etc/authd/brokers.d/
 cat <<EOF >> /etc/ssh/sshd_config.d/authd.conf
@@ -105,7 +105,7 @@ EOF
 
 ```shell
 sed -i "s|<CLIENT_ID>|$CLIENT_ID|g; s|<ISSUER_ID>|$ISSUER_ID|g" /var/snap/authd-msentraid/current/broker.conf
-echo "ssh_allowed_suffixes = @example.onmicrosoft.com" >> /var/snap/authd-msentraid/current/broker.conf
+echo "ssh_allowed_suffixes_first_auth = @example.onmicrosoft.com" >> /var/snap/authd-msentraid/current/broker.conf
 mkdir -p /etc/authd/brokers.d/
 cp /snap/authd-msentraid/current/conf/authd/msentraid.conf /etc/authd/brokers.d/
 cat <<EOF >> /etc/ssh/sshd_config.d/authd.conf
