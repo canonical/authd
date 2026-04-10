@@ -32,7 +32,16 @@ CLIENT_ID=<CLIENT_ID>
 
 ## Installation
 
-Install the authd deb and the broker snap:
+For Ubuntu 26.04 LTS, install the authd deb and the broker snap from the archive:
+
+:::{admonition} Add PPA before installing on Ubuntu 24.04
+:class: note
+On Ubuntu 24.04 LTS, add the following line at the start of your script, before `apt-get install authd`, to add the stable PPA:
+
+```shell
+add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd
+```
+:::
 
 :::::{tab-set}
 :sync-group: broker
@@ -41,7 +50,6 @@ Install the authd deb and the broker snap:
 :sync: google
 
 ```shell
-add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd
 apt-get upgrade -y
 apt-get install -y authd
 snap install authd-google
@@ -53,7 +61,6 @@ snap install authd-google
 :sync: msentraid
 
 ```shell
-add-apt-repository -y ppa:ubuntu-enterprise-desktop/authd
 apt-get upgrade -y
 apt-get install -y authd
 snap install authd-msentraid
