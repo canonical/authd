@@ -1,8 +1,14 @@
-authd (0.6.1+git260409+209+55770627) questing; urgency=medium
+authd (0.6.2+git260410+217+d71041e4) questing; urgency=medium
 
-  * Github build. Run id: 24206102479. Run number: 209.
+  * Github build. Run id: 24244990184. Run number: 217.
 
- -- adombeck <18482300+adombeck@users.noreply.github.com>  Thu, 09 Apr 2026 18:17:08 +0000
+ -- Adrian <adrian.dombeck@canonical.com>  Fri, 10 Apr 2026 13:21:59 +0000
+
+authd (0.6.2) resolute; urgency=medium
+
+  * New upload
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Wed, 08 Apr 2026 18:29:02 +0200
 
 authd (0.6.1) resolute; urgency=medium
 
