@@ -219,11 +219,8 @@ Test Setup
 
 ### Teardown ###
 
-Log Videos On Error
-    Run Keyword If    '${TEST STATUS}' == 'FAIL'    VideoLogger.Log videos
-
 Test Teardown
     VNCRecorder.Stop Recording
     Journal.Stop Receiving Journal
     Journal.Log Journal
-    Log Videos On Error
+    VideoLogger.Log videos
