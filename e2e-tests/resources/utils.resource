@@ -14,6 +14,10 @@ Library             OperatingSystem
 
 *** Variables ***
 ${SUITE_OUTPUT_DIR}    ${OUTPUT_DIR}/${SUITE_NAME.rsplit('.')[-1]}
+# Save yarf debug screenshots as files in the suite output directory so that
+# they are referenced by relative URLs in log.html instead of being embedded
+# as base64. Set to an empty string to fall back to inline base64 embedding.
+${YARF_IMAGE_DIR}    ${SUITE_OUTPUT_DIR}/screenshots
 
 
 *** Keywords ***
