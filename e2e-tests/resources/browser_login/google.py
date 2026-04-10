@@ -98,6 +98,8 @@ class GoogleLoginFlow:
                     time.sleep(1)
                 num_totp_failures += 1
 
+    _LOGIN_TIMEOUT_S = 3 * 60  # 3 minutes
+
     def _do_login(self) -> None:
         """Load the entry URL and process pages until success."""
         url = "https://accounts.google.com/o/oauth2/device/usercode?hl=en&flowName=DeviceOAuth"
@@ -111,7 +113,11 @@ class GoogleLoginFlow:
         # After the device code is entered, Google can show pages in varying
         # order depending on the session state.  We keep dispatching to the
         # right handler until we reach the success page.
+        deadline = time.monotonic() + self._LOGIN_TIMEOUT_S
         while True:
+            if time.monotonic() > deadline:
+                raise RuntimeError(
+                    f"Login flow timed out after {self._LOGIN_TIMEOUT_S} seconds")
             # Stabilize first so that wait_for_pattern reads the new page's
             # text rather than leftovers from the previous one.  This is safe
             # to do before typing because wait_for_stable_page no longer steals
