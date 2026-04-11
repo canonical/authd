@@ -223,7 +223,10 @@ if [ -z "${FORCE:-}" ] && has_snapshot "${AUTHD_STABLE_SNAPSHOT}"; then
 else
     # Install authd stable and create a snapshot
     PPA="ubuntu-enterprise-desktop/authd"
-    $SSH "add-apt-repository -y ppa:${PPA}"
+    # Launchpad is sometimes slow to respond, so we add retries to avoid
+    # transient failures in the tests.
+    cmd="add-apt-repository -y ppa:${PPA}"
+    retry --times 5 --delay 3 -- "$SSH" -- "$cmd"
     $SSH "apt-get install -y authd"
     force_create_snapshot "${AUTHD_STABLE_SNAPSHOT}"
 fi
