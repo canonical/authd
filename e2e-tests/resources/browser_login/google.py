@@ -20,7 +20,7 @@ from base import (
     run_browser_login,
 )
 
-TOTP_CODE_MAX_TRIES = 3
+TOTP_CODE_MAX_TRIES = 5
 
 # Patterns that identify each page, used in wait_for_pattern calls.
 _ENTER_CODE = "Enter the code displayed on your device"
