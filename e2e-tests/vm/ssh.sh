@@ -36,8 +36,8 @@ done
 
 
 if [ -z "${RELEASE:-}" ]; then
-    echo "Error: Missing required argument <release>"
-    usage
+    echo >&2 "Error: Missing required argument <release>"
+    usage >&2
     exit 1
 fi
 
