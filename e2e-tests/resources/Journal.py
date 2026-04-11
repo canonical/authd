@@ -54,7 +54,9 @@ class Journal:
             logger.info("Terminating socat")
             self.socat_process.terminate()
             self.socat_process.wait()
-            logger.info("socat stderr:\n" + self.socat_process.stderr.read().decode())
+            socat_stderr = self.socat_process.stderr.read().decode()
+            socat_stderr_filtered = _filter_socat_stderr(socat_stderr)
+            logger.info("socat stderr:\n" + socat_stderr_filtered)
             self.socat_process = None
             # The systemd-journal-remote process should exit on its own when socat terminates
             try:
@@ -90,6 +92,25 @@ class Journal:
 
         html_output = Ansi2HTMLConverter(inline=True).convert(output, full=False)
         logger.info(html_output, html=True)
+
+def _filter_socat_stderr(stderr):
+    """Filter socat stderr, keeping the first write/read line and summarizing the rest."""
+    lines = []
+    skipped = 0
+    first_io_seen = False
+    for line in stderr.splitlines():
+        if "write(" in line:
+            if not first_io_seen:
+                lines.append(line)
+                first_io_seen = True
+            else:
+                skipped += 1
+        else:
+            lines.append(line)
+    if skipped:
+        lines.append(f"... ({skipped} more write lines omitted)")
+    return "\n".join(lines)
+
 
 def stream_journal_from_vm_via_tcp(output_dir, timeout=60):
     vm_name = VMUtils.vm_name()
