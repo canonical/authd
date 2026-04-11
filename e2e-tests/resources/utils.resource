@@ -226,5 +226,5 @@ Test Setup
 Test Teardown
     VNCRecorder.Stop Recording
     Journal.Stop Receiving Journal
-    Journal.Log Journal
     VideoLogger.Log videos
+    Journal.Log Journal

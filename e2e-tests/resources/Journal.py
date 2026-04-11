@@ -132,7 +132,7 @@ class Journal:
             <span id="{count_id}" style="margin-left:8px;font-size:0.85em;color:#888"></span>
             <pre id="{container_id}" style="background:#1b1b1b;color:#f8f8f2;overflow:auto;max-height:600px;margin:2px 0 0 0">{wrapped_lines}</pre>
             """
-        logger.info(html, html=True)
+        BuiltIn().set_test_message(f'*HTML*<h3 style="margin-bottom:0">Journal</h3>{html}', append=True, separator='\n')
 
 def _filter_socat_stderr(stderr):
     """Filter socat stderr, keeping the first write/read line and summarizing the rest."""
