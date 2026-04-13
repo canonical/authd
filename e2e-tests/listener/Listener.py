@@ -35,6 +35,11 @@ SILENT_KEYWORDS = [
     # Dumping the whole journal on stderr is too noisy. It's already included
     # in the HTML log and stored separately as a .journal file.
     "Journal.Log Journal",
+    # We stream the output of the browser login script continuously to stderr,
+    # and after the script finishes we log the collected output to the
+    # Robot Framework log file. To avoid duplication, we mark the login keyword
+    # as silent so its log messages are not printed to stderr.
+    "Browser.Login",
 ]
 
 def _write(text: str) -> None:
