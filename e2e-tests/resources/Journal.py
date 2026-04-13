@@ -54,7 +54,9 @@ class Journal:
             logger.info("Terminating socat")
             self.socat_process.terminate()
             self.socat_process.wait()
-            logger.info("socat stderr:\n" + self.socat_process.stderr.read().decode())
+            socat_stderr = self.socat_process.stderr.read().decode()
+            socat_stderr_filtered = _filter_socat_stderr(socat_stderr)
+            logger.info("socat stderr:\n" + socat_stderr_filtered)
             self.socat_process = None
             # The systemd-journal-remote process should exit on its own when socat terminates
             try:
@@ -89,7 +91,67 @@ class Journal:
         )
 
         html_output = Ansi2HTMLConverter(inline=True).convert(output, full=False)
-        logger.info(html_output, html=True)
+
+        # ansi2html produces a <pre> block; split on newlines so we can wrap each
+        # line in a <span> that JS can toggle.
+        lines = html_output.split('\n')
+        wrapped_lines = ''.join(
+            f'<span class="jline" style="display:block">{line}</span>'
+            for line in lines
+        )
+
+        uid = id(html_output)  # unique enough within a single report
+        container_id = f'journal-{uid}'
+        filter_id = f'journal-filter-{uid}'
+        count_id = f'journal-count-{uid}'
+
+        html = f"""
+            <input id="{filter_id}"
+              type="text"
+              placeholder="Filter journal (plain text or /regex/i)"
+              style="width:60%;padding:4px 6px;font-size:0.9em;box-sizing:border-box;margin:0"
+              oninput="(function(){{
+                var raw = document.getElementById('{filter_id}').value;
+                var pre = document.getElementById('{container_id}');
+                var lines = pre.querySelectorAll('.jline');
+                var re = null;
+                var m = raw.match(/^\\/(.+)\\/([gimsuy]*)$/);
+                if (m) {{
+                  try {{ re = new RegExp(m[1], m[2]); }} catch(e) {{ re = null; }}
+                }}
+                var shown = 0;
+                lines.forEach(function(s) {{
+                  var text = s.textContent;
+                  var visible = raw === '' || (re ? re.test(text) : text.toLowerCase().indexOf(raw.toLowerCase()) !== -1);
+                  s.style.display = visible ? 'block' : 'none';
+                  if (visible) shown++;
+                }});
+                document.getElementById('{count_id}').textContent =
+                  raw === '' ? '' : shown + ' / ' + lines.length + ' lines';
+              }})()">
+            <span id="{count_id}" style="margin-left:8px;font-size:0.85em;color:#888"></span>
+            <pre id="{container_id}" style="background:#1b1b1b;color:#f8f8f2;overflow:auto;max-height:600px;margin:2px 0 0 0">{wrapped_lines}</pre>
+            """
+        BuiltIn().set_test_message(f'*HTML*<h3 data-skip-stderr style="margin-bottom:0">Journal</h3>{html}', append=True, separator='\n')
+
+def _filter_socat_stderr(stderr):
+    """Filter socat stderr, keeping the first write/read line and summarizing the rest."""
+    lines = []
+    skipped = 0
+    first_io_seen = False
+    for line in stderr.splitlines():
+        if "write(" in line:
+            if not first_io_seen:
+                lines.append(line)
+                first_io_seen = True
+            else:
+                skipped += 1
+        else:
+            lines.append(line)
+    if skipped:
+        lines.append(f"... ({skipped} more write lines omitted)")
+    return "\n".join(lines)
+
 
 def stream_journal_from_vm_via_tcp(output_dir, timeout=60):
     vm_name = VMUtils.vm_name()

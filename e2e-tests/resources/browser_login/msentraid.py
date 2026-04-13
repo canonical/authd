@@ -4,20 +4,20 @@
 import os
 import sys
 
+import gi  # noqa: E402
+
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk  # type: ignore  # noqa: E402
+
 # Allow imports from this package when executed as a script.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from base import (  # noqa: E402
+from base import (
     ascii_string_to_key_events,
     generate_totp,
     logger,
     run_browser_login,
 )
-
-import gi  # noqa: E402
-
-gi.require_version("Gdk", "3.0")
-from gi.repository import Gdk  # type: ignore  # noqa: E402
 
 
 def login(browser, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):
@@ -45,9 +45,9 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
     browser.send_key_taps(
         ascii_string_to_key_events(password) + [Gdk.KEY_Return])
 
-    match = browser.wait_for_pattern(r"(Enter code|Are you trying to sign in)")
+    matches = browser.wait_for_pattern(r"(Enter code|Are you trying to sign in)")
     browser.wait_for_stable_page()
-    if match == "Enter code":
+    if "Enter code" in matches:
         browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
         browser.send_key_taps(
             ascii_string_to_key_events(generate_totp(totp_secret)) + [Gdk.KEY_Return])

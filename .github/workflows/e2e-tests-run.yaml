@@ -258,9 +258,10 @@ jobs:
           cd "${{ steps.run-tests.outputs.output-dir }}"
           cp "./log.html" "${PAGES_DIR}/log.html"
           cp "./report.html" "${PAGES_DIR}/report.html"
-          # Upload any recordings (.mp4 files), preserving the directory
+
+          # Upload any recordings and images, preserving the directory
           # structure so that the links in the log still work
-          find . -name '*.mp4' -exec cp --parents {} "${PAGES_DIR}/" \;
+          find . \( -name '*.mp4' -o -name '*.webp' \) -exec cp --parents {} "${PAGES_DIR}/" \;
 
           # Add a link to the parent directory to the log and report pages
           for page in "${PAGES_DIR}"/*.html; do

@@ -7,7 +7,7 @@ so it only needs to be maintained once.
 
 Usage from a broker-specific script::
 
-    from base import run_browser_login
+    from .base import run_browser_login
     def login(browser, username, password, device_code, totp_secret, screenshot_dir):
         ...
     if __name__ == "__main__":
@@ -29,18 +29,12 @@ gi.require_version("WebKit2", "4.1")
 
 from gi.repository import Gtk  # type: ignore
 
-# browser_window.py and generate_totp.py live in the sibling "authd" resource
-# directory; add it to the path so broker scripts can import them.
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "authd")))
+from browser_window import BrowserWindow, ascii_string_to_key_events  # noqa: F401
+from generate_totp import generate_totp  # noqa: F401
 
-from browser_window import BrowserWindow  # type: ignore  # resolved at runtime
-
-logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S")
+logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Re-export for convenience so broker scripts can do ``from base import ...``
-from browser_window import ascii_string_to_key_events  # type: ignore  # noqa: E402, F401
-from generate_totp import generate_totp  # type: ignore  # noqa: E402, F401
 
 LoginFunc = Callable[
     # (browser, username, password, device_code, totp_secret, screenshot_dir)
@@ -100,5 +94,6 @@ def run_browser_login(login_func: LoginFunc) -> None:
         finally:
             if browser.get_mapped():
                 browser.capture_snapshot(screenshot_dir, "failure")
+            logger.info("Stopping recording and closing browser")
             browser.stop_recording(os.path.join(args.output_dir, "Webview_Recording.mp4"))
             browser.destroy()

@@ -14,6 +14,10 @@ Library             OperatingSystem
 
 *** Variables ***
 ${SUITE_OUTPUT_DIR}    ${OUTPUT_DIR}/${SUITE_NAME.rsplit('.')[-1]}
+# Save yarf debug screenshots as files in the suite output directory so that
+# they are referenced by relative URLs in log.html instead of being embedded
+# as base64. Set to an empty string to fall back to inline base64 embedding.
+${YARF_IMAGE_DIR}    ${SUITE_OUTPUT_DIR}/screenshots
 
 
 *** Keywords ***
@@ -69,7 +73,7 @@ Try Desktop Ready
     Hid.Move Pointer To Proportional    1    1
     BuiltIn.Sleep    1
     Hid.Move Pointer To Proportional    0    1
-    Match Text    Show Apps    10
+    Match Text    Show Apps    2
 
 
 Open Terminal
@@ -219,11 +223,8 @@ Test Setup
 
 ### Teardown ###
 
-Log Videos On Error
-    Run Keyword If    '${TEST STATUS}' == 'FAIL'    VideoLogger.Log videos
-
 Test Teardown
     VNCRecorder.Stop Recording
     Journal.Stop Receiving Journal
+    VideoLogger.Log videos
     Journal.Log Journal
-    Log Videos On Error

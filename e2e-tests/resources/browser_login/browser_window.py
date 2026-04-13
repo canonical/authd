@@ -3,11 +3,11 @@ import json
 import gi
 import logging
 import os
+import subprocess
 import tempfile
 import traceback
 import sys
 
-import ExecUtils
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
@@ -21,7 +21,7 @@ from gi.repository import (
     WebKit2 as WebKit
 )  # type: ignore
 
-logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%H:%M:%S')
+logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%H:%M:%S', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
@@ -42,7 +42,7 @@ class BrowserWindow(Gtk.Window):
         self._recording_path = None
         self._recording_fps = 0
         self._recording_cancellable = None
-        self._recoding_cancellable_id = 0
+        self._recording_cancellable_id = 0
 
         self.web_view = WebKit.WebView()
         self.web_view.get_settings().enableJavascript = True
@@ -59,23 +59,15 @@ class BrowserWindow(Gtk.Window):
             Gtk.StateFlags.ACTIVE | Gtk.StateFlags.FOCUSED, True
         )
 
-        def on_event(_, event):
-            if (
-                event.type != Gdk.EventType.KEY_PRESS
-                and event.type != Gdk.EventType.KEY_RELEASE
-            ):
-                return
-            return False
-
         self.web_view.add_events(
             Gdk.EventMask.ALL_EVENTS_MASK
             & ~(Gdk.EventMask.EXPOSURE_MASK | Gdk.EventMask.STRUCTURE_MASK)
         )
-        self.web_view.connect("event", on_event)
 
         self.load_state = WebKit.LoadEvent.STARTED
 
         def on_load_changed(_, load_event):
+            logger.debug(f"Load event: {load_event.value_name}")
             self.load_state = load_event
 
         self.web_view.connect("load-changed", on_load_changed)
@@ -138,45 +130,79 @@ class BrowserWindow(Gtk.Window):
         if not self._draw_monitors and self._draw_monitors_cancellable:
             self._draw_monitors_cancellable.cancel()
 
-    def wait_for_page_loaded(self):
+    def wait_for_page_loaded(self, timeout_ms=60000):
+        logger.info("Waiting for page to load...")
         if self.load_state == WebKit.LoadEvent.FINISHED:
+            logger.info("Page already loaded")
             return
 
         loop = GLib.MainLoop()
+        timed_out = False
 
         def on_load_changed(_, load_event):
+            logger.debug(f"Load event during wait: {load_event.value_name}")
             if load_event != WebKit.LoadEvent.FINISHED:
                 return
 
             loop.quit()
 
+        def on_timeout():
+            nonlocal timed_out
+            timed_out = True
+            loop.quit()
+            return False
+
         signal_id = self.web_view.connect("load-changed", on_load_changed)
+        timeout_id = GLib.timeout_add(timeout_ms, on_timeout)
         loop.run()
         self.web_view.disconnect(signal_id)
 
-    def wait_for_stable_page(self):
-        logger.info("Waiting for stable page state...")
-        self.wait_for_page_loaded()
-        logger.info("Stable page state reached")
+        if timed_out:
+            GLib.source_remove(timeout_id)
+            raise TimeoutError(f"Timed out after {timeout_ms}ms waiting for page to load")
+        logger.info("Page loaded")
 
-        # This overlay serves us to ensure that focus-related elements of the
-        # page (such as the cursor blinking) aren't affecting our page changes
-        # check mechanism.
-        # So we add an overlay and temporarily steal the focus.
-        overlay = Gtk.Button()
-        overlay.set_opacity(0)
-        self._overlay.add_overlay(overlay)
-        overlay.show()
-        overlay.grab_focus()
+    def wait_for_stable_page(self, timeout_ms=60000):
+        self.wait_for_page_loaded(timeout_ms=timeout_ms)
+        logger.info("Waiting for page to stabilize")
+
+        # Suppress cursor-blink draw events by hiding the caret via CSS, so
+        # that blinking doesn't reset the stability timer.  This avoids having
+        # to steal focus (which would cause the first key tap after this call
+        # to be dropped because WebKit needs time to re-focus the input element
+        # after the widget regains focus).
+        hide_caret_js = """
+            (function() {
+                var style = document.createElement('style');
+                style.id = '__authd_hide_caret__';
+                style.textContent = '* { caret-color: transparent !important; }';
+                document.head.appendChild(style);
+            })()
+        """
+        show_caret_js = """
+            (function() {
+                var el = document.getElementById('__authd_hide_caret__');
+                if (el) el.parentNode.removeChild(el);
+            })()
+        """
+        self.web_view.run_javascript(hide_caret_js, None, None)
 
         loop = GLib.MainLoop()
+        timed_out = False
 
         def on_timeout():
             loop.quit()
             return False
 
-        draw_timeout = 750
+        def on_stable_timeout():
+            nonlocal timed_out
+            timed_out = True
+            loop.quit()
+            return False
+
+        draw_timeout = 600
         timeout = GLib.timeout_add(draw_timeout, on_timeout)
+        stable_timeout_id = GLib.timeout_add(timeout_ms, on_stable_timeout)
 
         def on_draw_event():
             nonlocal timeout
@@ -188,12 +214,18 @@ class BrowserWindow(Gtk.Window):
         loop.run()
         self.draw_event_disconnect(on_draw_event)
 
-        overlay.destroy()
-        self.web_view.grab_focus()
+        self.web_view.run_javascript(show_caret_js, None, None)
+
+        if timed_out:
+            GLib.source_remove(stable_timeout_id)
+            raise TimeoutError(f"Timed out after {timeout_ms}ms waiting for page to stabilize")
+
+        GLib.source_remove(stable_timeout_id)
+        logger.info("Page is stable now")
 
     def wait_for_pattern(self, pattern, timeout_ms=5000,
-                         poll_interval_ms=100) -> str|None:
-        """Wait until `text` is present in the page's visible text and return the matched substring."""
+                         poll_interval_ms=100) -> list[str]:
+        """Wait until `pattern` is present in the page's visible text and return all matched substrings."""
         logger.info(f"Waiting for pattern '{pattern}'...")
         loop = GLib.MainLoop()
         cancellable = Gio.Cancellable()
@@ -201,15 +233,16 @@ class BrowserWindow(Gtk.Window):
         timeout_id = 0
         found = None
 
-        # Use json.dumps / JSON.parse to safely escape the text into a JS string literal
-        # Return the first match (or empty string if none)
+        # Use json.dumps / JSON.parse to safely escape the text into a JS string literal.
+        # Use the global flag to collect all matches; return a JSON-encoded array so
+        # multiple results can be transferred as a single JS string.
         js = """(function(){
                         try {
                             var pattern = JSON.parse(`%s`);
-                            var re = new RegExp(pattern);
+                            var re = new RegExp(pattern, 'g');
                             var body = document && document.body && document.body.innerText ? document.body.innerText : '';
                             var m = body.match(re);
-                            return m ? m[0] : '';
+                            return m ? JSON.stringify(m) : '';
                         } catch (e) {
                             return '';
                         }
@@ -229,13 +262,13 @@ class BrowserWindow(Gtk.Window):
                     inject_javascript()
                     return
 
-                found = match_str
+                found = json.loads(match_str)
             except GLib.Error as e:
                 if e.matches(Gio.io_error_quark(), Gio.IOErrorEnum.CANCELLED):
                     return
-                raise e
-            except Exception as e:
-                raise e
+                raise
+            except Exception:
+                raise
             finally:
                 final_action()
 
@@ -271,17 +304,33 @@ class BrowserWindow(Gtk.Window):
         if not found:
             raise TimeoutError(f"Timed out after {timeout_ms}ms waiting for pattern '{pattern}'")
 
-        logger.info(f"Pattern '{pattern}' found")
+        logger.info(f"Found strings matching pattern: {found!r}")
         return found
 
-    def send_key(self, event_type, key):
-        default_seat = Gdk.Display.get_default().get_default_seat()
+    def send_key(self, event_type, key, silent=False):
+        if not silent:
+            if event_type == Gdk.EventType.KEY_PRESS:
+                logger.info(f"Pressing key: {Gdk.keyval_name(key)}")
+            elif event_type == Gdk.EventType.KEY_RELEASE:
+                logger.info(f"Releasing key: {Gdk.keyval_name(key)}")
+            else:
+                logger.info(f"Key: {Gdk.keyval_name(key)}")
+
+        display = self.get_display()
+        default_seat = display.get_default_seat()
         event = Gdk.Event.new(event_type)
         event.set_device(default_seat.get_keyboard())
         event.set_source_device(default_seat.get_keyboard())
         event.window = self.web_view.get_window()
         event.send_event = True
         event.keyval = key
+
+        # Set the hardware keycode so that WebKit correctly handles special
+        # keys such as BackSpace and Delete, which rely on it for editing.
+        keymap = Gdk.Keymap.get_for_display(display)
+        found, keys = keymap.get_entries_for_keyval(key)
+        if found and keys:
+            event.hardware_keycode = keys[0].keycode
 
         loop = GLib.MainLoop()
 
@@ -290,18 +339,21 @@ class BrowserWindow(Gtk.Window):
                 loop.quit()
             return False
 
-        self.web_view.connect("event", on_event)
+        signal_id = self.web_view.connect("event", on_event)
         event.put()
         loop.run()
+        self.web_view.disconnect(signal_id)
 
-    def send_key_tap(self, key):
-        self.send_key(Gdk.EventType.KEY_PRESS, key)
-        self.send_key(Gdk.EventType.KEY_RELEASE, key)
+    def send_key_tap(self, key, silent=False):
+        if not silent:
+            logger.info(f"Tapping key: {Gdk.keyval_name(key)}")
+        self.send_key(Gdk.EventType.KEY_PRESS, key, silent=True)
+        self.send_key(Gdk.EventType.KEY_RELEASE, key, silent=True)
 
     def send_key_taps(self, key_taps):
-        logger.info(f"Sending key taps: {key_taps}")
+        logger.info(f"Tapping keys: {[Gdk.keyval_name(key) for key in key_taps]}")
         for kt in key_taps:
-            self.send_key_tap(kt)
+            self.send_key_tap(kt, silent=True)
 
     def _run_async_task(self, task_function, cancellable: Gio.Cancellable = None,
                         wait: bool = True):
@@ -316,8 +368,8 @@ class BrowserWindow(Gtk.Window):
             except GLib.Error as e:
                 if e.matches(Gio.io_error_quark(), Gio.IOErrorEnum.CANCELLED):
                     return
-            except Exception as e:
-                raise e
+            except Exception:
+                raise
             finally:
                 if loop:
                     loop.quit()
@@ -346,7 +398,7 @@ class BrowserWindow(Gtk.Window):
         return True
 
     def capture_snapshot(self, path: str, filename: str = "snapshot", ext: str = "png",
-                         sync: bool = True, cancellable: Gio.Cancellable = None):
+                         sync: bool = True, cancellable: Gio.Cancellable = None) -> str:
         view_window = self.web_view.get_window()
         scale = view_window.get_scale_factor()
         width = view_window.get_width() * scale
@@ -384,7 +436,7 @@ class BrowserWindow(Gtk.Window):
 
         cancellable = Gio.Cancellable()
         timeout = 0
-        max_delay_ms = 1000 / fps
+        max_delay_ms = 1000 // fps
 
         self._recording_path = tempfile.TemporaryDirectory(prefix="authd-browser")
 
@@ -405,18 +457,18 @@ class BrowserWindow(Gtk.Window):
 
             self._recording_cancellable = None
 
-        self._recoding_cancellable_id = cancellable.connect(on_cancelled)
+        self._recording_cancellable_id = cancellable.connect(on_cancelled)
         self._recording_cancellable = cancellable
         self._recording_fps = fps
 
-    def stop_recording(self, rendered_output: str = None):
+    def stop_recording(self, rendered_output: str | None = None):
         if not self._recording_cancellable:
             return
 
         cancellable = self._recording_cancellable
         self._recording_cancellable.cancel()
-        cancellable.disconnect(self._recoding_cancellable_id)
-        self._recoding_cancellable_id = 0
+        cancellable.disconnect(self._recording_cancellable_id)
+        self._recording_cancellable_id = 0
 
         if rendered_output:
             self._run_async_task(lambda: render_video(self._recording_path.name,
@@ -430,11 +482,12 @@ class BrowserWindow(Gtk.Window):
 def ascii_string_to_key_events(string):
     if len(string) != len(string.encode()):
         raise TypeError(f"{string} is not an ascii string")
-    return [ord(ch) for ch in list(string)]
+    return [ord(ch) for ch in string]
 
 
 def render_video(screenshot_dir: str, video_path: str, framerate: int = 1):
-    ExecUtils.check_call([
+    logger.info(f"Rendering video from screenshots in {screenshot_dir} to {video_path} at {framerate} fps...")
+    subprocess.check_call([
         "ffmpeg",
         "-loglevel", "warning",
         # Overwrite output file if it already exists
