@@ -11,6 +11,7 @@ import (
 	"github.com/canonical/authd/log"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/msteinert/pam/v2"
 )
 
 // formModel is the form layout type to allow authentication and return a password.
@@ -80,13 +81,20 @@ func (m formModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Key presses
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "enter":
+		case "enter", "ctrl+d":
 			if m.focusIndex >= len(m.focusableModels) {
 				return m, nil
 			}
 			entry := m.focusableModels[m.focusIndex]
 			switch entry := entry.(type) {
 			case *textinputModel:
+				if msg.String() == "ctrl+d" && len(entry.Value()) == 0 {
+					return m, sendEvent(pamError{
+						status: pam.ErrAbort,
+						msg:    "cancel requested",
+					})
+				}
+
 				return m, sendEvent(isAuthenticatedRequested{
 					item: &authd.IARequest_AuthenticationData_Secret{
 						Secret: entry.Value(),
