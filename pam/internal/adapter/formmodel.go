@@ -91,7 +91,7 @@ func (m formModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if msg.String() == "ctrl+d" && len(entry.Value()) == 0 {
 					return m, sendEvent(pamError{
 						status: pam.ErrAbort,
-						msg:    "cancel requested",
+						msg:    "Authentication aborted by user",
 					})
 				}
 
