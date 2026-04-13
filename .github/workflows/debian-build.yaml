@@ -192,7 +192,13 @@ jobs:
           run-lrc: true
 
       - name: Prepare deb and sources for upload
-        if: steps.restore-cache.outputs.cache-hit != 'true'
+        # Skip if:
+        # * we have a cache hit and thus didn't build the package ourselves, or
+        # * the PR is from a fork, as we don't have the permission to upload to
+        #   the OCI registry.
+        if: >
+          steps.restore-cache.outputs.cache-hit != 'true' &&
+          github.event.pull_request.head.repo.full_name == github.repository
         run: |
           set -euo pipefail
           set -x
@@ -220,6 +226,9 @@ jobs:
           echo "PKG_TARBALL=${PKG_TARBALL}" >> ${GITHUB_ENV}
 
       - name: Upload deb and sources as OCI artifacts
+        # Skip if the PR is from a fork, as we don't have the permission to
+        # upload to the OCI registry.
+        if: github.event.pull_request.head.repo.full_name == github.repository
         run: |
           set -euo pipefail
           set -x
