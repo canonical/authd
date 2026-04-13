@@ -186,7 +186,6 @@ env \
         "${ROBOT_ARGS[@]}" \
         "$@" \
         "${TESTS_TO_RUN[@]}" \
-        | grep -v "<video controls style" \
         || test_result=$?
 
 exit "${test_result:-0}"

@@ -1,3 +1,4 @@
+import re
 import sys
 import time
 from datetime import timedelta
@@ -66,6 +67,13 @@ def _status_colour(status: str) -> str:
     }.get(status, _WHITE)
 
 
+def _sanitize_html(text: str) -> str:
+    """Remove HTML blocks marked with data-skip-stderr to avoid dumping large HTML content to the terminal."""
+    # Match any opening tag carrying the data-skip-stderr attribute and strip
+    # everything from it to the end of the string.
+    return re.sub(r"<\w[^>]*\bdata-skip-stderr\b[^>]*>.*", "", text, flags=re.DOTALL).rstrip()
+
+
 def _fmt_args(args: tuple) -> str:
     """Return a compact, single-line representation of keyword arguments."""
     if not args:
@@ -125,7 +133,8 @@ class Listener(ListenerV3):
     def end_test(self, data: running.TestCase, result: result.TestCase) -> None:
         elapsed = time.monotonic() - self._test_start
         colour = _status_colour(result.status)
-        msg = f"  {_DIM}{result.message}{_RESET}" if result.message else ""
+        message = _sanitize_html(result.message) if result.message else ""
+        msg = f"  {_DIM}{message}{_RESET}" if message else ""
         _write(
             f"{colour}{_BOLD}{'PASS' if result.passed else result.status:4}{_RESET}"
             f"  {_BOLD}{data.name}{_RESET}"
@@ -191,7 +200,6 @@ class Listener(ListenerV3):
         # Strip HTML tags if the message is HTML
         text = message.message
         if message.html:
-            import re
             text = re.sub(r"<[^>]+>", "", text)
         _write(f"{indent}{colour}{level_tag}{text}{_RESET}")
 
