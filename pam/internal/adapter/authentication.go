@@ -384,6 +384,12 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 		case auth.Cancelled:
 			// nothing to do
 			return m, nil
+
+		default:
+			return m, sendEvent(pamError{
+				status: pam.ErrSystem,
+				msg:    fmt.Sprintf("Unknown authentication access: %q", msg.access),
+			})
 		}
 
 	case errMsgToDisplay:
