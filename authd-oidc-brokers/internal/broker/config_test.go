@@ -306,7 +306,7 @@ func TestParseUserConfig(t *testing.T) {
 			wantAllowedSSHSuffixes: []string{"@issuer.url.com"},
 		},
 		"Support_old_suffixes_key":    {wantAllUsersAllowed: true, wantOwner: "machine_owner", wantAllowedSSHSuffixes: []string{"@issuer.url.com"}},
-		"SSH_suffixes_not_configured": {wantAllUsersAllowed: true, wantOwner: "machine_owner"},
+		"SSH_suffixes_not_configured": {wantAllUsersAllowed: true, wantOwner: "machine_owner", wantAllowedSSHSuffixes: nil},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
