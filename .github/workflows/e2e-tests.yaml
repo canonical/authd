@@ -59,6 +59,10 @@ concurrency:
 jobs:
   compute-hash:
     name: Compute hash of build-relevant files
+    # Skip this job (and the provision-and-run job which depends on it) if the
+    # PR is from a fork, as we don't have the permission to upload the Debian
+    # package to the OCI registry in the provision-and-run workflow.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     outputs:
       files-hash: ${{ steps.hash.outputs.hash }}
