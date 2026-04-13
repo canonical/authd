@@ -4,6 +4,8 @@ package genericprovider
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/authmodes"
 	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
@@ -117,9 +119,21 @@ func (p GenericProvider) userClaims(idToken info.Claimer) (claims, error) {
 }
 
 // IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.
-func (p GenericProvider) IsTokenExpiredError(_ *oauth2.RetrieveError) bool {
-	// TODO: Determine the correct error codes used for generic OIDC providers (e.g., Keycloak).
-	return false
+func (p GenericProvider) IsTokenExpiredError(err *oauth2.RetrieveError) bool {
+	if err.ErrorCode != "invalid_grant" {
+		return false
+	}
+
+	expiredDescriptions := []string{
+		"Session not active",         // Keycloak: online user session expired
+		"Offline session not active", // Keycloak: offline session expired or revoked
+		"Token is not active",        // Keycloak: refresh token JWT expired (exp/nbf check)
+		"Stale token",                // Keycloak: token issued before not-before policy or reuse detected
+	}
+
+	return slices.ContainsFunc(expiredDescriptions, func(desc string) bool {
+		return strings.Contains(err.ErrorDescription, desc)
+	})
 }
 
 // IsUserDisabledError returns false, as the generic provider does not support disabling users.
