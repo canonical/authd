@@ -22,7 +22,7 @@ Gimme your password:
 Gimme your password:
 >
 
-PAM Error Message: cancel requested
+PAM Error Message: Authentication aborted by user
 PAM Authenticate()
   User: "user-integration-sigint@example.com"
   Result: error: PAM exit code: 26
