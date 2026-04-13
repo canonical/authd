@@ -148,7 +148,13 @@ func (uc *userConfig) populateUsersConfig(users *ini.Section) {
 	if !users.HasKey(sshSuffixesKey) {
 		suffixesKey = sshSuffixesKeyOld
 	}
-	uc.allowedSSHSuffixes = strings.Split(users.Key(suffixesKey).String(), ",")
+	// Only parse the SSH suffixes if the key is actually present in the config.
+	// When neither key is configured, allowedSSHSuffixes stays nil, which means
+	// no SSH first-time logins are allowed (this does not affect GDM or other
+	// interactive logins).
+	if users.HasKey(suffixesKey) {
+		uc.allowedSSHSuffixes = strings.Split(users.Key(suffixesKey).String(), ",")
+	}
 
 	if uc.allowedUsers == nil {
 		uc.allowedUsers = make(map[string]struct{})

@@ -31,7 +31,7 @@ extra_scopes = groups,offline_access, some_other_scope
 
 [users]
 home_base_dir = /home
-allowed_ssh_suffixes = @issuer.url.com
+ssh_allowed_suffixes = @issuer.url.com
 `,
 
 	"invalid_boolean_value": `
@@ -179,7 +179,7 @@ client_id = client_id
 allowed_users = ALL
 owner = machine_owner
 home_base_dir = /home
-allowed_ssh_suffixes_first_auth = @issuer.url.com
+ssh_allowed_suffixes_first_auth = @issuer.url.com
 `,
 	"Only_owner_is_allowed": `
 [oidc]
@@ -190,7 +190,7 @@ client_id = client_id
 allowed_users = OWNER
 owner = machine_owner
 home_base_dir = /home
-allowed_ssh_suffixes_first_auth = @issuer.url.com
+ssh_allowed_suffixes_first_auth = @issuer.url.com
 `,
 	"By_default_only_owner_is_allowed": `
 [oidc]
@@ -200,7 +200,7 @@ client_id = client_id
 [users]
 owner = machine_owner
 home_base_dir = /home
-allowed_ssh_suffixes_first_auth = @issuer.url.com
+ssh_allowed_suffixes_first_auth = @issuer.url.com
 `,
 	"Only_owner_is_allowed_but_is_unset": `
 [oidc]
@@ -209,7 +209,7 @@ client_id = client_id
 
 [users]
 home_base_dir = /home
-allowed_ssh_suffixes_first_auth = @issuer.url.com
+ssh_allowed_suffixes_first_auth = @issuer.url.com
 `,
 	"Only_owner_is_allowed_but_is_empty": `
 [oidc]
@@ -219,7 +219,7 @@ client_id = client_id
 [users]
 owner =
 home_base_dir = /home
-allowed_ssh_suffixes_first_auth = @issuer.url.com
+ssh_allowed_suffixes_first_auth = @issuer.url.com
 `,
 	"Users_u1_and_u2_are_allowed": `
 [oidc]
@@ -229,7 +229,7 @@ client_id = client_id
 [users]
 allowed_users = u1,u2
 home_base_dir = /home
-allowed_ssh_suffixes_first_auth = @issuer.url.com
+ssh_allowed_suffixes_first_auth = @issuer.url.com
 `,
 	"Unset_owner_and_u1_is_allowed": `
 [oidc]
@@ -239,7 +239,7 @@ client_id = client_id
 [users]
 allowed_users = OWNER,u1
 home_base_dir = /home
-allowed_ssh_suffixes_first_auth = @issuer.url.com
+ssh_allowed_suffixes_first_auth = @issuer.url.com
 `,
 	"Set_owner_and_u1_is_allowed": `
 [oidc]
@@ -250,7 +250,7 @@ client_id = client_id
 allowed_users = OWNER,u1
 owner = machine_owner
 home_base_dir = /home
-allowed_ssh_suffixes_first_auth = @issuer.url.com
+ssh_allowed_suffixes_first_auth = @issuer.url.com
 `,
 	"Support_old_suffixes_key": `
 [oidc]
@@ -261,7 +261,17 @@ client_id = client_id
 allowed_users = ALL
 owner = machine_owner
 home_base_dir = /home
-allowed_ssh_suffixes = @issuer.url.com
+ssh_allowed_suffixes = @issuer.url.com
+`,
+	"SSH_suffixes_not_configured": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = ALL
+owner = machine_owner
+home_base_dir = /home
 `,
 }
 
@@ -275,24 +285,28 @@ func TestParseUserConfig(t *testing.T) {
 		wantFirstUserBecomesOwner bool
 		wantOwner                 string
 		wantAllowedUsers          []string
+		wantAllowedSSHSuffixes    []string
 	}{
-		"All_are_allowed":                    {wantAllUsersAllowed: true, wantOwner: "machine_owner"},
-		"Only_owner_is_allowed":              {wantOwnerAllowed: true, wantOwner: "machine_owner"},
-		"By_default_only_owner_is_allowed":   {wantOwnerAllowed: true, wantOwner: "machine_owner"},
-		"Only_owner_is_allowed_but_is_unset": {wantOwnerAllowed: true, wantFirstUserBecomesOwner: true},
-		"Only_owner_is_allowed_but_is_empty": {wantOwnerAllowed: true},
-		"Users_u1_and_u2_are_allowed":        {wantAllowedUsers: []string{"u1", "u2"}},
+		"All_are_allowed":                    {wantAllUsersAllowed: true, wantOwner: "machine_owner", wantAllowedSSHSuffixes: []string{"@issuer.url.com"}},
+		"Only_owner_is_allowed":              {wantOwnerAllowed: true, wantOwner: "machine_owner", wantAllowedSSHSuffixes: []string{"@issuer.url.com"}},
+		"By_default_only_owner_is_allowed":   {wantOwnerAllowed: true, wantOwner: "machine_owner", wantAllowedSSHSuffixes: []string{"@issuer.url.com"}},
+		"Only_owner_is_allowed_but_is_unset": {wantOwnerAllowed: true, wantFirstUserBecomesOwner: true, wantAllowedSSHSuffixes: []string{"@issuer.url.com"}},
+		"Only_owner_is_allowed_but_is_empty": {wantOwnerAllowed: true, wantAllowedSSHSuffixes: []string{"@issuer.url.com"}},
+		"Users_u1_and_u2_are_allowed":        {wantAllowedUsers: []string{"u1", "u2"}, wantAllowedSSHSuffixes: []string{"@issuer.url.com"}},
 		"Unset_owner_and_u1_is_allowed": {
 			wantOwnerAllowed:          true,
 			wantFirstUserBecomesOwner: true,
 			wantAllowedUsers:          []string{"u1"},
+			wantAllowedSSHSuffixes:    []string{"@issuer.url.com"},
 		},
 		"Set_owner_and_u1_is_allowed": {
-			wantOwnerAllowed: true,
-			wantOwner:        "machine_owner",
-			wantAllowedUsers: []string{"u1"},
+			wantOwnerAllowed:       true,
+			wantOwner:              "machine_owner",
+			wantAllowedUsers:       []string{"u1"},
+			wantAllowedSSHSuffixes: []string{"@issuer.url.com"},
 		},
-		"Support_old_suffixes_key": {wantAllUsersAllowed: true, wantOwner: "machine_owner"},
+		"Support_old_suffixes_key":    {wantAllUsersAllowed: true, wantOwner: "machine_owner", wantAllowedSSHSuffixes: []string{"@issuer.url.com"}},
+		"SSH_suffixes_not_configured": {wantAllUsersAllowed: true, wantOwner: "machine_owner"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -321,6 +335,7 @@ func TestParseUserConfig(t *testing.T) {
 			require.Equal(t, tc.wantOwner, cfg.owner)
 			require.Equal(t, tc.wantFirstUserBecomesOwner, cfg.firstUserBecomesOwner)
 			require.Equal(t, allowedUsersMap, cfg.allowedUsers)
+			require.Equal(t, tc.wantAllowedSSHSuffixes, cfg.allowedSSHSuffixes)
 
 			require.NoError(t, err)
 			golden.CheckOrUpdateFileTree(t, outDir)

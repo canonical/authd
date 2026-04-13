@@ -121,7 +121,7 @@ write_files:
 runcmd:
   - apt-get upgrade -y
   - sed -i 's|<CLIENT_ID>|{{ CLIENT_ID }}|g; s|<ISSUER_ID>|{{ ISSUER_ID }}|g' /var/snap/authd-google/current/broker.conf
-  - echo 'ssh_allowed_suffixes = @example.com' >> /var/snap/authd-google/current/broker.conf
+  - echo 'ssh_allowed_suffixes_first_auth = @example.com' >> /var/snap/authd-google/current/broker.conf
   - sed -i 's/^\(LOGIN_TIMEOUT\t\t\)[0-9]\+/\1360/' /etc/login.defs
   - cp /snap/authd-google/current/conf/authd/google.conf /etc/authd/brokers.d/
   - snap restart authd-google
@@ -145,7 +145,7 @@ write_files:
 runcmd:
   - apt-get upgrade -y
   - sed -i 's|<CLIENT_ID>|{{ CLIENT_ID }}|g; s|<ISSUER_ID>|{{ ISSUER_ID }}|g' /var/snap/authd-msentraid/current/broker.conf
-  - echo 'ssh_allowed_suffixes = @example.onmicrosoft.com' >> /var/snap/authd-msentraid/current/broker.conf
+  - echo 'ssh_allowed_suffixes_first_auth = @example.onmicrosoft.com' >> /var/snap/authd-msentraid/current/broker.conf
   - sed -i 's/^\(LOGIN_TIMEOUT\t\t\)[0-9]\+/\1360/' /etc/login.defs
   - mkdir -p /etc/authd/brokers.d/
   - cp /snap/authd-msentraid/current/conf/authd/msentraid.conf /etc/authd/brokers.d/
