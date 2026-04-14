@@ -100,6 +100,15 @@ The PAM module has two implementations (see `pam/Hacking.md`):
 - Enable debug: `authd daemon -vvv` (3 levels of verbosity)
 - Socket path: `/run/authd.sock` (override with `AUTHD_NSS_SOCKET` for NSS tests)
 
+## Git Usage
+
+Always pass `--no-pager` to git commands that may invoke a pager, to prevent them from hanging:
+```bash
+git --no-pager diff
+git --no-pager show
+git --no-pager log
+```
+
 ## Dependencies & Tools
 - **Go**: See `go.mod` for version requirements, uses go modules with vendoring
 - **Rust**: Cargo with vendor filtering (see `Cargo.toml` workspace)
