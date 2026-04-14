@@ -201,6 +201,7 @@ func TestUpdateUser(t *testing.T) {
 		"GID_does_not_change_if_group_with_same_name_and_empty_UGID_exists": {groupsCase: "authd-group", dbFile: "group-with-empty-UGID"},
 		"Removing_last_user_from_a_group_keeps_the_group_record":            {groupsCase: "no-groups", dbFile: "one_user_and_group"},
 		"Allow_login_with_existing_group_on_system":                         {groupsCase: "group-exists-on-system"},
+		"User_private_group_GID_preserved_across_logins":                    {dbFile: "user_with_primary_group_gid_changed"},
 
 		"Error_if_user_has_no_username":                           {userCase: "nameless", wantErr: true, noOutput: true},
 		"Error_if_group_has_no_name":                              {groupsCase: "nameless-group", wantErr: true, noOutput: true},
