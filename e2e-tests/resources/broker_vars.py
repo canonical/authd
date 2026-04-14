@@ -15,7 +15,11 @@ _BROKER_CONFIGS = {
         "BROKER_CFG_DIR": "/var/snap/authd-msentraid/current/broker.conf.d",
         "PROVIDER_DISPLAY_NAME": "Microsoft Entra ID",
         "DEVICE_URL": "login.microsoft.com/device",
-        "DEVICE_URL_REGEX": r"(https://)?login.microsoft.com/device\n((Login code: )?([A-Za-z0-9]+))",
+        # TODO: Once the stable channel ships the new URL:/Code: format, drop the
+        # optional-prefix fallbacks and simplify to r"URL:\s*(https://)?...\nCode:\s*([A-Za-z0-9]+)".
+        # They exist only for migration_broker.robot, which logs in before upgrading
+        # from stable (old bare format) to edge (new labeled format).
+        "DEVICE_URL_REGEX": r"(?:URL:\s*)?(https://)?login.microsoft.com/device\n(?:(?:Code|Login code):\s*|\s*)([A-Za-z0-9]+)",
         "remote_group": "e2e-test-group",
     },
     "authd-google": {
@@ -25,7 +29,8 @@ _BROKER_CONFIGS = {
         "BROKER_CFG_DIR": "/var/snap/authd-google/current/broker.conf.d",
         "PROVIDER_DISPLAY_NAME": "Google",
         "DEVICE_URL": "google.com/device",
-        "DEVICE_URL_REGEX": r"(https:\/\/)?google.com\/device\n((Login code: )?(([A-Za-z\- ]+)))",
+        # TODO: Same as above — simplify once stable ships the new format.
+        "DEVICE_URL_REGEX": r"(?:URL:\s*)?(https:\/\/)?google.com\/device\n(?:(?:Code|Login code):\s*|\s*)([A-Za-z\- ]+)",
         "remote_group": "",
     },
 }
