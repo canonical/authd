@@ -176,6 +176,12 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 	issuer = strings.ReplaceAll(issuer, ":", "_")
 
 	issuerDataDir := filepath.Join(b.cfg.DataDir, issuer)
+	// Check that the issuer does not contain path traversal characters by verifying that the resulting path is within
+	// the data directory and the basename matches the issuer.
+	if !strings.HasPrefix(issuerDataDir, b.cfg.DataDir) || filepath.Base(issuerDataDir) != issuer {
+		return "", "", fmt.Errorf("invalid issuer URL %q: path traversal detected", b.cfg.issuerURL)
+	}
+
 	s.userDataDir = filepath.Join(issuerDataDir, username)
 	// Check that the username does not contain path traversal characters by verifying that the resulting path is within
 	// the issuer data directory and the basename matches the username.

@@ -84,6 +84,7 @@ func TestNewSession(t *testing.T) {
 
 	tests := map[string]struct {
 		username                     string
+		issuerURL                    string
 		customHandlers               map[string]testutils.EndpointHandler
 		forceAccessCheckWithProvider bool
 
@@ -119,6 +120,10 @@ func TestNewSession(t *testing.T) {
 			username: "test/../other-user",
 			wantErr:  true,
 		},
+		"Error_when_issuer_contains_path_traversal": {
+			issuerURL: "https://..",
+			wantErr:   true,
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -127,6 +132,7 @@ func TestNewSession(t *testing.T) {
 			b := newBrokerForTests(t, &brokerForTestConfig{
 				customHandlers:               tc.customHandlers,
 				forceAccessCheckWithProvider: tc.forceAccessCheckWithProvider,
+				issuerURL:                    tc.issuerURL,
 			})
 
 			username := tc.username
