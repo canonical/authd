@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"time"
 
 	"github.com/canonical/authd/log"
 	"github.com/canonical/authd/pam/internal/dbusmodule"
@@ -17,7 +16,6 @@ import (
 var (
 	pamFlags      = flag.Int64("flags", 0, "pam flags")
 	serverAddress = flag.String("server-address", "", "the dbus connection to use to communicate with module")
-	timeout       = flag.Int64("timeout", 120, "timeout for the server connection (in seconds)")
 )
 
 func init() {
@@ -46,9 +44,7 @@ func mainFunc() error {
 		return fmt.Errorf("%w: no connection provided", pam.ErrSystem)
 	}
 
-	ctx, cancel := context.WithTimeout(context.TODO(), time.Duration(*timeout)*time.Second)
-	defer cancel()
-	mTx, closeFunc, err := dbusmodule.NewTransaction(ctx, *serverAddress)
+	mTx, closeFunc, err := dbusmodule.NewTransaction(context.Background(), *serverAddress)
 	if err != nil {
 		return fmt.Errorf("%w: can't connect to server: %w", pam.ErrSystem, err)
 	}
