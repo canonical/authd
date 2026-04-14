@@ -35,6 +35,11 @@ import (
 )
 
 const (
+	// LatestAPIVersion is the latest API version supported by the broker. It should be incremented when a non backward
+	// compatible change is made to the API.
+	// Note: Remember to also bump the LatestAPIVersion in internal/brokers/dbusbroker.go.
+	LatestAPIVersion = 2
+
 	maxAuthAttempts    = 3
 	maxRequestDuration = 5 * time.Second
 )
@@ -49,7 +54,8 @@ type Config struct {
 
 // Broker is the real implementation of the broker to track sessions and process oidc calls.
 type Broker struct {
-	cfg Config
+	cfg        Config
+	apiVersion uint
 
 	provider providers.Provider
 	oidcCfg  oidc.Config
@@ -98,7 +104,7 @@ type option struct {
 type Option func(*option)
 
 // New returns a new oidc Broker with the providers listed in the configuration file.
-func New(cfg Config, args ...Option) (b *Broker, err error) {
+func New(cfg Config, apiVersion uint, args ...Option) (b *Broker, err error) {
 	p := providers.CurrentProvider()
 
 	if cfg.ConfigFile != "" {
@@ -146,6 +152,7 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 
 	b = &Broker{
 		cfg:        cfg,
+		apiVersion: apiVersion,
 		provider:   opts.provider,
 		oidcCfg:    oidc.Config{ClientID: clientID},
 		privateKey: privateKey,

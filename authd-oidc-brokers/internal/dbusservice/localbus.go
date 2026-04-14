@@ -5,9 +5,11 @@
 package dbusservice
 
 import (
+	"context"
 	"os"
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
+	"github.com/canonical/authd/log"
 	"github.com/godbus/dbus/v5"
 )
 
