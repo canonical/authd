@@ -1,6 +1,0 @@
-localgroup1:x:41:otheruser@example.com,success_with_local_groups,otheruser2@example.com
-localgroup2:x:42:success_with_local_groups
-localgroup3:x:43:otheruser2@example.com
-localgroup4:x:44:otheruser2@example.com
-cloudgroup1:x:9998:otheruser3@example.com
-cloudgroup2:x:9999:otheruser4@example.com
