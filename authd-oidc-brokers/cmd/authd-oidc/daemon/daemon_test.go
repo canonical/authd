@@ -106,7 +106,6 @@ func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 	const (
 		// DataDir errors
 		dirIsFile = iota
-		wrongPermission
 		noParentDir
 	)
 
@@ -116,7 +115,6 @@ func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 	}{
 		"Error_on_existing_data_dir_being_a_file":    {dataDirBehavior: dirIsFile},
 		"Error_on_data_dir_missing_parent_directory": {dataDirBehavior: noParentDir},
-		"Error_on_wrong_permission_on_data_dir":      {dataDirBehavior: wrongPermission},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -127,9 +125,6 @@ func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 			case dirIsFile:
 				err := os.WriteFile(dataDir, []byte("file"), 0600)
 				require.NoError(t, err, "Setup: could not create cache file for tests")
-			case wrongPermission:
-				err := os.Mkdir(dataDir, 0600)
-				require.NoError(t, err, "Setup: could not create cache directory for tests")
 			case noParentDir:
 				dataDir = filepath.Join(dataDir, "doesnotexist", "data")
 			}

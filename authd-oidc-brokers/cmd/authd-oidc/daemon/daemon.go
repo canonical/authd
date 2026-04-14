@@ -128,15 +128,12 @@ func (a *App) serve(config daemonConfig) error {
 	}
 	defer closeFunc()
 
-	// When the data directory is SNAP_DATA, it has permission 0755, else we want to create it with 0700.
-	if err := ensureDirWithPerms(config.Paths.DataDir, 0700, os.Geteuid()); err != nil {
-		if err := ensureDirWithPerms(config.Paths.DataDir, 0755, os.Geteuid()); err != nil {
-			return fmt.Errorf("error initializing data directory %q: %v", config.Paths.DataDir, err)
-		}
+	if err := ensureDirWithOwner(config.Paths.DataDir, 0700, os.Geteuid()); err != nil {
+		return fmt.Errorf("error initializing data directory %q: %v", config.Paths.DataDir, err)
 	}
 
 	brokerConfigDir := broker.GetDropInDir(config.Paths.BrokerConf)
-	if err := ensureDirWithPerms(brokerConfigDir, 0755, os.Geteuid()); err != nil {
+	if err := ensureDirWithOwner(brokerConfigDir, 0755, os.Geteuid()); err != nil {
 		return fmt.Errorf("error initializing broker configuration directory %q: %v", brokerConfigDir, err)
 	}
 
