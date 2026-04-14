@@ -231,13 +231,11 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		}
 	}
 
-	// User private Group GID is the same of the user UID.
-	userPrivateGroup.GID = &u.UID
-
 	var groupRows []db.GroupRow
 	var localGroups []string
 	var newGroups []types.GroupInfo
-	for _, g := range u.Groups {
+	for i := range u.Groups {
+		g := &u.Groups[i]
 		if g.Name == "" {
 			return fmt.Errorf("empty group name for user %q", u.Name)
 		}
@@ -256,7 +254,7 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		}
 
 		// Check if the group already exists in the database
-		oldGroup, err := m.findGroup(g)
+		oldGroup, err := m.findGroup(*g)
 		if err != nil && !errors.Is(err, db.NoDataFoundError{}) {
 			// Unexpected error
 			return err
@@ -267,9 +265,16 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		}
 
 		if g.GID == nil {
-			// The group does not exist in the database, so we generate a unique GID for it.
-			newGroups = append(newGroups, g)
-			continue
+			// The group does not exist in the database.
+			if g == userPrivateGroup {
+				// On first login the user private group doesn't exist yet, so we default to GID = UID.
+				// Subsequent logins will find the existing group above and preserve any custom GID.
+				g.GID = &u.UID
+			} else {
+				// Else, we add it to the list of new groups to create, since we need to generate a GID for it.
+				newGroups = append(newGroups, *g)
+				continue
+			}
 		}
 
 		groupRows = append(groupRows, db.NewGroupRow(g.Name, *g.GID, g.UGID))
