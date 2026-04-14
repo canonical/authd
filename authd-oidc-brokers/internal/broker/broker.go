@@ -175,7 +175,11 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 		return "", "", fmt.Errorf("failed to marshal broker public key: %v", err)
 	}
 
-	_, issuer, _ := strings.Cut(b.cfg.issuerURL, "://")
+	_, issuer, found := strings.Cut(b.cfg.issuerURL, "://")
+	if !found {
+		// If the issuer URL does not contain a scheme, use the whole issuer URL as the issuer.
+		issuer = b.cfg.issuerURL
+	}
 	issuer = strings.ReplaceAll(issuer, "/", "_")
 	issuer = strings.ReplaceAll(issuer, ":", "_")
 
