@@ -1,16 +1,15 @@
 *** Settings ***
-Resource        ./resources/authd/utils.resource
-Resource        ./resources/authd/authd.resource
-Resource        ./resources/broker/broker.resource
+Resource        resources/utils.resource
+Resource        resources/authd.resource
+Resource        resources/broker.resource
 
 # Test Tags       robot:exit-on-failure
 
-Test Setup    utils.Test Setup    ${snapshot}
+Test Setup    utils.Test Setup    snapshot=%{BROKER}-installed
 Test Teardown   utils.Test Teardown
 
 
 *** Variables ***
-${snapshot}    %{BROKER}-installed
 ${username}    %{E2E_USER}
 ${local_password}    qwer1234
 ${new_uid}    60500
