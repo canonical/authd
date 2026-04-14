@@ -68,7 +68,7 @@ func TestNew(t *testing.T) {
 			bCfg := &broker.Config{DataDir: tc.dataDir}
 			bCfg.SetIssuerURL(tc.issuer)
 			bCfg.SetClientID(tc.clientID)
-			b, err := broker.New(*bCfg)
+			b, err := broker.New(*bCfg, broker.LatestAPIVersion)
 			if tc.wantErr {
 				require.Error(t, err, "New should have returned an error")
 				return

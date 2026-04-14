@@ -123,7 +123,7 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 		cfg.SetIssuerURL(issuerURL)
 	}
 
-	b, err := broker.New(cfg.Config, broker.WithCustomProvider(provider))
+	b, err := broker.New(cfg.Config, broker.LatestAPIVersion, broker.WithCustomProvider(provider))
 	require.NoError(t, err, "Setup: New should not have returned an error")
 	return b
 }

@@ -13,7 +13,7 @@ import (
 
 // getBus creates the local bus and returns a connection to the bus.
 // It attaches a disconnect handler to stop the local bus subprocess.
-func (s *Service) getBus() (*dbus.Conn, error) {
+func (s *Interface) getBus() (*dbus.Conn, error) {
 	cleanup, err := testutils.StartSystemBusMock()
 	if err != nil {
 		return nil, err

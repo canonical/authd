@@ -10,7 +10,7 @@ import (
 )
 
 // NewSession is the method through which the broker and the daemon will communicate once dbusInterface.NewSession is called.
-func (s *Service) NewSession(username, lang, mode string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+func (s *Interface) NewSession(username, lang, mode string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
 	log.Debugf(context.Background(), "Creating new session (username=%s, lang=%s, mode=%s)", username, lang, mode)
 	sessionID, encryptionKey, err := s.broker.NewSession(username, lang, mode)
 	if err != nil {
@@ -21,7 +21,7 @@ func (s *Service) NewSession(username, lang, mode string) (sessionID, encryption
 }
 
 // GetAuthenticationModes is the method through which the broker and the daemon will communicate once dbusInterface.GetAuthenticationModes is called.
-func (s *Service) GetAuthenticationModes(sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, dbusErr *dbus.Error) {
+func (s *Interface) GetAuthenticationModes(sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, dbusErr *dbus.Error) {
 	log.Debugf(context.Background(), "Getting authentication modes for session %s", sessionID)
 	authenticationModes, err := s.broker.GetAuthenticationModes(sessionID, supportedUILayouts)
 	if err != nil {
@@ -32,7 +32,7 @@ func (s *Service) GetAuthenticationModes(sessionID string, supportedUILayouts []
 }
 
 // SelectAuthenticationMode is the method through which the broker and the daemon will communicate once dbusInterface.SelectAuthenticationMode is called.
-func (s *Service) SelectAuthenticationMode(sessionID, authenticationModeName string) (uiLayoutInfo map[string]string, dbusErr *dbus.Error) {
+func (s *Interface) SelectAuthenticationMode(sessionID, authenticationModeName string) (uiLayoutInfo map[string]string, dbusErr *dbus.Error) {
 	log.Debugf(context.Background(), "Selecting authentication mode %s for session %s", authenticationModeName, sessionID)
 	uiLayoutInfo, err := s.broker.SelectAuthenticationMode(sessionID, authenticationModeName)
 	if err != nil {
@@ -43,7 +43,7 @@ func (s *Service) SelectAuthenticationMode(sessionID, authenticationModeName str
 }
 
 // IsAuthenticated is the method through which the broker and the daemon will communicate once dbusInterface.IsAuthenticated is called.
-func (s *Service) IsAuthenticated(sessionID, authenticationData string) (access, data string, dbusErr *dbus.Error) {
+func (s *Interface) IsAuthenticated(sessionID, authenticationData string) (access, data string, dbusErr *dbus.Error) {
 	// Do *not* log authenticationData here, because it may contain the user's password in cleartext.
 	log.Debugf(context.Background(), "Handling IsAuthenticated call for session %s", sessionID)
 	access, data, err := s.broker.IsAuthenticated(sessionID, authenticationData)
@@ -59,7 +59,7 @@ func (s *Service) IsAuthenticated(sessionID, authenticationData string) (access,
 }
 
 // EndSession is the method through which the broker and the daemon will communicate once dbusInterface.EndSession is called.
-func (s *Service) EndSession(sessionID string) (dbusErr *dbus.Error) {
+func (s *Interface) EndSession(sessionID string) (dbusErr *dbus.Error) {
 	log.Debugf(context.Background(), "Ending session %s", sessionID)
 	err := s.broker.EndSession(sessionID)
 	if err != nil {
@@ -69,14 +69,14 @@ func (s *Service) EndSession(sessionID string) (dbusErr *dbus.Error) {
 }
 
 // CancelIsAuthenticated is the method through which the broker and the daemon will communicate once dbusInterface.CancelIsAuthenticated is called.
-func (s *Service) CancelIsAuthenticated(sessionID string) (dbusErr *dbus.Error) {
+func (s *Interface) CancelIsAuthenticated(sessionID string) (dbusErr *dbus.Error) {
 	log.Debugf(context.Background(), "Cancelling IsAuthenticated call for session %s", sessionID)
 	s.broker.CancelIsAuthenticated(sessionID)
 	return nil
 }
 
 // UserPreCheck is the method through which the broker and the daemon will communicate once dbusInterface.UserPreCheck is called.
-func (s *Service) UserPreCheck(username string) (userinfo string, dbusErr *dbus.Error) {
+func (s *Interface) UserPreCheck(username string) (userinfo string, dbusErr *dbus.Error) {
 	log.Debugf(context.Background(), "UserPreCheck: %s", username)
 	userinfo, err := s.broker.UserPreCheck(username)
 	if err != nil {
