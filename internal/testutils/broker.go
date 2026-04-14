@@ -373,7 +373,7 @@ func userInfoFromName(sessionID string, extraGroups []groupJSONInfo) string {
 	// Default values
 	parsedID := parseSessionID(sessionID)
 
-	name := parsedID
+	name := parsedID + "@example.com"
 	group := "group-" + name
 	home := "/home/" + name
 	shell := "/bin/sh/" + name
@@ -384,9 +384,9 @@ func userInfoFromName(sessionID string, extraGroups []groupJSONInfo) string {
 	case "ia_info_empty_user_name":
 		name = ""
 	case "ia_info_mismatching_user_name":
-		name = "different_username"
+		name = "different_username@example.com"
 	case "ia_info_invalid_username":
-		name = "user@invalid-name"
+		name = "-invalid_username"
 	case "ia_info_empty_group_name":
 		group = ""
 	case "ia_info_empty_ugid":

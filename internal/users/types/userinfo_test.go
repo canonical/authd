@@ -153,14 +153,16 @@ func TestValidateUsername(t *testing.T) {
 		"Valid_name_with_trailing_dollar_sign":         {username: "user$"},
 		"Valid_single_character_name":                  {username: "a"},
 		"Valid_name_with_mixed_allowed_chars":          {username: "a-b_c0"},
+		"Valid_email_style_name":                       {username: "user@example.com"},
+		"Valid_email_style_name_with_subdomain":        {username: "user@sub.example.com"},
+		"Valid_name_with_dot":                          {username: "first.last"},
 
 		// Invalid usernames
 		"Error_on_empty_username":                      {username: "", wantErr: true},
 		"Error_on_uppercase_character":                 {username: "User", wantErr: true},
-		"Error_on_email_style_name":                    {username: "user@example.com", wantErr: true},
+		"Error_on_uppercase_email":                     {username: "User@example.com", wantErr: true},
 		"Error_on_name_starting_with_digit":            {username: "1user", wantErr: true},
 		"Error_on_name_starting_with_hyphen":           {username: "-user", wantErr: true},
-		"Error_on_name_with_dot":                       {username: "user.name", wantErr: true},
 		"Error_on_name_with_dollar_not_at_end":         {username: "user$name", wantErr: true},
 		"Error_on_name_with_space":                     {username: "user name", wantErr: true},
 	}

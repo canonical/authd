@@ -1,4 +1,4 @@
 FIRST CALL:
 	access: 
 	msg: 
-	err: provided userinfo is invalid: username "user@invalid-name" is not valid: it must match ^[a-z_][-a-z0-9_]*[$]?$
+	err: provided userinfo is invalid: username "-invalid_username" is not valid: it must match ^[a-z_][-a-z0-9_.@]*[$]?$

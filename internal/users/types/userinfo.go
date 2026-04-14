@@ -8,13 +8,16 @@ import (
 )
 
 // usernameRegexp is the regexp that a valid username must match.
-// It follows the Debian/Ubuntu username policy as defined by shadow-utils/useradd rules.
-var usernameRegexp = regexp.MustCompile(`^[a-z_][-a-z0-9_]*[$]?$`)
+// It follows the Debian/Ubuntu username policy as defined by shadow-utils/useradd rules,
+// extended to allow '@' and '.' characters for cloud identity provider email-style usernames
+// (e.g. user@example.com).
+var usernameRegexp = regexp.MustCompile(`^[a-z_][-a-z0-9_.@]*[$]?$`)
 
 // ValidateUsername checks if the given username is valid.
 // Valid usernames follow the Debian/Ubuntu naming convention: they start with a lowercase letter or
-// underscore, followed by lowercase letters, digits, hyphens, or underscores, with an optional
-// trailing dollar sign.
+// underscore, followed by lowercase letters, digits, hyphens, underscores, dots, or '@', with an
+// optional trailing dollar sign. The '@' and '.' characters are also permitted to support
+// email-style usernames used by cloud identity providers.
 func ValidateUsername(name string) error {
 	if !usernameRegexp.MatchString(name) {
 		return fmt.Errorf("username %q is not valid: it must match %s", name, usernameRegexp)
