@@ -1,4 +1,4 @@
 FIRST CALL:
 	access: granted
-	data: {"Name":"ia_info_empty_ugid@example.com","UID":0,"Gecos":"gecos for ia_info_empty_ugid@example.com","Dir":"/home/ia_info_empty_ugid@example.com","Shell":"/bin/sh/ia_info_empty_ugid@example.com","Groups":[{"Name":"group-ia_info_empty_ugid@example.com","GID":null,"UGID":""}]}
+	data: {"Name":"ia_info_empty_ugid","UID":0,"Gecos":"gecos for ia_info_empty_ugid","Dir":"/home/ia_info_empty_ugid","Shell":"/bin/sh/ia_info_empty_ugid","Groups":[{"Name":"group-ia_info_empty_ugid","GID":null,"UGID":""}]}
 	err: <nil>

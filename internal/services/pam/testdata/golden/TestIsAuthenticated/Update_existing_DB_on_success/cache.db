@@ -1,10 +1,10 @@
 users:
-    - name: success@example.com
+    - name: success
       uid: 1111
       gid: 1111
-      gecos: gecos for success@example.com
-      dir: /home/success@example.com
-      shell: /bin/sh/success@example.com
+      gecos: gecos for success
+      dir: /home/success
+      shell: /bin/sh/success
     - name: otheruser@example.com
       uid: 77777
       gid: 88888
@@ -13,12 +13,9 @@ users:
       shell: /bin/sh/otheruser
       broker_id: broker-id
 groups:
-    - name: success@example.com
+    - name: success
       gid: 1111
-      ugid: success@example.com
-    - name: group-success@example.com
-      gid: 22222
-      ugid: ugid-success@example.com
+      ugid: success
     - name: group-success
       gid: 88888
       ugid: ugid-success
@@ -26,7 +23,7 @@ users_to_groups:
     - uid: 1111
       gid: 1111
     - uid: 1111
-      gid: 22222
+      gid: 88888
     - uid: 77777
       gid: 88888
 schema_version: 2

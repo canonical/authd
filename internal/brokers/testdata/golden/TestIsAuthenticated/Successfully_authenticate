@@ -1,4 +1,4 @@
 FIRST CALL:
 	access: granted
-	data: {"Name":"success@example.com","UID":0,"Gecos":"gecos for success@example.com","Dir":"/home/success@example.com","Shell":"/bin/sh/success@example.com","Groups":[{"Name":"group-success@example.com","GID":null,"UGID":"ugid-success@example.com"}]}
+	data: {"Name":"success","UID":0,"Gecos":"gecos for success","Dir":"/home/success","Shell":"/bin/sh/success","Groups":[{"Name":"group-success","GID":null,"UGID":"ugid-success"}]}
 	err: <nil>

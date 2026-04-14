@@ -355,6 +355,9 @@ func validateUserInfo(uInfo types.UserInfo) (err error) {
 	if uInfo.Name == "" {
 		return errors.New("empty username")
 	}
+	if err := types.ValidateUsername(uInfo.Name); err != nil {
+		return err
+	}
 
 	// Validate home and shell directories
 	if !filepath.IsAbs(filepath.Clean(uInfo.Dir)) {

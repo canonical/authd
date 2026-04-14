@@ -456,6 +456,7 @@ func TestIsAuthenticated(t *testing.T) {
 		"Error_when_broker_returns_invalid_access":          {username: "ia_invalid_access@example.com"},
 		"Error_when_broker_returns_invalid_data":            {username: "ia_invalid_data@example.com"},
 		"Error_when_broker_returns_invalid_userinfo":        {username: "ia_invalid_userinfo@example.com"},
+		"Error_when_broker_returns_invalid_username":        {username: "ia_info_invalid_username@example.com"},
 		"Error_when_calling_second_time_without_cancelling": {username: "ia_second_call@example.com", secondCall: true},
 
 		// local group error

@@ -1,17 +1,17 @@
 users:
-    - name: success@example.com
+    - name: success
       uid: 1111
       gid: 1111
-      gecos: gecos for success@example.com
-      dir: /home/success@example.com
-      shell: /bin/sh/success@example.com
+      gecos: gecos for success
+      dir: /home/success
+      shell: /bin/sh/success
 groups:
-    - name: success@example.com
+    - name: success
       gid: 1111
-      ugid: success@example.com
-    - name: group-success@example.com
+      ugid: success
+    - name: group-success
       gid: 22222
-      ugid: ugid-success@example.com
+      ugid: ugid-success
 users_to_groups:
     - uid: 1111
       gid: 1111

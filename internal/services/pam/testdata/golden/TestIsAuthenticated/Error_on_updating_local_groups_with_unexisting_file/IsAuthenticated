@@ -1,4 +1,4 @@
 FIRST CALL:
 	access: 
 	msg: 
-	err: failed to update user "success_with_local_groups@example.com": could not update local groups for user "success_with_local_groups@example.com": could not fetch existing local group: open : no such file or directory
+	err: failed to update user "success_with_local_groups": could not update local groups for user "success_with_local_groups": could not fetch existing local group: open : no such file or directory

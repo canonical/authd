@@ -1,17 +1,17 @@
 users:
-    - name: ia_second_call@example.com
+    - name: ia_second_call
       uid: 1111
       gid: 1111
-      gecos: gecos for ia_second_call@example.com
-      dir: /home/ia_second_call@example.com
-      shell: /bin/sh/ia_second_call@example.com
+      gecos: gecos for ia_second_call
+      dir: /home/ia_second_call
+      shell: /bin/sh/ia_second_call
 groups:
-    - name: ia_second_call@example.com
+    - name: ia_second_call
       gid: 1111
-      ugid: ia_second_call@example.com
-    - name: group-ia_second_call@example.com
+      ugid: ia_second_call
+    - name: group-ia_second_call
       gid: 22222
-      ugid: ugid-ia_second_call@example.com
+      ugid: ugid-ia_second_call
 users_to_groups:
     - uid: 1111
       gid: 1111
