@@ -198,7 +198,11 @@ jobs:
         #   the OCI registry.
         if: >
           steps.restore-cache.outputs.cache-hit != 'true' &&
-          github.event.pull_request.head.repo.full_name == github.repository
+          (
+            (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+            github.event_name == 'push' ||
+            github.event_name == 'release'
+          )
         run: |
           set -euo pipefail
           set -x
@@ -228,7 +232,10 @@ jobs:
       - name: Upload deb and sources as OCI artifacts
         # Skip if the PR is from a fork, as we don't have the permission to
         # upload to the OCI registry.
-        if: github.event.pull_request.head.repo.full_name == github.repository
+        if: >
+          (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+          github.event_name == 'push' ||
+          github.event_name == 'release'
         run: |
           set -euo pipefail
           set -x
