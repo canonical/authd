@@ -138,9 +138,18 @@ type authenticationModel struct {
 	errorMsg string
 }
 
+// authTracker serialises IsAuthenticated calls and supports cancellation.
+//
+// At most one authentication goroutine is in flight at a time. A goroutine
+// that arrives while another is running blocks until the running one finishes.
+// cancelAndWait() cancels any in-flight goroutine and bumps the generation
+// counter so that any goroutine that is waiting (or has just been woken) knows
+// it has been superseded and must abort without making the RPC.
 type authTracker struct {
-	cancelFunc func()
-	cond       *sync.Cond
+	mu         sync.Mutex
+	generation uint64        // incremented by cancelAndWait; goroutines abort if theirs is stale
+	cancelFunc func()        // cancels the context of the current in-flight RPC; nil when idle
+	done       chan struct{} // closed by the goroutine when it exits; nil when idle
 }
 
 // startAuthentication signals that the authentication model can start
@@ -174,7 +183,7 @@ func newAuthenticationModel(client authd.PAMClient, clientType PamClientType, mo
 		client:      client,
 		clientType:  clientType,
 		mode:        mode,
-		authTracker: &authTracker{cond: sync.NewCond(&sync.Mutex{})},
+		authTracker: &authTracker{},
 	}
 }
 
@@ -293,7 +302,12 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 		clientType := m.clientType
 		currentLayout := m.currentLayout
 		return m, func() tea.Msg {
-			authTracker.waitAndStart(cancelFunc)
+			// waitForSlot blocks until no other auth is in flight, then registers
+			// us as the active goroutine for this generation.  It returns false
+			// if we have been superseded by a cancelAndWait() call and must abort.
+			if !authTracker.waitForSlot(cancelFunc) {
+				return nil
+			}
 
 			secret, hasSecret := msg.item.(*authd.IARequest_AuthenticationData_Secret)
 			if hasSecret && clientType == Gdm && currentLayout == layouts.NewPassword {
@@ -332,7 +346,7 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 			if msg.access != auth.Next && msg.access != auth.Retry {
 				m.currentModel = nil
 			}
-			m.authTracker.reset()
+			m.authTracker.finish()
 		}()
 
 		var authMsg string
@@ -550,43 +564,65 @@ func (authData *isAuthenticatedRequestedSend) encryptSecretIfPresent(publicKey *
 	return &secret.Secret, nil
 }
 
-// wait waits for the current authentication to be completed.
-func (at *authTracker) wait() {
-	at.cond.L.Lock()
-	defer at.cond.L.Unlock()
-
-	for at.cancelFunc != nil {
-		at.cond.Wait()
+// waitForSlot blocks until no other authentication goroutine is in flight,
+// then registers itself as the active goroutine.  It returns true when the
+// caller should proceed with the RPC, or false when a cancelAndWait() call
+// has superseded this goroutine and the caller must abort.
+//
+// The generation counter is the key to correctness: cancelAndWait() bumps it
+// under the lock before signalling, so any goroutine that wakes up afterwards
+// will see a stale generation and abort — with no window for a race.
+func (at *authTracker) waitForSlot(cancelFunc func()) bool {
+	at.mu.Lock()
+	gen := at.generation
+	// Wait until the previous auth goroutine has finished.
+	for at.done != nil {
+		done := at.done
+		at.mu.Unlock()
+		<-done
+		at.mu.Lock()
 	}
-}
-
-// waitAndStart waits for the current authentication to be completed and
-// marks the authentication as in progress.
-func (at *authTracker) waitAndStart(cancelFunc func()) {
-	at.cond.L.Lock()
-	defer at.cond.L.Unlock()
-
-	for at.cancelFunc != nil {
-		at.cond.Wait()
+	// If cancelAndWait() was called while we were waiting (or before we even
+	// started), our generation is stale — abort without making any RPC.
+	if at.generation != gen {
+		at.mu.Unlock()
+		return false
 	}
-
+	// Register ourselves as the active goroutine.
 	at.cancelFunc = cancelFunc
+	at.done = make(chan struct{})
+	at.mu.Unlock()
+	return true
 }
 
-func (at *authTracker) cancelAndWait() {
-	at.cond.L.Lock()
-	cancelFunc := at.cancelFunc
-	at.cond.L.Unlock()
-	if cancelFunc == nil {
-		return
-	}
-	cancelFunc()
-	at.wait()
-}
-
-func (at *authTracker) reset() {
-	at.cond.L.Lock()
-	defer at.cond.L.Unlock()
+// finish marks the active authentication goroutine as done.  It must be called
+// by every goroutine that received true from waitForSlot, regardless of whether
+// the RPC was actually made (e.g. even for newPasswordCheck detours).
+func (at *authTracker) finish() {
+	at.mu.Lock()
+	done := at.done
 	at.cancelFunc = nil
-	at.cond.Signal()
+	at.done = nil
+	at.mu.Unlock()
+	if done != nil {
+		close(done)
+	}
+}
+
+// cancelAndWait cancels the in-flight authentication (if any) and waits for
+// its goroutine to exit.  After it returns, any goroutine currently blocked in
+// waitForSlot will also abort, because the generation counter was bumped.
+func (at *authTracker) cancelAndWait() {
+	at.mu.Lock()
+	at.generation++
+	cancelFunc := at.cancelFunc
+	done := at.done
+	at.mu.Unlock()
+
+	if cancelFunc != nil {
+		cancelFunc()
+	}
+	if done != nil {
+		<-done
+	}
 }
