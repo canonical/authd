@@ -1,9 +1,9 @@
 users:
-    - name: locked@example.com
+    - name: locked
       uid: 1111
       gid: 11111
       gecos: gecos for other user
-      dir: /home/locked@example.com
+      dir: /home/locked
       shell: /bin/bash
       broker_id: broker-id
       locked: true
