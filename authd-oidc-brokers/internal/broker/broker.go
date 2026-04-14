@@ -157,6 +157,10 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 
 // NewSession creates a new session for the user.
 func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionKey string, err error) {
+	if username == "" {
+		return "", "", errors.New("username is required")
+	}
+
 	sessionID = uuid.New().String()
 	s := session{
 		username: username,
