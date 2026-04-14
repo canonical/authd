@@ -76,7 +76,7 @@ type uiModel struct {
 	authModeSelectionModel authModeSelectionModel
 	authenticationModel    authenticationModel
 	gdmModel               gdmModel
-	nativeModel            nativeModel
+	nativeModel            nativeClient
 
 	// exitStatus is a pointer to the [PamReturnStatus] value where the
 	// exit status will be written to.
@@ -157,7 +157,7 @@ func newUIModelForClients(mTx pam.ModuleTransaction, clientType PamClientType, m
 	case Gdm:
 		m.gdmModel = gdmModel{pamMTx: m.pamMTx}
 	case Native:
-		m.nativeModel = newNativeModel(m.pamMTx, userServiceClient)
+		m.nativeModel = newNativeModel(m.pamMTx, m.client, mode, userServiceClient)
 	}
 
 	m.userSelectionModel = newUserSelectionModel(m.pamMTx, m.clientType)

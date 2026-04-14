@@ -168,8 +168,6 @@ func defaultSafeMessageFormatter(msg tea.Msg) string {
 		return fmt.Sprintf("%T{Stage:%q}", msg, msg.Stage)
 	case StageChanged:
 		return fmt.Sprintf("%T{Stage:%q}", msg, msg.Stage)
-	case nativeStageChangeRequest:
-		return fmt.Sprintf("%T{Stage:%q}", msg, msg.Stage)
 	case tea.KeyMsg:
 		if msg.Type != tea.KeyRunes {
 			return fmt.Sprintf("%T{%s}", msg, msg)
