@@ -26,6 +26,7 @@ type brokerForTestConfig struct {
 	broker.Config
 	issuerURL                   string
 	forceProviderAuthentication bool
+	disableLocalPassword        bool
 	registerDevice              bool
 	allowedUsers                map[string]struct{}
 	allUsersAllowed             bool
@@ -59,6 +60,9 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	}
 	if cfg.forceProviderAuthentication {
 		cfg.SetForceProviderAuthentication(cfg.forceProviderAuthentication)
+	}
+	if cfg.disableLocalPassword {
+		cfg.SetDisableLocalPassword(cfg.disableLocalPassword)
 	}
 	if cfg.registerDevice {
 		cfg.SetRegisterDevice(cfg.registerDevice)
