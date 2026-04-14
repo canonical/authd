@@ -1,8 +1,8 @@
-authd (0.6.2+git260414+235+78c64315) resolute; urgency=medium
+authd (0.6.2+git260414+238+c12e94f5) resolute; urgency=medium
 
-  * Github build. Run id: 24388560165. Run number: 235.
+  * Github build. Run id: 24395073808. Run number: 238.
 
- -- adombeck <18482300+adombeck@users.noreply.github.com>  Tue, 14 Apr 2026 08:19:12 +0000
+ -- Noor <nooreldeen.mansour@canonical.com>  Tue, 14 Apr 2026 10:55:46 +0000
 
 authd (0.6.2) resolute; urgency=medium
 
