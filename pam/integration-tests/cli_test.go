@@ -217,6 +217,9 @@ func TestCLIAuthenticate(t *testing.T) {
 		"Exit_authd_if_user_sigints": {
 			tape: "sigint",
 		},
+		"Exit_authd_if_user_presses_ctrl_d": {
+			tape: "ctrl_d",
+		},
 		"Exit_if_authd_is_stopped": {
 			tape:            "authd_stopped",
 			stopDaemonAfter: sleepDuration(defaultSleepValues[authdSleepLong] * 5),
@@ -372,6 +375,9 @@ func TestCLIChangeAuthTok(t *testing.T) {
 		},
 		"Exit_authd_if_user_sigints": {
 			tape: "passwd_sigint",
+		},
+		"Exit_authd_if_user_presses_ctrl_d": {
+			tape: "passwd_ctrl_d",
 		},
 	}
 	for name, tc := range tests {
