@@ -83,6 +83,9 @@ func TestNewSession(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
+		username                     string
+		emptyUsername                bool
+		issuerURL                    string
 		customHandlers               map[string]testutils.EndpointHandler
 		forceAccessCheckWithProvider bool
 
@@ -102,6 +105,10 @@ func TestNewSession(t *testing.T) {
 			},
 			wantOffline: true,
 		},
+		"Creates_new_session_with_schemeless_issuer_URL": {
+			issuerURL:   "example.com",
+			wantOffline: true,
+		},
 
 		"Error_when_provider_authentication_is_forced_and_provider_is_not_available": {
 			customHandlers: map[string]testutils.EndpointHandler{
@@ -109,6 +116,22 @@ func TestNewSession(t *testing.T) {
 			},
 			forceAccessCheckWithProvider: true,
 			wantErr:                      true,
+		},
+		"Error_when_username_is_empty": {
+			emptyUsername: true,
+			wantErr:       true,
+		},
+		"Error_when_username_contains_path_traversal": {
+			username: "../test",
+			wantErr:  true,
+		},
+		"Error_when_username_contains_path_traversal_but_does_not_leave_the_parent_directory": {
+			username: "test/../other-user",
+			wantErr:  true,
+		},
+		"Error_when_issuer_contains_path_traversal": {
+			issuerURL: "https://..",
+			wantErr:   true,
 		},
 	}
 	for name, tc := range tests {
@@ -118,9 +141,18 @@ func TestNewSession(t *testing.T) {
 			b := newBrokerForTests(t, &brokerForTestConfig{
 				customHandlers:               tc.customHandlers,
 				forceAccessCheckWithProvider: tc.forceAccessCheckWithProvider,
+				issuerURL:                    tc.issuerURL,
 			})
 
-			id, _, err := b.NewSession("test-user", "lang", sessionmode.Login)
+			username := tc.username
+			if tc.emptyUsername {
+				username = ""
+			} else if username == "" {
+				username = "test-user"
+			}
+
+			id, _, err := b.NewSession(username, "lang", sessionmode.Login)
+			t.Logf("NewSession returned id: %q, err: %v", id, err)
 			if tc.wantErr {
 				require.Error(t, err, "NewSession should have returned an error")
 				return

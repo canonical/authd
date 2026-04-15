@@ -157,6 +157,10 @@ func New(cfg Config, args ...Option) (b *Broker, err error) {
 
 // NewSession creates a new session for the user.
 func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionKey string, err error) {
+	if username == "" {
+		return "", "", errors.New("username is required")
+	}
+
 	sessionID = uuid.New().String()
 	s := session{
 		username: username,
@@ -171,10 +175,27 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 		return "", "", fmt.Errorf("failed to marshal broker public key: %v", err)
 	}
 
-	_, issuer, _ := strings.Cut(b.cfg.issuerURL, "://")
+	_, issuer, found := strings.Cut(b.cfg.issuerURL, "://")
+	if !found {
+		// If the issuer URL does not contain a scheme, use the whole issuer URL as the issuer.
+		issuer = b.cfg.issuerURL
+	}
 	issuer = strings.ReplaceAll(issuer, "/", "_")
 	issuer = strings.ReplaceAll(issuer, ":", "_")
-	s.userDataDir = filepath.Join(b.cfg.DataDir, issuer, username)
+
+	issuerDataDir := filepath.Join(b.cfg.DataDir, issuer)
+	// Check that the issuer does not contain path traversal characters by verifying that the resulting path is within
+	// the data directory and the basename matches the issuer.
+	if !strings.HasPrefix(issuerDataDir, b.cfg.DataDir) || filepath.Base(issuerDataDir) != issuer {
+		return "", "", fmt.Errorf("invalid issuer URL %q: path traversal detected", b.cfg.issuerURL)
+	}
+
+	s.userDataDir = filepath.Join(issuerDataDir, username)
+	// Check that the username does not contain path traversal characters by verifying that the resulting path is within
+	// the issuer data directory and the basename matches the username.
+	if !strings.HasPrefix(s.userDataDir, issuerDataDir) || filepath.Base(s.userDataDir) != username {
+		return "", "", fmt.Errorf("invalid username %q: path traversal detected", username)
+	}
 	// The token is stored in $DATA_DIR/$ISSUER/$USERNAME/token.json.
 	s.tokenPath = filepath.Join(s.userDataDir, "token.json")
 	// The password is stored in $DATA_DIR/$ISSUER/$USERNAME/password.
