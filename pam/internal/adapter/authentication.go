@@ -55,11 +55,12 @@ func sendIsAuthenticated(ctx context.Context, client authd.PAMClient, sessionID 
 			if st := status.Convert(err); st.Code() == codes.Canceled {
 				// Note that this error is only the client-side error, so being here doesn't
 				// mean the cancellation on broker side is fully completed.
-
-				// Wait for the cancellation requests to have been delivered and actually handled.
-				// The multiplier can be increased to avoid that we return the cancelled event too
-				// early, but it implies slowing down the UI responses.
-				<-time.After(cancellationWait * 3)
+				// We still wait briefly so that the CancelIsAuthenticated D-Bus call (sent
+				// by the broker layer when ctx is cancelled) has time to arrive at the broker
+				// after the IsAuthenticated call — not before it.  Serialisation of
+				// back-to-back IsAuthenticated calls for the same session is handled
+				// server-side, so we no longer need a longer delay here.
+				<-time.After(cancellationWait)
 
 				return isAuthenticatedResultReceived{
 					access: auth.Cancelled,
