@@ -290,7 +290,14 @@ func (uc *userConfig) registerOwner(cfgPath, userName string) error {
 		return nil
 	}
 
-	p := filepath.Join(GetDropInDir(cfgPath), ownerAutoRegistrationConfigPath)
+	dropInDir := GetDropInDir(cfgPath)
+	//nolint:gosec // G301: World-readable so admins can list and tab-complete config files.
+	// Secrets are protected by the 0600 permissions of the files themselves.
+	if err := os.MkdirAll(dropInDir, 0755); err != nil {
+		return fmt.Errorf("failed to create drop-in directory %q: %w", dropInDir, err)
+	}
+
+	p := filepath.Join(dropInDir, ownerAutoRegistrationConfigPath)
 
 	templateName := filepath.Base(ownerAutoRegistrationConfigTemplate)
 	t, err := template.New(templateName).ParseFS(ownerAutoRegistrationConfig, ownerAutoRegistrationConfigTemplate)
