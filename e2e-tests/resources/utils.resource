@@ -151,6 +151,10 @@ Left Button Click
     Hid.Move Pointer To Proportional    1    1
 
 
+# Run Command uses the Alt+F2 shortcut to open the "Run a Command" dialog and
+# execute the given command.
+# Consider using SSH.Execute As Current User instead, which is more reliable and
+# faster because it doesn't use simulated keyboard input.
 Run Command
     [Arguments]    ${command}
     Hid.Keys Combo    Alt_L    F2
