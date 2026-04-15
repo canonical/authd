@@ -248,7 +248,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, sendEvent(pamError{
 				status: pam.ErrAbort,
-				msg:    "cancel requested",
+				msg:    "Authentication aborted by user",
 			})
 		case "esc":
 			if !m.canGoBack() {
