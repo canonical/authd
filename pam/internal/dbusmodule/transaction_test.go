@@ -1,7 +1,6 @@
 package dbusmodule_test
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -21,7 +20,7 @@ const objectPath = "/com/ubuntu/authd/pam"
 func TestTransactionConnectionError(t *testing.T) {
 	t.Parallel()
 
-	tx, cleanup, err := dbusmodule.NewTransaction(context.TODO(), "invalid-address")
+	tx, cleanup, err := dbusmodule.NewTransaction("invalid-address")
 	require.Nil(t, tx, "Transaction must be unset")
 	require.Nil(t, cleanup, "Cleanup func must be unset")
 	require.NotNil(t, err, "Error must be set")
@@ -633,7 +632,7 @@ func prepareTransaction(t *testing.T, expectedReturns []methodReturn) (pam.Modul
 	t.Helper()
 
 	address, obj := prepareTestServer(t, expectedReturns)
-	tx, cleanup, err := dbusmodule.NewTransaction(context.TODO(), address,
+	tx, cleanup, err := dbusmodule.NewTransaction(address,
 		dbusmodule.WithSharedConnection(true))
 	require.NoError(t, err, "Setup: Can't connect to %s", address)
 	t.Cleanup(cleanup)
