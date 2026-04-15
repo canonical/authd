@@ -84,6 +84,7 @@ func TestNewSession(t *testing.T) {
 
 	tests := map[string]struct {
 		username                     string
+		emptyUsername                bool
 		issuerURL                    string
 		customHandlers               map[string]testutils.EndpointHandler
 		forceAccessCheckWithProvider bool
@@ -104,6 +105,10 @@ func TestNewSession(t *testing.T) {
 			},
 			wantOffline: true,
 		},
+		"Creates_new_session_with_schemeless_issuer_URL": {
+			issuerURL:   "example.com",
+			wantOffline: true,
+		},
 
 		"Error_when_provider_authentication_is_forced_and_provider_is_not_available": {
 			customHandlers: map[string]testutils.EndpointHandler{
@@ -111,6 +116,10 @@ func TestNewSession(t *testing.T) {
 			},
 			forceAccessCheckWithProvider: true,
 			wantErr:                      true,
+		},
+		"Error_when_username_is_empty": {
+			emptyUsername: true,
+			wantErr:       true,
 		},
 		"Error_when_username_contains_path_traversal": {
 			username: "../test",
@@ -136,7 +145,9 @@ func TestNewSession(t *testing.T) {
 			})
 
 			username := tc.username
-			if username == "" {
+			if tc.emptyUsername {
+				username = ""
+			} else if username == "" {
 				username = "test-user"
 			}
 
