@@ -106,7 +106,6 @@ func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 	const (
 		// DataDir errors
 		dirIsFile = iota
-		wrongPermission
 		noParentDir
 	)
 
@@ -116,7 +115,6 @@ func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 	}{
 		"Error_on_existing_data_dir_being_a_file":    {dataDirBehavior: dirIsFile},
 		"Error_on_data_dir_missing_parent_directory": {dataDirBehavior: noParentDir},
-		"Error_on_wrong_permission_on_data_dir":      {dataDirBehavior: wrongPermission},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -127,9 +125,6 @@ func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 			case dirIsFile:
 				err := os.WriteFile(dataDir, []byte("file"), 0600)
 				require.NoError(t, err, "Setup: could not create cache file for tests")
-			case wrongPermission:
-				err := os.Mkdir(dataDir, 0600)
-				require.NoError(t, err, "Setup: could not create cache directory for tests")
 			case noParentDir:
 				dataDir = filepath.Join(dataDir, "doesnotexist", "data")
 			}
@@ -142,6 +137,49 @@ func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 			}
 
 			a := daemon.NewForTests(t, &config, issuerURL)
+			err := a.Run()
+			require.Error(t, err, "Run should return an error")
+		})
+	}
+}
+
+func TestAppRunFailsOnInsecureBrokerConfigPerms(t *testing.T) {
+	tests := map[string]struct {
+		mainConfPerm   os.FileMode
+		dropInFileName string
+		dropInFilePerm os.FileMode
+	}{
+		"Error_on_wrong_permission_on_broker_conf":         {mainConfPerm: 0644},
+		"Error_on_wrong_permission_on_drop_in_config_file": {dropInFileName: "extra.yaml", dropInFilePerm: 0644},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			brokerConf := filepath.Join(tmpDir, "broker.yaml")
+			config := daemon.DaemonConfig{
+				Paths: daemon.SystemPaths{
+					BrokerConf: brokerConf,
+				},
+			}
+
+			a := daemon.NewForTests(t, &config, issuerURL)
+
+			if tc.mainConfPerm != 0 {
+				err := os.Chmod(brokerConf, tc.mainConfPerm)
+				require.NoError(t, err, "Setup: could not change permission on broker config file for tests")
+			}
+
+			if tc.dropInFileName != "" {
+				dropInDir := brokerConf + ".d"
+				err := os.MkdirAll(dropInDir, 0700)
+				require.NoError(t, err, "Setup: could not create drop-in directory for tests")
+				//nolint:gosec // The drop-in directory is expected to have 0755 permissions
+				err = os.Chmod(dropInDir, 0755)
+				require.NoError(t, err, "Setup: could not set permissions on drop-in directory for tests")
+				err = os.WriteFile(filepath.Join(dropInDir, tc.dropInFileName), []byte("content"), tc.dropInFilePerm)
+				require.NoError(t, err, "Setup: could not create drop-in config file for tests")
+			}
+
 			err := a.Run()
 			require.Error(t, err, "Run should return an error")
 		})

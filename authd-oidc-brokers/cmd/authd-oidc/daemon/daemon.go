@@ -128,16 +128,39 @@ func (a *App) serve(config daemonConfig) error {
 	}
 	defer closeFunc()
 
-	// When the data directory is SNAP_DATA, it has permission 0755, else we want to create it with 0700.
-	if err := ensureDirWithPerms(config.Paths.DataDir, 0700, os.Geteuid()); err != nil {
-		if err := ensureDirWithPerms(config.Paths.DataDir, 0755, os.Geteuid()); err != nil {
-			return fmt.Errorf("error initializing data directory %q: %v", config.Paths.DataDir, err)
-		}
+	if err := ensureDirWithOwner(config.Paths.DataDir, 0700, os.Geteuid()); err != nil {
+		return fmt.Errorf("error initializing data directory %q: %v", config.Paths.DataDir, err)
 	}
 
 	brokerConfigDir := broker.GetDropInDir(config.Paths.BrokerConf)
-	if err := ensureDirWithPerms(brokerConfigDir, 0700, os.Geteuid()); err != nil {
+	if err := ensureDirWithOwner(brokerConfigDir, 0755, os.Geteuid()); err != nil {
 		return fmt.Errorf("error initializing broker configuration directory %q: %v", brokerConfigDir, err)
+	}
+
+	// Ensure that the broker configuration files have secure permissions
+	if err := checkFilePerms(config.Paths.BrokerConf, 0600); err != nil && !os.IsNotExist(err) {
+		// The error returned by checkFilePerms already contains the file path,
+		// so we don't need to wrap it with more context here.
+		return err
+	}
+
+	// Iterate over the drop-in directory and check permissions of each
+	// configuration file. We ignore subdirectories because we don't load
+	// them, so they don't represent a security risk.
+	entries, err := os.ReadDir(brokerConfigDir)
+	if err != nil {
+		return fmt.Errorf("error reading broker configuration directory %q: %v", brokerConfigDir, err)
+	}
+	for _, entry := range entries {
+		path := filepath.Join(brokerConfigDir, entry.Name())
+
+		if entry.IsDir() {
+			continue
+		}
+
+		if err := checkFilePerms(path, 0600); err != nil && !os.IsNotExist(err) {
+			return err
+		}
 	}
 
 	b, err := broker.New(broker.Config{
