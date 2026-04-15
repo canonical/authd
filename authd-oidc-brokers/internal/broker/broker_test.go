@@ -83,8 +83,8 @@ func TestNewSession(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		customHandlers              map[string]testutils.EndpointHandler
-		forceProviderAuthentication bool
+		customHandlers               map[string]testutils.EndpointHandler
+		forceAccessCheckWithProvider bool
 
 		wantOffline bool
 		wantErr     bool
@@ -107,8 +107,8 @@ func TestNewSession(t *testing.T) {
 			customHandlers: map[string]testutils.EndpointHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
-			forceProviderAuthentication: true,
-			wantErr:                     true,
+			forceAccessCheckWithProvider: true,
+			wantErr:                      true,
 		},
 	}
 	for name, tc := range tests {
@@ -116,8 +116,8 @@ func TestNewSession(t *testing.T) {
 			t.Parallel()
 
 			b := newBrokerForTests(t, &brokerForTestConfig{
-				customHandlers:              tc.customHandlers,
-				forceProviderAuthentication: tc.forceProviderAuthentication,
+				customHandlers:               tc.customHandlers,
+				forceAccessCheckWithProvider: tc.forceAccessCheckWithProvider,
 			})
 
 			id, _, err := b.NewSession("test-user", "lang", sessionmode.Login)
@@ -551,7 +551,7 @@ func TestIsAuthenticated(t *testing.T) {
 		sessionMode                        string
 		sessionOffline                     bool
 		username                           string
-		forceProviderAuthentication        bool
+		forceAccessCheckWithProvider       bool
 		userDoesNotBecomeOwner             bool
 		allUsersAllowed                    bool
 		extraGroups                        []string
@@ -675,9 +675,9 @@ func TestIsAuthenticated(t *testing.T) {
 			wantGroups: []info.Group{{Name: "old-group"}},
 		},
 		"Authenticating_with_password_when_provider_authentication_is_forced": {
-			firstMode:                   authmodes.Password,
-			token:                       &tokenOptions{},
-			forceProviderAuthentication: true,
+			firstMode:                    authmodes.Password,
+			token:                        &tokenOptions{},
+			forceAccessCheckWithProvider: true,
 		},
 		"Extra_groups_configured": {
 			firstMode:                authmodes.Password,
@@ -755,9 +755,9 @@ func TestIsAuthenticated(t *testing.T) {
 			wantOffline: true,
 		},
 		"Error_when_mode_is_password_and_token_refresh_times_out_with_forced_provider_auth": {
-			firstMode:                   authmodes.Password,
-			token:                       &tokenOptions{expired: true},
-			forceProviderAuthentication: true,
+			firstMode:                    authmodes.Password,
+			token:                        &tokenOptions{expired: true},
+			forceAccessCheckWithProvider: true,
 			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
@@ -832,16 +832,16 @@ func TestIsAuthenticated(t *testing.T) {
 			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
 
 			cfg := &brokerForTestConfig{
-				Config:                      broker.Config{DataDir: dataDir},
-				getGroupsFails:              tc.getGroupsFails,
-				ownerAllowed:                true,
-				firstUserBecomesOwner:       !tc.userDoesNotBecomeOwner,
-				allUsersAllowed:             tc.allUsersAllowed,
-				forceProviderAuthentication: tc.forceProviderAuthentication,
-				extraGroups:                 tc.extraGroups,
-				ownerExtraGroups:            tc.ownerExtraGroups,
-				supportsDeviceRegistration:  tc.providerSupportsDeviceRegistration,
-				registerDevice:              tc.registerDevice,
+				Config:                       broker.Config{DataDir: dataDir},
+				getGroupsFails:               tc.getGroupsFails,
+				ownerAllowed:                 true,
+				firstUserBecomesOwner:        !tc.userDoesNotBecomeOwner,
+				allUsersAllowed:              tc.allUsersAllowed,
+				forceAccessCheckWithProvider: tc.forceAccessCheckWithProvider,
+				extraGroups:                  tc.extraGroups,
+				ownerExtraGroups:             tc.ownerExtraGroups,
+				supportsDeviceRegistration:   tc.providerSupportsDeviceRegistration,
+				registerDevice:               tc.registerDevice,
 			}
 			if tc.customHandlers == nil {
 				// Use the default provider URL if no custom handlers are provided.
@@ -945,13 +945,13 @@ func TestIsAuthenticated(t *testing.T) {
 				require.True(t, gotOffline, "Session should be offline after token refresh network error")
 			}
 
-			// When forceProviderAuthentication is set, offline fallback must never happen,
+			// When forceAccessCheckWithProvider is set, offline fallback must never happen,
 			// even for transient network errors. Verify the session was not flipped to offline.
 			// (Skip if the session was already offline at creation, which is a separate scenario.)
-			if tc.forceProviderAuthentication && !tc.sessionOffline {
+			if tc.forceAccessCheckWithProvider && !tc.sessionOffline {
 				gotOffline, err := b.IsOffline(sessionID)
 				require.NoError(t, err, "IsOffline should not have returned an error")
-				require.False(t, gotOffline, "Session should not be offline when forceProviderAuthentication is true")
+				require.False(t, gotOffline, "Session should not be offline when forceAccessCheckWithProvider is true")
 			}
 
 			if tc.wantSecondCall {

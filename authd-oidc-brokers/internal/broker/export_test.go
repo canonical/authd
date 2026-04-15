@@ -16,8 +16,8 @@ func (cfg *Config) SetIssuerURL(issuerURL string) {
 	cfg.issuerURL = issuerURL
 }
 
-func (cfg *Config) SetForceProviderAuthentication(value bool) {
-	cfg.forceProviderAuthentication = value
+func (cfg *Config) SetforceAccessCheckWithProvider(value bool) {
+	cfg.forceAccessCheckWithProvider = value
 }
 
 func (cfg *Config) SetRegisterDevice(value bool) {

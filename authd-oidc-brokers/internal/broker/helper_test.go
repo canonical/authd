@@ -24,19 +24,19 @@ import (
 
 type brokerForTestConfig struct {
 	broker.Config
-	issuerURL                   string
-	forceProviderAuthentication bool
-	registerDevice              bool
-	allowedUsers                map[string]struct{}
-	allUsersAllowed             bool
-	ownerAllowed                bool
-	firstUserBecomesOwner       bool
-	owner                       string
-	extraGroups                 []string
-	ownerExtraGroups            []string
-	homeBaseDir                 string
-	allowedSSHSuffixes          []string
-	provider                    providers.Provider
+	issuerURL                    string
+	forceAccessCheckWithProvider bool
+	registerDevice               bool
+	allowedUsers                 map[string]struct{}
+	allUsersAllowed              bool
+	ownerAllowed                 bool
+	firstUserBecomesOwner        bool
+	owner                        string
+	extraGroups                  []string
+	ownerExtraGroups             []string
+	homeBaseDir                  string
+	allowedSSHSuffixes           []string
+	provider                     providers.Provider
 
 	getGroupsFails             bool
 	supportsDeviceRegistration bool
@@ -57,8 +57,8 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	if cfg.issuerURL != "" {
 		cfg.SetIssuerURL(cfg.issuerURL)
 	}
-	if cfg.forceProviderAuthentication {
-		cfg.SetForceProviderAuthentication(cfg.forceProviderAuthentication)
+	if cfg.forceAccessCheckWithProvider {
+		cfg.SetforceAccessCheckWithProvider(cfg.forceAccessCheckWithProvider)
 	}
 	if cfg.registerDevice {
 		cfg.SetRegisterDevice(cfg.registerDevice)

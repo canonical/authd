@@ -78,7 +78,7 @@ prevent accidental lockouts, but it also allows users whose access has been
 revoked at the identity provider to log in while the provider is unreachable.
 
 To enforce verification with the identity provider even when it is unreachable,
-enable the [force_provider_authentication](ref::config-force-provider-auth)
+enable the [force_access_check_with_provider](ref::config-force-provider-auth)
 setting.
 
 ### Login via SSH

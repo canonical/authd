@@ -26,7 +26,7 @@ client_id = client_id
 [oidc]
 issuer = https://issuer.url.com
 client_id = client_id
-force_provider_authentication = true
+force_access_check_with_provider = true
 extra_scopes = groups,offline_access, some_other_scope
 
 [users]
@@ -38,7 +38,7 @@ ssh_allowed_suffixes_first_auth = @issuer.url.com
 [oidc]
 issuer = https://issuer.url.com
 client_id = client_id
-force_provider_authentication = invalid
+force_access_check_with_provider = invalid
 `,
 
 	"singles": `

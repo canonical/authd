@@ -182,8 +182,8 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 
 	// Construct an OIDC provider via OIDC discovery.
 	s.oidcServer, err = b.connectToOIDCServer(context.Background())
-	if err != nil && b.cfg.forceProviderAuthentication {
-		log.Errorf(context.Background(), "Could not connect to the provider and force_provider_authentication is set, denying authentication: %v", err)
+	if err != nil && b.cfg.forceAccessCheckWithProvider {
+		log.Errorf(context.Background(), "Could not connect to the provider and force_access_check_with_provider is set, denying authentication: %v", err)
 		//nolint:staticcheck,revive // ST1005 This error is displayed as is to the user, so it should be capitalized
 		return "", "", errors.New("Error connecting to provider. Check your network connection.")
 	}
@@ -756,7 +756,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 	}
 
 	// Refresh the token if we're online even if the token has not expired
-	if b.cfg.forceProviderAuthentication || !session.isOffline {
+	if b.cfg.forceAccessCheckWithProvider || !session.isOffline {
 		// Check if we have a refresh token before attempting to refresh
 		if authInfo.Token.RefreshToken == "" {
 			log.Warningf(context.Background(), "No refresh token available for user %q", session.username)
@@ -794,7 +794,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 			// Fall back to offline mode for transient network failures (e.g. timeout, DNS,
 			// connection refused). Unless provider authentication is forced.
 			var netErr net.Error
-			if errors.As(err, &netErr) && !b.cfg.forceProviderAuthentication {
+			if errors.As(err, &netErr) && !b.cfg.forceAccessCheckWithProvider {
 				log.Warningf(context.Background(), "Network error during token refresh for user %q, skipping token refresh", session.username)
 				authInfo = oldAuthInfo
 				session.isOffline = true

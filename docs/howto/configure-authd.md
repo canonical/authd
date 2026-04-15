@@ -256,7 +256,7 @@ unreachable, enable it as follows:
 ```ini
 [oidc]
 ...
-force_provider_authentication = true
+force_access_check_with_provider = true
 ```
 
 ```{warning}
