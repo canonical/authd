@@ -42,7 +42,7 @@ Try Select User
 
 
 Log Out
-    Run Command    gnome-session-quit --logout --no-prompt
+    SSH.Execute    loginctl terminate-seat seat0
 
 
 Wait Until Desktop Ready
