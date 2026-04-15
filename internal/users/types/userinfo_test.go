@@ -165,6 +165,25 @@ func TestValidateUsername(t *testing.T) {
 		"Error_on_name_starting_with_hyphen":           {username: "-user", wantErr: true},
 		"Error_on_name_with_dollar_not_at_end":         {username: "user$name", wantErr: true},
 		"Error_on_name_with_space":                     {username: "user name", wantErr: true},
+
+		// Injection / path traversal characters must be rejected
+		"Error_on_name_with_slash":                     {username: "user/name", wantErr: true},
+		"Error_on_name_with_backslash":                 {username: `user\name`, wantErr: true},
+		"Error_on_name_with_single_quote":              {username: "user'name", wantErr: true},
+		"Error_on_name_with_double_quote":              {username: `user"name`, wantErr: true},
+		"Error_on_name_with_backtick":                  {username: "user`name", wantErr: true},
+		"Error_on_name_with_semicolon":                 {username: "user;name", wantErr: true},
+		"Error_on_name_with_ampersand":                 {username: "user&name", wantErr: true},
+		"Error_on_name_with_pipe":                      {username: "user|name", wantErr: true},
+		"Error_on_name_with_null_byte":                 {username: "user\x00name", wantErr: true},
+		"Error_on_name_with_newline":                   {username: "user\nname", wantErr: true},
+		"Error_on_name_with_tab":                       {username: "user\tname", wantErr: true},
+		"Error_on_name_with_colon":                     {username: "user:name", wantErr: true},
+		"Error_on_name_with_exclamation":               {username: "user!name", wantErr: true},
+		"Error_on_name_with_open_paren":                {username: "user(name", wantErr: true},
+		"Error_on_name_with_close_paren":               {username: "user)name", wantErr: true},
+		"Error_on_name_with_less_than":                 {username: "user<name", wantErr: true},
+		"Error_on_name_with_greater_than":              {username: "user>name", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
