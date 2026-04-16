@@ -33,7 +33,7 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
     browser.send_key_taps(
         ascii_string_to_key_events(device_code) + [Gdk.KEY_Return])
 
-    browser.wait_for_pattern("Sign in", timeout_ms=20000)
+    browser.wait_for_pattern("Sign in", timeout_ms=30000)
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-enter-username")
     browser.send_key_taps(
