@@ -49,7 +49,7 @@ func TestSetGIDCommand(t *testing.T) {
 			expectedExitCode: 1,
 		},
 		"Error_when_gid_is_too_large": {
-			args:             []string{"set-gid", "group1", strconv.Itoa(math.MaxInt32 + 1)},
+			args:             []string{"set-gid", "group1", strconv.FormatInt(int64(math.MaxInt32)+1, 10)},
 			expectedExitCode: int(codes.Unknown),
 		},
 		"Error_when_gid_is_already_taken": {
