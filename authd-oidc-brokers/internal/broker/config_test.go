@@ -329,30 +329,56 @@ func TestParseUserConfig(t *testing.T) {
 }
 
 func TestRegisterOwner(t *testing.T) {
+	t.Parallel()
+
 	p := &testutils.MockProvider{}
-	outDir := t.TempDir()
 	userName := "owner_name"
-	confPath := filepath.Join(outDir, "broker.conf")
 
-	err := os.WriteFile(confPath, []byte(configTypes["valid"]), 0600)
-	require.NoError(t, err, "Setup: Failed to write config file")
+	tests := map[string]struct {
+		preCreateDropInDir     bool
+		dropInDirBlockedByFile bool
+		wantErr                string
+	}{
+		"Drop_in_dir_already_exists": {preCreateDropInDir: true},
+		"Drop_in_dir_missing":        {},
+		"Drop_in_dir_creation_fails": {dropInDirBlockedByFile: true, wantErr: "failed to create drop-in directory"},
+	}
 
-	dropInDir := GetDropInDir(confPath)
-	err = os.Mkdir(dropInDir, 0700)
-	require.NoError(t, err, "Setup: Failed to create drop-in directory")
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	cfg := userConfig{firstUserBecomesOwner: true, ownerAllowed: true, provider: p, ownerMutex: &sync.RWMutex{}}
-	err = cfg.registerOwner(confPath, userName)
-	require.NoError(t, err)
+			outDir := t.TempDir()
+			confPath := filepath.Join(outDir, "broker.conf")
 
-	require.Equal(t, cfg.owner, userName)
-	require.Equal(t, cfg.firstUserBecomesOwner, false)
+			err := os.WriteFile(confPath, []byte(configTypes["valid"]), 0600)
+			require.NoError(t, err, "Setup: Failed to write config file")
 
-	f, err := os.Open(filepath.Join(dropInDir, "20-owner-autoregistration.conf"))
-	require.NoError(t, err, "failed to open 20-owner-autoregistration.conf")
-	defer f.Close()
+			dropInDir := GetDropInDir(confPath)
+			if tc.preCreateDropInDir {
+				err = os.Mkdir(dropInDir, 0700)
+				require.NoError(t, err, "Setup: Failed to create drop-in directory")
+			}
+			if tc.dropInDirBlockedByFile {
+				// Place a regular file where the directory would be created, so MkdirAll fails.
+				err = os.WriteFile(dropInDir, []byte{}, 0600)
+				require.NoError(t, err, "Setup: Failed to create blocking file")
+			}
 
-	golden.CheckOrUpdateFileTree(t, outDir)
+			cfg := userConfig{firstUserBecomesOwner: true, ownerAllowed: true, provider: p, ownerMutex: &sync.RWMutex{}}
+			err = cfg.registerOwner(confPath, userName)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+
+			require.Equal(t, cfg.owner, userName)
+			require.Equal(t, cfg.firstUserBecomesOwner, false)
+
+			golden.CheckOrUpdateFileTree(t, outDir)
+		})
+	}
 }
 
 func FuzzParseConfig(f *testing.F) {
