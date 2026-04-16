@@ -17,7 +17,7 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
-	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils/golden"
+	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/log"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
