@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
 	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -353,6 +355,87 @@ func TestRegisterOwner(t *testing.T) {
 	defer f.Close()
 
 	golden.CheckOrUpdateFileTree(t, outDir)
+}
+
+func TestParseConfigUnknownSettings(t *testing.T) {
+	// This test is NOT parallel because it modifies the global log handler.
+	p := &testutils.MockProvider{}
+
+	tests := map[string]struct {
+		config      string
+		wantWarning string
+	}{
+		"No_warning_for_valid_config": {
+			config: configTypes["valid"],
+		},
+		"No_warning_for_valid_config_with_optional_values": {
+			config: configTypes["valid+optional"],
+		},
+		"No_warning_for_valid_config_with_old_force_provider_authentication_key": {
+			config: `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+force_provider_authentication = true
+`,
+		},
+		"Warn_about_unknown_section": {
+			config: `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[unknown_section]
+some_key = some_value
+`,
+			wantWarning: `unknown section "unknown_section" in config file, ignoring`,
+		},
+		"Warn_about_unknown_key_in_oidc_section": {
+			config: `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+unknown_key = some_value
+`,
+			wantWarning: `unknown key "unknown_key" in section "oidc" in config file, ignoring`,
+		},
+		"Warn_about_unknown_key_in_users_section": {
+			config: `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+unknown_key = some_value
+`,
+			wantWarning: `unknown key "unknown_key" in section "users" in config file, ignoring`,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			var capturedWarnings []string
+			log.SetLevelHandler(log.WarnLevel, func(_ context.Context, _ log.Level, format string, args ...interface{}) {
+				capturedWarnings = append(capturedWarnings, fmt.Sprintf(format, args...))
+			})
+			t.Cleanup(func() {
+				log.SetLevelHandler(log.WarnLevel, nil)
+			})
+
+			confPath := filepath.Join(t.TempDir(), "broker.conf")
+			err := os.WriteFile(confPath, []byte(tc.config), 0600)
+			require.NoError(t, err, "Setup: Failed to write config file")
+
+			_, err = parseConfigFromPath(confPath, p)
+			require.NoError(t, err)
+
+			if tc.wantWarning == "" {
+				require.Empty(t, capturedWarnings, "No warnings should have been produced")
+			} else {
+				require.Contains(t, capturedWarnings, tc.wantWarning)
+			}
+		})
+	}
 }
 
 func FuzzParseConfig(f *testing.F) {
