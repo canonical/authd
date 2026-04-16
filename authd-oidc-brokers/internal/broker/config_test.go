@@ -11,7 +11,7 @@ import (
 	"unsafe"
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
-	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils/golden"
+	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/stretchr/testify/require"
 )
 

@@ -17,7 +17,7 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/internal/password"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
-	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils/golden"
+	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
