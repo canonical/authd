@@ -286,7 +286,7 @@ jobs:
 
       - name: Create commit status with link to the logs
         id: create-commit-status
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         if: always() && steps.upload-pages.outcome == 'success'
         with:
           retries: 3
@@ -303,7 +303,7 @@ jobs:
             console.log(JSON.stringify(response, null, 2));
 
       - name: Check the test result
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         if: always()
         with:
           script: |
