@@ -155,10 +155,12 @@ Then build the PAM module:
 
 ```shell
 go generate ./pam/
-go build -tags pam_binary_exec -o ./pam/authd-pam ./pam
+go build -o ./pam/authd-pam ./pam
 ```
 
-This last command will produce two libraries (`./pam/pam_authd.so` and `./pam/go-exec/pam_authd_exec.so`) and an executable (`./pam/authd-pam`).
+The `go generate` step produces two PAM modules (`./pam/pam_authd.so` and `./pam/go-exec/pam_authd_exec.so`).
+
+The `go build` step produces the PAM helper executable (`./pam/authd-pam`).
 
 These modules must be copied to `/usr/lib/$(gcc -dumpmachine)/security/` while the executable must be copied to `/usr/libexec/authd-pam`.
 
