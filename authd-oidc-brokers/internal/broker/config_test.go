@@ -438,6 +438,50 @@ unknown_key = some_value
 	}
 }
 
+func TestBrokerConfFilesHaveNoUnknownSettings(t *testing.T) {
+	// This test is NOT parallel because it modifies the global log handler.
+	p := &testutils.MockProvider{}
+
+	confFiles := map[string]string{
+		"google":    "../../conf/variants/google/broker.conf",
+		"msentraid": "../../conf/variants/msentraid/broker.conf",
+		"oidc":      "../../conf/variants/oidc/broker.conf",
+	}
+
+	for name, confFile := range confFiles {
+		t.Run(name, func(t *testing.T) {
+			content, err := os.ReadFile(confFile)
+			require.NoError(t, err, "Setup: Failed to read broker.conf")
+
+			// Replace template placeholders with valid dummy values so that
+			// parseConfig does not fail on the placeholder check.
+			replaced := strings.NewReplacer(
+				"<CLIENT_ID>", "test-client-id",
+				"<CLIENT_SECRET>", "test-client-secret",
+				"<ISSUER_URL>", "https://example.com",
+				"<ISSUER_ID>", "test-issuer-id",
+			).Replace(string(content))
+
+			var capturedWarnings []string
+			log.SetLevelHandler(log.WarnLevel, func(_ context.Context, _ log.Level, format string, args ...interface{}) {
+				capturedWarnings = append(capturedWarnings, fmt.Sprintf(format, args...))
+			})
+			t.Cleanup(func() {
+				log.SetLevelHandler(log.WarnLevel, nil)
+			})
+
+			confPath := filepath.Join(t.TempDir(), "broker.conf")
+			err = os.WriteFile(confPath, []byte(replaced), 0600)
+			require.NoError(t, err, "Setup: Failed to write config file")
+
+			_, err = parseConfigFromPath(confPath, p)
+			require.NoError(t, err)
+
+			require.Empty(t, capturedWarnings, "No unknown-setting warnings should be produced for the %s broker.conf", name)
+		})
+	}
+}
+
 func FuzzParseConfig(f *testing.F) {
 	p := &testutils.MockProvider{}
 	f.Fuzz(func(t *testing.T, a []byte) {
