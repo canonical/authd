@@ -18,7 +18,8 @@ import (
 const (
 	// forceAccessCheckWithProviderKey is the key in the config file for the setting to force verification with the
 	// identity provider during login.
-	forceAccessCheckWithProviderKey = "force_access_check_with_provider"
+	forceAccessCheckWithProviderKey    = "force_access_check_with_provider"
+	forceAccessCheckWithProviderKeyOld = "force_provider_authentication"
 
 	// oidcSection is the section name in the config file for the OIDC specific configuration.
 	oidcSection = "oidc"
@@ -229,10 +230,15 @@ func parseConfig(cfgContent []byte, dropInContent []any, p provider) (userConfig
 		cfg.clientSecret = oidc.Key(clientSecret).String()
 		cfg.extraScopes = oidc.Key(extraScopesKey).Strings(",")
 
-		if oidc.HasKey(forceAccessCheckWithProviderKey) {
-			cfg.forceAccessCheckWithProvider, err = oidc.Key(forceAccessCheckWithProviderKey).Bool()
+		forceAccessCheckKey := forceAccessCheckWithProviderKey
+		// If we don't have the new key, we should try reading the old one instead.
+		if !oidc.HasKey(forceAccessCheckKey) {
+			forceAccessCheckKey = forceAccessCheckWithProviderKeyOld
+		}
+		if oidc.HasKey(forceAccessCheckKey) {
+			cfg.forceAccessCheckWithProvider, err = oidc.Key(forceAccessCheckKey).Bool()
 			if err != nil {
-				return userConfig{}, fmt.Errorf("error parsing '%s': %w", forceAccessCheckWithProviderKey, err)
+				return userConfig{}, fmt.Errorf("error parsing '%s': %w", forceAccessCheckKey, err)
 			}
 		}
 	}
