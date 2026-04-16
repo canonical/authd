@@ -44,3 +44,28 @@ class SSH:
             logger.debug(f"stderr: {stderr}")
 
         return stdout
+
+    @keyword
+    async def execute_as_user(self, user:str, command: str, timeout: int|None = 30) -> str:
+        """
+        Run a command via SSH as a specific user and return its output.
+        """
+        command = (f"sudo -u {user} "
+                   f"XDG_RUNTIME_DIR=/run/user/$(id -u {user}) "
+                   f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u {user})/bus "
+                   f"{command}")
+        return await self.execute(command, timeout)
+
+    @keyword
+    async def execute_as_current_user(self, command: str, timeout: int|None = 30) -> str:
+        # Get the user that is currently logged in by checking which user the
+        # gnome-shell process runs as
+        stdout = await self.execute("ps -C gnome-shell -o user=")
+        users = stdout.strip().split("\n")
+        if len(users) == 0:
+            raise RuntimeError("No user is currently logged in")
+        elif len(users) > 1:
+            raise RuntimeError(f"Multiple users are logged in: {users}")
+        user = users[0].strip()
+        logger.info(f"Running command as user '{user}'")
+        return await self.execute_as_user(user, command, timeout)

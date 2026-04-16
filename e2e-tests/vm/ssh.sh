@@ -35,13 +35,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 
-if [ -z "${RELEASE:-}" ]; then
+if [ -z "${VM_NAME:-}" ] && [ -z "${RELEASE:-}" ]; then
     echo >&2 "Error: Missing required argument <release>"
     usage >&2
     exit 1
 fi
 
-VM_NAME="e2e-runner-${RELEASE}"
+VM_NAME=${VM_NAME:-"e2e-runner-${RELEASE}"}
 
 CID=$(virsh dumpxml "${VM_NAME}" | \
       xmllint --xpath 'string(//vsock/cid/@address)' -)

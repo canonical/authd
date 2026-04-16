@@ -42,7 +42,7 @@ Try Select User
 
 
 Log Out
-    Run Command    gnome-session-quit --logout --no-prompt
+    SSH.Execute    loginctl terminate-seat seat0
 
 
 Wait Until Desktop Ready
@@ -77,7 +77,11 @@ Try Desktop Ready
 
 
 Open Terminal
-    Run Command    x-terminal-emulator
+    IF    '%{RELEASE}' == 'noble'
+        Launch App    org.gnome.Terminal.desktop
+    ELSE
+        Launch App    org.gnome.Ptyxis.desktop
+    END
     Hid.Move Pointer To Proportional    1    1
     Match Text    @ubuntu:~$    120
     Hid.Keys Combo    F11
@@ -147,6 +151,10 @@ Left Button Click
     Hid.Move Pointer To Proportional    1    1
 
 
+# Run Command uses the Alt+F2 shortcut to open the "Run a Command" dialog and
+# execute the given command.
+# Consider using SSH.Execute As Current User instead, which is more reliable and
+# faster because it doesn't use simulated keyboard input.
 Run Command
     [Arguments]    ${command}
     Hid.Keys Combo    Alt_L    F2
@@ -162,9 +170,9 @@ Submit Run Command Dialog
     Should Be Empty    ${matches}
 
 
-Start Application
-    [Arguments]    ${application}
-    Run Command    ${application}
+Launch App
+    [Arguments]    ${app-id}
+    SSH.Execute As Current User    gtk-launch ${app-id}
 
 
 Cancel Operation
