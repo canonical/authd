@@ -119,3 +119,15 @@ git --no-pager log
 - Follow [Effective Go](https://go.dev/doc/effective_go) for Go style conventions
 - Use `go fmt` and `gofmt -s`
 - Rust: Standard cargo fmt conventions
+
+## Linting
+
+After making changes to Go files, run `scripts/golangci-lint` to check for lint errors:
+```bash
+scripts/golangci-lint run
+```
+
+If the changed files are below `authd-oidc-brokers/`, use the `-C` flag to run the linter in that directory:
+```bash
+scripts/golangci-lint -C authd-oidc-brokers run
+```
