@@ -41,6 +41,9 @@
     <method name="CancelIsAuthenticated">
         <arg type="s" direction="in" name="sessionID"/>
     </method>
+    <method name="DeleteUser">
+        <arg type="s" direction="in" name="username"/>
+    </method>
   </interface>
   <interface name="org.freedesktop.DBus.Introspectable">
     <method name="Introspect">
