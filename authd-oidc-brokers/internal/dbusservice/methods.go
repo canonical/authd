@@ -86,6 +86,15 @@ func (s *Service) UserPreCheck(username string) (userinfo string, dbusErr *dbus.
 	return userinfo, nil
 }
 
+// DeleteUser is the method through which the broker and the daemon will communicate once dbusInterface.DeleteUser is called.
+func (s *Service) DeleteUser(username string) (dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "DeleteUser: %s", username)
+	if err := s.broker.DeleteUser(username); err != nil {
+		return dbus.MakeFailedError(err)
+	}
+	return nil
+}
+
 // makeCanceledError creates a dbus.Error for a canceled operation.
 func makeCanceledError() *dbus.Error {
 	return &dbus.Error{Name: "com.ubuntu.authd.Canceled"}

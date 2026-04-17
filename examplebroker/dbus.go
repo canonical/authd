@@ -134,3 +134,11 @@ func (b *Bus) UserPreCheck(username string) (userinfo string, dbusErr *dbus.Erro
 	}
 	return userinfo, nil
 }
+
+// DeleteUser is the method through which the broker and the daemon will communicate once dbusInterface.DeleteUser is called.
+func (b *Bus) DeleteUser(username string) (dbusErr *dbus.Error) {
+	if err := b.broker.DeleteUser(context.Background(), username); err != nil {
+		return dbus.MakeFailedError(err)
+	}
+	return nil
+}

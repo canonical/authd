@@ -121,17 +121,9 @@ func TestNewSession(t *testing.T) {
 			emptyUsername: true,
 			wantErr:       true,
 		},
-		"Error_when_username_contains_path_traversal": {
-			username: "../test",
+		"Error_when_user_directory_path_could_not_be_derived": {
+			username: "invalid/../user",
 			wantErr:  true,
-		},
-		"Error_when_username_contains_path_traversal_but_does_not_leave_the_parent_directory": {
-			username: "test/../other-user",
-			wantErr:  true,
-		},
-		"Error_when_issuer_contains_path_traversal": {
-			issuerURL: "https://..",
-			wantErr:   true,
 		},
 	}
 	for name, tc := range tests {
@@ -1442,6 +1434,158 @@ func TestUserPreCheck(t *testing.T) {
 			require.NoError(t, err, "UserPreCheck should not have returned an error")
 
 			golden.CheckOrUpdate(t, got)
+		})
+	}
+}
+
+func TestNormalizedIssuer(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		issuerURL string
+		want      string
+	}{
+		"HTTP_issuerURL":                     {issuerURL: "http://example.com", want: "example.com"},
+		"HTTPS_issuerURL":                    {issuerURL: "https://example.com", want: "example.com"},
+		"IssuerURL_with_path":                {issuerURL: "https://example.com/tenant/v2.0", want: "example.com_tenant_v2.0"},
+		"IssuerURL_with_port":                {issuerURL: "https://example.com:8080", want: "example.com_8080"},
+		"IssuerURL_with_port_and_path":       {issuerURL: "https://example.com:8080/path", want: "example.com_8080_path"},
+		"IssuerURL_with_IP_address":          {issuerURL: "https://127.0.0.1", want: "127.0.0.1"},
+		"IssuerURL_with_IP_address_and_port": {issuerURL: "https://127.0.0.1:8080", want: "127.0.0.1_8080"},
+		"IssuerURL_without_scheme":           {issuerURL: "example.com", want: "example.com"},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				issuerURL: tc.issuerURL,
+			})
+
+			got := b.NormalizedIssuer(tc.issuerURL)
+			require.Equal(t, tc.want, got, "NormalizedIssuer returned unexpected result")
+		})
+	}
+}
+
+func TestUserDataDir(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		issuerURL string
+		username  string
+		want      string
+		wantErr   bool
+	}{
+		"Successfully_return_user_data_dir_for_simple_username_and_issuer": {
+			issuerURL: "https://example.com",
+			username:  "user@example.com",
+			want:      "example.com/user@example.com",
+		},
+		"Successfully_return_user_data_dir_for_issuer_url_without_scheme": {
+			issuerURL: "example.com",
+			username:  "user@example.com",
+			want:      "example.com/user@example.com",
+		},
+		"Error_when_username_is_empty": {
+			issuerURL: "https://example.com",
+			username:  "",
+			wantErr:   true,
+		},
+		"Error_when_username_contains_path_traversal": {
+			issuerURL: "https://example.com",
+			username:  "../test",
+			wantErr:   true,
+		},
+		"Error_when_username_contains_path_traversal_but_does_not_leave_the_parent_directory": {
+			issuerURL: "https://example.com",
+			username:  "test/../other-user",
+			wantErr:   true,
+		},
+		"Error_when_issuer_contains_path_traversal": {
+			issuerURL: "https://..",
+			username:  "validuser",
+			wantErr:   true,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				issuerURL: tc.issuerURL,
+			})
+
+			got, err := b.UserDataDir(tc.username)
+			if tc.wantErr {
+				require.Error(t, err, "UserDataDir should return an error, but did not")
+				return
+			}
+			require.NoError(t, err, "UserDataDir should not return an error")
+			require.Equal(t, filepath.Join(b.DataDir(), tc.want), got, "UserDataDir returned unexpected result")
+		})
+	}
+}
+
+func TestDeleteUser(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		username        string
+		createUserDir   bool
+		readOnlyDataDir bool
+
+		wantErr bool
+	}{
+		"Successfully_delete_existing_user":        {username: "user@example.com", createUserDir: true},
+		"Successfully_delete_unknown_user_is_noop": {username: "unknown@example.com"},
+
+		"Error_when_user_data_dir_cannot_be_removed":     {username: "user@example.com", createUserDir: true, readOnlyDataDir: true, wantErr: true},
+		"Error_when_userDataDir_could_not_be_determined": {username: "", wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				issuerURL: defaultIssuerURL,
+			})
+
+			// Derive the path where DeleteUser will look for the user's data
+			userDataDir, err := b.UserDataDir(tc.username)
+			if tc.username == "" {
+				require.Error(t, err, "Setup: UserDataDir should have returned an error for empty username")
+				return
+			}
+			require.NoError(t, err, "Setup: UserDataDir should not have returned an error for valid username")
+
+			if tc.createUserDir {
+				err := os.MkdirAll(userDataDir, 0700)
+				require.NoError(t, err, "Setup: could not create user data directory")
+
+				// Write a dummy token file so the directory is non-empty
+				err = os.WriteFile(filepath.Join(userDataDir, "token.json"), []byte(`{}`), 0600)
+				require.NoError(t, err, "Setup: could not write dummy token file")
+			}
+
+			if tc.readOnlyDataDir {
+				// Make the issuer directory read-only so RemoveAll fails on the user subdir
+				issuerDir := filepath.Dir(userDataDir)
+				err := os.Chmod(issuerDir, 0500) //nolint:gosec // Intentional read-only permission for testing
+				require.NoError(t, err, "Setup: could not make issuer directory read-only")
+				t.Cleanup(func() { _ = os.Chmod(issuerDir, 0700) }) //nolint:gosec // Restore full permissions after test
+			}
+
+			err = b.DeleteUser(tc.username)
+			if tc.wantErr {
+				require.Error(t, err, "DeleteUser should return an error, but did not")
+				return
+			}
+			require.NoError(t, err, "DeleteUser should not return an error, but did")
+
+			// Verify the user data directory no longer exists
+			require.NoDirExists(t, userDataDir, "User data directory should have been removed")
 		})
 	}
 }
