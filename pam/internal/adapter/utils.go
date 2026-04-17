@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/canonical/authd/log"
@@ -251,4 +252,27 @@ func goBackLabel(previousStage proto.Stage) string {
 	default:
 		return ""
 	}
+}
+
+// labeledField is a label-value pair used by [formatAlignedFields].
+type labeledField struct{ label, value string }
+
+// formatAlignedFields pads labels so that all values start at the same column.
+//
+// NOTE: This is not RTL-friendly and should be adjusted when adding RTL
+// language support.
+func formatAlignedFields(fields []labeledField) []string {
+	maxLen := 0
+	for _, f := range fields {
+		if n := utf8.RuneCountInString(f.label); n > maxLen {
+			maxLen = n
+		}
+	}
+
+	out := make([]string, 0, len(fields))
+	for _, f := range fields {
+		padding := strings.Repeat(" ", maxLen-utf8.RuneCountInString(f.label)+1)
+		out = append(out, f.label+":"+padding+f.value)
+	}
+	return out
 }
