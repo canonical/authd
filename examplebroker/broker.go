@@ -877,6 +877,21 @@ func (b *Broker) UserPreCheck(ctx context.Context, username string) (string, err
 	return userInfoFromName(username), nil
 }
 
+// DeleteUser removes any broker side data associated with the user.
+func (b *Broker) DeleteUser(ctx context.Context, username string) error {
+	exampleUsersMu.Lock()
+	defer exampleUsersMu.Unlock()
+
+	if _, exists := exampleUsers[username]; !exists {
+		// Nothing to delete.
+		return nil
+	}
+
+	delete(exampleUsers, username)
+	log.Infof(ctx, "Broker: deleted user data for %q", username)
+	return nil
+}
+
 // decryptAES is just here to illustrate the encryption and decryption
 // and in no way the right way to perform a secure encryption
 //
