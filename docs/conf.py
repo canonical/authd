@@ -70,7 +70,16 @@ copyright = "%s CC-BY-SA, %s" % (datetime.date.today().year, author)
 # NOTE: The Open Graph Protocol (OGP) enhances page display in a social graph
 #       and is used by social media platforms; see https://ogp.me/
 
-ogp_site_url = "https://documentation.ubuntu.com/authd/stable-docs"
+# Read the version slug once here so it can drive both ogp_site_url and the
+# Sphinx build tags below.  On RTD this is injected automatically; locally
+# set READTHEDOCS_VERSION before invoking sphinx-build (see demo.md).
+_rtd_version = os.getenv("READTHEDOCS_VERSION", "")
+
+ogp_site_url = (
+    "https://documentation.ubuntu.com/authd/edge-docs"
+    if _rtd_version == "edge-docs"
+    else "https://documentation.ubuntu.com/authd/stable-docs"
+)
 
 
 # Preview name of the documentation website
@@ -163,6 +172,27 @@ html_extra_path = []
 if os.getenv("OPENAPI", ""):
     tags.add("openapi")
     html_extra_path.append("how-to/assets/openapi.yaml")
+
+# Register the stable/edge build variant as a Sphinx tag so that
+# {only} directives in .md source files work correctly:
+#
+#   ```{only} edge
+#   Content shown only in edge-docs builds.
+#   ```
+#
+#   ```{only} stable
+#   Content shown only in stable-docs builds.
+#   ```
+#
+# To test locally, set READTHEDOCS_VERSION before invoking sphinx-build:
+#   READTHEDOCS_VERSION=edge-docs sphinx-build ...   -> edge tag set
+#   READTHEDOCS_VERSION=stable-docs sphinx-build ...  -> stable tag set
+#   (unset)                                           -> stable tag (safe default)
+# See demo.md at the repository root for full example commands.
+if _rtd_version == "edge-docs":
+    tags.add("edge")
+else:
+    tags.add("stable")
 
 # TODO: To enable the edit button on pages, uncomment and change the link to a
 # public repository on GitHub or Launchpad. Any of the following link domains

@@ -13,19 +13,23 @@ This project consists of two components:
 
 authd is delivered as a Debian package for Ubuntu Desktop and Ubuntu Server.
 
-```{admonition} (Optional) Switching from stable to edge
+:::::{only} edge
+:::{admonition} (Optional) Switching from stable to edge
 :class: important
-This guide describes how to install the stable version of authd and its brokers, which is recommended for production use. 
+This guide describes how to install the stable version of authd and its brokers, which is recommended for production use.
 
 If you want to try the **edge** version, read our guide on [changing authd
 versions](ref::changing-versions).
-```
+:::
+:::::
 
 ## System requirements
 
+:::::{only} stable
 * Ubuntu: Desktop or Server editions
 * Release: 24.04 LTS or later
 * Architectures: amd64, arm64
+:::::
 
 ## Install authd
 
