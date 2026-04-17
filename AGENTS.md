@@ -100,6 +100,15 @@ The PAM module has two implementations (see `pam/Hacking.md`):
 - Enable debug: `authd daemon -vvv` (3 levels of verbosity)
 - Socket path: `/run/authd.sock` (override with `AUTHD_NSS_SOCKET` for NSS tests)
 
+## Git Usage
+
+Always pass `--no-pager` to git commands that may invoke a pager, to prevent them from hanging:
+```bash
+git --no-pager diff
+git --no-pager show
+git --no-pager log
+```
+
 ## Dependencies & Tools
 - **Go**: See `go.mod` for version requirements, uses go modules with vendoring
 - **Rust**: Cargo with vendor filtering (see `Cargo.toml` workspace)
@@ -110,3 +119,15 @@ The PAM module has two implementations (see `pam/Hacking.md`):
 - Follow [Effective Go](https://go.dev/doc/effective_go) for Go style conventions
 - Use `go fmt` and `gofmt -s`
 - Rust: Standard cargo fmt conventions
+
+## Linting
+
+After making changes to Go files, run `scripts/golangci-lint` to check for lint errors:
+```bash
+scripts/golangci-lint run
+```
+
+If the changed files are below `authd-oidc-brokers/`, use the `-C` flag to run the linter in that directory:
+```bash
+scripts/golangci-lint -C authd-oidc-brokers run
+```

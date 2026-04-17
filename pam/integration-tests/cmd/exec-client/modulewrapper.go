@@ -22,7 +22,7 @@ type moduleWrapper struct {
 }
 
 func newModuleWrapper(serverAddress string) (pam.ModuleTransaction, func(), error) {
-	mTx, closeFunc, err := dbusmodule.NewTransaction(context.TODO(), serverAddress)
+	mTx, closeFunc, err := dbusmodule.NewTransaction(serverAddress)
 	return &moduleWrapper{mTx}, closeFunc, err
 }
 
