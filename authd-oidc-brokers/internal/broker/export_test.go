@@ -125,6 +125,16 @@ func (b *Broker) DataDir() string {
 	return b.cfg.DataDir
 }
 
+// UserDataDir exposes the broker's userDataDir method for tests.
+func (b *Broker) UserDataDir(username string) (string, error) {
+	return b.userDataDir(username)
+}
+
+// NormalizedIssuer exposes the broker's normalizedIssuer method for tests.
+func (b *Broker) NormalizedIssuer(issuerURL string) string {
+	return normalizedIssuer(issuerURL)
+}
+
 // GetNextAuthModes returns the next auth mode of the specified session.
 func (b *Broker) GetNextAuthModes(sessionID string) []string {
 	b.currentSessionsMu.Lock()
