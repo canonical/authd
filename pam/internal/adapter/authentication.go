@@ -230,6 +230,8 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 			// If the session is for authentication, we allow the user to set the same password again, to avoid
 			// that the user is forced to change their password if e.g. device authentication is forced when
 			// the refresh token is expired.
+			// TODO: This will not select the correct secret in case the last authentication step uses a secret
+			// which is not the local password (e.g. OTP).
 			oldPassword = m.currentSecret
 		}
 
@@ -347,6 +349,8 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 		switch msg.access {
 		case auth.Granted:
 			var secret string
+			// TODO: This will not select the correct secret in case the last authentication step uses a secret
+			// which is not the local password (e.g. OTP).
 			if msg.secret != nil {
 				secret = *msg.secret
 			} else if m.currentSecret != "" {
