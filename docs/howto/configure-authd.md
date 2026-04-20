@@ -267,6 +267,9 @@ user does not have the necessary permissions in the identity provider.
 In some cases, forcing the access check may prevent login, such as when there are network issues.
 ```
 
+Additional information on the forced access check is provided in the [security
+overview](ref::force-auth-security).
+
 (ref::config-extra-scopes)=
 
 ## Configure extra scopes
