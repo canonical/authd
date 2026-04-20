@@ -259,6 +259,9 @@ unreachable, enable it as follows:
 force_access_check_with_provider = true
 ```
 
+This check works by forcing a token refresh during login, which fails if the
+user does not have the necessary permissions in the identity provider.
+
 ```{warning}
 In some cases, this may prevent login, such as when there are network issues.
 ```
