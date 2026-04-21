@@ -608,7 +608,19 @@ func TestIsAuthenticated(t *testing.T) {
 		"Successfully_authenticate_user_with_device_auth_and_newpassword": {firstSecret: "-", wantSecondCall: true},
 		"Successfully_authenticate_user_with_password":                    {firstMode: authmodes.Password, token: &tokenOptions{}},
 
-		"Authenticating_with_qrcode_reacquires_token":          {firstSecret: "-", wantSecondCall: true, token: &tokenOptions{}},
+		"Authenticating_with_qrcode_reacquires_token": {
+			firstSecret:       "-",
+			token:             &tokenOptions{},
+			wantGroups:        []info.Group{{Name: "remote-test-group", UGID: "12345"}, {Name: "local-test-group", UGID: ""}},
+			wantNextAuthModes: []string{},
+		},
+
+		"Authenticating_with_device_auth_and_existing_password_skips_newpassword": {
+			firstSecret:       "-",
+			token:             &tokenOptions{},
+			wantGroups:        []info.Group{{Name: "remote-test-group", UGID: "12345"}, {Name: "local-test-group", UGID: ""}},
+			wantNextAuthModes: []string{},
+		},
 		"Authenticating_with_password_refreshes_expired_token": {firstMode: authmodes.Password, token: &tokenOptions{expired: true}},
 		"Authenticating_with_password_still_allowed_if_server_is_unreachable": {
 			firstMode: authmodes.Password,
