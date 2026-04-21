@@ -66,6 +66,7 @@ Strong passwords are critical to prevent unauthorized access.
 authd uses libpwquality to enforce password complexity requirements. See the
 [Configure password quality](ref::config-pwquality) section for details.
 
+(ref::force-auth-security)=
 #### Force provider authentication
 
 If the identity provider is reachable during login, authd verifies that the user

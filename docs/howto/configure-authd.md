@@ -244,14 +244,15 @@ client_secret = <CLIENT_SECRET>
 :::::
 
 (ref::config-force-provider-auth)=
-## Force remote authentication with the identity provider
+## Force remote access check with the identity provider
 
 By default, remote authentication with the identity provider only happens if
 there is a working internet connection and the provider is reachable during
 login.
 
-If you want to force remote authentication, even when the provider is
-unreachable, enable it as follows:
+To ensure that user access permissions are always checked with the identity
+provider during login, even when the provider is unreachable, enable the check
+as follows:
 
 ```ini
 [oidc]
@@ -259,9 +260,15 @@ unreachable, enable it as follows:
 force_access_check_with_provider = true
 ```
 
+This check works by forcing a token refresh during login, which fails if the
+user does not have the necessary permissions in the identity provider.
+
 ```{warning}
-In some cases, this may prevent login, such as when there are network issues.
+In some cases, forcing the access check may prevent login, such as when there are network issues.
 ```
+
+Additional information on the forced access check is provided in the [security
+overview](ref::force-auth-security).
 
 (ref::config-extra-scopes)=
 
