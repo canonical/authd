@@ -536,6 +536,10 @@ func qrcodeData(sessionInfo *sessionInfo) (content string, code string) {
 		"https://www.ubuntu-it.org/",
 	}
 
+	if strings.HasPrefix(sessionInfo.username, UserIntegrationQRcodeWithoutCodePrefix) {
+		return qrcodeURIs[0], ""
+	}
+
 	if strings.HasPrefix(sessionInfo.username, UserIntegrationQRcodeStaticPrefix) {
 		return qrcodeURIs[0], fmt.Sprint(baseCode)
 	}
