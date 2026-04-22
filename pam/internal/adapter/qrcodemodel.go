@@ -106,11 +106,11 @@ func (m qrcodeModel) View() string {
 	// Add some extra vertical space to improve readability
 	fields = append(fields, "")
 
-	fields = append(fields, fmt.Sprintf("URL:  %s", m.content))
-
+	labeledFields := []labeledField{{"URL", m.content}}
 	if m.code != "" {
-		fields = append(fields, fmt.Sprintf("Code: %s", m.code))
+		labeledFields = append(labeledFields, labeledField{"Code", m.code})
 	}
+	fields = append(fields, formatAlignedFields(labeledFields)...)
 
 	if m.buttonModel != nil {
 		fields = append(fields, style.Render(m.buttonModel.View()))

@@ -1,8 +1,8 @@
-authd (0.6.2+git260417+280+1f7d986c) questing; urgency=medium
+authd (0.6.2+git260417+285+ca27edfa) questing; urgency=medium
 
-  * Github build. Run id: 24568003950. Run number: 280.
+  * Github build. Run id: 24576355385. Run number: 285.
 
- -- Noor <nooreldeen.mansour@canonical.com>  Fri, 17 Apr 2026 13:38:56 +0000
+ -- Noor <nooreldeen.mansour@canonical.com>  Fri, 17 Apr 2026 16:46:20 +0000
 
 authd (0.6.2) resolute; urgency=medium
 
