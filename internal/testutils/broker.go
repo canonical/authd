@@ -385,6 +385,8 @@ func userInfoFromName(sessionID string, extraGroups []groupJSONInfo) string {
 		name = ""
 	case "ia_info_mismatching_user_name":
 		name = "different_username@example.com"
+	case "ia_info_invalid_username":
+		name = "-invalid_username"
 	case "ia_info_empty_group_name":
 		group = ""
 	case "ia_info_empty_ugid":

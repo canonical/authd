@@ -229,6 +229,7 @@ func TestIsAuthenticated(t *testing.T) {
 		"Error_when_broker_returns_invalid_access":                            {sessionID: "ia_invalid_access"},
 		"Error_when_broker_returns_invalid_userinfo":                          {sessionID: "ia_invalid_userinfo"},
 		"Error_when_broker_returns_userinfo_with_empty_username":              {sessionID: "ia_info_empty_user_name"},
+		"Error_when_broker_returns_userinfo_with_invalid_username":            {sessionID: "ia_info_invalid_username"},
 		"Error_when_broker_returns_userinfo_with_empty_group_name":            {sessionID: "ia_info_empty_group_name"},
 		"Error_when_broker_returns_userinfo_with_invalid_homedir":             {sessionID: "ia_info_invalid_home"},
 		"Error_when_broker_returns_userinfo_with_invalid_shell":               {sessionID: "ia_info_invalid_shell"},
