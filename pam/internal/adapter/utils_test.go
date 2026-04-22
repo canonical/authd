@@ -313,3 +313,42 @@ func TestSafeMessageDebug(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatAlignedFields(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		fields []labeledField
+		want   []string
+	}{
+		"Single field has no extra padding": {
+			fields: []labeledField{{"URL", "https://example.com"}},
+			want:   []string{"URL: https://example.com"},
+		},
+		"Two fields are padded to equal width": {
+			fields: []labeledField{{"URL", "https://example.com"}, {"Code", "1337"}},
+			want:   []string{"URL:  https://example.com", "Code: 1337"},
+		},
+		"Longer first label pads the second": {
+			fields: []labeledField{{"Verification URL", "https://example.com"}, {"Code", "1337"}},
+			want:   []string{"Verification URL: https://example.com", "Code:             1337"},
+		},
+		"Equal length labels": {
+			fields: []labeledField{{"Name", "Alice"}, {"Role", "Admin"}},
+			want:   []string{"Name: Alice", "Role: Admin"},
+		},
+		"Multibyte label is measured by rune count": {
+			// "URLé" is 5 bytes but 4 runes — padding must use rune count.
+			fields: []labeledField{{"URLé", "https://example.com"}, {"Code", "1337"}},
+			want:   []string{"URLé: https://example.com", "Code: 1337"},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got := formatAlignedFields(tc.fields)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}

@@ -729,11 +729,11 @@ func (m nativeModel) handleQrCode() tea.Cmd {
 		qrcodeView = append(qrcodeView, qrcode)
 	}
 
-	qrcodeView = append(qrcodeView, fmt.Sprintf("URL:  %s", m.uiLayout.GetContent()))
-
+	labeledFields := []labeledField{{"URL", m.uiLayout.GetContent()}}
 	if code := m.uiLayout.GetCode(); code != "" {
-		qrcodeView = append(qrcodeView, fmt.Sprintf("Code: %s", code))
+		labeledFields = append(labeledFields, labeledField{"Code", code})
 	}
+	qrcodeView = append(qrcodeView, formatAlignedFields(labeledFields)...)
 
 	// Add some extra vertical space to improve readability
 	qrcodeView = append(qrcodeView, " ")
