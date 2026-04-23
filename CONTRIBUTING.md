@@ -163,7 +163,7 @@ This last command will produce two libraries (`./pam/pam_authd.so` and `./pam/go
 These modules must be copied to `/usr/lib/$(gcc -dumpmachine)/security/` while the executable must be copied to `/usr/libexec/authd-pam`.
 
 For further information about the PAM module architecture and testing see the
-[PAM Hacking](https://github.com/canonical/authd/blob/main/pam/Hacking.md) page.
+[README for the authd PAM module](https://github.com/canonical/authd/blob/main/pam/README.md).
 
 #### Building the NSS module only
 

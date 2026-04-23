@@ -451,12 +451,12 @@ func TestIsAuthenticated(t *testing.T) {
 		"Error_when_user_is_locked":     {username: "locked@example.com", existingDB: "cache-with-locked-user.db"},
 
 		// broker errors
-		"Error_when_authenticating":                         {username: "ia_error@example.com"},
-		"Error_on_empty_data_even_if_granted":               {username: "ia_empty_data@example.com"},
-		"Error_when_broker_returns_invalid_access":          {username: "ia_invalid_access@example.com"},
-		"Error_when_broker_returns_invalid_data":            {username: "ia_invalid_data@example.com"},
-		"Error_when_broker_returns_invalid_userinfo":        {username: "ia_invalid_userinfo@example.com"},
-		"Error_when_calling_second_time_without_cancelling": {username: "ia_second_call@example.com", secondCall: true},
+		"Error_when_authenticating":                                              {username: "ia_error@example.com"},
+		"Error_on_empty_data_even_if_granted":                                    {username: "ia_empty_data@example.com"},
+		"Error_when_broker_returns_invalid_access":                               {username: "ia_invalid_access@example.com"},
+		"Error_when_broker_returns_invalid_data":                                 {username: "ia_invalid_data@example.com"},
+		"Error_when_broker_returns_invalid_userinfo":                             {username: "ia_invalid_userinfo@example.com"},
+		"Successfully_authenticate_after_calling_second_time_without_cancelling": {username: "ia_second_call@example.com", secondCall: true},
 
 		// local group error
 		"Error_on_updating_local_groups_with_unexisting_file": {username: "success_with_local_groups@example.com", localGroupsFile: "does_not_exists.group"},

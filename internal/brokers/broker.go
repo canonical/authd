@@ -43,6 +43,12 @@ type Broker struct {
 	ongoingUserRequests   map[string]string
 	ongoingUserRequestsMu *sync.Mutex
 
+	// isAuthMu serialises IsAuthenticated calls per session. A new call for
+	// the same session must wait until the previous one — including any broker-
+	// side cancellation and cleanup — has fully returned.
+	isAuthMu   map[string]*sync.Mutex
+	isAuthMuMu *sync.Mutex
+
 	brokerer brokerer
 }
 
@@ -83,6 +89,8 @@ func newBroker(ctx context.Context, configFile string, bus *dbus.Conn) (b Broker
 		layoutValidatorsMu:    &sync.Mutex{},
 		ongoingUserRequests:   make(map[string]string),
 		ongoingUserRequestsMu: &sync.Mutex{},
+		isAuthMu:              make(map[string]*sync.Mutex),
+		isAuthMuMu:            &sync.Mutex{},
 	}, nil
 }
 
@@ -141,6 +149,24 @@ func (b Broker) SelectAuthenticationMode(ctx context.Context, sessionID, authent
 // IsAuthenticated calls the broker corresponding method, stripping broker ID prefix from sessionID.
 func (b Broker) IsAuthenticated(ctx context.Context, sessionID, authenticationData string) (access string, data string, err error) {
 	sessionID = b.parseSessionID(sessionID)
+
+	// Serialise concurrent IsAuthenticated calls for the same session.
+	// A previous call may still be in-flight on the broker side after the
+	// client-side context was cancelled; we must wait for it to fully finish
+	// (including the broker's own cleanup) before sending a new request.
+	// Because broker.IsAuthenticated already does <-done in the ctx.Done()
+	// branch, this mutex is only released after the broker goroutine has
+	// exited — so the second call is guaranteed to see a clean broker state.
+	b.isAuthMuMu.Lock()
+	mu, ok := b.isAuthMu[sessionID]
+	if !ok {
+		mu = &sync.Mutex{}
+		b.isAuthMu[sessionID] = mu
+	}
+	b.isAuthMuMu.Unlock()
+
+	mu.Lock()
+	defer mu.Unlock()
 
 	// monitor ctx in goroutine to call cancel
 	done := make(chan struct{})
@@ -229,6 +255,10 @@ func (b Broker) endSession(ctx context.Context, sessionID string) (err error) {
 	b.ongoingUserRequestsMu.Lock()
 	defer b.ongoingUserRequestsMu.Unlock()
 	delete(b.ongoingUserRequests, sessionID)
+
+	b.isAuthMuMu.Lock()
+	delete(b.isAuthMu, sessionID)
+	b.isAuthMuMu.Unlock()
 
 	return b.brokerer.EndSession(ctx, sessionID)
 }
