@@ -41,6 +41,8 @@ const (
 	UserIntegrationCanResetPrefix = "user-can-reset-integration-"
 	// UserIntegrationLocalGroupsPrefix is the prefix for a local-groups user for integration tests.
 	UserIntegrationLocalGroupsPrefix = "user-local-groups-integration-"
+	// UserIntegrationQRcodeWithoutCodePrefix is the prefix for a qrcode user returning an URI without a code for integration tests.
+	UserIntegrationQRcodeWithoutCodePrefix = "user-integration-qrcode-without-code-"
 	// UserIntegrationQRcodeStaticPrefix is the prefix for a static qrcode user for integration tests.
 	UserIntegrationQRcodeStaticPrefix = "user-integration-qrcode-static-"
 	// UserIntegrationPreCheckValue is the value for a pre-check user for integration tests.

@@ -3,6 +3,6 @@ FIRST CALL:
 	data: {"Name":"ia_second_call@example.com","UID":0,"Gecos":"gecos for ia_second_call@example.com","Dir":"/home/ia_second_call@example.com","Shell":"/bin/sh/ia_second_call@example.com","Groups":[{"Name":"group-ia_second_call@example.com","GID":null,"UGID":"ugid-ia_second_call@example.com"}]}
 	err: <nil>
 SECOND CALL:
-	access: 
-	data: 
-	err: broker "TestIsAuthenticated": IsAuthenticated already running for session "TestIsAuthenticated/Error_when_calling_IsAuthenticated_a_second_time_without_cancelling_separator_ia_second_call"
+	access: granted
+	data: {"Name":"ia_second_call@example.com","UID":0,"Gecos":"gecos for ia_second_call@example.com","Dir":"/home/ia_second_call@example.com","Shell":"/bin/sh/ia_second_call@example.com","Groups":[{"Name":"group-ia_second_call@example.com","GID":null,"UGID":"ugid-ia_second_call@example.com"}]}
+	err: <nil>
