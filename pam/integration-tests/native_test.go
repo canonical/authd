@@ -134,6 +134,17 @@ func TestNativeAuthenticate(t *testing.T) {
 				"AUTHD_QRCODE_TAPE_ITEM_NAME": "QR code",
 			},
 		},
+		"Authenticate_user_with_qr_code_without_code": {
+			tape:         "qr_code",
+			tapeSettings: []tapeSetting{{vhsHeight, 3000}},
+			tapeVariables: map[string]string{
+				"AUTHD_QRCODE_TAPE_ITEM":      "7",
+				"AUTHD_QRCODE_TAPE_ITEM_NAME": "QR code",
+			},
+			clientOptions: clientOptions{
+				PamUser: examplebroker.UserIntegrationQRcodeWithoutCodePrefix + "native@example.com",
+			},
+		},
 		"Authenticate_user_with_qr_code_in_a_TTY": {
 			tape:         "qr_code",
 			tapeSettings: []tapeSetting{{vhsHeight, 4000}},
