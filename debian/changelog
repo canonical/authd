@@ -1,3 +1,13 @@
+authd (0.6.3) UNRELEASED; urgency=medium
+
+  * Fix primary group ID reset to UID during login
+  * Fix login failures due to unstable network connection
+  * Fix TTY and CLI login failing after a 120 second timeout.
+  * Fix Ctrl-D not working in text enries by pam_authd
+  * Fix int overflow in test on 32-bit architectures
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Thu, 23 Apr 2026 13:24:42 +0200
+
 authd (0.6.2) resolute; urgency=medium
 
   * New upload
