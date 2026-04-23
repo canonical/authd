@@ -4,3 +4,7 @@ set -eu
 
 cp --update=none "${SNAP}/conf/broker.conf.orig" "${SNAP_DATA}/broker.conf"
 chmod 0600 "${SNAP_DATA}/broker.conf"
+
+# shellcheck disable=SC2174 # it's fine that --mode only applies to the deepest directory, because the SNAP_DATA
+# directory is created by snapd with the correct permissions.
+mkdir -p --mode=0755 "${SNAP_DATA}/broker.conf.d"
