@@ -1,4 +1,4 @@
-authd (0.6.4) UNRELEASED; urgency=medium
+authd (0.6.4) resolute; urgency=medium
 
   * Update Go dependencies:
     - toolchain go1.25.9
@@ -6,7 +6,7 @@ authd (0.6.4) UNRELEASED; urgency=medium
     - golang.org/x/sys v0.43.0
     - golang.org/x/term v0.42.0
 
- -- Adrian Dombeck <adrian.dombeck@canonical.com>  Thu, 23 Apr 2026 15:49:29 +0200
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Thu, 23 Apr 2026 15:51:55 +0200
 
 authd (0.6.3) resolute; urgency=medium
 
