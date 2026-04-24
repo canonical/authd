@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-func TestUserLockCommand(t *testing.T) {
+func TestSetShellCommand(t *testing.T) {
 	t.Parallel()
 
 	daemonSocket := testutils.StartAuthd(t, daemonPath,
@@ -24,12 +24,16 @@ func TestUserLockCommand(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		args             []string
+		args []string
+
 		expectedExitCode int
 	}{
-		"Lock_user_success": {args: []string{"lock", "user1@example.com"}, expectedExitCode: 0},
+		"Set_shell_success": {args: []string{"set-shell", "user1", "/bin/bash"}, expectedExitCode: 0},
 
-		"Error_locking_invalid_user": {args: []string{"lock", "invaliduser"}, expectedExitCode: int(codes.NotFound)},
+		"Error_when_user_does_not_exist": {
+			args:             []string{"set-shell", "invaliduser", "/bin/bash"},
+			expectedExitCode: int(codes.NotFound),
+		},
 	}
 
 	for name, tc := range tests {

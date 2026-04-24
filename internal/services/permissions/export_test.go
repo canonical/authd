@@ -1,9 +1,9 @@
 package permissions
 
-type PeerCredsInfo = peerCredsInfo
+type PeerAuthInfo = peerAuthInfo
 
-func NewTestPeerCredsInfo(uid uint32, pid int32) PeerCredsInfo {
-	return PeerCredsInfo{uid: uid, pid: pid}
+func NewTestPeerAuthInfo(uid uint32, pid int32) PeerAuthInfo {
+	return PeerAuthInfo{uid: uid, pid: pid}
 }
 
 var (
