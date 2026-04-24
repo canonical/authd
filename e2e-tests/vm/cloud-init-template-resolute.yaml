@@ -28,6 +28,8 @@ packages:
   - gnome-shell-ubuntu-extensions
   - gsettings-ubuntu-schemas
   - libpam-pwquality
+  # Required to test that the keyring is unlocked (ships secret-tool)
+  - libsecret-tools
   - openssh-server
   - policykit-desktop-privileges
   # Required to get the VM's IP address
