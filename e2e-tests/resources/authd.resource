@@ -72,3 +72,7 @@ Check That Remote User Can Run Sudo Commands
     SSH.Execute    echo ${local_password} | sudo -S touch sudo-test.txt
     ${output} =    SSH.Execute    ls -l sudo-test.txt
     Should Contain    ${output}    sudo-test.txt
+
+
+Check that GNOME keyring is unlocked
+    SSH.Execute As Current User    echo '' | secret-tool store --label=test test key
