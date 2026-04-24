@@ -92,3 +92,7 @@ Check That Remote User Can Run Sudo Commands
     Hid.Type String    ls -l
     Hid.Keys Combo    Return
     Match Text    sudo-test.txt    15
+
+
+Check that GNOME keyring is unlocked
+    SSH.Execute As Current User    echo '' | secret-tool store --label=test test key
