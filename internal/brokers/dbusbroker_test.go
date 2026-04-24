@@ -61,42 +61,46 @@ func introspectionXML(interfaces ...string) string {
 	return string(data)
 }
 
-func TestDetectAvailableInterfaces(t *testing.T) {
+func TestGetInterface(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
 		interfaces []string
 		callErr    error
 
-		wantInterfaces []string
-		wantErr        bool
+		wantInterface string
+		wantErr       bool
 	}{
 		"Single_base_interface": {
-			interfaces:     []string{"com.ubuntu.authd.Broker"},
-			wantInterfaces: []string{"com.ubuntu.authd.Broker"},
+			interfaces:    []string{"com.ubuntu.authd.Broker"},
+			wantInterface: "com.ubuntu.authd.Broker",
 		},
-		"Multiple_versioned_interfaces_sorted_ascending": {
-			interfaces:     []string{"com.ubuntu.authd.Broker3", "com.ubuntu.authd.Broker1", "com.ubuntu.authd.Broker2"},
-			wantInterfaces: []string{"com.ubuntu.authd.Broker1", "com.ubuntu.authd.Broker2", "com.ubuntu.authd.Broker3"},
+		"Returns_highest_supported_version": {
+			interfaces:    []string{"com.ubuntu.authd.Broker1", "com.ubuntu.authd.Broker2", "com.ubuntu.authd.Broker3"},
+			wantInterface: "com.ubuntu.authd.Broker2",
 		},
 		"Versioned_interfaces_with_unversioned": {
-			interfaces:     []string{"com.ubuntu.authd.Broker2", "com.ubuntu.authd.Broker", "com.ubuntu.authd.Broker1"},
-			wantInterfaces: []string{"com.ubuntu.authd.Broker", "com.ubuntu.authd.Broker1", "com.ubuntu.authd.Broker2"},
+			interfaces:    []string{"com.ubuntu.authd.Broker2", "com.ubuntu.authd.Broker", "com.ubuntu.authd.Broker1"},
+			wantInterface: "com.ubuntu.authd.Broker2",
 		},
 		"Unrelated_interfaces_are_excluded": {
 			interfaces: []string{"com.ubuntu.authd.Broker2", "org.freedesktop.DBus.Introspectable",
 				"com.ubuntu.authd.Broker1", "com.ubuntu.authd.BrokerUnrelated"},
-			wantInterfaces: []string{"com.ubuntu.authd.Broker1", "com.ubuntu.authd.Broker2"},
+			wantInterface: "com.ubuntu.authd.Broker2",
 		},
 		"Single_versioned_interface": {
-			interfaces:     []string{"com.ubuntu.authd.Broker1"},
-			wantInterfaces: []string{"com.ubuntu.authd.Broker1"},
-		},
-		"No_interfaces": {
-			interfaces:     []string{},
-			wantInterfaces: nil,
+			interfaces:    []string{"com.ubuntu.authd.Broker1"},
+			wantInterface: "com.ubuntu.authd.Broker1",
 		},
 
+		"Error_when_no_supported_interfaces": {
+			interfaces: []string{},
+			wantErr:    true,
+		},
+		"Error_when_all_interfaces_above_latest_version": {
+			interfaces: []string{"com.ubuntu.authd.Broker3", "com.ubuntu.authd.Broker4"},
+			wantErr:    true,
+		},
 		"Error_when_introspect_fails": {
 			callErr: fmt.Errorf("connection refused"),
 			wantErr: true,
@@ -111,38 +115,31 @@ func TestDetectAvailableInterfaces(t *testing.T) {
 				mock.introspectXML = introspectionXML(tc.interfaces...)
 			}
 
-			got, err := detectAvailableInterfaces(mock)
+			got, err := getInterface(mock)
 			if tc.wantErr {
-				require.Error(t, err, "detectAvailableInterfaces should return an error, but did not")
+				require.Error(t, err, "getInterface should return an error, but did not")
 				return
 			}
-			require.NoError(t, err, "detectAvailableInterfaces should not return an error, but did")
-			require.Equal(t, tc.wantInterfaces, got, "detectAvailableInterfaces returned unexpected interfaces")
+			require.NoError(t, err, "getInterface should not return an error, but did")
+			require.Equal(t, tc.wantInterface, got, "getInterface returned unexpected interface")
 		})
 	}
 }
 
-func TestDbusBrokerCallUsesLatestInterface(t *testing.T) {
+func TestDbusBrokerCallUsesInterface(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		interfaces []string
-
+		iface            string
 		wantMethodCalled string
-		wantErr          bool
 	}{
-		"Uses_only_interface": {
-			interfaces:       []string{"com.ubuntu.authd.Broker"},
+		"Uses_base_interface": {
+			iface:            "com.ubuntu.authd.Broker",
 			wantMethodCalled: "com.ubuntu.authd.Broker.TestMethod",
 		},
-		"Uses_latest_interface": {
-			interfaces:       []string{"com.ubuntu.authd.Broker1", "com.ubuntu.authd.Broker2", "com.ubuntu.authd.Broker3"},
-			wantMethodCalled: "com.ubuntu.authd.Broker3.TestMethod",
-		},
-
-		"Error_when_no_interfaces_available": {
-			interfaces: []string{},
-			wantErr:    true,
+		"Uses_versioned_interface": {
+			iface:            "com.ubuntu.authd.Broker2",
+			wantMethodCalled: "com.ubuntu.authd.Broker2.TestMethod",
 		},
 	}
 	for name, tc := range tests {
@@ -152,15 +149,11 @@ func TestDbusBrokerCallUsesLatestInterface(t *testing.T) {
 			mock := &mockBusObject{}
 			b := dbusBroker{
 				name:       "test",
-				interfaces: tc.interfaces,
+				iface:      tc.iface,
 				dbusObject: mock,
 			}
 
 			_, err := b.call(context.Background(), "TestMethod")
-			if tc.wantErr {
-				require.Error(t, err, "call should return an error, but did not")
-				return
-			}
 			require.NoError(t, err, "call should not return a D-Bus error")
 			require.Equal(t, tc.wantMethodCalled, mock.lastCalledMethod)
 		})

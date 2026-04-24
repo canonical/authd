@@ -16,12 +16,17 @@ import (
 	"gopkg.in/ini.v1"
 )
 
-// DbusBaseInterface is the expected interface that should be implemented by the brokers.
-const DbusBaseInterface string = "com.ubuntu.authd.Broker"
+const (
+	// DbusBaseInterface is the expected interface that should be implemented by the brokers.
+	DbusBaseInterface string = "com.ubuntu.authd.Broker"
+
+	// LatestAPIVersion is the latest API version supported by authd.
+	LatestAPIVersion = 2
+)
 
 type dbusBroker struct {
-	name       string
-	interfaces []string
+	name  string
+	iface string
 
 	dbusObject dbus.BusObject
 }
@@ -62,21 +67,20 @@ func newDbusBroker(ctx context.Context, bus *dbus.Conn, configFile string) (b db
 		dbusObject: bus.Object(dbusName.String(), dbus.ObjectPath(objectName.String())),
 	}
 
-	dBroker.interfaces, err = detectAvailableInterfaces(dBroker.dbusObject)
+	dBroker.iface, err = getInterface(dBroker.dbusObject)
 	if err != nil {
 		return b, "", "", fmt.Errorf("could not detect broker interfaces: %v", err)
 	}
-	log.Debugf(ctx, "Broker %q supports interfaces: %v", nameVal.String(), dBroker.interfaces)
 
 	return dBroker, nameVal.String(), brandIconVal.String(), nil
 }
 
-// detectAvailableInterfaces introspects the broker's D-Bus object and returns the supported
-// interface versions.
-func detectAvailableInterfaces(obj dbus.BusObject) ([]string, error) {
+// getInterface introspects the broker's D-Bus object and returns the interface with the highest version supported both
+// by the broker and authd.
+func getInterface(obj dbus.BusObject) (string, error) {
 	node, err := introspect.Call(obj)
 	if err != nil {
-		return nil, fmt.Errorf("could not introspect broker: %v", err)
+		return "", fmt.Errorf("could not introspect broker: %v", err)
 	}
 
 	var supportedInterfaces []string
@@ -93,7 +97,13 @@ func detectAvailableInterfaces(obj dbus.BusObject) ([]string, error) {
 
 		// The suffix should be either empty (for the first version) or a number (for later versions).
 		if suffix != "" {
-			if _, err := strconv.Atoi(suffix); err != nil {
+			v, err := strconv.Atoi(suffix)
+			if err != nil {
+				continue
+			}
+
+			if v > LatestAPIVersion {
+				// The interface version is higher than the latest API version supported by authd, ignore it.
 				continue
 			}
 		}
@@ -124,7 +134,11 @@ func detectAvailableInterfaces(obj dbus.BusObject) ([]string, error) {
 		return 0
 	})
 
-	return supportedInterfaces, nil
+	if len(supportedInterfaces) == 0 {
+		return "", errors.New("no supported interfaces found")
+	}
+
+	return supportedInterfaces[len(supportedInterfaces)-1], nil
 }
 
 // NewSession calls the corresponding method on the broker bus and returns the session ID and encryption key.
@@ -212,15 +226,7 @@ func (b dbusBroker) UserPreCheck(ctx context.Context, username string) (userinfo
 // call is an abstraction over dbus calls to ensure we wrap the returned error to an ErrorToDisplay.
 // All wrapped errors will be logged, but not returned to the UI.
 func (b dbusBroker) call(ctx context.Context, method string, args ...interface{}) (*dbus.Call, error) {
-	// For now, we can safely use the latest interface available, as the methods we call are the same in all versions.
-	// If in the future we need to call methods that are only available in specific versions,
-	// we can add logic here to select the appropriate interface based on the method being called.
-	if len(b.interfaces) == 0 {
-		return nil, fmt.Errorf("no supported interfaces found for broker %q", b.name)
-	}
-	dbusInterface := b.interfaces[len(b.interfaces)-1]
-
-	dbusMethod := dbusInterface + "." + method
+	dbusMethod := b.iface + "." + method
 	call := b.dbusObject.CallWithContext(ctx, dbusMethod, 0, args...)
 	if err := call.Err; err != nil {
 		var dbusError dbus.Error

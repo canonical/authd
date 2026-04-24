@@ -37,6 +37,7 @@ import (
 const (
 	// LatestAPIVersion is the latest API version supported by the broker. It should be incremented when a non backward
 	// compatible change is made to the API.
+	// Note: Remember to also bump the LatestAPIVersion in internal/brokers/dbusbroker.go.
 	LatestAPIVersion = 2
 
 	maxAuthAttempts    = 3
