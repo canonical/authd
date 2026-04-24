@@ -1,8 +1,14 @@
-authd (0.6.2+git260423+296+d8e30f73) resolute; urgency=medium
+authd (0.6.4+git260424+310+63aa65e5) resolute; urgency=medium
 
-  * Github build. Run id: 24833971434. Run number: 296.
+  * Github build. Run id: 24894879102. Run number: 310.
 
- -- adombeck <18482300+adombeck@users.noreply.github.com>  Thu, 23 Apr 2026 12:04:04 +0000
+ -- Adrian <adrian.dombeck@canonical.com>  Fri, 24 Apr 2026 14:31:58 +0000
+
+authd (0.6.4) resolute; urgency=medium
+
+  * Fix primary group ID reset to UID during login
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Thu, 23 Apr 2026 16:58:22 +0200
 
 authd (0.6.2) resolute; urgency=medium
 
