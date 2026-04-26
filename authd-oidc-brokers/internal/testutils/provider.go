@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -113,6 +114,7 @@ func StartMockProviderServer(address string, tokenHandlerOpts *TokenHandlerOptio
 			"/device_auth":                      DefaultDeviceAuthHandler(),
 			"/token":                            TokenHandler(server.URL, tokenHandlerOpts),
 			"/keys":                             DefaultJWKHandler(),
+			"/userinfo":                         UserInfoHandler(map[string]interface{}{"must-have-claim": "present"}),
 		},
 	}
 	for _, arg := range args {
@@ -140,12 +142,30 @@ func DefaultOpenIDHandler(serverURL string) EndpointHandler {
 			"device_authorization_endpoint": "%[1]s/device_auth",
 			"token_endpoint": "%[1]s/token",
 			"jwks_uri": "%[1]s/keys",
+			"userinfo_endpoint": "%[1]s/userinfo",
 			"id_token_signing_alg_values_supported": ["RS256"]
 		}`, serverURL)
 
 		w.Header().Add("Content-Type", "application/json")
 		_, err := w.Write([]byte(wellKnown))
 		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}
+}
+
+// UserInfoHandler returns a handler that returns a userinfo response with the provided claims.
+// It is meant to be registered at the /userinfo endpoint when testing thin-ID-token flows.
+func UserInfoHandler(claims map[string]interface{}) EndpointHandler {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		data, err := json.Marshal(claims)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Add("Content-Type", "application/json")
+		if _, err := w.Write(data); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}
@@ -195,6 +215,9 @@ type TokenHandlerOptions struct {
 	// will be added to the token, and then that element will be removed from
 	// the list.
 	IDTokenClaims []map[string]interface{}
+	// DeleteClaims lists claim keys to remove from the ID token before signing.
+	// This is useful to simulate thin ID tokens that are missing certain claims.
+	DeleteClaims []string
 }
 
 var idTokenClaimsMutex sync.Mutex
@@ -248,6 +271,7 @@ func TokenHandler(serverURL string, opts *TokenHandlerOptions) EndpointHandler {
 			"preferred_username": "test-user-preferred-username@email.com",
 			"email":              "test-user@email.com",
 			"email_verified":     true,
+			"must-have-claim":    "present",
 		}
 
 		idTokenClaimsMutex.Lock()
@@ -259,6 +283,11 @@ func TokenHandler(serverURL string, opts *TokenHandlerOptions) EndpointHandler {
 			opts.IDTokenClaims = opts.IDTokenClaims[1:]
 		}
 		idTokenClaimsMutex.Unlock()
+
+		// Delete any claims that should be absent (simulates thin ID tokens).
+		for _, key := range opts.DeleteClaims {
+			delete(claims, key)
+		}
 
 		idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 
@@ -377,6 +406,16 @@ type MockProvider struct {
 	numCallsLock sync.Mutex
 }
 
+// HasRequiredClaims returns false if "must-have-claim" is absent from the claimer.
+func (p *MockProvider) HasRequiredClaims(claimer info.Claimer) (bool, error) {
+	var m map[string]interface{}
+	if err := claimer.Claims(&m); err != nil {
+		return false, fmt.Errorf("failed to get claims: %v", err)
+	}
+
+	return m["must-have-claim"] != nil, nil
+}
+
 // AdditionalScopes returns the additional scopes required by the provider.
 func (p *MockProvider) AdditionalScopes() []string {
 	if p.Scopes != nil {
@@ -403,11 +442,15 @@ func (p *MockProvider) GetMetadata(provider *oidc.Provider) (map[string]interfac
 	return nil, nil
 }
 
-// GetUserInfo returns the user info parsed from the ID token.
+// GetUserInfo returns the user info parsed from the provided Claimer.
 func (p *MockProvider) GetUserInfo(idToken info.Claimer) (info.User, error) {
 	userClaims, err := p.userClaims(idToken)
 	if err != nil {
 		return info.User{}, err
+	}
+
+	if userClaims.MustHave == "" {
+		return info.User{}, errors.New("authentication failure: 'must-have-claim' claim is missing")
 	}
 
 	p.numCallsLock.Lock()
@@ -474,11 +517,12 @@ func (p *MockProvider) SupportsDeviceRegistration() bool {
 }
 
 type claims struct {
-	Email string `json:"email"`
-	Sub   string `json:"sub"`
-	Home  string `json:"home"`
-	Shell string `json:"shell"`
-	Gecos string `json:"name"`
+	Email    string `json:"email"`
+	Sub      string `json:"sub"`
+	Home     string `json:"home"`
+	Shell    string `json:"shell"`
+	Gecos    string `json:"name"`
+	MustHave string `json:"must-have-claim"`
 }
 
 // userClaims returns the user claims parsed from the ID token.
