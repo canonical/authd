@@ -17,7 +17,8 @@ type Provider interface {
 	GetExtraFields(token *oauth2.Token) map[string]interface{}
 	GetMetadata(provider *oidc.Provider) (map[string]interface{}, error)
 
-	GetUserInfo(idToken info.Claimer) (info.User, error)
+	HasRequiredClaims(idToken info.Claimer) (bool, error)
+	GetUserInfo(claimer info.Claimer) (info.User, error)
 
 	GetGroups(
 		ctx context.Context,

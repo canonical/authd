@@ -709,7 +709,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 		return AuthDenied, unexpectedErrMsg("could not get provider metadata")
 	}
 
-	authInfo.UserInfo, err = b.userInfoFromIDToken(ctx, session, rawIDToken)
+	authInfo.UserInfo, err = b.userInfoFromIDToken(ctx, session, t, rawIDToken)
 	if err != nil {
 		log.Errorf(context.Background(), "could not get user info: %s", err)
 		return AuthDenied, errorMessageForDisplay(err, "Could not get user info")
@@ -1147,7 +1147,7 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 	t.ProviderMetadata = oldToken.ProviderMetadata
 	t.DeviceRegistrationData = oldToken.DeviceRegistrationData
 
-	t.UserInfo, err = b.userInfoFromIDToken(ctx, session, rawIDToken)
+	t.UserInfo, err = b.userInfoFromIDToken(ctx, session, oauthToken, rawIDToken)
 	if err != nil {
 		return nil, err
 	}
@@ -1157,16 +1157,50 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 	return t, nil
 }
 
+// claimerFromIDToken returns a Claimer for the given verified ID token.
+// If requiresUserInfo is true, additional claims are fetched from the `/userinfo` endpoint and
+// merged with the ID token claims, with userinfo endpoint claims overriding ID token claims.
+func (b *Broker) claimerFromIDToken(ctx context.Context, session *session, token *oauth2.Token, idToken info.Claimer, requiresUserInfo bool) (info.Claimer, error) {
+	if !requiresUserInfo {
+		return idToken, nil
+	}
+
+	userInfoEndpointData, err := session.oidcServer.UserInfo(ctx, oauth2.StaticTokenSource(token))
+	if err != nil {
+		return nil, fmt.Errorf("could not get user info from userinfo endpoint: %w", err)
+	}
+
+	// Merge ID token claims with userinfo endpoint claims.
+	// userinfo endpoint claims override ID token claims for the same key.
+	merged, err := info.NewMergedClaimer(idToken, userInfoEndpointData)
+	if err != nil {
+		return nil, fmt.Errorf("could not merge ID token and userinfo endpoint claims: %w", err)
+	}
+	return merged, nil
+}
+
 // userInfoFromIDToken verifies and parses the raw ID token and returns the user info from it.
+// If any provider specific mandatory claims are not present in the ID token, the missing claims are
+// fetched from the `/userinfo` endpoint and merged before extracting user info.
 // Note that verifying the ID token requires a working network connection to the provider's JWKs endpoint,
 // so make sure to only call this function if the session is online.
-func (b *Broker) userInfoFromIDToken(ctx context.Context, session *session, rawIDToken string) (info.User, error) {
+func (b *Broker) userInfoFromIDToken(ctx context.Context, session *session, token *oauth2.Token, rawIDToken string) (info.User, error) {
 	idToken, err := session.oidcServer.Verifier(&b.oidcCfg).Verify(ctx, rawIDToken)
 	if err != nil {
 		return info.User{}, fmt.Errorf("could not verify token: %w", err)
 	}
 
-	userInfo, err := b.provider.GetUserInfo(idToken)
+	hasRequiredClaims, err := b.provider.HasRequiredClaims(idToken)
+	if err != nil {
+		return info.User{}, err
+	}
+
+	claimer, err := b.claimerFromIDToken(ctx, session, token, idToken, !hasRequiredClaims)
+	if err != nil {
+		return info.User{}, err
+	}
+
+	userInfo, err := b.provider.GetUserInfo(claimer)
 	if err != nil {
 		return info.User{}, err
 	}
