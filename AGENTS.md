@@ -34,7 +34,7 @@ debuild --prepend-path=${HOME}/.cargo/bin
 
 # Individual components (development)
 go build ./cmd/authd                    # authd daemon only
-go generate ./pam/ && go build -tags pam_binary_exec -o ./pam/authd-pam ./pam  # PAM test client
+go generate ./pam/ && go build -o ./pam/authd-pam ./pam  # PAM helper client
 cargo build                              # NSS (debug mode)
 ```
 

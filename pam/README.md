@@ -47,15 +47,15 @@ TTY availability, which is useful for testing.
 
 ## Directory Structure
 
-| Path | Description |
-|------|-------------|
-| `pam.go` | Core PAM module logic |
-| `pam_module.go` | Auto-generated C-exported `pam_sm_*` entry points |
-| `main-exec.go` | Entry point for the exec-mode child binary |
-| `go-exec/` | C wrapper that implements `pam_authd_exec.so` |
-| `internal/adapter/` | Authentication UI adapters (native CLI and GDM) |
-| `tools/pam-runner/` | Developer tool for manual end-to-end PAM testing |
-| `integration-tests/` | Automated integration tests using `vhs` tapes |
+| Path                 | Description                                       |
+| -------------------- | ------------------------------------------------- |
+| `pam.go`             | Core PAM module logic                             |
+| `pam_module.go`      | Auto-generated C-exported `pam_sm_*` entry points |
+| `main-exec.go`       | Entry point for the exec-mode child binary        |
+| `go-exec/`           | C wrapper that implements `pam_authd_exec.so`     |
+| `internal/adapter/`  | Authentication UI adapters (native CLI and GDM)   |
+| `tools/pam-runner/`  | Developer tool for manual end-to-end PAM testing  |
+| `integration-tests/` | Automated integration tests using `vhs` tapes     |
 
 ## Building
 
@@ -151,7 +151,7 @@ Enable debug logging by passing `debug=true` together with `logfile=` pointing t
 
 ```
 auth sufficient /path/to/pam_authd_exec.so /path/to/pam_authd \
-    debug=true logfile=/dev/stderr
+    --exec-debug --exec-log=/dev/stderr debug=true logfile=/dev/stderr
 ```
 
 Alternatively, leave `logfile` unset and tail the systemd journal in real time:
@@ -161,4 +161,4 @@ journalctl -ef _COMM=exec-child
 ```
 
 > **Note:** To test against an installed version of authd rather than a local
-> build, point `socket=` at the installed socket path (e.g. `/run/authd.sock`).
+> build, point `socket=` at the installed socket path (e.g. `/tmp/authd.sock`).

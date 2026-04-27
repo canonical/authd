@@ -43,7 +43,7 @@ The tests have mainly two sets of dependencies: one required to configure and ru
     python3-tk
     python3-gi
     python3-cairo
-    xvfb    
+    xvfb
     ```
 
     Those are all part of the archive and can be installed on Ubuntu with:
@@ -56,15 +56,16 @@ The tests have mainly two sets of dependencies: one required to configure and ru
 
 The tests need a VM to run. This can be easily setup by using the domain definition and cloud-init configuration provided in the repository.
 
-1. Download the latest Ubuntu Desktop image (and resize it):
+1. Download the Ubuntu cloud image for the target release (and resize it):
 
     ```bash
-    wget https://cloud-images.ubuntu.com/questing/current/questing-server-cloudimg-amd64.img
+    RELEASE=resolute  # Replace with your target release (e.g. noble, questing, resolute)
+    wget https://cloud-images.ubuntu.com/${RELEASE}/current/${RELEASE}-server-cloudimg-amd64.img
 
-    qemu-img resize questing-server-cloudimg-amd64.img 10G
+    qemu-img resize ${RELEASE}-server-cloudimg-amd64.img 10G
     ```
 
-2. Create the cloud-init iso using the provided configuration in `e2e-tests/vm/cloud-init-template.yaml`:
+2. Create the cloud-init iso using the release-specific configuration from `e2e-tests/vm/cloud-init-template-${RELEASE}.yaml`:
    1. Update the file with the ssh key that will be used to access the VM.
    2. Create a directory and copy the YAML file there. The file must be named `user-data`.
    3. Create the `seed.iso` file using `cloud-localds`.
@@ -74,7 +75,7 @@ The tests need a VM to run. This can be easily setup by using the domain definit
         mkdir -p /tmp/seed/
 
         SSH_PUBLIC_KEY=$(cat "${SSH_PUBLIC_KEY_FILE}") \
-            envsubst < e2e-tests/vm/cloud-init-template.yaml > /tmp/seed/user-data
+            envsubst < e2e-tests/vm/cloud-init-template-${RELEASE}.yaml > /tmp/seed/user-data
 
         cloud-localds /tmp/seed.iso /tmp/seed/user-data
         ```
@@ -148,10 +149,10 @@ Now that the VM is ready, we need to install authd and the brokers we want to te
 
 ##### Install authd
 
-1. Revert to the "fresh install" snapshot:
+1. Revert to the `initial-setup` snapshot:
 
     ```bash
-    virsh snapshot-revert e2e-runner fresh-install
+    virsh snapshot-revert e2e-runner initial-setup
     ```
 
 2. Install authd:
