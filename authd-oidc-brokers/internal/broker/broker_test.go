@@ -717,6 +717,29 @@ func TestIsAuthenticated(t *testing.T) {
 			ownerExtraGroups:         []string{"owner-group"},
 			wantGroups:               []info.Group{{Name: "remote-group"}, {Name: "owner-group"}},
 		},
+		"Extra_and_owner_extra_groups_configured_with_existing_extra_group_in_cached_user_info": {
+			firstMode: authmodes.Password,
+			token: &tokenOptions{groups: []info.Group{
+				{Name: "remote-group"},
+				{Name: "extra-group"},
+			}},
+			sessionOffline:   true,
+			extraGroups:      []string{"extra-group", "other-extra-group"},
+			ownerExtraGroups: []string{"owner-group"},
+			wantGroups:       []info.Group{{Name: "remote-group"}, {Name: "extra-group"}, {Name: "other-extra-group"}, {Name: "owner-group"}},
+		},
+		"Extra_and_owner_extra_groups_configured_but_already_in_cached_user_info": {
+			firstMode: authmodes.Password,
+			token: &tokenOptions{groups: []info.Group{
+				{Name: "remote-group"},
+				{Name: "extra-group"},
+				{Name: "owner-group"},
+			}},
+			sessionOffline:   true,
+			extraGroups:      []string{"extra-group"},
+			ownerExtraGroups: []string{"owner-group"},
+			wantGroups:       []info.Group{{Name: "remote-group"}, {Name: "extra-group"}, {Name: "owner-group"}},
+		},
 		"Owner_extra_groups_configured_but_user_does_not_become_owner": {
 			firstMode:                authmodes.Password,
 			token:                    &tokenOptions{},
