@@ -21,9 +21,6 @@ export DH_GOLANG_INSTALL_ALL := 1
 # as long as it matches the go.mod go stenza which is the language requirement.
 export GOTOOLCHAIN := local
 
-# Use the debian cargo wrapper
-export CARGO_PATH := /usr/share/cargo/bin/cargo
-
 # Needed for Rust vendored sources tracking
 export CARGO_VENDOR_DIR := $(CURDIR)/vendor_rust
 
@@ -50,10 +47,14 @@ export DH_GOLANG_BUILDPKG := \
 	$(AUTHD_GO_PACKAGE)/pam \
 	$(NULL)
 
-# We add the required backported version to the $PATH so that if it exists, then
-# we can use it. Otherwise we default to the go installed in original $PATH that
-# always matches with the latest available go version in the archive.
-export PATH := $(shell printenv PATH):$(shell ./debian/get-depends-go-bin-path.sh)
+# Prepend the following paths to PATH:
+# * The cargo wrapper. This will either be the path to the wrapper installed by
+#   dh-cargo, or the path to the wrapper installed by the cargo-$VERSION package.
+# * The Go executable from the backported Go package. It's possible that no
+#   backported Go package is installed, because the golang-go package already
+#   satisfies the dependency. It's still fine to also add the path in that case,
+#   it will be ignored if it doesn't exist.
+export PATH := $(shell ./debian/get-depends-cargo-bin-path.sh):$(shell ./debian/get-depends-go-bin-path.sh):$(shell printenv PATH)
 
 BUILDDIR := $(CURDIR)/obj-$(DEB_HOST_GNU_TYPE)
 
@@ -89,7 +90,7 @@ override_dh_auto_configure:
 	# TODO: Drop this when we won't care about noble anymore.
 	if ! command -v cargo-vendor-filterer 2>/dev/null; then \
 		env DEB_CARGO_CRATE="$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM)" \
-		  $(CARGO_PATH) prepare-debian "$(CARGO_VENDOR_DIR)"; \
+		  cargo prepare-debian "$(CARGO_VENDOR_DIR)"; \
 	else \
 	    echo "cargo version: $$(cargo --version)"; \
 	    echo "cargo-vendor-filterer version: $$(cargo-vendor-filterer --version)"; \
@@ -105,7 +106,9 @@ override_dh_auto_build:
 	DH_GOLANG_GO_GENERATE=1 dh_auto_build -- $(AUTHD_GO_PACKAGE)/pam
 
 	# Build the NSS library
-	$(CARGO_PATH) build --release
+	echo "PATH: $(PATH)"
+	echo "Building NSS library with $$(which cargo) ($$(cargo --version))"
+	cargo build --release
 
 	# Build the daemon
 	dh_auto_build -- $(AUTHD_GO_PACKAGE)/cmd/authd
