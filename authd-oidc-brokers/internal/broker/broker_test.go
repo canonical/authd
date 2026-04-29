@@ -590,8 +590,9 @@ func TestIsAuthenticated(t *testing.T) {
 		useOldNameForSecretField bool
 		groupsReturnedByProvider []info.Group
 
-		customHandlers map[string]testutils.EndpointHandler
-		address        string
+		customHandlers      map[string]testutils.EndpointHandler
+		address             string
+		tokenHandlerOptions *testutils.TokenHandlerOptions
 
 		wantSecondCall bool
 		secondMode     string
@@ -607,6 +608,20 @@ func TestIsAuthenticated(t *testing.T) {
 	}{
 		"Successfully_authenticate_user_with_device_auth_and_newpassword": {firstSecret: "-", wantSecondCall: true},
 		"Successfully_authenticate_user_with_password":                    {firstMode: authmodes.Password, token: &tokenOptions{}},
+		"Successfully_authenticate_with_device_auth_when_provider_uses_thin_id_token": {
+			firstSecret:    "-",
+			wantSecondCall: true,
+			tokenHandlerOptions: &testutils.TokenHandlerOptions{
+				// Remove "must-have-claim" from the ID token.
+				DeleteClaims: []string{"must-have-claim"},
+			},
+			customHandlers: map[string]testutils.EndpointHandler{
+				// Provide "must-have-claim" via the userinfo endpoint.
+				"/userinfo": testutils.UserInfoHandler(map[string]interface{}{
+					"must-have-claim": "present",
+				}),
+			},
+		},
 
 		"Authenticating_with_qrcode_reacquires_token":          {firstSecret: "-", wantSecondCall: true, token: &tokenOptions{}},
 		"Authenticating_with_password_refreshes_expired_token": {firstMode: authmodes.Password, token: &tokenOptions{expired: true}},
@@ -834,6 +849,16 @@ func TestIsAuthenticated(t *testing.T) {
 			sessionOffline: true,
 		},
 		"Error_when_mode_is_invalid": {firstMode: "invalid"},
+		"Error_when_thin_id_token_and_userinfo_endpoint_is_unavailable": {
+			firstSecret:    "-",
+			wantSecondCall: true,
+			tokenHandlerOptions: &testutils.TokenHandlerOptions{
+				DeleteClaims: []string{"must-have-claim"},
+			},
+			customHandlers: map[string]testutils.EndpointHandler{
+				"/userinfo": testutils.UnavailableHandler(),
+			},
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -866,6 +891,7 @@ func TestIsAuthenticated(t *testing.T) {
 				ownerExtraGroups:             tc.ownerExtraGroups,
 				supportsDeviceRegistration:   tc.providerSupportsDeviceRegistration,
 				registerDevice:               tc.registerDevice,
+				tokenHandlerOptions:          tc.tokenHandlerOptions,
 			}
 			if tc.customHandlers == nil {
 				// Use the default provider URL if no custom handlers are provided.

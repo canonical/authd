@@ -47,19 +47,34 @@ func (p GenericProvider) GetMetadata(provider *oidc.Provider) (map[string]interf
 	return nil, nil
 }
 
-// GetUserInfo is a no-op when no specific provider is in use.
-func (p GenericProvider) GetUserInfo(idToken info.Claimer) (info.User, error) {
-	userClaims, err := p.userClaims(idToken)
+// HasRequiredClaims checks if all mandatory claims are present in the provided Claimer.
+// Providers like Okta use thin ID tokens, which do not contain all the required claims.
+// Returns true if all required claims are present, false if any required claim is missing.
+func (p GenericProvider) HasRequiredClaims(claimer info.Claimer) (bool, error) {
+	var claimsMap map[string]interface{}
+	if err := claimer.Claims(&claimsMap); err != nil {
+		return false, fmt.Errorf("failed to get ID token claims: %v", err)
+	}
+
+	if claimsMap["email_verified"] == nil {
+		return false, nil
+	}
+	return true, nil
+}
+
+// GetUserInfo returns user information from the claims of the provided Claimer.
+func (p GenericProvider) GetUserInfo(claimer info.Claimer) (info.User, error) {
+	userClaims, err := p.userClaims(claimer)
 	if err != nil {
 		return info.User{}, err
 	}
 
 	if userClaims.Sub == "" {
-		return info.User{}, fmt.Errorf("authentication failure: sub claim is missing in the ID token")
+		return info.User{}, fmt.Errorf("authentication failure: sub claim is missing")
 	}
 
 	if userClaims.Email == "" {
-		return info.User{}, fmt.Errorf("authentication failure: email claim is missing in the ID token")
+		return info.User{}, fmt.Errorf("authentication failure: email claim is missing")
 	}
 
 	if !userClaims.EmailVerified {
@@ -109,10 +124,10 @@ type claims struct {
 	EmailVerified bool   `json:"email_verified"`
 }
 
-// userClaims returns the user claims parsed from the ID token.
-func (p GenericProvider) userClaims(idToken info.Claimer) (claims, error) {
+// userClaims returns the user claims parsed from the provided Claimer.
+func (p GenericProvider) userClaims(claimer info.Claimer) (claims, error) {
 	var userClaims claims
-	if err := idToken.Claims(&userClaims); err != nil {
+	if err := claimer.Claims(&userClaims); err != nil {
 		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
 	}
 	return userClaims, nil

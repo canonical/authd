@@ -118,11 +118,17 @@ func (p *Provider) GetMetadata(provider *oidc.Provider) (map[string]interface{},
 	}, nil
 }
 
-// GetUserInfo returns the user info from the ID token.
-func (p *Provider) GetUserInfo(idToken info.Claimer) (info.User, error) {
+// HasRequiredClaims checks if all required claims are present in idToken.
+// This is a no-op for EntraID because it returns all required claims in the ID token.
+func (p *Provider) HasRequiredClaims(idToken info.Claimer) (bool, error) {
+	return true, nil
+}
+
+// GetUserInfo returns the user info from the provided Claimer.
+func (p *Provider) GetUserInfo(claimer info.Claimer) (info.User, error) {
 	var err error
 
-	userClaims, err := p.userClaims(idToken)
+	userClaims, err := p.userClaims(claimer)
 	if err != nil {
 		return info.User{}, err
 	}

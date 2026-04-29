@@ -1,0 +1,3 @@
+access: denied
+data: '{"message":"Could not get user info"}'
+err: <nil>
