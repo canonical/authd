@@ -95,6 +95,8 @@ Continue Log In With Remote User Through CLI: Define Local Password
 
 Log In With Remote User Through CLI: Local Password
     [Arguments]    ${username}    ${local_password}
+    Hid.Type String    clear
+    Hid.Keys Combo    Return
     Try machinectl login Prompt
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
@@ -137,6 +139,34 @@ Try Navigating Back to User Selection
     Match Text    Select your provider    120
     Hid.Keys Combo    Escape
     Match Text    Select your provider    120
+
+
+Log In With Remote User Through CLI: Local Password And Expect Failure
+    [Arguments]    ${username}    ${local_password}
+    Hid.Type String    clear
+    Hid.Keys Combo    Return
+    Try machinectl login Prompt
+    Hid.Type String    ${username}
+    Hid.Keys Combo    Return
+    Builtin.Sleep    2
+    Match Text    Enter your local password:    120
+    Hid.Type String    ${local_password}
+    Hid.Keys Combo    Return
+    Check That Remote User Is Not Allowed To Log In
+    # Exit the machinectl session (three ^] within 1 s exits the session).
+    Hid.Keys Combo    Control_L    ]
+    Hid.Keys Combo    Control_L    ]
+    Hid.Keys Combo    Control_L    ]
+    # Wait until the shell prompt is back before the next login attempt.
+    Match Text    @ubuntu:~$    30
+
+
+Remove Registered Owner
+    [Documentation]    Removes the auto-registration drop-in that the broker creates when
+    ...               the first user logs in, so that subsequent OWNER-based tests start
+    ...               from a known-clean state.
+    SSH.Execute    sudo rm -f ${BROKER_CFG_DIR}/20-owner-autoregistration.conf
+    SSH.Execute    sudo snap restart ${BROKER_SNAP_NAME}
 
 
 # Uses sed to change the broker configuration.
