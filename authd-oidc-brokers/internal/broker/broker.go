@@ -755,6 +755,10 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 		return AuthDenied, errorMessageForDisplay(err, "Failed to retrieve groups from Microsoft Graph API")
 	}
 
+	if passwordFileExists(*session) {
+		return b.finishAuth(session, authInfo)
+	}
+
 	// Store the auth info in the session so that we can use it when handling the
 	// next IsAuthenticated call for the new password mode.
 	session.authInfo = authInfo
