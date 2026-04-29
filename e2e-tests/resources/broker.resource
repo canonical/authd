@@ -106,6 +106,39 @@ Log In With Remote User Through CLI: Local Password
     Match Text    ${username}@ubuntu:~$    120
 
 
+Try Changing Username In sudo su Log In
+    Hid.Type String    sudo su
+    Hid.Keys Combo    Return
+    Try Navigating Back to User Selection
+    Cancel Operation
+
+
+Try Changing Username In su Log In
+    [Arguments]    ${username}
+    Hid.Type String    su ${username}
+    Hid.Keys Combo    Return
+    Try Navigating Back to User Selection
+    Cancel Operation
+
+Try Navigating Back to User Selection
+    # First screen is the autoselected local password mode
+    Match Text    Enter your local password:    120
+    Hid.Keys Combo    Escape
+
+    # The previous screen should be the authentication mode selection
+    Match Text    Select your authentication method    120
+    Hid.Keys Combo    Escape
+
+    # The previous screen should be the broker selection
+    Match Text    Select your provider    120
+    Hid.Keys Combo    Escape
+
+    # The previous screen is the username prompt, but it shouldn't be possible to get there
+    Match Text    Select your provider    120
+    Hid.Keys Combo    Escape
+    Match Text    Select your provider    120
+
+
 # Uses sed to change the broker configuration.
 # It should match both commented and uncommented lines.
 # The full command looks like:

@@ -176,8 +176,8 @@ Launch App
 
 
 Cancel Operation
-    Match Text    @ubuntu    15
     Hid.Keys Combo    Control_L    C
+    Match Text    @ubuntu    15
 
 
 Update And Upgrade Packages
