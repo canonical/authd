@@ -934,17 +934,29 @@ func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (s
 		return AuthDenied, errorMessage{Message: "Authentication failure: user not allowed in broker configuration"}
 	}
 
-	// Add extra groups to the user info.
-	for _, name := range b.cfg.extraGroups {
+	// Build a set of group names already in the user info (e.g. from cached/loaded auth state)
+	// so we don't append a configured extra/owner group that's already in the slice. Without this,
+	// every offline retry would append another copy of the configured local groups, which then
+	// explodes the daemon's UNIQUE constraint on users_to_local_groups (uid, group_name) because
+	// handleUsersToLocalGroupsUpdate does DELETE-then-INSERT and the duplicates collide intra-tx.
+	existing := make(map[string]struct{}, len(authInfo.UserInfo.Groups))
+	for _, g := range authInfo.UserInfo.Groups {
+		existing[g.Name] = struct{}{}
+	}
+	addExtra := func(name string) {
+		if _, ok := existing[name]; ok {
+			return
+		}
 		log.Debugf(context.Background(), "Adding extra group %q", name)
 		authInfo.UserInfo.Groups = append(authInfo.UserInfo.Groups, info.Group{Name: name})
+		existing[name] = struct{}{}
 	}
-
+	for _, name := range b.cfg.extraGroups {
+		addExtra(name)
+	}
 	if b.isOwner(authInfo.UserInfo.Name) {
-		// Add the owner extra groups to the user info.
 		for _, name := range b.cfg.ownerExtraGroups {
-			log.Debugf(context.Background(), "Adding owner extra group %q", name)
-			authInfo.UserInfo.Groups = append(authInfo.UserInfo.Groups, info.Group{Name: name})
+			addExtra(name)
 		}
 	}
 
