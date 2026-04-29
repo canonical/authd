@@ -423,6 +423,85 @@ func TestSetGroupID(t *testing.T) {
 	}
 }
 
+func TestDeleteUser(t *testing.T) {
+	tests := map[string]struct {
+		sourceDB           string
+		username           string
+		currentUserNotRoot bool
+
+		wantErr bool
+	}{
+		"Successfully_delete_user":                {username: "user1@example.com"},
+		"Successfully_delete_user_with_uppercase": {username: "USER1@EXAMPLE.COM"},
+
+		"Error_when_username_is_empty":      {wantErr: true},
+		"Error_when_user_does_not_exist":    {username: "doesnotexist@example.com", wantErr: true},
+		"Error_when_not_root":               {username: "user1@example.com", currentUserNotRoot: true, wantErr: true},
+		"Error_when_broker_fails_to_delete": {username: "delete_error@example.com", wantErr: true},
+		"Error_when_broker_not_found":       {sourceDB: "default.db.yaml", username: "user1@example.com", wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			if !tc.wantErr {
+				userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
+			}
+
+			dbFile := tc.sourceDB
+			if dbFile == "" {
+				dbFile = "delete-user.db.yaml"
+			}
+
+			client, m := newUserServiceClient(t, dbFile, tc.currentUserNotRoot)
+
+			_, err := client.DeleteUser(context.Background(), &authd.DeleteUserRequest{Name: tc.username})
+			if tc.wantErr {
+				require.Error(t, err, "DeleteUser should return an error, but did not")
+				return
+			}
+			require.NoError(t, err, "DeleteUser should not return an error, but did")
+
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
+			require.NoError(t, err, "Setup: failed to dump database for comparing")
+			golden.CheckOrUpdate(t, dbContent)
+		})
+	}
+}
+
+func TestDeleteGroup(t *testing.T) {
+	tests := map[string]struct {
+		sourceDB string
+
+		groupname          string
+		currentUserNotRoot bool
+
+		wantErr bool
+	}{
+		"Successfully_delete_group":                {groupname: "commongroup"},
+		"Successfully_delete_group_with_uppercase": {groupname: "COMMONGROUP"},
+
+		"Error_when_groupname_is_empty":                         {wantErr: true},
+		"Error_when_group_does_not_exist":                       {groupname: "doesnotexist", wantErr: true},
+		"Error_when_not_root":                                   {groupname: "commongroup", currentUserNotRoot: true, wantErr: true},
+		"Error_when_group_is_primary_group_of_an_existing_user": {groupname: "group1", wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			client, m := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
+
+			_, err := client.DeleteGroup(context.Background(), &authd.DeleteGroupRequest{Name: tc.groupname})
+			if tc.wantErr {
+				require.Error(t, err, "DeleteGroup should return an error, but did not")
+				return
+			}
+			require.NoError(t, err, "DeleteGroup should not return an error, but did")
+
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
+			require.NoError(t, err, "Setup: failed to dump database for comparing")
+			golden.CheckOrUpdate(t, dbContent)
+		})
+	}
+}
+
 // newUserServiceClient returns a new gRPC client for the CLI service.
 func newUserServiceClient(t *testing.T, dbFile string, currentUserNotRoot ...bool) (client authd.UserServiceClient, userManager *users.Manager) {
 	t.Helper()

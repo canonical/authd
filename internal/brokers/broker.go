@@ -31,6 +31,7 @@ type brokerer interface {
 	CancelIsAuthenticated(ctx context.Context, sessionID string)
 
 	UserPreCheck(ctx context.Context, username string) (userinfo string, err error)
+	DeleteUser(ctx context.Context, username string) error
 }
 
 // Broker represents a broker object that can be used for authentication.
@@ -275,6 +276,12 @@ func (b Broker) cancelIsAuthenticated(ctx context.Context, sessionID string) {
 func (b Broker) UserPreCheck(ctx context.Context, username string) (userinfo string, err error) {
 	log.Debugf(context.TODO(), "Pre-checking user %q", username)
 	return b.brokerer.UserPreCheck(ctx, username)
+}
+
+// DeleteUser calls the broker to delete any broker side data associated with the user.
+func (b Broker) DeleteUser(ctx context.Context, username string) error {
+	log.Debugf(context.TODO(), "Deleting user %q", username)
+	return b.brokerer.DeleteUser(ctx, username)
 }
 
 // generateValidators generates layout validators based on what is supported by the system.

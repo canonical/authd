@@ -4,6 +4,7 @@ Usage:
 
 Available Commands:
   set-gid     Set the GID of a group managed by authd
+  delete      Delete a group managed by authd
 
 Flags:
   -h, --help   help for group

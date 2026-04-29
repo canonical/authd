@@ -707,6 +707,86 @@ func (m *Manager) UnlockUser(username string) error {
 	return nil
 }
 
+// DeleteUser removes the user with the given name from the database.
+// If removeHome is true, the user's home directory is also removed.
+func (m *Manager) DeleteUser(username string, removeHome bool) error {
+	m.userManagementMu.Lock()
+	defer m.userManagementMu.Unlock()
+
+	userRow, err := m.db.UserByName(username)
+	if err != nil {
+		return err
+	}
+
+	lockedEntries, unlockEntries, err := localentries.WithUserDBLock()
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, unlockEntries()) }()
+
+	// Remove the user from any local groups they are a member of.
+	_, _, localGroups, err := m.db.UserWithGroups(username)
+	if err != nil {
+		return err
+	}
+	if err := localentries.UpdateGroups(lockedEntries, username, nil, localGroups); err != nil {
+		return err
+	}
+
+	if err := m.db.DeleteUser(userRow.UID); err != nil {
+		return err
+	}
+
+	// Delete the user's primary group
+	if err := m.db.DeleteGroup(userRow.GID); err != nil {
+		return fmt.Errorf("failed to delete primary group for user %q: %w", username, err)
+	}
+
+	if removeHome && userRow.Dir != "" {
+		if err := os.RemoveAll(userRow.Dir); err != nil {
+			return fmt.Errorf("failed to remove home directory %q for user %q: %w", userRow.Dir, username, err)
+		}
+	}
+
+	return nil
+}
+
+// isGroupPrimaryForUsers returns the names of users for which the given GID is
+// their primary group. It returns an empty slice when no such users exist.
+func (m *Manager) isGroupPrimaryForUsers(gid uint32) ([]string, error) {
+	primaryUsers, err := m.db.UsersWithPrimaryGroup(gid)
+	if err != nil {
+		return nil, err
+	}
+
+	names := make([]string, 0, len(primaryUsers))
+	for _, u := range primaryUsers {
+		names = append(names, u.Name)
+	}
+	return names, nil
+}
+
+// DeleteGroup removes the group with the given name from the database.
+func (m *Manager) DeleteGroup(groupname string) error {
+	m.userManagementMu.Lock()
+	defer m.userManagementMu.Unlock()
+
+	groupRow, err := m.db.GroupByName(groupname)
+	if err != nil {
+		return err
+	}
+
+	primaryUserNames, err := m.isGroupPrimaryForUsers(groupRow.GID)
+	if err != nil {
+		return fmt.Errorf("failed to check for users with primary group %q: %w", groupname, err)
+	}
+	if len(primaryUserNames) > 0 {
+		return GroupIsPrimaryError{GroupName: groupname, Users: primaryUserNames}
+	}
+
+	return m.db.DeleteGroup(groupRow.GID)
+}
+
 // IsUserLocked returns true if the user with the given user name is locked, false otherwise.
 func (m *Manager) IsUserLocked(username string) (bool, error) {
 	u, err := m.db.UserByName(username)

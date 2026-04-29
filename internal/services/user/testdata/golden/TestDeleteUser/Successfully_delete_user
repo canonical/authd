@@ -1,0 +1,47 @@
+users:
+    - name: user2@example.com
+      uid: 2222
+      gid: 22222
+      gecos: User2
+      dir: /home/user2@example.com
+      shell: /bin/dash
+      broker_id: "1902181170"
+    - name: user3@example.com
+      uid: 3333
+      gid: 33333
+      gecos: User3
+      dir: /home/user3@example.com
+      shell: /bin/zsh
+      broker_id: "1902181170"
+    - name: delete_error@example.com
+      uid: 4444
+      gid: 44444
+      gecos: DeleteError
+      dir: /home/delete_error@example.com
+      shell: /bin/bash
+      broker_id: "1902181170"
+groups:
+    - name: group2
+      gid: 22222
+      ugid: group2
+    - name: group3
+      gid: 33333
+      ugid: group3
+    - name: group4
+      gid: 44444
+      ugid: group4
+    - name: commongroup
+      gid: 99999
+      ugid: commongroup
+users_to_groups:
+    - uid: 2222
+      gid: 22222
+    - uid: 2222
+      gid: 99999
+    - uid: 3333
+      gid: 33333
+    - uid: 3333
+      gid: 99999
+    - uid: 4444
+      gid: 44444
+schema_version: 2
