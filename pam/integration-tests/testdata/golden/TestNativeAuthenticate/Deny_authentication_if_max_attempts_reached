@@ -147,11 +147,11 @@ PAM Error Message: invalid password 'wrongpass', should be 'goodpass'
 Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
-PAM Error Message: invalid password 'wrongpass', should be 'goodpass'
+PAM Error Message: Maximum number of authentication attempts reached
 PAM Authenticate()
   User: "user-integration-native-deny-authentication-if-max-attempts-reached@example.com"
-  Result: error: PAM exit code: 7
-    Authentication failure
+  Result: error: PAM exit code: 11
+    Have exhausted maximum number of retries for service
 acct=incomplete
 PAM AcctMgmt()
   User: "user-integration-native-deny-authentication-if-max-attempts-reached@example.com"
