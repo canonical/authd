@@ -333,6 +333,11 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 		if err := mTx.SetData(authenticationBrokerIDKey, exitStatus.BrokerID); err != nil {
 			return err
 		}
+		if exitStatus.AuthTok != "" {
+			if err := mTx.SetItem(pam.Authtok, exitStatus.AuthTok); err != nil {
+				return err
+			}
+		}
 		return nil
 
 	case adapter.PamReturnError:
