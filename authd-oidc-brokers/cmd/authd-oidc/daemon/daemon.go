@@ -163,15 +163,12 @@ func (a *App) serve(config daemonConfig) error {
 		}
 	}
 
-	b, err := broker.New(broker.Config{
+	brokerConfig := broker.Config{
 		ConfigFile: config.Paths.BrokerConf,
 		DataDir:    config.Paths.DataDir,
-	})
-	if err != nil {
-		return err
 	}
 
-	s, err := dbusservice.New(ctx, b)
+	s, err := dbusservice.New(ctx, brokerConfig)
 	if err != nil {
 		return err
 	}
