@@ -52,11 +52,12 @@ fn init_sys_logger(log_level: LevelFilter) {
         pid: std::process::id(),
     };
 
-    let logger = if let Ok(l) = syslog::unix(formatter) {
-        l
-    } else {
-        eprintln!("failed to create syslog logger");
-        return;
+    let logger = match syslog::unix(formatter) {
+        Ok(l) => l,
+        _ => {
+            eprintln!("failed to create syslog logger");
+            return;
+        }
     };
 
     if let Err(err) = log::set_boxed_logger(Box::new(BasicLogger::new(logger))) {
