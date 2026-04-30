@@ -24,10 +24,39 @@ ${YARF_IMAGE_DIR}    ${SUITE_OUTPUT_DIR}/screenshots
 Log In
     Set OCR Confidence Threshold    0.94
     Set OCR Coincidence Threshold    92
+    Log In With Password    ubuntu
+
+
+Log In With Password
+    [Arguments]    ${password}
+    Match Text    Not listed    300
+    Wait Until User Selected
+    Hid.Type String    ${password}
+    Hid.Keys Combo    Return
+    Wait Until Desktop Ready
+
+
+Log In And Set Password
+    [Arguments]    ${new_password}
     Match Text    Not listed    300
     Wait Until User Selected
     Hid.Type String    ubuntu
     Hid.Keys Combo    Return
+
+    Match Text    You are required to change your password immediately    30
+    Match Text    Changing password   30
+    Sleep   2
+    Hid.Type String    ubuntu
+    Hid.Keys Combo    Return
+
+    Match Text    New password    30
+    Hid.Type String    ${new_password}
+    Hid.Keys Combo    Return
+
+    Match Text    Retype new password    30
+    Hid.Type String    ${new_password}
+    Hid.Keys Combo    Return
+
     Wait Until Desktop Ready
 
 
@@ -212,6 +241,12 @@ Try machinectl login Prompt
         Hid.Keys Combo    Control_L    ]
         ${tries} =    Evaluate    ${tries} - 1
     END
+
+
+Force Password Change
+    Hid.Type String    passwd -e ubuntu
+    Hid.Keys Combo    Return
+    Match Text    passwd: password changed.    30
 
 
 ### Setup ###
