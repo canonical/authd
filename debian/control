@@ -11,7 +11,12 @@ Build-Depends: debhelper-compat (= 13),
                dh-exec,
                dh-golang,
                dctrl-tools,
-               cargo (>= 1.82) | cargo-1.82,
+# FIXME: We need a newer cargo to be able to update our Rust dependencies.
+# These are the newest versions currently available in the active Ubuntu releases:
+# * Noble: cargo-1.91
+# * Questing: cargo-1.88
+# * Resolute: cargo (>= 1.91)
+               cargo (>= 1.91) | cargo-1.91 | cargo-1.88,
 # FIXME: We need cargo-vendor-filterer starting from plucky, but noble isn't ready yet
 # so workaround it, making it kind of optional, and requiring it only on versions after
 # noble (controlled via base-files version that matches the one in noble).

@@ -173,7 +173,9 @@ jobs:
           docker-image: ubuntu:${{ inputs.ubuntu-version }}
           # Add the Go backports PPA if we're testing a Ubuntu release which
           # doesn't have the required Go version in main.
-          extra-apt-repositories: ${{ (inputs.ubuntu-version == 'noble' || inputs.ubuntu-version == 'questing') && 'ppa:ubuntu-enterprise-desktop/golang' || '' }}
+          extra-apt-repositories: |
+            ${{ (inputs.ubuntu-version == 'noble' || inputs.ubuntu-version == 'questing') && 'ppa:ubuntu-enterprise-desktop/golang' || '' }}
+            ${{ (inputs.ubuntu-version == 'noble' && 'ppa:maxgmr/lp2100266-2' || '') }}
           # Extra build dependencies:
           # - systemd-dev: Required to read compile time variables from systemd via pkg-config.
           extra-source-build-deps: |
