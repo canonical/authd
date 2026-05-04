@@ -706,6 +706,7 @@ Code: 1341
 Or enter 'r' to go back to select the authentication method
 Choose action:
 > 1
+user-integration-pre-check-ssh-service-qr-code-native@example.com
 PAM Authenticate()
   User: "user-integration-pre-check-ssh-service-qr-code-native@example.com"
   Result: success

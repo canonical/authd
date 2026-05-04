@@ -472,6 +472,7 @@ Press Enter to wait for authentication or enter 'r' to go back to select the aut
 Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 (user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa@example.com@localhost) Plug your fido device and press with your thumb:
 >
+user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa@example.com
 PAM Authenticate() finished for user 'user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa@example.com'
 PAM AcctMgmt() finished for user 'user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_with_mfa]

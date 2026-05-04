@@ -237,6 +237,7 @@ Choose action:
 Enter 'r' to cancel the request and go back to select the authentication method
 Enter your one time credential:
 > temporary pass00
+user-integration-native-authenticate-user-with-form-mode-with-button-in-polkit@example.com
 PAM Authenticate()
   User: "user-integration-native-authenticate-user-with-form-mode-with-button-in-polkit@example.com"
   Result: success

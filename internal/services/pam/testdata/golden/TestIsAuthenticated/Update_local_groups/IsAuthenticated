@@ -1,4 +1,4 @@
 FIRST CALL:
 	access: granted
-	msg: 
+	msg: success_with_local_groups@example.com
 	err: <nil>

@@ -107,7 +107,7 @@ func sendReturnMessageToPam(mTx pam.ModuleTransaction, retStatus adapter.PamRetu
 	style := pam.ErrorMsg
 	switch rs := retStatus.(type) {
 	case adapter.PamSuccess:
-		style = pam.TextInfo
+		return // No need to show a message for success status
 	case adapter.PamReturnError:
 		if rs.Status() == pam.ErrIgnore {
 			style = pam.TextInfo
@@ -331,6 +331,15 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 	switch exitStatus := exitStatus.(type) {
 	case adapter.PamSuccess:
 		if err := mTx.SetData(authenticationBrokerIDKey, exitStatus.BrokerID); err != nil {
+			return err
+		}
+
+		authenticatedUsername := exitStatus.Message()
+		if authenticatedUsername == "" {
+			return fmt.Errorf("%w: expected username, but didn't get any", pam.ErrAuthinfoUnavail)
+		}
+
+		if err := mTx.SetItem(pam.User, authenticatedUsername); err != nil {
 			return err
 		}
 		return nil

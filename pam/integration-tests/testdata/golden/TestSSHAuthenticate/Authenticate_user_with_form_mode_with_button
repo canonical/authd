@@ -313,6 +313,7 @@ Or enter 'r' to go back to select the authentication method
 Enter 'r' to cancel the request and go back to select the authentication method
 (user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button@example.com@localhost) Enter your one time credential:
 > temporary pass00
+user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button@example.com
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button@example.com'
 PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_with_form_mode_with_button]

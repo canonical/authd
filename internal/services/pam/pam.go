@@ -327,9 +327,26 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		return nil, err
 	}
 
+	// The broker returned the FQDN'ed username (i.e. user@domain.com), but authd might be configured to use
+	// short usernames (i.e. user) as keys in the database. In that case, we need to get the user information
+	// from the database and return the username in the format it is stored in the database.
+	authenticatedUser, err := s.userManager.UserByFullUsername(uInfo.Name)
+	if err != nil {
+		log.Errorf(ctx, "IsAuthenticated: Could not get user %q from database after update: %v", uInfo.Name, err)
+		return nil, fmt.Errorf("could not get user from database after update: %v", err)
+	}
+
+	msg, err := json.Marshal(struct {
+		Message string `json:"message"`
+	}{Message: authenticatedUser.Name})
+	if err != nil {
+		log.Errorf(ctx, "IsAuthenticated: Could not marshal authenticated user name for session %q: %v", sessionID, err)
+		return nil, fmt.Errorf("could not marshal authenticated user name: %v", err)
+	}
+
 	return &authd.IAResponse{
 		Access: access,
-		Msg:    "",
+		Msg:    string(msg),
 	}, nil
 }
 

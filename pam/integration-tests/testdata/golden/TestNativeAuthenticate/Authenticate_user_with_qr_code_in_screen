@@ -1889,6 +1889,7 @@ Code: 1341
 Or enter 'r' to go back to select the authentication method
 Choose action:
 > 1
+user-integration-native-authenticate-user-with-qr-code-in-screen@example.com
 PAM Authenticate()
   User: "user-integration-native-authenticate-user-with-qr-code-in-screen@example.com"
   Result: success

@@ -3761,6 +3761,7 @@ Choose your authentication method:
 Enter 'r' to cancel the request and go back to select the authentication method
 Enter your pin code:
 > 4242
+user-integration-switch-mode-native@example.com
 PAM Authenticate()
   User: "user-integration-switch-mode-native@example.com"
   Result: success

@@ -706,6 +706,7 @@ Code: 1341
 Or enter 'r' to go back to select the authentication method
 (user-integration-pre-check-ssh-authenticate-user-with-qr-code@example.com@localhost) Choose action:
 > 1
+user-integration-pre-check-ssh-authenticate-user-with-qr-code@example.com
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-with-qr-code@example.com'
 PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-with-qr-code@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_with_qr_code]
