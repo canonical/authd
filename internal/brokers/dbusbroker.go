@@ -4,19 +4,29 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/canonical/authd/internal/decorate"
 	"github.com/canonical/authd/internal/services/errmessages"
 	"github.com/canonical/authd/log"
 	"github.com/godbus/dbus/v5"
+	"github.com/godbus/dbus/v5/introspect"
+	"golang.org/x/exp/slices"
 	"gopkg.in/ini.v1"
 )
 
-// DbusInterface is the expected interface that should be implemented by the brokers.
-const DbusInterface string = "com.ubuntu.authd.Broker"
+const (
+	// DbusBaseInterface is the expected interface that should be implemented by the brokers.
+	DbusBaseInterface string = "com.ubuntu.authd.Broker"
+
+	// LatestAPIVersion is the latest API version supported by authd.
+	LatestAPIVersion = 2
+)
 
 type dbusBroker struct {
-	name string
+	name  string
+	iface string
 
 	dbusObject dbus.BusObject
 }
@@ -52,10 +62,83 @@ func newDbusBroker(ctx context.Context, bus *dbus.Conn, configFile string) (b db
 		return b, "", "", fmt.Errorf("missing field for broker: %v", err)
 	}
 
-	return dbusBroker{
+	dBroker := dbusBroker{
 		name:       nameVal.String(),
 		dbusObject: bus.Object(dbusName.String(), dbus.ObjectPath(objectName.String())),
-	}, nameVal.String(), brandIconVal.String(), nil
+	}
+
+	dBroker.iface, err = getInterface(dBroker.dbusObject)
+	if err != nil {
+		return b, "", "", fmt.Errorf("could not detect broker interfaces: %v", err)
+	}
+
+	return dBroker, nameVal.String(), brandIconVal.String(), nil
+}
+
+// getInterface introspects the broker's D-Bus object and returns the interface with the highest version supported both
+// by the broker and authd.
+func getInterface(obj dbus.BusObject) (string, error) {
+	node, err := introspect.Call(obj)
+	if err != nil {
+		return "", fmt.Errorf("could not introspect broker: %v", err)
+	}
+
+	var supportedInterfaces []string
+	for _, iface := range node.Interfaces {
+		// Ignore interfaces that do not satisfy the expected format, as they are not relevant for selecting the broker
+		// interface version.
+		// The expected format is com.ubuntu.authd.BrokerX, where X is the version number (or empty for the first
+		// version).
+		suffix := strings.TrimPrefix(iface.Name, DbusBaseInterface)
+		if suffix == iface.Name {
+			// The interface name doesn't start with com.ubuntu.authd.Broker
+			continue
+		}
+
+		// The suffix should be either empty (for the first version) or a number (for later versions).
+		if suffix != "" {
+			v, err := strconv.Atoi(suffix)
+			if err != nil {
+				continue
+			}
+
+			if v > LatestAPIVersion {
+				// The interface version is higher than the latest API version supported by authd, ignore it.
+				continue
+			}
+		}
+
+		supportedInterfaces = append(supportedInterfaces, iface.Name)
+	}
+
+	slices.SortFunc(supportedInterfaces, func(a, b string) int {
+		suffixA := strings.TrimPrefix(a, DbusBaseInterface)
+		suffixB := strings.TrimPrefix(b, DbusBaseInterface)
+
+		// We know from the filtering above that the suffix is either empty (for the base
+		// interface, which is version 1 per D-Bus API versioning) or a valid number.
+		versionA := 1
+		if suffixA != "" {
+			versionA, _ = strconv.Atoi(suffixA)
+		}
+		versionB := 1
+		if suffixB != "" {
+			versionB, _ = strconv.Atoi(suffixB)
+		}
+
+		if versionA < versionB {
+			return -1
+		} else if versionA > versionB {
+			return 1
+		}
+		return 0
+	})
+
+	if len(supportedInterfaces) == 0 {
+		return "", errors.New("no supported interfaces found")
+	}
+
+	return supportedInterfaces[len(supportedInterfaces)-1], nil
 }
 
 // NewSession calls the corresponding method on the broker bus and returns the session ID and encryption key.
@@ -143,7 +226,7 @@ func (b dbusBroker) UserPreCheck(ctx context.Context, username string) (userinfo
 // call is an abstraction over dbus calls to ensure we wrap the returned error to an ErrorToDisplay.
 // All wrapped errors will be logged, but not returned to the UI.
 func (b dbusBroker) call(ctx context.Context, method string, args ...interface{}) (*dbus.Call, error) {
-	dbusMethod := DbusInterface + "." + method
+	dbusMethod := b.iface + "." + method
 	call := b.dbusObject.CallWithContext(ctx, dbusMethod, 0, args...)
 	if err := call.Err; err != nil {
 		var dbusError dbus.Error
