@@ -53,6 +53,26 @@ issuer = https://<ISSUER_URL>
 client_id = <CLIENT_ID>
 `,
 
+	"valid+register_device": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[msentraid]
+register_device = true
+`,
+
+	"invalid_register_device_value": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[msentraid]
+register_device = invalid
+`,
+
+	"invalid-ini": `=invalid`,
+
 	"overwrite_lower_precedence": `
 [oidc]
 issuer = https://lower-precedence-issuer.url.com
@@ -74,20 +94,26 @@ func TestParseConfig(t *testing.T) {
 		configType string
 		dropInType string
 
-		wantErr bool
+		wantErr                         bool
+		wantErrContainsDropInConfigPath bool
 	}{
 		"Successfully_parse_config_file":                      {},
 		"Successfully_parse_config_file_with_optional_values": {configType: "valid+optional"},
+		"Successfully_parse_config_file_with_register_device": {configType: "valid+register_device"},
 		"Successfully_parse_config_with_drop_in_files":        {dropInType: "valid"},
 
 		"Do_not_fail_if_values_contain_a_single_template_delimiter": {configType: "singles"},
 
-		"Error_if_file_does_not_exist":             {configType: "inexistent", wantErr: true},
-		"Error_if_file_is_unreadable":              {configType: "unreadable", wantErr: true},
-		"Error_if_file_is_not_updated":             {configType: "template", wantErr: true},
-		"Error_if_drop_in_directory_is_unreadable": {dropInType: "unreadable-dir", wantErr: true},
-		"Error_if_drop_in_file_is_unreadable":      {dropInType: "unreadable-file", wantErr: true},
-		"Error_if_config_contains_invalid_values":  {configType: "invalid_boolean_value", wantErr: true},
+		"Error_if_file_does_not_exist":                           {configType: "inexistent", wantErr: true},
+		"Error_if_file_is_unreadable":                            {configType: "unreadable", wantErr: true},
+		"Error_if_file_is_not_updated":                           {configType: "template", wantErr: true},
+		"Error_if_main_config_has_invalid_syntax":                {configType: "invalid-ini", wantErr: true},
+		"Error_if_drop_in_directory_is_unreadable":               {dropInType: "unreadable-dir", wantErr: true},
+		"Error_if_drop_in_file_is_unreadable":                    {dropInType: "unreadable-file", wantErr: true},
+		"Error_if_config_contains_invalid_values":                {configType: "invalid_boolean_value", wantErr: true},
+		"Error_if_config_contains_invalid_register_device_value": {configType: "invalid_register_device_value", wantErr: true},
+		"Error_if_drop_in_file_is_invalid":                       {dropInType: "invalid-ini", wantErr: true, wantErrContainsDropInConfigPath: true},
+		"Error_if_drop_in_file_is_not_updated":                   {dropInType: "template", wantErr: true, wantErrContainsDropInConfigPath: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -133,11 +159,20 @@ func TestParseConfig(t *testing.T) {
 			case "unreadable-file":
 				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["valid"]), 0000)
 				require.NoError(t, err, "Setup: Failed to make drop-in file unreadable")
+			case "invalid-ini":
+				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte("=invalid"), 0600)
+				require.NoError(t, err, "Setup: Failed to write drop-in file")
+			case "template":
+				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["template"]), 0600)
+				require.NoError(t, err, "Setup: Failed to write drop-in file")
 			}
 
 			cfg, err := parseConfigFromPath(confPath, p)
 			if tc.wantErr {
 				require.Error(t, err)
+				if tc.wantErrContainsDropInConfigPath {
+					require.ErrorContains(t, err, filepath.Join(dropInDir, "00-drop-in.conf"))
+				}
 				return
 			}
 			require.NoError(t, err)
