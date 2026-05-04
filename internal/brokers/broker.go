@@ -61,8 +61,6 @@ type fieldValidator struct {
 
 // newBroker creates a new broker object based on the provided config file. No config means local broker.
 func newBroker(ctx context.Context, configFile string, bus *dbus.Conn) (b Broker, err error) {
-	defer decorate.OnError(&err, "can't create broker from %q", configFile)
-
 	name := LocalBrokerName
 	id := LocalBrokerName
 	var brandIcon string

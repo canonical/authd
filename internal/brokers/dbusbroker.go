@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/canonical/authd/internal/decorate"
 	"github.com/canonical/authd/internal/services/errmessages"
 	"github.com/canonical/authd/log"
 	"github.com/godbus/dbus/v5"
@@ -33,33 +32,31 @@ type dbusBroker struct {
 
 // newDbusBroker returns a dbus broker and broker attributes from its configuration file.
 func newDbusBroker(ctx context.Context, bus *dbus.Conn, configFile string) (b dbusBroker, name, brandIcon string, err error) {
-	defer decorate.OnError(&err, "D-Bus broker from configuration file: %q", configFile)
-
 	log.Debugf(ctx, "D-Bus broker configuration at %q", configFile)
 
 	cfg, err := ini.Load(configFile)
 	if err != nil {
-		return b, "", "", fmt.Errorf("could not read ini configuration for broker %v", err)
+		return b, "", "", fmt.Errorf("error reading read ini config: %v", err)
 	}
 
 	nameVal, err := cfg.Section("authd").GetKey("name")
 	if err != nil {
-		return b, "", "", fmt.Errorf("missing field for broker: %v", err)
+		return b, "", "", err
 	}
 
 	brandIconVal, err := cfg.Section("authd").GetKey("brand_icon")
 	if err != nil {
-		return b, "", "", fmt.Errorf("missing field for broker: %v", err)
+		return b, "", "", err
 	}
 
 	dbusName, err := cfg.Section("authd").GetKey("dbus_name")
 	if err != nil {
-		return b, "", "", fmt.Errorf("missing field for broker: %v", err)
+		return b, "", "", err
 	}
 
 	objectName, err := cfg.Section("authd").GetKey("dbus_object")
 	if err != nil {
-		return b, "", "", fmt.Errorf("missing field for broker: %v", err)
+		return b, "", "", err
 	}
 
 	dBroker := dbusBroker{

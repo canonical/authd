@@ -102,7 +102,7 @@ func NewManager(ctx context.Context, brokersConfPath string, configuredBrokers [
 		configFile := filepath.Join(brokersConfPath, cfgFileName)
 		b, err := newBroker(ctx, configFile, bus)
 		if err != nil {
-			log.Warningf(ctx, "Skipping broker %q is not correctly configured: %v", cfgFileName, err)
+			log.Warningf(ctx, "Skipping broker configuration file %q: %v", configFile, err)
 			continue
 		}
 		brokersOrder = append(brokersOrder, b.ID)
