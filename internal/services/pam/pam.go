@@ -75,8 +75,6 @@ func (s Service) GetPreviousBroker(ctx context.Context, req *authd.GPBRequest) (
 	brokerID, err := s.userManager.BrokerForUser(username)
 	// User is not in our database.
 	if err != nil && errors.Is(err, users.NoDataFoundError{}) {
-		// FIXME: this part will not be here in the v2 API version, as we won’t have GetPreviousBroker and handle
-		// autoselection silently in authd.
 		// User not in database, if there is only the local broker available, return this one without saving it.
 		if len(s.brokerManager.AvailableBrokers()) == 1 {
 			log.Debugf(ctx, "GetPreviousBroker: User %q not found in database and only local broker available, selecting local broker", req.GetUsername())
