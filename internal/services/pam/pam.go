@@ -30,18 +30,20 @@ type Service struct {
 	userManager       *users.Manager
 	brokerManager     *brokers.Manager
 	permissionManager *permissions.Manager
+	hideLocalBroker   bool
 
 	authd.UnimplementedPAMServer
 }
 
 // NewService returns a new PAM GRPC service.
-func NewService(ctx context.Context, userManager *users.Manager, brokerManager *brokers.Manager, permissionManager *permissions.Manager) Service {
+func NewService(ctx context.Context, userManager *users.Manager, brokerManager *brokers.Manager, permissionManager *permissions.Manager, hideLocalBroker bool) Service {
 	log.Debug(ctx, "Building new gRPC PAM service")
 
 	return Service{
 		userManager:       userManager,
 		brokerManager:     brokerManager,
 		permissionManager: permissionManager,
+		hideLocalBroker:   hideLocalBroker,
 	}
 }
 
@@ -50,6 +52,9 @@ func (s Service) AvailableBrokers(ctx context.Context, _ *authd.Empty) (*authd.A
 	var r authd.ABResponse
 
 	for _, b := range s.brokerManager.AvailableBrokers() {
+		if s.hideLocalBroker && b.ID == brokers.LocalBrokerName {
+			continue
+		}
 		r.BrokersInfos = append(r.BrokersInfos, &authd.ABResponse_BrokerInfo{
 			Id:        b.ID,
 			Name:      b.Name,

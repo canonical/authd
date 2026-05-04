@@ -42,10 +42,11 @@ type systemPaths struct {
 
 // daemonConfig defines configuration parameters of the daemon.
 type daemonConfig struct {
-	Brokers     []string
-	Verbosity   int
-	Paths       systemPaths
-	UsersConfig *users.Config `mapstructure:",squash" yaml:",inline"`
+	Brokers         []string
+	HideLocalBroker bool `mapstructure:"hide_local_broker" yaml:"hide_local_broker"`
+	Verbosity       int
+	Paths           systemPaths
+	UsersConfig     *users.Config `mapstructure:",squash" yaml:",inline"`
 }
 
 type options struct {
@@ -152,7 +153,7 @@ func (a *App) serve(config daemonConfig) error {
 		panic("Users config must be set! This is a programmer error.")
 	}
 
-	m, err := services.NewManager(ctx, dbDir, config.Paths.BrokersConf, config.Brokers, *config.UsersConfig)
+	m, err := services.NewManager(ctx, dbDir, config.Paths.BrokersConf, config.Brokers, config.HideLocalBroker, *config.UsersConfig)
 	if err != nil {
 		close(a.ready)
 		return err

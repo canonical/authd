@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/canonical/authd/internal/brokers"
 	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/canonical/authd/log"
 	"github.com/canonical/authd/pam/internal/proto"
@@ -100,6 +101,16 @@ func (m brokerSelectionModel) Update(msg tea.Msg) (brokerSelectionModel, tea.Cmd
 
 	case brokerSelected:
 		safeMessageDebug(msg)
+
+		// If the GetPreviousBroker call returns the local broker, auto-select it even if it's not part of the available
+		// brokers list (e.g. because of hide_local_broker=true), to still allow existing non-authd users to log in.
+		if msg.brokerID == brokers.LocalBrokerName {
+			log.Infof(context.TODO(), "auto-selecting local broker")
+			return m, sendEvent(BrokerSelected{
+				BrokerID: msg.brokerID,
+			})
+		}
+
 		broker := brokerFromID(msg.brokerID, m.availableBrokers)
 		if broker == nil {
 			log.Infof(context.TODO(), "broker %q is not part of current active brokers", msg.brokerID)

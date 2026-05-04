@@ -6,6 +6,14 @@
 ## 2 prints debug messages.
 #verbosity: 0
 
+## Whether to allow users to select a "local" broker which allows authenticating
+## with other PAM modules configured in /etc/pam.d/, for example
+## pam_systemd_home, pam_ldap or pam_unix. If set to true, users will only be
+## able to select authd brokers. Note that the local broker will still be
+## automatically selected if the user does not exist in the authd database but
+## does exist in other NSS sources.
+#hide_local_broker: false
+
 ## UID and GID allocation range for users and groups.
 ##
 ## These define the minimum and maximum UID and GID values assigned
