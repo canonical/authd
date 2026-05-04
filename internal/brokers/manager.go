@@ -91,6 +91,9 @@ func NewManager(ctx context.Context, brokersConfPath string, configuredBrokers [
 
 	// First broker is always the local one.
 	b, err := newBroker(ctx, "", nil)
+	if err != nil {
+		return m, err
+	}
 	brokersOrder = append(brokersOrder, b.ID)
 	brokers[b.ID] = &b
 
