@@ -131,8 +131,8 @@ func AutoSelectForUser(client authd.PAMClient, username string) tea.Cmd {
 			&authd.GPBRequest{
 				Username: username,
 			})
-		// We keep a chance to manually select the broker, not a blocker issue.
 		if err != nil {
+			// Don't block login if we can't get the previous broker, let the user select one.
 			log.Infof(context.TODO(), "can't get previous broker for %q", username)
 			return brokerSelectionRequired{}
 		}
