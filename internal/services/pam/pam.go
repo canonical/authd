@@ -137,6 +137,29 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 		log.Errorf(ctx, "SelectBroker: No user name provided")
 		return nil, status.Error(codes.InvalidArgument, "no user name provided")
 	}
+
+	if !s.userManager.ShortUsernameAllowed() && !strings.Contains(username, "@") {
+		log.Errorf(ctx, "SelectBroker: Short username %q provided but not allowed by configuration", username)
+		return nil, status.Error(codes.InvalidArgument, "short usernames not allowed by configuration")
+	}
+
+	// We want to keep the short fullUsername format restricted within authd. The broker should always receive the
+	// full fullUsername, even if the user logged in with a short fullUsername.
+	fullUsername, err := s.userManager.FullUsernameForUser(username)
+	switch {
+	case err == nil:
+		username = fullUsername
+	case errors.Is(err, users.NoDataFoundError{}):
+		if !strings.Contains(username, "@") {
+			log.Errorf(ctx, "SelectBroker: User %q not found in database. First authentication must use the full username", username)
+			return nil, status.Error(codes.InvalidArgument, "first authentication must use the full username")
+		}
+	default: // err != nil && !errors.Is(err, users.NoDataFoundError{})
+		log.Errorf(ctx, "SelectBroker: Could not get full username for user %q: %v", username, err)
+		return nil, status.Error(codes.InvalidArgument, "invalid user name")
+	}
+	log.Debugf(ctx, "Using fullusername: %q", fullUsername)
+
 	if brokerID == "" {
 		log.Errorf(ctx, "SelectBroker: No broker selected")
 		return nil, status.Error(codes.InvalidArgument, "no broker selected")

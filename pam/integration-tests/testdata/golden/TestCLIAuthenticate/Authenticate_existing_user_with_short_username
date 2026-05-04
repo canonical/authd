@@ -1,0 +1,27 @@
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
+Username: user name
+────────────────────────────────────────────────────────────────────────────────
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
+Username: user-integration-shortusername
+────────────────────────────────────────────────────────────────────────────────
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
+Gimme your password:
+>
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
+Gimme your password:
+> ********
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
+PAM Authenticate()
+  User: "user-integration-shortusername"
+  Result: success
+PAM AcctMgmt()
+  User: "user-integration-shortusername"
+  Result: success
+>
+────────────────────────────────────────────────────────────────────────────────

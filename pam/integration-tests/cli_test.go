@@ -53,6 +53,8 @@ func TestCLIAuthenticate(t *testing.T) {
 		socketPath         string
 		currentUserNotRoot bool
 		wantLocalGroups    bool
+		existingDB         string
+		useShortUsernames  bool
 		stopDaemonAfter    time.Duration
 	}{
 		"Authenticate_user_successfully": {
@@ -176,6 +178,21 @@ func TestCLIAuthenticate(t *testing.T) {
 		"Authenticate_with_warnings_on_unsupported_arguments": {
 			tape: "simple_auth_with_unsupported_args",
 		},
+		"Authenticate_user_with_short_username": {
+			tape: "short_username",
+			tapeVariables: map[string]string{
+				vhsTapeUserVariable: examplebroker.UserIntegrationPrefix + "shortusername@example.com",
+			},
+			useShortUsernames: true,
+		},
+		"Authenticate_existing_user_with_short_username": {
+			tape: "short_username_existing",
+			tapeVariables: map[string]string{
+				vhsTapeUserVariable: examplebroker.UserIntegrationPrefix + "shortusername",
+			},
+			useShortUsernames: true,
+			existingDB:        "db_with_short_username",
+		},
 
 		"Remember_last_successful_broker_and_mode": {
 			tape: "remember_broker_and_mode",
@@ -209,6 +226,19 @@ func TestCLIAuthenticate(t *testing.T) {
 		"Deny_authentication_if_newpassword_does_not_match_required_criteria": {
 			tape: "bad_password",
 		},
+		"Deny_authentication_if_short_username_is_used_but_not_allowed": {
+			tape: "short_username_not_allowed",
+			tapeVariables: map[string]string{
+				vhsTapeUserVariable: examplebroker.UserIntegrationPrefix + "shortusername",
+			},
+		},
+		"Deny_authentication_if_short_username_is_allowed_but_user_does_not_exist": {
+			tape: "short_username_not_allowed",
+			tapeVariables: map[string]string{
+				vhsTapeUserVariable: examplebroker.UserIntegrationPrefix + "shortusername",
+			},
+			useShortUsernames: true,
+		},
 
 		"Exit_authd_if_local_broker_is_selected": {
 			tape:         "local_broker",
@@ -240,7 +270,8 @@ func TestCLIAuthenticate(t *testing.T) {
 			require.NoError(t, err, "Setup: symlinking the pam client")
 
 			var socketPath, groupFileOutput, pidFile string
-			if tc.wantLocalGroups || tc.currentUserNotRoot || tc.stopDaemonAfter > 0 {
+			if tc.wantLocalGroups || tc.currentUserNotRoot || tc.stopDaemonAfter > 0 ||
+				tc.existingDB != "" || tc.useShortUsernames {
 				// For the local groups tests we need to run authd again so that it has
 				// special environment that saves the updated group file to a writable
 				// location for us to test.
@@ -263,6 +294,13 @@ func TestCLIAuthenticate(t *testing.T) {
 				}
 				if !tc.currentUserNotRoot {
 					args = append(args, testutils.WithCurrentUserAsRoot)
+				}
+				if tc.existingDB != "" {
+					existingDBDir := prepareExistingDB(t, tc.existingDB)
+					args = append(args, testutils.WithDBPath(existingDBDir))
+				}
+				if tc.useShortUsernames {
+					args = append(args, testutils.WithShortUsernames())
 				}
 
 				socketPath = runAuthd(t, args...)

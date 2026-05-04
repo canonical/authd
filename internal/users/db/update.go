@@ -166,8 +166,8 @@ func (m *Manager) UpdateBrokerForUser(username, brokerID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	query := `UPDATE users SET broker_id = ? WHERE name = ?`
-	res, err := m.db.Exec(query, brokerID, username)
+	query := `UPDATE users SET broker_id = ? WHERE name = ? OR full_username = ?`
+	res, err := m.db.Exec(query, brokerID, username, username)
 	if err != nil {
 		return fmt.Errorf("failed to update broker for user: %w", err)
 	}

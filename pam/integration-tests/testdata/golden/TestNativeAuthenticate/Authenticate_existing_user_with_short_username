@@ -1,0 +1,22 @@
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
+────────────────────────────────────────────────────────────────────────────────
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+Gimme your password:
+>
+────────────────────────────────────────────────────────────────────────────────
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+Gimme your password:
+>
+user-integration-shortusername
+PAM Authenticate()
+  User: "user-integration-shortusername"
+  Result: success
+PAM AcctMgmt()
+  User: "user-integration-shortusername"
+  Result: success
+>
+────────────────────────────────────────────────────────────────────────────────

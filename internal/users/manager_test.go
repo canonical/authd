@@ -31,17 +31,18 @@ import (
 
 func TestNewManager(t *testing.T) {
 	tests := map[string]struct {
-		dbFile          string
-		corruptedDbFile bool
-		uidMin          uint32
-		uidMax          uint32
-		gidMin          uint32
-		gidMax          uint32
+		dbFile              string
+		corruptedDbFile     bool
+		uidMin              uint32
+		uidMax              uint32
+		gidMin              uint32
+		gidMax              uint32
+		allowShortUsernames bool
 
 		wantErr bool
 	}{
 		"Successfully_create_manager_with_default_config":                           {},
-		"Successfully_create_manager_with_custom_config":                            {uidMin: 10000, uidMax: 20000, gidMin: 10000, gidMax: 20000},
+		"Successfully_create_manager_with_custom_config":                            {uidMin: 10000, uidMax: 20000, gidMin: 10000, gidMax: 20000, allowShortUsernames: true},
 		"Successfully_create_manager_with_UID_range_next_to_systemd_dynamic_users":  {uidMin: users.SystemdDynamicUIDMax + 1, uidMax: users.SystemdDynamicUIDMax + 10000},
 		"Successfully_create_manager_with_GID_range_next_to_systemd_dynamic_groups": {gidMin: users.SystemdDynamicUIDMin - 1000, gidMax: users.SystemdDynamicUIDMin - 1},
 
@@ -95,6 +96,7 @@ func TestNewManager(t *testing.T) {
 			if tc.gidMax != 0 {
 				config.GIDMax = tc.gidMax
 			}
+			config.UseShortUsernames = tc.allowShortUsernames
 
 			m, err := users.NewManager(config, dbDir)
 			if tc.wantErr {
@@ -127,7 +129,7 @@ func TestNewManager(t *testing.T) {
 
 func TestStop(t *testing.T) {
 	dbDir := t.TempDir()
-	m := newManagerForTests(t, dbDir)
+	m := newManagerForTests(t, users.DefaultConfig, dbDir)
 	require.NoError(t, m.Stop(), "Stop should not return an error, but did")
 
 	// Should fail, because the db is closed
@@ -160,6 +162,7 @@ func TestUpdateUser(t *testing.T) {
 		"different-name-same-uid":           {UserInfo: types.UserInfo{Name: "newuser1@example.com"}, UID: 1111},
 		"different-capitalization-same-uid": {UserInfo: types.UserInfo{Name: "User1@example.com"}, UID: 1111},
 		"user-exists-on-system":             {UserInfo: types.UserInfo{Name: "root"}, UID: 1111},
+		"user1-different-domain":            {UserInfo: types.UserInfo{Name: "user1@different.com"}, UID: 1111},
 	}
 
 	groupsCases := map[string][]groupCase{
@@ -186,8 +189,9 @@ func TestUpdateUser(t *testing.T) {
 		userCase   string
 		groupsCase string
 
-		dbFile          string
-		localGroupsFile string
+		dbFile              string
+		localGroupsFile     string
+		allowShortUsernames bool
 
 		wantErr     bool
 		noOutput    bool
@@ -196,6 +200,7 @@ func TestUpdateUser(t *testing.T) {
 		"Successfully_update_user":                                          {groupsCase: "authd-group"},
 		"Successfully_update_user_updating_local_groups":                    {groupsCase: "mixed-groups-authd-first", localGroupsFile: "users_in_groups.group"},
 		"Successfully_update_user_updating_local_groups_with_changes":       {groupsCase: "mixed-groups-authd-first", localGroupsFile: "user_mismatching_groups.group"},
+		"Successfully_update_user_using_shortened_username":                 {userCase: "user1", allowShortUsernames: true, groupsCase: "authd-group"},
 		"UID_does_not_change_if_user_already_exists":                        {userCase: "same-name-different-uid", dbFile: "one_user_and_group", wantSameUID: true},
 		"GID_does_not_change_if_group_with_same_UGID_exists":                {groupsCase: "different-name-same-ugid", dbFile: "one_user_and_group"},
 		"GID_does_not_change_if_group_with_same_name_and_empty_UGID_exists": {groupsCase: "authd-group", dbFile: "group-with-empty-UGID"},
@@ -203,11 +208,13 @@ func TestUpdateUser(t *testing.T) {
 		"Allow_login_with_existing_group_on_system":                         {groupsCase: "group-exists-on-system"},
 		"User_private_group_GID_preserved_across_logins":                    {dbFile: "user_with_primary_group_gid_changed"},
 
-		"Error_if_user_has_no_username":                           {userCase: "nameless", wantErr: true, noOutput: true},
-		"Error_if_group_has_no_name":                              {groupsCase: "nameless-group", wantErr: true, noOutput: true},
-		"Error_if_group_has_conflicting_gid":                      {groupsCase: "different-name-same-gid", dbFile: "one_user_and_group", wantErr: true, noOutput: true},
-		"Error_if_group_with_same_name_but_different_UGID_exists": {groupsCase: "authd-group", dbFile: "one_user_and_group", wantErr: true, noOutput: true},
-		"Error_if_user_exists_on_system":                          {userCase: "user-exists-on-system", wantErr: true, noOutput: true},
+		"Error_if_user_has_no_username":                                  {userCase: "nameless", wantErr: true, noOutput: true},
+		"Error_if_group_has_no_name":                                     {groupsCase: "nameless-group", wantErr: true, noOutput: true},
+		"Error_if_group_has_conflicting_gid":                             {groupsCase: "different-name-same-gid", dbFile: "one_user_and_group", wantErr: true, noOutput: true},
+		"Error_if_group_with_same_name_but_different_UGID_exists":        {groupsCase: "authd-group", dbFile: "one_user_and_group", wantErr: true, noOutput: true},
+		"Error_if_user_exists_on_system":                                 {userCase: "user-exists-on-system", wantErr: true, noOutput: true},
+		"Error_if_fullusername_conflicts_with_existing_user":             {userCase: "user1", allowShortUsernames: true, dbFile: "one_user_and_group", wantErr: true, noOutput: true},
+		"Error_if_user_with_same_name_but_different_fullusername_exists": {userCase: "user1-different-domain", allowShortUsernames: true, dbFile: "one_user_and_group", wantErr: true, noOutput: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -252,7 +259,10 @@ func TestUpdateUser(t *testing.T) {
 					GIDsToGenerate: gids,
 				}),
 			}
-			m := newManagerForTests(t, dbDir, managerOpts...)
+
+			managerCfg := users.DefaultConfig
+			managerCfg.UseShortUsernames = tc.allowShortUsernames
+			m := newManagerForTests(t, managerCfg, dbDir, managerOpts...)
 
 			var oldUID uint32
 			if tc.wantSameUID {
@@ -337,7 +347,7 @@ func TestRegisterUserPreauth(t *testing.T) {
 					UIDsToGenerate: []uint32{user.UID},
 				}),
 			}
-			m := newManagerForTests(t, dbDir, managerOpts...)
+			m := newManagerForTests(t, users.DefaultConfig, dbDir, managerOpts...)
 
 			uid, err := m.RegisterUserPreAuth(user.Name)
 
@@ -410,7 +420,7 @@ func TestConcurrentUserUpdate(t *testing.T) {
 		//nolint: gosec // we're in tests, overflow is very unlikely to happen.
 		GIDMax: uint32(len(systemGroups)) + nIterations*perUserGroups + uint32(len(systemGroups)),
 	}
-	m := newManagerForTests(t, dbDir, users.WithIDGenerator(idGenerator))
+	m := newManagerForTests(t, users.DefaultConfig, dbDir, users.WithIDGenerator(idGenerator))
 
 	originalDBUsers, err := m.AllUsers()
 	require.NoError(t, err, "AllUsers should not fail but it did")
@@ -433,7 +443,7 @@ func TestConcurrentUserUpdate(t *testing.T) {
 
 			idx := idx
 			doPreAuth := idx%3 == 0
-			userName := fmt.Sprintf("authd-test-user%d", idx)
+			userName := fmt.Sprintf("authd-test-user%d@example.com", idx)
 			t.Cleanup(wg.Done)
 
 			var preauthUID atomic.Uint32
@@ -442,7 +452,7 @@ func TestConcurrentUserUpdate(t *testing.T) {
 				// In the pre-auth case we do even more parallelization, so that
 				// the pre-auth happens without a defined order of the actual
 				// registration.
-				userName = fmt.Sprintf("%s%d", registeredUserPrefix, idx)
+				userName = fmt.Sprintf("%s%d@example.com", registeredUserPrefix, idx)
 
 				//nolint:thelper // This is actually a test function!
 				preAuth := func(t *testing.T) {
@@ -517,7 +527,7 @@ func TestConcurrentUserUpdate(t *testing.T) {
 		t.Run(fmt.Sprintf("Allow_updating_user_with_group_name_conflict_%s", g.Name), func(t *testing.T) {
 			t.Parallel()
 
-			userName := fmt.Sprintf("%s-with-group-name-conflict%d", registeredUserPrefix, idx)
+			userName := fmt.Sprintf("%s-with-group-name-conflict%d@example.com", registeredUserPrefix, idx)
 			err := m.UpdateUser(types.UserInfo{
 				Name:  userName,
 				Dir:   "/home-prefixes/" + g.Name,
@@ -675,7 +685,7 @@ func TestUpdateWhenNoMoreIDsAreAvailable(t *testing.T) {
 			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", dbFile+".db.yaml"), dbDir)
 			require.NoError(t, err, "Setup: could not create database from testdata")
 
-			m := newManagerForTests(t, dbDir, users.WithIDGenerator(tc.idGenerator))
+			m := newManagerForTests(t, users.DefaultConfig, dbDir, users.WithIDGenerator(tc.idGenerator))
 
 			// Let'ts fill the manager first...
 			for idx := range maxIDs {
@@ -736,7 +746,7 @@ func TestBrokerForUser(t *testing.T) {
 			dbDir := t.TempDir()
 			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
 			require.NoError(t, err, "Setup: could not create database from testdata")
-			m := newManagerForTests(t, dbDir)
+			m := newManagerForTests(t, users.DefaultConfig, dbDir)
 
 			brokerID, err := m.BrokerForUser(tc.username)
 
@@ -779,7 +789,7 @@ func TestUpdateBrokerForUser(t *testing.T) {
 			dbDir := t.TempDir()
 			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
 			require.NoError(t, err, "Setup: could not create database from testdata")
-			m := newManagerForTests(t, dbDir)
+			m := newManagerForTests(t, users.DefaultConfig, dbDir)
 
 			err = m.UpdateBrokerForUser(tc.username, "ExampleBrokerID")
 
@@ -825,7 +835,7 @@ func TestLockUser(t *testing.T) {
 			dbDir := t.TempDir()
 			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
 			require.NoError(t, err, "Setup: could not create database from testdata")
-			m := newManagerForTests(t, dbDir)
+			m := newManagerForTests(t, users.DefaultConfig, dbDir)
 
 			err = m.LockUser(tc.username)
 
@@ -871,7 +881,7 @@ func TestUnlockUser(t *testing.T) {
 			dbDir := t.TempDir()
 			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
 			require.NoError(t, err, "Setup: could not create database from testdata")
-			m := newManagerForTests(t, dbDir)
+			m := newManagerForTests(t, users.DefaultConfig, dbDir)
 
 			err = m.UnlockUser(tc.username)
 
@@ -920,7 +930,7 @@ func TestUserByIDAndName(t *testing.T) {
 			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
 			require.NoError(t, err, "Setup: could not create database from testdata")
 
-			m := newManagerForTests(t, dbDir)
+			m := newManagerForTests(t, users.DefaultConfig, dbDir)
 
 			if tc.isTempUser {
 				tc.uid, err = m.RegisterUserPreAuth("tempuser1@example.com")
@@ -975,7 +985,7 @@ func TestAllUsers(t *testing.T) {
 			dbDir := t.TempDir()
 			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
 			require.NoError(t, err, "Setup: could not create database from testdata")
-			m := newManagerForTests(t, dbDir)
+			m := newManagerForTests(t, users.DefaultConfig, dbDir)
 
 			got, err := m.AllUsers()
 
@@ -1020,7 +1030,7 @@ func TestGroupByIDAndName(t *testing.T) {
 			dbDir := t.TempDir()
 			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
 			require.NoError(t, err, "Setup: could not create database from testdata")
-			m := newManagerForTests(t, dbDir, users.WithIDGenerator(&users.IDGeneratorMock{
+			m := newManagerForTests(t, users.DefaultConfig, dbDir, users.WithIDGenerator(&users.IDGeneratorMock{
 				UIDsToGenerate: []uint32{12345},
 				GIDsToGenerate: []uint32{12345},
 			}))
@@ -1080,7 +1090,7 @@ func TestAllGroups(t *testing.T) {
 			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
 			require.NoError(t, err, "Setup: could not create database from testdata")
 
-			m := newManagerForTests(t, dbDir)
+			m := newManagerForTests(t, users.DefaultConfig, dbDir)
 
 			got, err := m.AllGroups()
 
@@ -1116,7 +1126,7 @@ func TestShadowByName(t *testing.T) {
 			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
 			require.NoError(t, err, "Setup: could not create database from testdata")
 
-			m := newManagerForTests(t, dbDir)
+			m := newManagerForTests(t, users.DefaultConfig, dbDir)
 
 			got, err := m.ShadowByName(tc.username)
 
@@ -1148,7 +1158,7 @@ func TestAllShadows(t *testing.T) {
 			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
 			require.NoError(t, err, "Setup: could not create database from testdata")
 
-			m := newManagerForTests(t, dbDir)
+			m := newManagerForTests(t, users.DefaultConfig, dbDir)
 
 			got, err := m.AllShadows()
 
@@ -1187,7 +1197,7 @@ func TestCompareNewUserInfoWithDB(t *testing.T) {
 		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
 		require.NoError(t, err, "Setup: could not create database from testdata")
 
-		m := newManagerForTests(t, dbDir)
+		m := newManagerForTests(t, users.DefaultConfig, dbDir)
 
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -1257,7 +1267,7 @@ func TestRegisterUserPreAuthWhenLocked(t *testing.T) {
 	err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", dbFile+".db.yaml"), dbDir)
 	require.NoError(t, err, "Setup: could not create database from testdata")
 
-	m := newManagerForTests(t, dbDir)
+	m := newManagerForTests(t, users.DefaultConfig, dbDir)
 
 	uid, err := m.RegisterUserPreAuth("locked-user@example.com")
 	require.ErrorIs(t, err, userslocking.ErrLock)
@@ -1286,7 +1296,7 @@ func TestRegisterUserPreAuthAfterUnlock(t *testing.T) {
 	err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", dbFile+".db.yaml"), dbDir)
 	require.NoError(t, err, "Setup: could not create database from testdata")
 
-	m := newManagerForTests(t, dbDir)
+	m := newManagerForTests(t, users.DefaultConfig, dbDir)
 
 	uid, err := m.RegisterUserPreAuth("locked-user@example.com")
 	require.NoError(t, err, "Registration should not fail")
@@ -1309,7 +1319,7 @@ func TestUpdateUserWhenLocked(t *testing.T) {
 	err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", dbFile+".db.yaml"), dbDir)
 	require.NoError(t, err, "Setup: could not create database from testdata")
 
-	m := newManagerForTests(t, dbDir)
+	m := newManagerForTests(t, users.DefaultConfig, dbDir)
 
 	err = m.UpdateUser(types.UserInfo{UID: 1234, Name: "test-user@example.com"})
 	require.ErrorIs(t, err, userslocking.ErrLock)
@@ -1337,9 +1347,9 @@ func TestUpdateUserAfterUnlock(t *testing.T) {
 	err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", dbFile+".db.yaml"), dbDir)
 	require.NoError(t, err, "Setup: could not create database from testdata")
 
-	m := newManagerForTests(t, dbDir)
+	m := newManagerForTests(t, users.DefaultConfig, dbDir)
 
-	err = m.UpdateUser(types.UserInfo{UID: 1234, Name: "some-user-test"})
+	err = m.UpdateUser(types.UserInfo{UID: 1234, Name: "some-user-test@example.com"})
 	require.NoError(t, err, "UpdateUser should not fail")
 }
 
@@ -1357,10 +1367,10 @@ func requireErrorAssertions(t *testing.T, gotErr, wantErrType error, wantErr boo
 	require.NoError(t, gotErr, "Error should not be returned")
 }
 
-func newManagerForTests(t *testing.T, dbDir string, opts ...users.Option) *users.Manager {
+func newManagerForTests(t *testing.T, config users.Config, dbDir string, opts ...users.Option) *users.Manager {
 	t.Helper()
 
-	m, err := users.NewManager(users.DefaultConfig, dbDir, opts...)
+	m, err := users.NewManager(config, dbDir, opts...)
 	require.NoError(t, err, "NewManager should not return an error, but did")
 
 	return m

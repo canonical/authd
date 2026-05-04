@@ -89,7 +89,7 @@ func TestSetUserID(t *testing.T) {
 			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "multiple_users_and_groups.db.yaml"), dbDir)
 			require.NoError(t, err, "Setup: could not create database from testdata")
 
-			m := newManagerForTests(t, dbDir)
+			m := newManagerForTests(t, users.DefaultConfig, dbDir)
 
 			username := "user1@example.com"
 			if tc.nonExistentUser {
@@ -241,7 +241,7 @@ func TestSetGroupID(t *testing.T) {
 			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "multiple_users_and_groups.db.yaml"), dbDir)
 			require.NoError(t, err, "Setup: could not create database from testdata")
 
-			m := newManagerForTests(t, dbDir)
+			m := newManagerForTests(t, users.DefaultConfig, dbDir)
 
 			groupname := "group1"
 			if tc.nonExistentGroup {

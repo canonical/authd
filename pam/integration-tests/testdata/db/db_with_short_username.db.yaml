@@ -1,0 +1,24 @@
+users:
+    - name: user-integration-shortusername
+      uid: 77777
+      gid: 77777
+      gecos: gecos for user-integration-shortusername@example.com
+      dir: /tmp/authd-tests/user-integration-shortusername
+      shell: /bin/sh
+      broker_id: 2221040704
+      full_username: user-integration-shortusername@example.com
+groups:
+    - name: user-integration-shortusername
+      gid: 77777
+      ugid: user-integration-shortusername
+    - name: group-user-integration-shortusername
+      gid: 77778
+      ugid: ugid-user-integration-shortusername
+users_to_groups:
+    - uid: 77777
+      gid: 77777
+    - uid: 77777
+      gid: 77778
+users_to_local_groups:
+    - uid: 77777
+      group_name: localgroup
