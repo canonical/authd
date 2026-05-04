@@ -384,6 +384,6 @@ func TestRegisterOwner(t *testing.T) {
 func FuzzParseConfig(f *testing.F) {
 	p := &testutils.MockProvider{}
 	f.Fuzz(func(t *testing.T, a []byte) {
-		_, _ = parseConfig(a, nil, p)
+		_, _ = parseConfig(configFile{content: a}, nil, p)
 	})
 }

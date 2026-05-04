@@ -72,6 +72,12 @@ type provider interface {
 	NormalizeUsername(username string) string
 }
 
+// configFile holds the path and content of a configuration file.
+type configFile struct {
+	path    string
+	content []byte
+}
+
 type templateEnv struct {
 	Owner string
 }
@@ -104,7 +110,7 @@ func GetDropInDir(cfgPath string) string {
 	return cfgPath + ".d"
 }
 
-func readDropInFiles(cfgPath string) ([]any, error) {
+func readDropInFiles(cfgPath string) ([]configFile, error) {
 	// Check if a .d directory exists and return the paths to the files in it.
 	dropInDir := GetDropInDir(cfgPath)
 	files, err := os.ReadDir(dropInDir)
@@ -115,18 +121,19 @@ func readDropInFiles(cfgPath string) ([]any, error) {
 		return nil, err
 	}
 
-	var dropInFiles []any
+	var dropInFiles []configFile
 	// files is empty if the directory does not exist
 	for _, file := range files {
 		if file.IsDir() {
 			continue
 		}
 
-		dropInFile, err := os.ReadFile(filepath.Join(dropInDir, file.Name()))
+		p := filepath.Join(dropInDir, file.Name())
+		content, err := os.ReadFile(p)
 		if err != nil {
-			return nil, fmt.Errorf("could not read drop-in file %q: %v", file.Name(), err)
+			return nil, fmt.Errorf("could not read drop-in file %q: %v", p, err)
 		}
-		dropInFiles = append(dropInFiles, dropInFile)
+		dropInFiles = append(dropInFiles, configFile{path: p, content: content})
 	}
 
 	return dropInFiles, nil
@@ -188,10 +195,11 @@ func (uc *userConfig) populateUsersConfig(users *ini.Section) {
 
 // parseConfigFromPath parses the config file and returns a map with the configuration keys and values.
 func parseConfigFromPath(cfgPath string, p provider) (userConfig, error) {
-	cfgFile, err := os.ReadFile(cfgPath)
+	content, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return userConfig{}, fmt.Errorf("could not open config file %q: %v", cfgPath, err)
 	}
+	cfgFile := configFile{path: cfgPath, content: content}
 
 	dropInFiles, err := readDropInFiles(cfgPath)
 	if err != nil {
@@ -201,34 +209,79 @@ func parseConfigFromPath(cfgPath string, p provider) (userConfig, error) {
 	return parseConfig(cfgFile, dropInFiles, p)
 }
 
-// parseConfig parses the config file and returns a userConfig struct with the configuration keys and values.
-// It also checks if the keys contain any placeholders and returns an error if they do.
-func parseConfig(cfgContent []byte, dropInContent []any, p provider) (userConfig, error) {
-	cfg := userConfig{provider: p, ownerMutex: &sync.RWMutex{}}
-
-	iniCfg, err := ini.Load(cfgContent, dropInContent...)
-	if err != nil {
-		return userConfig{}, err
-	}
-
-	// Check if any of the keys still contain the placeholders.
+// validateConfigFile checks a parsed ini config for validity: template placeholders and parseable boolean fields.
+func validateConfigFile(path string, iniCfg *ini.File) error {
+	var placeholderErr error
 	for _, section := range iniCfg.Sections() {
 		for _, key := range section.Keys() {
-			if strings.Contains(key.Value(), "<") && strings.Contains(key.Value(), ">") {
-				err = errors.Join(err, fmt.Errorf("found invalid character in section %q, key %q", section.Name(), key.Name()))
+			v := key.Value()
+			if strings.Contains(v, "<") && strings.Contains(v, ">") {
+				placeholderErr = errors.Join(placeholderErr, fmt.Errorf("unedited template placeholder found in section '%s', key '%s'", section.Name(), key.Name()))
 			}
 		}
 	}
-	if err != nil {
-		return userConfig{}, fmt.Errorf("config file has invalid values, did you edit the config file?\n%w", err)
+	if placeholderErr != nil {
+		return fmt.Errorf("config file %q has invalid values, did you edit the config file?\n%w", path, placeholderErr)
 	}
 
 	oidc := iniCfg.Section(oidcSection)
 	if oidc != nil {
-		cfg.issuerURL = oidc.Key(issuerKey).String()
-		cfg.clientID = oidc.Key(clientIDKey).String()
-		cfg.clientSecret = oidc.Key(clientSecret).String()
-		cfg.extraScopes = oidc.Key(extraScopesKey).Strings(",")
+		forceAccessCheckKey := forceAccessCheckWithProviderKey
+		if !oidc.HasKey(forceAccessCheckKey) {
+			forceAccessCheckKey = forceAccessCheckWithProviderKeyOld
+		}
+		if oidc.HasKey(forceAccessCheckKey) {
+			if _, err := oidc.Key(forceAccessCheckKey).Bool(); err != nil {
+				return fmt.Errorf("error parsing '%s' in config file %q: %w", forceAccessCheckKey, path, err)
+			}
+		}
+	}
+
+	entraID := iniCfg.Section(entraIDSection)
+	if entraID != nil && entraID.HasKey(registerDeviceKey) {
+		if _, err := entraID.Key(registerDeviceKey).Bool(); err != nil {
+			return fmt.Errorf("error parsing '%s' in config file %q: %w", registerDeviceKey, path, err)
+		}
+	}
+
+	return nil
+}
+
+// parseConfig parses the config file and returns a userConfig struct with the configuration keys and values.
+// It also checks if the keys contain any placeholders and returns an error if they do.
+func parseConfig(cfg configFile, dropInCfgs []configFile, p provider) (userConfig, error) {
+	uc := userConfig{provider: p, ownerMutex: &sync.RWMutex{}}
+
+	iniCfg, err := ini.Load(cfg.content)
+	if err != nil {
+		return userConfig{}, fmt.Errorf("error in config file %q: %w", cfg.path, err)
+	}
+
+	if err := validateConfigFile(cfg.path, iniCfg); err != nil {
+		return userConfig{}, err
+	}
+
+	for _, dropIn := range dropInCfgs {
+		dropInCfg, err := ini.Load(dropIn.content)
+		if err != nil {
+			return userConfig{}, fmt.Errorf("error in drop-in config file %q: %w", dropIn.path, err)
+		}
+
+		if err := validateConfigFile(dropIn.path, dropInCfg); err != nil {
+			return userConfig{}, err
+		}
+
+		if err := iniCfg.Append(dropIn.content); err != nil {
+			return userConfig{}, fmt.Errorf("error in drop-in config file %q: %w", dropIn.path, err)
+		}
+	}
+
+	oidc := iniCfg.Section(oidcSection)
+	if oidc != nil {
+		uc.issuerURL = oidc.Key(issuerKey).String()
+		uc.clientID = oidc.Key(clientIDKey).String()
+		uc.clientSecret = oidc.Key(clientSecret).String()
+		uc.extraScopes = oidc.Key(extraScopesKey).Strings(",")
 
 		forceAccessCheckKey := forceAccessCheckWithProviderKey
 		// If we don't have the new key, we should try reading the old one instead.
@@ -236,24 +289,20 @@ func parseConfig(cfgContent []byte, dropInContent []any, p provider) (userConfig
 			forceAccessCheckKey = forceAccessCheckWithProviderKeyOld
 		}
 		if oidc.HasKey(forceAccessCheckKey) {
-			cfg.forceAccessCheckWithProvider, err = oidc.Key(forceAccessCheckKey).Bool()
-			if err != nil {
-				return userConfig{}, fmt.Errorf("error parsing '%s': %w", forceAccessCheckKey, err)
-			}
+			// Already validated per-file above; ignore error.
+			uc.forceAccessCheckWithProvider, _ = oidc.Key(forceAccessCheckKey).Bool()
 		}
 	}
 
 	entraID := iniCfg.Section(entraIDSection)
 	if entraID != nil && entraID.HasKey(registerDeviceKey) {
-		cfg.registerDevice, err = entraID.Key(registerDeviceKey).Bool()
-		if err != nil {
-			return userConfig{}, fmt.Errorf("error parsing '%s': %w", registerDeviceKey, err)
-		}
+		// Already validated per-file above; ignore error.
+		uc.registerDevice, _ = entraID.Key(registerDeviceKey).Bool()
 	}
 
-	cfg.populateUsersConfig(iniCfg.Section(usersSection))
+	uc.populateUsersConfig(iniCfg.Section(usersSection))
 
-	return cfg, nil
+	return uc, nil
 }
 
 func (uc *userConfig) userNameIsAllowed(userName string) bool {
