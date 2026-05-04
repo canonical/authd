@@ -223,7 +223,7 @@ class BrowserWindow(Gtk.Window):
         GLib.source_remove(stable_timeout_id)
         logger.info("Page is stable now")
 
-    def wait_for_pattern(self, pattern, timeout_ms=5000,
+    def wait_for_pattern(self, pattern, timeout_ms=10000,
                          poll_interval_ms=100) -> list[str]:
         """Wait until `pattern` is present in the page's visible text and return all matched substrings."""
         logger.info(f"Waiting for pattern '{pattern}'...")

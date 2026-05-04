@@ -11,8 +11,9 @@ import (
 	"github.com/godbus/dbus/v5/introspect"
 )
 
-const intro = `
-<node>
+const (
+	introspectableHeader    = `<node>`
+	introspectableInterface = `
 	<interface name="%s">
 		<method name="NewSession">
 			<arg type="s" direction="in" name="username"/>
@@ -50,51 +51,86 @@ const intro = `
 		<method name="DeleteUser">
 			<arg type="s" direction="in" name="username"/>
 		</method>
-	</interface>` + introspect.IntrospectDataString + `</node> `
+	</interface>`
+	introspectableFooter = introspect.IntrospectDataString + `</node> `
+)
 
-// Service is the handler exposing our broker methods on the system bus.
+// Service is the object representing the dbus service, which contains the exported interfaces and the necessary
+// information to disconnect from the bus and stop the service.
 type Service struct {
-	name   string
-	broker *broker.Broker
-
-	serve      chan struct{}
+	name       string
+	interfaces []*Interface
 	disconnect func()
+	serve      chan struct{}
+}
+
+// Interface is the object representing a dbus interface, which contains the broker to which delegate the calls and the
+// name of the interface itself.
+type Interface struct {
+	iface  string
+	broker *broker.Broker
+}
+
+var interfaceNames = []string{
+	"com.ubuntu.authd.Broker",
+	"com.ubuntu.authd.Broker2",
 }
 
 // New returns a new dbus service after exporting to the system bus our name.
-func New(_ context.Context, broker *broker.Broker) (s *Service, err error) {
+func New(_ context.Context, brokerConfig broker.Config) (*Service, error) {
 	name := consts.DbusName
 	object := dbus.ObjectPath(consts.DbusObject)
-	iface := "com.ubuntu.authd.Broker"
-	s = &Service{
-		name:   name,
-		broker: broker,
-		serve:  make(chan struct{}),
+
+	service := &Service{
+		name:  name,
+		serve: make(chan struct{}),
 	}
 
-	conn, err := s.getBus()
+	conn, err := service.getBus()
 	if err != nil {
 		return nil, err
 	}
 
-	if err := conn.Export(s, object, iface); err != nil {
-		return nil, err
+	var introspectableBody string
+	for i, iface := range interfaceNames {
+		b, err := broker.New(brokerConfig, uint(i)+1) // There's no 0 version, so we start from 1.
+		if err != nil {
+			service.disconnect()
+			return nil, fmt.Errorf("error initializing broker for %q: %v", iface, err)
+		}
+
+		s := &Interface{
+			iface:  iface,
+			broker: b,
+		}
+
+		if err := conn.Export(s, object, iface); err != nil {
+			service.disconnect()
+			return nil, err
+		}
+
+		service.interfaces = append(service.interfaces, s)
+		introspectableBody = introspectableBody + fmt.Sprintf(introspectableInterface, iface)
 	}
-	if err := conn.Export(introspect.Introspectable(fmt.Sprintf(intro, iface)), object, "org.freedesktop.DBus.Introspectable"); err != nil {
+
+	// Build combined introspection XML for all versioned interfaces and export once.
+	introspectable := introspect.Introspectable(introspectableHeader + introspectableBody + introspectableFooter)
+	if err := conn.Export(introspectable, object, "org.freedesktop.DBus.Introspectable"); err != nil {
+		service.disconnect()
 		return nil, err
 	}
 
 	reply, err := conn.RequestName(consts.DbusName, dbus.NameFlagDoNotQueue)
 	if err != nil {
-		s.disconnect()
+		service.disconnect()
 		return nil, err
 	}
 	if reply != dbus.RequestNameReplyPrimaryOwner {
-		s.disconnect()
+		service.disconnect()
 		return nil, fmt.Errorf("%q is already taken in the bus", name)
 	}
 
-	return s, nil
+	return service, nil
 }
 
 // Addr returns the address of the service.
@@ -117,5 +153,6 @@ func (s *Service) Stop() error {
 		close(s.serve)
 		s.disconnect()
 	}
+
 	return nil
 }
