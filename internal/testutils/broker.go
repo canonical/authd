@@ -18,6 +18,8 @@ import (
 )
 
 const (
+	latestAPIVersion = 2
+
 	dbusInterface = "com.ubuntu.authd.Broker"
 	objectPathFmt = "/com/ubuntu/authd/%s"
 	nameFmt       = "com.ubuntu.authd.%s"
@@ -75,7 +77,7 @@ func StartBusBrokerMock(cfgDir string, brokerName string) (string, func(), error
 		isAuthenticatedCallsMu: sync.RWMutex{},
 	}
 
-	if err = conn.Export(&bus, dbus.ObjectPath(busObjectPath), dbusInterface); err != nil {
+	if err = conn.Export(&bus, dbus.ObjectPath(busObjectPath), fmt.Sprintf("%s%d", dbusInterface, latestAPIVersion)); err != nil {
 		conn.Close()
 		return "", nil, err
 	}
@@ -85,7 +87,7 @@ func StartBusBrokerMock(cfgDir string, brokerName string) (string, func(), error
 		Interfaces: []introspect.Interface{
 			introspect.IntrospectData,
 			{
-				Name:    dbusInterface,
+				Name:    fmt.Sprintf("%s%d", dbusInterface, latestAPIVersion),
 				Methods: introspect.Methods(&bus),
 			},
 		},
