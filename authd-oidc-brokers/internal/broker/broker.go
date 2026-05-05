@@ -110,7 +110,7 @@ func New(cfg Config, apiVersion uint, args ...Option) (b *Broker, err error) {
 	if cfg.ConfigFile != "" {
 		cfg.userConfig, err = parseConfigFromPath(cfg.ConfigFile, p)
 		if err != nil {
-			return nil, fmt.Errorf("could not parse config file '%s': %v", cfg.ConfigFile, err)
+			return nil, err
 		}
 	}
 
