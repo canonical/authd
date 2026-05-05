@@ -716,7 +716,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 		return AuthDenied, unexpectedErrMsg("could not get provider metadata")
 	}
 
-	authInfo.UserInfo, err = b.userInfoFromIDToken(ctx, session, rawIDToken)
+	authInfo.UserInfo, err = b.getUserInfo(ctx, session, t, rawIDToken)
 	if err != nil {
 		log.Errorf(context.Background(), "could not get user info: %s", err)
 		return AuthDenied, errorMessageForDisplay(err, "Could not get user info")
@@ -1154,7 +1154,7 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 	t.ProviderMetadata = oldToken.ProviderMetadata
 	t.DeviceRegistrationData = oldToken.DeviceRegistrationData
 
-	t.UserInfo, err = b.userInfoFromIDToken(ctx, session, rawIDToken)
+	t.UserInfo, err = b.getUserInfo(ctx, session, oauthToken, rawIDToken)
 	if err != nil {
 		return nil, err
 	}
@@ -1164,16 +1164,37 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 	return t, nil
 }
 
-// userInfoFromIDToken verifies and parses the raw ID token and returns the user info from it.
+// getUserInfo verifies and parses the raw ID token and returns the user info from it.
+// If any provider specific mandatory claims are not present in the ID token, the missing claims are
+// fetched from the `/userinfo` endpoint and merged before extracting user info.
 // Note that verifying the ID token requires a working network connection to the provider's JWKs endpoint,
 // so make sure to only call this function if the session is online.
-func (b *Broker) userInfoFromIDToken(ctx context.Context, session *session, rawIDToken string) (info.User, error) {
+func (b *Broker) getUserInfo(ctx context.Context, session *session, token *oauth2.Token, rawIDToken string) (info.User, error) {
 	idToken, err := session.oidcServer.Verifier(&b.oidcCfg).Verify(ctx, rawIDToken)
 	if err != nil {
 		return info.User{}, fmt.Errorf("could not verify token: %w", err)
 	}
 
 	userInfo, err := b.provider.GetUserInfo(idToken)
+	var missingClaimErr *providerErrors.MissingClaimError
+	if errors.As(err, &missingClaimErr) {
+		// The ID token is missing a required claim. Try fetching the claims from the UserInfo endpoint.
+		log.Infof(context.Background(), "ID token is missing claim %q. Fetching claims from UserInfo endpoint.", missingClaimErr.Claim)
+		var userInfoClaims info.Claimer
+		userInfoClaims, err = session.oidcServer.UserInfo(ctx, oauth2.StaticTokenSource(token))
+		if err != nil {
+			return info.User{}, fmt.Errorf("could not get user info from UserInfo endpoint: %w", err)
+		}
+
+		// Merge ID token claims with UserInfo claims.
+		// UserInfo claims override ID token claims for the same key.
+		var claims info.Claimer
+		claims, err = info.NewMergedClaimer(idToken, userInfoClaims)
+		if err != nil {
+			return info.User{}, fmt.Errorf("could not merge ID token and UserInfo endpoint claims: %w", err)
+		}
+		userInfo, err = b.provider.GetUserInfo(claims)
+	}
 	if err != nil {
 		return info.User{}, err
 	}

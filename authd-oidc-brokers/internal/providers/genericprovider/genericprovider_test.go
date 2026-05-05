@@ -60,7 +60,7 @@ func TestGetUserInfo(t *testing.T) {
 				"email": "user@example.com",
 			},
 			wantErr:     true,
-			wantErrType: &providerErrors.ForDisplayError{},
+			wantErrType: &providerErrors.MissingClaimError{Claim: "email_verified"},
 		},
 		"Error_when_email_is_not_verified": {
 			claims: map[string]interface{}{
@@ -85,10 +85,9 @@ func TestGetUserInfo(t *testing.T) {
 
 			if tc.wantErr {
 				require.Error(t, err)
-				return
-			}
-			if tc.wantErrType != nil {
-				require.ErrorIs(t, err, tc.wantErrType)
+				if tc.wantErrType != nil {
+					require.ErrorAs(t, err, &tc.wantErrType)
+				}
 				return
 			}
 			require.NoError(t, err)

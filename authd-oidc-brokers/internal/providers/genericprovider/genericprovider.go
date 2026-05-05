@@ -3,6 +3,7 @@ package genericprovider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -47,31 +48,49 @@ func (p GenericProvider) GetMetadata(provider *oidc.Provider) (map[string]interf
 	return nil, nil
 }
 
-// GetUserInfo is a no-op when no specific provider is in use.
-func (p GenericProvider) GetUserInfo(idToken info.Claimer) (info.User, error) {
-	userClaims, err := p.userClaims(idToken)
-	if err != nil {
-		return info.User{}, err
+// GetUserInfo returns user information from the claims of the provided Claimer.
+func (p GenericProvider) GetUserInfo(claimer info.Claimer) (info.User, error) {
+	var claimsMap map[string]interface{}
+	if err := claimer.Claims(&claimsMap); err != nil {
+		return info.User{}, fmt.Errorf("failed to get ID token claims: %v", err)
 	}
 
-	if userClaims.Sub == "" {
-		return info.User{}, fmt.Errorf("authentication failure: sub claim is missing in the ID token")
+	// Check required claims
+	sub, ok := claimsMap["sub"].(string)
+	if !ok || sub == "" {
+		return info.User{}, providerErrors.NewMissingClaimError("sub")
 	}
 
-	if userClaims.Email == "" {
-		return info.User{}, fmt.Errorf("authentication failure: email claim is missing in the ID token")
+	email, ok := claimsMap["email"].(string)
+	if !ok || email == "" {
+		return info.User{}, providerErrors.NewMissingClaimError("email")
 	}
 
-	if !userClaims.EmailVerified {
-		return info.User{}, &providerErrors.ForDisplayError{Message: "Authentication failure: email not verified"}
+	rawEmailVerified, present := claimsMap["email_verified"]
+	if !present {
+		return info.User{}, &providerErrors.ForDisplayError{
+			Message: "Authentication failure: email not verified",
+			Err:     providerErrors.NewMissingClaimError("email_verified"),
+		}
 	}
+	if verified, ok := rawEmailVerified.(bool); !ok || !verified {
+		return info.User{}, &providerErrors.ForDisplayError{
+			Message: "Authentication failure: email not verified",
+			Err:     errors.New("email_verified claim value is false or malformed"),
+		}
+	}
+
+	// Optional claims: home, shell, name
+	home, _ := claimsMap["home"].(string)
+	shell, _ := claimsMap["shell"].(string)
+	gecos, _ := claimsMap["name"].(string)
 
 	return info.NewUser(
-		userClaims.Email,
-		userClaims.Home,
-		userClaims.Sub,
-		userClaims.Shell,
-		userClaims.Gecos,
+		email,
+		home,
+		sub,
+		shell,
+		gecos,
 		nil,
 	), nil
 }
@@ -98,24 +117,6 @@ func (p GenericProvider) VerifyUsername(requestedUsername, username string) erro
 // SupportedOIDCAuthModes returns the OIDC authentication modes supported by the provider.
 func (p GenericProvider) SupportedOIDCAuthModes() []string {
 	return []string{authmodes.Device, authmodes.DeviceQr}
-}
-
-type claims struct {
-	Email         string `json:"email"`
-	Sub           string `json:"sub"`
-	Home          string `json:"home"`
-	Shell         string `json:"shell"`
-	Gecos         string `json:"name"`
-	EmailVerified bool   `json:"email_verified"`
-}
-
-// userClaims returns the user claims parsed from the ID token.
-func (p GenericProvider) userClaims(idToken info.Claimer) (claims, error) {
-	var userClaims claims
-	if err := idToken.Claims(&userClaims); err != nil {
-		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
-	}
-	return userClaims, nil
 }
 
 // IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.

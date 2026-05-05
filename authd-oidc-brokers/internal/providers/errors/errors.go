@@ -18,3 +18,17 @@ func (e *ForDisplayError) Error() string {
 func (e *ForDisplayError) Unwrap() error {
 	return e.Err
 }
+
+// MissingClaimError is an error type for missing claims in the ID token or the claims returned by the UserInfo endpoint.
+type MissingClaimError struct {
+	Claim string
+}
+
+func (e *MissingClaimError) Error() string {
+	return e.Claim + " claim is missing"
+}
+
+// NewMissingClaimError creates a new MissingClaimError for the specified claim.
+func NewMissingClaimError(claim string) error {
+	return &MissingClaimError{Claim: claim}
+}
