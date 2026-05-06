@@ -33,3 +33,10 @@ Test login with CLI
     # Log in with remote user with local password
     Open Terminal In Sudo Mode
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
+
+    # Try to change username during su login, it should not be possible
+    Check That Username Cannot Be Changed When Using su    ${username}
+    Clear Terminal
+
+    # Try to change username during su login with sudo, it should not be possible
+    Try Changing Username In sudo su Log In

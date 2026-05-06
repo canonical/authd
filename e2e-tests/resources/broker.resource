@@ -115,12 +115,13 @@ Try Changing Username In sudo su Log In
     Cancel Operation
 
 
-Try Changing Username In su Log In
+Check That Username Cannot Be Changed When Using su
     [Arguments]    ${username}
     Hid.Type String    su ${username}
     Hid.Keys Combo    Return
     Try Navigating Back to User Selection
     Cancel Operation
+
 
 Try Navigating Back to User Selection
     # First screen is the autoselected local password mode
