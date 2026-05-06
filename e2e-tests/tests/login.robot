@@ -38,5 +38,5 @@ Test login with CLI
     Check That Username Cannot Be Changed When Using su    ${username}
     Clear Terminal
 
-    # Try to change username during su login with sudo, it should not be possible
-    Try Changing Username In sudo su Log In
+    # Check that `su` to a local user goes to the local broker, not authd.
+    Check That su To Local User Goes To Local Broker
