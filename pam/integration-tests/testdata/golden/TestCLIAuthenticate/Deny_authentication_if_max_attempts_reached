@@ -81,11 +81,11 @@ invalid password 'wrongpass', should be 'goodpass'
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
 > ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-PAM Error Message: invalid password 'wrongpass', should be 'goodpass'
+PAM Error Message: Maximum number of authentication attempts reached
 PAM Authenticate()
   User: "user-integration-max-attempts@example.com"
-  Result: error: PAM exit code: 7
-    Authentication failure
+  Result: error: PAM exit code: 11
+    Have exhausted maximum number of retries for service
 PAM Info Message: acct=incomplete
 PAM AcctMgmt()
   User: "user-integration-max-attempts@example.com"

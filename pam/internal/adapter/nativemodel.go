@@ -333,6 +333,9 @@ func (m nativeModel) Update(msg tea.Msg) (nativeModel, tea.Cmd) {
 		case auth.Denied:
 			// This is handled by the main authentication model
 			return m, nil
+		case auth.DeniedMaxTries:
+			// This is handled by the main authentication model
+			return m, nil
 		case auth.Cancelled:
 			return m, nil
 		default:
