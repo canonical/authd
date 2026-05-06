@@ -6,14 +6,14 @@ import (
 
 // Various signalling return messaging to PAM.
 
-// PamReturnStatus is the interface that all PAM return types should implement.
-type PamReturnStatus interface {
+// PamReturnValue is the interface that all PAM return types should implement.
+type PamReturnValue interface {
 	Message() string
 }
 
 // PamReturnError is an interface that PAM errors return types should implement.
 type PamReturnError interface {
-	PamReturnStatus
+	PamReturnValue
 	Status() pam.Error
 }
 
