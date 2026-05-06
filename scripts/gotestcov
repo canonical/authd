@@ -6,6 +6,42 @@
 
 set -eu
 
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS] [-- GO_TEST_ARGS...]
+
+Run Go tests with coverage and generate an HTML report served on localhost:6061.
+
+OPTIONS:
+  -C <dir>    Change to <dir> before doing anything else
+  --help      Print this help message and exit
+
+GO_TEST_ARGS are passed directly to 'go test'.
+EOF
+}
+
+# Parse options
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -C)
+            if [[ -z "${2-}" ]]; then
+                echo "Error: -C requires a directory argument" >&2
+                usage >&2
+                exit 1
+            fi
+            cd "$2"
+            shift 2
+            ;;
+        --help)
+            usage
+            exit 0
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
 # find_go_mod walks up the directory tree looking for the go.mod file.
 # If it doesn't find it, the script will be aborted.
 find_go_mod() {
