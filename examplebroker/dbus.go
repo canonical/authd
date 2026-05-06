@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/canonical/authd/internal/brokers"
 	"github.com/canonical/authd/internal/decorate"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
@@ -16,7 +17,8 @@ const (
 	dbusObjectPath = "/com/ubuntu/authd/ExampleBroker"
 	busName        = "com.ubuntu.authd.ExampleBroker"
 	// we need to redeclare the interface here to avoid include cycles.
-	dbusInterface = "com.ubuntu.authd.Broker"
+	dbusInterface    = "com.ubuntu.authd.Broker"
+	latestAPIVersion = brokers.LatestAPIVersion
 )
 
 // Bus is the D-Bus object that will answer calls for the broker.
@@ -45,7 +47,7 @@ func StartBus(cfgPath string) (conn *dbus.Conn, err error) {
 		Interfaces: []introspect.Interface{
 			introspect.IntrospectData,
 			{
-				Name:    dbusInterface,
+				Name:    fmt.Sprintf("%s%d", dbusInterface, latestAPIVersion),
 				Methods: introspect.Methods(&obj),
 			},
 		},
