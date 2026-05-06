@@ -38,7 +38,7 @@ const (
 	// LatestAPIVersion is the latest API version supported by the broker. It should be incremented when a non backward
 	// compatible change is made to the API.
 	// Note: Remember to also bump the LatestAPIVersion in internal/brokers/dbusbroker.go.
-	LatestAPIVersion = 2
+	LatestAPIVersion uint = 2
 
 	maxAuthAttempts    = 3
 	maxRequestDuration = 5 * time.Second
@@ -618,8 +618,11 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 
 	if access == AuthRetry {
 		session.attemptsPerMode[session.selectedMode]++
-		if session.attemptsPerMode[session.selectedMode] == maxAuthAttempts {
-			access = AuthDenied
+		if session.attemptsPerMode[session.selectedMode] >= maxAuthAttempts {
+			access = AuthDeniedMaxTries
+			if b.apiVersion < 2 {
+				access = AuthDenied
+			}
 			iadResponse = errorMessage{Message: "Maximum number of authentication attempts reached"}
 		}
 	}

@@ -273,6 +273,7 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 		switch access {
 		case auth.Granted:
 		case auth.Denied:
+		case auth.DeniedMaxTries:
 		case auth.Cancelled:
 		case auth.Retry:
 		case auth.Next:

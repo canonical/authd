@@ -37,6 +37,7 @@ type brokerForTestConfig struct {
 	homeBaseDir                  string
 	allowedSSHSuffixes           []string
 	provider                     providers.Provider
+	apiVersion                   uint
 
 	getGroupsFails             bool
 	supportsDeviceRegistration bool
@@ -123,7 +124,12 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 		cfg.SetIssuerURL(issuerURL)
 	}
 
-	b, err := broker.New(cfg.Config, broker.LatestAPIVersion, broker.WithCustomProvider(provider))
+	apiVersion := broker.LatestAPIVersion
+	if cfg.apiVersion != 0 {
+		apiVersion = cfg.apiVersion
+	}
+
+	b, err := broker.New(cfg.Config, apiVersion, broker.WithCustomProvider(provider))
 	require.NoError(t, err, "Setup: New should not have returned an error")
 	return b
 }

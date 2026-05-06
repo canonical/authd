@@ -15,8 +15,9 @@ import (
 const (
 	dbusObjectPath = "/com/ubuntu/authd/ExampleBroker"
 	busName        = "com.ubuntu.authd.ExampleBroker"
-	// we need to redeclare the interface here to avoid include cycles.
-	dbusInterface = "com.ubuntu.authd.Broker"
+	// we need to redeclare the interface and API version here to avoid include cycles.
+	dbusInterface    = "com.ubuntu.authd.Broker"
+	latestAPIVersion = 2
 )
 
 // Bus is the D-Bus object that will answer calls for the broker.
@@ -35,7 +36,7 @@ func StartBus(cfgPath string) (conn *dbus.Conn, err error) {
 
 	b, _, _ := New("ExampleBroker")
 	obj := Bus{broker: b}
-	err = conn.Export(&obj, dbusObjectPath, dbusInterface)
+	err = conn.Export(&obj, dbusObjectPath, fmt.Sprintf("%s%d", dbusInterface, latestAPIVersion))
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +46,7 @@ func StartBus(cfgPath string) (conn *dbus.Conn, err error) {
 		Interfaces: []introspect.Interface{
 			introspect.IntrospectData,
 			{
-				Name:    dbusInterface,
+				Name:    fmt.Sprintf("%s%d", dbusInterface, latestAPIVersion),
 				Methods: introspect.Methods(&obj),
 			},
 		},

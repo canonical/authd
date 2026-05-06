@@ -180,5 +180,21 @@ func (b *Broker) IsOffline(sessionID string) (bool, error) {
 	return session.isOffline, nil
 }
 
+func (b *Broker) SetAttemptsPerMode(sessionID, mode string, attempts int) error {
+	s, err := b.getSession(sessionID)
+	if err != nil {
+		return err
+	}
+	if s.attemptsPerMode == nil {
+		s.attemptsPerMode = make(map[string]int)
+	}
+	s.attemptsPerMode[mode] = attempts
+
+	return b.updateSession(sessionID, s)
+}
+
 // MaxRequestDuration exposes the broker's maxRequestDuration for tests.
 const MaxRequestDuration = maxRequestDuration
+
+// MaxAuthAttempts exposes the broker's maxAuthAttempts for tests.
+const MaxAuthAttempts = maxAuthAttempts

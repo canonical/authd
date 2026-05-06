@@ -2257,8 +2257,8 @@ func TestGdmModel(t *testing.T) {
 				Msg:    `Access "" is not valid`,
 			}},
 			wantExitStatus: pamError{
-				status: pam.ErrAuth,
-				msg:    `Access "" is not valid`,
+				status: pam.ErrSystem,
+				msg:    `Unknown authentication access: ""`,
 			},
 		},
 		"Error_on_authentication_client_because_of_invalid_auth_data_access_with_message": {
@@ -2302,8 +2302,8 @@ func TestGdmModel(t *testing.T) {
 				Msg:    `Access "no way you get here!" is not valid`,
 			}},
 			wantExitStatus: pamError{
-				status: pam.ErrAuth,
-				msg:    `Access "no way you get here!" is not valid`,
+				status: pam.ErrSystem,
+				msg:    `Unknown authentication access: "no way you get here!"`,
 			},
 		},
 		"Error_on_change_stage_using_an_unknown_stage": {
