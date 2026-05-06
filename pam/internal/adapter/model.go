@@ -78,9 +78,9 @@ type uiModel struct {
 	gdmModel               gdmModel
 	nativeModel            nativeModel
 
-	// exitStatus is a pointer to the [PamReturnStatus] value where the
-	// exit status will be written to.
-	exitStatus *PamReturnStatus
+	// pamReturnValue is a pointer to the [PamReturnValue] where the
+	// return value will be written to.
+	pamReturnValue *PamReturnValue
 }
 
 /* global events */
@@ -128,29 +128,29 @@ type ChangeStage struct {
 type StageChanged ChangeStage
 
 // NewUIModel creates and initializes the main model orchestrator.
-func NewUIModel(mTx pam.ModuleTransaction, clientType PamClientType, mode authd.SessionMode, conn *grpc.ClientConn, exitStatus *PamReturnStatus) tea.Model {
+func NewUIModel(mTx pam.ModuleTransaction, clientType PamClientType, mode authd.SessionMode, conn *grpc.ClientConn, pamReturnValue *PamReturnValue) tea.Model {
 	var userServiceClient authd.UserServiceClient
 	if conn != nil && isSSHSession(mTx) {
 		userServiceClient = authd.NewUserServiceClient(conn)
 	}
 
-	m := newUIModelForClients(mTx, clientType, mode, authd.NewPAMClient(conn), userServiceClient, exitStatus)
+	m := newUIModelForClients(mTx, clientType, mode, authd.NewPAMClient(conn), userServiceClient, pamReturnValue)
 	m.conn = conn
 	return m
 }
 
 // newUIModelForClients is the internal implementation of [NewUIModel] for testing purposes.
-func newUIModelForClients(mTx pam.ModuleTransaction, clientType PamClientType, mode authd.SessionMode, pamClient authd.PAMClient, userServiceClient authd.UserServiceClient, exitStatus *PamReturnStatus) uiModel {
+func newUIModelForClients(mTx pam.ModuleTransaction, clientType PamClientType, mode authd.SessionMode, pamClient authd.PAMClient, userServiceClient authd.UserServiceClient, pamReturnValue *PamReturnValue) uiModel {
 	m := uiModel{
-		pamMTx:      mTx,
-		clientType:  clientType,
-		sessionMode: mode,
-		exitStatus:  exitStatus,
-		client:      pamClient,
+		pamMTx:         mTx,
+		clientType:     clientType,
+		sessionMode:    mode,
+		pamReturnValue: pamReturnValue,
+		client:         pamClient,
 	}
 
-	if m.exitStatus != nil {
-		*m.exitStatus = errNoExitStatus
+	if m.pamReturnValue != nil {
+		*m.pamReturnValue = pamNoReturnValue
 	}
 
 	switch m.clientType {
@@ -262,16 +262,16 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.startHealthCheck()
 
 	// Exit cases
-	case PamReturnStatus:
+	case PamReturnValue:
 		safeMessageDebug(msg)
-		if m.exitStatus == nil {
+		if m.pamReturnValue == nil {
 			return m, m.quit()
 		}
-		if *m.exitStatus != errNoExitStatus {
+		if *m.pamReturnValue != pamNoReturnValue {
 			// Nothing to do, we're already exiting...
 			return m, nil
 		}
-		*m.exitStatus = msg
+		*m.pamReturnValue = msg
 		return m, m.quit()
 
 	// Events
@@ -561,7 +561,7 @@ func MsgFilter(model tea.Model, msg tea.Msg) tea.Msg {
 	return msg
 }
 
-var errNoExitStatus = pamError{status: pam.ErrSystem, msg: "model did not return anything"}
+var pamNoReturnValue = pamError{status: pam.ErrSystem, msg: "model did not return anything"}
 
 // username returns currently selected user name.
 func (m uiModel) username() string {

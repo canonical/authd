@@ -172,7 +172,7 @@ Submit Run Command Dialog
 
 Launch App
     [Arguments]    ${app-id}
-    SSH.Execute As Current User    gtk-launch ${app-id}
+    SSH.Execute As Current User    gtk-launch ${app-id}    timeout=60
 
 
 Cancel Operation

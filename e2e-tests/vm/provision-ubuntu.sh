@@ -15,6 +15,7 @@ Usage: $0 [--config-file <file>] [--force]
 
 Options:
    --config-file <file>  Path to the configuration file (default: config.sh)
+   --release <release>   The Ubuntu release to provision the VM with (e.g. "noble")
    --force               Force provisioning: remove existing VM and artifacts and create a fresh VM
    --no-snapshot         Do not create a snapshot after initial setup
   -h, --help             Show this help message and exit
@@ -27,6 +28,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --config-file)
             CONFIG_FILE="$2"
+            shift 2
+            ;;
+        --release)
+            RELEASE="$2"
             shift 2
             ;;
         --force)
@@ -101,7 +106,7 @@ ARTIFACTS_DIR="${ARTIFACTS_DIR:-${DATA_DIR}/${RELEASE}}"
 CLOUD_INIT_TEMPLATE="${SCRIPT_DIR}/cloud-init-template-${RELEASE_NAME}.yaml"
 
 if [ -z "${VM_NAME:-}" ]; then
-    VM_NAME="${VM_NAME_BASE}-${RELEASE}"
+    export VM_NAME="${VM_NAME_BASE}-${RELEASE}"
 fi
 
 function cloud_init_finished() {

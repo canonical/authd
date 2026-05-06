@@ -98,7 +98,7 @@ func showPamMessage(mTx pam.ModuleTransaction, style pam.Style, msg string) erro
 	return nil
 }
 
-func sendReturnMessageToPam(mTx pam.ModuleTransaction, retStatus adapter.PamReturnStatus) {
+func sendReturnMessageToPam(mTx pam.ModuleTransaction, retStatus adapter.PamReturnValue) {
 	msg := retStatus.Message()
 	if msg == "" {
 		return
@@ -317,8 +317,8 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 		return err
 	}
 
-	var exitStatus adapter.PamReturnStatus
-	appState := adapter.NewUIModel(mTx, pamClientType, mode, conn, &exitStatus)
+	var pamReturnValue adapter.PamReturnValue
+	appState := adapter.NewUIModel(mTx, pamClientType, mode, conn, &pamReturnValue)
 	teaOpts = append(teaOpts, tea.WithFilter(adapter.MsgFilter))
 	p := tea.NewProgram(appState, teaOpts...)
 	if _, err := p.Run(); err != nil {
@@ -326,20 +326,25 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 		return pam.ErrAbort
 	}
 
-	sendReturnMessageToPam(mTx, exitStatus)
+	sendReturnMessageToPam(mTx, pamReturnValue)
 
-	switch exitStatus := exitStatus.(type) {
+	switch returnValue := pamReturnValue.(type) {
 	case adapter.PamSuccess:
-		if err := mTx.SetData(authenticationBrokerIDKey, exitStatus.BrokerID); err != nil {
+		if err := mTx.SetData(authenticationBrokerIDKey, returnValue.BrokerID); err != nil {
 			return err
+		}
+		if returnValue.AuthTok != "" {
+			if err := mTx.SetItem(pam.Authtok, returnValue.AuthTok); err != nil {
+				return err
+			}
 		}
 		return nil
 
 	case adapter.PamReturnError:
-		return fmt.Errorf("%w: %s", exitStatus.Status(), exitStatus.Message())
+		return fmt.Errorf("%w: %s", returnValue.Status(), returnValue.Message())
 
 	default:
-		return fmt.Errorf("%w: unknown exit code: %#v", pam.ErrSystem, exitStatus)
+		return fmt.Errorf("%w: unknown exit code: %#v", pam.ErrSystem, returnValue)
 	}
 }
 

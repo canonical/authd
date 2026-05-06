@@ -15,6 +15,7 @@ Options:
    --config-file <file>  Path to the configuration file (default: config.sh)
    --force              Force installation of authd and brokers even if snapshots already exist.
                         The existing snapshots will be deleted and recreated with the new installation.
+   --release <release>  The Ubuntu release to provision the VM with (e.g. "noble")
    --broker <broker>    The broker to install ("authd-google", "authd-msentraid", ...)
    --authd-deb <deb>    Path to the authd deb file to install (default: install from the edge PPA)
    --broker-snap <snap> Path to the broker snap file to install (default: install from the edge channel)
@@ -33,6 +34,10 @@ while [[ $# -gt 0 ]]; do
         --force)
             FORCE=true
             shift
+            ;;
+        --release)
+            RELEASE="$2"
+            shift 2
             ;;
         --broker)
             BROKER="$2"
@@ -97,7 +102,7 @@ assert_env_vars RELEASE VM_NAME_BASE BROKER
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-${DATA_DIR}/${RELEASE}}"
 
 if [ -z "${VM_NAME:-}" ]; then
-    VM_NAME="${VM_NAME_BASE}-${RELEASE}"
+    export VM_NAME="${VM_NAME_BASE}-${RELEASE}"
 fi
 
 # Check if we have all required artifacts

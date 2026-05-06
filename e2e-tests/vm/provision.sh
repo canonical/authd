@@ -11,6 +11,7 @@ Usage: $0 [--config-file <config file>] [--force]
 
 Options:
   --config-file <config file>  Path to the configuration file (default: config.sh)
+  --release <release>          The Ubuntu release to provision the VM with (e.g. "noble")
   --broker <broker>            The broker to install ("authd-google", "authd-msentraid", ...)
   --force                      Force provisioning: remove existing VM and artifacts and create a fresh VM
   -h, --help                   Show this help message and exit
@@ -34,6 +35,10 @@ while [[ $# -gt 0 ]]; do
             BROKER="$2"
             shift 2
             ;;
+        --release)
+            RELEASE="$2"
+            shift 2
+            ;;
         -h|--help)
             usage
             exit 0
@@ -54,10 +59,12 @@ set -x
 # Provision the VM with Ubuntu
 "${SCRIPT_DIR}/provision-ubuntu.sh" \
   --config-file "${CONFIG_FILE}" \
+  ${RELEASE:+--release "${RELEASE}"} \
   ${FORCE:+--force}
 
 # Provision authd in the VM
 "${SCRIPT_DIR}/provision-authd.sh" \
   --config-file "${CONFIG_FILE}" \
+  ${RELEASE:+--release "${RELEASE}"} \
   ${BROKER:+--broker "${BROKER}"} \
   ${FORCE:+--force}
