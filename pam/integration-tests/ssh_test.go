@@ -146,6 +146,12 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 
 		testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, sshdHostKeyPath+".pub")
 
+		err = os.MkdirAll(sshTestsHomeBase, 0700)
+		require.NoError(t, err, "Setup: failed to create home base directory")
+		t.Cleanup(func() {
+			_ = os.RemoveAll(sshTestsHomeBase)
+		})
+
 		if !t.Failed() {
 			t.Log("Prepared SSH tests")
 			sshTestsPrepared.Store(true)
@@ -155,7 +161,8 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 	var sharedSSHDPort, sharedSSHDUserHome, sharedAuthdSocket, sharedAuthdGroupOutput string
 	prepareSharedSSHDTests := func(subtest *testing.T) {
 		t.Logf("Preparing SSH tests with shared sshd, triggered by %q", subtest.Name())
-		sharedAuthdSocket, sharedAuthdGroupOutput = sharedAuthd(t)
+		sharedAuthdSocket, sharedAuthdGroupOutput = sharedAuthd(t,
+			testutils.WithHomeBaseDir(sshTestsHomeBase))
 		serviceFile := createSSHDServiceFile(t, execModule, execChild, pamMkHomeDirModule, sharedAuthdSocket)
 		sshdEnv = append(sshdEnv, nssEnv...)
 		sshdEnv = append(sshdEnv, fmt.Sprintf("AUTHD_NSS_SOCKET=%s", sharedAuthdSocket))
@@ -434,15 +441,6 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 				// location for us to test.
 				_, groupOutput = prepareGroupFiles(t)
 
-				// Since we are migrating users, we need to make sure that we can replicate
-				// the homedir they have in the database.
-				err := os.MkdirAll(sshTestsHomeBase, 0700)
-				require.NoError(t, err, "Setup: failed to create home directory")
-
-				t.Cleanup(func() {
-					_ = os.RemoveAll(sshTestsHomeBase)
-				})
-
 				socketPath = runAuthd(t,
 					testutils.WithCurrentUserAsRoot,
 					testutils.WithGroupFile(groupOutput),
@@ -452,7 +450,8 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 			} else if !sharedSSHD {
 				socketPath, groupOutput = sharedAuthd(t,
 					testutils.WithGroupFileOutput(sharedAuthdGroupOutput),
-					testutils.WithEnvironment(authdEnv...))
+					testutils.WithEnvironment(authdEnv...),
+					testutils.WithHomeBaseDir(sshTestsHomeBase))
 			}
 			if tc.socketPath != "" {
 				socketPath = tc.socketPath
@@ -669,7 +668,7 @@ func startSSHDForTest(t *testing.T, serviceFile, hostKey, user string, preloadLi
 		fmt.Sprintf("HOME=%s", sshTestsHomeBase),
 		fmt.Sprintf("LD_PRELOAD=%s", strings.Join(preloadLibraries, ":")),
 		fmt.Sprintf("AUTHD_TEST_SSH_USER=%s", user),
-		fmt.Sprintf("AUTHD_TEST_SSH_HOME=%s", userHome),
+		fmt.Sprintf("AUTHD_TEST_SSH_HOME_BASE=%s", sshTestsHomeBase),
 		fmt.Sprintf("AUTHD_TEST_SSH_PAM_SERVICE=%s", serviceFile),
 	}, env...))
 
