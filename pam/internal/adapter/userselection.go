@@ -96,7 +96,13 @@ func (m userSelectionModel) Update(msg tea.Msg) (userSelectionModel, tea.Cmd) {
 					currentUser, selectedUser),
 			})
 		}
-		if selectedUser != currentUser {
+		// Only update PAM_USER when the user is genuinely different
+		// (not just a case variation). OpenSSH 10.2+ checks PAM_USER
+		// against pw_name from getpwnam() and rejects mismatches, so
+		// we must not change PAM_USER for case-only differences.
+		// The lowercase version is still used internally by authd
+		// via the Username() method.
+		if isDifferentUser {
 			err := m.pamMTx.SetItem(pam.User, selectedUser)
 			if cmd := maybeSendPamError(err); cmd != nil {
 				return m, cmd

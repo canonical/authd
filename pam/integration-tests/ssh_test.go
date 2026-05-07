@@ -382,7 +382,9 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 		"Error_if_cannot_connect_to_authd": {
 			tape: "connection_error",
 			tapeVariables: map[string]string{
-				vhsCommandFinalAuthWaitVariable: `Wait /Password:/`,
+				vhsCommandFinalAuthWaitVariable: fmt.Sprintf(
+					`Wait+Screen /Password:|Disconnected from/
+Wait@%dms`, sshDefaultFinalWaitTimeout),
 			},
 			socketPath:          "/some-path/not-existent-socket",
 			wantNotLoggedInUser: true,
@@ -539,7 +541,13 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 			output := sanitizedOutput(t, td)
 			golden.CheckOrUpdate(t, output)
 
-			userEnv := fmt.Sprintf("USER=%s", strings.ToLower(user))
+			// OpenSSH sets USER from authctxt->pw->pw_name which comes
+			// from the initial getpwnam() call. The sshd_preloader
+			// preserves the SSH login name case for pw_name, so USER
+			// matches the original case. authd uses lowercase
+			// internally but does not change PAM_USER for case-only
+			// differences (see userselection.go).
+			userEnv := fmt.Sprintf("USER=%s", user)
 			if tc.wantNotLoggedInUser {
 				if strings.Contains(output, userEnv) {
 					require.Fail(t, "Tape output should not contain the logged in user name",
@@ -663,7 +671,7 @@ func startSSHDForTest(t *testing.T, serviceFile, hostKey, user string, preloadLi
 		sshdConnectCommand += "&& /bin/sh"
 	}
 
-	userHome := filepath.Join(sshTestsHomeBase, user)
+	userHome := filepath.Join(sshTestsHomeBase, strings.ToLower(user))
 	sshdPort := startSSHD(t, hostKey, sshdConnectCommand, append([]string{
 		fmt.Sprintf("HOME=%s", sshTestsHomeBase),
 		fmt.Sprintf("LD_PRELOAD=%s", strings.Join(preloadLibraries, ":")),

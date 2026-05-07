@@ -10,9 +10,9 @@
 #include <sys/types.h>
 #include <dlfcn.h>
 #include <string.h>
-#include <ctype.h>
 #include <pwd.h>
 #include <limits.h>
+#include <ctype.h>
 #include <sys/types.h>
 
 #define AUTHD_TEST_SHELL "/bin/sh"
@@ -94,18 +94,6 @@ is_valid_test_user (const char *name)
   return is_supported_test_fake_user (name);
 }
 
-static bool
-is_lower_case (const char *str)
-{
-  for (size_t i = 0; str[i]; ++i)
-    {
-      if (isalpha (str[i]) && !islower (str[i]))
-        return false;
-    }
-
-  return true;
-}
-
 /*
  * This overrides allows us to manually handle the getpwnam() ensuring that
  * we reply a fake user only when an expected fake user is requested.
@@ -175,18 +163,29 @@ getpwnam (const char *name)
     {
       passwd_entity = &passwd_entities[i].parent;
 
-      if (!passwd_entity->pw_name || strcmp (passwd_entity->pw_name, name) != 0)
+      if (!passwd_entity->pw_name || strcasecmp (passwd_entity->pw_name, name) != 0)
         continue;
 
 #ifdef AUTHD_TESTS_SSH_USE_AUTHD_NSS
       /* If NSS now has updated data for this user (e.g. after auth registered
-       * them in authd), update pw_dir from NSS so we don't return a stale
-       * fake home path.
+       * them in authd), update pw_name and pw_dir from NSS so we don't return
+       * stale fake data. In particular, pw_name must reflect authd's canonical
+       * (lowercase) name so that sshd uses it for the session.
        */
       {
         struct passwd *nss_pw = orig_getpwnam (name);
-        if (nss_pw != NULL && nss_pw->pw_dir != NULL)
-          passwd_entity->pw_dir = nss_pw->pw_dir;
+        if (nss_pw != NULL)
+          {
+            if (nss_pw->pw_name != NULL)
+              {
+                MockPasswd *mock = &passwd_entities[i];
+                free (mock->authd_name);
+                mock->authd_name = strdup (nss_pw->pw_name);
+                passwd_entity->pw_name = mock->authd_name;
+              }
+            if (nss_pw->pw_dir != NULL)
+              passwd_entity->pw_dir = nss_pw->pw_dir;
+          }
       }
 #endif
 
@@ -206,45 +205,46 @@ getpwnam (const char *name)
   assert (passwd_entity->pw_name == NULL ||
           strcasecmp (passwd_entity->pw_name, name) == 0);
 
-  if (passwd_entity->pw_name == NULL)
-    {
-      MockPasswd *mock_passwd = &passwd_entities[entity_idx];
+  {
+    MockPasswd *mock_passwd = &passwd_entities[entity_idx];
 
-      passwd_entity->pw_shell = AUTHD_TEST_SHELL;
-      passwd_entity->pw_gecos = AUTHD_TEST_GECOS;
-      passwd_entity->pw_name = (char *) name;
+    if (passwd_entity->pw_name == NULL)
+      {
+        passwd_entity->pw_shell = AUTHD_TEST_SHELL;
+        passwd_entity->pw_gecos = AUTHD_TEST_GECOS;
+      }
 
-      /* Construct a per-user home path from the base dir + username,
-       * so each user gets their own home directory even in the shared
-       * sshd case where AUTHD_TEST_SSH_USER is the accept-all user.
-       */
-      free (mock_passwd->home_path);
-      if (asprintf (&mock_passwd->home_path, "%s/%s",
-                     get_home_base_path (), name) < 0)
-        mock_passwd->home_path = NULL;
-      passwd_entity->pw_dir = mock_passwd->home_path
-                                ? mock_passwd->home_path
-                                : (char *) get_home_base_path ();
+    /* Store pw_name preserving the original query case.
+     * OpenSSH 10.2+ validates that PAM_USER matches pw_name from
+     * getpwnam(), and PAM is initialized with the SSH login name
+     * (original case), so pw_name must match the queried name.
+     * The authd PAM module handles case normalization internally
+     * via Username() without changing PAM_USER.
+     */
+    free (mock_passwd->authd_name);
+    mock_passwd->authd_name = strdup (name);
+    passwd_entity->pw_name = mock_passwd->authd_name;
 
-      if (!is_lower_case (passwd_entity->pw_name))
-        {
-          /* authd uses lower-case user names */
-          MockPasswd *mock_passwd = (MockPasswd *) passwd_entity;
-          char *n = strdup (passwd_entity->pw_name);
-
-          for (size_t i = 0; n[i]; ++i)
-            n[i] = tolower (n[i]);
-
-          mock_passwd->authd_name = n;
-          passwd_entity->pw_name = mock_passwd->authd_name;
-
-          fprintf (stderr, "sshd_preloader[%d]: User %s converted to %s\n",
-                  getpid (), name, passwd_entity->pw_name);
-        }
-    }
-
-  /* authd uses lower-case user names */
-  assert (is_lower_case (passwd_entity->pw_name));
+    /* Construct a per-user home path from the base dir + a
+     * lowercase username, so each user gets their own home directory
+     * even in the shared sshd case where AUTHD_TEST_SSH_USER is the
+     * accept-all user. authd normalizes usernames to lowercase.
+     */
+    if (passwd_entity->pw_dir == NULL || mock_passwd->home_path != NULL)
+      {
+        char *lower_name = strdup (name);
+        for (char *p = lower_name; *p; p++)
+          *p = tolower ((unsigned char) *p);
+        free (mock_passwd->home_path);
+        if (asprintf (&mock_passwd->home_path, "%s/%s",
+                       get_home_base_path (), lower_name) < 0)
+          mock_passwd->home_path = NULL;
+        free (lower_name);
+        passwd_entity->pw_dir = mock_passwd->home_path
+                                  ? mock_passwd->home_path
+                                  : (char *) get_home_base_path ();
+      }
+  }
 
   /* We're simulating to be the same user running the test but with another
    * name, so that we won't touch the user settings, but it's still enough to
