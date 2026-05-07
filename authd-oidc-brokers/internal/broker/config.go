@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"context"
 	"embed"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"text/template"
 
+	"github.com/canonical/authd/log"
 	"gopkg.in/ini.v1"
 )
 
@@ -66,6 +68,30 @@ const (
 var (
 	//go:embed templates/20-owner-autoregistration.conf.tmpl
 	ownerAutoRegistrationConfig embed.FS
+
+	// knownConfigKeys maps each known config section to its known keys.
+	knownConfigKeys = map[string]map[string]struct{}{
+		oidcSection: {
+			issuerKey:                          {},
+			clientIDKey:                        {},
+			clientSecret:                       {},
+			extraScopesKey:                     {},
+			forceAccessCheckWithProviderKey:    {},
+			forceAccessCheckWithProviderKeyOld: {},
+		},
+		entraIDSection: {
+			registerDeviceKey: {},
+		},
+		usersSection: {
+			allowedUsersKey:     {},
+			ownerKey:            {},
+			homeDirKey:          {},
+			sshSuffixesKey:      {},
+			sshSuffixesKeyOld:   {},
+			extraGroupsKey:      {},
+			ownerExtraGroupsKey: {},
+		},
+	}
 )
 
 type provider interface {
@@ -222,6 +248,24 @@ func validateConfigFile(path string, iniCfg *ini.File) error {
 	}
 	if placeholderErr != nil {
 		return fmt.Errorf("config file %q has invalid values, did you edit the config file?\n%w", path, placeholderErr)
+	}
+
+	// Log warnings for unknown sections and keys.
+	for _, section := range iniCfg.Sections() {
+		if section.Name() == ini.DefaultSection {
+			continue
+		}
+		sectionKeys, ok := knownConfigKeys[section.Name()]
+		if !ok {
+			log.Warningf(context.Background(), "unknown section %q in config file, ignoring", section.Name())
+			continue
+		}
+
+		for _, key := range section.Keys() {
+			if _, ok := sectionKeys[key.Name()]; !ok {
+				log.Warningf(context.Background(), "unknown key %q in section %q in config file, ignoring", key.Name(), section.Name())
+			}
+		}
 	}
 
 	oidc := iniCfg.Section(oidcSection)
