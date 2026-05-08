@@ -15,5 +15,6 @@ authctl group [flags]
 ### SEE ALSO
 
 * [authctl](authctl.md)	 - Manage authd users and groups
+* [authctl group delete](authctl_group_delete.md)	 - Delete a group managed by authd
 * [authctl group set-gid](authctl_group_set-gid.md)	 - Set the GID of a group managed by authd
 
