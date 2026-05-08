@@ -600,12 +600,29 @@ func sanitizedOutput(t *testing.T, td *tapeData) string {
 func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socketPath string) string {
 	t.Helper()
 
+	pamLog := filepath.Join(t.TempDir(), "authd-pam.log")
+	f, err := os.Create(pamLog)
+	require.NoError(t, err, "Setup: Could not create pam_authd log file")
+	err = f.Close()
+	require.NoError(t, err, "Setup: Could not close pam_authd log file")
+	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, pamLog)
+	t.Cleanup(func() {
+		out, err := os.ReadFile(pamLog)
+		if errors.Is(err, os.ErrNotExist) {
+			return
+		}
+		require.NoError(t, err, "Teardown: Impossible to read pam_authd logs")
+		if !testlog.Quiet() {
+			_, _ = fmt.Fprintf(os.Stderr, "pam_authd output for %s:\n%s\n", t.Name(), out)
+		}
+	})
+
 	moduleArgs := []string{
 		execChild,
 		"socket=" + socketPath,
 		fmt.Sprintf("connection_timeout=%d", defaultConnectionTimeout),
 		"debug=true",
-		"logfile=" + os.Stderr.Name(),
+		"logfile=" + pamLog,
 		"--exec-debug",
 	}
 
@@ -724,7 +741,11 @@ func startSSHD(t *testing.T, hostKey, forcedCommand string, env []string) string
 
 	// Write stdout/stderr both to our stdout/stderr and to the buffer
 	sshd.Stdout = io.MultiWriter(t.Output(), sshdOutput)
-	sshd.Stderr = io.MultiWriter(newFilteredStderrWriter(t.Output()), sshdOutput)
+	if testlog.Quiet() {
+		sshd.Stderr = sshdOutput
+	} else {
+		sshd.Stderr = io.MultiWriter(newFilteredStderrWriter(t.Output()), sshdOutput)
+	}
 
 	testlog.LogCommand(t, "Starting sshd", sshd)
 	start := time.Now()

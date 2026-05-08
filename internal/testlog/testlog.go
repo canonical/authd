@@ -15,6 +15,8 @@ import (
 var (
 	isVerboseOnce sync.Once
 	isVerbose     bool
+	isQuietOnce   sync.Once
+	isQuiet       bool
 )
 
 type runWithTimingOptions struct {
@@ -201,6 +203,9 @@ func highRed(s string) string {
 //
 //nolint:thelper // we're not using t in any way that requires the helper annotation
 func testOutput(t *testing.T) io.Writer {
+	if Quiet() {
+		return io.Discard
+	}
 	if t != nil {
 		return &syncWriter{w: t.Output()}
 	}
@@ -224,6 +229,16 @@ func verbose() bool {
 		}
 	})
 	return isVerbose
+}
+
+// Quiet returns whether quiet mode is enabled, which is controlled by the AUTHD_TESTS_QUIET environment variable.
+func Quiet() bool {
+	isQuietOnce.Do(func() {
+		if os.Getenv("AUTHD_TESTS_QUIET") != "" {
+			isQuiet = true
+		}
+	})
+	return isQuiet
 }
 
 // syncWriter is a writer that synchronizes writes to its underlying writer.
