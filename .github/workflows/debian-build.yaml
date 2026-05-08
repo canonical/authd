@@ -171,9 +171,20 @@ jobs:
         uses: canonical/desktop-engineering/gh-actions/common/build-debian@main
         with:
           docker-image: ubuntu:${{ inputs.ubuntu-version }}
-          # Add the Go backports PPA if we're testing a Ubuntu release which
-          # doesn't have the required Go version in main.
-          extra-apt-repositories: ${{ (inputs.ubuntu-version == 'noble' || inputs.ubuntu-version == 'questing') && 'ppa:ubuntu-enterprise-desktop/golang' || '' }}
+          # Add:
+          # * the Go backports PPA if we're testing a Ubuntu release which
+          #   doesn't have the required Go version in main.
+          # * the noble-proposed repository for noble, to test the rustc-1.91
+          #   package from there.
+          extra-apt-repositories: |
+            ${{ (inputs.ubuntu-version == 'noble' || inputs.ubuntu-version == 'questing') && 'ppa:ubuntu-enterprise-desktop/golang' || '' }}
+            ${{ inputs.ubuntu-version == 'noble' && 'deb http://archive.ubuntu.com/ubuntu noble-proposed main universe' || '' }}
+          extra-apt-repositories-pin: |
+            ${{ inputs.ubuntu-version == 'noble' && '
+            Package: *
+            Pin: release a=noble-proposed
+            Pin-Priority: 500
+            ' || '' }}
           # Extra build dependencies:
           # - systemd-dev: Required to read compile time variables from systemd via pkg-config.
           extra-source-build-deps: |
