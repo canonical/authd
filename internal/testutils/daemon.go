@@ -194,7 +194,10 @@ paths:
 
 		// For shared authd instances, we can't redirect the output to the test log,
 		// because the instance could still be running after the test finishes.
-		if opts.shared {
+		if testlog.Quiet() {
+			cmd.Stdout = nil
+			cmd.Stderr = nil
+		} else if opts.shared {
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 		} else {
@@ -204,8 +207,13 @@ paths:
 
 		if opts.saveOutputAsTestArtifact {
 			authdOutput := &SyncBuffer{}
-			cmd.Stdout = io.MultiWriter(cmd.Stdout, authdOutput)
-			cmd.Stderr = io.MultiWriter(cmd.Stderr, authdOutput)
+			if testlog.Quiet() {
+				cmd.Stdout = authdOutput
+				cmd.Stderr = authdOutput
+			} else {
+				cmd.Stdout = io.MultiWriter(cmd.Stdout, authdOutput)
+				cmd.Stderr = io.MultiWriter(cmd.Stderr, authdOutput)
+			}
 			MaybeSaveBufferAsArtifactOnCleanup(t, authdOutput, "authd.log")
 		}
 
