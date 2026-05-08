@@ -328,7 +328,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			tapeVariables: map[string]string{
 				vhsCommandFinalAuthWaitVariable: fmt.Sprintf(
 					`Wait+Screen /Too many authentication failures/
-Wait@%dms`, sshDefaultFinalWaitTimeout),
+Wait@%dms`, sshDefaultFinalWaitTimeout.Milliseconds()),
 			},
 		},
 		"Deny_authentication_if_user_does_not_exist": {
