@@ -123,6 +123,7 @@ Check That Username Cannot Be Changed When Using su
     Hid.Keys Combo    Return
     Try Navigating Back to User Selection
     Cancel Operation
+    Match Text    su: Critical error - immediate abort    120
 
 
 Try Navigating Back to User Selection
