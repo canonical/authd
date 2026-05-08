@@ -27,6 +27,7 @@ packages:
   - gnome-shell
   - gnome-shell-ubuntu-extensions
   - gsettings-ubuntu-schemas
+  - libpam-pwquality
   - openssh-server
   - policykit-desktop-privileges
   # Required to get the VM's IP address
