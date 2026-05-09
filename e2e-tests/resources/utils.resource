@@ -181,7 +181,7 @@ Launch App
 
 
 Cancel Operation
-    Hid.Keys Combo    Control_L    C
+    Hid.Keys Combo    Control_L    c
     Match Text    @ubuntu    15
 
 
