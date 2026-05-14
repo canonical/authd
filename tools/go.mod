@@ -8,7 +8,7 @@ require (
 	github.com/golang/protobuf v1.5.4
 	github.com/golangci/golangci-lint/v2 v2.12.2
 	github.com/msteinert/pam/v2 v2.0.0-00010101000000-000000000000
-	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.6.1
+	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.6.2
 )
 
 require (
@@ -215,7 +215,7 @@ require (
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	golang.org/x/tools v0.44.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
