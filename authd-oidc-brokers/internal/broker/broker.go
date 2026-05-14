@@ -944,17 +944,25 @@ func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (s
 		return AuthDenied, errorMessage{Message: "Authentication failure: user not allowed in broker configuration"}
 	}
 
-	// Add extra groups to the user info.
-	for _, name := range b.cfg.extraGroups {
-		log.Debugf(context.Background(), "Adding extra group %q", name)
-		authInfo.UserInfo.Groups = append(authInfo.UserInfo.Groups, info.Group{Name: name})
+	// Append extra groups from config, avoiding duplicates.
+	existingGroups := make(map[string]struct{}, len(authInfo.UserInfo.Groups)+len(b.cfg.extraGroups)+len(b.cfg.ownerExtraGroups))
+	for _, g := range authInfo.UserInfo.Groups {
+		existingGroups[g.Name] = struct{}{}
 	}
-
-	if b.isOwner(authInfo.UserInfo.Name) {
-		// Add the owner extra groups to the user info.
-		for _, name := range b.cfg.ownerExtraGroups {
-			log.Debugf(context.Background(), "Adding owner extra group %q", name)
+	for _, name := range b.cfg.extraGroups {
+		if _, exists := existingGroups[name]; !exists {
+			log.Debugf(context.Background(), "Adding extra group %q", name)
 			authInfo.UserInfo.Groups = append(authInfo.UserInfo.Groups, info.Group{Name: name})
+			existingGroups[name] = struct{}{}
+		}
+	}
+	if b.isOwner(authInfo.UserInfo.Name) {
+		for _, name := range b.cfg.ownerExtraGroups {
+			if _, exists := existingGroups[name]; !exists {
+				log.Debugf(context.Background(), "Adding owner extra group %q", name)
+				authInfo.UserInfo.Groups = append(authInfo.UserInfo.Groups, info.Group{Name: name})
+				existingGroups[name] = struct{}{}
+			}
 		}
 	}
 
