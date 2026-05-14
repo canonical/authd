@@ -169,6 +169,14 @@ Remove Registered Owner
     SSH.Execute    sudo snap restart ${BROKER_SNAP_NAME}
 
 
+Block Network Access To Identity Provider
+    [Documentation]    Blocks outbound HTTPS traffic (IPv4 and IPv6) to simulate the identity
+    ...               provider being unreachable. The iptables rules are automatically reverted
+    ...               when the VM snapshot is restored at the start of the next test.
+    SSH.Execute    sudo iptables -I OUTPUT -p tcp --dport 443 -j REJECT
+    SSH.Execute    sudo ip6tables -I OUTPUT -p tcp --dport 443 -j REJECT
+
+
 # Uses sed to change the broker configuration.
 # It should match both commented and uncommented lines.
 # The full command looks like:
