@@ -102,6 +102,7 @@ func GetPamTTY(mTx pam.ModuleTransaction) (tty *os.File, cleanup func()) {
 		return nil, nil
 	}
 
+	log.Debugf(context.Background(), "PAM TTY is %q", pamTTY)
 	tty, err = os.OpenFile(pamTTY, os.O_RDWR, 0600)
 	if err != nil {
 		return nil, nil
@@ -123,6 +124,8 @@ func IsTerminalTTY(mTx pam.ModuleTransaction) bool {
 		tty, cleanup := GetPamTTY(mTx)
 		defer cleanup()
 		isTerminalTTYValue = term.IsTerminal(tty.Fd())
+		log.Debugf(context.Background(), "Tty %v (%v) is attached to a terminal: %v",
+			tty.Fd(), tty.Name(), isTerminalTTYValue)
 	})
 	return isTerminalTTYValue
 }
