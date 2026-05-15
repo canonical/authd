@@ -989,11 +989,13 @@ do_pam_action_thread (pam_handle_t *pamh,
   g_autofree char *log_file = NULL;
   g_autofree char *program_name = NULL;
   g_autofree char *wait_thread_name = NULL;
+  g_autofd int pam_tty_fd = -1;
   g_autofd int stdin_fd = -1;
   g_autofd int stdout_fd = -1;
   g_autofd int stderr_fd = -1;
   g_autofd int log_file_fd = -1;
   const char *action_name;
+  const char *pam_tty;
   int errsv;
   int exit_status;
   gboolean interactive_mode;
@@ -1102,30 +1104,76 @@ do_pam_action_thread (pam_handle_t *pamh,
   main_context = g_main_context_ref (module_data->main_context);
   context_pusher = g_main_context_pusher_new (main_context);
 
-  interactive_mode = isatty (STDIN_FILENO);
+  if ((exit_status = pam_get_item (pamh, PAM_TTY, (const void **) &pam_tty)) != PAM_SUCCESS)
+    return exit_status;
+
+  interactive_mode = FALSE;
+
+  if (pam_tty != NULL && *pam_tty != '\0')
+    {
+      g_debug ("Trying to use PAM TTY %s", pam_tty);
+      pam_tty_fd = open (pam_tty, O_RDWR, 0600);
+      errsv = errno;
+
+      if (pam_tty_fd >= 0)
+        {
+          if (isatty (pam_tty_fd))
+            {
+              stdin_fd = pam_tty_fd;
+              stdout_fd = pam_tty_fd;
+              stderr_fd = pam_tty_fd;
+              interactive_mode = TRUE;
+            }
+          else
+            {
+              g_warning ("PAM TTY '%s' is not really a TTY", pam_tty);
+            }
+        }
+      else
+        {
+          g_debug ("Impossible to open PAM_TTY %s: %s",
+                   pam_tty, g_strerror (errsv));
+        }
+    }
+
+  if (pam_tty_fd < 0 && !interactive_mode &&
+      isatty (STDIN_FILENO) && isatty (STDOUT_FILENO))
+    {
+      stdin_fd = STDIN_FILENO;
+      stdout_fd = STDOUT_FILENO;
+      stderr_fd = STDERR_FILENO;
+      interactive_mode = TRUE;
+    }
+
   g_debug ("Running in interactive mode: %s", interactive_mode ? "true" : "false");
 
   if (interactive_mode)
     {
-      if ((stdin_fd = dup_fd_checked (STDIN_FILENO, &error)) < 0)
+      if ((stdin_fd = dup_fd_checked (stdin_fd, &error)) < 0)
         {
-          notify_error (pamh, action, "can't duplicate stdin file descriptor: %s",
-                        error->message);
-          return PAM_SYSTEM_ERR;
+          g_warning ("%s: can't duplicate stdin file descriptor: %s",
+                     action_type_to_string (action), error->message);
+          g_clear_error (&error);
         }
 
-      if ((stdout_fd = dup_fd_checked (STDOUT_FILENO, &error)) < 0)
+      if ((stdout_fd = dup_fd_checked (stdout_fd, &error)) < 0)
         {
-          notify_error (pamh, action, "can't duplicate stdout file descriptor: %s",
-                        error->message);
-          return PAM_SYSTEM_ERR;
+          g_warning ("%s: can't duplicate stdout file descriptor: %s",
+                     action_type_to_string (action), error->message);
+          g_clear_error (&error);
         }
 
-      if ((stderr_fd = dup_fd_checked (STDERR_FILENO, &error)) < 0)
+      if ((stderr_fd = dup_fd_checked (stderr_fd, &error)) < 0)
         {
-          notify_error (pamh, action, "can't duplicate stderr file descriptor: %s",
-                        error->message);
-          return PAM_SYSTEM_ERR;
+          g_warning ("%s: can't duplicate stderr file descriptor: %s",
+                     action_type_to_string (action), error->message);
+          g_clear_error (&error);
+        }
+
+      if (stdin_fd < 0 || stdout_fd < 0)
+        {
+          g_warning ("No relevant FD available for interactive mode");
+          interactive_mode = FALSE;
         }
     }
 
