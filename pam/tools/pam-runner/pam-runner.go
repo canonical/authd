@@ -22,6 +22,7 @@ import (
 // Simulating pam on the CLI for manual testing.
 func main() {
 	logFile := os.Getenv(pam_test.RunnerEnvLogFile)
+	outputFile := os.Getenv(pam_test.RunnerEnvOutputFile)
 	supportsConversation := os.Getenv(pam_test.RunnerEnvSupportsConversation) != ""
 	execModule := os.Getenv(pam_test.RunnerEnvExecModule)
 	execChildPath := os.Getenv(pam_test.RunnerEnvExecChildPath)
@@ -61,6 +62,16 @@ func main() {
 		defaultArgs = append(defaultArgs, "--exec-debug", "--exec-log", logFile)
 	}
 
+	if outputFile == "" {
+		outputFile = os.Stdout.Name()
+	}
+
+	output, err := os.OpenFile(outputFile, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0600)
+	if err != nil {
+		log.Fatalf("Can't open output file %s: %v", outputFile, err)
+	}
+	defer output.Close()
+
 	for _, env := range []string{
 		"GOCOVERDIR",
 		"GORACE",
@@ -95,9 +106,13 @@ func main() {
 		log.Fatalf("Can't create service file %s: %v", serviceFile, err)
 	}
 
-	conversationHandler := pam.ConversationFunc(noConversationHandler)
+	conversationHandler := pam.ConversationFunc(func(s1 pam.Style, s2 string) (string, error) {
+		return noConversationHandler(output, s1, s2)
+	})
 	if supportsConversation {
-		conversationHandler = pam.ConversationFunc(simpleConversationHandler)
+		conversationHandler = pam.ConversationFunc(func(s1 pam.Style, s2 string) (string, error) {
+			return simpleConversationHandler(output, s1, s2)
+		})
 	}
 
 	tx, err := pam.StartConfDir(filepath.Base(serviceFile), pamUser,
@@ -136,30 +151,29 @@ func main() {
 	pamRes := pamFunc(pamFlags)
 	user, _ := tx.GetItem(pam.User)
 
-	printPamResult(runnerAction.Result(), user, pamRes)
-
+	printPamResult(output, runnerAction.Result(), user, pamRes)
 }
 
-func noConversationHandler(style pam.Style, msg string) (string, error) {
+func noConversationHandler(output *os.File, style pam.Style, msg string) (string, error) {
 	switch style {
 	case pam.TextInfo:
-		fmt.Fprintf(os.Stderr, "PAM Info Message: %s\n", msg)
+		fmt.Fprintf(output, "PAM Info Message: %s\n", msg)
 	case pam.ErrorMsg:
-		fmt.Fprintf(os.Stderr, "PAM Error Message: %s\n", msg)
+		fmt.Fprintf(output, "PAM Error Message: %s\n", msg)
 	default:
 		return "", fmt.Errorf("PAM style %d not implemented", style)
 	}
 	return "", nil
 }
 
-func simpleConversationHandler(style pam.Style, msg string) (string, error) {
+func simpleConversationHandler(output *os.File, style pam.Style, msg string) (string, error) {
 	switch style {
 	case pam.TextInfo:
-		fmt.Println(msg)
+		fmt.Fprintln(output, msg)
 	case pam.ErrorMsg:
-		return noConversationHandler(style, msg)
+		return noConversationHandler(output, style, msg)
 	case pam.PromptEchoOn:
-		fmt.Print(msg)
+		fmt.Fprint(output, msg)
 		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
 		if err != nil {
 			log.Fatalf("PAM Prompt error: %v", err)
@@ -167,9 +181,9 @@ func simpleConversationHandler(style pam.Style, msg string) (string, error) {
 		}
 		return strings.TrimRight(line, "\n"), nil
 	case pam.PromptEchoOff:
-		fmt.Print(msg)
+		fmt.Fprint(output, msg)
 		input, err := term.ReadPassword(int(os.Stdin.Fd()))
-		fmt.Print("\n")
+		fmt.Fprint(output, "\n")
 		if err != nil {
 			log.Fatalf("PAM Password Prompt error: %v", err)
 			return "", err
@@ -181,11 +195,11 @@ func simpleConversationHandler(style pam.Style, msg string) (string, error) {
 	return "", nil
 }
 
-func printPamResult(resultAction pam_test.RunnerResultAction, user string, result error) {
+func printPamResult(output *os.File, resultAction pam_test.RunnerResultAction, user string, result error) {
 	if user == "" {
 		user = "<unset>"
 	}
-	fmt.Println(resultAction.MessageWithError(user, result))
+	fmt.Fprintln(output, resultAction.MessageWithError(user, result))
 }
 
 func getPkgConfigFlags(args []string) ([]string, error) {
