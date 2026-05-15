@@ -11,6 +11,8 @@ import (
 const (
 	// RunnerEnvLogFile is the environment variable used by the test client to set the log file.
 	RunnerEnvLogFile = "AUTHD_PAM_RUNNER_LOG_FILE"
+	// RunnerEnvOutputFile is the environment variable used by the test client to set the output file.
+	RunnerEnvOutputFile = "AUTHD_PAM_RUNNER_OUTPUT_FILE"
 	// RunnerEnvSupportsConversation is the environment variable used by the test client to set whether it supports PAM conversations.
 	RunnerEnvSupportsConversation = "AUTHD_PAM_RUNNER_SUPPORTS_CONVERSATION"
 	// RunnerEnvExecModule is the environment variable used by the test client to set the exec module library path.
