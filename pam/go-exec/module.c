@@ -223,6 +223,7 @@ log_writer (GLogLevelFlags   log_level,
   int log_file_fd;
   gboolean use_colors;
   size_t length;
+  int errsv;
 
   if (g_log_writer_default_would_drop (log_level, log_domain))
     return G_LOG_WRITER_HANDLED;
@@ -244,7 +245,8 @@ log_writer (GLogLevelFlags   log_level,
       write (log_file_fd, "\n", 1) == 1)
     return G_LOG_WRITER_HANDLED;
 
-  g_printerr ("Can't write log to file: %s", g_strerror (errno));
+  errsv = errno;
+  g_printerr ("Can't write log to file: %s", g_strerror (errsv));
   return G_LOG_WRITER_UNHANDLED;
 }
 
@@ -983,6 +985,7 @@ do_pam_action_thread (pam_handle_t *pamh,
   g_autofd int stderr_fd = -1;
   g_autofd int log_file_fd = -1;
   const char *action_name;
+  int errsv;
   int exit_status;
   gboolean interactive_mode;
   GPid child_pid;
@@ -1017,6 +1020,7 @@ do_pam_action_thread (pam_handle_t *pamh,
   else
     log_file_fd = dup (STDERR_FILENO);
 
+  errsv = errno;
   action_data.log_file_fd = g_steal_fd (&log_file_fd);
   G_UNLOCK (logger);
 
@@ -1024,7 +1028,7 @@ do_pam_action_thread (pam_handle_t *pamh,
     {
       g_warning ("Impossible to open log file %s: %s",
                  (log_file && *log_file != '\0') ? log_file : "<sderr>",
-                 g_strerror (errno));
+                 g_strerror (errsv));
     }
 
   locker = g_mutex_locker_new (&G_LOCK_NAME (exec_module));
