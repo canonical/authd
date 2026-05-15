@@ -354,9 +354,10 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 		teaOpts = append(teaOpts, modeOpts...)
 	} else if !forceNativeClient && adapter.IsTerminalTTY(mTx) && !adapter.IsDumbTerminal() {
 		pamClientType = adapter.InteractiveTerminal
-		tty, cleanup := adapter.GetPamTTY(mTx)
+		input, output, cleanup := adapter.GetPamIO(mTx)
 		defer cleanup()
-		teaOpts = append(teaOpts, tea.WithInput(tty))
+		teaOpts = append(teaOpts, tea.WithInput(input))
+		teaOpts = append(teaOpts, tea.WithOutput(output))
 	} else {
 		pamClientType = adapter.Native
 		modeOpts, err := adapter.TeaHeadlessOptions()
