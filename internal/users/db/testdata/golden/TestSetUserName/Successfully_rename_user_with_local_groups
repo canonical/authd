@@ -1,5 +1,5 @@
 users:
-    - name: user1
+    - name: user1-renamed
       uid: 1111
       gid: 11111
       gecos: |-

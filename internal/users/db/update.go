@@ -417,11 +417,11 @@ func (m *Manager) SetUserName(oldName, newName string) error {
 	}
 
 	// Check if a user with the new name already exists
-	_, err = userByName(tx, newName)
-	if err != nil && !errors.Is(err, NoDataFoundError{}) {
-		return fmt.Errorf("failed to check if new username already exists: %w", err)
+	_, checkErr := userByName(tx, newName)
+	if checkErr != nil && !errors.Is(checkErr, NoDataFoundError{}) {
+		return fmt.Errorf("failed to check if new username already exists: %w", checkErr)
 	}
-	if err == nil {
+	if checkErr == nil {
 		log.Errorf(context.TODO(), "Username %q already in use", newName)
 		return fmt.Errorf("username %q already in use", newName)
 	}
