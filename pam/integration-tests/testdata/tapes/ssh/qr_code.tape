@@ -1,1 +1,0 @@
-../native/qr_code.tape

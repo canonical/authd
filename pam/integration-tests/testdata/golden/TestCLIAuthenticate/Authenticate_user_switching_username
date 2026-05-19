@@ -1,46 +1,6 @@
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user name
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user-integration-switch-username@example.com
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-  Select your provider
-
-> 1. local
-  2. ExampleBroker
-
-  Press escape key to go back to user selection
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user-integration-username-switched@example.com
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-  Select your provider
-
-> 1. local
-  2. ExampleBroker
-
-  Press escape key to go back to user selection
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Gimme your password:
->
-
-  Press escape key to go back to select the authentication method
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Gimme your password:
-> ********
-
-  Press escape key to go back to select the authentication method
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 PAM Authenticate()
-  User: "user-integration-username-switched@example.com"
+  User: "user-integration-switch-username-switched@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-username-switched@example.com"
+  User: "user-integration-switch-username-switched@example.com"
   Result: success
->
-────────────────────────────────────────────────────────────────────────────────

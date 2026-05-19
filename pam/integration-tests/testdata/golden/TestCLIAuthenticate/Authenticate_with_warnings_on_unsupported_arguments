@@ -1,35 +1,6 @@
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo bar
-Username: user name
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo bar
-Username: user2@example.com
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo bar
-  Select your provider
-
-> 1. local
-  2. ExampleBroker
-
-  Press escape key to go back to user selection
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo bar
-Gimme your password:
->
-
-  Press escape key to go back to select the authentication method
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo bar
-Gimme your password:
-> ********
-
-  Press escape key to go back to select the authentication method
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} invalid_flag=foo bar
 PAM Authenticate()
   User: "user2@example.com"
   Result: success
 PAM AcctMgmt()
   User: "user2@example.com"
   Result: success
->
-────────────────────────────────────────────────────────────────────────────────

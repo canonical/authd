@@ -186,7 +186,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_with_upper_case_name": {
-			pamUser: ptrValue(strings.ToUpper(vhsTestUserName(t, "upper-case"))),
+			pamUser: ptrValue(strings.ToUpper(testUserName(t, "upper-case"))),
 			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
 				gdm.EventType_startAuthentication: {
 					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Secret{
@@ -950,9 +950,9 @@ func TestGdmModule(t *testing.T) {
 			serviceFile := createServiceFile(t, "gdm-authd", libPath, moduleArgs)
 			testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
 
-			pamUser := vhsTestUserName(t, "gdm")
+			pamUser := testUserName(t, "gdm")
 			if tc.pamUserPrefix != "" {
-				pamUser = vhsTestUserNameFull(t, tc.pamUserPrefix, "gdm")
+				pamUser = testUserNameFull(t, tc.pamUserPrefix, "gdm")
 			}
 			if tc.pamUser != nil {
 				pamUser = *tc.pamUser
@@ -1075,7 +1075,7 @@ func TestGdmModuleAuthenticateWithoutGdmExtension(t *testing.T) {
 
 	serviceFile := createServiceFile(t, "gdm-authd", libPath, moduleArgs)
 	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
-	pamUser := vhsTestUserName(t, "gdm")
+	pamUser := testUserName(t, "gdm")
 	gh := newGdmTestModuleHandler(t, serviceFile, pamUser)
 	t.Cleanup(func() { require.NoError(t, gh.tx.End(), "PAM: can't end transaction") })
 
@@ -1113,7 +1113,7 @@ func TestGdmModuleAcctMgmtWithoutGdmExtension(t *testing.T) {
 
 	serviceFile := createServiceFile(t, "gdm-authd", libPath, moduleArgs)
 	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
-	pamUser := vhsTestUserName(t, "gdm")
+	pamUser := testUserName(t, "gdm")
 	gh := newGdmTestModuleHandler(t, serviceFile, pamUser)
 	t.Cleanup(func() { require.NoError(t, gh.tx.End(), "PAM: can't end transaction") })
 

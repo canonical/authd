@@ -1,26 +1,10 @@
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 PAM Error Message: could not get current available brokers: permission denied: only root can perform this operation
 PAM Authenticate()
   User: "<unset>"
   Result: error: PAM exit code: 9
     Authentication service cannot retrieve authentication info
-PAM Info Message: acct=incomplete
+acct=incomplete
 PAM AcctMgmt()
   User: "<unset>"
   Result: error: PAM exit code: 25
     The return value should be ignored by PAM dispatch
->
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-PAM Error Message: could not get current available brokers: permission denied: only root can perform this operation
-PAM Authenticate()
-  User: "<unset>"
-  Result: error: PAM exit code: 9
-    Authentication service cannot retrieve authentication info
-PAM Info Message: acct=incomplete
-PAM AcctMgmt()
-  User: "<unset>"
-  Result: error: PAM exit code: 25
-    The return value should be ignored by PAM dispatch
->
-────────────────────────────────────────────────────────────────────────────────

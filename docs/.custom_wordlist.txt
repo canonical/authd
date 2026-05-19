@@ -66,6 +66,5 @@ UIDs
 unix
 unmount
 vendorize
-vhs
 webview
 whitespace

@@ -224,15 +224,6 @@ Every package has a suite of at least package-level tests. They may integrate mo
 
 The test suite must pass before merging the PR to our main branch. Any new feature, change or fix must be covered by corresponding tests.
 
-#### Tests with dependencies
-
-Some tests, such as the [PAM CLI tests](https://github.com/canonical/authd/blob/main/pam/integration-tests/cli_test.go), use external tools such as [VHS](https://github.com/charmbracelet/vhs)
-to record and run the tape files needed for the tests. Those tools are not included in the project dependencies and must be installed manually.
-
-Information about these tools and their usage will be linked below:
-
-- [VHS](https://github.com/charmbracelet/vhs?tab=readme-ov-file#tutorial): tutorial on using VHS as a CLI-based video recorder
-
 ### Code style
 
 This project follow the Go code-style. For more detailed information about the code style in use, please check <https://google.github.io/styleguide/go/>.
