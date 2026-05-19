@@ -29,7 +29,7 @@ Log In
 
 Log In With Password
     [Arguments]    ${password}
-    Match Text    Not listed    300
+    Wait Until GDM Login Screen Ready
     Wait Until User Selected
     Hid.Type String    ${password}
     Hid.Keys Combo    Return
@@ -38,7 +38,7 @@ Log In With Password
 
 Log In And Set Password
     [Arguments]    ${new_password}
-    Match Text    Not listed    300
+    Wait Until GDM Login Screen Ready
     Wait Until User Selected
     Hid.Type String    ubuntu
     Hid.Keys Combo    Return
@@ -72,6 +72,10 @@ Try Select User
 
 Log Out
     SSH.Execute    loginctl terminate-seat seat0
+
+
+Wait Until GDM Login Screen Ready
+    Match Text    Not listed    180
 
 
 Wait Until Desktop Ready
