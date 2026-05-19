@@ -1,58 +1,6 @@
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user name
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user-integration-form-w-button@example.com
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-  Select your provider
-
-> 1. local
-  2. ExampleBroker
-
-  Press escape key to go back to user selection
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Gimme your password:
->
-
-  Press escape key to go back to select the authentication method
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-  Select your authentication method
-
-> 1. Password authentication
-  2. Send URL to user-integration-form-w-button@example.com
-  3. Use your fido device foo
-  4. Use your phone +33...
-  5. Use your phone +1...
-  6. Use a QR code
-  7. Authentication code
-
-  Press escape key to go back to choose the provider
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Enter your one time credential:
->
-
-  [ Resend SMS (1 sent) ]
-
-  Press escape key to go back to select the authentication method
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Enter your one time credential:
->
-
-  [ Resend SMS (2 sent) ]
-
-  Press escape key to go back to select the authentication method
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 PAM Authenticate()
   User: "user-integration-form-w-button@example.com"
   Result: success
 PAM AcctMgmt()
   User: "user-integration-form-w-button@example.com"
   Result: success
->
-────────────────────────────────────────────────────────────────────────────────

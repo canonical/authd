@@ -1,26 +1,4 @@
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username:
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-integration-native-passwd-exit-authd-if-local-broker-is-selected@example.com
-== Provider selection ==
-  1. local
-  2. ExampleBroker
-Or enter 'r' to go back to user selection
-Choose your provider:
->
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-integration-native-passwd-exit-authd-if-local-broker-is-selected@example.com
-== Provider selection ==
-  1. local
-  2. ExampleBroker
-Or enter 'r' to go back to user selection
-Choose your provider:
-> 1
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username: user-integration-native-passwd-exit-authd-if-local-broker-is-selected@example.com
+Username: user-integration-native-passwd-testnativechangeauthtok@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -29,12 +7,10 @@ Choose your provider:
 > 1
 chauthtok=incomplete
 PAM ChangeAuthTok()
-  User: "user-integration-native-passwd-exit-authd-if-local-broker-is-selected@example.com"
+  User: "user-integration-native-passwd-testnativechangeauthtok@example.com"
   Result: error: PAM exit code: 25
     The return value should be ignored by PAM dispatch
 PAM AcctMgmt()
-  User: "user-integration-native-passwd-exit-authd-if-local-broker-is-selected@example.com"
+  User: "user-integration-native-passwd-testnativechangeauthtok@example.com"
   Result: error: PAM exit code: 26
     Critical error - immediate abort
->
-────────────────────────────────────────────────────────────────────────────────

@@ -1,11 +1,4 @@
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: user name
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-Username: root
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
-PAM Info Message: auth=incomplete
+auth=incomplete
 PAM Authenticate()
   User: "root"
   Result: error: PAM exit code: 25
@@ -14,5 +7,3 @@ PAM AcctMgmt()
   User: "root"
   Result: error: PAM exit code: 26
     Critical error - immediate abort
->
-────────────────────────────────────────────────────────────────────────────────

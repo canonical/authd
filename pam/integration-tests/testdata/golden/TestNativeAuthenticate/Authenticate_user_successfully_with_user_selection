@@ -1,51 +1,4 @@
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username:
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username:
-Username:
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username:
-Username: user-integration-native-user-selection@example.com
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username:
-Username: user-integration-native-user-selection@example.com
-== Provider selection ==
-  1. local
-  2. ExampleBroker
-Or enter 'r' to go back to user selection
-Choose your provider:
->
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username:
-Username: user-integration-native-user-selection@example.com
-== Provider selection ==
-  1. local
-  2. ExampleBroker
-Or enter 'r' to go back to user selection
-Choose your provider:
-> 2
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username:
-Username: user-integration-native-user-selection@example.com
-== Provider selection ==
-  1. local
-  2. ExampleBroker
-Or enter 'r' to go back to user selection
-Choose your provider:
-> 2
-== Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
-Gimme your password:
->
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-Username:
-Username: user-integration-native-user-selection@example.com
+Username: user-integration-user-selection-native-testnativeauthenticate@example.com
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -57,10 +10,8 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
 PAM Authenticate()
-  User: "user-integration-native-user-selection@example.com"
+  User: "user-integration-user-selection-native-testnativeauthenticate@example.com"
   Result: success
 PAM AcctMgmt()
-  User: "user-integration-native-user-selection@example.com"
+  User: "user-integration-user-selection-native-testnativeauthenticate@example.com"
   Result: success
->
-────────────────────────────────────────────────────────────────────────────────

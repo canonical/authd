@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/examplebroker"
 	"github.com/canonical/authd/internal/consts"
 	"github.com/canonical/authd/internal/fileutils"
 	"github.com/canonical/authd/internal/grpcutils"
@@ -236,24 +237,60 @@ func sleepDuration(in time.Duration) time.Duration {
 	return testutils.MultipliedSleepDuration(in)
 }
 
-// pathEnvWithGoBin returns the value of the GOPATH defined in go env prepended to PATH.
-func pathEnvWithGoBin(t *testing.T) string {
+var (
+	defaultConnectionTimeout = sleepDuration(3*time.Second) / time.Millisecond
+)
+
+// clientOptions holds PAM client configuration for test cases.
+type clientOptions struct {
+	PamUser        string
+	PamEnv         []string
+	PamServiceName string
+	PamTimeout     string
+	Term           string
+	SessionType    string
+}
+
+func checkDataRaces(t *testing.T, raceLog string) {
 	t.Helper()
 
-	pathEnv := testutils.MinimalPathEnv
-
-	cmd := exec.Command("go", "env", "GOPATH")
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "Could not get GOPATH: %v: %s", err, out)
-
-	goPath := strings.TrimSpace(string(out))
-
-	if goPath == "" {
-		return pathEnv
+	if !testutils.IsRace() {
+		return
 	}
 
-	goBinPath := filepath.Join(goPath, "bin")
-	return fmt.Sprintf("PATH=%s:%s", goBinPath, strings.TrimPrefix(pathEnv, "PATH="))
+	var raceLogs []string
+	err := filepath.Walk(filepath.Dir(raceLog),
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !strings.HasPrefix(info.Name(), filepath.Base(raceLog)) {
+				return nil
+			}
+			t.Logf("Found data race %s", info.Name())
+			raceLogs = append(raceLogs, filepath.Join(filepath.Dir(raceLog), info.Name()))
+			return nil
+		})
+
+	require.NoError(t, err, "TearDown: Check for races")
+	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, raceLogs...)
+	for _, raceLog := range raceLogs {
+		checkDataRace(t, raceLog)
+	}
+}
+
+func checkDataRace(t *testing.T, raceLog string) {
+	t.Helper()
+
+	content, err := os.ReadFile(raceLog)
+	require.NoError(t, err, "TearDown: Error reading race log %q", raceLog)
+
+	out := string(content)
+	if strings.TrimSpace(out) == "" {
+		return
+	}
+
+	t.Fatalf("Got a GO Race on child process:\n%s", out)
 }
 
 func goEnv(t *testing.T) []string {
@@ -481,4 +518,57 @@ func requireGetEntExists(t *testing.T, nssLibrary, authdSocket, user string, exi
 		return
 	}
 	require.NoError(t, err, "getent should not fail for user %q\n%s", user, out)
+}
+
+// testUserNameFull generates a unique test username from the given prefix parts and test name.
+func testUserNameFull(t *testing.T, userPrefix string, namePrefix string) string {
+	t.Helper()
+
+	require.NotEmpty(t, userPrefix, "Setup: user prefix needs to be set", t.Name())
+	if userPrefix[len(userPrefix)-1] != '-' {
+		userPrefix += "-"
+	}
+	if namePrefix != "" && namePrefix[len(namePrefix)-1] != '-' {
+		namePrefix += "-"
+	}
+
+	username := userPrefix + namePrefix + strings.ReplaceAll(strings.ToLower(filepath.Base(t.Name())), "_", "-")
+	return username + "@example.com"
+}
+
+// testUserName generates a unique test username using the standard integration user prefix.
+func testUserName(t *testing.T, prefix string) string {
+	t.Helper()
+
+	require.NotEmpty(t, prefix, "Setup: user prefix needs to be set", t.Name())
+	return testUserNameFull(t, examplebroker.UserIntegrationPrefix, prefix)
+}
+
+// requireRunnerResultForUser checks that the golden content contains the expected
+// PAM runner result messages for the given session mode and user.
+func requireRunnerResultForUser(t *testing.T, sessionMode authd.SessionMode, user, goldenContent string) {
+	t.Helper()
+
+	// Only check the last 50 lines of the golden file, because that's where
+	// the result is printed, while printing the full output on failure is too much.
+	goldenLines := strings.Split(goldenContent, "\n")
+	goldenContent = strings.Join(goldenLines[max(0, len(goldenLines)-50):], "\n")
+
+	// authd uses lowercase usernames
+	user = strings.ToLower(user)
+
+	require.Contains(t, goldenContent, pam_test.RunnerAction(sessionMode).Result().Message(user),
+		"Golden file does not include required value, consider increasing the terminal size:\n%s",
+		goldenContent)
+	require.Contains(t, goldenContent, pam_test.RunnerResultActionAcctMgmt.Message(user),
+		"Golden file does not include required value, consider increasing the terminal size:\n%s",
+		goldenContent)
+}
+
+// requireRunnerResult checks that the golden content contains the expected
+// PAM runner result messages for the given session mode.
+func requireRunnerResult(t *testing.T, sessionMode authd.SessionMode, goldenContent string) {
+	t.Helper()
+
+	requireRunnerResultForUser(t, sessionMode, "", goldenContent)
 }

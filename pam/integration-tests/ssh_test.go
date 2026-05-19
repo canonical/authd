@@ -29,6 +29,7 @@ import (
 	"github.com/canonical/authd/internal/testlog"
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/testutils/ptytest"
 	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
 	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/stretchr/testify/require"
@@ -37,10 +38,10 @@ import (
 )
 
 var (
-	sshEnvVariablesRegex *regexp.Regexp
-	sshHostPortRegex     *regexp.Regexp
+	sshTestsHomeBase = filepath.Join(os.TempDir(), "authd-tests", "home")
 
-	sshDefaultFinalWaitTimeout = sleepDuration(3 * defaultSleepValues[authdWaitDefault])
+	sshEnvVariablesRegex = regexp.MustCompile(`(?m)  (PATH|HOME|PWD|SSH_[A-Z]+)=.*(\n*)($[^ ]{2}.*)?$`)
+	sshHostPortRegex     = regexp.MustCompile(`([\d\.:]+) port ([\d:]+)`)
 
 	prepareSSHTestsOnce sync.Once
 	sshTestsPrepared    atomic.Bool
@@ -56,546 +57,7 @@ var (
 	sshdEnv                                   []string
 	sshdHostKeyPath                           string
 	sshdHostPubKey                            []byte
-
-	sshTestsHomeBase = filepath.Join(os.TempDir(), "authd-tests", "home")
 )
-
-func TestSSHAuthenticate(t *testing.T) {
-	t.Parallel()
-
-	if testing.Short() {
-		t.Skip("skipping test in short mode.")
-	}
-
-	runSharedDaemonTests := testutils.IsRace() || os.Getenv("AUTHD_TESTS_SSHD_SHARED") != ""
-
-	// We only test the single-sshd instance when in race mode.
-	testSSHAuthenticate(t, runSharedDaemonTests)
-
-	// When updating the golden files we need to perform all kind of tests.
-	if golden.UpdateEnabled() {
-		testSSHAuthenticate(t, !runSharedDaemonTests)
-	}
-}
-
-//nolint:thelper // This is actually a test function!
-func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
-	// Due to external dependencies such as `vhs`, we can't run the tests in some environments (like LP builders), as we
-	// can't install the dependencies there. So we need to be able to skip these tests on-demand.
-	if os.Getenv("AUTHD_SKIP_EXTERNAL_DEPENDENT_TESTS") != "" {
-		t.Skip("Skipping tests with external dependencies as requested")
-	}
-
-	// These tests are flaky, see https://github.com/canonical/authd/issues/1328
-	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
-		t.Skip("skipping flaky test")
-	}
-
-	if uv := getUbuntuVersion(t); uv == 0 || uv < 2404 {
-		require.Empty(t, os.Getenv("GITHUB_REPOSITORY"),
-			"Golden files need to be updated to run tests on Ubuntu %v", uv)
-		t.Skipf("Skipping SSH tests since they require new golden files for Ubuntu %v", uv)
-	}
-
-	currentDir, err := os.Getwd()
-	require.NoError(t, err, "Setup: Could not get current directory for the tests")
-
-	prepareSSHTests := func(subtest *testing.T) {
-		t.Logf("Preparing SSH tests, triggered by %q", subtest.Name())
-
-		execModule = buildExecModuleWithCFlags(t, []string{"-std=c11"}, true)
-		execChild = buildPAMExecChild(t)
-
-		mkHomeDirHelper, err := exec.LookPath("mkhomedir_helper")
-		require.NoError(t, err, "Setup: mkhomedir_helper not found")
-		pamMkHomeDirModule = buildSharedModule(t,
-			"Building pam_mkhomedir module",
-			[]string{"./pam/integration-tests/pam_mkhomedir/pam_mkhomedir.c"},
-			nil,
-			[]string{
-				"-DAUTHD_TESTS_SSH_USE_AUTHD_NSS",
-				fmt.Sprintf("-DMKHOMEDIR_HELPER=%q", mkHomeDirHelper),
-			},
-			[]string{"-lpam"},
-			"pam_mkhomedir_test.so", true)
-
-		err = testutils.CanRunRustTests(false)
-		if os.Getenv("AUTHD_TESTS_SSH_USE_DUMMY_NSS") == "" && err == nil {
-			nssLibrary, nssEnv = testutils.BuildRustNSSLib(t, true)
-			sshdPreloadLibraries = append(sshdPreloadLibraries, nssLibrary)
-			sshdPreloaderCFlags = append(sshdPreloaderCFlags,
-				"-DAUTHD_TESTS_SSH_USE_AUTHD_NSS")
-			nssEnv = append(nssEnv, nssTestEnvBase(t, nssLibrary)...)
-		} else if err != nil {
-			t.Logf("Using the dummy library to implement NSS: %v", err)
-		}
-
-		sources := []string{filepath.Join(currentDir, "/sshd_preloader/sshd_preloader.c")}
-		sshdPreloadLibrary := buildSharedModule(t, "Building sshd_preloader library", sources,
-			nil, sshdPreloaderCFlags, nil, "sshd_preloader", true)
-		sshdPreloadLibraries = append(sshdPreloadLibraries, sshdPreloadLibrary)
-
-		sshdHostKeyPath = filepath.Join(t.TempDir(), "ssh_host_ed25519_key")
-		//#nosec:G204 - we control the command arguments in tests
-		out, err := exec.Command("ssh-keygen", "-q", "-f", sshdHostKeyPath, "-N", "", "-t", "ed25519").CombinedOutput()
-		require.NoError(t, err, "Setup: Failed generating SSH host key: %s", out)
-		testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, sshdHostKeyPath)
-
-		sshdHostPubKey, err = os.ReadFile(sshdHostKeyPath + ".pub")
-		require.NoError(t, err, "Setup: Can't read sshd host public key")
-
-		testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, sshdHostKeyPath+".pub")
-
-		if !t.Failed() {
-			t.Log("Prepared SSH tests")
-			sshTestsPrepared.Store(true)
-		}
-	}
-
-	var sharedSSHDPort, sharedSSHDUserHome, sharedAuthdSocket, sharedAuthdGroupOutput string
-	prepareSharedSSHDTests := func(subtest *testing.T) {
-		t.Logf("Preparing SSH tests with shared sshd, triggered by %q", subtest.Name())
-		sharedAuthdSocket, sharedAuthdGroupOutput = sharedAuthd(t)
-		serviceFile := createSSHDServiceFile(t, execModule, execChild, pamMkHomeDirModule, sharedAuthdSocket)
-		sshdEnv = append(sshdEnv, nssEnv...)
-		sshdEnv = append(sshdEnv, fmt.Sprintf("AUTHD_NSS_SOCKET=%s", sharedAuthdSocket))
-
-		sharedSSHDPort, sharedSSHDUserHome = startSSHDForTest(t, serviceFile, sshdHostKeyPath,
-			"authd-test-user-sshd-accept-all@example.com", sshdPreloadLibraries, sshdEnv, false)
-
-		if !t.Failed() {
-			t.Log("Prepared SSH tests with shared sshd")
-			sharedSSHDTestsPrepared.Store(true)
-		}
-	}
-
-	const pamSSHUserEnv = "AUTHD_PAM_SSH_USER"
-	const baseTapeCommand = "ssh ${%s}@localhost ${AUTHD_PAM_SSH_ARGS}"
-	tapeCommand := fmt.Sprintf(baseTapeCommand, pamSSHUserEnv)
-	defaultTapeSettings := []tapeSetting{{vhsHeight, 1000}, {vhsWidth, 2000}}
-
-	sshEnvVariablesRegex = regexp.MustCompile(`(?m)  (PATH|HOME|PWD|SSH_[A-Z]+)=.*(\n*)($[^ ]{2}.*)?$`)
-	sshHostPortRegex = regexp.MustCompile(`([\d\.:]+) port ([\d:]+)`)
-
-	authctlPath, authctlCleanup, err := testutils.BuildAuthctl()
-	require.NoError(t, err)
-	t.Cleanup(authctlCleanup)
-
-	tests := map[string]struct {
-		tape          string
-		tapeSettings  []tapeSetting
-		tapeVariables map[string]string
-
-		user             string
-		isLocalUser      bool
-		userPrefix       string
-		pamServiceName   string
-		socketPath       string
-		interactiveShell bool
-
-		wantUserAlreadyExist bool
-		wantNotLoggedInUser  bool
-		wantLocalGroups      bool
-	}{
-		"Authenticate_user_successfully": {
-			tape: "simple_auth",
-		},
-		"Authenticate_user_successfully_if_already_registered": {
-			user: "user-ssh@example.com",
-			tape: "simple_auth",
-		},
-		"Authenticate_user_successfully_and_enters_shell": {
-			tape:             "simple_auth_with_shell",
-			interactiveShell: true,
-		},
-		"Authenticate_user_successfully_with_upper_case": {
-			tape: "simple_auth",
-			user: strings.ToUpper(vhsTestUserNameFull(t,
-				examplebroker.UserIntegrationPreCheckPrefix, "upper-case")),
-		},
-		"Authenticate_user_successfully_if_already_registered_with_upper_case": {
-			user: "USER-SSH2@example.com",
-			tape: "simple_auth",
-		},
-		"Authenticate_user_with_mfa": {
-			tape:         "mfa_auth",
-			tapeSettings: []tapeSetting{{vhsHeight, 1500}},
-			userPrefix:   examplebroker.UserIntegrationMfaPrefix,
-		},
-		"Authenticate_user_with_form_mode_with_button": {
-			tape:         "form_with_button",
-			tapeSettings: []tapeSetting{{vhsHeight, 1500}},
-			tapeVariables: map[string]string{
-				"AUTHD_FORM_BUTTON_TAPE_ITEM": "8",
-			},
-		},
-		"Authenticate_user_with_qr_code": {
-			tape:         "qr_code",
-			tapeSettings: []tapeSetting{{vhsHeight, 1500}},
-			tapeVariables: map[string]string{
-				"AUTHD_QRCODE_TAPE_ITEM":      "2",
-				"AUTHD_QRCODE_TAPE_ITEM_NAME": "Login code",
-			},
-		},
-		"Authenticate_user_and_reset_password_while_enforcing_policy": {
-			tape:       "mandatory_password_reset",
-			userPrefix: examplebroker.UserIntegrationNeedsResetPrefix,
-		},
-		"Authenticate_user_and_reset_password_with_case_insensitive_user_selection": {
-			tape: "mandatory_password_reset_case_insensitive",
-			user: strings.ToUpper(vhsTestUserNameFull(t,
-				examplebroker.UserIntegrationNeedsResetPrefix+
-					examplebroker.UserIntegrationPreCheckValue, "case-insensitive")),
-			tapeVariables: map[string]string{
-				"AUTHD_TEST_TAPE_SSH_USER_VAR": pamSSHUserEnv,
-				"AUTHD_TEST_TAPE_LOWER_CASE_USERNAME": vhsTestUserNameFull(t,
-					examplebroker.UserIntegrationNeedsResetPrefix+
-						examplebroker.UserIntegrationPreCheckValue, "case-insensitive"),
-				"AUTHD_TEST_TAPE_MIXED_CASE_USERNAME": vhsTestUserNameFull(t,
-					examplebroker.UserIntegrationNeedsResetPrefix+
-						examplebroker.UserIntegrationPreCheckValue, "Case-INSENSITIVE"),
-			},
-		},
-		"Authenticate_user_with_mfa_and_reset_password_while_enforcing_policy": {
-			tape:         "mfa_reset_pwquality_auth",
-			tapeSettings: []tapeSetting{{vhsHeight, 1500}, {vhsWidth, 1800}},
-			userPrefix:   examplebroker.UserIntegrationMfaWithResetPrefix,
-		},
-		"Authenticate_user_with_mfa_and_reset_same_password": {
-			tape:         "mfa_reset_same_password",
-			tapeSettings: []tapeSetting{{vhsHeight, 3000}},
-			userPrefix:   examplebroker.UserIntegrationMfaWithResetPrefix,
-		},
-		"Authenticate_user_and_offer_password_reset": {
-			tape:       "optional_password_reset_skip",
-			userPrefix: examplebroker.UserIntegrationCanResetPrefix,
-		},
-		"Authenticate_user_and_accept_password_reset": {
-			tape:       "optional_password_reset_accept",
-			userPrefix: examplebroker.UserIntegrationCanResetPrefix,
-		},
-		"Authenticate_user_switching_auth_mode": {
-			tape:         "switch_auth_mode",
-			tapeSettings: []tapeSetting{{vhsHeight, 3500}},
-			tapeVariables: map[string]string{
-				"AUTHD_SWITCH_AUTH_MODE_TAPE_QR_OR_LOGIN_CODE_ITEM":    "2",
-				"AUTHD_SWITCH_AUTH_MODE_TAPE_SEND_URL_TO_EMAIL_ITEM":   "3",
-				"AUTHD_SWITCH_AUTH_MODE_TAPE_FIDO_DEVICE_FOO_ITEM":     "4",
-				"AUTHD_SWITCH_AUTH_MODE_TAPE_PHONE_33_ITEM":            "5",
-				"AUTHD_SWITCH_AUTH_MODE_TAPE_PHONE_1_ITEM":             "6",
-				"AUTHD_SWITCH_AUTH_MODE_TAPE_PIN_CODE_ITEM":            "7",
-				"AUTHD_SWITCH_AUTH_MODE_TAPE_AUTHENTICATION_CODE_ITEM": "8",
-
-				"AUTHD_SWITCH_AUTH_MODE_TAPE_QR_OR_LOGIN_CODE_ITEM_NAME": "Login code",
-			},
-		},
-		"Authenticate_user_switching_to_local_broker": {
-			tape:                "switch_local_broker",
-			wantNotLoggedInUser: true,
-			tapeSettings:        []tapeSetting{{vhsHeight, 900}},
-			tapeVariables: map[string]string{
-				vhsCommandFinalAuthWaitVariable: `Wait /Password:/`,
-			},
-		},
-		"Authenticate_user_and_add_it_to_local_group": {
-			tape:            "local_group",
-			userPrefix:      examplebroker.UserIntegrationLocalGroupsPrefix,
-			wantLocalGroups: true,
-		},
-
-		"Remember_last_successful_broker_and_mode": {
-			tape: "remember_broker_and_mode",
-		},
-		"Autoselect_local_broker_for_local_user": {
-			tape:                "local_user_preset",
-			user:                "root",
-			isLocalUser:         true,
-			wantNotLoggedInUser: true,
-			tapeSettings: []tapeSetting{
-				{vhsHeight, 200},
-			},
-			tapeVariables: map[string]string{
-				vhsCommandFinalAuthWaitVariable: `Wait /Password:/`,
-			},
-		},
-		"Authenticate_user_locks_and_unlocks_it": {
-			tape: "simple_auth_locks_unlocks",
-		},
-
-		"Deny_authentication_if_max_attempts_reached": {
-			tape:                "max_attempts",
-			wantNotLoggedInUser: true,
-			tapeVariables: map[string]string{
-				vhsCommandFinalAuthWaitVariable: fmt.Sprintf(
-					`Wait+Screen /Too many authentication failures/
-Wait@%dms`, sshDefaultFinalWaitTimeout.Milliseconds()),
-			},
-		},
-		"Deny_authentication_if_user_does_not_exist": {
-			tape:                "unexistent_user",
-			user:                examplebroker.UserIntegrationUnexistent,
-			wantNotLoggedInUser: true,
-		},
-		"Deny_authentication_if_user_does_not_exist_and_matches_cancel_key": {
-			tape:                "cancel_key_user",
-			user:                "r",
-			wantNotLoggedInUser: true,
-		},
-		"Deny_authentication_if_newpassword_does_not_match_required_criteria": {
-			tape:         "bad_password",
-			userPrefix:   examplebroker.UserIntegrationNeedsResetPrefix,
-			tapeSettings: []tapeSetting{{vhsHeight, 1200}},
-		},
-
-		"Prevent_user_from_switching_username": {
-			tape: "switch_preset_username",
-		},
-
-		"Exit_authd_if_local_broker_is_selected": {
-			tape:                "local_broker",
-			wantNotLoggedInUser: true,
-			tapeVariables: map[string]string{
-				vhsCommandFinalAuthWaitVariable: `Wait /Password:/`,
-			},
-		},
-		"Exit_if_user_is_not_pre-checked_on_ssh_service": {
-			tape:                "local_ssh",
-			user:                examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed@example.com",
-			pamServiceName:      "sshd",
-			wantNotLoggedInUser: true,
-			tapeVariables: map[string]string{
-				vhsCommandFinalAuthWaitVariable: `Wait /Password:/`,
-			},
-		},
-		"Exit_authd_if_user_sigints": {
-			tape:                "sigint",
-			wantNotLoggedInUser: true,
-		},
-
-		"Error_if_cannot_connect_to_authd": {
-			tape: "connection_error",
-			tapeVariables: map[string]string{
-				vhsCommandFinalAuthWaitVariable: `Wait /Password:/`,
-			},
-			socketPath:          "/some-path/not-existent-socket",
-			wantNotLoggedInUser: true,
-		},
-	}
-	for name, tc := range tests {
-		if sharedSSHD {
-			name = fmt.Sprintf("%s_with_shared_sshd", name)
-		}
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			if !sshTestsPrepared.Load() {
-				t.Log("Waiting for SSH tests to be prepared")
-				start := time.Now()
-				prepareSSHTestsOnce.Do(func() {
-					prepareSSHTests(t)
-				})
-				require.True(t, sshTestsPrepared.Load(), "Setup: preparing SSH tests failed")
-				t.Logf("SSH tests prepared after %.3fs", time.Since(start).Seconds())
-			}
-
-			if sharedSSHD && !sharedSSHDTestsPrepared.Load() {
-				t.Log("Waiting for shared SSHD tests to be prepared")
-				start := time.Now()
-				prepareSharedSSHDTestsOnce.Do(func() {
-					prepareSharedSSHDTests(t)
-				})
-				require.True(t, sharedSSHDTestsPrepared.Load(), "Setup: creating shared sshd service file failed")
-				t.Logf("Shared SSHD tests prepared after %.3fs", time.Since(start).Seconds())
-			}
-
-			socketPath := sharedAuthdSocket
-			groupOutput := sharedAuthdGroupOutput
-
-			var authdEnv []string
-			var authdSocketLink string
-			if nssLibrary != "" {
-				authdEnv = slices.Clone(nssEnv)
-
-				// Chicken-egg problem here: we need to start authd with the
-				// AUTHD_NSS_SOCKET env set, but its content is not yet known to
-				// us, so let's pass to it a path that we'll eventually symlink to
-				// the real socket path, once we've one.
-				socketDir, err := os.MkdirTemp("", "authd-sockets")
-				require.NoError(t, err, "Setup: failed to create socket dir")
-				authdSocketLink = filepath.Join(socketDir, "authd.sock")
-				t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
-
-				authdEnv = append(authdEnv, nssTestEnv(t, nssLibrary, authdSocketLink)...)
-			}
-
-			if tc.wantLocalGroups {
-				// For the local groups tests we need to run authd again so that it has
-				// special environment that saves the updated group file to a writable
-				// location for us to test.
-				_, groupOutput = prepareGroupFiles(t)
-
-				// Since we are migrating users, we need to make sure that we can replicate
-				// the homedir they have in the database.
-				err := os.MkdirAll(sshTestsHomeBase, 0700)
-				require.NoError(t, err, "Setup: failed to create home directory")
-
-				t.Cleanup(func() {
-					_ = os.RemoveAll(sshTestsHomeBase)
-				})
-
-				socketPath = runAuthd(t,
-					testutils.WithCurrentUserAsRoot,
-					testutils.WithGroupFile(groupOutput),
-					testutils.WithEnvironment(authdEnv...),
-					testutils.WithHomeBaseDir(sshTestsHomeBase),
-				)
-			} else if !sharedSSHD {
-				socketPath, groupOutput = sharedAuthd(t,
-					testutils.WithGroupFileOutput(sharedAuthdGroupOutput),
-					testutils.WithEnvironment(authdEnv...))
-			}
-			if tc.socketPath != "" {
-				socketPath = tc.socketPath
-			}
-
-			user := tc.user
-			if tc.userPrefix != "" {
-				tc.userPrefix = tc.userPrefix + examplebroker.UserIntegrationPreCheckValue
-			}
-			if tc.userPrefix == "" {
-				tc.userPrefix = examplebroker.UserIntegrationPreCheckPrefix
-			}
-			if user == "" {
-				user = vhsTestUserNameFull(t, tc.userPrefix, "ssh")
-			}
-
-			var userClient authd.UserServiceClient
-			if tc.socketPath == "" {
-				conn, err := grpc.NewClient("unix://"+socketPath,
-					grpc.WithTransportCredentials(insecure.NewCredentials()),
-					grpc.WithUnaryInterceptor(errmessages.FormatErrorMessage))
-				require.NoError(t, err, "Setup: could not dial the server")
-				t.Cleanup(func() { conn.Close() })
-
-				require.NoError(t, grpcutils.WaitForConnection(context.TODO(), conn,
-					sleepDuration(5*time.Second)))
-
-				userClient = authd.NewUserServiceClient(conn)
-
-				if tc.wantUserAlreadyExist {
-					requireAuthdUser(t, userClient, user)
-				} else {
-					requireNoAuthdUser(t, userClient, user)
-				}
-			}
-
-			sshdPort := sharedSSHDPort
-			userHome := sharedSSHDUserHome
-			if !sharedSSHD || tc.wantLocalGroups || tc.interactiveShell || tc.socketPath != "" {
-				sshdEnv := sshdEnv
-				if nssLibrary != "" {
-					sshdEnv = slices.Clone(sshdEnv)
-					sshdEnv = append(sshdEnv, nssEnv...)
-					sshdEnv = append(sshdEnv, fmt.Sprintf("AUTHD_NSS_SOCKET=%s", socketPath))
-
-					// Let's give authd access to its own NSS module via the socket.
-					err := os.Symlink(socketPath, authdSocketLink)
-					require.NoError(t, err, "Setup: symlinking the authd socket")
-				}
-				serviceFile := createSSHDServiceFile(t, execModule, execChild,
-					pamMkHomeDirModule, socketPath)
-				sshdPort, userHome = startSSHDForTest(t, serviceFile, sshdHostKeyPath, user,
-					sshdPreloadLibraries, sshdEnv, tc.interactiveShell)
-			}
-
-			if !sharedSSHD {
-				_, err := os.Stat(userHome)
-				require.ErrorIs(t, err, os.ErrNotExist, "Unexpected error checking for %q", userHome)
-			}
-
-			knownHost := filepath.Join(t.TempDir(), "known_hosts")
-			err := os.WriteFile(knownHost, []byte(
-				fmt.Sprintf("[localhost]:%s %s", sshdPort, sshdHostPubKey),
-			), 0600)
-			require.NoError(t, err, "Setup: can't create known hosts file")
-
-			outDir := t.TempDir()
-			td := newTapeData(tc.tape, outDir, append(defaultTapeSettings, tc.tapeSettings...)...)
-			td.Command = tapeCommand
-			td.Env[pam_test.RunnerEnvSupportsConversation] = "1"
-			td.Env[pamSSHUserEnv] = user
-			td.Env["AUTHD_SOCKET"] = "unix://" + socketPath
-			td.Env["AUTHCTL_PATH"] = authctlPath
-			td.Env["AUTHD_PAM_SSH_ARGS"] = strings.Join([]string{
-				"-p", sshdPort,
-				"-F", os.DevNull,
-				"-i", os.DevNull,
-				"-o", "ServerAliveInterval=300",
-				"-o", "PasswordAuthentication=no",
-				"-o", "PubkeyAuthentication=no",
-				"-o", "UserKnownHostsFile=" + knownHost,
-			}, " ")
-			td.Variables = tc.tapeVariables
-			td.RunVHS(t, vhsTestTypeSSH, nil)
-			output := sanitizedOutput(t, td)
-			golden.CheckOrUpdate(t, output)
-
-			userEnv := fmt.Sprintf("USER=%s", strings.ToLower(user))
-			if tc.wantNotLoggedInUser {
-				if strings.Contains(output, userEnv) {
-					require.Fail(t, "Tape output should not contain the logged in user name",
-						"##### Tape output #####\n%s\n##### End of tape output #####\n", output)
-				}
-
-				if userClient != nil {
-					requireNoAuthdUser(t, userClient, user)
-				}
-				if nssLibrary != "" {
-					requireGetEntExists(t, nssLibrary, socketPath, user, tc.isLocalUser)
-				}
-			} else {
-				if !strings.Contains(output, userEnv) {
-					require.Fail(t, "Tape output should contain the logged in user name",
-						"##### Tape output:\n%s\n##### End of tape output #####\n", output)
-				}
-
-				if userClient != nil {
-					authdUser := requireAuthdUser(t, userClient, user)
-					group := requireAuthdGroup(t, userClient, authdUser.Gid)
-					require.Contains(t, group.Members, authdUser.Name,
-						"Group lacks of the expected user")
-
-					if nssLibrary != "" {
-						userHome = authdUser.Homedir
-
-						requireGetEntEqualsUser(t, nssLibrary, socketPath, user, authdUser)
-						requireGetEntEqualsGroup(t, nssLibrary, socketPath, group.Name, group)
-					}
-				}
-
-				if !tc.wantUserAlreadyExist {
-					// Check if user home has been created, but only if the user is a new one.
-					stat, err := os.Stat(userHome)
-					require.NoError(t, err, "Home directory does not exist: %q", userHome)
-					require.True(t, stat.IsDir(), "%q is not a directory", userHome)
-				}
-			}
-
-			localgroupstestutils.RequireGroupFile(t, groupOutput, golden.Path(t))
-		})
-	}
-}
-
-func sanitizedOutput(t *testing.T, td *tapeData) string {
-	t.Helper()
-
-	output := td.SanitizedOutput(t)
-
-	// When sshd is in debug mode, it shows the environment variables, so let's sanitize them
-	output = sshEnvVariablesRegex.ReplaceAllString(output, "  $1=$${AUTHD_TEST_$1}")
-
-	return sshHostPortRegex.ReplaceAllLiteralString(output, "${SSH_HOST} port ${SSH_PORT}")
-}
 
 func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socketPath string) string {
 	t.Helper()
@@ -888,4 +350,1325 @@ func (fw *filteredStderrWriter) Write(p []byte) (n int, err error) {
 
 	_, err = fw.w.Write([]byte(out))
 	return len(p), err
+}
+
+func TestSSHAuthenticate(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	runSharedDaemonTests := testutils.IsRace() || os.Getenv("AUTHD_TESTS_SSHD_SHARED") != ""
+
+	testSSHAuthenticate(t, runSharedDaemonTests)
+
+	if golden.UpdateEnabled() {
+		testSSHAuthenticate(t, !runSharedDaemonTests)
+	}
+}
+
+//nolint:thelper // This is actually a test function!
+func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
+	// These tests are flaky, see https://github.com/canonical/authd/issues/1328
+	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+		t.Skip("skipping flaky test")
+	}
+
+	if uv := getUbuntuVersion(t); uv == 0 || uv < 2404 {
+		require.Empty(t, os.Getenv("GITHUB_REPOSITORY"),
+			"Golden files need to be updated to run tests on Ubuntu %v", uv)
+		t.Skipf("Skipping SSH tests since they require new golden files for Ubuntu %v", uv)
+	}
+
+	currentDir, err := os.Getwd()
+	require.NoError(t, err, "Setup: Could not get current directory for the tests")
+
+	prepareSSHTests := func(subtest *testing.T) {
+		t.Logf("Preparing SSH pty tests, triggered by %q", subtest.Name())
+
+		execModule = buildExecModuleWithCFlags(t, []string{"-std=c11"}, true)
+		execChild = buildPAMExecChild(t)
+
+		mkHomeDirHelper, err := exec.LookPath("mkhomedir_helper")
+		require.NoError(t, err, "Setup: mkhomedir_helper not found")
+		pamMkHomeDirModule = buildSharedModule(t,
+			"Building pam_mkhomedir module",
+			[]string{"./pam/integration-tests/pam_mkhomedir/pam_mkhomedir.c"},
+			nil,
+			[]string{
+				"-DAUTHD_TESTS_SSH_USE_AUTHD_NSS",
+				fmt.Sprintf("-DMKHOMEDIR_HELPER=%q", mkHomeDirHelper),
+			},
+			[]string{"-lpam"},
+			"pam_mkhomedir_test.so", true)
+
+		err = testutils.CanRunRustTests(false)
+		if os.Getenv("AUTHD_TESTS_SSH_USE_DUMMY_NSS") == "" && err == nil {
+			nssLibrary, nssEnv = testutils.BuildRustNSSLib(t, true)
+			sshdPreloadLibraries = append(sshdPreloadLibraries, nssLibrary)
+			sshdPreloaderCFlags = append(sshdPreloaderCFlags,
+				"-DAUTHD_TESTS_SSH_USE_AUTHD_NSS")
+			nssEnv = append(nssEnv, nssTestEnvBase(t, nssLibrary)...)
+		} else if err != nil {
+			t.Logf("Using the dummy library to implement NSS: %v", err)
+		}
+
+		sources := []string{filepath.Join(currentDir, "/sshd_preloader/sshd_preloader.c")}
+		sshdPreloadLibrary := buildSharedModule(t, "Building sshd_preloader library", sources,
+			nil, sshdPreloaderCFlags, nil, "sshd_preloader", true)
+		sshdPreloadLibraries = append(sshdPreloadLibraries, sshdPreloadLibrary)
+
+		sshdHostKeyPath = filepath.Join(t.TempDir(), "ssh_host_ed25519_key")
+		//#nosec:G204 - we control the command arguments in tests
+		out, err := exec.Command("ssh-keygen", "-q", "-f", sshdHostKeyPath, "-N", "", "-t", "ed25519").CombinedOutput()
+		require.NoError(t, err, "Setup: Failed generating SSH host key: %s", out)
+		testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, sshdHostKeyPath)
+
+		sshdHostPubKey, err = os.ReadFile(sshdHostKeyPath + ".pub")
+		require.NoError(t, err, "Setup: Can't read sshd host public key")
+
+		testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, sshdHostKeyPath+".pub")
+
+		if !t.Failed() {
+			t.Log("Prepared SSH pty tests")
+			sshTestsPrepared.Store(true)
+		}
+	}
+
+	var sharedSSHDPort, sharedSSHDUserHome, sharedAuthdSocket, sharedAuthdGroupOutput string
+	prepareSharedSSHDTests := func(subtest *testing.T) {
+		t.Logf("Preparing SSH pty tests with shared sshd, triggered by %q", subtest.Name())
+		sharedAuthdSocket, sharedAuthdGroupOutput = sharedAuthd(t)
+		serviceFile := createSSHDServiceFile(t, execModule, execChild, pamMkHomeDirModule, sharedAuthdSocket)
+		sshdEnv = append(sshdEnv, nssEnv...)
+		sshdEnv = append(sshdEnv, fmt.Sprintf("AUTHD_NSS_SOCKET=%s", sharedAuthdSocket))
+
+		sharedSSHDPort, sharedSSHDUserHome = startSSHDForTest(t, serviceFile, sshdHostKeyPath,
+			"authd-test-user-sshd-accept-all@example.com", sshdPreloadLibraries, sshdEnv, false)
+
+		if !t.Failed() {
+			t.Log("Prepared SSH pty tests with shared sshd")
+			sharedSSHDTestsPrepared.Store(true)
+		}
+	}
+
+	authctlPath, authctlCleanup, err := testutils.BuildAuthctl()
+	require.NoError(t, err)
+	t.Cleanup(authctlCleanup)
+
+	tests := map[string]struct {
+		user             string
+		isLocalUser      bool
+		userPrefix       string
+		pamServiceName   string
+		socketPath       string
+		interactiveShell bool
+
+		wantUserAlreadyExist bool
+		wantNotLoggedInUser  bool
+		wantLocalGroups      bool
+
+		test func(t *testing.T, args sshPtyArgs)
+	}{
+		"Authenticate_user_successfully": {
+			test: sshPtySimpleAuth,
+		},
+		"Authenticate_user_successfully_if_already_registered": {
+			user: "user-ssh@example.com",
+			test: sshPtySimpleAuth,
+		},
+		"Authenticate_user_successfully_and_enters_shell": {
+			interactiveShell: true,
+			test:             sshPtyAuthWithShell,
+		},
+		"Deny_authentication_if_username_has_uppercase": {
+			user: strings.ToUpper(testUserNameFull(t,
+				examplebroker.UserIntegrationPreCheckPrefix, "upper-case")),
+			wantNotLoggedInUser: true,
+			test:                sshPtyUppercaseRejected,
+		},
+		"Deny_authentication_if_username_has_uppercase_and_already_registered": {
+			user:                "USER-SSH2@example.com",
+			wantNotLoggedInUser: true,
+			test:                sshPtyUppercaseRejected,
+		},
+		"Authenticate_user_with_mfa": {
+			userPrefix: examplebroker.UserIntegrationMfaPrefix,
+			test:       sshPtyMfaAuth,
+		},
+		"Authenticate_user_with_form_mode_with_button": {
+			test: sshPtyFormWithButton,
+		},
+		"Authenticate_user_with_qr_code": {
+			test: sshPtyQRCode,
+		},
+		"Authenticate_user_and_reset_password_while_enforcing_policy": {
+			userPrefix: examplebroker.UserIntegrationNeedsResetPrefix,
+			test:       sshPtyMandatoryPasswordReset,
+		},
+		"Authenticate_user_and_reset_password_then_deny_uppercase_re-login": {
+			user: testUserNameFull(t,
+				examplebroker.UserIntegrationNeedsResetPrefix+
+					examplebroker.UserIntegrationPreCheckValue, "case-insensitive"),
+			test: sshPtyMandatoryPasswordResetThenUppercaseRejected,
+		},
+		"Authenticate_user_with_mfa_and_reset_password_while_enforcing_policy": {
+			userPrefix: examplebroker.UserIntegrationMfaWithResetPrefix,
+			test:       sshPtyMfaResetPwqualityAuth,
+		},
+		"Authenticate_user_with_mfa_and_reset_same_password": {
+			userPrefix: examplebroker.UserIntegrationMfaWithResetPrefix,
+			test:       sshPtyMfaResetSamePassword,
+		},
+		"Authenticate_user_and_offer_password_reset": {
+			userPrefix: examplebroker.UserIntegrationCanResetPrefix,
+			test:       sshPtyOptionalPasswordResetSkip,
+		},
+		"Authenticate_user_and_accept_password_reset": {
+			userPrefix: examplebroker.UserIntegrationCanResetPrefix,
+			test:       sshPtyOptionalPasswordResetAccept,
+		},
+		"Authenticate_user_switching_auth_mode": {
+			test: sshPtySwitchAuthMode,
+		},
+		"Authenticate_user_switching_to_local_broker": {
+			wantNotLoggedInUser: true,
+			test:                sshPtySwitchLocalBroker,
+		},
+		"Authenticate_user_and_add_it_to_local_group": {
+			userPrefix:      examplebroker.UserIntegrationLocalGroupsPrefix,
+			wantLocalGroups: true,
+			test:            sshPtySimpleAuth,
+		},
+
+		"Remember_last_successful_broker_and_mode": {
+			test: sshPtyRememberBrokerAndMode,
+		},
+		"Autoselect_local_broker_for_local_user": {
+			user:                "root",
+			isLocalUser:         true,
+			wantNotLoggedInUser: true,
+			test:                sshPtyLocalUserPreset,
+		},
+		"Authenticate_user_locks_and_unlocks_it": {
+			test: sshPtyLocksUnlocks,
+		},
+
+		"Deny_authentication_if_max_attempts_reached": {
+			wantNotLoggedInUser: true,
+			test:                sshPtyMaxAttempts,
+		},
+		"Deny_authentication_if_user_does_not_exist": {
+			user:                examplebroker.UserIntegrationUnexistent,
+			wantNotLoggedInUser: true,
+			test:                sshPtyUnexistentUser,
+		},
+		"Deny_authentication_if_user_does_not_exist_and_matches_cancel_key": {
+			user:                "r",
+			wantNotLoggedInUser: true,
+			test:                sshPtyCancelKeyUser,
+		},
+		"Deny_authentication_if_newpassword_does_not_match_required_criteria": {
+			userPrefix: examplebroker.UserIntegrationNeedsResetPrefix,
+			test:       sshPtyBadPassword,
+		},
+
+		"Prevent_user_from_switching_username": {
+			test: sshPtySwitchPresetUsername,
+		},
+
+		"Exit_authd_if_local_broker_is_selected": {
+			wantNotLoggedInUser: true,
+			test:                sshPtyLocalBroker,
+		},
+		"Exit_if_user_is_not_pre-checked_on_ssh_service": {
+			user:                examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed@example.com",
+			pamServiceName:      "sshd",
+			wantNotLoggedInUser: true,
+			test:                sshPtyLocalSSH,
+		},
+		"Exit_authd_if_user_sigints": {
+			wantNotLoggedInUser: true,
+			test:                sshPtySigint,
+		},
+
+		"Error_if_cannot_connect_to_authd": {
+			socketPath:          "/some-path/not-existent-socket",
+			wantNotLoggedInUser: true,
+			test:                sshPtyConnectionError,
+		},
+	}
+	for name, tc := range tests {
+		if sharedSSHD {
+			name = fmt.Sprintf("%s_with_shared_sshd", name)
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if !sshTestsPrepared.Load() {
+				t.Log("Waiting for SSH pty tests to be prepared")
+				start := time.Now()
+				prepareSSHTestsOnce.Do(func() {
+					prepareSSHTests(t)
+				})
+				require.True(t, sshTestsPrepared.Load(), "Setup: preparing SSH pty tests failed")
+				t.Logf("SSH pty tests prepared after %.3fs", time.Since(start).Seconds())
+			}
+
+			if sharedSSHD && !sharedSSHDTestsPrepared.Load() {
+				t.Log("Waiting for shared SSHD pty tests to be prepared")
+				start := time.Now()
+				prepareSharedSSHDTestsOnce.Do(func() {
+					prepareSharedSSHDTests(t)
+				})
+				require.True(t, sharedSSHDTestsPrepared.Load(), "Setup: creating shared sshd service file failed")
+				t.Logf("Shared SSHD pty tests prepared after %.3fs", time.Since(start).Seconds())
+			}
+
+			socketPath := sharedAuthdSocket
+			groupOutput := sharedAuthdGroupOutput
+
+			var authdEnv []string
+			var authdSocketLink string
+			if nssLibrary != "" {
+				authdEnv = slices.Clone(nssEnv)
+
+				socketDir, err := os.MkdirTemp("", "authd-sockets")
+				require.NoError(t, err, "Setup: failed to create socket dir")
+				authdSocketLink = filepath.Join(socketDir, "authd.sock")
+				t.Cleanup(func() { _ = os.RemoveAll(socketDir) })
+
+				authdEnv = append(authdEnv, nssTestEnv(t, nssLibrary, authdSocketLink)...)
+			}
+
+			if tc.wantLocalGroups {
+				_, groupOutput = prepareGroupFiles(t)
+
+				err := os.MkdirAll(sshTestsHomeBase, 0700)
+				require.NoError(t, err, "Setup: failed to create home directory")
+
+				t.Cleanup(func() {
+					_ = os.RemoveAll(sshTestsHomeBase)
+				})
+
+				socketPath = runAuthd(t,
+					testutils.WithCurrentUserAsRoot,
+					testutils.WithGroupFile(groupOutput),
+					testutils.WithEnvironment(authdEnv...),
+					testutils.WithHomeBaseDir(sshTestsHomeBase),
+				)
+			} else if !sharedSSHD {
+				socketPath, groupOutput = sharedAuthd(t,
+					testutils.WithGroupFileOutput(sharedAuthdGroupOutput),
+					testutils.WithEnvironment(authdEnv...))
+			}
+			if tc.socketPath != "" {
+				socketPath = tc.socketPath
+			}
+
+			user := tc.user
+			if tc.userPrefix != "" {
+				tc.userPrefix = tc.userPrefix + examplebroker.UserIntegrationPreCheckValue
+			}
+			if tc.userPrefix == "" {
+				tc.userPrefix = examplebroker.UserIntegrationPreCheckPrefix
+			}
+			if user == "" {
+				user = testUserNameFull(t, tc.userPrefix, "ssh")
+			}
+
+			var userClient authd.UserServiceClient
+			if tc.socketPath == "" {
+				conn, err := grpc.NewClient("unix://"+socketPath,
+					grpc.WithTransportCredentials(insecure.NewCredentials()),
+					grpc.WithUnaryInterceptor(errmessages.FormatErrorMessage))
+				require.NoError(t, err, "Setup: could not dial the server")
+				t.Cleanup(func() { conn.Close() })
+
+				require.NoError(t, grpcutils.WaitForConnection(context.TODO(), conn,
+					sleepDuration(5*time.Second)))
+
+				userClient = authd.NewUserServiceClient(conn)
+
+				if tc.wantUserAlreadyExist {
+					requireAuthdUser(t, userClient, user)
+				} else {
+					requireNoAuthdUser(t, userClient, user)
+				}
+			}
+
+			sshdPort := sharedSSHDPort
+			userHome := sharedSSHDUserHome
+			if !sharedSSHD || tc.wantLocalGroups || tc.interactiveShell || tc.socketPath != "" {
+				sshdEnv := sshdEnv
+				if nssLibrary != "" {
+					sshdEnv = slices.Clone(sshdEnv)
+					sshdEnv = append(sshdEnv, nssEnv...)
+					sshdEnv = append(sshdEnv, fmt.Sprintf("AUTHD_NSS_SOCKET=%s", socketPath))
+
+					err := os.Symlink(socketPath, authdSocketLink)
+					require.NoError(t, err, "Setup: symlinking the authd socket")
+				}
+				serviceFile := createSSHDServiceFile(t, execModule, execChild,
+					pamMkHomeDirModule, socketPath)
+				sshdPort, userHome = startSSHDForTest(t, serviceFile, sshdHostKeyPath, user,
+					sshdPreloadLibraries, sshdEnv, tc.interactiveShell)
+			}
+
+			if !sharedSSHD {
+				_, err := os.Stat(userHome)
+				require.ErrorIs(t, err, os.ErrNotExist, "Unexpected error checking for %q", userHome)
+			}
+
+			args := sshPtyArgs{
+				user:        user,
+				sshdPort:    sshdPort,
+				hostPubKey:  sshdHostPubKey,
+				authctlPath: authctlPath,
+				socketPath:  socketPath,
+			}
+
+			tc.test(t, args)
+
+			// After the test interaction is complete, verify user state.
+			if tc.wantNotLoggedInUser {
+				if userClient != nil {
+					requireNoAuthdUser(t, userClient, user)
+				}
+				if nssLibrary != "" {
+					requireGetEntExists(t, nssLibrary, socketPath, user, tc.isLocalUser)
+				}
+			} else {
+				if userClient != nil {
+					authdUser := requireAuthdUser(t, userClient, user)
+					group := requireAuthdGroup(t, userClient, authdUser.Gid)
+					require.Contains(t, group.Members, authdUser.Name,
+						"Group lacks of the expected user")
+
+					if nssLibrary != "" {
+						userHome = authdUser.Homedir
+
+						requireGetEntEqualsUser(t, nssLibrary, socketPath, user, authdUser)
+						requireGetEntEqualsGroup(t, nssLibrary, socketPath, group.Name, group)
+					}
+				}
+
+				if !tc.wantUserAlreadyExist {
+					stat, err := os.Stat(userHome)
+					require.NoError(t, err, "Home directory does not exist: %q", userHome)
+					require.True(t, stat.IsDir(), "%q is not a directory", userHome)
+				}
+			}
+
+			localgroupstestutils.RequireGroupFile(t, groupOutput, golden.Path(t))
+		})
+	}
+}
+
+// sshPtyArgs contains parameters for starting SSH in a pty.
+type sshPtyArgs struct {
+	user        string
+	sshdPort    string
+	hostPubKey  []byte
+	authctlPath string
+	socketPath  string
+}
+
+// startSSHForPty starts an SSH session in a ptytest Console.
+func startSSHForPty(t *testing.T, args sshPtyArgs) *ptytest.Console {
+	t.Helper()
+
+	return startSSHForPtyWithUser(t, args, args.user)
+}
+
+// startSSHForPtyWithUser starts an SSH session with a specific user.
+func startSSHForPtyWithUser(t *testing.T, args sshPtyArgs, user string) *ptytest.Console {
+	t.Helper()
+
+	knownHost := filepath.Join(t.TempDir(), "known_hosts")
+	err := os.WriteFile(knownHost, []byte(
+		fmt.Sprintf("[localhost]:%s %s", args.sshdPort, args.hostPubKey),
+	), 0600)
+	require.NoError(t, err, "Setup: can't create known hosts file")
+
+	sshArgs := []string{
+		fmt.Sprintf("%s@localhost", user),
+		"-p", args.sshdPort,
+		"-F", os.DevNull,
+		"-i", os.DevNull,
+		"-o", "ServerAliveInterval=300",
+		"-o", "PasswordAuthentication=no",
+		"-o", "PubkeyAuthentication=no",
+		"-o", "UserKnownHostsFile=" + knownHost,
+	}
+
+	env := testutils.AppendCovEnv(nil)
+	env = append(env, testutils.MinimalPathEnv)
+	env = append(env, "TERM=xterm-256color")
+
+	ptyOpts := []ptytest.Option{
+		ptytest.WithEnv(env),
+		ptytest.WithSize(terminalWidth, 50),
+		ptytest.WithTimeout(30 * time.Second),
+	}
+
+	return ptytest.Start(t, "ssh", sshArgs, ptyOpts...)
+}
+
+// sshPtySanitizeOutput sanitizes SSH terminal output for golden file comparison.
+func sshPtySanitizeOutput(t *testing.T, rawOutput string) string {
+	t.Helper()
+
+	s := ptytest.ProcessRawOutput(rawOutput)
+
+	// Collapse runs of 3+ blank lines to just 2.
+	for strings.Contains(s, "\n\n\n") {
+		s = strings.ReplaceAll(s, "\n\n\n", "\n\n")
+	}
+
+	// Remove leading/trailing blank lines.
+	s = strings.TrimLeft(s, "\n")
+	s = strings.TrimRight(s, "\n \t")
+	s += "\n"
+
+	// Replace socket path references.
+	s = ptyUnixSocketRegex.ReplaceAllLiteralString(s, "unix:///authd/test_socket.sock")
+
+	// Sanitize SSH environment variables.
+	s = sshEnvVariablesRegex.ReplaceAllString(s, "  $1=$${AUTHD_TEST_$1}")
+
+	// Sanitize host:port references.
+	s = sshHostPortRegex.ReplaceAllLiteralString(s, "${SSH_HOST} port ${SSH_PORT}")
+
+	return s
+}
+
+// sshPtySelectBroker waits for the provider selection and selects ExampleBroker.
+func sshPtySelectBroker(t *testing.T, c *ptytest.Console) {
+	t.Helper()
+
+	c.WaitFor(t, `Choose your provider`)
+	c.SendLine(t, "2")
+}
+
+// sshPtyWaitForSSHConnection waits for the SSH connection output.
+func sshPtyWaitForSSHConnection(t *testing.T, c *ptytest.Console) {
+	t.Helper()
+
+	c.WaitFor(t, `SSHD: Connected to ssh via authd module!`)
+}
+
+// --- Test functions ---
+
+func sshPtySimpleAuth(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+	sshPtyWaitForSSHConnection(t, c)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyAuthWithShell(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+	sshPtyWaitForSSHConnection(t, c)
+
+	// Wait for the shell prompt.
+	c.WaitFor(t, `\$`)
+
+	// Check user.
+	c.SendLine(t, "echo $USER")
+	c.WaitFor(t, strings.ToLower(args.user))
+
+	// Check we're inside SSH.
+	c.SendLine(t, `[ -n "${SSH_CONNECTION}" ] && echo "Inside SSH"`)
+	c.WaitFor(t, `Inside SSH`)
+
+	// Exit shell with Ctrl+D.
+	c.SendKey(t, ptytest.KeyCtrlD)
+	c.WaitFor(t, `Connection to localhost closed`)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyUppercaseRejected(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	// sshd 10.2 rejects uppercase usernames because PAM_USER doesn't match pw_name.
+	// The PAM module detects this and returns a helpful error.
+	c.WaitFor(t, `uppercase characters|Disconnected from|Connection closed`)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyMfaAuth(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+
+	// Cancel and go to auth method selection.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `1\. Password authentication`)
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Select password auth.
+	c.SendLine(t, "1")
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+
+	// MFA: fido device.
+	c.WaitFor(t, `Plug your fido device and press with your thumb`)
+
+	// Cancel and go back to auth method selection (MFA modes only).
+	c.SendLine(t, "r")
+	c.WaitFor(t, `1\. Use your fido device foo`)
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Re-select fido auth.
+	c.SendLine(t, "1")
+	c.WaitFor(t, `Plug your fido device and press with your thumb`)
+
+	// Cancel again.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `2\. Use your phone \+33`)
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Select phone auth.
+	c.SendLine(t, "2")
+	c.WaitFor(t, `Unlock your phone \+33`)
+
+	// Advance.
+	c.SendKey(t, ptytest.KeyEnter)
+	c.WaitFor(t, `Plug your fido device and press with your thumb`)
+
+	// Complete.
+	c.SendKey(t, ptytest.KeyEnter)
+	sshPtyWaitForSSHConnection(t, c)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyFormWithButton(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+
+	// Cancel to auth method selection.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `8\. Authentication code`)
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Select Authentication code.
+	c.SendLine(t, "8")
+	c.WaitFor(t, `Choose action`)
+
+	// Select "resend sms" button.
+	c.SendLine(t, "2")
+	c.WaitFor(t, `Choose action`)
+
+	// Select "enter credential".
+	c.SendLine(t, "1")
+	c.WaitFor(t, `Enter your one time credential`)
+
+	c.SendLine(t, "temporary pass00")
+	sshPtyWaitForSSHConnection(t, c)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyQRCode(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+
+	// Cancel to auth method selection.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `2\. Use a Login code`)
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Select Login code mode.
+	c.SendLine(t, "2")
+	c.WaitFor(t, `Choose action`)
+
+	// Regenerate QR code several times.
+	c.SendLine(t, "2")
+	c.WaitFor(t, `Choose action`)
+	c.SendLine(t, "2")
+	c.WaitFor(t, `Choose action`)
+	c.SendLine(t, "2")
+	c.WaitFor(t, `Choose action`)
+	c.SendLine(t, "2")
+	c.WaitFor(t, `Choose action`)
+
+	// Accept the code.
+	c.SendLine(t, "1")
+	sshPtyWaitForSSHConnection(t, c)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtySwitchAuthMode(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+
+	// Cancel to auth method selection.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `3\. Send URL to `)
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Select "Send URL to" mode.
+	c.SendLine(t, "3")
+	c.WaitFor(t, `enter the code`)
+
+	// Go back.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `4\. Use your fido device foo`)
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Select fido.
+	c.SendLine(t, "4")
+	c.WaitFor(t, `Plug your fido device and press with your thumb`)
+
+	// Go back.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `5\. Use your phone \+33`)
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Select phone +33.
+	c.SendLine(t, "5")
+	c.WaitFor(t, `Unlock your phone \+33`)
+
+	// Go back.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `6\. Use your phone \+1`)
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Select phone +1.
+	c.SendLine(t, "6")
+	c.WaitFor(t, `Unlock your phone \+1`)
+
+	// Go back.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `7\. Pin code`)
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Select pin code.
+	c.SendLine(t, "7")
+	c.WaitFor(t, `Enter your pin code`)
+
+	// Go back.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `2\. Use a Login code`)
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Select Login code (QR).
+	c.SendLine(t, "2")
+	c.WaitFor(t, `Choose action`)
+
+	// Go back.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `8\. Authentication code`)
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Select Authentication code.
+	c.SendLine(t, "8")
+	c.WaitFor(t, `Choose action`)
+
+	// Go back.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Try invalid selection.
+	c.SendLine(t, "invalid-selection")
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Try negative number.
+	c.SendLine(t, "-1")
+	c.WaitFor(t, `7\. Pin code`)
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Select Pin code.
+	c.SendLine(t, "7")
+	c.WaitFor(t, `Enter your pin code`)
+
+	// Enter pin.
+	c.SendLine(t, "4242")
+	sshPtyWaitForSSHConnection(t, c)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtySwitchLocalBroker(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+
+	// Cancel to auth method selection.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Go back to provider selection.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `Choose your provider`)
+
+	// Try invalid ID.
+	c.SendLine(t, "invalid-ID")
+	c.WaitFor(t, `Unsupported input`)
+	c.WaitFor(t, `Choose your provider`)
+
+	// Try invalid number.
+	c.SendLine(t, "555")
+	c.WaitFor(t, `Invalid selection`)
+	c.WaitFor(t, `Choose your provider`)
+
+	// Select local broker.
+	c.SendLine(t, "1")
+	c.WaitFor(t, `Password:`)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	c.Close(t)
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtySwitchPresetUsername(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	c.WaitFor(t, `Choose your provider`)
+
+	// Try going back with 'r' (should stay at provider selection with preset user).
+	c.SendLine(t, "r")
+	c.WaitFor(t, `Choose your provider`)
+
+	// Select ExampleBroker.
+	c.SendLine(t, "2")
+	c.WaitFor(t, `Gimme your password`)
+
+	// Cancel to auth method.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Go back to provider.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `Choose your provider`)
+
+	// Try 'r' again at provider level.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `Choose your provider`)
+
+	// And again.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `Choose your provider`)
+
+	// Select ExampleBroker and authenticate.
+	c.SendLine(t, "2")
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+	sshPtyWaitForSSHConnection(t, c)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyRememberBrokerAndMode(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	// First login: select broker and auth code mode.
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+
+	// Cancel to auth method selection.
+	c.SendLine(t, "r")
+	c.WaitFor(t, `8\. Authentication code`)
+	c.WaitFor(t, `Choose your authentication method`)
+
+	// Select Authentication code.
+	c.SendLine(t, "8")
+	c.WaitFor(t, `Choose action`)
+
+	// Enter credential.
+	c.SendLine(t, "1")
+	c.WaitFor(t, `Enter your one time credential`)
+	c.SendLine(t, "temporary pass0")
+	sshPtyWaitForSSHConnection(t, c)
+
+	_ = c.WaitForExit(t)
+
+	// Second login: broker and mode should be remembered.
+	c2 := startSSHForPty(t, args)
+
+	// Should go directly to the remembered auth mode.
+	c2.WaitFor(t, `Choose action`)
+
+	c2.SendLine(t, "1")
+	c2.WaitFor(t, `Enter your one time credential`)
+	c2.SendLine(t, "temporary pass0")
+	sshPtyWaitForSSHConnection(t, c2)
+
+	_ = c2.WaitForExit(t)
+
+	// Combine outputs for the golden file.
+	got := sshPtySanitizeOutput(t, c.RawOutput()) + sshPtySanitizeOutput(t, c2.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyLocksUnlocks(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	// First auth: succeed.
+	c := startSSHForPty(t, args)
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+	sshPtyWaitForSSHConnection(t, c)
+
+	_ = c.WaitForExit(t)
+
+	// Lock the user.
+	//#nosec:G204 - we control the command arguments in tests
+	lockCmd := exec.Command(args.authctlPath, "user", "lock", args.user)
+	lockCmd.Env = append(os.Environ(), "AUTHD_SOCKET="+args.socketPath)
+	out, err := lockCmd.CombinedOutput()
+	require.NoError(t, err, "Setup: locking user failed: %s", out)
+
+	// Try to auth while locked.
+	c2 := startSSHForPty(t, args)
+	c2.WaitFor(t, `Gimme your password`)
+	c2.SendLine(t, "goodpass")
+	c2.WaitFor(t, `permission denied: user .* is locked`)
+
+	_ = c2.WaitForExit(t)
+
+	// Lock again (idempotent).
+	//#nosec:G204 - we control the command arguments in tests
+	lockCmd = exec.Command(args.authctlPath, "user", "lock", args.user)
+	lockCmd.Env = append(os.Environ(), "AUTHD_SOCKET="+args.socketPath)
+	out, err = lockCmd.CombinedOutput()
+	require.NoError(t, err, "Setup: re-locking user failed: %s", out)
+
+	// Unlock the user.
+	//#nosec:G204 - we control the command arguments in tests
+	unlockCmd := exec.Command(args.authctlPath, "user", "unlock", args.user)
+	unlockCmd.Env = append(os.Environ(), "AUTHD_SOCKET="+args.socketPath)
+	out, err = unlockCmd.CombinedOutput()
+	require.NoError(t, err, "Setup: unlocking user failed: %s", out)
+
+	// Auth again after unlock.
+	c3 := startSSHForPty(t, args)
+	c3.WaitFor(t, `Gimme your password`)
+	c3.SendLine(t, "goodpass")
+	sshPtyWaitForSSHConnection(t, c3)
+
+	_ = c3.WaitForExit(t)
+
+	// Combine outputs for golden file.
+	got := sshPtySanitizeOutput(t, c.RawOutput()) +
+		sshPtySanitizeOutput(t, c2.RawOutput()) +
+		sshPtySanitizeOutput(t, c3.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyMandatoryPasswordReset(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+
+	c.WaitFor(t, `Enter your new password`)
+	c.SendLine(t, "authd2404")
+	c.WaitFor(t, `Confirm Password`)
+	c.SendLine(t, "authd2404")
+	sshPtyWaitForSSHConnection(t, c)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyMandatoryPasswordResetThenUppercaseRejected(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	// First auth with lowercase user (initial password reset).
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+
+	c.WaitFor(t, `Enter your new password`)
+	c.SendLine(t, "authd2404")
+	c.WaitFor(t, `Confirm Password`)
+	c.SendLine(t, "authd2404")
+	sshPtyWaitForSSHConnection(t, c)
+
+	_ = c.WaitForExit(t)
+
+	// Second auth with uppercase username - should be rejected.
+	upperUser := strings.ToUpper(args.user)
+	c2 := startSSHForPtyWithUser(t, args, upperUser)
+	c2.WaitFor(t, `uppercase characters|Disconnected from|Connection closed`)
+
+	_ = c2.WaitForExit(t)
+
+	// Combine outputs.
+	got := sshPtySanitizeOutput(t, c.RawOutput()) +
+		sshPtySanitizeOutput(t, c2.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyMfaResetPwqualityAuth(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+
+	// MFA: wait for fido device.
+	c.WaitFor(t, `Plug your fido device and press with your thumb`)
+
+	// Complete MFA (auto-advance).
+	c.SendKey(t, ptytest.KeyEnter)
+
+	// Password reset with quality checks.
+	c.WaitFor(t, `Choose action`)
+	c.SendLine(t, "1")
+
+	c.WaitFor(t, `Enter your new password`)
+
+	// Bad password: dictionary word.
+	c.SendLine(t, "password")
+	c.WaitFor(t, `The password fails the dictionary check`)
+
+	// Bad password: too short.
+	c.WaitFor(t, `Enter your new password`)
+	c.SendLine(t, "1234")
+	c.WaitFor(t, `The password is shorter than`)
+
+	// Good password.
+	c.WaitFor(t, `Enter your new password`)
+	c.SendLine(t, "authd2404")
+	c.WaitFor(t, `Confirm Password`)
+	c.SendLine(t, "authd2404")
+	sshPtyWaitForSSHConnection(t, c)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyMfaResetSamePassword(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+
+	// MFA: wait for fido device.
+	c.WaitFor(t, `Plug your fido device and press with your thumb`)
+
+	// Complete MFA.
+	c.SendKey(t, ptytest.KeyEnter)
+
+	// Password reset.
+	c.WaitFor(t, `Choose action`)
+	c.SendLine(t, "1")
+
+	c.WaitFor(t, `Enter your new password`)
+	c.SendLine(t, "authd2404")
+	c.WaitFor(t, `Confirm Password`)
+	c.SendLine(t, "authd2404")
+	sshPtyWaitForSSHConnection(t, c)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyOptionalPasswordResetSkip(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+
+	// Optional reset offered.
+	c.WaitFor(t, `Choose action`)
+
+	// Skip the reset.
+	c.SendLine(t, "2")
+	sshPtyWaitForSSHConnection(t, c)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyOptionalPasswordResetAccept(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+
+	// Optional reset offered.
+	c.WaitFor(t, `Choose action`)
+
+	// Accept the reset.
+	c.SendLine(t, "1")
+	c.WaitFor(t, `Enter your new password`)
+	c.SendLine(t, "authd2404")
+	c.WaitFor(t, `Confirm Password`)
+	c.SendLine(t, "authd2404")
+	sshPtyWaitForSSHConnection(t, c)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyBadPassword(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+
+	// Password reset required.
+	c.WaitFor(t, `Enter your new password`)
+
+	// Empty password.
+	c.SendKey(t, ptytest.KeyEnter)
+	c.WaitFor(t, `No password supplied`)
+
+	// Too short.
+	c.WaitFor(t, `Enter your new password`)
+	c.SendLine(t, "1234")
+	c.WaitFor(t, `The password is shorter than`)
+
+	// Dictionary word.
+	c.WaitFor(t, `Enter your new password`)
+	c.SendLine(t, "12345678")
+	c.WaitFor(t, `The password fails the dictionary check`)
+
+	// Good password.
+	c.WaitFor(t, `Enter your new password`)
+	c.SendLine(t, "authd2404")
+	c.WaitFor(t, `Confirm Password`)
+
+	// Mismatched confirm.
+	c.SendLine(t, "123456789")
+	c.WaitFor(t, `Password entries don't match`)
+
+	// Empty password again.
+	c.WaitFor(t, `Enter your new password`)
+	c.SendKey(t, ptytest.KeyEnter)
+	c.WaitFor(t, `No password supplied`)
+
+	// Finally, correct password.
+	c.WaitFor(t, `Enter your new password`)
+	c.SendLine(t, "authd2404")
+	c.WaitFor(t, `Confirm Password`)
+	c.SendLine(t, "authd2404")
+	sshPtyWaitForSSHConnection(t, c)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyMaxAttempts(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+
+	// Send wrong passwords, waiting for re-prompt after each.
+	for i := 0; i < 5; i++ {
+		c.SendLine(t, "wrongpass")
+		if i < 4 {
+			c.WaitFor(t, `Gimme your password`)
+		}
+	}
+
+	c.WaitFor(t, `Too many authentication failures|Maximum number of authentication attempts reached`)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyLocalBroker(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	c.WaitFor(t, `Choose your provider`)
+	c.SendLine(t, "1")
+	c.WaitFor(t, `Password:`)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	c.Close(t)
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyLocalUserPreset(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	c.WaitFor(t, `Password:`)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	c.Close(t)
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyLocalSSH(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	// User is not pre-checked on ssh service, connection is closed.
+	c.WaitFor(t, `Connection closed|Disconnected from|Password:`)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyCancelKeyUser(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	// User "r" doesn't exist as a real user, SSH connection is closed.
+	// In some cases sshd may show a Password: prompt from local PAM before closing.
+	c.WaitFor(t, `Connection closed|Disconnected from|Password:`)
+
+	c.Close(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyUnexistentUser(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	// User doesn't exist, SSH connection is closed by sshd.
+	c.WaitFor(t, `Connection closed|Disconnected from`)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyConnectionError(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	// Cannot connect to authd, SSH connection is closed.
+	c.WaitFor(t, `Connection closed|Disconnected from|Password:`)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtySigint(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+
+	c.SendKey(t, ptytest.KeyCtrlC)
+
+	_ = c.WaitForExit(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
 }

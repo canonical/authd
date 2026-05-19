@@ -45,7 +45,6 @@ cargo build                              # NSS (debug mode)
   - Compare/update: `golden.CheckOrUpdate(t, got)` or `golden.CheckOrUpdateYAML(t, got)`
 - **Test helpers with underscores**: Functions prefixed `Z_ForTests_` are test-only exports (e.g., `Z_ForTests_CreateDBFromYAML`)
 - **Environment variables**:
-  - `AUTHD_SKIP_EXTERNAL_DEPENDENT_TESTS=1`: Skip tests requiring external tools (vhs)
   - `AUTHD_SKIP_ROOT_TESTS=1`: Skip tests that fail when run as root
 
 ### Code Generation
@@ -80,7 +79,7 @@ The PAM module has two implementations (see `pam/Hacking.md`):
 - Use `testify/require` for assertions (not `assert`)
 - Golden files in `testdata/golden/` subdirectories matching test structure
 - Test-only exports via `export_test.go` files (no build tag, package-level visibility)
-- PAM integration tests use `vhs` tapes in `pam/integration-tests/testdata/tapes/`
+- PAM integration tests use `ptytest` in `pam/integration-tests/`
 
 ## Common Workflows
 
@@ -113,7 +112,7 @@ git --no-pager log
 - **Go**: See `go.mod` for version requirements, uses go modules with vendoring
 - **Rust**: Cargo with vendor filtering (see `Cargo.toml` workspace)
 - **Required**: `libpam-dev`, `libglib2.0-dev`, `protoc`, `cargo-vendor-filterer`
-- **Optional**: `vhs` (PAM CLI tests), `delta` (colored diffs in tests)
+- **Optional**: `delta` (colored diffs in tests)
 
 ## Code Style
 - Follow [Effective Go](https://go.dev/doc/effective_go) for Go style conventions

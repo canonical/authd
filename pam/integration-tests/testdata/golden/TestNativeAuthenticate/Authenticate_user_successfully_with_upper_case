@@ -1,29 +1,3 @@
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-== Provider selection ==
-  1. local
-  2. ExampleBroker
-Choose your provider:
->
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-== Provider selection ==
-  1. local
-  2. ExampleBroker
-Choose your provider:
-> 2
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-== Provider selection ==
-  1. local
-  2. ExampleBroker
-Choose your provider:
-> 2
-== Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
-Gimme your password:
->
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
 == Provider selection ==
   1. local
   2. ExampleBroker
@@ -39,5 +13,3 @@ PAM Authenticate()
 PAM AcctMgmt()
   User: "user-integration-upper-case-native-testnativeauthenticate@example.com"
   Result: success
->
-────────────────────────────────────────────────────────────────────────────────
