@@ -1341,9 +1341,13 @@ func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (s
 		b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID)
 	}
 
-	if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
+	err := token.CacheAuthInfo(session.tokenPath, authInfo)
+	if err != nil && b.cfg.forceAccessCheckWithProvider {
 		log.Errorf(context.Background(), "Failed to store token: %s", err)
 		return AuthDenied, unexpectedErrMsg("failed to store token")
+	}
+	if err != nil {
+		log.Errorf(context.Background(), "Failed to store token: %s. Continuing with login since provider access check is not forced.", err)
 	}
 
 	return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
