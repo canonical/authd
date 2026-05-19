@@ -10,6 +10,7 @@ import (
 	"os/user"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -155,30 +156,31 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 	userPrivateGroup := &u.Groups[0]
 
 	var oldUserInfo *types.UserInfo
-	checkEqualUserExists := func() (exists bool, err error) {
+	var pendingDiffs []string
+	checkUserNeedsUpdate := func() (needsUpdate bool, err error) {
 		// Check if the user already exists in the database.
 		oldUserInfo, err = m.getOldUserInfoFromDB(u.Name)
 		if err != nil {
 			return false, err
 		}
 		if oldUserInfo == nil {
+			return true, nil
+		}
+		pendingDiffs = diffNormalizedUserInfo(u, *oldUserInfo)
+		if len(pendingDiffs) == 0 {
+			log.Debugf(context.TODO(), "User %q in database is up to date with current user info", u.Name)
 			return false, nil
 		}
-		if !compareNewUserInfoWithUserInfoFromDB(u, *oldUserInfo) {
-			log.Debugf(context.TODO(), "User %q is already in our database", u.Name)
-			return false, nil
-		}
-
-		log.Debugf(context.TODO(), "User %q in database already matches current", u.Name)
+		log.Debugf(context.TODO(), "User %q exists in database but needs update", u.Name)
 		return true, nil
 	}
 
 	// Do a first check before locking, so that if the user is already there and
 	// matches the DB entry, we can avoid any kind of locking (and so being
 	// blocked by other pre-auth users that may try to login meanwhile).
-	exists, err := checkEqualUserExists()
-	if exists || err != nil {
-		// The user already exists, so no update needed, or an error occurred.
+	needsUpdate, err := checkUserNeedsUpdate()
+	if !needsUpdate || err != nil {
+		// The user is up to date, or an error occurred.
 		return err
 	}
 
@@ -188,11 +190,15 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 	// Now that we're locked, check again if meanwhile some other request
 	// created the same user, if not we can do all the kinds of locking since
 	// we're sure that the user needs to be added or updated in the database.
-	if exists, err := checkEqualUserExists(); exists || err != nil {
+	if needsUpdate, err := checkUserNeedsUpdate(); !needsUpdate || err != nil {
 		return err
 	}
 
-	log.Debugf(context.TODO(), "User %q needs update", u.Name)
+	if oldUserInfo == nil {
+		log.Debugf(context.TODO(), "User %q needs update: new user", u.Name)
+	} else {
+		log.Debugf(context.TODO(), "User %q needs update: %s", u.Name, strings.Join(pendingDiffs, ", "))
+	}
 
 	lockedEntries, unlockEntries, err := localentries.WithUserDBLock()
 	if err != nil {
@@ -345,18 +351,18 @@ func (m *Manager) getOldUserInfoFromDB(name string) (oldUserInfo *types.UserInfo
 	return userInfoFromUserAndGroupRows(oldUser, oldGroups, oldLocalGroups), nil
 }
 
-func compareNewUserInfoWithUserInfoFromDB(newUserInfo, dbUserInfo types.UserInfo) bool {
-	if len(dbUserInfo.Groups) != len(newUserInfo.Groups) {
-		return false
-	}
-
-	// The new user UID may be set or un set, but despite that we're going to use
-	// the one we saved, so compare against it.
+// diffNormalizedUserInfo normalizes newUserInfo for comparison against dbUserInfo
+// (overriding UID and group GIDs to match existing DB values, since those are
+// assigned by authd and not by the broker) and returns the diff between the two.
+// An empty slice means the users are equal.
+func diffNormalizedUserInfo(newUserInfo, dbUserInfo types.UserInfo) []string {
+	// The new user UID may be set or unset, but we're going to use the one we
+	// saved, so normalize it before comparing.
 	newUserInfo.UID = dbUserInfo.UID
 
-	// We then need to normalize the new user groups in order to be able to
-	// compare the two users, in fact we may receive from the broker user entries
-	// with unset or different GIDs, so let's
+	// Normalize group GIDs: the broker may send different or absent GIDs, so
+	// match each new group to its existing DB counterpart (by UGID, falling
+	// back to name for legacy records where UGID was not stored).
 	for idx, g := range newUserInfo.Groups {
 		oldGroupIdx := slices.IndexFunc(dbUserInfo.Groups, func(dg types.GroupInfo) bool {
 			if dg.UGID == "" {
@@ -372,7 +378,7 @@ func compareNewUserInfoWithUserInfoFromDB(newUserInfo, dbUserInfo types.UserInfo
 		newUserInfo.Groups[idx].GID = dbUserInfo.Groups[oldGroupIdx].GID
 	}
 
-	return dbUserInfo.Equals(newUserInfo)
+	return dbUserInfo.Diff(newUserInfo)
 }
 
 // SetUserIDResp is the response type of SetUserID.
