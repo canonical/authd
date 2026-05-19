@@ -18,12 +18,13 @@ ${SUITE_OUTPUT_DIR}    ${OUTPUT_DIR}/${SUITE_NAME.rsplit('.')[-1]}
 # they are referenced by relative URLs in log.html instead of being embedded
 # as base64. Set to an empty string to fall back to inline base64 embedding.
 ${YARF_IMAGE_DIR}    ${SUITE_OUTPUT_DIR}/screenshots
+# Used by YARF OCR matching internals (read from environment).
+${OCR_CONFIDENCE_THRESHOLD}    94
+${OCR_SIMILARITY_THRESHOLD}    92
 
 
 *** Keywords ***
 Log In
-    Set OCR Confidence Threshold    0.94
-    Set OCR Coincidence Threshold    92
     Log In With Password    ubuntu
 
 
