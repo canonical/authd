@@ -1704,7 +1704,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_userSelected,
 			},
 			wantExitStatus: pamError{
-				status: pam.ErrSystem,
+				status: pam.ErrAuthinfoUnavail,
 				msg:    "could not get current available brokers: brokers loading failed",
 			},
 			wantNoBrokers: true,
