@@ -155,7 +155,8 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 	var sharedSSHDPort, sharedSSHDUserHome, sharedAuthdSocket, sharedAuthdGroupOutput string
 	prepareSharedSSHDTests := func(subtest *testing.T) {
 		t.Logf("Preparing SSH tests with shared sshd, triggered by %q", subtest.Name())
-		sharedAuthdSocket, sharedAuthdGroupOutput = sharedAuthd(t)
+		sharedAuthdSocket, sharedAuthdGroupOutput = sharedAuthd(t,
+			testutils.WithHomeBaseDir(sshTestsHomeBase))
 		serviceFile := createSSHDServiceFile(t, execModule, execChild, pamMkHomeDirModule, sharedAuthdSocket)
 		sshdEnv = append(sshdEnv, nssEnv...)
 		sshdEnv = append(sshdEnv, fmt.Sprintf("AUTHD_NSS_SOCKET=%s", sharedAuthdSocket))
@@ -452,7 +453,8 @@ Wait@%dms`, sshDefaultFinalWaitTimeout.Milliseconds()),
 			} else if !sharedSSHD {
 				socketPath, groupOutput = sharedAuthd(t,
 					testutils.WithGroupFileOutput(sharedAuthdGroupOutput),
-					testutils.WithEnvironment(authdEnv...))
+					testutils.WithEnvironment(authdEnv...),
+					testutils.WithHomeBaseDir(sshTestsHomeBase))
 			}
 			if tc.socketPath != "" {
 				socketPath = tc.socketPath
@@ -681,7 +683,7 @@ func startSSHDForTest(t *testing.T, serviceFile, hostKey, user string, preloadLi
 		fmt.Sprintf("HOME=%s", sshTestsHomeBase),
 		fmt.Sprintf("LD_PRELOAD=%s", strings.Join(preloadLibraries, ":")),
 		fmt.Sprintf("AUTHD_TEST_SSH_USER=%s", user),
-		fmt.Sprintf("AUTHD_TEST_SSH_HOME=%s", userHome),
+		fmt.Sprintf("AUTHD_TEST_SSH_HOME_BASE=%s", sshTestsHomeBase),
 		fmt.Sprintf("AUTHD_TEST_SSH_PAM_SERVICE=%s", serviceFile),
 	}, env...))
 

@@ -26,6 +26,7 @@ typedef struct {
   struct passwd parent;
 
   char *authd_name;
+  char *home_path;
 } MockPasswd;
 
 static MockPasswd passwd_entities[512];
@@ -40,20 +41,23 @@ __attribute__((destructor))
 void destructor (void)
 {
   for (size_t i = 0; i < SIZE_OF_ARRAY (passwd_entities); ++i)
-    free (passwd_entities[i].authd_name);
+    {
+      free (passwd_entities[i].authd_name);
+      free (passwd_entities[i].home_path);
+    }
 
   fprintf (stderr, "sshd_preloader[%d]: Library unloaded\n", getpid ());
 }
 
 static const char *
-get_home_path (void)
+get_home_base_path (void)
 {
-  const char *home_path = getenv ("AUTHD_TEST_SSH_HOME");
+  const char *base_path = getenv ("AUTHD_TEST_SSH_HOME_BASE");
 
-  if (home_path == NULL)
+  if (base_path == NULL)
     return "/not-existing-home";
 
-  return home_path;
+  return base_path;
 }
 
 static bool
@@ -117,6 +121,9 @@ getpwnam (const char *name)
   struct passwd *passwd_entity = NULL;
   static atomic_int last_entity_idx;
   int entity_idx;
+#ifdef AUTHD_TESTS_SSH_USE_AUTHD_NSS
+  struct passwd *nss_entity = NULL;
+#endif
 
   if (orig_getpwnam == NULL)
     {
@@ -135,6 +142,8 @@ getpwnam (const char *name)
 #ifdef AUTHD_TESTS_SSH_USE_AUTHD_NSS
   if ((passwd_entity = orig_getpwnam (name)))
     {
+      nss_entity = passwd_entity;
+
       fprintf (stderr, "sshd_preloader[%d]: Simulating to be the broker user %s (%d:%d)\n",
                getpid (), passwd_entity->pw_name, passwd_entity->pw_uid,
                passwd_entity->pw_gid);
@@ -175,6 +184,19 @@ getpwnam (const char *name)
       if (!passwd_entity->pw_name || strcmp (passwd_entity->pw_name, name) != 0)
         continue;
 
+#ifdef AUTHD_TESTS_SSH_USE_AUTHD_NSS
+      /* Update the cached entry with the latest NSS data so that fields
+       * like pw_dir reflect the broker-assigned home directory once the
+       * user has been authenticated and is known to authd.
+       */
+      if (nss_entity)
+        {
+          passwd_entity->pw_dir = nss_entity->pw_dir;
+          passwd_entity->pw_gecos = nss_entity->pw_gecos;
+          passwd_entity->pw_shell = nss_entity->pw_shell;
+        }
+#endif
+
       fprintf (stderr, "sshd_preloader[%d]: Recycling fake entity for user %s\n",
                getpid (), name);
       return passwd_entity;
@@ -193,10 +215,23 @@ getpwnam (const char *name)
 
   if (passwd_entity->pw_name == NULL)
     {
+      MockPasswd *mock_passwd = &passwd_entities[entity_idx];
+
       passwd_entity->pw_shell = AUTHD_TEST_SHELL;
       passwd_entity->pw_gecos = AUTHD_TEST_GECOS;
       passwd_entity->pw_name = (char *) name;
-      passwd_entity->pw_dir = (char *) get_home_path ();
+
+      /* Construct a per-user home path from the base dir + username,
+       * so each user gets their own home directory even in the shared
+       * sshd case where AUTHD_TEST_SSH_USER is the accept-all user.
+       */
+      free (mock_passwd->home_path);
+      if (asprintf (&mock_passwd->home_path, "%s/%s",
+                     get_home_base_path (), name) < 0)
+        mock_passwd->home_path = NULL;
+      passwd_entity->pw_dir = mock_passwd->home_path
+                                ? mock_passwd->home_path
+                                : (char *) get_home_base_path ();
 
       if (!is_lower_case (passwd_entity->pw_name))
         {
@@ -230,6 +265,56 @@ getpwnam (const char *name)
            passwd_entity->pw_gid);
 
   return passwd_entity;
+}
+
+/*
+ * Override getpwnam_r() so that pam_modutil_getpwnam() (which uses
+ * getpwnam_r internally) can also find our fake test users.
+ * Without this, pam_mkhomedir fails to look up the user and does not
+ * create the home directory, causing sshd to print
+ * "Could not chdir to home directory".
+ */
+int
+getpwnam_r (const char *name, struct passwd *pwd, char *buf, size_t buflen,
+            struct passwd **result)
+{
+  static int (*orig_getpwnam_r) (const char *, struct passwd *, char *,
+                                 size_t, struct passwd **) = NULL;
+
+  if (orig_getpwnam_r == NULL)
+    {
+      orig_getpwnam_r = dlsym (RTLD_NEXT, "getpwnam_r");
+      assert (orig_getpwnam_r);
+    }
+
+  if (!is_valid_test_user (name))
+    return orig_getpwnam_r (name, pwd, buf, buflen, result);
+
+#ifdef AUTHD_TESTS_SSH_USE_AUTHD_NSS
+  /* Try the real NSS lookup first (e.g. via authd NSS module). */
+  int ret = orig_getpwnam_r (name, pwd, buf, buflen, result);
+  if (ret != 0)
+    return ret;
+  if (*result != NULL)
+    {
+      /* Override uid/gid like getpwnam does. */
+      pwd->pw_uid = getuid ();
+      pwd->pw_gid = getgid ();
+      return 0;
+    }
+#endif
+
+  /* Fall back to our getpwnam() override which creates fake users. */
+  struct passwd *pw = getpwnam (name);
+  if (pw == NULL)
+    {
+      *result = NULL;
+      return 0;
+    }
+
+  *pwd = *pw;
+  *result = pwd;
+  return 0;
 }
 
 FILE *
