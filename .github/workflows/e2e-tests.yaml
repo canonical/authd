@@ -79,6 +79,10 @@ jobs:
 
   provision-and-run:
     needs: compute-hash
+    permissions:
+      contents: read
+      packages: write
+      statuses: write
     strategy:
       matrix:
         ubuntu-version: [ 'noble', 'resolute' ]
