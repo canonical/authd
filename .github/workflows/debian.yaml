@@ -108,7 +108,10 @@ jobs:
       - compute-hash
       - get-modified-files
     permissions:
+      # Needed to update the packaging branch with the new Debian sources
       contents: write
+      # Needed to push OCI artifact to ghcr.io
+      packages: write
     strategy:
       matrix:
         ubuntu-version: [ 'noble', 'questing', 'devel' ]
