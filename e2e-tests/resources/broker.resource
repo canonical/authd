@@ -108,19 +108,23 @@ Log In With Remote User Through CLI: Local Password
     Match Text    ${username}@ubuntu:~$    120
 
 
-Try Changing Username In sudo su Log In
-    Hid.Type String    sudo su
+Check That su To Local User Goes To Local Broker
+    Hid.Type String    su ubuntu
     Hid.Keys Combo    Return
-    Try Navigating Back to User Selection
-    Cancel Operation
+    Match Text    Password:    120
+    Hid.Type String    ubuntu    # The password for the local user is the same as the username in our test setup
+    Hid.Keys Combo    Return
+    Match Text    ubuntu@ubuntu:~$    120
 
 
-Try Changing Username In su Log In
+Check That Username Cannot Be Changed When Using su
     [Arguments]    ${username}
     Hid.Type String    su ${username}
     Hid.Keys Combo    Return
     Try Navigating Back to User Selection
     Cancel Operation
+    Match Text    su: Critical error - immediate abort    120
+
 
 Try Navigating Back to User Selection
     # First screen is the autoselected local password mode

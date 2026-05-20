@@ -147,6 +147,11 @@ Close Terminal In Sudo Mode
     Close Focused Window
 
 
+Clear Terminal
+    Hid.Type String    clear
+    Hid.Keys Combo    Return
+
+
 Log Out From Terminal Session
     Match Text    @ubuntu    120
     # We are in a machinectl session, so we need to ^] thrice to exit properly
@@ -205,7 +210,7 @@ Launch App
 
 
 Cancel Operation
-    Hid.Keys Combo    Control_L    C
+    Hid.Keys Combo    Control_L    c
     Match Text    @ubuntu    15
 
 
