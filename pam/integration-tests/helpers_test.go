@@ -3,9 +3,7 @@ package main_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -196,18 +194,18 @@ func buildPAMExecChild(t *testing.T) string {
 func prepareFileLogging(t *testing.T, fileName string) string {
 	t.Helper()
 
-	cliLog := filepath.Join(t.TempDir(), fileName)
-	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, cliLog)
+	file := filepath.Join(t.TempDir(), fileName)
+	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, file)
 	t.Cleanup(func() {
-		out, err := os.ReadFile(cliLog)
-		if errors.Is(err, fs.ErrNotExist) {
+		exists, err := fileutils.FileExists(file)
+		require.NoError(t, err, "Teardown: Impossible to check if log file %q exists", file)
+		if !exists {
 			return
 		}
-		require.NoError(t, err, "Teardown: Impossible to read PAM client logs")
-		t.Log(string(out))
+		testlog.LogFileContents(t, file)
 	})
 
-	return cliLog
+	return file
 }
 
 func requirePreviousBrokerForUser(t *testing.T, socketPath string, brokerName string, user string) {
