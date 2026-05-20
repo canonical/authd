@@ -2,8 +2,8 @@
 PAM Error Message: could not get current available brokers: permission denied: only root can perform this operation
 PAM Authenticate()
   User: "<unset>"
-  Result: error: PAM exit code: 4
-    System error
+  Result: error: PAM exit code: 9
+    Authentication service cannot retrieve authentication info
 PAM Info Message: acct=incomplete
 PAM AcctMgmt()
   User: "<unset>"
@@ -15,8 +15,8 @@ PAM AcctMgmt()
 PAM Error Message: could not get current available brokers: permission denied: only root can perform this operation
 PAM Authenticate()
   User: "<unset>"
-  Result: error: PAM exit code: 4
-    System error
+  Result: error: PAM exit code: 9
+    Authentication service cannot retrieve authentication info
 PAM Info Message: acct=incomplete
 PAM AcctMgmt()
   User: "<unset>"
