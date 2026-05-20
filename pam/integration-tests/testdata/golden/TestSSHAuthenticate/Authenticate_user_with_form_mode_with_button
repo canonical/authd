@@ -37,7 +37,6 @@ Enter 'r' to cancel the request and go back to select the authentication method
 > temporary pass00
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button@example.com'
 PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button@example.com'
-Could not chdir to home directory /tmp/authd-tests/home/user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button@example.com: No such file or directory
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_with_form_mode_with_button]
   HOME=${AUTHD_TEST_HOME}
   LOGNAME=user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button@example.com

@@ -39,7 +39,6 @@ Enter 'r' to cancel the request and go back to select the authentication method
 >
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-prevent-user-from-switching-username-with-shared-sshd@example.com'
 PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-prevent-user-from-switching-username-with-shared-sshd@example.com'
-Could not chdir to home directory /tmp/authd-tests/home/authd-test-user-sshd-accept-all@example.com: No such file or directory
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate]
   HOME=${AUTHD_TEST_HOME}
   LOGNAME=user-integration-pre-check-ssh-prevent-user-from-switching-username-with-shared-sshd@example.com

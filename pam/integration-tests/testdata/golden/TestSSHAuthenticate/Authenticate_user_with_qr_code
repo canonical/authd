@@ -76,7 +76,6 @@ Or enter 'r' to go back to select the authentication method
 > 1
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-with-qr-code@example.com'
 PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-with-qr-code@example.com'
-Could not chdir to home directory /tmp/authd-tests/home/user-integration-pre-check-ssh-authenticate-user-with-qr-code@example.com: No such file or directory
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_with_qr_code]
   HOME=${AUTHD_TEST_HOME}
   LOGNAME=user-integration-pre-check-ssh-authenticate-user-with-qr-code@example.com

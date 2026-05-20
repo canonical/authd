@@ -55,7 +55,6 @@ Press Enter to wait for authentication or enter 'r' to go back to select the aut
 >
 PAM Authenticate() finished for user 'user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com'
 PAM AcctMgmt() finished for user 'user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com'
-Could not chdir to home directory /tmp/authd-tests/home/authd-test-user-sshd-accept-all@example.com: No such file or directory
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate]
   HOME=${AUTHD_TEST_HOME}
   LOGNAME=user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com
