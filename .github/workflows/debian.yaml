@@ -105,6 +105,8 @@ jobs:
     needs:
       - compute-hash
       - get-modified-files
+    permissions:
+      contents: write
     strategy:
       matrix:
         ubuntu-version: [ 'noble', 'questing', 'devel' ]
