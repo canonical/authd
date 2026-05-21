@@ -21,6 +21,11 @@ Test that disabling broker prevents remote logins
     # Disable broker
     Disable Broker And Purge Config
 
+    # Check that remote user is redirected to local broker when trying to log in through GDM
+    Start Log In With Remote User Through GDM: QR Code    ${username}
+    Check That User Is Redirected To Local Broker
+    Escape Back to GDM Login Screen
+
     # Check that local user can still log in
     Log In
 

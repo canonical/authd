@@ -254,6 +254,11 @@ Force Password Change
     Match Text    passwd: password changed.    30
 
 
+Escape Back to GDM Login Screen
+    Hid.Keys Combo    Escape
+    Match Text    Not listed    120
+
+
 ### Setup ###
 
 Restore Snapshot
