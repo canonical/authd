@@ -45,7 +45,7 @@ func TestNewUser(t *testing.T) {
 			gecos:  "Test User",
 			groups: []info.Group{{Name: "test-group", UGID: "12345"}},
 		},
-		"Create_a_new_user_with_default_gecos": {name: "test-user",
+		"Create_a_new_user_with_empty_gecos": {name: "test-user",
 			home:   "/home/test-user",
 			uuid:   "some-uuid",
 			shell:  "/usr/bin/zsh",
@@ -66,17 +66,12 @@ func TestNewUser(t *testing.T) {
 				wantShell = "/usr/bin/bash"
 			}
 
-			wantGecos := tc.gecos
-			if tc.gecos == "" {
-				wantGecos = tc.name
-			}
-
 			got := info.NewUser(tc.name, tc.home, tc.uuid, tc.shell, tc.gecos, tc.groups)
 			require.Equal(t, tc.name, got.Name, "Name does not match the expected value")
 			require.Equal(t, wantHome, got.Home, "Home does not match the expected value")
 			require.Equal(t, tc.uuid, got.UUID, "UUID does not match the expected value")
 			require.Equal(t, wantShell, got.Shell, "Shell does not match the expected value")
-			require.Equal(t, wantGecos, got.Gecos, "Gecos does not match the expected value")
+			require.Equal(t, tc.gecos, got.Gecos, "Gecos does not match the expected value")
 			require.Equal(t, tc.groups, got.Groups, "Groups do not match the expected value")
 		})
 	}

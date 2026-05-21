@@ -124,7 +124,7 @@ func TestGetUserInfo(t *testing.T) {
 
 			p := msentraid.New()
 
-			got, err := p.GetUserInfo(idToken)
+			got, err := p.GetUserInfo(idToken, false)
 			if tc.wantErr {
 				require.Error(t, err, "GetUserInfo should return an error")
 				return

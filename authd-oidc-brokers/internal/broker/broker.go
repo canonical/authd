@@ -719,7 +719,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 		return AuthDenied, unexpectedErrMsg("could not get provider metadata")
 	}
 
-	authInfo.UserInfo, err = b.getUserInfo(ctx, session, t, rawIDToken)
+	authInfo.UserInfo, err = b.getUserInfo(ctx, session, t, rawIDToken, false)
 	if err != nil {
 		log.Errorf(context.Background(), "could not get user info: %s", err)
 		return AuthDenied, errorMessageForDisplay(err, "Could not get user info")
@@ -1165,9 +1165,12 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 	t.ProviderMetadata = oldToken.ProviderMetadata
 	t.DeviceRegistrationData = oldToken.DeviceRegistrationData
 
-	t.UserInfo, err = b.getUserInfo(ctx, session, oauthToken, rawIDToken)
+	t.UserInfo, err = b.getUserInfo(ctx, session, oauthToken, rawIDToken, true)
 	if err != nil {
 		return nil, err
+	}
+	if t.UserInfo.Gecos == "" {
+		t.UserInfo.Gecos = oldToken.UserInfo.Gecos
 	}
 
 	t.UserInfo.Groups = oldToken.UserInfo.Groups
@@ -1180,13 +1183,13 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 // fetched from the `/userinfo` endpoint and merged before extracting user info.
 // Note that verifying the ID token requires a working network connection to the provider's JWKs endpoint,
 // so make sure to only call this function if the session is online.
-func (b *Broker) getUserInfo(ctx context.Context, session *session, token *oauth2.Token, rawIDToken string) (info.User, error) {
+func (b *Broker) getUserInfo(ctx context.Context, session *session, token *oauth2.Token, rawIDToken string, isRefresh bool) (info.User, error) {
 	idToken, err := session.oidcServer.Verifier(&b.oidcCfg).Verify(ctx, rawIDToken)
 	if err != nil {
 		return info.User{}, fmt.Errorf("could not verify token: %w", err)
 	}
 
-	userInfo, err := b.provider.GetUserInfo(idToken)
+	userInfo, err := b.provider.GetUserInfo(idToken, isRefresh)
 	var missingClaimErr *providerErrors.MissingClaimError
 	if errors.As(err, &missingClaimErr) {
 		// The ID token is missing a required claim. Try fetching the claims from the UserInfo endpoint.
@@ -1204,7 +1207,7 @@ func (b *Broker) getUserInfo(ctx context.Context, session *session, token *oauth
 		if err != nil {
 			return info.User{}, fmt.Errorf("could not merge ID token and UserInfo endpoint claims: %w", err)
 		}
-		userInfo, err = b.provider.GetUserInfo(claims)
+		userInfo, err = b.provider.GetUserInfo(claims, isRefresh)
 	}
 	if err != nil {
 		return info.User{}, err

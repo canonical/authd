@@ -49,7 +49,7 @@ func (p GenericProvider) GetMetadata(provider *oidc.Provider) (map[string]interf
 }
 
 // GetUserInfo returns user information from the claims of the provided Claimer.
-func (p GenericProvider) GetUserInfo(claimer info.Claimer) (info.User, error) {
+func (p GenericProvider) GetUserInfo(claimer info.Claimer, _ bool) (info.User, error) {
 	var claimsMap map[string]interface{}
 	if err := claimer.Claims(&claimsMap); err != nil {
 		return info.User{}, fmt.Errorf("failed to get ID token claims: %v", err)

@@ -39,11 +39,12 @@ type brokerForTestConfig struct {
 	provider                     providers.Provider
 	apiVersion                   uint
 
-	getGroupsFails             bool
-	supportsDeviceRegistration bool
-	firstCallDelay             int
-	secondCallDelay            int
-	getGroupsFunc              func() ([]info.Group, error)
+	getGroupsFails                bool
+	supportsDeviceRegistration    bool
+	requireNameClaimOnInitialAuth bool
+	firstCallDelay                int
+	secondCallDelay               int
+	getGroupsFunc                 func() ([]info.Group, error)
 
 	listenAddress       string
 	tokenHandlerOptions *testutils.TokenHandlerOptions
@@ -95,6 +96,7 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	provider := &testutils.MockProvider{
 		GetGroupsFails:                     cfg.getGroupsFails,
 		ProviderSupportsDeviceRegistration: cfg.supportsDeviceRegistration,
+		RequireNameClaimOnInitialAuth:      cfg.requireNameClaimOnInitialAuth,
 		FirstCallDelay:                     cfg.firstCallDelay,
 		SecondCallDelay:                    cfg.secondCallDelay,
 		GetGroupsFunc:                      cfg.getGroupsFunc,
@@ -199,6 +201,7 @@ func generateAndStoreCachedInfo(t *testing.T, options tokenOptions, path string)
 type tokenOptions struct {
 	username string
 	issuer   string
+	gecos    string
 	groups   []info.Group
 
 	expired                     bool
@@ -273,11 +276,14 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 	}
 
 	if !options.noUserInfo {
+		if options.gecos == "" {
+			options.gecos = options.username
+		}
 		tok.UserInfo = info.User{
 			Name:  options.username,
 			UUID:  "saved-user-id",
 			Home:  "/home/" + options.username,
-			Gecos: options.username,
+			Gecos: options.gecos,
 			Shell: "/usr/bin/bash",
 			Groups: []info.Group{
 				{Name: "saved-remote-group", UGID: "12345"},

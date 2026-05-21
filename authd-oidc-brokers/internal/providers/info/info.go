@@ -23,7 +23,7 @@ type User struct {
 
 // NewUser creates a new user with the specified values.
 //
-// It fills the defaults for Shell and Gecos if they are empty.
+// It fills the defaults for Shell if it is empty.
 func NewUser(name, home, uuid, shell, gecos string, groups []Group) User {
 	u := User{
 		Name:   name,
@@ -39,9 +39,6 @@ func NewUser(name, home, uuid, shell, gecos string, groups []Group) User {
 	}
 	if u.Shell == "" {
 		u.Shell = "/usr/bin/bash"
-	}
-	if u.Gecos == "" {
-		u.Gecos = u.Name
 	}
 
 	return u
