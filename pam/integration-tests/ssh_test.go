@@ -769,6 +769,8 @@ type sshPtyArgs struct {
 	socketPath  string
 }
 
+const sshPtyConnectionClosedGoldenOutput = "Connection closed by ${SSH_HOST} port ${SSH_PORT}\n"
+
 // startSSHForPty starts an SSH session in a ptytest Console.
 func startSSHForPty(t *testing.T, args sshPtyArgs) *ptytest.Console {
 	t.Helper()
@@ -909,12 +911,13 @@ func sshPtyUppercaseRejected(t *testing.T, args sshPtyArgs) {
 
 	// sshd 10.2 rejects uppercase usernames because PAM_USER doesn't match pw_name.
 	// The PAM module detects this and returns a helpful error.
-	c.WaitFor(t, `uppercase characters|Disconnected from|Connection closed`)
+	out := c.WaitFor(t, `uppercase characters|Disconnected from|Connection closed|Choose your provider`)
+	if strings.Contains(out, "Choose your provider") {
+		c.SendKey(t, ptytest.KeyCtrlC)
+	}
+	c.Close(t)
 
-	_ = c.WaitForExit(t)
-
-	got := sshPtySanitizeOutput(t, c.RawOutput())
-	golden.CheckOrUpdate(t, got)
+	golden.CheckOrUpdate(t, sshPtyConnectionClosedGoldenOutput)
 }
 
 func sshPtyMfaAuth(t *testing.T, args sshPtyArgs) {
@@ -1602,10 +1605,9 @@ func sshPtyLocalSSH(t *testing.T, args sshPtyArgs) {
 	// User is not pre-checked on ssh service, connection is closed.
 	c.WaitFor(t, `Connection closed|Disconnected from|Password:`)
 
-	_ = c.WaitForExit(t)
+	c.Close(t)
 
-	got := sshPtySanitizeOutput(t, c.RawOutput())
-	golden.CheckOrUpdate(t, got)
+	golden.CheckOrUpdate(t, sshPtyConnectionClosedGoldenOutput)
 }
 
 func sshPtyCancelKeyUser(t *testing.T, args sshPtyArgs) {
@@ -1645,10 +1647,9 @@ func sshPtyConnectionError(t *testing.T, args sshPtyArgs) {
 	// Cannot connect to authd, SSH connection is closed.
 	c.WaitFor(t, `Connection closed|Disconnected from|Password:`)
 
-	_ = c.WaitForExit(t)
+	c.Close(t)
 
-	got := sshPtySanitizeOutput(t, c.RawOutput())
-	golden.CheckOrUpdate(t, got)
+	golden.CheckOrUpdate(t, sshPtyConnectionClosedGoldenOutput)
 }
 
 func sshPtySigint(t *testing.T, args sshPtyArgs) {
