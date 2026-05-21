@@ -119,6 +119,7 @@ getpwnam (const char *name)
 {
   static struct passwd * (*orig_getpwnam) (const char *name) = NULL;
   struct passwd *passwd_entity = NULL;
+  struct passwd *source_entity = NULL;
   static atomic_int last_entity_idx;
   int entity_idx;
 #ifdef AUTHD_TESTS_SSH_USE_AUTHD_NSS
@@ -143,6 +144,7 @@ getpwnam (const char *name)
   if ((passwd_entity = orig_getpwnam (name)))
     {
       nss_entity = passwd_entity;
+      source_entity = passwd_entity;
 
       fprintf (stderr, "sshd_preloader[%d]: Simulating to be the broker user %s (%d:%d)\n",
                getpid (), passwd_entity->pw_name, passwd_entity->pw_uid,
@@ -179,10 +181,12 @@ getpwnam (const char *name)
 
   for (size_t i = atomic_load (&last_entity_idx); i != 0; --i)
     {
-      passwd_entity = &passwd_entities[i].parent;
+      struct passwd *cached_entity = &passwd_entities[i].parent;
 
-      if (!passwd_entity->pw_name || strcmp (passwd_entity->pw_name, name) != 0)
+      if (!cached_entity->pw_name || strcmp (cached_entity->pw_name, name) != 0)
         continue;
+
+      passwd_entity = cached_entity;
 
 #ifdef AUTHD_TESTS_SSH_USE_AUTHD_NSS
       /* Update the cached entry with the latest NSS data so that fields
@@ -206,8 +210,12 @@ getpwnam (const char *name)
                                           memory_order_relaxed);
   assert (entity_idx < SIZE_OF_ARRAY (passwd_entities));
 
-  if (passwd_entity)
-    passwd_entities[entity_idx].parent = *passwd_entity;
+  if (source_entity && source_entity->pw_name &&
+      strcasecmp (source_entity->pw_name, name) != 0)
+    source_entity = NULL;
+
+  if (source_entity)
+    passwd_entities[entity_idx].parent = *source_entity;
 
   passwd_entity = &passwd_entities[entity_idx].parent;
   assert (passwd_entity->pw_name == NULL ||
