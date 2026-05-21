@@ -1631,12 +1631,15 @@ func sshPtyUnexistentUser(t *testing.T, args sshPtyArgs) {
 	c := startSSHForPty(t, args)
 
 	// User doesn't exist, SSH connection is closed by sshd.
-	c.WaitFor(t, `Connection closed|Disconnected from`)
+	// On Ubuntu 24.04 (OpenSSH 9.6p1), authentication is handed off to
+	// pam_unix.so which shows a 'Password:' prompt. Starting with OpenSSH
+	// 10.2p1 (Ubuntu 26.04+), check_pam_user() was added to sshd and causes
+	// auth to fail before pam_unix.so is reached, so no prompt is shown.
+	c.WaitFor(t, `Connection closed|Disconnected from|Password:`)
 
-	_ = c.WaitForExit(t)
+	c.Close(t)
 
-	got := sshPtySanitizeOutput(t, c.RawOutput())
-	golden.CheckOrUpdate(t, got)
+	golden.CheckOrUpdate(t, sshPtyConnectionClosedGoldenOutput)
 }
 
 func sshPtyConnectionError(t *testing.T, args sshPtyArgs) {
