@@ -187,7 +187,7 @@ Block Network Access To Identity Provider
 #     sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${BROKER_CFG}
 Change Broker Configuration
     [Arguments]    ${config_key}    ${config_value}
-    SSH.Execute    sudo sed -i 's/^#*${config_key} =.*/${config_key} = ${config_value}/g' ${BROKER_CFG}
+    SSH.Execute    sudo sed -i 's|^#*${config_key} =.*|${config_key} = ${config_value}|g' ${BROKER_CFG}
     SSH.Execute    sudo snap restart ${BROKER_SNAP_NAME}
 
 
@@ -341,13 +341,11 @@ Check If Owner Was Registered
 
 
 Check Home Directory
-    [Arguments]    ${username}
-    Hid.Type String    echo $HOME
-    Hid.Keys Combo    Return
-    Match Text    /home/${username}    120
-    Hid.Type String    stat -c %U:%G $HOME
-    Hid.Keys Combo    Return
-    Match Text    ${username}:${username}
+    [Arguments]    ${username}    ${base_dir}=/home
+    ${home_dir} =    SSH.Execute    getent passwd ${username} | cut -d: -f6
+    Should Start With    ${home_dir}    ${base_dir}/
+    ${ownership} =    SSH.Execute    sudo stat -c %U:%G ${home_dir}
+    Should Be Equal    ${ownership}    ${username}:${username}
 
 
 Check That Remote User Is Not Allowed To Log In
