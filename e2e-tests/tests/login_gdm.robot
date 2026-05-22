@@ -26,6 +26,7 @@ Test login with GDM
     # Check remote user is properly added to the system
     Open Terminal
     Check If User Was Added Properly    ${username}
+    Check Home Directory    ${username}
     Close Focused Window
     Log Out
 
