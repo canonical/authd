@@ -36,7 +36,7 @@ func TestGroupDeleteCommand(t *testing.T) {
 
 		"Confirmation_prompt_accepted_with_y": {
 			args:             []string{"delete", "group4-nonprimary"},
-			stdin:            "y\n",
+			stdin:            "y",
 			expectedExitCode: 0,
 		},
 		"Confirmation_prompt_accepted_with_yes": {

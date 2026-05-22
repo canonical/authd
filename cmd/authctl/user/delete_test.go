@@ -42,7 +42,7 @@ func TestUserDeleteCommand(t *testing.T) {
 
 		"Confirmation_prompt_accepted_with_y": {
 			args:             []string{"delete", "user2@example.com"},
-			stdin:            "y\n",
+			stdin:            "y",
 			expectedExitCode: 0,
 		},
 		"Confirmation_prompt_accepted_with_yes": {

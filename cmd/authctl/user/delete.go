@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -60,7 +61,7 @@ func runDeleteUser(cmd *cobra.Command, args []string) error {
 
 		reader := bufio.NewReader(os.Stdin)
 		answer, err := reader.ReadString('\n')
-		if err != nil {
+		if err != nil && (err != io.EOF || len(answer) == 0) {
 			return fmt.Errorf("failed to read confirmation: %w", err)
 		}
 		answer = strings.TrimSpace(strings.ToLower(answer))
