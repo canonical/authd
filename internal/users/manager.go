@@ -737,9 +737,15 @@ func (m *Manager) DeleteUser(username string, removeHome bool) (err error) {
 		return err
 	}
 
-	// Delete the user's primary group
-	if err := m.db.DeleteGroup(userRow.GID); err != nil {
-		return fmt.Errorf("failed to delete primary group for user %q: %w", username, err)
+	// Delete the user's primary group only if no remaining user has it as primary.
+	primaryUserNames, err := m.isGroupPrimaryForUsers(userRow.GID)
+	if err != nil {
+		return fmt.Errorf("failed to check for users with primary group for user %q: %w", username, err)
+	}
+	if len(primaryUserNames) == 0 {
+		if err := m.db.DeleteGroup(userRow.GID); err != nil {
+			return fmt.Errorf("failed to delete primary group for user %q: %w", username, err)
+		}
 	}
 
 	if removeHome && userRow.Dir != "" {

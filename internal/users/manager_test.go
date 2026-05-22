@@ -799,6 +799,7 @@ func TestUpdateBrokerForUser(t *testing.T) {
 func TestDeleteUser(t *testing.T) {
 	tests := map[string]struct {
 		username string
+		dbFile   string
 
 		localGroupsFile string
 		removeHome      bool
@@ -809,6 +810,10 @@ func TestDeleteUser(t *testing.T) {
 		"Successfully_delete_user":                                   {},
 		"Successfully_delete_user_removes_them_from_local_groups":    {localGroupsFile: "users_in_groups.group"},
 		"Successfully_delete_user_keeps_other_users_in_shared_group": {username: "user2@example.com"},
+		"Successfully_delete_user_keeps_primary_group_if_other_users_still_use_it": {
+			username: "user1@example.com",
+			dbFile:   "multiple_users_shared_primary_group_with_tmp_home",
+		},
 		"Successfully_delete_user_and_remove_home":                   {removeHome: true},
 
 		"Error_if_user_does_not_exist": {username: "doesnotexist@example.com", wantErrType: db.NoDataFoundError{}},
@@ -826,7 +831,10 @@ func TestDeleteUser(t *testing.T) {
 			}
 
 			dbDir := t.TempDir()
-			dbFile := "multiple_users_and_groups_with_tmp_home"
+			dbFile := tc.dbFile
+			if dbFile == "" {
+				dbFile = "multiple_users_and_groups_with_tmp_home"
+			}
 			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", dbFile+".db.yaml"), dbDir)
 			require.NoError(t, err, "Setup: could not create database from testdata")
 			m := newManagerForTests(t, dbDir)
