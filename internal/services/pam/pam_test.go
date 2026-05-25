@@ -197,11 +197,13 @@ func TestSelectBroker(t *testing.T) {
 		existingDB  string
 
 		currentUserNotRoot bool
+		useShortUsernames  bool
 
 		wantErr bool
 	}{
 		"Successfully_select_a_broker_and_creates_auth_session":   {username: "success@example.com", sessionMode: auth.SessionModeLogin},
 		"Successfully_select_a_broker_and_creates_passwd_session": {username: "success@example.com", sessionMode: auth.SessionModeChangePassword},
+		"Successfully_select_a_broker_with_short_username":        {username: "success", useShortUsernames: true, existingDB: "one-user-one-group.db"},
 
 		"Error_when_not_root":                             {username: "success@example.com", currentUserNotRoot: true, wantErr: true},
 		"Error_when_username_is_empty":                    {wantErr: true},
@@ -211,6 +213,9 @@ func TestSelectBroker(t *testing.T) {
 		"Error_when_broker_does_not_exist":                {username: "no broker@example.com", brokerID: "does not exist", wantErr: true},
 		"Error_when_broker_does_not_provide_a_session_ID": {username: "ns_no_id@example.com", wantErr: true},
 		"Error_when_starting_the_session":                 {username: "ns_error@example.com", wantErr: true},
+
+		"Error_when_selecting_a_broker_with_short_username_not_allowed":                           {username: "shortusername", wantErr: true},
+		"Error_when_selecting_a_broker_with_short_username_allowed_but_user_does_not_exist_in_db": {username: "shortusername", useShortUsernames: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -222,7 +227,10 @@ func TestSelectBroker(t *testing.T) {
 				require.NoError(t, err, "Setup: could not create database from testdata")
 			}
 
-			m, err := users.NewManager(users.DefaultConfig, cacheDir)
+			managerCfg := users.DefaultConfig
+			managerCfg.UseShortUsernames = tc.useShortUsernames
+
+			m, err := users.NewManager(managerCfg, cacheDir)
 			require.NoError(t, err, "Setup: could not create user manager")
 			t.Cleanup(func() { _ = m.Stop() })
 

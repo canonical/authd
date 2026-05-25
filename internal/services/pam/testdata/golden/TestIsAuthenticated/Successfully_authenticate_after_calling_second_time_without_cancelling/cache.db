@@ -5,6 +5,7 @@ users:
       gecos: gecos for ia_second_call@example.com
       dir: /home/ia_second_call@example.com
       shell: /bin/sh/ia_second_call@example.com
+      full_username: ia_second_call@example.com
 groups:
     - name: ia_second_call@example.com
       gid: 1111

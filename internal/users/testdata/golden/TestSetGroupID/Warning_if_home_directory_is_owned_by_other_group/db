@@ -7,6 +7,7 @@ users:
         On multiple lines
       dir: /tmp/home/user-1111
       shell: /bin/bash
+      full_username: user1@example.com
       broker_id: broker-id
     - name: user2@example.com
       uid: 2222
@@ -14,6 +15,7 @@ users:
       gecos: User2
       dir: /home/user2@example.com
       shell: /bin/dash
+      full_username: user2@example.com
       broker_id: broker-id
     - name: user3@example.com
       uid: 3333
@@ -21,6 +23,7 @@ users:
       gecos: User3
       dir: /home/user3@example.com
       shell: /bin/zsh
+      full_username: user3@example.com
       broker_id: broker-id
     - name: userwithoutbroker@example.com
       uid: 4444
@@ -28,6 +31,7 @@ users:
       gecos: userwithoutbroker
       dir: /home/userwithoutbroker@example.com
       shell: /bin/sh
+      full_username: userwithoutbroker@example.com
 groups:
     - name: group2withoutugid
       gid: 22222

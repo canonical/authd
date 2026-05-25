@@ -26,6 +26,7 @@ Enter 'r' to cancel the request and go back to select the authentication method
 Enter 'r' to cancel the request and go back to select the authentication method
 (user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com@localhost) Gimme your password:
 >
+user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com'
 PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_successfully_and_enters_shell]
@@ -51,6 +52,7 @@ $
 Enter 'r' to cancel the request and go back to select the authentication method
 (user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com@localhost) Gimme your password:
 >
+user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com'
 PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_successfully_and_enters_shell]
@@ -78,6 +80,7 @@ $
 Enter 'r' to cancel the request and go back to select the authentication method
 (user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com@localhost) Gimme your password:
 >
+user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com'
 PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_successfully_and_enters_shell]
@@ -107,6 +110,7 @@ $
 Enter 'r' to cancel the request and go back to select the authentication method
 (user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com@localhost) Gimme your password:
 >
+user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com'
 PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_successfully_and_enters_shell]
@@ -138,6 +142,7 @@ Connection to localhost closed.
 Enter 'r' to cancel the request and go back to select the authentication method
 (user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com@localhost) Gimme your password:
 >
+user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com'
 PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-and-enters-shell@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_successfully_and_enters_shell]

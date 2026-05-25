@@ -161,7 +161,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		sshdEnv = append(sshdEnv, fmt.Sprintf("AUTHD_NSS_SOCKET=%s", sharedAuthdSocket))
 
 		sharedSSHDPort, sharedSSHDUserHome = startSSHDForTest(t, serviceFile, sshdHostKeyPath,
-			"authd-test-user-sshd-accept-all@example.com", sshdPreloadLibraries, sshdEnv, false)
+			"authd-test-user-sshd-accept-all@example.com", sshdPreloadLibraries, sshdEnv, false, false)
 
 		if !t.Failed() {
 			t.Log("Prepared SSH tests with shared sshd")
@@ -186,12 +186,14 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		tapeSettings  []tapeSetting
 		tapeVariables map[string]string
 
-		user             string
-		isLocalUser      bool
-		userPrefix       string
-		pamServiceName   string
-		socketPath       string
-		interactiveShell bool
+		user              string
+		isLocalUser       bool
+		userPrefix        string
+		pamServiceName    string
+		socketPath        string
+		interactiveShell  bool
+		existingDB        string
+		useShortUsernames bool
 
 		wantUserAlreadyExist bool
 		wantNotLoggedInUser  bool
@@ -302,6 +304,19 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			userPrefix:      examplebroker.UserIntegrationLocalGroupsPrefix,
 			wantLocalGroups: true,
 		},
+		"Authenticate_user_with_short_username": {
+			tape:              "short_username",
+			user:              examplebroker.UserIntegrationPrefix + examplebroker.UserIntegrationPreCheckValue + "-shortusername@example.com",
+			useShortUsernames: true,
+		},
+		"Authenticate_existing_user_with_short_username": {
+			tape:                 "short_username_existing",
+			user:                 examplebroker.UserIntegrationPrefix + "shortusername",
+			useShortUsernames:    true,
+			wantLocalGroups:      true,
+			wantUserAlreadyExist: true,
+			existingDB:           "db_with_short_username",
+		},
 
 		"Remember_last_successful_broker_and_mode": {
 			tape: "remember_broker_and_mode",
@@ -345,6 +360,15 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 			tape:         "bad_password",
 			userPrefix:   examplebroker.UserIntegrationNeedsResetPrefix,
 			tapeSettings: []tapeSetting{{vhsHeight, 1200}},
+		},
+		"Deny_authentication_if_short_username_is_used_but_not_allowed": {
+			tape: "short_username_not_allowed",
+			user: examplebroker.UserIntegrationPrefix + examplebroker.UserIntegrationPreCheckValue + "-shortusername",
+		},
+		"Deny_authentication_if_short_username_is_allowed_but_user_does_not_exist": {
+			tape:              "short_username_not_allowed",
+			user:              examplebroker.UserIntegrationPrefix + examplebroker.UserIntegrationPreCheckValue + "-shortusername",
+			useShortUsernames: true,
 		},
 
 		"Prevent_user_from_switching_username": {
@@ -428,11 +452,12 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 				authdEnv = append(authdEnv, nssTestEnv(t, nssLibrary, authdSocketLink)...)
 			}
 
-			if tc.wantLocalGroups {
+			if tc.wantLocalGroups || tc.existingDB != "" || tc.useShortUsernames {
 				// For the local groups tests we need to run authd again so that it has
 				// special environment that saves the updated group file to a writable
 				// location for us to test.
-				_, groupOutput = prepareGroupFiles(t)
+				groupFileOutput, groupFile := prepareGroupFiles(t)
+				groupOutput = groupFileOutput
 
 				// Since we are migrating users, we need to make sure that we can replicate
 				// the homedir they have in the database.
@@ -443,12 +468,22 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 					_ = os.RemoveAll(sshTestsHomeBase)
 				})
 
-				socketPath = runAuthd(t,
+				args := []testutils.DaemonOption{
 					testutils.WithCurrentUserAsRoot,
-					testutils.WithGroupFile(groupOutput),
+					testutils.WithGroupFile(groupFile),
+					testutils.WithGroupFileOutput(groupOutput),
 					testutils.WithEnvironment(authdEnv...),
 					testutils.WithHomeBaseDir(sshTestsHomeBase),
-				)
+				}
+				if tc.existingDB != "" {
+					existingDBDir := prepareExistingDB(t, tc.existingDB)
+					args = append(args, testutils.WithDBPath(existingDBDir))
+				}
+				if tc.useShortUsernames {
+					args = append(args, testutils.WithShortUsernames())
+				}
+
+				socketPath = runAuthd(t, args...)
 			} else if !sharedSSHD {
 				socketPath, groupOutput = sharedAuthd(t,
 					testutils.WithGroupFileOutput(sharedAuthdGroupOutput),
@@ -491,7 +526,9 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 
 			sshdPort := sharedSSHDPort
 			userHome := sharedSSHDUserHome
-			if !sharedSSHD || tc.wantLocalGroups || tc.interactiveShell || tc.socketPath != "" {
+			if !sharedSSHD || tc.wantLocalGroups ||
+				tc.existingDB != "" || tc.useShortUsernames ||
+				tc.interactiveShell || tc.socketPath != "" {
 				sshdEnv := sshdEnv
 				if nssLibrary != "" {
 					sshdEnv = slices.Clone(sshdEnv)
@@ -505,7 +542,7 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 				serviceFile := createSSHDServiceFile(t, execModule, execChild,
 					pamMkHomeDirModule, socketPath)
 				sshdPort, userHome = startSSHDForTest(t, serviceFile, sshdHostKeyPath, user,
-					sshdPreloadLibraries, sshdEnv, tc.interactiveShell)
+					sshdPreloadLibraries, sshdEnv, tc.interactiveShell, tc.useShortUsernames)
 			}
 
 			if !sharedSSHD {
@@ -560,6 +597,9 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 				}
 
 				if userClient != nil {
+					if tc.useShortUsernames {
+						user = strings.Split(user, "@")[0]
+					}
 					authdUser := requireAuthdUser(t, userClient, user)
 					group := requireAuthdGroup(t, userClient, authdUser.Gid)
 					require.Contains(t, group.Members, authdUser.Name,
@@ -574,7 +614,12 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 				}
 
 				if !tc.wantUserAlreadyExist {
+					if tc.useShortUsernames {
+						userHome = strings.Split(userHome, "@")[0]
+					}
 					// Check if user home has been created, but only if the user is a new one.
+					// For short-username SSH logins, the PAM username and normalized authd username
+					// can diverge, and home creation is currently not deterministic in this flow.
 					stat, err := os.Stat(userHome)
 					require.NoError(t, err, "Home directory does not exist: %q", userHome)
 					require.True(t, stat.IsDir(), "%q is not a directory", userHome)
@@ -654,7 +699,7 @@ func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socket
 	return serviceFile
 }
 
-func startSSHDForTest(t *testing.T, serviceFile, hostKey, user string, preloadLibraries []string, env []string, interactiveShell bool) (string, string) {
+func startSSHDForTest(t *testing.T, serviceFile, hostKey, user string, preloadLibraries []string, env []string, interactiveShell bool, useShortUsernames bool) (string, string) {
 	t.Helper()
 
 	sshdConnectCommand := fmt.Sprintf(
@@ -664,7 +709,13 @@ func startSSHDForTest(t *testing.T, serviceFile, hostKey, user string, preloadLi
 		sshdConnectCommand += "&& /bin/sh"
 	}
 
+	shortenedUsername := strings.Split(user, "@")[0]
 	userHome := filepath.Join(sshTestsHomeBase, user)
+	if useShortUsernames {
+		user = shortenedUsername
+		userHome = filepath.Join(sshTestsHomeBase, shortenedUsername)
+	}
+
 	sshdPort := startSSHD(t, hostKey, sshdConnectCommand, append([]string{
 		fmt.Sprintf("HOME=%s", sshTestsHomeBase),
 		fmt.Sprintf("LD_PRELOAD=%s", strings.Join(preloadLibraries, ":")),

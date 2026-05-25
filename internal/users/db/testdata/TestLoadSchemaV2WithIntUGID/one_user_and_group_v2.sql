@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     dir       TEXT DEFAULT "",
     shell     TEXT DEFAULT "/bin/bash",
     broker_id TEXT DEFAULT "",
+    full_username TEXT DEFAULT "",
     locked    BOOLEAN DEFAULT FALSE
 );
 CREATE UNIQUE INDEX "idx_user_name" ON users ("name");

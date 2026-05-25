@@ -3506,6 +3506,7 @@ Or enter 'r' to go back to choose the provider
 Enter 'r' to cancel the request and go back to select the authentication method
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@example.com@localhost) Enter your pin code:
 > 4242
+user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@example.com
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@example.com'
 PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-switching-auth-mode@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_switching_auth_mode]

@@ -7,6 +7,7 @@ users:
         On multiple lines
       dir: /home/userwithbroker@example.com
       shell: /bin/bash
+      full_username: userwithbroker@example.com
       broker_id: broker-id
     - name: userwithinactivebroker@example.com
       uid: 2222
@@ -14,6 +15,7 @@ users:
       gecos: userwithinactivebroker
       dir: /home/userwithinactivebroker@example.com
       shell: /bin/dash
+      full_username: userwithinactivebroker@example.com
       broker_id: inactive-broker-id
     - name: userlocalbroker@example.com
       uid: 3333
@@ -21,18 +23,21 @@ users:
       gecos: userlocalbroker
       dir: /home/userlocalbroker@example.com
       shell: /bin/zsh
+      full_username: userlocalbroker@example.com
     - name: usersetbroker@example.com
       uid: 4444
       gid: 44444
       gecos: usersetbroker
       dir: /home/usersetbroker@example.com
       shell: /bin/dash
+      full_username: usersetbroker@example.com
     - name: userupdatebroker@example.com
       uid: 5555
       gid: 55555
       gecos: userupdatebroker
       dir: /home/userupdatebroker@example.com
       shell: /bin/zsh
+      full_username: userupdatebroker@example.com
       broker_id: "1902181170"
 groups:
     - name: group1

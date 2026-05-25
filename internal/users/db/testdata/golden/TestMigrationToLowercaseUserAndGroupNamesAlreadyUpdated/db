@@ -5,6 +5,7 @@ users:
       gecos: testuser gecos
       dir: /home/testuser
       shell: /bin/bash
+      full_username: TestUser
       broker_id: broker-id
 groups:
     - name: testgroup

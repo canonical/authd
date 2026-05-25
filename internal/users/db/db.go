@@ -15,6 +15,7 @@ import (
 	"github.com/canonical/authd/internal/consts"
 	"github.com/canonical/authd/internal/fileutils"
 	"github.com/canonical/authd/log"
+
 	// sqlite3 driver.
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -95,6 +96,12 @@ func New(dbDir string) (*Manager, error) {
 	err = m.maybeApplyMigrations()
 	if err != nil {
 		return nil, err
+	}
+
+	// Existing databases might not have the full_username column, so we need to fill it after opening the database
+	// and applying migrations.
+	if err = m.fillFullUsernameColumns(); err != nil {
+		return nil, fmt.Errorf("failed to update full_username column: %w", err)
 	}
 
 	return m, nil

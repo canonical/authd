@@ -45,6 +45,8 @@ func TestNativeAuthenticate(t *testing.T) {
 		clientOptions      clientOptions
 		currentUserNotRoot bool
 		userSelection      bool
+		existingDB         string
+		useShortUsernames  bool
 		wantLocalGroups    bool
 		wantSeparateDaemon bool
 		skipRunnerCheck    bool
@@ -299,6 +301,21 @@ func TestNativeAuthenticate(t *testing.T) {
 			tapeCommand: strings.ReplaceAll(tapeCommand, "force_native_client=true",
 				"invalid_flag=foo force_native_client=true bar"),
 		},
+		"Authenticate_user_with_short_username": {
+			tape: "short_username",
+			clientOptions: clientOptions{
+				PamUser: examplebroker.UserIntegrationPrefix + "shortusername@example.com",
+			},
+			useShortUsernames: true,
+		},
+		"Authenticate_existing_user_with_short_username": {
+			tape: "short_username_existing",
+			clientOptions: clientOptions{
+				PamUser: examplebroker.UserIntegrationPrefix + "shortusername",
+			},
+			useShortUsernames: true,
+			existingDB:        "db_with_short_username",
+		},
 
 		"Remember_last_successful_broker_and_mode": {
 			tape:         "remember_broker_and_mode",
@@ -341,16 +358,25 @@ func TestNativeAuthenticate(t *testing.T) {
 				PamUser: examplebroker.UserIntegrationUnexistent,
 			},
 		},
-		"Deny_authentication_if_user_does_not_exist_and_matches_cancel_key": {
-			tape:          "cancel_key_user",
-			userSelection: true,
-		},
 		"Deny_authentication_if_newpassword_does_not_match_required_criteria": {
 			tape:         "bad_password",
 			tapeSettings: []tapeSetting{{vhsHeight, 800}},
 			clientOptions: clientOptions{
 				PamUser: examplebroker.UserIntegrationNeedsResetPrefix + "bad-password-native@example.com",
 			},
+		},
+		"Deny_authentication_if_short_username_is_used_but_not_allowed": {
+			tape: "short_username_not_allowed",
+			clientOptions: clientOptions{
+				PamUser: examplebroker.UserIntegrationPrefix + "shortusername",
+			},
+		},
+		"Deny_authentication_if_short_username_is_allowed_but_user_does_not_exist": {
+			tape: "short_username_not_allowed",
+			clientOptions: clientOptions{
+				PamUser: examplebroker.UserIntegrationPrefix + "shortusername",
+			},
+			useShortUsernames: true,
 		},
 
 		"Prevent_preset_user_from_switching_username": {
@@ -404,7 +430,8 @@ func TestNativeAuthenticate(t *testing.T) {
 			require.NoError(t, err, "Setup: symlinking the pam client")
 
 			var socketPath, groupFileOutput, pidFile string
-			if tc.wantLocalGroups || tc.currentUserNotRoot || tc.wantSeparateDaemon {
+			if tc.wantLocalGroups || tc.currentUserNotRoot || tc.wantSeparateDaemon ||
+				tc.existingDB != "" || tc.useShortUsernames {
 				// For the local groups tests we need to run authd again so that it has
 				// special environment that saves the updated group file to a writable
 				// location for us to test.
@@ -427,6 +454,13 @@ func TestNativeAuthenticate(t *testing.T) {
 				}
 				if !tc.currentUserNotRoot {
 					args = append(args, testutils.WithCurrentUserAsRoot)
+				}
+				if tc.existingDB != "" {
+					existingDBDir := prepareExistingDB(t, tc.existingDB)
+					args = append(args, testutils.WithDBPath(existingDBDir))
+				}
+				if tc.useShortUsernames {
+					args = append(args, testutils.WithShortUsernames())
 				}
 
 				socketPath = runAuthd(t, args...)
@@ -459,6 +493,10 @@ func TestNativeAuthenticate(t *testing.T) {
 			localgroupstestutils.RequireGroupFile(t, groupFileOutput, golden.Path(t))
 
 			if !tc.skipRunnerCheck {
+				// If we have short usernames enabled, we need to trim the domain part for the check, as pam won't have it.
+				if tc.useShortUsernames {
+					tc.clientOptions.PamUser = strings.Split(tc.clientOptions.PamUser, "@")[0]
+				}
 				requireRunnerResultForUser(t, authd.SessionMode_LOGIN, tc.clientOptions.PamUser, got)
 			}
 		})

@@ -472,6 +472,7 @@ Unlock your phone +33... or accept request on web interface:
 Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
 Plug your fido device and press with your thumb:
 >
+user-mfa-integration-auth-native@example.com
 PAM Authenticate()
   User: "user-mfa-integration-auth-native@example.com"
   Result: success

@@ -137,6 +137,29 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 		log.Errorf(ctx, "SelectBroker: No user name provided")
 		return nil, status.Error(codes.InvalidArgument, "no user name provided")
 	}
+
+	if !s.userManager.ShortUsernameAllowed() && !strings.Contains(username, "@") {
+		log.Errorf(ctx, "SelectBroker: Short username %q provided but not allowed by configuration", username)
+		return nil, status.Error(codes.InvalidArgument, "short usernames not allowed by configuration")
+	}
+
+	// We want to keep the short fullUsername format restricted within authd. The broker should always receive the
+	// full fullUsername, even if the user logged in with a short fullUsername.
+	fullUsername, err := s.userManager.FullUsernameForUser(username)
+	switch {
+	case err == nil:
+		username = fullUsername
+	case errors.Is(err, users.NoDataFoundError{}):
+		if !strings.Contains(username, "@") {
+			log.Errorf(ctx, "SelectBroker: User %q not found in database. First authentication must use the full username", username)
+			return nil, status.Error(codes.InvalidArgument, "first authentication must use the full username")
+		}
+	default: // err != nil && !errors.Is(err, users.NoDataFoundError{})
+		log.Errorf(ctx, "SelectBroker: Could not get full username for user %q: %v", username, err)
+		return nil, status.Error(codes.InvalidArgument, "invalid user name")
+	}
+	log.Debugf(ctx, "Using fullusername: %q", fullUsername)
+
 	if brokerID == "" {
 		log.Errorf(ctx, "SelectBroker: No broker selected")
 		return nil, status.Error(codes.InvalidArgument, "no broker selected")
@@ -294,30 +317,36 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		uInfo.Groups[i].Name = strings.ToLower(g.Name)
 	}
 
-	// Check if the user is locked. We can only do this after the broker has granted access, because we want to avoid
-	// leaking whether a user exists or not to unauthenticated users.
-	// TODO: We might want to let the broker know whether the user is locked or not, so that it can avoid storing any
-	//       updated tokens or user info on disk.
-	userIsLocked, err := s.userManager.IsUserLocked(uInfo.Name)
-	if err != nil && !errors.Is(err, users.NoDataFoundError{}) {
-		log.Errorf(ctx, "IsAuthenticated: Could not check if user %q is locked: %v", uInfo.Name, err)
-		return nil, fmt.Errorf("could not check if user %q is locked: %w", uInfo.Name, err)
-	}
-	// Throw an error if the user trying to authenticate already exists in the database and is locked
-	if err == nil && userIsLocked {
-		log.Noticef(ctx, "Authentication failure: user %q is locked", uInfo.Name)
-		return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("user %s is locked", uInfo.Name))
-	}
-
 	// Update database and local groups on granted auth.
 	if err := s.userManager.UpdateUser(uInfo); err != nil {
+		if errors.Is(err, users.UserIsLockedError{}) {
+			log.Noticef(ctx, "Authentication failure: user %q is locked", uInfo.Name)
+			return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("user %s is locked", uInfo.Name))
+		}
 		log.Errorf(ctx, "IsAuthenticated: Could not update user %q in database: %v", uInfo.Name, err)
 		return nil, err
 	}
 
+	// The broker returned the FQDN'ed username (i.e. user@domain.com), but authd might be configured to use
+	// short usernames (i.e. user) as keys in the database. In that case, we need to get the user information
+	// from the database and return the username in the format it is stored in the database.
+	authenticatedUser, err := s.userManager.UserByFullUsername(uInfo.Name)
+	if err != nil {
+		log.Errorf(ctx, "IsAuthenticated: Could not get user %q from database after update: %v", uInfo.Name, err)
+		return nil, fmt.Errorf("could not get user from database after update: %v", err)
+	}
+
+	msg, err := json.Marshal(struct {
+		Message string `json:"message"`
+	}{Message: authenticatedUser.Name})
+	if err != nil {
+		log.Errorf(ctx, "IsAuthenticated: Could not marshal authenticated user name for session %q: %v", sessionID, err)
+		return nil, fmt.Errorf("could not marshal authenticated user name: %v", err)
+	}
+
 	return &authd.IAResponse{
 		Access: access,
-		Msg:    "",
+		Msg:    string(msg),
 	}, nil
 }
 

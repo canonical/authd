@@ -10,6 +10,7 @@ import (
 	"os/user"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -30,6 +31,8 @@ type Config struct {
 	UIDMax uint32 `mapstructure:"uid_max" yaml:"uid_max"`
 	GIDMin uint32 `mapstructure:"gid_min" yaml:"gid_min"`
 	GIDMax uint32 `mapstructure:"gid_max" yaml:"gid_max"`
+
+	UseShortUsernames bool `mapstructure:"use_short_usernames" yaml:"use_short_usernames"`
 }
 
 // DefaultConfig is the default configuration for the user manager.
@@ -38,6 +41,8 @@ var DefaultConfig = Config{
 	UIDMax: 60000,
 	GIDMin: 10000,
 	GIDMax: 60000,
+
+	UseShortUsernames: false,
 }
 
 // Manager is the manager for any user related operation.
@@ -150,6 +155,31 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		return errors.New("empty username")
 	}
 
+	if !m.config.UseShortUsernames && !strings.Contains(u.Name, "@") {
+		return fmt.Errorf("username %q does not contain domain suffix, but short usernames are disabled", u.Name)
+	}
+
+	fullUsername := u.Name
+	if m.config.UseShortUsernames {
+		log.Debug(context.TODO(), "Formatting user to use short-format")
+		u, fullUsername = formatShortUsername(u)
+	}
+
+	// Check if the user is locked. We can only do this after the broker has granted access, because we want to avoid
+	// leaking whether a user exists or not to unauthenticated users.
+	// TODO: We might want to let the broker know whether the user is locked or not, so that it can avoid storing any
+	//       updated tokens or user info on disk.
+	userIsLocked, err := m.isUserLocked(u.Name)
+	if err != nil && !errors.Is(err, NoDataFoundError{}) {
+		log.Errorf(context.TODO(), "IsAuthenticated: Could not check if user %q is locked: %v", u.Name, err)
+		return fmt.Errorf("could not check if user %q is locked: %w", u.Name, err)
+	}
+	// Throw an error if the user trying to authenticate already exists in the database and is locked
+	if err == nil && userIsLocked {
+		log.Noticef(context.TODO(), "Authentication failure: user %q is locked", u.Name)
+		return UserIsLockedError{fmt.Sprintf("user %q is locked", u.Name)}
+	}
+
 	// Prepend the user private group
 	u.Groups = append([]types.GroupInfo{{Name: u.Name, UGID: u.Name}}, u.Groups...)
 	userPrivateGroup := &u.Groups[0]
@@ -180,6 +210,18 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 	if exists || err != nil {
 		// The user already exists, so no update needed, or an error occurred.
 		return err
+	}
+
+	// Even if the user doesn't exist in the database, we still want to check if a user with the same full username
+	// exists.
+	fullUsernameUser, err := m.db.UserByFullUsername(fullUsername)
+	if err != nil && !errors.Is(err, NoDataFoundError{}) {
+		return err
+	}
+	if fullUsernameUser.Name != "" && fullUsernameUser.FullUsername != "" &&
+		fullUsernameUser.FullUsername != fullUsername {
+		log.Errorf(context.Background(), "Full username %q for user %q is already taken", fullUsername, u.Name)
+		return fmt.Errorf("full username %q is already taken", fullUsername)
 	}
 
 	m.userManagementMu.Lock()
@@ -315,7 +357,7 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		}
 	}
 
-	userRow := db.NewUserRow(u.Name, u.UID, *userPrivateGroup.GID, u.Gecos, u.Dir, u.Shell)
+	userRow := db.NewUserRow(u.Name, u.UID, *userPrivateGroup.GID, u.Gecos, u.Dir, u.Shell, fullUsername)
 	if err = m.db.UpdateUserEntry(userRow, groupRows, localGroups); err != nil {
 		return err
 	}
@@ -707,8 +749,8 @@ func (m *Manager) UnlockUser(username string) error {
 	return nil
 }
 
-// IsUserLocked returns true if the user with the given user name is locked, false otherwise.
-func (m *Manager) IsUserLocked(username string) (bool, error) {
+// isUserLocked returns true if the user with the given user name is locked, false otherwise.
+func (m *Manager) isUserLocked(username string) (bool, error) {
 	u, err := m.db.UserByName(username)
 	if err != nil {
 		return false, err
@@ -929,4 +971,46 @@ func (m *Manager) RegisterUserPreAuth(name string) (uid uint32, err error) {
 
 	log.Debugf(context.Background(), "Using new UID %d for temporary user %q", uid, name)
 	return uid, nil
+}
+
+// ShortUsernameAllowed returns true if short usernames are allowed by the configuration, false otherwise.
+func (m *Manager) ShortUsernameAllowed() bool {
+	return m.config.UseShortUsernames
+}
+
+// FullUsernameForUser returns the full username for the given username.
+func (m *Manager) FullUsernameForUser(username string) (string, error) {
+	userRow, err := m.db.UserByName(username)
+	if err != nil {
+		return "", err
+	}
+	return userRow.FullUsername, nil
+}
+
+func (m *Manager) UserByFullUsername(fullUsername string) (types.UserEntry, error) {
+	userRow, err := m.db.UserByFullUsername(fullUsername)
+	if err != nil {
+		return types.UserEntry{}, err
+	}
+	return userEntryFromUserRow(userRow), nil
+}
+
+func formatShortUsername(u types.UserInfo) (types.UserInfo, string) {
+	shortenedName, _, found := strings.Cut(u.Name, "@")
+	if !found {
+		return u, ""
+	}
+	fullUsername := u.Name
+
+	// We need to also format the self-named group
+	for _, g := range u.Groups {
+		if g.Name == u.Name {
+			g.Name = shortenedName
+			break
+		}
+	}
+	u.Dir = strings.ReplaceAll(u.Dir, u.Name, shortenedName)
+	u.Name = shortenedName
+
+	return u, fullUsername
 }

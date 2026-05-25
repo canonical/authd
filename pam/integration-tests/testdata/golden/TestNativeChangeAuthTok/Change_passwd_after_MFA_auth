@@ -633,6 +633,7 @@ Enter your new password:
 >
 Confirm Password:
 >
+user-mfa-integration-native-passwd@example.com
 PAM ChangeAuthTok()
   User: "user-mfa-integration-native-passwd@example.com"
   Result: success

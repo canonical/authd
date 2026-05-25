@@ -33,6 +33,7 @@ Choose your provider:
 Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
+user-integration-upper-case-native-testnativeauthenticate@example.com
 PAM Authenticate()
   User: "user-integration-upper-case-native-testnativeauthenticate@example.com"
   Result: success

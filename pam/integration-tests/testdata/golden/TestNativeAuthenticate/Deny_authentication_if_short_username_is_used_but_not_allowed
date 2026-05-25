@@ -1,0 +1,32 @@
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
+>
+────────────────────────────────────────────────────────────────────────────────
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
+> 2
+────────────────────────────────────────────────────────────────────────────────
+> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
+> 2
+PAM Error Message: error InvalidArgument from server: short usernames not allowed by configuration
+PAM Authenticate()
+  User: "user-integration-shortusername"
+  Result: error: PAM exit code: 4
+    System error
+acct=incomplete
+PAM AcctMgmt()
+  User: "user-integration-shortusername"
+  Result: error: PAM exit code: 25
+    The return value should be ignored by PAM dispatch
+>
+────────────────────────────────────────────────────────────────────────────────

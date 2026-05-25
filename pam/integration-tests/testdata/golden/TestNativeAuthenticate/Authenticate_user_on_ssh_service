@@ -33,6 +33,7 @@ Choose your provider:
 Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
+user-integration-pre-check-ssh-service-native@example.com
 PAM Authenticate()
   User: "user-integration-pre-check-ssh-service-native@example.com"
   Result: success

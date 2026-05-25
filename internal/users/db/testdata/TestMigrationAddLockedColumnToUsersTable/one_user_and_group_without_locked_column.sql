@@ -7,9 +7,10 @@ CREATE TABLE users (
     gecos     TEXT DEFAULT "",
     dir       TEXT DEFAULT "",
     shell     TEXT DEFAULT "/bin/bash",
-    broker_id TEXT DEFAULT ""
+    broker_id TEXT DEFAULT "",
+    full_username TEXT DEFAULT ""
 );
-INSERT INTO users VALUES('user1',1111,11111,replace('User1 gecos\nOn multiple lines','\n',char(10)),'/home/user1','/bin/bash','broker-id');
+INSERT INTO users VALUES('user1',1111,11111,replace('User1 gecos\nOn multiple lines','\n',char(10)),'/home/user1','/bin/bash','broker-id','user1');
 CREATE TABLE GROUPS (
     name TEXT NOT NULL,  -- Uniqueness is enforced by the index below
     gid  INT PRIMARY KEY, -- Uniqueness and not NULL is enforced by PRIMARY KEY

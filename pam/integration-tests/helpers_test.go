@@ -23,6 +23,7 @@ import (
 	"github.com/canonical/authd/internal/services/errmessages"
 	"github.com/canonical/authd/internal/testlog"
 	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/users/db"
 	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -481,4 +482,19 @@ func requireGetEntExists(t *testing.T, nssLibrary, authdSocket, user string, exi
 		return
 	}
 	require.NoError(t, err, "getent should not fail for user %q\n%s", user, out)
+}
+
+func prepareExistingDB(t *testing.T, existingDB string) string {
+	t.Helper()
+
+	dbDir, err := os.MkdirTemp(t.TempDir(), "existing-db-path")
+	require.NoError(t, err, "Setup: Could not create temp dir for database")
+
+	err = os.Chmod(dbDir, 0700)
+	require.NoError(t, err, "Setup: Could not set required permissions for database directory")
+
+	err = db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", existingDB+".db.yaml"), dbDir)
+	require.NoError(t, err, "Setup: creating existing database")
+
+	return dbDir
 }

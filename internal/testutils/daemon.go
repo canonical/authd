@@ -31,6 +31,7 @@ type daemonOptions struct {
 	pidFile                  string
 	saveOutputAsTestArtifact bool
 	shared                   bool
+	useShortUsernames        bool
 	env                      []string
 }
 
@@ -114,6 +115,12 @@ func WithGroupFileOutput(groupFile string) DaemonOption {
 	}
 }
 
+func WithShortUsernames() DaemonOption {
+	return func(o *daemonOptions) {
+		o.useShortUsernames = true
+	}
+}
+
 // WithCurrentUserAsRoot configures authd to accept the current user as root when checking permissions.
 // This is useful for integration tests where the current user is not root, but we want to
 // test the behavior as if it were root.
@@ -162,7 +169,9 @@ verbosity: 2
 paths:
   database: %s
   socket: %s
-`, opts.dbPath, opts.socketPath)
+
+use_short_usernames: %t
+`, opts.dbPath, opts.socketPath, opts.useShortUsernames)
 
 	configPath := filepath.Join(tempDir, "testconfig.yaml")
 	require.NoError(t, os.WriteFile(configPath, []byte(config), 0600), "Setup: failed to create config file for tests")

@@ -33,6 +33,7 @@ Choose your provider:
 Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
+user-integration-native-authenticate-user-successfully@example.com
 PAM Authenticate()
   User: "user-integration-native-authenticate-user-successfully@example.com"
   Result: success

@@ -383,6 +383,7 @@ Unsupported input
 Enter 'r' to cancel the request and go back to select the authentication method
 (user-integration-pre-check-ssh-prevent-user-from-switching-username@example.com@localhost) Gimme your password:
 >
+user-integration-pre-check-ssh-prevent-user-from-switching-username@example.com
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-prevent-user-from-switching-username@example.com'
 PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-prevent-user-from-switching-username@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Prevent_user_from_switching_username]

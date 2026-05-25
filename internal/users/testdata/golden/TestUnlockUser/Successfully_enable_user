@@ -7,6 +7,7 @@ users:
         On multiple lines
       dir: /home/user1@example.com
       shell: /bin/bash
+      full_username: user1@example.com
       broker_id: broker-id
 groups:
     - name: group1
