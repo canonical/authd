@@ -105,8 +105,12 @@ jobs:
     needs:
       - compute-hash
       - get-modified-files
+    # Permissions needed by nested debian-build-test-and-sync workflow:
+    # - contents: write: for pushing to packaging branches
+    # - packages: write: for pushing OCI artifacts to ghcr.io
     permissions:
       contents: write
+      packages: write
     strategy:
       matrix:
         ubuntu-version: [ 'noble', 'questing', 'devel' ]
