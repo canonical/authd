@@ -27,6 +27,7 @@ Test login with CLI
     Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
     # Check remote user is properly added to the system
     Check If User Was Added Properly    ${username}
+    Check Home Directory    ${username}
     Log Out From Terminal Session
     Close Focused Window
 
