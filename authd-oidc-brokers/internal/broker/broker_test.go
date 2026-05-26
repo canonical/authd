@@ -582,6 +582,7 @@ func TestIsAuthenticated(t *testing.T) {
 		ownerExtraGroups                   []string
 		providerSupportsDeviceRegistration bool
 		registerDevice                     bool
+		requireNameClaimOnInitialAuth      bool
 
 		firstMode                string
 		firstSecret              string
@@ -603,6 +604,7 @@ func TestIsAuthenticated(t *testing.T) {
 		dontWaitForFirstCall bool
 		readOnlyDataDir      bool
 		wantGroups           []info.Group
+		wantGecos            string
 		wantNextAuthModes    []string
 		wantOffline          bool
 	}{
@@ -625,6 +627,30 @@ func TestIsAuthenticated(t *testing.T) {
 
 		"Authenticating_with_qrcode_reacquires_token":          {firstSecret: "-", wantSecondCall: true, token: &tokenOptions{}},
 		"Authenticating_with_password_refreshes_expired_token": {firstMode: authmodes.Password, token: &tokenOptions{expired: true}},
+		"Authenticating_with_password_keeps_old_gecos_if_name_claim_missing_on_refresh_for_name_claim_provider": {
+			firstMode:                     authmodes.Password,
+			token:                         &tokenOptions{expired: true, gecos: "Saved Name"},
+			requireNameClaimOnInitialAuth: true,
+			wantGecos:                     "Saved Name",
+			customHandlers:                map[string]testutils.EndpointHandler{},
+			tokenHandlerOptions: &testutils.TokenHandlerOptions{
+				DeleteClaims: []string{"name"},
+			},
+		},
+		"Successfully_authenticate_with_name_claim_provider_when_name_is_only_in_userinfo": {
+			firstSecret:                   "-",
+			wantSecondCall:                true,
+			requireNameClaimOnInitialAuth: true,
+			tokenHandlerOptions: &testutils.TokenHandlerOptions{
+				DeleteClaims: []string{"name"},
+			},
+			customHandlers: map[string]testutils.EndpointHandler{
+				"/userinfo": testutils.UserInfoHandler(map[string]interface{}{
+					"must-have-claim": "present",
+					"name":            "Full Name from UserInfo",
+				}),
+			},
+		},
 		"Authenticating_with_password_still_allowed_if_server_is_unreachable": {
 			firstMode: authmodes.Password,
 			token:     &tokenOptions{},
@@ -914,17 +940,18 @@ func TestIsAuthenticated(t *testing.T) {
 			require.NoError(t, err, "Setup: Mkdir should not have returned an error")
 
 			cfg := &brokerForTestConfig{
-				Config:                       broker.Config{DataDir: dataDir},
-				getGroupsFails:               tc.getGroupsFails,
-				ownerAllowed:                 true,
-				firstUserBecomesOwner:        !tc.userDoesNotBecomeOwner,
-				allUsersAllowed:              tc.allUsersAllowed,
-				forceAccessCheckWithProvider: tc.forceAccessCheckWithProvider,
-				extraGroups:                  tc.extraGroups,
-				ownerExtraGroups:             tc.ownerExtraGroups,
-				supportsDeviceRegistration:   tc.providerSupportsDeviceRegistration,
-				registerDevice:               tc.registerDevice,
-				tokenHandlerOptions:          tc.tokenHandlerOptions,
+				Config:                        broker.Config{DataDir: dataDir},
+				getGroupsFails:                tc.getGroupsFails,
+				ownerAllowed:                  true,
+				firstUserBecomesOwner:         !tc.userDoesNotBecomeOwner,
+				allUsersAllowed:               tc.allUsersAllowed,
+				forceAccessCheckWithProvider:  tc.forceAccessCheckWithProvider,
+				extraGroups:                   tc.extraGroups,
+				ownerExtraGroups:              tc.ownerExtraGroups,
+				supportsDeviceRegistration:    tc.providerSupportsDeviceRegistration,
+				requireNameClaimOnInitialAuth: tc.requireNameClaimOnInitialAuth,
+				registerDevice:                tc.registerDevice,
+				tokenHandlerOptions:           tc.tokenHandlerOptions,
 			}
 			if tc.customHandlers == nil {
 				// Use the default provider URL if no custom handlers are provided.
@@ -1015,6 +1042,15 @@ func TestIsAuthenticated(t *testing.T) {
 					require.NoError(t, err, "Failed to unmarshal user info message")
 					userInfo := userInfoMsg.UserInfo
 					require.ElementsMatch(t, tc.wantGroups, userInfo.Groups, "Groups should match")
+				}
+				if tc.wantGecos != "" {
+					type userInfoMsgType struct {
+						UserInfo info.User `json:"userinfo"`
+					}
+					userInfoMsg := userInfoMsgType{}
+					err = json.Unmarshal([]byte(data), &userInfoMsg)
+					require.NoError(t, err, "Failed to unmarshal user info message")
+					require.Equal(t, tc.wantGecos, userInfoMsg.UserInfo.Gecos, "GECOS should match")
 				}
 			}()
 

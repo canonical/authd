@@ -5,7 +5,9 @@ import (
 	"slices"
 	"strings"
 
+	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/genericprovider"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
 
@@ -34,6 +36,34 @@ func (Provider) DisplayName() string {
 // More info on https://developers.google.com/identity/protocols/oauth2/limited-input-device#allowedscopes.
 func (Provider) AdditionalScopes() []string {
 	return []string{}
+}
+
+// GetUserInfo returns the user info from the provided Claimer.
+func (p Provider) GetUserInfo(claimer info.Claimer, isRefresh bool) (info.User, error) {
+	userInfo, err := p.GenericProvider.GetUserInfo(claimer, isRefresh)
+	if err != nil {
+		return info.User{}, err
+	}
+
+	nameClaimPresent, err := hasNonEmptyStringClaim(claimer, "name")
+	if err != nil {
+		return info.User{}, err
+	}
+	if !isRefresh && !nameClaimPresent {
+		return info.User{}, providerErrors.NewMissingClaimError("name")
+	}
+
+	return userInfo, nil
+}
+
+func hasNonEmptyStringClaim(claimer info.Claimer, claim string) (bool, error) {
+	var claims map[string]interface{}
+	if err := claimer.Claims(&claims); err != nil {
+		return false, err
+	}
+
+	value, ok := claims[claim].(string)
+	return ok && value != "", nil
 }
 
 // IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.

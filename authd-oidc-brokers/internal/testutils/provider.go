@@ -401,6 +401,7 @@ type MockProvider struct {
 	SecondCallDelay                    int
 	GetGroupsFails                     bool
 	ProviderSupportsDeviceRegistration bool
+	RequireNameClaimOnInitialAuth      bool
 
 	numCalls     int
 	numCallsLock sync.Mutex
@@ -433,7 +434,7 @@ func (p *MockProvider) GetMetadata(provider *oidc.Provider) (map[string]interfac
 }
 
 // GetUserInfo returns the user info parsed from the provided Claimer.
-func (p *MockProvider) GetUserInfo(idToken info.Claimer) (info.User, error) {
+func (p *MockProvider) GetUserInfo(idToken info.Claimer, isRefresh bool) (info.User, error) {
 	userClaims, err := p.userClaims(idToken)
 	if err != nil {
 		return info.User{}, err
@@ -441,6 +442,9 @@ func (p *MockProvider) GetUserInfo(idToken info.Claimer) (info.User, error) {
 
 	if userClaims.MustHave == "" {
 		return info.User{}, providerErrors.NewMissingClaimError("must-have-claim")
+	}
+	if p.RequireNameClaimOnInitialAuth && !isRefresh && userClaims.Gecos == "" {
+		return info.User{}, providerErrors.NewMissingClaimError("name")
 	}
 
 	p.numCallsLock.Lock()

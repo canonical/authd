@@ -80,7 +80,7 @@ func TestGetUserInfo(t *testing.T) {
 			p := genericprovider.New()
 			mockToken := &mockIDToken{claims: tc.claims}
 
-			user, err := p.GetUserInfo(mockToken)
+			user, err := p.GetUserInfo(mockToken, false)
 			t.Logf("GetUserInfo error: %v", err)
 
 			if tc.wantErr {

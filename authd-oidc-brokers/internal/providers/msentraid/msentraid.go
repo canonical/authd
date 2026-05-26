@@ -119,7 +119,7 @@ func (p *Provider) GetMetadata(provider *oidc.Provider) (map[string]interface{},
 }
 
 // GetUserInfo returns the user info from the provided Claimer.
-func (p *Provider) GetUserInfo(claimer info.Claimer) (info.User, error) {
+func (p *Provider) GetUserInfo(claimer info.Claimer, _ bool) (info.User, error) {
 	var err error
 
 	userClaims, err := p.userClaims(claimer)

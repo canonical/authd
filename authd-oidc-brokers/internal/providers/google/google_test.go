@@ -1,8 +1,11 @@
 package google_test
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
+	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/google"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
@@ -22,6 +25,74 @@ func TestAdditionalScopes(t *testing.T) {
 	p := google.New()
 
 	require.Empty(t, p.AdditionalScopes(), "Google provider should not require additional scopes")
+}
+
+func TestGetUserInfo(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		claims    map[string]interface{}
+		isRefresh bool
+		wantErr   bool
+	}{
+		"Error_when_name_claim_is_missing_on_initial_auth": {
+			claims: map[string]interface{}{
+				"sub":            "sub123",
+				"email":          "user@example.com",
+				"email_verified": true,
+			},
+			wantErr: true,
+		},
+		"Success_when_name_claim_is_missing_on_refresh": {
+			claims: map[string]interface{}{
+				"sub":            "sub123",
+				"email":          "user@example.com",
+				"email_verified": true,
+			},
+			isRefresh: true,
+		},
+		"Success_when_name_claim_is_present_on_initial_auth": {
+			claims: map[string]interface{}{
+				"sub":            "sub123",
+				"email":          "user@example.com",
+				"email_verified": true,
+				"name":           "Test User",
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			p := google.New()
+			_, err := p.GetUserInfo(&mockIDToken{claims: tc.claims}, tc.isRefresh)
+			if tc.wantErr {
+				var missingClaimErr *providerErrors.MissingClaimError
+				require.ErrorAs(t, err, &missingClaimErr)
+				require.Equal(t, "name", missingClaimErr.Claim)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+type mockIDToken struct {
+	claims map[string]interface{}
+}
+
+func (m *mockIDToken) Claims(v interface{}) error {
+	data, err := json.Marshal(m.claims)
+	if err != nil {
+		return fmt.Errorf("failed to marshal claims: %v", err)
+	}
+
+	if err := json.Unmarshal(data, v); err != nil {
+		return fmt.Errorf("failed to unmarshal claims: %v", err)
+	}
+
+	return nil
 }
 
 func TestIsTokenExpiredError(t *testing.T) {
