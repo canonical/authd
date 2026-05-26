@@ -44,6 +44,7 @@ jobs:
             - uses: canonical/desktop-engineering/gh-actions/go/generate@main
               with:
                 tools-directory: ./tools
+                token: ${{ github.token }}
 
             - name: Fetch last successful QA runs ids
               env:
