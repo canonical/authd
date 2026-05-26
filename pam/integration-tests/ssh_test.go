@@ -68,9 +68,6 @@ func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socket
 	err = f.Close()
 	require.NoError(t, err, "Setup: Could not close pam_authd log file")
 	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, pamLog)
-	t.Cleanup(func() {
-		testlog.LogFileContents(t, pamLog)
-	})
 
 	moduleArgs := []string{
 		execChild,
