@@ -761,7 +761,11 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 					sshdPreloadLibraries, sshdEnv, tc.interactiveShell)
 			}
 
-			if !sharedSSHD {
+			// When golden update is enabled, testSSHAuthenticate is called twice
+			// (once with sharedSSHD=false, once with sharedSSHD=true) and all subtests
+			// run in parallel. The two variants share the same user names, so the
+			// sharedSSHD variant may create the home directory before this check runs.
+			if !sharedSSHD && !golden.UpdateEnabled() {
 				_, err := os.Stat(userHome)
 				require.ErrorIs(t, err, os.ErrNotExist, "Unexpected error checking for %q", userHome)
 			}
