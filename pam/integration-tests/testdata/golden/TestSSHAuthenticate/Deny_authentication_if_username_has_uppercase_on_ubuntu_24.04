@@ -1,0 +1,5 @@
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(USER-INTEGRATION-PRE-CHECK-UPPER-CASE-TESTSSHAUTHENTICATE@EXAMPLE.COM@localhost) Choose your provider:
+> ^C

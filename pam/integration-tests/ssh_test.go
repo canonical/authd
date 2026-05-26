@@ -464,6 +464,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		pamServiceName   string
 		socketPath       string
 		interactiveShell bool
+		ubuntuVersion    string
 
 		wantUserAlreadyExist bool
 		wantNotLoggedInUser  bool
@@ -482,13 +483,28 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			interactiveShell: true,
 			test:             sshPtyAuthWithShell,
 		},
-		"Deny_authentication_if_username_has_uppercase": {
+		"Deny_authentication_if_username_has_uppercase_on_ubuntu_24.04": {
+			ubuntuVersion: "24.04",
 			user: strings.ToUpper(testUserNameFull(t,
 				examplebroker.UserIntegrationPreCheckPrefix, "upper-case")),
 			wantNotLoggedInUser: true,
 			test:                sshPtyUppercaseRejected,
 		},
-		"Deny_authentication_if_username_has_uppercase_and_already_registered": {
+		"Deny_authentication_if_username_has_uppercase_on_ubuntu_26.04": {
+			ubuntuVersion: "26.04",
+			user: strings.ToUpper(testUserNameFull(t,
+				examplebroker.UserIntegrationPreCheckPrefix, "upper-case")),
+			wantNotLoggedInUser: true,
+			test:                sshPtyUppercaseRejected,
+		},
+		"Deny_authentication_if_username_has_uppercase_and_already_registered_on_ubuntu_24.04": {
+			ubuntuVersion:       "24.04",
+			user:                "USER-SSH2@example.com",
+			wantNotLoggedInUser: true,
+			test:                sshPtyUppercaseRejected,
+		},
+		"Deny_authentication_if_username_has_uppercase_and_already_registered_on_ubuntu_26.04": {
+			ubuntuVersion:       "26.04",
 			user:                "USER-SSH2@example.com",
 			wantNotLoggedInUser: true,
 			test:                sshPtyUppercaseRejected,
@@ -508,6 +524,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			test:       sshPtyMandatoryPasswordReset,
 		},
 		"Authenticate_user_and_reset_password_then_deny_uppercase_re-login": {
+			ubuntuVersion: "26.04",
 			user: testUserNameFull(t,
 				examplebroker.UserIntegrationNeedsResetPrefix+
 					examplebroker.UserIntegrationPreCheckValue, "case-insensitive"),
@@ -559,12 +576,26 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			wantNotLoggedInUser: true,
 			test:                sshPtyMaxAttempts,
 		},
-		"Deny_authentication_if_user_does_not_exist": {
+		"Deny_authentication_if_user_does_not_exist_on_ubuntu_24.04": {
+			ubuntuVersion:       "24.04",
 			user:                examplebroker.UserIntegrationUnexistent,
 			wantNotLoggedInUser: true,
 			test:                sshPtyUnexistentUser,
 		},
-		"Deny_authentication_if_user_does_not_exist_and_matches_cancel_key": {
+		"Deny_authentication_if_user_does_not_exist_on_ubuntu_26.04": {
+			ubuntuVersion:       "26.04",
+			user:                examplebroker.UserIntegrationUnexistent,
+			wantNotLoggedInUser: true,
+			test:                sshPtyUnexistentUser,
+		},
+		"Deny_authentication_if_user_does_not_exist_and_matches_cancel_key_on_ubuntu_24.04": {
+			ubuntuVersion:       "24.04",
+			user:                "r",
+			wantNotLoggedInUser: true,
+			test:                sshPtyCancelKeyUser,
+		},
+		"Deny_authentication_if_user_does_not_exist_and_matches_cancel_key_on_ubuntu_26.04": {
+			ubuntuVersion:       "26.04",
 			user:                "r",
 			wantNotLoggedInUser: true,
 			test:                sshPtyCancelKeyUser,
@@ -582,7 +613,15 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			wantNotLoggedInUser: true,
 			test:                sshPtyLocalBroker,
 		},
-		"Exit_if_user_is_not_pre-checked_on_ssh_service": {
+		"Exit_if_user_is_not_pre-checked_on_ssh_service_on_ubuntu_24.04": {
+			ubuntuVersion:       "24.04",
+			user:                examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed@example.com",
+			pamServiceName:      "sshd",
+			wantNotLoggedInUser: true,
+			test:                sshPtyLocalSSH,
+		},
+		"Exit_if_user_is_not_pre-checked_on_ssh_service_on_ubuntu_26.04": {
+			ubuntuVersion:       "26.04",
 			user:                examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed@example.com",
 			pamServiceName:      "sshd",
 			wantNotLoggedInUser: true,
@@ -593,7 +632,14 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			test:                sshPtySigint,
 		},
 
-		"Error_if_cannot_connect_to_authd": {
+		"Error_if_cannot_connect_to_authd_on_ubuntu_24.04": {
+			ubuntuVersion:       "24.04",
+			socketPath:          "/some-path/not-existent-socket",
+			wantNotLoggedInUser: true,
+			test:                sshPtyConnectionError,
+		},
+		"Error_if_cannot_connect_to_authd_on_ubuntu_26.04": {
+			ubuntuVersion:       "26.04",
 			socketPath:          "/some-path/not-existent-socket",
 			wantNotLoggedInUser: true,
 			test:                sshPtyConnectionError,
@@ -605,6 +651,11 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		}
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
+			// If this test is version-specific, delegate to LXD if needed.
+			if tc.ubuntuVersion != "" && testutils.RunTestInLXD(t, tc.ubuntuVersion) {
+				return
+			}
 
 			if !sshTestsPrepared.Load() {
 				t.Log("Waiting for SSH pty tests to be prepared")
