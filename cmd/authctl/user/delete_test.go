@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/canonical/authd/internal/envutils"
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -20,10 +21,13 @@ func TestUserDeleteCommand(t *testing.T) {
 		testutils.WithPreviousDBState("multiple_users_and_groups_with_tmp_home"),
 		testutils.WithCurrentUserAsRoot,
 	)
-	t.Cleanup(func() { _ = os.RemoveAll(homeBasePath) })
 
-	err := os.Setenv("AUTHD_SOCKET", daemonSocket)
-	require.NoError(t, err, "Failed to set AUTHD_SOCKET environment variable")
+	authctlEnv := []string{
+		"AUTHD_SOCKET=" + daemonSocket,
+		testutils.CoverDirEnv(),
+	}
+
+	t.Cleanup(func() { _ = os.RemoveAll(homeBasePath) })
 
 	tests := map[string]struct {
 		args             []string
@@ -100,14 +104,11 @@ func TestUserDeleteCommand(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			authctlEnv := append([]string{}, authctlEnv...)
 			if tc.authdUnavailable {
-				origValue := os.Getenv("AUTHD_SOCKET")
-				err := os.Setenv("AUTHD_SOCKET", "/non-existent")
+				var err error
+				authctlEnv, err = envutils.Setenv(authctlEnv, "AUTHD_SOCKET", "/non-existent")
 				require.NoError(t, err, "Failed to set AUTHD_SOCKET environment variable")
-				t.Cleanup(func() {
-					err := os.Setenv("AUTHD_SOCKET", origValue)
-					require.NoError(t, err, "Failed to restore AUTHD_SOCKET environment variable")
-				})
 			}
 
 			// Extract the username from the last element of args
@@ -122,6 +123,7 @@ func TestUserDeleteCommand(t *testing.T) {
 
 			//nolint:gosec // G204 it's safe to use exec.Command with a variable here
 			cmd := exec.Command(authctlPath, append([]string{"user"}, tc.args...)...)
+			cmd.Env = authctlEnv
 			if tc.stdin != "" {
 				cmd.Stdin = strings.NewReader(tc.stdin)
 			}
