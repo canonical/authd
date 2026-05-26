@@ -29,6 +29,9 @@ runs:
 
         echo "::endgroup::"
 
+    - name: Setup LXD
+      uses: canonical/setup-lxd@main
+
     - name: Install gotestfmt and our wrapper script
       uses: canonical/desktop-engineering/gh-actions/go/gotestfmt@main
 
