@@ -685,11 +685,7 @@ func startSSHD(t *testing.T, hostKey, forcedCommand string, env []string) string
 
 	// Write stdout/stderr both to our stdout/stderr and to the buffer
 	sshd.Stdout = io.MultiWriter(t.Output(), sshdOutput)
-	if testlog.Quiet() {
-		sshd.Stderr = sshdOutput
-	} else {
-		sshd.Stderr = io.MultiWriter(newFilteredStderrWriter(t.Output()), sshdOutput)
-	}
+	sshd.Stderr = sshdOutput
 
 	testlog.LogCommand(t, "Starting sshd", sshd)
 	start := time.Now()
@@ -778,60 +774,6 @@ func startSSHD(t *testing.T, hostKey, forcedCommand string, env []string) string
 		duration.Seconds(), sshdPid, strings.TrimSpace(string(pidFileContent)), sshdPort)
 
 	return sshdPort
-}
-
-type filteredStderrWriter struct {
-	w io.Writer
-}
-
-func newFilteredStderrWriter(w io.Writer) *filteredStderrWriter {
-	return &filteredStderrWriter{w: w}
-}
-
-func (fw *filteredStderrWriter) Write(p []byte) (n int, err error) {
-	debugLevel := os.Getenv("AUTHD_SSHD_STDERR_DEBUG_LEVEL")
-	if debugLevel == "" {
-		debugLevel = "1"
-	}
-
-	logAllPAMMessages := os.Getenv("AUTHD_SSHD_STDERR_LOG_ALL_PAM_MESSAGES") != ""
-
-	lines := strings.Split(string(p), "\n")
-	var outLines []string
-	for _, line := range lines {
-		// Print all PAM messages if requested
-		if logAllPAMMessages && len(line) >= 12 && strings.HasPrefix(line[8:], "PAM:") {
-			outLines = append(outLines, line)
-			continue
-		}
-
-		// Only print lines with a debug level less than or equal to the configured level
-		if strings.HasPrefix(line, "debug") {
-			switch debugLevel {
-			case "1":
-				if strings.HasPrefix(line, "debug2") || strings.HasPrefix(line, "debug3") {
-					continue
-				}
-			case "2":
-				if strings.HasPrefix(line, "debug3") {
-					continue
-				}
-			case "3":
-				// Print all debug lines
-			default:
-				// Unknown debug level, don't print any debug lines
-				continue
-			}
-		}
-		outLines = append(outLines, line)
-	}
-	out := strings.Join(outLines, "\n")
-	if out == "" {
-		return len(p), nil
-	}
-
-	_, err = fw.w.Write([]byte(out))
-	return len(p), err
 }
 
 // sshPtyArgs contains parameters for starting SSH in a pty.
