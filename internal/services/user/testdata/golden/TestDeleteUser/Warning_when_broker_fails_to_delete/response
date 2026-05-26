@@ -1,0 +1,2 @@
+warnings:
+    - Failed to remove locally cached authentication data for user "delete_error@example.com" from the broker; residual data may remain on disk. Check the system logs for details.

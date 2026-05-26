@@ -160,7 +160,7 @@ func getAvailableBrokers(client authd.PAMClient) tea.Cmd {
 		brokersInfo, err := client.AvailableBrokers(context.TODO(), &authd.Empty{})
 		if err != nil {
 			return pamError{
-				status: pam.ErrSystem,
+				status: pam.ErrAuthinfoUnavail,
 				msg:    fmt.Sprintf("could not get current available brokers: %v", err),
 			}
 		}
