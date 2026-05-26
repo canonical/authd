@@ -1,0 +1,8 @@
+Warning: Deleting a group that still owns files on the filesystem can lead
+to security issues.
+
+Any existing files owned by this group may become accessible to a different
+group that is later assigned the same GID.
+You should manually check that no files remain owned by this group.
+
+Are you sure you want to delete group "group1"? [y/N] Aborted.

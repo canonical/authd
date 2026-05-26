@@ -42,3 +42,8 @@ func (b localBroker) CancelIsAuthenticated(ctx context.Context, sessionID string
 func (b localBroker) UserPreCheck(ctx context.Context, username string) (string, error) {
 	return "", errors.New("UserPreCheck should never be called on local broker")
 }
+
+//nolint:unused // We still need localBroker to implement the brokerer interface, even though this method should never be called on it.
+func (b localBroker) DeleteUser(ctx context.Context, username string) error {
+	return errors.New("DeleteUser should never be called on local broker")
+}

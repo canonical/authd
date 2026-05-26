@@ -1,6 +1,9 @@
 package users
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/canonical/authd/internal/sliceutils"
 	"github.com/canonical/authd/internal/users/db"
 	"github.com/canonical/authd/internal/users/types"
@@ -68,3 +71,15 @@ func groupEntryFromGroupWithMembers(g db.GroupWithMembers) types.GroupEntry {
 
 // NoDataFoundError is the error returned when no entry is found in the db.
 type NoDataFoundError = db.NoDataFoundError
+
+// GroupIsPrimaryError is returned when trying to delete a group that is still
+// the primary group of one or more users.
+type GroupIsPrimaryError struct {
+	GroupName string
+	Users     []string
+}
+
+// Error implements the error interface for GroupIsPrimaryError.
+func (e GroupIsPrimaryError) Error() string {
+	return fmt.Sprintf("group %q is the primary group of user(s): %s", e.GroupName, strings.Join(e.Users, ", "))
+}

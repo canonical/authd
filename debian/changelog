@@ -1,8 +1,8 @@
-authd (0.6.4+git260514+351+06bfca40) questing; urgency=medium
+authd (0.6.4+git260526+407+47b41d09) questing; urgency=medium
 
-  * Github build. Run id: 25860539699. Run number: 351.
+  * Github build. Run id: 26473277512. Run number: 407.
 
- -- adombeck <18482300+adombeck@users.noreply.github.com>  Thu, 14 May 2026 12:43:19 +0000
+ -- adombeck <18482300+adombeck@users.noreply.github.com>  Tue, 26 May 2026 20:29:30 +0000
 
 authd (0.6.4) resolute; urgency=medium
 
