@@ -53,6 +53,10 @@ env:
   DEBIAN_FRONTEND: noninteractive
   GO_TESTS_TIMEOUT: 20m
   AUTHD_SSHD_STDERR_LOG_ALL_PAM_MESSAGES: true
+  # Also run tests which require a different Ubuntu version, which we run in LXD
+  # containers.
+  AUTHD_TESTS_USE_LXD: true
+
   c_build_dependencies: >-
     clang-tools
     clang
