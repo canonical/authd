@@ -769,8 +769,6 @@ type sshPtyArgs struct {
 	socketPath  string
 }
 
-const sshPtyConnectionClosedGoldenOutput = "Connection closed by ${SSH_HOST} port ${SSH_PORT}\n"
-
 // startSSHForPty starts an SSH session in a ptytest Console.
 func startSSHForPty(t *testing.T, args sshPtyArgs) *ptytest.Console {
 	t.Helper()
@@ -917,7 +915,8 @@ func sshPtyUppercaseRejected(t *testing.T, args sshPtyArgs) {
 	}
 	c.Close(t)
 
-	golden.CheckOrUpdate(t, sshPtyConnectionClosedGoldenOutput)
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
 }
 
 func sshPtyMfaAuth(t *testing.T, args sshPtyArgs) {
@@ -1607,7 +1606,8 @@ func sshPtyLocalSSH(t *testing.T, args sshPtyArgs) {
 
 	c.Close(t)
 
-	golden.CheckOrUpdate(t, sshPtyConnectionClosedGoldenOutput)
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
 }
 
 func sshPtyCancelKeyUser(t *testing.T, args sshPtyArgs) {
@@ -1639,7 +1639,8 @@ func sshPtyUnexistentUser(t *testing.T, args sshPtyArgs) {
 
 	c.Close(t)
 
-	golden.CheckOrUpdate(t, sshPtyConnectionClosedGoldenOutput)
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
 }
 
 func sshPtyConnectionError(t *testing.T, args sshPtyArgs) {
@@ -1652,7 +1653,8 @@ func sshPtyConnectionError(t *testing.T, args sshPtyArgs) {
 
 	c.Close(t)
 
-	golden.CheckOrUpdate(t, sshPtyConnectionClosedGoldenOutput)
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
 }
 
 func sshPtySigint(t *testing.T, args sshPtyArgs) {
