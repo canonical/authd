@@ -430,7 +430,7 @@ func TestDeleteUser(t *testing.T) {
 		currentUserNotRoot bool
 
 		wantErr      bool
-		wantWarnings bool
+		wantWarnings int
 	}{
 		"Successfully_delete_user":                {username: "user1@example.com"},
 		"Successfully_delete_user_with_uppercase": {username: "USER1@EXAMPLE.COM"},
@@ -439,8 +439,8 @@ func TestDeleteUser(t *testing.T) {
 		"Error_when_user_does_not_exist": {username: "doesnotexist@example.com", wantErr: true},
 		"Error_when_not_root":            {username: "user1@example.com", currentUserNotRoot: true, wantErr: true},
 
-		"Warning_when_broker_fails_to_delete": {username: "delete_error@example.com", wantWarnings: true},
-		"Warning_when_broker_not_found":       {sourceDB: "default.db.yaml", username: "user1@example.com", wantWarnings: true},
+		"Warning_when_broker_fails_to_delete": {username: "delete_error@example.com", wantWarnings: 1},
+		"Warning_when_broker_not_found":       {sourceDB: "default.db.yaml", username: "user1@example.com", wantWarnings: 1},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -461,16 +461,12 @@ func TestDeleteUser(t *testing.T) {
 				return
 			}
 			require.NoError(t, err, "DeleteUser should not return an error, but did")
-
-			if tc.wantWarnings {
-				require.NotEmpty(t, resp.GetWarnings(), "DeleteUser should return warnings, but did not")
-				return
-			}
-			require.Empty(t, resp.GetWarnings(), "DeleteUser should not return warnings, but did")
+			require.Len(t, resp.Warnings, tc.wantWarnings, "Unexpected number of warnings")
+			golden.CheckOrUpdateYAML(t, resp, golden.WithPath("response"))
 
 			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
 			require.NoError(t, err, "Setup: failed to dump database for comparing")
-			golden.CheckOrUpdate(t, dbContent)
+			golden.CheckOrUpdate(t, dbContent, golden.WithPath("database"))
 		})
 	}
 }
