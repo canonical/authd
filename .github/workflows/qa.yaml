@@ -196,6 +196,9 @@ jobs:
     env:
       RAW_COVERAGE_DIR: ${{ github.workspace }}/raw-coverage
       COVERAGE_DIR: ${{ github.workspace }}/coverage
+      # Also run tests which require a different Ubuntu version, which we run in LXD
+      # containers.
+      AUTHD_TESTS_USE_LXD: true
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-go-tests
@@ -261,6 +264,9 @@ jobs:
     env:
       RAW_COVERAGE_DIR: ${{ github.workspace }}/raw-coverage
       COVERAGE_DIR: ${{ github.workspace }}/coverage
+      # Also run tests which require a different Ubuntu version, which we run in LXD
+      # containers.
+      AUTHD_TESTS_USE_LXD: true
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-go-tests
