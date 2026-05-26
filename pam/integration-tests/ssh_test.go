@@ -38,10 +38,19 @@ import (
 )
 
 var (
-	sshTestsHomeBase = filepath.Join(os.TempDir(), "authd-tests", "home")
+	// sshTestsHomeBase is unique per process so concurrent LXD invocations
+	// (each running their own test binary) don't clobber each other's home
+	// directories when they call os.RemoveAll(sshTestsHomeBase) during setup.
+	sshTestsHomeBase = filepath.Join(os.TempDir(),
+		fmt.Sprintf("authd-tests-%d", os.Getpid()), "home")
 
 	sshEnvVariablesRegex = regexp.MustCompile(`(?m)  (PATH|HOME|PWD|SSH_[A-Z]+)=.*(\n*)($[^ ]{2}.*)?$`)
 	sshHostPortRegex     = regexp.MustCompile(`([\d\.:]+) port ([\d:]+)`)
+	// sshNoiseRegex matches lines that are environment-specific noise and should
+	// be stripped before golden-file comparison. This covers:
+	//   - sshd debug messages (e.g. "debug1: PAM: establishing credentials")
+	//   - NSS library log lines (e.g. "16:00:00 INFO  [nss_authd::client] ...")
+	sshNoiseRegex = regexp.MustCompile(`(?m)^(debug\d+: |\d{2}:\d{2}:\d{2} \w+ +\[nss_authd::).*\n?`)
 
 	prepareSSHTestsOnce sync.Once
 	sshTestsPrepared    atomic.Bool
@@ -137,6 +146,20 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 
 		testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, sshdHostKeyPath+".pub")
 
+		_ = os.RemoveAll(sshTestsHomeBase)
+		err = os.MkdirAll(sshTestsHomeBase, 0750)
+		require.NoError(t, err, "Setup: failed to create home base directory")
+		// Ensure the entire path is world-traversable so that session processes
+		// running as non-root UIDs (e.g. uid=65534 for fake users) can chdir
+		// into it.
+		for dir := sshTestsHomeBase; dir != os.TempDir(); dir = filepath.Dir(dir) {
+			err = os.Chmod(dir, 0777) //nolint:gosec // 0777 is intentional: world traversal needed
+			require.NoError(t, err, "Setup: failed to chmod %s", dir)
+		}
+		t.Cleanup(func() {
+			_ = os.RemoveAll(sshTestsHomeBase)
+		})
+
 		if !t.Failed() {
 			t.Log("Prepared SSH pty tests")
 			sshTestsPrepared.Store(true)
@@ -172,6 +195,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		pamServiceName   string
 		socketPath       string
 		interactiveShell bool
+		ubuntuVersion    string
 
 		wantUserAlreadyExist bool
 		wantNotLoggedInUser  bool
@@ -190,13 +214,28 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			interactiveShell: true,
 			test:             sshPtyAuthWithShell,
 		},
-		"Deny_authentication_if_username_has_uppercase": {
+		"Deny_authentication_if_username_has_uppercase_on_ubuntu_24.04": {
+			ubuntuVersion: "24.04",
 			user: strings.ToUpper(testUserNameFull(t,
 				examplebroker.UserIntegrationPreCheckPrefix, "upper-case")),
 			wantNotLoggedInUser: true,
 			test:                sshPtyUppercaseRejected,
 		},
-		"Deny_authentication_if_username_has_uppercase_and_already_registered": {
+		"Deny_authentication_if_username_has_uppercase_on_ubuntu_26.04": {
+			ubuntuVersion: "26.04",
+			user: strings.ToUpper(testUserNameFull(t,
+				examplebroker.UserIntegrationPreCheckPrefix, "upper-case")),
+			wantNotLoggedInUser: true,
+			test:                sshPtyUppercaseRejected,
+		},
+		"Deny_authentication_if_username_has_uppercase_and_already_registered_on_ubuntu_24.04": {
+			ubuntuVersion:       "24.04",
+			user:                "USER-SSH2@example.com",
+			wantNotLoggedInUser: true,
+			test:                sshPtyUppercaseRejected,
+		},
+		"Deny_authentication_if_username_has_uppercase_and_already_registered_on_ubuntu_26.04": {
+			ubuntuVersion:       "26.04",
 			user:                "USER-SSH2@example.com",
 			wantNotLoggedInUser: true,
 			test:                sshPtyUppercaseRejected,
@@ -216,6 +255,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			test:       sshPtyMandatoryPasswordReset,
 		},
 		"Authenticate_user_and_reset_password_then_deny_uppercase_re-login": {
+			ubuntuVersion: "26.04",
 			user: testUserNameFull(t,
 				examplebroker.UserIntegrationNeedsResetPrefix+
 					examplebroker.UserIntegrationPreCheckValue, "case-insensitive"),
@@ -267,12 +307,26 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			wantNotLoggedInUser: true,
 			test:                sshPtyMaxAttempts,
 		},
-		"Deny_authentication_if_user_does_not_exist": {
+		"Deny_authentication_if_user_does_not_exist_on_ubuntu_24.04": {
+			ubuntuVersion:       "24.04",
 			user:                examplebroker.UserIntegrationUnexistent,
 			wantNotLoggedInUser: true,
 			test:                sshPtyUnexistentUser,
 		},
-		"Deny_authentication_if_user_does_not_exist_and_matches_cancel_key": {
+		"Deny_authentication_if_user_does_not_exist_on_ubuntu_26.04": {
+			ubuntuVersion:       "26.04",
+			user:                examplebroker.UserIntegrationUnexistent,
+			wantNotLoggedInUser: true,
+			test:                sshPtyUnexistentUser,
+		},
+		"Deny_authentication_if_user_does_not_exist_and_matches_cancel_key_on_ubuntu_24.04": {
+			ubuntuVersion:       "24.04",
+			user:                "r",
+			wantNotLoggedInUser: true,
+			test:                sshPtyCancelKeyUser,
+		},
+		"Deny_authentication_if_user_does_not_exist_and_matches_cancel_key_on_ubuntu_26.04": {
+			ubuntuVersion:       "26.04",
 			user:                "r",
 			wantNotLoggedInUser: true,
 			test:                sshPtyCancelKeyUser,
@@ -290,7 +344,15 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			wantNotLoggedInUser: true,
 			test:                sshPtyLocalBroker,
 		},
-		"Exit_if_user_is_not_pre-checked_on_ssh_service": {
+		"Exit_if_user_is_not_pre-checked_on_ssh_service_on_ubuntu_24.04": {
+			ubuntuVersion:       "24.04",
+			user:                examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed@example.com",
+			pamServiceName:      "sshd",
+			wantNotLoggedInUser: true,
+			test:                sshPtyLocalSSH,
+		},
+		"Exit_if_user_is_not_pre-checked_on_ssh_service_on_ubuntu_26.04": {
+			ubuntuVersion:       "26.04",
 			user:                examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed@example.com",
 			pamServiceName:      "sshd",
 			wantNotLoggedInUser: true,
@@ -301,7 +363,14 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			test:                sshPtySigint,
 		},
 
-		"Error_if_cannot_connect_to_authd": {
+		"Error_if_cannot_connect_to_authd_on_ubuntu_24.04": {
+			ubuntuVersion:       "24.04",
+			socketPath:          "/some-path/not-existent-socket",
+			wantNotLoggedInUser: true,
+			test:                sshPtyConnectionError,
+		},
+		"Error_if_cannot_connect_to_authd_on_ubuntu_26.04": {
+			ubuntuVersion:       "26.04",
 			socketPath:          "/some-path/not-existent-socket",
 			wantNotLoggedInUser: true,
 			test:                sshPtyConnectionError,
@@ -313,6 +382,11 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		}
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
+			// If this test is version-specific, delegate to LXD if needed.
+			if tc.ubuntuVersion != "" && testutils.RunTestInLXD(t, tc.ubuntuVersion) {
+				return
+			}
 
 			if !sshTestsPrepared.Load() {
 				t.Log("Waiting for SSH pty tests to be prepared")
@@ -352,13 +426,6 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 
 			if tc.wantLocalGroups {
 				_, groupOutput = prepareGroupFiles(t)
-
-				err := os.MkdirAll(sshTestsHomeBase, 0700)
-				require.NoError(t, err, "Setup: failed to create home directory")
-
-				t.Cleanup(func() {
-					_ = os.RemoveAll(sshTestsHomeBase)
-				})
 
 				socketPath = runAuthd(t,
 					testutils.WithCurrentUserAsRoot,
@@ -828,6 +895,9 @@ func sshPtySanitizeOutput(t *testing.T, rawOutput string) string {
 	s = strings.TrimLeft(s, "\n")
 	s = strings.TrimRight(s, "\n \t")
 	s += "\n"
+
+	// Strip environment-specific noise lines (sshd debug messages, NSS log lines).
+	s = sshNoiseRegex.ReplaceAllString(s, "")
 
 	// Replace socket path references.
 	s = ptyUnixSocketRegex.ReplaceAllLiteralString(s, "unix:///authd/test_socket.sock")

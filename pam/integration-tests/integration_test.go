@@ -19,6 +19,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	defer cleanup()
+	defer testutils.CleanupLXDContainers()
 
 	m.Run()
 }
