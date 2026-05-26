@@ -599,7 +599,7 @@ func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socket
 		// Ignore case:
 		notifyState,
 		{Action: pam_test.Auth, Control: pam_test.Optional, Module: "pam_echo.so", Args: []string{"SSH PAM user '%u' using local broker"}},
-		{Action: pam_test.Include, Module: "common-auth"},
+		{Action: pam_test.Auth, Control: pam_test.Required, Module: "pam_unix.so"},
 
 		{Action: pam_test.Account, Control: pam_test.NewControl(accountControl), Module: module, Args: moduleArgs},
 		{

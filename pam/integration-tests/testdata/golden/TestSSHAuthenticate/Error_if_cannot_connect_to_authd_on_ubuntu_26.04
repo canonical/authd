@@ -1,1 +1,4 @@
-Connection closed by ${SSH_HOST} port ${SSH_PORT}
+could not connect to unix:///some-path/not-existent-socket: service took too long to respond. Disconnecting client
+PAM Authenticate() finished for user 'user-integration-pre-check-ssh-error-if-cannot-connect-to-authd-on-ubuntu-26.04@example.com'
+SSH PAM user 'user-integration-pre-check-ssh-error-if-cannot-connect-to-authd-on-ubuntu-26.04@example.com' using local broker
+(user-integration-pre-check-ssh-error-if-cannot-connect-to-authd-on-ubuntu-26.04@example.com@localhost) Password:
