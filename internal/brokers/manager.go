@@ -127,7 +127,7 @@ func (m *Manager) AvailableBrokers() (r []*Broker) {
 
 // SetDefaultBrokerForUser memorizes which broker was used for which user.
 func (m *Manager) SetDefaultBrokerForUser(brokerID, username string) error {
-	broker, err := m.brokerFromID(brokerID)
+	broker, err := m.BrokerFromID(brokerID)
 	if err != nil {
 		return fmt.Errorf("invalid broker: %v", err)
 	}
@@ -152,7 +152,7 @@ func (m *Manager) BrokerFromSessionID(id string) (broker *Broker, err error) {
 
 	// no session ID means local broker
 	if id == "" {
-		return m.brokerFromID(LocalBrokerName)
+		return m.BrokerFromID(LocalBrokerName)
 	}
 
 	broker, exists := m.transactionsToBroker[id]
@@ -165,7 +165,7 @@ func (m *Manager) BrokerFromSessionID(id string) (broker *Broker, err error) {
 
 // NewSession create a new session for the broker and store the sessionID on the manager.
 func (m *Manager) NewSession(brokerID, username, lang, mode string) (sessionID string, encryptionKey string, err error) {
-	broker, err := m.brokerFromID(brokerID)
+	broker, err := m.BrokerFromID(brokerID)
 	if err != nil {
 		return "", "", fmt.Errorf("invalid broker: %v", err)
 	}
@@ -209,8 +209,8 @@ func (m *Manager) BrokerExists(brokerID string) bool {
 	return exists
 }
 
-// brokerFromID returns the broker matching this brokerID.
-func (m *Manager) brokerFromID(id string) (broker *Broker, err error) {
+// BrokerFromID returns the broker matching this brokerID.
+func (m *Manager) BrokerFromID(id string) (broker *Broker, err error) {
 	broker, exists := m.brokers[id]
 	if !exists {
 		return nil, fmt.Errorf("no broker found matching %q", id)

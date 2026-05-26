@@ -18,6 +18,7 @@ authctl_user
 
 ```{toctree}
 :titlesonly:
+authctl_user_delete
 authctl_user_lock
 authctl_user_unlock
 authctl_user_set-uid
@@ -31,5 +32,6 @@ authctl_group
 
 ```{toctree}
 :titlesonly:
+authctl_group_delete
 authctl_group_set-gid
 ```
