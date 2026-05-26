@@ -1,2 +1,2 @@
-could not find broker "nonexistent" for user "delete_error@example.com", skipping broker-side cleanup: no broker found matching "nonexistent"
+Failed to remove locally cached authentication data for user "delete_error@example.com" from the broker; residual data may remain on disk. Check the system logs for details.
 User "delete_error@example.com" has been deleted from the authd database.

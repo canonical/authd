@@ -286,9 +286,11 @@ func (s Service) DeleteUser(ctx context.Context, req *authd.DeleteUserRequest) (
 	// we can attempt broker-side cleanup afterwards. A failure here is non-fatal
 	// for the deletion itself.
 	var warnings []string
+	var brokerCleanupFailedOrSkipped bool
 	brokerID, err := s.userManager.BrokerForUser(name)
 	if err != nil {
-		warnings = append(warnings, fmt.Sprintf("could not determine broker for user %q, skipping broker-side cleanup: %v", name, err))
+		brokerCleanupFailedOrSkipped = true
+		log.Errorf(context.Background(), "failed to look up broker for user %q: %v", name, err)
 	}
 
 	if err := s.userManager.DeleteUser(name, req.GetRemoveHome()); err != nil {
@@ -303,10 +305,16 @@ func (s Service) DeleteUser(ctx context.Context, req *authd.DeleteUserRequest) (
 	if brokerID != "" && brokerID != brokers.LocalBrokerName {
 		broker, err := s.brokerManager.BrokerFromID(brokerID)
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("could not find broker %q for user %q, skipping broker-side cleanup: %v", brokerID, name, err))
+			brokerCleanupFailedOrSkipped = true
+			log.Errorf(context.Background(), "failed to get broker %q for user %q: %v", brokerID, name, err)
 		} else if err := broker.DeleteUser(ctx, name); err != nil {
-			warnings = append(warnings, fmt.Sprintf("broker-side cleanup for user %q failed: %v", name, err))
+			brokerCleanupFailedOrSkipped = true
+			log.Errorf(context.Background(), "failed to delete user %q from broker %q: %v", name, brokerID, err)
 		}
+	}
+
+	if brokerCleanupFailedOrSkipped {
+		warnings = append(warnings, fmt.Sprintf("Failed to remove locally cached authentication data for user %q from the broker; residual data may remain on disk. Check the system logs for details.", name))
 	}
 
 	return &authd.DeleteUserResponse{Warnings: warnings}, nil
