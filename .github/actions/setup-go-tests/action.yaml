@@ -29,6 +29,10 @@ runs:
 
         echo "::endgroup::"
 
+    - name: Setup LXD
+      if: env.AUTHD_TESTS_USE_LXD == 'true'
+      uses: canonical/setup-lxd@main
+
     - name: Install gotestfmt and our wrapper script
       uses: canonical/desktop-engineering/gh-actions/go/gotestfmt@main
 
