@@ -97,6 +97,23 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		t.Skipf("Skipping SSH tests since they require new golden files for Ubuntu %v", uv)
 	}
 
+	// Reset one-time setup state so testSSHAuthenticate is re-entrant for
+	// -count>1 test runs. By the time testSSHAuthenticate is called again all
+	// subtests from the previous run have completed and their temp directories
+	// have been cleaned up, so it is safe to rebuild everything from scratch.
+	prepareSSHTestsOnce = sync.Once{}
+	sshTestsPrepared.Store(false)
+	prepareSharedSSHDTestsOnce = sync.Once{}
+	sharedSSHDTestsPrepared.Store(false)
+	execModule, execChild, pamMkHomeDirModule = "", "", ""
+	nssEnv = nil
+	nssLibrary = ""
+	sshdPreloadLibraries = nil
+	sshdPreloaderCFlags = nil
+	sshdEnv = nil
+	sshdHostKeyPath = ""
+	sshdHostPubKey = nil
+
 	currentDir, err := os.Getwd()
 	require.NoError(t, err, "Setup: Could not get current directory for the tests")
 
