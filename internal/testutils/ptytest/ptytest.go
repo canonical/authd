@@ -462,7 +462,8 @@ func (c *Console) WaitForTimeout(t *testing.T, pattern string, timeout time.Dura
 	}
 }
 
-// WaitForExit blocks until the command exits. Returns the exit error (nil on success).
+// WaitForExit blocks until the command exits and all PTY output has been
+// drained. Returns the exit error (nil on success).
 func (c *Console) WaitForExit(t *testing.T) error {
 	t.Helper()
 
@@ -471,6 +472,9 @@ func (c *Console) WaitForExit(t *testing.T) error {
 	select {
 	case err := <-c.done:
 		c.done <- err // put it back for Close
+		// Wait for the copy goroutine to drain any remaining PTY output so
+		// that RawOutput() returns the complete output after this call.
+		<-c.copyDone
 		return err
 	case <-time.After(c.opts.timeout):
 		c.mu.RLock()
