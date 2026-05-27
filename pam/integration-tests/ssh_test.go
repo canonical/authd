@@ -150,8 +150,8 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		err = os.MkdirAll(sshTestsHomeBase, 0750)
 		require.NoError(t, err, "Setup: failed to create home base directory")
 		// Ensure the entire path is world-traversable so that session processes
-		// running as non-root UIDs (e.g. uid=65534 for fake users) can chdir
-		// into it.
+		// running as non-root UIDs (e.g. when sshd runs in a root LXD container
+		// and the preloader assigns uid=65534 to fake users) can chdir into it.
 		for dir := sshTestsHomeBase; dir != os.TempDir(); dir = filepath.Dir(dir) {
 			err = os.Chmod(dir, 0777) //nolint:gosec // 0777 is intentional: world traversal needed
 			require.NoError(t, err, "Setup: failed to chmod %s", dir)
@@ -662,6 +662,13 @@ func sshdCommand(t *testing.T, port, hostKey, forcedCommand string, env []string
 		"-o", "ClientAliveCountMax=3",
 		"-o", "ForceCommand="+forcedCommand,
 		"-o", "MaxAuthTries=1",
+		// Raise MaxStartups well above the default (10:30:100) to prevent
+		// connections from being reset during key exchange when many parallel
+		// test subtests share the same sshd instance and connect concurrently.
+		// The start:rate:full format must be used explicitly: a single-number
+		// value only sets the "full" field, leaving "start" and "rate" at
+		// their defaults (10 and 30%), which still causes drops at 10+ connections.
+		"-o", "MaxStartups=200:100:200",
 	)
 	sshd.Env = append(sshd.Env, env...)
 	sshd.Env = testutils.AppendCovEnv(sshd.Env)
