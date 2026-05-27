@@ -1,1 +1,3 @@
-Connection closed by ${SSH_HOST} port ${SSH_PORT}
+PAM Authenticate() finished for user 'user-integration-ssh-service-not-allowed@example.com'
+SSH PAM user 'user-integration-ssh-service-not-allowed@example.com' using local broker
+(user-integration-ssh-service-not-allowed@example.com@localhost) Password:

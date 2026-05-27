@@ -1667,8 +1667,15 @@ func sshPtyConnectionError(t *testing.T, args sshPtyArgs) {
 
 	c := startSSHForPty(t, args)
 
-	// Cannot connect to authd, SSH connection is closed.
-	c.WaitFor(t, `Connection closed|Disconnected from|Password:`)
+	// Cannot connect to authd, PAM falls through to pam_unix.so which prompts
+	// for a password. Send an empty password so pam_unix.so fails immediately,
+	// then wait for the connection to close. This avoids a race where
+	// "Connection closed" may or may not appear in the output depending on timing.
+	matched := c.WaitFor(t, `Connection closed|Disconnected from|Password:`)
+	if strings.Contains(matched, "Password:") {
+		c.SendLine(t, "")
+		c.WaitFor(t, `Connection closed|Disconnected from`)
+	}
 
 	c.Close(t)
 

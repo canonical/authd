@@ -171,11 +171,14 @@ getpwnam (const char *name)
           abort();
         }
     }
-  else if (!is_supported_test_fake_user (name))
+  else
     {
-      fprintf (stderr, "sshd_preloader[%d]: User %s is not handled by authd brokers\n",
-               getpid (), name);
-      return NULL;
+      /* NSS lookup failed (e.g. user has not yet authenticated with authd, or
+       * authd socket is unreachable). Fall through to create a fake passwd
+       * entry so that sshd's check_pam_user() can match it against PAM_USER.
+       */
+      fprintf (stderr, "sshd_preloader[%d]: User %s not found via NSS, "
+               "creating fake entry\n", getpid (), name);
     }
 #endif /* AUTHD_TESTS_SSH_USE_AUTHD_NSS */
 
