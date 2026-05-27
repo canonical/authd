@@ -269,9 +269,18 @@ getpwnam (const char *name)
   /* We're simulating to be the same user running the test but with another
    * name, so that we won't touch the user settings, but it's still enough to
    * trick sshd.
+   *
+   * When running as root (e.g. inside an LXD container), avoid assigning
+   * uid/gid 0 to fake users. OpenSSH applies PermitRootLogin checks and other
+   * special handling for uid=0 users, which can cause non-deterministic
+   * disconnect behavior when authentication fails. Use the uid of "nobody"
+   * (65534) as a safe non-root fallback. Auth-failure tests never actually
+   * set up a user session, so the uid only needs to pass pre-auth checks.
    */
-  passwd_entity->pw_uid = getuid ();
-  passwd_entity->pw_gid = getgid ();
+  uid_t effective_uid = getuid () != 0 ? getuid () : 65534;
+  uid_t effective_gid = getgid () != 0 ? getgid () : 65534;
+  passwd_entity->pw_uid = effective_uid;
+  passwd_entity->pw_gid = effective_gid;
 
   fprintf (stderr, "sshd_preloader[%d]: Simulating to be fake user %s (%d:%d)\n",
            getpid (), passwd_entity->pw_name, passwd_entity->pw_uid,
@@ -310,9 +319,14 @@ getpwnam_r (const char *name, struct passwd *pwd, char *buf, size_t buflen,
     return ret;
   if (*result != NULL)
     {
-      /* Override uid/gid like getpwnam does. */
-      pwd->pw_uid = getuid ();
-      pwd->pw_gid = getgid ();
+      /* Override uid/gid like getpwnam does.
+       * Avoid uid/gid 0 for fake users in root environments (e.g. LXD
+       * containers) for the same reason as in getpwnam(): uid=0 triggers
+       * OpenSSH's root-login special handling (PermitRootLogin checks, etc.).
+       * Use nobody (65534) as a safe non-root fallback when running as root.
+       */
+      pwd->pw_uid = getuid () != 0 ? getuid () : 65534;
+      pwd->pw_gid = getgid () != 0 ? getgid () : 65534;
       return 0;
     }
 #endif
