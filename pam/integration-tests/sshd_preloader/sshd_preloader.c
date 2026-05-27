@@ -11,7 +11,9 @@
 #include <dlfcn.h>
 #include <string.h>
 #include <ctype.h>
+#include <errno.h>
 #include <pwd.h>
+#include <shadow.h>
 #include <limits.h>
 #include <sys/types.h>
 
@@ -325,6 +327,71 @@ getpwnam_r (const char *name, struct passwd *pwd, char *buf, size_t buflen,
 
   *pwd = *pw;
   *result = pwd;
+  return 0;
+}
+
+/*
+ * Override getspnam_r() so that shadow lookups for test users don't go through
+ * the real NSS chain. On hosts with authd installed, /etc/nsswitch.conf
+ * includes authd in the shadow line. pam_unix may then delegate password checks
+ * to unix_chkpwd, which executes with an empty environment and can only see the
+ * default NSS socket path. By returning a fake shadow entry here, we keep the
+ * lookup inside sshd and avoid host-dependent NSS behavior.
+ *
+ * The fake shadow entry has an invalid password hash ("x"), so pam_unix.so
+ * will always fail authentication - which is the expected behavior for tests.
+ */
+int
+getspnam_r (const char *name, struct spwd *spbuf, char *buf, size_t buflen,
+            struct spwd **spbufp)
+{
+  static int (*orig_getspnam_r) (const char *, struct spwd *, char *,
+                                 size_t, struct spwd **) = NULL;
+
+  if (orig_getspnam_r == NULL)
+    {
+      orig_getspnam_r = dlsym (RTLD_NEXT, "getspnam_r");
+      assert (orig_getspnam_r);
+    }
+
+  /* Only intercept test users; let real users go through normal NSS. */
+  if (!is_valid_test_user (name))
+    return orig_getspnam_r (name, spbuf, buf, buflen, spbufp);
+
+  fprintf (stderr, "sshd_preloader[%d]: getspnam_r(%s) - returning fake shadow entry\n",
+           getpid (), name);
+
+  /* Create a minimal fake shadow entry.
+   * sp_pwdp = "x" means password is stored elsewhere (but we don't have it),
+   * which will cause pam_unix.so to fail authentication as expected.
+   */
+  size_t name_len = strlen (name) + 1;
+  if (buflen < name_len + 2)
+    {
+      /* Buffer too small */
+      *spbufp = NULL;
+      return ERANGE;
+    }
+
+  /* Copy name into buffer */
+  char *name_buf = buf;
+  strcpy (name_buf, name);
+
+  /* Copy password hash "x" into buffer after the name */
+  char *pwdp_buf = buf + name_len;
+  strcpy (pwdp_buf, "x");
+
+  spbuf->sp_namp = name_buf;
+  spbuf->sp_pwdp = pwdp_buf;
+  spbuf->sp_lstchg = -1;
+  spbuf->sp_min = -1;
+  spbuf->sp_max = -1;
+  spbuf->sp_warn = -1;
+  spbuf->sp_inact = -1;
+  spbuf->sp_expire = -1;
+  spbuf->sp_flag = 0;
+
+  *spbufp = spbuf;
   return 0;
 }
 
