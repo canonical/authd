@@ -103,6 +103,16 @@ func startPAMRunner(t *testing.T, clientPath string, socketPath string,
 var (
 	ptyUnixSocketRegex   = regexp.MustCompile(fmt.Sprintf(`unix://%s/(\S*)\b`, regexp.QuoteMeta(os.TempDir())))
 	ptyDirectSocketRegex = regexp.MustCompile(fmt.Sprintf(`%s/\S*/authd\.(?:socket|sock)\b`, regexp.QuoteMeta(os.TempDir())))
+
+	// ptyAuthdUnavailableRegex normalises the two error forms that appear
+	// when authd stops while the PAM module is running: a dial failure
+	// ("couldn't connect") and a health-check detection ("stopped serving").
+	// Which one fires first is a race, so both are collapsed to one stable
+	// string for golden-file comparisons.
+	ptyAuthdUnavailableRegex = regexp.MustCompile(
+		`couldn't connect to authd daemon: connection error: desc = "transport: Error while dialing: dial unix \S+: connect: no such file or directory"` +
+			`|unix://\S+ stopped serving`,
+	)
 )
 
 // terminalWidth is the terminal width used for ptytest sessions.
@@ -129,6 +139,11 @@ func ptySanitizeOutput(t *testing.T, rawOutput string) string {
 	// Replace socket path references.
 	s = ptyUnixSocketRegex.ReplaceAllLiteralString(s, "unix:///authd/test_socket.sock")
 	s = ptyDirectSocketRegex.ReplaceAllLiteralString(s, "/authd/test_socket.sock")
+
+	// Normalise authd-unavailable errors: a dial failure and a health-check
+	// "stopped serving" are both valid outcomes of authd stopping mid-run;
+	// collapse them to one stable string so golden files don't flake.
+	s = ptyAuthdUnavailableRegex.ReplaceAllLiteralString(s, "unix:///authd/test_socket.sock stopped serving")
 
 	// Strip UID from permission error messages (makes output deterministic).
 	s = permissions.Z_ForTests_IdempotentPermissionError(s)

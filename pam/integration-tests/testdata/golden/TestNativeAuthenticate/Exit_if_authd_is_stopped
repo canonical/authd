@@ -3,7 +3,7 @@
   2. ExampleBroker
 Choose your provider:
 > 2
-PAM Error Message: couldn't connect to authd daemon: connection error: desc = "transport: Error while dialing: dial unix /authd/test_socket.sock: connect: no such file or directory"
+PAM Error Message: unix:///authd/test_socket.sock stopped serving
 PAM Authenticate()
   User: "user-integration-native-exit-if-authd-is-stopped@example.com"
   Result: error: PAM exit code: 4
