@@ -21,7 +21,7 @@ authd is an authentication daemon for cloud-based identity providers (MS Entra I
 - `internal/brokers/`: Broker manager and D-Bus integration
 - `internal/services/`: gRPC service implementations (PAM, NSS, user management)
 - `internal/users/`: User/group database management (SQLite + BoltDB legacy)
-- `pam/`: PAM module with two build modes (see `pam/Hacking.md`)
+- `pam/`: PAM module with two build modes (see `pam/README.md`)
 - `nss/`: Rust NSS module using `libnss` crate
 - `examplebroker/`: Reference broker implementation
 
@@ -64,7 +64,7 @@ go generate ./shell-completion/         # Shell completions
 - Brokers must implement the D-Bus interface defined in `internal/brokers/dbusbroker.go`
 
 ### PAM Module Dual Mode
-The PAM module has two implementations (see `pam/Hacking.md`):
+The PAM module has two implementations (see `pam/README.md`):
 1. **GDM mode** (`pam_authd.so`): Native Go shared library with GDM JSON protocol support
 2. **Generic mode** (`pam_authd_exec.so` + `authd-pam` executable): C wrapper launching Go program via private D-Bus
    - Required for reliability with non-GDM PAM apps (avoids Go threading issues)
