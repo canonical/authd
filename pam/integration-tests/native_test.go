@@ -889,8 +889,8 @@ func TestNativeChangeAuthTok(t *testing.T) {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				nativeSelectBroker(t, c)
-				c.WaitFor(t, `Gimme your password:`)
 				for i := 0; i < 5; i++ {
+					c.WaitFor(t, `Gimme your password:`)
 					c.SendLine(t, "wrongpass")
 				}
 				c.WaitFor(t, `Maximum number of authentication attempts reached`)
