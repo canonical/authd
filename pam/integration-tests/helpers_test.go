@@ -196,14 +196,6 @@ func prepareFileLogging(t *testing.T, fileName string) string {
 
 	file := filepath.Join(t.TempDir(), fileName)
 	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, file)
-	t.Cleanup(func() {
-		exists, err := fileutils.FileExists(file)
-		require.NoError(t, err, "Teardown: Impossible to check if log file %q exists", file)
-		if !exists {
-			return
-		}
-		testlog.LogFileContents(t, file)
-	})
 
 	return file
 }
