@@ -286,6 +286,18 @@ paths:
 	return opts.socketPath, cancelFunc
 }
 
+// AuthdGoBuildArgs returns the `go build` arguments (run from [ProjectRoot])
+// used to build the authd daemon with the example broker into outputPath.
+// It is the single source of truth shared by BuildAuthdWithExampleBroker and
+// the LXD build-cache warmup, so their build (and thus cache) keys stay in sync.
+func AuthdGoBuildArgs(outputPath string) []string {
+	args := []string{"build"}
+	args = append(args, GoBuildFlags()...)
+	args = append(args, "-gcflags=all=-N -l", "-tags=withexamplebroker,integrationtests",
+		"-o", outputPath, "./cmd/authd")
+	return args
+}
+
 // BuildAuthdWithExampleBroker builds the authd executable and returns the binary path.
 func BuildAuthdWithExampleBroker() (execPath string, cleanup func(), err error) {
 	projectRoot := ProjectRoot()
@@ -297,12 +309,9 @@ func BuildAuthdWithExampleBroker() (execPath string, cleanup func(), err error) 
 	cleanup = func() { os.RemoveAll(tempDir) }
 
 	execPath = filepath.Join(tempDir, "authd")
-	cmd := exec.Command("go", "build")
+	//nolint:gosec // G204 - test-only code; args are controlled by AuthdGoBuildArgs.
+	cmd := exec.Command("go", AuthdGoBuildArgs(execPath)...)
 	cmd.Dir = projectRoot
-	cmd.Args = append(cmd.Args, GoBuildFlags()...)
-	cmd.Args = append(cmd.Args, "-gcflags=all=-N -l")
-	cmd.Args = append(cmd.Args, "-tags=withexamplebroker,integrationtests")
-	cmd.Args = append(cmd.Args, "-o", execPath, "./cmd/authd")
 
 	if err := testlog.RunWithTiming(nil, "Building authd", cmd); err != nil {
 		cleanup()

@@ -172,19 +172,27 @@ func buildPAMRunner(execPath string) (cleanup func(), err error) {
 	return func() { _ = os.Remove(filepath.Join(execPath, "pam_authd")) }, nil
 }
 
+// pamExecChildGoBuildArgs returns the `go build` arguments (run from
+// [testutils.ProjectRoot]) used to build the PAM exec child into output. It is
+// the single source of truth shared by buildPAMExecChild and the LXD build-cache
+// warmup, so their build (and thus cache) keys stay in sync.
+func pamExecChildGoBuildArgs(output string) []string {
+	args := []string{"build"}
+	args = append(args, testutils.GoBuildFlags()...)
+	args = append(args, "-gcflags=all=-N -l", "-tags=pam_debug", "-o", output, "./pam")
+	return args
+}
+
 func buildPAMExecChild(t *testing.T) string {
 	t.Helper()
 
-	cmd := exec.Command("go", "build")
-	cmd.Dir = filepath.Join(testutils.ProjectRoot(), "pam")
-	cmd.Args = append(cmd.Args, testutils.GoBuildFlags()...)
-	cmd.Args = append(cmd.Args, "-gcflags=all=-N -l")
-	cmd.Args = append(cmd.Args, "-tags=pam_debug")
-	cmd.Env = append(goEnv(t), testutils.MinimalPathEnv, "CGO_CFLAGS=-O0 -g3")
-
 	authdPam := filepath.Join(t.TempDir(), "authd-pam")
 
-	cmd.Args = append(cmd.Args, "-o", authdPam)
+	//nolint:gosec // G204 - test-only code; args are controlled by pamExecChildGoBuildArgs.
+	cmd := exec.Command("go", pamExecChildGoBuildArgs(authdPam)...)
+	cmd.Dir = testutils.ProjectRoot()
+	cmd.Env = append(goEnv(t), testutils.MinimalPathEnv, "CGO_CFLAGS=-O0 -g3")
+
 	err := testlog.RunWithTiming(t, "Building PAM exec child", cmd)
 	require.NoError(t, err, "Setup: Failed to build PAM exec child")
 
