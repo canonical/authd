@@ -1,5 +1,0 @@
-== Provider selection ==
-  1. local
-  2. ExampleBroker
-(USER-SSH2@example.com@localhost) Choose your provider:
-> ^C
