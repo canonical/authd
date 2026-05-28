@@ -46,6 +46,17 @@ var (
 
 	sshEnvVariablesRegex = regexp.MustCompile(`(?m)  (PATH|HOME|PWD|SSH_[A-Z]+)=.*(\n*)($[^ ]{2}.*)?$`)
 	sshHostPortRegex     = regexp.MustCompile(`([\d\.:]+) port ([\d:]+)`)
+	// OpenSSH's privsep architecture creates a race between the client
+	// reading the SSH2_MSG_DISCONNECT packet and the server closing the
+	// socket. Depending on timing, the client prints either:
+	//   - "Connection closed by ..." (saw EOF before the packet), or
+	//   - "Received disconnect ... Too many authentication failures" +
+	//     "Disconnected from ..." (read the packet before EOF).
+	// Normalize the two-line variant for deterministic golden files.
+	sshTooManyAuthFailuresRegex = regexp.MustCompile(
+		`(?m)^Received disconnect from \$\{SSH_HOST\} port \$\{SSH_PORT\} Too many authentication failures\n` +
+			`Disconnected from \$\{SSH_HOST\} port \$\{SSH_PORT\}\n?`,
+	)
 	// sshNoiseRegex matches lines that are environment-specific noise and should
 	// be stripped before golden-file comparison. This covers:
 	//   - sshd debug messages (e.g. "debug1: PAM: establishing credentials")
@@ -1704,6 +1715,8 @@ func sshPtyConnectionError(t *testing.T, args sshPtyArgs) {
 	c.Close(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
+	got = sshTooManyAuthFailuresRegex.ReplaceAllString(
+		got, "Connection closed by $${SSH_HOST} port $${SSH_PORT}\n")
 	golden.CheckOrUpdate(t, got)
 }
 
