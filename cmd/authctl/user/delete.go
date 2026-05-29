@@ -55,6 +55,15 @@ func init() {
 func runDeleteUser(cmd *cobra.Command, args []string) error {
 	name := args[0]
 
+	c, err := client.NewUserServiceClient()
+	if err != nil {
+		return err
+	}
+
+	if _, err = c.GetUserByName(context.Background(), &authd.GetUserByNameRequest{Name: name}); err != nil {
+		return err
+	}
+
 	if !deleteUserYes {
 		log.Warning(warningMessage)
 		fmt.Fprintf(os.Stderr, "\nAre you sure you want to delete user %q? [y/N] ", name)
@@ -69,11 +78,6 @@ func runDeleteUser(cmd *cobra.Command, args []string) error {
 			log.Info("Aborted.")
 			return nil
 		}
-	}
-
-	c, err := client.NewUserServiceClient()
-	if err != nil {
-		return err
 	}
 
 	resp, err := c.DeleteUser(context.Background(), &authd.DeleteUserRequest{Name: name, RemoveHome: deleteUserRemoveHome})
