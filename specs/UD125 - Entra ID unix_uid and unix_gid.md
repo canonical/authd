@@ -2,7 +2,7 @@
 
 # Abstract
 
-Allow authd users and groups to use stable, administrator-assigned UIDs and GIDs that are stored in Microsoft Entra ID as directory extension attributes, so that the same user gets the same UID/GID on every machine managed by authd.
+Allow authd users and groups to use stable, administrator-assigned UIDs and GIDs that are stored in Microsoft Entra ID as directory extension attributes, achieving consistent IDs across all machines managed by authd.
 
 # Rationale
 
@@ -14,6 +14,13 @@ The mechanism for storing and retrieving custom attributes is IdP-specific. This
 
 # Specification
 
+The feature is delivered in two iterations:
+
+1. **Iteration 1** — The broker fetches `unix_uid` / `unix_gid` from Entra ID and caches them in `token.json`. Administrators can apply them using `authctl user set-uid` / `authctl group set-gid` (manually or via scripting).
+2. **Iteration 2** — The broker passes the IdP-provided IDs to authd through the `userinfo` payload. authd uses them automatically when creating users and groups. On first SSH login (where the pre-auth UID was auto-generated), the PAM module terminates the session with an informational message, and the user must reconnect.
+
+Both iterations share the same Entra ID attribute storage, Graph API integration, and broker configuration. The difference is only in how the IDs are applied to the system.
+
 ## Attribute storage: directory extensions
 
 Among the custom-data options Entra ID offers (on-premises extension attributes, directory extensions, schema extensions, open extensions, custom security attributes), **directory extensions** are the best fit because they:
@@ -21,7 +28,6 @@ Among the custom-data options Entra ID offers (on-premises extension attributes,
 * can target both `User` and `Group` objects,
 * use a strongly-typed `Integer` (signed 32-bit) data type that maps directly to a Unix UID/GID,
 * are accessible via the Microsoft Graph API with the existing `User.Read` and `GroupMember.Read.All` delegated permissions (no additional permissions required),
-* can be exposed as optional claims in the ID token (format `extn.<attributename>`), which avoids an extra Graph API call for the user UID,
 * are scoped to the owning application, avoiding conflicts with extensions from other apps.
 
 ### Defining the extensions
@@ -55,27 +61,15 @@ This creates properties with canonical names of the form:
 
 The administrator then sets the values on individual users and groups via the Graph API, PowerShell (`Set-MgUser` / `Set-MgGroup`), or provisioning automation.
 
-### Optional: exposing the UID as an ID-token claim
-
-Administrators can add the user extension as an optional claim in the app registration's token configuration. When configured, the claim appears in the ID token as `extn.unix_uid`. This lets the broker read the UID from the token directly, without an extra Graph API call.
-
-If the claim is not configured (or absent from a particular user's token), the broker falls back to the Graph API.
-
-## Reading the attributes
+## Reading the attributes (broker side)
 
 ### User UID
 
-The broker reads the user UID in order of preference:
-
-1. **ID-token claim** — If the token contains `extn.unix_uid` (or the configured claim name), use that value.
-2. **Graph API** — Call `GET /me?$select=extension_{appId}_unix_uid` (or the configured attribute name) and read the value from the response.
-3. **Absent** — If neither source provides a value, the UID field is left unset and authd falls through to its existing auto-generation logic.
+When `unix_uid_attribute` is configured, the broker calls `GET /me?$select=extension_{appId}_{unix_uid_attribute}` via the Graph API and reads the integer value from the response. If the attribute is absent or null for a particular user, the UID field is left unset.
 
 ### Group GID
 
-Groups cannot appear in OIDC tokens, so their GIDs are always read via the Graph API. The existing `fetchUserGroups` function queries `client.Me().TransitiveMemberOf().GraphGroup()`. The `$select` parameter of that request is extended to also request the `extension_{appId}_unix_gid` property.
-
-If a group's `unix_gid` value is absent (null), that group's GID is left unset and authd auto-generates one as it does today.
+When `unix_gid_attribute` is configured, the existing `fetchUserGroups` function extends the `$select` parameter of the `client.Me().TransitiveMemberOf().GraphGroup()` request to also include `extension_{appId}_{unix_gid_attribute}`. When iterating the returned groups, the extension property value is read from each group's additional data and set as `info.Group.GID`. If a group's attribute is absent or null, that group's GID is left unset.
 
 ### Graph API permissions
 
@@ -88,10 +82,12 @@ No new permissions are required beyond what authd already requests:
 
 ## Broker configuration
 
-A new section in the broker configuration file (`broker.conf`) controls this feature. Example:
+New configuration keys in the `[msentraid]` section of the broker configuration file (`broker.conf`) control this feature:
 
-```yaml
+```ini
 [msentraid]
+...
+
 # The name of the directory extension attribute that stores the Unix UID
 # on User objects.
 # Default: empty (feature disabled)
@@ -103,11 +99,11 @@ unix_uid_attribute = unix_uid
 unix_gid_attribute = unix_gid
 ```
 
-The feature is **disabled by default**. Administrators opt in by setting at least `unix_uid_attribute` or `unix_gid_attribute`.
+The feature is **disabled by default**. Administrators opt in by setting at least `unix_uid_attribute` or `unix_gid_attribute`. The values shown above match the recommended attribute names from the [Defining the extensions](#defining-the-extensions) section and are the expected defaults for most deployments.
 
-## Changes to the broker–authd interface
+## Changes to the broker
 
-### `info.User` and `info.Group` structs (OIDC broker)
+### `info.User` and `info.Group` structs
 
 ```go
 // In authd-oidc-brokers/internal/providers/info/info.go
@@ -119,19 +115,53 @@ type User struct {
     Shell  string  `json:"shell"`
     Gecos  string  `json:"gecos"`
     Groups []Group `json:"groups"`
-    UID    *uint32 `json:"uid,omitempty"`     // NEW — broker-provided UID
+    UID    *uint32 `json:"uid,omitempty"`     // NEW — IdP-provided UID
 }
 
 type Group struct {
     Name string  `json:"name"`
     UGID string  `json:"ugid"`
-    GID  *uint32 `json:"gid,omitempty"`     // NEW — broker-provided GID
+    GID  *uint32 `json:"gid,omitempty"`     // NEW — IdP-provided GID
 }
 ```
 
+These fields are populated by the provider when reading the directory extensions and stored in `token.json` as part of `AuthCachedInfo.UserInfo`.
+
+### `msentraid.go` — `GetUserInfo`
+
+When `unix_uid_attribute` is configured, the broker makes a Graph API call to `GET /me?$select=extension_{appId}_{unix_uid_attribute}` after obtaining the token. If the attribute is present and holds a valid non-zero integer, it is converted to `uint32` and set on the returned `info.User.UID`.
+
+### `msentraid.go` — `fetchUserGroups`
+
+When `unix_gid_attribute` is configured, the full attribute name (`extension_{appId}_{unix_gid_attribute}`) is added to the `$select` parameter of the groups query. When iterating the returned groups, the extension property value is read and set as `info.Group.GID`.
+
+### Token refresh
+
+On token refresh, the broker re-fetches user info and groups. The UID and GID fields are populated in the refreshed `UserInfo` and written to `token.json`, so the latest IdP-provided IDs are always cached.
+
+### `providers.go` — `Provider` interface
+
+The `GetUserInfo` and `GetGroups` methods do not need signature changes, since the UID/GID are carried in the existing `info.User` and `info.Group` return types.
+
+---
+
+## Iteration 1: Manual/scripted ID application via `authctl`
+
+### Caching in `token.json`
+
+The broker already caches a `UserInfo` struct in `token.json` (at `$DATA_DIR/$ISSUER/$USERNAME/token.json`, where `$DATA_DIR` defaults to `/var/lib/authd-oidc`). With the new `UID` and `GID` fields on `info.User` and `info.Group`, the IdP-provided IDs are automatically persisted there after every authentication or token refresh.
+
+Administrators can read these values and apply them using `authctl user set-uid` / `authctl group set-gid`. The `token.json` format is documented so that this can be scripted or integrated into site-specific provisioning tooling.
+
+---
+
+## Iteration 2: Automatic ID application during login
+
+In this iteration, the broker passes the IdP-provided IDs to authd through the `userinfo` JSON payload, and authd uses them directly when creating or updating users and groups. This provides the best user experience: the correct UID/GID is applied from the first login onward (except for the first SSH session — see below).
+
 ### `userinfo` JSON payload
 
-The broker includes the `uid` field in the JSON payload returned from `IsAuthenticated` when a UID was obtained from the IdP. Similarly, `gid` is included on each group entry that has a GID from the IdP.
+The broker includes the `uid` field in the JSON payload returned from `IsAuthenticated` when a UID was obtained from the IdP. Similarly, `gid` is included on each group entry.
 
 Example payload:
 
@@ -152,7 +182,7 @@ Example payload:
 }
 ```
 
-### `types.UserInfo` and `types.GroupInfo` (authd core)
+### Changes to `types.UserInfo` (authd core)
 
 The existing `UserInfo.UID` field (`uint32`) does not distinguish between "broker provided UID 0" and "no UID provided". To support opt-in semantics, change the field to a pointer:
 
@@ -167,23 +197,19 @@ type UserInfo struct {
     Shell string
     Groups []GroupInfo
 }
-
-type GroupInfo struct {
-    Name string
-    GID  *uint32
-    UGID string
-}
 ```
 
 **Note:** `GroupInfo.GID` is already a `*uint32`, so only `UserInfo.UID` needs the type change. All call sites that read or write `UID` as a plain `uint32` must be updated to handle the pointer.
 
-## Changes to authd user manager
+### Changes to `UpdateUser` (authd user manager)
 
-In `internal/users/manager.go`, the `UpdateUser` function currently ignores `UserInfo.UID` for new users and always auto-generates. The logic becomes:
+In `internal/users/manager.go`, the `UpdateUser` function logic becomes:
 
 ```
 if user already exists in DB:
     keep existing UID (no change from today)
+else if pre-auth UID exists AND broker provided a different UID:
+    this is first SSH login with IdP UID mismatch → signal error (see SSH handling below)
 else if pre-auth UID exists:
     use pre-auth UID (no change from today)
 else if broker provided a UID (UserInfo.UID != nil):
@@ -207,68 +233,87 @@ else:
     auto-generate GID (no change from today)
 ```
 
-### Validation of broker-provided IDs
+#### Validation of broker-provided IDs
 
-A broker-provided UID or GID must pass the following checks before being used:
+A broker-provided UID or GID must pass the following checks:
 
 1. **Not a reserved ID** — Must not be 0 (root), 65534 (nobody), 65535, or MaxUint32 (same reserved list as `isReservedID`).
 2. **Not conflicting with local entries** — Must not be in use in `/etc/passwd` or `/etc/group` (checked via `lockedEntries.IsUniqueUID` / `IsUniqueGID`).
 3. **Not conflicting with the authd database** — Must not be assigned to a *different* user/group in the authd database.
 
-A broker-provided UID/GID is **not** restricted to the configured `uid_min`/`uid_max` (`gid_min`/`gid_max`) range. Those limits only apply to auto-generated IDs. This is intentional: an administrator explicitly assigning IDs in the IdP is expected to know what range they want.
+A broker-provided UID/GID is **not** restricted to the configured `uid_min`/`uid_max` range. Those limits only apply to auto-generated IDs.
 
-If validation fails, the broker-provided ID is rejected with a warning log, and authd falls back to auto-generation for that user or group.
+If validation fails, the broker-provided ID is rejected with a warning log, and authd falls back to auto-generation.
+
+### SSH pre-auth handling: first-login disconnect
+
+When a user logs in via SSH for the first time and the IdP provides a UID, the following sequence occurs:
+
+1. sshd calls NSS → `RegisterUserPreAuth` generates a temporary UID (e.g. 10001).
+2. sshd uses UID 10001 for the session.
+3. PAM authentication succeeds → broker returns `userinfo` with IdP UID 50001.
+4. authd's `UpdateUser` detects: pre-auth UID (10001) exists AND broker-provided UID (50001) differs.
+5. authd creates the user with the IdP-provided UID (50001), discarding the pre-auth UID.
+6. `UpdateUser` (or `IsAuthenticated` in the PAM service) returns a specific error indicating that the session must be restarted.
+7. The PAM module sends an informational message to the user and returns an authentication failure.
+
+The informational message displayed via PAM:
+
+```
+Your user account has been created. Please log in again.
+```
+
+The PAM module uses `showPamMessage(mTx, pam.TextInfo, msg)` before returning the error. OpenSSH displays `PAM_TEXT_INFO` messages to the client when `UsePAM yes` is set (which is the default).
+
+On the second login, the user exists in the authd database with UID 50001. The SSH pre-auth NSS lookup finds them in the DB and returns the correct UID. No disconnect is needed.
+
+**This disconnect only occurs:**
+- On the very first SSH login for a user
+- When the feature is enabled (IdP UID attribute is configured)
+- When the IdP actually provides a UID for the user
+- When the login method is SSH (GDM does not have pre-auth, so the IdP UID is used directly)
+
+#### GDM and other non-SSH login methods
+
+For GDM and other PAM applications that do not perform a pre-auth NSS lookup, there is no pre-auth record. `UpdateUser` takes the `broker provided a UID` branch directly, and the user is created with the correct UID on first login. No disconnect is needed.
 
 ### Behaviour on subsequent logins (UID/GID already stored)
 
 Once a user or group has a UID/GID stored in the authd database, that ID is preserved on subsequent logins — even if the IdP attribute has changed. This prevents breaking file ownership. A warning is logged if the IdP-provided value differs from the stored one.
 
-## Changes to the Entra ID provider
+To change the UID/GID after it has been stored, administrators use `authctl user set-uid` / `authctl group set-gid`.
 
-### `msentraid.go` — claims struct
-
-Add an optional field for the UID claim:
-
-```go
-type claims struct {
-    PreferredUserName string  `json:"preferred_username"`
-    Sub               string  `json:"sub"`
-    Home              string  `json:"home"`
-    Shell             string  `json:"shell"`
-    Gecos             string  `json:"name"`
-    UnixUID           *int32  `json:"extn.unix_uid,omitempty"`
-}
-```
-
-The claim name (`extn.unix_uid`) should be read from the broker configuration (the `unix_uid_claim` setting) to support custom names.
-
-### `msentraid.go` — `GetUserInfo`
-
-If the claims contain a non-nil `UnixUID`, convert it to `uint32` and set it on the returned `info.User.UID`. If the claim is absent and a `unix_uid_attribute` is configured, the broker makes a Graph API call to `/me?$select=<attribute>` to retrieve it.
-
-### `msentraid.go` — `fetchUserGroups`
-
-Extend the Graph API request for groups to also `$select` the `unix_gid` directory extension attribute. When iterating the returned groups, read the extension property from each group's additional data and set `info.Group.GID` accordingly.
-
-### `providers.go` — `Provider` interface
-
-The `GetUserInfo` and `GetGroups` methods should not need signature changes, since the UID/GID are carried in the existing `info.User` and `info.Group` return types.
+---
 
 ## Example broker
 
-The example broker should be updated to optionally include `uid` and `gid` fields in the `userinfo` JSON for specific test users, to enable testing the full flow in integration tests.
+The example broker should be updated to optionally include `uid` and `gid` fields in the `userinfo` JSON and `token.json` for specific test users, to enable testing both iterations in integration tests.
 
 ## Documentation
 
 The following documentation should be created or updated:
 
-* **Setup guide**: Step-by-step instructions for administrators to create the directory extension properties, assign values, and optionally configure the ID-token claim.
-* **Broker configuration reference**: Document the new `unix_uid_attribute`, `unix_uid_claim`, and `unix_gid_attribute` configuration keys.
-* **Troubleshooting**: Common issues (attribute not found, ID conflicts, value format errors) and how to diagnose them.
+* **Setup guide**: Step-by-step instructions for administrators to:
+  1. Create the directory extension properties in Entra ID.
+  2. Assign UID/GID values to users and groups.
+  3. Configure the broker (`unix_uid_attribute`, `unix_gid_attribute`).
+  4. (Iteration 1) Use `authctl user set-uid` / `authctl group set-gid` to apply cached IDs, including guidance on scripting.
+* **Broker configuration reference**: Document the new configuration keys.
+* **First login behaviour**: Document that the first SSH login with a configured IdP UID will create the user account and require a re-login (iteration 2 only).
+* **Troubleshooting**: Common issues (attribute not found, ID conflicts, value format errors, first-login disconnect) and how to diagnose them.
 
 # Further Information
 
 ## Alternatives considered
+
+### Fetching UID at pre-auth time via application credentials (rejected)
+
+The broker could use a client_credentials grant to query the Graph API during `UserPreCheck` (before authentication), using `User.Read.All` application permission. This was rejected because:
+
+* It requires the sensitive `User.Read.All` application permission (allows reading all users in the tenant).
+* Not all installations have app credentials configured (some use only the public client OIDC flow).
+* It adds latency to every SSH NSS lookup.
+* It only works for the user UID, not group GIDs (groups aren't known until after auth).
 
 ### On-premises extension attributes (`extensionAttribute1`–`extensionAttribute15`)
 
@@ -293,7 +338,6 @@ These are conceptually similar to directory extensions but were rejected because
 
 * They use a complex-type wrapper (e.g., `contoso_unixAttributes/uid`) rather than a flat property, making the `$select` and JSON parsing slightly more involved.
 * They have a lifecycle management model (InDevelopment → Available) that adds unnecessary complexity.
-* They cannot be emitted as optional claims in OIDC tokens.
 
 ## Related issues
 
@@ -304,5 +348,4 @@ These are conceptually similar to directory extensions but were rejected because
 
 * [Microsoft Graph extensibility overview](https://learn.microsoft.com/en-us/graph/extensibility-overview)
 * [Create directory extension property](https://learn.microsoft.com/en-us/graph/api/application-post-extensionproperty)
-* [Directory extension optional claims](https://learn.microsoft.com/en-us/entra/identity-platform/optional-claims#directory-extension-optional-claims)
 * [systemd UID/GID ranges](https://systemd.io/UIDS-GIDS/)
