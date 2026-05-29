@@ -26,7 +26,6 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers"
 	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
-	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/canonical/authd/log"
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -883,7 +882,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 
 	// Try to refresh the groups
 	groups, err := b.getGroups(ctx, session, authInfo)
-	if errors.Is(err, himmelblau.ErrDeviceDisabled) {
+	if errors.Is(err, providerErrors.ErrDeviceDisabled) {
 		// The device is disabled, deny login
 		log.Errorf(context.Background(), "Login failed: %s", err)
 
@@ -896,13 +895,13 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 
 		return AuthDenied, errorMessage{Message: fmt.Sprintf("This device is disabled in %s, please contact your administrator.", b.provider.DisplayName())}
 	}
-	if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
+	if errors.Is(err, providerErrors.ErrInvalidRedirectURI) {
 		// Deny login if the redirect URI is invalid, so that users and administrators are aware of the issue.
 		log.Errorf(context.Background(), "Login failed: %s", err)
 		return AuthDenied, errorMessageForDisplay(err, "Invalid redirect URI")
 	}
-	var tokenAcquisitionError himmelblau.TokenAcquisitionError
-	if errors.As(err, &tokenAcquisitionError) {
+	var retryWithDeviceAuthError *providerErrors.RetryWithDeviceAuthError
+	if errors.As(err, &retryWithDeviceAuthError) {
 		log.Errorf(context.Background(), "Token acquisition failed: %s. Try again using device authentication.", err)
 		// The token acquisition failed unexpectedly.
 		// One possible reason is that the device was deleted by an administrator in Entra ID.
