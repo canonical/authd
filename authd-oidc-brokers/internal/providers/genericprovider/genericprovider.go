@@ -2,7 +2,6 @@
 package genericprovider
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -11,7 +10,6 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/authmodes"
 	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
-	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 )
 
@@ -36,16 +34,6 @@ func (p GenericProvider) AdditionalScopes() []string {
 // AuthOptions is a no-op when no specific provider is in use.
 func (p GenericProvider) AuthOptions() []oauth2.AuthCodeOption {
 	return []oauth2.AuthCodeOption{}
-}
-
-// GetExtraFields returns the extra fields of the token which should be stored persistently.
-func (p GenericProvider) GetExtraFields(token *oauth2.Token) map[string]interface{} {
-	return nil
-}
-
-// GetMetadata is a no-op when no specific provider is in use.
-func (p GenericProvider) GetMetadata(provider *oidc.Provider) (map[string]interface{}, error) {
-	return nil, nil
 }
 
 // GetUserInfo returns user information from the claims of the provided Claimer.
@@ -95,11 +83,6 @@ func (p GenericProvider) GetUserInfo(claimer info.Claimer, _ bool) (info.User, e
 	), nil
 }
 
-// GetGroups is a no-op when no specific provider is in use.
-func (GenericProvider) GetGroups(ctx context.Context, clientID string, issuerURL string, token *oauth2.Token, providerMetadata map[string]interface{}, deviceRegistrationData []byte) ([]info.Group, error) {
-	return nil, nil
-}
-
 // NormalizeUsername parses a username into a normalized version.
 func (p GenericProvider) NormalizeUsername(username string) string {
 	return username
@@ -135,24 +118,4 @@ func (p GenericProvider) IsTokenExpiredError(err *oauth2.RetrieveError) bool {
 	return slices.ContainsFunc(expiredDescriptions, func(desc string) bool {
 		return strings.Contains(err.ErrorDescription, desc)
 	})
-}
-
-// IsUserDisabledError returns false, as the generic provider does not support disabling users.
-func (p GenericProvider) IsUserDisabledError(_ *oauth2.RetrieveError) bool {
-	return false
-}
-
-// SupportsDeviceRegistration returns false, as the generic provider does not support device registration.
-func (p GenericProvider) SupportsDeviceRegistration() bool {
-	return false
-}
-
-// IsTokenForDeviceRegistration returns false, as the generic provider does not support device registration.
-func (p GenericProvider) IsTokenForDeviceRegistration(_ *oauth2.Token) (bool, error) {
-	return false, nil
-}
-
-// MaybeRegisterDevice is a no-op when no specific provider is in use.
-func (p GenericProvider) MaybeRegisterDevice(_ context.Context, _ *oauth2.Token, _, _ string, _ []byte) ([]byte, func(), error) {
-	return nil, func() {}, nil
 }

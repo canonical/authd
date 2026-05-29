@@ -14,11 +14,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers"
 	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/genericprovider"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
@@ -394,14 +396,13 @@ func ExpiryDeviceAuthHandler() EndpointHandler {
 // MockProvider is a mock that implements the Provider interface.
 type MockProvider struct {
 	genericprovider.GenericProvider
-	Scopes                             []string
-	Options                            []oauth2.AuthCodeOption
-	GetGroupsFunc                      func() ([]info.Group, error)
-	FirstCallDelay                     int
-	SecondCallDelay                    int
-	GetGroupsFails                     bool
-	ProviderSupportsDeviceRegistration bool
-	RequireNameClaimOnInitialAuth      bool
+	Scopes                        []string
+	Options                       []oauth2.AuthCodeOption
+	GetGroupsFunc                 func() ([]info.Group, error)
+	FirstCallDelay                int
+	SecondCallDelay               int
+	GetGroupsFails                bool
+	RequireNameClaimOnInitialAuth bool
 
 	numCalls     int
 	numCallsLock sync.Mutex
@@ -426,11 +427,6 @@ func (p *MockProvider) AuthOptions() []oauth2.AuthCodeOption {
 // NormalizeUsername parses a username into a normalized version.
 func (p *MockProvider) NormalizeUsername(username string) string {
 	return strings.ToLower(username)
-}
-
-// GetMetadata is a no-op when no specific provider is in use.
-func (p *MockProvider) GetMetadata(provider *oidc.Provider) (map[string]interface{}, error) {
-	return nil, nil
 }
 
 // GetUserInfo returns the user info parsed from the provided Claimer.
@@ -491,25 +487,6 @@ func (p *MockProvider) GetGroups(ctx context.Context, clientID string, issuerURL
 	return userGroups, nil
 }
 
-// IsTokenForDeviceRegistration checks if the token is for device registration.
-func (p *MockProvider) IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error) {
-	if token == nil {
-		return false, errors.New("token is nil")
-	}
-
-	isForDeviceRegistration, ok := token.Extra(IsForDeviceRegistrationClaim).(bool)
-	if !ok {
-		return false, fmt.Errorf("token does not contain %q claim", IsForDeviceRegistrationClaim)
-	}
-
-	return isForDeviceRegistration, nil
-}
-
-// SupportsDeviceRegistration checks if the provider supports device registration.
-func (p *MockProvider) SupportsDeviceRegistration() bool {
-	return p.ProviderSupportsDeviceRegistration
-}
-
 type claims struct {
 	Email    string `json:"email"`
 	Sub      string `json:"sub"`
@@ -526,4 +503,115 @@ func (p *MockProvider) userClaims(idToken info.Claimer) (claims, error) {
 		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
 	}
 	return userClaims, nil
+}
+
+// MockDeviceRegistererProvider wraps MockProvider and adds DeviceRegisterer support.
+// Use this when tests need the provider to implement the DeviceRegisterer interface.
+type MockDeviceRegistererProvider struct {
+	*MockProvider
+}
+
+// IsTokenForDeviceRegistration checks if the token is for device registration.
+func (p *MockDeviceRegistererProvider) IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error) {
+	if token == nil {
+		return false, errors.New("token is nil")
+	}
+
+	isForDeviceRegistration, ok := token.Extra(IsForDeviceRegistrationClaim).(bool)
+	if !ok {
+		return false, fmt.Errorf("token does not contain %q claim", IsForDeviceRegistrationClaim)
+	}
+
+	return isForDeviceRegistration, nil
+}
+
+// MaybeRegisterDevice is a no-op for the mock device registrar.
+func (p *MockDeviceRegistererProvider) MaybeRegisterDevice(_ context.Context, _ *oauth2.Token, _, _ string, _ []byte) ([]byte, func(), error) {
+	return nil, func() {}, nil
+}
+
+// MockMetadataProvider wraps MockProvider and adds MetadataProvider support.
+// Use this when tests need the provider to implement the MetadataProvider interface.
+type MockMetadataProvider struct {
+	*MockProvider
+	GetMetadataErr error
+}
+
+// GetMetadata returns a fixed metadata map, or the configured error.
+func (p *MockMetadataProvider) GetMetadata(_ *oidc.Provider) (map[string]interface{}, error) {
+	if p.GetMetadataErr != nil {
+		return nil, p.GetMetadataErr
+	}
+	return map[string]interface{}{"test-metadata": "test-value"}, nil
+}
+
+// GetExtraFields returns a fixed extra-fields map for the given token.
+func (p *MockMetadataProvider) GetExtraFields(_ *oauth2.Token) map[string]interface{} {
+	return map[string]interface{}{"test-extra-field": "test-value"}
+}
+
+// MockUserDisabledCheckerProvider wraps MockProvider and adds UserDisabledChecker support.
+// Use this when tests need the provider to implement the UserDisabledChecker interface.
+type MockUserDisabledCheckerProvider struct {
+	*MockProvider
+	// UserDisabledErrorCode is the OAuth2 error code that signals a disabled user.
+	UserDisabledErrorCode string
+}
+
+// IsUserDisabledError returns true when the retrieve error code matches UserDisabledErrorCode.
+func (p *MockUserDisabledCheckerProvider) IsUserDisabledError(err *oauth2.RetrieveError) bool {
+	return err.ErrorCode == p.UserDisabledErrorCode
+}
+
+// ProviderCapabilities enumerates the optional provider interfaces to expose.
+type ProviderCapabilities struct {
+	GroupFetcher        providers.GroupFetcher
+	DeviceRegisterer    providers.DeviceRegisterer
+	MetadataProvider    providers.MetadataProvider
+	UserDisabledChecker providers.UserDisabledChecker
+}
+
+// ComposeProvider returns a provider exposing only the requested optional interfaces.
+func ComposeProvider(provider providers.Provider, capabilities ProviderCapabilities) providers.Provider {
+	caps := make(map[reflect.Type]any)
+	if capabilities.GroupFetcher != nil {
+		caps[reflect.TypeOf((*providers.GroupFetcher)(nil)).Elem()] = capabilities.GroupFetcher
+	}
+	if capabilities.DeviceRegisterer != nil {
+		caps[reflect.TypeOf((*providers.DeviceRegisterer)(nil)).Elem()] = capabilities.DeviceRegisterer
+	}
+	if capabilities.MetadataProvider != nil {
+		caps[reflect.TypeOf((*providers.MetadataProvider)(nil)).Elem()] = capabilities.MetadataProvider
+	}
+	if capabilities.UserDisabledChecker != nil {
+		caps[reflect.TypeOf((*providers.UserDisabledChecker)(nil)).Elem()] = capabilities.UserDisabledChecker
+	}
+	return &composedProvider{provider, caps}
+}
+
+type composedProvider struct {
+	providers.Provider
+	caps map[reflect.Type]any
+}
+
+func (c *composedProvider) ProviderAs(target any) bool {
+	tv := reflect.ValueOf(target)
+	if tv.Kind() != reflect.Pointer || tv.IsNil() {
+		return false
+	}
+	elem := tv.Elem()
+	if capability, ok := c.caps[elem.Type()]; ok {
+		elem.Set(reflect.ValueOf(capability))
+		return true
+	}
+	return false
+}
+
+// ErrorResponseHandler returns a handler that responds with the given HTTP status code and JSON body.
+func ErrorResponseHandler(statusCode int, body string) EndpointHandler {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(statusCode)
+		_, _ = w.Write([]byte(body))
+	}
 }

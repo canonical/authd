@@ -439,12 +439,6 @@ func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername strin
 	return nil
 }
 
-// SupportsDeviceRegistration checks if the provider supports device registration.
-func (p *Provider) SupportsDeviceRegistration() bool {
-	// The Microsoft Entra ID provider supports device registration.
-	return true
-}
-
 // IsTokenForDeviceRegistration checks if the token is for device registration.
 func (p *Provider) IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error) {
 	accessToken, _, err := new(jwt.Parser).ParseUnverified(token.AccessToken, jwt.MapClaims{})
