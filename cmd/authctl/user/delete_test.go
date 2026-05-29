@@ -1,9 +1,11 @@
 package user_test
 
 import (
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -95,6 +97,10 @@ func TestUserDeleteCommand(t *testing.T) {
 			args:             []string{"delete", "--yes", "nonexistent@example.com"},
 			expectedExitCode: int(codes.NotFound),
 		},
+		"Error_when_user_does_not_exist_without_confirmation_prompt": {
+			args:             []string{"delete", "nonexistent@example.com"},
+			expectedExitCode: int(codes.NotFound),
+		},
 		"Error_when_authd_is_unavailable": {
 			args:             []string{"delete", "--yes", "user1@example.com"},
 			authdUnavailable: true,
@@ -102,7 +108,8 @@ func TestUserDeleteCommand(t *testing.T) {
 		},
 	}
 
-	for name, tc := range tests {
+	for _, name := range slices.Sorted(maps.Keys(tests)) {
+		tc := tests[name]
 		t.Run(name, func(t *testing.T) {
 			authctlEnv := append([]string{}, authctlEnv...)
 			if tc.authdUnavailable {
