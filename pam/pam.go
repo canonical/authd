@@ -108,6 +108,9 @@ func sendReturnMessageToPam(mTx pam.ModuleTransaction, retStatus adapter.PamRetu
 	switch rs := retStatus.(type) {
 	case adapter.PamSuccess:
 		style = pam.TextInfo
+	case adapter.PamNewUser:
+		// Show the reconnect prompt as informational, not as an error.
+		style = pam.TextInfo
 	case adapter.PamReturnError:
 		if rs.Status() == pam.ErrIgnore {
 			style = pam.TextInfo

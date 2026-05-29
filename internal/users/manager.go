@@ -200,17 +200,33 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 	}
 	defer func() { err = errors.Join(err, unlockEntries()) }()
 
+	// preauthUID is non-zero when this is the first SSH login for a new user: the
+	// NSS pre-auth path registered a temporary UID before authentication ran.
+	var preauthUID uint32
 	if oldUserInfo != nil {
 		// The user already exists in the database, use the existing UID to avoid permission issues.
 		u.UID = oldUserInfo.UID
 	} else {
-		preauthUID, cleanup, err := m.preAuthRecords.MaybeCompletePreauthUser(u.Name)
-		if err != nil && !errors.Is(err, tempentries.NoDataFoundError{}) {
-			return err
+		var preauthCleanup func()
+		var preauthErr error
+		preauthUID, preauthCleanup, preauthErr = m.preAuthRecords.MaybeCompletePreauthUser(u.Name)
+		if preauthErr != nil && !errors.Is(preauthErr, tempentries.NoDataFoundError{}) {
+			return preauthErr
 		}
 		if preauthUID != 0 {
-			u.UID = preauthUID
-			defer cleanup()
+			// Defer cleanup so that the pre-auth record remains in preAuthRecords
+			// during UID generation below. UsedUIDs() includes pre-auth records,
+			// so the generator will skip preauthUID and produce a different ID.
+			// This mismatch between sshd's pre-auth UID and the stored UID is
+			// exactly why the session must be restarted.
+			defer preauthCleanup()
+			var cleanupUID func()
+			u.UID, cleanupUID, err = m.idGenerator.GenerateUID(lockedEntries, m)
+			if err != nil {
+				return err
+			}
+			defer cleanupUID()
+			log.Debugf(context.Background(), "Using new UID %d for user %q (pre-auth UID was %d)", u.UID, u.Name, preauthUID)
 		} else {
 			unique, err := lockedEntries.IsUniqueUserName(u.Name)
 			if err != nil {
@@ -327,6 +343,13 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 
 	if err = checkHomeDirOwner(userRow.Dir, userRow.UID, userRow.GID); err != nil {
 		log.Warningf(context.Background(), "Failed to check home directory ownership: %v", err)
+	}
+
+	// The user was created using the pre-auth UID assigned before authentication.
+	// The SSH session must be restarted so that sshd can look up the now-persistent
+	// user record and bind to the correct UID from the start.
+	if preauthUID != 0 {
+		return PreAuthUserCreatedError{}
 	}
 
 	return nil

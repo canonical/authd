@@ -72,6 +72,19 @@ func groupEntryFromGroupWithMembers(g db.GroupWithMembers) types.GroupEntry {
 // NoDataFoundError is the error returned when no entry is found in the db.
 type NoDataFoundError = db.NoDataFoundError
 
+// PreAuthUserCreatedError is returned by UpdateUser when a new user was created
+// using a pre-authentication UID, i.e., on the first SSH login for that user.
+// The user record has been successfully committed to the database, but the SSH
+// session must be restarted: sshd bound the session to the pre-auth UID before
+// PAM authentication ran, so the UID in the running session may differ from
+// what was ultimately stored.
+type PreAuthUserCreatedError struct{}
+
+// Error implements the error interface.
+func (e PreAuthUserCreatedError) Error() string {
+	return "user record was created during pre-authentication"
+}
+
 // GroupIsPrimaryError is returned when trying to delete a group that is still
 // the primary group of one or more users.
 type GroupIsPrimaryError struct {

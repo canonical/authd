@@ -14,6 +14,13 @@ const (
 	Retry = "retry"
 	// Next is the response when another MFA (including changing password) authentication is necessary.
 	Next = "next"
+
+	// NewUser is returned by the authd PAM gRPC service (not by a broker) when
+	// authentication succeeded but a new user record was created using a pre-auth
+	// UID. The SSH session must be restarted so sshd picks up the correct UID.
+	// This value is intentionally not in Replies because it is never produced by
+	// a broker.
+	NewUser = "new-user"
 )
 
 // Replies is the list of all possible authentication replies.

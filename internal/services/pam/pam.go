@@ -311,6 +311,13 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 
 	// Update database and local groups on granted auth.
 	if err := s.userManager.UpdateUser(uInfo); err != nil {
+		if errors.Is(err, users.PreAuthUserCreatedError{}) {
+			// The user's persistent record was just created. The running SSH session
+			// bound to the pre-auth UID before authentication, so the session must
+			// be restarted for sshd to pick up the correct UID.
+			log.Noticef(ctx, "IsAuthenticated: user %q record created during pre-auth, session restart required", uInfo.Name)
+			return &authd.IAResponse{Access: auth.NewUser}, nil
+		}
 		log.Errorf(ctx, "IsAuthenticated: Could not update user %q in database: %v", uInfo.Name, err)
 		return nil, err
 	}

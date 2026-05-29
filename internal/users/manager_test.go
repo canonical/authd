@@ -2,6 +2,7 @@ package users_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -483,6 +484,13 @@ func TestConcurrentUserUpdate(t *testing.T) {
 				}
 
 				err := m.UpdateUser(u)
+				// ErrPreAuthUserCreated is expected when the user is registered
+				// via the SSH pre-auth path: the user record is committed
+				// successfully but the session must be restarted.
+				if errors.Is(err, users.PreAuthUserCreatedError{}) {
+					t.Logf("Updated user %q using UID %d (pre-auth user created)", userName, uid)
+					return
+				}
 				require.NoError(t, err, "UpdateUser should not fail but it did")
 				t.Logf("Updated user %q using UID %d", userName, uid)
 			}

@@ -28,6 +28,27 @@ func (p PamSuccess) Message() string {
 	return p.msg
 }
 
+// PamNewUser signals that a new user account was just created on the first SSH
+// login. The SSH session must be restarted because sshd bound to the pre-auth
+// UID before authentication ran. The message is shown to the user as
+// pam.TextInfo before the PAM module returns pam.ErrAuth.
+type PamNewUser struct {
+	msg string
+}
+
+// Message returns the informational message to send to the user.
+func (p PamNewUser) Message() string {
+	return p.msg
+}
+
+// Status returns pam.ErrMaxtries so that the SSH session is closed without
+// offering another retry within the same connection. The user must start a
+// fresh connection, at which point sshd will look up the user in the authd
+// database and get the correct UID.
+func (p PamNewUser) Status() pam.Error {
+	return pam.ErrMaxtries
+}
+
 // pamError signals PAM module to return the provided error message and Quit tea.Model.
 type pamError struct {
 	status pam.Error

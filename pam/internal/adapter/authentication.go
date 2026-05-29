@@ -363,6 +363,12 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 		case auth.Granted:
 			return m, sendEvent(PamSuccess{BrokerID: m.currentBrokerID, msg: authMsg})
 
+		case auth.NewUser:
+			// Authentication succeeded but the user record was just created using the
+			// SSH pre-auth UID. The session must be restarted so that sshd picks up the
+			// correct UID from the now-persistent user record.
+			return m, sendEvent(PamNewUser{msg: "Your user account has been created. Please log in again."})
+
 		case auth.Retry:
 			m.errorMsg = authMsg
 			return m, sendEvent(startAuthentication{})
