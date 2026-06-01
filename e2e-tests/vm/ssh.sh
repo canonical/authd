@@ -5,12 +5,16 @@ set -euo pipefail
 usage(){
     cat << EOF
 
-    Usage: $0 --release <release> [ssh options]
+    Usage: $0 --release <release> --user <user> [--] [ssh_options]
 
     SSH into the e2e-test VM for the specified Ubuntu release.
 
+    Options:
+      --release, -r <release>    The Ubuntu release to connect to (e.g., "noble", "resolute").
+      --user, -u <user>          The SSH user to connect as (default: "root").
+
     Example:
-      $0 --release questing
+      $0 --release resolute
 EOF
 }
 
@@ -24,6 +28,10 @@ while [[ $# -gt 0 ]]; do
             RELEASE="$2"
             shift 2
             ;;
+        -u|--user)
+            SSH_USER="$2"
+            shift 2
+            ;;
         --)
             shift
             break
@@ -34,12 +42,13 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-
 if [ -z "${VM_NAME:-}" ] && [ -z "${RELEASE:-}" ]; then
     echo >&2 "Error: Missing required argument <release>"
     usage >&2
     exit 1
 fi
+
+SSH_USER=${SSH_USER:-"root"}
 
 VM_NAME=${VM_NAME:-"e2e-runner-${RELEASE}"}
 
@@ -51,4 +60,4 @@ exec ssh \
   -o UserKnownHostsFile=/dev/null \
   -o StrictHostKeyChecking=no \
   -o LogLevel=ERROR \
-  root@localhost "$@"
+  "${SSH_USER}@localhost" "$@"
