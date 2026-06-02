@@ -1,6 +1,6 @@
 {
 		"name": "user-pre-check@example.com",
-		"uuid": "",
+		"provider_id": "providerid-user-pre-check@example.com",
 		"gecos": "gecos for user-pre-check@example.com",
 		"dir": "/home/user-pre-check@example.com",
 		"shell": "/bin/sh/user-pre-check@example.com",

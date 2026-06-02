@@ -21,12 +21,17 @@ const (
 	DbusBaseInterface string = "com.ubuntu.authd.Broker"
 
 	// LatestAPIVersion is the latest API version supported by authd.
-	LatestAPIVersion = 2
+	LatestAPIVersion = 3
 )
+
+type dbusInterface struct {
+	name    string
+	version uint
+}
 
 type dbusBroker struct {
 	name  string
-	iface string
+	iface dbusInterface
 
 	dbusObject dbus.BusObject
 }
@@ -77,76 +82,83 @@ func newDbusBroker(ctx context.Context, bus *dbus.Conn, configFile string) (b db
 
 // getInterface introspects the broker's D-Bus object and returns the interface with the highest version supported both
 // by the broker and authd.
-func getInterface(obj dbus.BusObject) (string, error) {
+func getInterface(obj dbus.BusObject) (dbusInterface, error) {
 	node, err := introspect.Call(obj)
 	if err != nil {
-		return "", fmt.Errorf("could not introspect broker: %v", err)
+		return dbusInterface{}, fmt.Errorf("could not introspect broker: %v", err)
 	}
 
-	var supportedInterfaces []string
+	var supportedInterfaces []dbusInterface
 	for _, iface := range node.Interfaces {
 		// Ignore interfaces that do not satisfy the expected format, as they are not relevant for selecting the broker
 		// interface version.
 		// The expected format is com.ubuntu.authd.BrokerX, where X is the version number (or empty for the first
 		// version).
-		suffix := strings.TrimPrefix(iface.Name, DbusBaseInterface)
-		if suffix == iface.Name {
-			// The interface name doesn't start with com.ubuntu.authd.Broker
+		version, err := interfaceVersion(iface.Name)
+		if err != nil {
+			log.Warningf(context.Background(), "Could not parse interface version from %q", iface.Name)
 			continue
 		}
 
-		// The suffix should be either empty (for the first version) or a number (for later versions).
-		if suffix != "" {
-			v, err := strconv.Atoi(suffix)
-			if err != nil {
-				continue
-			}
-
-			if v > LatestAPIVersion {
-				// The interface version is higher than the latest API version supported by authd, ignore it.
-				continue
-			}
+		if version > LatestAPIVersion {
+			log.Warningf(context.Background(), "Ignoring interface %q with version %d higher than latest supported version %d", iface.Name, version, LatestAPIVersion)
+			continue
 		}
 
-		supportedInterfaces = append(supportedInterfaces, iface.Name)
+		supportedInterfaces = append(supportedInterfaces, dbusInterface{name: iface.Name, version: uint(version)})
 	}
 
-	slices.SortFunc(supportedInterfaces, func(a, b string) int {
-		suffixA := strings.TrimPrefix(a, DbusBaseInterface)
-		suffixB := strings.TrimPrefix(b, DbusBaseInterface)
-
-		// We know from the filtering above that the suffix is either empty (for the base
-		// interface, which is version 1 per D-Bus API versioning) or a valid number.
-		versionA := 1
-		if suffixA != "" {
-			versionA, _ = strconv.Atoi(suffixA)
-		}
-		versionB := 1
-		if suffixB != "" {
-			versionB, _ = strconv.Atoi(suffixB)
-		}
-
-		if versionA < versionB {
+	slices.SortFunc(supportedInterfaces, func(a, b dbusInterface) int {
+		if a.version < b.version {
 			return -1
-		} else if versionA > versionB {
+		} else if a.version > b.version {
 			return 1
 		}
 		return 0
 	})
 
 	if len(supportedInterfaces) == 0 {
-		return "", errors.New("no supported interfaces found")
+		return dbusInterface{}, errors.New("no supported interfaces found")
 	}
 
 	return supportedInterfaces[len(supportedInterfaces)-1], nil
 }
 
+// interfaceVersion extracts the version number from the broker interface name.
+//
+// If it is the base interface without a version suffix, it returns 1.
+func interfaceVersion(iface string) (int, error) {
+	suffix := strings.TrimPrefix(iface, DbusBaseInterface)
+	if suffix == iface {
+		return 0, fmt.Errorf("interface name %q does not start with expected prefix %q", iface, DbusBaseInterface)
+	}
+
+	if suffix == "" {
+		return 1, nil
+	}
+
+	version, err := strconv.Atoi(suffix)
+	if err != nil {
+		return 0, fmt.Errorf("invalid interface version suffix %q: %v", suffix, err)
+	}
+
+	return version, nil
+}
+
 // NewSession calls the corresponding method on the broker bus and returns the session ID and encryption key.
-func (b dbusBroker) NewSession(ctx context.Context, username, lang, mode string) (sessionID, encryptionKey string, err error) {
-	call, err := b.call(ctx, "NewSession", username, lang, mode)
+// On API v3, the providerID (stable provider identifier) is passed so the broker can locate the
+// provider ID-keyed cache directory directly. v2 brokers receive only username, lang, and mode.
+func (b dbusBroker) NewSession(ctx context.Context, username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
+	var call *dbus.Call
+	if b.iface.version < 3 {
+		call, err = b.call(ctx, "NewSession", username, lang, mode)
+	} else {
+		call, err = b.call(ctx, "NewSession", username, lang, mode, providerID)
+	}
 	if err != nil {
 		return "", "", err
 	}
+
 	if err = call.Store(&sessionID, &encryptionKey); err != nil {
 		return "", "", err
 	}
@@ -224,17 +236,26 @@ func (b dbusBroker) UserPreCheck(ctx context.Context, username string) (userinfo
 }
 
 // DeleteUser calls the corresponding method on the broker bus to delete broker side user data.
-func (b dbusBroker) DeleteUser(ctx context.Context, username string) error {
-	if _, err := b.call(ctx, "DeleteUser", username); err != nil {
+// On API v3, the providerID (stable provider identifier) is passed so the broker can locate the
+// provider ID-keyed cache directory even after an email change. v2 brokers receive only the username.
+func (b dbusBroker) DeleteUser(ctx context.Context, username, providerID string) error {
+	var err error
+	if b.iface.version < 3 {
+		_, err = b.call(ctx, "DeleteUser", username)
+	} else {
+		_, err = b.call(ctx, "DeleteUser", username, providerID)
+	}
+	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
 // call is an abstraction over dbus calls to ensure we wrap the returned error to an ErrorToDisplay.
 // All wrapped errors will be logged, but not returned to the UI.
 func (b dbusBroker) call(ctx context.Context, method string, args ...interface{}) (*dbus.Call, error) {
-	dbusMethod := b.iface + "." + method
+	dbusMethod := b.iface.name + "." + method
 	call := b.dbusObject.CallWithContext(ctx, dbusMethod, 0, args...)
 	if err := call.Err; err != nil {
 		var dbusError dbus.Error

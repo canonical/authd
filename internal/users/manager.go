@@ -880,6 +880,18 @@ func (m *Manager) ProviderIDForUser(username, brokerID string) (string, error) {
 	return u.ProviderID, nil
 }
 
+// BrokerAndProviderIDForUser returns the broker ID and the stable provider identifier recorded
+// for the user in a single database lookup. Both values are empty if not recorded (pre-migration
+// user, v2 broker, or local user).
+func (m *Manager) BrokerAndProviderIDForUser(username string) (brokerID, providerID string, err error) {
+	u, err := m.db.UserByName(username)
+	if err != nil {
+		return "", "", err
+	}
+
+	return u.BrokerID, u.ProviderID, nil
+}
+
 // UpdateBrokerForUser updates the broker ID for the given user.
 func (m *Manager) UpdateBrokerForUser(username, brokerID string) error {
 	if err := m.db.UpdateBrokerForUser(username, brokerID); err != nil {
@@ -996,6 +1008,18 @@ func (m *Manager) DeleteGroup(groupname string) error {
 // IsUserLocked returns true if the user with the given user name is locked, false otherwise.
 func (m *Manager) IsUserLocked(username string) (bool, error) {
 	u, err := m.db.UserByName(username)
+	if err != nil {
+		return false, err
+	}
+
+	return u.Locked, nil
+}
+
+// IsUserLockedByProviderID returns true if the user identified by the given broker-scoped provider ID
+// is locked. It resolves the user by their stable identity rather than their name, so a lock set before
+// an IdP-side username change is still honored. Returns a NoDataFoundError if no user matches.
+func (m *Manager) IsUserLockedByProviderID(brokerID, providerID string) (bool, error) {
+	u, err := m.db.UserByProviderID(brokerID, providerID)
 	if err != nil {
 		return false, err
 	}
