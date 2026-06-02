@@ -146,7 +146,7 @@ func TestNewSession(t *testing.T) {
 				username = "test-user"
 			}
 
-			id, _, err := b.NewSession(username, "lang", sessionmode.Login)
+			id, _, err := b.NewSession(username, "lang", sessionmode.Login, "")
 			t.Logf("NewSession returned id: %q, err: %v", id, err)
 			if tc.wantErr {
 				require.Error(t, err, "NewSession should have returned an error")
@@ -160,6 +160,43 @@ func TestNewSession(t *testing.T) {
 			require.Equal(t, tc.wantOffline, gotOffline, "Session should have been created in the expected mode")
 		})
 	}
+}
+
+// TestNewSessionRecoversFromDanglingCacheSymlink verifies that when the username cache path is a
+// dangling compatibility symlink (its provider ID-keyed target was removed, e.g. by a partial
+// DeleteUser), NewSession removes the broken link and falls back to a fresh username-based cache
+// directory. Without this, the resolved cache path stays under the dangling symlink and every
+// subsequent token/password write fails, denying the login with no way to recover.
+func TestNewSessionRecoversFromDanglingCacheSymlink(t *testing.T) {
+	t.Parallel()
+
+	b := newBrokerForTests(t, &brokerForTestConfig{issuerURL: defaultIssuerURL})
+
+	const username = "user@example.com"
+	userDataDir, err := b.UserDataDir(username)
+	require.NoError(t, err, "Setup: deriving the username data dir should not fail")
+	require.NoError(t, os.MkdirAll(filepath.Dir(userDataDir), 0700), "Setup: create the issuer dir")
+
+	// A compatibility symlink left behind by a prior migration, whose provider ID-keyed target no
+	// longer exists.
+	missingTarget, err := b.UserDataDir("provider-id-removed")
+	require.NoError(t, err)
+	require.NoError(t, os.Symlink(missingTarget, userDataDir), "Setup: create dangling compat symlink")
+	_, statErr := os.Stat(userDataDir)
+	require.Error(t, statErr, "Setup: the symlink should be dangling")
+
+	sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, "")
+	require.NoError(t, err, "NewSession should not error on a dangling symlink")
+
+	// The dangling symlink must have been removed so the path can be recreated as a real directory.
+	_, lstatErr := os.Lstat(userDataDir)
+	require.ErrorIs(t, lstatErr, os.ErrNotExist, "the dangling cache symlink should have been removed")
+
+	// Caching the token must now succeed (it would have failed through the dangling link).
+	tokenPath := b.TokenPathForSession(sessionID)
+	require.NoError(t, os.MkdirAll(filepath.Dir(tokenPath), 0700), "creating the fresh cache dir should succeed")
+	require.NoError(t, os.WriteFile(tokenPath, []byte("{}"), 0600),
+		"writing the token to the recovered cache path should succeed")
 }
 
 var supportedUILayouts = map[string]map[string]string{
@@ -1221,11 +1258,20 @@ func TestIsAuthenticated(t *testing.T) {
 			// Ensure that the directory structure is generic to avoid golden file conflicts
 			if _, err := os.Stat(filepath.Dir(b.TokenPathForSession(sessionID))); err == nil {
 				issuerDir := filepath.Dir(filepath.Dir(b.TokenPathForSession(sessionID)))
-				newIsserDir := filepath.Join(filepath.Dir(issuerDir), "provider_url")
-				err := os.Rename(issuerDir, newIsserDir)
+				newIssuerDir := filepath.Join(filepath.Dir(issuerDir), "provider_url")
+				err := os.Rename(issuerDir, newIssuerDir)
 				if err != nil {
 					require.ErrorIs(t, err, os.ErrNotExist, "Teardown: Failed to rename token directory")
 					t.Logf("Failed to rename token directory: %v", err)
+				}
+
+				// Remove compatibility symlinks left by cache migration.
+				// These point to temp directories and break golden file comparison.
+				entries, _ := os.ReadDir(newIssuerDir)
+				for _, entry := range entries {
+					if entry.Type()&os.ModeSymlink != 0 {
+						os.Remove(filepath.Join(newIssuerDir, entry.Name()))
+					}
 				}
 			}
 
@@ -1374,10 +1420,19 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			// Ensure that the directory structure is generic to avoid golden file conflicts
 			issuerDataDir := filepath.Dir(b.UserDataDirForSession(firstSession))
 			if _, err := os.Stat(issuerDataDir); err == nil {
-				err := os.Rename(issuerDataDir, filepath.Join(filepath.Dir(issuerDataDir), "provider_url"))
+				newIssuerDir := filepath.Join(filepath.Dir(issuerDataDir), "provider_url")
+				err := os.Rename(issuerDataDir, newIssuerDir)
 				if err != nil {
 					require.ErrorIs(t, err, os.ErrNotExist, "Teardown: Failed to rename issuer data directory")
 					t.Logf("Failed to rename issuer data directory: %v", err)
+				}
+
+				// Remove compatibility symlinks left by cache migration.
+				entries, _ := os.ReadDir(newIssuerDir)
+				for _, entry := range entries {
+					if entry.Type()&os.ModeSymlink != 0 {
+						os.Remove(filepath.Join(newIssuerDir, entry.Name()))
+					}
 				}
 			}
 			golden.CheckOrUpdateFileTree(t, outDir)
@@ -1765,15 +1820,36 @@ func TestUserDataDir(t *testing.T) {
 func TestDeleteUser(t *testing.T) {
 	t.Parallel()
 
+	const providerID = "provider-id-123"
+
 	tests := map[string]struct {
-		username        string
-		createUserDir   bool
-		readOnlyDataDir bool
+		username   string
+		providerID string
+
+		createUserDir       bool
+		createProviderIDDir bool
+		// usernameIsSymlink makes the username path a compatibility symlink pointing
+		// to the provider ID-keyed directory, as created by the cache migration.
+		usernameIsSymlink bool
+		readOnlyDataDir   bool
 
 		wantErr bool
 	}{
 		"Successfully_delete_existing_user":        {username: "user@example.com", createUserDir: true},
 		"Successfully_delete_unknown_user_is_noop": {username: "unknown@example.com"},
+
+		// Deleting by username when the username path is a compatibility symlink
+		// created by the cache migration must also remove the provider ID-keyed
+		// target, otherwise the token and password would be left behind on disk.
+		"Successfully_delete_symlinked_user_and_provider_ID_target": {
+			username: "user@example.com", usernameIsSymlink: true, createProviderIDDir: true,
+		},
+		"Successfully_delete_by_username_and_provider_ID": {
+			username: "user@example.com", providerID: providerID, usernameIsSymlink: true, createProviderIDDir: true,
+		},
+		"Successfully_delete_by_provider_ID_only": {
+			providerID: providerID, createProviderIDDir: true,
+		},
 
 		"Error_when_user_data_dir_cannot_be_removed":     {username: "user@example.com", createUserDir: true, readOnlyDataDir: true, wantErr: true},
 		"Error_when_userDataDir_could_not_be_determined": {username: "", wantErr: true},
@@ -1786,13 +1862,25 @@ func TestDeleteUser(t *testing.T) {
 				issuerURL: defaultIssuerURL,
 			})
 
-			// Derive the path where DeleteUser will look for the user's data
-			userDataDir, err := b.UserDataDir(tc.username)
-			if tc.username == "" {
-				require.Error(t, err, "Setup: UserDataDir should have returned an error for empty username")
+			// providerIDDir is always derived from the constant provider ID: the
+			// on-disk cache directory exists regardless of whether the provider ID is
+			// passed to DeleteUser. Creating it first also creates the shared issuer
+			// directory needed to place the username symlink.
+			providerIDDir, err := b.UserDataDir(providerID)
+			require.NoError(t, err, "Setup: UserDataDir for provider ID should not have returned an error")
+
+			// Derive the path where DeleteUser will look for the user's data.
+			userDataDir, errUser := b.UserDataDir(tc.username)
+
+			// An empty username (and no provider ID) only verifies that the data dir
+			// path could not be derived.
+			if tc.username == "" && tc.providerID == "" {
+				require.Error(t, errUser, "Setup: UserDataDir should have returned an error for empty username")
 				return
 			}
-			require.NoError(t, err, "Setup: UserDataDir should not have returned an error for valid username")
+			if tc.username != "" {
+				require.NoError(t, errUser, "Setup: UserDataDir should not have returned an error for valid username")
+			}
 
 			if tc.createUserDir {
 				err := os.MkdirAll(userDataDir, 0700)
@@ -1803,6 +1891,19 @@ func TestDeleteUser(t *testing.T) {
 				require.NoError(t, err, "Setup: could not write dummy token file")
 			}
 
+			if tc.createProviderIDDir {
+				// Create the real provider ID-keyed directory with cached data.
+				generateAndStoreCachedInfo(t, tokenOptions{}, filepath.Join(providerIDDir, "token.json"))
+				err := os.WriteFile(filepath.Join(providerIDDir, "password"), []byte("hashed"), 0600)
+				require.NoError(t, err, "Setup: could not write dummy password file")
+			}
+
+			if tc.usernameIsSymlink {
+				// Reproduce the compatibility symlink left behind by the cache migration.
+				err := os.Symlink(providerIDDir, userDataDir)
+				require.NoError(t, err, "Setup: could not create compatibility symlink")
+			}
+
 			if tc.readOnlyDataDir {
 				// Make the issuer directory read-only so RemoveAll fails on the user subdir
 				issuerDir := filepath.Dir(userDataDir)
@@ -1811,15 +1912,22 @@ func TestDeleteUser(t *testing.T) {
 				t.Cleanup(func() { _ = os.Chmod(issuerDir, 0700) }) //nolint:gosec // Restore full permissions after test
 			}
 
-			err = b.DeleteUser(tc.username)
+			err = b.DeleteUser(tc.username, tc.providerID)
 			if tc.wantErr {
 				require.Error(t, err, "DeleteUser should return an error, but did not")
 				return
 			}
 			require.NoError(t, err, "DeleteUser should not return an error, but did")
 
-			// Verify the user data directory no longer exists
-			require.NoDirExists(t, userDataDir, "User data directory should have been removed")
+			if tc.username != "" {
+				// Verify the user data directory (or compatibility symlink) no longer exists.
+				_, lstatErr := os.Lstat(userDataDir)
+				require.ErrorIs(t, lstatErr, os.ErrNotExist, "User data path should have been removed")
+			}
+			if tc.providerID != "" || tc.usernameIsSymlink {
+				// The provider ID-keyed directory (token + password) must be gone too.
+				require.NoDirExists(t, providerIDDir, "Provider ID directory should have been removed")
+			}
 		})
 	}
 }

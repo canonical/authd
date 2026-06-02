@@ -10,9 +10,11 @@ import (
 )
 
 // NewSession is the method through which the broker and the daemon will communicate once dbusInterface.NewSession is called.
-func (s *Interface) NewSession(username, lang, mode string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
-	log.Debugf(context.Background(), "Creating new session (username=%s, lang=%s, mode=%s)", username, lang, mode)
-	sessionID, encryptionKey, err := s.broker.NewSession(username, lang, mode)
+//
+// This is the v3+ version that accepts the providerID identifier for cache directory resolution.
+func (s *Interface) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "Creating new session (v3) (username=%s, lang=%s, mode=%s, provider_id=%s)", username, lang, mode, providerID)
+	sessionID, encryptionKey, err := s.broker.NewSession(username, lang, mode, providerID)
 	if err != nil {
 		return "", "", dbus.MakeFailedError(err)
 	}
@@ -87,9 +89,36 @@ func (s *Interface) UserPreCheck(username string) (userinfo string, dbusErr *dbu
 }
 
 // DeleteUser is the method through which the broker and the daemon will communicate once dbusInterface.DeleteUser is called.
-func (s *Interface) DeleteUser(username string) (dbusErr *dbus.Error) {
+//
+// This is the v3+ version that accepts the providerID identifier for cache directory resolution.
+func (s *Interface) DeleteUser(username, providerID string) (dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "DeleteUser (v3): username=%s provider_id=%s", username, providerID)
+	if err := s.broker.DeleteUser(username, providerID); err != nil {
+		return dbus.MakeFailedError(err)
+	}
+	return nil
+}
+
+// InterfaceV2 wraps Interface and exposes old methods that do not accept a providerID argument.
+type InterfaceV2 struct {
+	*Interface
+}
+
+// NewSession is the method through which the broker and the daemon will communicate once dbusInterface.NewSession is called.
+func (s *InterfaceV2) NewSession(username, lang, mode string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "Creating new session (username=%s, lang=%s, mode=%s)", username, lang, mode)
+	sessionID, encryptionKey, err := s.broker.NewSession(username, lang, mode, "")
+	if err != nil {
+		return "", "", dbus.MakeFailedError(err)
+	}
+	log.Debugf(context.Background(), "Created new session %s", sessionID)
+	return sessionID, encryptionKey, nil
+}
+
+// DeleteUser is the method through which the broker and the daemon will communicate once dbusInterface.DeleteUser is called.
+func (s *InterfaceV2) DeleteUser(username string) (dbusErr *dbus.Error) {
 	log.Debugf(context.Background(), "DeleteUser: %s", username)
-	if err := s.broker.DeleteUser(username); err != nil {
+	if err := s.broker.DeleteUser(username, ""); err != nil {
 		return dbus.MakeFailedError(err)
 	}
 	return nil

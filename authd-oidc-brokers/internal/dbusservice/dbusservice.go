@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 
+	_ "embed"
+
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
 	"github.com/godbus/dbus/v5"
@@ -12,47 +14,17 @@ import (
 )
 
 const (
-	introspectableHeader    = `<node>`
-	introspectableInterface = `
-	<interface name="%s">
-		<method name="NewSession">
-			<arg type="s" direction="in" name="username"/>
-			<arg type="s" direction="in" name="lang"/>
-			<arg type="s" direction="in" name="mode"/>
-			<arg type="s" direction="out" name="sessionID"/>
-			<arg type="s" direction="out" name="encryptionKey"/>
-		</method>
-		<method name="GetAuthenticationModes">
-			<arg type="s" direction="in" name="sessionID"/>
-			<arg type="aa{ss}" direction="in" name="supportedUILayouts"/>
-			<arg type="aa{ss}" direction="out" name="authenticationModes"/>
-		</method>
-		<method name="SelectAuthenticationMode">
-			<arg type="s" direction="in" name="sessionID"/>
-			<arg type="s" direction="in" name="authenticationModeName"/>
-			<arg type="a{ss}" direction="out"  name="uiLayoutInfo"/>
-		</method>
-		<method name="IsAuthenticated">
-			<arg type="s" direction="in" name="sessionID"/>
-			<arg type="s" direction="in" name="authenticationData"/>
-			<arg type="s" direction="out" name="access"/>
-			<arg type="s" direction="out" name="data"/>
-		</method>
-		<method name="EndSession">
-			<arg type="s" direction="in" name="sessionID"/>
-		</method>
-		<method name="CancelIsAuthenticated">
-			<arg type="s" direction="in" name="sessionID"/>
-		</method>
-		<method name="UserPreCheck">
-			<arg type="s" direction="in" name="username"/>
-			<arg type="s" direction="out" name="userInfo"/>
-		</method>
-		<method name="DeleteUser">
-			<arg type="s" direction="in" name="username"/>
-		</method>
-	</interface>`
+	introspectableHeader = `<node>`
 	introspectableFooter = introspect.IntrospectDataString + `</node> `
+)
+
+var (
+	//go:embed interfaces/com.ubuntu.authd.BrokerV2.xml
+	interfaceV2 string
+
+	// interfaceV3 extends the base interface with a provider_id argument in NewSession and DeleteUser.
+	//go:embed interfaces/com.ubuntu.authd.BrokerV3.xml
+	interfaceV3 string
 )
 
 // Service is the object representing the dbus service, which contains the exported interfaces and the necessary
@@ -74,6 +46,7 @@ type Interface struct {
 var interfaceNames = []string{
 	"com.ubuntu.authd.Broker",
 	"com.ubuntu.authd.Broker2",
+	"com.ubuntu.authd.Broker3",
 }
 
 // New returns a new dbus service after exporting to the system bus our name.
@@ -93,7 +66,8 @@ func New(_ context.Context, brokerConfig broker.Config) (*Service, error) {
 
 	var introspectableBody string
 	for i, iface := range interfaceNames {
-		b, err := broker.New(brokerConfig, uint(i)+1) // There's no 0 version, so we start from 1.
+		version := uint(i) + 1 // There's no 0 version, so we start from 1.
+		b, err := broker.New(brokerConfig, version)
 		if err != nil {
 			service.disconnect()
 			return nil, fmt.Errorf("error initializing broker for %q: %v", iface, err)
@@ -104,13 +78,24 @@ func New(_ context.Context, brokerConfig broker.Config) (*Service, error) {
 			broker: b,
 		}
 
-		if err := conn.Export(s, object, iface); err != nil {
+		var objectToExport any
+		// We declare the interfaces in order, so we can use the index to determine which version we are exporting and
+		// adjust the introspection XML accordingly
+		// (v1 and v2 share the same method signatures, while v3 introduces provider_id arguments in some methods).
+		objectToExport = s
+		introspectableInterface := interfaceV3
+		if version < 3 {
+			introspectableInterface = interfaceV2
+			objectToExport = &InterfaceV2{Interface: s}
+		}
+
+		if err := conn.Export(objectToExport, object, iface); err != nil {
 			service.disconnect()
 			return nil, err
 		}
+		introspectableBody = introspectableBody + fmt.Sprintf(introspectableInterface, iface)
 
 		service.interfaces = append(service.interfaces, s)
-		introspectableBody = introspectableBody + fmt.Sprintf(introspectableInterface, iface)
 	}
 
 	// Build combined introspection XML for all versioned interfaces and export once.
