@@ -18,11 +18,11 @@ var testToken = &token.AuthCachedInfo{
 	},
 	RawIDToken: "rawidtoken",
 	UserInfo: info.User{
-		Name:  "foo",
-		UUID:  "saved-user-id",
-		Home:  "/home/foo",
-		Gecos: "foo",
-		Shell: "/usr/bin/bash",
+		Name:       "foo",
+		ProviderID: "saved-user-id",
+		Home:       "/home/foo",
+		Gecos:      "foo",
+		Shell:      "/usr/bin/bash",
 		Groups: []info.Group{
 			{Name: "token-test-group", UGID: "12345"},
 		},
