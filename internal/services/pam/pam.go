@@ -156,8 +156,17 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 		return nil, status.Error(codes.InvalidArgument, "invalid session mode")
 	}
 
+	// Look up the user's stable provider identifier from the database.
+	// If the user doesn't exist yet (first login), the lookup fails silently
+	// and an empty identifier is passed to the broker.
+	userProviderID, err := s.userManager.ProviderIDForUser(username, brokerID)
+	if err != nil && !errors.Is(err, users.NoDataFoundError{}) {
+		log.Errorf(ctx, "SelectBroker: Could not look up provider ID for user %q and broker %q: %v", username, brokerID, err)
+		return nil, fmt.Errorf("could not look up provider ID for user %q: %w", username, err)
+	}
+
 	// Create a session and Memorize selected broker for it.
-	sessionID, encryptionKey, err := s.brokerManager.NewSession(brokerID, username, lang, mode)
+	sessionID, encryptionKey, err := s.brokerManager.NewSession(brokerID, username, lang, mode, userProviderID)
 	if err != nil {
 		log.Errorf(ctx, "SelectBroker: Could not create session for user %q with broker %q: %v", username, brokerID, err)
 		return nil, err
@@ -290,6 +299,7 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 
 	// authd uses lowercase user and group names
 	uInfo.Name = strings.ToLower(uInfo.Name)
+	uInfo.BrokerID = broker.ID
 	for i, g := range uInfo.Groups {
 		uInfo.Groups[i].Name = strings.ToLower(g.Name)
 	}
@@ -303,8 +313,20 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		log.Errorf(ctx, "IsAuthenticated: Could not check if user %q is locked: %v", uInfo.Name, err)
 		return nil, fmt.Errorf("could not check if user %q is locked: %w", uInfo.Name, err)
 	}
-	// Throw an error if the user trying to authenticate already exists in the database and is locked
-	if err == nil && userIsLocked {
+
+	// The username may have changed at the IdP, in which case the locked row is still stored under the
+	// previous name and the name-based lookup above misses it. Resolve the stable identity by the
+	// broker-scoped provider ID and honor its locked state too.
+	if errors.Is(err, users.NoDataFoundError{}) && uInfo.BrokerID != "" && uInfo.ProviderID != "" {
+		userIsLocked, err = s.userManager.IsUserLockedByProviderID(uInfo.BrokerID, uInfo.ProviderID)
+		if err != nil && !errors.Is(err, users.NoDataFoundError{}) {
+			log.Errorf(ctx, "IsAuthenticated: Could not check if user %q is locked: %v", uInfo.Name, err)
+			return nil, fmt.Errorf("could not check if user %q is locked: %w", uInfo.Name, err)
+		}
+	}
+
+	// Throw an error if the user trying to authenticate already exists in the database and is locked.
+	if userIsLocked {
 		log.Noticef(ctx, "Authentication failure: user %q is locked", uInfo.Name)
 		return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("user %s is locked", uInfo.Name))
 	}

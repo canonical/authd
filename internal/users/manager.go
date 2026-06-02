@@ -904,6 +904,18 @@ func (m *Manager) IsUserLocked(username string) (bool, error) {
 	return u.Locked, nil
 }
 
+// IsUserLockedByProviderID returns true if the user identified by the given broker-scoped provider ID
+// is locked. It resolves the user by their stable identity rather than their name, so a lock set before
+// an IdP-side username change is still honored. Returns a NoDataFoundError if no user matches.
+func (m *Manager) IsUserLockedByProviderID(brokerID, providerID string) (bool, error) {
+	u, err := m.db.UserByProviderID(brokerID, providerID)
+	if err != nil {
+		return false, err
+	}
+
+	return u.Locked, nil
+}
+
 // UserByName returns the user information for the given user name.
 func (m *Manager) UserByName(username string) (types.UserEntry, error) {
 	usr, err := m.db.UserByName(username)
