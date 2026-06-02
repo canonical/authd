@@ -8,25 +8,23 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
-	"testing"
-	"time"
+func (p *mockMFANilTokenProvider) AcquireTokenByMFAFlow(_ context.Context, _, _ string, _ string, _ *himmelblau.MFAFlowState, _ string, _ int, _ []byte) (*oauth2.Token, error) {
+	return nil, nil
+}
 
-	"github.com/canonical/authd/authd-oidc-brokers/internal/broker"
-	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/authmodes"
-	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/sessionmode"
-	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
-	"github.com/canonical/authd/authd-oidc-brokers/internal/password"
-	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
-	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
-	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
-	"github.com/canonical/authd/internal/testutils/golden"
-	"github.com/canonical/authd/log"
-	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
-)
-
-var defaultIssuerURL string
+// newMFATokenResult builds an oauth2.Token mirroring what
+// himmelblau.AcquireTokenByMFAFlow returns in production: the user's
+// preferred_username/sub/name carried as top-level token extras, recovered
+// from the native MFA UserToken. finishEntraAuth relies on these extras since
+// the MFA access token cannot be used against the OIDC UserInfo endpoint. The
+// sub/name values match the claims set by generateCachedInfo.
+func newMFATokenResult(t *oauth2.Token) *oauth2.Token {
+	return t.WithExtra(map[string]any{
+		"preferred_username": "test-user@email.com",
+		"sub":                "saved-user-id",
+		"name":               "test-user",
+	})
+}
 
 func TestNew(t *testing.T) {
 	t.Parallel()
