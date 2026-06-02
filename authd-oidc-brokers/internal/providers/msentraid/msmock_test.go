@@ -96,7 +96,7 @@ func startMockMSServer(t *testing.T, config *mockMSServerConfig) (mockServer *mo
 			m.handleDeviceEnrollmentRequest(t, w, r)
 
 		// ===== graph.microsoft.com =====
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/me/transitiveMemberOf/graph.group"):
+		case r.Method == http.MethodGet && (strings.HasSuffix(r.URL.Path, "/me/transitiveMemberOf/graph.group") || strings.Contains(r.URL.Path, "/transitiveMemberOf/graph.group")):
 			config.GroupEndpointHandler(w, r)
 
 		default:
@@ -154,6 +154,9 @@ func (m *mockMSServer) handleTokenRequest(t *testing.T, w http.ResponseWriter, r
 	case "refresh_token":
 		m.handleRefreshTokenRequest(t, w, r)
 
+	case "client_credentials":
+		m.handleClientCredentialsRequest(t, w, r)
+
 	case "srv_challenge":
 		m.handleNonceRequest(t, w, r)
 
@@ -166,6 +169,28 @@ func (m *mockMSServer) handleTokenRequest(t *testing.T, w http.ResponseWriter, r
 	default:
 		t.Fatalf("unexpected grant_type in token request: %s", grantType)
 	}
+}
+
+func (m *mockMSServer) handleClientCredentialsRequest(t *testing.T, w http.ResponseWriter, r *http.Request) {
+	require.Equal(t, strings.TrimRight(m.URL, "/")+"/.default", r.Form.Get("scope"), "unexpected client credentials scope")
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"exp": float64(time.Now().Add(time.Hour).Unix()),
+	})
+	accessTokenStr, err := accessToken.SignedString(m.rsaPrivateKey)
+	require.NoError(t, err, "failed to sign app access token")
+
+	resp := map[string]interface{}{
+		"token_type":     "Bearer",
+		"expires_in":     3600,
+		"ext_expires_in": 3600,
+		"access_token":   accessTokenStr,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	err = json.NewEncoder(w).Encode(resp)
+	require.NoError(t, err, "failed to encode response")
 }
 
 func (m *mockMSServer) handleAuthorizeRequest(t *testing.T, w http.ResponseWriter, r *http.Request) {
