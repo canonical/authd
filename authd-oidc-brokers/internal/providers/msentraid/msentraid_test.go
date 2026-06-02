@@ -135,6 +135,44 @@ func TestGetUserInfo(t *testing.T) {
 	}
 }
 
+func TestRefreshEntraPasswordToken(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		refreshHandler http.HandlerFunc
+		wantErr        bool
+		wantErrSubstr  string
+	}{
+		"Active_user_refresh_succeeds": {},
+		"Disabled_user_returns_AADSTS50057": {
+			refreshHandler: disabledRefreshHandler,
+			wantErr:        true,
+			wantErrSubstr:  "AADSTS50057",
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			mockServer, cleanup := startMockMSServer(t, &mockMSServerConfig{RefreshHandler: tc.refreshHandler})
+			t.Cleanup(cleanup)
+
+			got, err := msentraid.New().RefreshEntraPasswordToken(
+				context.Background(),
+				mockServer.URL+"/tenant-id/v2.0",
+				"refreshtoken",
+			)
+			if tc.wantErr {
+				require.Error(t, err, "RefreshEntraPasswordToken should fail")
+				require.Contains(t, err.Error(), tc.wantErrSubstr, "unexpected error from refresh")
+				return
+			}
+			require.NoError(t, err, "RefreshEntraPasswordToken should succeed for an active user")
+			require.NotEmpty(t, got.AccessToken, "expected a rotated token on success")
+		})
+	}
+}
+
 func TestGetGroups(t *testing.T) {
 	t.Parallel()
 

@@ -715,7 +715,7 @@ func (b *Broker) availableAuthModes(session session) (availableModes []string, e
 		// The order of the modes is important, because authd picks the first supported one.
 		// Password authentication should be the first option if available, to avoid performing device authentication
 		// when it's not necessary.
-		modes := append([]string{authmodes.Password}, b.provider.SupportedOIDCAuthModes()...)
+		modes := append([]string{authmodes.Password}, b.provider.SupportedOnlineAuthModes()...)
 		for _, mode := range modes {
 			if b.authModeIsAvailable(session, mode) {
 				availableModes = append(availableModes, mode)
