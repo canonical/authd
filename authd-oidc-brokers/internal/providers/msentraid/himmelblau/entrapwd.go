@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
 
@@ -60,6 +61,23 @@ type EntraPasswordProvider interface {
 		issuerURL string,
 		refreshToken string,
 	) (*oauth2.Token, error)
+
+	// VerifyAccessToken verifies the RS256 signature of the MFA-flow access token
+	// against the tenant's published JWKS (handling the header-nonce rewrite that
+	// Microsoft first-party tokens use) and that its tenant claim matches. It is
+	// the defense-in-depth check that the token genuinely came from Microsoft, so
+	// the identity read from its claims is not trusted on TLS alone. Returns nil
+	// only when the token verifies.
+	VerifyAccessToken(
+		ctx context.Context,
+		issuerURL string,
+		accessToken string,
+	) error
+
+	// UserInfoFromAccessToken extracts user identity from a verified Entra access
+	// token, mapping provider-specific claims (e.g. oid/upn) to the same info.User
+	// shape that GetUserInfo returns for OIDC ID tokens / UserInfo responses.
+	UserInfoFromAccessToken(accessToken string) (info.User, error)
 }
 
 // MFAFlowState is an opaque handle to an in-progress MFA flow.
@@ -95,10 +113,10 @@ func FreeMFAFlowState(flow *MFAFlowState) {
 
 // MFAChallengeInfo describes the MFA challenge that must be presented to the user.
 type MFAChallengeInfo struct {
-	Message         string
-	Method          string
-	PollingInterval int
-	MaxPollAttempts int
+	Message           string
+	Method            string
+	PollingIntervalMs int
+	MaxPollAttempts   int
 }
 
 // MFAErrorCategory classifies an MFA error so the broker can route
@@ -118,24 +136,24 @@ const (
 	MFAErrorRequired
 	// MFAErrorRetryableCode means a submitted one-time code was incorrect or
 	// expired while the MFA flow itself remains valid, so the user can simply
-	// re-enter the code without restarting the flow. See newMFAInitError for how
+	// re-enter the code without restarting the flow. See newMFAError for how
 	// this is detected.
 	MFAErrorRetryableCode
 )
 
-// MFAInitError represents an error from initiating or continuing an MFA flow.
+// MFAError represents an error from initiating or continuing an MFA flow.
 //
 // Category is set so that consumers can branch on well-known outcomes without
 // referencing libhimmelblau-specific error codes. AADSTS, when non-zero,
 // carries the Entra ID AADSTS error code.
-type MFAInitError struct {
+type MFAError struct {
 	Category MFAErrorCategory
 	AADSTS   int
 	Message  string
 }
 
 // Error returns the formatted error message.
-func (e *MFAInitError) Error() string {
+func (e *MFAError) Error() string {
 	if e.AADSTS != 0 {
 		return fmt.Sprintf("AADSTS%d: %s", e.AADSTS, e.Message)
 	}
@@ -143,24 +161,24 @@ func (e *MFAInitError) Error() string {
 }
 
 // IsMFAPollContinue returns true if the error indicates the MFA poll should continue.
-func (e *MFAInitError) IsMFAPollContinue() bool {
+func (e *MFAError) IsMFAPollContinue() bool {
 	return e.Category == MFAErrorPollContinue
 }
 
 // IsMFADenied returns true if the error indicates the MFA request was actively
 // rejected (e.g., user denied the push notification).
-func (e *MFAInitError) IsMFADenied() bool {
+func (e *MFAError) IsMFADenied() bool {
 	return e.Category == MFAErrorDenied
 }
 
 // IsMFARequired returns true if the error indicates MFA is required.
-func (e *MFAInitError) IsMFARequired() bool {
+func (e *MFAError) IsMFARequired() bool {
 	return e.Category == MFAErrorRequired
 }
 
 // IsMFARetryableCode returns true if the error indicates a submitted one-time
 // code was incorrect or expired while the MFA flow remains valid, so the user
 // can retry the code without restarting the flow.
-func (e *MFAInitError) IsMFARetryableCode() bool {
+func (e *MFAError) IsMFARetryableCode() bool {
 	return e.Category == MFAErrorRetryableCode
 }

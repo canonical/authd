@@ -19,15 +19,17 @@ type AuthCachedInfo struct {
 	ProviderMetadata       map[string]interface{}
 	UserInfo               info.User
 	DeviceRegistrationData []byte
-	// NeedsAccessTokenForGraphAPI records that group lookup must first exchange
-	// the cached token for a Graph-scoped access token using device registration
-	// data. This is explicit auth state rather than provider-global mutable state.
-	NeedsAccessTokenForGraphAPI bool
-	DeviceIsDisabled            bool
-	UserIsDisabled              bool
+	DeviceIsDisabled       bool
+	UserIsDisabled         bool
+	// ObtainedViaEntraPasswordAuth is set when the token was obtained through the
+	// entra_password MFA flow. On a returning login it selects the refresh path:
+	// these tokens are refreshed as the Microsoft Broker App (public client, no
+	// client_secret) for the liveness/revocation check, rather than via the OIDC
+	// app refresh used by device-auth tokens.
+	ObtainedViaEntraPasswordAuth bool
 }
 
-// NewAuthCachedInfo creates a new AuthCachedInfo. It sets the provided token, rawIDToken, and
+// NewAuthCachedInfo creates a new AuthCachedInfo. It sets the provided token and rawIDToken and the provider-specific
 // extra fields which should be stored persistently.
 func NewAuthCachedInfo(token *oauth2.Token, rawIDToken string, extraFields map[string]interface{}) *AuthCachedInfo {
 	return &AuthCachedInfo{

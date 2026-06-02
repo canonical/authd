@@ -1,3 +1,3 @@
 access: next
-data: '{"message":"Refresh token expired, please authenticate again using device authentication."}'
+data: '{"message":"Refresh token expired, please authenticate again."}'
 err: <nil>

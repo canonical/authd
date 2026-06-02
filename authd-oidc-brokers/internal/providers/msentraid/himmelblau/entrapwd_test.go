@@ -6,15 +6,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMFAInitError_Error(t *testing.T) {
+func TestMFAError_Error(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		err  *MFAInitError
+		err  *MFAError
 		want string
 	}{
-		"Without_AADSTS": {err: &MFAInitError{Message: "plain message"}, want: "plain message"},
-		"With_AADSTS":    {err: &MFAInitError{AADSTS: 50126, Message: "bad credentials"}, want: "AADSTS50126: bad credentials"},
+		"Without_AADSTS": {err: &MFAError{Message: "plain message"}, want: "plain message"},
+		"With_AADSTS":    {err: &MFAError{AADSTS: 50126, Message: "bad credentials"}, want: "AADSTS50126: bad credentials"},
 	}
 
 	for name, tc := range tests {
@@ -25,18 +25,18 @@ func TestMFAInitError_Error(t *testing.T) {
 	}
 }
 
-func TestMFAInitError_IsMFAPollContinue(t *testing.T) {
+func TestMFAError_IsMFAPollContinue(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		err  *MFAInitError
+		err  *MFAError
 		want bool
 	}{
-		"Poll_continue":             {err: &MFAInitError{Category: MFAErrorPollContinue}, want: true},
-		"Denied":                    {err: &MFAInitError{Category: MFAErrorDenied}, want: false},
-		"Required":                  {err: &MFAInitError{Category: MFAErrorRequired}, want: false},
-		"Other":                     {err: &MFAInitError{Category: MFAErrorOther}, want: false},
-		"Poll_continue_with_aadsts": {err: &MFAInitError{Category: MFAErrorPollContinue, AADSTS: 50126}, want: true},
+		"Poll_continue":             {err: &MFAError{Category: MFAErrorPollContinue}, want: true},
+		"Denied":                    {err: &MFAError{Category: MFAErrorDenied}, want: false},
+		"Required":                  {err: &MFAError{Category: MFAErrorRequired}, want: false},
+		"Other":                     {err: &MFAError{Category: MFAErrorOther}, want: false},
+		"Poll_continue_with_aadsts": {err: &MFAError{Category: MFAErrorPollContinue, AADSTS: 50126}, want: true},
 	}
 
 	for name, tc := range tests {
@@ -47,18 +47,18 @@ func TestMFAInitError_IsMFAPollContinue(t *testing.T) {
 	}
 }
 
-func TestMFAInitError_IsMFADenied(t *testing.T) {
+func TestMFAError_IsMFADenied(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		err  *MFAInitError
+		err  *MFAError
 		want bool
 	}{
-		"Denied_no_aadsts":   {err: &MFAInitError{Category: MFAErrorDenied}, want: true},
-		"Denied_with_aadsts": {err: &MFAInitError{Category: MFAErrorDenied, AADSTS: 50126}, want: true},
-		"Poll_continue":      {err: &MFAInitError{Category: MFAErrorPollContinue}, want: false},
-		"Required":           {err: &MFAInitError{Category: MFAErrorRequired}, want: false},
-		"Other":              {err: &MFAInitError{Category: MFAErrorOther}, want: false},
+		"Denied_no_aadsts":   {err: &MFAError{Category: MFAErrorDenied}, want: true},
+		"Denied_with_aadsts": {err: &MFAError{Category: MFAErrorDenied, AADSTS: 50126}, want: true},
+		"Poll_continue":      {err: &MFAError{Category: MFAErrorPollContinue}, want: false},
+		"Required":           {err: &MFAError{Category: MFAErrorRequired}, want: false},
+		"Other":              {err: &MFAError{Category: MFAErrorOther}, want: false},
 	}
 
 	for name, tc := range tests {
@@ -69,17 +69,17 @@ func TestMFAInitError_IsMFADenied(t *testing.T) {
 	}
 }
 
-func TestMFAInitError_IsMFARequired(t *testing.T) {
+func TestMFAError_IsMFARequired(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		err  *MFAInitError
+		err  *MFAError
 		want bool
 	}{
-		"Required":      {err: &MFAInitError{Category: MFAErrorRequired}, want: true},
-		"Poll_continue": {err: &MFAInitError{Category: MFAErrorPollContinue}, want: false},
-		"Denied":        {err: &MFAInitError{Category: MFAErrorDenied}, want: false},
-		"Other":         {err: &MFAInitError{Category: MFAErrorOther}, want: false},
+		"Required":      {err: &MFAError{Category: MFAErrorRequired}, want: true},
+		"Poll_continue": {err: &MFAError{Category: MFAErrorPollContinue}, want: false},
+		"Denied":        {err: &MFAError{Category: MFAErrorDenied}, want: false},
+		"Other":         {err: &MFAError{Category: MFAErrorOther}, want: false},
 	}
 
 	for name, tc := range tests {
@@ -90,19 +90,19 @@ func TestMFAInitError_IsMFARequired(t *testing.T) {
 	}
 }
 
-func TestMFAInitError_IsMFARetryableCode(t *testing.T) {
+func TestMFAError_IsMFARetryableCode(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		err  *MFAInitError
+		err  *MFAError
 		want bool
 	}{
-		"Retryable_code":             {err: &MFAInitError{Category: MFAErrorRetryableCode}, want: true},
-		"Retryable_code_with_aadsts": {err: &MFAInitError{Category: MFAErrorRetryableCode, AADSTS: 50126}, want: true},
-		"Poll_continue":              {err: &MFAInitError{Category: MFAErrorPollContinue}, want: false},
-		"Denied":                     {err: &MFAInitError{Category: MFAErrorDenied}, want: false},
-		"Required":                   {err: &MFAInitError{Category: MFAErrorRequired}, want: false},
-		"Other":                      {err: &MFAInitError{Category: MFAErrorOther}, want: false},
+		"Retryable_code":             {err: &MFAError{Category: MFAErrorRetryableCode}, want: true},
+		"Retryable_code_with_aadsts": {err: &MFAError{Category: MFAErrorRetryableCode, AADSTS: 50126}, want: true},
+		"Poll_continue":              {err: &MFAError{Category: MFAErrorPollContinue}, want: false},
+		"Denied":                     {err: &MFAError{Category: MFAErrorDenied}, want: false},
+		"Required":                   {err: &MFAError{Category: MFAErrorRequired}, want: false},
+		"Other":                      {err: &MFAError{Category: MFAErrorOther}, want: false},
 	}
 
 	for name, tc := range tests {
