@@ -44,8 +44,8 @@ func (p GenericProvider) GetUserInfo(claimer info.Claimer, _ bool) (info.User, e
 	}
 
 	// Check required claims
-	sub, ok := claimsMap["sub"].(string)
-	if !ok || sub == "" {
+	providerID, ok := claimsMap["sub"].(string)
+	if !ok || providerID == "" {
 		return info.User{}, providerErrors.NewMissingClaimError("sub")
 	}
 
@@ -76,7 +76,7 @@ func (p GenericProvider) GetUserInfo(claimer info.Claimer, _ bool) (info.User, e
 	return info.NewUser(
 		email,
 		home,
-		sub,
+		providerID,
 		shell,
 		gecos,
 		nil,
