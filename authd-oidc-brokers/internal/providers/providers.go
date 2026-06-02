@@ -31,6 +31,7 @@ type GroupFetcher interface {
 		token *oauth2.Token,
 		providerMetadata map[string]interface{},
 		deviceRegistrationData []byte,
+		needsAccessTokenForGraphAPI bool,
 	) ([]info.Group, error)
 }
 
@@ -56,6 +57,13 @@ type DeviceRegisterer interface {
 // from token refresh errors.
 type UserDisabledChecker interface {
 	IsUserDisabledError(err *oauth2.RetrieveError) bool
+}
+
+// GraphClientSecretSetter is implemented by providers that can use the OIDC
+// app's client secret for app-only (client credentials) group lookup as a
+// fallback when the delegated token cannot be used against the Graph API.
+type GraphClientSecretSetter interface {
+	SetGraphClientSecret(secret string)
 }
 
 // Capability is an optional interface that allows a Provider to expose optional
