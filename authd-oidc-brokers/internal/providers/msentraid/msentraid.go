@@ -241,11 +241,15 @@ func (p *Provider) GetGroups(
 		tenantID := tenantID(issuerURL)
 		accessTokenStr, err = himmelblau.AcquireAccessTokenForGraphAPI(ctx, clientID, tenantID, token, data)
 		if errors.Is(err, himmelblau.ErrDeviceDisabled) {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", providerErrors.ErrDeviceDisabled, err)
 		}
 		if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
 			msg := "Token acquisition failed: The app is misconfigured in Microsoft Entra (the redirect URI is missing or invalid). Please contact your administrator."
-			return nil, &providerErrors.ForDisplayError{Message: msg, Err: err}
+			return nil, &providerErrors.ForDisplayError{Message: msg, Err: fmt.Errorf("%w: %w", providerErrors.ErrInvalidRedirectURI, err)}
+		}
+		var tokenAcquisitionError himmelblau.TokenAcquisitionError
+		if errors.As(err, &tokenAcquisitionError) {
+			return nil, &providerErrors.RetryWithDeviceAuthError{Err: fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", err)}
 		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", err)
