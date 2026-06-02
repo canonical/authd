@@ -50,4 +50,4 @@ users_to_groups:
       gid: 33333
     - uid: 4444
       gid: 44444
-schema_version: 2
+schema_version: 3

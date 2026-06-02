@@ -10,4 +10,4 @@ users:
       broker_id: broker-id
 groups: []
 users_to_groups: []
-schema_version: 2
+schema_version: 3
