@@ -9,6 +9,15 @@ type UserInfo struct {
 	Dir   string
 	Shell string
 
+	// BrokerID is the provider scope for ProviderID. It is set by authd from the
+	// selected broker, not by broker-returned JSON.
+	BrokerID string `json:"-" yaml:"broker_id,omitempty"`
+
+	// ProviderID is the stable OIDC subject identifier (or oid for MS Entra ID).
+	// It is used as the primary matching key for returning users. Empty for
+	// v2 brokers or users that have not yet logged in after the migration.
+	ProviderID string `json:"provider_id,omitempty" yaml:"provider_id"`
+
 	Groups []GroupInfo
 }
 

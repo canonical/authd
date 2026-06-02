@@ -12,4 +12,4 @@ groups:
 users_to_groups:
     - uid: 1111
       gid: 60500
-schema_version: 2
+schema_version: 3
