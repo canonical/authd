@@ -19,8 +19,12 @@ type AuthCachedInfo struct {
 	ProviderMetadata       map[string]interface{}
 	UserInfo               info.User
 	DeviceRegistrationData []byte
-	DeviceIsDisabled       bool
-	UserIsDisabled         bool
+	// NeedsAccessTokenForGraphAPI records that group lookup must first exchange
+	// the cached token for a Graph-scoped access token using device registration
+	// data. This is explicit auth state rather than provider-global mutable state.
+	NeedsAccessTokenForGraphAPI bool
+	DeviceIsDisabled            bool
+	UserIsDisabled              bool
 }
 
 // NewAuthCachedInfo creates a new AuthCachedInfo. It sets the provided token, rawIDToken, and
