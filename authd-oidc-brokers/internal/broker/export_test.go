@@ -4,12 +4,23 @@ import (
 	"sync"
 )
 
+// IsFIDOMethod and IsPromptMethod expose the unexported MFA method classifiers for tests.
+var (
+	IsFIDOMethod   = isFIDOMethod
+	IsPromptMethod = isPromptMethod
+)
+
 func (cfg *Config) Init() {
 	cfg.ownerMutex = &sync.RWMutex{}
+	cfg.flows = defaultFlowsConfig()
 }
 
 func (cfg *Config) SetClientID(clientID string) {
 	cfg.clientID = clientID
+}
+
+func (cfg *Config) SetClientSecret(clientSecret string) {
+	cfg.clientSecret = clientSecret
 }
 
 func (cfg *Config) SetIssuerURL(issuerURL string) {
@@ -67,6 +78,12 @@ func (cfg *Config) SetOwnerExtraGroups(ownerExtraGroups []string) {
 
 func (cfg *Config) SetAllowedSSHSuffixes(allowedSSHSuffixes []string) {
 	cfg.allowedSSHSuffixes = allowedSSHSuffixes
+}
+
+func (cfg *Config) SetFlows(deviceAuth, entraPassword bool) {
+	cfg.flows = defaultFlowsConfig()
+	cfg.flows.DeviceAuth = deviceAuth
+	cfg.flows.EntraPassword = entraPassword
 }
 
 func (cfg *Config) SetProvider(provider provider) {

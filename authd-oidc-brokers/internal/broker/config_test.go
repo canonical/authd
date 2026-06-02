@@ -64,6 +64,26 @@ client_id = client_id
 register_device = true
 `,
 
+	"valid+flows_disabled": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+device_auth = false
+entra_password = false
+`,
+
+	"valid+one_flow_disabled": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+device_auth = false
+entra_password = true
+`,
+
 	"invalid_register_device_value": `
 [oidc]
 issuer = https://issuer.url.com
@@ -85,6 +105,11 @@ client_id = lower_precedence_client_id
 [oidc]
 issuer = https://higher-precedence-issuer.url.com
 `,
+
+	"overwrite_enable_entra_password": `
+[flows]
+entra_password = true
+`,
 }
 
 func TestParseConfig(t *testing.T) {
@@ -102,10 +127,16 @@ func TestParseConfig(t *testing.T) {
 		"Successfully_parse_config_file":                      {},
 		"Successfully_parse_config_file_with_optional_values": {configType: "valid+optional"},
 		"Successfully_parse_config_file_with_register_device": {configType: "valid+register_device"},
+		"Successfully_parse_config_file_with_flow_values":     {configType: "valid+one_flow_disabled"},
 		"Successfully_parse_config_with_drop_in_files":        {dropInType: "valid"},
+		"Successfully_parse_config_with_flow_drop_in_files": {
+			configType: "valid+flows_disabled",
+			dropInType: "flows",
+		},
 
 		"Do_not_fail_if_values_contain_a_single_template_delimiter": {configType: "singles"},
 
+		"Error_if_all_flows_are_disabled":                        {configType: "valid+flows_disabled", wantErr: true},
 		"Error_if_file_does_not_exist":                           {configType: "inexistent", wantErr: true},
 		"Error_if_file_is_unreadable":                            {configType: "unreadable", wantErr: true},
 		"Error_if_file_is_not_updated":                           {configType: "template", wantErr: true},
@@ -155,6 +186,9 @@ func TestParseConfig(t *testing.T) {
 				// are still present.
 				err = os.WriteFile(confPath, []byte(configTypes["valid+optional"]), 0600)
 				require.NoError(t, err, "Setup: Failed to write config file")
+			case "flows":
+				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["overwrite_enable_entra_password"]), 0600)
+				require.NoError(t, err, "Setup: Failed to write drop-in file")
 			case "unreadable-dir":
 				err = os.Chmod(dropInDir, 0000)
 				require.NoError(t, err, "Setup: Failed to make drop-in directory unreadable")

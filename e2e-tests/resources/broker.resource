@@ -101,7 +101,7 @@ Log In With Remote User Through CLI: Local Password
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
     Builtin.Sleep    2
-    Match Text    Enter your local password:    120
+    Match Text    Enter your password:    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
     Builtin.Sleep    2
@@ -128,7 +128,7 @@ Check That Username Cannot Be Changed When Using su
 
 Try Navigating Back to User Selection
     # First screen is the autoselected local password mode
-    Match Text    Enter your local password:    120
+    Match Text    Enter your password:    120
     Hid.Keys Combo    Escape
 
     # The previous screen should be the authentication mode selection
@@ -153,7 +153,7 @@ Log In With Remote User Through CLI: Local Password And Expect Failure
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
     Builtin.Sleep    2
-    Match Text    Enter your local password:    120
+    Match Text    Enter your password:    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
     Check That Remote User Is Not Allowed To Log In
@@ -253,7 +253,7 @@ Log In With Remote User Through SSH: Local Password
     [Arguments]    ${username}    ${local_password}
     Hid.Type String    ssh ${username}@localhost
     Hid.Keys Combo    Return
-    Match Text    Enter your local password:    120
+    Match Text    Enter your password:    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
     Match Text    ${username}@ubuntu:~$    120

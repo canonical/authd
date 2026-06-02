@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 )
@@ -47,7 +48,12 @@ type MetadataProvider interface {
 
 // DeviceRegisterer is implemented by providers that support device registration.
 type DeviceRegisterer interface {
-	IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error)
+	// IsTokenForDeviceRegistration reports whether the cached token carries
+	// device-registration data (i.e. the device was registered). This is the
+	// authoritative signal: tokens issued by the Microsoft Broker App (e.g. the
+	// entra_password MFA flow) are not device-registration tokens unless a device
+	// was actually registered.
+	IsTokenForDeviceRegistration(authInfo *token.AuthCachedInfo) bool
 	MaybeRegisterDevice(
 		ctx context.Context,
 		token *oauth2.Token,

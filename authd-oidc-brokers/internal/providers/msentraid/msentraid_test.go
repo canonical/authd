@@ -15,11 +15,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/log"
 	"github.com/golang-jwt/jwt/v5"
@@ -139,6 +139,22 @@ func TestGetUserInfo(t *testing.T) {
 	}
 }
 
+func TestUserInfoFromAccessToken(t *testing.T) {
+	t.Parallel()
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"oid":  "saved-user-id",
+		"upn":  "test-user@email.com",
+		"name": "test-user",
+	})
+	accessTokenStr, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err, "Failed to sign access token")
+
+	got, err := msentraid.New().UserInfoFromAccessToken(accessTokenStr)
+	require.NoError(t, err, "UserInfoFromAccessToken should not return an error")
+	require.Equal(t, info.NewUser("test-user@email.com", "", "saved-user-id", "", "test-user", nil), got)
+}
+
 func TestRefreshEntraPasswordToken(t *testing.T) {
 	t.Parallel()
 
@@ -173,6 +189,9 @@ func TestRefreshEntraPasswordToken(t *testing.T) {
 			}
 			require.NoError(t, err, "RefreshEntraPasswordToken should succeed for an active user")
 			require.NotEmpty(t, got.AccessToken, "expected a rotated token on success")
+			require.Nil(t, got.Extra("preferred_username"), "refresh should not add redundant preferred_username extras")
+			require.Nil(t, got.Extra("sub"), "refresh should not add redundant sub extras")
+			require.Nil(t, got.Extra("name"), "refresh should not add redundant name extras")
 		})
 	}
 }
@@ -468,47 +487,22 @@ func TestIsTokenForDeviceRegistration(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		appID        string
-		invalidToken bool
+		deviceRegistrationData []byte
 
-		want    bool
-		wantErr bool
+		want bool
 	}{
-		"Success_when_token_has_microsoft_broker_app_ID": {appID: consts.MicrosoftBrokerAppID, want: true},
-		"Success_when_token_has_other_app_ID":            {appID: "some-other-app-id", want: false},
-		"Success_when_token_has_empty_app_ID":            {appID: "", want: false},
-
-		"Error_when_token_has_no_app_ID": {appID: "-", wantErr: true},
-		"Error_when_token_is_invalid":    {invalidToken: true, wantErr: true},
+		"True_when_device_registration_data_is_present": {deviceRegistrationData: []byte("device-registration-data"), want: true},
+		"False_when_device_registration_data_is_absent": {deviceRegistrationData: nil, want: false},
+		"False_when_device_registration_data_is_empty":  {deviceRegistrationData: []byte{}, want: false},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			claims := jwt.MapClaims{"appid": tc.appID}
-			if tc.appID == "-" {
-				claims = jwt.MapClaims{}
-			}
-
-			accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-			accessTokenString, err := accessToken.SignedString(testutils.MockKey)
-			require.NoError(t, err, "Failed to sign access token")
-
-			if tc.invalidToken {
-				accessTokenString = "invalid-token"
-			}
-
-			token := &oauth2.Token{AccessToken: accessTokenString}
-
 			p := msentraid.New()
-			got, err := p.IsTokenForDeviceRegistration(token)
+			got := p.IsTokenForDeviceRegistration(&token.AuthCachedInfo{DeviceRegistrationData: tc.deviceRegistrationData})
 
-			if tc.wantErr {
-				require.Error(t, err, "IsTokenForDeviceRegistration should return an error")
-				return
-			}
-			require.NoError(t, err, "IsTokenForDeviceRegistration should not return an error")
 			require.Equal(t, tc.want, got, "IsTokenForDeviceRegistration should return the expected value")
 		})
 	}
