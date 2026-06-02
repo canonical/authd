@@ -754,6 +754,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 			log.Errorf(context.Background(), "error registering device: %s", err)
 			return AuthDenied, errorMessage{Message: "Error registering device"}
 		}
+		authInfo.NeedsAccessTokenForGraphAPI = true
 		defer cleanup()
 
 		// Store the auth info, so that the device registration data is not lost if the login fails after this point.
@@ -878,6 +879,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 			log.Errorf(context.Background(), "error registering device: %s", err)
 			return AuthDenied, errorMessage{Message: "Error registering device"}
 		}
+		authInfo.NeedsAccessTokenForGraphAPI = true
 		defer cleanup()
 
 		// Store the auth info, so that the device registration data is not lost if the login fails after this point.
@@ -1174,6 +1176,7 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 	t := token.NewAuthCachedInfo(oauthToken, rawIDToken, extraFields)
 	t.ProviderMetadata = oldToken.ProviderMetadata
 	t.DeviceRegistrationData = oldToken.DeviceRegistrationData
+	t.NeedsAccessTokenForGraphAPI = oldToken.NeedsAccessTokenForGraphAPI
 
 	t.UserInfo, err = b.getUserInfo(ctx, session, oauthToken, rawIDToken, true)
 	if err != nil {
@@ -1251,6 +1254,7 @@ func (b *Broker) getGroups(ctx context.Context, session *session, t *token.AuthC
 		t.Token,
 		t.ProviderMetadata,
 		t.DeviceRegistrationData,
+		t.NeedsAccessTokenForGraphAPI,
 	)
 }
 
