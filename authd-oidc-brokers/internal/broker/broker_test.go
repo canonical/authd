@@ -2,7 +2,9 @@ package broker_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,6 +17,7 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/sessionmode"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/password"
+	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
 	"github.com/canonical/authd/internal/testutils/golden"
@@ -583,11 +586,17 @@ func TestIsAuthenticated(t *testing.T) {
 		providerSupportsDeviceRegistration bool
 		registerDevice                     bool
 		requireNameClaimOnInitialAuth      bool
+		providerSupportsMetadata           bool
+		metadataGetErr                     error
+		providerSupportsUserDisabledCheck  bool
+		userDisabledErrorCode              string
+		providerHasNoGroupFetcher          bool
 
 		firstMode                string
 		firstSecret              string
 		badFirstKey              bool
 		getGroupsFails           bool
+		getGroupsFunc            func() ([]info.Group, error)
 		useOldNameForSecretField bool
 		groupsReturnedByProvider []info.Group
 
@@ -918,6 +927,72 @@ func TestIsAuthenticated(t *testing.T) {
 				"/userinfo": testutils.UserInfoHandler(map[string]interface{}{}),
 			},
 		},
+
+		// MetadataProvider: the broker should call GetExtraFields and GetMetadata when the
+		// provider implements MetadataProvider.
+		"Successfully_authenticate_with_device_auth_when_provider_supports_metadata": {
+			firstSecret:              "-",
+			wantSecondCall:           true,
+			providerSupportsMetadata: true,
+		},
+		"Error_when_device_auth_metadata_provider_fails_to_get_metadata": {
+			firstSecret:              "-",
+			wantSecondCall:           true,
+			providerSupportsMetadata: true,
+			metadataGetErr:           errors.New("metadata unavailable"),
+		},
+		"Authenticating_with_password_when_provider_supports_metadata": {
+			firstMode:                authmodes.Password,
+			token:                    &tokenOptions{},
+			providerSupportsMetadata: true,
+		},
+
+		// NoGroupFetcher: when the provider does not implement GroupFetcher, getGroups
+		// returns nil and the user is authenticated without remote groups.
+		"Authenticating_with_password_when_provider_has_no_group_fetcher": {
+			firstMode:                 authmodes.Password,
+			token:                     &tokenOptions{},
+			providerHasNoGroupFetcher: true,
+			wantGroups:                []info.Group{},
+		},
+
+		// UserDisabledChecker: when a token refresh fails with a provider-specific
+		// "user disabled" error code, login is denied and the token is marked disabled.
+		"Error_when_user_is_disabled_according_to_user_disabled_checker": {
+			firstMode:                         authmodes.Password,
+			token:                             &tokenOptions{},
+			providerSupportsUserDisabledCheck: true,
+			userDisabledErrorCode:             "user_disabled",
+			customHandlers: map[string]testutils.EndpointHandler{
+				"/token": testutils.ErrorResponseHandler(http.StatusBadRequest,
+					`{"error":"user_disabled","error_description":"User account is disabled"}`),
+			},
+		},
+
+		// getGroups error cases: test that errors returned from the GroupFetcher are
+		// handled correctly.
+		"Error_when_getgroups_returns_device_disabled_error": {
+			firstMode: authmodes.Password,
+			token:     &tokenOptions{},
+			getGroupsFunc: func() ([]info.Group, error) {
+				return nil, providerErrors.ErrDeviceDisabled
+			},
+		},
+		"Error_when_getgroups_returns_invalid_redirect_uri_error": {
+			firstMode: authmodes.Password,
+			token:     &tokenOptions{},
+			getGroupsFunc: func() ([]info.Group, error) {
+				return nil, providerErrors.ErrInvalidRedirectURI
+			},
+		},
+		"Error_when_getgroups_returns_retry_with_device_auth_error": {
+			firstMode: authmodes.Password,
+			token:     &tokenOptions{},
+			getGroupsFunc: func() ([]info.Group, error) {
+				return nil, &providerErrors.RetryWithDeviceAuthError{Err: errors.New("token acquisition failed")}
+			},
+			wantNextAuthModes: []string{authmodes.Device, authmodes.DeviceQr},
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -951,6 +1026,11 @@ func TestIsAuthenticated(t *testing.T) {
 				supportsDeviceRegistration:    tc.providerSupportsDeviceRegistration,
 				requireNameClaimOnInitialAuth: tc.requireNameClaimOnInitialAuth,
 				registerDevice:                tc.registerDevice,
+				supportsMetadata:              tc.providerSupportsMetadata,
+				metadataGetErr:                tc.metadataGetErr,
+				supportsUserDisabledCheck:     tc.providerSupportsUserDisabledCheck,
+				userDisabledErrorCode:         tc.userDisabledErrorCode,
+				supportsFetchingGroups:        !tc.providerHasNoGroupFetcher,
 				tokenHandlerOptions:           tc.tokenHandlerOptions,
 			}
 			if tc.customHandlers == nil {
@@ -964,6 +1044,9 @@ func TestIsAuthenticated(t *testing.T) {
 				cfg.getGroupsFunc = func() ([]info.Group, error) {
 					return tc.groupsReturnedByProvider, nil
 				}
+			}
+			if tc.getGroupsFunc != nil {
+				cfg.getGroupsFunc = tc.getGroupsFunc
 			}
 			b := newBrokerForTests(t, cfg)
 

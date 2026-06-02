@@ -26,7 +26,6 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers"
 	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
-	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/canonical/authd/log"
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -146,7 +145,7 @@ func New(cfg Config, apiVersion uint, args ...Option) (b *Broker, err error) {
 	}
 
 	clientID := cfg.clientID
-	if opts.provider.SupportsDeviceRegistration() && cfg.registerDevice {
+	if _, ok := providers.ProviderAs[providers.DeviceRegisterer](opts.provider); ok && cfg.registerDevice {
 		clientID = consts.MicrosoftBrokerAppID
 	}
 
@@ -246,7 +245,7 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 	}
 
 	scopes := append(consts.DefaultScopes, b.provider.AdditionalScopes()...)
-	if b.provider.SupportsDeviceRegistration() && b.cfg.registerDevice {
+	if _, ok := providers.ProviderAs[providers.DeviceRegisterer](b.provider); ok && b.cfg.registerDevice {
 		scopes = consts.MicrosoftBrokerAppScopes
 	}
 	// Append extra scopes from config
@@ -376,7 +375,8 @@ func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 			return false
 		}
 
-		if !b.provider.SupportsDeviceRegistration() {
+		dr, isDR := providers.ProviderAs[providers.DeviceRegisterer](b.provider)
+		if !isDR {
 			// If the provider does not support device registration,
 			// we can always use the token for local password authentication.
 			log.Debugf(context.Background(), "Provider does not support device registration, so local password authentication is available for user %q", session.username)
@@ -390,7 +390,7 @@ func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 			return true
 		}
 
-		isTokenForDeviceRegistration, err := b.provider.IsTokenForDeviceRegistration(authInfo.Token)
+		isTokenForDeviceRegistration, err := dr.IsTokenForDeviceRegistration(authInfo.Token)
 		if err != nil {
 			log.Warningf(context.Background(), "Could not check if token is for device registration, so local password authentication is not available: %v", err)
 			return false
@@ -711,12 +711,18 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 		return AuthDenied, unexpectedErrMsg("token response does not contain an ID token")
 	}
 
-	authInfo := token.NewAuthCachedInfo(t, rawIDToken, b.provider)
+	var extraFields map[string]interface{}
+	if mp, ok := providers.ProviderAs[providers.MetadataProvider](b.provider); ok {
+		extraFields = mp.GetExtraFields(t)
+	}
+	authInfo := token.NewAuthCachedInfo(t, rawIDToken, extraFields)
 
-	authInfo.ProviderMetadata, err = b.provider.GetMetadata(session.oidcServer)
-	if err != nil {
-		log.Errorf(context.Background(), "could not get provider metadata: %s", err)
-		return AuthDenied, unexpectedErrMsg("could not get provider metadata")
+	if mp, ok := providers.ProviderAs[providers.MetadataProvider](b.provider); ok {
+		authInfo.ProviderMetadata, err = mp.GetMetadata(session.oidcServer)
+		if err != nil {
+			log.Errorf(context.Background(), "could not get provider metadata: %s", err)
+			return AuthDenied, unexpectedErrMsg("could not get provider metadata")
+		}
 	}
 
 	authInfo.UserInfo, err = b.getUserInfo(ctx, session, t, rawIDToken, false)
@@ -730,7 +736,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 		return AuthDenied, errorMessage{Message: "Authentication failure: user not allowed in broker configuration"}
 	}
 
-	if b.provider.SupportsDeviceRegistration() && b.cfg.registerDevice {
+	if dr, ok := providers.ProviderAs[providers.DeviceRegisterer](b.provider); ok && b.cfg.registerDevice {
 		// Load existing device registration data if there is any, to avoid re-registering the device.
 		var deviceRegistrationData []byte
 		oldAuthInfo, err := token.LoadAuthInfo(session.tokenPath)
@@ -739,7 +745,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 		}
 
 		var cleanup func()
-		authInfo.DeviceRegistrationData, cleanup, err = b.provider.MaybeRegisterDevice(ctx, t,
+		authInfo.DeviceRegistrationData, cleanup, err = dr.MaybeRegisterDevice(ctx, t,
 			session.username,
 			b.cfg.issuerURL,
 			deviceRegistrationData,
@@ -829,7 +835,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 				session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
 				return AuthNext, errorMessage{Message: "Refresh token expired, please authenticate again using device authentication."}
 			}
-			if b.provider.IsUserDisabledError(retrieveErr) {
+			if udc, ok := providers.ProviderAs[providers.UserDisabledChecker](b.provider); ok && udc.IsUserDisabledError(retrieveErr) {
 				log.Error(context.Background(), retrieveErr.Error())
 				log.Errorf(context.Background(), "Login denied: User %q is disabled in %s, please contact your administrator.", session.username, b.provider.DisplayName())
 
@@ -860,9 +866,9 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 	}
 
 	// If device registration is enabled, ensure that the device is registered.
-	if b.provider.SupportsDeviceRegistration() && !session.isOffline && b.cfg.registerDevice {
+	if dr, ok := providers.ProviderAs[providers.DeviceRegisterer](b.provider); ok && !session.isOffline && b.cfg.registerDevice {
 		var cleanup func()
-		authInfo.DeviceRegistrationData, cleanup, err = b.provider.MaybeRegisterDevice(ctx,
+		authInfo.DeviceRegistrationData, cleanup, err = dr.MaybeRegisterDevice(ctx,
 			authInfo.Token,
 			session.username,
 			b.cfg.issuerURL,
@@ -883,7 +889,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 
 	// Try to refresh the groups
 	groups, err := b.getGroups(ctx, session, authInfo)
-	if errors.Is(err, himmelblau.ErrDeviceDisabled) {
+	if errors.Is(err, providerErrors.ErrDeviceDisabled) {
 		// The device is disabled, deny login
 		log.Errorf(context.Background(), "Login failed: %s", err)
 
@@ -896,13 +902,13 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 
 		return AuthDenied, errorMessage{Message: fmt.Sprintf("This device is disabled in %s, please contact your administrator.", b.provider.DisplayName())}
 	}
-	if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
+	if errors.Is(err, providerErrors.ErrInvalidRedirectURI) {
 		// Deny login if the redirect URI is invalid, so that users and administrators are aware of the issue.
 		log.Errorf(context.Background(), "Login failed: %s", err)
 		return AuthDenied, errorMessageForDisplay(err, "Invalid redirect URI")
 	}
-	var tokenAcquisitionError himmelblau.TokenAcquisitionError
-	if errors.As(err, &tokenAcquisitionError) {
+	var retryWithDeviceAuthError *providerErrors.RetryWithDeviceAuthError
+	if errors.As(err, &retryWithDeviceAuthError) {
 		log.Errorf(context.Background(), "Token acquisition failed: %s. Try again using device authentication.", err)
 		// The token acquisition failed unexpectedly.
 		// One possible reason is that the device was deleted by an administrator in Entra ID.
@@ -1161,7 +1167,11 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 		rawIDToken = oldToken.RawIDToken
 	}
 
-	t := token.NewAuthCachedInfo(oauthToken, rawIDToken, b.provider)
+	var extraFields map[string]interface{}
+	if mp, ok := providers.ProviderAs[providers.MetadataProvider](b.provider); ok {
+		extraFields = mp.GetExtraFields(oauthToken)
+	}
+	t := token.NewAuthCachedInfo(oauthToken, rawIDToken, extraFields)
 	t.ProviderMetadata = oldToken.ProviderMetadata
 	t.DeviceRegistrationData = oldToken.DeviceRegistrationData
 
@@ -1230,7 +1240,12 @@ func (b *Broker) getGroups(ctx context.Context, session *session, t *token.AuthC
 		return nil, errors.New("session is in offline mode")
 	}
 
-	return b.provider.GetGroups(ctx,
+	gf, ok := providers.ProviderAs[providers.GroupFetcher](b.provider)
+	if !ok {
+		return nil, nil
+	}
+
+	return gf.GetGroups(ctx,
 		b.cfg.clientID,
 		b.cfg.issuerURL,
 		t.Token,

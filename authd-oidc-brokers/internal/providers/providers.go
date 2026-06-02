@@ -9,16 +9,21 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// Provider defines provider-specific methods to be used by the broker.
+// Provider defines the core provider-specific methods required by the broker.
+// Every provider implementation must satisfy this interface.
 type Provider interface {
 	AdditionalScopes() []string
 	AuthOptions() []oauth2.AuthCodeOption
 	DisplayName() string
-	GetExtraFields(token *oauth2.Token) map[string]interface{}
-	GetMetadata(provider *oidc.Provider) (map[string]interface{}, error)
-
 	GetUserInfo(claimer info.Claimer, isRefresh bool) (info.User, error)
+	IsTokenExpiredError(err *oauth2.RetrieveError) bool
+	NormalizeUsername(username string) string
+	SupportedOIDCAuthModes() []string
+	VerifyUsername(requestedUsername, authenticatedUsername string) error
+}
 
+// GroupFetcher is implemented by providers that can fetch group memberships from the identity provider.
+type GroupFetcher interface {
 	GetGroups(
 		ctx context.Context,
 		clientID string,
@@ -27,11 +32,17 @@ type Provider interface {
 		providerMetadata map[string]interface{},
 		deviceRegistrationData []byte,
 	) ([]info.Group, error)
+}
 
-	IsTokenExpiredError(err *oauth2.RetrieveError) bool
-	IsUserDisabledError(err *oauth2.RetrieveError) bool
+// MetadataProvider is implemented by providers that supply extra metadata or token fields.
+type MetadataProvider interface {
+	GetMetadata(provider *oidc.Provider) (map[string]interface{}, error)
+	GetExtraFields(token *oauth2.Token) map[string]interface{}
+}
+
+// DeviceRegisterer is implemented by providers that support device registration.
+type DeviceRegisterer interface {
 	IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error)
-
 	MaybeRegisterDevice(
 		ctx context.Context,
 		token *oauth2.Token,
@@ -39,9 +50,36 @@ type Provider interface {
 		issuerURL string,
 		deviceRegistrationData []byte,
 	) ([]byte, func(), error)
+}
 
-	NormalizeUsername(username string) string
-	SupportedOIDCAuthModes() []string
-	VerifyUsername(requestedUsername, authenticatedUsername string) error
-	SupportsDeviceRegistration() bool
+// UserDisabledChecker is implemented by providers that can detect disabled users
+// from token refresh errors.
+type UserDisabledChecker interface {
+	IsUserDisabledError(err *oauth2.RetrieveError) bool
+}
+
+// Capability is an optional interface that allows a Provider to expose optional
+// interfaces dynamically, similar to errors.As. Composed or wrapped providers
+// should implement this to avoid combinatorial type-switch boilerplate.
+type Capability interface {
+	// ProviderAs sets *target to the capability of type T if available, and
+	// returns true. If the capability is not available, it returns false
+	// without modifying *target.
+	ProviderAs(target any) bool
+}
+
+// ProviderAs checks whether p exposes optional capability T. It first checks
+// if p implements Capability (for composed/wrapped providers), then falls back
+// to a direct interface assertion.
+func ProviderAs[T any](p Provider) (T, bool) {
+	if c, ok := p.(Capability); ok {
+		var t T
+		if c.ProviderAs(&t) {
+			return t, true
+		}
+		var zero T
+		return zero, false
+	}
+	t, ok := p.(T)
+	return t, ok
 }

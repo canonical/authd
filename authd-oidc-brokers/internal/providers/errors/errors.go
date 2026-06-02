@@ -5,6 +5,31 @@
 // provider packages in the future, so it's not worth the effort to fix this now.
 package errors
 
+import stderrors "errors"
+
+// ErrDeviceDisabled is returned when the device is disabled in the identity provider.
+var ErrDeviceDisabled = stderrors.New("device is disabled")
+
+// ErrInvalidRedirectURI is returned when the redirect URI of the client application is missing or invalid.
+var ErrInvalidRedirectURI = stderrors.New("invalid redirect URI")
+
+// RetryWithDeviceAuthError is returned when token acquisition fails and the user should retry
+// using device authentication (e.g. because the device was deleted by an administrator).
+type RetryWithDeviceAuthError struct {
+	Err error
+}
+
+func (e *RetryWithDeviceAuthError) Error() string {
+	if e.Err != nil {
+		return e.Err.Error()
+	}
+	return "token acquisition failed, retry with device authentication"
+}
+
+func (e *RetryWithDeviceAuthError) Unwrap() error {
+	return e.Err
+}
+
 // ForDisplayError is an error type for errors that are meant to be displayed to the user.
 type ForDisplayError struct {
 	Message string

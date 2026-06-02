@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/canonical/authd/authd-oidc-brokers/internal/providers"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"golang.org/x/oauth2"
 )
@@ -24,13 +23,13 @@ type AuthCachedInfo struct {
 	UserIsDisabled         bool
 }
 
-// NewAuthCachedInfo creates a new AuthCachedInfo. It sets the provided token and rawIDToken and the provider-specific
+// NewAuthCachedInfo creates a new AuthCachedInfo. It sets the provided token, rawIDToken, and
 // extra fields which should be stored persistently.
-func NewAuthCachedInfo(token *oauth2.Token, rawIDToken string, provider providers.Provider) *AuthCachedInfo {
+func NewAuthCachedInfo(token *oauth2.Token, rawIDToken string, extraFields map[string]interface{}) *AuthCachedInfo {
 	return &AuthCachedInfo{
 		Token:       token,
 		RawIDToken:  rawIDToken,
-		ExtraFields: provider.GetExtraFields(token),
+		ExtraFields: extraFields,
 	}
 }
 

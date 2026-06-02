@@ -41,6 +41,11 @@ type brokerForTestConfig struct {
 
 	getGroupsFails                bool
 	supportsDeviceRegistration    bool
+	supportsMetadata              bool
+	metadataGetErr                error
+	supportsUserDisabledCheck     bool
+	userDisabledErrorCode         string
+	supportsFetchingGroups        bool
 	requireNameClaimOnInitialAuth bool
 	firstCallDelay                int
 	secondCallDelay               int
@@ -49,6 +54,27 @@ type brokerForTestConfig struct {
 	listenAddress       string
 	tokenHandlerOptions *testutils.TokenHandlerOptions
 	customHandlers      map[string]testutils.EndpointHandler
+}
+
+func brokerProviderWithOptionalCapabilities(provider *testutils.MockProvider, cfg *brokerForTestConfig) providers.Provider {
+	capabilities := testutils.ProviderCapabilities{}
+	if cfg.supportsFetchingGroups {
+		capabilities.GroupFetcher = provider
+	}
+	if cfg.supportsDeviceRegistration {
+		capabilities.DeviceRegisterer = &testutils.MockDeviceRegistererProvider{MockProvider: provider}
+	}
+	if cfg.supportsMetadata {
+		capabilities.MetadataProvider = &testutils.MockMetadataProvider{MockProvider: provider, GetMetadataErr: cfg.metadataGetErr}
+	}
+	if cfg.supportsUserDisabledCheck {
+		capabilities.UserDisabledChecker = &testutils.MockUserDisabledCheckerProvider{
+			MockProvider:          provider,
+			UserDisabledErrorCode: cfg.userDisabledErrorCode,
+		}
+	}
+
+	return testutils.ComposeProvider(provider, capabilities)
 }
 
 // newBrokerForTests is a helper function to easily create a new broker for tests.
@@ -94,13 +120,14 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	}
 
 	provider := &testutils.MockProvider{
-		GetGroupsFails:                     cfg.getGroupsFails,
-		ProviderSupportsDeviceRegistration: cfg.supportsDeviceRegistration,
-		RequireNameClaimOnInitialAuth:      cfg.requireNameClaimOnInitialAuth,
-		FirstCallDelay:                     cfg.firstCallDelay,
-		SecondCallDelay:                    cfg.secondCallDelay,
-		GetGroupsFunc:                      cfg.getGroupsFunc,
+		GetGroupsFails:                cfg.getGroupsFails,
+		RequireNameClaimOnInitialAuth: cfg.requireNameClaimOnInitialAuth,
+		FirstCallDelay:                cfg.firstCallDelay,
+		SecondCallDelay:               cfg.secondCallDelay,
+		GetGroupsFunc:                 cfg.getGroupsFunc,
 	}
+
+	brokerProvider := brokerProviderWithOptionalCapabilities(provider, cfg)
 
 	if cfg.provider == nil {
 		cfg.SetProvider(provider)
@@ -131,7 +158,7 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 		apiVersion = cfg.apiVersion
 	}
 
-	b, err := broker.New(cfg.Config, apiVersion, broker.WithCustomProvider(provider))
+	b, err := broker.New(cfg.Config, apiVersion, broker.WithCustomProvider(brokerProvider))
 	require.NoError(t, err, "Setup: New should not have returned an error")
 	return b
 }
