@@ -466,7 +466,7 @@ func (p *MockProvider) GetUserInfo(idToken info.Claimer, isRefresh bool) (info.U
 }
 
 // GetGroups returns the groups the user is a member of.
-func (p *MockProvider) GetGroups(ctx context.Context, clientID string, issuerURL string, token *oauth2.Token, providerMetadata map[string]interface{}, deviceRegistrationData []byte) ([]info.Group, error) {
+func (p *MockProvider) GetGroups(ctx context.Context, clientID string, issuerURL string, token *oauth2.Token, providerMetadata map[string]interface{}, deviceRegistrationData []byte, needsAccessTokenForGraphAPI bool) ([]info.Group, error) {
 	if p.GetGroupsFails {
 		return nil, errors.New("error requested in the mock")
 	}
