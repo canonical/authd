@@ -129,10 +129,12 @@ Ensure the API permission type is set to **Delegated** for each permission.
 The {guilabel}`GroupMember.Read.All` permission needs admin consent. Click on
 {guilabel}`Grant admin consent for <TENANT_NAME>` to provide this consent.
 
-Finally, as the supported authentication mechanism is the device workflow, you
-need to allow the public client workflows. In {menuselection}`Manage -->
-Authentication (Preview) --> Settings`, ensure that {guilabel}`Allow public
-client flows` is set to **Enabled**.
+If you plan to use the device code flow, you also need to allow public client
+flows. In {menuselection}`Manage --> Authentication (Preview) --> Settings`,
+ensure that {guilabel}`Allow public client flows` is set to **Enabled**. This
+isn't required if only the Entra password flow is used, since it authenticates
+through the Microsoft Broker App rather than through this application
+registration.
 
 [The Microsoft documentation](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app)
 provides detailed instructions for registering an application with the Microsoft
@@ -503,6 +505,84 @@ The authd-oidc broker does not support device registration.
 ::::
 :::::
 
+(ref::config-auth-flows)=
+
+## Configure authentication flows
+
+:::::{tab-set}
+:sync-group: broker
+
+::::{tab-item} Google IAM
+:sync: google
+
+The Google IAM broker only supports the device code flow.
+::::
+
+::::{tab-item} Microsoft Entra ID
+:sync: msentraid
+
+The `[flows]` section of the broker configuration file controls which
+authentication flows are offered to the user at login. By default, both
+Entra password + MFA and device code flow
+(browser-based) are enabled.
+
+```ini
+[flows]
+## Enable Entra password + MFA authentication (default: true)
+#entra_password = true
+
+## Enable browser-based device code flow (default: true)
+#device_auth = true
+```
+
+### Entra password + MFA flow
+
+When `entra_password` is enabled, the user can enter their Entra ID password
+directly. After password verification, Microsoft Entra ID requires a second
+factor (MFA). The broker automatically handles the MFA challenge:
+
+- **Push notification or number matching**: The user approves a notification on
+  their registered authenticator app.
+- **TOTP code**: The user enters a time-based one-time password from their
+  authenticator app.
+
+```{admonition} FIDO2/WebAuthn security key support
+:class: note
+FIDO2/WebAuthn security keys are currently not supported for the Entra password + MFA flow.
+If only FIDO methods are registered, the user is prompted to switch to the device code flow
+instead.
+```
+
+### Device code flow
+
+When `device_auth` is enabled, the user is presented with a device code and
+a URL to visit in a browser to complete authentication. This is the standard
+OAuth 2.0 Device Authorization Grant flow.
+
+### Disabling a flow
+
+To disable a flow, set its value to `false`:
+
+```ini
+[flows]
+## Disable Entra password + MFA, only offer device code flow
+entra_password = false
+```
+
+```{warning}
+At least one active bootstrap authentication flow must remain enabled. If both
+`device_auth` and `entra_password` are disabled, the broker logs an error and
+new users cannot authenticate until one of those flows is re-enabled.
+```
+::::
+
+::::{tab-item} Keycloak
+:sync: keycloak
+
+The authd-oidc broker does not support configuring authentication flows.
+::::
+:::::
+
 ## Restart the broker
 
 When a configuration file is added you have to restart authd:
@@ -603,80 +683,3 @@ minlen = 14
 
 > The [man pages](https://manpages.ubuntu.com/manpages/noble/man5/pwquality.conf.5.html)
 provide a full list of configuration options for the libpwquality library.
-
-(ref::config-auth-flows)=
-
-## Configure authentication flows
-
-:::::{tab-set}
-:sync-group: broker
-
-::::{tab-item} Google IAM
-:sync: google
-
-The Google IAM broker only supports the device code flow.
-::::
-
-::::{tab-item} Microsoft Entra ID
-:sync: msentraid
-
-The `[flows]` section of the broker configuration file controls which
-authentication flows are offered to the user at login. By default, both
-direct Entra password authentication (with MFA) and device code flow
-(browser-based) are enabled.
-
-```ini
-[flows]
-## Enable direct Entra password + MFA authentication (default: true)
-#entra_password = true
-
-## Enable browser-based device code flow (default: true)
-#device_auth = true
-```
-
-### Entra password authentication
-
-When `entra_password` is enabled, the user can enter their Entra ID password
-directly. After password verification, Microsoft Entra ID requires a second
-factor (MFA). The broker automatically handles the MFA challenge:
-
-- **Push notification or number matching**: The user approves a notification on
-  their registered authenticator app.
-- **TOTP code**: The user enters a time-based one-time password from their
-  authenticator app.
-
-```{note}
-FIDO2/WebAuthn security keys are currently not supported for the direct password flow.
-If only FIDO methods are registered, the user is prompted to switch to device
-authentication instead.
-```
-
-### Device code flow
-
-When `device_auth` is enabled, the user is presented with a device code and
-a URL to visit in a browser to complete authentication. This is the standard
-OAuth 2.0 Device Authorization Grant flow.
-
-### Disabling a flow
-
-To disable a flow, set its value to `false`:
-
-```ini
-[flows]
-## Disable direct password authentication, only offer device auth
-entra_password = false
-```
-
-```{warning}
-At least one active bootstrap authentication flow must remain enabled. If both
-`device_auth` and `entra_password` are disabled, the broker logs an error and
-new users cannot authenticate until one of those flows is re-enabled.
-```
-::::
-
-::::{tab-item} Keycloak
-:sync: keycloak
-
-The authd-oidc broker does not support configuring authentication flows.
-::::
-:::::
