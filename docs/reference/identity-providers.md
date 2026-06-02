@@ -20,3 +20,34 @@ Several brokers can be installed and enabled on a system.
 ```{note}
 Support for multiple additional providers is planned for future releases of authd.
 ```
+
+## Authentication methods
+
+### Google IAM
+
+Google IAM supports device code authentication, where the user visits a URL
+and enters a code to complete authentication.
+
+### Microsoft Entra ID
+
+Microsoft Entra ID supports the following authentication methods:
+
+- **Device code authentication**: The user visits a URL and enters a code to
+  authenticate. This is the traditional flow and works with all account types.
+- **Entra password + MFA**: The user authenticates directly with their Entra ID
+  password, followed by a multi-factor authentication (MFA) challenge. On
+  success, authd reuses the same Entra password as the local cached password for
+  subsequent logins.
+
+Both methods are enabled by default and can be individually controlled via the
+`[flows]` section of the broker configuration file. See
+[Configure authentication flows](ref::config-auth-flows) for details.
+
+The **Entra password + MFA** flow has additional requirements for resolving group
+membership, depending on whether device registration is enabled. See
+[Group membership resolution with Entra password + MFA](reference::group-membership-resolution).
+
+### Keycloak
+
+Keycloak supports device code authentication, where the user visits a URL and
+enters a code to complete authentication.
