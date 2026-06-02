@@ -678,6 +678,87 @@ func (p *Provider) NormalizeUsername(username string) string {
 	return strings.ToLower(username)
 }
 
+// SupportedOIDCAuthModes returns the OIDC authentication modes supported by the provider.
+func (p *Provider) SupportedOIDCAuthModes() []string {
+	return []string{authmodes.EntraPassword, authmodes.Device, authmodes.DeviceQr}
+}
+
+// unmarshalOptionalDeviceRegistrationData decodes JSON device-registration data
+// when present. Returns nil (and no error) when raw is empty.
+func unmarshalOptionalDeviceRegistrationData(raw []byte) (*himmelblau.DeviceRegistrationData, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	data := &himmelblau.DeviceRegistrationData{}
+	if err := json.Unmarshal(raw, data); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal device registration data: %v", err)
+	}
+	return data, nil
+}
+
+// InitiateEntraPasswordAuth starts the Entra password + MFA flow.
+func (p *Provider) InitiateEntraPasswordAuth(
+	ctx context.Context,
+	clientID string,
+	issuerURL string,
+	username, password string,
+	deviceRegistrationData []byte,
+	withDeviceScope bool,
+) (*himmelblau.MFAFlowState, *himmelblau.MFAChallengeInfo, error) {
+	tid := tenantID(issuerURL)
+
+	data, err := unmarshalOptionalDeviceRegistrationData(deviceRegistrationData)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return himmelblau.InitiateMFAFlowWithPassword(ctx, clientID, tid, data, username, password, withDeviceScope)
+}
+
+// AcquireTokenByMFAFlow completes the MFA challenge.
+func (p *Provider) AcquireTokenByMFAFlow(
+	ctx context.Context,
+	clientID string,
+	issuerURL string,
+	username string,
+	flow *himmelblau.MFAFlowState,
+	authData string,
+	pollAttempt int,
+	deviceRegistrationData []byte,
+) (*oauth2.Token, error) {
+	tid := tenantID(issuerURL)
+
+	data, err := unmarshalOptionalDeviceRegistrationData(deviceRegistrationData)
+	if err != nil {
+		return nil, err
+	}
+
+	return himmelblau.AcquireTokenByMFAFlow(ctx, clientID, tid, data, username, flow, authData, pollAttempt)
+}
+
+// RefreshEntraPasswordToken refreshes the cached Entra password + MFA refresh token
+// as the Microsoft Broker app (a public client, no client_secret) for basic scopes
+// only, to re-verify the account on a returning login. The Broker app is the client
+// that issued the family refresh token during the MFA flow; the configured OIDC app
+// cannot redeem it. Basic scopes (never Microsoft Graph) avoid the Broker-app↔Graph
+// preauthorization wall (AADSTS65002), so this works for any register_device setting.
+// A failure is returned as the underlying *oauth2.RetrieveError so the broker can
+// classify it exactly like the device-auth refresh.
+func (p *Provider) RefreshEntraPasswordToken(ctx context.Context, issuerURL, refreshToken string) (*oauth2.Token, error) {
+	tokenURL, err := clientCredentialsTokenURL(issuerURL)
+	if err != nil {
+		return nil, fmt.Errorf("could not build token URL for Entra password refresh: %w", err)
+	}
+
+	cfg := oauth2.Config{
+		ClientID: consts.MicrosoftBrokerAppID,
+		Scopes:   []string{"openid", "profile", "offline_access"},
+		Endpoint: oauth2.Endpoint{TokenURL: tokenURL, AuthStyle: oauth2.AuthStyleInParams},
+	}
+
+	return cfg.TokenSource(ctx, &oauth2.Token{RefreshToken: refreshToken}).Token()
+}
+
 // VerifyUsername checks if the authenticated username matches the requested username and that both are valid.
 func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername string) error {
 	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(authenticatedUsername) {
@@ -700,11 +781,6 @@ func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername strin
 	}
 
 	return nil
-}
-
-// SupportedOIDCAuthModes returns the OIDC authentication modes supported by the provider.
-func (p *Provider) SupportedOIDCAuthModes() []string {
-	return []string{authmodes.Device, authmodes.DeviceQr}
 }
 
 // IsTokenForDeviceRegistration checks if the token is for device registration.
