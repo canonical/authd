@@ -14,22 +14,38 @@ import (
 
 // HashAndStorePassword hashes the password and stores it in the data directory.
 func HashAndStorePassword(password, path string) error {
+	encoded, err := HashPassword(password)
+	if err != nil {
+		return err
+	}
+	return StoreHashedPassword(encoded, path)
+}
+
+// HashPassword hashes a plaintext password and returns the base64-encoded
+// salt+hash string. The result can later be persisted with StoreHashedPassword.
+//
+// Splitting hashing from storage lets callers narrow the plaintext memory
+// window: hash early, then drop the plaintext.
+func HashPassword(password string) (string, error) {
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		return "", fmt.Errorf("could not generate salt: %w", err)
+	}
+
+	hash := hashPassword(password, salt)
+	return base64.StdEncoding.EncodeToString(append(salt, hash...)), nil
+}
+
+// StoreHashedPassword writes a pre-computed password hash (from HashPassword)
+// to the given path.
+func StoreHashedPassword(encoded, path string) error {
 	// Ensure that the password file's parent directory exists.
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("could not create password parent directory: %w", err)
 	}
-
-	salt := make([]byte, 16)
-	if _, err := rand.Read(salt); err != nil {
-		return fmt.Errorf("could not generate salt: %w", err)
-	}
-
-	hash := hashPassword(password, salt)
-	s := base64.StdEncoding.EncodeToString(append(salt, hash...))
-	if err := os.WriteFile(path, []byte(s), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(encoded), 0o600); err != nil {
 		return fmt.Errorf("could not store password: %w", err)
 	}
-
 	return nil
 }
 
