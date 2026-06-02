@@ -95,6 +95,41 @@ var schemaMigrations = []schemaMigration{
 			return nil
 		},
 	},
+	{
+		description: "Add column 'provider_id' to users table for stable provider identifier",
+		migrate: func(m *Manager) error {
+			tx, err := m.db.Begin()
+			if err != nil {
+				return fmt.Errorf("failed to start transaction: %w", err)
+			}
+
+			defer func() {
+				err = commitOrRollBackTransaction(err, tx)
+			}()
+
+			var exists bool
+			err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM pragma_table_info('users') WHERE name = 'provider_id')").Scan(&exists)
+			if err != nil {
+				return fmt.Errorf("failed to check if 'provider_id' column exists: %w", err)
+			}
+			if !exists {
+				if _, err = tx.Exec(`ALTER TABLE users ADD COLUMN provider_id TEXT DEFAULT ""`); err != nil {
+					return fmt.Errorf("failed to add 'provider_id' column to users table: %w", err)
+				}
+			}
+
+			// Partial unique index: only enforce uniqueness when broker ID and provider ID are non-empty,
+			// allowing multiple existing users without provider identity (pre-migration state).
+			_, err = tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS "idx_user_broker_provider_id" ON users ("broker_id", "provider_id") WHERE broker_id != "" AND provider_id != ""`)
+			if err != nil {
+				return fmt.Errorf("failed to create provider ID index: %w", err)
+			}
+			if exists {
+				log.Debug(context.Background(), "'provider_id' column already exists in users table, ensured provider ID index")
+			}
+			return nil
+		},
+	},
 }
 
 func (m *Manager) maybeApplyMigrations() error {
