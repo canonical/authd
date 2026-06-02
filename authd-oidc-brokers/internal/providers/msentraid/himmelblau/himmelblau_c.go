@@ -460,7 +460,7 @@ func initiateMFAFlow(broker *brokerClientApplication, username, password string)
 		&flow,
 	)
 	if msalErr != nil {
-		return nil, newMFAInitError(msalErr)
+		return nil, newMFAError(msalErr)
 	}
 	return newMFAFlowState(flow), nil
 }
@@ -492,8 +492,8 @@ func msalErrorMsg(msalErr *C.MSAL_ERROR) string {
 	return C.GoString(msalErr.msg)
 }
 
-// newMFAInitError builds an MFAInitError from an msalErr and frees it.
-func newMFAInitError(msalErr *C.MSAL_ERROR) *MFAInitError {
+// newMFAError builds an MFAError from an msalErr and frees it.
+func newMFAError(msalErr *C.MSAL_ERROR) *MFAError {
 	defer C.error_free(msalErr)
 	msg := C.GoString(msalErr.msg)
 	category := mfaErrorCategory(msalErr.code)
@@ -524,7 +524,7 @@ func newMFAInitError(msalErr *C.MSAL_ERROR) *MFAInitError {
 	if category == MFAErrorOther && strings.Contains(msg, "AuthResponse indicates failure") {
 		category = MFAErrorRetryableCode
 	}
-	return &MFAInitError{
+	return &MFAError{
 		Category: category,
 		AADSTS:   int(msalErr.aadsts_code),
 		Message:  msg,
@@ -546,7 +546,7 @@ func initiateMFAFlowForEnrollment(broker *brokerClientApplication, username, pas
 		&flow,
 	)
 	if msalErr != nil {
-		return nil, newMFAInitError(msalErr)
+		return nil, newMFAError(msalErr)
 	}
 
 	return newMFAFlowState(flow), nil
@@ -585,7 +585,7 @@ func acquireTokenByMFAFlow(broker *brokerClientApplication, username string, flo
 		&userToken,
 	)
 	if msalErr != nil {
-		return nil, nil, newMFAInitError(msalErr)
+		return nil, nil, newMFAError(msalErr)
 	}
 
 	cleanup = func() { C.user_token_free(userToken) }

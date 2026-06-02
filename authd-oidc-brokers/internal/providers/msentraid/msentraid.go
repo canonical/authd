@@ -23,6 +23,7 @@ import (
 	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/canonical/authd/log"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/golang-jwt/jwt/v5"
@@ -98,18 +99,6 @@ func (p *Provider) getTokenScopes(token *jwt.Token) ([]string, error) {
 	return strings.Split(scopesStr, " "), nil
 }
 
-func (p *Provider) getAppID(token *jwt.Token) (string, error) {
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return "", fmt.Errorf("failed to cast token claims to MapClaims: %v", token.Claims)
-	}
-	appID, ok := claims["appid"].(string)
-	if !ok {
-		return "", fmt.Errorf("failed to cast appid claim to string: %v", claims["appid"])
-	}
-	return appID, nil
-}
-
 // GetExtraFields returns the extra fields of the token which should be stored persistently.
 func (p *Provider) GetExtraFields(token *oauth2.Token) map[string]interface{} {
 	return map[string]interface{}{
@@ -150,6 +139,32 @@ func (p *Provider) GetUserInfo(claimer info.Claimer, _ bool) (info.User, error) 
 		userClaims.Gecos,
 		nil,
 	), nil
+}
+
+// UserInfoFromAccessToken extracts user info from an Entra access token's
+// claims. Access tokens use oid/upn-style claims rather than the OIDC
+// preferred_username/sub pair that GetUserInfo expects, so remap them first and
+// then reuse the standard GetUserInfo path.
+func (p *Provider) UserInfoFromAccessToken(accessToken string) (info.User, error) {
+	parsed, _, err := new(jwt.Parser).ParseUnverified(accessToken, jwt.MapClaims{})
+	if err != nil {
+		return info.User{}, fmt.Errorf("failed to parse access token claims: %w", err)
+	}
+
+	rawClaims, ok := parsed.Claims.(jwt.MapClaims)
+	if !ok {
+		return info.User{}, errors.New("failed to cast access token claims to MapClaims")
+	}
+	if oid, _ := rawClaims["oid"].(string); oid != "" {
+		rawClaims["sub"] = oid
+	}
+	if upn, _ := rawClaims["upn"].(string); upn != "" {
+		rawClaims["preferred_username"] = upn
+	} else if email, _ := rawClaims["email"].(string); email != "" {
+		rawClaims["preferred_username"] = email
+	}
+
+	return p.GetUserInfo(tokenClaimer(rawClaims), false)
 }
 
 // GetGroups retrieves the groups the user is a member of via the Microsoft Graph API.
@@ -250,11 +265,15 @@ func (p *Provider) GetGroups(
 		tenantID := tenantID(issuerURL)
 		accessTokenStr, err = himmelblau.AcquireAccessTokenForGraphAPI(ctx, clientID, tenantID, token, data)
 		if errors.Is(err, himmelblau.ErrDeviceDisabled) {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", providerErrors.ErrDeviceDisabled, err)
 		}
 		if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
 			msg := "Token acquisition failed: The app is misconfigured in Microsoft Entra (the redirect URI is missing or invalid). Please contact your administrator."
-			return nil, &providerErrors.ForDisplayError{Message: msg, Err: err}
+			return nil, &providerErrors.ForDisplayError{Message: msg, Err: fmt.Errorf("%w: %w", providerErrors.ErrInvalidRedirectURI, err)}
+		}
+		var tokenAcquisitionError himmelblau.TokenAcquisitionError
+		if errors.As(err, &tokenAcquisitionError) {
+			return nil, &providerErrors.RetryWithDeviceAuthError{Err: fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", err)}
 		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", err)
@@ -298,6 +317,18 @@ type claims struct {
 	Home              string `json:"home"`
 	Shell             string `json:"shell"`
 	Gecos             string `json:"name"`
+}
+
+// tokenClaimer implements info.Claimer for a JWT MapClaims map,
+// allowing access-token claims to be fed through the standard GetUserInfo path.
+type tokenClaimer jwt.MapClaims
+
+func (tc tokenClaimer) Claims(v any) error {
+	b, err := json.Marshal(jwt.MapClaims(tc))
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, v)
 }
 
 // userClaims returns the user claims parsed from the ID token.
@@ -766,7 +797,12 @@ func (p *Provider) RefreshEntraPasswordToken(ctx context.Context, issuerURL, ref
 		Endpoint: oauth2.Endpoint{TokenURL: tokenURL, AuthStyle: oauth2.AuthStyleInParams},
 	}
 
-	return cfg.TokenSource(ctx, &oauth2.Token{RefreshToken: refreshToken}).Token()
+	tok, err := cfg.TokenSource(ctx, &oauth2.Token{RefreshToken: refreshToken}).Token()
+	if err != nil {
+		return nil, err
+	}
+
+	return tok, nil
 }
 
 // VerifyUsername checks if the authenticated username matches the requested username and that both are valid.
@@ -793,19 +829,12 @@ func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername strin
 	return nil
 }
 
-// IsTokenForDeviceRegistration checks if the token is for device registration.
-func (p *Provider) IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error) {
-	accessToken, _, err := new(jwt.Parser).ParseUnverified(token.AccessToken, jwt.MapClaims{})
-	if err != nil {
-		return false, fmt.Errorf("failed to parse access token: %v", err)
-	}
-
-	appID, err := p.getAppID(accessToken)
-	if err != nil {
-		return false, fmt.Errorf("failed to get app ID from access token: %v", err)
-	}
-
-	return appID == consts.MicrosoftBrokerAppID, nil
+// IsTokenForDeviceRegistration reports whether the cached token carries
+// device-registration data. The entra_password MFA flow issues tokens under the
+// Microsoft Broker App ID too, so the App ID alone cannot distinguish a
+// device-registration token; the presence of device-registration data can.
+func (p *Provider) IsTokenForDeviceRegistration(authInfo *token.AuthCachedInfo) bool {
+	return len(authInfo.DeviceRegistrationData) > 0
 }
 
 // MaybeRegisterDevice checks if the device is already registered and registers it if not.
