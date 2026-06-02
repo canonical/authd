@@ -71,7 +71,7 @@ copyright = "%s CC-BY-SA, %s" % (datetime.date.today().year, author)
 # NOTE: The Open Graph Protocol (OGP) enhances page display in a social graph
 #       and is used by social media platforms; see https://ogp.me/
 
-ogp_site_url = "https://documentation.ubuntu.com/authd/stable-docs"
+ogp_site_url = f"https://ubuntu.com/docs/authd/{version}/"
 
 
 # Preview name of the documentation website
@@ -97,8 +97,6 @@ ogp_image = "https://assets.ubuntu.com/v1/cc828679-docs_illustration.svg"
 
 # Dictionary of values to pass into the Sphinx context for all pages:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#confval-html_context
-
-version = os.getenv("READTHEDOCS_VERSION", "")
 
 html_context = {
     # Used for rendering version information and links in authd documentation
@@ -181,7 +179,7 @@ html_theme_options = {
 # TODO: If your documentation is hosted on https://docs.ubuntu.com/,
 #       uncomment and update as needed.
 
-slug = "authd"
+slug = "docs/authd"
 
 #######################
 # Sitemap configuration: https://sphinx-sitemap.readthedocs.io/
@@ -189,7 +187,7 @@ slug = "authd"
 
 # Use RTD canonical URL to ensure duplicate pages have a specific canonical URL
 
-html_baseurl = os.environ.get("READTHEDOCS_CANONICAL_URL", "/")
+html_baseurl = f"https://ubuntu.com/docs/authd/{version}/"
 
 # sphinx-sitemap uses html_baseurl to generate the full URL for each page:
 
