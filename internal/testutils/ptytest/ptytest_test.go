@@ -279,3 +279,63 @@ func TestWaitForFailureShowsInteractionHistory(t *testing.T) {
 	require.Contains(t, out, "Got user: testuser")
 	require.Contains(t, out, "Selected: 2")
 }
+
+func TestSnapshots(t *testing.T) {
+	t.Parallel()
+
+	c := ptytest.Start(t, "bash", []string{"-c", `
+		echo "Step 1: hello"
+		echo "Step 2: world"
+		echo "Step 3: done"
+	`}, ptytest.WithSnapshots())
+
+	c.WaitFor(t, "Step 1")
+	c.WaitFor(t, "Step 2")
+	c.WaitFor(t, "Step 3")
+	_ = c.WaitForExit(t)
+
+	snapshots := c.Snapshots()
+	require.NotEmpty(t, snapshots, "snapshots should be captured")
+
+	// Each snapshot should contain the text visible at that point.
+	require.Contains(t, snapshots[0], "Step 1")
+
+	// Later snapshots should contain earlier text too (terminal accumulates).
+	last := snapshots[len(snapshots)-1]
+	require.Contains(t, last, "Step 1")
+	require.Contains(t, last, "Step 2")
+	require.Contains(t, last, "Step 3")
+}
+
+func TestSnapshotsDisabledByDefault(t *testing.T) {
+	t.Parallel()
+
+	c := ptytest.Start(t, "echo", []string{"hello"})
+	c.WaitFor(t, "hello")
+	_ = c.WaitForExit(t)
+
+	require.Nil(t, c.Snapshots(), "snapshots should be nil when not enabled")
+}
+
+func TestSnapshotsDeduplication(t *testing.T) {
+	t.Parallel()
+
+	c := ptytest.Start(t, "bash", []string{"-c", `
+		echo "line1"
+		echo "line2"
+	`}, ptytest.WithSnapshots())
+
+	// Two WaitFor calls that match on the same screen state
+	// (both patterns exist in the same output).
+	c.WaitFor(t, "line1")
+	c.WaitFor(t, "line2")
+	_ = c.WaitForExit(t)
+
+	snapshots := c.Snapshots()
+	// Consecutive identical snapshots should be deduped.
+	for i := 1; i < len(snapshots); i++ {
+		if snapshots[i] == snapshots[i-1] {
+			t.Errorf("snapshot %d is identical to %d, should have been deduped", i, i-1)
+		}
+	}
+}

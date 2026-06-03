@@ -48,11 +48,12 @@ func sectionFooter(title string) string {
 
 // options holds configuration for a Console.
 type options struct {
-	env     []string
-	dir     string
-	cols    uint16
-	rows    uint16
-	timeout time.Duration
+	env       []string
+	dir       string
+	cols      uint16
+	rows      uint16
+	timeout   time.Duration
+	snapshots bool
 }
 
 // defaultOptions returns the default configuration.
@@ -96,6 +97,16 @@ func WithDir(dir string) Option {
 	}
 }
 
+// WithSnapshots enables automatic terminal screen snapshot capture after each
+// successful WaitFor call. Use Snapshots() to retrieve the captured states.
+// This is useful for TUI applications that redraw in-place (e.g. bubbletea),
+// where the final terminal state alone loses intermediate interaction steps.
+func WithSnapshots() Option {
+	return func(o *options) {
+		o.snapshots = true
+	}
+}
+
 // interactionResult describes the outcome of an interaction step.
 type interactionResult string
 
@@ -124,6 +135,7 @@ type Console struct {
 	copyDone     chan struct{}
 	closed       bool
 	interactions []interaction
+	snapshots    []string // terminal screen snapshots captured at WaitFor points
 }
 
 // winsize is the struct for the TIOCSWINSZ ioctl.
@@ -418,6 +430,7 @@ func (c *Console) WaitForTimeout(t *testing.T, pattern string, timeout time.Dura
 			// content longer than the stripped content.
 			c.scanPos += rawOffsetForStripped(rawContent, loc[1])
 			c.record("WaitFor", pattern, resultOK)
+			c.captureSnapshot(content)
 			t.Logf("ptytest: WaitFor(%q) matched", pattern)
 			return searchContent[:loc[1]]
 		}
@@ -447,6 +460,7 @@ func (c *Console) WaitForTimeout(t *testing.T, pattern string, timeout time.Dura
 			if loc != nil {
 				c.scanPos += rawOffsetForStripped(rawContent, loc[1])
 				c.record("WaitFor", pattern, resultOK)
+				c.captureSnapshot(content)
 				t.Logf("ptytest: WaitFor(%q) matched (after exit)", pattern)
 				return searchContent[:loc[1]]
 			}
@@ -475,6 +489,13 @@ func (c *Console) WaitForExit(t *testing.T) error {
 		// Wait for the copy goroutine to drain any remaining PTY output so
 		// that RawOutput() returns the complete output after this call.
 		<-c.copyDone
+
+		// Capture a final snapshot now that all output has been drained.
+		c.mu.RLock()
+		content := c.buf.String()
+		c.mu.RUnlock()
+		c.captureSnapshot(content)
+
 		return err
 	case <-time.After(c.opts.timeout):
 		c.mu.RLock()
@@ -503,6 +524,49 @@ func (c *Console) RawOutput() string {
 	defer c.mu.RUnlock()
 
 	return c.buf.String()
+}
+
+// captureSnapshot processes the current raw buffer through the terminal
+// emulator and stores the result if snapshots are enabled.
+func (c *Console) captureSnapshot(rawContent string) {
+	if !c.opts.snapshots {
+		return
+	}
+	screen := ProcessRawOutput(rawContent)
+	c.snapshots = append(c.snapshots, screen)
+}
+
+// Snapshots returns the terminal screen states captured at each WaitFor match
+// point and after WaitForExit. Consecutive duplicate snapshots are removed.
+// Only populated when WithSnapshots() option was used.
+func (c *Console) Snapshots() []string {
+	if len(c.snapshots) == 0 {
+		return nil
+	}
+	// Deduplicate consecutive identical snapshots.
+	deduped := []string{c.snapshots[0]}
+	for i := 1; i < len(c.snapshots); i++ {
+		if c.snapshots[i] != c.snapshots[i-1] {
+			deduped = append(deduped, c.snapshots[i])
+		}
+	}
+	return deduped
+}
+
+// ResetSnapshots discards all snapshots captured so far.
+// Useful to ignore preliminary interaction steps (e.g. waiting for a prompt
+// before the meaningful flow begins) when WithSnapshots is enabled.
+func (c *Console) ResetSnapshots() {
+	c.snapshots = nil
+}
+
+// DiscardLastSnapshot removes the most recently captured snapshot.
+// Useful when a WaitFor call captures a timing-sensitive intermediate state
+// that should not appear in the golden file.
+func (c *Console) DiscardLastSnapshot() {
+	if len(c.snapshots) > 0 {
+		c.snapshots = c.snapshots[:len(c.snapshots)-1]
+	}
 }
 
 // Close terminates the command (if still running) and cleans up the PTY.
