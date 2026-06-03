@@ -358,10 +358,10 @@ func acquireTokenByRefreshToken(broker *brokerClientApplication, refreshToken st
 		&cScopes[0],
 		C.int(len(scopes)),
 		cRequestResource,
-		// We could use `nil` here instead of the client ID if we also use `nil` as the client ID
-		// in the `broker_init` call, which means that the user doesn't even have to register
-		// an OIDC app in Entra. However, that has the effect that we can't fetch the groups
-		// of the user.
+		// on_behalf_of client ID. Passing it per-call (rather than only via
+		// broker_init) is what lets us resolve the user's groups: it requests the
+		// token on behalf of the caller's OIDC app. The per-call value takes
+		// precedence over the broker app's default on_behalf_of client ID.
 		cClientID,
 		(*C.BoxedDynTpm)(unsafe.Pointer(tpm)),
 		machineKey,
