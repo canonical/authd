@@ -87,25 +87,6 @@ func ensureBrokerClientAppInitialized(tenantID string, data *DeviceRegistrationD
 	return brokerClientAppInitErr
 }
 
-// DeviceRegistrationData contains the data returned by RegisterDevice
-// which is needed to acquire an access token later.
-type DeviceRegistrationData struct {
-	DeviceID      string `json:"device_id"`
-	CertKey       []byte `json:"cert_key"`
-	TransportKey  []byte `json:"transport_key"`
-	AuthValue     string `json:"auth_value"`
-	TPMMachineKey []byte `json:"tpm_machine_key"`
-}
-
-// IsValid checks whether all fields of the DeviceRegistrationData are set.
-func (d *DeviceRegistrationData) IsValid() bool {
-	return d.DeviceID != "" &&
-		d.CertKey != nil &&
-		d.TransportKey != nil &&
-		d.AuthValue != "" &&
-		d.TPMMachineKey != nil
-}
-
 // RegisterDevice registers the device with Microsoft Entra ID and returns the
 // device registration data required for subsequent access token acquisition via
 // AcquireAccessTokenForGraphAPI.
