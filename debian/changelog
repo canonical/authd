@@ -1,8 +1,8 @@
-authd (0.6.4+git260529+423+cac9c282) resolute; urgency=medium
+authd (0.6.4+git260602+438+e5d44ec7) resolute; urgency=medium
 
-  * Github build. Run id: 26638108597. Run number: 423.
+  * Github build. Run id: 26819134277. Run number: 438.
 
- -- Copilot <198982749+Copilot@users.noreply.github.com>  Fri, 29 May 2026 12:48:42 +0000
+ -- adombeck <18482300+adombeck@users.noreply.github.com>  Tue, 02 Jun 2026 12:18:38 +0000
 
 authd (0.6.4) resolute; urgency=medium
 
