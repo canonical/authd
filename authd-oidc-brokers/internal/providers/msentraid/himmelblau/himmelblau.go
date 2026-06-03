@@ -5,6 +5,8 @@ package himmelblau
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"os"
@@ -22,16 +24,31 @@ var (
 	//nolint:errname // This is not a sentinel error.
 	tpmInitErr error
 
-	brokerClientApp         *brokerClientApplication
-	brokerClientAppInitOnce sync.Once
-	//nolint:errname // This is not a sentinel error.
-	brokerClientAppInitErr error
+	brokerClientApps   = make(map[brokerClientAppCacheKey]*brokerClientAppEntry)
+	brokerClientAppsMu sync.Mutex
 
 	authorityBaseURL   = "https://login.microsoftonline.com"
 	authorityBaseURLMu sync.RWMutex
 
 	deviceRegistrationMu sync.RWMutex
 )
+
+type brokerClientAppCacheKey struct {
+	authority        string
+	clientID         string
+	transportKeyHash string
+	certKeyHash      string
+}
+
+// brokerClientAppEntry is a cache slot for a broker client app. The once gate
+// ensures initBroker runs only once per key while letting unrelated keys
+// initialize concurrently (the global mutex is held only for map access, not
+// across the cgo call, which performs TPM and network work).
+type brokerClientAppEntry struct {
+	once sync.Once
+	app  *brokerClientApplication
+	err  error
+}
 
 func ensureTPMInitialized() error {
 	tpmInitOnce.Do(func() {
@@ -59,33 +76,62 @@ func ensureTPMInitialized() error {
 	return tpmInitErr
 }
 
-func ensureBrokerClientAppInitialized(clientID, tenantID string, data *DeviceRegistrationData) error {
+func brokerClientAppFor(clientID, tenantID string, data *DeviceRegistrationData) (*brokerClientApplication, error) {
 	if err := ensureTPMInitialized(); err != nil {
-		return err
+		return nil, err
 	}
 
-	brokerClientAppInitOnce.Do(func() {
-		authorityBaseURLMu.RLock()
-		authority, err := url.JoinPath(authorityBaseURL, tenantID)
-		authorityBaseURLMu.RUnlock()
-		if err != nil {
-			brokerClientAppInitErr = fmt.Errorf("failed to construct authority URL: %v", err)
-			return
-		}
-		var transportKey []byte
-		var certKey []byte
-		if data != nil {
-			transportKey = data.TransportKey
-			certKey = data.CertKey
-		}
+	authorityBaseURLMu.RLock()
+	authority, err := url.JoinPath(authorityBaseURL, tenantID)
+	authorityBaseURLMu.RUnlock()
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct authority URL: %v", err)
+	}
 
-		brokerClientApp, brokerClientAppInitErr = initBroker(authority, clientID, transportKey, certKey)
-		if brokerClientAppInitErr != nil {
-			return
-		}
+	var transportKey []byte
+	var certKey []byte
+	if data != nil {
+		transportKey = data.TransportKey
+		certKey = data.CertKey
+	}
+
+	key := brokerClientAppCacheKey{
+		authority:        authority,
+		clientID:         clientID,
+		transportKeyHash: hashCacheKeyBytes(transportKey),
+		certKeyHash:      hashCacheKeyBytes(certKey),
+	}
+
+	brokerClientAppsMu.Lock()
+	entry := brokerClientApps[key]
+	if entry == nil {
+		entry = &brokerClientAppEntry{}
+		brokerClientApps[key] = entry
+	}
+	brokerClientAppsMu.Unlock()
+
+	entry.once.Do(func() {
+		entry.app, entry.err = initBroker(authority, clientID, transportKey, certKey)
 	})
+	if entry.err != nil {
+		// Do not cache failures: drop the entry so a later call can retry.
+		brokerClientAppsMu.Lock()
+		if brokerClientApps[key] == entry {
+			delete(brokerClientApps, key)
+		}
+		brokerClientAppsMu.Unlock()
+		return nil, entry.err
+	}
 
-	return brokerClientAppInitErr
+	return entry.app, nil
+}
+
+func hashCacheKeyBytes(value []byte) string {
+	if len(value) == 0 {
+		return ""
+	}
+	sum := sha256.Sum256(value)
+	return hex.EncodeToString(sum[:])
 }
 
 func tokenExtrasFromAccessToken(ctx context.Context, accessToken string) map[string]any {
@@ -158,7 +204,8 @@ func RegisterDevice(
 		}
 	}()
 
-	if err := ensureBrokerClientAppInitialized("", tenantID, nil); err != nil {
+	brokerClientApp, err := brokerClientAppFor("", tenantID, nil)
+	if err != nil {
 		return nil, nil, fmt.Errorf("failed to initialize broker client application: %v", err)
 	}
 
@@ -240,7 +287,8 @@ func AcquireAccessTokenForGraphAPI(
 	token *oauth2.Token,
 	data DeviceRegistrationData,
 ) (string, error) {
-	if err := ensureBrokerClientAppInitialized(clientID, tenantID, &data); err != nil {
+	brokerClientApp, err := brokerClientAppFor(clientID, tenantID, &data)
+	if err != nil {
 		return "", fmt.Errorf("failed to initialize broker client application: %v", err)
 	}
 
@@ -289,13 +337,13 @@ func AcquireAccessTokenForGraphAPI(
 // When withDeviceScope is true, the MFA flow requests scopes required for device
 // enrollment. When false, it uses standard scopes without enrollment resources.
 func InitiateMFAFlowWithPassword(ctx context.Context, clientID, tenantID string, data *DeviceRegistrationData, username, password string, withDeviceScope bool) (*MFAFlowState, *MFAChallengeInfo, error) {
-	if err := ensureBrokerClientAppInitialized(clientID, tenantID, data); err != nil {
+	brokerClientApp, err := brokerClientAppFor(clientID, tenantID, data)
+	if err != nil {
 		return nil, nil, fmt.Errorf("failed to initialize broker client application: %v", err)
 	}
 
 	log.Debugf(ctx, "Initiating MFA flow for user %q (withDeviceScope=%v)", username, withDeviceScope)
 	var flow *MFAFlowState
-	var err error
 	if withDeviceScope {
 		flow, err = initiateMFAFlowForEnrollment(brokerClientApp, username, password)
 	} else {
@@ -332,7 +380,8 @@ func InitiateMFAFlowWithPassword(ctx context.Context, clientID, tenantID string,
 // For code-based MFA, pass the code as authData with pollAttempt=0.
 // Returns an OAuth token containing the access and refresh tokens from the MFA result.
 func AcquireTokenByMFAFlow(ctx context.Context, clientID, tenantID string, data *DeviceRegistrationData, username string, flow *MFAFlowState, authData string, pollAttempt int) (*oauth2.Token, error) {
-	if err := ensureBrokerClientAppInitialized(clientID, tenantID, data); err != nil {
+	brokerClientApp, err := brokerClientAppFor(clientID, tenantID, data)
+	if err != nil {
 		return nil, fmt.Errorf("failed to initialize broker client application: %v", err)
 	}
 
