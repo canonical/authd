@@ -1,3 +1,17 @@
+Username: user name
+────────────────────────────────────────────────────────────────────────────────
+  Select your provider
+
+> 1. local
+  2. ExampleBroker
+
+  Press escape key to go back to user selection
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+>
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
 Gimme your password:
 >
 
@@ -6,8 +20,9 @@ PAM ChangeAuthTok()
   User: "user-integration-cli-passwd-exit-authd-if-user-presses-ctrl-d@example.com"
   Result: error: PAM exit code: 26
     Critical error - immediate abort
-acct=incomplete
+PAM Info Message: acct=incomplete
 PAM AcctMgmt()
   User: "user-integration-cli-passwd-exit-authd-if-user-presses-ctrl-d@example.com"
   Result: error: PAM exit code: 25
     The return value should be ignored by PAM dispatch
+────────────────────────────────────────────────────────────────────────────────

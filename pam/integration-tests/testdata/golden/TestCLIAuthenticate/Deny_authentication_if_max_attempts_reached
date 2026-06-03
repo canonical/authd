@@ -1,10 +1,27 @@
+Username: user name
+────────────────────────────────────────────────────────────────────────────────
+Username: user-integration-max-attempts@example.com
+────────────────────────────────────────────────────────────────────────────────
+  Select your provider
+
+> 1. local
+  2. ExampleBroker
+
+  Press escape key to go back to user selection
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+>
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
 PAM Error Message: Maximum number of authentication attempts reached
 PAM Authenticate()
   User: "user-integration-max-attempts@example.com"
   Result: error: PAM exit code: 11
     Have exhausted maximum number of retries for service
-acct=incomplete
+PAM Info Message: acct=incomplete
 PAM AcctMgmt()
   User: "user-integration-max-attempts@example.com"
   Result: error: PAM exit code: 25
     The return value should be ignored by PAM dispatch
+────────────────────────────────────────────────────────────────────────────────

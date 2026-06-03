@@ -1,9 +1,44 @@
+Username: user name
+────────────────────────────────────────────────────────────────────────────────
+Username: user-integration-switch-broker@example.com
+────────────────────────────────────────────────────────────────────────────────
   Select your provider
 
 > 1. local
   2. ExampleBroker
 
-auth=incomplete
+  Press escape key to go back to user selection
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+>
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+  Select your authentication method
+
+> 1. Password authentication
+  2. Send URL to user-integration-switch-broker@example.com
+  3. Use your fido device foo
+  4. Use your phone +33...
+  5. Use your phone +1...
+  6. Use a QR code
+  7. Authentication code
+
+  Press escape key to go back to choose the provider
+────────────────────────────────────────────────────────────────────────────────
+  Select your provider
+
+  1. local
+> 2. ExampleBroker
+
+  Press escape key to go back to user selection
+────────────────────────────────────────────────────────────────────────────────
+  Select your provider
+
+> 1. local
+  2. ExampleBroker
+
+PAM Info Message: auth=incomplete
 PAM Authenticate()
   User: "user-integration-switch-broker@example.com"
   Result: error: PAM exit code: 25
@@ -12,3 +47,4 @@ PAM AcctMgmt()
   User: "user-integration-switch-broker@example.com"
   Result: error: PAM exit code: 26
     Critical error - immediate abort
+────────────────────────────────────────────────────────────────────────────────

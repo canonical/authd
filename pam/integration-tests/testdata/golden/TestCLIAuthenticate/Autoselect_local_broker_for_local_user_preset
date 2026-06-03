@@ -1,4 +1,4 @@
-auth=incomplete
+PAM Info Message: auth=incomplete
 PAM Authenticate()
   User: "root"
   Result: error: PAM exit code: 25
@@ -7,3 +7,4 @@ PAM AcctMgmt()
   User: "root"
   Result: error: PAM exit code: 26
     Critical error - immediate abort
+────────────────────────────────────────────────────────────────────────────────

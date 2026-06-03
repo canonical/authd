@@ -32,7 +32,6 @@ func ptyRunnerEnv(t *testing.T, cliEnv []string, opts clientOptions) []string {
 		testutils.MinimalPathEnv,
 		fmt.Sprintf("%s=%s", pam_test.RunnerEnvLogFile, logFile),
 		fmt.Sprintf("%s=%s", pam_test.RunnerEnvTestName, t.Name()),
-		fmt.Sprintf("%s=1", pam_test.RunnerEnvSupportsConversation),
 		"SHELL="+shellPath,
 		"HOME="+t.TempDir(),
 	)
@@ -84,6 +83,29 @@ func startPAMRunner(t *testing.T, clientPath string, socketPath string,
 ) *ptytest.Console {
 	t.Helper()
 
+	return startPAMRunnerWithPtyOpts(t, clientPath, socketPath, action, cliEnv, opts, nil, extraArgs...)
+}
+
+// startCLIPAMRunner starts the PAM runner with snapshot capture enabled.
+// Use ptySanitizeSnapshots to get the golden output from the returned Console.
+func startCLIPAMRunner(t *testing.T, clientPath string, socketPath string,
+	action pam_test.RunnerAction, cliEnv []string, opts clientOptions,
+	extraArgs ...string,
+) *ptytest.Console {
+	t.Helper()
+
+	return startPAMRunnerWithPtyOpts(t, clientPath, socketPath, action, cliEnv, opts,
+		[]ptytest.Option{ptytest.WithSnapshots()}, extraArgs...)
+}
+
+// startPAMRunnerWithPtyOpts is like startPAMRunner but allows passing
+// additional ptytest options (e.g. WithSnapshots).
+func startPAMRunnerWithPtyOpts(t *testing.T, clientPath string, socketPath string,
+	action pam_test.RunnerAction, cliEnv []string, opts clientOptions,
+	extraPtyOpts []ptytest.Option, extraArgs ...string,
+) *ptytest.Console {
+	t.Helper()
+
 	pamRunnerPath := filepath.Join(clientPath, "pam_authd")
 	args := []string{action.String(), "socket=" + socketPath}
 	args = append(args, extraArgs...)
@@ -95,6 +117,7 @@ func startPAMRunner(t *testing.T, clientPath string, socketPath string,
 		ptytest.WithSize(terminalWidth, 50),
 		ptytest.WithTimeout(30 * time.Second),
 	}
+	ptyOpts = append(ptyOpts, extraPtyOpts...)
 
 	return ptytest.Start(t, pamRunnerPath, args, ptyOpts...)
 }
@@ -126,6 +149,14 @@ func ptySanitizeOutput(t *testing.T, rawOutput string) string {
 	// output regardless of bubbletea's internal render batching timing.
 	s := ptytest.ProcessRawOutput(rawOutput)
 
+	return ptySanitizeScreen(t, s)
+}
+
+// ptySanitizeScreen sanitizes a terminal screen (already processed through
+// ProcessRawOutput) for golden file comparison.
+func ptySanitizeScreen(t *testing.T, s string) string {
+	t.Helper()
+
 	// Collapse runs of 3+ blank lines to just 2.
 	for strings.Contains(s, "\n\n\n") {
 		s = strings.ReplaceAll(s, "\n\n\n", "\n\n")
@@ -149,4 +180,55 @@ func ptySanitizeOutput(t *testing.T, rawOutput string) string {
 	s = permissions.Z_ForTests_IdempotentPermissionError(s)
 
 	return s
+}
+
+// ptySanitizeSnapshotFrames takes terminal snapshots, sanitizes each one,
+// deduplicates consecutive identical results, and formats them as cumulative
+// frames separated by a horizontal rule.
+func ptySanitizeSnapshotFrames(t *testing.T, snapshots []string, sanitizeScreen func(string) string) string {
+	t.Helper()
+
+	if len(snapshots) == 0 {
+		return ""
+	}
+
+	separator := strings.Repeat("─", 80)
+
+	var sanitized []string
+	for _, snap := range snapshots {
+		sanitized = append(sanitized, sanitizeScreen(snap))
+	}
+
+	// Deduplicate consecutive identical sanitized snapshots.
+	deduped := []string{sanitized[0]}
+	for i := 1; i < len(sanitized); i++ {
+		if sanitized[i] != sanitized[i-1] {
+			deduped = append(deduped, sanitized[i])
+		}
+	}
+
+	var b strings.Builder
+	for _, snap := range deduped {
+		b.WriteString(snap)
+		b.WriteString(separator)
+		b.WriteByte('\n')
+	}
+
+	return b.String()
+}
+
+// ptySanitizeSnapshots takes the snapshots captured by a Console (with
+// WithSnapshots enabled), sanitizes them, and formats them as cumulative
+// frames.
+func ptySanitizeSnapshots(t *testing.T, c *ptytest.Console) string {
+	t.Helper()
+
+	snapshots := c.Snapshots()
+	if len(snapshots) == 0 {
+		return ptySanitizeOutput(t, c.RawOutput())
+	}
+
+	return ptySanitizeSnapshotFrames(t, snapshots, func(snap string) string {
+		return ptySanitizeScreen(t, snap)
+	})
 }

@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -39,8 +40,15 @@ type nativePtyTestContext struct {
 func (r nativePtySessionRunner) start(t *testing.T, spec nativePtySessionSpec) *ptytest.Console {
 	t.Helper()
 
+	// The native PAM client uses text-based prompts via the PAM conversation,
+	// so it needs the pam-runner to support conversations (unlike the CLI
+	// client, which handles all interaction via its own bubbletea TUI and for
+	// which conversation support is intentionally left out of ptyRunnerEnv).
+	cliEnv := append(r.cliEnv,
+		fmt.Sprintf("%s=1", pam_test.RunnerEnvSupportsConversation),
+	)
 	extraArgs := append([]string{"force_native_client=true"}, spec.extraArgs...)
-	c := startPAMRunner(t, r.clientPath, r.socketPath, spec.action, r.cliEnv, spec.clientOptions, extraArgs...)
+	c := startPAMRunner(t, r.clientPath, r.socketPath, spec.action, cliEnv, spec.clientOptions, extraArgs...)
 	if spec.username != "" && spec.clientOptions.PamUser == "" {
 		nativeEnterUsername(t, c, spec.username)
 	}

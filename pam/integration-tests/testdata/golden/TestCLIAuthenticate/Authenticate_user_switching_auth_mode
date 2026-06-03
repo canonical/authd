@@ -1,6 +1,78 @@
+Username: user name
+────────────────────────────────────────────────────────────────────────────────
+Username: user-integration-switch-mode@example.com
+────────────────────────────────────────────────────────────────────────────────
+  Select your provider
+
+> 1. local
+  2. ExampleBroker
+
+  Press escape key to go back to user selection
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+>
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+  Select your authentication method
+
+> 1. Password authentication
+  2. Send URL to user-integration-switch-mode@example.com
+  3. Use your fido device foo
+  4. Use your phone +33...
+  5. Use your phone +1...
+  6. Use a QR code
+  7. Authentication code
+
+  Press escape key to go back to choose the provider
+────────────────────────────────────────────────────────────────────────────────
+Click on the link received at user-integration-switch-mode@example.com or enter the code:
+>
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+  Select your authentication method
+
+  1. Password authentication
+> 2. Send URL to user-integration-switch-mode@example.com
+  3. Use your fido device foo
+  4. Use your phone +33...
+  5. Use your phone +1...
+  6. Use a QR code
+  7. Authentication code
+
+  Press escape key to go back to choose the provider
+────────────────────────────────────────────────────────────────────────────────
+Plug your fido device and press with your thumb
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+  Select your authentication method
+
+  1. Password authentication
+  2. Send URL to user-integration-switch-mode@example.com
+> 3. Use your fido device foo
+  4. Use your phone +33...
+  5. Use your phone +1...
+  6. Use a QR code
+  7. Authentication code
+
+  Press escape key to go back to choose the provider
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+>
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+> ********
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
 PAM Authenticate()
   User: "user-integration-switch-mode@example.com"
   Result: success
 PAM AcctMgmt()
   User: "user-integration-switch-mode@example.com"
   Result: success
+────────────────────────────────────────────────────────────────────────────────

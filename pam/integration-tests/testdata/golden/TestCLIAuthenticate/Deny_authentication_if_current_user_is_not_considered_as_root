@@ -3,8 +3,9 @@ PAM Authenticate()
   User: "<unset>"
   Result: error: PAM exit code: 9
     Authentication service cannot retrieve authentication info
-acct=incomplete
+PAM Info Message: acct=incomplete
 PAM AcctMgmt()
   User: "<unset>"
   Result: error: PAM exit code: 25
     The return value should be ignored by PAM dispatch
+────────────────────────────────────────────────────────────────────────────────
