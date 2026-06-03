@@ -376,8 +376,7 @@ func TestCLIAuthenticate(t *testing.T) {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 
-				c.WaitFor(t, `Username:`)
-				c.SendLine(t, "user-integration-switch-username@example.com")
+				cliEnterUsername(t, c, "user-integration-switch-username@example.com")
 				c.WaitFor(t, `Select your provider`)
 
 				// Go back to username.
@@ -458,8 +457,7 @@ func TestCLIAuthenticate(t *testing.T) {
 		"Autoselect_local_broker_for_local_user": {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
-				c.WaitFor(t, `Username:`)
-				c.SendLine(t, "root")
+				cliEnterUsername(t, c, "root")
 				cliWaitForResult(t, c)
 			},
 		},
@@ -652,8 +650,7 @@ func TestCLIAuthenticate(t *testing.T) {
 
 			// If we have a typed username (not preset), enter it.
 			if tc.username != "" && tc.clientOptions.PamUser == "" {
-				c.WaitFor(t, `Username:`)
-				c.SendLine(t, tc.username)
+				cliEnterUsername(t, c, tc.username)
 			}
 
 			if tc.testWithAuthd != nil {
@@ -678,6 +675,12 @@ func TestCLIAuthenticate(t *testing.T) {
 
 // cliSelectBroker waits for the provider selection and selects ExampleBroker.
 // Note: The TUI auto-selects when the number is typed, no Enter needed.
+func cliEnterUsername(t *testing.T, c *ptytest.Console, username string) {
+	t.Helper()
+	c.WaitFor(t, `Username:`)
+	c.SendLine(t, username)
+}
+
 func cliSelectBroker(t *testing.T, c *ptytest.Console) {
 	t.Helper()
 
@@ -734,8 +737,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 			test: func(t *testing.T, socketPath, username string) string {
 				t.Helper()
 				c := startPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
-				c.WaitFor(t, `Username:`)
-				c.SendLine(t, username)
+				cliEnterUsername(t, c, username)
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 				c.SendLine(t, "goodpass")
@@ -747,8 +749,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				_ = c.WaitForExit(t)
 
 				c2 := startPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionLogin, cliEnv, clientOptions{})
-				c2.WaitFor(t, `Username:`)
-				c2.SendLine(t, username)
+				cliEnterUsername(t, c2, username)
 				c2.WaitFor(t, `Gimme your password`)
 				c2.SendLine(t, "authd2404")
 				cliWaitForResult(t, c2)
@@ -767,8 +768,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				loginUsername := strings.ToLower(username)
 
 				c := startPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
-				c.WaitFor(t, `Username:`)
-				c.SendLine(t, username)
+				cliEnterUsername(t, c, username)
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 				c.SendLine(t, "goodpass")
@@ -780,8 +780,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				_ = c.WaitForExit(t)
 
 				c2 := startPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionLogin, cliEnv, clientOptions{})
-				c2.WaitFor(t, `Username:`)
-				c2.SendLine(t, loginUsername)
+				cliEnterUsername(t, c2, loginUsername)
 				c2.WaitFor(t, `Gimme your password`)
 				c2.SendLine(t, "authd2404")
 				cliWaitForResult(t, c2)
@@ -798,8 +797,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 			test: func(t *testing.T, socketPath, username string) string {
 				t.Helper()
 				c := startPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
-				c.WaitFor(t, `Username:`)
-				c.SendLine(t, username)
+				cliEnterUsername(t, c, username)
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 				c.SendKey(t, ptytest.KeyEscape)
@@ -833,8 +831,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 			test: func(t *testing.T, socketPath, username string) string {
 				t.Helper()
 				c := startPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
-				c.WaitFor(t, `Username:`)
-				c.SendLine(t, username)
+				cliEnterUsername(t, c, username)
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 				c.SendLine(t, "goodpass")
@@ -855,8 +852,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 			test: func(t *testing.T, socketPath, username string) string {
 				t.Helper()
 				c := startPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
-				c.WaitFor(t, `Username:`)
-				c.SendLine(t, username)
+				cliEnterUsername(t, c, username)
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 				c.SendLine(t, "goodpass")
@@ -875,8 +871,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 			test: func(t *testing.T, socketPath, username string) string {
 				t.Helper()
 				c := startPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
-				c.WaitFor(t, `Username:`)
-				c.SendLine(t, username)
+				cliEnterUsername(t, c, username)
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 				c.SendLine(t, "goodpass")
@@ -897,8 +892,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 			test: func(t *testing.T, socketPath, username string) string {
 				t.Helper()
 				c := startPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
-				c.WaitFor(t, `Username:`)
-				c.SendLine(t, username)
+				cliEnterUsername(t, c, username)
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 				c.SendLine(t, "goodpass")
@@ -925,8 +919,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 			test: func(t *testing.T, socketPath, username string) string {
 				t.Helper()
 				c := startPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
-				c.WaitFor(t, `Username:`)
-				c.SendLine(t, username)
+				cliEnterUsername(t, c, username)
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 				for i := 0; i < 5; i++ {
@@ -943,8 +936,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 			test: func(t *testing.T, socketPath, username string) string {
 				t.Helper()
 				c := startPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
-				c.WaitFor(t, `Username:`)
-				c.SendLine(t, username)
+				cliEnterUsername(t, c, username)
 				cliSelectBroker(t, c)
 				cliWaitForResult(t, c)
 				_ = c.WaitForExit(t)
@@ -965,8 +957,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 			test: func(t *testing.T, socketPath, username string) string {
 				t.Helper()
 				c := startPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
-				c.WaitFor(t, `Username:`)
-				c.SendLine(t, username)
+				cliEnterUsername(t, c, username)
 				c.WaitFor(t, `Select your provider`)
 				c.WaitFor(t, `1\. local`)
 				c.SendKey(t, ptytest.KeyEnter)
@@ -979,8 +970,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 			test: func(t *testing.T, socketPath, username string) string {
 				t.Helper()
 				c := startPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
-				c.WaitFor(t, `Username:`)
-				c.SendLine(t, username)
+				cliEnterUsername(t, c, username)
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 				c.SendKey(t, ptytest.KeyCtrlC)
@@ -993,8 +983,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 			test: func(t *testing.T, socketPath, username string) string {
 				t.Helper()
 				c := startPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
-				c.WaitFor(t, `Username:`)
-				c.SendLine(t, username)
+				cliEnterUsername(t, c, username)
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 				c.SendKey(t, ptytest.KeyCtrlD)
