@@ -992,16 +992,30 @@ func TestCLIChangeAuthTok(t *testing.T) {
 		"Retry_if_new_password_is_rejected_by_broker": {
 			test: func(t *testing.T, socketPath, username string) string {
 				t.Helper()
-				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
-				cliEnterUsername(t, c, username)
-				cliSelectBroker(t, c)
-				c.WaitFor(t, `Gimme your password`)
-				cliSendPassword(t, c, "goodpass")
-				cliChangePasswordWithRetry(t, c, "noble2404", "noble2404",
+				c1 := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
+				cliEnterUsername(t, c1, username)
+				cliSelectBroker(t, c1)
+				c1.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c1, "goodpass")
+				cliChangePasswordWithRetry(t, c1, "noble2404", "noble2404",
 					`new password does not match criteria`, "authd2404")
-				cliWaitForResult(t, c)
-				_ = c.WaitForExit(t)
-				return ptySanitizeSnapshots(t, c)
+				cliWaitForResult(t, c1)
+				_ = c1.WaitForExit(t)
+
+				// Repeat the flow to verify that after a rejection, the user can still change the password successfully.
+				c2 := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
+				c2.WaitFor(t, `Username:`)
+				c2.Send(t, username)
+				c2.WaitFor(t, regexp.QuoteMeta(username))
+				c2.SendKey(t, ptytest.KeyEnter)
+				c2.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c2, "authd2404")
+				cliChangePasswordWithRetry(t, c2, "noble2404", "noble2404",
+					`new password does not match criteria`, "goodpass")
+				cliWaitForResult(t, c2)
+				_ = c2.WaitForExit(t)
+
+				return ptySanitizeSnapshots(t, c1) + ptySanitizeSnapshots(t, c2)
 			},
 		},
 		"Retry_if_new_password_is_same_of_previous": {
