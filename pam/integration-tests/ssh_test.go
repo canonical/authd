@@ -913,7 +913,7 @@ func sshPtySelectBroker(t *testing.T, c *ptytest.Console) {
 	t.Helper()
 
 	c.WaitFor(t, `Choose your provider`)
-	c.SendLine(t, "2")
+	sendEchoedLine(t, c, "2")
 }
 
 // sshPtyWaitForSSHConnection waits for the SSH connection output.
@@ -1011,7 +1011,7 @@ func sshPtyMfaAuth(t *testing.T, args sshPtyArgs) {
 	c.WaitFor(t, `Plug your fido device and press with your thumb`)
 
 	// Cancel and go back to auth method selection (MFA modes only).
-	c.SendLine(t, "r")
+	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `1\. Use your fido device foo`)
 	c.WaitFor(t, `Choose your authentication method`)
 
@@ -1020,7 +1020,7 @@ func sshPtyMfaAuth(t *testing.T, args sshPtyArgs) {
 	c.WaitFor(t, `Plug your fido device and press with your thumb`)
 
 	// Cancel again.
-	c.SendLine(t, "r")
+	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `2\. Use your phone \+33`)
 	c.WaitFor(t, `Choose your authentication method`)
 
@@ -1058,18 +1058,18 @@ func sshPtyFormWithButton(t *testing.T, args sshPtyArgs) {
 	c.WaitFor(t, `Choose your authentication method`)
 
 	// Select Authentication code.
-	c.SendLine(t, "8")
+	sendEchoedLine(t, c, "8")
 	c.WaitFor(t, `Choose action`)
 
 	// Select "resend sms" button.
-	c.SendLine(t, "2")
+	sendEchoedLine(t, c, "2")
 	c.WaitFor(t, `Choose action`)
 
 	// Select "enter credential".
-	c.SendLine(t, "1")
+	sendEchoedLine(t, c, "1")
 	c.WaitFor(t, `Enter your one time credential`)
 
-	c.SendLine(t, "temporary pass00")
+	sendEchoedLine(t, c, "temporary pass00")
 	sshPtyWaitForSSHConnection(t, c)
 
 	_ = c.WaitForExit(t)
@@ -1092,22 +1092,22 @@ func sshPtyQRCode(t *testing.T, args sshPtyArgs) {
 	c.WaitFor(t, `Choose your authentication method`)
 
 	// Select Login code mode.
-	c.SendLine(t, "2")
+	sendEchoedLine(t, c, "2")
 	c.WaitFor(t, `Choose action`)
 
 	// Regenerate QR code several times.
-	c.SendLine(t, "2")
+	sendEchoedLine(t, c, "2")
 	c.WaitFor(t, `Choose action`)
-	c.SendLine(t, "2")
+	sendEchoedLine(t, c, "2")
 	c.WaitFor(t, `Choose action`)
-	c.SendLine(t, "2")
+	sendEchoedLine(t, c, "2")
 	c.WaitFor(t, `Choose action`)
-	c.SendLine(t, "2")
+	sendEchoedLine(t, c, "2")
 	c.WaitFor(t, `Choose action`)
 
 	// Accept the code.
 	args.signalFn(args.user)
-	c.SendLine(t, "1")
+	sendEchoedLine(t, c, "1")
 	sshPtyWaitForSSHConnection(t, c)
 
 	_ = c.WaitForExit(t)
@@ -1130,82 +1130,82 @@ func sshPtySwitchAuthMode(t *testing.T, args sshPtyArgs) {
 	c.WaitFor(t, `Choose your authentication method`)
 
 	// Select "Send URL to" mode.
-	c.SendLine(t, "3")
+	sendEchoedLine(t, c, "3")
 	c.WaitFor(t, `enter the code`)
 
 	// Go back.
-	c.SendLine(t, "r")
+	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `4\. Use your fido device foo`)
 	c.WaitFor(t, `Choose your authentication method`)
 
 	// Select fido.
-	c.SendLine(t, "4")
+	sendEchoedLine(t, c, "4")
 	c.WaitFor(t, `Plug your fido device and press with your thumb`)
 
 	// Go back.
-	c.SendLine(t, "r")
+	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `5\. Use your phone \+33`)
 	c.WaitFor(t, `Choose your authentication method`)
 
 	// Select phone +33.
-	c.SendLine(t, "5")
+	sendEchoedLine(t, c, "5")
 	c.WaitFor(t, `Unlock your phone \+33`)
 
 	// Go back.
-	c.SendLine(t, "r")
+	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `6\. Use your phone \+1`)
 	c.WaitFor(t, `Choose your authentication method`)
 
 	// Select phone +1.
-	c.SendLine(t, "6")
+	sendEchoedLine(t, c, "6")
 	c.WaitFor(t, `Unlock your phone \+1`)
 
 	// Go back.
-	c.SendLine(t, "r")
+	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `7\. Pin code`)
 	c.WaitFor(t, `Choose your authentication method`)
 
 	// Select pin code.
-	c.SendLine(t, "7")
+	sendEchoedLine(t, c, "7")
 	c.WaitFor(t, `Enter your pin code`)
 
 	// Go back.
-	c.SendLine(t, "r")
+	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `2\. Use a Login code`)
 	c.WaitFor(t, `Choose your authentication method`)
 
 	// Select Login code (QR).
-	c.SendLine(t, "2")
+	sendEchoedLine(t, c, "2")
 	c.WaitFor(t, `Choose action`)
 
 	// Go back.
-	c.SendLine(t, "r")
+	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `8\. Authentication code`)
 	c.WaitFor(t, `Choose your authentication method`)
 
 	// Select Authentication code.
-	c.SendLine(t, "8")
+	sendEchoedLine(t, c, "8")
 	c.WaitFor(t, `Choose action`)
 
 	// Go back.
-	c.SendLine(t, "r")
+	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `Choose your authentication method`)
 
 	// Try invalid selection.
-	c.SendLine(t, "invalid-selection")
+	sendEchoedLine(t, c, "invalid-selection")
 	c.WaitFor(t, `Choose your authentication method`)
 
 	// Try negative number.
-	c.SendLine(t, "-1")
+	sendEchoedLine(t, c, "-1")
 	c.WaitFor(t, `7\. Pin code`)
 	c.WaitFor(t, `Choose your authentication method`)
 
 	// Select Pin code.
-	c.SendLine(t, "7")
+	sendEchoedLine(t, c, "7")
 	c.WaitFor(t, `Enter your pin code`)
 
 	// Enter pin.
-	c.SendLine(t, "4242")
+	sendEchoedLine(t, c, "4242")
 	sshPtyWaitForSSHConnection(t, c)
 
 	_ = c.WaitForExit(t)
@@ -1227,21 +1227,21 @@ func sshPtySwitchLocalBroker(t *testing.T, args sshPtyArgs) {
 	c.WaitFor(t, `Choose your authentication method`)
 
 	// Go back to provider selection.
-	c.SendLine(t, "r")
+	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `Choose your provider`)
 
 	// Try invalid ID.
-	c.SendLine(t, "invalid-ID")
+	sendEchoedLine(t, c, "invalid-ID")
 	c.WaitFor(t, `Unsupported input`)
 	c.WaitFor(t, `Choose your provider`)
 
 	// Try invalid number.
-	c.SendLine(t, "555")
+	sendEchoedLine(t, c, "555")
 	c.WaitFor(t, `Invalid selection`)
 	c.WaitFor(t, `Choose your provider`)
 
 	// Select local broker.
-	c.SendLine(t, "1")
+	sendEchoedLine(t, c, "1")
 	c.WaitFor(t, `Password:`)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
@@ -1257,11 +1257,11 @@ func sshPtySwitchPresetUsername(t *testing.T, args sshPtyArgs) {
 	c.WaitFor(t, `Choose your provider`)
 
 	// Try going back with 'r' (should stay at provider selection with preset user).
-	c.SendLine(t, "r")
+	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `Choose your provider`)
 
 	// Select ExampleBroker.
-	c.SendLine(t, "2")
+	sendEchoedLine(t, c, "2")
 	c.WaitFor(t, `Gimme your password`)
 
 	// Cancel to auth method.
@@ -1269,19 +1269,19 @@ func sshPtySwitchPresetUsername(t *testing.T, args sshPtyArgs) {
 	c.WaitFor(t, `Choose your authentication method`)
 
 	// Go back to provider.
-	c.SendLine(t, "r")
+	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `Choose your provider`)
 
 	// Try 'r' again at provider level.
-	c.SendLine(t, "r")
+	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `Choose your provider`)
 
 	// And again.
-	c.SendLine(t, "r")
+	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `Choose your provider`)
 
 	// Select ExampleBroker and authenticate.
-	c.SendLine(t, "2")
+	sendEchoedLine(t, c, "2")
 	c.WaitFor(t, `Gimme your password`)
 	c.SendLine(t, "goodpass")
 	sshPtyWaitForSSHConnection(t, c)
@@ -1307,13 +1307,13 @@ func sshPtyRememberBrokerAndMode(t *testing.T, args sshPtyArgs) {
 	c.WaitFor(t, `Choose your authentication method`)
 
 	// Select Authentication code.
-	c.SendLine(t, "8")
+	sendEchoedLine(t, c, "8")
 	c.WaitFor(t, `Choose action`)
 
 	// Enter credential.
-	c.SendLine(t, "1")
+	sendEchoedLine(t, c, "1")
 	c.WaitFor(t, `Enter your one time credential`)
-	c.SendLine(t, "temporary pass0")
+	sendEchoedLine(t, c, "temporary pass0")
 	sshPtyWaitForSSHConnection(t, c)
 
 	_ = c.WaitForExit(t)
@@ -1324,9 +1324,9 @@ func sshPtyRememberBrokerAndMode(t *testing.T, args sshPtyArgs) {
 	// Should go directly to the remembered auth mode.
 	c2.WaitFor(t, `Choose action`)
 
-	c2.SendLine(t, "1")
+	sendEchoedLine(t, c2, "1")
 	c2.WaitFor(t, `Enter your one time credential`)
-	c2.SendLine(t, "temporary pass0")
+	sendEchoedLine(t, c2, "temporary pass0")
 	sshPtyWaitForSSHConnection(t, c2)
 
 	_ = c2.WaitForExit(t)
@@ -1497,7 +1497,7 @@ func sshPtyMfaResetPwqualityAuth(t *testing.T, args sshPtyArgs) {
 
 	// Password reset with quality checks.
 	c.WaitFor(t, `Choose action`)
-	c.SendLine(t, "1")
+	sendEchoedLine(t, c, "1")
 
 	c.WaitFor(t, `Enter your new password`)
 
@@ -1541,7 +1541,7 @@ func sshPtyMfaResetSamePassword(t *testing.T, args sshPtyArgs) {
 
 	// Password reset.
 	c.WaitFor(t, `Choose action`)
-	c.SendLine(t, "1")
+	sendEchoedLine(t, c, "1")
 
 	c.WaitFor(t, `Enter your new password`)
 	c.SendLine(t, "authd2404")
@@ -1568,7 +1568,7 @@ func sshPtyOptionalPasswordResetSkip(t *testing.T, args sshPtyArgs) {
 	c.WaitFor(t, `Choose action`)
 
 	// Skip the reset.
-	c.SendLine(t, "2")
+	sendEchoedLine(t, c, "2")
 	sshPtyWaitForSSHConnection(t, c)
 
 	_ = c.WaitForExit(t)
@@ -1590,7 +1590,7 @@ func sshPtyOptionalPasswordResetAccept(t *testing.T, args sshPtyArgs) {
 	c.WaitFor(t, `Choose action`)
 
 	// Accept the reset.
-	c.SendLine(t, "1")
+	sendEchoedLine(t, c, "1")
 	c.WaitFor(t, `Enter your new password`)
 	c.SendLine(t, "authd2404")
 	c.WaitFor(t, `Confirm Password`)
@@ -1686,7 +1686,7 @@ func sshPtyLocalBroker(t *testing.T, args sshPtyArgs) {
 	c := startSSHForPty(t, args)
 
 	c.WaitFor(t, `Choose your provider`)
-	c.SendLine(t, "1")
+	sendEchoedLine(t, c, "1")
 	c.WaitFor(t, `Password:`)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())

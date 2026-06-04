@@ -166,13 +166,13 @@ func TestNativeAuthenticate(t *testing.T) {
 				c.WaitFor(t, `Gimme your password:`)
 				c.SendLine(t, "r")
 				c.WaitFor(t, `Choose your authentication method:`)
-				c.SendLine(t, "8")
+				sendEchoedLine(t, c, "8")
 				c.WaitFor(t, `Choose action:`)
-				c.SendLine(t, "2")
+				sendEchoedLine(t, c, "2")
 				c.WaitFor(t, `Choose action:`)
-				c.SendLine(t, "1")
+				sendEchoedLine(t, c, "1")
 				c.WaitFor(t, `Enter your one time credential:`)
-				c.SendLine(t, "temporary pass00")
+				sendEchoedLine(t, c, "temporary pass00")
 				nativeWaitForResult(t, c)
 			},
 			expectedUser: testUserName(t, "native"),
@@ -185,13 +185,13 @@ func TestNativeAuthenticate(t *testing.T) {
 				c.WaitFor(t, `Gimme your password:`)
 				c.SendLine(t, "r")
 				c.WaitFor(t, `Choose your authentication method:`)
-				c.SendLine(t, "2")
+				sendEchoedLine(t, c, "2")
 				c.WaitFor(t, `Choose action:`)
-				c.SendLine(t, "2")
+				sendEchoedLine(t, c, "2")
 				c.WaitFor(t, `Choose action:`)
-				c.SendLine(t, "1")
+				sendEchoedLine(t, c, "1")
 				c.WaitFor(t, `Enter your one time credential:`)
-				c.SendLine(t, "temporary pass00")
+				sendEchoedLine(t, c, "temporary pass00")
 				nativeWaitForResult(t, c)
 			},
 			expectedUser: examplebroker.UserIntegrationAuthModesPrefix + "totp_with_button,password-integration-native@example.com",
@@ -203,13 +203,13 @@ func TestNativeAuthenticate(t *testing.T) {
 				c.WaitFor(t, `Gimme your password:`)
 				c.SendLine(t, "r")
 				c.WaitFor(t, `Choose your authentication method:`)
-				c.SendLine(t, "7")
+				sendEchoedLine(t, c, "7")
 				c.WaitFor(t, `Choose action:`)
-				c.SendLine(t, "2")
+				sendEchoedLine(t, c, "2")
 				c.WaitFor(t, `Choose action:`)
-				c.SendLine(t, "1")
+				sendEchoedLine(t, c, "1")
 				c.WaitFor(t, `Enter your one time credential:`)
-				c.SendLine(t, "temporary pass00")
+				sendEchoedLine(t, c, "temporary pass00")
 				nativeWaitForResult(t, c)
 			},
 			expectedUser: testUserName(t, "native"),
@@ -314,7 +314,7 @@ func TestNativeAuthenticate(t *testing.T) {
 				signalFn(username)
 				c.SendLine(t, "")
 				c.WaitFor(t, `Choose action:`)
-				c.SendLine(t, "1")
+				sendEchoedLine(t, c, "1")
 				c.WaitFor(t, `Enter your new password`)
 				c.SendLine(t, "password")
 				c.WaitFor(t, `The password fails the dictionary check`)
@@ -338,7 +338,7 @@ func TestNativeAuthenticate(t *testing.T) {
 				signalFn(username)
 				c.SendLine(t, "")
 				c.WaitFor(t, `Choose action:`)
-				c.SendLine(t, "1")
+				sendEchoedLine(t, c, "1")
 				nativeChangePassword(t, c, "authd2404", "authd2404")
 				nativeWaitForResult(t, c)
 			},
@@ -352,7 +352,7 @@ func TestNativeAuthenticate(t *testing.T) {
 				c.WaitFor(t, `Gimme your password:`)
 				c.SendLine(t, "goodpass")
 				c.WaitFor(t, `Choose action:`)
-				c.SendLine(t, "2")
+				sendEchoedLine(t, c, "2")
 				nativeWaitForResult(t, c)
 			},
 			expectedUser: testUserNameFull(t, examplebroker.UserIntegrationCanResetPrefix, "skip-native"),
@@ -365,7 +365,7 @@ func TestNativeAuthenticate(t *testing.T) {
 				c.WaitFor(t, `Gimme your password:`)
 				c.SendLine(t, "goodpass")
 				c.WaitFor(t, `Choose action:`)
-				c.SendLine(t, "1")
+				sendEchoedLine(t, c, "1")
 				nativeChangePassword(t, c, "authd2404", "authd2404")
 				nativeWaitForResult(t, c)
 			},
@@ -384,22 +384,22 @@ func TestNativeAuthenticate(t *testing.T) {
 					switch choice {
 					case "2":
 						c.WaitFor(t, `Click on the link received at`)
-						c.SendLine(t, "r")
+						sendEchoedLine(t, c, "r")
 					case "3":
 						c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
-						c.SendLine(t, "r")
+						sendEchoedLine(t, c, "r")
 					case "4", "5":
 						c.WaitFor(t, `Unlock your phone`)
-						c.SendLine(t, "r")
+						sendEchoedLine(t, c, "r")
 					case "6":
 						c.WaitFor(t, `Enter your pin code:`)
-						c.SendLine(t, "r")
+						sendEchoedLine(t, c, "r")
 					case "7":
 						c.WaitFor(t, `Choose action:`)
-						c.SendLine(t, "r")
+						sendEchoedLine(t, c, "r")
 					case "8":
 						c.WaitFor(t, `Choose action:`)
-						c.SendLine(t, "r")
+						sendEchoedLine(t, c, "r")
 					}
 				}
 				c.WaitFor(t, `Choose your authentication method:`)
@@ -415,7 +415,7 @@ func TestNativeAuthenticate(t *testing.T) {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				c.WaitFor(t, `(?s)== Provider selection ==.*Choose your provider:`)
-				c.SendLine(t, "r")
+				sendEchoedLine(t, c, "r")
 				nativeEnterUsername(t, c, testUserName(t, "native-username-switched"))
 				nativeSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password:`)
@@ -430,7 +430,7 @@ func TestNativeAuthenticate(t *testing.T) {
 				c.WaitFor(t, `Gimme your password:`)
 				c.SendLine(t, "r")
 				c.WaitFor(t, `Choose your authentication method:`)
-				c.SendLine(t, "r")
+				sendEchoedLine(t, c, "r")
 				c.WaitFor(t, `Choose your provider:`)
 				c.SendLine(t, "1")
 				nativeWaitForResult(t, c)
@@ -479,11 +479,11 @@ func TestNativeAuthenticate(t *testing.T) {
 				c.WaitFor(t, `Gimme your password:`)
 				c.SendLine(t, "r")
 				c.WaitFor(t, `Choose your authentication method:`)
-				c.SendLine(t, "8")
+				sendEchoedLine(t, c, "8")
 				c.WaitFor(t, `Choose action:`)
-				c.SendLine(t, "1")
+				sendEchoedLine(t, c, "1")
 				c.WaitFor(t, `Enter your one time credential:`)
-				c.SendLine(t, "temporary pass0")
+				sendEchoedLine(t, c, "temporary pass0")
 				nativeWaitForResult(t, c)
 			},
 			after: func(t *testing.T, ctx *nativePtyTestContext) {
@@ -491,9 +491,9 @@ func TestNativeAuthenticate(t *testing.T) {
 				ctx.run(t, nativePtySessionSpec{action: pam_test.RunnerActionLogin, clientOptions: clientOptions{PamUser: testUserName(t, "native")}}, func(t *testing.T, c *ptytest.Console) {
 					t.Helper()
 					c.WaitFor(t, `Choose action:`)
-					c.SendLine(t, "1")
+					sendEchoedLine(t, c, "1")
 					c.WaitFor(t, `Enter your one time credential:`)
-					c.SendLine(t, "temporary pass0")
+					sendEchoedLine(t, c, "temporary pass0")
 					nativeWaitForResult(t, c)
 				})
 			},
@@ -581,19 +581,19 @@ func TestNativeAuthenticate(t *testing.T) {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				c.WaitFor(t, `Choose your provider:`)
-				c.SendLine(t, "r")
+				sendEchoedLine(t, c, "r")
 				c.WaitFor(t, `Unsupported input`)
 				c.WaitFor(t, `Choose your provider:`)
-				c.SendLine(t, "2")
+				sendEchoedLine(t, c, "2")
 				c.WaitFor(t, `Gimme your password:`)
 				c.SendLine(t, "r")
 				c.WaitFor(t, `Choose your authentication method:`)
-				c.SendLine(t, "r")
+				sendEchoedLine(t, c, "r")
 				c.WaitFor(t, `Choose your provider:`)
-				c.SendLine(t, "r")
+				sendEchoedLine(t, c, "r")
 				c.WaitFor(t, `Unsupported input`)
 				c.WaitFor(t, `Choose your provider:`)
-				c.SendLine(t, "2")
+				sendEchoedLine(t, c, "2")
 				c.WaitFor(t, `Gimme your password:`)
 				c.SendLine(t, "goodpass")
 				nativeWaitForResult(t, c)
@@ -604,7 +604,7 @@ func TestNativeAuthenticate(t *testing.T) {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				c.WaitFor(t, `Choose your provider:`)
-				c.SendLine(t, "1")
+				sendEchoedLine(t, c, "1")
 				nativeWaitForResult(t, c)
 			},
 			expectedUser: testUserName(t, "native"),
@@ -741,7 +741,7 @@ func TestNativeAuthenticate(t *testing.T) {
 			if name == "Exit_if_authd_is_stopped" && ctx.authdCancel != nil {
 				ctx.authdCancel()
 				ctx.authdCancel = nil
-				c.SendLine(t, "2")
+				sendEchoedLine(t, c, "2")
 				nativeWaitForResult(t, c)
 			}
 			if name == "Authenticate_user_switching_username" {
@@ -946,7 +946,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				c.WaitFor(t, `Choose your provider:`)
-				c.SendLine(t, "1")
+				sendEchoedLine(t, c, "1")
 				c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionChangeAuthTok.String()))
 			},
 		},
@@ -1046,7 +1046,7 @@ func nativeReloginAfterPasswordChange(t *testing.T, ctx *nativePtyTestContext) {
 func nativeSelectBroker(t *testing.T, c *ptytest.Console) {
 	t.Helper()
 	c.WaitFor(t, `(?s)== Provider selection ==.*2\. ExampleBroker.*Choose your provider:`)
-	c.SendLine(t, "2")
+	sendEchoedLine(t, c, "2")
 }
 
 // nativeSimpleAuth performs basic native authentication: select broker, enter password.
@@ -1067,7 +1067,7 @@ func nativeQRCodeAuth(t *testing.T, c *ptytest.Console, method, username string,
 	c.SendLine(t, method)
 	c.WaitFor(t, `Choose action:`)
 	signalFn(username)
-	c.SendLine(t, "1")
+	sendEchoedLine(t, c, "1")
 	nativeWaitForResult(t, c)
 }
 
@@ -1084,7 +1084,7 @@ func nativeWaitForLoginPasswordPrompt(t *testing.T, c *ptytest.Console) {
 
 	matched := c.WaitFor(t, `Choose your provider:|Gimme your password:`)
 	if strings.Contains(matched, `Choose your provider:`) {
-		c.SendLine(t, "2")
+		sendEchoedLine(t, c, "2")
 		c.WaitFor(t, `Gimme your password:`)
 	}
 }

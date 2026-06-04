@@ -217,6 +217,31 @@ func ptySanitizeSnapshotFrames(t *testing.T, snapshots []string, sanitizeScreen 
 	return b.String()
 }
 
+// sendEchoedLine sends s to the console without Enter, waits for the echo
+// to appear in the terminal output (capturing an intermediate snapshot that
+// matches VHS behaviour), then sends Enter. Use for non-password, non-empty
+// inputs where the terminal echoes the typed characters back (i.e. everything
+// except actual password fields such as "Gimme your password:").
+func sendEchoedLine(t *testing.T, c *ptytest.Console, s string) {
+	t.Helper()
+	require.NotEmpty(t, s, "sendEchoedLine requires a non-empty input")
+
+	// The caller has just matched the label preceding the input prompt and
+	// captured a snapshot, but the "> " prompt may not be rendered yet. If we
+	// Send before it is, the PTY kernel echoes the typed characters before the
+	// prompt (e.g. "2>" instead of "> 2"), racing the subsequent WaitFor.
+	//
+	// Discard that (possibly prompt-less) caller frame and recapture once "> "
+	// is guaranteed present. The "> " frame is a cumulative-screen superset of
+	// the discarded label frame, so this reproduces the golden frame
+	// deterministically while ensuring our echo lands after the prompt.
+	c.DiscardLastSnapshot()
+	c.WaitFor(t, regexp.QuoteMeta("> "))
+	c.Send(t, s)
+	c.WaitFor(t, regexp.QuoteMeta(s))
+	c.SendKey(t, ptytest.KeyEnter)
+}
+
 // ptySanitizeSnapshots takes the snapshots captured by a Console (with
 // WithSnapshots enabled), sanitizes them, and formats them as cumulative
 // frames.
