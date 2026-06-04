@@ -23,6 +23,15 @@ Choose your authentication method:
   1. local
   2. ExampleBroker
 Choose your provider:
+> invalid-ID
+PAM Error Message: Unsupported input
+Choose your provider:
+> 555
+PAM Error Message: Invalid selection
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
 > 1
 auth=incomplete
 PAM Authenticate()

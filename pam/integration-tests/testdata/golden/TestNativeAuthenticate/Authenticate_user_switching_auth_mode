@@ -156,11 +156,27 @@ Choose action:
   8. Authentication code
 Or enter 'r' to go back to choose the provider
 Choose your authentication method:
-> 1
-== Password authentication ==
+> invalid-selection
+PAM Error Message: Unsupported input
+Choose your authentication method:
+> -1
+PAM Error Message: Invalid selection
+== Authentication method selection ==
+  1. Password authentication
+  2. Send URL to user-integration-switch-mode-native-testnativeauthenticate@example.com
+  3. Use your fido device foo
+  4. Use your phone +33...
+  5. Use your phone +1...
+  6. Pin code
+  7. Use a QR code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+Choose your authentication method:
+> 6
+== Pin code ==
 Enter 'r' to cancel the request and go back to select the authentication method
-Gimme your password:
->
+Enter your pin code:
+> 4242
 PAM Authenticate()
   User: "user-integration-switch-mode-native-testnativeauthenticate@example.com"
   Result: success

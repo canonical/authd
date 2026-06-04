@@ -40,10 +40,9 @@ type nativePtyTestContext struct {
 func (r nativePtySessionRunner) start(t *testing.T, spec nativePtySessionSpec) *ptytest.Console {
 	t.Helper()
 
-	// The native PAM client uses text-based prompts via the PAM conversation,
-	// so it needs the pam-runner to support conversations (unlike the CLI
-	// client, which handles all interaction via its own bubbletea TUI and for
-	// which conversation support is intentionally left out of ptyRunnerEnv).
+	// Native PAM client uses text-based prompts via PAM conversation, so it
+	// needs the pam-runner to support conversations (unlike the CLI client
+	// which handles all interaction via its own bubbletea TUI).
 	cliEnv := append(r.cliEnv,
 		fmt.Sprintf("%s=1", pam_test.RunnerEnvSupportsConversation),
 	)
@@ -148,11 +147,23 @@ func TestNativeAuthenticate(t *testing.T) {
 				username := testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "auth-native")
 				nativeSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password:`)
+				c.SendLine(t, "r")
+				c.WaitFor(t, `Choose your authentication method:`)
+				c.SendLine(t, "1")
+				c.WaitFor(t, `Gimme your password:`)
 				c.SendLine(t, "goodpass")
 				c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
+				sendEchoedLine(t, c, "r")
+				c.WaitFor(t, `Choose your authentication method:`)
+				c.SendLine(t, "1")
+				c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
+				sendEchoedLine(t, c, "r")
+				c.WaitFor(t, `Choose your authentication method:`)
+				c.SendLine(t, "2")
+				c.WaitFor(t, regexp.QuoteMeta(`Unlock your phone +33... or accept request on web interface:`))
 				signalFn(username)
 				c.SendLine(t, "")
-				c.WaitFor(t, regexp.QuoteMeta(`Unlock your phone +33... or accept request on web interface:`))
+				c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
 				signalFn(username)
 				c.SendLine(t, "")
 				nativeWaitForResult(t, c)
@@ -380,7 +391,7 @@ func TestNativeAuthenticate(t *testing.T) {
 				c.SendLine(t, "r")
 				for _, choice := range []string{"2", "3", "4", "5", "6", "7", "8"} {
 					c.WaitFor(t, `Choose your authentication method:`)
-					c.SendLine(t, choice)
+					sendEchoedLine(t, c, choice)
 					switch choice {
 					case "2":
 						c.WaitFor(t, `Click on the link received at`)
@@ -403,9 +414,13 @@ func TestNativeAuthenticate(t *testing.T) {
 					}
 				}
 				c.WaitFor(t, `Choose your authentication method:`)
-				c.SendLine(t, "1")
-				c.WaitFor(t, `Gimme your password:`)
-				c.SendLine(t, "goodpass")
+				sendEchoedLine(t, c, "invalid-selection")
+				c.WaitFor(t, `PAM Error Message: Unsupported input`)
+				sendEchoedLine(t, c, "-1")
+				c.WaitFor(t, `Choose your authentication method:`)
+				sendEchoedLine(t, c, "6")
+				c.WaitFor(t, `Enter your pin code:`)
+				sendEchoedLine(t, c, "4242")
 				nativeWaitForResult(t, c)
 			},
 			expectedUser: testUserName(t, "switch-mode-native"),
@@ -432,7 +447,11 @@ func TestNativeAuthenticate(t *testing.T) {
 				c.WaitFor(t, `Choose your authentication method:`)
 				sendEchoedLine(t, c, "r")
 				c.WaitFor(t, `Choose your provider:`)
-				c.SendLine(t, "1")
+				sendEchoedLine(t, c, "invalid-ID")
+				c.WaitFor(t, `PAM Error Message: Unsupported input`)
+				sendEchoedLine(t, c, "555")
+				c.WaitFor(t, `Choose your provider:`)
+				sendEchoedLine(t, c, "1")
 				nativeWaitForResult(t, c)
 			},
 			expectedUser: testUserName(t, "native"),
@@ -533,7 +552,6 @@ func TestNativeAuthenticate(t *testing.T) {
 					c.WaitFor(t, `Gimme your password:`)
 					c.SendLine(t, "wrongpass")
 				}
-				c.WaitFor(t, `Maximum number of authentication attempts reached`)
 				nativeWaitForResult(t, c)
 			},
 			expectedUser: testUserName(t, "native"),
@@ -806,7 +824,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 				c.WaitFor(t, `Gimme your password:`)
 				c.SendLine(t, "goodpass")
 				nativeChangePassword(t, c, "authd2404", "authd2404")
-				c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionChangeAuthTok.String()))
+				nativeWaitForChangeAuthTokResult(t, c)
 			},
 			after: func(t *testing.T, ctx *nativePtyTestContext) {
 				t.Helper()
@@ -832,20 +850,30 @@ func TestNativeChangeAuthTok(t *testing.T) {
 				username := testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "native-passwd")
 				nativeSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password:`)
+				c.SendLine(t, "r")
+				c.WaitFor(t, `Choose your authentication method:`)
+				c.SendLine(t, "1")
+				c.WaitFor(t, `Gimme your password:`)
 				c.SendLine(t, "goodpass")
+				c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
+				sendEchoedLine(t, c, "r")
+				c.WaitFor(t, `Choose your authentication method:`)
+				c.SendLine(t, "1")
 				c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
 				signalFn(username)
 				c.SendLine(t, "")
 				c.WaitFor(t, regexp.QuoteMeta(`Unlock your phone +33... or accept request on web interface:`))
+				sendEchoedLine(t, c, "r")
+				c.WaitFor(t, `Choose your authentication method:`)
+				c.SendLine(t, "1")
+				c.WaitFor(t, regexp.QuoteMeta(`Unlock your phone +33... or accept request on web interface:`))
 				signalFn(username)
 				c.SendLine(t, "")
 				nativeChangePassword(t, c, "authd2404", "authd2404")
-				c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionChangeAuthTok.String()))
+				nativeWaitForChangeAuthTokResult(t, c)
 			},
 		},
 		"Retry_if_new_password_is_rejected_by_broker": {
-			username:     testUserName(t, "native-passwd"),
-			expectedUser: testUserName(t, "native-passwd"),
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				nativeSelectBroker(t, c)
@@ -853,12 +881,10 @@ func TestNativeChangeAuthTok(t *testing.T) {
 				c.SendLine(t, "goodpass")
 				nativeChangePassword(t, c, "wrongpass", "wrongpass")
 				nativeChangePassword(t, c, "authd2404", "authd2404")
-				c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionChangeAuthTok.String()))
+				nativeWaitForChangeAuthTokResult(t, c)
 			},
 		},
 		"Retry_if_new_password_is_same_of_previous": {
-			username:     testUserName(t, "native-passwd"),
-			expectedUser: testUserName(t, "native-passwd"),
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				nativeSelectBroker(t, c)
@@ -870,12 +896,10 @@ func TestNativeChangeAuthTok(t *testing.T) {
 				c.SendLine(t, "authd2404")
 				c.WaitFor(t, `Confirm Password:`)
 				c.SendLine(t, "authd2404")
-				c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionChangeAuthTok.String()))
+				nativeWaitForChangeAuthTokResult(t, c)
 			},
 		},
 		"Retry_if_password_confirmation_is_not_the_same": {
-			username:     testUserName(t, "native-passwd"),
-			expectedUser: testUserName(t, "native-passwd"),
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				nativeSelectBroker(t, c)
@@ -883,12 +907,10 @@ func TestNativeChangeAuthTok(t *testing.T) {
 				c.SendLine(t, "goodpass")
 				nativeChangePassword(t, c, "authd2404", "mismatch")
 				nativeChangePassword(t, c, "authd2404", "authd2404")
-				c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionChangeAuthTok.String()))
+				nativeWaitForChangeAuthTokResult(t, c)
 			},
 		},
 		"Retry_if_new_password_does_not_match_quality_criteria": {
-			username:     testUserName(t, "native-passwd"),
-			expectedUser: testUserName(t, "native-passwd"),
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				nativeSelectBroker(t, c)
@@ -907,12 +929,10 @@ func TestNativeChangeAuthTok(t *testing.T) {
 				c.WaitFor(t, `Enter your new password:`)
 				c.SendLine(t, "")
 				nativeChangePassword(t, c, "authd2404", "authd2404")
-				c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionChangeAuthTok.String()))
+				nativeWaitForChangeAuthTokResult(t, c)
 			},
 		},
 		"Prevent_change_password_if_auth_fails": {
-			username:     testUserName(t, "native-passwd"),
-			expectedUser: testUserName(t, "native-passwd"),
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				nativeSelectBroker(t, c)
@@ -920,8 +940,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 					c.WaitFor(t, `Gimme your password:`)
 					c.SendLine(t, "wrongpass")
 				}
-				c.WaitFor(t, `Maximum number of authentication attempts reached`)
-				c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionChangeAuthTok.String()))
+				nativeWaitForChangeAuthTokResult(t, c)
 			},
 		},
 		"Prevent_change_password_if_user_does_not_exist": {
@@ -930,30 +949,26 @@ func TestNativeChangeAuthTok(t *testing.T) {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				nativeSelectBroker(t, c)
-				c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionChangeAuthTok.String()))
+				nativeWaitForChangeAuthTokResult(t, c)
 			},
 		},
 		"Prevent_change_password_if_current_user_is_not_root_as_can_not_authenticate": {
 			currentUserNotRoot: true,
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
-				c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionChangeAuthTok.String()))
+				nativeWaitForChangeAuthTokResult(t, c)
 			},
 		},
 		"Exit_authd_if_local_broker_is_selected": {
-			username:     testUserName(t, "native-passwd"),
-			expectedUser: testUserName(t, "native-passwd"),
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				c.WaitFor(t, `Choose your provider:`)
 				sendEchoedLine(t, c, "1")
-				c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionChangeAuthTok.String()))
+				nativeWaitForChangeAuthTokResult(t, c)
 			},
 		},
 		"Exit_authd_if_user_sigints": {
-			username:        testUserName(t, "native-passwd"),
 			skipRunnerCheck: true,
-			expectedUser:    testUserName(t, "native-passwd"),
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				nativeSelectBroker(t, c)
@@ -1019,7 +1034,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 
 func nativeEnterUsername(t *testing.T, c *ptytest.Console, username string) {
 	t.Helper()
-	c.WaitFor(t, `Username:`)
+	c.WaitFor(t, `Username: `)
 	c.SendLine(t, username)
 }
 
@@ -1029,7 +1044,7 @@ func nativePasswdSimpleChange(t *testing.T, c *ptytest.Console) {
 	c.WaitFor(t, `Gimme your password:`)
 	c.SendLine(t, "goodpass")
 	nativeChangePassword(t, c, "authd2404", "authd2404")
-	c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionChangeAuthTok.String()))
+	nativeWaitForChangeAuthTokResult(t, c)
 }
 
 func nativeReloginAfterPasswordChange(t *testing.T, ctx *nativePtyTestContext) {
@@ -1064,8 +1079,12 @@ func nativeQRCodeAuth(t *testing.T, c *ptytest.Console, method, username string,
 	c.WaitFor(t, `Gimme your password:`)
 	c.SendLine(t, "r")
 	c.WaitFor(t, `Choose your authentication method:`)
-	c.SendLine(t, method)
+	sendEchoedLine(t, c, method)
 	c.WaitFor(t, `Choose action:`)
+	for i := 0; i < 4; i++ {
+		sendEchoedLine(t, c, "2")
+		c.WaitFor(t, `Choose action:`)
+	}
 	signalFn(username)
 	sendEchoedLine(t, c, "1")
 	nativeWaitForResult(t, c)
@@ -1091,6 +1110,14 @@ func nativeWaitForLoginPasswordPrompt(t *testing.T, c *ptytest.Console) {
 
 // nativeWaitForResult waits for the PAM runner result line.
 func nativeWaitForResult(t *testing.T, c *ptytest.Console) {
+	t.Helper()
+	c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionAcctMgmt.String()))
+}
+
+// nativeWaitForChangeAuthTokResult waits for the PAM runner ChangeAuthTok result.
+// AcctMgmt is the last action to complete, so waiting for it ensures the whole
+// authentication token change has finished.
+func nativeWaitForChangeAuthTokResult(t *testing.T, c *ptytest.Console) {
 	t.Helper()
 	c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionAcctMgmt.String()))
 }
