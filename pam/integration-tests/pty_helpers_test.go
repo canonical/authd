@@ -53,6 +53,13 @@ func ptyRunnerEnv(t *testing.T, cliEnv []string, opts clientOptions) []string {
 	}
 	if opts.Term != "" {
 		env = append(env, "AUTHD_PAM_CLI_TERM="+opts.Term)
+		env = append(env, "TERM="+opts.Term)
+	} else {
+		// Set a color-capable terminal so the QR code renderer uses the compact
+		// half-block format (ToSmallString) instead of the larger full-block
+		// format (ToString). Without TERM, termenv detects Ascii profile and
+		// falls back to the larger format.
+		env = append(env, "TERM=xterm-256color")
 	}
 	if opts.SessionType != "" {
 		env = append(env, "XDG_SESSION_TYPE="+opts.SessionType)
