@@ -1,5 +1,7 @@
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
+Username: user-integration-cli-passwd-exit-authd-if-user-presses-ctrl-d@example.com
+────────────────────────────────────────────────────────────────────────────────
   Select your provider
 
 > 1. local

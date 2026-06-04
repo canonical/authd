@@ -1,5 +1,7 @@
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
+Username: user-mfa-integration-cli-passwd@example.com
+────────────────────────────────────────────────────────────────────────────────
   Select your provider
 
 > 1. local

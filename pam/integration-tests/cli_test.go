@@ -764,7 +764,9 @@ func TestCLIAuthenticate(t *testing.T) {
 func cliEnterUsername(t *testing.T, c *ptytest.Console, username string) {
 	t.Helper()
 	c.WaitFor(t, `Username:`)
-	c.SendLine(t, username)
+	c.Send(t, username)
+	c.WaitFor(t, regexp.QuoteMeta(username))
+	c.SendKey(t, ptytest.KeyEnter)
 }
 
 func cliSelectBroker(t *testing.T, c *ptytest.Console) {
