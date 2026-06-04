@@ -14,6 +14,30 @@ Gimme your password:
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+>
+invalid password 'wrongpass1', should be 'goodpass'
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+>
+invalid password 'wrongpass2', should be 'goodpass'
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+>
+invalid password 'wrongpass3', should be 'goodpass'
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+>
+invalid password 'wrongpass4', should be 'goodpass'
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
 PAM Error Message: Maximum number of authentication attempts reached
 PAM Authenticate()
   User: "user-integration-max-attempts@example.com"

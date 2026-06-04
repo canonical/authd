@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -567,17 +568,17 @@ func TestCLIAuthenticate(t *testing.T) {
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 
-				// Send all wrong passwords. We can't WaitFor the error between
-				// attempts because bubbletea skips re-renders when the view
-				// content is identical (same error message each time).
-				// We also can't use cliSendPassword here: the auth.Retry response
-				// races with the typed characters inside bubbletea's event batch,
-				// so the field is often cleared before any asterisks are rendered.
-				for i := 0; i < 5; i++ {
-					c.SendLine(t, "wrongpass")
+				// Send the wrong passwords. We use a different wrong password on each attempt
+				// because bubbletea skips re-renders when the view content is identical.
+				// By using a different password, we ensure that the
+				// "Invalid password '<password>'" message is different, so that bubbletea
+				// re-renders and we can WaitFor the new error message on each attempt.
+				for i := 0; i < 4; i++ {
+					c.SendLine(t, "wrongpass"+strconv.Itoa(i+1))
+					c.WaitFor(t, `invalid password`)
 				}
 
-				c.SendLine(t, "wrongpass")
+				c.SendLine(t, "wrongpass-final")
 				c.WaitFor(t, `Maximum number of authentication attempts reached`)
 				// The snapshot at this point is flaky: sometimes the PAM result
 				// has already been rendered alongside the error message, sometimes
@@ -1071,13 +1072,18 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliEnterUsername(t, c, username)
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
-				// Use SendLine for wrong password retries: the auth.Retry response
-				// races with typed characters inside bubbletea's event batch, causing
-				// the field to clear before asterisks are rendered.
-				for i := 0; i < 5; i++ {
-					c.SendLine(t, "wrongpass")
+
+				// Send the wrong passwords. We use a different wrong password on each attempt
+				// because bubbletea skips re-renders when the view content is identical.
+				// By using a different password, we ensure that the
+				// "Invalid password '<password>'" message is different, so that bubbletea
+				// re-renders and we can WaitFor the new error message on each attempt.
+				for i := 0; i < 4; i++ {
+					c.SendLine(t, "wrongpass"+strconv.Itoa(i+1))
+					c.WaitFor(t, `invalid password`)
 				}
-				c.SendLine(t, "wrongpass")
+
+				c.SendLine(t, "wrongpass-final")
 				c.WaitFor(t, `Maximum number of authentication attempts reached`)
 				cliWaitForResult(t, c)
 				_ = c.WaitForExit(t)
