@@ -46,8 +46,12 @@ func TestCLIAuthenticate(t *testing.T) {
 		socketPath         string // override socket path
 		useCancelableAuthd bool
 
-		test          func(t *testing.T, c *ptytest.Console)
-		testWithAuthd func(t *testing.T, c *ptytest.Console, cancelAuthd func())
+		test func(t *testing.T, c *ptytest.Console)
+		// testWithSignals is like test but receives a signalFn that creates a broker
+		// completion signal for the given username, allowing tests to control when
+		// wait-based authentication (FIDO, QR code, phone ack) completes.
+		testWithSignals func(t *testing.T, c *ptytest.Console, signalFn func(username string))
+		testWithAuthd   func(t *testing.T, c *ptytest.Console, cancelAuthd func())
 		// testRun allows a test to control the entire test run (useful for
 		// multi-session tests). When set, it handles all sessions and returns
 		// the combined golden output. The test runner skips the default single-
@@ -109,7 +113,7 @@ func TestCLIAuthenticate(t *testing.T) {
 		},
 		"Authenticate_user_with_mfa": {
 			username: "user-mfa@example.com",
-			test: func(t *testing.T, c *ptytest.Console) {
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(string)) {
 				t.Helper()
 
 				cliSelectBroker(t, c)
@@ -134,8 +138,9 @@ func TestCLIAuthenticate(t *testing.T) {
 
 				c.SendKey(t, ptytest.KeyEnter) // Select first option
 				c.WaitFor(t, `Plug your fido device and press with your thumb`)
+				signalFn("user-mfa@example.com")
 
-				// Wait for auto-advance to phone.
+				// Auto-advances to phone after FIDO completes.
 				c.WaitFor(t, `Unlock your phone \+33`)
 
 				c.SendKey(t, ptytest.KeyEscape)
@@ -144,6 +149,7 @@ func TestCLIAuthenticate(t *testing.T) {
 
 				c.SendKey(t, ptytest.KeyEnter)
 				c.WaitFor(t, `Unlock your phone \+33`)
+				signalFn("user-mfa@example.com")
 
 				cliWaitForResult(t, c)
 			},
@@ -177,8 +183,9 @@ func TestCLIAuthenticate(t *testing.T) {
 			clientOptions: clientOptions{
 				PamUser: examplebroker.UserIntegrationPrefix + "qr-code@example.com",
 			},
-			test: func(t *testing.T, c *ptytest.Console) {
-				cliAuthenticateWithQRCode(t, c, examplebroker.UserIntegrationPrefix+"qr-code@example.com")
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(string)) {
+				t.Helper()
+				cliAuthenticateWithQRCode(t, c, signalFn, examplebroker.UserIntegrationPrefix+"qr-code@example.com")
 			},
 		},
 		"Authenticate_user_with_qr_code_in_a_TTY": {
@@ -186,8 +193,9 @@ func TestCLIAuthenticate(t *testing.T) {
 				PamUser: examplebroker.UserIntegrationPrefix + "qr-code-tty@example.com",
 				Term:    "linux",
 			},
-			test: func(t *testing.T, c *ptytest.Console) {
-				cliAuthenticateWithQRCode(t, c, examplebroker.UserIntegrationPrefix+"qr-code-tty@example.com")
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(string)) {
+				t.Helper()
+				cliAuthenticateWithQRCode(t, c, signalFn, examplebroker.UserIntegrationPrefix+"qr-code-tty@example.com")
 			},
 		},
 		"Authenticate_user_with_qr_code_in_a_TTY_session": {
@@ -196,8 +204,9 @@ func TestCLIAuthenticate(t *testing.T) {
 				Term:        "xterm-256color",
 				SessionType: "tty",
 			},
-			test: func(t *testing.T, c *ptytest.Console) {
-				cliAuthenticateWithQRCode(t, c, examplebroker.UserIntegrationPrefix+"qr-code-tty-session@example.com")
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(string)) {
+				t.Helper()
+				cliAuthenticateWithQRCode(t, c, signalFn, examplebroker.UserIntegrationPrefix+"qr-code-tty-session@example.com")
 			},
 		},
 		"Authenticate_user_with_qr_code_in_screen": {
@@ -205,13 +214,14 @@ func TestCLIAuthenticate(t *testing.T) {
 				PamUser: examplebroker.UserIntegrationPrefix + "qr-code-screen@example.com",
 				Term:    "screen",
 			},
-			test: func(t *testing.T, c *ptytest.Console) {
-				cliAuthenticateWithQRCode(t, c, examplebroker.UserIntegrationPrefix+"qr-code-screen@example.com")
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(string)) {
+				t.Helper()
+				cliAuthenticateWithQRCode(t, c, signalFn, examplebroker.UserIntegrationPrefix+"qr-code-screen@example.com")
 			},
 		},
 		"Authenticate_user_with_qr_code_after_many_regenerations": {
 			username: "user-integration-qrcode-static-regenerate@example.com",
-			test: func(t *testing.T, c *ptytest.Console) {
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(string)) {
 				t.Helper()
 
 				cliSelectBroker(t, c)
@@ -224,6 +234,7 @@ func TestCLIAuthenticate(t *testing.T) {
 				c.WaitFor(t, `Code:\s*1337`)
 				c.Send(t, "	")
 				c.Send(t, strings.Repeat("\r", 100))
+				signalFn("user-integration-qrcode-static-regenerate@example.com")
 				cliWaitForResult(t, c)
 			},
 		},
@@ -302,7 +313,7 @@ func TestCLIAuthenticate(t *testing.T) {
 		},
 		"Authenticate_user_with_mfa_and_reset_password_while_enforcing_policy": {
 			username: "user-mfa-with-reset@example.com",
-			test: func(t *testing.T, c *ptytest.Console) {
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(string)) {
 				t.Helper()
 
 				cliSelectBroker(t, c)
@@ -311,6 +322,7 @@ func TestCLIAuthenticate(t *testing.T) {
 
 				c.WaitFor(t, `Password reset`)
 				c.WaitFor(t, `Plug your fido device and press with your thumb`)
+				signalFn("user-mfa-with-reset@example.com")
 				// After FIDO auto-completes, capture the "1 step(s) missing" state.
 				c.WaitFor(t, `Password reset, 1 step`)
 				c.WaitFor(t, `New password`)
@@ -722,9 +734,14 @@ func TestCLIAuthenticate(t *testing.T) {
 					c.SendKey(t, ptytest.KeyEnter)
 				}
 
-				if tc.testWithAuthd != nil {
+				if tc.testWithSignals != nil {
+					signalFn := func(username string) {
+						testutils.CreateBrokerCompletionSignal(t, socketPath, username)
+					}
+					tc.testWithSignals(t, c, signalFn)
+				} else if tc.testWithAuthd != nil {
 					tc.testWithAuthd(t, c, cancelAuthd)
-				} else {
+				} else if tc.test != nil {
 					tc.test(t, c)
 				}
 
@@ -827,7 +844,7 @@ func cliWaitForResult(t *testing.T, c *ptytest.Console) {
 	c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionAcctMgmt.String()))
 }
 
-func cliAuthenticateWithQRCode(t *testing.T, c *ptytest.Console, username string) {
+func cliAuthenticateWithQRCode(t *testing.T, c *ptytest.Console, signalFn func(string), username string) {
 	t.Helper()
 
 	cliSelectBroker(t, c)
@@ -853,6 +870,7 @@ func cliAuthenticateWithQRCode(t *testing.T, c *ptytest.Console, username string
 	time.Sleep(testutils.MultipliedSleepDuration(550 * time.Millisecond))
 	c.SendKey(t, ptytest.KeyEnter)
 	c.WaitFor(t, `Code:\s*1341`)
+	signalFn(username)
 	cliWaitForResult(t, c)
 }
 
@@ -951,12 +969,14 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				c.WaitFor(t, `1\. Use your fido device foo`)
 				c.SendKey(t, ptytest.KeyEnter)
 				c.WaitFor(t, `Plug your fido device and press with your thumb`)
+				testutils.CreateBrokerCompletionSignal(t, socketPath, username)
 				c.WaitFor(t, `Unlock your phone \+33`)
 				c.SendKey(t, ptytest.KeyEscape)
 				c.WaitFor(t, `Select your authentication method`)
 				c.WaitFor(t, `1\. Use your phone \+33`)
 				c.SendKey(t, ptytest.KeyEnter)
 				c.WaitFor(t, `Unlock your phone \+33`)
+				testutils.CreateBrokerCompletionSignal(t, socketPath, username)
 				c.WaitFor(t, `New password`)
 				cliSendPassword(t, c, "authd2404")
 				c.WaitFor(t, `Confirm password`)

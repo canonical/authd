@@ -547,6 +547,9 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 				hostPubKey:  sshdHostPubKey,
 				authctlPath: authctlPath,
 				socketPath:  socketPath,
+				signalFn: func(username string) {
+					testutils.CreateBrokerCompletionSignal(t, socketPath, username)
+				},
 			}
 
 			tc.test(t, args)
@@ -830,6 +833,7 @@ type sshPtyArgs struct {
 	hostPubKey  []byte
 	authctlPath string
 	socketPath  string
+	signalFn    func(username string)
 }
 
 // startSSHForPty starts an SSH session in a ptytest Console.
@@ -1025,10 +1029,12 @@ func sshPtyMfaAuth(t *testing.T, args sshPtyArgs) {
 	c.WaitFor(t, `Unlock your phone \+33`)
 
 	// Advance.
+	args.signalFn(args.user)
 	c.SendKey(t, ptytest.KeyEnter)
 	c.WaitFor(t, `Plug your fido device and press with your thumb`)
 
 	// Complete.
+	args.signalFn(args.user)
 	c.SendKey(t, ptytest.KeyEnter)
 	sshPtyWaitForSSHConnection(t, c)
 
@@ -1100,6 +1106,7 @@ func sshPtyQRCode(t *testing.T, args sshPtyArgs) {
 	c.WaitFor(t, `Choose action`)
 
 	// Accept the code.
+	args.signalFn(args.user)
 	c.SendLine(t, "1")
 	sshPtyWaitForSSHConnection(t, c)
 
@@ -1485,6 +1492,7 @@ func sshPtyMfaResetPwqualityAuth(t *testing.T, args sshPtyArgs) {
 	c.WaitFor(t, `Plug your fido device and press with your thumb`)
 
 	// Complete MFA (auto-advance).
+	args.signalFn(args.user)
 	c.SendKey(t, ptytest.KeyEnter)
 
 	// Password reset with quality checks.
@@ -1528,6 +1536,7 @@ func sshPtyMfaResetSamePassword(t *testing.T, args sshPtyArgs) {
 	c.WaitFor(t, `Plug your fido device and press with your thumb`)
 
 	// Complete MFA.
+	args.signalFn(args.user)
 	c.SendKey(t, ptytest.KeyEnter)
 
 	// Password reset.

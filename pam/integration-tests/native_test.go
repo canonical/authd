@@ -95,8 +95,9 @@ func TestNativeAuthenticate(t *testing.T) {
 		extraArgs          []string
 		expectedUser       string
 
-		test  func(t *testing.T, c *ptytest.Console)
-		after func(t *testing.T, ctx *nativePtyTestContext)
+		test            func(t *testing.T, c *ptytest.Console)
+		testWithSignals func(t *testing.T, c *ptytest.Console, signalFn func(username string))
+		after           func(t *testing.T, ctx *nativePtyTestContext)
 	}{
 		"Authenticate_user_successfully": {
 			test:         nativeSimpleAuth,
@@ -142,14 +143,17 @@ func TestNativeAuthenticate(t *testing.T) {
 		},
 		"Authenticate_user_with_mfa": {
 			clientOptions: clientOptions{PamUser: testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "auth-native")},
-			test: func(t *testing.T, c *ptytest.Console) {
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(username string)) {
 				t.Helper()
+				username := testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "auth-native")
 				nativeSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password:`)
 				c.SendLine(t, "goodpass")
 				c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
+				signalFn(username)
 				c.SendLine(t, "")
 				c.WaitFor(t, regexp.QuoteMeta(`Unlock your phone +33... or accept request on web interface:`))
+				signalFn(username)
 				c.SendLine(t, "")
 				nativeWaitForResult(t, c)
 			},
@@ -211,41 +215,41 @@ func TestNativeAuthenticate(t *testing.T) {
 			expectedUser: testUserName(t, "native"),
 		},
 		"Authenticate_user_with_qr_code": {
-			test: func(t *testing.T, c *ptytest.Console) {
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(username string)) {
 				t.Helper()
-				nativeQRCodeAuth(t, c, "7")
+				nativeQRCodeAuth(t, c, "7", testUserName(t, "native"), signalFn)
 			},
 			expectedUser: testUserName(t, "native"),
 		},
 		"Authenticate_user_with_qr_code_without_code": {
 			clientOptions: clientOptions{PamUser: testUserNameFull(t, examplebroker.UserIntegrationQRcodeWithoutCodePrefix, "native")},
-			test: func(t *testing.T, c *ptytest.Console) {
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(username string)) {
 				t.Helper()
-				nativeQRCodeAuth(t, c, "7")
+				nativeQRCodeAuth(t, c, "7", testUserNameFull(t, examplebroker.UserIntegrationQRcodeWithoutCodePrefix, "native"), signalFn)
 			},
 			expectedUser: testUserNameFull(t, examplebroker.UserIntegrationQRcodeWithoutCodePrefix, "native"),
 		},
 		"Authenticate_user_with_qr_code_in_a_TTY": {
 			clientOptions: clientOptions{Term: "linux"},
-			test: func(t *testing.T, c *ptytest.Console) {
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(username string)) {
 				t.Helper()
-				nativeQRCodeAuth(t, c, "7")
+				nativeQRCodeAuth(t, c, "7", testUserName(t, "native"), signalFn)
 			},
 			expectedUser: testUserName(t, "native"),
 		},
 		"Authenticate_user_with_qr_code_in_a_TTY_session": {
 			clientOptions: clientOptions{Term: "xterm-256color", SessionType: "tty"},
-			test: func(t *testing.T, c *ptytest.Console) {
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(username string)) {
 				t.Helper()
-				nativeQRCodeAuth(t, c, "7")
+				nativeQRCodeAuth(t, c, "7", testUserName(t, "native"), signalFn)
 			},
 			expectedUser: testUserName(t, "native"),
 		},
 		"Authenticate_user_with_qr_code_in_screen": {
 			clientOptions: clientOptions{Term: "screen"},
-			test: func(t *testing.T, c *ptytest.Console) {
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(username string)) {
 				t.Helper()
-				nativeQRCodeAuth(t, c, "7")
+				nativeQRCodeAuth(t, c, "7", testUserName(t, "native"), signalFn)
 			},
 			expectedUser: testUserName(t, "native"),
 		},
@@ -254,9 +258,9 @@ func TestNativeAuthenticate(t *testing.T) {
 				PamUser:        testUserNameFull(t, examplebroker.UserIntegrationPreCheckPrefix, "ssh-service-qr-code-native"),
 				PamServiceName: "sshd",
 			},
-			test: func(t *testing.T, c *ptytest.Console) {
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(username string)) {
 				t.Helper()
-				nativeQRCodeAuth(t, c, "2")
+				nativeQRCodeAuth(t, c, "2", testUserNameFull(t, examplebroker.UserIntegrationPreCheckPrefix, "ssh-service-qr-code-native"), signalFn)
 			},
 			expectedUser: testUserNameFull(t, examplebroker.UserIntegrationPreCheckPrefix, "ssh-service-qr-code-native"),
 		},
@@ -300,12 +304,14 @@ func TestNativeAuthenticate(t *testing.T) {
 		},
 		"Authenticate_user_with_mfa_and_reset_password_while_enforcing_policy": {
 			clientOptions: clientOptions{PamUser: testUserNameFull(t, examplebroker.UserIntegrationMfaWithResetPrefix, "pwquality-native")},
-			test: func(t *testing.T, c *ptytest.Console) {
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(username string)) {
 				t.Helper()
+				username := testUserNameFull(t, examplebroker.UserIntegrationMfaWithResetPrefix, "pwquality-native")
 				nativeSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password:`)
 				c.SendLine(t, "goodpass")
 				c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
+				signalFn(username)
 				c.SendLine(t, "")
 				c.WaitFor(t, `Choose action:`)
 				c.SendLine(t, "1")
@@ -322,12 +328,14 @@ func TestNativeAuthenticate(t *testing.T) {
 		},
 		"Authenticate_user_with_mfa_and_reset_same_password": {
 			clientOptions: clientOptions{PamUser: testUserNameFull(t, examplebroker.UserIntegrationMfaWithResetPrefix, "same-password-native")},
-			test: func(t *testing.T, c *ptytest.Console) {
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(username string)) {
 				t.Helper()
+				username := testUserNameFull(t, examplebroker.UserIntegrationMfaWithResetPrefix, "same-password-native")
 				nativeSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password:`)
 				c.SendLine(t, "goodpass")
 				c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
+				signalFn(username)
 				c.SendLine(t, "")
 				c.WaitFor(t, `Choose action:`)
 				c.SendLine(t, "1")
@@ -722,7 +730,14 @@ func TestNativeAuthenticate(t *testing.T) {
 			}
 
 			c := ctx.runner.start(t, ctx.baseSpec)
-			tc.test(t, c)
+			if tc.testWithSignals != nil {
+				signalFn := func(_ string) {
+					testutils.CreateBrokerCompletionSignal(t, socketPath, expectedUser)
+				}
+				tc.testWithSignals(t, c, signalFn)
+			} else if tc.test != nil {
+				tc.test(t, c)
+			}
 			if name == "Exit_if_authd_is_stopped" && ctx.authdCancel != nil {
 				ctx.authdCancel()
 				ctx.authdCancel = nil
@@ -770,8 +785,9 @@ func TestNativeChangeAuthTok(t *testing.T) {
 		skipRunnerCheck    bool
 		expectedUser       string
 
-		test  func(t *testing.T, c *ptytest.Console)
-		after func(t *testing.T, ctx *nativePtyTestContext)
+		test            func(t *testing.T, c *ptytest.Console)
+		testWithSignals func(t *testing.T, c *ptytest.Console, signalFn func(username string))
+		after           func(t *testing.T, ctx *nativePtyTestContext)
 	}{
 		"Change_password_successfully_and_authenticate_with_new_one": {
 			username:     testUserName(t, "simple"),
@@ -811,14 +827,17 @@ func TestNativeChangeAuthTok(t *testing.T) {
 		"Change_passwd_after_MFA_auth": {
 			username:     testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "native-passwd"),
 			expectedUser: testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "native-passwd"),
-			test: func(t *testing.T, c *ptytest.Console) {
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(username string)) {
 				t.Helper()
+				username := testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "native-passwd")
 				nativeSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password:`)
 				c.SendLine(t, "goodpass")
 				c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
+				signalFn(username)
 				c.SendLine(t, "")
 				c.WaitFor(t, regexp.QuoteMeta(`Unlock your phone +33... or accept request on web interface:`))
+				signalFn(username)
 				c.SendLine(t, "")
 				nativeChangePassword(t, c, "authd2404", "authd2404")
 				c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionChangeAuthTok.String()))
@@ -976,7 +995,14 @@ func TestNativeChangeAuthTok(t *testing.T) {
 				username:      username,
 			}}
 			c := ctx.runner.start(t, ctx.baseSpec)
-			tc.test(t, c)
+			if tc.testWithSignals != nil {
+				signalFn := func(_ string) {
+					testutils.CreateBrokerCompletionSignal(t, socketPath, expectedUser)
+				}
+				tc.testWithSignals(t, c, signalFn)
+			} else if tc.test != nil {
+				tc.test(t, c)
+			}
 			ctx.capture(t, c)
 			if tc.after != nil {
 				tc.after(t, ctx)
@@ -1032,7 +1058,7 @@ func nativeSimpleAuth(t *testing.T, c *ptytest.Console) {
 	nativeWaitForResult(t, c)
 }
 
-func nativeQRCodeAuth(t *testing.T, c *ptytest.Console, method string) {
+func nativeQRCodeAuth(t *testing.T, c *ptytest.Console, method, username string, signalFn func(string)) {
 	t.Helper()
 	nativeSelectBroker(t, c)
 	c.WaitFor(t, `Gimme your password:`)
@@ -1040,6 +1066,7 @@ func nativeQRCodeAuth(t *testing.T, c *ptytest.Console, method string) {
 	c.WaitFor(t, `Choose your authentication method:`)
 	c.SendLine(t, method)
 	c.WaitFor(t, `Choose action:`)
+	signalFn(username)
 	c.SendLine(t, "1")
 	nativeWaitForResult(t, c)
 }

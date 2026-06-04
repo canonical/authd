@@ -29,6 +29,7 @@ import (
 	"github.com/canonical/authd/internal/brokers/auth"
 	"github.com/canonical/authd/internal/brokers/layouts"
 	"github.com/canonical/authd/internal/brokers/layouts/entries"
+	"github.com/canonical/authd/internal/testutils"
 	"github.com/canonical/authd/log"
 	"github.com/google/uuid"
 	"golang.org/x/exp/slices"
@@ -100,7 +101,8 @@ type Broker struct {
 
 	privateKey *rsa.PrivateKey
 
-	sleepMultiplier float64
+	completionSignalsDir string
+	sleepMultiplier      float64
 }
 
 var (
@@ -247,6 +249,8 @@ func New(name string) (b *Broker, fullName, brandIcon string) {
 		}
 	}
 
+	completionSignalsDir := os.Getenv("AUTHD_EXAMPLE_BROKER_COMPLETION_SIGNALS_DIR")
+
 	log.Debugf(context.TODO(), "Using sleep multiplier: %f", sleepMultiplier)
 
 	return &Broker{
@@ -257,6 +261,7 @@ func New(name string) (b *Broker, fullName, brandIcon string) {
 		isAuthenticatedCalls:   make(map[string]isAuthenticatedCtx),
 		isAuthenticatedCallsMu: sync.Mutex{},
 		privateKey:             privateKey,
+		completionSignalsDir:   completionSignalsDir,
 		sleepMultiplier:        sleepMultiplier,
 	}, strings.ReplaceAll(name, "_", " "), fmt.Sprintf("/usr/share/brokers/%s.png", name)
 }
@@ -681,6 +686,41 @@ func (b *Broker) sleepDuration(in time.Duration) time.Duration {
 	return time.Duration(math.Round(float64(in) * b.sleepMultiplier))
 }
 
+// waitForCompletion waits until a completion signal is received for the given username,
+// or the context is cancelled. If completionSignalsDir is not set, it uses time-based
+// sleep for production behavior. In tests, it polls for a signal file named after the
+// username. The signal file is deleted when found, ensuring each signal is consumed
+// exactly once.
+func (b *Broker) waitForCompletion(ctx context.Context, username string) bool {
+	if b.completionSignalsDir == "" {
+		select {
+		case <-time.After(b.sleepDuration(4 * time.Second)):
+			return true
+		case <-ctx.Done():
+			return false
+		}
+	}
+
+	// Test mode: poll for signal file. The signal file is created by the test
+	// and deleted here when found, ensuring each signal is consumed exactly once.
+	signalFileName := testutils.BrokerCompletionSignalFilename(username)
+	signalPath := filepath.Join(b.completionSignalsDir, signalFileName)
+
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-ticker.C:
+			if _, err := os.Stat(signalPath); err == nil {
+				_ = os.Remove(signalPath)
+				return true
+			}
+		}
+	}
+}
+
 func (b *Broker) handleIsAuthenticated(ctx context.Context, sessionInfo sessionInfo, authData map[string]string) (access, data string) {
 	// Decrypt secret if present.
 	secret, err := decodeRawSecret(b.privateKey, authData["secret"])
@@ -724,9 +764,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, sessionInfo sessionI
 			return auth.Denied, `{"message": "phoneack1 should have wait set to true"}`
 		}
 		// Send notification to phone1 and wait on server signal to return if OK or not
-		select {
-		case <-time.After(sleepDuration):
-		case <-ctx.Done():
+		if !b.waitForCompletion(ctx, sessionInfo.username) {
 			return auth.Cancelled, ""
 		}
 
@@ -749,9 +787,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, sessionInfo sessionI
 		}
 
 		// simulate direct exchange with the FIDO device
-		select {
-		case <-time.After(sleepDuration):
-		case <-ctx.Done():
+		if !b.waitForCompletion(ctx, sessionInfo.username) {
 			return auth.Cancelled, ""
 		}
 
@@ -760,9 +796,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, sessionInfo sessionI
 			return auth.Denied, fmt.Sprintf(`{"message": "%s should have wait set to true"}`, sessionInfo.currentAuthMode)
 		}
 		// Simulate connexion with remote server to check that the correct code was entered
-		select {
-		case <-time.After(sleepDuration):
-		case <-ctx.Done():
+		if !b.waitForCompletion(ctx, sessionInfo.username) {
 			return auth.Cancelled, ""
 		}
 

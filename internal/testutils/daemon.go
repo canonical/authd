@@ -157,6 +157,11 @@ func StartAuthdWithCancel(t *testing.T, execPath string, args ...DaemonOption) (
 		opts.socketPath = filepath.Join(tempDir, "authd.socket")
 	}
 
+	// Create signals directory for broker completion in tests.
+	signalsDir := filepath.Join(tempDir, "broker-signals")
+	require.NoError(t, os.MkdirAll(signalsDir, 0700), "Setup: failed to create broker signals dir")
+	opts.env = append(opts.env, fmt.Sprintf("AUTHD_EXAMPLE_BROKER_COMPLETION_SIGNALS_DIR=%s", signalsDir))
+
 	config := fmt.Sprintf(`
 verbosity: 2
 paths:
@@ -284,6 +289,31 @@ paths:
 	}
 
 	return opts.socketPath, cancelFunc
+}
+
+// BrokerCompletionSignalsDir returns the directory where broker completion signals are stored
+// for a daemon started with the given socket path. This follows the convention established
+// by StartAuthdWithCancel which creates the signals dir at $dir(socketPath)/broker-signals.
+func BrokerCompletionSignalsDir(socketPath string) string {
+	return filepath.Join(filepath.Dir(socketPath), "broker-signals")
+}
+
+// BrokerCompletionSignalFilename returns the file name used for broker completion signals.
+func BrokerCompletionSignalFilename(username string) string {
+	return strings.ReplaceAll(username, "/", "_")
+}
+
+// CreateBrokerCompletionSignal creates a signal file that tells the broker to complete
+// authentication for the given username. The broker polls for this file and deletes it
+// when found.
+func CreateBrokerCompletionSignal(t *testing.T, socketPath, username string) string {
+	t.Helper()
+
+	signalPath := filepath.Join(BrokerCompletionSignalsDir(socketPath),
+		BrokerCompletionSignalFilename(username))
+	err := os.WriteFile(signalPath, []byte{}, 0600)
+	require.NoError(t, err, "Failed to create broker completion signal for %q", username)
+	return signalPath
 }
 
 // AuthdGoBuildArgs returns the `go build` arguments (run from [ProjectRoot])
