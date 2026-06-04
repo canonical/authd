@@ -2,6 +2,8 @@
 
 set -exuo pipefail
 
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+
 # Skip tests which depend on vhs which is not available in the build environment.
 export AUTHD_SKIP_EXTERNAL_DEPENDENT_TESTS=1
 
@@ -12,7 +14,7 @@ export AUTHD_SKIP_FLAKY_TESTS=1
 export GOPROXY=off
 export GOTOOLCHAIN=local
 
-PATH=$PATH:$("$(dirname "$0")"/../get-depends-go-bin-path.sh)
+PATH=$("${SCRIPT_DIR}/../get-depends-cargo-bin-paths.sh"):$("${SCRIPT_DIR}/../get-depends-go-bin-path.sh"):$PATH
 export PATH
 
 go test ./...
