@@ -1099,6 +1099,10 @@ func TestCLIChangeAuthTok(t *testing.T) {
 
 				c.SendLine(t, "wrongpass-final")
 				c.WaitFor(t, `Maximum number of authentication attempts reached`)
+				// The snapshot at this point is flaky: sometimes the PAM result
+				// has already been rendered alongside the error message, sometimes
+				// not. Discard it; cliWaitForResult captures the stable final state.
+				c.DiscardLastSnapshot()
 				cliWaitForResult(t, c)
 				_ = c.WaitForExit(t)
 				return ptySanitizeSnapshots(t, c)
