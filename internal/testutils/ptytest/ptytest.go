@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -19,6 +21,7 @@ import (
 
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
 )
 
 // Predefined key constants for SendKey.
@@ -498,6 +501,7 @@ func (c *Console) WaitForExit(t *testing.T) error {
 
 		return err
 	case <-time.After(c.opts.timeout):
+		c.logProcessDiagnostics(t)
 		c.mu.RLock()
 		content := c.buf.String()
 		c.mu.RUnlock()
@@ -589,9 +593,196 @@ func (c *Console) Close(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		// Force kill.
 		t.Logf("ptytest: killing process %d (did not exit after PTY close)", c.cmd.Process.Pid)
+		c.logProcessDiagnostics(t)
 		_ = c.cmd.Process.Kill()
 		<-c.done
 	}
+}
+
+// logProcessDiagnostics logs the state of the spawned process tree and the PTY.
+// It is meant to help debug cases where a process unexpectedly fails to exit
+// (e.g. a missed or swallowed signal): the symptom we have seen is the native
+// "sigints" tests timing out because Ctrl+C did not terminate the process.
+//
+// It reports, best-effort, the PTY foreground process group and line discipline,
+// and for every process in the spawned tree (and each of its threads) the state,
+// the kernel function it is blocked in (wchan), and the SIGINT disposition
+// (blocked/ignored/caught/pending). A SIGINT that is pending but blocked, or a
+// thread stuck in a blocking read, is the kind of signal we are looking for.
+//
+// It is Linux-specific and never fails the test: any field it cannot read is
+// skipped. All output goes through t.Logf so it shows up in CI logs.
+func (c *Console) logProcessDiagnostics(t *testing.T) {
+	t.Helper()
+
+	if c.cmd == nil || c.cmd.Process == nil {
+		return
+	}
+	rootPID := c.cmd.Process.Pid
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "ptytest: process diagnostics for command tree rooted at pid %d:\n", rootPID)
+
+	// PTY foreground process group and line discipline. These ioctls fail if
+	// the PTY has already been closed (e.g. from the Close path); that is fine.
+	fd := int(c.ptmx.Fd())
+	if fgpgrp, err := unix.IoctlGetInt(fd, unix.TIOCGPGRP); err == nil {
+		fmt.Fprintf(&b, "  pty: foreground process group (TIOCGPGRP) = %d\n", fgpgrp)
+	} else {
+		fmt.Fprintf(&b, "  pty: TIOCGPGRP unavailable: %v\n", err)
+	}
+	if tio, err := unix.IoctlGetTermios(fd, unix.TCGETS); err == nil {
+		fmt.Fprintf(&b, "  pty: Lflag=%#x (ECHO=%v ICANON=%v ISIG=%v) VINTR=%#x\n",
+			tio.Lflag, tio.Lflag&unix.ECHO != 0, tio.Lflag&unix.ICANON != 0,
+			tio.Lflag&unix.ISIG != 0, tio.Cc[unix.VINTR])
+	}
+
+	for _, pid := range processTree(rootPID) {
+		b.WriteString(procSummary(pid))
+	}
+
+	t.Logf("%s", strings.TrimRight(b.String(), "\n"))
+}
+
+// processTree returns rootPID followed by all of its descendant PIDs, found by
+// scanning /proc. Returns just rootPID if /proc cannot be read.
+func processTree(rootPID int) []int {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return []int{rootPID}
+	}
+
+	ppidOf := make(map[int]int)
+	var pids []int
+	for _, e := range entries {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil {
+			continue
+		}
+		ppid, ok := readPPID(pid)
+		if !ok {
+			continue
+		}
+		ppidOf[pid] = ppid
+		pids = append(pids, pid)
+	}
+
+	inTree := map[int]bool{rootPID: true}
+	for changed := true; changed; {
+		changed = false
+		for _, pid := range pids {
+			if inTree[pid] || !inTree[ppidOf[pid]] {
+				continue
+			}
+			inTree[pid] = true
+			changed = true
+		}
+	}
+
+	result := []int{rootPID}
+	for _, pid := range pids {
+		if pid != rootPID && inTree[pid] {
+			result = append(result, pid)
+		}
+	}
+	sort.Ints(result)
+	return result
+}
+
+// readPPID returns the parent PID of pid from /proc/<pid>/stat. The comm field
+// (field 2) may contain spaces and parentheses, so the remaining fields are
+// parsed from after the final ')'.
+func readPPID(pid int) (int, bool) {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return 0, false
+	}
+	s := string(data)
+	i := strings.LastIndex(s, ")")
+	if i < 0 {
+		return 0, false
+	}
+	// Fields after "<pid> (comm) ": state ppid pgrp session tty_nr tpgid ...
+	fields := strings.Fields(s[i+1:])
+	if len(fields) < 2 {
+		return 0, false
+	}
+	ppid, err := strconv.Atoi(fields[1])
+	if err != nil {
+		return 0, false
+	}
+	return ppid, true
+}
+
+// procSummary returns a human-readable, multi-line summary of a process and its
+// threads, focused on what is needed to debug a missed/swallowed SIGINT.
+func procSummary(pid int) string {
+	var b strings.Builder
+
+	status := readStatusFields(fmt.Sprintf("/proc/%d/status", pid))
+	fmt.Fprintf(&b, "  pid %d (%s):\n", pid, readProcFileTrim(fmt.Sprintf("/proc/%d/comm", pid)))
+	// SigIgn/SigCgt and the process-wide pending set (ShdPnd) are shared by all
+	// threads, so report them once per process.
+	fmt.Fprintf(&b, "    SIGINT: ignored=%v caught=%v process-pending=%v\n",
+		sigSetHasSIGINT(status["SigIgn"]),
+		sigSetHasSIGINT(status["SigCgt"]),
+		sigSetHasSIGINT(status["ShdPnd"]))
+
+	taskDir := fmt.Sprintf("/proc/%d/task", pid)
+	tids, err := os.ReadDir(taskDir)
+	if err != nil {
+		return b.String()
+	}
+	for _, te := range tids {
+		tid := te.Name()
+		ts := readStatusFields(fmt.Sprintf("%s/%s/status", taskDir, tid))
+		comm := readProcFileTrim(fmt.Sprintf("%s/%s/comm", taskDir, tid))
+		wchan := readProcFileTrim(fmt.Sprintf("%s/%s/wchan", taskDir, tid))
+		// SigBlk and the per-thread pending set (SigPnd) are per-thread.
+		fmt.Fprintf(&b, "    thread %s (%s): state=%q wchan=%q SIGINT[blocked=%v thread-pending=%v]\n",
+			tid, comm, ts["State"], wchan,
+			sigSetHasSIGINT(ts["SigBlk"]),
+			sigSetHasSIGINT(ts["SigPnd"]))
+	}
+	return b.String()
+}
+
+// readStatusFields parses a /proc/<pid>/status (or task/<tid>/status) file into
+// a key->value map (values trimmed). Returns an empty map on error.
+func readStatusFields(path string) map[string]string {
+	out := make(map[string]string)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return out
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		key, val, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		out[key] = strings.TrimSpace(val)
+	}
+	return out
+}
+
+// readProcFileTrim reads a small /proc file and returns its trimmed contents,
+// or "" on error.
+func readProcFileTrim(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// sigSetHasSIGINT reports whether SIGINT is present in a /proc status signal
+// mask, which is a 64-bit hex bitmask with bit (sig-1) set for each signal.
+func sigSetHasSIGINT(mask string) bool {
+	v, err := strconv.ParseUint(strings.TrimSpace(mask), 16, 64)
+	if err != nil {
+		return false
+	}
+	return v&(1<<(uint(unix.SIGINT)-1)) != 0
 }
 
 // stripANSI removes ANSI escape sequences from s.
