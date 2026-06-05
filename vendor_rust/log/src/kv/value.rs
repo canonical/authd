@@ -10,20 +10,20 @@ pub use crate::kv::Error;
 /// A type that can be converted into a [`Value`](struct.Value.html).
 pub trait ToValue {
     /// Perform the conversion.
-    fn to_value(&self) -> Value;
+    fn to_value(&self) -> Value<'_>;
 }
 
-impl<'a, T> ToValue for &'a T
+impl<T> ToValue for &T
 where
     T: ToValue + ?Sized,
 {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         (**self).to_value()
     }
 }
 
 impl<'v> ToValue for Value<'v> {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         Value {
             inner: self.inner.clone(),
         }
@@ -153,7 +153,7 @@ impl<'v> Value<'v> {
     #[cfg(feature = "kv_serde")]
     pub fn from_serde<T>(value: &'v T) -> Self
     where
-        T: serde::Serialize,
+        T: serde_core::Serialize,
     {
         Value {
             inner: inner::Inner::from_serde1(value),
@@ -232,10 +232,10 @@ impl<'v> fmt::Display for Value<'v> {
 }
 
 #[cfg(feature = "kv_serde")]
-impl<'v> serde::Serialize for Value<'v> {
+impl<'v> serde_core::Serialize for Value<'v> {
     fn serialize<S>(&self, s: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: serde_core::Serializer,
     {
         self.inner.serialize(s)
     }
@@ -256,7 +256,7 @@ impl<'v> sval_ref::ValueRef<'v> for Value<'v> {
 }
 
 impl ToValue for str {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         Value::from(self)
     }
 }
@@ -268,7 +268,7 @@ impl<'v> From<&'v str> for Value<'v> {
 }
 
 impl ToValue for () {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         Value::from_inner(())
     }
 }
@@ -277,7 +277,7 @@ impl<T> ToValue for Option<T>
 where
     T: ToValue,
 {
-    fn to_value(&self) -> Value {
+    fn to_value(&self) -> Value<'_> {
         match *self {
             Some(ref value) => value.to_value(),
             None => Value::from_inner(()),
@@ -289,7 +289,7 @@ macro_rules! impl_to_value_primitive {
     ($($into_ty:ty,)*) => {
         $(
             impl ToValue for $into_ty {
-                fn to_value(&self) -> Value {
+                fn to_value(&self) -> Value<'_> {
                     Value::from(*self)
                 }
             }
@@ -313,7 +313,7 @@ macro_rules! impl_to_value_nonzero_primitive {
     ($($into_ty:ident,)*) => {
         $(
             impl ToValue for std::num::$into_ty {
-                fn to_value(&self) -> Value {
+                fn to_value(&self) -> Value<'_> {
                     Value::from(self.get())
                 }
             }
@@ -373,6 +373,35 @@ impl_value_to_primitive![
     to_bool -> bool,
 ];
 
+#[cfg(feature = "std")]
+macro_rules! impl_to_value_from_display {
+    ($($into_ty:ty,)*) => {
+        $(
+            impl ToValue for $into_ty {
+                fn to_value(&self) -> Value<'_> {
+                    Value::from_display(self)
+                }
+            }
+
+            impl<'v> From<&'v $into_ty> for Value<'v> {
+                fn from(value: &'v $into_ty) -> Self {
+                    Value::from_display(value)
+                }
+            }
+        )*
+    };
+}
+
+#[cfg(feature = "std")]
+impl_to_value_from_display![
+    std::net::IpAddr,
+    std::net::Ipv4Addr,
+    std::net::Ipv6Addr,
+    std::net::SocketAddr,
+    std::net::SocketAddrV4,
+    std::net::SocketAddrV6,
+];
+
 impl<'v> Value<'v> {
     /// Try to convert this value into an error.
     #[cfg(feature = "kv_std")]
@@ -398,7 +427,7 @@ mod std_support {
     where
         T: ToValue + ?Sized,
     {
-        fn to_value(&self) -> Value {
+        fn to_value(&self) -> Value<'_> {
             (**self).to_value()
         }
     }
@@ -407,7 +436,7 @@ mod std_support {
     where
         T: ToValue + ?Sized,
     {
-        fn to_value(&self) -> Value {
+        fn to_value(&self) -> Value<'_> {
             (**self).to_value()
         }
     }
@@ -416,19 +445,19 @@ mod std_support {
     where
         T: ToValue + ?Sized,
     {
-        fn to_value(&self) -> Value {
+        fn to_value(&self) -> Value<'_> {
             (**self).to_value()
         }
     }
 
     impl ToValue for String {
-        fn to_value(&self) -> Value {
+        fn to_value(&self) -> Value<'_> {
             Value::from(&**self)
         }
     }
 
     impl<'v> ToValue for Cow<'v, str> {
-        fn to_value(&self) -> Value {
+        fn to_value(&self) -> Value<'_> {
             Value::from(&**self)
         }
     }
@@ -449,7 +478,7 @@ mod std_support {
 
 /// A visitor for a [`Value`].
 ///
-/// Also see [`Value`'s documentation on seralization]. Value visitors are a simple alternative
+/// Also see [`Value`'s documentation on serialization]. Value visitors are a simple alternative
 /// to a more fully-featured serialization framework like `serde` or `sval`. A value visitor
 /// can differentiate primitive types through methods like [`VisitValue::visit_bool`] and
 /// [`VisitValue::visit_str`], but more complex types like maps and sequences
@@ -458,7 +487,7 @@ mod std_support {
 /// If you're trying to serialize a value to a format like JSON, you can use either `serde`
 /// or `sval` directly with the value. You don't need a visitor.
 ///
-/// [`Value`'s documentation on seralization]: Value#serialization
+/// [`Value`'s documentation on serialization]: Value#serialization
 pub trait VisitValue<'v> {
     /// Visit a `Value`.
     ///
@@ -535,6 +564,7 @@ pub trait VisitValue<'v> {
     }
 }
 
+#[allow(clippy::needless_lifetimes)] // Not needless.
 impl<'a, 'v, T: ?Sized> VisitValue<'v> for &'a mut T
 where
     T: VisitValue<'v>,
@@ -735,6 +765,7 @@ pub(in crate::kv) mod inner {
 
     #[derive(Clone)]
     pub enum Inner<'v> {
+        // NOTE: New variants can't be added here; see the module-level doc above
         None,
         Bool(bool),
         Str(&'v str),
@@ -998,7 +1029,7 @@ pub(in crate::kv) mod inner {
         }
 
         #[cfg(test)]
-        pub fn to_test_token(&self) -> Token {
+        pub fn to_test_token(&self) -> Token<'_> {
             match self {
                 Inner::None => Token::None,
                 Inner::Bool(v) => Token::Bool(*v),
@@ -1083,7 +1114,7 @@ impl<'v> Value<'v> {
     #[deprecated(note = "use `from_serde` instead")]
     pub fn capture_serde<T>(value: &'v T) -> Self
     where
-        T: serde::Serialize + 'static,
+        T: serde_core::Serialize + 'static,
     {
         Value::from_serde(value)
     }
@@ -1175,7 +1206,10 @@ macro_rules! as_sval {
 pub(crate) mod tests {
     use super::*;
 
+    // For new `ToValue` implementations, also add a test to the `tests/macros` file
+
     impl<'v> Value<'v> {
+        #[allow(mismatched_lifetime_syntaxes)]
         pub(crate) fn to_token(&self) -> inner::Token {
             self.inner.to_test_token()
         }
@@ -1240,6 +1274,75 @@ pub(crate) mod tests {
         assert_eq!(Some(true).to_value().to_string(), "true");
         assert_eq!(().to_value().to_string(), "None");
         assert_eq!(None::<bool>.to_value().to_string(), "None");
+    }
+
+    #[test]
+    #[cfg(feature = "std")]
+    fn test_net_to_value_display() {
+        use std::str::FromStr;
+
+        assert_eq!(
+            std::net::Ipv4Addr::new(192, 168, 10, 100)
+                .to_value()
+                .to_string(),
+            "192.168.10.100"
+        );
+        assert_eq!(
+            std::net::Ipv6Addr::from_str("f33c::1")
+                .unwrap()
+                .to_value()
+                .to_string(),
+            "f33c::1"
+        );
+        assert_eq!(
+            std::net::IpAddr::V4(std::net::Ipv4Addr::new(192, 168, 10, 100))
+                .to_value()
+                .to_string(),
+            "192.168.10.100"
+        );
+        assert_eq!(
+            std::net::IpAddr::V6(std::net::Ipv6Addr::from_str("f33c::1").unwrap())
+                .to_value()
+                .to_string(),
+            "f33c::1"
+        );
+        assert_eq!(
+            std::net::SocketAddrV4::new(std::net::Ipv4Addr::new(192, 168, 10, 100), 12345)
+                .to_value()
+                .to_string(),
+            "192.168.10.100:12345"
+        );
+        assert_eq!(
+            std::net::SocketAddrV6::new(
+                std::net::Ipv6Addr::from_str("f33c::1").unwrap(),
+                12345,
+                0,
+                0
+            )
+            .to_value()
+            .to_string(),
+            "[f33c::1]:12345"
+        );
+        assert_eq!(
+            std::net::SocketAddr::V4(std::net::SocketAddrV4::new(
+                std::net::Ipv4Addr::new(192, 168, 10, 100),
+                12345
+            ))
+            .to_value()
+            .to_string(),
+            "192.168.10.100:12345"
+        );
+        assert_eq!(
+            std::net::SocketAddr::V6(std::net::SocketAddrV6::new(
+                std::net::Ipv6Addr::from_str("f33c::1").unwrap(),
+                12345,
+                0,
+                0
+            ))
+            .to_value()
+            .to_string(),
+            "[f33c::1]:12345"
+        );
     }
 
     #[test]

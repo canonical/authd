@@ -10,9 +10,10 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
+edition = "2024"
+rust-version = "1.88"
 name = "tonic-prost-build"
-version = "0.14.2"
+version = "0.14.6"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 build = false
 autolib = false
@@ -37,6 +38,7 @@ categories = [
 ]
 license = "MIT"
 repository = "https://github.com/hyperium/tonic"
+resolver = "2"
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
@@ -79,9 +81,9 @@ version = "2.0"
 version = "3.0"
 
 [dependencies.tonic-build]
-version = "0.14.0"
+version = "0.14.6"
 default-features = false
 
 [dev-dependencies.tonic]
-version = "0.14.0"
+version = "0.14.6"
 default-features = false

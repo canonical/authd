@@ -1,6 +1,6 @@
 //! Hackery to work around not being able to use ADTs in const generics on stable.
 
-use core::num::NonZeroU8;
+use core::num::NonZero;
 
 #[cfg(feature = "formatting")]
 use super::Iso8601;
@@ -126,13 +126,13 @@ impl Config {
         };
         let time_precision = match bytes[4] {
             0 => TimePrecision::Hour {
-                decimal_digits: NonZeroU8::new(bytes[5]),
+                decimal_digits: NonZero::new(bytes[5]),
             },
             1 => TimePrecision::Minute {
-                decimal_digits: NonZeroU8::new(bytes[5]),
+                decimal_digits: NonZero::new(bytes[5]),
             },
             2 => TimePrecision::Second {
-                decimal_digits: NonZeroU8::new(bytes[5]),
+                decimal_digits: NonZero::new(bytes[5]),
             },
             _ => panic!("invalid configuration"),
         };
@@ -145,7 +145,9 @@ impl Config {
         // No `for` loops in `const fn`.
         let mut idx = 7; // first unused byte
         while idx < EncodedConfig::BITS as usize / 8 {
-            assert!(bytes[idx] == 0, "invalid configuration");
+            if bytes[idx] != 0 {
+                panic!("invalid configuration");
+            }
             idx += 1;
         }
 
@@ -213,13 +215,13 @@ mod tests {
             decimal_digits: None,
         }));
         assert_roundtrip!(Config::DEFAULT.set_time_precision(TimePrecision::Hour {
-            decimal_digits: NonZeroU8::new(1),
+            decimal_digits: NonZero::new(1),
         }));
         assert_roundtrip!(Config::DEFAULT.set_time_precision(TimePrecision::Minute {
-            decimal_digits: NonZeroU8::new(1),
+            decimal_digits: NonZero::new(1),
         }));
         assert_roundtrip!(Config::DEFAULT.set_time_precision(TimePrecision::Second {
-            decimal_digits: NonZeroU8::new(1),
+            decimal_digits: NonZero::new(1),
         }));
         assert_roundtrip!(Config::DEFAULT.set_offset_precision(OffsetPrecision::Hour));
         assert_roundtrip!(Config::DEFAULT.set_offset_precision(OffsetPrecision::Minute));
@@ -227,10 +229,12 @@ mod tests {
 
     macro_rules! assert_decode_fail {
         ($encoding:expr) => {
-            assert!(std::panic::catch_unwind(|| {
-                Config::decode($encoding);
-            })
-            .is_err());
+            assert!(
+                std::panic::catch_unwind(|| {
+                    Config::decode($encoding);
+                })
+                .is_err()
+            );
         };
     }
 

@@ -186,13 +186,7 @@ impl Prioritize {
 
             // `try_assign_capacity` will queue the stream to `pending_capacity` if the capcaity
             // cannot be assigned at the time it is called.
-            //
-            // Streams over the max concurrent count will still call `send_data` so we should be
-            // careful not to put it into `pending_capacity` as it will starve the connection
-            // capacity for other streams
-            if !stream.is_pending_open {
-                self.try_assign_capacity(stream);
-            }
+            self.try_assign_capacity(stream);
         }
 
         if frame.is_end_stream() {
@@ -414,6 +408,12 @@ impl Prioritize {
 
     /// Request capacity to send data
     fn try_assign_capacity(&mut self, stream: &mut store::Ptr) {
+        // Streams over the max concurrent count should not have capacity assign to avoid starving the connection
+        // capacity for open streams
+        if stream.is_pending_open {
+            return;
+        }
+
         let total_requested = stream.requested_send_capacity;
 
         // Total requested should never go below actual assigned
@@ -442,14 +442,10 @@ impl Prioritize {
             return;
         }
 
-        // If the stream has requested capacity, then it must be in the
-        // streaming state (more data could be sent) or there is buffered data
-        // waiting to be sent.
-        debug_assert!(
-            stream.state.is_send_streaming() || stream.buffered_send_data > 0,
-            "state={:?}",
-            stream.state
-        );
+        // The stream may have been reset or closed since capacity was requested.
+        if !stream.state.is_send_streaming() && stream.buffered_send_data == 0 {
+            return;
+        }
 
         // The amount of currently available capacity on the connection
         let conn_available = self.flow.available().as_size();

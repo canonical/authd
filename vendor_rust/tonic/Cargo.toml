@@ -10,10 +10,10 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
-rust-version = "1.75"
+edition = "2024"
+rust-version = "1.88"
 name = "tonic"
-version = "0.14.2"
+version = "0.14.6"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 build = false
 exclude = ["benches-disabled"]
@@ -41,6 +41,10 @@ categories = [
 ]
 license = "MIT"
 repository = "https://github.com/hyperium/tonic"
+resolver = "2"
+
+[package.metadata.docs.rs]
+all-features = true
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
@@ -58,14 +62,12 @@ allowed_external_types = [
     "axum::routing::Router",
     "futures_core::stream::Stream",
     "h2::error::Error",
+    "rustls::verify::ServerCertVerifier",
     "tower_service::Service",
     "tower_layer::Layer",
     "tower_layer::stack::Stack",
     "tower_layer::identity::Identity",
 ]
-
-[package.metadata.docs.rs]
-all-features = true
 
 [features]
 _tls-any = [
@@ -179,7 +181,7 @@ version = "0.4"
 optional = true
 
 [dependencies.http]
-version = "1"
+version = "1.1.0"
 
 [dependencies.http-body]
 version = "1"
@@ -200,7 +202,7 @@ version = "0.5"
 optional = true
 
 [dependencies.hyper-util]
-version = "0.1.4"
+version = "0.1.11"
 features = ["tokio"]
 optional = true
 
@@ -279,6 +281,7 @@ version = "1.0"
 features = [
     "rt-multi-thread",
     "macros",
+    "test-util",
 ]
 
 [dev-dependencies.tower]

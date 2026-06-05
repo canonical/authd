@@ -508,6 +508,22 @@ bitflags! {
     }
 }
 
+#[cfg(target_os = "redox")]
+bitflags! {
+    /// `RENAME_*` constants for use with [`renameat_with`].
+    ///
+    /// [`renameat_with`]: crate::fs::renameat_with
+    #[repr(transparent)]
+    #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+    pub struct RenameFlags: ffi::c_uint {
+        /// `RENAME_NOREPLACE`
+        const NOREPLACE = bitcast!(c::RENAME_NOREPLACE);
+
+        /// <https://docs.rs/bitflags/*/bitflags/#externally-defined-flags>
+        const _ = !0;
+    }
+}
+
 #[cfg(apple)]
 bitflags! {
     /// `RENAME_*` constants for use with [`renameat_with`].
@@ -736,6 +752,9 @@ bitflags! {
         /// `F_SEAL_FUTURE_WRITE` (since Linux 5.1)
         #[cfg(linux_kernel)]
         const FUTURE_WRITE = bitcast!(c::F_SEAL_FUTURE_WRITE);
+        /// `F_SEAL_EXEC` (since Linux 6.3)
+        #[cfg(linux_kernel)]
+        const EXEC = bitcast!(c::F_SEAL_EXEC);
 
         /// <https://docs.rs/bitflags/*/bitflags/#externally-defined-flags>
         const _ = !0;
@@ -842,7 +861,7 @@ bitflags! {
     }
 }
 
-#[cfg(not(any(target_os = "haiku", target_os = "redox", target_os = "wasi")))]
+#[cfg(not(target_os = "wasi"))]
 bitflags! {
     /// `ST_*` constants for use with [`StatVfs`].
     #[repr(transparent)]
@@ -874,11 +893,11 @@ bitflags! {
         const NOEXEC = c::ST_NOEXEC as u64;
 
         /// `ST_NOSUID`
-        #[cfg(not(any(target_os = "espidf", target_os = "horizon", target_os = "vita")))]
+        #[cfg(not(any(target_os = "espidf", target_os = "haiku", target_os = "horizon", target_os = "redox", target_os = "vita")))]
         const NOSUID = c::ST_NOSUID as u64;
 
         /// `ST_RDONLY`
-        #[cfg(not(any(target_os = "espidf", target_os = "horizon", target_os = "vita")))]
+        #[cfg(not(any(target_os = "espidf", target_os = "haiku", target_os = "horizon", target_os = "redox", target_os = "vita")))]
         const RDONLY = c::ST_RDONLY as u64;
 
         /// `ST_RELATIME`
@@ -1074,7 +1093,7 @@ pub type Fsid = c::fsid_t;
 ///
 /// [`statvfs`]: crate::fs::statvfs
 /// [`fstatvfs`]: crate::fs::fstatvfs
-#[cfg(not(any(target_os = "haiku", target_os = "redox", target_os = "wasi")))]
+#[cfg(not(target_os = "wasi"))]
 #[allow(missing_docs)]
 pub struct StatVfs {
     pub f_bsize: u64,

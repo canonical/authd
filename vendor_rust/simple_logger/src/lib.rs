@@ -548,6 +548,11 @@ pub fn init_utc() -> Result<(), SetLoggerError> {
 /// Initialise the logger with the `RUST_LOG` environment variable.
 ///
 /// Log messages will be filtered based on the `RUST_LOG` environment variable.
+///
+/// This will use the default level ([`LevelFilter::Trace`]) if the `RUST_LOG`
+/// environment variable is not set or can't be parsed as a standard log level
+/// (see [`LevelFilter::from_str`] and [`log::LOG_LEVEL_NAMES`] for valid
+/// names).
 pub fn init_with_env() -> Result<(), SetLoggerError> {
     SimpleLogger::new().env().init()
 }
@@ -689,7 +694,7 @@ mod test {
         assert_eq!(logger.enabled(&create_log("serde_json", Level::Trace)), true);
     }
 
-    fn create_log(name: &str, level: Level) -> Metadata {
+    fn create_log(name: &str, level: Level) -> Metadata<'_> {
         let mut builder = Metadata::builder();
         builder.level(level);
         builder.target(name);

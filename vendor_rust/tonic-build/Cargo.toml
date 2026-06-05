@@ -10,10 +10,10 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
-rust-version = "1.75"
+edition = "2024"
+rust-version = "1.88"
 name = "tonic-build"
-version = "0.14.2"
+version = "0.14.6"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 build = false
 autolib = false
@@ -39,12 +39,13 @@ categories = [
 ]
 license = "MIT"
 repository = "https://github.com/hyperium/tonic"
-
-[package.metadata.cargo_check_external_types]
-allowed_external_types = ["proc_macro2::*"]
+resolver = "2"
 
 [package.metadata.docs.rs]
 all-features = true
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = ["proc_macro2::*"]
 
 [features]
 default = ["transport"]

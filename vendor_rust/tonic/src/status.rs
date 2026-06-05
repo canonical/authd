@@ -1,12 +1,12 @@
-use crate::metadata::MetadataMap;
 use crate::metadata::GRPC_CONTENT_TYPE;
+use crate::metadata::MetadataMap;
 use base64::Engine as _;
 use bytes::Bytes;
 use http::{
-    header::{HeaderMap, HeaderValue},
     HeaderName,
+    header::{HeaderMap, HeaderValue},
 };
-use percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
+use percent_encoding::{AsciiSet, CONTROLS, percent_decode, percent_encode};
 use std::{borrow::Cow, error::Error, fmt, sync::Arc};
 use tracing::{debug, trace, warn};
 
@@ -273,7 +273,7 @@ impl Status {
     ///
     /// Unlike `InvalidArgument`, this error indicates a problem that may be
     /// fixed if the system state changes. For example, a 32-bit file system will
-    /// generate `InvalidArgument if asked to read at an offset that is not in the
+    /// generate `InvalidArgument` if asked to read at an offset that is not in the
     /// range [0,2^32-1], but it will generate `OutOfRange` if asked to read from
     /// an offset past the current file size.
     ///
@@ -393,6 +393,8 @@ impl Status {
     fn code_from_h2(err: &h2::Error) -> Code {
         // See https://github.com/grpc/grpc/blob/3977c30/doc/PROTOCOL-HTTP2.md#errors
         match err.reason() {
+            // NO_ERROR on a RST_STREAM means the peer reset the stream without a gRPC status.
+            // Per the spec this is still a protocol violation and must be mapped to INTERNAL.
             Some(h2::Reason::NO_ERROR)
             | Some(h2::Reason::PROTOCOL_ERROR)
             | Some(h2::Reason::INTERNAL_ERROR)
@@ -748,14 +750,16 @@ impl From<std::io::Error> for Status {
 
 impl fmt::Display for Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "status: '{}'", self.code())?;
+        write!(f, "code: '{}'", self.code())?;
 
         if !self.message().is_empty() {
-            write!(f, ", self: {:?}", self.message())?;
+            write!(f, ", message: {:?}", self.message())?;
         }
         // We intentionally omit `self.details` since it's binary data, not fit for human eyes.
-        if !self.metadata().is_empty() {
-            write!(f, ", metadata: {:?}", self.metadata().as_ref())?;
+        // Additionally, `self.metadata` contains low-level details that only belong in the `Debug`
+        // impl.
+        if let Some(source) = self.source() {
+            write!(f, ", source: {source:?}")?;
         }
         Ok(())
     }
@@ -794,13 +798,37 @@ pub(crate) fn infer_grpc_status(
         | http::StatusCode::BAD_GATEWAY
         | http::StatusCode::SERVICE_UNAVAILABLE
         | http::StatusCode::GATEWAY_TIMEOUT => Code::Unavailable,
-        // We got a 200 but no trailers, we can infer that this request is finished.
+        // We got a 200 but no grpc-status trailer.
         //
-        // This can happen when a streaming response sends two Status but
-        // gRPC requires that we end the stream after the first status.
+        // Per the gRPC-over-HTTP/2 protocol, grpc-status MUST be present in Trailers
+        // even when the HTTP status is 200 OK. A clean end-of-stream without a
+        // grpc-status trailer is therefore a protocol violation.
         //
-        // https://github.com/hyperium/tonic/issues/681
-        http::StatusCode::OK => return Err(None),
+        // Tonic attempts to follow the RST_STREAM error-code mapping defined in the
+        // gRPC-over-HTTP/2 spec (see `code_from_h2` and the h2 error handling in
+        // `from_hyper_error`):
+        //   https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#errors
+        //
+        // However, hyper intentionally converts RST_STREAM frames with reason NO_ERROR
+        // or CANCEL into a clean end-of-stream (Poll::Ready(None)) instead of surfacing
+        // them as errors — see hyper's `Incoming::poll_frame` for h2 bodies. By the time
+        // tonic observes the body termination, the h2 reset reason has been discarded and
+        // is no longer accessible. Tonic therefore has no way to distinguish a legitimate
+        // graceful close from a proxy/load-balancer reset (e.g. an Envoy timeout that
+        // issues RST_STREAM(NO_ERROR)) via the h2 error path.
+        //
+        // The only signal available at this point is the absence of a grpc-status
+        // trailer on an otherwise-successful (HTTP 200) stream. We map this to Unknown,
+        // which the gRPC spec defines as the appropriate code when a final status is
+        // absent or indeterminate. This matches the behaviour of grpc-go:
+        //   https://github.com/grpc/grpc-go/pull/8702
+        //
+        // https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#responses
+        http::StatusCode::OK => {
+            return Err(Some(Status::unknown(
+                "protocol error: missing grpc-status trailer, stream was terminated without a final status (possible truncation by a proxy or load balancer)",
+            )));
+        }
         _ => Code::Unknown,
     };
 
@@ -1056,8 +1084,8 @@ mod tests {
 /// Timeouts can be configured either with [`Endpoint::timeout`], [`Server::timeout`], or by
 /// setting the [`grpc-timeout` metadata value][spec].
 ///
-/// [`Endpoint::timeout`]: crate::transport::server::Server::timeout
-/// [`Server::timeout`]: crate::transport::channel::Endpoint::timeout
+/// [`Endpoint::timeout`]: crate::transport::channel::Endpoint::timeout
+/// [`Server::timeout`]: crate::transport::server::Server::timeout
 /// [spec]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
 #[derive(Debug)]
 pub struct TimeoutExpired(pub ());

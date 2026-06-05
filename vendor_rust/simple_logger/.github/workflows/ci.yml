@@ -26,7 +26,7 @@ jobs:
   rust-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -67,7 +67,7 @@ jobs:
             features: "colors,threads,timestamps,nightly"
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ matrix.toolchain }}
@@ -81,10 +81,15 @@ jobs:
     needs:
       - rust-lint
       - rust-test
+    environment: release
+    permissions:
+      id-token: write
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-      - run: cargo publish --token ${{ secrets.CRATES_TOKEN }}
+      - id: checkout
+        uses: actions/checkout@v5
+      - id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+      - id: publish
+        run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: "${{ steps.auth.outputs.token }}"

@@ -5,11 +5,11 @@ pub type speed_t = c_uint;
 pub type tcflag_t = c_uint;
 pub type clockid_t = c_int;
 pub type timer_t = *mut c_void;
+pub type useconds_t = u32;
 pub type key_t = c_int;
 pub type id_t = c_uint;
 
-missing! {
-    #[cfg_attr(feature = "extra_traits", derive(Debug))]
+extern_ty! {
     pub enum timezone {}
 }
 
@@ -64,7 +64,7 @@ s! {
         pub ai_protocol: c_int,
         pub ai_addrlen: socklen_t,
 
-        #[cfg(any(target_os = "linux", target_os = "emscripten"))]
+        #[cfg(not(target_os = "android"))]
         pub ai_addr: *mut crate::sockaddr,
 
         pub ai_canonname: *mut c_char,
@@ -103,16 +103,9 @@ s! {
         pub tm_zone: *const c_char,
     }
 
+    #[cfg(not(any(target_env = "musl", target_os = "emscripten", target_env = "ohos")))]
     pub struct sched_param {
         pub sched_priority: c_int,
-        #[cfg(any(target_env = "musl", target_os = "emscripten", target_env = "ohos"))]
-        pub sched_ss_low_priority: c_int,
-        #[cfg(any(target_env = "musl", target_os = "emscripten", target_env = "ohos"))]
-        pub sched_ss_repl_period: crate::timespec,
-        #[cfg(any(target_env = "musl", target_os = "emscripten", target_env = "ohos"))]
-        pub sched_ss_init_budget: crate::timespec,
-        #[cfg(any(target_env = "musl", target_os = "emscripten", target_env = "ohos"))]
-        pub sched_ss_max_repl: c_int,
     }
 
     pub struct Dl_info {
@@ -205,10 +198,38 @@ s! {
         pub msg_hdr: crate::msghdr,
         pub msg_len: c_uint,
     }
+
+    pub struct sockaddr_un {
+        pub sun_family: sa_family_t,
+        pub sun_path: [c_char; 108],
+    }
+
+    pub struct sockaddr_storage {
+        pub ss_family: sa_family_t,
+        #[cfg(target_pointer_width = "32")]
+        __ss_pad2: Padding<[u8; 128 - 2 - 4]>,
+        #[cfg(target_pointer_width = "64")]
+        __ss_pad2: Padding<[u8; 128 - 2 - 8]>,
+        __ss_align: size_t,
+    }
+
+    pub struct utsname {
+        pub sysname: [c_char; 65],
+        pub nodename: [c_char; 65],
+        pub release: [c_char; 65],
+        pub version: [c_char; 65],
+        pub machine: [c_char; 65],
+        pub domainname: [c_char; 65],
+    }
+
+    pub struct if_nameindex {
+        pub if_index: c_uint,
+        pub if_name: *mut c_char,
+    }
 }
 
 cfg_if! {
-    if #[cfg(not(target_os = "emscripten"))] {
+    if #[cfg(not(any(target_os = "emscripten", target_os = "l4re")))] {
         s! {
             pub struct file_clone_range {
                 pub src_fd: crate::__s64,
@@ -248,7 +269,7 @@ cfg_if! {
                 pub stx_uid: crate::__u32,
                 pub stx_gid: crate::__u32,
                 pub stx_mode: crate::__u16,
-                __statx_pad1: [crate::__u16; 1],
+                __statx_pad1: Padding<[crate::__u16; 1]>,
                 pub stx_ino: crate::__u64,
                 pub stx_size: crate::__u64,
                 pub stx_blocks: crate::__u64,
@@ -264,13 +285,13 @@ cfg_if! {
                 pub stx_mnt_id: crate::__u64,
                 pub stx_dio_mem_align: crate::__u32,
                 pub stx_dio_offset_align: crate::__u32,
-                __statx_pad3: [crate::__u64; 12],
+                __statx_pad3: Padding<[crate::__u64; 12]>,
             }
 
             pub struct statx_timestamp {
                 pub tv_sec: crate::__s64,
                 pub tv_nsec: crate::__u32,
-                __statx_timestamp_pad1: [crate::__s32; 1],
+                __statx_timestamp_pad1: Padding<[crate::__s32; 1]>,
             }
         }
     }
@@ -278,42 +299,12 @@ cfg_if! {
 
 s_no_extra_traits! {
     #[cfg_attr(
-        any(
-            all(
-                target_arch = "x86",
-                not(target_env = "musl"),
-                not(target_os = "android")
-            ),
-            target_arch = "x86_64"
-        ),
+        any(target_arch = "x86_64", all(target_arch = "x86", target_env = "gnu")),
         repr(packed)
     )]
     pub struct epoll_event {
         pub events: u32,
         pub u64: u64,
-    }
-
-    pub struct sockaddr_un {
-        pub sun_family: sa_family_t,
-        pub sun_path: [c_char; 108],
-    }
-
-    pub struct sockaddr_storage {
-        pub ss_family: sa_family_t,
-        #[cfg(target_pointer_width = "32")]
-        __ss_pad2: [u8; 128 - 2 - 4],
-        #[cfg(target_pointer_width = "64")]
-        __ss_pad2: [u8; 128 - 2 - 8],
-        __ss_align: size_t,
-    }
-
-    pub struct utsname {
-        pub sysname: [c_char; 65],
-        pub nodename: [c_char; 65],
-        pub release: [c_char; 65],
-        pub version: [c_char; 65],
-        pub machine: [c_char; 65],
-        pub domainname: [c_char; 65],
     }
 
     pub struct sigevent {
@@ -324,14 +315,14 @@ s_no_extra_traits! {
         // the most useful member
         pub sigev_notify_thread_id: c_int,
         #[cfg(target_pointer_width = "64")]
-        __unused1: [c_int; 11],
+        __unused1: Padding<[c_int; 11]>,
         #[cfg(target_pointer_width = "32")]
-        __unused1: [c_int; 12],
+        __unused1: Padding<[c_int; 12]>,
     }
 }
 
 cfg_if! {
-    if #[cfg(feature = "extra_traits")] {
+    if #[cfg(all(feature = "extra_traits", not(target_os = "l4re")))] {
         impl PartialEq for epoll_event {
             fn eq(&self, other: &epoll_event) -> bool {
                 self.events == other.events && self.u64 == other.u64
@@ -344,91 +335,6 @@ cfg_if! {
                 let u64 = self.u64;
                 events.hash(state);
                 u64.hash(state);
-            }
-        }
-
-        impl PartialEq for sockaddr_un {
-            fn eq(&self, other: &sockaddr_un) -> bool {
-                self.sun_family == other.sun_family
-                    && self
-                        .sun_path
-                        .iter()
-                        .zip(other.sun_path.iter())
-                        .all(|(a, b)| a == b)
-            }
-        }
-        impl Eq for sockaddr_un {}
-        impl hash::Hash for sockaddr_un {
-            fn hash<H: hash::Hasher>(&self, state: &mut H) {
-                self.sun_family.hash(state);
-                self.sun_path.hash(state);
-            }
-        }
-
-        impl PartialEq for sockaddr_storage {
-            fn eq(&self, other: &sockaddr_storage) -> bool {
-                self.ss_family == other.ss_family
-                    && self
-                        .__ss_pad2
-                        .iter()
-                        .zip(other.__ss_pad2.iter())
-                        .all(|(a, b)| a == b)
-            }
-        }
-
-        impl Eq for sockaddr_storage {}
-
-        impl hash::Hash for sockaddr_storage {
-            fn hash<H: hash::Hasher>(&self, state: &mut H) {
-                self.ss_family.hash(state);
-                self.__ss_pad2.hash(state);
-            }
-        }
-
-        impl PartialEq for utsname {
-            fn eq(&self, other: &utsname) -> bool {
-                self.sysname
-                    .iter()
-                    .zip(other.sysname.iter())
-                    .all(|(a, b)| a == b)
-                    && self
-                        .nodename
-                        .iter()
-                        .zip(other.nodename.iter())
-                        .all(|(a, b)| a == b)
-                    && self
-                        .release
-                        .iter()
-                        .zip(other.release.iter())
-                        .all(|(a, b)| a == b)
-                    && self
-                        .version
-                        .iter()
-                        .zip(other.version.iter())
-                        .all(|(a, b)| a == b)
-                    && self
-                        .machine
-                        .iter()
-                        .zip(other.machine.iter())
-                        .all(|(a, b)| a == b)
-                    && self
-                        .domainname
-                        .iter()
-                        .zip(other.domainname.iter())
-                        .all(|(a, b)| a == b)
-            }
-        }
-
-        impl Eq for utsname {}
-
-        impl hash::Hash for utsname {
-            fn hash<H: hash::Hasher>(&self, state: &mut H) {
-                self.sysname.hash(state);
-                self.nodename.hash(state);
-                self.release.hash(state);
-                self.version.hash(state);
-                self.machine.hash(state);
-                self.domainname.hash(state);
             }
         }
 
@@ -548,9 +454,6 @@ pub const F_OK: c_int = 0;
 pub const R_OK: c_int = 4;
 pub const W_OK: c_int = 2;
 pub const X_OK: c_int = 1;
-pub const STDIN_FILENO: c_int = 0;
-pub const STDOUT_FILENO: c_int = 1;
-pub const STDERR_FILENO: c_int = 2;
 pub const SIGHUP: c_int = 1;
 pub const SIGINT: c_int = 2;
 pub const SIGQUIT: c_int = 3;
@@ -568,7 +471,9 @@ pub const PROT_READ: c_int = 1;
 pub const PROT_WRITE: c_int = 2;
 pub const PROT_EXEC: c_int = 4;
 
+#[cfg(not(target_os = "l4re"))]
 pub const XATTR_CREATE: c_int = 0x1;
+#[cfg(not(target_os = "l4re"))]
 pub const XATTR_REPLACE: c_int = 0x2;
 
 cfg_if! {
@@ -634,6 +539,7 @@ pub const MS_SYNCHRONOUS: c_ulong = 0x10;
 pub const MS_REMOUNT: c_ulong = 0x20;
 pub const MS_MANDLOCK: c_ulong = 0x40;
 pub const MS_DIRSYNC: c_ulong = 0x80;
+pub const MS_NOSYMFOLLOW: c_ulong = 0x100;
 pub const MS_NOATIME: c_ulong = 0x0400;
 pub const MS_NODIRATIME: c_ulong = 0x0800;
 pub const MS_BIND: c_ulong = 0x1000;
@@ -679,11 +585,13 @@ pub const MADV_DONTDUMP: c_int = 16;
 pub const MADV_DODUMP: c_int = 17;
 pub const MADV_WIPEONFORK: c_int = 18;
 pub const MADV_KEEPONFORK: c_int = 19;
+#[cfg(not(target_os = "l4re"))]
 pub const MADV_COLD: c_int = 20;
+#[cfg(not(target_os = "l4re"))]
 pub const MADV_PAGEOUT: c_int = 21;
 pub const MADV_HWPOISON: c_int = 100;
 cfg_if! {
-    if #[cfg(not(target_os = "emscripten"))] {
+    if #[cfg(not(any(target_os = "emscripten", target_os = "l4re")))] {
         pub const MADV_POPULATE_READ: c_int = 22;
         pub const MADV_POPULATE_WRITE: c_int = 23;
         pub const MADV_DONTNEED_LOCKED: c_int = 24;
@@ -852,8 +760,11 @@ pub const IP_TRANSPARENT: c_int = 19;
 pub const IP_ORIGDSTADDR: c_int = 20;
 pub const IP_RECVORIGDSTADDR: c_int = IP_ORIGDSTADDR;
 pub const IP_MINTTL: c_int = 21;
+#[cfg(not(target_env = "uclibc"))]
 pub const IP_NODEFRAG: c_int = 22;
+#[cfg(not(target_env = "uclibc"))]
 pub const IP_CHECKSUM: c_int = 23;
+#[cfg(not(target_env = "uclibc"))]
 pub const IP_BIND_ADDRESS_NO_PORT: c_int = 24;
 pub const IP_MULTICAST_IF: c_int = 32;
 pub const IP_MULTICAST_TTL: c_int = 33;
@@ -875,7 +786,9 @@ pub const IP_PMTUDISC_DONT: c_int = 0;
 pub const IP_PMTUDISC_WANT: c_int = 1;
 pub const IP_PMTUDISC_DO: c_int = 2;
 pub const IP_PMTUDISC_PROBE: c_int = 3;
+#[cfg(not(target_env = "uclibc"))]
 pub const IP_PMTUDISC_INTERFACE: c_int = 4;
+#[cfg(not(target_env = "uclibc"))]
 pub const IP_PMTUDISC_OMIT: c_int = 5;
 
 // IPPROTO_IP defined in src/unix/mod.rs
@@ -932,8 +845,10 @@ pub const IPPROTO_RAW: c_int = 255;
 pub const IPPROTO_BEETPH: c_int = 94;
 pub const IPPROTO_MPLS: c_int = 137;
 /// Multipath TCP
+#[cfg(not(target_os = "l4re"))]
 pub const IPPROTO_MPTCP: c_int = 262;
 /// Ethernet-within-IPv6 encapsulation.
+#[cfg(not(target_os = "l4re"))]
 pub const IPPROTO_ETHERNET: c_int = 143;
 
 pub const MCAST_EXCLUDE: c_int = 0;
@@ -983,25 +898,32 @@ pub const IPV6_RECVRTHDR: c_int = 56;
 pub const IPV6_RTHDR: c_int = 57;
 pub const IPV6_RECVDSTOPTS: c_int = 58;
 pub const IPV6_DSTOPTS: c_int = 59;
+#[cfg(not(target_env = "uclibc"))]
 pub const IPV6_RECVPATHMTU: c_int = 60;
+#[cfg(not(target_env = "uclibc"))]
 pub const IPV6_PATHMTU: c_int = 61;
+#[cfg(not(target_env = "uclibc"))]
 pub const IPV6_DONTFRAG: c_int = 62;
 pub const IPV6_RECVTCLASS: c_int = 66;
 pub const IPV6_TCLASS: c_int = 67;
-pub const IPV6_AUTOFLOWLABEL: c_int = 70;
-pub const IPV6_ADDR_PREFERENCES: c_int = 72;
-pub const IPV6_MINHOPCOUNT: c_int = 73;
-pub const IPV6_ORIGDSTADDR: c_int = 74;
-pub const IPV6_RECVORIGDSTADDR: c_int = IPV6_ORIGDSTADDR;
-pub const IPV6_TRANSPARENT: c_int = 75;
-pub const IPV6_UNICAST_IF: c_int = 76;
-pub const IPV6_PREFER_SRC_TMP: c_int = 0x0001;
-pub const IPV6_PREFER_SRC_PUBLIC: c_int = 0x0002;
-pub const IPV6_PREFER_SRC_PUBTMP_DEFAULT: c_int = 0x0100;
-pub const IPV6_PREFER_SRC_COA: c_int = 0x0004;
-pub const IPV6_PREFER_SRC_HOME: c_int = 0x0400;
-pub const IPV6_PREFER_SRC_CGA: c_int = 0x0008;
-pub const IPV6_PREFER_SRC_NONCGA: c_int = 0x0800;
+cfg_if! {
+    if #[cfg(not(target_env = "uclibc"))] {
+        pub const IPV6_AUTOFLOWLABEL: c_int = 70;
+        pub const IPV6_ADDR_PREFERENCES: c_int = 72;
+        pub const IPV6_MINHOPCOUNT: c_int = 73;
+        pub const IPV6_ORIGDSTADDR: c_int = 74;
+        pub const IPV6_RECVORIGDSTADDR: c_int = IPV6_ORIGDSTADDR;
+        pub const IPV6_TRANSPARENT: c_int = 75;
+        pub const IPV6_UNICAST_IF: c_int = 76;
+        pub const IPV6_PREFER_SRC_TMP: c_int = 0x0001;
+        pub const IPV6_PREFER_SRC_PUBLIC: c_int = 0x0002;
+        pub const IPV6_PREFER_SRC_PUBTMP_DEFAULT: c_int = 0x0100;
+        pub const IPV6_PREFER_SRC_COA: c_int = 0x0004;
+        pub const IPV6_PREFER_SRC_HOME: c_int = 0x0400;
+        pub const IPV6_PREFER_SRC_CGA: c_int = 0x0008;
+        pub const IPV6_PREFER_SRC_NONCGA: c_int = 0x0800;
+    }
+}
 
 pub const IPV6_PMTUDISC_DONT: c_int = 0;
 pub const IPV6_PMTUDISC_WANT: c_int = 1;
@@ -1079,6 +1001,7 @@ pub const LOCK_UN: c_int = 8;
 pub const SS_ONSTACK: c_int = 1;
 pub const SS_DISABLE: c_int = 2;
 
+pub const NAME_MAX: c_int = 255;
 pub const PATH_MAX: c_int = 4096;
 
 pub const UIO_MAXIOV: c_int = 1024;
@@ -1110,25 +1033,29 @@ pub const MNT_DETACH: c_int = 0x2;
 pub const MNT_EXPIRE: c_int = 0x4;
 pub const UMOUNT_NOFOLLOW: c_int = 0x8;
 
-pub const Q_GETFMT: c_int = 0x800004;
-pub const Q_GETINFO: c_int = 0x800005;
-pub const Q_SETINFO: c_int = 0x800006;
-pub const QIF_BLIMITS: u32 = 1;
-pub const QIF_SPACE: u32 = 2;
-pub const QIF_ILIMITS: u32 = 4;
-pub const QIF_INODES: u32 = 8;
-pub const QIF_BTIME: u32 = 16;
-pub const QIF_ITIME: u32 = 32;
-pub const QIF_LIMITS: u32 = 5;
-pub const QIF_USAGE: u32 = 10;
-pub const QIF_TIMES: u32 = 48;
-pub const QIF_ALL: u32 = 63;
+cfg_if! {
+    if #[cfg(not(target_os = "l4re"))] {
+        pub const Q_GETFMT: c_int = 0x800004;
+        pub const Q_GETINFO: c_int = 0x800005;
+        pub const Q_SETINFO: c_int = 0x800006;
+        pub const QIF_BLIMITS: u32 = 1;
+        pub const QIF_SPACE: u32 = 2;
+        pub const QIF_ILIMITS: u32 = 4;
+        pub const QIF_INODES: u32 = 8;
+        pub const QIF_BTIME: u32 = 16;
+        pub const QIF_ITIME: u32 = 32;
+        pub const QIF_LIMITS: u32 = 5;
+        pub const QIF_USAGE: u32 = 10;
+        pub const QIF_TIMES: u32 = 48;
+        pub const QIF_ALL: u32 = 63;
 
-pub const Q_SYNC: c_int = 0x800001;
-pub const Q_QUOTAON: c_int = 0x800002;
-pub const Q_QUOTAOFF: c_int = 0x800003;
-pub const Q_GETQUOTA: c_int = 0x800007;
-pub const Q_SETQUOTA: c_int = 0x800008;
+        pub const Q_SYNC: c_int = 0x800001;
+        pub const Q_QUOTAON: c_int = 0x800002;
+        pub const Q_QUOTAOFF: c_int = 0x800003;
+        pub const Q_GETQUOTA: c_int = 0x800007;
+        pub const Q_SETQUOTA: c_int = 0x800008;
+    }
+}
 
 pub const TCIOFF: c_int = 2;
 pub const TCION: c_int = 3;
@@ -1186,6 +1113,7 @@ pub const CLONE_CHILD_CLEARTID: c_int = 0x200000;
 pub const CLONE_DETACHED: c_int = 0x400000;
 pub const CLONE_UNTRACED: c_int = 0x800000;
 pub const CLONE_CHILD_SETTID: c_int = 0x01000000;
+#[cfg(not(target_os = "l4re"))]
 pub const CLONE_NEWCGROUP: c_int = 0x02000000;
 pub const CLONE_NEWUTS: c_int = 0x04000000;
 pub const CLONE_NEWIPC: c_int = 0x08000000;
@@ -1201,47 +1129,55 @@ pub const WEXITED: c_int = 0x00000004;
 pub const WCONTINUED: c_int = 0x00000008;
 pub const WNOWAIT: c_int = 0x01000000;
 
-// Options for personality(2).
-pub const ADDR_NO_RANDOMIZE: c_int = 0x0040000;
-pub const MMAP_PAGE_ZERO: c_int = 0x0100000;
-pub const ADDR_COMPAT_LAYOUT: c_int = 0x0200000;
-pub const READ_IMPLIES_EXEC: c_int = 0x0400000;
-pub const ADDR_LIMIT_32BIT: c_int = 0x0800000;
-pub const SHORT_INODE: c_int = 0x1000000;
-pub const WHOLE_SECONDS: c_int = 0x2000000;
-pub const STICKY_TIMEOUTS: c_int = 0x4000000;
-pub const ADDR_LIMIT_3GB: c_int = 0x8000000;
+cfg_if! {
+    if #[cfg(not(target_os = "l4re"))] {
+        // Options for personality(2).
+        pub const ADDR_NO_RANDOMIZE: c_int = 0x0040000;
+        pub const MMAP_PAGE_ZERO: c_int = 0x0100000;
+        pub const ADDR_COMPAT_LAYOUT: c_int = 0x0200000;
+        pub const READ_IMPLIES_EXEC: c_int = 0x0400000;
+        pub const ADDR_LIMIT_32BIT: c_int = 0x0800000;
+        pub const SHORT_INODE: c_int = 0x1000000;
+        pub const WHOLE_SECONDS: c_int = 0x2000000;
+        pub const STICKY_TIMEOUTS: c_int = 0x4000000;
+        pub const ADDR_LIMIT_3GB: c_int = 0x8000000;
 
-// Options set using PTRACE_SETOPTIONS.
-pub const PTRACE_O_TRACESYSGOOD: c_int = 0x00000001;
-pub const PTRACE_O_TRACEFORK: c_int = 0x00000002;
-pub const PTRACE_O_TRACEVFORK: c_int = 0x00000004;
-pub const PTRACE_O_TRACECLONE: c_int = 0x00000008;
-pub const PTRACE_O_TRACEEXEC: c_int = 0x00000010;
-pub const PTRACE_O_TRACEVFORKDONE: c_int = 0x00000020;
-pub const PTRACE_O_TRACEEXIT: c_int = 0x00000040;
-pub const PTRACE_O_TRACESECCOMP: c_int = 0x00000080;
-pub const PTRACE_O_SUSPEND_SECCOMP: c_int = 0x00200000;
-pub const PTRACE_O_EXITKILL: c_int = 0x00100000;
-pub const PTRACE_O_MASK: c_int = 0x003000ff;
+        // Options set using PTRACE_SETOPTIONS.
+        pub const PTRACE_O_TRACESYSGOOD: c_int = 0x00000001;
+        pub const PTRACE_O_TRACEFORK: c_int = 0x00000002;
+        pub const PTRACE_O_TRACEVFORK: c_int = 0x00000004;
+        pub const PTRACE_O_TRACECLONE: c_int = 0x00000008;
+        pub const PTRACE_O_TRACEEXEC: c_int = 0x00000010;
+        pub const PTRACE_O_TRACEVFORKDONE: c_int = 0x00000020;
+        pub const PTRACE_O_TRACEEXIT: c_int = 0x00000040;
+        pub const PTRACE_O_TRACESECCOMP: c_int = 0x00000080;
+        pub const PTRACE_O_SUSPEND_SECCOMP: c_int = 0x00200000;
+        pub const PTRACE_O_EXITKILL: c_int = 0x00100000;
+        pub const PTRACE_O_MASK: c_int = 0x003000ff;
 
-// Wait extended result codes for the above trace options.
-pub const PTRACE_EVENT_FORK: c_int = 1;
-pub const PTRACE_EVENT_VFORK: c_int = 2;
-pub const PTRACE_EVENT_CLONE: c_int = 3;
-pub const PTRACE_EVENT_EXEC: c_int = 4;
-pub const PTRACE_EVENT_VFORK_DONE: c_int = 5;
-pub const PTRACE_EVENT_EXIT: c_int = 6;
-pub const PTRACE_EVENT_SECCOMP: c_int = 7;
+        // Wait extended result codes for the above trace options.
+        pub const PTRACE_EVENT_FORK: c_int = 1;
+        pub const PTRACE_EVENT_VFORK: c_int = 2;
+        pub const PTRACE_EVENT_CLONE: c_int = 3;
+        pub const PTRACE_EVENT_EXEC: c_int = 4;
+        pub const PTRACE_EVENT_VFORK_DONE: c_int = 5;
+        pub const PTRACE_EVENT_EXIT: c_int = 6;
+        pub const PTRACE_EVENT_SECCOMP: c_int = 7;
+    }
+}
 
 pub const __WNOTHREAD: c_int = 0x20000000;
 pub const __WALL: c_int = 0x40000000;
 pub const __WCLONE: c_int = 0x80000000;
 
-pub const SPLICE_F_MOVE: c_uint = 0x01;
-pub const SPLICE_F_NONBLOCK: c_uint = 0x02;
-pub const SPLICE_F_MORE: c_uint = 0x04;
-pub const SPLICE_F_GIFT: c_uint = 0x08;
+cfg_if! {
+    if #[cfg(not(target_env = "uclibc"))] {
+        pub const SPLICE_F_MOVE: c_uint = 0x01;
+        pub const SPLICE_F_NONBLOCK: c_uint = 0x02;
+        pub const SPLICE_F_MORE: c_uint = 0x04;
+        pub const SPLICE_F_GIFT: c_uint = 0x08;
+    }
+}
 
 pub const RTLD_LOCAL: c_int = 0;
 pub const RTLD_LAZY: c_int = 1;
@@ -1264,6 +1200,7 @@ pub const LOG_AUTHPRIV: c_int = 10 << 3;
 pub const LOG_FTP: c_int = 11 << 3;
 pub const LOG_PERROR: c_int = 0x20;
 
+#[cfg(not(target_os = "l4re"))]
 pub const PIPE_BUF: usize = 4096;
 
 pub const SI_LOAD_SHIFT: c_uint = 16;
@@ -1296,14 +1233,19 @@ pub const BUS_ADRALN: c_int = 1;
 pub const BUS_ADRERR: c_int = 2;
 pub const BUS_OBJERR: c_int = 3;
 // Linux-specific si_code values for SIGBUS signal
+#[cfg(not(target_os = "l4re"))]
 pub const BUS_MCEERR_AR: c_int = 4;
+#[cfg(not(target_os = "l4re"))]
 pub const BUS_MCEERR_AO: c_int = 5;
 
 // si_code values for SIGTRAP
 pub const TRAP_BRKPT: c_int = 1;
 pub const TRAP_TRACE: c_int = 2;
+#[cfg(not(target_os = "l4re"))]
 pub const TRAP_BRANCH: c_int = 3;
+#[cfg(not(target_os = "l4re"))]
 pub const TRAP_HWBKPT: c_int = 4;
+#[cfg(not(target_os = "l4re"))]
 pub const TRAP_UNK: c_int = 5;
 
 // si_code values for SIGCHLD signal
@@ -1466,7 +1408,7 @@ pub const ARPHRD_VOID: u16 = 0xFFFF;
 pub const ARPHRD_NONE: u16 = 0xFFFE;
 
 cfg_if! {
-    if #[cfg(not(target_os = "emscripten"))] {
+    if #[cfg(not(any(target_os = "emscripten", target_os = "l4re")))] {
         // linux/if_tun.h
         /* TUNSETIFF ifr flags */
         pub const IFF_TUN: c_int = 0x0001;
@@ -1553,7 +1495,7 @@ cfg_if! {
 }
 
 cfg_if! {
-    if #[cfg(target_os = "emscripten")] {
+    if #[cfg(any(target_os = "emscripten", target_os = "l4re"))] {
         // Emscripten does not define any `*_SUPER_MAGIC` constants.
     } else if #[cfg(not(target_arch = "s390x"))] {
         pub const ADFS_SUPER_MAGIC: c_long = 0x0000adf5;
@@ -1670,7 +1612,8 @@ cfg_if! {
     if #[cfg(any(
         target_env = "gnu",
         target_os = "android",
-        all(target_env = "musl", musl_v1_2_3)
+        all(target_env = "musl", musl_v1_2_3),
+        target_os = "l4re"
     ))] {
         pub const AT_STATX_SYNC_TYPE: c_int = 0x6000;
         pub const AT_STATX_SYNC_AS_STAT: c_int = 0x0000;
@@ -1752,13 +1695,10 @@ cfg_if! {
 
         /// Build an ioctl number, analogous to the C macro of the same name.
         const fn _IOC(dir: u32, ty: u32, nr: u32, size: usize) -> Ioctl {
-            // FIXME(ctest) the `garando_syntax` crate (used by ctest in the CI test suite)
-            // cannot currently parse these `debug_assert!`s
-            //
-            // debug_assert!(dir <= _IOC_DIRMASK);
-            // debug_assert!(ty <= _IOC_TYPEMASK);
-            // debug_assert!(nr <= _IOC_NRMASK);
-            // debug_assert!(size <= (_IOC_SIZEMASK as usize));
+            core::debug_assert!(dir <= _IOC_DIRMASK);
+            core::debug_assert!(ty <= _IOC_TYPEMASK);
+            core::debug_assert!(nr <= _IOC_NRMASK);
+            core::debug_assert!(size <= (_IOC_SIZEMASK as usize));
 
             ((dir << _IOC_DIRSHIFT)
                 | (ty << _IOC_TYPESHIFT)
@@ -1793,10 +1733,8 @@ cfg_if! {
     }
 }
 
-const_fn! {
-    {const} fn CMSG_ALIGN(len: usize) -> usize {
-        (len + size_of::<usize>() - 1) & !(size_of::<usize>() - 1)
-    }
+const fn CMSG_ALIGN(len: usize) -> usize {
+    (len + size_of::<usize>() - 1) & !(size_of::<usize>() - 1)
 }
 
 f! {
@@ -1812,11 +1750,11 @@ f! {
         cmsg.offset(1) as *mut c_uchar
     }
 
-    pub {const} fn CMSG_SPACE(length: c_uint) -> c_uint {
+    pub const fn CMSG_SPACE(length: c_uint) -> c_uint {
         (CMSG_ALIGN(length as usize) + CMSG_ALIGN(size_of::<crate::cmsghdr>())) as c_uint
     }
 
-    pub {const} fn CMSG_LEN(length: c_uint) -> c_uint {
+    pub const fn CMSG_LEN(length: c_uint) -> c_uint {
         CMSG_ALIGN(size_of::<crate::cmsghdr>()) as c_uint + length
     }
 
@@ -1856,68 +1794,68 @@ safe_f! {
         unsafe { __libc_current_sigrtmin() }
     }
 
-    pub {const} fn WIFSTOPPED(status: c_int) -> bool {
+    pub const fn WIFSTOPPED(status: c_int) -> bool {
         (status & 0xff) == 0x7f
     }
 
-    pub {const} fn WSTOPSIG(status: c_int) -> c_int {
+    pub const fn WSTOPSIG(status: c_int) -> c_int {
         (status >> 8) & 0xff
     }
 
-    pub {const} fn WIFCONTINUED(status: c_int) -> bool {
+    pub const fn WIFCONTINUED(status: c_int) -> bool {
         status == 0xffff
     }
 
-    pub {const} fn WIFSIGNALED(status: c_int) -> bool {
+    pub const fn WIFSIGNALED(status: c_int) -> bool {
         ((status & 0x7f) + 1) as i8 >= 2
     }
 
-    pub {const} fn WTERMSIG(status: c_int) -> c_int {
+    pub const fn WTERMSIG(status: c_int) -> c_int {
         status & 0x7f
     }
 
-    pub {const} fn WIFEXITED(status: c_int) -> bool {
+    pub const fn WIFEXITED(status: c_int) -> bool {
         (status & 0x7f) == 0
     }
 
-    pub {const} fn WEXITSTATUS(status: c_int) -> c_int {
+    pub const fn WEXITSTATUS(status: c_int) -> c_int {
         (status >> 8) & 0xff
     }
 
-    pub {const} fn WCOREDUMP(status: c_int) -> bool {
+    pub const fn WCOREDUMP(status: c_int) -> bool {
         (status & 0x80) != 0
     }
 
-    pub {const} fn W_EXITCODE(ret: c_int, sig: c_int) -> c_int {
+    pub const fn W_EXITCODE(ret: c_int, sig: c_int) -> c_int {
         (ret << 8) | sig
     }
 
-    pub {const} fn W_STOPCODE(sig: c_int) -> c_int {
+    pub const fn W_STOPCODE(sig: c_int) -> c_int {
         (sig << 8) | 0x7f
     }
 
-    pub {const} fn QCMD(cmd: c_int, type_: c_int) -> c_int {
+    pub const fn QCMD(cmd: c_int, type_: c_int) -> c_int {
         (cmd << 8) | (type_ & 0x00ff)
     }
 
-    pub {const} fn IPOPT_COPIED(o: u8) -> u8 {
+    pub const fn IPOPT_COPIED(o: u8) -> u8 {
         o & IPOPT_COPY
     }
 
-    pub {const} fn IPOPT_CLASS(o: u8) -> u8 {
+    pub const fn IPOPT_CLASS(o: u8) -> u8 {
         o & IPOPT_CLASS_MASK
     }
 
-    pub {const} fn IPOPT_NUMBER(o: u8) -> u8 {
+    pub const fn IPOPT_NUMBER(o: u8) -> u8 {
         o & IPOPT_NUMBER_MASK
     }
 
-    pub {const} fn IPTOS_ECN(x: u8) -> u8 {
+    pub const fn IPTOS_ECN(x: u8) -> u8 {
         x & crate::IPTOS_ECN_MASK
     }
 
     #[allow(ellipsis_inclusive_range_patterns)]
-    pub {const} fn KERNEL_VERSION(a: u32, b: u32, c: u32) -> u32 {
+    pub const fn KERNEL_VERSION(a: u32, b: u32, c: u32) -> u32 {
         ((a << 16) + (b << 8)) + if c > 255 { 255 } else { c }
     }
 }
@@ -1931,31 +1869,41 @@ extern "C" {
     pub fn sem_destroy(sem: *mut sem_t) -> c_int;
     pub fn sem_init(sem: *mut sem_t, pshared: c_int, value: c_uint) -> c_int;
     pub fn fdatasync(fd: c_int) -> c_int;
+    #[cfg(not(target_os = "l4re"))]
     pub fn mincore(addr: *mut c_void, len: size_t, vec: *mut c_uchar) -> c_int;
 
     #[cfg_attr(gnu_time_bits64, link_name = "__clock_getres64")]
+    #[cfg_attr(musl_redir_time64, link_name = "__clock_getres_time64")]
     pub fn clock_getres(clk_id: crate::clockid_t, tp: *mut crate::timespec) -> c_int;
-    #[cfg_attr(gnu_time_bits64, link_name = "__clock_gettime64")]
+    #[cfg_attr(
+        any(gnu_time_bits64, musl_redir_time64),
+        link_name = "__clock_gettime64"
+    )]
     pub fn clock_gettime(clk_id: crate::clockid_t, tp: *mut crate::timespec) -> c_int;
-    #[cfg_attr(gnu_time_bits64, link_name = "__clock_settime64")]
+    #[cfg_attr(
+        any(gnu_time_bits64, musl_redir_time64),
+        link_name = "__clock_settime64"
+    )]
     pub fn clock_settime(clk_id: crate::clockid_t, tp: *const crate::timespec) -> c_int;
+    #[cfg(not(target_os = "l4re"))]
     pub fn clock_getcpuclockid(pid: crate::pid_t, clk_id: *mut crate::clockid_t) -> c_int;
+
+    #[cfg_attr(gnu_time_bits64, link_name = "__getitimer64")]
+    #[cfg_attr(musl_redir_time64, link_name = "__getitimer_time64")]
+    pub fn getitimer(which: c_int, curr_value: *mut crate::itimerval) -> c_int;
+    #[cfg_attr(gnu_time_bits64, link_name = "__setitimer64")]
+    #[cfg_attr(musl_redir_time64, link_name = "__setitimer_time64")]
+    pub fn setitimer(
+        which: c_int,
+        new_value: *const crate::itimerval,
+        old_value: *mut crate::itimerval,
+    ) -> c_int;
 
     pub fn dirfd(dirp: *mut crate::DIR) -> c_int;
 
-    pub fn pthread_getattr_np(native: crate::pthread_t, attr: *mut crate::pthread_attr_t) -> c_int;
-    pub fn pthread_attr_getstack(
-        attr: *const crate::pthread_attr_t,
-        stackaddr: *mut *mut c_void,
-        stacksize: *mut size_t,
-    ) -> c_int;
-    pub fn pthread_attr_setstack(
-        attr: *mut crate::pthread_attr_t,
-        stackaddr: *mut c_void,
-        stacksize: size_t,
-    ) -> c_int;
     pub fn memalign(align: size_t, size: size_t) -> *mut c_void;
     pub fn setgroups(ngroups: size_t, ptr: *const crate::gid_t) -> c_int;
+    #[cfg(not(target_os = "l4re"))]
     pub fn pipe2(fds: *mut c_int, flags: c_int) -> c_int;
     #[cfg_attr(gnu_file_offset_bits64, link_name = "statfs64")]
     pub fn statfs(path: *const c_char, buf: *mut statfs) -> c_int;
@@ -1965,80 +1913,85 @@ extern "C" {
     #[cfg_attr(gnu_file_offset_bits64, link_name = "posix_fadvise64")]
     pub fn posix_fadvise(fd: c_int, offset: off_t, len: off_t, advise: c_int) -> c_int;
     #[cfg_attr(gnu_time_bits64, link_name = "__futimens64")]
+    #[cfg_attr(musl_redir_time64, link_name = "__futimens_time64")]
+    #[cfg(not(target_os = "l4re"))]
     pub fn futimens(fd: c_int, times: *const crate::timespec) -> c_int;
     #[cfg_attr(gnu_time_bits64, link_name = "__utimensat64")]
+    #[cfg_attr(musl_redir_time64, link_name = "__utimensat_time64")]
     pub fn utimensat(
         dirfd: c_int,
         path: *const c_char,
         times: *const crate::timespec,
         flag: c_int,
     ) -> c_int;
+    #[cfg(not(target_os = "l4re"))]
     pub fn duplocale(base: crate::locale_t) -> crate::locale_t;
     pub fn freelocale(loc: crate::locale_t);
     pub fn newlocale(mask: c_int, locale: *const c_char, base: crate::locale_t) -> crate::locale_t;
     pub fn uselocale(loc: crate::locale_t) -> crate::locale_t;
+    #[cfg(not(target_os = "l4re"))]
     pub fn mknodat(dirfd: c_int, pathname: *const c_char, mode: mode_t, dev: dev_t) -> c_int;
-    pub fn pthread_condattr_getclock(
-        attr: *const pthread_condattr_t,
-        clock_id: *mut clockid_t,
-    ) -> c_int;
-    pub fn pthread_condattr_setclock(
-        attr: *mut pthread_condattr_t,
-        clock_id: crate::clockid_t,
-    ) -> c_int;
-    pub fn pthread_condattr_setpshared(attr: *mut pthread_condattr_t, pshared: c_int) -> c_int;
-    pub fn pthread_mutexattr_setpshared(attr: *mut pthread_mutexattr_t, pshared: c_int) -> c_int;
-    pub fn pthread_rwlockattr_getpshared(
-        attr: *const pthread_rwlockattr_t,
-        val: *mut c_int,
-    ) -> c_int;
-    pub fn pthread_rwlockattr_setpshared(attr: *mut pthread_rwlockattr_t, val: c_int) -> c_int;
+
+    #[cfg(not(target_os = "l4re"))]
     pub fn ptsname_r(fd: c_int, buf: *mut c_char, buflen: size_t) -> c_int;
     pub fn clearenv() -> c_int;
+    #[cfg(not(target_os = "l4re"))]
     pub fn waitid(
         idtype: idtype_t,
         id: id_t,
         infop: *mut crate::siginfo_t,
         options: c_int,
     ) -> c_int;
+    #[cfg(not(target_os = "l4re"))]
     pub fn getresuid(
         ruid: *mut crate::uid_t,
         euid: *mut crate::uid_t,
         suid: *mut crate::uid_t,
     ) -> c_int;
+    #[cfg(not(target_os = "l4re"))]
     pub fn getresgid(
         rgid: *mut crate::gid_t,
         egid: *mut crate::gid_t,
         sgid: *mut crate::gid_t,
     ) -> c_int;
+    #[cfg(not(target_os = "l4re"))]
     pub fn acct(filename: *const c_char) -> c_int;
+    #[cfg(not(target_os = "l4re"))]
     pub fn brk(addr: *mut c_void) -> c_int;
+    #[cfg(not(target_os = "l4re"))]
     pub fn sbrk(increment: intptr_t) -> *mut c_void;
     #[deprecated(
         since = "0.2.66",
         note = "causes memory corruption, see rust-lang/libc#1596"
     )]
     pub fn vfork() -> crate::pid_t;
+    #[cfg(not(target_os = "l4re"))]
     pub fn setresgid(rgid: crate::gid_t, egid: crate::gid_t, sgid: crate::gid_t) -> c_int;
+    #[cfg(not(target_os = "l4re"))]
     pub fn setresuid(ruid: crate::uid_t, euid: crate::uid_t, suid: crate::uid_t) -> c_int;
-    #[cfg_attr(gnu_time_bits64, link_name = "__wait4_time64")]
+    #[cfg_attr(any(gnu_time_bits64, musl_redir_time64), link_name = "__wait4_time64")]
+    #[cfg(not(target_os = "l4re"))]
     pub fn wait4(
         pid: crate::pid_t,
         status: *mut c_int,
         options: c_int,
         rusage: *mut crate::rusage,
     ) -> crate::pid_t;
+    #[cfg(not(target_os = "l4re"))]
     pub fn login_tty(fd: c_int) -> c_int;
 
     // DIFF(main): changed to `*const *mut` in e77f551de9
+    #[cfg(not(target_os = "l4re"))]
     pub fn execvpe(
         file: *const c_char,
         argv: *const *const c_char,
         envp: *const *const c_char,
     ) -> c_int;
+    #[cfg(not(target_os = "l4re"))]
     pub fn fexecve(fd: c_int, argv: *const *const c_char, envp: *const *const c_char) -> c_int;
-
+    #[cfg(not(target_os = "l4re"))]
     pub fn getifaddrs(ifap: *mut *mut crate::ifaddrs) -> c_int;
+    #[cfg(not(target_os = "l4re"))]
     pub fn freeifaddrs(ifa: *mut crate::ifaddrs);
     pub fn bind(
         socket: c_int,
@@ -2075,10 +2028,31 @@ extern "C" {
     #[cfg_attr(gnu_file_offset_bits64, link_name = "mkostemp64")]
     pub fn mkostemp(template: *mut c_char, flags: c_int) -> c_int;
     #[cfg_attr(gnu_file_offset_bits64, link_name = "mkostemps64")]
+    #[cfg(not(target_os = "l4re"))]
     pub fn mkostemps(template: *mut c_char, suffixlen: c_int, flags: c_int) -> c_int;
 
+    #[cfg(not(target_os = "l4re"))]
     pub fn getdomainname(name: *mut c_char, len: size_t) -> c_int;
+    #[cfg(not(target_os = "l4re"))]
     pub fn setdomainname(name: *const c_char, len: size_t) -> c_int;
+
+    pub fn if_nameindex() -> *mut if_nameindex;
+    pub fn if_freenameindex(ptr: *mut if_nameindex);
+
+    pub fn getpwnam_r(
+        name: *const c_char,
+        pwd: *mut passwd,
+        buf: *mut c_char,
+        buflen: size_t,
+        result: *mut *mut passwd,
+    ) -> c_int;
+    pub fn getpwuid_r(
+        uid: crate::uid_t,
+        pwd: *mut passwd,
+        buf: *mut c_char,
+        buflen: size_t,
+        result: *mut *mut passwd,
+    ) -> c_int;
 }
 
 // LFS64 extensions
@@ -2086,7 +2060,11 @@ extern "C" {
 // * musl and Emscripten has 64-bit versions only so aliases the LFS64 symbols to the standard ones
 // * ulibc doesn't have preadv64/pwritev64
 cfg_if! {
-    if #[cfg(not(any(target_env = "musl", target_os = "emscripten")))] {
+    if #[cfg(not(any(
+        target_env = "musl",
+        target_env = "ohos",
+        target_os = "emscripten",
+    )))] {
         extern "C" {
             pub fn fstatfs64(fd: c_int, buf: *mut statfs64) -> c_int;
             pub fn statvfs64(path: *const c_char, buf: *mut statvfs64) -> c_int;
@@ -2096,6 +2074,7 @@ cfg_if! {
             #[cfg_attr(gnu_time_bits64, link_name = "__fstat64_time64")]
             pub fn fstat64(fildes: c_int, buf: *mut stat64) -> c_int;
             #[cfg_attr(gnu_time_bits64, link_name = "__fstatat64_time64")]
+            #[cfg(not(target_os = "l4re"))]
             pub fn fstatat64(
                 dirfd: c_int,
                 pathname: *const c_char,
@@ -2105,6 +2084,7 @@ cfg_if! {
             pub fn ftruncate64(fd: c_int, length: off64_t) -> c_int;
             pub fn lseek64(fd: c_int, offset: off64_t, whence: c_int) -> off64_t;
             #[cfg_attr(gnu_time_bits64, link_name = "__lstat64_time64")]
+            #[cfg(not(target_os = "l4re"))]
             pub fn lstat64(path: *const c_char, buf: *mut stat64) -> c_int;
             pub fn mmap64(
                 addr: *mut c_void,
@@ -2136,6 +2116,7 @@ cfg_if! {
                 result: *mut *mut crate::dirent64,
             ) -> c_int;
             #[cfg_attr(gnu_time_bits64, link_name = "__stat64_time64")]
+            #[cfg(not(target_os = "l4re"))]
             pub fn stat64(path: *const c_char, buf: *mut stat64) -> c_int;
             pub fn truncate64(path: *const c_char, length: off64_t) -> c_int;
         }
@@ -2146,7 +2127,8 @@ cfg_if! {
     if #[cfg(not(any(
         target_env = "uclibc",
         target_env = "musl",
-        target_os = "emscripten"
+        target_env = "ohos",
+        target_os = "emscripten",
     )))] {
         extern "C" {
             pub fn preadv64(
@@ -2213,9 +2195,13 @@ cfg_if! {
     } else if #[cfg(target_os = "linux")] {
         mod linux;
         pub use self::linux::*;
+        mod linux_l4re_shared;
+        pub use self::linux_l4re_shared::*;
     } else if #[cfg(target_os = "l4re")] {
-        mod linux;
-        pub use self::linux::*;
+        mod l4re;
+        pub use self::l4re::*;
+        mod linux_l4re_shared;
+        pub use self::linux_l4re_shared::*;
     } else if #[cfg(target_os = "android")] {
         mod android;
         pub use self::android::*;

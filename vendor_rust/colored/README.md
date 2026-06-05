@@ -14,13 +14,14 @@ Coloring terminal so simple, you already know how to do it!
     "truecolor from tuple".custom_color((0, 255, 136));
     "background truecolor from tuple".on_custom_color((0, 255, 136));
     "bright colors are welcome as well".on_bright_blue().bright_red();
-    "you can also make bold comments".bold();
+    "you can also make bold text".bold();
     println!("{} {} {}", "or use".cyan(), "any".italic().yellow(), "string type".cyan());
     "or change advice. This is red".yellow().blue().red();
     "or clear things up. This is default color and style".red().bold().clear();
     "purple and magenta are the same".purple().magenta();
     "and so are normal and clear".normal().clear();
     "you can specify color by string".color("blue").on_color("red");
+    "you can also use hex colors".color("#0057B7").on_color("#fd0");
     String::from("this also works!").green().bold();
     format!("{:30}", "format works as expected. This will be padded".blue());
     format!("{:.3}", "and this will be green but truncated to 3 chars".green());
@@ -32,7 +33,7 @@ Add this in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-colored = "2"
+colored = "3"
 ```
 
 and add this to your `lib.rs` or `main.rs`:
@@ -122,11 +123,11 @@ For example, you can do this in your `Cargo.toml` to disable color in tests:
 ```toml
 [features]
 # this effectively enable the feature `no-color` of colored when testing with
-# `cargo test --feature dumb_terminal`
+# `cargo test --features dumb_terminal`
 dumb_terminal = ["colored/no-color"]
 ```
 
-You can use have even finer control by using the
+You can have even finer control by using the
 `colored::control::set_override` method.
 
 ## Todo
@@ -142,7 +143,7 @@ providing a reference implementation, which greatly helped making this crate
 output correct strings.
 
 ## Minimum Supported Rust Version (MSRV)
-The current MSRV is `1.70`, which is checked and enforced automatically via CI. This version may change in the future in minor version bumps, so if you require a specific Rust version you should use a restricted version requirement such as `~X.Y`.
+The current MSRV is `1.80`, which is checked and enforced automatically via CI. This version may change in the future in minor version bumps, so if you require a specific Rust version you should use a restricted version requirement such as `~X.Y`.
 
 ## License
 

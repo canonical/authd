@@ -974,7 +974,7 @@ impl UnixStream {
     /// Unlike [`split`], the owned halves can be moved to separate tasks, however
     /// this comes at the cost of a heap allocation.
     ///
-    /// **Note:** Dropping the write half will shut down the write half of the
+    /// **Note:** Dropping the write half will only shut down the write half of the
     /// stream. This is equivalent to calling [`shutdown()`] on the `UnixStream`.
     ///
     /// [`split`]: Self::split()
@@ -1072,7 +1072,13 @@ impl UnixStream {
 
 impl fmt::Debug for UnixStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.io.fmt(f)
+        (*self.io).fmt(f)
+    }
+}
+
+impl AsRef<Self> for UnixStream {
+    fn as_ref(&self) -> &Self {
+        self
     }
 }
 
