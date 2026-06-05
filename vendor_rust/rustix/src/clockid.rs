@@ -1,5 +1,6 @@
 use crate::backend::c;
 use crate::fd::BorrowedFd;
+use crate::io;
 
 /// `CLOCK_*` constants for use with [`clock_gettime`].
 ///
@@ -97,6 +98,51 @@ pub enum ClockId {
     BoottimeAlarm = bitcast!(c::CLOCK_BOOTTIME_ALARM),
 }
 
+#[cfg(not(any(apple, target_os = "wasi")))]
+impl TryFrom<c::clockid_t> for ClockId {
+    type Error = io::Errno;
+
+    fn try_from(value: c::clockid_t) -> Result<Self, Self::Error> {
+        match value {
+            c::CLOCK_REALTIME => Ok(ClockId::Realtime),
+            c::CLOCK_MONOTONIC => Ok(ClockId::Monotonic),
+            #[cfg(any(freebsdlike, target_os = "openbsd"))]
+            c::CLOCK_UPTIME => Ok(ClockId::Uptime),
+            #[cfg(not(any(
+                solarish,
+                target_os = "horizon",
+                target_os = "netbsd",
+                target_os = "redox",
+                target_os = "vita"
+            )))]
+            c::CLOCK_PROCESS_CPUTIME_ID => Ok(ClockId::ProcessCPUTime),
+            #[cfg(not(any(
+                solarish,
+                target_os = "horizon",
+                target_os = "netbsd",
+                target_os = "redox",
+                target_os = "vita"
+            )))]
+            c::CLOCK_THREAD_CPUTIME_ID => Ok(ClockId::ThreadCPUTime),
+            #[cfg(any(linux_kernel, target_os = "freebsd"))]
+            c::CLOCK_REALTIME_COARSE => Ok(ClockId::RealtimeCoarse),
+            #[cfg(any(linux_kernel, target_os = "freebsd"))]
+            c::CLOCK_MONOTONIC_COARSE => Ok(ClockId::MonotonicCoarse),
+            #[cfg(linux_kernel)]
+            c::CLOCK_MONOTONIC_RAW => Ok(ClockId::MonotonicRaw),
+            #[cfg(linux_kernel)]
+            c::CLOCK_REALTIME_ALARM => Ok(ClockId::RealtimeAlarm),
+            #[cfg(all(linux_kernel, feature = "linux_4_11"))]
+            c::CLOCK_TAI => Ok(ClockId::Tai),
+            #[cfg(any(linux_kernel, target_os = "fuchsia", target_os = "openbsd"))]
+            c::CLOCK_BOOTTIME => Ok(ClockId::Boottime),
+            #[cfg(any(linux_kernel, target_os = "fuchsia"))]
+            c::CLOCK_BOOTTIME_ALARM => Ok(ClockId::BoottimeAlarm),
+            _ => Err(io::Errno::RANGE),
+        }
+    }
+}
+
 /// `CLOCK_*` constants for use with [`clock_gettime`].
 ///
 /// These constants are always supported at runtime, so `clock_gettime` never
@@ -127,6 +173,21 @@ pub enum ClockId {
     ThreadCPUTime = c::CLOCK_THREAD_CPUTIME_ID,
 }
 
+#[cfg(apple)]
+impl TryFrom<c::clockid_t> for ClockId {
+    type Error = io::Errno;
+
+    fn try_from(value: c::clockid_t) -> Result<Self, Self::Error> {
+        match value {
+            c::CLOCK_REALTIME => Ok(ClockId::Realtime),
+            c::CLOCK_MONOTONIC => Ok(ClockId::Monotonic),
+            c::CLOCK_PROCESS_CPUTIME_ID => Ok(ClockId::ProcessCPUTime),
+            c::CLOCK_THREAD_CPUTIME_ID => Ok(ClockId::ThreadCPUTime),
+            _ => Err(io::Errno::RANGE),
+        }
+    }
+}
+
 /// `CLOCK_*` constants for use with [`clock_gettime_dynamic`].
 ///
 /// These constants may be unsupported at runtime, depending on the OS version,
@@ -145,7 +206,7 @@ pub enum DynamicClockId<'a> {
     Dynamic(BorrowedFd<'a>),
 
     /// `CLOCK_REALTIME_ALARM`
-    #[cfg(linux_kernel)]
+    #[cfg(any(linux_kernel, target_os = "fuchsia"))]
     #[doc(alias = "CLOCK_REALTIME_ALARM")]
     RealtimeAlarm,
 

@@ -1,4 +1,4 @@
-//! HTTP/1 Server Connections
+//! HTTP/1 Server Connections.
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -180,8 +180,15 @@ where
     pub fn without_shutdown(self) -> impl Future<Output = crate::Result<Parts<I, S>>> {
         let mut zelf = Some(self);
         crate::common::future::poll_fn(move |cx| {
-            ready!(zelf.as_mut().unwrap().conn.poll_without_shutdown(cx))?;
-            Poll::Ready(Ok(zelf.take().unwrap().into_parts()))
+            ready!(zelf
+                .as_mut()
+                .expect("server connection polled after completion")
+                .conn
+                .poll_without_shutdown(cx))?;
+            Poll::Ready(Ok(zelf
+                .take()
+                .expect("server connection missing before completion")
+                .into_parts()))
         })
     }
 
@@ -261,7 +268,7 @@ impl Builder {
 
     /// Enables or disables HTTP/1 keep-alive.
     ///
-    /// Default is true.
+    /// Default is `true`.
     pub fn keep_alive(&mut self, val: bool) -> &mut Self {
         self.h1_keep_alive = val;
         self
@@ -270,13 +277,15 @@ impl Builder {
     /// Set whether HTTP/1 connections will write header names as title case at
     /// the socket level.
     ///
-    /// Default is false.
+    /// Default is `false`.
     pub fn title_case_headers(&mut self, enabled: bool) -> &mut Self {
         self.h1_title_case_headers = enabled;
         self
     }
 
     /// Set whether multiple spaces are allowed as delimiters in request lines.
+    ///
+    /// Default is `false`.
     pub fn allow_multiple_spaces_in_request_line_delimiters(&mut self, enabled: bool) -> &mut Self {
         self.h1_parser_config
             .allow_multiple_spaces_in_request_line_delimiters(enabled);
@@ -289,7 +298,7 @@ impl Builder {
     /// name, or does not include a colon at all, the line will be silently ignored
     /// and no error will be reported.
     ///
-    /// Default is false.
+    /// Default is `false`.
     pub fn ignore_invalid_headers(&mut self, enabled: bool) -> &mut Builder {
         self.h1_parser_config
             .ignore_invalid_headers_in_requests(enabled);
@@ -306,7 +315,7 @@ impl Builder {
     /// interact with the original cases. The only effect this can have now is
     /// to forward the cases in a proxy-like fashion.
     ///
-    /// Default is false.
+    /// Default is `false`.
     pub fn preserve_header_case(&mut self, enabled: bool) -> &mut Self {
         self.h1_preserve_header_case = enabled;
         self
@@ -351,11 +360,11 @@ impl Builder {
     /// but may also improve performance when an IO transport doesn't
     /// support vectored writes well, such as most TLS implementations.
     ///
-    /// Setting this to true will force hyper to use queued strategy
-    /// which may eliminate unnecessary cloning on some TLS backends
+    /// Setting this to true will force hyper to use queued strategy,
+    /// which may eliminate unnecessary cloning on some TLS backends.
     ///
     /// Default is `auto`. In this mode hyper will try to guess which
-    /// mode to use
+    /// mode to use.
     pub fn writev(&mut self, val: bool) -> &mut Self {
         self.h1_writev = Some(val);
         self
@@ -381,7 +390,7 @@ impl Builder {
     ///
     /// Note that including the `date` header is recommended by RFC 7231.
     ///
-    /// Default is true.
+    /// Default is `true`.
     pub fn auto_date_header(&mut self, enabled: bool) -> &mut Self {
         self.date_header = enabled;
         self
@@ -391,7 +400,7 @@ impl Builder {
     ///
     /// Experimental, may have bugs.
     ///
-    /// Default is false.
+    /// Default is `false`.
     pub fn pipeline_flush(&mut self, enabled: bool) -> &mut Self {
         self.pipeline_flush = enabled;
         self
@@ -520,6 +529,12 @@ where
             Pin::new(conn).graceful_shutdown()
         }
     }
+
+    /// Return the inner IO object, and additional information provided the connection
+    /// has not yet been upgraded.
+    pub fn into_parts(self) -> Option<Parts<I, S>> {
+        self.inner.map(|conn| conn.into_parts())
+    }
 }
 
 impl<I, B, S> Future for UpgradeableConnection<I, S>
@@ -537,7 +552,12 @@ where
             match ready!(Pin::new(&mut conn.conn).poll(cx)) {
                 Ok(proto::Dispatched::Shutdown) => Poll::Ready(Ok(())),
                 Ok(proto::Dispatched::Upgrade(pending)) => {
-                    let (io, buf, _) = self.inner.take().unwrap().conn.into_inner();
+                    let (io, buf, _) = self
+                        .inner
+                        .take()
+                        .expect("upgradeable server connection missing after upgrade")
+                        .conn
+                        .into_inner();
                     pending.fulfill(Upgraded::new(io, buf));
                     Poll::Ready(Ok(()))
                 }

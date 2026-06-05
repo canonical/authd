@@ -13,7 +13,7 @@
 edition = "2021"
 rust-version = "1.63"
 name = "linux-raw-sys"
-version = "0.9.4"
+version = "0.12.1"
 authors = ["Dan Gohman <dev@sunfishcode.online>"]
 build = false
 exclude = [
@@ -66,6 +66,7 @@ targets = [
 ]
 
 [features]
+auxvec = []
 bootparam = []
 btrfs = []
 default = [
@@ -80,6 +81,7 @@ general = []
 if_arp = []
 if_ether = []
 if_packet = []
+if_tun = []
 image = []
 io_uring = []
 ioctl = []
@@ -93,20 +95,16 @@ prctl = []
 ptrace = []
 rustc-dep-of-std = [
     "core",
-    "compiler_builtins",
     "no_std",
 ]
 std = []
 system = []
+vm_sockets = []
 xdp = []
 
 [lib]
 name = "linux_raw_sys"
 path = "src/lib.rs"
-
-[dependencies.compiler_builtins]
-version = "0.1.49"
-optional = true
 
 [dependencies.core]
 version = "1.0.0"

@@ -1,13 +1,20 @@
 #![allow(
-    clippy::missing_const_for_fn, // irrelevant for proc macros
-    clippy::missing_docs_in_private_items, // TODO remove
-    clippy::std_instead_of_core, // irrelevant for proc macros
-    clippy::std_instead_of_alloc, // irrelevant for proc macros
-    clippy::alloc_instead_of_core, // irrelevant for proc macros
-    missing_docs, // TODO remove
+    clippy::missing_const_for_fn,
+    clippy::std_instead_of_core,
+    clippy::std_instead_of_alloc,
+    clippy::alloc_instead_of_core,
+    reason = "irrelevant for proc macros"
+)]
+#![allow(
+    clippy::missing_docs_in_private_items,
+    missing_docs,
+    reason = "may be removed eventually"
 )]
 
-#[allow(unused_macros)]
+#[allow(
+    unused_macros,
+    reason = "may not be used for all feature flag combinations"
+)]
 macro_rules! bug {
     () => { compile_error!("provide an error message to help fix a possible bug") };
     ($descr:literal $($rest:tt)?) => {
@@ -46,13 +53,13 @@ macro_rules! impl_macros {
     ($($name:ident)*) => {$(
         #[proc_macro]
         pub fn $name(input: TokenStream) -> TokenStream {
-            use crate::to_tokens::ToTokenTree;
+            use crate::to_tokens::ToTokenStream;
 
             let mut iter = input.into_iter().peekable();
             match $name::parse(&mut iter) {
                 Ok(value) => match iter.peek() {
                     Some(tree) => Error::UnexpectedToken { tree: tree.clone() }.to_compile_error(),
-                    None => TokenStream::from(value.into_token_tree()),
+                    None => quote_! { const { #S(value.into_token_stream()) } },
                 },
                 Err(err) => err.to_compile_error(),
             }
@@ -157,11 +164,11 @@ fn parse_format_description_version<const NO_EQUALS_IS_MOD_NAME: bool>(
 fn parse_visibility(iter: &mut PeekableTokenStreamIter) -> Result<TokenStream, Error> {
     let mut visibility = match iter.peek().ok_or(Error::UnexpectedEndOfInput)? {
         pub_ident @ TokenTree::Ident(ident) if ident.to_string() == "pub" => {
-            let visibility = quote! { #(pub_ident.clone()) };
+            let visibility = quote_! { #(pub_ident.clone()) };
             iter.next(); // consume `pub`
             visibility
         }
-        _ => return Ok(quote! {}),
+        _ => return Ok(quote_! {}),
     };
 
     match iter.peek().ok_or(Error::UnexpectedEndOfInput)? {
@@ -184,15 +191,17 @@ pub fn format_description(input: TokenStream) -> TokenStream {
         let (span, string) = helpers::get_string_literal(input)?;
         let items = format_description::parse_with_version(version, &string, span)?;
 
-        Ok(quote! {{
-            const DESCRIPTION: &[::time::format_description::BorrowedFormatItem<'_>] = &[#S(
-                items
-                    .into_iter()
-                    .map(|item| quote! { #S(item), })
-                    .collect::<TokenStream>()
-            )];
-            DESCRIPTION
-        }})
+        Ok(quote_! {
+            const {
+                use ::time::format_description::{*, modifier::*};
+                &[#S(
+                    items
+                        .into_iter()
+                        .map(|item| quote_! { #S(item), })
+                        .collect::<TokenStream>()
+                )] as StaticFormatDescription
+            }
+        })
     })()
     .unwrap_or_else(|err: Error| err.to_compile_error())
 }
@@ -237,12 +246,15 @@ pub fn serde_format_description(input: TokenStream) -> TokenStream {
             Some(TokenTree::Literal(_)) => {
                 let (span, format_string) = helpers::get_string_literal(tokens)?;
                 let items = format_description::parse_with_version(version, &format_string, span)?;
-                let items: TokenStream =
-                    items.into_iter().map(|item| quote! { #S(item), }).collect();
-                let items = quote! {
-                    const ITEMS: &[::time::format_description::BorrowedFormatItem<'_>]
-                        = &[#S(items)];
-                    ITEMS
+                let items: TokenStream = items
+                    .into_iter()
+                    .map(|item| quote_! { #S(item), })
+                    .collect();
+                let items = quote_! {
+                    const {
+                        use ::time::format_description::{*, modifier::*};
+                        &[#S(items)] as StaticFormatDescription
+                    }
                 };
 
                 (items, String::from_utf8_lossy(&format_string).into_owned())

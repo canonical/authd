@@ -128,18 +128,18 @@ pub(super) fn lex<const VERSION: u8>(
 ) -> Lexed<impl Iterator<Item = Result<Token<'_>, Error>>> {
     assert!(version!(1..=2));
 
-    let mut depth: u8 = 0;
+    let mut depth: u32 = 0;
     let mut iter = attach_location(input.iter(), proc_span).peekable();
     let mut second_bracket_location = None;
 
     let iter = iter::from_fn(move || {
-        if version!(..=1) {
-            if let Some(location) = second_bracket_location.take() {
-                return Some(Ok(Token::Bracket {
-                    kind: BracketKind::Opening,
-                    location,
-                }));
-            }
+        if version!(..=1)
+            && let Some(location) = second_bracket_location.take()
+        {
+            return Some(Ok(Token::Bracket {
+                kind: BracketKind::Opening,
+                location,
+            }));
         }
 
         Some(Ok(match iter.next()? {

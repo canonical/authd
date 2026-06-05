@@ -1,4 +1,8 @@
-use std::{borrow::Cow, env, str::FromStr};
+use std::{borrow::Cow, cmp, env, str::FromStr};
+use Color::{
+    AnsiColor, Black, Blue, BrightBlack, BrightBlue, BrightCyan, BrightGreen, BrightMagenta,
+    BrightRed, BrightWhite, BrightYellow, Cyan, Green, Magenta, Red, TrueColor, White, Yellow,
+};
 
 /// The 8 standard colors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -20,75 +24,73 @@ pub enum Color {
     BrightMagenta,
     BrightCyan,
     BrightWhite,
+    AnsiColor(u8),
     TrueColor { r: u8, g: u8, b: u8 },
 }
 
 fn truecolor_support() -> bool {
     let truecolor = env::var("COLORTERM");
-    if let Ok(truecolor) = truecolor {
-        truecolor == "truecolor" || truecolor == "24bit"
-    } else {
-        false
-    }
+    truecolor.is_ok_and(|truecolor| truecolor == "truecolor" || truecolor == "24bit")
 }
 
 #[allow(missing_docs)]
 impl Color {
+    #[must_use]
     pub fn to_fg_str(&self) -> Cow<'static, str> {
         match *self {
-            Color::Black => "30".into(),
-            Color::Red => "31".into(),
-            Color::Green => "32".into(),
-            Color::Yellow => "33".into(),
-            Color::Blue => "34".into(),
-            Color::Magenta => "35".into(),
-            Color::Cyan => "36".into(),
-            Color::White => "37".into(),
-            Color::BrightBlack => "90".into(),
-            Color::BrightRed => "91".into(),
-            Color::BrightGreen => "92".into(),
-            Color::BrightYellow => "93".into(),
-            Color::BrightBlue => "94".into(),
-            Color::BrightMagenta => "95".into(),
-            Color::BrightCyan => "96".into(),
-            Color::BrightWhite => "97".into(),
-            Color::TrueColor { .. } if !truecolor_support() => {
+            Self::Black => "30".into(),
+            Self::Red => "31".into(),
+            Self::Green => "32".into(),
+            Self::Yellow => "33".into(),
+            Self::Blue => "34".into(),
+            Self::Magenta => "35".into(),
+            Self::Cyan => "36".into(),
+            Self::White => "37".into(),
+            Self::BrightBlack => "90".into(),
+            Self::BrightRed => "91".into(),
+            Self::BrightGreen => "92".into(),
+            Self::BrightYellow => "93".into(),
+            Self::BrightBlue => "94".into(),
+            Self::BrightMagenta => "95".into(),
+            Self::BrightCyan => "96".into(),
+            Self::BrightWhite => "97".into(),
+            Self::TrueColor { .. } if !truecolor_support() => {
                 self.closest_color_euclidean().to_fg_str()
             }
-            Color::TrueColor { r, g, b } => format!("38;2;{};{};{}", r, g, b).into(),
+            Self::AnsiColor(code) => format!("38;5;{code}").into(),
+            Self::TrueColor { r, g, b } => format!("38;2;{r};{g};{b}").into(),
         }
     }
 
+    #[must_use]
     pub fn to_bg_str(&self) -> Cow<'static, str> {
         match *self {
-            Color::Black => "40".into(),
-            Color::Red => "41".into(),
-            Color::Green => "42".into(),
-            Color::Yellow => "43".into(),
-            Color::Blue => "44".into(),
-            Color::Magenta => "45".into(),
-            Color::Cyan => "46".into(),
-            Color::White => "47".into(),
-            Color::BrightBlack => "100".into(),
-            Color::BrightRed => "101".into(),
-            Color::BrightGreen => "102".into(),
-            Color::BrightYellow => "103".into(),
-            Color::BrightBlue => "104".into(),
-            Color::BrightMagenta => "105".into(),
-            Color::BrightCyan => "106".into(),
-            Color::BrightWhite => "107".into(),
-            Color::TrueColor { .. } if !truecolor_support() => {
+            Self::Black => "40".into(),
+            Self::Red => "41".into(),
+            Self::Green => "42".into(),
+            Self::Yellow => "43".into(),
+            Self::Blue => "44".into(),
+            Self::Magenta => "45".into(),
+            Self::Cyan => "46".into(),
+            Self::White => "47".into(),
+            Self::BrightBlack => "100".into(),
+            Self::BrightRed => "101".into(),
+            Self::BrightGreen => "102".into(),
+            Self::BrightYellow => "103".into(),
+            Self::BrightBlue => "104".into(),
+            Self::BrightMagenta => "105".into(),
+            Self::BrightCyan => "106".into(),
+            Self::BrightWhite => "107".into(),
+            Self::AnsiColor(code) => format!("48;5;{code}").into(),
+            Self::TrueColor { .. } if !truecolor_support() => {
                 self.closest_color_euclidean().to_bg_str()
             }
-            Color::TrueColor { r, g, b } => format!("48;2;{};{};{}", r, g, b).into(),
+            Self::TrueColor { r, g, b } => format!("48;2;{r};{g};{b}").into(),
         }
     }
 
-    /// Gets the closest plain color to the TrueColor
+    /// Gets the closest plain color to the `TrueColor`
     fn closest_color_euclidean(self) -> Self {
-        use std::cmp;
-        use Color::*;
-
         match self {
             TrueColor {
                 r: r1,
@@ -135,8 +137,7 @@ impl Color {
         }
     }
 
-    fn into_truecolor(self) -> Self {
-        use Color::*;
+    const fn into_truecolor(self) -> Self {
         match self {
             Black => TrueColor { r: 0, g: 0, b: 0 },
             Red => TrueColor { r: 205, g: 0, b: 0 },
@@ -194,6 +195,7 @@ impl Color {
                 g: 255,
                 b: 255,
             },
+            AnsiColor(color) => AnsiColor(color),
             TrueColor { r, g, b } => TrueColor { r, g, b },
         }
     }
@@ -201,13 +203,13 @@ impl Color {
 
 impl From<&str> for Color {
     fn from(src: &str) -> Self {
-        src.parse().unwrap_or(Color::White)
+        src.parse().unwrap_or(Self::White)
     }
 }
 
 impl From<String> for Color {
     fn from(src: String) -> Self {
-        src.parse().unwrap_or(Color::White)
+        src.parse().unwrap_or(Self::White)
     }
 }
 
@@ -218,25 +220,44 @@ impl FromStr for Color {
         let src = src.to_lowercase();
 
         match src.as_ref() {
-            "black" => Ok(Color::Black),
-            "red" => Ok(Color::Red),
-            "green" => Ok(Color::Green),
-            "yellow" => Ok(Color::Yellow),
-            "blue" => Ok(Color::Blue),
-            "magenta" => Ok(Color::Magenta),
-            "purple" => Ok(Color::Magenta),
-            "cyan" => Ok(Color::Cyan),
-            "white" => Ok(Color::White),
-            "bright black" => Ok(Color::BrightBlack),
-            "bright red" => Ok(Color::BrightRed),
-            "bright green" => Ok(Color::BrightGreen),
-            "bright yellow" => Ok(Color::BrightYellow),
-            "bright blue" => Ok(Color::BrightBlue),
-            "bright magenta" => Ok(Color::BrightMagenta),
-            "bright cyan" => Ok(Color::BrightCyan),
-            "bright white" => Ok(Color::BrightWhite),
+            "black" => Ok(Self::Black),
+            "red" => Ok(Self::Red),
+            "green" => Ok(Self::Green),
+            "yellow" => Ok(Self::Yellow),
+            "blue" => Ok(Self::Blue),
+            "magenta" | "purple" => Ok(Self::Magenta),
+            "cyan" => Ok(Self::Cyan),
+            "white" => Ok(Self::White),
+            "bright black" => Ok(Self::BrightBlack),
+            "bright red" => Ok(Self::BrightRed),
+            "bright green" => Ok(Self::BrightGreen),
+            "bright yellow" => Ok(Self::BrightYellow),
+            "bright blue" => Ok(Self::BrightBlue),
+            "bright magenta" => Ok(Self::BrightMagenta),
+            "bright cyan" => Ok(Self::BrightCyan),
+            "bright white" => Ok(Self::BrightWhite),
+            s if s.starts_with('#') => parse_hex(&s[1..]).ok_or(()),
             _ => Err(()),
         }
+    }
+}
+
+fn parse_hex(s: &str) -> Option<Color> {
+    if s.len() == 6 {
+        let r = u8::from_str_radix(&s[0..2], 16).ok()?;
+        let g = u8::from_str_radix(&s[2..4], 16).ok()?;
+        let b = u8::from_str_radix(&s[4..6], 16).ok()?;
+        Some(Color::TrueColor { r, g, b })
+    } else if s.len() == 3 {
+        let r = u8::from_str_radix(&s[0..1], 16).ok()?;
+        let r = r | (r << 4);
+        let g = u8::from_str_radix(&s[1..2], 16).ok()?;
+        let g = g | (g << 4);
+        let b = u8::from_str_radix(&s[2..3], 16).ok()?;
+        let b = b | (b << 4);
+        Some(Color::TrueColor { r, g, b })
+    } else {
+        None
     }
 }
 
@@ -281,7 +302,17 @@ mod tests {
 
             invalid: "invalid" => Color::White,
             capitalized: "BLUE" => Color::Blue,
-            mixed_case: "bLuE" => Color::Blue
+            mixed_case: "bLuE" => Color::Blue,
+
+            hex3_lower: "#abc" => Color::TrueColor { r: 170, g: 187, b: 204 },
+            hex3_upper: "#ABC" => Color::TrueColor { r: 170, g: 187, b: 204 },
+            hex3_mixed: "#aBc" => Color::TrueColor { r: 170, g: 187, b: 204 },
+            hex6_lower: "#abcdef" => Color::TrueColor { r: 171, g: 205, b: 239 },
+            hex6_upper: "#ABCDEF" => Color::TrueColor { r: 171, g: 205, b: 239 },
+            hex6_mixed: "#aBcDeF" => Color::TrueColor { r: 171, g: 205, b: 239 },
+            hex_too_short: "#aa" => Color::White,
+            hex_too_long: "#aaabbbccc" => Color::White,
+            hex_invalid: "#abcxyz" => Color::White
         );
     }
 
@@ -322,7 +353,17 @@ mod tests {
 
             invalid: "invalid" => Color::White,
             capitalized: "BLUE" => Color::Blue,
-            mixed_case: "bLuE" => Color::Blue
+            mixed_case: "bLuE" => Color::Blue,
+
+            hex3_lower: "#abc" => Color::TrueColor { r: 170, g: 187, b: 204 },
+            hex3_upper: "#ABC" => Color::TrueColor { r: 170, g: 187, b: 204 },
+            hex3_mixed: "#aBc" => Color::TrueColor { r: 170, g: 187, b: 204 },
+            hex6_lower: "#abcdef" => Color::TrueColor { r: 171, g: 205, b: 239 },
+            hex6_upper: "#ABCDEF" => Color::TrueColor { r: 171, g: 205, b: 239 },
+            hex6_mixed: "#aBcDeF" => Color::TrueColor { r: 171, g: 205, b: 239 },
+            hex_too_short: "#aa" => Color::White,
+            hex_too_long: "#aaabbbccc" => Color::White,
+            hex_invalid: "#abcxyz" => Color::White
         );
     }
 

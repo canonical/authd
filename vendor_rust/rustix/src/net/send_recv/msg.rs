@@ -66,6 +66,11 @@ macro_rules! cmsg_space {
             $len * ::core::mem::size_of::<$crate::net::UCred>(),
         )
     };
+    (TxTime($len:expr)) => {
+        $crate::net::__cmsg_space(
+            $len * ::core::mem::size_of::<::core::primitive::u64>(),
+        )
+    };
 
     // Combo Rules
     ($firstid:ident($firstex:expr), $($restid:ident($restex:expr)),*) => {{
@@ -94,12 +99,17 @@ macro_rules! cmsg_aligned_space {
             $len * ::core::mem::size_of::<$crate::net::UCred>(),
         )
     };
+    (TxTime($len:expr)) => {
+        $crate::net::__cmsg_aligned_space(
+            $len * ::core::mem::size_of::<::core::primitive::u64>(),
+        )
+    };
 
     // Combo Rules
     ($firstid:ident($firstex:expr), $($restid:ident($restex:expr)),*) => {{
-        let sum = cmsg_aligned_space!($firstid($firstex));
+        let sum = $crate::cmsg_aligned_space!($firstid($firstex));
         $(
-            let sum = sum + cmsg_aligned_space!($restid($restex));
+            let sum = sum + $crate::cmsg_aligned_space!($restid($restex));
         )*
         sum
     }};
@@ -138,6 +148,13 @@ pub enum SendAncillaryMessage<'slice, 'fd> {
     #[cfg(linux_kernel)]
     #[doc(alias = "SCM_CREDENTIAL")]
     ScmCredentials(UCred),
+    /// Transmission time, in nanoseconds. The value will be interpreted by
+    /// whichever clock was configured on the socket with [`set_txtime`].
+    ///
+    /// [`set_txtime`]: crate::net::sockopt::set_txtime
+    #[cfg(target_os = "linux")]
+    #[doc(alias = "SCM_TXTIME")]
+    TxTime(u64),
 }
 
 impl SendAncillaryMessage<'_, '_> {
@@ -150,6 +167,8 @@ impl SendAncillaryMessage<'_, '_> {
             Self::ScmRights(slice) => cmsg_space!(ScmRights(slice.len())),
             #[cfg(linux_kernel)]
             Self::ScmCredentials(_) => cmsg_space!(ScmCredentials(1)),
+            #[cfg(target_os = "linux")]
+            Self::TxTime(_) => cmsg_space!(TxTime(1)),
         }
     }
 }
@@ -290,6 +309,13 @@ impl<'buf, 'slice, 'fd> SendAncillaryBuffer<'buf, 'slice, 'fd> {
                     slice::from_raw_parts(addr_of!(ucred).cast::<u8>(), size_of_val(&ucred))
                 };
                 self.push_ancillary(ucred_bytes, c::SOL_SOCKET as _, c::SCM_CREDENTIALS as _)
+            }
+            #[cfg(target_os = "linux")]
+            SendAncillaryMessage::TxTime(tx_time) => {
+                let tx_time_bytes = unsafe {
+                    slice::from_raw_parts(addr_of!(tx_time).cast::<u8>(), size_of_val(&tx_time))
+                };
+                self.push_ancillary(tx_time_bytes, c::SOL_SOCKET as _, c::SO_TXTIME as _)
             }
         }
     }
@@ -958,4 +984,43 @@ mod messages {
     }
 
     impl FusedIterator for Messages<'_> {}
+}
+
+#[cfg(test)]
+mod tests {
+    #[no_implicit_prelude]
+    mod hygiene {
+        #[allow(unused_macros)]
+        #[test]
+        fn macro_hygiene() {
+            // This `u64` is `!Sized`, so `cmsg_space!` will fail if it tries to get its size with
+            // `size_of()`.
+            #[allow(dead_code, non_camel_case_types)]
+            struct u64([u8]);
+
+            // Ensure that when `cmsg*_space!` calls itself recursively, it really calls itself and
+            // not these macros.
+            macro_rules! cmsg_space {
+                ($($tt:tt)*) => {{
+                    let v: usize = ::core::panic!("Wrong cmsg_space! macro called");
+                    v
+                }};
+            }
+            macro_rules! cmsg_aligned_space {
+                ($($tt:tt)*) => {{
+                    let v: usize = ::core::panic!("Wrong cmsg_aligned_space! macro called");
+                    v
+                }};
+            }
+
+            crate::cmsg_space!(ScmRights(1));
+            crate::cmsg_space!(TxTime(1));
+            #[cfg(linux_kernel)]
+            {
+                crate::cmsg_space!(ScmCredentials(1));
+                crate::cmsg_space!(ScmRights(1), ScmCredentials(1), TxTime(1));
+                crate::cmsg_aligned_space!(ScmRights(1), ScmCredentials(1), TxTime(1));
+            }
+        }
+    }
 }

@@ -143,6 +143,8 @@
 #![doc(alias = "getsockopt")]
 #![doc(alias = "setsockopt")]
 
+#[cfg(all(target_os = "linux", feature = "time"))]
+use crate::clockid::ClockId;
 #[cfg(target_os = "linux")]
 use crate::net::xdp::{XdpMmapOffsets, XdpOptionsFlags, XdpStatistics, XdpUmemReg};
 #[cfg(not(any(
@@ -172,6 +174,8 @@ use crate::net::Protocol;
 use crate::net::SocketAddrV4;
 #[cfg(linux_kernel)]
 use crate::net::SocketAddrV6;
+#[cfg(all(target_os = "linux", feature = "time"))]
+use crate::net::TxTimeFlags;
 use crate::net::{Ipv4Addr, Ipv6Addr, SocketType};
 use crate::{backend, io};
 #[cfg(feature = "alloc")]
@@ -196,6 +200,110 @@ pub enum Timeout {
 
     /// `SO_SNDTIMEO`—Timeout for sending.
     Send = c::SO_SNDTIMEO as _,
+}
+
+/// A type for holding raw integer IPv4 Path MTU Discovery options.
+#[cfg(linux_kernel)]
+pub type RawIpv4PathMtuDiscovery = i32;
+
+/// IPv4 Path MTU Discovery option values (`IP_PMTUDISC_*`) for use with
+/// [`set_ip_mtu_discover`] and [`ip_mtu_discover`].
+///
+/// # References
+/// - [Linux]
+/// - [Linux INET header]
+///
+/// [Linux]: https://man7.org/linux/man-pages/man7/ip.7.html
+/// [Linux INET header]: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/in.h?h=v6.14#n135
+#[cfg(linux_kernel)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[repr(transparent)]
+pub struct Ipv4PathMtuDiscovery(RawIpv4PathMtuDiscovery);
+
+#[cfg(linux_kernel)]
+impl Ipv4PathMtuDiscovery {
+    /// `IP_PMTUDISC_DONT`
+    #[doc(alias = "IP_PMTUDISC_DONT")]
+    pub const DONT: Self = Self(c::IP_PMTUDISC_DONT as _);
+    /// `IP_PMTUDISC_WANT`
+    #[doc(alias = "IP_PMTUDISC_WANT")]
+    pub const WANT: Self = Self(c::IP_PMTUDISC_WANT as _);
+    /// `IP_PMTUDISC_DO`
+    #[doc(alias = "IP_PMTUDISC_DO")]
+    pub const DO: Self = Self(c::IP_PMTUDISC_DO as _);
+    /// `IP_PMTUDISC_PROBE`
+    #[doc(alias = "IP_PMTUDISC_PROBE")]
+    pub const PROBE: Self = Self(c::IP_PMTUDISC_PROBE as _);
+    /// `IP_PMTUDISC_INTERFACE`
+    #[doc(alias = "IP_PMTUDISC_INTERFACE")]
+    pub const INTERFACE: Self = Self(c::IP_PMTUDISC_INTERFACE as _);
+    /// `IP_PMTUDISC_OMIT`
+    #[doc(alias = "IP_PMTUDISC_OMIT")]
+    pub const OMIT: Self = Self(c::IP_PMTUDISC_OMIT as _);
+
+    /// Constructs an option from a raw integer.
+    #[inline]
+    pub const fn from_raw(raw: RawIpv4PathMtuDiscovery) -> Self {
+        Self(raw)
+    }
+
+    /// Returns the raw integer for this option.
+    #[inline]
+    pub const fn as_raw(self) -> RawIpv4PathMtuDiscovery {
+        self.0
+    }
+}
+
+/// A type for holding raw integer IPv6 Path MTU Discovery options.
+#[cfg(linux_kernel)]
+pub type RawIpv6PathMtuDiscovery = i32;
+
+/// IPv6 Path MTU Discovery option values (`IPV6_PMTUDISC_*`) for use with
+/// [`set_ipv6_mtu_discover`] and [`ipv6_mtu_discover`].
+///
+/// # References
+/// - [Linux]
+/// - [Linux INET6 header]
+///
+/// [Linux]: https://man7.org/linux/man-pages/man7/ipv6.7.html
+/// [Linux INET6 header]: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/in6.h?h=v6.14#n185
+#[cfg(linux_kernel)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[repr(transparent)]
+pub struct Ipv6PathMtuDiscovery(RawIpv6PathMtuDiscovery);
+
+#[cfg(linux_kernel)]
+impl Ipv6PathMtuDiscovery {
+    /// `IPV6_PMTUDISC_DONT`
+    #[doc(alias = "IPV6_PMTUDISC_DONT")]
+    pub const DONT: Self = Self(c::IPV6_PMTUDISC_DONT as _);
+    /// `IPV6_PMTUDISC_WANT`
+    #[doc(alias = "IPV6_PMTUDISC_WANT")]
+    pub const WANT: Self = Self(c::IPV6_PMTUDISC_WANT as _);
+    /// `IPV6_PMTUDISC_DO`
+    #[doc(alias = "IPV6_PMTUDISC_DO")]
+    pub const DO: Self = Self(c::IPV6_PMTUDISC_DO as _);
+    /// `IPV6_PMTUDISC_PROBE`
+    #[doc(alias = "IPV6_PMTUDISC_PROBE")]
+    pub const PROBE: Self = Self(c::IPV6_PMTUDISC_PROBE as _);
+    /// `IPV6_PMTUDISC_INTERFACE`
+    #[doc(alias = "IPV6_PMTUDISC_INTERFACE")]
+    pub const INTERFACE: Self = Self(c::IPV6_PMTUDISC_INTERFACE as _);
+    /// `IPV6_PMTUDISC_OMIT`
+    #[doc(alias = "IPV6_PMTUDISC_OMIT")]
+    pub const OMIT: Self = Self(c::IPV6_PMTUDISC_OMIT as _);
+
+    /// Constructs an option from a raw integer.
+    #[inline]
+    pub const fn from_raw(raw: RawIpv6PathMtuDiscovery) -> Self {
+        Self(raw)
+    }
+
+    /// Returns the raw integer for this option.
+    #[inline]
+    pub const fn as_raw(self) -> RawIpv6PathMtuDiscovery {
+        self.0
+    }
 }
 
 /// `getsockopt(fd, SOL_SOCKET, SO_TYPE)`—Returns the type of a socket.
@@ -684,6 +792,54 @@ pub fn ip_mtu<Fd: AsFd>(fd: Fd) -> io::Result<u32> {
 #[doc(alias = "IPV6_MTU")]
 pub fn ipv6_mtu<Fd: AsFd>(fd: Fd) -> io::Result<u32> {
     backend::net::sockopt::ipv6_mtu(fd.as_fd())
+}
+
+/// `setsockopt(fd, IPPROTO_IP, IP_MTU_DISCOVER, value)`
+///
+/// See the [module-level documentation] for more.
+///
+/// [module-level documentation]: self#references-for-get_ip_-and-set_ip_-functions
+#[cfg(linux_kernel)]
+#[inline]
+#[doc(alias = "IP_MTU_DISCOVER")]
+pub fn set_ip_mtu_discover<Fd: AsFd>(fd: Fd, value: Ipv4PathMtuDiscovery) -> io::Result<()> {
+    backend::net::sockopt::set_ip_mtu_discover(fd.as_fd(), value)
+}
+
+/// `getsockopt(fd, IPPROTO_IP, IP_MTU_DISCOVER)`
+///
+/// See the [module-level documentation] for more.
+///
+/// [module-level documentation]: self#references-for-get_ip_-and-set_ip_-functions
+#[cfg(linux_kernel)]
+#[inline]
+#[doc(alias = "IP_MTU_DISCOVER")]
+pub fn ip_mtu_discover<Fd: AsFd>(fd: Fd) -> io::Result<Ipv4PathMtuDiscovery> {
+    backend::net::sockopt::ip_mtu_discover(fd.as_fd())
+}
+
+/// `setsockopt(fd, IPPROTO_IPV6, IPV6_MTU_DISCOVER, value)`
+///
+/// See the [module-level documentation] for more.
+///
+/// [module-level documentation]: self#references-for-get_ipv6_-and-set_ipv6_-functions
+#[cfg(linux_kernel)]
+#[inline]
+#[doc(alias = "IPV6_MTU_DISCOVER")]
+pub fn set_ipv6_mtu_discover<Fd: AsFd>(fd: Fd, value: Ipv6PathMtuDiscovery) -> io::Result<()> {
+    backend::net::sockopt::set_ipv6_mtu_discover(fd.as_fd(), value)
+}
+
+/// `getsockopt(fd, IPPROTO_IPV6, IPV6_MTU_DISCOVER)`
+///
+/// See the [module-level documentation] for more.
+///
+/// [module-level documentation]: self#references-for-get_ipv6_-and-set_ipv6_-functions
+#[cfg(linux_kernel)]
+#[inline]
+#[doc(alias = "IPV6_MTU_DISCOVER")]
+pub fn ipv6_mtu_discover<Fd: AsFd>(fd: Fd) -> io::Result<Ipv6PathMtuDiscovery> {
+    backend::net::sockopt::ipv6_mtu_discover(fd.as_fd())
 }
 
 /// `setsockopt(fd, IPPROTO_IP, IP_MULTICAST_IF, value)`
@@ -1536,6 +1692,20 @@ pub fn socket_peercred<Fd: AsFd>(fd: Fd) -> io::Result<super::UCred> {
     backend::net::sockopt::socket_peercred(fd.as_fd())
 }
 
+/// `getsockopt(fd, SOL_SOCKET, SO_TXTIME)` — Get transmission timing configuration.
+#[cfg(all(target_os = "linux", feature = "time"))]
+#[doc(alias = "SO_TXTIME")]
+pub fn get_txtime<Fd: AsFd>(fd: Fd) -> io::Result<(ClockId, TxTimeFlags)> {
+    backend::net::sockopt::get_txtime(fd.as_fd())
+}
+
+/// `setsockopt(fd, SOL_SOCKET, SO_TXTIME)` — Configure transmission timing.
+#[cfg(all(target_os = "linux", feature = "time"))]
+#[doc(alias = "SO_TXTIME")]
+pub fn set_txtime<Fd: AsFd>(fd: Fd, clockid: ClockId, flags: TxTimeFlags) -> io::Result<()> {
+    backend::net::sockopt::set_txtime(fd.as_fd(), clockid, flags)
+}
+
 /// `setsockopt(fd, SOL_XDP, XDP_UMEM_REG, value)`
 ///
 /// On kernel versions only supporting v1, the flags are ignored.
@@ -1604,7 +1774,7 @@ pub fn set_xdp_rx_ring_size<Fd: AsFd>(fd: Fd, value: u32) -> io::Result<()> {
 ///   - [Linux]
 ///
 /// [Linux]: https://www.kernel.org/doc/html/next/networking/af_xdp.html
-#[cfg(target_os = "linux")]
+#[cfg(all(linux_raw_dep, target_os = "linux"))]
 #[doc(alias = "XDP_MMAP_OFFSETS")]
 pub fn xdp_mmap_offsets<Fd: AsFd>(fd: Fd) -> io::Result<XdpMmapOffsets> {
     backend::net::sockopt::xdp_mmap_offsets(fd.as_fd())
@@ -1616,7 +1786,7 @@ pub fn xdp_mmap_offsets<Fd: AsFd>(fd: Fd) -> io::Result<XdpMmapOffsets> {
 ///   - [Linux]
 ///
 /// [Linux]: https://www.kernel.org/doc/html/next/networking/af_xdp.html#xdp-statistics-getsockopt
-#[cfg(target_os = "linux")]
+#[cfg(all(linux_raw_dep, target_os = "linux"))]
 #[doc(alias = "XDP_STATISTICS")]
 pub fn xdp_statistics<Fd: AsFd>(fd: Fd) -> io::Result<XdpStatistics> {
     backend::net::sockopt::xdp_statistics(fd.as_fd())

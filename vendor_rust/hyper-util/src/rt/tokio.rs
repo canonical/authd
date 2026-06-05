@@ -295,6 +295,10 @@ impl Timer for TokioTimer {
             sleep.reset(new_deadline)
         }
     }
+
+    fn now(&self) -> Instant {
+        tokio::time::Instant::now().into()
+    }
 }
 
 impl TokioTimer {
@@ -326,7 +330,6 @@ mod tests {
     use hyper::rt::Executor;
     use tokio::sync::oneshot;
 
-    #[cfg(not(miri))]
     #[tokio::test]
     async fn simple_execute() -> Result<(), Box<dyn std::error::Error>> {
         let (tx, rx) = oneshot::channel();

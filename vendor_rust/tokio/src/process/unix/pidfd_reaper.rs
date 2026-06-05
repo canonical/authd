@@ -4,7 +4,6 @@ use crate::{
         imp::{orphan::Wait, OrphanQueue},
         kill::Kill,
     },
-    util::error::RUNTIME_SHUTTING_DOWN_ERROR,
 };
 
 use libc::{syscall, SYS_pidfd_open, ENOSYS, PIDFD_NONBLOCK};
@@ -95,19 +94,6 @@ where
     pidfd: PollEvented<Pidfd>,
 }
 
-#[allow(deprecated)]
-fn is_rt_shutdown_err(err: &io::Error) -> bool {
-    if let Some(inner) = err.get_ref() {
-        // Using `Error::description()` is more efficient than `format!("{inner}")`,
-        // so we use it here even if it is deprecated.
-        err.kind() == io::ErrorKind::Other
-            && inner.source().is_none()
-            && inner.description() == RUNTIME_SHUTTING_DOWN_ERROR
-    } else {
-        false
-    }
-}
-
 impl<W> Future for PidfdReaperInner<W>
 where
     W: Wait + Unpin,
@@ -124,7 +110,7 @@ where
                 }
                 this.pidfd.registration().clear_readiness(evt);
             }
-            Poll::Ready(Err(err)) if is_rt_shutdown_err(&err) => {}
+            Poll::Ready(Err(err)) if crate::runtime::is_rt_shutdown_err(&err) => {}
             Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
             Poll::Pending => return Poll::Pending,
         };
@@ -256,7 +242,7 @@ mod test {
         .split('.');
 
         let major: u32 = kernel_version_iter.next().unwrap().parse().unwrap();
-        let minor: u32 = kernel_version_iter.next().unwrap().parse().unwrap();
+        let minor: u32 = kernel_version_iter.next().unwrap().trim().parse().unwrap();
 
         major >= 6 || (major == 5 && minor >= 10)
     }

@@ -1,7 +1,6 @@
 //! Filesystem operations.
 
 mod abs;
-#[cfg(not(target_os = "redox"))]
 mod at;
 mod constants;
 #[cfg(linux_kernel)]
@@ -30,7 +29,7 @@ pub(crate) mod fd;
 mod getpath;
 #[cfg(not(target_os = "wasi"))] // WASI doesn't have get[gpu]id.
 mod id;
-#[cfg(linux_kernel)]
+#[cfg(linux_raw_dep)]
 pub mod inotify;
 #[cfg(linux_kernel)]
 mod ioctl;
@@ -38,21 +37,20 @@ mod ioctl;
     target_os = "espidf",
     target_os = "haiku",
     target_os = "horizon",
-    target_os = "redox",
     target_os = "vita",
     target_os = "wasi"
 )))]
 mod makedev;
 #[cfg(any(linux_kernel, target_os = "freebsd"))]
 mod memfd_create;
-#[cfg(linux_kernel)]
+#[cfg(linux_raw_dep)]
 mod openat2;
 #[cfg(linux_kernel)]
 mod raw_dir;
 mod seek_from;
 #[cfg(target_os = "linux")]
 mod sendfile;
-#[cfg(not(any(target_os = "espidf", target_os = "redox")))]
+#[cfg(not(target_os = "espidf"))]
 mod special;
 #[cfg(linux_kernel)]
 mod statx;
@@ -68,7 +66,6 @@ mod sync;
 mod xattr;
 
 pub use abs::*;
-#[cfg(not(target_os = "redox"))]
 pub use at::*;
 pub use constants::*;
 #[cfg(linux_kernel)]
@@ -103,21 +100,20 @@ pub use ioctl::*;
     target_os = "espidf",
     target_os = "haiku",
     target_os = "horizon",
-    target_os = "redox",
     target_os = "vita",
     target_os = "wasi"
 )))]
 pub use makedev::*;
 #[cfg(any(linux_kernel, target_os = "freebsd"))]
 pub use memfd_create::memfd_create;
-#[cfg(linux_kernel)]
+#[cfg(linux_raw_dep)]
 pub use openat2::openat2;
 #[cfg(linux_kernel)]
 pub use raw_dir::{RawDir, RawDirEntry};
 pub use seek_from::SeekFrom;
 #[cfg(target_os = "linux")]
 pub use sendfile::sendfile;
-#[cfg(not(any(target_os = "espidf", target_os = "redox")))]
+#[cfg(not(target_os = "espidf"))]
 pub use special::*;
 #[cfg(linux_kernel)]
 pub use statx::*;

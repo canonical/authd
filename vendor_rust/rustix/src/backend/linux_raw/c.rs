@@ -10,7 +10,7 @@ pub(crate) type size_t = usize;
 pub(crate) use linux_raw_sys::ctypes::*;
 pub(crate) use linux_raw_sys::errno::{EBADF, EINVAL};
 pub(crate) use linux_raw_sys::general::{__kernel_fd_set as fd_set, __FD_SETSIZE as FD_SETSIZE};
-pub(crate) use linux_raw_sys::ioctl::{FIONBIO, FIONREAD};
+pub(crate) use linux_raw_sys::ioctl::{FIOCLEX, FIONBIO, FIONCLEX, FIONREAD};
 // Import the kernel's `uid_t` and `gid_t` if they're 32-bit.
 #[cfg(feature = "thread")]
 pub(crate) use linux_raw_sys::general::futex_waitv;
@@ -84,14 +84,17 @@ pub(crate) use linux_raw_sys::{
         AF_APPLETALK, AF_ASH, AF_ATMPVC, AF_ATMSVC, AF_AX25, AF_BLUETOOTH, AF_BRIDGE, AF_CAN,
         AF_ECONET, AF_IEEE802154, AF_INET, AF_INET6, AF_IPX, AF_IRDA, AF_ISDN, AF_IUCV, AF_KEY,
         AF_LLC, AF_NETBEUI, AF_NETLINK, AF_NETROM, AF_PACKET, AF_PHONET, AF_PPPOX, AF_RDS, AF_ROSE,
-        AF_RXRPC, AF_SECURITY, AF_SNA, AF_TIPC, AF_UNIX, AF_UNSPEC, AF_WANPIPE, AF_X25, AF_XDP,
-        IP6T_SO_ORIGINAL_DST, IPPROTO_FRAGMENT, IPPROTO_ICMPV6, IPPROTO_MH, IPPROTO_ROUTING,
-        IPV6_ADD_MEMBERSHIP, IPV6_DROP_MEMBERSHIP, IPV6_FREEBIND, IPV6_MULTICAST_HOPS,
-        IPV6_MULTICAST_LOOP, IPV6_RECVTCLASS, IPV6_TCLASS, IPV6_UNICAST_HOPS, IPV6_V6ONLY,
-        IP_ADD_MEMBERSHIP, IP_ADD_SOURCE_MEMBERSHIP, IP_DROP_MEMBERSHIP, IP_DROP_SOURCE_MEMBERSHIP,
-        IP_FREEBIND, IP_MULTICAST_LOOP, IP_MULTICAST_TTL, IP_RECVTOS, IP_TOS, IP_TTL,
-        MSG_CMSG_CLOEXEC, MSG_CONFIRM, MSG_CTRUNC, MSG_DONTROUTE, MSG_DONTWAIT, MSG_EOR,
-        MSG_ERRQUEUE, MSG_MORE, MSG_NOSIGNAL, MSG_OOB, MSG_PEEK, MSG_TRUNC, MSG_WAITALL,
+        AF_RXRPC, AF_SECURITY, AF_SNA, AF_TIPC, AF_UNIX, AF_UNSPEC, AF_VSOCK, AF_WANPIPE, AF_X25,
+        AF_XDP, IP6T_SO_ORIGINAL_DST, IPPROTO_FRAGMENT, IPPROTO_ICMPV6, IPPROTO_MH,
+        IPPROTO_ROUTING, IPV6_ADD_MEMBERSHIP, IPV6_DROP_MEMBERSHIP, IPV6_FREEBIND,
+        IPV6_MULTICAST_HOPS, IPV6_MULTICAST_LOOP, IPV6_PMTUDISC_DO, IPV6_PMTUDISC_DONT,
+        IPV6_PMTUDISC_INTERFACE, IPV6_PMTUDISC_OMIT, IPV6_PMTUDISC_PROBE, IPV6_PMTUDISC_WANT,
+        IPV6_RECVTCLASS, IPV6_TCLASS, IPV6_UNICAST_HOPS, IPV6_V6ONLY, IP_ADD_MEMBERSHIP,
+        IP_ADD_SOURCE_MEMBERSHIP, IP_DROP_MEMBERSHIP, IP_DROP_SOURCE_MEMBERSHIP, IP_FREEBIND,
+        IP_MULTICAST_LOOP, IP_MULTICAST_TTL, IP_PMTUDISC_DO, IP_PMTUDISC_DONT,
+        IP_PMTUDISC_INTERFACE, IP_PMTUDISC_OMIT, IP_PMTUDISC_PROBE, IP_PMTUDISC_WANT, IP_RECVTOS,
+        IP_TOS, IP_TTL, MSG_CMSG_CLOEXEC, MSG_CONFIRM, MSG_CTRUNC, MSG_DONTROUTE, MSG_DONTWAIT,
+        MSG_EOR, MSG_ERRQUEUE, MSG_MORE, MSG_NOSIGNAL, MSG_OOB, MSG_PEEK, MSG_TRUNC, MSG_WAITALL,
         SCM_CREDENTIALS, SCM_RIGHTS, SHUT_RD, SHUT_RDWR, SHUT_WR, SOCK_DGRAM, SOCK_RAW, SOCK_RDM,
         SOCK_SEQPACKET, SOCK_STREAM, SOL_SOCKET, SOL_XDP, SO_ACCEPTCONN, SO_BROADCAST, SO_COOKIE,
         SO_DOMAIN, SO_ERROR, SO_INCOMING_CPU, SO_KEEPALIVE, SO_LINGER, SO_OOBINLINE,
@@ -113,6 +116,19 @@ pub(crate) use linux_raw_sys::{
         XSK_UNALIGNED_BUF_ADDR_MASK, XSK_UNALIGNED_BUF_OFFSET_SHIFT,
     },
 };
+
+#[cfg(any(feature = "io_uring", feature = "time", feature = "thread"))]
+pub use linux_raw_sys::general::__kernel_clockid_t as clockid_t;
+
+#[cfg(feature = "net")]
+pub use linux_raw_sys::net::{sock_txtime, SCM_TXTIME, SO_TXTIME};
+
+#[cfg(all(feature = "net", feature = "time"))]
+pub(crate) const SOF_TXTIME_DEADLINE_MODE: u32 =
+    linux_raw_sys::net::txtime_flags::SOF_TXTIME_DEADLINE_MODE as _;
+#[cfg(all(feature = "net", feature = "time"))]
+pub(crate) const SOF_TXTIME_REPORT_ERRORS: u32 =
+    linux_raw_sys::net::txtime_flags::SOF_TXTIME_REPORT_ERRORS as _;
 
 // Cast away bindgen's `enum` type to make these consistent with the other
 // `setsockopt`/`getsockopt` level values.

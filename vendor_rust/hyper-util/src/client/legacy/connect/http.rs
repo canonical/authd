@@ -6,10 +6,9 @@ use std::marker::PhantomData;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{self, Poll};
+use std::task::{self, ready, Poll};
 use std::time::Duration;
 
-use futures_core::ready;
 use futures_util::future::Either;
 use http::uri::{Scheme, Uri};
 use pin_project_lite::pin_project;
@@ -397,7 +396,7 @@ impl<R> HttpConnector<R> {
     /// - macOS, iOS, visionOS, watchOS, and tvOS
     ///
     /// [VRF]: https://www.kernel.org/doc/Documentation/networking/vrf.txt
-    /// [`man 7 socket`] https://man7.org/linux/man-pages/man7/socket.7.html
+    /// [`man 7 socket`]: https://man7.org/linux/man-pages/man7/socket.7.html
     /// [`man 7p ip`]: https://docs.oracle.com/cd/E86824_01/html/E54777/ip-7p.html
     #[cfg(any(
         target_os = "android",
@@ -509,7 +508,7 @@ fn get_host_port<'u>(config: &Config, dst: &'u Uri) -> Result<(&'u str, u16), Co
                 msg: INVALID_MISSING_HOST,
                 addr: None,
                 cause: None,
-            })
+            });
         }
     };
     let port = match dst.port() {
@@ -914,24 +913,8 @@ fn connect(
     )
     .map_err(ConnectError::m("tcp bind local error"))?;
 
-    #[cfg(unix)]
-    let socket = unsafe {
-        // Safety: `from_raw_fd` is only safe to call if ownership of the raw
-        // file descriptor is transferred. Since we call `into_raw_fd` on the
-        // socket2 socket, it gives up ownership of the fd and will not close
-        // it, so this is safe.
-        use std::os::unix::io::{FromRawFd, IntoRawFd};
-        TcpSocket::from_raw_fd(socket.into_raw_fd())
-    };
-    #[cfg(windows)]
-    let socket = unsafe {
-        // Safety: `from_raw_socket` is only safe to call if ownership of the raw
-        // Windows SOCKET is transferred. Since we call `into_raw_socket` on the
-        // socket2 socket, it gives up ownership of the SOCKET and will not close
-        // it, so this is safe.
-        use std::os::windows::io::{FromRawSocket, IntoRawSocket};
-        TcpSocket::from_raw_socket(socket.into_raw_socket())
-    };
+    // Convert the `Socket` to a Tokio `TcpSocket`.
+    let socket = TcpSocket::from_std_stream(socket.into());
 
     if config.reuse_address {
         if let Err(e) = socket.set_reuseaddr(true) {
@@ -1038,7 +1021,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg_attr(miri, ignore)]
     async fn test_errors_enforce_http() {
         let dst = "https://example.domain/foo/bar?baz".parse().unwrap();
         let connector = HttpConnector::new();
@@ -1082,7 +1064,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg_attr(miri, ignore)]
     async fn test_errors_missing_scheme() {
         let dst = "example.domain".parse().unwrap();
         let mut connector = HttpConnector::new();

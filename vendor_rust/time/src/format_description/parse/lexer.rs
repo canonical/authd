@@ -2,15 +2,21 @@
 
 use core::iter;
 
-use super::{attach_location, unused, Error, Location, Spanned, SpannedValue};
+use super::{Error, Location, Spanned, SpannedValue, attach_location, unused};
 
 /// An iterator over the lexed tokens.
-pub(super) struct Lexed<I: Iterator> {
+pub(super) struct Lexed<I>
+where
+    I: Iterator,
+{
     /// The internal iterator.
     iter: iter::Peekable<I>,
 }
 
-impl<I: Iterator> Iterator for Lexed<I> {
+impl<I> Iterator for Lexed<I>
+where
+    I: Iterator,
+{
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -18,13 +24,19 @@ impl<I: Iterator> Iterator for Lexed<I> {
     }
 }
 
-impl<'iter, 'token: 'iter, I: Iterator<Item = Result<Token<'token>, Error>> + 'iter> Lexed<I> {
+impl<'iter, 'token, I> Lexed<I>
+where
+    'token: 'iter,
+    I: Iterator<Item = Result<Token<'token>, Error>> + 'iter,
+{
     /// Peek at the next item in the iterator.
+    #[inline]
     pub(super) fn peek(&mut self) -> Option<&I::Item> {
         self.iter.peek()
     }
 
     /// Consume the next token if it is whitespace.
+    #[inline]
     pub(super) fn next_if_whitespace(&mut self) -> Option<Spanned<&'token [u8]>> {
         if let Some(&Ok(Token::ComponentPart {
             kind: ComponentKind::Whitespace,
@@ -39,6 +51,7 @@ impl<'iter, 'token: 'iter, I: Iterator<Item = Result<Token<'token>, Error>> + 'i
     }
 
     /// Consume the next token if it is a component item that is not whitespace.
+    #[inline]
     pub(super) fn next_if_not_whitespace(&mut self) -> Option<Spanned<&'token [u8]>> {
         if let Some(&Ok(Token::ComponentPart {
             kind: ComponentKind::NotWhitespace,
@@ -53,6 +66,7 @@ impl<'iter, 'token: 'iter, I: Iterator<Item = Result<Token<'token>, Error>> + 'i
     }
 
     /// Consume the next token if it is an opening bracket.
+    #[inline]
     pub(super) fn next_if_opening_bracket(&mut self) -> Option<Location> {
         if let Some(&Ok(Token::Bracket {
             kind: BracketKind::Opening,
@@ -67,6 +81,7 @@ impl<'iter, 'token: 'iter, I: Iterator<Item = Result<Token<'token>, Error>> + 'i
     }
 
     /// Peek at the next token if it is a closing bracket.
+    #[inline]
     pub(super) fn peek_closing_bracket(&'iter mut self) -> Option<&'iter Location> {
         if let Some(Ok(Token::Bracket {
             kind: BracketKind::Closing,
@@ -80,6 +95,7 @@ impl<'iter, 'token: 'iter, I: Iterator<Item = Result<Token<'token>, Error>> + 'i
     }
 
     /// Consume the next token if it is a closing bracket.
+    #[inline]
     pub(super) fn next_if_closing_bracket(&mut self) -> Option<Location> {
         if let Some(&Ok(Token::Bracket {
             kind: BracketKind::Closing,
@@ -137,12 +153,13 @@ pub(super) enum ComponentKind {
 /// - When `VERSION` is 2, all escape sequences begin with `\`. The only characters that may
 ///   currently follow are `\`, `[`, and `]`, all of which result in the literal character. All
 ///   other characters result in a lex error.
+#[inline]
 pub(super) fn lex<const VERSION: usize>(
     mut input: &[u8],
 ) -> Lexed<impl Iterator<Item = Result<Token<'_>, Error>>> {
     validate_version!(VERSION);
 
-    let mut depth: u8 = 0;
+    let mut depth: u32 = 0;
     let mut iter = attach_location(input.iter()).peekable();
     let mut second_bracket_location = None;
 

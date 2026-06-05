@@ -9,7 +9,7 @@
 /// ```rust
 /// # use time::{Date, Weekday::*, Month, macros::date};
 /// assert_eq!(
-///     date!(2020 - W 01 - 3),
+///     date!(2020-W01-3),
 ///     Date::from_iso_week_date(2020, 1, Wednesday)?
 /// );
 /// assert_eq!(date!(2020-001), Date::from_ordinal_date(2020, 1)?);
@@ -52,7 +52,10 @@ pub use time_macros::datetime;
 /// Equivalent of performing [`format_description::parse()`] at compile time.
 ///
 /// Using the macro instead of the function results in a static slice rather than a
-/// [`Vec`](alloc::vec::Vec), such that it can be used in `#![no_alloc]` situations.
+/// [`Vec`](alloc::vec::Vec), such that it can be used in `#![no_alloc]` situations. For
+/// readability, you can use [`StaticFormatDescription`] as the type.
+///
+/// [`StaticFormatDescription`]: crate::format_description::StaticFormatDescription
 ///
 /// The resulting expression can be used in `const` or `static` declarations, and implements
 /// the sealed traits required for both formatting and parsing.

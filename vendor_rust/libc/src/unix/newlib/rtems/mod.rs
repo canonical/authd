@@ -73,8 +73,6 @@ pub const EAI_SERVICE: c_int = 9;
 pub const EAI_SYSTEM: c_int = 11;
 pub const EAI_OVERFLOW: c_int = 14;
 
-pub const _SC_PAGESIZE: c_int = 8;
-pub const _SC_GETPW_R_SIZE_MAX: c_int = 51;
 pub const PTHREAD_STACK_MIN: size_t = 0;
 
 // sys/wait.h
@@ -85,38 +83,38 @@ pub const WUNTRACED: c_int = 2;
 pub const SOMAXCONN: c_int = 128;
 
 safe_f! {
-    pub {const} fn WIFSTOPPED(status: c_int) -> bool {
+    pub const fn WIFSTOPPED(status: c_int) -> bool {
         (status & 0xff) == 0x7f
     }
 
-    pub {const} fn WSTOPSIG(status: c_int) -> c_int {
+    pub const fn WSTOPSIG(status: c_int) -> c_int {
         // (status >> 8) & 0xff
         WEXITSTATUS(status)
     }
 
-    pub {const} fn WIFSIGNALED(status: c_int) -> bool {
+    pub const fn WIFSIGNALED(status: c_int) -> bool {
         ((status & 0x7f) > 0) && ((status & 0x7f) < 0x7f)
     }
 
-    pub {const} fn WTERMSIG(status: c_int) -> c_int {
+    pub const fn WTERMSIG(status: c_int) -> c_int {
         status & 0x7f
     }
 
-    pub {const} fn WIFEXITED(status: c_int) -> bool {
+    pub const fn WIFEXITED(status: c_int) -> bool {
         (status & 0xff) == 0
     }
 
-    pub {const} fn WEXITSTATUS(status: c_int) -> c_int {
+    pub const fn WEXITSTATUS(status: c_int) -> c_int {
         (status >> 8) & 0xff
     }
 
     // RTEMS doesn't have native WIFCONTINUED.
-    pub {const} fn WIFCONTINUED(_status: c_int) -> bool {
+    pub const fn WIFCONTINUED(_status: c_int) -> bool {
         true
     }
 
     // RTEMS doesn't have native WCOREDUMP.
-    pub {const} fn WCOREDUMP(_status: c_int) -> bool {
+    pub const fn WCOREDUMP(_status: c_int) -> bool {
         false
     }
 }

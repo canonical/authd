@@ -1,5 +1,6 @@
 //! Utility functions, including updating time zone information.
 
+pub(crate) use time_core::util::{days_in_month_leap, range_validated};
 pub use time_core::util::{days_in_year, is_leap_year, weeks_in_year};
 
 use crate::Month;
@@ -20,6 +21,7 @@ pub(crate) enum DateAdjustment {
 /// # use time::{Month, util};
 /// assert_eq!(util::days_in_month(Month::February, 2020), 29);
 /// ```
+#[inline]
 pub const fn days_in_month(month: Month, year: i32) -> u8 {
     time_core::util::days_in_month(month as u8, year)
 }
@@ -27,7 +29,7 @@ pub const fn days_in_month(month: Month, year: i32) -> u8 {
 /// Get the number of days in the month of a given year.
 ///
 /// ```rust
-/// # #![allow(deprecated)]
+/// # #![expect(deprecated)]
 /// # use time::{Month, util};
 /// assert_eq!(util::days_in_year_month(2020, Month::February), 29);
 /// ```
@@ -35,6 +37,7 @@ pub const fn days_in_month(month: Month, year: i32) -> u8 {
     since = "0.3.37",
     note = "use `days_in_month` or `Month::length` instead"
 )]
+#[inline]
 pub const fn days_in_year_month(year: i32, month: Month) -> u8 {
     days_in_month(month, year)
 }
@@ -73,6 +76,7 @@ pub const fn days_in_year_month(year: i32, month: Month) -> u8 {
 /// may change in the future if necessary, expanding the safety requirements. It is expected that,
 /// at a minimum, calling this method when the process is single-threaded will remain sound.
 #[cfg(feature = "local-offset")]
+#[inline]
 pub unsafe fn refresh_tz_unchecked() {
     // Safety: The caller must uphold the safety requirements.
     unsafe { crate::sys::refresh_tz_unchecked() };
@@ -82,13 +86,17 @@ pub unsafe fn refresh_tz_unchecked() {
 ///
 /// Returns `None` if the call is not known to be sound.
 #[cfg(feature = "local-offset")]
+#[inline]
 pub fn refresh_tz() -> Option<()> {
     crate::sys::refresh_tz()
 }
 
 #[doc(hidden)]
 #[cfg(feature = "local-offset")]
-#[allow(clippy::missing_const_for_fn)]
+#[expect(
+    clippy::missing_const_for_fn,
+    reason = "no longer used; original implementation was not const"
+)]
 #[deprecated(since = "0.3.37", note = "no longer needed; TZ is refreshed manually")]
 pub mod local_offset {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,8 +105,10 @@ pub mod local_offset {
         Unsound,
     }
 
+    #[inline]
     pub unsafe fn set_soundness(_: Soundness) {}
 
+    #[inline]
     pub fn get_soundness() -> Soundness {
         Soundness::Sound
     }

@@ -24,6 +24,7 @@ pub enum Format {
 }
 
 impl fmt::Display for Format {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InsufficientTypeInformation => f.write_str(
@@ -41,12 +42,14 @@ impl fmt::Display for Format {
 }
 
 impl From<error::ComponentRange> for Format {
+    #[inline]
     fn from(err: error::ComponentRange) -> Self {
         Self::ComponentRange(Box::new(err))
     }
 }
 
 impl From<io::Error> for Format {
+    #[inline]
     fn from(err: io::Error) -> Self {
         Self::StdIo(err)
     }
@@ -55,6 +58,7 @@ impl From<io::Error> for Format {
 impl TryFrom<Format> for error::ComponentRange {
     type Error = error::DifferentVariant;
 
+    #[inline]
     fn try_from(err: Format) -> Result<Self, Self::Error> {
         match err {
             Format::ComponentRange(err) => Ok(*err),
@@ -66,6 +70,7 @@ impl TryFrom<Format> for error::ComponentRange {
 impl TryFrom<Format> for io::Error {
     type Error = error::DifferentVariant;
 
+    #[inline]
     fn try_from(err: Format) -> Result<Self, Self::Error> {
         match err {
             Format::StdIo(err) => Ok(err),
@@ -74,9 +79,9 @@ impl TryFrom<Format> for io::Error {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for Format {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for Format {
+    #[inline]
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
             Self::InsufficientTypeInformation | Self::InvalidComponent(_) => None,
             Self::ComponentRange(err) => Some(&**err),
@@ -86,6 +91,7 @@ impl std::error::Error for Format {
 }
 
 impl From<Format> for crate::Error {
+    #[inline]
     fn from(original: Format) -> Self {
         Self::Format(original)
     }
@@ -94,6 +100,7 @@ impl From<Format> for crate::Error {
 impl TryFrom<crate::Error> for Format {
     type Error = error::DifferentVariant;
 
+    #[inline]
     fn try_from(err: crate::Error) -> Result<Self, Self::Error> {
         match err {
             crate::Error::Format(err) => Ok(err),
@@ -106,8 +113,12 @@ impl TryFrom<crate::Error> for Format {
 impl Format {
     /// Obtain an error type for the serializer.
     #[doc(hidden)] // Exposed only for the `declare_format_string` macro
-    pub fn into_invalid_serde_value<S: serde::Serializer>(self) -> S::Error {
-        use serde::ser::Error;
+    #[inline]
+    pub fn into_invalid_serde_value<S>(self) -> S::Error
+    where
+        S: serde_core::Serializer,
+    {
+        use serde_core::ser::Error;
         S::Error::custom(self)
     }
 }

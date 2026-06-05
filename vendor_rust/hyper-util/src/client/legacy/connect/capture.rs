@@ -119,7 +119,7 @@ impl CaptureConnection {
     }
 }
 
-#[cfg(all(test, not(miri)))]
+#[cfg(test)]
 mod test {
     use super::*;
 
