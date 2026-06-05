@@ -2,7 +2,7 @@
 
 #![allow(unsafe_code)]
 
-use core::num::NonZeroI32;
+use core::{fmt, num::NonZeroI32};
 
 /// A process identifier as a raw integer.
 pub type RawPid = i32;
@@ -78,6 +78,14 @@ impl Pid {
         self.0
     }
 
+    /// Converts a `Pid` into a `RawPid`.
+    ///
+    /// This is the same as `self.as_raw_nonzero().get()`.
+    #[inline]
+    pub const fn as_raw_pid(self) -> RawPid {
+        self.0.get()
+    }
+
     /// Converts an `Option<Pid>` into a `RawPid`.
     #[inline]
     pub const fn as_raw(pid: Option<Self>) -> RawPid {
@@ -91,6 +99,44 @@ impl Pid {
     #[inline]
     pub const fn is_init(self) -> bool {
         self.0.get() == Self::INIT.0.get()
+    }
+}
+
+impl fmt::Display for Pid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+impl fmt::Binary for Pid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+impl fmt::Octal for Pid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+impl fmt::LowerHex for Pid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+impl fmt::UpperHex for Pid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+#[cfg(lower_upper_exp_for_non_zero)]
+impl fmt::LowerExp for Pid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+#[cfg(lower_upper_exp_for_non_zero)]
+impl fmt::UpperExp for Pid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -124,6 +170,7 @@ mod tests {
             Pid::from_raw(77).unwrap().as_raw_nonzero(),
             NonZeroI32::new(77).unwrap()
         );
+        assert_eq!(Pid::from_raw(77).unwrap().as_raw_pid(), 77);
         assert_eq!(Pid::as_raw(Pid::from_raw(77)), 77);
     }
 

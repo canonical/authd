@@ -19,68 +19,57 @@ pub(crate) const NFS_SUPER_MAGIC: u32 = 0x0000_6969;
 pub(crate) const EXIT_SIGNALED_SIGABRT: c_int = 128 + SIGABRT as c_int;
 
 // TODO: Upstream these.
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_TSN: c_int = linux_raw_sys::if_ether::ETH_P_TSN as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_ERSPAN2: c_int = linux_raw_sys::if_ether::ETH_P_ERSPAN2 as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_ERSPAN: c_int = linux_raw_sys::if_ether::ETH_P_ERSPAN as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_PROFINET: c_int = linux_raw_sys::if_ether::ETH_P_PROFINET as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_REALTEK: c_int = linux_raw_sys::if_ether::ETH_P_REALTEK as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_ETHERCAT: c_int = linux_raw_sys::if_ether::ETH_P_ETHERCAT as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_PREAUTH: c_int = linux_raw_sys::if_ether::ETH_P_PREAUTH as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_LLDP: c_int = linux_raw_sys::if_ether::ETH_P_LLDP as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_MRP: c_int = linux_raw_sys::if_ether::ETH_P_MRP as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_NCSI: c_int = linux_raw_sys::if_ether::ETH_P_NCSI as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_CFM: c_int = linux_raw_sys::if_ether::ETH_P_CFM as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_IBOE: c_int = linux_raw_sys::if_ether::ETH_P_IBOE as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_HSR: c_int = linux_raw_sys::if_ether::ETH_P_HSR as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_NSH: c_int = linux_raw_sys::if_ether::ETH_P_NSH as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_DSA_8021Q: c_int = linux_raw_sys::if_ether::ETH_P_DSA_8021Q as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_DSA_A5PSW: c_int = linux_raw_sys::if_ether::ETH_P_DSA_A5PSW as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_IFE: c_int = linux_raw_sys::if_ether::ETH_P_IFE as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_CAN: c_int = linux_raw_sys::if_ether::ETH_P_CAN as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_CANXL: c_int = linux_raw_sys::if_ether::ETH_P_CANXL as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_XDSA: c_int = linux_raw_sys::if_ether::ETH_P_XDSA as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_MAP: c_int = linux_raw_sys::if_ether::ETH_P_MAP as _;
-#[cfg(all(linux_kernel, feature = "net"))]
+#[cfg(all(linux_raw_dep, feature = "net"))]
 pub(crate) const ETH_P_MCTP: c_int = linux_raw_sys::if_ether::ETH_P_MCTP as _;
-
-#[cfg(all(
-    linux_kernel,
-    any(
-        target_arch = "mips",
-        target_arch = "mips32r6",
-        target_arch = "mips64",
-        target_arch = "mips64r6",
-        target_arch = "sparc",
-        target_arch = "sparc64"
-    )
-))]
-pub(crate) const SIGEMT: c_int = linux_raw_sys::general::SIGEMT as _;
+#[cfg(all(linux_raw_dep, feature = "mount"))]
+pub(crate) const MS_NOSYMFOLLOW: c_ulong = linux_raw_sys::general::MS_NOSYMFOLLOW as _;
 
 // TODO: Upstream these.
-#[cfg(all(linux_kernel, feature = "termios"))]
+#[cfg(all(linux_raw_dep, feature = "termios"))]
 pub(crate) const IUCLC: tcflag_t = linux_raw_sys::general::IUCLC as _;
-#[cfg(all(linux_kernel, feature = "termios"))]
+#[cfg(all(linux_raw_dep, feature = "termios"))]
 pub(crate) const XCASE: tcflag_t = linux_raw_sys::general::XCASE as _;
 
 #[cfg(target_os = "aix")]
@@ -89,7 +78,7 @@ pub(crate) const MSG_DONTWAIT: c_int = MSG_NONBLOCK;
 // `O_LARGEFILE` can be automatically set by the kernel on Linux:
 // <https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/fs/open.c?h=v6.13#n1423>
 // so libc implementations may leave it undefined or defined to zero.
-#[cfg(linux_kernel)]
+#[cfg(linux_raw_dep)]
 pub(crate) const O_LARGEFILE: c_int = linux_raw_sys::general::O_LARGEFILE as _;
 
 // Gated under `_LARGEFILE_SOURCE` but automatically set by the kernel.
@@ -489,7 +478,12 @@ pub(super) use readwrite_pv64v2::{preadv64v2 as preadv2, pwritev64v2 as pwritev2
 #[cfg(feature = "fs")]
 #[cfg(all(
     linux_like,
-    not(any(target_os = "android", target_os = "emscripten", target_env = "gnu"))
+    linux_raw_dep,
+    not(any(
+        target_os = "emscripten",
+        target_env = "gnu",
+        all(target_arch = "loongarch64", target_env = "musl")
+    ))
 ))]
 mod statx_flags {
     pub(crate) use linux_raw_sys::general::{
@@ -507,7 +501,13 @@ mod statx_flags {
 #[cfg(feature = "fs")]
 #[cfg(all(
     linux_like,
-    not(any(target_os = "android", target_os = "emscripten", target_env = "gnu"))
+    linux_raw_dep,
+    not(any(
+        target_os = "android",
+        target_os = "emscripten",
+        target_env = "gnu",
+        all(target_arch = "loongarch64", target_env = "musl")
+    ))
 ))]
 pub(crate) use statx_flags::*;
 
@@ -515,9 +515,59 @@ pub(crate) use statx_flags::*;
 #[cfg(target_os = "android")]
 pub(crate) use __fsid_t as fsid_t;
 
-#[cfg(feature = "mm")]
-#[cfg(target_os = "android")]
-pub(crate) const MAP_DROPPABLE: c_int = bitcast!(linux_raw_sys::general::MAP_DROPPABLE);
+// FreeBSD added `timerfd_*` in FreeBSD 14. NetBSD added then in NetBSD 10.
+#[cfg(all(feature = "time", any(target_os = "freebsd", target_os = "netbsd")))]
+syscall!(pub(crate) fn timerfd_create(
+    clockid: c_int,
+    flags: c_int
+) via SYS_timerfd_create -> c_int);
+#[cfg(all(feature = "time", any(target_os = "freebsd", target_os = "netbsd")))]
+syscall!(pub(crate) fn timerfd_gettime(
+    fd: c_int,
+    curr_value: *mut itimerspec
+) via SYS_timerfd_gettime -> c_int);
+#[cfg(all(feature = "time", any(target_os = "freebsd", target_os = "netbsd")))]
+syscall!(pub(crate) fn timerfd_settime(
+    fd: c_int,
+    flags: c_int,
+    new_value: *const itimerspec,
+    old_value: *mut itimerspec
+) via SYS_timerfd_settime -> c_int);
+
+#[cfg(all(feature = "time", target_os = "illumos"))]
+extern "C" {
+    pub(crate) fn timerfd_create(clockid: c_int, flags: c_int) -> c_int;
+    pub(crate) fn timerfd_gettime(fd: c_int, curr_value: *mut itimerspec) -> c_int;
+    pub(crate) fn timerfd_settime(
+        fd: c_int,
+        flags: c_int,
+        new_value: *const itimerspec,
+        old_value: *mut itimerspec,
+    ) -> c_int;
+}
+
+// illumos and NetBSD timerfd support.
+// Submitted upstream in <https://github.com/rust-lang/libc/pull/4333>.
+
+// <https://code.illumos.org/plugins/gitiles/illumos-gate/+/refs/heads/master/usr/src/uts/common/sys/timerfd.h#34>
+#[cfg(all(feature = "time", target_os = "illumos"))]
+pub(crate) const TFD_CLOEXEC: i32 = 0o2000000;
+#[cfg(all(feature = "time", target_os = "illumos"))]
+pub(crate) const TFD_NONBLOCK: i32 = 0o4000;
+#[cfg(all(feature = "time", target_os = "illumos"))]
+pub(crate) const TFD_TIMER_ABSTIME: i32 = 1 << 0;
+#[cfg(all(feature = "time", target_os = "illumos"))]
+pub(crate) const TFD_TIMER_CANCEL_ON_SET: i32 = 1 << 1;
+
+// <https://nxr.netbsd.org/xref/src/sys/sys/timerfd.h#44>
+#[cfg(all(feature = "time", target_os = "netbsd"))]
+pub(crate) const TFD_CLOEXEC: i32 = O_CLOEXEC;
+#[cfg(all(feature = "time", target_os = "netbsd"))]
+pub(crate) const TFD_NONBLOCK: i32 = O_NONBLOCK;
+#[cfg(all(feature = "time", target_os = "netbsd"))]
+pub(crate) const TFD_TIMER_ABSTIME: i32 = O_WRONLY;
+#[cfg(all(feature = "time", target_os = "netbsd"))]
+pub(crate) const TFD_TIMER_CANCEL_ON_SET: i32 = O_RDWR;
 
 #[cfg(test)]
 mod tests {

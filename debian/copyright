@@ -117,6 +117,7 @@ Files: vendor/github.com/mattn/go-sqlite3/sqlite3.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_opt_app_armor.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_opt_foreign_keys.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_opt_introspect.go
+       vendor/github.com/mattn/go-sqlite3/sqlite3_opt_percentile.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_opt_secure_delete.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_opt_secure_delete_fast.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_opt_stat4.go
@@ -287,7 +288,7 @@ Copyright: 2011-2019 Canonical Ltd
 License: Apache-2.0
 
 Files: vendor/golang.org/*
-Copyright: 2009-2025 The Go Authors.
+Copyright: 2009-2026 The Go Authors.
 License: BSD-3-clause
 
 Files: vendor/google.golang.org/genproto/*
@@ -295,7 +296,7 @@ Copyright: 2025 Google LLC
 License: Apache-2.0
 
 Files: vendor/google.golang.org/grpc/*
-Copyright: 2014-2025 The gRPC Authors
+Copyright: 2014-2026 The gRPC Authors
 License: Apache-2.0
 
 Files: vendor/google.golang.org/grpc/CONTRIBUTING.md
@@ -399,15 +400,6 @@ Files: vendor_rust/cc/*
 Copyright: 2014 Alex Crichton
 License: Apache-2.0 or Expat
 
-Files: vendor_rust/cc/src/*
-Copyright: 2015-2017 winapi-rs developers
-License: Apache-2.0 or Expat
-
-Files: vendor_rust/cc/src/windows/find_tools.rs
-       vendor_rust/cc/src/windows/registry.rs
-Copyright: 2015 The Rust Project Developers
-License: Apache-2.0 or Expat
-
 Files: vendor_rust/cfg-if/*
 Copyright: 2014 Alex Crichton
 License: Apache-2.0 or Expat
@@ -462,6 +454,19 @@ Copyright: 2014-2015 The Rust Project Developers
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/fastrand/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/find-msvc-tools/*
+Copyright: 2014 Alex Crichton
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/find-msvc-tools/src/*
+Copyright: 2015-2017 winapi-rs developers
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/find-msvc-tools/src/find_tools.rs
+       vendor_rust/find-msvc-tools/src/registry.rs
+Copyright: 2015 The Rust Project Developers
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/fixedbitset/*
@@ -563,7 +568,7 @@ Copyright: 2016 Pyfisch
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/hyper/*
-Copyright: 2014-2025 Sean McArthur
+Copyright: 2014-2026 Sean McArthur
 License: Expat
 
 Files: vendor_rust/hyper-timeout/*
@@ -596,7 +601,7 @@ Copyright: 2016 lazy-static.rs Developers
 License: Apache-2.0
 
 Files: vendor_rust/libc/*
-Copyright: 2014-2020 The Rust Project Developers
+Copyright: The Rust Project Developers
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/linux-raw-sys/*
@@ -644,7 +649,7 @@ Copyright: 2016 multimap developers
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/num-conv/*
-Copyright: 2023 Jacob Pratt
+Copyright: Jacob Pratt
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/num-traits/*
@@ -760,6 +765,9 @@ Files: vendor_rust/rustversion/*
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/serde/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/serde_core/*
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/shlex/*

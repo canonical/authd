@@ -24,13 +24,7 @@ use crate::fs::{fstat, Stat};
     target_os = "wasi",
 )))]
 use crate::fs::{fstatfs, StatFs};
-#[cfg(not(any(
-    solarish,
-    target_os = "haiku",
-    target_os = "redox",
-    target_os = "vita",
-    target_os = "wasi"
-)))]
+#[cfg(not(any(solarish, target_os = "vita", target_os = "wasi")))]
 use crate::fs::{fstatvfs, StatVfs};
 use crate::io;
 #[cfg(not(any(target_os = "fuchsia", target_os = "vita", target_os = "wasi")))]
@@ -78,6 +72,27 @@ impl Dir {
                 let _ = c::close(raw);
                 Err(err)
             }
+        }
+    }
+
+    /// Returns the file descriptor associated with the directory stream.
+    ///
+    /// The file descriptor is used internally by the directory stream. As a result, it is useful
+    /// only for functions which do not depend or alter the file position.
+    ///
+    /// # References
+    ///
+    ///   - [POSIX]
+    ///
+    /// [POSIX]: https://pubs.opengroup.org/onlinepubs/9799919799/functions/dirfd.html
+    #[inline]
+    #[doc(alias = "dirfd")]
+    pub fn fd<'a>(&'a self) -> io::Result<BorrowedFd<'a>> {
+        let raw_fd = unsafe { c::dirfd(self.libc_dir.as_ptr()) };
+        if raw_fd < 0 {
+            Err(io::Errno::last_os_error())
+        } else {
+            Ok(unsafe { BorrowedFd::borrow_raw(raw_fd) })
         }
     }
 
@@ -243,9 +258,7 @@ impl Dir {
     /// `fstatvfs(self)`
     #[cfg(not(any(
         solarish,
-        target_os = "haiku",
         target_os = "horizon",
-        target_os = "redox",
         target_os = "vita",
         target_os = "wasi"
     )))]

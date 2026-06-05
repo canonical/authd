@@ -25,6 +25,52 @@ use std::task::{Context, Poll};
 /// Reads bytes from a source.
 ///
 /// This trait is similar to `std::io::Read`, but supports asynchronous reads.
+///
+/// # Implementing `Read`
+///
+/// Implementations should read data into the provided [`ReadBufCursor`] and
+/// advance the cursor to indicate how many bytes were written. The simplest
+/// and safest approach is to use [`ReadBufCursor::put_slice`]:
+///
+/// ```
+/// use hyper::rt::{Read, ReadBufCursor};
+/// use std::pin::Pin;
+/// use std::task::{Context, Poll};
+/// use std::io;
+///
+/// struct MyReader {
+///     data: Vec<u8>,
+///     position: usize,
+/// }
+///
+/// impl Read for MyReader {
+///     fn poll_read(
+///         mut self: Pin<&mut Self>,
+///         _cx: &mut Context<'_>,
+///         mut buf: ReadBufCursor<'_>,
+///     ) -> Poll<Result<(), io::Error>> {
+///         let remaining_data = &self.data[self.position..];
+///         if remaining_data.is_empty() {
+///             // No more data to read, signal EOF by returning Ok without
+///             // advancing the buffer
+///             return Poll::Ready(Ok(()));
+///         }
+///
+///         // Calculate how many bytes we can write
+///         let to_copy = remaining_data.len().min(buf.remaining());
+///         // Use put_slice to safely copy data and advance the cursor
+///         buf.put_slice(&remaining_data[..to_copy]);
+///
+///         self.position += to_copy;
+///         Poll::Ready(Ok(()))
+///     }
+/// }
+/// ```
+///
+/// For more advanced use cases where you need direct access to the buffer
+/// (e.g., when interfacing with APIs that write directly to a pointer),
+/// you can use the unsafe [`ReadBufCursor::as_mut`] and [`ReadBufCursor::advance`]
+/// methods. See their documentation for safety requirements.
 pub trait Read {
     /// Attempts to read bytes into the `buf`.
     ///
@@ -124,9 +170,62 @@ pub struct ReadBuf<'a> {
     init: usize,
 }
 
-/// The cursor part of a [`ReadBuf`].
+/// The cursor part of a [`ReadBuf`], representing the unfilled portion.
 ///
-/// This is created by calling `ReadBuf::unfilled()`.
+/// This is created by calling [`ReadBuf::unfilled()`].
+///
+/// `ReadBufCursor` provides safe and unsafe methods for writing data into the
+/// buffer:
+///
+/// - **Safe approach**: Use [`put_slice`](Self::put_slice) to copy data from
+///   a slice. This handles initialization tracking and cursor advancement
+///   automatically.
+///
+/// - **Unsafe approach**: For zero-copy scenarios or when interfacing with
+///   low-level APIs, use [`as_mut`](Self::as_mut) to get a mutable slice
+///   of `MaybeUninit<u8>`, then call [`advance`](Self::advance) after writing.
+///   This is more efficient but requires careful attention to safety invariants.
+///
+/// # Example using safe methods
+///
+/// ```
+/// use hyper::rt::ReadBuf;
+///
+/// let mut backing = [0u8; 64];
+/// let mut read_buf = ReadBuf::new(&mut backing);
+///
+/// {
+///     let mut cursor = read_buf.unfilled();
+///     // put_slice handles everything safely
+///     cursor.put_slice(b"hello");
+/// }
+///
+/// assert_eq!(read_buf.filled(), b"hello");
+/// ```
+///
+/// # Example using unsafe methods
+///
+/// ```
+/// use hyper::rt::ReadBuf;
+///
+/// let mut backing = [0u8; 64];
+/// let mut read_buf = ReadBuf::new(&mut backing);
+///
+/// {
+///     let mut cursor = read_buf.unfilled();
+///     // SAFETY: we will initialize exactly 5 bytes
+///     let slice = unsafe { cursor.as_mut() };
+///     slice[0].write(b'h');
+///     slice[1].write(b'e');
+///     slice[2].write(b'l');
+///     slice[3].write(b'l');
+///     slice[4].write(b'o');
+///     // SAFETY: we have initialized 5 bytes
+///     unsafe { cursor.advance(5) };
+/// }
+///
+/// assert_eq!(read_buf.filled(), b"hello");
+/// ```
 #[derive(Debug)]
 pub struct ReadBufCursor<'a> {
     buf: &'a mut ReadBuf<'a>,
@@ -247,13 +346,13 @@ impl ReadBufCursor<'_> {
     /// Returns the number of bytes that can be written from the current
     /// position until the end of the buffer is reached.
     ///
-    /// This value is equal to the length of the slice returned by `as_mut()``.
+    /// This value is equal to the length of the slice returned by `as_mut()`.
     #[inline]
     pub fn remaining(&self) -> usize {
         self.buf.remaining()
     }
 
-    /// Transfer bytes into `self`` from `src` and advance the cursor
+    /// Transfer bytes into `self` from `src` and advance the cursor
     /// by the number of bytes written.
     ///
     /// # Panics
@@ -396,8 +495,8 @@ where
     }
 }
 
-/// Polyfill for Pin::as_deref_mut()
-/// TODO: use Pin::as_deref_mut() instead once stabilized
+/// Polyfill for `Pin::as_deref_mut()`.
+/// TODO: use `Pin::as_deref_mut()` instead once stabilized.
 fn pin_as_deref_mut<P: DerefMut>(pin: Pin<&mut Pin<P>>) -> Pin<&mut P::Target> {
     // SAFETY: we go directly from Pin<&mut Pin<P>> to Pin<&mut P::Target>, without moving or
     // giving out the &mut Pin<P> in the process. See Pin::as_deref_mut() for more detail.

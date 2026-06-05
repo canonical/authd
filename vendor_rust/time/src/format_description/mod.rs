@@ -23,10 +23,14 @@ pub use borrowed_format_item::BorrowedFormatItem as FormatItem;
 pub use owned_format_item::OwnedFormatItem;
 
 pub use self::component::Component;
+pub(crate) use self::component::Period;
 #[cfg(feature = "alloc")]
 pub use self::parse::{
     parse, parse_borrowed, parse_owned, parse_strftime_borrowed, parse_strftime_owned,
 };
+
+/// The type output by the [`format_description!`](crate::macros::format_description) macro.
+pub type StaticFormatDescription = &'static [BorrowedFormatItem<'static>];
 
 /// Well-known formats, typically standards.
 pub mod well_known {

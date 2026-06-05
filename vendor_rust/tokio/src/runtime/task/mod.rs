@@ -178,10 +178,6 @@
 //! poll call will notice it when the poll finishes, and the task is cancelled
 //! at that point.
 
-// Some task infrastructure is here to support `JoinSet`, which is currently
-// unstable. This should be removed once `JoinSet` is stabilized.
-#![cfg_attr(not(tokio_unstable), allow(dead_code))]
-
 mod core;
 use self::core::Cell;
 use self::core::Header;
@@ -193,7 +189,6 @@ mod harness;
 use self::harness::Harness;
 
 mod id;
-#[cfg_attr(not(tokio_unstable), allow(unreachable_pub, unused_imports))]
 pub use id::{id, try_id, Id};
 
 #[cfg(feature = "rt")]
@@ -249,7 +244,7 @@ pub(crate) struct Notified<S: 'static>(Task<S>);
 impl<S> Notified<S> {
     #[cfg(all(tokio_unstable, feature = "rt-multi-thread"))]
     #[inline]
-    pub(crate) fn task_meta<'task, 'meta>(&'task self) -> crate::runtime::TaskMeta<'meta> {
+    pub(crate) fn task_meta<'meta>(&self) -> crate::runtime::TaskMeta<'meta> {
         self.0.task_meta()
     }
 }
@@ -270,7 +265,7 @@ pub(crate) struct LocalNotified<S: 'static> {
 impl<S> LocalNotified<S> {
     #[cfg(tokio_unstable)]
     #[inline]
-    pub(crate) fn task_meta<'task, 'meta>(&'task self) -> crate::runtime::TaskMeta<'meta> {
+    pub(crate) fn task_meta<'meta>(&self) -> crate::runtime::TaskMeta<'meta> {
         self.task.task_meta()
     }
 }
@@ -398,13 +393,16 @@ impl<S: 'static> Task<S> {
         }
     }
 
+    /// # Safety
+    ///
+    /// `ptr` must be a valid pointer to a [`Header`].
     unsafe fn from_raw(ptr: NonNull<Header>) -> Task<S> {
-        Task::new(RawTask::from_raw(ptr))
+        unsafe { Task::new(RawTask::from_raw(ptr)) }
     }
 
     #[cfg(all(
         tokio_unstable,
-        tokio_taskdump,
+        feature = "taskdump",
         feature = "rt",
         target_os = "linux",
         any(target_arch = "aarch64", target_arch = "x86", target_arch = "x86_64")
@@ -441,7 +439,7 @@ impl<S: 'static> Task<S> {
     // the compiler infers the lifetimes to be the same, and considers the task
     // to be borrowed for the lifetime of the returned `TaskMeta`.
     #[cfg(tokio_unstable)]
-    pub(crate) fn task_meta<'task, 'meta>(&'task self) -> crate::runtime::TaskMeta<'meta> {
+    pub(crate) fn task_meta<'meta>(&self) -> crate::runtime::TaskMeta<'meta> {
         crate::runtime::TaskMeta {
             id: self.id(),
             spawned_at: self.spawned_at().into(),
@@ -479,8 +477,11 @@ impl<S: 'static> Notified<S> {
 }
 
 impl<S: 'static> Notified<S> {
+    /// # Safety
+    ///
+    /// [`RawTask::ptr`] must be a valid pointer to a [`Header`].
     pub(crate) unsafe fn from_raw(ptr: RawTask) -> Notified<S> {
-        Notified(Task::new(ptr))
+        Notified(unsafe { Task::new(ptr) })
     }
 }
 
@@ -597,11 +598,11 @@ unsafe impl<S> linked_list::Link for Task<S> {
     }
 
     unsafe fn from_raw(ptr: NonNull<Header>) -> Task<S> {
-        Task::from_raw(ptr)
+        unsafe { Task::from_raw(ptr) }
     }
 
     unsafe fn pointers(target: NonNull<Header>) -> NonNull<linked_list::Pointers<Header>> {
-        self::core::Trailer::addr_of_owned(Header::get_trailer(target))
+        unsafe { self::core::Trailer::addr_of_owned(Header::get_trailer(target)) }
     }
 }
 

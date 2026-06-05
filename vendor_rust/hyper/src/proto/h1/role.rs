@@ -92,7 +92,7 @@ where
 /// Used when there was a partial read, to skip full parsing on a
 /// a slow connection.
 fn is_complete_fast(bytes: &[u8], prev_len: usize) -> bool {
-    let start = if prev_len < 3 { 0 } else { prev_len - 3 };
+    let start = prev_len.saturating_sub(3);
     let bytes = &bytes[start..];
 
     for (i, b) in bytes.iter().copied().enumerate() {
@@ -164,17 +164,22 @@ impl Http1Transaction for Server {
             trace!(bytes = buf.len(), "Request.parse");
             let mut req = httparse::Request::new(&mut []);
             let bytes = buf.as_ref();
-            match req.parse_with_uninit_headers(bytes, &mut headers) {
+            match ctx.h1_parser_config.parse_request_with_uninit_headers(
+                &mut req,
+                bytes,
+                &mut headers,
+            ) {
                 Ok(httparse::Status::Complete(parsed_len)) => {
                     trace!("Request.parse Complete({})", parsed_len);
                     len = parsed_len;
-                    let uri = req.path.unwrap();
+                    let uri = req.path.expect("httparse completed");
                     if uri.len() > MAX_URI_LEN {
                         return Err(Parse::UriTooLong);
                     }
-                    method = Method::from_bytes(req.method.unwrap().as_bytes())?;
+                    method =
+                        Method::from_bytes(req.method.expect("httparse completed").as_bytes())?;
                     path_range = Server::record_path_range(bytes, uri);
-                    version = if req.version.unwrap() == 1 {
+                    version = if req.version.expect("httparse completed") == 1 {
                         keep_alive = true;
                         is_http_11 = true;
                         Version::HTTP_11
@@ -188,20 +193,18 @@ impl Http1Transaction for Server {
                     headers_len = req.headers.len();
                 }
                 Ok(httparse::Status::Partial) => return Ok(None),
-                Err(err) => {
-                    return Err(match err {
-                        // if invalid Token, try to determine if for method or path
-                        httparse::Error::Token => {
-                            if req.method.is_none() {
-                                Parse::Method
-                            } else {
-                                debug_assert!(req.path.is_none());
-                                Parse::Uri
-                            }
+                // if invalid Token, try to determine if for method or path
+                Err(httparse::Error::Token) => {
+                    return Err({
+                        if req.method.is_none() {
+                            Parse::Method
+                        } else {
+                            debug_assert!(req.path.is_none());
+                            Parse::Uri
                         }
-                        other => other.into(),
-                    });
+                    })
                 }
+                Err(err) => return Err(err.into()),
             }
         };
 
@@ -648,7 +651,7 @@ impl Server {
         };
 
         let mut encoder = Encoder::length(0);
-        let mut allowed_trailer_fields: Option<Vec<HeaderValue>> = None;
+        let mut allowed_trailer_fields: Option<Vec<HeaderName>> = None;
         let mut wrote_date = false;
         let mut cur_name = None;
         let mut is_name_written = false;
@@ -858,12 +861,22 @@ impl Server {
                         extend(dst, value.as_bytes());
                     }
 
-                    match allowed_trailer_fields {
-                        Some(ref mut allowed_trailer_fields) => {
-                            allowed_trailer_fields.push(value);
-                        }
-                        None => {
-                            allowed_trailer_fields = Some(vec![value]);
+                    // Parse the Trailer header value into HeaderNames.
+                    // The value may contain comma-separated names.
+                    // HeaderName normalizes to lowercase for case-insensitive matching.
+                    if let Ok(value_str) = value.to_str() {
+                        let names: Vec<HeaderName> = value_str
+                            .split(',')
+                            .filter_map(|s| HeaderName::from_bytes(s.trim().as_bytes()).ok())
+                            .collect();
+
+                        match allowed_trailer_fields {
+                            Some(ref mut fields) => {
+                                fields.extend(names);
+                            }
+                            None => {
+                                allowed_trailer_fields = Some(names);
+                            }
                         }
                     }
 
@@ -1024,10 +1037,10 @@ impl Http1Transaction for Client {
                 ) {
                     Ok(httparse::Status::Complete(len)) => {
                         trace!("Response.parse Complete({})", len);
-                        let status = StatusCode::from_u16(res.code.unwrap())?;
+                        let status = StatusCode::from_u16(res.code.expect("httparse completed"))?;
 
                         let reason = {
-                            let reason = res.reason.unwrap();
+                            let reason = res.reason.expect("httparse completed");
                             // Only save the reason phrase if it isn't the canonical reason
                             if Some(reason) != status.canonical_reason() {
                                 Some(Bytes::copy_from_slice(reason.as_bytes()))
@@ -1036,7 +1049,7 @@ impl Http1Transaction for Client {
                             }
                         };
 
-                        let version = if res.version.unwrap() == 1 {
+                        let version = if res.version.expect("httparse completed") == 1 {
                             Version::HTTP_11
                         } else {
                             Version::HTTP_10
@@ -1228,9 +1241,9 @@ impl Http1Transaction for Client {
 
 #[cfg(feature = "client")]
 impl Client {
-    /// Returns Some(length, wants_upgrade) if successful.
+    /// Returns `Some(length, wants_upgrade)` if successful.
     ///
-    /// Returns None if this message head should be skipped (like a 100 status).
+    /// Returns `None` if this message head should be skipped (like a 100 status).
     fn decoder(
         inc: &MessageHead<StatusCode>,
         method: &mut Option<Method>,
@@ -1387,8 +1400,16 @@ impl Client {
 
         let encoder = encoder.map(|enc| {
             if enc.is_chunked() {
-                let allowed_trailer_fields: Vec<HeaderValue> =
-                    headers.get_all(header::TRAILER).iter().cloned().collect();
+                // Parse Trailer header values into HeaderNames.
+                // Each Trailer header value may contain comma-separated names.
+                // HeaderName normalizes to lowercase, enabling case-insensitive matching.
+                let allowed_trailer_fields: Vec<HeaderName> = headers
+                    .get_all(header::TRAILER)
+                    .iter()
+                    .filter_map(|hv| hv.to_str().ok())
+                    .flat_map(|s| s.split(','))
+                    .filter_map(|s| HeaderName::from_bytes(s.trim().as_bytes()).ok())
+                    .collect();
 
                 if !allowed_trailer_fields.is_empty() {
                     return enc.into_chunked_with_trailing_fields(allowed_trailer_fields);
@@ -1811,6 +1832,61 @@ mod tests {
             on_informational: &mut None,
         };
         Client::parse(&mut raw, ctx).unwrap_err();
+    }
+
+    const REQUEST_WITH_MULTIPLE_SPACES_IN_REQUEST_LINE: &str =
+        "GET  /echo  HTTP/1.1\r\nHost: hyper.rs\r\n\r\n";
+
+    #[cfg(feature = "server")]
+    #[test]
+    fn test_parse_allow_request_with_multiple_spaces_in_request_line() {
+        use httparse::ParserConfig;
+
+        let _ = pretty_env_logger::try_init();
+        let mut raw = BytesMut::from(REQUEST_WITH_MULTIPLE_SPACES_IN_REQUEST_LINE);
+        let mut h1_parser_config = ParserConfig::default();
+        h1_parser_config.allow_multiple_spaces_in_request_line_delimiters(true);
+        let mut method = None;
+        let ctx = ParseContext {
+            cached_headers: &mut None,
+            req_method: &mut method,
+            h1_parser_config,
+            h1_max_headers: None,
+            preserve_header_case: false,
+            #[cfg(feature = "ffi")]
+            preserve_header_order: false,
+            h09_responses: false,
+            #[cfg(feature = "client")]
+            on_informational: &mut None,
+        };
+        let msg = Server::parse(&mut raw, ctx).unwrap().unwrap();
+        assert_eq!(raw.len(), 0);
+        assert_eq!(msg.head.subject.0, crate::Method::GET);
+        assert_eq!(msg.head.subject.1, "/echo");
+        assert_eq!(msg.head.version, crate::Version::HTTP_11);
+        assert_eq!(msg.head.headers.len(), 1);
+        assert_eq!(msg.head.headers["Host"], "hyper.rs");
+        assert_eq!(method, Some(crate::Method::GET));
+    }
+
+    #[cfg(feature = "server")]
+    #[test]
+    fn test_parse_reject_request_with_multiple_spaces_in_request_line() {
+        let _ = pretty_env_logger::try_init();
+        let mut raw = BytesMut::from(REQUEST_WITH_MULTIPLE_SPACES_IN_REQUEST_LINE);
+        let ctx = ParseContext {
+            cached_headers: &mut None,
+            req_method: &mut None,
+            h1_parser_config: Default::default(),
+            h1_max_headers: None,
+            preserve_header_case: false,
+            #[cfg(feature = "ffi")]
+            preserve_header_order: false,
+            h09_responses: false,
+            #[cfg(feature = "client")]
+            on_informational: &mut None,
+        };
+        Server::parse(&mut raw, ctx).unwrap_err();
     }
 
     #[cfg(feature = "server")]

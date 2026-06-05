@@ -508,10 +508,10 @@ impl<T: AsRef<[u8]>> Buf for Cursor<T> {
 
 // an internal buffer to collect writes before flushes
 pub(super) struct WriteBuf<B> {
-    /// Re-usable buffer that holds message headers
+    /// Re-usable buffer that holds message headers.
     headers: Cursor<Vec<u8>>,
     max_buf_size: usize,
-    /// Deque of user buffers if strategy is Queue
+    /// Deque of user buffers if strategy is `Queue`.
     queue: BufList<B>,
     strategy: WriteStrategy,
 }
@@ -826,7 +826,7 @@ mod tests {
         }
 
         let mut max = 8192;
-        while max < std::usize::MAX {
+        while max < usize::MAX {
             fuzz(max);
             max = (max / 2).saturating_mul(3);
         }

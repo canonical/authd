@@ -2,6 +2,70 @@
 
 use crate::hint;
 
+/// Versions of functions that are optimized for when the year has already been range-validated.
+///
+/// The implementations of these functions depend on whether the `large-dates` feature is enabled.
+///
+/// Note: This module is not exposed by the `time` crate. It is an implementation detail.
+pub mod range_validated {
+    /// Returns if the provided year is a leap year in the proleptic Gregorian calendar, assuming
+    /// the year has already been range-validated.
+    ///
+    /// Behavior is unspecified for years outside the valid range.
+    ///
+    /// Note: This function is not exposed by the `time` crate. It is an implementation detail.
+    #[inline]
+    #[track_caller]
+    pub const fn is_leap_year(year: i32) -> bool {
+        #[cfg(feature = "large-dates")]
+        {
+            super::is_leap_year(year)
+        }
+        #[cfg(not(feature = "large-dates"))]
+        {
+            debug_assert!(year >= -9999);
+            debug_assert!(year <= 9999);
+            year.unsigned_abs().wrapping_mul(0x20003D7) & 0x6007C0F <= 0x7C00
+        }
+    }
+
+    /// Get the number of calendar days in a given year, assuming the year has already been
+    /// range-validated.
+    ///
+    /// Behavior is unspecified for years outside the valid range.
+    ///
+    /// Note: This function is not exposed by the `time` crate. It is an implementation detail.
+    #[inline]
+    #[track_caller]
+    pub const fn days_in_year(year: i32) -> u16 {
+        #[cfg(feature = "large-dates")]
+        {
+            super::days_in_year(year)
+        }
+        #[cfg(not(feature = "large-dates"))]
+        {
+            if is_leap_year(year) { 366 } else { 365 }
+        }
+    }
+
+    /// Get the number of days in the month of a given year, assuming the year has already been
+    /// range-validated.
+    ///
+    /// Note: This function is not exposed by the `time` crate. It is an implementation detail.
+    #[inline]
+    #[track_caller]
+    pub const fn days_in_month(month: u8, year: i32) -> u8 {
+        #[cfg(feature = "large-dates")]
+        {
+            super::days_in_month(month, year)
+        }
+        #[cfg(not(feature = "large-dates"))]
+        {
+            super::days_in_month_leap(month, is_leap_year(year))
+        }
+    }
+}
+
 /// Returns if the provided year is a leap year in the proleptic Gregorian calendar. Uses
 /// [astronomical year numbering](https://en.wikipedia.org/wiki/Astronomical_year_numbering).
 ///
@@ -13,9 +77,14 @@ use crate::hint;
 /// assert!(!is_leap_year(2005));
 /// assert!(!is_leap_year(2100));
 /// ```
+// https://hueffner.de/falk/blog/a-leap-year-check-in-three-instructions.html
+#[inline]
 pub const fn is_leap_year(year: i32) -> bool {
-    let d = if year % 100 == 0 { 15 } else { 3 };
-    year & d == 0
+    (year as i64)
+        .unsigned_abs()
+        .wrapping_mul(0x4000_0000_28F5_C28F)
+        & 0xC000_000F_8000_000F
+        <= 0xF_8000_0000
 }
 
 /// Get the number of calendar days in a given year.
@@ -30,12 +99,9 @@ pub const fn is_leap_year(year: i32) -> bool {
 /// assert_eq!(days_in_year(2005), 365);
 /// assert_eq!(days_in_year(2100), 365);
 /// ```
+#[inline]
 pub const fn days_in_year(year: i32) -> u16 {
-    if is_leap_year(year) {
-        366
-    } else {
-        365
-    }
+    if is_leap_year(year) { 366 } else { 365 }
 }
 
 /// Get the number of weeks in the ISO year.
@@ -47,6 +113,7 @@ pub const fn days_in_year(year: i32) -> u16 {
 /// assert_eq!(weeks_in_year(2019), 52);
 /// assert_eq!(weeks_in_year(2020), 53);
 /// ```
+#[inline]
 pub const fn weeks_in_year(year: i32) -> u8 {
     match year % 400 {
         -396 | -391 | -385 | -380 | -374 | -368 | -363 | -357 | -352 | -346 | -340 | -335
@@ -72,16 +139,24 @@ pub const fn weeks_in_year(year: i32) -> u8 {
 /// ```
 ///
 /// Note: This function is not exposed by the `time` crate. It is an implementation detail.
+#[inline]
+#[track_caller]
 pub const fn days_in_month(month: u8, year: i32) -> u8 {
+    days_in_month_leap(month, is_leap_year(year))
+}
+
+/// Get the number of days in the month. The year does not need to be known, but whether the
+/// year is a leap year does.
+///
+/// Note: This function is not exposed by the `time` crate. It is an implementation detail.
+#[inline]
+#[track_caller]
+pub const fn days_in_month_leap(month: u8, is_leap_year: bool) -> u8 {
     debug_assert!(month >= 1);
     debug_assert!(month <= 12);
 
     if hint::unlikely(month == 2) {
-        if is_leap_year(year) {
-            29
-        } else {
-            28
-        }
+        if is_leap_year { 29 } else { 28 }
     } else {
         30 | month ^ (month >> 3)
     }

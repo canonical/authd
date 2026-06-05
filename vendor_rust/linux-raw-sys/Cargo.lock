@@ -3,22 +3,15 @@
 version = 3
 
 [[package]]
-name = "compiler_builtins"
-version = "0.1.151"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abc30f1766d387c35f2405e586d3e7a88230dc728ff78cd1d0bc59ae0b63154b"
-
-[[package]]
 name = "libc"
-version = "0.2.170"
+version = "0.2.177"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "875b3680cb2f8f71bdcf9a30f38d48282f5d3c95cbf9b3fa57269bb5d5c06828"
+checksum = "2874a2af47a2325c2001a6e6fad9b16a53b802102b528163885171cf92b15976"
 
 [[package]]
 name = "linux-raw-sys"
-version = "0.9.4"
+version = "0.12.1"
 dependencies = [
- "compiler_builtins",
  "libc",
  "rustc-std-workspace-core",
  "static_assertions",

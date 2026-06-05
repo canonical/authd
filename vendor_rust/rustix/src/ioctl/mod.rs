@@ -18,20 +18,20 @@ use crate::fd::{AsFd, BorrowedFd};
 use crate::ffi as c;
 use crate::io::Result;
 
-#[cfg(any(linux_kernel, bsd))]
+#[cfg(any(linux_kernel, bsd, target_os = "redox"))]
 use core::mem;
 
 pub use patterns::*;
 
 mod patterns;
 
-#[cfg(linux_kernel)]
+#[cfg(any(linux_kernel, target_os = "redox"))]
 mod linux;
 
 #[cfg(bsd)]
 mod bsd;
 
-#[cfg(linux_kernel)]
+#[cfg(any(linux_kernel, target_os = "redox"))]
 use linux as platform;
 
 #[cfg(bsd)]
@@ -198,7 +198,7 @@ pub unsafe trait Ioctl {
 ///
 /// If you're writing a driver and defining your own ioctl numbers, it's
 /// recommended to use these functions to compute them.
-#[cfg(any(linux_kernel, bsd))]
+#[cfg(any(linux_kernel, bsd, target_os = "redox"))]
 pub mod opcode {
     use super::*;
 
@@ -344,7 +344,7 @@ type _Opcode = c::c_uint;
 #[cfg(windows)]
 type _Opcode = i32;
 
-#[cfg(linux_kernel)]
+#[cfg(linux_raw_dep)]
 #[cfg(not(any(target_arch = "sparc", target_arch = "sparc64")))]
 #[cfg(test)]
 mod tests {

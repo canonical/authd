@@ -14,6 +14,8 @@ use crate::fd::BorrowedFd;
 use crate::ffi::CStr;
 use crate::io;
 use crate::net::sockopt::Timeout;
+#[cfg(linux_kernel)]
+use crate::net::sockopt::{Ipv4PathMtuDiscovery, Ipv6PathMtuDiscovery};
 #[cfg(target_os = "linux")]
 use crate::net::xdp::{XdpMmapOffsets, XdpOptionsFlags, XdpRingOffset, XdpStatistics, XdpUmemReg};
 #[cfg(not(any(
@@ -50,9 +52,13 @@ use crate::net::Protocol;
 use crate::net::RawProtocol;
 #[cfg(any(linux_kernel, target_os = "fuchsia"))]
 use crate::net::SocketAddrV4;
+#[cfg(all(target_os = "linux", feature = "time"))]
+use crate::net::TxTimeFlags;
 use crate::net::{Ipv4Addr, Ipv6Addr, SocketType};
 #[cfg(linux_kernel)]
 use crate::net::{SocketAddrV6, UCred};
+#[cfg(all(target_os = "linux", feature = "time"))]
+use crate::time::ClockId;
 use crate::utils::as_mut_ptr;
 #[cfg(feature = "alloc")]
 #[cfg(any(
@@ -76,7 +82,7 @@ use c::TCP_KEEPALIVE as TCP_KEEPIDLE;
 use c::TCP_KEEPIDLE;
 use core::mem::{size_of, MaybeUninit};
 use core::time::Duration;
-#[cfg(target_os = "linux")]
+#[cfg(all(linux_raw_dep, target_os = "linux"))]
 use linux_raw_sys::xdp::{xdp_mmap_offsets, xdp_statistics, xdp_statistics_v1};
 
 #[inline]
@@ -498,6 +504,36 @@ pub(crate) fn ip_mtu(fd: BorrowedFd<'_>) -> io::Result<u32> {
 #[inline]
 pub(crate) fn ipv6_mtu(fd: BorrowedFd<'_>) -> io::Result<u32> {
     getsockopt(fd, c::IPPROTO_IPV6, c::IPV6_MTU)
+}
+
+#[cfg(linux_kernel)]
+#[inline]
+pub(crate) fn set_ip_mtu_discover(
+    fd: BorrowedFd<'_>,
+    value: Ipv4PathMtuDiscovery,
+) -> io::Result<()> {
+    setsockopt(fd, c::IPPROTO_IP, c::IP_MTU_DISCOVER, value)
+}
+
+#[cfg(linux_kernel)]
+#[inline]
+pub(crate) fn ip_mtu_discover(fd: BorrowedFd<'_>) -> io::Result<Ipv4PathMtuDiscovery> {
+    getsockopt(fd, c::IPPROTO_IP, c::IP_MTU_DISCOVER)
+}
+
+#[cfg(linux_kernel)]
+#[inline]
+pub(crate) fn set_ipv6_mtu_discover(
+    fd: BorrowedFd<'_>,
+    value: Ipv6PathMtuDiscovery,
+) -> io::Result<()> {
+    setsockopt(fd, c::IPPROTO_IPV6, c::IPV6_MTU_DISCOVER, value)
+}
+
+#[cfg(linux_kernel)]
+#[inline]
+pub(crate) fn ipv6_mtu_discover(fd: BorrowedFd<'_>) -> io::Result<Ipv6PathMtuDiscovery> {
+    getsockopt(fd, c::IPPROTO_IPV6, c::IPV6_MTU_DISCOVER)
 }
 
 #[inline]
@@ -1058,6 +1094,35 @@ pub(crate) fn socket_peercred(fd: BorrowedFd<'_>) -> io::Result<UCred> {
     getsockopt(fd, c::SOL_SOCKET, c::SO_PEERCRED)
 }
 
+#[cfg(all(target_os = "linux", feature = "time"))]
+#[inline]
+pub(crate) fn set_txtime(
+    fd: BorrowedFd<'_>,
+    clockid: ClockId,
+    flags: TxTimeFlags,
+) -> io::Result<()> {
+    setsockopt(
+        fd,
+        c::SOL_SOCKET,
+        c::SO_TXTIME,
+        c::sock_txtime {
+            clockid: clockid as _,
+            flags: flags.bits(),
+        },
+    )
+}
+
+#[cfg(all(target_os = "linux", feature = "time"))]
+#[inline]
+pub(crate) fn get_txtime(fd: BorrowedFd<'_>) -> io::Result<(ClockId, TxTimeFlags)> {
+    let txtime: c::sock_txtime = getsockopt(fd, c::SOL_SOCKET, c::SO_TXTIME)?;
+
+    Ok((
+        txtime.clockid.try_into().map_err(|_| io::Errno::RANGE)?,
+        TxTimeFlags::from_bits(txtime.flags).ok_or(io::Errno::RANGE)?,
+    ))
+}
+
 #[cfg(target_os = "linux")]
 #[inline]
 pub(crate) fn set_xdp_umem_reg(fd: BorrowedFd<'_>, value: XdpUmemReg) -> io::Result<()> {
@@ -1088,7 +1153,7 @@ pub(crate) fn set_xdp_rx_ring_size(fd: BorrowedFd<'_>, value: u32) -> io::Result
     setsockopt(fd, c::SOL_XDP, c::XDP_RX_RING, value)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(linux_raw_dep, target_os = "linux"))]
 #[inline]
 pub(crate) fn xdp_mmap_offsets(fd: BorrowedFd<'_>) -> io::Result<XdpMmapOffsets> {
     // The kernel will write `xdp_mmap_offsets` or `xdp_mmap_offsets_v1` to the
@@ -1175,7 +1240,7 @@ pub(crate) fn xdp_mmap_offsets(fd: BorrowedFd<'_>) -> io::Result<XdpMmapOffsets>
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(linux_raw_dep, target_os = "linux"))]
 #[inline]
 pub(crate) fn xdp_statistics(fd: BorrowedFd<'_>) -> io::Result<XdpStatistics> {
     let mut optlen = size_of::<xdp_statistics>().try_into().unwrap();

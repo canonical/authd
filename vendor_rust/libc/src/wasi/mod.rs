@@ -33,6 +33,10 @@ pub type wchar_t = i32;
 pub type nl_item = c_int;
 pub type __wasi_rights_t = u64;
 pub type locale_t = *mut __locale_struct;
+pub type pthread_t = *mut c_void;
+pub type pthread_once_t = c_int;
+pub type pthread_key_t = c_uint;
+pub type pthread_spinlock_t = c_int;
 
 s_no_extra_traits! {
     #[repr(align(16))]
@@ -42,13 +46,13 @@ s_no_extra_traits! {
 }
 
 #[allow(missing_copy_implementations)]
-#[cfg_attr(feature = "extra_traits", derive(Debug))]
+#[derive(Debug)]
 pub enum FILE {}
 #[allow(missing_copy_implementations)]
-#[cfg_attr(feature = "extra_traits", derive(Debug))]
+#[derive(Debug)]
 pub enum DIR {}
 #[allow(missing_copy_implementations)]
-#[cfg_attr(feature = "extra_traits", derive(Debug))]
+#[derive(Debug)]
 pub enum __locale_struct {}
 
 s_paren! {
@@ -83,11 +87,13 @@ s! {
         pub __tm_nsec: c_int,
     }
 
+    #[derive(Default)]
     pub struct timeval {
         pub tv_sec: time_t,
         pub tv_usec: suseconds_t,
     }
 
+    #[derive(Default)]
     pub struct timespec {
         pub tv_sec: time_t,
         pub tv_nsec: c_long,
@@ -155,7 +161,7 @@ s! {
         pub st_mode: mode_t,
         pub st_uid: uid_t,
         pub st_gid: gid_t,
-        __pad0: c_uint,
+        __pad0: Padding<c_uint>,
         pub st_rdev: dev_t,
         pub st_size: off_t,
         pub st_blksize: blksize_t,
@@ -163,12 +169,48 @@ s! {
         pub st_atim: timespec,
         pub st_mtim: timespec,
         pub st_ctim: timespec,
-        __reserved: [c_longlong; 3],
+        __reserved: Padding<[c_longlong; 3]>,
     }
 
     pub struct fd_set {
         __nfds: usize,
         __fds: [c_int; FD_SETSIZE as usize],
+    }
+
+    pub struct pthread_attr_t {
+        size: [c_long; 9],
+    }
+
+    pub struct pthread_mutexattr_t {
+        __attr: c_uint,
+    }
+
+    pub struct pthread_condattr_t {
+        __attr: c_uint,
+    }
+
+    pub struct pthread_barrierattr_t {
+        __attr: c_uint,
+    }
+
+    pub struct pthread_rwlockattr_t {
+        __attr: [c_uint; 2],
+    }
+
+    pub struct pthread_cond_t {
+        size: [*mut c_void; 12],
+    }
+
+    pub struct pthread_mutex_t {
+        size: [*mut c_void; 6],
+    }
+
+    pub struct pthread_rwlock_t {
+        size: [*mut c_void; 8],
+    }
+
+    pub struct pthread_barrier_t {
+        size: [*mut c_void; 5],
     }
 }
 
@@ -176,7 +218,7 @@ s! {
 // etc., since it contains a flexible array member with a dynamic size.
 #[repr(C)]
 #[allow(missing_copy_implementations)]
-#[cfg_attr(feature = "extra_traits", derive(Debug))]
+#[derive(Debug)]
 pub struct dirent {
     pub d_ino: ino_t,
     pub d_type: c_uchar,
@@ -262,7 +304,9 @@ pub const DT_BLK: u8 = 1;
 pub const DT_CHR: u8 = 2;
 pub const DT_DIR: u8 = 3;
 pub const DT_REG: u8 = 4;
+pub const DT_FIFO: u8 = 6;
 pub const DT_LNK: u8 = 7;
+pub const DT_SOCK: u8 = 20;
 pub const FIONREAD: c_int = 1;
 pub const FIONBIO: c_int = 2;
 pub const F_OK: c_int = 0;
@@ -356,31 +400,155 @@ pub const ENOTCAPABLE: c_int = 76;
 pub const EOPNOTSUPP: c_int = ENOTSUP;
 pub const EWOULDBLOCK: c_int = EAGAIN;
 
+pub const _SC_ARG_MAX: c_int = 0;
+pub const _SC_CHILD_MAX: c_int = 1;
+pub const _SC_CLK_TCK: c_int = 2;
+pub const _SC_NGROUPS_MAX: c_int = 3;
+pub const _SC_OPEN_MAX: c_int = 4;
+pub const _SC_STREAM_MAX: c_int = 5;
+pub const _SC_TZNAME_MAX: c_int = 6;
+pub const _SC_JOB_CONTROL: c_int = 7;
+pub const _SC_SAVED_IDS: c_int = 8;
+pub const _SC_REALTIME_SIGNALS: c_int = 9;
+pub const _SC_PRIORITY_SCHEDULING: c_int = 10;
+pub const _SC_TIMERS: c_int = 11;
+pub const _SC_ASYNCHRONOUS_IO: c_int = 12;
+pub const _SC_PRIORITIZED_IO: c_int = 13;
+pub const _SC_SYNCHRONIZED_IO: c_int = 14;
+pub const _SC_FSYNC: c_int = 15;
+pub const _SC_MAPPED_FILES: c_int = 16;
+pub const _SC_MEMLOCK: c_int = 17;
+pub const _SC_MEMLOCK_RANGE: c_int = 18;
+pub const _SC_MEMORY_PROTECTION: c_int = 19;
+pub const _SC_MESSAGE_PASSING: c_int = 20;
+pub const _SC_SEMAPHORES: c_int = 21;
+pub const _SC_SHARED_MEMORY_OBJECTS: c_int = 22;
+pub const _SC_AIO_LISTIO_MAX: c_int = 23;
+pub const _SC_AIO_MAX: c_int = 24;
+pub const _SC_AIO_PRIO_DELTA_MAX: c_int = 25;
+pub const _SC_DELAYTIMER_MAX: c_int = 26;
+pub const _SC_MQ_OPEN_MAX: c_int = 27;
+pub const _SC_MQ_PRIO_MAX: c_int = 28;
+pub const _SC_VERSION: c_int = 29;
 pub const _SC_PAGESIZE: c_int = 30;
 pub const _SC_PAGE_SIZE: c_int = _SC_PAGESIZE;
+pub const _SC_RTSIG_MAX: c_int = 31;
+pub const _SC_SEM_NSEMS_MAX: c_int = 32;
+pub const _SC_SEM_VALUE_MAX: c_int = 33;
+pub const _SC_SIGQUEUE_MAX: c_int = 34;
+pub const _SC_TIMER_MAX: c_int = 35;
+pub const _SC_BC_BASE_MAX: c_int = 36;
+pub const _SC_BC_DIM_MAX: c_int = 37;
+pub const _SC_BC_SCALE_MAX: c_int = 38;
+pub const _SC_BC_STRING_MAX: c_int = 39;
+pub const _SC_COLL_WEIGHTS_MAX: c_int = 40;
+pub const _SC_EXPR_NEST_MAX: c_int = 42;
+pub const _SC_LINE_MAX: c_int = 43;
+pub const _SC_RE_DUP_MAX: c_int = 44;
+pub const _SC_2_VERSION: c_int = 46;
+pub const _SC_2_C_BIND: c_int = 47;
+pub const _SC_2_C_DEV: c_int = 48;
+pub const _SC_2_FORT_DEV: c_int = 49;
+pub const _SC_2_FORT_RUN: c_int = 50;
+pub const _SC_2_SW_DEV: c_int = 51;
+pub const _SC_2_LOCALEDEF: c_int = 52;
+pub const _SC_UIO_MAXIOV: c_int = 60;
 pub const _SC_IOV_MAX: c_int = 60;
+pub const _SC_THREADS: c_int = 67;
+pub const _SC_THREAD_SAFE_FUNCTIONS: c_int = 68;
+pub const _SC_GETGR_R_SIZE_MAX: c_int = 69;
+pub const _SC_GETPW_R_SIZE_MAX: c_int = 70;
+pub const _SC_LOGIN_NAME_MAX: c_int = 71;
+pub const _SC_TTY_NAME_MAX: c_int = 72;
+pub const _SC_THREAD_DESTRUCTOR_ITERATIONS: c_int = 73;
+pub const _SC_THREAD_KEYS_MAX: c_int = 74;
+pub const _SC_THREAD_STACK_MIN: c_int = 75;
+pub const _SC_THREAD_THREADS_MAX: c_int = 76;
+pub const _SC_THREAD_ATTR_STACKADDR: c_int = 77;
+pub const _SC_THREAD_ATTR_STACKSIZE: c_int = 78;
+pub const _SC_THREAD_PRIORITY_SCHEDULING: c_int = 79;
+pub const _SC_THREAD_PRIO_INHERIT: c_int = 80;
+pub const _SC_THREAD_PRIO_PROTECT: c_int = 81;
+pub const _SC_THREAD_PROCESS_SHARED: c_int = 82;
+pub const _SC_NPROCESSORS_CONF: c_int = 83;
+pub const _SC_NPROCESSORS_ONLN: c_int = 84;
+pub const _SC_PHYS_PAGES: c_int = 85;
+pub const _SC_AVPHYS_PAGES: c_int = 86;
+pub const _SC_ATEXIT_MAX: c_int = 87;
+pub const _SC_PASS_MAX: c_int = 88;
+pub const _SC_XOPEN_VERSION: c_int = 89;
+pub const _SC_XOPEN_XCU_VERSION: c_int = 90;
+pub const _SC_XOPEN_UNIX: c_int = 91;
+pub const _SC_XOPEN_CRYPT: c_int = 92;
+pub const _SC_XOPEN_ENH_I18N: c_int = 93;
+pub const _SC_XOPEN_SHM: c_int = 94;
+pub const _SC_2_CHAR_TERM: c_int = 95;
+pub const _SC_2_UPE: c_int = 97;
+pub const _SC_XOPEN_XPG2: c_int = 98;
+pub const _SC_XOPEN_XPG3: c_int = 99;
+pub const _SC_XOPEN_XPG4: c_int = 100;
+pub const _SC_NZERO: c_int = 109;
+pub const _SC_XBS5_ILP32_OFF32: c_int = 125;
+pub const _SC_XBS5_ILP32_OFFBIG: c_int = 126;
+pub const _SC_XBS5_LP64_OFF64: c_int = 127;
+pub const _SC_XBS5_LPBIG_OFFBIG: c_int = 128;
+pub const _SC_XOPEN_LEGACY: c_int = 129;
+pub const _SC_XOPEN_REALTIME: c_int = 130;
+pub const _SC_XOPEN_REALTIME_THREADS: c_int = 131;
+pub const _SC_ADVISORY_INFO: c_int = 132;
+pub const _SC_BARRIERS: c_int = 133;
+pub const _SC_CLOCK_SELECTION: c_int = 137;
+pub const _SC_CPUTIME: c_int = 138;
+pub const _SC_THREAD_CPUTIME: c_int = 139;
+pub const _SC_MONOTONIC_CLOCK: c_int = 149;
+pub const _SC_READER_WRITER_LOCKS: c_int = 153;
+pub const _SC_SPIN_LOCKS: c_int = 154;
+pub const _SC_REGEXP: c_int = 155;
+pub const _SC_SHELL: c_int = 157;
+pub const _SC_SPAWN: c_int = 159;
+pub const _SC_SPORADIC_SERVER: c_int = 160;
+pub const _SC_THREAD_SPORADIC_SERVER: c_int = 161;
+pub const _SC_TIMEOUTS: c_int = 164;
+pub const _SC_TYPED_MEMORY_OBJECTS: c_int = 165;
+pub const _SC_2_PBS: c_int = 168;
+pub const _SC_2_PBS_ACCOUNTING: c_int = 169;
+pub const _SC_2_PBS_LOCATE: c_int = 170;
+pub const _SC_2_PBS_MESSAGE: c_int = 171;
+pub const _SC_2_PBS_TRACK: c_int = 172;
 pub const _SC_SYMLOOP_MAX: c_int = 173;
+pub const _SC_STREAMS: c_int = 174;
+pub const _SC_2_PBS_CHECKPOINT: c_int = 175;
+pub const _SC_V6_ILP32_OFF32: c_int = 176;
+pub const _SC_V6_ILP32_OFFBIG: c_int = 177;
+pub const _SC_V6_LP64_OFF64: c_int = 178;
+pub const _SC_V6_LPBIG_OFFBIG: c_int = 179;
+pub const _SC_HOST_NAME_MAX: c_int = 180;
+pub const _SC_TRACE: c_int = 181;
+pub const _SC_TRACE_EVENT_FILTER: c_int = 182;
+pub const _SC_TRACE_INHERIT: c_int = 183;
+pub const _SC_TRACE_LOG: c_int = 184;
+pub const _SC_IPV6: c_int = 235;
+pub const _SC_RAW_SOCKETS: c_int = 236;
+pub const _SC_V7_ILP32_OFF32: c_int = 237;
+pub const _SC_V7_ILP32_OFFBIG: c_int = 238;
+pub const _SC_V7_LP64_OFF64: c_int = 239;
+pub const _SC_V7_LPBIG_OFFBIG: c_int = 240;
+pub const _SC_SS_REPL_MAX: c_int = 241;
+pub const _SC_TRACE_EVENT_NAME_MAX: c_int = 242;
+pub const _SC_TRACE_NAME_MAX: c_int = 243;
+pub const _SC_TRACE_SYS_MAX: c_int = 244;
+pub const _SC_TRACE_USER_EVENT_MAX: c_int = 245;
+pub const _SC_XOPEN_STREAMS: c_int = 246;
+pub const _SC_THREAD_ROBUST_PRIO_INHERIT: c_int = 247;
+pub const _SC_THREAD_ROBUST_PRIO_PROTECT: c_int = 248;
+pub const _SC_MINSIGSTKSZ: c_int = 249;
+pub const _SC_SIGSTKSZ: c_int = 250;
 
-cfg_if! {
-    if #[cfg(libc_ctest)] {
-        // skip these constants when this is active because `ctest` currently
-        // panics on parsing the constants below
-    } else {
-        // `addr_of!(EXTERN_STATIC)` is now safe; remove `unsafe` when MSRV >= 1.82
-        #[allow(unused_unsafe)]
-        pub static CLOCK_MONOTONIC: clockid_t =
-            unsafe { clockid_t(core::ptr::addr_of!(_CLOCK_MONOTONIC)) };
-        #[allow(unused_unsafe)]
-        pub static CLOCK_PROCESS_CPUTIME_ID: clockid_t =
-            unsafe { clockid_t(core::ptr::addr_of!(_CLOCK_PROCESS_CPUTIME_ID)) };
-        #[allow(unused_unsafe)]
-        pub static CLOCK_REALTIME: clockid_t =
-            unsafe { clockid_t(core::ptr::addr_of!(_CLOCK_REALTIME)) };
-        #[allow(unused_unsafe)]
-        pub static CLOCK_THREAD_CPUTIME_ID: clockid_t =
-            unsafe { clockid_t(core::ptr::addr_of!(_CLOCK_THREAD_CPUTIME_ID)) };
-    }
-}
+// FIXME(msrv): `addr_of!(EXTERN_STATIC)` is now safe; remove `unsafe` when MSRV >= 1.82
+#[allow(unused_unsafe)]
+pub static CLOCK_MONOTONIC: clockid_t = unsafe { clockid_t(core::ptr::addr_of!(_CLOCK_MONOTONIC)) };
+#[allow(unused_unsafe)]
+pub static CLOCK_REALTIME: clockid_t = unsafe { clockid_t(core::ptr::addr_of!(_CLOCK_REALTIME)) };
 
 pub const ABDAY_1: crate::nl_item = 0x20000;
 pub const ABDAY_2: crate::nl_item = 0x20001;
@@ -446,6 +614,9 @@ pub const YESEXPR: crate::nl_item = 0x50000;
 pub const NOEXPR: crate::nl_item = 0x50001;
 pub const YESSTR: crate::nl_item = 0x50002;
 pub const NOSTR: crate::nl_item = 0x50003;
+
+pub const PTHREAD_STACK_MIN: usize = 2048;
+pub const TIMER_ABSTIME: c_int = 1;
 
 f! {
     pub fn FD_ISSET(fd: c_int, set: *const fd_set) -> bool {
@@ -550,9 +721,7 @@ extern "C" {
     pub fn ctime_r(a: *const time_t, b: *mut c_char) -> *mut c_char;
 
     static _CLOCK_MONOTONIC: u8;
-    static _CLOCK_PROCESS_CPUTIME_ID: u8;
     static _CLOCK_REALTIME: u8;
-    static _CLOCK_THREAD_CPUTIME_ID: u8;
     pub fn nanosleep(a: *const timespec, b: *mut timespec) -> c_int;
     pub fn clock_getres(a: clockid_t, b: *mut timespec) -> c_int;
     pub fn clock_gettime(a: clockid_t, b: *mut timespec) -> c_int;
@@ -757,6 +926,7 @@ extern "C" {
         timeout: *const timeval,
     ) -> c_int;
 
+    #[cfg(target_env = "p1")]
     pub fn __wasilibc_register_preopened_fd(fd: c_int, path: *const c_char) -> c_int;
     pub fn __wasilibc_fd_renumber(fd: c_int, newfd: c_int) -> c_int;
     pub fn __wasilibc_unlinkat(fd: c_int, path: *const c_char) -> c_int;
@@ -852,10 +1022,76 @@ extern "C" {
     pub fn arc4random_uniform(a: u32) -> u32;
 
     pub fn __errno_location() -> *mut c_int;
+
+    pub fn chmod(path: *const c_char, mode: mode_t) -> c_int;
+    pub fn fchmod(fd: c_int, mode: mode_t) -> c_int;
+    pub fn realpath(pathname: *const c_char, resolved: *mut c_char) -> *mut c_char;
+
+    pub fn pthread_self() -> pthread_t;
+    pub fn pthread_create(
+        native: *mut pthread_t,
+        attr: *const pthread_attr_t,
+        f: extern "C" fn(*mut c_void) -> *mut c_void,
+        value: *mut c_void,
+    ) -> c_int;
+    pub fn pthread_equal(t1: pthread_t, t2: pthread_t) -> c_int;
+    pub fn pthread_join(native: pthread_t, value: *mut *mut c_void) -> c_int;
+    pub fn pthread_attr_init(attr: *mut pthread_attr_t) -> c_int;
+    pub fn pthread_attr_destroy(attr: *mut pthread_attr_t) -> c_int;
+    pub fn pthread_attr_getstacksize(attr: *const pthread_attr_t, stacksize: *mut size_t) -> c_int;
+    pub fn pthread_attr_setstacksize(attr: *mut pthread_attr_t, stack_size: size_t) -> c_int;
+    pub fn pthread_attr_setdetachstate(attr: *mut pthread_attr_t, state: c_int) -> c_int;
+    pub fn pthread_detach(thread: pthread_t) -> c_int;
+
+    pub fn pthread_key_create(
+        key: *mut pthread_key_t,
+        dtor: Option<unsafe extern "C" fn(*mut c_void)>,
+    ) -> c_int;
+    pub fn pthread_key_delete(key: pthread_key_t) -> c_int;
+    pub fn pthread_getspecific(key: pthread_key_t) -> *mut c_void;
+    pub fn pthread_setspecific(key: pthread_key_t, value: *const c_void) -> c_int;
+    pub fn pthread_mutex_init(
+        lock: *mut pthread_mutex_t,
+        attr: *const pthread_mutexattr_t,
+    ) -> c_int;
+    pub fn pthread_mutex_destroy(lock: *mut pthread_mutex_t) -> c_int;
+    pub fn pthread_mutex_lock(lock: *mut pthread_mutex_t) -> c_int;
+    pub fn pthread_mutex_trylock(lock: *mut pthread_mutex_t) -> c_int;
+    pub fn pthread_mutex_unlock(lock: *mut pthread_mutex_t) -> c_int;
+
+    pub fn pthread_mutexattr_init(attr: *mut pthread_mutexattr_t) -> c_int;
+    pub fn pthread_mutexattr_destroy(attr: *mut pthread_mutexattr_t) -> c_int;
+    pub fn pthread_mutexattr_settype(attr: *mut pthread_mutexattr_t, _type: c_int) -> c_int;
+
+    pub fn pthread_cond_init(cond: *mut pthread_cond_t, attr: *const pthread_condattr_t) -> c_int;
+    pub fn pthread_cond_wait(cond: *mut pthread_cond_t, lock: *mut pthread_mutex_t) -> c_int;
+    pub fn pthread_cond_timedwait(
+        cond: *mut pthread_cond_t,
+        lock: *mut pthread_mutex_t,
+        abstime: *const timespec,
+    ) -> c_int;
+    pub fn pthread_cond_signal(cond: *mut pthread_cond_t) -> c_int;
+    pub fn pthread_cond_broadcast(cond: *mut pthread_cond_t) -> c_int;
+    pub fn pthread_cond_destroy(cond: *mut pthread_cond_t) -> c_int;
+    pub fn pthread_condattr_init(attr: *mut pthread_condattr_t) -> c_int;
+    pub fn pthread_condattr_destroy(attr: *mut pthread_condattr_t) -> c_int;
+
+    pub fn pthread_rwlock_init(
+        lock: *mut pthread_rwlock_t,
+        attr: *const pthread_rwlockattr_t,
+    ) -> c_int;
+    pub fn pthread_rwlock_destroy(lock: *mut pthread_rwlock_t) -> c_int;
+    pub fn pthread_rwlock_rdlock(lock: *mut pthread_rwlock_t) -> c_int;
+    pub fn pthread_rwlock_tryrdlock(lock: *mut pthread_rwlock_t) -> c_int;
+    pub fn pthread_rwlock_wrlock(lock: *mut pthread_rwlock_t) -> c_int;
+    pub fn pthread_rwlock_trywrlock(lock: *mut pthread_rwlock_t) -> c_int;
+    pub fn pthread_rwlock_unlock(lock: *mut pthread_rwlock_t) -> c_int;
+    pub fn pthread_rwlockattr_init(attr: *mut pthread_rwlockattr_t) -> c_int;
+    pub fn pthread_rwlockattr_destroy(attr: *mut pthread_rwlockattr_t) -> c_int;
 }
 
 cfg_if! {
-    if #[cfg(target_env = "p2")] {
+    if #[cfg(not(target_env = "p1"))] {
         mod p2;
         pub use self::p2::*;
     }

@@ -3,9 +3,11 @@ use crate::runtime::blocking::BlockingPool;
 use crate::runtime::scheduler::CurrentThread;
 use crate::runtime::{context, EnterGuard, Handle};
 use crate::task::JoinHandle;
+use crate::util::error::RUNTIME_SHUTTING_DOWN_ERROR;
 use crate::util::trace::SpawnMeta;
 
 use std::future::Future;
+use std::io;
 use std::mem;
 use std::time::Duration;
 
@@ -184,6 +186,8 @@ impl Runtime {
     /// # Examples
     ///
     /// ```
+    /// # #[cfg(not(target_family = "wasm"))]
+    /// # {
     /// use tokio::runtime::Runtime;
     ///
     /// let rt = Runtime::new()
@@ -192,6 +196,7 @@ impl Runtime {
     /// let handle = rt.handle();
     ///
     /// // Use the handle...
+    /// # }
     /// ```
     pub fn handle(&self) -> &Handle {
         &self.handle
@@ -205,15 +210,18 @@ impl Runtime {
     ///
     /// The provided future will start running in the background immediately
     /// when `spawn` is called, even if you don't await the returned
-    /// `JoinHandle`.
+    /// `JoinHandle` (assuming that the runtime [is running][running-runtime]).
     ///
     /// See [module level][mod] documentation for more details.
     ///
     /// [mod]: index.html
+    /// [running-runtime]: index.html#driving-the-runtime
     ///
     /// # Examples
     ///
     /// ```
+    /// # #[cfg(not(target_family = "wasm"))]
+    /// # {
     /// use tokio::runtime::Runtime;
     ///
     /// # fn dox() {
@@ -224,6 +232,7 @@ impl Runtime {
     /// rt.spawn(async {
     ///     println!("now running on a worker thread");
     /// });
+    /// # }
     /// # }
     /// ```
     #[track_caller]
@@ -247,6 +256,8 @@ impl Runtime {
     /// # Examples
     ///
     /// ```
+    /// # #[cfg(not(target_family = "wasm"))]
+    /// # {
     /// use tokio::runtime::Runtime;
     ///
     /// # fn dox() {
@@ -257,6 +268,7 @@ impl Runtime {
     /// rt.spawn_blocking(|| {
     ///     println!("now running on a worker thread");
     /// });
+    /// # }
     /// # }
     /// ```
     #[track_caller]
@@ -309,6 +321,8 @@ impl Runtime {
     /// # Examples
     ///
     /// ```no_run
+    /// # #[cfg(not(target_family = "wasm"))]
+    /// # {
     /// use tokio::runtime::Runtime;
     ///
     /// // Create the runtime
@@ -318,6 +332,7 @@ impl Runtime {
     /// rt.block_on(async {
     ///     println!("hello");
     /// });
+    /// # }
     /// ```
     ///
     /// [handle]: fn@Handle::block_on
@@ -335,7 +350,7 @@ impl Runtime {
     fn block_on_inner<F: Future>(&self, future: F, _meta: SpawnMeta<'_>) -> F::Output {
         #[cfg(all(
             tokio_unstable,
-            tokio_taskdump,
+            feature = "taskdump",
             feature = "rt",
             target_os = "linux",
             any(target_arch = "aarch64", target_arch = "x86", target_arch = "x86_64")
@@ -372,6 +387,8 @@ impl Runtime {
     /// # Example
     ///
     /// ```
+    /// # #[cfg(not(target_family = "wasm"))]
+    /// # {
     /// use tokio::runtime::Runtime;
     /// use tokio::task::JoinHandle;
     ///
@@ -394,6 +411,7 @@ impl Runtime {
     ///     // Wait for the task before we end the test.
     ///     rt.block_on(handle).unwrap();
     /// }
+    /// # }
     /// ```
     pub fn enter(&self) -> EnterGuard<'_> {
         self.handle.enter()
@@ -407,6 +425,8 @@ impl Runtime {
     /// # Examples
     ///
     /// ```
+    /// # #[cfg(not(target_family = "wasm"))]
+    /// # {
     /// use tokio::runtime::Runtime;
     /// use tokio::task;
     ///
@@ -414,7 +434,6 @@ impl Runtime {
     /// use std::time::Duration;
     ///
     /// fn main() {
-    /// #  if cfg!(miri) { return } // Miri reports error when main thread terminated without waiting all remaining threads.
     ///    let runtime = Runtime::new().unwrap();
     ///
     ///    runtime.block_on(async move {
@@ -425,6 +444,7 @@ impl Runtime {
     ///
     ///    runtime.shutdown_timeout(Duration::from_millis(100));
     /// }
+    /// # }
     /// ```
     pub fn shutdown_timeout(mut self, duration: Duration) {
         // Wakeup and shutdown all the worker threads
@@ -448,6 +468,8 @@ impl Runtime {
     /// This function is equivalent to calling `shutdown_timeout(Duration::from_nanos(0))`.
     ///
     /// ```
+    /// # #[cfg(not(target_family = "wasm"))]
+    /// # {
     /// use tokio::runtime::Runtime;
     ///
     /// fn main() {
@@ -459,6 +481,7 @@ impl Runtime {
     ///        inner_runtime.shutdown_background();
     ///    });
     /// }
+    /// # }
     /// ```
     pub fn shutdown_background(self) {
         self.shutdown_timeout(Duration::from_nanos(0));
@@ -493,3 +516,70 @@ impl Drop for Runtime {
 impl std::panic::UnwindSafe for Runtime {}
 
 impl std::panic::RefUnwindSafe for Runtime {}
+
+fn display_eq(d: impl std::fmt::Display, s: &str) -> bool {
+    use std::fmt::Write;
+
+    struct FormatEq<'r> {
+        remainder: &'r str,
+        unequal: bool,
+    }
+
+    impl<'r> Write for FormatEq<'r> {
+        fn write_str(&mut self, s: &str) -> std::fmt::Result {
+            if !self.unequal {
+                if let Some(new_remainder) = self.remainder.strip_prefix(s) {
+                    self.remainder = new_remainder;
+                } else {
+                    self.unequal = true;
+                }
+            }
+            Ok(())
+        }
+    }
+
+    let mut fmt_eq = FormatEq {
+        remainder: s,
+        unequal: false,
+    };
+    let _ = write!(fmt_eq, "{d}");
+    fmt_eq.remainder.is_empty() && !fmt_eq.unequal
+}
+
+/// Checks whether the given error was emitted by Tokio when shutting down its runtime.
+///
+/// # Examples
+///
+/// ```
+/// # #[cfg(not(target_family = "wasm"))]
+/// # {
+/// use tokio::runtime::Runtime;
+/// use tokio::net::TcpListener;
+///
+/// fn main() {
+///     let rt1 = Runtime::new().unwrap();
+///     let rt2 = Runtime::new().unwrap();
+///
+///     let listener = rt1.block_on(async {
+///         TcpListener::bind("127.0.0.1:0").await.unwrap()
+///     });
+///
+///     drop(rt1);
+///
+///     rt2.block_on(async {
+///         let res = listener.accept().await;
+///         assert!(res.is_err());
+///         assert!(tokio::runtime::is_rt_shutdown_err(res.as_ref().unwrap_err()));
+///     });
+/// }
+/// # }
+/// ```
+pub fn is_rt_shutdown_err(err: &io::Error) -> bool {
+    if let Some(inner) = err.get_ref() {
+        err.kind() == io::ErrorKind::Other
+            && inner.source().is_none()
+            && display_eq(inner, RUNTIME_SHUTTING_DOWN_ERROR)
+    } else {
+        false
+    }
+}
