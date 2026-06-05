@@ -1,8 +1,8 @@
-authd (0.6.4+git260603+443+f1d02941) questing; urgency=medium
+authd (0.6.4+git260605+461+b9b0fb89) questing; urgency=medium
 
-  * Github build. Run id: 26883454194. Run number: 443.
+  * Github build. Run id: 27010503720. Run number: 461.
 
- -- Denison <denison.barbosa@canonical.com>  Wed, 03 Jun 2026 12:04:08 +0000
+ -- Denison <denison.barbosa@canonical.com>  Fri, 05 Jun 2026 10:49:02 +0000
 
 authd (0.6.4) resolute; urgency=medium
 

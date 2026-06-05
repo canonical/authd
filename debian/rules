@@ -66,7 +66,20 @@ export BUILT_PAM_LIBS_PATH := obj-$(DEB_HOST_GNU_TYPE)/src/$(AUTHD_GO_PACKAGE)/p
 
 override_dh_auto_clean:
 	dh_auto_clean
-	dh_auto_clean --buildsystem=cargo
+
+	# 'dh_auto_clean --buildsystem=cargo' calls /usr/share/cargo/bin/cargo.
+	# If the cargo in $PATH is the one from /usr/share/cargo/bin/cargo,
+	# then we can just call 'dh_auto_clean --buildsystem=cargo'.
+	# Otherwise, we need to do what 'dh_auto_clean --buildsystem=cargo' does
+	# ourselves, but using the cargo in $PATH.
+	if [ "$$(command -v cargo)" = "/usr/share/cargo/bin/cargo" ]; then \
+		dh_auto_clean --buildsystem=cargo; \
+	else \
+		touch --no-create --date='@$(SOURCE_DATE_EPOCH)' .cargo_vcs_info.json; \
+		cargo clean --verbose --verbose; \
+		rm -f .cargo-checksum.json; \
+		rm -rf debian/cargo_registry; \
+	fi
 
 	# Vendor Go dependencies when building the source package
 	[ -d vendor/ ] || go mod vendor
