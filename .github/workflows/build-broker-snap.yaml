@@ -63,7 +63,9 @@ jobs:
 
           # Tags and main branch are needed by the snap/scripts/version script
           # which is used during the build of the broker snap.
-          git fetch --tags --unshallow
+          # --no-recurse-submodules is needed to avoid fetching submodule history,
+          # which may reference commits that no longer exist in the upstream repository.
+          git fetch --tags --unshallow --no-recurse-submodules
           if [ "$(git branch --show-current)" != "main" ]; then
             git fetch origin main:main
           fi
