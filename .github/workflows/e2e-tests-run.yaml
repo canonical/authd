@@ -250,7 +250,13 @@ jobs:
         if: always() && (steps.run-tests.outputs.output-dir != '')
         run: |
           set -euo pipefail
-          TARGET_DIR="pr-${{ github.event.pull_request.number }}/run-${{ github.run_id }}-${{ github.run_attempt }}/${{ inputs.ubuntu-version }}-${{ inputs.broker }}"
+          if [ -n "${{ github.event.pull_request.number }}" ]; then
+            EVENT_DIR="pr-${{ github.event.pull_request.number }}"
+          else
+            EVENT_DIR="${{ github.event_name }}-${{ github.run_id }}"
+          fi
+
+          TARGET_DIR="${EVENT_DIR}/run-${{ github.run_id }}-${{ github.run_attempt }}/${{ inputs.ubuntu-version }}-${{ inputs.broker }}"
           PAGES_DIR="$(pwd)/pages/${TARGET_DIR}"
           mkdir -p "${PAGES_DIR}"
 
