@@ -139,6 +139,15 @@ type Console struct {
 	closed       bool
 	interactions []interaction
 	snapshots    []string // terminal screen snapshots captured at WaitFor points
+
+	// spawnSelfSIGINT records the test process's own SIGINT disposition at the
+	// moment this command was spawned. A spawned process inherits SIG_IGN for
+	// SIGINT across exec (and the Go runtime preserves an inherited ignored
+	// SIGINT), so if the test process had SIGINT ignored when it forked the
+	// command, the command will silently ignore Ctrl+C. This is logged in the
+	// failure diagnostics to help distinguish inherited-ignore from an
+	// in-process override.
+	spawnSelfSIGINT string
 }
 
 // winsize is the struct for the TIOCSWINSZ ioctl.
@@ -248,11 +257,12 @@ func Start(t *testing.T, name string, args []string, opts ...Option) *Console {
 	pts.Close()
 
 	c := &Console{
-		cmd:      cmd,
-		ptmx:     ptmx,
-		opts:     o,
-		done:     make(chan error, 1),
-		copyDone: make(chan struct{}),
+		cmd:             cmd,
+		ptmx:            ptmx,
+		opts:            o,
+		done:            make(chan error, 1),
+		copyDone:        make(chan struct{}),
+		spawnSelfSIGINT: selfSIGINTDisposition(),
 	}
 
 	// Background goroutine: read PTY output.
@@ -622,6 +632,8 @@ func (c *Console) logProcessDiagnostics(t *testing.T) {
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "ptytest: process diagnostics for command tree rooted at pid %d:\n", rootPID)
+	fmt.Fprintf(&b, "  test process (pid %d) SIGINT disposition when this command was spawned: %s\n",
+		os.Getpid(), c.spawnSelfSIGINT)
 
 	// PTY foreground process group and line discipline. These ioctls fail if
 	// the PTY has already been closed (e.g. from the Close path); that is fine.
@@ -773,6 +785,19 @@ func readProcFileTrim(path string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(data))
+}
+
+// selfSIGINTDisposition returns a short description of the current (test)
+// process's SIGINT disposition, read from /proc/self/status. A spawned child
+// inherits SIG_IGN across exec, so this captures whether the test process was
+// ignoring SIGINT at the moment it forked a command.
+func selfSIGINTDisposition() string {
+	status := readStatusFields("/proc/self/status")
+	if len(status) == 0 {
+		return "unknown"
+	}
+	return fmt.Sprintf("ignored=%v caught=%v",
+		sigSetHasSIGINT(status["SigIgn"]), sigSetHasSIGINT(status["SigCgt"]))
 }
 
 // sigSetHasSIGINT reports whether SIGINT is present in a /proc status signal
