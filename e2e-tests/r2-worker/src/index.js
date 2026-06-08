@@ -14,11 +14,20 @@ export default {
       }
     }
 
-    // List the directory
+    // List the directory, following pagination so entries don't disappear.
     const prefix = path ? path.replace(/\/?$/, "/") : "";
-    const listing = await env.BUCKET.list({ prefix, delimiter: "/" });
+    const objects = [];
+    const delimitedPrefixes = [];
+    let cursor;
 
-    if (!listing.objects.length && !listing.delimitedPrefixes.length) {
+    do {
+      const listing = await env.BUCKET.list({ prefix, delimiter: "/", cursor });
+      objects.push(...listing.objects);
+      delimitedPrefixes.push(...listing.delimitedPrefixes);
+      cursor = listing.truncated ? listing.cursor : undefined;
+    } while (cursor);
+
+    if (!objects.length && !delimitedPrefixes.length) {
       return new Response("Not found", { status: 404 });
     }
 
@@ -33,11 +42,11 @@ export default {
     const rows = [
       // Add '..' row if not at root
       ...(parent !== null ? [`<li><a href="/${parent}">..</a></li>`] : []),
-      ...listing.delimitedPrefixes.map(p => {
+      ...[...new Set(delimitedPrefixes)].sort().map(p => {
         const name = p.replace(prefix, "");
         return `<li><a href="/${p}">${name}</a></li>`;
       }),
-      ...listing.objects.map(o => {
+      ...objects.map(o => {
         const name = o.key.replace(prefix, "");
         return `<li><a href="/${o.key}">${name}</a></li>`;
       }),
