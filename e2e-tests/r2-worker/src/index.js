@@ -2,13 +2,16 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = decodeURIComponent(url.pathname.replace(/^\//, ""));
+    const wantsDirectory = url.pathname.endsWith("/");
 
-    // Try to serve the file directly
-    const object = await env.BUCKET.get(path);
-    if (object) {
-      const headers = new Headers();
-      object.writeHttpMetadata(headers);
-      return new Response(object.body, { headers });
+    // Serve file objects only for non-directory paths.
+    if (!wantsDirectory && path) {
+      const object = await env.BUCKET.get(path);
+      if (object) {
+        const headers = new Headers();
+        object.writeHttpMetadata(headers);
+        return new Response(object.body, { headers });
+      }
     }
 
     // List the directory
