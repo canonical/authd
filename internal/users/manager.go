@@ -444,7 +444,7 @@ func (m *Manager) SetUserID(name string, uid uint32) (resp *SetUserIDResp, err e
 	// Check if the home directory is currently owned by the user.
 	homeUID, _, err := getHomeDirOwner(oldUser.Dir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		warning := fmt.Sprintf("Could not get owner of home directory '%s'.", oldUser.Dir)
+		warning := fmt.Sprintf("Warning: Could not get owner of home directory '%s', not updating ownership.", oldUser.Dir)
 		log.Warningf(context.Background(), "%s: %v", warning, err)
 		resp.Warnings = append(resp.Warnings, warning)
 		return resp, nil
@@ -456,7 +456,7 @@ func (m *Manager) SetUserID(name string, uid uint32) (resp *SetUserIDResp, err e
 	}
 
 	if homeUID != oldUser.UID {
-		warning := fmt.Sprintf("Not updating ownership of home directory '%s' because it is not owned by UID %d (current owner: %d).", oldUser.Dir, oldUser.UID, homeUID)
+		warning := fmt.Sprintf("Warning: Not updating ownership of home directory '%s' because it is not owned by UID %d (current owner: %d).", oldUser.Dir, oldUser.UID, homeUID)
 		log.Warning(context.Background(), warning)
 		resp.Warnings = append(resp.Warnings, warning)
 		return resp, nil
@@ -554,18 +554,18 @@ func (m *Manager) updateUserHomeDirOwnership(userRow db.UserRow, oldGID uint32, 
 	// Check if the home directory is currently owned by the group
 	_, homeGID, err := getHomeDirOwner(userRow.Dir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		warning := fmt.Sprintf("Could not get owner of home directory '%s' for user '%s'.", userRow.Dir, userRow.Name)
+		warning := fmt.Sprintf("Warning: Could not get owner of home directory '%s', not updating ownership.", userRow.Dir)
 		log.Warningf(context.Background(), "%s: %v", warning, err)
 		return false, warning, nil
 	}
 	if errors.Is(err, os.ErrNotExist) {
 		// The home directory does not exist, so we don't need to change the owner.
-		log.Debugf(context.Background(), "Home directory %q for user %q does not exist, skipping ownership change", userRow.Dir, userRow.Name)
+		log.Debugf(context.Background(), "Not updating ownership of home directory %q for user %q because it does not exist", userRow.Dir, userRow.Name)
 		return false, "", nil
 	}
 
 	if homeGID != oldGID {
-		warning := fmt.Sprintf("Not updating ownership of home directory '%s' because it is not owned by GID %d (current owner: %d).", userRow.Dir, oldGID, homeGID)
+		warning := fmt.Sprintf("Warning: Not updating ownership of home directory '%s' because it is not owned by GID %d (current owner: %d).", userRow.Dir, oldGID, homeGID)
 		log.Warning(context.Background(), warning)
 		return false, warning, nil
 	}
@@ -668,6 +668,36 @@ func checkHomeDirOwner(home string, uid, gid uint32) error {
 	}
 
 	return nil
+}
+
+// SetShell sets the shell for the given user.
+func (m *Manager) SetShell(username, shell string) (warnings []string, err error) {
+	if username == "" {
+		return nil, errors.New("empty username")
+	}
+
+	// Check if the user exists
+	_, err = m.db.UserByName(username)
+	if err != nil {
+		return nil, err
+	}
+
+	err = checkValidShellPath(shell)
+	if err != nil {
+		return nil, err
+	}
+
+	err = checkValidShell(shell)
+	if err != nil {
+		// We allow root to set an invalid shell but print a warning
+		warnings = append(warnings, fmt.Sprintf("Warning: %s", err.Error()))
+	}
+
+	if err = m.db.SetShell(username, shell); err != nil {
+		return warnings, err
+	}
+
+	return warnings, nil
 }
 
 // BrokerForUser returns the broker ID for the given user.
