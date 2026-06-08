@@ -27,7 +27,7 @@ func NewUserServiceClient() (authd.UserServiceClient, error) {
 
 	conn, err := grpc.NewClient(authdSocket, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to authd: %w", err)
+		return nil, fmt.Errorf("failed to create gRPC client: %w", err)
 	}
 
 	client := authd.NewUserServiceClient(conn)
