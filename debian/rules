@@ -98,16 +98,28 @@ override_dh_auto_configure:
 
 	touch debian/cargo-checksum.json
 
-	# Go manual if cargo-vendor-filterer is not around, otherwise dh-cargo will
-	# ensure that what we've filtered won't be still listed in debian/control.
+	# If cargo-vendor-filterer is not installed then
+	# 'dh_auto_configure --buildsystem=cargo' will cause a build failure because
+	# of vendoring checks. In that case, we need to do what
+	# 'dh_auto_configure --buildsystem=cargo' does ourselves, but without the
+	# vendoring checks.
 	# TODO: Drop this when we won't care about noble anymore.
+	# If cargo-vendor-filterer is installed, we can still only call
+	# 'dh_auto_configure --buildsystem=cargo' if the cargo in $PATH is the one
+	# from /usr/share/cargo/bin/cargo, for the same reason as in the
+	# override_dh_auto_clean target. Otherwise we have to do what
+	# 'dh_auto_configure --buildsystem=cargo' does ourselves,
+	# but using the cargo in $PATH.
 	if ! command -v cargo-vendor-filterer 2>/dev/null; then \
 		env DEB_CARGO_CRATE="$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM)" \
 		  cargo prepare-debian "$(CARGO_VENDOR_DIR)"; \
-	else \
-	    echo "cargo version: $$(cargo --version)"; \
-	    echo "cargo-vendor-filterer version: $$(cargo-vendor-filterer --version)"; \
+	elif [ "$$(command -v cargo)" = "/usr/share/cargo/bin/cargo" ]; then \
 		dh_auto_configure --buildsystem=cargo; \
+	else \
+		cp debian/cargo-checksum.json .cargo-checksum.json; \
+		env DEB_CARGO_CRATE="$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM)" \
+		  cargo prepare-debian "$(CARGO_VENDOR_DIR)"; \
+		/usr/share/cargo/bin/dh-cargo-vendored-sources; \
 	fi
 
 	for i in debian/*.service.in debian/pam-configs/*.in; do \
