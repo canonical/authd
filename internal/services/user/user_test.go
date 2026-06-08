@@ -423,6 +423,49 @@ func TestSetGroupID(t *testing.T) {
 	}
 }
 
+func TestSetShell(t *testing.T) {
+	tests := map[string]struct {
+		sourceDB string
+
+		username           string
+		newShell           string
+		closeDB            bool
+		currentUserNotRoot bool
+
+		wantErr bool
+	}{
+		"Successfully_set_shell":                                  {username: "user1@example.com", newShell: "/bin/sh"},
+		"Successfully_set_shell_when_username_has_uppercase_char": {username: "USER1@example.com", newShell: "/bin/sh"},
+
+		"Error_when_not_root":                         {username: "user1@example.com", newShell: "/bin/sh", currentUserNotRoot: true, wantErr: true},
+		"Error_when_users_manager_fails_to_set_shell": {username: "doesnotexist", newShell: "/bin/sh", wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			client, m := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
+
+			if tc.closeDB {
+				// Close the database to trigger a database error
+				err := userstestutils.DBManager(m).Close()
+				require.NoError(t, err, "Setup: failed to close database")
+			}
+
+			resp, err := client.SetShell(context.Background(), &authd.SetShellRequest{Name: tc.username, Shell: tc.newShell})
+			if tc.wantErr {
+				require.Error(t, err, "SetShell should return an error, but did not")
+				return
+			}
+			require.NoError(t, err, "SetShell should not return an error, but did")
+
+			golden.CheckOrUpdateYAML(t, resp, golden.WithPath("response"))
+
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
+			require.NoError(t, err, "Setup: failed to dump database for comparing")
+			golden.CheckOrUpdate(t, dbContent, golden.WithPath("database"))
+		})
+	}
+}
+
 func TestDeleteUser(t *testing.T) {
 	tests := map[string]struct {
 		sourceDB           string
