@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -181,6 +182,8 @@ type interaction struct {
 // Console represents a running command in a PTY.
 type Console struct {
 	cmd          *exec.Cmd
+	commandPID   int
+	commandPath  string
 	ptmx         *os.File
 	opts         options
 	mu           sync.RWMutex
@@ -264,6 +267,51 @@ func setWinsize(fd uintptr, ws *winsize) error {
 	return nil
 }
 
+func waitForSingleChildPID(parentPID int, timeout time.Duration) int {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		children := childPIDs(parentPID)
+		if len(children) == 1 {
+			return children[0]
+		}
+		if len(children) > 1 {
+			return children[0]
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return 0
+}
+
+func childPIDs(parentPID int) []int {
+	taskDir := fmt.Sprintf("/proc/%d/task", parentPID)
+	tids, err := os.ReadDir(taskDir)
+	if err != nil {
+		return nil
+	}
+
+	seen := make(map[int]bool)
+	for _, tid := range tids {
+		data, err := os.ReadFile(filepath.Join(taskDir, tid.Name(), "children"))
+		if err != nil {
+			continue
+		}
+		for _, field := range strings.Fields(string(data)) {
+			pid, err := strconv.Atoi(field)
+			if err != nil {
+				continue
+			}
+			seen[pid] = true
+		}
+	}
+
+	children := make([]int, 0, len(seen))
+	for pid := range seen {
+		children = append(children, pid)
+	}
+	sort.Ints(children)
+	return children
+}
+
 // Start spawns the command in a PTY and returns a Console.
 // The command is automatically terminated and the PTY cleaned up when the test ends.
 func Start(t *testing.T, name string, args []string, opts ...Option) *Console {
@@ -284,8 +332,21 @@ func Start(t *testing.T, name string, args []string, opts ...Option) *Console {
 		require.FailNow(t, err.Error(), "ptytest: failed to set winsize")
 	}
 
+	// Run a shell as the session leader, like a real terminal does. We install
+	// a SIGINT trap before spawning the child so the child does not inherit an
+	// ignored SIGINT disposition from the parent test process (SIG_IGN survives
+	// exec, while a caught signal is reset to default on exec).
+	//
+	// Run the target in the foreground so PTY Ctrl+C reaches it exactly as in a
+	// normal interactive session.
+	shellCmd := `
+	trap ':' INT
+	"$0" "$@"
+	exit $?
+	`
 	//nolint:gosec // G204: The command is provided by the caller (test code).
-	cmd := exec.Command(name, args...)
+	cmd := exec.Command("sh", "-c", shellCmd, name)
+	cmd.Args = append(cmd.Args, args...)
 	cmd.Stdin = pts
 	cmd.Stdout = pts
 	cmd.Stderr = pts
@@ -306,12 +367,15 @@ func Start(t *testing.T, name string, args []string, opts ...Option) *Console {
 		ptmx.Close()
 		require.FailNow(t, err.Error(), "ptytest: failed to start command %q", name)
 	}
+	commandPID := waitForSingleChildPID(cmd.Process.Pid, 5*time.Second)
 
 	// Close the slave side in the parent — the child owns it.
 	pts.Close()
 
 	c := &Console{
 		cmd:             cmd,
+		commandPID:      commandPID,
+		commandPath:     name,
 		ptmx:            ptmx,
 		opts:            o,
 		done:            make(chan error, 1),
@@ -354,8 +418,8 @@ func Start(t *testing.T, name string, args []string, opts ...Option) *Console {
 
 	t.Cleanup(func() { c.Close(t) })
 
-	t.Logf("ptytest: started %q %v (pid %d, pty %s, %dx%d)",
-		name, args, cmd.Process.Pid, ptmx.Name(), o.cols, o.rows)
+	t.Logf("ptytest: started %q %v (pid %d, launcher pid %d, pty %s, %dx%d)",
+		name, args, c.Pid(), cmd.Process.Pid, ptmx.Name(), o.cols, o.rows)
 
 	return c
 }
@@ -752,8 +816,19 @@ func (c *Console) RewriteLastSnapshot(rewrite func(string) string) {
 	c.snapshots[len(c.snapshots)-1] = rewrite(c.snapshots[len(c.snapshots)-1])
 }
 
+// CmdPath returns the executable path of the spawned command.
+func (c *Console) CmdPath() string {
+	if c.commandPath != "" {
+		return c.commandPath
+	}
+	return c.cmd.Path
+}
+
 // Pid returns the PID of the spawned command.
 func (c *Console) Pid() int {
+	if c.commandPID != 0 {
+		return c.commandPID
+	}
 	if c.cmd == nil || c.cmd.Process == nil {
 		return 0
 	}
@@ -768,8 +843,11 @@ func (c *Console) Signal(t *testing.T, sig os.Signal) {
 		require.FailNow(t, "ptytest: no process to signal")
 		return
 	}
-	require.NoError(t, c.cmd.Process.Signal(sig),
-		"ptytest: failed to send signal %s to pid %d", sig, c.cmd.Process.Pid)
+	pid := c.Pid()
+	sysSig, ok := sig.(syscall.Signal)
+	require.True(t, ok, "ptytest: unsupported signal type %T", sig)
+	require.NoError(t, syscall.Kill(pid, sysSig),
+		"ptytest: failed to send signal %s to pid %d", sig, pid)
 }
 
 // Close terminates the command (if still running) and cleans up the PTY.
@@ -793,7 +871,8 @@ func (c *Console) Close(t *testing.T) {
 		t.Logf("ptytest: process %d exited gracefully after PTY close", c.cmd.Process.Pid)
 	case <-time.After(5 * time.Second):
 		// Force kill.
-		t.Logf("ptytest: killing process %d (did not exit after PTY close)", c.cmd.Process.Pid)
+		t.Logf("ptytest: killing launcher process %d (command pid %d did not exit after PTY close)",
+			c.cmd.Process.Pid, c.Pid())
 		c.logProcessDiagnostics(t)
 		_ = c.cmd.Process.Kill()
 		<-c.done
@@ -940,7 +1019,7 @@ func (c *Console) logProcessDiagnostics(t *testing.T) {
 	if c.cmd == nil || c.cmd.Process == nil {
 		return
 	}
-	rootPID := c.cmd.Process.Pid
+	rootPID := c.Pid()
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "ptytest: process diagnostics for command tree rooted at pid %d:\n", rootPID)
