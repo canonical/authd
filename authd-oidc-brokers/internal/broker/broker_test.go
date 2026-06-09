@@ -1280,12 +1280,13 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			username2 := "user2@example.com"
 
 			b := newBrokerForTests(t, &brokerForTestConfig{
-				Config:                broker.Config{DataDir: dataDir},
-				allUsersAllowed:       tc.allUsersAllowed,
-				ownerAllowed:          tc.ownerAllowed,
-				firstUserBecomesOwner: tc.firstUserBecomesOwner,
-				firstCallDelay:        tc.firstCallDelay,
-				secondCallDelay:       tc.secondCallDelay,
+				Config:                 broker.Config{DataDir: dataDir},
+				allUsersAllowed:        tc.allUsersAllowed,
+				ownerAllowed:           tc.ownerAllowed,
+				firstUserBecomesOwner:  tc.firstUserBecomesOwner,
+				firstCallDelay:         tc.firstCallDelay,
+				secondCallDelay:        tc.secondCallDelay,
+				supportsFetchingGroups: true,
 				tokenHandlerOptions: &testutils.TokenHandlerOptions{
 					IDTokenClaims: []map[string]interface{}{
 						{"sub": "user1", "name": "user1", "email": username1},
