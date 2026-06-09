@@ -124,8 +124,20 @@ func IsTerminalTTY(mTx pam.ModuleTransaction) bool {
 		tty, cleanup := GetPamTTY(mTx)
 		defer cleanup()
 		isTerminalTTYValue = term.IsTerminal(tty.Fd())
-		log.Debugf(context.Background(), "Tty %v (%v) is attached to a terminal: %v",
-			tty.Fd(), tty.Name(), isTerminalTTYValue)
+		log.Debugf(context.Background(), "Tty %q (FD: %v) is attached to a terminal: %v",
+			tty.Name(), tty.Fd(), isTerminalTTYValue)
+
+		oldState, err := term.MakeRaw(tty.Fd())
+		if err != nil {
+			log.Warningf(context.Background(), "Failed to set terminal to raw mode: %s", err)
+			isTerminalTTYValue = false
+			return
+		}
+
+		err = term.Restore(tty.Fd(), oldState)
+		if err != nil {
+			log.Warningf(context.Background(), "Failed to restore terminal state: %s", err)
+		}
 	})
 	return isTerminalTTYValue
 }
