@@ -652,7 +652,7 @@ func TestNativeAuthenticate(t *testing.T) {
 		},
 		"Exit_authd_if_user_sigints": {
 			skipRunnerCheck:  true,
-			expectedExitCode: 130,
+			expectedExitCode: 128 + int(syscall.SIGINT),
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				nativeSelectBroker(t, c)
@@ -678,7 +678,7 @@ func TestNativeAuthenticate(t *testing.T) {
 		//nolint:dupl // This is not a duplicate test
 		"Exit_the_pam_client_if_parent_pam_application_is_stopped": {
 			skipRunnerCheck:  true,
-			expectedExitCode: -1,
+			expectedExitCode: 128 + int(syscall.SIGTERM),
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 
@@ -1008,7 +1008,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 		},
 		"Exit_authd_if_user_sigints": {
 			skipRunnerCheck:  true,
-			expectedExitCode: 130,
+			expectedExitCode: 128 + int(syscall.SIGINT),
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				nativeSelectBroker(t, c)

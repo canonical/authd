@@ -1812,7 +1812,7 @@ func sshPtySigint(t *testing.T, args sshPtyArgs) {
 
 	c.SendKey(t, ptytest.KeyCtrlC)
 
-	c.RequireExitCode(t, -1)
+	c.RequireExitCode(t, 128+int(syscall.SIGINT))
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)

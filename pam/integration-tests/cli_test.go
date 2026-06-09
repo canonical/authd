@@ -690,7 +690,7 @@ func TestCLIAuthenticate(t *testing.T) {
 		//nolint:dupl // This is not a duplicate test
 		"Exit_the_pam_client_if_parent_pam_application_is_stopped": {
 			skipRunnerCheck:  true,
-			expectedExitCode: -1,
+			expectedExitCode: 128 + int(syscall.SIGTERM),
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 
