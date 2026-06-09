@@ -1119,6 +1119,7 @@ do_pam_action_thread (pam_handle_t *pamh,
     }
 
   interactive_mode = isatty (stdin_fd) && isatty (stdout_fd);
+  g_debug ("Running in interactive mode: %s", interactive_mode ? "true" : "false");
 
   if (interactive_mode)
     {
