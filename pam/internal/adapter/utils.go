@@ -95,16 +95,18 @@ func GetPamTTY(mTx pam.ModuleTransaction) (tty *os.File, cleanup func()) {
 	var pamTTY string
 	pamTTY, err = mTx.GetItem(pam.Tty)
 	if err != nil {
-		return nil, nil
-	}
-
-	if pamTTY == "" {
+		log.Debugf(context.Background(), "Failed to get PAM TTY: %s", err)
 		return nil, nil
 	}
 
 	log.Debugf(context.Background(), "PAM TTY is %q", pamTTY)
+	if pamTTY == "" {
+		return nil, nil
+	}
+
 	tty, err = os.OpenFile(pamTTY, os.O_RDWR, 0600)
 	if err != nil {
+		log.Debugf(context.Background(), "Failed to open PAM TTY: %s", err)
 		return nil, nil
 	}
 	cleanup = func() { tty.Close() }
