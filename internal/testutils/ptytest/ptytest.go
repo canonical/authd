@@ -638,18 +638,23 @@ func (c *Console) logProcessDiagnostics(t *testing.T) {
 	fmt.Fprintf(&b, "  test process (pid %d) SIGINT disposition when this command was spawned: %s\n",
 		os.Getpid(), c.spawnSelfSIGINT)
 
-	// PTY foreground process group and line discipline. These ioctls fail if
-	// the PTY has already been closed (e.g. from the Close path); that is fine.
-	fd := int(c.ptmx.Fd())
-	if fgpgrp, err := unix.IoctlGetInt(fd, unix.TIOCGPGRP); err == nil {
-		fmt.Fprintf(&b, "  pty: foreground process group (TIOCGPGRP) = %d\n", fgpgrp)
-	} else {
-		fmt.Fprintf(&b, "  pty: TIOCGPGRP unavailable: %v\n", err)
-	}
-	if tio, err := unix.IoctlGetTermios(fd, unix.TCGETS); err == nil {
-		fmt.Fprintf(&b, "  pty: Lflag=%#x (ECHO=%v ICANON=%v ISIG=%v) VINTR=%#x\n",
-			tio.Lflag, tio.Lflag&unix.ECHO != 0, tio.Lflag&unix.ICANON != 0,
-			tio.Lflag&unix.ISIG != 0, tio.Cc[unix.VINTR])
+	// PTY foreground process group and line discipline.
+	//
+	// Avoid calling Fd() after Close() has started: with the race detector this
+	// can race with the PTY reader goroutine tearing down the file descriptor.
+	// In that case, skip PTY diagnostics and still report process-tree details.
+	if !c.closed {
+		fd := int(c.ptmx.Fd())
+		if fgpgrp, err := unix.IoctlGetInt(fd, unix.TIOCGPGRP); err == nil {
+			fmt.Fprintf(&b, "  pty: foreground process group (TIOCGPGRP) = %d\n", fgpgrp)
+		} else {
+			fmt.Fprintf(&b, "  pty: TIOCGPGRP unavailable: %v\n", err)
+		}
+		if tio, err := unix.IoctlGetTermios(fd, unix.TCGETS); err == nil {
+			fmt.Fprintf(&b, "  pty: Lflag=%#x (ECHO=%v ICANON=%v ISIG=%v) VINTR=%#x\n",
+				tio.Lflag, tio.Lflag&unix.ECHO != 0, tio.Lflag&unix.ICANON != 0,
+				tio.Lflag&unix.ISIG != 0, tio.Cc[unix.VINTR])
+		}
 	}
 
 	for _, pid := range processTree(rootPID) {
