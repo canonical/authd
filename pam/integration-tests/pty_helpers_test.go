@@ -17,6 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var separator = strings.Repeat("─", 80) + "\n"
+
 // ptyRunnerEnv builds the environment variable list for the PAM runner process
 // when launched via ptytest.
 func ptyRunnerEnv(t *testing.T, cliEnv []string, opts clientOptions) []string {
@@ -199,8 +201,6 @@ func ptySanitizeSnapshotFrames(t *testing.T, snapshots []string, sanitizeScreen 
 		return ""
 	}
 
-	separator := strings.Repeat("─", 80)
-
 	var sanitized []string
 	for _, snap := range snapshots {
 		sanitized = append(sanitized, sanitizeScreen(snap))
@@ -218,7 +218,6 @@ func ptySanitizeSnapshotFrames(t *testing.T, snapshots []string, sanitizeScreen 
 	for _, snap := range deduped {
 		b.WriteString(snap)
 		b.WriteString(separator)
-		b.WriteByte('\n')
 	}
 
 	return b.String()

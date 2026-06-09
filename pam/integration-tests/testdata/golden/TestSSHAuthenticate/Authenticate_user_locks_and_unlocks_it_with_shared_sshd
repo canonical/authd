@@ -21,6 +21,9 @@ PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-us
   TERM=xterm-256color
   USER=user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com
 Connection to localhost closed.
+> authctl user lock ${USERNAME}
+
+────────────────────────────────────────────────────────────────────────────────
 == Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication method
 (user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com@localhost) Gimme your password:
@@ -28,6 +31,12 @@ Enter 'r' to cancel the request and go back to select the authentication method
 permission denied: user user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com is locked
 Received disconnect from ${SSH_HOST} port ${SSH_PORT} Too many authentication failures
 Disconnected from ${SSH_HOST} port ${SSH_PORT}
+> authctl user lock ${USERNAME}
+
+────────────────────────────────────────────────────────────────────────────────
+> authctl user unlock ${USERNAME}
+
+────────────────────────────────────────────────────────────────────────────────
 == Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication method
 (user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it-with-shared-sshd@example.com@localhost) Gimme your password:

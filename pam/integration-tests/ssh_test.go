@@ -1348,12 +1348,15 @@ func sshPtyLocksUnlocks(t *testing.T, args sshPtyArgs) {
 
 	_ = c.WaitForExit(t)
 
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+
 	// Lock the user.
 	//#nosec:G204 - we control the command arguments in tests
 	lockCmd := exec.Command(args.authctlPath, "user", "lock", args.user)
 	lockCmd.Env = append(os.Environ(), "AUTHD_SOCKET="+args.socketPath)
 	out, err := lockCmd.CombinedOutput()
 	require.NoError(t, err, "Setup: locking user failed: %s", out)
+	got += "> authctl user lock ${USERNAME}\n" + fmt.Sprintln(string(out)) + separator
 
 	// Try to auth while locked.
 	c2 := startSSHForPty(t, args)
@@ -1363,12 +1366,15 @@ func sshPtyLocksUnlocks(t *testing.T, args sshPtyArgs) {
 
 	_ = c2.WaitForExit(t)
 
+	got += sshPtySanitizeOutput(t, c2.RawOutput())
+
 	// Lock again (idempotent).
 	//#nosec:G204 - we control the command arguments in tests
 	lockCmd = exec.Command(args.authctlPath, "user", "lock", args.user)
 	lockCmd.Env = append(os.Environ(), "AUTHD_SOCKET="+args.socketPath)
 	out, err = lockCmd.CombinedOutput()
 	require.NoError(t, err, "Setup: re-locking user failed: %s", out)
+	got += "> authctl user lock ${USERNAME}\n" + fmt.Sprintln(string(out)) + separator
 
 	// Unlock the user.
 	//#nosec:G204 - we control the command arguments in tests
@@ -1376,6 +1382,7 @@ func sshPtyLocksUnlocks(t *testing.T, args sshPtyArgs) {
 	unlockCmd.Env = append(os.Environ(), "AUTHD_SOCKET="+args.socketPath)
 	out, err = unlockCmd.CombinedOutput()
 	require.NoError(t, err, "Setup: unlocking user failed: %s", out)
+	got += "> authctl user unlock ${USERNAME}\n" + fmt.Sprintln(string(out)) + separator
 
 	// Auth again after unlock.
 	c3 := startSSHForPty(t, args)
@@ -1385,10 +1392,8 @@ func sshPtyLocksUnlocks(t *testing.T, args sshPtyArgs) {
 
 	_ = c3.WaitForExit(t)
 
-	// Combine outputs for golden file.
-	got := sshPtySanitizeOutput(t, c.RawOutput()) +
-		sshPtySanitizeOutput(t, c2.RawOutput()) +
-		sshPtySanitizeOutput(t, c3.RawOutput())
+	got += sshPtySanitizeOutput(t, c3.RawOutput())
+
 	golden.CheckOrUpdate(t, got)
 }
 
