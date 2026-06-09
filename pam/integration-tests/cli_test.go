@@ -92,17 +92,20 @@ func TestCLIAuthenticate(t *testing.T) {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 
+				initialUsername := "user-integration-not-empty@example.com"
+				finalUsername := "user-integration-was-empty@example.com"
+
 				c.WaitFor(t, `Username:`)
-				c.Send(t, "user-integration-not-empty@example.com")
+				c.Send(t, initialUsername)
 				c.WaitFor(t, `not-empty`)
-				for i := 0; i < 38; i++ {
+				for i := 0; i < len(initialUsername); i++ {
 					c.SendKey(t, ptytest.KeyBackspace)
 				}
 				c.SendKey(t, ptytest.KeyEnter)
 				c.WaitFor(t, `user name`)
 				c.SendKey(t, ptytest.KeyEscape)
 				c.SendKey(t, ptytest.KeyBackspace)
-				c.Send(t, "user-integration-was-empty@example.com")
+				c.Send(t, finalUsername)
 				c.WaitFor(t, `was-empty`)
 				c.SendKey(t, ptytest.KeyEnter)
 
@@ -397,9 +400,13 @@ func TestCLIAuthenticate(t *testing.T) {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 
+				initialUsername := "user-integration-switch-username@example.com"
+				updatedUsernameSuffix := "username-switched@example.com"
+				clearedSuffix := "switch-username@example.com"
+
 				// Type initial username and capture it before submitting.
 				c.WaitFor(t, `Username:`)
-				c.Send(t, "user-integration-switch-username@example.com")
+				c.Send(t, initialUsername)
 				c.WaitFor(t, `user-integration-switch-username@example`)
 				c.SendKey(t, ptytest.KeyEnter)
 
@@ -413,10 +420,10 @@ func TestCLIAuthenticate(t *testing.T) {
 				c.DiscardLastSnapshot()
 
 				// Edit the username: remove "switch-username@example.com" and retype suffix.
-				for i := 0; i < len("switch-username@example.com"); i++ {
+				for i := 0; i < len(clearedSuffix); i++ {
 					c.SendKey(t, ptytest.KeyBackspace)
 				}
-				c.Send(t, "username-switched@example.com")
+				c.Send(t, updatedUsernameSuffix)
 				// Capture the final username before submitting.
 				c.WaitFor(t, `user-integration-username-switched`)
 				c.SendKey(t, ptytest.KeyEnter)
