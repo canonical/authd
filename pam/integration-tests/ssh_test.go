@@ -600,12 +600,24 @@ func sanitizedOutput(t *testing.T, td *tapeData) string {
 func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socketPath string) string {
 	t.Helper()
 
+	var pamLog string
+	if testutils.TestVerbosity() >= 1 {
+		pamLog = os.Stderr.Name()
+	} else {
+		pamLog = filepath.Join(t.TempDir(), "authd-pam.log")
+		f, err := os.Create(pamLog)
+		require.NoError(t, err, "Setup: Could not create pam_authd log file")
+		err = f.Close()
+		require.NoError(t, err, "Setup: Could not close pam_authd log file")
+		testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, pamLog)
+	}
+
 	moduleArgs := []string{
 		execChild,
 		"socket=" + socketPath,
 		fmt.Sprintf("connection_timeout=%d", defaultConnectionTimeout),
 		"debug=true",
-		"logfile=" + os.Stderr.Name(),
+		"logfile=" + pamLog,
 		"--exec-debug",
 	}
 
