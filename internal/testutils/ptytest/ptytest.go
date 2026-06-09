@@ -824,6 +824,17 @@ func (c *Console) CmdPath() string {
 	return c.cmd.Path
 }
 
+// Env returns the value of an environment variable passed to the spawned command.
+func (c *Console) Env(key string) (string, bool) {
+	prefix := key + "="
+	for _, env := range c.opts.env {
+		if strings.HasPrefix(env, prefix) {
+			return strings.TrimPrefix(env, prefix), true
+		}
+	}
+	return "", false
+}
+
 // Pid returns the PID of the spawned command.
 func (c *Console) Pid() int {
 	if c.commandPID != 0 {

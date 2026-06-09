@@ -689,6 +689,10 @@ func TestNativeAuthenticate(t *testing.T) {
 				t.Logf("Found %s helper child pid %d under PAM runner pid %d",
 					pamExecChildName, helperPID, parentPID)
 
+				runnerLogPath, ok := c.Env(pam_test.RunnerEnvLogFile)
+				require.True(t, ok, "missing %s in pty runner environment", pam_test.RunnerEnvLogFile)
+				t.Logf("Found %s logfile path: %s", pamExecChildName, runnerLogPath)
+
 				// Kill the parent PAM application. This tears down the
 				// private D-Bus server that the PAM module was hosting for
 				// the helper, which is the condition the helper is supposed
@@ -702,8 +706,13 @@ func TestNativeAuthenticate(t *testing.T) {
 				}, sleepDuration(1*time.Second), 50*time.Millisecond,
 					"authd-pam helper child (pid %d) was not terminated after parent was killed",
 					helperPID)
+
+				content, err := os.ReadFile(runnerLogPath)
+				require.NoError(t, err, "failed to read PAM runner log file")
+				require.Contains(t, string(content), "D-Bus Connection closed")
 			},
 		},
+
 		"Error_if_cannot_connect_to_authd": {
 			socketPath: "/some-path/not-existent-socket",
 			test: func(t *testing.T, c *ptytest.Console) {
