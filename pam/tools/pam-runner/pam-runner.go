@@ -29,6 +29,7 @@ func main() {
 	testName := os.Getenv(pam_test.RunnerEnvTestName)
 	pamUser := os.Getenv(pam_test.RunnerEnvUser)
 	pamEnvs := os.Getenv(pam_test.RunnerEnvEnvs)
+	pamTty := os.Getenv(pam_test.RunnerEnvTty)
 	pamService := os.Getenv(pam_test.RunnerEnvService)
 	timeoutDuration := os.Getenv(pam_test.RunnerEnvConnectionTimeout)
 
@@ -125,6 +126,12 @@ func main() {
 	err = tx.PutEnv("AUTHD_PAM_CLI_TEST_NAME=" + testName)
 	if err != nil {
 		log.Fatalf("Impossible to set environment: %v", err)
+	}
+
+	if pamTty != "" {
+		if err := tx.SetItem(pam.Tty, pamTty); err != nil {
+			log.Fatalf("Impossible to set PAM_TTY environment: %v", err)
+		}
 	}
 
 	if pamEnvs != "" {
