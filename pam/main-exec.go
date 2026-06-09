@@ -57,6 +57,21 @@ func mainFunc() error {
 		flags = pam.Flags(*pamFlags)
 	}
 
+	// Initialize logging early so lifecycle logs emitted by main-exec (including
+	// disconnect handling) follow the same debug/logfile/silent behavior used by
+	// PAM action handlers.
+	parsedArgs, _ := parseArgs(args)
+	resetLogging, err := initLogging(mTx, parsedArgs, flags)
+	if err != nil {
+		return fmt.Errorf("%w: can't initialize logger: %v", pam.ErrSystem, err)
+	}
+	defer resetLogging()
+
+	log.Debugf(context.Background(), "[%v] Connected to D-Bus server %q",
+		os.Getpid(), *serverAddress)
+	log.Debugf(context.Background(), "[%v] Starting action %q (%v)",
+		os.Getpid(), action, flags)
+
 	switch action {
 	case "authenticate":
 		return module.Authenticate(mTx, flags, args)
