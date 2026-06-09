@@ -1103,6 +1103,7 @@ do_pam_action_thread (pam_handle_t *pamh,
   context_pusher = g_main_context_pusher_new (main_context);
 
   interactive_mode = isatty (STDIN_FILENO);
+  g_debug ("Running in interactive mode: %s", interactive_mode ? "true" : "false");
 
   if (interactive_mode)
     {
