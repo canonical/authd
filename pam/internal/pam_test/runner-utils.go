@@ -27,6 +27,8 @@ const (
 	RunnerEnvConnectionTimeout = "AUTHD_PAM_CONNECTION_TIMEOUT"
 	// RunnerEnvEnvs is the environment variable used by the test client to set the PAM child environment variables.
 	RunnerEnvEnvs = "AUTHD_PAM_RUNNER_ENVS"
+	// RunnerEnvTty is the environment variable used by the test client to set the PAM TTY.
+	RunnerEnvTty = "AUTHD_PAM_RUNNER_TTY"
 	// RunnerEnvService is the environment variable used by the test client to set the PAM service name.
 	RunnerEnvService = "AUTHD_PAM_RUNNER_SERVICE"
 )
