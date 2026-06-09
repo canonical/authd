@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -43,6 +44,7 @@ func TestCLIAuthenticate(t *testing.T) {
 		clientOptions      clientOptions
 		currentUserNotRoot bool
 		wantLocalGroups    bool
+		expectedExitCode   int
 		extraArgs          []string
 		socketPath         string // override socket path
 		useCancelableAuthd bool
@@ -436,7 +438,8 @@ func TestCLIAuthenticate(t *testing.T) {
 			},
 		},
 		"Authenticate_user_switching_to_local_broker": {
-			username: "user-integration-switch-broker@example.com",
+			username:         "user-integration-switch-broker@example.com",
+			expectedExitCode: 0,
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 
@@ -562,13 +565,15 @@ func TestCLIAuthenticate(t *testing.T) {
 
 		"Deny_authentication_if_current_user_is_not_considered_as_root": {
 			currentUserNotRoot: true,
+			expectedExitCode:   0,
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				cliWaitForResult(t, c)
 			},
 		},
 		"Deny_authentication_if_max_attempts_reached": {
-			username: "user-integration-max-attempts@example.com",
+			username:         "user-integration-max-attempts@example.com",
+			expectedExitCode: 0,
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 
@@ -595,7 +600,8 @@ func TestCLIAuthenticate(t *testing.T) {
 			},
 		},
 		"Deny_authentication_if_user_does_not_exist": {
-			username: "user-unexistent@example.com",
+			username:         "user-unexistent@example.com",
+			expectedExitCode: 0,
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				cliSelectBroker(t, c)
@@ -631,7 +637,8 @@ func TestCLIAuthenticate(t *testing.T) {
 		},
 
 		"Exit_authd_if_local_broker_is_selected": {
-			username: "user-local-broker",
+			username:         "user-local-broker",
+			expectedExitCode: 0,
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				c.WaitFor(t, `Select your provider`)
@@ -641,7 +648,8 @@ func TestCLIAuthenticate(t *testing.T) {
 			},
 		},
 		"Exit_authd_if_user_sigints": {
-			username: "user-integration-sigint@example.com",
+			username:         "user-integration-sigint@example.com",
+			expectedExitCode: 0,
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				cliSelectBroker(t, c)
@@ -651,7 +659,8 @@ func TestCLIAuthenticate(t *testing.T) {
 			},
 		},
 		"Exit_authd_if_user_presses_ctrl_d": {
-			username: "user-integration-ctrl-d@example.com",
+			username:         "user-integration-ctrl-d@example.com",
+			expectedExitCode: 0,
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				cliSelectBroker(t, c)
@@ -662,6 +671,7 @@ func TestCLIAuthenticate(t *testing.T) {
 		},
 		"Exit_if_authd_is_stopped": {
 			useCancelableAuthd: true,
+			expectedExitCode:   0,
 			testWithAuthd: func(t *testing.T, c *ptytest.Console, cancelAuthd func()) {
 				t.Helper()
 
@@ -677,7 +687,8 @@ func TestCLIAuthenticate(t *testing.T) {
 		},
 
 		"Error_if_cannot_connect_to_authd": {
-			socketPath: "/some-path/not-existent-socket",
+			socketPath:       "/some-path/not-existent-socket",
+			expectedExitCode: 0,
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				// Discard the intermediate snapshot: the PAM error appears first but
@@ -754,8 +765,13 @@ func TestCLIAuthenticate(t *testing.T) {
 				}
 
 				err := c.WaitForExit(t)
-				// Allow non-zero exits (e.g. auth failures, sigint).
-				_ = err
+				if tc.expectedExitCode == 0 {
+					require.NoError(t, err)
+				} else {
+					var exitErr *exec.ExitError
+					require.True(t, errors.As(err, &exitErr), "expected *exec.ExitError, got %T", err)
+					require.Equal(t, tc.expectedExitCode, exitErr.ExitCode())
+				}
 
 				consoleOutput = ptySanitizeSnapshots(t, c)
 			}
