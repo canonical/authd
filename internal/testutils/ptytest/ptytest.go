@@ -4,6 +4,7 @@
 package ptytest
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/canonical/authd/internal/testlog"
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
@@ -33,6 +35,11 @@ const (
 	KeyBackspace = '\x7f'
 	KeyCtrlC     = '\x03'
 	KeyCtrlD     = '\x04'
+)
+
+var (
+	launcherOnce sync.Once
+	launcherPath string
 )
 
 // ansiRegex matches ANSI escape sequences (CSI, OSC, and simple escapes).
@@ -267,49 +274,41 @@ func setWinsize(fd uintptr, ws *winsize) error {
 	return nil
 }
 
-func waitForSingleChildPID(parentPID int, timeout time.Duration) int {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		children := childPIDs(parentPID)
-		if len(children) == 1 {
-			return children[0]
-		}
-		if len(children) > 1 {
-			return children[0]
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	return 0
+func launcherBinary(t *testing.T) string {
+	t.Helper()
+
+	launcherOnce.Do(func() {
+		buildDir, err := os.MkdirTemp("", "ptytest-launcher-")
+		require.NoError(t, err, "ptytest: failed to create launcher build dir")
+
+		launcherPath = filepath.Join(buildDir, "ptytest-launcher")
+		cmd := exec.Command("go", "build")
+		cmd.Dir = testutils.ProjectRoot()
+		cmd.Args = append(cmd.Args, testutils.GoBuildFlags()...)
+		cmd.Args = append(cmd.Args, "-o", launcherPath, "./internal/testutils/ptytest/launcher")
+
+		err = testlog.RunWithTiming(nil, "Building ptytest launcher", cmd)
+		require.NoError(t, err, "ptytest: failed to build launcher")
+	})
+
+	return launcherPath
 }
 
-func childPIDs(parentPID int) []int {
-	taskDir := fmt.Sprintf("/proc/%d/task", parentPID)
-	tids, err := os.ReadDir(taskDir)
-	if err != nil {
-		return nil
+func readLauncherPID(t *testing.T, control *os.File, name string) int {
+	t.Helper()
+
+	line, err := bufio.NewReader(control).ReadString('\n')
+	require.NoError(t, err, "ptytest: launcher failed to report pid for command %q", name)
+
+	line = strings.TrimSpace(line)
+	pidText, ok := strings.CutPrefix(line, "pid ")
+	if !ok {
+		require.FailNowf(t, "ptytest: launcher failed", "unexpected launcher response for %q: %s", name, line)
 	}
 
-	seen := make(map[int]bool)
-	for _, tid := range tids {
-		data, err := os.ReadFile(filepath.Join(taskDir, tid.Name(), "children"))
-		if err != nil {
-			continue
-		}
-		for _, field := range strings.Fields(string(data)) {
-			pid, err := strconv.Atoi(field)
-			if err != nil {
-				continue
-			}
-			seen[pid] = true
-		}
-	}
-
-	children := make([]int, 0, len(seen))
-	for pid := range seen {
-		children = append(children, pid)
-	}
-	sort.Ints(children)
-	return children
+	pid, err := strconv.Atoi(pidText)
+	require.NoError(t, err, "ptytest: invalid launcher pid response %q", line)
+	return pid
 }
 
 // Start spawns the command in a PTY and returns a Console.
@@ -332,24 +331,19 @@ func Start(t *testing.T, name string, args []string, opts ...Option) *Console {
 		require.FailNow(t, err.Error(), "ptytest: failed to set winsize")
 	}
 
-	// Run a shell as the session leader, like a real terminal does. We install
-	// a SIGINT trap before spawning the child so the child does not inherit an
-	// ignored SIGINT disposition from the parent test process (SIG_IGN survives
-	// exec, while a caught signal is reset to default on exec).
-	//
-	// Run the target in the foreground so PTY Ctrl+C reaches it exactly as in a
-	// normal interactive session.
-	shellCmd := `
-	trap ':' INT
-	"$0" "$@"
-	exit $?
-	`
+	controlRead, controlWrite, err := os.Pipe()
+	require.NoError(t, err, "ptytest: failed to create launcher control pipe")
+	defer controlRead.Close()
+
+	launcherArgs := []string{name}
+	launcherArgs = append(launcherArgs, args...)
+
 	//nolint:gosec // G204: The command is provided by the caller (test code).
-	cmd := exec.Command("sh", "-c", shellCmd, name)
-	cmd.Args = append(cmd.Args, args...)
+	cmd := exec.Command(launcherBinary(t), launcherArgs...)
 	cmd.Stdin = pts
 	cmd.Stdout = pts
 	cmd.Stderr = pts
+	cmd.ExtraFiles = []*os.File{controlWrite}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setsid:  true,
 		Setctty: true,
@@ -363,11 +357,13 @@ func Start(t *testing.T, name string, args []string, opts ...Option) *Console {
 	}
 
 	if err := cmd.Start(); err != nil {
+		controlWrite.Close()
 		pts.Close()
 		ptmx.Close()
 		require.FailNow(t, err.Error(), "ptytest: failed to start command %q", name)
 	}
-	commandPID := waitForSingleChildPID(cmd.Process.Pid, 5*time.Second)
+	controlWrite.Close()
+	commandPID := readLauncherPID(t, controlRead, name)
 
 	// Close the slave side in the parent — the child owns it.
 	pts.Close()
@@ -875,6 +871,9 @@ func (c *Console) Close(t *testing.T) {
 
 	// Try graceful shutdown first: close the PTY (sends EOF/SIGHUP to child).
 	c.ptmx.Close()
+	if c.cmd != nil && c.cmd.Process != nil {
+		_ = syscall.Kill(-c.cmd.Process.Pid, syscall.SIGHUP)
+	}
 
 	select {
 	case <-c.done:
