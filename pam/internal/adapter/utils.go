@@ -16,6 +16,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/term"
 	"github.com/msteinert/pam/v2"
+	"golang.org/x/sys/unix"
 )
 
 var (
@@ -80,65 +81,106 @@ func isSSHSession(mTx pam.ModuleTransaction) bool {
 // GetPamIO returns the input and output files to use to interact with the
 // user, preferring the PAM tty when it is set and can be opened.
 //
-// When a PAM tty is used, the same file is returned for both input and output,
-// so that the interface can still work when the standard streams are
-// redirected. Otherwise stdin is used for input and stdout for output, since
-// stdin is not guaranteed to be writable.
+// When a PAM tty is used, it is returned for both input and output, so that
+// the interface can still work when the standard streams are redirected.
+// Otherwise stdin is used for input and stdout for output, since stdin is not
+// guaranteed to be writable.
 func GetPamIO(mTx pam.ModuleTransaction) (input, output *os.File, cleanup func()) {
-	var err error
-	defer func() {
-		if err != nil {
-			log.Warningf(context.TODO(), "Failed to open PAM TTY: %s", err)
-		}
-		if input == nil {
-			input = os.Stdin
-		}
-		if output == nil {
-			output = os.Stdout
-		}
-		if cleanup == nil {
-			cleanup = func() {}
-		}
-	}()
+	pamTTYPath, err := mTx.GetItem(pam.Tty)
+	if err != nil || pamTTYPath == "" {
+		log.Debugf(context.Background(), "No PAM TTY set")
+		return os.Stdin, os.Stdout, func() {}
+	}
 
-	var pamTTY string
-	pamTTY, err = mTx.GetItem(pam.Tty)
+	log.Debugf(context.Background(), "PAM TTY is %q", pamTTYPath)
+	tty, err := os.OpenFile(pamTTYPath, os.O_RDWR, 0600)
 	if err != nil {
-		log.Debugf(context.Background(), "Failed to get PAM TTY: %s", err)
-		return nil, nil, nil
+		log.Warningf(context.Background(), "Failed to open PAM TTY %q: %s", pamTTYPath, err)
+		return os.Stdin, os.Stdout, func() {}
 	}
 
-	log.Debugf(context.Background(), "PAM TTY is %q", pamTTY)
-	if pamTTY == "" {
-		return nil, nil, nil
-	}
-
-	tty, err := os.OpenFile(pamTTY, os.O_RDWR, 0600)
-	if err != nil {
-		log.Debugf(context.Background(), "Failed to open PAM TTY: %s", err)
-		return nil, nil, nil
-	}
-	cleanup = func() { tty.Close() }
-
-	// We check the fd could be passed to x/term to decide if we should fallback to stdin
+	// We check the fd could be passed to x/term to decide if we can use it
 	if tty.Fd() > math.MaxInt {
-		err = fmt.Errorf("unexpected large PAM TTY fd: %d", tty.Fd())
-		return nil, nil, cleanup
+		log.Warningf(context.Background(), "Unexpected large PAM TTY fd: %d", tty.Fd())
+		tty.Close()
+		return os.Stdin, os.Stdout, func() {}
 	}
 
-	return tty, tty, cleanup
+	return tty, tty, func() { tty.Close() }
 }
 
-// IsTerminalTTY returns whether the [pam.Tty] or the [os.Stdin] is a terminal TTY.
+// IsTerminalTTY returns whether the [pam.Tty] or the standard streams are
+// terminals that can be used for the interactive interface.
 func IsTerminalTTY(mTx pam.ModuleTransaction) bool {
 	isTerminalTTYOnce.Do(func() {
-		tty, _, cleanup := GetPamIO(mTx)
+		input, output, cleanup := GetPamIO(mTx)
 		defer cleanup()
-		isTerminalTTYValue = term.IsTerminal(tty.Fd())
-		log.Debugf(context.Background(), "Tty %v (%v) is attached to a terminal: %v",
-			tty.Fd(), tty.Name(), isTerminalTTYValue)
+
+		pamTTY, err := mTx.GetItem(pam.Tty)
+		if err == nil && pamTTY != "" && input == os.Stdin {
+			// PAM_TTY is set but we could not open it, so we can't use the
+			// interactive interface on the terminal.
+			return
+		}
+
+		// Both the input and the output are used by the interface, so they
+		// must be terminals we can use. For a PAM tty they are the same file.
+		if !isTTYUsable(input) {
+			return
+		}
+		if input != output && !isTTYUsable(output) {
+			return
+		}
+
+		isTerminalTTYValue = true
 	})
 	return isTerminalTTYValue
+}
+
+// isTTYUsable returns whether the given file is a terminal that can be used for
+// the interactive interface, without us getting stopped when switching it to
+// raw mode.
+func isTTYUsable(tty *os.File) bool {
+	if !term.IsTerminal(tty.Fd()) {
+		return false
+	}
+
+	// MakeRaw sends SIGTTOU when the tty is our controlling terminal but we
+	// are not in its foreground pgrp. ENOTTY means the tty is not our
+	// controlling terminal, which is safe to use for a PAM tty we opened
+	// ourselves, but not for the standard streams we're supposed to be
+	// attached to.
+	fd := int(tty.Fd())
+	foregroundPgrp, err := unix.IoctlGetInt(fd, unix.TIOCGPGRP)
+	switch {
+	case err == nil:
+		if foregroundPgrp != unix.Getpgrp() {
+			log.Debugf(context.Background(),
+				"Tty %q (FD: %v) is in the background (%d != %d), can't use it",
+				tty.Name(), fd, foregroundPgrp, unix.Getpgrp())
+			return false
+		}
+	case !errors.Is(err, unix.ENOTTY) || tty == os.Stdin || tty == os.Stdout:
+		log.Warningf(context.Background(),
+			"Failed to get the foreground process group of tty %q (FD: %v): %s",
+			tty.Name(), fd, err)
+		return false
+	default:
+		log.Debugf(context.Background(), "TTY %q (FD: %v) is not our controlling terminal",
+			tty.Name(), fd)
+	}
+
+	oldState, err := term.MakeRaw(tty.Fd())
+	if err != nil {
+		log.Warningf(context.Background(), "Failed to set terminal to raw mode: %s", err)
+		return false
+	}
+
+	if err := term.Restore(tty.Fd(), oldState); err != nil {
+		log.Warningf(context.Background(), "Failed to restore terminal state: %s", err)
+	}
+
+	return true
 }
 
 // IsDumbTerminal returns whether the TERM environment variable is set to "dumb".
