@@ -64,7 +64,7 @@ func (c *Console) Send(t *testing.T, s string)
 func (c *Console) SendLine(t *testing.T, s string)
 
 // SendKey sends a single control byte to the PTY.
-// Predefined keys: KeyEscape, KeyCtrlC, KeyCtrlD, KeyEnter.
+// Predefined keys: KeyEscape, KeyBackspace, KeyCtrlC, KeyCtrlD, KeyEnter.
 func (c *Console) SendKey(t *testing.T, key byte)
 
 // WaitFor blocks until the accumulated terminal output (since the last
@@ -93,6 +93,7 @@ func (c *Console) Close(t *testing.T)
 const (
     KeyEnter  = '\r'
     KeyEscape = '\x1b'
+    KeyBackspace = '\x7f'
     KeyCtrlC  = '\x03'
     KeyCtrlD  = '\x04'
 )

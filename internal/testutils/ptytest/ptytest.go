@@ -26,10 +26,11 @@ import (
 
 // Predefined key constants for SendKey.
 const (
-	KeyEnter  = '\r'
-	KeyEscape = '\x1b'
-	KeyCtrlC  = '\x03'
-	KeyCtrlD  = '\x04'
+	KeyEnter     = '\r'
+	KeyEscape    = '\x1b'
+	KeyBackspace = '\x7f'
+	KeyCtrlC     = '\x03'
+	KeyCtrlD     = '\x04'
 )
 
 // ansiRegex matches ANSI escape sequences (CSI, OSC, and simple escapes).
@@ -393,6 +394,8 @@ func (c *Console) SendKey(t *testing.T, key byte) {
 		keyName = "Enter"
 	case KeyEscape:
 		keyName = "Escape"
+	case KeyBackspace:
+		keyName = "Backspace"
 	case KeyCtrlC:
 		keyName = "Ctrl+C"
 	case KeyCtrlD:
