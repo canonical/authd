@@ -752,6 +752,26 @@ func (c *Console) RewriteLastSnapshot(rewrite func(string) string) {
 	c.snapshots[len(c.snapshots)-1] = rewrite(c.snapshots[len(c.snapshots)-1])
 }
 
+// Pid returns the PID of the spawned command.
+func (c *Console) Pid() int {
+	if c.cmd == nil || c.cmd.Process == nil {
+		return 0
+	}
+	return c.cmd.Process.Pid
+}
+
+// Signal sends a signal to the spawned command.
+func (c *Console) Signal(t *testing.T, sig os.Signal) {
+	t.Helper()
+
+	if c.cmd == nil || c.cmd.Process == nil {
+		require.FailNow(t, "ptytest: no process to signal")
+		return
+	}
+	require.NoError(t, c.cmd.Process.Signal(sig),
+		"ptytest: failed to send signal %s to pid %d", sig, c.cmd.Process.Pid)
+}
+
 // Close terminates the command (if still running) and cleans up the PTY.
 // It is safe to call multiple times. It is also called automatically on
 // test cleanup.
