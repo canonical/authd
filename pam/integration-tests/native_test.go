@@ -56,7 +56,7 @@ func (r nativePtySessionRunner) start(t *testing.T, spec nativePtySessionSpec) *
 	return c
 }
 
-func (ctx *nativePtyTestContext) capture(t *testing.T, c *ptytest.Console, expectedExitCode int) {
+func (ctx *nativePtyTestContext) waitForExitAndCapture(t *testing.T, c *ptytest.Console, expectedExitCode int) {
 	t.Helper()
 
 	c.RequireExitCode(t, expectedExitCode)
@@ -70,7 +70,7 @@ func (ctx *nativePtyTestContext) run(t *testing.T, spec nativePtySessionSpec, te
 	if test != nil {
 		test(t, c)
 	}
-	ctx.capture(t, c, spec.expectedExitCode)
+	ctx.waitForExitAndCapture(t, c, spec.expectedExitCode)
 }
 
 func TestNativeAuthenticate(t *testing.T) {
@@ -771,7 +771,7 @@ func TestNativeAuthenticate(t *testing.T) {
 			if name == "Authenticate_user_switching_username" {
 				expectedUser = testUserName(t, "native-username-switched")
 			}
-			ctx.capture(t, c, tc.expectedExitCode)
+			ctx.waitForExitAndCapture(t, c, tc.expectedExitCode)
 			if tc.after != nil {
 				tc.after(t, ctx)
 			}
@@ -1026,7 +1026,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 			} else if tc.test != nil {
 				tc.test(t, c)
 			}
-			ctx.capture(t, c, tc.expectedExitCode)
+			ctx.waitForExitAndCapture(t, c, tc.expectedExitCode)
 			if tc.after != nil {
 				tc.after(t, ctx)
 			}
