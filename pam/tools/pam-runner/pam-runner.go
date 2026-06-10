@@ -107,12 +107,15 @@ func main() {
 		log.Fatalf("Can't create service file %s: %v", serviceFile, err)
 	}
 
+	reader, readerFile, cleanup := openReader(pamTty)
+	defer cleanup()
+
 	conversationHandler := pam.ConversationFunc(func(s1 pam.Style, s2 string) (string, error) {
 		return noConversationHandler(output, s1, s2)
 	})
 	if supportsConversation {
 		conversationHandler = pam.ConversationFunc(func(s1 pam.Style, s2 string) (string, error) {
-			return simpleConversationHandler(output, s1, s2)
+			return simpleConversationHandler(output, reader, readerFile, s1, s2)
 		})
 	}
 
@@ -173,7 +176,7 @@ func noConversationHandler(output *os.File, style pam.Style, msg string) (string
 	return "", nil
 }
 
-func simpleConversationHandler(output *os.File, style pam.Style, msg string) (string, error) {
+func simpleConversationHandler(output *os.File, reader *bufio.Reader, readerFile *os.File, style pam.Style, msg string) (string, error) {
 	switch style {
 	case pam.TextInfo:
 		fmt.Fprintln(output, msg)
@@ -181,7 +184,7 @@ func simpleConversationHandler(output *os.File, style pam.Style, msg string) (st
 		return noConversationHandler(output, style, msg)
 	case pam.PromptEchoOn:
 		fmt.Fprint(output, msg)
-		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		line, err := reader.ReadString('\n')
 		if err != nil {
 			log.Fatalf("PAM Prompt error: %v", err)
 			return "", err
@@ -189,7 +192,7 @@ func simpleConversationHandler(output *os.File, style pam.Style, msg string) (st
 		return strings.TrimRight(line, "\n"), nil
 	case pam.PromptEchoOff:
 		fmt.Fprint(output, msg)
-		input, err := term.ReadPassword(int(os.Stdin.Fd()))
+		input, err := term.ReadPassword(int(readerFile.Fd()))
 		fmt.Fprint(output, "\n")
 		if err != nil {
 			log.Fatalf("PAM Password Prompt error: %v", err)
@@ -200,6 +203,20 @@ func simpleConversationHandler(output *os.File, style pam.Style, msg string) (st
 		return "", fmt.Errorf("PAM style %d not implemented", style)
 	}
 	return "", nil
+}
+
+func openReader(pamTTY string) (*bufio.Reader, *os.File, func()) {
+	if pamTTY == "" {
+		return bufio.NewReader(os.Stdin), os.Stdin, func() {}
+	}
+
+	pamTTYFile, err := os.OpenFile(pamTTY, os.O_RDWR, 0)
+	if err != nil {
+		log.Printf("Can't open PAM_TTY %q, falling back to stdin: %v", pamTTY, err)
+		return bufio.NewReader(os.Stdin), os.Stdin, func() {}
+	}
+
+	return bufio.NewReader(pamTTYFile), pamTTYFile, func() { pamTTYFile.Close() }
 }
 
 func printPamResult(output *os.File, resultAction pam_test.RunnerResultAction, user string, result error) {
