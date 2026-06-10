@@ -1,0 +1,38 @@
+name: "Export LXD test image for cache"
+description: "Exports the LXD authd test image tarball used by the workflow cache"
+outputs:
+  cache-exported:
+    description: "Whether an LXD image tarball was exported"
+    value: ${{ steps.export.outputs.cache-exported }}
+runs:
+  using: "composite"
+  steps:
+    - name: Export LXD test image for cache
+      id: export
+      shell: bash
+      run: |
+        set -euo pipefail
+        set -x
+
+        echo "cache-exported=false" >> "${GITHUB_OUTPUT}"
+
+        cache_dir="${RUNNER_TEMP}/authd-lxd-image-cache"
+        image_prefix="${cache_dir}/ubuntu-${LXD_UBUNTU_VERSION}"
+        mkdir -p "${cache_dir}"
+
+        container_name="$(lxc --project authd-tests list --format=csv -c n | grep "^authd-test-${LXD_UBUNTU_VERSION}-" | head -n1 || true)"
+        if [ -z "${container_name}" ]; then
+          echo "No Ubuntu 26.04 LXD test container found; skipping cache export"
+          exit 0
+        fi
+
+        image_alias="authd-test-cache-export-${LXD_UBUNTU_VERSION}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${GITHUB_JOB}"
+        cleanup() {
+          lxc --project authd-tests image delete "${image_alias}" || true
+        }
+        trap cleanup EXIT
+        lxc publish --project authd-tests --quiet "${container_name}" --alias "${image_alias}"
+        lxc image export --project authd-tests --quiet "${image_alias}" "${image_prefix}"
+        echo "Files in cache dir after export:"
+        ls -la "${cache_dir}/"
+        echo "cache-exported=true" >> "${GITHUB_OUTPUT}"
