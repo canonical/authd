@@ -703,6 +703,106 @@ func (m *Manager) SetShell(username, shell string) (warnings []string, err error
 	return warnings, nil
 }
 
+// SetHomeDirResp is the response type of SetHomeDir.
+type SetHomeDirResp struct {
+	HomeDirChanged bool
+	HomeDirMoved   bool
+	Warnings       []string
+}
+
+// SetHomeDir updates the home directory of the user with the given name to the
+// specified path. If the user's current home directory exists, its contents are
+// moved to the new location; the move is performed with rename(2), so the new
+// path must reside on the same filesystem as the current one.
+func (m *Manager) SetHomeDir(name, home string) (resp *SetHomeDirResp, err error) {
+	log.Debugf(context.TODO(), "Updating home directory for user %q to %q", name, home)
+	resp = &SetHomeDirResp{}
+
+	if name == "" {
+		return nil, errors.New("empty username")
+	}
+
+	if err = checkValidHomePath(home); err != nil {
+		return nil, err
+	}
+
+	m.userManagementMu.Lock()
+	defer m.userManagementMu.Unlock()
+
+	// Call lckpwdf to avoid race conditions with other processes which modify
+	// the passwd database.
+	if err = userslocking.WriteLock(); err != nil {
+		return nil, err
+	}
+	defer func() { err = errors.Join(err, userslocking.WriteUnlock()) }()
+
+	// Check if the user exists.
+	oldUser, err := m.db.UserByName(name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the user already has the given home directory.
+	if oldUser.Dir == home {
+		warning := fmt.Sprintf("User '%s' already has home directory '%s'.", name, home)
+		log.Info(context.Background(), warning)
+		resp.Warnings = append(resp.Warnings, warning)
+		return resp, nil
+	}
+
+	// Check if the user has active processes.
+	if err = proc.CheckUserBusy(name, oldUser.UID); err != nil {
+		return nil, err
+	}
+
+	// Refuse to overwrite an existing path at the destination.
+	if _, err = os.Lstat(home); err == nil {
+		return nil, fmt.Errorf("new home directory '%s' already exists", home)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("could not check new home directory '%s': %w", home, err)
+	}
+
+	// If the current home directory does not exist, only update the database
+	// record without creating the new directory (this mirrors `usermod -m`).
+	if _, err = os.Lstat(oldUser.Dir); errors.Is(err, os.ErrNotExist) {
+		log.Debugf(context.Background(), "Home directory %q for user %q does not exist, only updating the database record", oldUser.Dir, name)
+		if err = m.db.SetHomeDir(name, home); err != nil {
+			return nil, err
+		}
+		resp.HomeDirChanged = true
+		warning := fmt.Sprintf("Warning: Current home directory '%s' does not exist, not creating the new one.", oldUser.Dir)
+		log.Warning(context.Background(), warning)
+		resp.Warnings = append(resp.Warnings, warning)
+		return resp, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("could not check current home directory '%s': %w", oldUser.Dir, err)
+	}
+
+	// Move the home directory to the new location. Do this before updating the
+	// database so that a failure leaves the user record untouched.
+	log.Debugf(context.Background(), "Moving home directory of user %q from %q to %q", name, oldUser.Dir, home)
+	if err = fileutils.Lrename(oldUser.Dir, home); err != nil {
+		if errors.Is(err, syscall.EXDEV) {
+			return nil, fmt.Errorf("cannot move home directory across filesystems (EXDEV); move %q manually (e.g. via a temporary path), then re-run this command to update the database to %q (which must not already exist)", oldUser.Dir, home)
+		}
+		return nil, fmt.Errorf("failed to move home directory from '%s' to '%s': %w", oldUser.Dir, home, err)
+	}
+
+	if err = m.db.SetHomeDir(name, home); err != nil {
+		// Best-effort rollback of the move to keep the database and the
+		// filesystem consistent.
+		log.Warningf(context.Background(), "Could not update record for user %q in the database. Rolling back the home directory to its original location %q.", name, oldUser.Dir)
+		if rerr := fileutils.Lrename(home, oldUser.Dir); rerr != nil {
+			log.Warningf(context.Background(), "Failed to move home directory back to %q: %v. Try moving it manually.", oldUser.Dir, rerr)
+		}
+		return nil, err
+	}
+	resp.HomeDirChanged = true
+	resp.HomeDirMoved = true
+
+	return resp, nil
+}
+
 // BrokerForUser returns the broker ID for the given user.
 func (m *Manager) BrokerForUser(username string) (string, error) {
 	u, err := m.db.UserByName(username)
