@@ -836,6 +836,11 @@ func (c *Console) Pid() int {
 	if c.commandPID != 0 {
 		return c.commandPID
 	}
+	return c.LauncherPid()
+}
+
+// LauncherPid returns the PID of the launcher command.
+func (c *Console) LauncherPid() int {
 	if c.cmd == nil || c.cmd.Process == nil {
 		return 0
 	}

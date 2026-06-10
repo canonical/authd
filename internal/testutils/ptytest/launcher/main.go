@@ -17,6 +17,11 @@ const (
 	controlFD = 3
 )
 
+var forwardedSignals = []os.Signal{
+	os.Interrupt,
+	syscall.SIGTERM,
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "ptytest-launcher: missing command")
@@ -29,6 +34,17 @@ func main() {
 		os.Exit(2)
 	}
 	defer control.Close()
+
+	// ptytest launcher is a test-only stand-in for a shell supervising a real
+	// foreground PAM application (login, sshd, ...). Some test environments start
+	// the test process with SIGINT ignored; because ignored dispositions survive
+	// exec, the child command would then ignore Ctrl+C too. Registering the handler
+	// before starting the child makes the child inherit a caught SIGINT, which exec
+	// resets to the default disposition, matching a normally-launched foreground
+	// command. If the launcher is terminated explicitly in tests, forward the same
+	// termination signal to the child rather than translating it.
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, forwardedSignals...)
 
 	//nolint:gosec // G204 we control the arguments in the tests explicitly.
 	cmd := exec.Command(os.Args[1], os.Args[2:]...)
@@ -44,11 +60,13 @@ func main() {
 
 	fmt.Fprintf(control, "pid %d\n", cmd.Process.Pid)
 
-	// If the user sends Ctrl+C through the PTY, the terminal delivers SIGINT to
-	// the whole foreground process group. A real shell remains alive while the
-	// foreground command handles it, so do the same after the child has started
-	// and inherited the default signal disposition.
-	signal.Ignore(os.Interrupt)
+	go func() {
+		for sig := range sigChan {
+			if cmd.Process != nil {
+				_ = cmd.Process.Signal(sig)
+			}
+		}
+	}()
 
 	err := cmd.Wait()
 	if err == nil {
