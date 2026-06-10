@@ -3,6 +3,7 @@ package testutils
 import (
 	"bytes"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,6 +45,8 @@ var (
 
 	hostUbuntuVersionOnce sync.Once
 	hostUbuntuVersion     string // e.g. "24.04"
+	hostMachineSlugOnce   sync.Once
+	hostMachineSlug       string
 
 	canUseLXDOnce sync.Once
 	canUseLXD     bool
@@ -249,7 +252,33 @@ func ensureLXDProject() error {
 // Ubuntu version. The name is stable across test runs so containers can be reused.
 func containerNameForVersion(ubuntuVersion string) string {
 	slug := strings.ReplaceAll(ubuntuVersion, ".", "")
-	return "authd-test-" + slug
+	return fmt.Sprintf("authd-test-%s-%s", slug, getHostMachineSlug())
+}
+
+// getHostMachineSlug returns a stable host-specific slug used to avoid
+// cross-host container DNS name collisions on shared LXD networks.
+func getHostMachineSlug() string {
+	hostMachineSlugOnce.Do(func() {
+		machineID, err := os.ReadFile("/etc/machine-id")
+		if err == nil {
+			id := strings.TrimSpace(string(machineID))
+			id = strings.ToLower(id)
+			id = regexp.MustCompile(`[^a-z0-9-]`).ReplaceAllString(id, "")
+			if id != "" {
+				if len(id) > 12 {
+					id = id[:12]
+				}
+				hostMachineSlug = id
+				return
+			}
+		}
+
+		hostname, _ := os.Hostname()
+		h := fnv.New32a()
+		_, _ = h.Write([]byte(hostname))
+		hostMachineSlug = fmt.Sprintf("%08x", h.Sum32())
+	})
+	return hostMachineSlug
 }
 
 // getOrCreateLXDContainer returns the name of a persistent LXD container for
