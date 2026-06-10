@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -295,7 +294,7 @@ func TestCLIAuthenticate(t *testing.T) {
 				c1.WaitFor(t, `Confirm password`)
 				cliSendPassword(t, c1, "authd2404")
 				cliWaitForResult(t, c1)
-				_ = c1.WaitForExit(t)
+				c1.RequireSuccessfulExit(t)
 
 				// Second login: UPPERCASE username. Broker is remembered, so no
 				// broker selection step.
@@ -303,14 +302,14 @@ func TestCLIAuthenticate(t *testing.T) {
 				c2.WaitFor(t, `Gimme your password`)
 				cliSendPassword(t, c2, "authd2404")
 				cliWaitForResult(t, c2)
-				_ = c2.WaitForExit(t)
+				c2.RequireSuccessfulExit(t)
 
 				// Third login: mixed-case username (as returned by testUserNameFull).
 				c3 := cliStartLogin(baseUsername)
 				c3.WaitFor(t, `Gimme your password`)
 				cliSendPassword(t, c3, "authd2404")
 				cliWaitForResult(t, c3)
-				_ = c3.WaitForExit(t)
+				c3.RequireSuccessfulExit(t)
 
 				return "=== Login (lowercase, password reset) ===\n" + ptySanitizeSnapshots(t, c1) +
 					"\n=== Login (UPPERCASE) ===\n" + ptySanitizeSnapshots(t, c2) +
@@ -497,7 +496,7 @@ func TestCLIAuthenticate(t *testing.T) {
 
 				cliSendText(t, c, "temporary pass0")
 				cliWaitForResult(t, c)
-				_ = c.WaitForExit(t)
+				c.RequireSuccessfulExit(t)
 
 				// Second login: broker and mode should be remembered.
 				c2 := startCLIPAMRunner(t, clientPath, socketPath,
@@ -513,7 +512,7 @@ func TestCLIAuthenticate(t *testing.T) {
 
 				cliSendText(t, c2, "temporary pass0")
 				cliWaitForResult(t, c2)
-				_ = c2.WaitForExit(t)
+				c2.RequireSuccessfulExit(t)
 
 				return "=== First Login ===\n" + ptySanitizeSnapshots(t, c) +
 					"\n=== Second Login (broker/mode remembered) ===\n" + ptySanitizeSnapshots(t, c2)
@@ -764,14 +763,7 @@ func TestCLIAuthenticate(t *testing.T) {
 					tc.test(t, c)
 				}
 
-				err := c.WaitForExit(t)
-				if tc.expectedExitCode == 0 {
-					require.NoError(t, err)
-				} else {
-					var exitErr *exec.ExitError
-					require.True(t, errors.As(err, &exitErr), "expected *exec.ExitError, got %T", err)
-					require.Equal(t, tc.expectedExitCode, exitErr.ExitCode())
-				}
+				c.RequireExitCode(t, tc.expectedExitCode)
 
 				consoleOutput = ptySanitizeSnapshots(t, c)
 			}
@@ -929,14 +921,14 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				c.WaitFor(t, `Confirm password`)
 				cliSendPassword(t, c, "authd2404")
 				cliWaitForResult(t, c)
-				_ = c.WaitForExit(t)
+				c.RequireSuccessfulExit(t)
 
 				c2 := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionLogin, cliEnv, clientOptions{})
 				cliEnterUsername(t, c2, username)
 				c2.WaitFor(t, `Gimme your password`)
 				cliSendPassword(t, c2, "authd2404")
 				cliWaitForResult(t, c2)
-				_ = c2.WaitForExit(t)
+				c2.RequireSuccessfulExit(t)
 
 				got := "=== Password Change ===\n" + ptySanitizeSnapshots(t, c) +
 					"\n=== Login ===\n" + ptySanitizeSnapshots(t, c2)
@@ -960,14 +952,14 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				c.WaitFor(t, `Confirm password`)
 				cliSendPassword(t, c, "authd2404")
 				cliWaitForResult(t, c)
-				_ = c.WaitForExit(t)
+				c.RequireSuccessfulExit(t)
 
 				c2 := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionLogin, cliEnv, clientOptions{})
 				cliEnterUsername(t, c2, loginUsername)
 				c2.WaitFor(t, `Gimme your password`)
 				cliSendPassword(t, c2, "authd2404")
 				cliWaitForResult(t, c2)
-				_ = c2.WaitForExit(t)
+				c2.RequireSuccessfulExit(t)
 
 				got := "=== Password Change ===\n" + ptySanitizeSnapshots(t, c) +
 					"\n=== Login ===\n" + ptySanitizeSnapshots(t, c2)
@@ -1008,7 +1000,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				c.WaitFor(t, `Confirm password`)
 				cliSendPassword(t, c, "authd2404")
 				cliWaitForResult(t, c)
-				_ = c.WaitForExit(t)
+				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
 		},
@@ -1023,7 +1015,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliChangePasswordWithRetry(t, c1, "noble2404", "noble2404",
 					`new password does not match criteria`, "authd2404")
 				cliWaitForResult(t, c1)
-				_ = c1.WaitForExit(t)
+				c1.RequireSuccessfulExit(t)
 
 				// Repeat the flow to verify that after a rejection, the user can still change the password successfully.
 				c2 := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
@@ -1036,7 +1028,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliChangePasswordWithRetry(t, c2, "noble2404", "noble2404",
 					`new password does not match criteria`, "goodpass")
 				cliWaitForResult(t, c2)
-				_ = c2.WaitForExit(t)
+				c2.RequireSuccessfulExit(t)
 
 				return ptySanitizeSnapshots(t, c1) + ptySanitizeSnapshots(t, c2)
 			},
@@ -1056,7 +1048,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				c.WaitFor(t, `Confirm password`)
 				cliSendPassword(t, c, "authd2404")
 				cliWaitForResult(t, c)
-				_ = c.WaitForExit(t)
+				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
 		},
@@ -1071,7 +1063,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliChangePasswordWithRetry(t, c, "authd2404", "badpass",
 					`Password entries don't match`, "authd2404")
 				cliWaitForResult(t, c)
-				_ = c.WaitForExit(t)
+				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
 		},
@@ -1098,7 +1090,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				c.WaitFor(t, `Confirm password`)
 				cliSendPassword(t, c, "authd2404")
 				cliWaitForResult(t, c)
-				_ = c.WaitForExit(t)
+				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
 		},
@@ -1127,7 +1119,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				// not. Discard it; cliWaitForResult captures the stable final state.
 				c.DiscardLastSnapshot()
 				cliWaitForResult(t, c)
-				_ = c.WaitForExit(t)
+				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
 		},
@@ -1139,7 +1131,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliEnterUsername(t, c, username)
 				cliSelectBroker(t, c)
 				cliWaitForResult(t, c)
-				_ = c.WaitForExit(t)
+				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
 		},
@@ -1149,7 +1141,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				t.Helper()
 				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
 				cliWaitForResult(t, c)
-				_ = c.WaitForExit(t)
+				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
 		},
@@ -1162,7 +1154,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				c.WaitFor(t, `1\. local`)
 				c.SendKey(t, ptytest.KeyEnter)
 				cliWaitForResult(t, c)
-				_ = c.WaitForExit(t)
+				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
 		},
@@ -1175,7 +1167,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				c.WaitFor(t, `Gimme your password`)
 				c.SendKey(t, ptytest.KeyCtrlC)
 				cliWaitForResult(t, c)
-				_ = c.WaitForExit(t)
+				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
 		},
@@ -1188,7 +1180,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				c.WaitFor(t, `Gimme your password`)
 				c.SendKey(t, ptytest.KeyCtrlD)
 				cliWaitForResult(t, c)
-				_ = c.WaitForExit(t)
+				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
 		},

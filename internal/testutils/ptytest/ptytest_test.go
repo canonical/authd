@@ -292,7 +292,7 @@ func TestSnapshots(t *testing.T) {
 	c.WaitFor(t, "Step 1")
 	c.WaitFor(t, "Step 2")
 	c.WaitFor(t, "Step 3")
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	snapshots := c.Snapshots()
 	require.NotEmpty(t, snapshots, "snapshots should be captured")
@@ -312,7 +312,7 @@ func TestSnapshotsDisabledByDefault(t *testing.T) {
 
 	c := ptytest.Start(t, "echo", []string{"hello"})
 	c.WaitFor(t, "hello")
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	require.Nil(t, c.Snapshots(), "snapshots should be nil when not enabled")
 }
@@ -329,7 +329,7 @@ func TestSnapshotsDeduplication(t *testing.T) {
 	// (both patterns exist in the same output).
 	c.WaitFor(t, "line1")
 	c.WaitFor(t, "line2")
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	snapshots := c.Snapshots()
 	// Consecutive identical snapshots should be deduped.

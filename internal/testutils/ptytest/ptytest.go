@@ -5,6 +5,7 @@ package ptytest
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -67,6 +68,39 @@ func defaultOptions() options {
 		rows:    50,
 		timeout: testutils.MultipliedSleepDuration(10 * time.Second),
 	}
+}
+
+// RequireSuccessfulExit waits for command exit and requires exit code 0.
+func (c *Console) RequireSuccessfulExit(t *testing.T) {
+	t.Helper()
+
+	c.RequireExitCode(t, 0)
+}
+
+// RequireExitCode waits for command exit and requires the expected non-zero exit code.
+func (c *Console) RequireExitCode(t *testing.T, expectedExitCode int) {
+	t.Helper()
+
+	var exitCode int
+	err := c.WaitForExit(t)
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		exitCode = exitErr.ExitCode()
+	} else if err != nil {
+		c.logProcessDiagnostics(t)
+		content, rawSinceLastMatch := c.diagnosticContent()
+		require.FailNow(t, fmt.Sprintf("ptytest: WaitForExit failed: %v", err),
+			c.formatDiagnostics(content, rawSinceLastMatch))
+	}
+
+	if exitCode == expectedExitCode {
+		return
+	}
+
+	content, rawSinceLastMatch := c.diagnosticContent()
+	require.FailNow(t,
+		colorBoldRed(fmt.Sprintf("ptytest: expected command to exit with code %d, got %d", expectedExitCode, exitCode)),
+		c.formatDiagnostics(content, rawSinceLastMatch))
 }
 
 // Option configures a PTY test session.

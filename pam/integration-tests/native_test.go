@@ -24,10 +24,11 @@ type nativePtySessionRunner struct {
 }
 
 type nativePtySessionSpec struct {
-	action        pam_test.RunnerAction
-	clientOptions clientOptions
-	username      string
-	extraArgs     []string
+	action           pam_test.RunnerAction
+	clientOptions    clientOptions
+	username         string
+	extraArgs        []string
+	expectedExitCode int
 }
 
 type nativePtyTestContext struct {
@@ -55,10 +56,10 @@ func (r nativePtySessionRunner) start(t *testing.T, spec nativePtySessionSpec) *
 	return c
 }
 
-func (ctx *nativePtyTestContext) capture(t *testing.T, c *ptytest.Console) {
+func (ctx *nativePtyTestContext) capture(t *testing.T, c *ptytest.Console, expectedExitCode int) {
 	t.Helper()
 
-	_ = c.WaitForExit(t)
+	c.RequireExitCode(t, expectedExitCode)
 	ctx.rawOutputs = append(ctx.rawOutputs, c.RawOutput())
 }
 
@@ -69,7 +70,7 @@ func (ctx *nativePtyTestContext) run(t *testing.T, spec nativePtySessionSpec, te
 	if test != nil {
 		test(t, c)
 	}
-	ctx.capture(t, c)
+	ctx.capture(t, c, spec.expectedExitCode)
 }
 
 func TestNativeAuthenticate(t *testing.T) {
@@ -93,6 +94,7 @@ func TestNativeAuthenticate(t *testing.T) {
 		socketPath         string
 		extraArgs          []string
 		expectedUser       string
+		expectedExitCode   int
 
 		test            func(t *testing.T, c *ptytest.Console)
 		testWithSignals func(t *testing.T, c *ptytest.Console, signalFn func(username string))
@@ -646,7 +648,8 @@ func TestNativeAuthenticate(t *testing.T) {
 			expectedUser:  testUserName(t, "native"),
 		},
 		"Exit_authd_if_user_sigints": {
-			skipRunnerCheck: true,
+			skipRunnerCheck:  true,
+			expectedExitCode: 130,
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				nativeSelectBroker(t, c)
@@ -768,7 +771,7 @@ func TestNativeAuthenticate(t *testing.T) {
 			if name == "Authenticate_user_switching_username" {
 				expectedUser = testUserName(t, "native-username-switched")
 			}
-			ctx.capture(t, c)
+			ctx.capture(t, c, tc.expectedExitCode)
 			if tc.after != nil {
 				tc.after(t, ctx)
 			}
@@ -805,6 +808,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 		currentUserNotRoot bool
 		skipRunnerCheck    bool
 		expectedUser       string
+		expectedExitCode   int
 
 		test            func(t *testing.T, c *ptytest.Console)
 		testWithSignals func(t *testing.T, c *ptytest.Console, signalFn func(username string))
@@ -971,7 +975,8 @@ func TestNativeChangeAuthTok(t *testing.T) {
 			},
 		},
 		"Exit_authd_if_user_sigints": {
-			skipRunnerCheck: true,
+			skipRunnerCheck:  true,
+			expectedExitCode: 130,
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				nativeSelectBroker(t, c)
@@ -1021,7 +1026,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 			} else if tc.test != nil {
 				tc.test(t, c)
 			}
-			ctx.capture(t, c)
+			ctx.capture(t, c, tc.expectedExitCode)
 			if tc.after != nil {
 				tc.after(t, ctx)
 			}

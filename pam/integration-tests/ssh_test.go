@@ -935,7 +935,7 @@ func sshPtySimpleAuth(t *testing.T, args sshPtyArgs) {
 	c.SendLine(t, "goodpass")
 	sshPtyWaitForSSHConnection(t, c)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
@@ -966,7 +966,7 @@ func sshPtyAuthWithShell(t *testing.T, args sshPtyArgs) {
 	c.SendKey(t, ptytest.KeyCtrlD)
 	c.WaitFor(t, `Connection to localhost closed`)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
@@ -1038,7 +1038,7 @@ func sshPtyMfaAuth(t *testing.T, args sshPtyArgs) {
 	c.SendKey(t, ptytest.KeyEnter)
 	sshPtyWaitForSSHConnection(t, c)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
@@ -1072,7 +1072,7 @@ func sshPtyFormWithButton(t *testing.T, args sshPtyArgs) {
 	sendEchoedLine(t, c, "temporary pass00")
 	sshPtyWaitForSSHConnection(t, c)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
@@ -1110,7 +1110,7 @@ func sshPtyQRCode(t *testing.T, args sshPtyArgs) {
 	sendEchoedLine(t, c, "1")
 	sshPtyWaitForSSHConnection(t, c)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
@@ -1208,7 +1208,7 @@ func sshPtySwitchAuthMode(t *testing.T, args sshPtyArgs) {
 	sendEchoedLine(t, c, "4242")
 	sshPtyWaitForSSHConnection(t, c)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
@@ -1286,7 +1286,7 @@ func sshPtySwitchPresetUsername(t *testing.T, args sshPtyArgs) {
 	c.SendLine(t, "goodpass")
 	sshPtyWaitForSSHConnection(t, c)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
@@ -1316,7 +1316,7 @@ func sshPtyRememberBrokerAndMode(t *testing.T, args sshPtyArgs) {
 	sendEchoedLine(t, c, "temporary pass0")
 	sshPtyWaitForSSHConnection(t, c)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	// Second login: broker and mode should be remembered.
 	c2 := startSSHForPty(t, args)
@@ -1329,7 +1329,7 @@ func sshPtyRememberBrokerAndMode(t *testing.T, args sshPtyArgs) {
 	sendEchoedLine(t, c2, "temporary pass0")
 	sshPtyWaitForSSHConnection(t, c2)
 
-	_ = c2.WaitForExit(t)
+	c2.RequireSuccessfulExit(t)
 
 	// Combine outputs for the golden file.
 	got := sshPtySanitizeOutput(t, c.RawOutput()) + sshPtySanitizeOutput(t, c2.RawOutput())
@@ -1346,7 +1346,7 @@ func sshPtyLocksUnlocks(t *testing.T, args sshPtyArgs) {
 	c.SendLine(t, "goodpass")
 	sshPtyWaitForSSHConnection(t, c)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 
@@ -1358,13 +1358,13 @@ func sshPtyLocksUnlocks(t *testing.T, args sshPtyArgs) {
 	require.NoError(t, err, "Setup: locking user failed: %s", out)
 	got += "> authctl user lock ${USERNAME}\n" + fmt.Sprintln(string(out)) + separator
 
-	// Try to auth while locked.
+	// Try to auth while locked - should be rejected with a specific message about the user being locked.
 	c2 := startSSHForPty(t, args)
 	c2.WaitFor(t, `Gimme your password`)
 	c2.SendLine(t, "goodpass")
 	c2.WaitFor(t, `permission denied: user .* is locked\s+Received disconnect`)
 
-	_ = c2.WaitForExit(t)
+	c2.RequireExitCode(t, 255)
 
 	got += sshPtySanitizeOutput(t, c2.RawOutput())
 
@@ -1390,7 +1390,7 @@ func sshPtyLocksUnlocks(t *testing.T, args sshPtyArgs) {
 	c3.SendLine(t, "goodpass")
 	sshPtyWaitForSSHConnection(t, c3)
 
-	_ = c3.WaitForExit(t)
+	c3.RequireSuccessfulExit(t)
 
 	got += sshPtySanitizeOutput(t, c3.RawOutput())
 
@@ -1412,7 +1412,7 @@ func sshPtyMandatoryPasswordReset(t *testing.T, args sshPtyArgs) {
 	c.SendLine(t, "authd2404")
 	sshPtyWaitForSSHConnection(t, c)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
@@ -1434,14 +1434,14 @@ func sshPtyMandatoryPasswordResetThenUppercaseRejected(t *testing.T, args sshPty
 	c.SendLine(t, "authd2404")
 	sshPtyWaitForSSHConnection(t, c)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	// Second auth with uppercase username - should be rejected.
 	upperUser := strings.ToUpper(args.user)
 	c2 := startSSHForPtyWithUser(t, args, upperUser)
 	c2.WaitFor(t, `uppercase characters|Disconnected from|Connection closed`)
 
-	_ = c2.WaitForExit(t)
+	c2.RequireExitCode(t, 255)
 
 	// Combine outputs.
 	got := sshPtySanitizeOutput(t, c.RawOutput()) +
@@ -1465,7 +1465,7 @@ func sshPtyMandatoryPasswordResetThenUppercaseSucceeds(t *testing.T, args sshPty
 	c.SendLine(t, "authd2404")
 	sshPtyWaitForSSHConnection(t, c)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	// Second auth with uppercase username - on 24.04 (OpenSSH 9.6p1) there is no
 	// check_pam_user(), so authd normalises the username and authenticates successfully.
@@ -1476,7 +1476,7 @@ func sshPtyMandatoryPasswordResetThenUppercaseSucceeds(t *testing.T, args sshPty
 	c2.SendLine(t, "authd2404")
 	sshPtyWaitForSSHConnection(t, c2)
 
-	_ = c2.WaitForExit(t)
+	c2.RequireSuccessfulExit(t)
 
 	// Combine outputs.
 	got := sshPtySanitizeOutput(t, c.RawOutput()) +
@@ -1522,7 +1522,7 @@ func sshPtyMfaResetPwqualityAuth(t *testing.T, args sshPtyArgs) {
 	c.SendLine(t, "authd2404")
 	sshPtyWaitForSSHConnection(t, c)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
@@ -1554,7 +1554,7 @@ func sshPtyMfaResetSamePassword(t *testing.T, args sshPtyArgs) {
 	c.SendLine(t, "authd2404")
 	sshPtyWaitForSSHConnection(t, c)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
@@ -1576,7 +1576,7 @@ func sshPtyOptionalPasswordResetSkip(t *testing.T, args sshPtyArgs) {
 	sendEchoedLine(t, c, "2")
 	sshPtyWaitForSSHConnection(t, c)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
@@ -1602,7 +1602,7 @@ func sshPtyOptionalPasswordResetAccept(t *testing.T, args sshPtyArgs) {
 	c.SendLine(t, "authd2404")
 	sshPtyWaitForSSHConnection(t, c)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
@@ -1655,7 +1655,7 @@ func sshPtyBadPassword(t *testing.T, args sshPtyArgs) {
 	c.SendLine(t, "authd2404")
 	sshPtyWaitForSSHConnection(t, c)
 
-	_ = c.WaitForExit(t)
+	c.RequireSuccessfulExit(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
@@ -1679,7 +1679,7 @@ func sshPtyMaxAttempts(t *testing.T, args sshPtyArgs) {
 
 	c.WaitFor(t, `Too many authentication failures|Maximum number of authentication attempts reached`)
 
-	_ = c.WaitForExit(t)
+	c.RequireExitCode(t, 255)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
@@ -1791,7 +1791,7 @@ func sshPtySigint(t *testing.T, args sshPtyArgs) {
 
 	c.SendKey(t, ptytest.KeyCtrlC)
 
-	_ = c.WaitForExit(t)
+	c.RequireExitCode(t, -1)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
