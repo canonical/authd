@@ -51,6 +51,8 @@ var (
 	hostUbuntuVersion     string // e.g. "24.04"
 	hostMachineSlugOnce   sync.Once
 	hostMachineSlug       string
+	hostGoModCacheOnce    sync.Once
+	hostGoModCache        string
 
 	canUseLXDOnce sync.Once
 	canUseLXD     bool
@@ -376,6 +378,7 @@ func createLXDContainer(t *testing.T, containerName, ubuntuVersion string) {
 	projectRoot := ProjectRoot()
 	lxcRun(t, "config", "device", "add", containerName, "project",
 		"disk", "source="+projectRoot, "path="+projectRoot)
+	ensureGoModCacheMount(t, containerName)
 
 	// Install dependencies.
 	provisionLXDContainer(t, containerName)
@@ -468,6 +471,7 @@ func ensureContainerReady(t *testing.T, containerName string) {
 	// Ensure the project bind-mount is present (it should persist, but check
 	// in case the container was recreated without it).
 	ensureBindMount(t, containerName)
+	ensureGoModCacheMount(t, containerName)
 }
 
 // ensureBindMount adds the project source tree bind-mount to the container if
@@ -493,6 +497,64 @@ func ensureBindMount(t *testing.T, containerName string) {
 		lxcRun(t, "config", "device", "add", containerName, "project",
 			"disk", "source="+projectRoot, "path="+projectRoot)
 	}
+}
+
+// ensureGoModCacheMount adds a bind mount for the host's Go module cache so
+// version-specific LXD test containers can reuse already-downloaded modules.
+func ensureGoModCacheMount(t *testing.T, containerName string) {
+	t.Helper()
+
+	hostCache := hostGoModCachePath(t)
+	if hostCache == "" {
+		return
+	}
+
+	const (
+		deviceName    = "go-mod-cache"
+		containerPath = "/home/ubuntu/go/pkg/mod"
+	)
+
+	// #nosec:G204 - we control the command arguments
+	cmd := lxcCommand("config", "device", "show", containerName)
+	out, err := cmd.Output()
+	if err != nil {
+		lxcRun(t, "config", "device", "add", containerName, deviceName,
+			"disk", "source="+hostCache, "path="+containerPath)
+		return
+	}
+
+	if !bytes.Contains(out, []byte(deviceName+":")) {
+		lxcRun(t, "config", "device", "add", containerName, deviceName,
+			"disk", "source="+hostCache, "path="+containerPath)
+	}
+}
+
+func hostGoModCachePath(t *testing.T) string {
+	t.Helper()
+
+	hostGoModCacheOnce.Do(func() {
+		// #nosec:G204 - controlled command to query local Go environment
+		cmd := exec.Command("go", "env", "GOMODCACHE")
+		out, err := cmd.Output()
+		if err != nil {
+			return
+		}
+
+		hostGoModCache = strings.TrimSpace(string(out))
+		if hostGoModCache == "" {
+			return
+		}
+
+		if err := os.MkdirAll(hostGoModCache, 0o750); err != nil {
+			hostGoModCache = ""
+		}
+	})
+
+	if hostGoModCache == "" {
+		t.Log("Host Go module cache unavailable; running LXD tests without shared GOMODCACHE")
+	}
+
+	return hostGoModCache
 }
 
 // lxcRun runs an lxc command and fails the test on error.

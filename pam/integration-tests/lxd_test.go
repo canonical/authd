@@ -37,7 +37,9 @@ func warmupGoBuildCache(t *testing.T, containerName string) {
 		testutils.AuthctlGoBuildArgs(os.DevNull),
 	}
 	for _, args := range builds {
-		testutils.LXCExecFromDir(t, containerName, projectRoot, append([]string{"go"}, args...)...)
+		testutils.LXCExecFromDirAsUser(t, containerName, projectRoot,
+			testutils.LXDUbuntuUserID, testutils.LXDUbuntuUserID,
+			append([]string{"env", "HOME=/home/ubuntu", "go"}, args...)...)
 	}
 
 	t.Logf("Go build cache pre-warmed in %s", containerName)
