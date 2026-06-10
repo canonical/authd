@@ -56,6 +56,29 @@ func checkValidShellPath(shell string) (err error) {
 	return nil
 }
 
+func checkValidHomePath(home string) (err error) {
+	// Apply the same path constraints as for the login shell: a home directory
+	// is also stored in the passwd "dir" field.
+	if err = checkValidPasswdField(home); err != nil {
+		return err
+	}
+
+	if !path.IsAbs(home) {
+		return errors.New("home directory must be an absolute path")
+	}
+
+	if home != path.Clean(home) {
+		return errors.New("home directory path must be normalized")
+	}
+
+	// PATH_MAX is counted with the terminating null byte
+	if unix.PathMax-1 < len(home) {
+		return errors.New("home directory path is too long")
+	}
+
+	return nil
+}
+
 func checkValidShell(shell string) (err error) {
 	// Check if the shell exists and is executable
 	stat, err := os.Stat(shell)

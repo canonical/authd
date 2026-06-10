@@ -1630,6 +1630,104 @@ func TestSetShell(t *testing.T) {
 	}
 }
 
+func TestSetHomeDir(t *testing.T) {
+	// These tests acquire the user-management write lock and move directories on
+	// disk, so they must not run in parallel: the test lock override returns an
+	// error immediately when the lock is already held.
+	tests := map[string]struct {
+		emptyUsername     bool
+		nonExistentUser   bool
+		relativeNewHome   bool
+		createOldHome     bool
+		precreateNewHome  bool
+		sameAsCurrentHome bool
+
+		wantErr      bool
+		wantChanged  bool
+		wantMoved    bool
+		wantWarnings int
+	}{
+		"Successfully_move_existing_home_dir":  {createOldHome: true, wantChanged: true, wantMoved: true},
+		"Update_db_only_when_old_home_missing": {wantChanged: true, wantWarnings: 1},
+		"No-op_when_user_already_has_home_dir": {sameAsCurrentHome: true, wantWarnings: 1},
+
+		"Error_when_destination_already_exists": {createOldHome: true, precreateNewHome: true, wantErr: true},
+		"Error_when_path_is_not_absolute":       {relativeNewHome: true, wantErr: true},
+		"Error_when_username_is_empty":          {emptyUsername: true, wantErr: true},
+		"Error_when_user_does_not_exist":        {nonExistentUser: true, wantErr: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			dbDir := t.TempDir()
+			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_and_group.db.yaml"), dbDir)
+			require.NoError(t, err, "Setup: could not create database from testdata")
+
+			m := newManagerForTests(t, dbDir)
+
+			username := "user1@example.com"
+			if tc.nonExistentUser {
+				username = "nonexistent@example.com"
+			} else if tc.emptyUsername {
+				username = ""
+			}
+
+			baseDir := t.TempDir()
+			oldHome := filepath.Join(baseDir, "old")
+			newHome := filepath.Join(baseDir, "new")
+			if tc.relativeNewHome {
+				newHome = "relative/new"
+			}
+			if tc.sameAsCurrentHome {
+				newHome = oldHome
+			}
+
+			// Point the user at our controlled old home directory.
+			if !tc.emptyUsername && !tc.nonExistentUser {
+				err = m.DB().SetHomeDir(username, oldHome)
+				require.NoError(t, err, "Setup: could not set initial home directory")
+			}
+
+			if tc.createOldHome {
+				require.NoError(t, os.MkdirAll(oldHome, 0o700), "Setup: could not create old home directory")
+				require.NoError(t, os.WriteFile(filepath.Join(oldHome, "marker"), []byte("data"), 0o600), "Setup: could not create marker file")
+			}
+			if tc.precreateNewHome {
+				require.NoError(t, os.MkdirAll(newHome, 0o700), "Setup: could not pre-create new home directory")
+			}
+
+			resp, err := m.SetHomeDir(username, newHome)
+			if tc.wantErr {
+				require.Error(t, err, "SetHomeDir should return an error")
+				// On error, the database record must remain unchanged.
+				if !tc.emptyUsername && !tc.nonExistentUser {
+					u, lookupErr := m.UserByName(username)
+					require.NoError(t, lookupErr, "User should still exist")
+					require.Equal(t, oldHome, u.Dir, "Home directory in the database should be unchanged on error")
+				}
+				return
+			}
+			require.NoError(t, err, "SetHomeDir should not return an error")
+			require.Equal(t, tc.wantChanged, resp.HomeDirChanged, "Unexpected HomeDirChanged value")
+			require.Equal(t, tc.wantMoved, resp.HomeDirMoved, "Unexpected HomeDirMoved value")
+			require.Len(t, resp.Warnings, tc.wantWarnings, "Unexpected number of warnings")
+
+			// On success, the database record is always updated to the new path.
+			u, err := m.UserByName(username)
+			require.NoError(t, err, "User should exist")
+			require.Equal(t, newHome, u.Dir, "Home directory in the database should be updated")
+
+			if tc.wantMoved {
+				require.NoDirExists(t, oldHome, "Old home directory should have been moved")
+				require.FileExists(t, filepath.Join(newHome, "marker"), "Marker file should exist at the new location")
+			} else {
+				// The old home was missing, so the new directory must not be created.
+				require.NoDirExists(t, newHome, "New home directory should not be created when the old one is missing")
+			}
+		})
+	}
+}
+
 func requireErrorAssertions(t *testing.T, gotErr, wantErrType error, wantErr bool) {
 	t.Helper()
 
