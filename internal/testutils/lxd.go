@@ -31,6 +31,10 @@ const (
 	// be executed inside an LXD container with the correct Ubuntu version.
 	UseLXDEnvVar = "AUTHD_TESTS_USE_LXD"
 
+	// lxdImageAliasEnvVarPrefix is used to inject a pre-imported LXD image alias
+	// for a specific Ubuntu version in CI, e.g. AUTHD_TESTS_LXD_IMAGE_2604_ALIAS.
+	lxdImageAliasEnvVarPrefix = "AUTHD_TESTS_LXD_IMAGE_"
+
 	// provisionedMarker is created inside the container after provisioning to
 	// avoid re-running the full provisioning on subsequent test runs.
 	provisionedMarker = "/var/lib/authd-test/provisioned"
@@ -358,10 +362,12 @@ func createLXDContainer(t *testing.T, containerName, ubuntuVersion string) {
 	gid := os.Getgid()
 	rawIDMap := fmt.Sprintf("uid %d %d\ngid %d %d", uid, LXDUbuntuUserID, gid, LXDUbuntuUserID)
 
+	imageRef := lxdImageReferenceForVersion(ubuntuVersion)
+	t.Logf("Launching LXD container %s from image %s", containerName, imageRef)
 	lxcRun(t, "launch",
 		"--config", "raw.idmap="+rawIDMap,
 		"--config", "boot.autostart=false",
-		"ubuntu:"+ubuntuVersion, containerName)
+		imageRef, containerName)
 
 	// Wait for the container to be ready (cloud-init / networking).
 	lxcRun(t, "exec", containerName, "--", "cloud-init", "status", "--wait")
@@ -375,6 +381,14 @@ func createLXDContainer(t *testing.T, containerName, ubuntuVersion string) {
 	provisionLXDContainer(t, containerName)
 
 	t.Logf("LXD container %s ready", containerName)
+}
+
+func lxdImageReferenceForVersion(ubuntuVersion string) string {
+	envVar := lxdImageAliasEnvVarPrefix + strings.ReplaceAll(ubuntuVersion, ".", "") + "_ALIAS"
+	if alias := os.Getenv(envVar); alias != "" {
+		return alias
+	}
+	return "ubuntu:" + ubuntuVersion
 }
 
 // provisionLXDContainer installs all required build/test dependencies.
