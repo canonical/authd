@@ -53,6 +53,9 @@ var (
 	hostMachineSlug       string
 	hostGoModCacheOnce    sync.Once
 	hostGoModCache        string
+	hostCargoCacheOnce    sync.Once
+	hostCargoRegistryPath string
+	hostCargoGitPath      string
 
 	canUseLXDOnce sync.Once
 	canUseLXD     bool
@@ -379,6 +382,7 @@ func createLXDContainer(t *testing.T, containerName, ubuntuVersion string) {
 	lxcRun(t, "config", "device", "add", containerName, "project",
 		"disk", "source="+projectRoot, "path="+projectRoot)
 	ensureGoModCacheMount(t, containerName)
+	ensureCargoCacheMounts(t, containerName)
 
 	// Install dependencies.
 	provisionLXDContainer(t, containerName)
@@ -472,6 +476,7 @@ func ensureContainerReady(t *testing.T, containerName string) {
 	// in case the container was recreated without it).
 	ensureBindMount(t, containerName)
 	ensureGoModCacheMount(t, containerName)
+	ensureCargoCacheMounts(t, containerName)
 }
 
 // ensureBindMount adds the project source tree bind-mount to the container if
@@ -555,6 +560,71 @@ func hostGoModCachePath(t *testing.T) string {
 	}
 
 	return hostGoModCache
+}
+
+// ensureCargoCacheMounts adds bind mounts for the host's Cargo download caches
+// so LXD containers can reuse Rust dependency downloads across Ubuntu versions.
+func ensureCargoCacheMounts(t *testing.T, containerName string) {
+	t.Helper()
+
+	registryPath, gitPath := hostCargoCachePaths(t)
+	if registryPath == "" || gitPath == "" {
+		return
+	}
+
+	ensureLXDDeviceMount(t, containerName, "cargo-registry-cache", registryPath, "/home/ubuntu/.cargo/registry")
+	ensureLXDDeviceMount(t, containerName, "cargo-git-cache", gitPath, "/home/ubuntu/.cargo/git")
+}
+
+func hostCargoCachePaths(t *testing.T) (registryPath, gitPath string) {
+	t.Helper()
+
+	hostCargoCacheOnce.Do(func() {
+		cargoHome := os.Getenv("CARGO_HOME")
+		if cargoHome == "" {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return
+			}
+			cargoHome = filepath.Join(homeDir, ".cargo")
+		}
+
+		registryPath = filepath.Join(cargoHome, "registry")
+		gitPath = filepath.Join(cargoHome, "git")
+		if err := os.MkdirAll(registryPath, 0o750); err != nil {
+			return
+		}
+		if err := os.MkdirAll(gitPath, 0o750); err != nil {
+			return
+		}
+
+		hostCargoRegistryPath = registryPath
+		hostCargoGitPath = gitPath
+	})
+
+	if hostCargoRegistryPath == "" || hostCargoGitPath == "" {
+		t.Log("Host Cargo cache unavailable; running LXD tests without shared Cargo caches")
+	}
+
+	return hostCargoRegistryPath, hostCargoGitPath
+}
+
+func ensureLXDDeviceMount(t *testing.T, containerName, deviceName, sourcePath, containerPath string) {
+	t.Helper()
+
+	// #nosec:G204 - we control the command arguments
+	cmd := lxcCommand("config", "device", "show", containerName)
+	out, err := cmd.Output()
+	if err != nil {
+		lxcRun(t, "config", "device", "add", containerName, deviceName,
+			"disk", "source="+sourcePath, "path="+containerPath)
+		return
+	}
+
+	if !bytes.Contains(out, []byte(deviceName+":")) {
+		lxcRun(t, "config", "device", "add", containerName, deviceName,
+			"disk", "source="+sourcePath, "path="+containerPath)
+	}
 }
 
 // lxcRun runs an lxc command and fails the test on error.
