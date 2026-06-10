@@ -1,0 +1,45 @@
+name: Refresh LXD test image cache
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 1"
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+  AUTHD_TESTS_USE_LXD: true
+  LXD_UBUNTU_VERSION: "2604"
+
+jobs:
+  refresh-lxd-image-cache:
+    name: Refresh LXD image cache
+    # When updating the runner version, make sure that:
+    # * the test case below targets a different Ubuntu version to ensure that
+    #   it's run in LXD.
+    # * the LXD_UBUNTU_VERSION environment variable matches the version used in
+    #   the test case.
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: setup-go-tests
+        uses: ./.github/actions/setup-go-tests
+        with:
+          restore-lxd-image-cache: "false"
+
+      - name: Warm version-specific LXD test container
+        run: go test -count=1 ./pam/integration-tests \
+            -run 'TestSSHAuthenticate/Exit_if_user_is_not_pre-checked_on_ssh_service_on_ubuntu_26\.04$'
+
+      - name: Export LXD test image for cache
+        id: export-lxd-test-image
+        if: always()
+        uses: ./.github/actions/export-lxd-test-image-for-cache
+
+      - name: Save LXD test image cache
+        if: always() && steps.export-lxd-test-image.outputs.cache-exported == 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/authd-lxd-image-cache/ubuntu-${{ env.LXD_UBUNTU_VERSION }}.tar
+          key: ${{ steps.setup-go-tests.outputs.lxd-image-cache-primary-key }}
