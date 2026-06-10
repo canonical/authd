@@ -138,6 +138,7 @@ service UserService {
   rpc SetUserID(SetUserIDRequest) returns (SetUserIDResponse);
   rpc SetGroupID(SetGroupIDRequest) returns (SetGroupIDResponse);
   rpc SetShell(SetShellRequest) returns (SetShellResponse);
+  rpc SetHomeDir(SetHomeDirRequest) returns (SetHomeDirResponse);
   rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
   rpc DeleteGroup(DeleteGroupRequest) returns (Empty);
 
@@ -216,6 +217,17 @@ message SetShellRequest {
 
 message SetShellResponse {
   repeated string warnings = 1;
+}
+
+message SetHomeDirRequest {
+  string name = 1;
+  string home = 2;
+}
+
+message SetHomeDirResponse {
+  bool home_dir_changed = 1;
+  bool home_dir_moved = 2;
+  repeated string warnings = 3;
 }
 
 message DeleteUserResponse {
