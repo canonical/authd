@@ -25,7 +25,7 @@ jobs:
     strategy:
       matrix:
         branch_name: ["google","msentraid","oidc"]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:

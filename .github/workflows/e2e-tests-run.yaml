@@ -58,7 +58,7 @@ jobs:
   run-tests:
     name: Run e2e-tests (${{ inputs.broker }})
     needs: build-broker-snap
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       # Needed by actions/checkout
       contents: read
