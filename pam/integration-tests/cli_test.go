@@ -854,12 +854,11 @@ func cliChangePasswordWithRetry(t *testing.T, c *ptytest.Console, firstNew, firs
 	cliSendPassword(t, c, secondNew)
 }
 
-// cliWaitForResult waits for the PAM AcctMgmt() result, which is the last
-// output line from the PAM runner (always printed, even on auth failure).
+// cliWaitForResult waits for the complete PAM AcctMgmt() result block.
 func cliWaitForResult(t *testing.T, c *ptytest.Console) {
 	t.Helper()
 
-	c.WaitFor(t, regexp.QuoteMeta(pam_test.RunnerResultActionAcctMgmt.String()))
+	waitForRunnerResult(t, c, pam_test.RunnerResultActionAcctMgmt)
 }
 
 func cliAuthenticateWithQRCode(t *testing.T, c *ptytest.Console, signalFn func(string), username string) {

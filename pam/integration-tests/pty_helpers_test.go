@@ -248,6 +248,14 @@ func sendEchoedLine(t *testing.T, c *ptytest.Console, s string) {
 	c.SendKey(t, ptytest.KeyEnter)
 }
 
+// waitForRunnerResult waits for a complete PAM runner result block, including
+// the "Result:" line, to avoid matching an intermediate frame that only
+// contains the action header.
+func waitForRunnerResult(t *testing.T, c *ptytest.Console, action pam_test.RunnerResultAction) {
+	t.Helper()
+	c.WaitFor(t, `(?s)`+regexp.QuoteMeta(action.String())+`\r?\n(?:  User: .*\r?\n)?  Result: `)
+}
+
 // ptySanitizeSnapshots takes the snapshots captured by a Console (with
 // WithSnapshots enabled), sanitizes them, and formats them as cumulative
 // frames.
