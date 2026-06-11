@@ -63,6 +63,7 @@ env:
     libglib2.0-dev
     libpam-dev
     libpwquality-dev
+    libsystemd-dev
 
   go_test_dependencies: >-
     bubblewrap
