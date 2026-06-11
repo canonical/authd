@@ -1214,14 +1214,14 @@ func (b *Broker) getUserInfo(ctx context.Context, session *session, token *oauth
 		// equal the sub from the verified ID token. A mismatch means the /userinfo
 		// response is attempting to substitute a different ProviderID and must be
 		// rejected to prevent UID takeover.
-		var userInfoSub struct {
+		var subClaimCheck struct {
 			Sub string `json:"sub"`
 		}
-		if err = userInfoClaims.Claims(&userInfoSub); err != nil {
+		if err = userInfoClaims.Claims(&subClaimCheck); err != nil {
 			return info.User{}, fmt.Errorf("could not decode UserInfo endpoint claims: %w", err)
 		}
-		if userInfoSub.Sub != "" && userInfoSub.Sub != idToken.Subject {
-			return info.User{}, fmt.Errorf("userinfo sub %q does not match ID token sub %q: rejecting potential identity substitution", userInfoSub.Sub, idToken.Subject)
+		if subClaimCheck.Sub != "" && subClaimCheck.Sub != idToken.Subject {
+			return info.User{}, fmt.Errorf("userinfo sub %q does not match ID token sub %q: rejecting potential identity substitution", subClaimCheck.Sub, idToken.Subject)
 		}
 
 		// Merge ID token claims with UserInfo claims.
