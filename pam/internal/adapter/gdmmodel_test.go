@@ -176,7 +176,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Challenge_stage_caused_by_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil)),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil)),
 			pamUser: "pam-preset-user-and-daemon-selected-broker",
 			messages: []tea.Msg{
 				gdmTestWaitForStage{stage: proto.Stage_challenge},
@@ -240,7 +240,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Authenticated_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedWantSecret("gdm-good-password")),
 			pamUser: "pam-PRESET-user-and-daemon-selected-broker",
 			messages: []tea.Msg{
@@ -275,7 +275,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Authenticated_with_preset_PAM_user_using_legacy_challenge_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedWantSecret("gdm-good-password")),
 			pamUser: "pam-PRESET-user-and-daemon-selected-broker",
 			messages: []tea.Msg{
@@ -310,7 +310,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Authenticated_with_preset_PAM_user_updated_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedWantSecret("gdm-good-password")),
 			pamUser: "GDM@PAM-CASE-INDEPENDENT-PRESET-USER",
 			messages: []tea.Msg{
@@ -366,7 +366,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Authenticated_with_message_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(multiBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedReturn(&authd.IAResponse{
 					Access: auth.Granted,
 					Msg:    `{"message": "Hi GDM, it's a pleasure to get you in!"}`,
@@ -411,7 +411,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"New_password_changed_after_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerNewPasswordClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedReturn(&authd.IAResponse{
 					Access: auth.Granted,
 				}, nil),
@@ -454,7 +454,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"New_password_changed_with_message_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerNewPasswordClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedReturn(&authd.IAResponse{
 					Access: auth.Granted,
 					Msg:    `{"message": "Hi GDM, it's a pleasure to change your password!"}`,
@@ -500,7 +500,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"New_password_cannot_change_because_not_respecting_rules_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerNewPasswordClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedReturn(&authd.IAResponse{
 					Access: auth.Granted,
 					Msg:    `{"message": "Hi GDM, it's a pleasure to change your password!"}`,
@@ -568,7 +568,7 @@ func TestGdmModel(t *testing.T) {
 			timeout:     30 * time.Second,
 			sessionMode: authd.SessionMode_CHANGE_PASSWORD,
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithUILayout(newPasswordUILayoutID, "New Password", pam_test.NewPasswordUILayout()),
 				pam_test.WithIsAuthenticatedReturn(&authd.IAResponse{
 					Access: auth.Next,
@@ -702,7 +702,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Cancelled_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(multiBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedReturn(&authd.IAResponse{
 					Access: auth.Cancelled,
 				}, nil),
@@ -735,7 +735,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Explicitly_cancelled_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(multiBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 			),
 			pamUser: "pam-preset-user-and-daemon-selected-broker",
 			messages: []tea.Msg{
@@ -766,7 +766,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Explicitly_cancelled_for_a_waiting_auth_mode_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(multiBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedWantWait(time.Millisecond*1500),
 			),
 			pamUser: "pam-preset-user-and-daemon-selected-broker",
@@ -807,7 +807,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Implicitly_cancelled_for_a_waiting_auth_mode_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(multiBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedWantWait(time.Millisecond*1500),
 			),
 			pamUser: "pam-preset-user-and-daemon-selected-broker",
@@ -852,7 +852,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Authenticated_with_preset_PAM_user_and_server_side_broker_and_authMode_selection_and_after_various_retries": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedWantSecret("gdm-good-password"),
 				pam_test.WithIsAuthenticatedMaxRetries(1),
 			),
@@ -1055,7 +1055,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"AuthMode_selection_stage_from_client_after_server_side_broker_and_auth_mode_selection_if_there_is_only_one_auth_mode": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 			),
 			pamUser: "pam-preset-user-and-daemon-selected-broker",
 			messages: []tea.Msg{
@@ -1094,7 +1094,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"AuthMode_selection_stage_from_client_after_server_side_broker_and_auth_mode_selection_with_multiple_auth_modes": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithUILayout("pincode", "Pin Code", pam_test.FormUILayout()),
 			),
 			pamUser: "pam-preset-user-and-daemon-selected-broker",
@@ -1770,7 +1770,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Error_on_invalid_broker_selection": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithSelectBrokerReturn(nil, errors.New("error during broker selection")),
 			),
 			pamUser:            "pam-preset-user-and-daemon-selected-broker",
@@ -1790,7 +1790,7 @@ func TestGdmModel(t *testing.T) {
 		"Error_during_broker_selection_if_session_ID_is_empty": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
 				pam_test.WithIgnoreSessionIDGeneration(),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithSelectBrokerReturn(&authd.SBResponse{}, nil),
 			),
 			pamUser:            "pam-preset-user-and-daemon-selected-broker",
@@ -1810,7 +1810,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Error_during_broker_selection_if_encryption_key_is_empty": {
 			client: pam_test.NewDummyClient(nil, append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithSelectBrokerReturn(&authd.SBResponse{SessionId: "session-id"}, nil),
 			)...),
 			pamUser:            "pam-preset-user-and-daemon-selected-broker",
@@ -1830,7 +1830,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Error_during_broker_selection_if_encryption_key_is_not_valid_base64": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithSelectBrokerReturn(&authd.SBResponse{
 					SessionId:     "session-id",
 					EncryptionKey: "no encryption key returned by broker",
@@ -1852,7 +1852,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Error_during_broker_selection_if_encryption_key_is_not_valid_key": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithSelectBrokerReturn(&authd.SBResponse{
 					SessionId: "session-id",
 					EncryptionKey: base64.StdEncoding.EncodeToString(
@@ -2041,7 +2041,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Error_on_authentication_client_invalid_message": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedReturn(&authd.IAResponse{
 					Access: auth.Denied,
 					Msg:    "invalid JSON",
@@ -2168,7 +2168,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Error_on_authentication_client_denied_because_of_wrong_password_after_retry": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedWantSecret("gdm-good-password"),
 				pam_test.WithIsAuthenticatedMaxRetries(1),
 			),
@@ -2221,7 +2221,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Error_on_authentication_client_because_of_empty_auth_data_access": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedReturn(&authd.IAResponse{}, nil),
 			),
 			pamUser: "pam-preset-user-and-daemon-selected-broker-with-wrong-pass",
@@ -2263,7 +2263,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Error_on_authentication_client_because_of_invalid_auth_data_access_with_message": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedReturn(&authd.IAResponse{
 					Access: "no way you get here!",
 					Msg:    `{"message": "This is not a valid access"}`,
@@ -2400,7 +2400,7 @@ func TestGdmModel(t *testing.T) {
 		},
 		"Error_on_selecting_user_name_after_PAM_provided_already_one": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
-				pam_test.WithGetPreviousBrokerReturn(firstBrokerInfo.Id, nil)),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil)),
 			pamUser: "gdm-pam-preset-user",
 			messages: []tea.Msg{
 				gdmTestWaitForStage{

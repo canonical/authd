@@ -124,19 +124,19 @@ func (m brokerSelectionModel) Update(msg tea.Msg) (brokerSelectionModel, tea.Cmd
 	return m, cmd
 }
 
-// AutoSelectForUser requests if any previous broker was used by this user to automatically selects it.
+// AutoSelectForUser requests if any  broker was used by this user to automatically selects it.
 func AutoSelectForUser(client authd.PAMClient, username string) tea.Cmd {
 	return func() tea.Msg {
-		r, err := client.GetPreviousBroker(context.TODO(),
-			&authd.GPBRequest{
+		r, err := client.GetBroker(context.TODO(),
+			&authd.GBRequest{
 				Username: username,
 			})
 		// We keep a chance to manually select the broker, not a blocker issue.
 		if err != nil {
-			log.Infof(context.TODO(), "can't get previous broker for %q", username)
+			log.Infof(context.TODO(), "can't get  broker for %q", username)
 			return brokerSelectionRequired{}
 		}
-		brokerID := r.GetPreviousBroker()
+		brokerID := r.GetBroker()
 		if brokerID == "" {
 			return brokerSelectionRequired{}
 		}

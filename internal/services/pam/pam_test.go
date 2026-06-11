@@ -117,7 +117,7 @@ func TestAvailableBrokers(t *testing.T) {
 	}
 }
 
-func TestGetPreviousBroker(t *testing.T) {
+func TestGetBroker(t *testing.T) {
 	t.Parallel()
 
 	// Get local user and get it set to local broker
@@ -134,7 +134,7 @@ func TestGetPreviousBroker(t *testing.T) {
 		wantBroker string
 		wantErr    bool
 	}{
-		"Success_getting_previous_broker":                          {user: "userwithbroker@example.com", wantBroker: mockBrokerGeneratedID},
+		"Success_getting_broker":                                   {user: "userwithbroker@example.com", wantBroker: mockBrokerGeneratedID},
 		"For_local_user,_get_local_broker":                         {user: currentUsername, wantBroker: brokers.LocalBrokerName},
 		"For_unmanaged_user_and_only_one_broker,_get_local_broker": {user: "nonexistent@example.com", onlyLocalBroker: true, wantBroker: brokers.LocalBrokerName},
 		"Username_is_case_insensitive":                             {user: "UserWithBroker@example.com", wantBroker: mockBrokerGeneratedID},
@@ -152,7 +152,7 @@ func TestGetPreviousBroker(t *testing.T) {
 			dbDir := t.TempDir()
 
 			// We have to replace MOCKBROKERID with our generated broker id.
-			f, err := os.Open(filepath.Join(testutils.TestFamilyPath(t), "get-previous-broker.db"))
+			f, err := os.Open(filepath.Join(testutils.TestFamilyPath(t), "get-broker.db"))
 			require.NoError(t, err, "Setup: could not open fixture database file")
 			defer f.Close()
 			d, err := io.ReadAll(f)
@@ -174,15 +174,15 @@ func TestGetPreviousBroker(t *testing.T) {
 			client := newPamClient(t, m, brokerManager, &pm)
 
 			// Get existing entry
-			gotResp, err := client.GetPreviousBroker(context.Background(), &authd.GPBRequest{Username: tc.user})
+			gotResp, err := client.GetBroker(context.Background(), &authd.GBRequest{Username: tc.user})
 
 			if tc.wantErr {
-				require.Error(t, err, "GetPreviousBroker should return an error, but did not")
+				require.Error(t, err, "GetBroker should return an error, but did not")
 				return
 			}
-			require.NoError(t, err, "GetPreviousBroker should not return an error, but did")
+			require.NoError(t, err, "GetBroker should not return an error, but did")
 
-			require.Equal(t, tc.wantBroker, gotResp.GetPreviousBroker(), "GetPreviousBroker should return expected broker")
+			require.Equal(t, tc.wantBroker, gotResp.GetBroker(), "GetBroker should return expected broker")
 		})
 	}
 }
@@ -618,7 +618,7 @@ func TestIDGeneration(t *testing.T) {
 	}
 }
 
-func TestSetDefaultBrokerForUser(t *testing.T) {
+func TestSetBroker(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
@@ -628,22 +628,22 @@ func TestSetDefaultBrokerForUser(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Set_default_broker_for_existing_user_with_no_broker":   {username: "usersetbroker@example.com"},
-		"Update_default_broker_for_existing_user_with_a_broker": {username: "userupdatebroker@example.com"},
-		"Username_is_case_insensitive":                          {username: "UserSetBroker@example.com"},
+		"Set_broker_for_existing_user_with_no_broker":   {username: "usersetbroker@example.com"},
+		"Update_broker_for_existing_user_with_a_broker": {username: "userupdatebroker@example.com"},
+		"Username_is_case_insensitive":                  {username: "UserSetBroker@example.com"},
 
-		"Error_when_setting_default_broker_to_local_broker": {username: "userlocalbroker@example.com", brokerID: brokers.LocalBrokerName, wantErr: true},
-		"Error_when_not_root":                               {username: "usersetbroker@example.com", currentUserNotRoot: true, wantErr: true},
-		"Error_when_username_is_empty":                      {wantErr: true},
-		"Error_when_user_does_not_exist_":                   {username: "doesnotexist@example.com", wantErr: true},
-		"Error_when_broker_does_not_exist":                  {username: "userwithbroker@example.com", brokerID: "does not exist", wantErr: true},
+		"Error_when_setting_broker_to_local_broker": {username: "userlocalbroker@example.com", brokerID: brokers.LocalBrokerName, wantErr: true},
+		"Error_when_not_root":                       {username: "usersetbroker@example.com", currentUserNotRoot: true, wantErr: true},
+		"Error_when_username_is_empty":              {wantErr: true},
+		"Error_when_user_does_not_exist_":           {username: "doesnotexist@example.com", wantErr: true},
+		"Error_when_broker_does_not_exist":          {username: "userwithbroker@example.com", brokerID: "does not exist", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
 			dbDir := t.TempDir()
-			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join(testutils.TestFamilyPath(t), "set-default-broker.db"), dbDir)
+			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join(testutils.TestFamilyPath(t), "set-broker.db"), dbDir)
 			require.NoError(t, err, "Setup: could not create database from testdata")
 
 			m, err := users.NewManager(users.DefaultConfig, dbDir)
@@ -656,20 +656,20 @@ func TestSetDefaultBrokerForUser(t *testing.T) {
 				tc.brokerID = mockBrokerGeneratedID
 			}
 
-			sdbfuReq := &authd.SDBFURequest{
+			stbReq := &authd.STBRequest{
 				BrokerId: tc.brokerID,
 				Username: tc.username,
 			}
-			_, err = client.SetDefaultBrokerForUser(context.Background(), sdbfuReq)
+			_, err = client.SetBroker(context.Background(), stbReq)
 			if tc.wantErr {
-				require.Error(t, err, "SetDefaultBrokerForUser should return an error, but did not")
+				require.Error(t, err, "SetBroker should return an error, but did not")
 				return
 			}
-			require.NoError(t, err, "SetDefaultBrokerForUser should not return an error, but did")
+			require.NoError(t, err, "SetBroker should not return an error, but did")
 
-			gpbResp, err := client.GetPreviousBroker(context.Background(), &authd.GPBRequest{Username: tc.username})
-			require.NoError(t, err, "GetPreviousBroker should not return an error")
-			require.Equal(t, tc.brokerID, gpbResp.GetPreviousBroker(), "SetDefaultBrokerForUser should set the default broker as expected")
+			gbResp, err := client.GetBroker(context.Background(), &authd.GBRequest{Username: tc.username})
+			require.NoError(t, err, "GetBroker should not return an error")
+			require.Equal(t, tc.brokerID, gbResp.GetBroker(), "SetBroker should set the default broker as expected")
 
 			// Check that database has been updated too.
 			gotDB, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))

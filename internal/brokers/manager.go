@@ -125,8 +125,8 @@ func (m *Manager) AvailableBrokers() (r []*Broker) {
 	return r
 }
 
-// SetDefaultBrokerForUser memorizes which broker was used for which user.
-func (m *Manager) SetDefaultBrokerForUser(brokerID, username string) error {
+// SetBroker memorizes which broker was used for which user.
+func (m *Manager) SetBroker(brokerID, username string) error {
 	broker, err := m.BrokerFromID(brokerID)
 	if err != nil {
 		return fmt.Errorf("invalid broker: %v", err)

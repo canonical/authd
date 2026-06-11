@@ -90,7 +90,7 @@ func TestSetDefaultBrokerForUser(t *testing.T) {
 				want.ID = "does not exist"
 			}
 
-			err = m.SetDefaultBrokerForUser(want.ID, "user@example.com")
+			err = m.SetBroker(want.ID, "user@example.com")
 			if tc.wantErr {
 				require.Error(t, err, "SetDefaultBrokerForUser should return an error, but did not")
 				return
@@ -109,7 +109,7 @@ func TestBrokerForUser(t *testing.T) {
 	m, err := brokers.NewManager(context.Background(), filepath.Join(brokerConfFixtures, "valid_brokers"), nil)
 	require.NoError(t, err, "Setup: could not create manager")
 
-	err = m.SetDefaultBrokerForUser(brokers.LocalBrokerName, "user@example.com")
+	err = m.SetBroker(brokers.LocalBrokerName, "user@example.com")
 	require.NoError(t, err, "Setup: could not set default broker")
 
 	// Broker for user should return the assigned broker
