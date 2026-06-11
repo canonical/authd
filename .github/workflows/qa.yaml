@@ -195,8 +195,8 @@ jobs:
     name: "Go Tests with Coverage Collection"
     runs-on: ubuntu-26.04 # ubuntu-latest
     env:
-      RAW_COVERAGE_DIR: ${{ github.workspace }}/raw-coverage
-      COVERAGE_DIR: ${{ github.workspace }}/coverage
+      RAW_COVERAGE_DIR: /tmp/raw-coverage
+      COVERAGE_DIR: /tmp/coverage
     steps:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-go-tests
