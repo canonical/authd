@@ -29,7 +29,7 @@ tower = {  version = "0.4.13", features = ["util"] }
 log = "0.4.31"
 simple_logger = {version = "5.2.0", features = ["stderr"]}
 syslog = "7.0.0"
-ctor = "0.5.0"
+ctor = "1.0.7"
 procfs = "0.17.0"
 hyper-util = "0.1.20"
 time = "0.3.41"
