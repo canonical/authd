@@ -51,6 +51,23 @@ func sectionFooter(title string) string {
 	return colorDim(strings.Repeat("=", length))
 }
 
+func waitStatusDetails(ws syscall.WaitStatus) string {
+	if ws.Exited() {
+		return fmt.Sprintf("exited (code=%d)", ws.ExitStatus())
+	}
+	if ws.Signaled() {
+		s := fmt.Sprintf("terminated by signal %s", ws.Signal())
+		if ws.CoreDump() {
+			s += " (core dumped)"
+		}
+		return s
+	}
+	if ws.Stopped() {
+		return fmt.Sprintf("stopped by signal %s", ws.StopSignal())
+	}
+	return fmt.Sprintf("wait status=%#x", int(ws))
+}
+
 // options holds configuration for a Console.
 type options struct {
 	env       []string
@@ -174,6 +191,8 @@ type Console struct {
 	closed       bool
 	interactions []interaction
 	snapshots    []string // terminal screen snapshots captured at WaitFor points
+	startedAt    time.Time
+	exitedAt     time.Time
 
 	// spawnSelfSIGINT records the test process's own SIGINT disposition at the
 	// moment this command was spawned. A spawned process inherits SIG_IGN for
@@ -298,6 +317,7 @@ func Start(t *testing.T, name string, args []string, opts ...Option) *Console {
 		done:            make(chan error, 1),
 		copyDone:        make(chan struct{}),
 		spawnSelfSIGINT: selfSIGINTDisposition(),
+		startedAt:       time.Now(),
 	}
 
 	// Background goroutine: read PTY output.
@@ -319,7 +339,11 @@ func Start(t *testing.T, name string, args []string, opts ...Option) *Console {
 
 	// Background goroutine: wait for command exit.
 	go func() {
-		c.done <- cmd.Wait()
+		err := cmd.Wait()
+		c.mu.Lock()
+		c.exitedAt = time.Now()
+		c.mu.Unlock()
+		c.done <- err
 	}()
 
 	t.Cleanup(func() { c.Close(t) })
@@ -374,6 +398,7 @@ func (c *Console) formatDiagnostics(content, rawContent string) string {
 	}
 
 	fmt.Fprintf(&b, "%s\n%s\n", sectionHeader("interaction history"), c.formatHistory())
+	fmt.Fprintf(&b, "%s\n%s\n\n", sectionHeader("process exit"), c.processExitSummary())
 	fmt.Fprintf(&b, "%s\n%s\n", sectionHeader("current terminal screen"), ProcessRawOutput(content))
 
 	title := "text seen since last match"
@@ -383,6 +408,56 @@ func (c *Console) formatDiagnostics(content, rawContent string) string {
 		sectionFooter(title))
 
 	return b.String()
+}
+
+// processExitSummary returns best-effort process termination details for diagnostics.
+func (c *Console) processExitSummary() string {
+	runtime := c.processRuntime()
+
+	// Prefer the direct wait result if it is already available.
+	select {
+	case err := <-c.done:
+		// Put it back so WaitForExit/Close can still consume it.
+		c.done <- err
+
+		if err == nil {
+			return fmt.Sprintf("exited (code=0), runtime=%s", runtime)
+		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			if ws, ok := exitErr.Sys().(syscall.WaitStatus); ok {
+				return fmt.Sprintf("%s, runtime=%s", waitStatusDetails(ws), runtime)
+			}
+			return fmt.Sprintf("exited with non-zero status (code=%d), runtime=%s", exitErr.ExitCode(), runtime)
+		}
+		return fmt.Sprintf("wait error: %v, runtime=%s", err, runtime)
+	default:
+	}
+
+	// If the wait result is not ready yet, fall back to ProcessState if present.
+	if c.cmd != nil && c.cmd.ProcessState != nil {
+		if ws, ok := c.cmd.ProcessState.Sys().(syscall.WaitStatus); ok {
+			return fmt.Sprintf("%s, runtime=%s", waitStatusDetails(ws), runtime)
+		}
+		return fmt.Sprintf("process state available (code=%d), runtime=%s", c.cmd.ProcessState.ExitCode(), runtime)
+	}
+
+	return fmt.Sprintf("still running (no exit observed), runtime=%s", runtime)
+}
+
+func (c *Console) processRuntime() time.Duration {
+	c.mu.RLock()
+	started := c.startedAt
+	exited := c.exitedAt
+	c.mu.RUnlock()
+
+	if started.IsZero() {
+		return 0
+	}
+	if exited.IsZero() {
+		return time.Since(started).Round(time.Millisecond)
+	}
+	return exited.Sub(started).Round(time.Millisecond)
 }
 
 // diagnosticContent returns the full raw terminal output and the portion seen
@@ -625,6 +700,7 @@ func (c *Console) DiscardLastSnapshot() {
 // test cleanup.
 func (c *Console) Close(t *testing.T) {
 	t.Helper()
+	t.Logf("ptytest: closing console for pid %d", c.cmd.Process.Pid)
 
 	if c.closed {
 		return
@@ -637,6 +713,7 @@ func (c *Console) Close(t *testing.T) {
 	select {
 	case <-c.done:
 		// Process already exited.
+		t.Logf("ptytest: process %d exited gracefully after PTY close", c.cmd.Process.Pid)
 	case <-time.After(5 * time.Second):
 		// Force kill.
 		t.Logf("ptytest: killing process %d (did not exit after PTY close)", c.cmd.Process.Pid)
