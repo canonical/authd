@@ -116,6 +116,17 @@ explicitly asks for no commit.
 When creating commits for agent-authored changes, use atomic commits:
 each commit must contain one coherent, self-contained logical change.
 
+## Commit messages
+
+Explain why, not what — the diff shows what changed.
+
+- For bug fixes, describe the observable symptom before the root cause
+- Document non-obvious decisions and rejected alternatives
+- One-liners are fine for mechanical changes; anything behavioral needs a body
+
+Don't narrate your activity ("Fixed X as requested") or describe the diff
+("Add null check before calling Process()").
+
 ## Dependencies & Tools
 - **Go**: See `go.mod` for version requirements, uses go modules with vendoring
 - **Rust**: Cargo with vendor filtering (see `Cargo.toml` workspace)
