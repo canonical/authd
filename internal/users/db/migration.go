@@ -19,9 +19,12 @@ type schemaMigration struct {
 var schemaMigrations = []schemaMigration{
 	{
 		description: "Migrate to lowercase user and group names",
-		migrate: func(m *Manager) error {
+		migrate: func(m *Manager) (err error) {
 			// Start a transaction to ensure atomicity
 			tx, err := m.db.Begin()
+			if err != nil {
+				return fmt.Errorf("failed to start transaction: %w", err)
+			}
 
 			// Ensure the transaction is committed or rolled back
 			defer func() {
@@ -63,7 +66,7 @@ var schemaMigrations = []schemaMigration{
 	},
 	{
 		description: "Add column 'locked' to users table",
-		migrate: func(m *Manager) error {
+		migrate: func(m *Manager) (err error) {
 			// Start a transaction to ensure atomicity
 			tx, err := m.db.Begin()
 			if err != nil {
@@ -97,12 +100,13 @@ var schemaMigrations = []schemaMigration{
 	},
 	{
 		description: "Add column 'provider_id' to users table for stable provider identifier",
-		migrate: func(m *Manager) error {
+		migrate: func(m *Manager) (err error) {
 			tx, err := m.db.Begin()
 			if err != nil {
 				return fmt.Errorf("failed to start transaction: %w", err)
 			}
 
+			// Ensure the transaction is committed or rolled back
 			defer func() {
 				err = commitOrRollBackTransaction(err, tx)
 			}()
