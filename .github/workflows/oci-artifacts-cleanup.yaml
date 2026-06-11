@@ -7,7 +7,7 @@ on:
 
 jobs:
   cleanup-broker-snap:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       packages: write
     strategy:
@@ -22,7 +22,7 @@ jobs:
           min-versions-to-keep: 10
 
   cleanup-deb:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       packages: write
     strategy:
@@ -44,7 +44,7 @@ jobs:
           min-versions-to-keep: 10
 
   cleanup-e2e-test-vm-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       packages: write
     steps:

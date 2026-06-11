@@ -67,7 +67,7 @@ jobs:
     name: Run e2e-tests (${{ inputs.broker }})
     needs: build-broker-snap
     if: ${{ !cancelled() && (needs.build-broker-snap.result == 'success' || needs.build-broker-snap.result == 'skipped') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       # Needed by actions/checkout
       contents: read
