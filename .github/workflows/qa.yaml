@@ -67,7 +67,7 @@ jobs:
   go-sanity:
     name: "Go: Code sanity"
     permissions: {}
-    runs-on: ubuntu-24.04 # ubuntu-latest-runner
+    runs-on: ubuntu-26.04 # ubuntu-latest
     steps:
       - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
       - name: Install dependencies
@@ -109,7 +109,7 @@ jobs:
 
   shell-sanity:
     name: "Shell: Code sanity"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - name: Run ShellCheck
@@ -120,7 +120,7 @@ jobs:
   rust-sanity:
     name: "Rust: Code sanity"
     permissions: {}
-    runs-on: ubuntu-24.04 # ubuntu-latest-runner
+    runs-on: ubuntu-26.04 # ubuntu-latest
     steps:
       - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
       - name: Install dependencies
@@ -141,7 +141,7 @@ jobs:
 
   c-sanity:
     name: "C Code sanity"
-    runs-on: ubuntu-24.04 # ubuntu-latest-runner
+    runs-on: ubuntu-26.04 # ubuntu-latest
     env:
       CFLAGS: "-Werror"
     steps:
@@ -184,7 +184,7 @@ jobs:
 
   go-tests-coverage:
     name: "Go Tests with Coverage Collection"
-    runs-on: ubuntu-24.04 # ubuntu-latest-runner
+    runs-on: ubuntu-26.04 # ubuntu-latest
     env:
       RAW_COVERAGE_DIR: ${{ github.workspace }}/raw-coverage
       COVERAGE_DIR: ${{ github.workspace }}/coverage
@@ -265,7 +265,7 @@ jobs:
     name: "Retry Go Tests with Coverage Collection"
     needs: go-tests-coverage
     if: always() && needs.go-tests-coverage.result == 'failure'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04 # ubuntu-latest
     env:
       RAW_COVERAGE_DIR: ${{ github.workspace }}/raw-coverage
       COVERAGE_DIR: ${{ github.workspace }}/coverage
@@ -343,7 +343,7 @@ jobs:
 
   go-tests-race:
     name: "Go Tests with Race Detector"
-    runs-on: ubuntu-24.04 # ubuntu-latest-runner
+    runs-on: ubuntu-26.04 # ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - id: setup-go-tests
@@ -373,7 +373,7 @@ jobs:
 
   go-tests-asan:
     name: "Go PAM tests with Address Sanitizer"
-    runs-on: ubuntu-24.04 # ubuntu-latest-runner
+    runs-on: ubuntu-26.04 # ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-go-tests

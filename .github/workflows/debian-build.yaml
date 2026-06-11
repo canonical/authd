@@ -28,7 +28,7 @@ env:
 jobs:
   build-deb:
     name: Build Debian package (${{ inputs.files-hash }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       # Needed by actions/checkout
       contents: read
