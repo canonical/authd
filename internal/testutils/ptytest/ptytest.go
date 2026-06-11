@@ -732,10 +732,116 @@ func LogProcessTree(t *testing.T, label string, rootPID int) {
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "process diagnostics for %s (pid %d):\n", label, rootPID)
-	for _, pid := range processTree(rootPID) {
+	tree := processTree(rootPID)
+	for _, pid := range tree {
 		b.WriteString(procSummary(pid))
 	}
+	// If anything in the tree is stuck in uninterruptible sleep, the cause is
+	// usually an I/O stall rather than the process itself; capture system-wide
+	// I/O state to confirm. Gated so healthy teardowns stay quiet.
+	if treeHasDState(tree) {
+		b.WriteString(systemIODiagnostics())
+	}
 	t.Logf("%s", strings.TrimRight(b.String(), "\n"))
+}
+
+// treeHasDState reports whether any thread of any pid in the tree is in
+// uninterruptible sleep (state "D").
+func treeHasDState(tree []int) bool {
+	for _, pid := range tree {
+		taskDir := fmt.Sprintf("/proc/%d/task", pid)
+		tids, err := os.ReadDir(taskDir)
+		if err != nil {
+			continue
+		}
+		for _, te := range tids {
+			ts := readStatusFields(fmt.Sprintf("%s/%s/status", taskDir, te.Name()))
+			if strings.HasPrefix(ts["State"], "D") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// systemIODiagnostics returns a system-wide snapshot useful for diagnosing an
+// I/O stall: every uninterruptible (D-state) task on the host, disk usage, and
+// any kernel hung-task warnings. It is best-effort and never fails.
+func systemIODiagnostics() string {
+	var b strings.Builder
+	b.WriteString("  system I/O diagnostics (a thread in the tree is in uninterruptible sleep):\n")
+
+	b.WriteString("    uninterruptible (D-state) tasks system-wide:\n")
+	tasks := dStateTasks()
+	if len(tasks) == 0 {
+		b.WriteString("      none\n")
+	}
+	for _, line := range tasks {
+		fmt.Fprintf(&b, "      %s\n", line)
+	}
+
+	if out, err := exec.Command("df", "-h").CombinedOutput(); err == nil {
+		b.WriteString("    df -h:\n")
+		for line := range strings.SplitSeq(strings.TrimRight(string(out), "\n"), "\n") {
+			fmt.Fprintf(&b, "      %s\n", line)
+		}
+	} else {
+		fmt.Fprintf(&b, "    df -h: unavailable: %v\n", err)
+	}
+
+	// Kernel hung-task warnings ("task X blocked for more than N seconds") name
+	// the stuck task and its filesystem. dmesg may be restricted; that is fine.
+	if out, err := exec.Command("dmesg").CombinedOutput(); err == nil {
+		var hung []string
+		for line := range strings.SplitSeq(string(out), "\n") {
+			if strings.Contains(line, "blocked for more than") || strings.Contains(line, "hung_task") {
+				hung = append(hung, line)
+			}
+		}
+		if len(hung) > 0 {
+			b.WriteString("    kernel hung-task warnings (dmesg):\n")
+			for _, line := range hung {
+				fmt.Fprintf(&b, "      %s\n", line)
+			}
+		}
+	} else {
+		fmt.Fprintf(&b, "    dmesg: unavailable: %v\n", err)
+	}
+
+	return b.String()
+}
+
+// dStateTasks scans /proc for every thread in uninterruptible sleep (state "D")
+// and returns a one-line summary (pid, tid, comm, state, wchan) for each.
+func dStateTasks() []string {
+	var out []string
+	procs, err := os.ReadDir("/proc")
+	if err != nil {
+		return out
+	}
+	for _, p := range procs {
+		pid, err := strconv.Atoi(p.Name())
+		if err != nil {
+			continue
+		}
+		taskDir := fmt.Sprintf("/proc/%d/task", pid)
+		tasks, err := os.ReadDir(taskDir)
+		if err != nil {
+			continue
+		}
+		for _, te := range tasks {
+			tid := te.Name()
+			ts := readStatusFields(fmt.Sprintf("%s/%s/status", taskDir, tid))
+			if !strings.HasPrefix(ts["State"], "D") {
+				continue
+			}
+			comm := readProcFileTrim(fmt.Sprintf("%s/%s/comm", taskDir, tid))
+			wchan := readProcFileTrim(fmt.Sprintf("%s/%s/wchan", taskDir, tid))
+			out = append(out, fmt.Sprintf("pid %d tid %s (%s) state=%q wchan=%q",
+				pid, tid, comm, ts["State"], wchan))
+		}
+	}
+	return out
 }
 
 // logProcessDiagnostics logs the state of the spawned process tree and the PTY.
@@ -879,6 +985,7 @@ func procSummary(pid int) string {
 	if err != nil {
 		return b.String()
 	}
+	blocked := false
 	for _, te := range tids {
 		tid := te.Name()
 		ts := readStatusFields(fmt.Sprintf("%s/%s/status", taskDir, tid))
@@ -889,17 +996,63 @@ func procSummary(pid int) string {
 			tid, comm, ts["State"], wchan,
 			sigSetHasSIGINT(ts["SigBlk"]),
 			sigSetHasSIGINT(ts["SigPnd"]))
-		// For threads stuck in uninterruptible sleep, include the kernel stack
-		// so we can see which call path is blocking and which file is involved.
+		// For threads stuck in uninterruptible sleep, gather what we can about
+		// the blocking call path and the file/fd involved.
 		if strings.Contains(ts["State"], "D") {
-			stack := readProcFileTrim(fmt.Sprintf("%s/%s/stack", taskDir, tid))
-			if stack != "" {
+			blocked = true
+			// /proc/<tid>/syscall shows the in-progress syscall number and its
+			// args (including fds/addresses). It is usually readable even when
+			// /stack is not, so it is our best chance to identify the operation.
+			if sc := readProcFileTrim(fmt.Sprintf("%s/%s/syscall", taskDir, tid)); sc != "" {
+				fmt.Fprintf(&b, "      syscall: %s\n", sc)
+			}
+			// /proc/<tid>/stack requires CAP_SYS_ADMIN and is blocked under
+			// kernel lockdown (common on Ubuntu kernels). Surface the read error
+			// rather than silently omitting it, so an EPERM is not mistaken for
+			// "the thread had no stack".
+			stack, err := os.ReadFile(fmt.Sprintf("%s/%s/stack", taskDir, tid))
+			switch {
+			case err != nil:
+				fmt.Fprintf(&b, "      kernel stack: unavailable: %v\n", err)
+			case strings.TrimSpace(string(stack)) == "":
+				fmt.Fprintf(&b, "      kernel stack: empty\n")
+			default:
 				fmt.Fprintf(&b, "      kernel stack:\n")
-				for _, line := range strings.Split(stack, "\n") {
+				for line := range strings.SplitSeq(strings.TrimSpace(string(stack)), "\n") {
 					fmt.Fprintf(&b, "        %s\n", strings.TrimSpace(line))
 				}
 			}
 		}
+	}
+	// When a thread is blocked in the kernel, the working directory and open
+	// files of the process narrow down which file/filesystem is stalling.
+	if blocked {
+		if cwd, err := os.Readlink(fmt.Sprintf("/proc/%d/cwd", pid)); err == nil {
+			fmt.Fprintf(&b, "    cwd: %s\n", cwd)
+		}
+		b.WriteString(procOpenFiles(pid))
+	}
+	return b.String()
+}
+
+// procOpenFiles returns a summary of the open file descriptors of pid (each fd
+// resolved to its target via /proc/<pid>/fd), which helps identify the file a
+// blocked thread is operating on.
+func procOpenFiles(pid int) string {
+	var b strings.Builder
+	fdDir := fmt.Sprintf("/proc/%d/fd", pid)
+	fds, err := os.ReadDir(fdDir)
+	if err != nil {
+		fmt.Fprintf(&b, "    open files: unavailable: %v\n", err)
+		return b.String()
+	}
+	fmt.Fprintf(&b, "    open files:\n")
+	for _, fd := range fds {
+		target, err := os.Readlink(fmt.Sprintf("%s/%s", fdDir, fd.Name()))
+		if err != nil {
+			target = fmt.Sprintf("<%v>", err)
+		}
+		fmt.Fprintf(&b, "      fd %s -> %s\n", fd.Name(), target)
 	}
 	return b.String()
 }
