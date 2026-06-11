@@ -927,6 +927,24 @@ func TestIsAuthenticated(t *testing.T) {
 				"/userinfo": testutils.UserInfoHandler(map[string]interface{}{}),
 			},
 		},
+		// OIDC Core §5.3.2: /userinfo sub must equal the verified ID-token sub.
+		// A malicious/MITM'd IdP that omits a required claim (triggering the UserInfo
+		// fallback) and then supplies sub = victim_provider_id must be rejected.
+		"Error_when_thin_id_token_and_userinfo_sub_does_not_match_id_token_sub": {
+			firstSecret: "-",
+			tokenHandlerOptions: &testutils.TokenHandlerOptions{
+				DeleteClaims: []string{"must-have-claim"},
+				IDTokenClaims: []map[string]interface{}{
+					{"sub": "attacker-provider-id"},
+				},
+			},
+			customHandlers: map[string]testutils.EndpointHandler{
+				"/userinfo": testutils.UserInfoHandler(map[string]interface{}{
+					"sub":             "victim-provider-id",
+					"must-have-claim": "present",
+				}),
+			},
+		},
 
 		// MetadataProvider: the broker should call GetExtraFields and GetMetadata when the
 		// provider implements MetadataProvider.
