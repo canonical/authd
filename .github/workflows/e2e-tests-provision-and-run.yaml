@@ -74,7 +74,7 @@ env:
 jobs:
   resolve_release:
     name: Resolve Ubuntu release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     outputs:
       codename: ${{ steps.resolve.outputs.codename }}
     steps:
@@ -94,7 +94,7 @@ jobs:
   provision-vm:
     name: Provision VM
     needs: resolve_release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       # Needed by actions/checkout
       contents: read

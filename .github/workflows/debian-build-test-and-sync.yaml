@@ -26,7 +26,7 @@ jobs:
 
   run-autopkgtests:
     name: Run autopkgtests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     needs: build-deb
 
     # Run autopkgtests only on:
@@ -70,7 +70,7 @@ jobs:
 
   synchronize-packaging-branches:
     name: Update packaging branch
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     needs: build-deb
     permissions:
       contents: write
