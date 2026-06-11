@@ -173,7 +173,7 @@ jobs:
 
       - name: Build Debian package and sources
         if: steps.restore-cache.outputs.cache-hit != 'true'
-        uses: canonical/desktop-engineering/gh-actions/common/build-debian@main
+        uses: canonical/desktop-engineering/gh-actions/common/build-debian@fix-build-debian
         with:
           docker-image: ubuntu:${{ inputs.ubuntu-version }}
           # Add the Go backports PPA if we're testing a Ubuntu release which
