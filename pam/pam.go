@@ -253,7 +253,7 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 			return err
 		}
 
-		response, err := c.GetPreviousBroker(context.TODO(), &authd.GPBRequest{Username: username})
+		response, err := c.GetBroker(context.TODO(), &authd.GBRequest{Username: username})
 		if err != nil {
 			err = fmt.Errorf("could not get current available brokers: %w", err)
 			if msgErr := showPamMessage(mTx, pam.ErrorMsg, err.Error()); msgErr != nil {
@@ -262,7 +262,7 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 			return fmt.Errorf("%w: %w", pam.ErrSystem, err)
 		}
 
-		if response.GetPreviousBroker() == brokers.LocalBrokerName {
+		if response.GetBroker() == brokers.LocalBrokerName {
 			return pam.ErrIgnore
 		}
 		return nil
@@ -412,11 +412,11 @@ func (h *pamModule) AcctMgmt(mTx pam.ModuleTransaction, flags pam.Flags, args []
 	}
 	defer closeConn()
 
-	req := authd.SDBFURequest{
+	req := authd.STBRequest{
 		BrokerId: brokerIDUsedToAuthenticate,
 		Username: user,
 	}
-	if _, err := client.SetDefaultBrokerForUser(context.TODO(), &req); err != nil {
+	if _, err := client.SetBroker(context.TODO(), &req); err != nil {
 		msg := err.Error()
 		if err := showPamMessage(mTx, pam.ErrorMsg, msg); err != nil {
 			log.Warningf(context.TODO(), "Impossible to show PAM message: %v", err)
