@@ -134,7 +134,7 @@ jobs:
       - build-deb
     strategy:
       matrix:
-        broker: [ authd-msentraid, authd-google ]
+        broker: [authd-msentraid, authd-google]
       fail-fast: false
     uses: ./.github/workflows/e2e-tests-run.yaml
     with:
