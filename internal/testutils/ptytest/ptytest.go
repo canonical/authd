@@ -324,12 +324,18 @@ func Start(t *testing.T, name string, args []string, opts ...Option) *Console {
 	go func() {
 		defer close(c.copyDone)
 		buf := make([]byte, 4096)
+		var queryCarry []byte
 		for {
 			n, err := ptmx.Read(buf)
 			if n > 0 {
 				c.mu.Lock()
 				c.buf.Write(buf[:n])
 				c.mu.Unlock()
+				// Answer terminal capability queries the way a real terminal
+				// emulator would. A raw PTY has nobody to reply, so libraries
+				// like termenv (used by bubbletea via lipgloss) block on their
+				// OSCTimeout (5s) at startup, once per spawned UI process.
+				queryCarry = c.answerTerminalQueries(append(queryCarry, buf[:n]...))
 			}
 			if err != nil {
 				break
@@ -352,6 +358,48 @@ func Start(t *testing.T, name string, args []string, opts ...Option) *Console {
 		name, args, cmd.Process.Pid, ptmx.Name(), o.cols, o.rows)
 
 	return c
+}
+
+// dsrCursorQuery is the Device Status Report sequence (ESC [ 6 n) a program
+// sends to ask the terminal for the cursor position.
+var dsrCursorQuery = []byte("\x1b[6n")
+
+// answerTerminalQueries replies to terminal capability queries emitted by the
+// program, mimicking a real terminal emulator. scan is the freshly read output
+// (prefixed with any carry-over from the previous read so a query split across
+// reads is still detected); it returns the trailing bytes to carry into the
+// next call.
+//
+// We answer the cursor-position query (DSR). termenv — used by bubbletea via
+// lipgloss to detect the terminal background — first writes an OSC background
+// query and then a DSR, and reads the first response back. By answering the
+// DSR (which every real terminal answers) it reads a non-OSC reply, concludes
+// the terminal does not report its background and falls back to its default
+// (dark), instead of blocking for the full 5s OSCTimeout. The reported
+// position is unused by both termenv (which discards it) and bubbletea (which
+// never reads cursor reports), so a fixed 1;1 is fine. This keeps the detected
+// background — and therefore every rendered byte — identical to the timed-out
+// fallback, only without the per-process 5s stall.
+func (c *Console) answerTerminalQueries(scan []byte) (carry []byte) {
+	idx := 0
+	for {
+		i := bytes.Index(scan[idx:], dsrCursorQuery)
+		if i < 0 {
+			break
+		}
+		idx += i + len(dsrCursorQuery)
+		// The cursor position report: ESC [ row ; col R.
+		if _, err := c.ptmx.Write([]byte("\x1b[1;1R")); err != nil {
+			break
+		}
+	}
+	// Retain the last few unmatched bytes in case a query straddles the
+	// boundary with the next read.
+	tail := scan[idx:]
+	if maxLen := len(dsrCursorQuery) - 1; len(tail) > maxLen {
+		tail = tail[len(tail)-maxLen:]
+	}
+	return append([]byte(nil), tail...)
 }
 
 // record appends an interaction step to the history.
