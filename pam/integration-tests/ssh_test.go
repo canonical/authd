@@ -782,6 +782,13 @@ func startSSHD(t *testing.T, hostKey, forcedCommand string, env []string) string
 		t.Logf("Teardown: Sent SIGKILL to sshd[%d]", pid)
 	})
 
+	// Log the sshd process tree just before it gets killed, to help diagnose
+	// hangs where the session setup doesn't complete (e.g. pam_mkhomedir waiting
+	// on mkhomedir_helper). This cleanup runs first (LIFO order).
+	t.Cleanup(func() {
+		ptytest.LogProcessTree(t, "sshd", sshdPid)
+	})
+
 	sshdStarted := make(chan error)
 	go func() {
 		for {

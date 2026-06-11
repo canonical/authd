@@ -723,6 +723,21 @@ func (c *Console) Close(t *testing.T) {
 	}
 }
 
+// LogProcessTree logs the process tree rooted at rootPID to the test log.
+// label is a descriptive name used to identify the tree in the log.
+// This is a standalone diagnostic helper, not tied to any Console, useful for
+// diagnosing external processes (e.g. sshd) that may be hanging when a test fails.
+func LogProcessTree(t *testing.T, label string, rootPID int) {
+	t.Helper()
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "process diagnostics for %s (pid %d):\n", label, rootPID)
+	for _, pid := range processTree(rootPID) {
+		b.WriteString(procSummary(pid))
+	}
+	t.Logf("%s", strings.TrimRight(b.String(), "\n"))
+}
+
 // logProcessDiagnostics logs the state of the spawned process tree and the PTY.
 // It is meant to help debug cases where a process unexpectedly fails to exit
 // (e.g. a missed or swallowed signal): the symptom we have seen is the native
