@@ -624,6 +624,18 @@ func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socket
 	}
 
 	outDir := t.TempDir()
+
+	// Point pam_mkhomedir at a dedicated empty skeleton directory rather than
+	// the host's /etc/skel. The tests only care that the home directory gets
+	// created, not what it is seeded with, and on CI runners /etc/skel can
+	// contain a large rustup toolchain. Copying that into every test home (with
+	// several sessions creating homes concurrently) thrashes the page cache and
+	// has wedged mkhomedir_helper in uninterruptible disk sleep
+	// (folio_wait_bit_common), making session setup time out.
+	skelDir := filepath.Join(outDir, "skel")
+	require.NoError(t, os.MkdirAll(skelDir, 0755), //nolint:gosec // 0755: root helper must traverse it
+		"Setup: failed to create empty skel directory")
+
 	pamServiceName := "authd-sshd"
 	// Keep control values in sync with debian/pam-configs/authd.in.
 	authControl := "[success=ok default=die authinfo_unavail=2 ignore=2]"
@@ -648,7 +660,7 @@ func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socket
 			Action: pam_test.Account, Control: pam_test.Optional, Module: "pam_echo.so",
 			Args: []string{fmt.Sprintf("%s finished for user '%%u'", pam_test.RunnerResultActionAcctMgmt.Message(""))},
 		},
-		{Action: pam_test.Session, Control: pam_test.Optional, Module: mkHomeModule, Args: []string{"debug"}},
+		{Action: pam_test.Session, Control: pam_test.Optional, Module: mkHomeModule, Args: []string{"debug", "skel=" + skelDir}},
 		{Action: pam_test.Session, Control: pam_test.Requisite, Module: pam_test.Permit.String()},
 	})
 	require.NoError(t, err, "Setup: Creation of service file %s", pamServiceName)
