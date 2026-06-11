@@ -889,6 +889,17 @@ func procSummary(pid int) string {
 			tid, comm, ts["State"], wchan,
 			sigSetHasSIGINT(ts["SigBlk"]),
 			sigSetHasSIGINT(ts["SigPnd"]))
+		// For threads stuck in uninterruptible sleep, include the kernel stack
+		// so we can see which call path is blocking and which file is involved.
+		if strings.Contains(ts["State"], "D") {
+			stack := readProcFileTrim(fmt.Sprintf("%s/%s/stack", taskDir, tid))
+			if stack != "" {
+				fmt.Fprintf(&b, "      kernel stack:\n")
+				for _, line := range strings.Split(stack, "\n") {
+					fmt.Fprintf(&b, "        %s\n", strings.TrimSpace(line))
+				}
+			}
+		}
 	}
 	return b.String()
 }
