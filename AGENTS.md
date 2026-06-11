@@ -109,6 +109,13 @@ git --no-pager show
 git --no-pager log
 ```
 
+Agent-authored changes should generally be committed once complete.
+Do not leave finished agent-created changes uncommitted unless the user
+explicitly asks for no commit.
+
+When creating commits for agent-authored changes, use atomic commits:
+each commit must contain one coherent, self-contained logical change.
+
 ## Dependencies & Tools
 - **Go**: See `go.mod` for version requirements, uses go modules with vendoring
 - **Rust**: Cargo with vendor filtering (see `Cargo.toml` workspace)
