@@ -141,7 +141,6 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			[]string{"./pam/integration-tests/pam_mkhomedir/pam_mkhomedir.c"},
 			nil,
 			[]string{
-				"-DAUTHD_TESTS_SSH_USE_AUTHD_NSS",
 				fmt.Sprintf("-DMKHOMEDIR_HELPER=%q", mkHomeDirHelper),
 			},
 			[]string{"-lpam"},
