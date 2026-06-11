@@ -906,6 +906,21 @@ func TestIsAuthenticated(t *testing.T) {
 			token:          &tokenOptions{deviceIsDisabled: true},
 			sessionOffline: true,
 		},
+		// disabled user/device must be denied even when the session transitions from online to offline mid-auth (network error during token refresh).
+		"Error_when_user_is_disabled_and_session_transitions_to_offline_due_to_network_error": {
+			firstMode: authmodes.Password,
+			token:     &tokenOptions{userIsDisabled: true},
+			customHandlers: map[string]testutils.EndpointHandler{
+				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
+			},
+		},
+		"Error_when_device_is_disabled_and_session_transitions_to_offline_due_to_network_error": {
+			firstMode: authmodes.Password,
+			token:     &tokenOptions{deviceIsDisabled: true},
+			customHandlers: map[string]testutils.EndpointHandler{
+				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
+			},
+		},
 		"Error_when_mode_is_invalid": {firstMode: "invalid"},
 		"Error_when_thin_id_token_and_userinfo_endpoint_is_unavailable": {
 			firstSecret:    "-",
