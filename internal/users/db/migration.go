@@ -19,13 +19,17 @@ type schemaMigration struct {
 var schemaMigrations = []schemaMigration{
 	{
 		description: "Migrate to lowercase user and group names",
-		migrate: func(m *Manager) error {
+		migrate: func(m *Manager) (err error) {
 			// Start a transaction to ensure atomicity
 			tx, err := m.db.Begin()
+			if err != nil {
+				return fmt.Errorf("failed to start transaction: %w", err)
+			}
 
 			// Ensure the transaction is committed or rolled back
 			defer func() {
-				err = commitOrRollBackTransaction(err, tx)
+				// We don't want to lose the original error if commit/rollback also fails, so we join the errors together.
+				err = errors.Join(err, commitOrRollBackTransaction(err, tx))
 			}()
 
 			rows, err := tx.Query(`SELECT name FROM users`)
@@ -63,7 +67,7 @@ var schemaMigrations = []schemaMigration{
 	},
 	{
 		description: "Add column 'locked' to users table",
-		migrate: func(m *Manager) error {
+		migrate: func(m *Manager) (err error) {
 			// Start a transaction to ensure atomicity
 			tx, err := m.db.Begin()
 			if err != nil {
@@ -72,7 +76,8 @@ var schemaMigrations = []schemaMigration{
 
 			// Ensure the transaction is committed or rolled back
 			defer func() {
-				err = commitOrRollBackTransaction(err, tx)
+				// We don't want to lose the original error if commit/rollback also fails, so we join the errors together.
+				err = errors.Join(err, commitOrRollBackTransaction(err, tx))
 			}()
 
 			// Check if the 'locked' column already exists
@@ -97,14 +102,16 @@ var schemaMigrations = []schemaMigration{
 	},
 	{
 		description: "Add column 'provider_id' to users table for stable provider identifier",
-		migrate: func(m *Manager) error {
+		migrate: func(m *Manager) (err error) {
 			tx, err := m.db.Begin()
 			if err != nil {
 				return fmt.Errorf("failed to start transaction: %w", err)
 			}
 
+			// Ensure the transaction is committed or rolled back
 			defer func() {
-				err = commitOrRollBackTransaction(err, tx)
+				// We don't want to lose the original error if commit/rollback also fails, so we join the errors together.
+				err = errors.Join(err, commitOrRollBackTransaction(err, tx))
 			}()
 
 			var exists bool
