@@ -51,7 +51,7 @@ runs:
     - name: Set LXD Ubuntu version
       if: env.AUTHD_TESTS_USE_LXD == 'true'
       shell: bash
-      run: echo "LXD_UBUNTU_VERSION=2604" >> "$GITHUB_ENV"
+      run: echo "LXD_UBUNTU_VERSION=2404" >> "$GITHUB_ENV"
 
     - name: Compute LXD image cache rotation bucket
       if: env.AUTHD_TESTS_USE_LXD == 'true'
@@ -102,7 +102,7 @@ runs:
         lxc project show authd-tests || lxc project create authd-tests -c features.profiles=false
         lxc --project authd-tests image delete "${alias}" || true
         lxc --project authd-tests image import "${image_tar}" --alias "${alias}"
-        echo AUTHD_TESTS_LXD_IMAGE_2604_ALIAS="${alias}" >> "$GITHUB_ENV"
+        echo AUTHD_TESTS_LXD_IMAGE_2404_ALIAS="${alias}" >> "$GITHUB_ENV"
 
     - name: Install gotestfmt and our wrapper script
       uses: canonical/desktop-engineering/gh-actions/go/gotestfmt@main

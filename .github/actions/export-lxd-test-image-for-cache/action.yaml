@@ -22,7 +22,7 @@ runs:
 
         container_name="$(lxc --project authd-tests list --format=csv -c n | grep "^authd-test-${LXD_UBUNTU_VERSION}-" | head -n1 || true)"
         if [ -z "${container_name}" ]; then
-          echo "No Ubuntu 26.04 LXD test container found; skipping cache export"
+          echo "No Ubuntu 24.04 LXD test container found; skipping cache export"
           exit 0
         fi
 
