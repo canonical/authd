@@ -91,4 +91,5 @@ jobs:
     with:
       ubuntu-version: ${{ matrix.ubuntu-version }}
       files-hash: ${{ needs.compute-hash.outputs.files-hash }}
+      force-fresh-image: ${{ github.event_name == 'schedule' }}
     secrets: inherit
