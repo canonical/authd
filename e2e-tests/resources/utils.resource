@@ -214,9 +214,8 @@ Cancel Operation
     Match Text    @ubuntu    15
 
 
-Update And Upgrade Packages
-    SSH.Execute    apt-get update
-    SSH.Execute    apt-get upgrade -y    timeout=1200
+Update Authd
+    SSH.Execute    apt-get install -y authd    timeout=120
 
 
 Sync System Time

@@ -38,7 +38,7 @@ Test login after updating authd to edge version
 
     # Switch to the edge PPA for authd
     Enable Edge Repository For Authd
-    Update And Upgrade Packages
+    Update Authd
 
     # Log in with remote user with local password after upgrading
     Open Terminal In Sudo Mode

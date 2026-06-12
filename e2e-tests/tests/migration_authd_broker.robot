@@ -39,7 +39,7 @@ Test login after upgrading authd and broker to edge channel
     # Switch to the edge channel for the broker snap and the edge PPA for authd
     Enable Edge Repository For Authd
     Enable Edge Broker
-    Update And Upgrade Packages
+    Update Authd
 
     # Log in with remote user with local password after upgrading
     Open Terminal In Sudo Mode
