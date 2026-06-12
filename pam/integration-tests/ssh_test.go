@@ -155,7 +155,8 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 	var sharedSSHDPort, sharedSSHDUserHome, sharedAuthdSocket, sharedAuthdGroupOutput string
 	prepareSharedSSHDTests := func(subtest *testing.T) {
 		t.Logf("Preparing SSH tests with shared sshd, triggered by %q", subtest.Name())
-		sharedAuthdSocket, sharedAuthdGroupOutput = sharedAuthd(t)
+		sharedAuthdSocket, sharedAuthdGroupOutput = sharedAuthd(t,
+			testutils.WithHomeBaseDir(sshTestsHomeBase))
 		serviceFile := createSSHDServiceFile(t, execModule, execChild, pamMkHomeDirModule, sharedAuthdSocket)
 		sshdEnv = append(sshdEnv, nssEnv...)
 		sshdEnv = append(sshdEnv, fmt.Sprintf("AUTHD_NSS_SOCKET=%s", sharedAuthdSocket))
@@ -328,7 +329,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			tapeVariables: map[string]string{
 				vhsCommandFinalAuthWaitVariable: fmt.Sprintf(
 					`Wait+Screen /Too many authentication failures/
-Wait@%dms`, sshDefaultFinalWaitTimeout),
+Wait@%dms`, sshDefaultFinalWaitTimeout.Milliseconds()),
 			},
 		},
 		"Deny_authentication_if_user_does_not_exist": {
@@ -452,7 +453,8 @@ Wait@%dms`, sshDefaultFinalWaitTimeout),
 			} else if !sharedSSHD {
 				socketPath, groupOutput = sharedAuthd(t,
 					testutils.WithGroupFileOutput(sharedAuthdGroupOutput),
-					testutils.WithEnvironment(authdEnv...))
+					testutils.WithEnvironment(authdEnv...),
+					testutils.WithHomeBaseDir(sshTestsHomeBase))
 			}
 			if tc.socketPath != "" {
 				socketPath = tc.socketPath
@@ -600,12 +602,27 @@ func sanitizedOutput(t *testing.T, td *tapeData) string {
 func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socketPath string) string {
 	t.Helper()
 
+	pamLog := filepath.Join(t.TempDir(), "authd-pam.log")
+	err := os.WriteFile(pamLog, []byte{}, 0600)
+	require.NoError(t, err, "Setup: Could not create pam_authd log file")
+	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, pamLog)
+	t.Cleanup(func() {
+		out, err := os.ReadFile(pamLog)
+		if errors.Is(err, os.ErrNotExist) {
+			return
+		}
+		require.NoError(t, err, "Teardown: Impossible to read pam_authd logs")
+		if !testlog.Quiet() {
+			_, _ = fmt.Fprintf(os.Stderr, "pam_authd output for %s:\n%s\n", t.Name(), out)
+		}
+	})
+
 	moduleArgs := []string{
 		execChild,
 		"socket=" + socketPath,
 		fmt.Sprintf("connection_timeout=%d", defaultConnectionTimeout),
 		"debug=true",
-		"logfile=" + os.Stderr.Name(),
+		"logfile=" + pamLog,
 		"--exec-debug",
 	}
 
@@ -669,7 +686,7 @@ func startSSHDForTest(t *testing.T, serviceFile, hostKey, user string, preloadLi
 		fmt.Sprintf("HOME=%s", sshTestsHomeBase),
 		fmt.Sprintf("LD_PRELOAD=%s", strings.Join(preloadLibraries, ":")),
 		fmt.Sprintf("AUTHD_TEST_SSH_USER=%s", user),
-		fmt.Sprintf("AUTHD_TEST_SSH_HOME=%s", userHome),
+		fmt.Sprintf("AUTHD_TEST_SSH_HOME_BASE=%s", sshTestsHomeBase),
 		fmt.Sprintf("AUTHD_TEST_SSH_PAM_SERVICE=%s", serviceFile),
 	}, env...))
 
@@ -724,7 +741,11 @@ func startSSHD(t *testing.T, hostKey, forcedCommand string, env []string) string
 
 	// Write stdout/stderr both to our stdout/stderr and to the buffer
 	sshd.Stdout = io.MultiWriter(t.Output(), sshdOutput)
-	sshd.Stderr = io.MultiWriter(newFilteredStderrWriter(t.Output()), sshdOutput)
+	if testlog.Quiet() {
+		sshd.Stderr = sshdOutput
+	} else {
+		sshd.Stderr = io.MultiWriter(newFilteredStderrWriter(t.Output()), sshdOutput)
+	}
 
 	testlog.LogCommand(t, "Starting sshd", sshd)
 	start := time.Now()
