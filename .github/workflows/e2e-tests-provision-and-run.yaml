@@ -25,7 +25,7 @@ env:
 jobs:
   provision-vm:
     name: Provision VM
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       # Needed by actions/checkout
       contents: read
@@ -134,7 +134,7 @@ jobs:
       - build-deb
     strategy:
       matrix:
-        broker: [ authd-msentraid, authd-google ]
+        broker: [authd-msentraid, authd-google]
       fail-fast: false
     uses: ./.github/workflows/e2e-tests-run.yaml
     with:

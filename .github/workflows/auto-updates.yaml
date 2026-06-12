@@ -26,7 +26,7 @@ jobs:
             ubuntu-version: noble
 
     name: Update ${{ matrix.ubuntu-version }} packaging related Rust files
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     container:
       image: ubuntu:${{ matrix.ubuntu-version }}
       env:

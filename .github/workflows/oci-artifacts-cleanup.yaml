@@ -7,12 +7,12 @@ on:
 
 jobs:
   cleanup-broker-snap:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       packages: write
     strategy:
       matrix:
-        broker: [ authd-msentraid, authd-google ]
+        broker: [authd-msentraid, authd-google]
     steps:
       - name: Delete broker snap OCI artifacts
         uses: actions/delete-package-versions@v5
@@ -22,12 +22,12 @@ jobs:
           min-versions-to-keep: 10
 
   cleanup-deb:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       packages: write
     strategy:
       matrix:
-        ubuntu-version: [ 'noble', 'questing', 'devel' ]
+        ubuntu-version: ['noble', 'questing', 'devel']
     steps:
       - name: Delete deb OCI artifacts
         uses: actions/delete-package-versions@v5
@@ -44,7 +44,7 @@ jobs:
           min-versions-to-keep: 10
 
   cleanup-e2e-test-vm-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       packages: write
     steps:
