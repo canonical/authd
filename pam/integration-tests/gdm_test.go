@@ -159,13 +159,6 @@ func TestGdmModule(t *testing.T) {
 		stagePollResponses map[proto.Stage][]*gdm.EventData
 		moduleArgs         []string
 
-		brokerCompletionSignals int
-		// brokerCompletionSignalsAfterWait is the number of waitForCompletion calls expected to be
-		// cancelled before the signal goroutine creates the completion signal. Use
-		// this for QR code regeneration tests where early calls are cancelled by
-		// ReselectAuthMode and only the last call should succeed.
-		brokerCompletionSignalsAfterWait int
-
 		wantError            error
 		wantAuthModeIDs      []string
 		wantUILayouts        []*authd.UILayout
@@ -250,9 +243,8 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_with_MFA": {
-			brokerCompletionSignals: 2,
-			pamUserPrefix:           examplebroker.UserIntegrationMfaPrefix,
-			wantAuthModeIDs:         []string{passwordAuthID, fido1AuthID, phoneAck1ID},
+			pamUserPrefix:   examplebroker.UserIntegrationMfaPrefix,
+			wantAuthModeIDs: []string{passwordAuthID, fido1AuthID, phoneAck1ID},
 			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
 				gdm.EventType_startAuthentication: {
 					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Secret{
@@ -278,9 +270,8 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_with_MFA_after_retry": {
-			brokerCompletionSignals: 2,
-			pamUserPrefix:           examplebroker.UserIntegrationMfaPrefix,
-			wantAuthModeIDs:         []string{passwordAuthID, passwordAuthID, fido1AuthID, phoneAck1ID},
+			pamUserPrefix:   examplebroker.UserIntegrationMfaPrefix,
+			wantAuthModeIDs: []string{passwordAuthID, passwordAuthID, fido1AuthID, phoneAck1ID},
 			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
 				gdm.EventType_startAuthentication: {
 					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Secret{
@@ -314,8 +305,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_switching_to_phone_ack_from_challenge_stage": {
-			brokerCompletionSignals: 1,
-			wantAuthModeIDs:         []string{passwordAuthID, phoneAck1ID},
+			wantAuthModeIDs: []string{passwordAuthID, phoneAck1ID},
 			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
 				gdm.EventType_startAuthentication: {
 					gdm_test.EventsGroupBegin(),
@@ -337,8 +327,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_switching_to_phone_ack_from_auth_mode_selection_stage": {
-			brokerCompletionSignals: 1,
-			wantAuthModeIDs:         []string{passwordAuthID, phoneAck1ID},
+			wantAuthModeIDs: []string{passwordAuthID, phoneAck1ID},
 			stagePollResponses: map[proto.Stage][]*gdm.EventData{
 				proto.Stage_authModeSelection: {
 					gdm_test.IgnoredEvent(), // Password is auto-selected.
@@ -433,8 +422,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_after_mfa_authentication_with_wait_and_password_change_checking_quality": {
-			brokerCompletionSignals: 1,
-			pamUserPrefix:           examplebroker.UserIntegrationMfaNeedsResetPrefix,
+			pamUserPrefix: examplebroker.UserIntegrationMfaNeedsResetPrefix,
 			wantAuthModeIDs: []string{
 				passwordAuthID,
 				fido1AuthID,
@@ -547,9 +535,8 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_with_qrcode": {
-			brokerCompletionSignals: 1,
-			wantAuthModeIDs:         []string{qrcodeID},
-			supportedLayouts:        []*authd.UILayout{pam_test.QrCodeUILayout()},
+			wantAuthModeIDs:  []string{qrcodeID},
+			supportedLayouts: []*authd.UILayout{pam_test.QrCodeUILayout()},
 			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
 				gdm.EventType_startAuthentication: {
 					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Wait{
@@ -560,8 +547,7 @@ func TestGdmModule(t *testing.T) {
 			wantUILayouts: []*authd.UILayout{&testQrcodeUILayout},
 		},
 		"Authenticates_user_with_qrcode_without_code_field": {
-			brokerCompletionSignals: 1,
-			wantAuthModeIDs:         []string{qrcodeWithoutCodeID},
+			wantAuthModeIDs: []string{qrcodeWithoutCodeID},
 			supportedLayouts: []*authd.UILayout{
 				pam_test.QrCodeUILayout(pam_test.WithQrCodeCode("")),
 			},
@@ -575,8 +561,7 @@ func TestGdmModule(t *testing.T) {
 			wantUILayouts: []*authd.UILayout{&testQrcodeUIWithoutCodeLayout},
 		},
 		"Authenticates_user_with_qrcode_without_rendering_support": {
-			brokerCompletionSignals: 1,
-			wantAuthModeIDs:         []string{qrcodeWithoutRenderingID},
+			wantAuthModeIDs: []string{qrcodeWithoutRenderingID},
 			supportedLayouts: []*authd.UILayout{
 				pam_test.QrCodeUILayout(pam_test.WithQrCodeRenders(ptrValue(false))),
 			},
@@ -590,7 +575,6 @@ func TestGdmModule(t *testing.T) {
 			wantUILayouts: []*authd.UILayout{&testQrcodeUIWithoutRendering},
 		},
 		"Authenticates_user_with_qrcode_without_explicit_rendering_support": {
-			brokerCompletionSignals: 1,
 			// This checks that we're backward compatible
 			wantAuthModeIDs: []string{qrcodeID},
 			supportedLayouts: []*authd.UILayout{
@@ -606,8 +590,7 @@ func TestGdmModule(t *testing.T) {
 			wantUILayouts: []*authd.UILayout{&testQrcodeUILayout},
 		},
 		"Authenticates_user_after_switching_to_qrcode_from_challenge_stage": {
-			brokerCompletionSignals: 1,
-			wantAuthModeIDs:         []string{passwordAuthID, qrcodeID},
+			wantAuthModeIDs: []string{passwordAuthID, qrcodeID},
 			supportedLayouts: []*authd.UILayout{
 				pam_test.FormUILayout(pam_test.WithWait(true)),
 				pam_test.QrCodeUILayout(),
@@ -633,8 +616,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_after_switching_to_qrcode_from_auth_mode_selection_stage": {
-			brokerCompletionSignals: 1,
-			wantAuthModeIDs:         []string{passwordAuthID, qrcodeID},
+			wantAuthModeIDs: []string{passwordAuthID, qrcodeID},
 			supportedLayouts: []*authd.UILayout{
 				pam_test.FormUILayout(pam_test.WithWait(true)),
 				pam_test.QrCodeUILayout(),
@@ -663,8 +645,6 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_after_regenerating_the_qrcode_with_optional_code_field": {
-			brokerCompletionSignals:          1,
-			brokerCompletionSignalsAfterWait: 2,
 			wantAuthModeIDs: []string{
 				passwordAuthID,
 				qrcodeID,
@@ -730,8 +710,6 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_after_regenerating_the_qrcode_without_code_field": {
-			brokerCompletionSignals:          1,
-			brokerCompletionSignalsAfterWait: 2,
 			wantAuthModeIDs: []string{
 				passwordAuthID,
 				qrcodeWithoutCodeID,
@@ -1031,23 +1009,36 @@ func TestGdmModule(t *testing.T) {
 				pamFlags = pam.Silent
 			}
 
-			if tc.brokerCompletionSignals != 0 {
-				for _, resp := range tc.eventPollResponses[gdm.EventType_startAuthentication] {
-					if resp.Type != gdm.EventType_isAuthenticatedRequested {
-						continue
+			brokerCompletionSignals := 0
+			brokerCompletionSignalAfterWaits := 0
+
+			for _, resp := range tc.eventPollResponses[gdm.EventType_startAuthentication] {
+				if resp.Type == gdm.EventType_reselectAuthMode {
+					if brokerCompletionSignals > 0 {
+						brokerCompletionSignalAfterWaits = 0
+						brokerCompletionSignals = 0
 					}
-					data, ok := resp.Data.(*gdm.EventData_IsAuthenticatedRequested)
-					if !ok {
-						continue
-					}
-					if data.IsAuthenticatedRequested.AuthenticationData.GetWait() != layouts.True {
-						continue
-					}
+
+					brokerCompletionSignalAfterWaits++
+					continue
 				}
 
-				tc.brokerCompletionSignals++
+				if resp.Type != gdm.EventType_isAuthenticatedRequested {
+					continue
+				}
+
+				data, ok := resp.Data.(*gdm.EventData_IsAuthenticatedRequested)
+				if !ok {
+					continue
+				}
+				if data.IsAuthenticatedRequested.AuthenticationData.GetWait() != layouts.True {
+					continue
+				}
+
+				brokerCompletionSignals++
 			}
-			if tc.brokerCompletionSignals > 0 {
+
+			if brokerCompletionSignals > 0 {
 				waitForFile := func(path string, exists bool) {
 					for {
 						_, err := os.Stat(path)
@@ -1064,19 +1055,19 @@ func TestGdmModule(t *testing.T) {
 				go func() {
 					waitActivePath := filepath.Join(testutils.BrokerCompletionSignalsDir(socketPath),
 						testutils.BrokerCompletionSignalWaitingFilename(pamUser))
-					// Wait for tc.brokerCompletionSignals waitForCompletion calls to be
+					// Wait for [brokerCompletionSignals] waitForCompletion calls to be
 					// cancelled before creating the signal. This is needed for QR
 					// code regeneration tests where the first N Wait calls are
 					// expected to be cancelled by ReselectAuthMode, and only the
 					// last one should succeed.
-					for i := 0; i < tc.brokerCompletionSignalsAfterWait; i++ {
+					for i := 0; i < brokerCompletionSignalAfterWaits; i++ {
 						t.Logf("Waiting broker completion signal completion %d", i+1)
 						waitForFile(waitActivePath, true)
 						waitForFile(waitActivePath, false)
 						t.Logf("Broker completion signal wait %d done", i+1)
 					}
 
-					for i := 0; i < tc.brokerCompletionSignals; i++ {
+					for i := 0; i < brokerCompletionSignals; i++ {
 						signalPath := testutils.CreateBrokerCompletionSignal(t, socketPath, pamUser)
 						t.Logf("Creating broker completion signal %d", i+1)
 						waitForFile(signalPath, false)
