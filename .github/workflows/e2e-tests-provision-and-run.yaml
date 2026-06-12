@@ -10,6 +10,11 @@ on:
       ubuntu-version:
         required: true
         type: string
+      force-fresh-image:
+        description: 'Force creation of a fresh VM image by ignoring cache'
+        type: boolean
+        required: false
+        default: false
     secrets:
       E2E_VM_SSH_PRIV_KEY:
         required: true
@@ -36,6 +41,7 @@ jobs:
 
       - name: Restore cached VM image (if available)
         id: restore-cache
+        if: ${{ !inputs.force-fresh-image }}
         uses: actions/cache/restore@v5
         with:
           path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-version }}.qcow2
@@ -48,15 +54,15 @@ jobs:
           fail-on-cache-miss: false
 
       - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
-        if: steps.restore-cache.outputs.cache-hit != 'true'
+        if: steps.restore-cache.outputs.cache-hit != 'true' || inputs.force-fresh-image
 
       - name: Install APT dependencies for VM provisioning
-        if: steps.restore-cache.outputs.cache-hit != 'true'
+        if: steps.restore-cache.outputs.cache-hit != 'true' || inputs.force-fresh-image
         run: ./${{ env.E2E_TESTS_DIR }}/vm/install-provision-deps.sh
 
       - name: Set up SSH keys for the VM provisioning
         id: set-ssh-keys
-        if: steps.restore-cache.outputs.cache-hit != 'true'
+        if: steps.restore-cache.outputs.cache-hit != 'true' || inputs.force-fresh-image
         uses: ./.github/actions/e2e-tests/set-up-ssh-keys
         with:
           E2E_VM_SSH_PRIV_KEY: ${{ secrets.E2E_VM_SSH_PRIV_KEY }}
@@ -64,7 +70,7 @@ jobs:
 
       - name: Provision the VM
         id: provision-vm
-        if: steps.restore-cache.outputs.cache-hit != 'true'
+        if: steps.restore-cache.outputs.cache-hit != 'true' || inputs.force-fresh-image
         run: |
           set -eu
           export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
