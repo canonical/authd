@@ -743,6 +743,15 @@ func (c *Console) DiscardLastSnapshot() {
 	}
 }
 
+// RewriteLastSnapshot rewrites the most recently captured snapshot in place.
+// If no snapshots were captured yet, it does nothing.
+func (c *Console) RewriteLastSnapshot(rewrite func(string) string) {
+	if len(c.snapshots) == 0 {
+		return
+	}
+	c.snapshots[len(c.snapshots)-1] = rewrite(c.snapshots[len(c.snapshots)-1])
+}
+
 // Close terminates the command (if still running) and cleans up the PTY.
 // It is safe to call multiple times. It is also called automatically on
 // test cleanup.

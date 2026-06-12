@@ -18,6 +18,7 @@ import (
 )
 
 var separator = strings.Repeat("─", 80) + "\n"
+var trailingPasswordEchoLine = regexp.MustCompile(`(?m)^>\s+\*+\s*$`)
 
 // ptyRunnerEnv builds the environment variable list for the PAM runner process
 // when launched via ptytest.
@@ -254,6 +255,20 @@ func sendEchoedLine(t *testing.T, c *ptytest.Console, s string) {
 func waitForRunnerResult(t *testing.T, c *ptytest.Console, action pam_test.RunnerResultAction) {
 	t.Helper()
 	c.WaitFor(t, `(?s)`+regexp.QuoteMeta(action.String())+`\r?\n(?:  User: .*\r?\n)?  Result: `)
+}
+
+// sanitizeTrailingPasswordEchoSnapshot rewrites a transient trailing password
+// echo line ("> *****") in the latest snapshot to a stable placeholder.
+func sanitizeTrailingPasswordEchoSnapshot(c *ptytest.Console) {
+	c.RewriteLastSnapshot(func(last string) string {
+		if !strings.Contains(last, "Gimme your password:") {
+			return last
+		}
+		if !trailingPasswordEchoLine.MatchString(last) {
+			return last
+		}
+		return trailingPasswordEchoLine.ReplaceAllString(last, ">")
+	})
 }
 
 // ptySanitizeSnapshots takes the snapshots captured by a Console (with

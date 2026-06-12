@@ -587,6 +587,7 @@ func TestCLIAuthenticate(t *testing.T) {
 				for i := 0; i < 4; i++ {
 					c.SendLine(t, "wrongpass"+strconv.Itoa(i+1))
 					c.WaitFor(t, `invalid password`)
+					sanitizeTrailingPasswordEchoSnapshot(c)
 				}
 
 				c.SendLine(t, "wrongpass-final")
@@ -1109,6 +1110,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				for i := 0; i < 4; i++ {
 					c.SendLine(t, "wrongpass"+strconv.Itoa(i+1))
 					c.WaitFor(t, `invalid password`)
+					sanitizeTrailingPasswordEchoSnapshot(c)
 				}
 
 				c.SendLine(t, "wrongpass-final")
