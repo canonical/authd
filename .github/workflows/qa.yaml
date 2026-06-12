@@ -398,13 +398,30 @@ jobs:
           # We don't need the xtrace output after this point
           set +x
 
-          # We're logging to a file, and this is useful for having artifacts, but we still may want to see it in logs:
+          # We're logging to a file, and this is useful for having artifacts, but we still may want to see it in logs.
+          # Print up to asan_log_preview_lines lines in total across all ASAN logs unconditionally (always visible),
+          # with the full content of each log also available in a collapsible group.
+          asan_log_preview_lines=50
+          asan_log_remaining=${asan_log_preview_lines}
           for f in "${AUTHD_TESTS_ARTIFACTS_PATH}"/asan.log*; do
             if ! [ -e "${f}" ]; then
               continue
             fi
             if [ -s "${f}" ]; then
-              echo "::group::${f} ($(wc -l < "${f}") lines)"
+              total_lines=$(wc -l < "${f}")
+              if [ "${asan_log_remaining}" -le 0 ]; then
+                echo "=== ${f} (${total_lines} lines, omitted from preview — see collapsible group below) ==="
+              elif [ "${total_lines}" -gt "${asan_log_remaining}" ]; then
+                echo "=== ${f} (first ${asan_log_remaining} of ${total_lines} lines) ==="
+                head -n "${asan_log_remaining}" "${f}"
+                echo "... (truncated — see collapsible group below for the full log)"
+                asan_log_remaining=0
+              else
+                echo "=== ${f} (${total_lines} lines) ==="
+                cat "${f}"
+                asan_log_remaining=$((asan_log_remaining - total_lines))
+              fi
+              echo "::group::${f} (full ${total_lines} lines)"
               cat "${f}"
               echo "::endgroup::"
             else
