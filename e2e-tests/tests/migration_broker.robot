@@ -38,7 +38,6 @@ Test login with broker on edge channel
 
     # Switch to edge channel for the broker snap
     Enable Edge Broker
-    Update And Upgrade Packages
 
     # Log in with remote user with local password after upgrading
     Open Terminal In Sudo Mode
