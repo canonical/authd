@@ -303,6 +303,12 @@ func BrokerCompletionSignalFilename(username string) string {
 	return strings.ReplaceAll(username, "/", "_")
 }
 
+// BrokerCompletionSignalWaitingFilename returns the file name used for broker completion signals
+// as marker that we're currently waiting.
+func BrokerCompletionSignalWaitingFilename(username string) string {
+	return BrokerCompletionSignalFilename(username) + "_waiting"
+}
+
 // CreateBrokerCompletionSignal creates a signal file that tells the broker to complete
 // authentication for the given username. The broker polls for this file and deletes it
 // when found.

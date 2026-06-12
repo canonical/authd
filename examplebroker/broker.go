@@ -706,6 +706,18 @@ func (b *Broker) waitForCompletion(ctx context.Context, username string) bool {
 	signalFileName := testutils.BrokerCompletionSignalFilename(username)
 	signalPath := filepath.Join(b.completionSignalsDir, signalFileName)
 
+	// We also write a "wait-active" marker file for the duration of this call so
+	// that the test goroutine can count how many wait calls have been cancelled
+	// before creating the completion signal (see signalAfterWaits in gdm_test.go).
+	waitActivePath := filepath.Join(b.completionSignalsDir,
+		testutils.BrokerCompletionSignalWaitingFilename(username))
+	if err := os.WriteFile(waitActivePath, []byte{}, 0600); err != nil {
+		log.Warningf(ctx, "Failed to write %s: %v", waitActivePath, err)
+		return false
+	}
+
+	defer func() { _ = os.Remove(waitActivePath) }()
+
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
 	for {
