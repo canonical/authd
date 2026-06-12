@@ -48,6 +48,11 @@ on:
       - '!**_test.go'
       - '!**/testdata/**'
       - '!**/testutils/**'
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
   workflow_dispatch:
   schedule:
     - cron: '0 0 * * 1'  # Runs every Monday at midnight
@@ -63,7 +68,11 @@ jobs:
     # PR is from a fork, as we don't have the permission to upload the Debian
     # package to the OCI registry in the provision-and-run workflow.
     if: >
-      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+      (
+       github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       contains(github.event.pull_request.labels.*.name, 'e2e-tests')
+      ) ||
       github.event_name == 'push' ||
       github.event_name == 'release'
     runs-on: ubuntu-latest
