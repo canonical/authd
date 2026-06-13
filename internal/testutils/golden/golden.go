@@ -179,7 +179,11 @@ func Dir(t *testing.T) string {
 
 // runDelta pipes the unified diff through the `delta` command for word-level diff and coloring.
 func runDelta(diff string) (string, error) {
-	cmd := exec.Command("delta", "--diff-so-fancy", "--hunk-header-style", "omit")
+	cmd := exec.Command("delta",
+		"--diff-so-fancy",
+		"--hunk-header-style", "omit",
+		"--keep-plus-minus-markers",
+	)
 	cmd.Stdin = strings.NewReader(diff)
 
 	var out bytes.Buffer

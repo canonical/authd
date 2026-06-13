@@ -55,7 +55,7 @@ TTY availability, which is useful for testing.
 | `go-exec/`           | C wrapper that implements `pam_authd_exec.so`     |
 | `internal/adapter/`  | Authentication UI adapters (native CLI and GDM)   |
 | `tools/pam-runner/`  | Developer tool for manual end-to-end PAM testing  |
-| `integration-tests/` | Automated integration tests using `vhs` tapes     |
+| `integration-tests/` | Automated integration tests using `ptytest`       |
 
 ## Building
 
@@ -136,13 +136,6 @@ AUTHD_PAM_RUNNER_SUPPORTS_CONVERSATION=1 go run -tags withpamrunner \
 
 ```bash
 go test ./pam/...
-```
-
-Integration tests require the `vhs` tool. Set
-`AUTHD_SKIP_EXTERNAL_DEPENDENT_TESTS=1` to skip them:
-
-```bash
-AUTHD_SKIP_EXTERNAL_DEPENDENT_TESTS=1 go test ./pam/...
 ```
 
 ## Troubleshooting

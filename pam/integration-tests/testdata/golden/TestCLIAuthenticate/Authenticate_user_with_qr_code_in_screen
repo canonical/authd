@@ -1,16 +1,13 @@
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your provider
 
 > 1. local
   2. ExampleBroker
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 Gimme your password:
 >
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your authentication method
 
 > 1. Password authentication
@@ -23,7 +20,6 @@ Gimme your password:
 
   Press escape key to go back to choose the provider
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 Scan the qrcode or enter the code in the login page
 
 ██████████████████████████████████████████████████████████████████
@@ -67,7 +63,6 @@ Code: 1337
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 Scan the qrcode or enter the code in the login page
 
 ██████████████████████████████████████████████████████████████████
@@ -111,7 +106,6 @@ Code: 1338
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 Scan the qrcode or enter the code in the login page
 
 ██████████████████████████████████████████████████████████████████████████
@@ -159,7 +153,6 @@ Code: 1339
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 Scan the qrcode or enter the code in the login page
 
 ██████████████████████████████████████████████████████████████████
@@ -203,7 +196,6 @@ Code: 1340
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 Scan the qrcode or enter the code in the login page
 
 ██████████████████████████████████████████████████████████████████
@@ -247,12 +239,10 @@ Code: 1341
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 PAM Authenticate()
   User: "user-integration-qr-code-screen@example.com"
   Result: success
 PAM AcctMgmt()
   User: "user-integration-qr-code-screen@example.com"
   Result: success
->
 ────────────────────────────────────────────────────────────────────────────────

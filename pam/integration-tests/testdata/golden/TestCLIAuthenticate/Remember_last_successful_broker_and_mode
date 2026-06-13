@@ -1,10 +1,8 @@
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
+=== First Login ===
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 Username: user-integration-remember-mode@example.com
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your provider
 
 > 1. local
@@ -12,7 +10,11 @@ Username: user-integration-remember-mode@example.com
 
   Press escape key to go back to user selection
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
+Gimme your password:
+>
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
   Select your authentication method
 
 > 1. Password authentication
@@ -25,7 +27,6 @@ Username: user-integration-remember-mode@example.com
 
   Press escape key to go back to choose the provider
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 Enter your one time credential:
 >
 
@@ -33,24 +34,26 @@ Enter your one time credential:
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
+Enter your one time credential:
+> temporary pass0
+
+  [ Resend SMS (1 sent) ]
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
 PAM Authenticate()
   User: "user-integration-remember-mode@example.com"
   Result: success
 PAM AcctMgmt()
   User: "user-integration-remember-mode@example.com"
   Result: success
->
 ────────────────────────────────────────────────────────────────────────────────
->
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
+
+=== Second Login (broker/mode remembered) ===
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 Username: user-integration-remember-mode@example.com
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 Enter your one time credential:
 >
 
@@ -58,12 +61,17 @@ Enter your one time credential:
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
+Enter your one time credential:
+> temporary pass0
+
+  [ Resend SMS (1 sent) ]
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
 PAM Authenticate()
   User: "user-integration-remember-mode@example.com"
   Result: success
 PAM AcctMgmt()
   User: "user-integration-remember-mode@example.com"
   Result: success
->
 ────────────────────────────────────────────────────────────────────────────────

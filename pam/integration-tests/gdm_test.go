@@ -158,6 +158,12 @@ func TestGdmModule(t *testing.T) {
 		eventPollResponses map[gdm.EventType][]*gdm.EventData
 		stagePollResponses map[proto.Stage][]*gdm.EventData
 		moduleArgs         []string
+		signalCount        int
+		// signalAfterWaits is the number of waitForCompletion calls expected to be
+		// cancelled before the signal goroutine creates the completion signal. Use
+		// this for QR code regeneration tests where early calls are cancelled by
+		// ReselectAuthMode and only the last call should succeed.
+		signalAfterWaits int
 
 		wantError            error
 		wantAuthModeIDs      []string
@@ -186,7 +192,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_with_upper_case_name": {
-			pamUser: ptrValue(strings.ToUpper(vhsTestUserName(t, "upper-case"))),
+			pamUser: ptrValue(strings.ToUpper(testUserName(t, "upper-case"))),
 			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
 				gdm.EventType_startAuthentication: {
 					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Secret{
@@ -243,6 +249,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_with_MFA": {
+			signalCount:     2,
 			pamUserPrefix:   examplebroker.UserIntegrationMfaPrefix,
 			wantAuthModeIDs: []string{passwordAuthID, fido1AuthID, phoneAck1ID},
 			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
@@ -270,6 +277,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_with_MFA_after_retry": {
+			signalCount:     2,
 			pamUserPrefix:   examplebroker.UserIntegrationMfaPrefix,
 			wantAuthModeIDs: []string{passwordAuthID, passwordAuthID, fido1AuthID, phoneAck1ID},
 			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
@@ -305,6 +313,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_switching_to_phone_ack_from_challenge_stage": {
+			signalCount:     1,
 			wantAuthModeIDs: []string{passwordAuthID, phoneAck1ID},
 			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
 				gdm.EventType_startAuthentication: {
@@ -327,6 +336,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_switching_to_phone_ack_from_auth_mode_selection_stage": {
+			signalCount:     1,
 			wantAuthModeIDs: []string{passwordAuthID, phoneAck1ID},
 			stagePollResponses: map[proto.Stage][]*gdm.EventData{
 				proto.Stage_authModeSelection: {
@@ -422,6 +432,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_after_mfa_authentication_with_wait_and_password_change_checking_quality": {
+			signalCount:   1,
 			pamUserPrefix: examplebroker.UserIntegrationMfaNeedsResetPrefix,
 			wantAuthModeIDs: []string{
 				passwordAuthID,
@@ -535,6 +546,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_with_qrcode": {
+			signalCount:      1,
 			wantAuthModeIDs:  []string{qrcodeID},
 			supportedLayouts: []*authd.UILayout{pam_test.QrCodeUILayout()},
 			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
@@ -547,6 +559,7 @@ func TestGdmModule(t *testing.T) {
 			wantUILayouts: []*authd.UILayout{&testQrcodeUILayout},
 		},
 		"Authenticates_user_with_qrcode_without_code_field": {
+			signalCount:     1,
 			wantAuthModeIDs: []string{qrcodeWithoutCodeID},
 			supportedLayouts: []*authd.UILayout{
 				pam_test.QrCodeUILayout(pam_test.WithQrCodeCode("")),
@@ -561,6 +574,7 @@ func TestGdmModule(t *testing.T) {
 			wantUILayouts: []*authd.UILayout{&testQrcodeUIWithoutCodeLayout},
 		},
 		"Authenticates_user_with_qrcode_without_rendering_support": {
+			signalCount:     1,
 			wantAuthModeIDs: []string{qrcodeWithoutRenderingID},
 			supportedLayouts: []*authd.UILayout{
 				pam_test.QrCodeUILayout(pam_test.WithQrCodeRenders(ptrValue(false))),
@@ -575,6 +589,7 @@ func TestGdmModule(t *testing.T) {
 			wantUILayouts: []*authd.UILayout{&testQrcodeUIWithoutRendering},
 		},
 		"Authenticates_user_with_qrcode_without_explicit_rendering_support": {
+			signalCount: 1,
 			// This checks that we're backward compatible
 			wantAuthModeIDs: []string{qrcodeID},
 			supportedLayouts: []*authd.UILayout{
@@ -590,6 +605,7 @@ func TestGdmModule(t *testing.T) {
 			wantUILayouts: []*authd.UILayout{&testQrcodeUILayout},
 		},
 		"Authenticates_user_after_switching_to_qrcode_from_challenge_stage": {
+			signalCount:     1,
 			wantAuthModeIDs: []string{passwordAuthID, qrcodeID},
 			supportedLayouts: []*authd.UILayout{
 				pam_test.FormUILayout(pam_test.WithWait(true)),
@@ -616,6 +632,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_after_switching_to_qrcode_from_auth_mode_selection_stage": {
+			signalCount:     1,
 			wantAuthModeIDs: []string{passwordAuthID, qrcodeID},
 			supportedLayouts: []*authd.UILayout{
 				pam_test.FormUILayout(pam_test.WithWait(true)),
@@ -645,6 +662,8 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_after_regenerating_the_qrcode_with_optional_code_field": {
+			signalCount:      1,
+			signalAfterWaits: 2,
 			wantAuthModeIDs: []string{
 				passwordAuthID,
 				qrcodeID,
@@ -710,6 +729,8 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_after_regenerating_the_qrcode_without_code_field": {
+			signalCount:      1,
+			signalAfterWaits: 2,
 			wantAuthModeIDs: []string{
 				passwordAuthID,
 				qrcodeWithoutCodeID,
@@ -950,9 +971,9 @@ func TestGdmModule(t *testing.T) {
 			serviceFile := createServiceFile(t, "gdm-authd", libPath, moduleArgs)
 			testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
 
-			pamUser := vhsTestUserName(t, "gdm")
+			pamUser := testUserName(t, "gdm")
 			if tc.pamUserPrefix != "" {
-				pamUser = vhsTestUserNameFull(t, tc.pamUserPrefix, "gdm")
+				pamUser = testUserNameFull(t, tc.pamUserPrefix, "gdm")
 			}
 			if tc.pamUser != nil {
 				pamUser = *tc.pamUser
@@ -1010,6 +1031,45 @@ func TestGdmModule(t *testing.T) {
 			}
 
 			authResult := make(chan error)
+			if tc.signalCount > 0 {
+				go func() {
+					waitActivePath := filepath.Join(testutils.BrokerCompletionSignalsDir(socketPath),
+						strings.ReplaceAll(pamUser, "/", "_")+"_wait")
+					// Wait for tc.signalAfterWaits waitForCompletion calls to be
+					// cancelled before creating the signal. This is needed for QR
+					// code regeneration tests where the first N Wait calls are
+					// expected to be cancelled by ReselectAuthMode, and only the
+					// last one should succeed.
+					for i := 0; i < tc.signalAfterWaits; i++ {
+						for {
+							if _, err := os.Stat(waitActivePath); err == nil {
+								break
+							}
+							time.Sleep(5 * time.Millisecond)
+						}
+						for {
+							if _, err := os.Stat(waitActivePath); os.IsNotExist(err) {
+								break
+							}
+							time.Sleep(5 * time.Millisecond)
+						}
+					}
+					for i := 0; i < tc.signalCount; i++ {
+						signalPath := filepath.Join(testutils.BrokerCompletionSignalsDir(socketPath),
+							strings.ReplaceAll(pamUser, "/", "_"))
+						if err := os.WriteFile(signalPath, []byte{}, 0600); err != nil {
+							t.Errorf("failed to create broker completion signal for %q: %v", pamUser, err)
+							return
+						}
+						for {
+							if _, err := os.Stat(signalPath); os.IsNotExist(err) {
+								break
+							}
+							time.Sleep(5 * time.Millisecond)
+						}
+					}
+				}()
+			}
 			go func() {
 				authResult <- gh.tx.Authenticate(pamFlags)
 			}()
@@ -1075,7 +1135,7 @@ func TestGdmModuleAuthenticateWithoutGdmExtension(t *testing.T) {
 
 	serviceFile := createServiceFile(t, "gdm-authd", libPath, moduleArgs)
 	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
-	pamUser := vhsTestUserName(t, "gdm")
+	pamUser := testUserName(t, "gdm")
 	gh := newGdmTestModuleHandler(t, serviceFile, pamUser)
 	t.Cleanup(func() { require.NoError(t, gh.tx.End(), "PAM: can't end transaction") })
 
@@ -1113,7 +1173,7 @@ func TestGdmModuleAcctMgmtWithoutGdmExtension(t *testing.T) {
 
 	serviceFile := createServiceFile(t, "gdm-authd", libPath, moduleArgs)
 	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
-	pamUser := vhsTestUserName(t, "gdm")
+	pamUser := testUserName(t, "gdm")
 	gh := newGdmTestModuleHandler(t, serviceFile, pamUser)
 	t.Cleanup(func() { require.NoError(t, gh.tx.End(), "PAM: can't end transaction") })
 

@@ -3,9 +3,7 @@ package main_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/examplebroker"
 	"github.com/canonical/authd/internal/consts"
 	"github.com/canonical/authd/internal/fileutils"
 	"github.com/canonical/authd/internal/grpcutils"
@@ -173,19 +172,27 @@ func buildPAMRunner(execPath string) (cleanup func(), err error) {
 	return func() { _ = os.Remove(filepath.Join(execPath, "pam_authd")) }, nil
 }
 
+// pamExecChildGoBuildArgs returns the `go build` arguments (run from
+// [testutils.ProjectRoot]) used to build the PAM exec child into output. It is
+// the single source of truth shared by buildPAMExecChild and the LXD build-cache
+// warmup, so their build (and thus cache) keys stay in sync.
+func pamExecChildGoBuildArgs(output string) []string {
+	args := []string{"build"}
+	args = append(args, testutils.GoBuildFlags()...)
+	args = append(args, "-gcflags=all=-N -l", "-tags=pam_debug", "-o", output, "./pam")
+	return args
+}
+
 func buildPAMExecChild(t *testing.T) string {
 	t.Helper()
 
-	cmd := exec.Command("go", "build")
-	cmd.Dir = filepath.Join(testutils.ProjectRoot(), "pam")
-	cmd.Args = append(cmd.Args, testutils.GoBuildFlags()...)
-	cmd.Args = append(cmd.Args, "-gcflags=all=-N -l")
-	cmd.Args = append(cmd.Args, "-tags=pam_debug")
-	cmd.Env = append(goEnv(t), testutils.MinimalPathEnv, "CGO_CFLAGS=-O0 -g3")
-
 	authdPam := filepath.Join(t.TempDir(), "authd-pam")
 
-	cmd.Args = append(cmd.Args, "-o", authdPam)
+	//nolint:gosec // G204 - test-only code; args are controlled by pamExecChildGoBuildArgs.
+	cmd := exec.Command("go", pamExecChildGoBuildArgs(authdPam)...)
+	cmd.Dir = testutils.ProjectRoot()
+	cmd.Env = append(goEnv(t), testutils.MinimalPathEnv, "CGO_CFLAGS=-O0 -g3")
+
 	err := testlog.RunWithTiming(t, "Building PAM exec child", cmd)
 	require.NoError(t, err, "Setup: Failed to build PAM exec child")
 
@@ -195,18 +202,10 @@ func buildPAMExecChild(t *testing.T) string {
 func prepareFileLogging(t *testing.T, fileName string) string {
 	t.Helper()
 
-	cliLog := filepath.Join(t.TempDir(), fileName)
-	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, cliLog)
-	t.Cleanup(func() {
-		out, err := os.ReadFile(cliLog)
-		if errors.Is(err, fs.ErrNotExist) {
-			return
-		}
-		require.NoError(t, err, "Teardown: Impossible to read PAM client logs")
-		t.Log(string(out))
-	})
+	file := filepath.Join(t.TempDir(), fileName)
+	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, file)
 
-	return cliLog
+	return file
 }
 
 func requirePreviousBrokerForUser(t *testing.T, socketPath string, brokerName string, user string) {
@@ -236,24 +235,60 @@ func sleepDuration(in time.Duration) time.Duration {
 	return testutils.MultipliedSleepDuration(in)
 }
 
-// pathEnvWithGoBin returns the value of the GOPATH defined in go env prepended to PATH.
-func pathEnvWithGoBin(t *testing.T) string {
+var (
+	defaultConnectionTimeout = sleepDuration(3*time.Second) / time.Millisecond
+)
+
+// clientOptions holds PAM client configuration for test cases.
+type clientOptions struct {
+	PamUser        string
+	PamEnv         []string
+	PamServiceName string
+	PamTimeout     string
+	Term           string
+	SessionType    string
+}
+
+func checkDataRaces(t *testing.T, raceLog string) {
 	t.Helper()
 
-	pathEnv := testutils.MinimalPathEnv
-
-	cmd := exec.Command("go", "env", "GOPATH")
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "Could not get GOPATH: %v: %s", err, out)
-
-	goPath := strings.TrimSpace(string(out))
-
-	if goPath == "" {
-		return pathEnv
+	if !testutils.IsRace() {
+		return
 	}
 
-	goBinPath := filepath.Join(goPath, "bin")
-	return fmt.Sprintf("PATH=%s:%s", goBinPath, strings.TrimPrefix(pathEnv, "PATH="))
+	var raceLogs []string
+	err := filepath.Walk(filepath.Dir(raceLog),
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !strings.HasPrefix(info.Name(), filepath.Base(raceLog)) {
+				return nil
+			}
+			t.Logf("Found data race %s", info.Name())
+			raceLogs = append(raceLogs, filepath.Join(filepath.Dir(raceLog), info.Name()))
+			return nil
+		})
+
+	require.NoError(t, err, "TearDown: Check for races")
+	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, raceLogs...)
+	for _, raceLog := range raceLogs {
+		checkDataRace(t, raceLog)
+	}
+}
+
+func checkDataRace(t *testing.T, raceLog string) {
+	t.Helper()
+
+	content, err := os.ReadFile(raceLog)
+	require.NoError(t, err, "TearDown: Error reading race log %q", raceLog)
+
+	out := string(content)
+	if strings.TrimSpace(out) == "" {
+		return
+	}
+
+	t.Fatalf("Got a GO Race on child process:\n%s", out)
 }
 
 func goEnv(t *testing.T) []string {
@@ -481,4 +516,57 @@ func requireGetEntExists(t *testing.T, nssLibrary, authdSocket, user string, exi
 		return
 	}
 	require.NoError(t, err, "getent should not fail for user %q\n%s", user, out)
+}
+
+// testUserNameFull generates a unique test username from the given prefix parts and test name.
+func testUserNameFull(t *testing.T, userPrefix string, namePrefix string) string {
+	t.Helper()
+
+	require.NotEmpty(t, userPrefix, "Setup: user prefix needs to be set", t.Name())
+	if userPrefix[len(userPrefix)-1] != '-' {
+		userPrefix += "-"
+	}
+	if namePrefix != "" && namePrefix[len(namePrefix)-1] != '-' {
+		namePrefix += "-"
+	}
+
+	username := userPrefix + namePrefix + strings.ReplaceAll(strings.ToLower(filepath.Base(t.Name())), "_", "-")
+	return username + "@example.com"
+}
+
+// testUserName generates a unique test username using the standard integration user prefix.
+func testUserName(t *testing.T, prefix string) string {
+	t.Helper()
+
+	require.NotEmpty(t, prefix, "Setup: user prefix needs to be set", t.Name())
+	return testUserNameFull(t, examplebroker.UserIntegrationPrefix, prefix)
+}
+
+// requireRunnerResultForUser checks that the golden content contains the expected
+// PAM runner result messages for the given session mode and user.
+func requireRunnerResultForUser(t *testing.T, sessionMode authd.SessionMode, user, goldenContent string) {
+	t.Helper()
+
+	// Only check the last 50 lines of the golden file, because that's where
+	// the result is printed, while printing the full output on failure is too much.
+	goldenLines := strings.Split(goldenContent, "\n")
+	goldenContent = strings.Join(goldenLines[max(0, len(goldenLines)-50):], "\n")
+
+	// authd uses lowercase usernames
+	user = strings.ToLower(user)
+
+	require.Contains(t, goldenContent, pam_test.RunnerAction(sessionMode).Result().Message(user),
+		"Golden file does not include required value, consider increasing the terminal size:\n%s",
+		goldenContent)
+	require.Contains(t, goldenContent, pam_test.RunnerResultActionAcctMgmt.Message(user),
+		"Golden file does not include required value, consider increasing the terminal size:\n%s",
+		goldenContent)
+}
+
+// requireRunnerResult checks that the golden content contains the expected
+// PAM runner result messages for the given session mode.
+func requireRunnerResult(t *testing.T, sessionMode authd.SessionMode, goldenContent string) {
+	t.Helper()
+
+	requireRunnerResultForUser(t, sessionMode, "", goldenContent)
 }

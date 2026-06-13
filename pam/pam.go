@@ -395,6 +395,7 @@ func (h *pamModule) AcctMgmt(mTx pam.ModuleTransaction, flags pam.Flags, args []
 	// Get current user for broker
 	user, err := mTx.GetItem(pam.User)
 	if err != nil {
+		log.Errorf(context.TODO(), "AcctMgmt: could not get user from PAM: %v", err)
 		return err
 	}
 

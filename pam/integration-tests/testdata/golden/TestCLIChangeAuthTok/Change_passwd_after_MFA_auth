@@ -1,10 +1,7 @@
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
 Username: user-mfa-integration-cli-passwd@example.com
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your provider
 
 > 1. local
@@ -12,13 +9,11 @@ Username: user-mfa-integration-cli-passwd@example.com
 
   Press escape key to go back to user selection
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
 Gimme your password:
 >
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your authentication method
 
 > 1. Password authentication
@@ -31,24 +26,20 @@ Gimme your password:
 
   Press escape key to go back to choose the provider
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
 Gimme your password:
 >
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
 Gimme your password:
 > ********
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
 Plug your fido device and press with your thumb
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your authentication method
 
 > 1. Use your fido device foo
@@ -57,17 +48,14 @@ Plug your fido device and press with your thumb
 
   Press escape key to go back to choose the provider
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
 Plug your fido device and press with your thumb
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
 Unlock your phone +33... or accept request on web interface
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your authentication method
 
 > 1. Use your phone +33...
@@ -75,12 +63,10 @@ Unlock your phone +33... or accept request on web interface
 
   Press escape key to go back to choose the provider
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
 Unlock your phone +33... or accept request on web interface
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
 Enter your new password
 
 New password:
@@ -88,7 +74,6 @@ New password:
 
   Press escape key to go back to choose the provider
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
 Enter your new password
 
 New password:
@@ -96,7 +81,15 @@ New password:
 
   Press escape key to go back to choose the provider
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
+Enter your new password
+
+New password:
+> *********
+Confirm password:
+>
+
+  Press escape key to go back to choose the provider
+────────────────────────────────────────────────────────────────────────────────
 Enter your new password
 
 New password:
@@ -106,12 +99,10 @@ Confirm password:
 
   Press escape key to go back to choose the provider
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd passwd socket=${AUTHD_TEST_TAPE_SOCKET}
 PAM ChangeAuthTok()
   User: "user-mfa-integration-cli-passwd@example.com"
   Result: success
 PAM AcctMgmt()
   User: "user-mfa-integration-cli-passwd@example.com"
   Result: success
->
 ────────────────────────────────────────────────────────────────────────────────
