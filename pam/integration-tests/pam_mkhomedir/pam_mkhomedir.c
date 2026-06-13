@@ -152,11 +152,6 @@ create_homedir (pam_handle_t *pamh, options_t *opt,
    /* fork */
    child = fork();
    if (child == 0) {
-#ifdef AUTHD_TESTS_SSH_USE_AUTHD_NSS
-	char **envp = environ;
-#else
-	static char *envp[] = { NULL };
-#endif
 	const char *args[] = { NULL, NULL, NULL, NULL, NULL, NULL };
 
 	if (pam_modutil_sanitize_helper_fds(pamh, PAM_MODUTIL_PIPE_FD,
@@ -172,7 +167,7 @@ create_homedir (pam_handle_t *pamh, options_t *opt,
 	args[4] = login_homemode;
 
 	DIAG_PUSH_IGNORE_CAST_QUAL;
-	execve(MKHOMEDIR_HELPER, (char **)args, envp);
+	execve(MKHOMEDIR_HELPER, (char **)args, environ);
 	DIAG_POP_IGNORE_CAST_QUAL;
 
 	/* should not get here: exit with error */

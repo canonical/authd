@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +16,8 @@ import (
 var (
 	isVerboseOnce sync.Once
 	isVerbose     bool
+	isQuietOnce   sync.Once
+	isQuiet       bool
 )
 
 type runWithTimingOptions struct {
@@ -99,6 +102,26 @@ func LogCommand(t *testing.T, msg string, cmd *exec.Cmd) {
 
 	sep := "----------------------------------------"
 	fmt.Fprintf(w, "\n"+separator(msg)+"\ncommand: %s\n%s\nenvironment: %s\n%s\n", cmd.String(), sep, cmd.Env, sep)
+}
+
+// LogFileContents logs the contents of the given file to stderr.
+//
+//nolint:thelper // we do call t.Helper() if t is not nil
+func LogFileContents(t *testing.T, file string) {
+	if t != nil {
+		t.Helper()
+	}
+	w := testOutput(t)
+
+	content, err := os.ReadFile(file)
+	if err != nil {
+		fmt.Fprintf(w, "Failed to read file %s: %v\n", file, err)
+		return
+	}
+
+	basename := filepath.Base(file)
+	fmt.Fprint(w, "\n"+separatorf("Contents of %s", basename)+"\n"+string(content)+
+		separatorf("End of contents of %s", basename)+"\n\n")
 }
 
 // LogStartSeparatorf logs a separator to stderr with the given formatted message.
@@ -201,6 +224,9 @@ func highRed(s string) string {
 //
 //nolint:thelper // we're not using t in any way that requires the helper annotation
 func testOutput(t *testing.T) io.Writer {
+	if Quiet() {
+		return io.Discard
+	}
 	if t != nil {
 		return &syncWriter{w: t.Output()}
 	}
@@ -224,6 +250,16 @@ func verbose() bool {
 		}
 	})
 	return isVerbose
+}
+
+// Quiet returns whether quiet mode is enabled, which is controlled by the AUTHD_TESTS_QUIET environment variable.
+func Quiet() bool {
+	isQuietOnce.Do(func() {
+		if os.Getenv("AUTHD_TESTS_QUIET") != "" {
+			isQuiet = true
+		}
+	})
+	return isQuiet
 }
 
 // syncWriter is a writer that synchronizes writes to its underlying writer.

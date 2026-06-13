@@ -186,7 +186,7 @@ func TestGdmModule(t *testing.T) {
 			},
 		},
 		"Authenticates_user_with_upper_case_name": {
-			pamUser: ptrValue(strings.ToUpper(vhsTestUserName(t, "upper-case"))),
+			pamUser: ptrValue(strings.ToUpper(testUserName(t, "upper-case"))),
 			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
 				gdm.EventType_startAuthentication: {
 					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Secret{
@@ -950,9 +950,9 @@ func TestGdmModule(t *testing.T) {
 			serviceFile := createServiceFile(t, "gdm-authd", libPath, moduleArgs)
 			testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
 
-			pamUser := vhsTestUserName(t, "gdm")
+			pamUser := testUserName(t, "gdm")
 			if tc.pamUserPrefix != "" {
-				pamUser = vhsTestUserNameFull(t, tc.pamUserPrefix, "gdm")
+				pamUser = testUserNameFull(t, tc.pamUserPrefix, "gdm")
 			}
 			if tc.pamUser != nil {
 				pamUser = *tc.pamUser
@@ -1007,6 +1007,73 @@ func TestGdmModule(t *testing.T) {
 			var pamFlags pam.Flags
 			if !testing.Verbose() {
 				pamFlags = pam.Silent
+			}
+
+			brokerCompletionSignals := 0
+			brokerCompletionSignalAfterWaits := 0
+
+			for _, resp := range tc.eventPollResponses[gdm.EventType_startAuthentication] {
+				if resp.Type == gdm.EventType_reselectAuthMode {
+					if brokerCompletionSignals > 0 {
+						brokerCompletionSignalAfterWaits = 0
+						brokerCompletionSignals = 0
+					}
+
+					brokerCompletionSignalAfterWaits++
+					continue
+				}
+
+				if resp.Type != gdm.EventType_isAuthenticatedRequested {
+					continue
+				}
+
+				data, ok := resp.Data.(*gdm.EventData_IsAuthenticatedRequested)
+				if !ok {
+					continue
+				}
+				if data.IsAuthenticatedRequested.AuthenticationData.GetWait() != layouts.True {
+					continue
+				}
+
+				brokerCompletionSignals++
+			}
+
+			if brokerCompletionSignals > 0 {
+				waitForFile := func(path string, exists bool) {
+					for {
+						_, err := os.Stat(path)
+						if err == nil && exists {
+							return
+						}
+						if os.IsNotExist(err) && !exists {
+							return
+						}
+						time.Sleep(5 * time.Millisecond)
+					}
+				}
+
+				go func() {
+					waitActivePath := filepath.Join(testutils.BrokerCompletionSignalsDir(socketPath),
+						testutils.BrokerCompletionSignalWaitingFilename(pamUser))
+					// Wait for [brokerCompletionSignals] waitForCompletion calls to be
+					// cancelled before creating the signal. This is needed for QR
+					// code regeneration tests where the first N Wait calls are
+					// expected to be cancelled by ReselectAuthMode, and only the
+					// last one should succeed.
+					for i := 0; i < brokerCompletionSignalAfterWaits; i++ {
+						t.Logf("Waiting broker completion signal completion %d", i+1)
+						waitForFile(waitActivePath, true)
+						waitForFile(waitActivePath, false)
+						t.Logf("Broker completion signal wait %d done", i+1)
+					}
+
+					for i := 0; i < brokerCompletionSignals; i++ {
+						signalPath := testutils.CreateBrokerCompletionSignal(t, socketPath, pamUser)
+						t.Logf("Creating broker completion signal %d", i+1)
+						waitForFile(signalPath, false)
+						t.Logf("Broker completion signal %d handled", i+1)
+					}
+				}()
 			}
 
 			authResult := make(chan error)
@@ -1075,7 +1142,7 @@ func TestGdmModuleAuthenticateWithoutGdmExtension(t *testing.T) {
 
 	serviceFile := createServiceFile(t, "gdm-authd", libPath, moduleArgs)
 	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
-	pamUser := vhsTestUserName(t, "gdm")
+	pamUser := testUserName(t, "gdm")
 	gh := newGdmTestModuleHandler(t, serviceFile, pamUser)
 	t.Cleanup(func() { require.NoError(t, gh.tx.End(), "PAM: can't end transaction") })
 
@@ -1113,7 +1180,7 @@ func TestGdmModuleAcctMgmtWithoutGdmExtension(t *testing.T) {
 
 	serviceFile := createServiceFile(t, "gdm-authd", libPath, moduleArgs)
 	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
-	pamUser := vhsTestUserName(t, "gdm")
+	pamUser := testUserName(t, "gdm")
 	gh := newGdmTestModuleHandler(t, serviceFile, pamUser)
 	t.Cleanup(func() { require.NoError(t, gh.tx.End(), "PAM: can't end transaction") })
 

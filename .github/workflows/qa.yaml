@@ -53,6 +53,8 @@ env:
   DEBIAN_FRONTEND: noninteractive
   GO_TESTS_TIMEOUT: 20m
   AUTHD_SSHD_STDERR_LOG_ALL_PAM_MESSAGES: true
+  LXD_UBUNTU_VERSION: "2604"
+
   c_build_dependencies: >-
     clang-tools
     clang
@@ -196,9 +198,13 @@ jobs:
     env:
       RAW_COVERAGE_DIR: ${{ github.workspace }}/raw-coverage
       COVERAGE_DIR: ${{ github.workspace }}/coverage
+      # Also run tests which require a different Ubuntu version, which we run in LXD
+      # containers.
+      AUTHD_TESTS_USE_LXD: true
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-go-tests
+      - id: setup-go-tests
+        uses: ./.github/actions/setup-go-tests
       - uses: ./.github/actions/setup-go-coverage-tests
       # Installation of debug symbols takes a long time (and fails currently),
       # so we skip it for now. Enable on demand.
@@ -250,6 +256,18 @@ jobs:
         with:
           codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
+      - name: Export LXD test image for cache
+        id: export-lxd-test-image
+        if: always() && steps.setup-go-tests.outputs.lxd-image-cache-matched-key == ''
+        uses: ./.github/actions/export-lxd-test-image-for-cache
+
+      - name: Save LXD test image cache
+        if: always() && steps.setup-go-tests.outputs.lxd-image-cache-matched-key == '' && steps.export-lxd-test-image.outputs.cache-exported == 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/authd-lxd-image-cache/ubuntu-${{ env.LXD_UBUNTU_VERSION }}.tar
+          key: ${{ steps.setup-go-tests.outputs.lxd-image-cache-primary-key }}
+
       - uses: ./.github/actions/upload-test-artifacts
         if: always()
 
@@ -261,9 +279,13 @@ jobs:
     env:
       RAW_COVERAGE_DIR: ${{ github.workspace }}/raw-coverage
       COVERAGE_DIR: ${{ github.workspace }}/coverage
+      # Also run tests which require a different Ubuntu version, which we run in LXD
+      # containers.
+      AUTHD_TESTS_USE_LXD: true
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-go-tests
+      - id: setup-go-tests
+        uses: ./.github/actions/setup-go-tests
       - uses: ./.github/actions/setup-go-coverage-tests
       # Installation of debug symbols takes a long time (and fails currently),
       # so we skip it for now. Enable on demand.
@@ -314,6 +336,18 @@ jobs:
         with:
           codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
+      - name: Export LXD test image for cache
+        id: export-lxd-test-image
+        if: always() && steps.setup-go-tests.outputs.lxd-image-cache-matched-key == ''
+        uses: ./.github/actions/export-lxd-test-image-for-cache
+
+      - name: Save LXD test image cache
+        if: always() && steps.setup-go-tests.outputs.lxd-image-cache-matched-key == '' && steps.export-lxd-test-image.outputs.cache-exported == 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}/authd-lxd-image-cache/ubuntu-${{ env.LXD_UBUNTU_VERSION }}.tar
+          key: ${{ steps.setup-go-tests.outputs.lxd-image-cache-primary-key }}
+
       - uses: ./.github/actions/upload-test-artifacts
         if: always()
 
@@ -322,7 +356,8 @@ jobs:
     runs-on: ubuntu-24.04 # ubuntu-latest-runner
     steps:
       - uses: actions/checkout@v6
-      - uses: ./.github/actions/setup-go-tests
+      - id: setup-go-tests
+        uses: ./.github/actions/setup-go-tests
       # Installation of debug symbols takes a long time (and fails currently),
       # so we skip it for now. Enable on demand.
       # - uses: ./.github/actions/install-debug-symbols

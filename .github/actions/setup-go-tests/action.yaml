@@ -1,5 +1,20 @@
 name: 'Setup Go Tests'
 description: 'Common setup steps for Go tests'
+inputs:
+  restore-lxd-image-cache:
+    description: "Whether to restore/import the cached LXD test image"
+    required: false
+    default: "true"
+outputs:
+  lxd-image-cache-hit:
+    description: "Whether the LXD test image cache was hit"
+    value: ${{ steps.restore-lxd-test-image.outputs.cache-hit }}
+  lxd-image-cache-matched-key:
+    description: "Matched key for restored LXD test image cache (empty if none)"
+    value: ${{ steps.restore-lxd-test-image.outputs.cache-matched-key }}
+  lxd-image-cache-primary-key:
+    description: "Primary key for the LXD test image cache"
+    value: ${{ steps.compute-lxd-test-image-cache-key.outputs.primary-key }}
 runs:
   using: 'composite'
   steps:
@@ -29,26 +44,68 @@ runs:
 
         echo "::endgroup::"
 
-    - name: Install gotestfmt and our wrapper script
-      uses: canonical/desktop-engineering/gh-actions/go/gotestfmt@main
+    - name: Setup LXD
+      if: env.AUTHD_TESTS_USE_LXD == 'true'
+      uses: canonical/setup-lxd@main
 
-    - name: Install VHS and ttyd for integration tests
+    - name: Set LXD Ubuntu version
+      if: env.AUTHD_TESTS_USE_LXD == 'true'
+      shell: bash
+      run: echo "LXD_UBUNTU_VERSION=2604" >> "$GITHUB_ENV"
+
+    - name: Compute LXD image cache rotation bucket
+      if: env.AUTHD_TESTS_USE_LXD == 'true'
+      shell: bash
+      run: echo AUTHD_TESTS_LXD_CACHE_BUCKET="$(date -u +%G-W%V)" >> "$GITHUB_ENV"
+
+    - name: Compute LXD image cache key
+      id: compute-lxd-test-image-cache-key
+      if: env.AUTHD_TESTS_USE_LXD == 'true'
       shell: bash
       run: |
-        # Install VHS and ttyd for integration tests
         set -eu
-        echo "::group::Install VHS and ttyd"
-        go install github.com/charmbracelet/vhs@latest
+        echo "primary-key=authd-lxd-test-image-${{ runner.os }}-ubuntu-${{ env.LXD_UBUNTU_VERSION }}-${{ hashFiles(
+          'debian/control',
+          'debian/get-depends-go-bin-path.sh',
+          'debian/get-depends-cargo-bin-paths.sh',
+          'internal/testutils/lxd.go',
+          '.github/actions/setup-go-tests/action.yaml',
+          '.github/workflows/qa.yaml'
+        ) }}-${AUTHD_TESTS_LXD_CACHE_BUCKET}" >> "$GITHUB_OUTPUT"
 
-        # VHS requires ttyd >= 1.7.2 to work properly.
-        wget https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64
-        chmod +x ttyd.x86_64
-        sudo mv ttyd.x86_64 /usr/bin/ttyd
+    - name: Restore cached LXD test image
+      id: restore-lxd-test-image
+      if: env.AUTHD_TESTS_USE_LXD == 'true' && inputs.restore-lxd-image-cache == 'true'
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ runner.temp }}/authd-lxd-image-cache/ubuntu-${{ env.LXD_UBUNTU_VERSION }}.tar
+        key: ${{ steps.compute-lxd-test-image-cache-key.outputs.primary-key }}
+        restore-keys: |
+          authd-lxd-test-image-${{ runner.os }}-ubuntu-${{ env.LXD_UBUNTU_VERSION }}-${{ hashFiles(
+            'debian/control',
+            'debian/get-depends-go-bin-path.sh',
+            'debian/get-depends-cargo-bin-paths.sh',
+            'internal/testutils/lxd.go',
+            '.github/actions/setup-go-tests/action.yaml',
+            '.github/workflows/qa.yaml'
+          ) }}-
+          authd-lxd-test-image-${{ runner.os }}-ubuntu-${{ env.LXD_UBUNTU_VERSION }}-
 
-        # VHS doesn't really use ffmpeg anymore now, but it still checks for it.
-        # Drop this when https://github.com/charmbracelet/vhs/pull/591 is released.
-        sudo ln -s /usr/bin/true /usr/local/bin/ffmpeg
-        echo "::endgroup::"
+    - name: Import cached LXD test image
+      if: env.AUTHD_TESTS_USE_LXD == 'true' && inputs.restore-lxd-image-cache == 'true' && steps.restore-lxd-test-image.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        set -x
+        image_tar="${{ runner.temp }}/authd-lxd-image-cache/ubuntu-${LXD_UBUNTU_VERSION}.tar"
+        alias="authd-test-cache-${LXD_UBUNTU_VERSION}"
+        lxc project show authd-tests || lxc project create authd-tests -c features.profiles=false
+        lxc --project authd-tests image delete "${alias}" || true
+        lxc --project authd-tests image import "${image_tar}" --alias "${alias}"
+        echo AUTHD_TESTS_LXD_IMAGE_2604_ALIAS="${alias}" >> "$GITHUB_ENV"
+
+    - name: Install gotestfmt and our wrapper script
+      uses: canonical/desktop-engineering/gh-actions/go/gotestfmt@main
 
     - name: Install latest Rust version
       shell: bash

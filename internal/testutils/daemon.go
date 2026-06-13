@@ -157,6 +157,11 @@ func StartAuthdWithCancel(t *testing.T, execPath string, args ...DaemonOption) (
 		opts.socketPath = filepath.Join(tempDir, "authd.socket")
 	}
 
+	// Create signals directory for broker completion in tests.
+	signalsDir := filepath.Join(tempDir, "broker-signals")
+	require.NoError(t, os.MkdirAll(signalsDir, 0700), "Setup: failed to create broker signals dir")
+	opts.env = append(opts.env, fmt.Sprintf("AUTHD_EXAMPLE_BROKER_COMPLETION_SIGNALS_DIR=%s", signalsDir))
+
 	config := fmt.Sprintf(`
 verbosity: 2
 paths:
@@ -194,7 +199,10 @@ paths:
 
 		// For shared authd instances, we can't redirect the output to the test log,
 		// because the instance could still be running after the test finishes.
-		if opts.shared {
+		if testlog.Quiet() {
+			cmd.Stdout = nil
+			cmd.Stderr = nil
+		} else if opts.shared {
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 		} else {
@@ -204,8 +212,13 @@ paths:
 
 		if opts.saveOutputAsTestArtifact {
 			authdOutput := &SyncBuffer{}
-			cmd.Stdout = io.MultiWriter(cmd.Stdout, authdOutput)
-			cmd.Stderr = io.MultiWriter(cmd.Stderr, authdOutput)
+			if testlog.Quiet() {
+				cmd.Stdout = authdOutput
+				cmd.Stderr = authdOutput
+			} else {
+				cmd.Stdout = io.MultiWriter(cmd.Stdout, authdOutput)
+				cmd.Stderr = io.MultiWriter(cmd.Stderr, authdOutput)
+			}
 			MaybeSaveBufferAsArtifactOnCleanup(t, authdOutput, "authd.log")
 		}
 
@@ -278,6 +291,49 @@ paths:
 	return opts.socketPath, cancelFunc
 }
 
+// BrokerCompletionSignalsDir returns the directory where broker completion signals are stored
+// for a daemon started with the given socket path. This follows the convention established
+// by StartAuthdWithCancel which creates the signals dir at $dir(socketPath)/broker-signals.
+func BrokerCompletionSignalsDir(socketPath string) string {
+	return filepath.Join(filepath.Dir(socketPath), "broker-signals")
+}
+
+// BrokerCompletionSignalFilename returns the file name used for broker completion signals.
+func BrokerCompletionSignalFilename(username string) string {
+	return strings.ReplaceAll(username, "/", "_")
+}
+
+// BrokerCompletionSignalWaitingFilename returns the file name used for broker completion signals
+// as marker that we're currently waiting.
+func BrokerCompletionSignalWaitingFilename(username string) string {
+	return BrokerCompletionSignalFilename(username) + "_waiting"
+}
+
+// CreateBrokerCompletionSignal creates a signal file that tells the broker to complete
+// authentication for the given username. The broker polls for this file and deletes it
+// when found.
+func CreateBrokerCompletionSignal(t *testing.T, socketPath, username string) string {
+	t.Helper()
+
+	signalPath := filepath.Join(BrokerCompletionSignalsDir(socketPath),
+		BrokerCompletionSignalFilename(username))
+	err := os.WriteFile(signalPath, []byte{}, 0600)
+	require.NoError(t, err, "Failed to create broker completion signal for %q", username)
+	return signalPath
+}
+
+// AuthdGoBuildArgs returns the `go build` arguments (run from [ProjectRoot])
+// used to build the authd daemon with the example broker into outputPath.
+// It is the single source of truth shared by BuildAuthdWithExampleBroker and
+// the LXD build-cache warmup, so their build (and thus cache) keys stay in sync.
+func AuthdGoBuildArgs(outputPath string) []string {
+	args := []string{"build"}
+	args = append(args, GoBuildFlags()...)
+	args = append(args, "-gcflags=all=-N -l", "-tags=withexamplebroker,integrationtests",
+		"-o", outputPath, "./cmd/authd")
+	return args
+}
+
 // BuildAuthdWithExampleBroker builds the authd executable and returns the binary path.
 func BuildAuthdWithExampleBroker() (execPath string, cleanup func(), err error) {
 	projectRoot := ProjectRoot()
@@ -289,12 +345,9 @@ func BuildAuthdWithExampleBroker() (execPath string, cleanup func(), err error) 
 	cleanup = func() { os.RemoveAll(tempDir) }
 
 	execPath = filepath.Join(tempDir, "authd")
-	cmd := exec.Command("go", "build")
+	//nolint:gosec // G204 - test-only code; args are controlled by AuthdGoBuildArgs.
+	cmd := exec.Command("go", AuthdGoBuildArgs(execPath)...)
 	cmd.Dir = projectRoot
-	cmd.Args = append(cmd.Args, GoBuildFlags()...)
-	cmd.Args = append(cmd.Args, "-gcflags=all=-N -l")
-	cmd.Args = append(cmd.Args, "-tags=withexamplebroker,integrationtests")
-	cmd.Args = append(cmd.Args, "-o", execPath, "./cmd/authd")
 
 	if err := testlog.RunWithTiming(nil, "Building authd", cmd); err != nil {
 		cleanup()
