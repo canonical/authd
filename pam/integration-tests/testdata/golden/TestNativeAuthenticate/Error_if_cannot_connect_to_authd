@@ -1,6 +1,3 @@
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
-────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET} force_native_client=true
 PAM Error Message: could not connect to unix:///some-path/not-existent-socket: service took too long to respond. Disconnecting client
 PAM Authenticate()
   User: "user-integration-native-error-if-cannot-connect-to-authd@example.com"
@@ -11,5 +8,3 @@ PAM AcctMgmt()
   User: "user-integration-native-error-if-cannot-connect-to-authd@example.com"
   Result: error: PAM exit code: 25
     The return value should be ignored by PAM dispatch
->
-────────────────────────────────────────────────────────────────────────────────

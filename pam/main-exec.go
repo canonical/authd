@@ -85,5 +85,9 @@ func main() {
 		log.Error(context.TODO(), err)
 		os.Exit(255)
 	}
+	// Log the PAM error and the resulting exit code before exiting. Without this
+	// a PAM error makes the process exit silently, which hides the reason behind
+	// the exec module's reported PAM result (e.g. when authd stops mid-run).
+	log.Debugf(context.TODO(), "Exiting with PAM error %q (exit code %d)", err, int(pamError))
 	os.Exit(int(pamError))
 }

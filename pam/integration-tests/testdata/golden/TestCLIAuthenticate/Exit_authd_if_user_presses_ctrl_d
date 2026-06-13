@@ -1,10 +1,7 @@
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 Username: user name
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 Username: user-integration-ctrl-d@example.com
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
   Select your provider
 
 > 1. local
@@ -12,13 +9,11 @@ Username: user-integration-ctrl-d@example.com
 
   Press escape key to go back to user selection
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 Gimme your password:
 >
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
-> ./pam_authd login socket=${AUTHD_TEST_TAPE_SOCKET}
 Gimme your password:
 >
 
@@ -32,5 +27,4 @@ PAM AcctMgmt()
   User: "user-integration-ctrl-d@example.com"
   Result: error: PAM exit code: 25
     The return value should be ignored by PAM dispatch
->
 ────────────────────────────────────────────────────────────────────────────────

@@ -9,6 +9,17 @@ import (
 	"github.com/canonical/authd/internal/testlog"
 )
 
+// AuthctlGoBuildArgs returns the `go build` arguments (run from [ProjectRoot])
+// used to build the authctl binary into outputPath. It is the single source of
+// truth shared by BuildAuthctl and the LXD build-cache warmup, so their build
+// (and thus cache) keys stay in sync.
+func AuthctlGoBuildArgs(outputPath string) []string {
+	args := []string{"build"}
+	args = append(args, GoBuildFlags()...)
+	args = append(args, "-o", outputPath, "./cmd/authctl")
+	return args
+}
+
 // BuildAuthctl builds the authctl binary in a temporary directory for testing purposes.
 func BuildAuthctl() (binaryPath string, cleanup func(), err error) {
 	tempDir, err := os.MkdirTemp("", "authctl")
@@ -18,9 +29,8 @@ func BuildAuthctl() (binaryPath string, cleanup func(), err error) {
 	cleanup = func() { os.RemoveAll(tempDir) }
 	binaryPath = filepath.Join(tempDir, "authctl")
 
-	cmd := exec.Command("go", "build")
-	cmd.Args = append(cmd.Args, GoBuildFlags()...)
-	cmd.Args = append(cmd.Args, "-o", binaryPath, "./cmd/authctl")
+	//nolint:gosec // G204 - test-only code; args are controlled by AuthctlGoBuildArgs.
+	cmd := exec.Command("go", AuthctlGoBuildArgs(binaryPath)...)
 	cmd.Dir = ProjectRoot()
 
 	if err := testlog.RunWithTiming(nil, "Building authctl", cmd); err != nil {

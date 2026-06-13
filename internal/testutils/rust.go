@@ -17,6 +17,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// LXDRustTargetDir is the persistent directory used for Rust build artifacts
+// inside LXD test containers. It is under the ubuntu user's home so both the
+// LXD test runner and warmup hook (which run as UID/GID 1000) can reuse it.
+// It must match the path used by BuildRustNSSLib when RunningInLXD() is true.
+const LXDRustTargetDir = "/home/ubuntu/.cache/authd-test/rust-build-artifacts"
+
+// rustTargetDir returns the Rust build artifact directory.
+// The TEST_RUST_TARGET env var overrides the default.
+// Inside an LXD container the default is LXDRustTargetDir (persistent);
+// elsewhere it is a path under os.TempDir().
+func rustTargetDir() string {
+	if t := os.Getenv("TEST_RUST_TARGET"); t != "" {
+		return t
+	}
+	if RunningInLXD() {
+		return LXDRustTargetDir
+	}
+	return filepath.Join(os.TempDir(), "authd-tests-rust-build-artifacts")
+}
+
 func getCargoPath() (path string, isNightly bool, err error) {
 	cargo := os.Getenv("CARGO_PATH")
 	if cargo == "" {
@@ -67,6 +87,16 @@ func CanRunRustTests(coverageWanted bool) (err error) {
 	return nil
 }
 
+// RustNSSBuildArgs returns the `cargo` arguments (run from [ProjectRoot]) used
+// to build the NSS library into targetDir with the given extra features. The
+// integration_tests and custom_socket features are always included. It is the
+// single source of truth shared by BuildRustNSSLib and the LXD build-cache
+// warmup, so their features and target dir (and thus cache keys) stay in sync.
+func RustNSSBuildArgs(targetDir string, extraFeatures ...string) []string {
+	features := append([]string{"integration_tests", "custom_socket"}, extraFeatures...)
+	return []string{"build", "--features", strings.Join(features, ","), "--target-dir", targetDir}
+}
+
 // BuildRustNSSLib builds the NSS library and links the compiled file to libPath.
 func BuildRustNSSLib(t *testing.T, disableCoverage bool, features ...string) (libPath string, rustCovEnv []string) {
 	t.Helper()
@@ -76,11 +106,8 @@ func BuildRustNSSLib(t *testing.T, disableCoverage bool, features ...string) (li
 	cargo, isNightly, err := getCargoPath()
 	require.NoError(t, err, "Setup: looking for cargo")
 
-	// Store the build artifacts in a common temp directory, so that they can be reused between tests.
-	target := os.Getenv("TEST_RUST_TARGET")
-	if target == "" {
-		target = filepath.Join(os.TempDir(), "authd-tests-rust-build-artifacts")
-	}
+	// Store the build artifacts in a common directory, so that they can be reused between tests.
+	target := rustTargetDir()
 
 	err = os.MkdirAll(target, 0700)
 	require.NoError(t, err, "Setup: could not create Rust target dir")
@@ -89,8 +116,6 @@ func BuildRustNSSLib(t *testing.T, disableCoverage bool, features ...string) (li
 	if !disableCoverage {
 		rustCovEnv = trackRustCoverage(t, target, rustDir)
 	}
-
-	features = append([]string{"integration_tests", "custom_socket"}, features...)
 
 	t.Logf("Locking Rust target dir %s", target)
 	unlock, err := fileutils.LockDir(target)
@@ -103,7 +128,7 @@ func BuildRustNSSLib(t *testing.T, disableCoverage bool, features ...string) (li
 
 	// Builds the nss library.
 	//nolint:gosec // G702 - test-only code; cargo path is from getCargoPath(), args are controlled.
-	cmd := exec.Command(cargo, "build", "--features", strings.Join(features, ","), "--target-dir", target)
+	cmd := exec.Command(cargo, RustNSSBuildArgs(target, features...)...)
 	if TestVerbosity() > 0 {
 		cmd.Args = append(cmd.Args, "--verbose")
 	}

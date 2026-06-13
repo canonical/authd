@@ -1,1 +1,0 @@
-../native/simple_auth.tape

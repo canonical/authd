@@ -10,17 +10,45 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 
 	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/msteinert/pam/v2"
 	"golang.org/x/term"
 )
 
+// exitOnSIGINT installs an explicit SIGINT handler that terminates the process.
+//
+// pam-runner is a test-only stand-in for a real foreground PAM application
+// (login, sshd, ...), which is normally launched with SIGINT at its default
+// disposition and so terminates when the user presses Ctrl+C during
+// authentication. However, when the integration test process is itself started
+// with SIGINT ignored (as happens in CI, where there is no controlling
+// terminal), pam-runner inherits the ignored disposition across exec, and the
+// Go runtime preserves an inherited ignored SIGINT (it installs no handler for
+// it). Ctrl+C would then be silently discarded and interrupt-handling tests
+// would hang. Calling signal.Notify overrides the inherited SIG_IGN so that
+// SIGINT reliably terminates the process, matching a normally-launched app.
+func exitOnSIGINT() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT)
+	go func() {
+		<-sigChan
+		// Conventional shell exit status for SIGINT. This intentionally does
+		// not preserve WIFSIGNALED semantics; the PTY tests only require that
+		// the prompt is aborted and the process exits.
+		os.Exit(130)
+	}()
+}
+
 // Simulating pam on the CLI for manual testing.
 func main() {
+	exitOnSIGINT()
+
 	logFile := os.Getenv(pam_test.RunnerEnvLogFile)
 	supportsConversation := os.Getenv(pam_test.RunnerEnvSupportsConversation) != ""
 	execModule := os.Getenv(pam_test.RunnerEnvExecModule)

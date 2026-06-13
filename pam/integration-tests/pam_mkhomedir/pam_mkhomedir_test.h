@@ -4,10 +4,11 @@
 
 #pragma once
 
-#ifdef AUTHD_TESTS_SSH_USE_AUTHD_NSS
 #include <stdio.h>
+#include <string.h>
+#include <stdarg.h>
+
 extern char **environ;
-#endif
 
 static inline const char *
 pam_str_skip_prefix(const char *str, const char *prefix)
