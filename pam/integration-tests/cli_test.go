@@ -1,10 +1,11 @@
 package main_test
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -13,25 +14,18 @@ import (
 	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/testutils/ptytest"
 	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
 	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/msteinert/pam/v2"
 	"github.com/stretchr/testify/require"
 )
 
-const cliTapeBaseCommand = "./pam_authd %s socket=${%s}"
-
 func TestCLIAuthenticate(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
-	}
-
-	// Due to external dependencies such as `vhs`, we can't run the tests in some environments (like LP builders), as we
-	// can't install the dependencies there. So we need to be able to skip these tests on-demand.
-	if os.Getenv("AUTHD_SKIP_EXTERNAL_DEPENDENT_TESTS") != "" {
-		t.Skip("Skipping tests with external dependencies as requested")
 	}
 
 	// This test is flaky, see https://github.com/canonical/authd/issues/1329
@@ -41,231 +35,700 @@ func TestCLIAuthenticate(t *testing.T) {
 
 	clientPath := t.TempDir()
 	cliEnv := preparePamRunnerTest(t, clientPath)
-	tapeCommand := fmt.Sprintf(cliTapeBaseCommand, pam_test.RunnerActionLogin,
-		vhsTapeSocketVariable)
 
 	tests := map[string]struct {
-		tape          string
-		tapeSettings  []tapeSetting
-		tapeVariables map[string]string
+		pamUser  string
+		username string // typed at the Username: prompt (empty = use pamUser as preset)
 
 		clientOptions      clientOptions
-		socketPath         string
 		currentUserNotRoot bool
 		wantLocalGroups    bool
-		stopDaemonAfter    time.Duration
+		expectedExitCode   int
+		extraArgs          []string
+		socketPath         string // override socket path
+		useCancelableAuthd bool
+
+		test func(t *testing.T, c *ptytest.Console)
+		// testWithSignals is like test but receives a signalFn that creates a broker
+		// completion signal for the given username, allowing tests to control when
+		// wait-based authentication (FIDO, QR code, phone ack) completes.
+		testWithSignals func(t *testing.T, c *ptytest.Console, signalFn func(username string))
+		testWithAuthd   func(t *testing.T, c *ptytest.Console, cancelAuthd func())
+		// testRun allows a test to control the entire test run (useful for
+		// multi-session tests). When set, it handles all sessions and returns
+		// the combined golden output. The test runner skips the default single-
+		// session flow.
+		testRun func(t *testing.T, socketPath string) string
 	}{
 		"Authenticate_user_successfully": {
-			tape: "simple_auth",
-			tapeVariables: map[string]string{
-				vhsTapeUserVariable: vhsTestUserName(t, "simple"),
-			},
+			username: testUserName(t, "simple"),
+			test:     cliSimpleAuth,
 		},
 		"Authenticate_user_successfully_with_upper_case": {
-			tape: "simple_auth",
-			tapeVariables: map[string]string{
-				vhsTapeUserVariable: vhsTestUserName(t, "upper-case"),
-			},
+			username: testUserName(t, "upper-case"),
+			test:     cliSimpleAuth,
 		},
 		"Authenticate_user_successfully_with_preset_user": {
-			tape: "simple_auth_with_preset_user",
 			clientOptions: clientOptions{
-				PamUser: vhsTestUserName(t, "preset"),
+				PamUser: testUserName(t, "preset"),
 			},
+			test: cliSimpleAuthPresetUser,
 		},
 		"Authenticate_user_successfully_with_upper_case_preset_user": {
-			tape: "simple_auth_with_preset_user",
 			clientOptions: clientOptions{
-				PamUser: strings.ToUpper(vhsTestUserName(t, "preset-upper-case")),
+				PamUser: strings.ToUpper(testUserName(t, "preset-upper-case")),
 			},
+			test: cliSimpleAuthPresetUser,
 		},
 		"Authenticate_user_successfully_with_invalid_connection_timeout": {
-			tape: "simple_auth",
-			tapeVariables: map[string]string{
-				vhsTapeUserVariable: vhsTestUserName(t, "invalid-timeout"),
-			},
+			username:      testUserName(t, "invalid-timeout"),
 			clientOptions: clientOptions{PamTimeout: "invalid"},
+			test:          cliSimpleAuth,
 		},
 		"Authenticate_user_successfully_with_password_only_supported_method": {
-			tape: "simple_auth",
-			tapeVariables: map[string]string{
-				vhsTapeUserVariable: examplebroker.UserIntegrationAuthModesPrefix + "password-integration-cli@example.com",
-			},
+			username: examplebroker.UserIntegrationAuthModesPrefix + "password-integration-cli@example.com",
+			test:     cliSimpleAuth,
 		},
 		"Authenticate_user_successfully_after_trying_empty_user": {
-			tape: "simple_auth_empty_user",
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				initialUsername := "user-integration-not-empty@example.com"
+				finalUsername := "user-integration-was-empty@example.com"
+
+				c.WaitFor(t, `Username:`)
+				c.Send(t, initialUsername)
+				c.WaitFor(t, `not-empty`)
+				for i := 0; i < len(initialUsername); i++ {
+					c.SendKey(t, ptytest.KeyBackspace)
+				}
+				c.SendKey(t, ptytest.KeyEnter)
+				c.WaitFor(t, `user name`)
+				c.SendKey(t, ptytest.KeyEscape)
+				c.SendKey(t, ptytest.KeyBackspace)
+				c.Send(t, finalUsername)
+				c.WaitFor(t, `was-empty`)
+				c.SendKey(t, ptytest.KeyEnter)
+
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c, "goodpass")
+				cliWaitForResult(t, c)
+			},
 		},
 		"Authenticate_user_with_mfa": {
-			tape: "mfa_auth",
+			username: "user-mfa@example.com",
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(string)) {
+				t.Helper()
+
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+
+				// Go to auth method selection first.
+				c.SendKey(t, ptytest.KeyEscape)
+				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `1\. Password authentication`)
+
+				// Select password auth.
+				c.Send(t, "1")
+				c.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c, "goodpass")
+
+				// MFA: fido device.
+				c.WaitFor(t, `Plug your fido device and press with your thumb`)
+
+				c.SendKey(t, ptytest.KeyEscape)
+				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `1\. Use your fido device foo`)
+
+				c.SendKey(t, ptytest.KeyEnter) // Select first option
+				c.WaitFor(t, `Plug your fido device and press with your thumb`)
+				signalFn("user-mfa@example.com")
+
+				// Auto-advances to phone after FIDO completes.
+				c.WaitFor(t, `Unlock your phone \+33`)
+
+				c.SendKey(t, ptytest.KeyEscape)
+				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `1\. Use your phone \+33`)
+
+				c.SendKey(t, ptytest.KeyEnter)
+				c.WaitFor(t, `Unlock your phone \+33`)
+				signalFn("user-mfa@example.com")
+
+				cliWaitForResult(t, c)
+			},
 		},
 		"Authenticate_user_with_form_mode_with_button": {
-			tape: "form_with_button",
+			username: "user-integration-form-w-button@example.com",
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+
+				c.SendKey(t, ptytest.KeyEscape)
+				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `7\. Authentication code`)
+
+				c.Send(t, "7")
+				c.WaitFor(t, `Enter your one time credential`)
+				c.WaitFor(t, `Resend SMS \(1 sent\)`)
+
+				// Press Tab to select button, then Enter.
+				c.Send(t, "\t")
+				c.SendKey(t, ptytest.KeyEnter)
+				c.WaitFor(t, `Resend SMS \(2 sent\)`)
+
+				cliSendText(t, c, "temporary pass00")
+				cliWaitForResult(t, c)
+			},
 		},
 		"Authenticate_user_with_qr_code": {
-			tape: "qr_code",
 			clientOptions: clientOptions{
 				PamUser: examplebroker.UserIntegrationPrefix + "qr-code@example.com",
 			},
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(string)) {
+				t.Helper()
+				cliAuthenticateWithQRCode(t, c, signalFn, examplebroker.UserIntegrationPrefix+"qr-code@example.com")
+			},
 		},
 		"Authenticate_user_with_qr_code_in_a_TTY": {
-			tape:         "qr_code",
-			tapeSettings: []tapeSetting{{vhsHeight, 800}},
 			clientOptions: clientOptions{
 				PamUser: examplebroker.UserIntegrationPrefix + "qr-code-tty@example.com",
 				Term:    "linux",
 			},
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(string)) {
+				t.Helper()
+				cliAuthenticateWithQRCode(t, c, signalFn, examplebroker.UserIntegrationPrefix+"qr-code-tty@example.com")
+			},
 		},
 		"Authenticate_user_with_qr_code_in_a_TTY_session": {
-			tape:         "qr_code",
-			tapeSettings: []tapeSetting{{vhsHeight, 800}},
 			clientOptions: clientOptions{
-				PamUser: examplebroker.UserIntegrationPrefix + "qr-code-tty-session@example.com",
-				Term:    "xterm-256color", SessionType: "tty",
+				PamUser:     examplebroker.UserIntegrationPrefix + "qr-code-tty-session@example.com",
+				Term:        "xterm-256color",
+				SessionType: "tty",
+			},
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(string)) {
+				t.Helper()
+				cliAuthenticateWithQRCode(t, c, signalFn, examplebroker.UserIntegrationPrefix+"qr-code-tty-session@example.com")
 			},
 		},
 		"Authenticate_user_with_qr_code_in_screen": {
-			tape:         "qr_code",
-			tapeSettings: []tapeSetting{{vhsHeight, 800}},
 			clientOptions: clientOptions{
 				PamUser: examplebroker.UserIntegrationPrefix + "qr-code-screen@example.com",
 				Term:    "screen",
 			},
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(string)) {
+				t.Helper()
+				cliAuthenticateWithQRCode(t, c, signalFn, examplebroker.UserIntegrationPrefix+"qr-code-screen@example.com")
+			},
 		},
 		"Authenticate_user_with_qr_code_after_many_regenerations": {
-			tape: "qr_code_quick_regenerate",
-			tapeSettings: []tapeSetting{
-				{vhsHeight, 800},
-				{vhsWaitTimeout, 15 * time.Second},
+			username: "user-integration-qrcode-static-regenerate@example.com",
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(string)) {
+				t.Helper()
+
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				c.SendKey(t, ptytest.KeyEscape)
+				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `6\. Use a QR code`)
+				c.Send(t, "6")
+				c.WaitFor(t, `Scan the qrcode or enter the code in the login page`)
+				c.WaitFor(t, `Code:\s*1337`)
+				c.Send(t, "	")
+				c.Send(t, strings.Repeat("\r", 100))
+				signalFn("user-integration-qrcode-static-regenerate@example.com")
+				cliWaitForResult(t, c)
 			},
 		},
 		"Authenticate_user_and_reset_password_while_enforcing_policy": {
-			tape: "mandatory_password_reset",
+			username: "user-needs-reset-integration-mandatory@example.com",
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c, "goodpass")
+
+				c.WaitFor(t, `Password reset`)
+				c.WaitFor(t, `New password`)
+				cliSendPassword(t, c, "authd2404")
+				c.WaitFor(t, `Confirm password`)
+				cliSendPassword(t, c, "authd2404")
+				cliWaitForResult(t, c)
+			},
 		},
 		"Authenticate_user_and_reset_password_with_case_insensitive_user_selection": {
-			tape: "mandatory_password_reset_case_insensitive",
-			tapeVariables: map[string]string{
-				vhsTapeUserVariable: vhsTestUserNameFull(t,
-					examplebroker.UserIntegrationNeedsResetPrefix, "case-insensitive"),
-				"AUTHD_TEST_TAPE_UPPER_CASE_USERNAME": strings.ToUpper(
-					vhsTestUserNameFull(t,
-						examplebroker.UserIntegrationNeedsResetPrefix, "Case-INSENSITIVE")),
-				"AUTHD_TEST_TAPE_MIXED_CASE_USERNAME": vhsTestUserNameFull(t,
-					examplebroker.UserIntegrationNeedsResetPrefix, "Case-INSENSITIVE"),
+			testRun: func(t *testing.T, socketPath string) string {
+				t.Helper()
+
+				// Three case variants of the same user (matched case-insensitively by authd).
+				baseUsername := testUserNameFull(t,
+					examplebroker.UserIntegrationNeedsResetPrefix, "Case-INSENSITIVE")
+				lowerUsername := strings.ToLower(baseUsername)
+				upperUsername := strings.ToUpper(baseUsername)
+
+				// cliStartLogin starts the PAM runner, enters the username, and
+				// returns the console (before broker selection).
+				cliStartLogin := func(username string) *ptytest.Console {
+					c := startCLIPAMRunner(t, clientPath, socketPath,
+						pam_test.RunnerActionLogin, cliEnv, clientOptions{})
+					c.WaitFor(t, `Username:`)
+					c.Send(t, username)
+					c.WaitFor(t, regexp.QuoteMeta(username))
+					c.SendKey(t, ptytest.KeyEnter)
+					return c
+				}
+
+				// First login: lowercase username, broker selection, then
+				// mandatory password reset.
+				c1 := cliStartLogin(lowerUsername)
+				cliSelectBroker(t, c1)
+				c1.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c1, "goodpass")
+				c1.WaitFor(t, `Password reset`)
+				c1.WaitFor(t, `New password`)
+				cliSendPassword(t, c1, "authd2404")
+				c1.WaitFor(t, `Confirm password`)
+				cliSendPassword(t, c1, "authd2404")
+				cliWaitForResult(t, c1)
+				c1.RequireSuccessfulExit(t)
+
+				// Second login: UPPERCASE username. Broker is remembered, so no
+				// broker selection step.
+				c2 := cliStartLogin(upperUsername)
+				c2.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c2, "authd2404")
+				cliWaitForResult(t, c2)
+				c2.RequireSuccessfulExit(t)
+
+				// Third login: mixed-case username (as returned by testUserNameFull).
+				c3 := cliStartLogin(baseUsername)
+				c3.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c3, "authd2404")
+				cliWaitForResult(t, c3)
+				c3.RequireSuccessfulExit(t)
+
+				return "=== Login (lowercase, password reset) ===\n" + ptySanitizeSnapshots(t, c1) +
+					"\n=== Login (UPPERCASE) ===\n" + ptySanitizeSnapshots(t, c2) +
+					"\n=== Login (Mixed Case) ===\n" + ptySanitizeSnapshots(t, c3)
 			},
 		},
 		"Authenticate_user_with_mfa_and_reset_password_while_enforcing_policy": {
-			tape: "mfa_reset_pwquality_auth",
+			username: "user-mfa-with-reset@example.com",
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(string)) {
+				t.Helper()
+
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c, "goodpass")
+
+				c.WaitFor(t, `Password reset`)
+				c.WaitFor(t, `Plug your fido device and press with your thumb`)
+				signalFn("user-mfa-with-reset@example.com")
+				// After FIDO auto-completes, capture the "1 step(s) missing" state.
+				c.WaitFor(t, `Password reset, 1 step`)
+				c.WaitFor(t, `New password`)
+				cliSendPassword(t, c, "password")
+				c.WaitFor(t, `The password fails the dictionary check`)
+				cliSendPassword(t, c, "1234")
+				c.WaitFor(t, `The password is shorter than`)
+				cliSendPassword(t, c, "authd2404")
+				c.WaitFor(t, `Confirm password`)
+				cliSendPassword(t, c, "authd2404")
+				cliWaitForResult(t, c)
+			},
 		},
 		"Authenticate_user_and_offer_password_reset": {
-			tape: "optional_password_reset_skip",
+			username: "user-can-reset@example.com",
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c, "goodpass")
+
+				c.WaitFor(t, `Password reset`)
+				c.WaitFor(t, `New password`)
+				c.WaitFor(t, `Skip`)
+
+				// Press Tab to select Skip button, then Enter.
+				c.Send(t, "\t")
+				c.SendKey(t, ptytest.KeyEnter)
+				cliWaitForResult(t, c)
+			},
 		},
 		"Authenticate_user_switching_auth_mode": {
-			tape: "switch_auth_mode",
+			username: "user-integration-switch-mode@example.com",
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+
+				// Switch to auth mode selection.
+				c.SendKey(t, ptytest.KeyEscape)
+				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `2\. Send URL to`)
+
+				// Select "Send URL to" mode.
+				c.Send(t, "2")
+				c.WaitFor(t, `Click on the link received at .* or enter the code`)
+
+				// Go back to auth mode selection.
+				c.SendKey(t, ptytest.KeyEscape)
+				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `3\. Use your fido device foo`)
+
+				// Select "Use your fido device" mode.
+				c.Send(t, "3")
+				c.WaitFor(t, `Plug your fido device and press with your thumb`)
+
+				// Go back and select password auth.
+				c.SendKey(t, ptytest.KeyEscape)
+				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `1\. Password authentication`)
+
+				c.Send(t, "1")
+				c.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c, "goodpass")
+				cliWaitForResult(t, c)
+			},
 		},
 		"Authenticate_user_switching_username": {
-			tape: "switch_username",
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				initialUsername := "user-integration-switch-username@example.com"
+				updatedUsernameSuffix := "username-switched@example.com"
+				clearedSuffix := "switch-username@example.com"
+
+				// Type initial username and capture it before submitting.
+				c.WaitFor(t, `Username:`)
+				c.Send(t, initialUsername)
+				c.WaitFor(t, `user-integration-switch-username@example`)
+				c.SendKey(t, ptytest.KeyEnter)
+
+				// Capture initial provider-selection (shows user flow before going back).
+				c.WaitFor(t, `Select your provider`)
+
+				// Go back to username.
+				c.SendKey(t, ptytest.KeyEscape)
+				// Discard pre-edit username snapshot (duplicate of initial username above).
+				c.WaitFor(t, `Username:`)
+				c.DiscardLastSnapshot()
+
+				// Edit the username: remove "switch-username@example.com" and retype suffix.
+				for i := 0; i < len(clearedSuffix); i++ {
+					c.SendKey(t, ptytest.KeyBackspace)
+				}
+				c.Send(t, updatedUsernameSuffix)
+				// Capture the final username before submitting.
+				c.WaitFor(t, `user-integration-username-switched`)
+				c.SendKey(t, ptytest.KeyEnter)
+
+				// Select broker and authenticate.
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c, "goodpass")
+				cliWaitForResult(t, c)
+			},
 		},
 		"Authenticate_user_switching_to_local_broker": {
-			tape:         "switch_local_broker",
-			tapeSettings: []tapeSetting{{vhsHeight, 800}},
+			username:         "user-integration-switch-broker@example.com",
+			expectedExitCode: 0,
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+
+				// Go back to auth method.
+				c.SendKey(t, ptytest.KeyEscape)
+				c.WaitFor(t, `Select your authentication method`)
+
+				// Go back to broker selection.
+				c.SendKey(t, ptytest.KeyEscape)
+				c.WaitFor(t, `Select your provider`)
+				c.WaitFor(t, `1\. local`)
+
+				// Select local broker.
+				c.Send(t, "1")
+				cliWaitForResult(t, c)
+			},
 		},
 		"Authenticate_user_and_add_it_to_local_group": {
-			tape:            "local_group",
+			username:        "user-local-groups-integration-auth-cli@example.com",
 			wantLocalGroups: true,
+			test:            cliSimpleAuth,
 		},
 		"Authenticate_with_warnings_on_unsupported_arguments": {
-			tape: "simple_auth_with_unsupported_args",
+			username:  "user2@example.com",
+			extraArgs: []string{"invalid_flag=foo", "bar"},
+			test:      cliSimpleAuth,
 		},
-
 		"Remember_last_successful_broker_and_mode": {
-			tape: "remember_broker_and_mode",
+			testRun: func(t *testing.T, socketPath string) string {
+				t.Helper()
+
+				username := "user-integration-remember-mode@example.com"
+
+				// First login: select broker, then auth code mode.
+				c := startCLIPAMRunner(t, clientPath, socketPath,
+					pam_test.RunnerActionLogin, cliEnv, clientOptions{})
+				c.WaitFor(t, `Username:`)
+				c.Send(t, username)
+				c.WaitFor(t, regexp.QuoteMeta(username))
+				c.SendKey(t, ptytest.KeyEnter)
+
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+
+				c.SendKey(t, ptytest.KeyEscape)
+				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `7\. Authentication code`)
+
+				c.Send(t, "7")
+				c.WaitFor(t, `Enter your one time credential`)
+				c.WaitFor(t, `Resend SMS \(1 sent\)`)
+
+				cliSendText(t, c, "temporary pass0")
+				cliWaitForResult(t, c)
+				c.RequireSuccessfulExit(t)
+
+				// Second login: broker and mode should be remembered.
+				c2 := startCLIPAMRunner(t, clientPath, socketPath,
+					pam_test.RunnerActionLogin, cliEnv, clientOptions{})
+				c2.WaitFor(t, `Username:`)
+				c2.Send(t, username)
+				c2.WaitFor(t, regexp.QuoteMeta(username))
+				c2.SendKey(t, ptytest.KeyEnter)
+
+				// Should go directly to auth code (no broker/auth method selection).
+				c2.WaitFor(t, `Enter your one time credential`)
+				c2.WaitFor(t, `Resend SMS \(1 sent\)`)
+
+				cliSendText(t, c2, "temporary pass0")
+				cliWaitForResult(t, c2)
+				c2.RequireSuccessfulExit(t)
+
+				return "=== First Login ===\n" + ptySanitizeSnapshots(t, c) +
+					"\n=== Second Login (broker/mode remembered) ===\n" + ptySanitizeSnapshots(t, c2)
+			},
 		},
 		"Autoselect_local_broker_for_local_user": {
-			tape: "local_user",
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+				c.WaitFor(t, `Username:`)
+				c.Send(t, "root")
+				c.WaitFor(t, `Username: root`)
+				c.SendKey(t, ptytest.KeyEnter)
+				cliWaitForResult(t, c)
+			},
 		},
 		"Autoselect_local_broker_for_local_user_preset": {
-			tape:          "local_user_preset",
 			clientOptions: clientOptions{PamUser: "root"},
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+				cliWaitForResult(t, c)
+			},
 		},
-
 		"Prevent_user_from_switching_username": {
-			tape: "switch_preset_username",
 			clientOptions: clientOptions{
 				PamUser: examplebroker.UserIntegrationPrefix + "pam-preset@example.com",
+			},
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+
+				// Go back to auth method, then provider.
+				c.SendKey(t, ptytest.KeyEscape)
+				c.WaitFor(t, `Select your authentication method`)
+
+				c.SendKey(t, ptytest.KeyEscape)
+				c.WaitFor(t, `Select your provider`)
+
+				// Verify we're still at provider selection by selecting broker.
+				// Don't use cliSelectBroker here because bubbletea won't re-render
+				// an identical view, so WaitFor can't find a new "Select your provider".
+				c.Send(t, "2")
+				c.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c, "goodpass")
+				cliWaitForResult(t, c)
 			},
 		},
 
 		"Deny_authentication_if_current_user_is_not_considered_as_root": {
-			tape: "not_root", currentUserNotRoot: true,
+			currentUserNotRoot: true,
+			expectedExitCode:   0,
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+				cliWaitForResult(t, c)
+			},
 		},
-
 		"Deny_authentication_if_max_attempts_reached": {
-			tape: "max_attempts",
+			username:         "user-integration-max-attempts@example.com",
+			expectedExitCode: 0,
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+
+				// Send the wrong passwords. We use a different wrong password on each attempt
+				// because bubbletea skips re-renders when the view content is identical.
+				// By using a different password, we ensure that the
+				// "Invalid password '<password>'" message is different, so that bubbletea
+				// re-renders and we can WaitFor the new error message on each attempt.
+				for i := 0; i < 4; i++ {
+					c.SendLine(t, "wrongpass"+strconv.Itoa(i+1))
+					c.WaitFor(t, `invalid password`)
+					sanitizeTrailingPasswordEchoSnapshot(c)
+				}
+
+				c.SendLine(t, "wrongpass-final")
+				c.WaitFor(t, `Maximum number of authentication attempts reached`)
+				// The snapshot at this point is flaky: sometimes the PAM result
+				// has already been rendered alongside the error message, sometimes
+				// not. Discard it; cliWaitForResult captures the stable final state.
+				c.DiscardLastSnapshot()
+				cliWaitForResult(t, c)
+			},
 		},
 		"Deny_authentication_if_user_does_not_exist": {
-			tape:         "unexistent_user",
-			tapeSettings: []tapeSetting{{vhsHeight, 800}},
+			username:         "user-unexistent@example.com",
+			expectedExitCode: 0,
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+				cliSelectBroker(t, c)
+				cliWaitForResult(t, c)
+			},
 		},
 		"Deny_authentication_if_newpassword_does_not_match_required_criteria": {
-			tape: "bad_password",
+			username: "user-needs-reset@example.com",
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c, "goodpass")
+
+				c.WaitFor(t, `Password reset`)
+				c.WaitFor(t, `New password`)
+				c.SendKey(t, ptytest.KeyEnter)
+				c.WaitFor(t, `No password supplied`)
+				cliSendPassword(t, c, "1234")
+				c.WaitFor(t, `The password is shorter than`)
+				cliSendPassword(t, c, "12345678")
+				c.WaitFor(t, `The password fails the dictionary check`)
+				cliSendPassword(t, c, "authd2404")
+				c.WaitFor(t, `Confirm password`)
+				cliSendPassword(t, c, "123456789")
+				c.WaitFor(t, `Password entries don't match`)
+				cliSendPassword(t, c, "authd2404")
+				c.WaitFor(t, `Confirm password`)
+				cliSendPassword(t, c, "authd2404")
+				cliWaitForResult(t, c)
+			},
 		},
 
 		"Exit_authd_if_local_broker_is_selected": {
-			tape:         "local_broker",
-			tapeSettings: []tapeSetting{{vhsHeight, 800}},
+			username:         "user-local-broker",
+			expectedExitCode: 0,
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+				c.WaitFor(t, `Select your provider`)
+				c.WaitFor(t, `1\. local`)
+				c.SendKey(t, ptytest.KeyEnter)
+				cliWaitForResult(t, c)
+			},
 		},
 		"Exit_authd_if_user_sigints": {
-			tape: "sigint",
+			username:         "user-integration-sigint@example.com",
+			expectedExitCode: 0,
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				c.SendKey(t, ptytest.KeyCtrlC)
+				cliWaitForResult(t, c)
+			},
 		},
 		"Exit_authd_if_user_presses_ctrl_d": {
-			tape: "ctrl_d",
+			username:         "user-integration-ctrl-d@example.com",
+			expectedExitCode: 0,
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				c.SendKey(t, ptytest.KeyCtrlD)
+				cliWaitForResult(t, c)
+			},
 		},
 		"Exit_if_authd_is_stopped": {
-			tape:            "authd_stopped",
-			stopDaemonAfter: sleepDuration(defaultSleepValues[authdSleepLong] * 5),
+			useCancelableAuthd: true,
+			expectedExitCode:   0,
+			testWithAuthd: func(t *testing.T, c *ptytest.Console, cancelAuthd func()) {
+				t.Helper()
+
+				c.WaitFor(t, `Username:`)
+				cancelAuthd()
+				c.WaitFor(t, `stopped serving`)
+				// Discard the timing-sensitive "stopped serving" snapshot: it may or
+				// may not include the PAM result depending on scheduling. The final
+				// snapshot from cliWaitForResult always includes the full output.
+				c.DiscardLastSnapshot()
+				cliWaitForResult(t, c)
+			},
 		},
 
 		"Error_if_cannot_connect_to_authd": {
-			tape:       "connection_error",
-			socketPath: "/some-path/not-existent-socket",
+			socketPath:       "/some-path/not-existent-socket",
+			expectedExitCode: 0,
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+				// Discard the intermediate snapshot: the PAM error appears first but
+				// Authenticate/AcctMgmt details may not be rendered yet, making the
+				// snapshot non-deterministic. Only keep the final complete result.
+				c.WaitFor(t, `could not connect to unix:`)
+				c.DiscardLastSnapshot()
+				cliWaitForResult(t, c)
+			},
 		},
 	}
+
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			outDir := t.TempDir()
-			err := os.Symlink(filepath.Join(clientPath, "pam_authd"),
-				filepath.Join(outDir, "pam_authd"))
-			require.NoError(t, err, "Setup: symlinking the pam client")
-
-			var socketPath, groupFileOutput, pidFile string
-			if tc.wantLocalGroups || tc.currentUserNotRoot || tc.stopDaemonAfter > 0 {
-				// For the local groups tests we need to run authd again so that it has
-				// special environment that saves the updated group file to a writable
-				// location for us to test.
-				// Similarly for the not-root tests authd has to run in a more restricted way.
-				// In the other cases this is not needed, so we can just use a shared authd.
+			var socketPath, groupFileOutput string
+			var cancelAuthd func()
+			if tc.wantLocalGroups || tc.currentUserNotRoot || tc.useCancelableAuthd {
 				var groupFile string
 				groupFileOutput, groupFile = prepareGroupFiles(t)
 
 				if tc.wantLocalGroups {
-					// We don't want to use separate input ant output files here.
 					groupFileOutput = groupFile
 				}
-
-				pidFile = filepath.Join(outDir, "authd.pid")
 
 				args := []testutils.DaemonOption{
 					testutils.WithGroupFile(groupFile),
 					testutils.WithGroupFileOutput(groupFileOutput),
-					testutils.WithPidFile(pidFile),
 				}
 				if !tc.currentUserNotRoot {
 					args = append(args, testutils.WithCurrentUserAsRoot)
 				}
 
-				socketPath = runAuthd(t, args...)
+				if tc.useCancelableAuthd {
+					socketPath, cancelAuthd = runAuthdForTestingWithCancel(t, false, args...)
+					t.Cleanup(cancelAuthd)
+				} else {
+					socketPath = runAuthd(t, args...)
+				}
 			} else {
 				socketPath, groupFileOutput = sharedAuthd(t)
 			}
@@ -273,21 +736,160 @@ func TestCLIAuthenticate(t *testing.T) {
 				socketPath = tc.socketPath
 			}
 
-			td := newTapeData(tc.tape, outDir, tc.tapeSettings...)
-			td.Command = tapeCommand
-			td.Variables = tc.tapeVariables
-			td.Env[vhsTapeSocketVariable] = socketPath
-			td.Env["AUTHD_TEST_PID_FILE"] = pidFile
-			td.AddClientOptions(t, tc.clientOptions)
-			td.RunVHS(t, vhsTestTypeCLI, cliEnv)
-			got := td.SanitizedOutput(t)
-			golden.CheckOrUpdate(t, got)
+			var consoleOutput string
+			if tc.testRun != nil {
+				consoleOutput = tc.testRun(t, socketPath)
+			} else {
+				c := startCLIPAMRunner(t, clientPath, socketPath,
+					pam_test.RunnerActionLogin, cliEnv, tc.clientOptions, tc.extraArgs...)
 
+				// If we have a typed username (not preset), enter it.
+				if tc.username != "" && tc.clientOptions.PamUser == "" {
+					c.WaitFor(t, `Username:`)
+					// Type the username without Enter first, wait for the echo so
+					// the snapshot captures "Username: <name>" on screen, then submit.
+					c.Send(t, tc.username)
+					c.WaitFor(t, regexp.QuoteMeta(tc.username))
+					c.SendKey(t, ptytest.KeyEnter)
+				}
+
+				if tc.testWithSignals != nil {
+					signalFn := func(username string) {
+						testutils.CreateBrokerCompletionSignal(t, socketPath, username)
+					}
+					tc.testWithSignals(t, c, signalFn)
+				} else if tc.testWithAuthd != nil {
+					tc.testWithAuthd(t, c, cancelAuthd)
+				} else if tc.test != nil {
+					tc.test(t, c)
+				}
+
+				c.RequireExitCode(t, tc.expectedExitCode)
+
+				consoleOutput = ptySanitizeSnapshots(t, c)
+			}
+
+			golden.CheckOrUpdate(t, consoleOutput)
 			localgroupstestutils.RequireGroupFile(t, groupFileOutput, golden.Path(t))
-
-			requireRunnerResultForUser(t, authd.SessionMode_LOGIN, tc.clientOptions.PamUser, got)
+			requireRunnerResultForUser(t, authd.SessionMode_LOGIN, tc.clientOptions.PamUser, consoleOutput)
 		})
 	}
+}
+
+// cliSelectBroker waits for the provider selection and selects ExampleBroker.
+// Note: The TUI auto-selects when the number is typed, no Enter needed.
+func cliEnterUsername(t *testing.T, c *ptytest.Console, username string) {
+	t.Helper()
+	c.WaitFor(t, `Username:`)
+	c.Send(t, username)
+	c.WaitFor(t, regexp.QuoteMeta(username))
+	c.SendKey(t, ptytest.KeyEnter)
+}
+
+func cliSelectBroker(t *testing.T, c *ptytest.Console) {
+	t.Helper()
+
+	c.WaitFor(t, `Select your provider`)
+	c.WaitFor(t, `2\. ExampleBroker`)
+	c.Send(t, "2")
+}
+
+// cliSendPassword types a password into the current password prompt and submits it.
+// cliSendPassword types password into the CLI password field, waits for the
+// asterisks to be rendered (capturing an intermediate snapshot showing the
+// masked input), then submits with Enter. Only use for single attempts — in
+// retry loops the auth.Retry response may race with the typed characters
+// inside bubbletea's event batch, causing the field to clear before any
+// asterisks are rendered. Use c.SendLine for repeated wrong passwords.
+func cliSendPassword(t *testing.T, c *ptytest.Console, password string) {
+	t.Helper()
+
+	c.Send(t, password)
+	c.WaitFor(t, `\*+`)
+	c.SendKey(t, ptytest.KeyEnter)
+}
+
+// cliSendText types text into a plain-text prompt (entries.Chars) and captures
+// a snapshot showing the typed text before submitting.
+func cliSendText(t *testing.T, c *ptytest.Console, text string) {
+	t.Helper()
+
+	c.Send(t, text)
+	c.WaitFor(t, regexp.QuoteMeta(text))
+	c.SendKey(t, ptytest.KeyEnter)
+}
+
+// cliSimpleAuth performs a standard simple authentication flow: select broker, enter password.
+func cliSimpleAuth(t *testing.T, c *ptytest.Console) {
+	t.Helper()
+
+	cliSelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	cliSendPassword(t, c, "goodpass")
+	cliWaitForResult(t, c)
+}
+
+// cliSimpleAuthPresetUser performs a simple auth flow when the user is preset (no username prompt).
+func cliSimpleAuthPresetUser(t *testing.T, c *ptytest.Console) {
+	t.Helper()
+
+	cliSelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	cliSendPassword(t, c, "goodpass")
+	cliWaitForResult(t, c)
+}
+
+// cliChangePasswordWithRetry performs the common "change password with one
+// rejected attempt then success" flow. It sends firstNew/firstConfirm (which
+// cause errMsg to appear), then retries with secondNew (confirmed identically).
+func cliChangePasswordWithRetry(t *testing.T, c *ptytest.Console, firstNew, firstConfirm, errMsg, secondNew string) {
+	t.Helper()
+
+	c.WaitFor(t, `New password`)
+	cliSendPassword(t, c, firstNew)
+	c.WaitFor(t, `Confirm password`)
+	cliSendPassword(t, c, firstConfirm)
+	c.WaitFor(t, errMsg)
+	cliSendPassword(t, c, secondNew)
+	c.WaitFor(t, `Confirm password`)
+	cliSendPassword(t, c, secondNew)
+}
+
+// cliWaitForResult waits for the complete PAM AcctMgmt() result block.
+func cliWaitForResult(t *testing.T, c *ptytest.Console) {
+	t.Helper()
+
+	waitForRunnerResult(t, c, pam_test.RunnerResultActionAcctMgmt)
+}
+
+func cliAuthenticateWithQRCode(t *testing.T, c *ptytest.Console, signalFn func(string), username string) {
+	t.Helper()
+
+	cliSelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendKey(t, ptytest.KeyEscape)
+	c.WaitFor(t, `Select your authentication method`)
+	c.WaitFor(t, `6\. Use a QR code`)
+	c.Send(t, "6")
+	c.WaitFor(t, `Scan the qrcode or enter the code in the login page`)
+	c.WaitFor(t, `Code:\s*1337`)
+	// The Regenerate button has a 500ms reselectionWaitTime guard to
+	// prevent accidental double-clicks right after mode selection.
+	// Wait past it before pressing Enter to trigger code regeneration.
+	time.Sleep(testutils.MultipliedSleepDuration(550 * time.Millisecond))
+	c.SendKey(t, ptytest.KeyEnter)
+	c.WaitFor(t, `Code:\s*1338`)
+	time.Sleep(testutils.MultipliedSleepDuration(550 * time.Millisecond))
+	c.SendKey(t, ptytest.KeyEnter)
+	c.WaitFor(t, `Code:\s*1339`)
+	time.Sleep(testutils.MultipliedSleepDuration(550 * time.Millisecond))
+	c.SendKey(t, ptytest.KeyEnter)
+	c.WaitFor(t, `Code:\s*1340`)
+	time.Sleep(testutils.MultipliedSleepDuration(550 * time.Millisecond))
+	c.SendKey(t, ptytest.KeyEnter)
+	c.WaitFor(t, `Code:\s*1341`)
+	signalFn(username)
+	cliWaitForResult(t, c)
 }
 
 func TestCLIChangeAuthTok(t *testing.T) {
@@ -297,123 +899,320 @@ func TestCLIChangeAuthTok(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	// Due to external dependencies such as `vhs`, we can't run the tests in some environments (like LP builders), as we
-	// can't install the dependencies there. So we need to be able to skip these tests on-demand.
-	if os.Getenv("AUTHD_SKIP_EXTERNAL_DEPENDENT_TESTS") != "" {
-		t.Skip("Skipping tests with external dependencies as requested")
-	}
-
 	clientPath := t.TempDir()
 	cliEnv := preparePamRunnerTest(t, clientPath)
 
-	tapeCommand := fmt.Sprintf(cliTapeBaseCommand, pam_test.RunnerActionPasswd,
-		vhsTapeSocketVariable)
-
 	tests := map[string]struct {
-		tape          string
-		tapeSettings  []tapeSetting
-		tapeVariables map[string]string
-
+		username           string
 		currentUserNotRoot bool
+
+		test func(t *testing.T, socketPath, username string) string
 	}{
 		"Change_password_successfully_and_authenticate_with_new_one": {
-			tape: "passwd_simple",
-			tapeVariables: map[string]string{
-				"AUTHD_TEST_TAPE_LOGIN_COMMAND": fmt.Sprintf(
-					cliTapeBaseCommand, pam_test.RunnerActionLogin, vhsTapeSocketVariable),
-				vhsTapeUserVariable:              vhsTestUserName(t, "simple"),
-				"AUTHD_TEST_TAPE_LOGIN_USERNAME": vhsTestUserName(t, "simple"),
+			test: func(t *testing.T, socketPath, username string) string {
+				t.Helper()
+				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
+				cliEnterUsername(t, c, username)
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c, "goodpass")
+				c.WaitFor(t, `New password`)
+				cliSendPassword(t, c, "authd2404")
+				c.WaitFor(t, `Confirm password`)
+				cliSendPassword(t, c, "authd2404")
+				cliWaitForResult(t, c)
+				c.RequireSuccessfulExit(t)
+
+				c2 := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionLogin, cliEnv, clientOptions{})
+				cliEnterUsername(t, c2, username)
+				c2.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c2, "authd2404")
+				cliWaitForResult(t, c2)
+				c2.RequireSuccessfulExit(t)
+
+				got := "=== Password Change ===\n" + ptySanitizeSnapshots(t, c) +
+					"\n=== Login ===\n" + ptySanitizeSnapshots(t, c2)
+				requireRunnerResultForUser(t, authd.SessionMode_LOGIN, username, got)
+				return got
 			},
 		},
 		"Change_password_successfully_and_authenticate_with_new_one_with_different_case": {
-			tape: "passwd_simple",
-			tapeVariables: map[string]string{
-				"AUTHD_TEST_TAPE_LOGIN_COMMAND": fmt.Sprintf(
-					cliTapeBaseCommand, pam_test.RunnerActionLogin, vhsTapeSocketVariable),
-				vhsTapeUserVariable:              strings.ToUpper(vhsTestUserName(t, "case-insensitive")),
-				"AUTHD_TEST_TAPE_LOGIN_USERNAME": vhsTestUserName(t, "case-insensitive"),
+			username: strings.ToUpper(testUserName(t, "case-insensitive")),
+			test: func(t *testing.T, socketPath, username string) string {
+				t.Helper()
+				loginUsername := strings.ToLower(username)
+
+				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
+				cliEnterUsername(t, c, username)
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c, "goodpass")
+				c.WaitFor(t, `New password`)
+				cliSendPassword(t, c, "authd2404")
+				c.WaitFor(t, `Confirm password`)
+				cliSendPassword(t, c, "authd2404")
+				cliWaitForResult(t, c)
+				c.RequireSuccessfulExit(t)
+
+				c2 := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionLogin, cliEnv, clientOptions{})
+				cliEnterUsername(t, c2, loginUsername)
+				c2.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c2, "authd2404")
+				cliWaitForResult(t, c2)
+				c2.RequireSuccessfulExit(t)
+
+				got := "=== Password Change ===\n" + ptySanitizeSnapshots(t, c) +
+					"\n=== Login ===\n" + ptySanitizeSnapshots(t, c2)
+				requireRunnerResultForUser(t, authd.SessionMode_LOGIN, loginUsername, got)
+				return got
 			},
 		},
 		"Change_passwd_after_MFA_auth": {
-			tape: "passwd_mfa",
-			tapeVariables: map[string]string{
-				vhsTapeUserVariable: examplebroker.UserIntegrationMfaPrefix + "cli-passwd@example.com",
+			username: examplebroker.UserIntegrationMfaPrefix + "cli-passwd@example.com",
+			test: func(t *testing.T, socketPath, username string) string {
+				t.Helper()
+				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
+				cliEnterUsername(t, c, username)
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				c.SendKey(t, ptytest.KeyEscape)
+				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `1\. Password authentication`)
+				c.Send(t, "1")
+				c.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c, "goodpass")
+				c.WaitFor(t, `Plug your fido device and press with your thumb`)
+				c.SendKey(t, ptytest.KeyEscape)
+				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `1\. Use your fido device foo`)
+				c.SendKey(t, ptytest.KeyEnter)
+				c.WaitFor(t, `Plug your fido device and press with your thumb`)
+				testutils.CreateBrokerCompletionSignal(t, socketPath, username)
+				c.WaitFor(t, `Unlock your phone \+33`)
+				c.SendKey(t, ptytest.KeyEscape)
+				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `1\. Use your phone \+33`)
+				c.SendKey(t, ptytest.KeyEnter)
+				c.WaitFor(t, `Unlock your phone \+33`)
+				testutils.CreateBrokerCompletionSignal(t, socketPath, username)
+				c.WaitFor(t, `New password`)
+				cliSendPassword(t, c, "authd2404")
+				c.WaitFor(t, `Confirm password`)
+				cliSendPassword(t, c, "authd2404")
+				cliWaitForResult(t, c)
+				c.RequireSuccessfulExit(t)
+				return ptySanitizeSnapshots(t, c)
 			},
 		},
-
 		"Retry_if_new_password_is_rejected_by_broker": {
-			tape: "passwd_rejected",
+			test: func(t *testing.T, socketPath, username string) string {
+				t.Helper()
+				c1 := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
+				cliEnterUsername(t, c1, username)
+				cliSelectBroker(t, c1)
+				c1.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c1, "goodpass")
+				cliChangePasswordWithRetry(t, c1, "noble2404", "noble2404",
+					`new password does not match criteria`, "authd2404")
+				cliWaitForResult(t, c1)
+				c1.RequireSuccessfulExit(t)
+
+				// Repeat the flow to verify that after a rejection, the user can still change the password successfully.
+				c2 := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
+				c2.WaitFor(t, `Username:`)
+				c2.Send(t, username)
+				c2.WaitFor(t, regexp.QuoteMeta(username))
+				c2.SendKey(t, ptytest.KeyEnter)
+				c2.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c2, "authd2404")
+				cliChangePasswordWithRetry(t, c2, "noble2404", "noble2404",
+					`new password does not match criteria`, "goodpass")
+				cliWaitForResult(t, c2)
+				c2.RequireSuccessfulExit(t)
+
+				return ptySanitizeSnapshots(t, c1) + ptySanitizeSnapshots(t, c2)
+			},
 		},
 		"Retry_if_new_password_is_same_of_previous": {
-			tape: "passwd_not_changed",
+			test: func(t *testing.T, socketPath, username string) string {
+				t.Helper()
+				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
+				cliEnterUsername(t, c, username)
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c, "goodpass")
+				c.WaitFor(t, `New password`)
+				cliSendPassword(t, c, "goodpass")
+				c.WaitFor(t, `The password is the same as the old one`)
+				cliSendPassword(t, c, "authd2404")
+				c.WaitFor(t, `Confirm password`)
+				cliSendPassword(t, c, "authd2404")
+				cliWaitForResult(t, c)
+				c.RequireSuccessfulExit(t)
+				return ptySanitizeSnapshots(t, c)
+			},
 		},
 		"Retry_if_password_confirmation_is_not_the_same": {
-			tape: "passwd_not_confirmed",
+			test: func(t *testing.T, socketPath, username string) string {
+				t.Helper()
+				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
+				cliEnterUsername(t, c, username)
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c, "goodpass")
+				cliChangePasswordWithRetry(t, c, "authd2404", "badpass",
+					`Password entries don't match`, "authd2404")
+				cliWaitForResult(t, c)
+				c.RequireSuccessfulExit(t)
+				return ptySanitizeSnapshots(t, c)
+			},
 		},
 		"Retry_if_new_password_does_not_match_quality_criteria": {
-			tape: "passwd_bad_password",
+			test: func(t *testing.T, socketPath, username string) string {
+				t.Helper()
+				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
+				cliEnterUsername(t, c, username)
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				cliSendPassword(t, c, "goodpass")
+				c.WaitFor(t, `New password`)
+				c.SendKey(t, ptytest.KeyEnter)
+				c.WaitFor(t, `No password supplied`)
+				cliSendPassword(t, c, "1234")
+				c.WaitFor(t, `The password is shorter than`)
+				cliSendPassword(t, c, "12345678")
+				c.WaitFor(t, `The password fails the dictionary check`)
+				cliSendPassword(t, c, "authd2404")
+				c.WaitFor(t, `Confirm password`)
+				cliSendPassword(t, c, "123456789")
+				c.WaitFor(t, `Password entries don't match`)
+				cliSendPassword(t, c, "authd2404")
+				c.WaitFor(t, `Confirm password`)
+				cliSendPassword(t, c, "authd2404")
+				cliWaitForResult(t, c)
+				c.RequireSuccessfulExit(t)
+				return ptySanitizeSnapshots(t, c)
+			},
 		},
-
 		"Prevent_change_password_if_auth_fails": {
-			tape: "passwd_auth_fail",
+			test: func(t *testing.T, socketPath, username string) string {
+				t.Helper()
+				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
+				cliEnterUsername(t, c, username)
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+
+				// Send the wrong passwords. We use a different wrong password on each attempt
+				// because bubbletea skips re-renders when the view content is identical.
+				// By using a different password, we ensure that the
+				// "Invalid password '<password>'" message is different, so that bubbletea
+				// re-renders and we can WaitFor the new error message on each attempt.
+				for i := 0; i < 4; i++ {
+					c.SendLine(t, "wrongpass"+strconv.Itoa(i+1))
+					c.WaitFor(t, `invalid password`)
+					sanitizeTrailingPasswordEchoSnapshot(c)
+				}
+
+				c.SendLine(t, "wrongpass-final")
+				c.WaitFor(t, `Maximum number of authentication attempts reached`)
+				// The snapshot at this point is flaky: sometimes the PAM result
+				// has already been rendered alongside the error message, sometimes
+				// not. Discard it; cliWaitForResult captures the stable final state.
+				c.DiscardLastSnapshot()
+				cliWaitForResult(t, c)
+				c.RequireSuccessfulExit(t)
+				return ptySanitizeSnapshots(t, c)
+			},
 		},
 		"Prevent_change_password_if_user_does_not_exist": {
-			tape:         "passwd_unexistent_user",
-			tapeSettings: []tapeSetting{{vhsHeight, 800}},
-			tapeVariables: map[string]string{
-				vhsTapeUserVariable: examplebroker.UserIntegrationUnexistent,
+			username: examplebroker.UserIntegrationUnexistent,
+			test: func(t *testing.T, socketPath, username string) string {
+				t.Helper()
+				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
+				cliEnterUsername(t, c, username)
+				cliSelectBroker(t, c)
+				cliWaitForResult(t, c)
+				c.RequireSuccessfulExit(t)
+				return ptySanitizeSnapshots(t, c)
 			},
 		},
 		"Prevent_change_password_if_current_user_is_not_root_as_can_not_authenticate": {
-			tape:               "passwd_not_root",
 			currentUserNotRoot: true,
+			test: func(t *testing.T, socketPath, username string) string {
+				t.Helper()
+				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
+				cliWaitForResult(t, c)
+				c.RequireSuccessfulExit(t)
+				return ptySanitizeSnapshots(t, c)
+			},
 		},
-
 		"Exit_authd_if_local_broker_is_selected": {
-			tape:         "passwd_local_broker",
-			tapeSettings: []tapeSetting{{vhsHeight, 800}},
+			test: func(t *testing.T, socketPath, username string) string {
+				t.Helper()
+				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
+				cliEnterUsername(t, c, username)
+				c.WaitFor(t, `Select your provider`)
+				c.WaitFor(t, `1\. local`)
+				c.SendKey(t, ptytest.KeyEnter)
+				cliWaitForResult(t, c)
+				c.RequireSuccessfulExit(t)
+				return ptySanitizeSnapshots(t, c)
+			},
 		},
 		"Exit_authd_if_user_sigints": {
-			tape: "passwd_sigint",
+			test: func(t *testing.T, socketPath, username string) string {
+				t.Helper()
+				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
+				cliEnterUsername(t, c, username)
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				c.SendKey(t, ptytest.KeyCtrlC)
+				cliWaitForResult(t, c)
+				c.RequireSuccessfulExit(t)
+				return ptySanitizeSnapshots(t, c)
+			},
 		},
 		"Exit_authd_if_user_presses_ctrl_d": {
-			tape: "passwd_ctrl_d",
+			test: func(t *testing.T, socketPath, username string) string {
+				t.Helper()
+				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
+				cliEnterUsername(t, c, username)
+				cliSelectBroker(t, c)
+				c.WaitFor(t, `Gimme your password`)
+				c.SendKey(t, ptytest.KeyCtrlD)
+				cliWaitForResult(t, c)
+				c.RequireSuccessfulExit(t)
+				return ptySanitizeSnapshots(t, c)
+			},
 		},
 	}
+
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			outDir := t.TempDir()
-			err := os.Symlink(filepath.Join(clientPath, "pam_authd"),
-				filepath.Join(outDir, "pam_authd"))
-			require.NoError(t, err, "Setup: symlinking the pam client")
-
+			groupFile := filepath.Join(t.TempDir(), "group")
+			if err := os.WriteFile(groupFile, nil, 0o600); err != nil {
+				t.Fatalf("Setup: could not create group file: %v", err)
+			}
 			var socketPath string
 			if tc.currentUserNotRoot {
-				// For the not-root tests authd has to run in a more restricted way.
-				// In the other cases this is not needed, so we can just use a shared authd.
-				socketPath = runAuthd(t, testutils.WithGroupFile(filepath.Join(t.TempDir(), "group")))
+				socketPath = runAuthd(t, testutils.WithGroupFile(groupFile))
 			} else {
-				socketPath, _ = sharedAuthd(t)
+				socketPath = runAuthd(t,
+					testutils.WithCurrentUserAsRoot,
+					testutils.WithGroupFile(groupFile),
+					testutils.WithGroupFileOutput(groupFile),
+				)
 			}
 
-			if _, ok := tc.tapeVariables[vhsTapeUserVariable]; !ok && !tc.currentUserNotRoot {
-				if tc.tapeVariables == nil {
-					tc.tapeVariables = make(map[string]string)
-				}
-				tc.tapeVariables[vhsTapeUserVariable] = vhsTestUserName(t, "cli-passwd")
+			username := tc.username
+			if username == "" && !tc.currentUserNotRoot {
+				username = testUserName(t, "cli-passwd")
 			}
 
-			td := newTapeData(tc.tape, outDir, tc.tapeSettings...)
-			td.Command = tapeCommand
-			td.Variables = tc.tapeVariables
-			td.Env[vhsTapeSocketVariable] = socketPath
-			td.AddClientOptions(t, clientOptions{})
-			td.RunVHS(t, vhsTestTypeCLI, cliEnv)
-			got := td.SanitizedOutput(t)
+			got := tc.test(t, socketPath, username)
 			golden.CheckOrUpdate(t, got)
-
 			requireRunnerResult(t, authd.SessionMode_CHANGE_PASSWORD, got)
 		})
 	}

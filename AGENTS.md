@@ -21,7 +21,7 @@ authd is an authentication daemon for cloud-based identity providers (MS Entra I
 - `internal/brokers/`: Broker manager and D-Bus integration
 - `internal/services/`: gRPC service implementations (PAM, NSS, user management)
 - `internal/users/`: User/group database management (SQLite + BoltDB legacy)
-- `pam/`: PAM module with two build modes (see `pam/Hacking.md`)
+- `pam/`: PAM module with two build modes (see `pam/README.md`)
 - `nss/`: Rust NSS module using `libnss` crate
 - `examplebroker/`: Reference broker implementation
 
@@ -45,7 +45,6 @@ cargo build                              # NSS (debug mode)
   - Compare/update: `golden.CheckOrUpdate(t, got)` or `golden.CheckOrUpdateYAML(t, got)`
 - **Test helpers with underscores**: Functions prefixed `Z_ForTests_` are test-only exports (e.g., `Z_ForTests_CreateDBFromYAML`)
 - **Environment variables**:
-  - `AUTHD_SKIP_EXTERNAL_DEPENDENT_TESTS=1`: Skip tests requiring external tools (vhs)
   - `AUTHD_SKIP_ROOT_TESTS=1`: Skip tests that fail when run as root
 
 ### Code Generation
@@ -65,7 +64,7 @@ go generate ./shell-completion/         # Shell completions
 - Brokers must implement the D-Bus interface defined in `internal/brokers/dbusbroker.go`
 
 ### PAM Module Dual Mode
-The PAM module has two implementations (see `pam/Hacking.md`):
+The PAM module has two implementations (see `pam/README.md`):
 1. **GDM mode** (`pam_authd.so`): Native Go shared library with GDM JSON protocol support
 2. **Generic mode** (`pam_authd_exec.so` + `authd-pam` executable): C wrapper launching Go program via private D-Bus
    - Required for reliability with non-GDM PAM apps (avoids Go threading issues)
@@ -80,7 +79,7 @@ The PAM module has two implementations (see `pam/Hacking.md`):
 - Use `testify/require` for assertions (not `assert`)
 - Golden files in `testdata/golden/` subdirectories matching test structure
 - Test-only exports via `export_test.go` files (no build tag, package-level visibility)
-- PAM integration tests use `vhs` tapes in `pam/integration-tests/testdata/tapes/`
+- PAM integration tests use `ptytest` in `pam/integration-tests/`
 
 ## Common Workflows
 
@@ -109,11 +108,29 @@ git --no-pager show
 git --no-pager log
 ```
 
+Agent-authored changes should generally be committed once complete.
+Do not leave finished agent-created changes uncommitted unless the user
+explicitly asks for no commit.
+
+When creating commits for agent-authored changes, use atomic commits:
+each commit must contain one coherent, self-contained logical change.
+
+## Commit messages
+
+Explain why, not what — the diff shows what changed.
+
+- For bug fixes, describe the observable symptom before the root cause
+- Document non-obvious decisions and rejected alternatives
+- One-liners are fine for mechanical changes; anything behavioral needs a body
+
+Don't narrate your activity ("Fixed X as requested") or describe the diff
+("Add null check before calling Process()").
+
 ## Dependencies & Tools
 - **Go**: See `go.mod` for version requirements, uses go modules with vendoring
 - **Rust**: Cargo with vendor filtering (see `Cargo.toml` workspace)
 - **Required**: `libpam-dev`, `libglib2.0-dev`, `protoc`, `cargo-vendor-filterer`
-- **Optional**: `vhs` (PAM CLI tests), `delta` (colored diffs in tests)
+- **Optional**: `delta` (colored diffs in tests)
 
 ## Code Style
 - Follow [Effective Go](https://go.dev/doc/effective_go) for Go style conventions

@@ -32,10 +32,6 @@ export CARGO_HOME = $(CURDIR)/debian/cargo_home
 export AUTHD_DAEMONS_PATH := /usr/libexec
 export AUTHD_PAM_MODULES_PATH = /usr/lib/$(DEB_TARGET_GNU_TYPE)/security
 
-# Skip some tests that rely on external dependencies when building package:
-# they need external commands (e.g. `vhs`) that are not available in the build environment.
-export AUTHD_SKIP_EXTERNAL_DEPENDENT_TESTS=1
-
 # Skip some tests that fail when running as root as it may happen when building the packages
 # in sbuild or similar environments.
 export AUTHD_SKIP_ROOT_TESTS := 1

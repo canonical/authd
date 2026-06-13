@@ -4,9 +4,6 @@ set -exuo pipefail
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 
-# Skip tests which depend on vhs which is not available in the build environment.
-export AUTHD_SKIP_EXTERNAL_DEPENDENT_TESTS=1
-
 # Skip flaky tests because we don't want autopkgtests to fail, which would cause
 # trouble for maintainers of packages which authd depends on.
 export AUTHD_SKIP_FLAKY_TESTS=1

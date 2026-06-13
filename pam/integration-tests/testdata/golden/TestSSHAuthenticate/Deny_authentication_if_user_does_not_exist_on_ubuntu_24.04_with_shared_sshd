@@ -1,0 +1,3 @@
+PAM Authenticate() finished for user 'user-unexistent@example.com'
+SSH PAM user 'user-unexistent@example.com' using local broker
+(user-unexistent@example.com@localhost) Password:
