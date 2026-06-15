@@ -634,7 +634,19 @@ func TestIsAuthenticated(t *testing.T) {
 			},
 		},
 
-		"Authenticating_with_qrcode_reacquires_token":          {firstSecret: "-", wantSecondCall: true, token: &tokenOptions{}},
+		"Authenticating_with_qrcode_reacquires_token": {
+			firstSecret:       "-",
+			token:             &tokenOptions{},
+			wantGroups:        []info.Group{{Name: "remote-test-group", UGID: "12345"}, {Name: "local-test-group", UGID: ""}},
+			wantNextAuthModes: []string{},
+		},
+
+		"Authenticating_with_device_auth_and_existing_password_skips_newpassword": {
+			firstSecret:       "-",
+			token:             &tokenOptions{},
+			wantGroups:        []info.Group{{Name: "remote-test-group", UGID: "12345"}, {Name: "local-test-group", UGID: ""}},
+			wantNextAuthModes: []string{},
+		},
 		"Authenticating_with_password_refreshes_expired_token": {firstMode: authmodes.Password, token: &tokenOptions{expired: true}},
 		"Authenticating_with_password_keeps_old_gecos_if_name_claim_missing_on_refresh_for_name_claim_provider": {
 			firstMode:                     authmodes.Password,
