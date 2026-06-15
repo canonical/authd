@@ -15,8 +15,8 @@
 [goreport-url]: https://goreportcard.com/report/github.com/canonical/authd
 
 [docs-image]: https://readthedocs.com/projects/canonical-authd/badge/?version=edge-docs
-[docs-url-stable]: https://documentation.ubuntu.com/authd/stable-docs/
-[docs-url-edge]: https://documentation.ubuntu.com/authd/edge-docs/
+[docs-url-stable]: https://ubuntu.com/docs/authd/stable-docs/
+[docs-url-edge]: https://ubuntu.com/docs/authd/edge-docs/
 
 [![Code quality][actions-image]][actions-url]
 [![License][license-image]](COPYING)

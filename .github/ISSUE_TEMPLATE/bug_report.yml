@@ -26,7 +26,7 @@ body:
 
         **Troubleshooting**
 
-        Please read our [Troubleshooting wiki page](https://documentation.ubuntu.com/authd/stable-docs/reference/troubleshooting/#common-issues-and-limitations)
+        Please read our [Troubleshooting page](https://ubuntu.com/docs/authd/stable-docs/reference/troubleshooting/#common-issues-and-limitations)
         and see if you can find a solution to your problem there.
   - type: checkboxes
     attributes:
