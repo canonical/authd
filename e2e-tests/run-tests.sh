@@ -33,6 +33,7 @@ Options:
   -o, --output-dir DIR         Directory to store test outputs (default: temporary directory)
   -h, --help                   Show this help message and exit
       --rerunfailed            Re-run only the tests that failed in the previous run
+      --interactive            Run YARF in interactive mode
 EOF
 }
 
@@ -69,6 +70,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --rerunfailed)
             RERUNFAILED=1
+            shift
+            ;;
+        --interactive)
+            INTERACTIVE=1
             shift
             ;;
         --output-dir|-o)
@@ -163,29 +168,45 @@ YARF_LOG_VIDEO=0
 # Make YARF log the image where it found a text match, for debugging
 YARF_LOG_LEVEL=DEBUG
 
-env \
-    E2E_USER="$E2E_USER" \
-    E2E_PASSWORD="$E2E_PASSWORD" \
-    TOTP_SECRET="$TOTP_SECRET" \
-    BROKER="$BROKER" \
-    RELEASE="$RELEASE" \
-    VNC_PORT="$VNC_PORT" \
-    SYSTEMD_SUPPORTS_VSOCK="${SYSTEMD_SUPPORTS_VSOCK:-}" \
-    YARF_LOG_VIDEO="${YARF_LOG_VIDEO}" \
-    YARF_LOG_LEVEL="${YARF_LOG_LEVEL}" \
-    robot \
-        --consolecolors on \
-        --loglevel DEBUG \
-        --pythonpath "${ROOT_DIR}" \
-        --pythonpath "${YARF_DIR}/yarf/rf_libraries/libraries/vnc" \
-        --pythonpath "${YARF_DIR}/yarf/rf_libraries/resources" \
-        --pythonpath "${YARF_DIR}/yarf/rf_libraries/variables" \
-        --outputdir "${OUTPUT_DIR}" \
-        --listener "${LISTENER_DIR}/Listener.py" \
-        --console quiet \
-        "${ROBOT_ARGS[@]}" \
-        "$@" \
-        "${TESTS_TO_RUN[@]}" \
+if [ -n "${INTERACTIVE:-}" ]; then
+    # If --interactive is passed, start yarf in interactive mode
+    env \
+        E2E_USER="$E2E_USER" \
+        E2E_PASSWORD="$E2E_PASSWORD" \
+        TOTP_SECRET="$TOTP_SECRET" \
+        BROKER="$BROKER" \
+        RELEASE="$RELEASE" \
+        VNC_PORT="$VNC_PORT" \
+        SYSTEMD_SUPPORTS_VSOCK="${SYSTEMD_SUPPORTS_VSOCK:-}" \
+        YARF_LOG_VIDEO="${YARF_LOG_VIDEO}" \
+        YARF_LOG_LEVEL="${YARF_LOG_LEVEL}" \
+        yarf \
         || test_result=$?
+else
+    env \
+        E2E_USER="$E2E_USER" \
+        E2E_PASSWORD="$E2E_PASSWORD" \
+        TOTP_SECRET="$TOTP_SECRET" \
+        BROKER="$BROKER" \
+        RELEASE="$RELEASE" \
+        VNC_PORT="$VNC_PORT" \
+        SYSTEMD_SUPPORTS_VSOCK="${SYSTEMD_SUPPORTS_VSOCK:-}" \
+        YARF_LOG_VIDEO="${YARF_LOG_VIDEO}" \
+        YARF_LOG_LEVEL="${YARF_LOG_LEVEL}" \
+        robot \
+            --consolecolors on \
+            --loglevel DEBUG \
+            --pythonpath "${ROOT_DIR}" \
+            --pythonpath "${YARF_DIR}/yarf/rf_libraries/libraries/vnc" \
+            --pythonpath "${YARF_DIR}/yarf/rf_libraries/resources" \
+            --pythonpath "${YARF_DIR}/yarf/rf_libraries/variables" \
+            --outputdir "${OUTPUT_DIR}" \
+            --listener "${LISTENER_DIR}/Listener.py" \
+            --console quiet \
+            "${ROBOT_ARGS[@]}" \
+            "$@" \
+            "${TESTS_TO_RUN[@]}" \
+            || test_result=$?
+fi
 
 exit "${test_result:-0}"

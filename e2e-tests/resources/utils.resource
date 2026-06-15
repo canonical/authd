@@ -18,19 +18,20 @@ ${SUITE_OUTPUT_DIR}    ${OUTPUT_DIR}/${SUITE_NAME.rsplit('.')[-1]}
 # they are referenced by relative URLs in log.html instead of being embedded
 # as base64. Set to an empty string to fall back to inline base64 embedding.
 ${YARF_IMAGE_DIR}    ${SUITE_OUTPUT_DIR}/screenshots
+# Used by YARF OCR matching internals (read from environment).
+${OCR_CONFIDENCE_THRESHOLD}    94
+${OCR_SIMILARITY_THRESHOLD}    92
 
 
 *** Keywords ***
 Log In
-    Set OCR Confidence Threshold    0.94
-    Set OCR Coincidence Threshold    92
     Log In With Password    ubuntu
 
 
 Log In With Password
     [Arguments]    ${password}
-    Match Text    Not listed    300
-    Wait Until User Selected
+    Wait Until GDM Login Screen Ready
+    Select User
     Hid.Type String    ${password}
     Hid.Keys Combo    Return
     Wait Until Desktop Ready
@@ -38,8 +39,8 @@ Log In With Password
 
 Log In And Set Password
     [Arguments]    ${new_password}
-    Match Text    Not listed    300
-    Wait Until User Selected
+    Wait Until GDM Login Screen Ready
+    Select User
     Hid.Type String    ubuntu
     Hid.Keys Combo    Return
 
@@ -60,7 +61,7 @@ Log In And Set Password
     Wait Until Desktop Ready
 
 
-Wait Until User Selected
+Select User
     Wait Until Keyword Succeeds    120 sec    1 sec
     ...    Try Select User
 
@@ -72,6 +73,10 @@ Try Select User
 
 Log Out
     SSH.Execute    loginctl terminate-seat seat0
+
+
+Wait Until GDM Login Screen Ready
+    Match Text    Not listed    180
 
 
 Wait Until Desktop Ready

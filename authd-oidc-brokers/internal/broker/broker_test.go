@@ -828,10 +828,20 @@ func TestIsAuthenticated(t *testing.T) {
 			address: "127.0.0.1:31315",
 		},
 
-		"Error_when_authentication_data_is_invalid":         {invalidAuthData: true},
-		"Error_when_secret_can_not_be_decrypted":            {firstMode: authmodes.Password, badFirstKey: true},
-		"Error_when_provided_wrong_secret":                  {firstMode: authmodes.Password, token: &tokenOptions{}, firstSecret: "wrongpassword"},
-		"Error_when_can_not_cache_token":                    {firstSecret: "-", wantSecondCall: true, readOnlyDataDir: true},
+		"Error_when_authentication_data_is_invalid": {invalidAuthData: true},
+		"Error_when_secret_can_not_be_decrypted":    {firstMode: authmodes.Password, badFirstKey: true},
+		"Error_when_provided_wrong_secret":          {firstMode: authmodes.Password, token: &tokenOptions{}, firstSecret: "wrongpassword"},
+		"Authenticating_when_can_not_cache_token_without_forced_provider_access_check": {
+			firstMode:       authmodes.Password,
+			token:           &tokenOptions{},
+			readOnlyDataDir: true,
+		},
+		"Error_when_can_not_cache_token_with_forced_provider_access_check": {
+			firstMode:                    authmodes.Password,
+			token:                        &tokenOptions{},
+			forceAccessCheckWithProvider: true,
+			readOnlyDataDir:              true,
+		},
 		"Error_when_IsAuthenticated_is_ongoing_for_session": {dontWaitForFirstCall: true, wantSecondCall: true},
 
 		"Error_when_mode_is_password_and_token_does_not_exist": {firstMode: authmodes.Password},
