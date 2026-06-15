@@ -1,5 +1,8 @@
 # Releasing authd and the brokers
 
+This document describes the process of releasing stable releases of the authd
+Debian packages and the broker snaps.
+
 ## Prepare release branch
 
 1. Ensure you’re on the main branch.
