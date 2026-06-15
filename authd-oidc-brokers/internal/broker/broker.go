@@ -806,16 +806,6 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		return AuthNext, nil
 	}
 
-	if authInfo.UserIsDisabled && session.isOffline {
-		log.Errorf(context.Background(), "Login denied: user %q is disabled in %s and session is offline", session.username, b.provider.DisplayName())
-		return AuthDenied, errorMessage{Message: fmt.Sprintf("Your user account is disabled in %s. Please contact your administrator or try again with a working network connection.", b.provider.DisplayName())}
-	}
-
-	if authInfo.DeviceIsDisabled && session.isOffline {
-		log.Errorf(context.Background(), "Login denied: device %q is disabled in %s and session is offline", session.username, b.provider.DisplayName())
-		return AuthDenied, errorMessage{Message: fmt.Sprintf("This device is disabled in %s. Please contact your administrator or try again with a working network connection.", b.provider.DisplayName())}
-	}
-
 	// Refresh the token if we're online even if the token has not expired
 	if b.cfg.forceAccessCheckWithProvider || !session.isOffline {
 		// Check if we have a refresh token before attempting to refresh
@@ -863,6 +853,19 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 				return AuthDenied, errorMessage{Message: "Failed to refresh token"}
 			}
 		}
+	}
+
+	// Check disabled status. We have to do this after trying to refresh the token,
+	// because if token refresh fails with a network error, the session falls back
+	// to offline mode.
+	if authInfo.UserIsDisabled && session.isOffline {
+		log.Errorf(context.Background(), "Login denied: user %q is disabled in %s and session is offline", session.username, b.provider.DisplayName())
+		return AuthDenied, errorMessage{Message: fmt.Sprintf("Your user account is disabled in %s. Please contact your administrator or try again with a working network connection.", b.provider.DisplayName())}
+	}
+
+	if authInfo.DeviceIsDisabled && session.isOffline {
+		log.Errorf(context.Background(), "Login denied: device %q is disabled in %s and session is offline", session.username, b.provider.DisplayName())
+		return AuthDenied, errorMessage{Message: fmt.Sprintf("This device is disabled in %s. Please contact your administrator or try again with a working network connection.", b.provider.DisplayName())}
 	}
 
 	// If device registration is enabled, ensure that the device is registered.
