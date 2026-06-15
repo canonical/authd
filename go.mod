@@ -12,7 +12,7 @@ require (
 	github.com/coreos/go-systemd/v22 v22.7.0
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/uuid v1.6.0
-	github.com/mattn/go-sqlite3 v1.14.44
+	github.com/mattn/go-sqlite3 v1.14.45
 	github.com/msteinert/pam/v2 v2.0.0
 	github.com/muesli/termenv v0.16.0
 	github.com/otiai10/copy v1.14.1
@@ -23,11 +23,11 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9
-	golang.org/x/sys v0.45.0
-	golang.org/x/term v0.43.0
+	golang.org/x/sys v0.46.0
+	golang.org/x/term v0.44.0
 	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.11
-	gopkg.in/ini.v1 v1.67.2
+	gopkg.in/ini.v1 v1.67.3
 	gopkg.in/yaml.v3 v3.0.1
 	gorbe.io/go/osrelease v0.3.0
 )
