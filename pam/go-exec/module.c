@@ -223,6 +223,7 @@ log_writer (GLogLevelFlags   log_level,
   int log_file_fd;
   gboolean use_colors;
   size_t length;
+  int errsv;
 
   if (g_log_writer_default_would_drop (log_level, log_domain))
     return G_LOG_WRITER_HANDLED;
@@ -244,7 +245,8 @@ log_writer (GLogLevelFlags   log_level,
       write (log_file_fd, "\n", 1) == 1)
     return G_LOG_WRITER_HANDLED;
 
-  g_printerr ("Can't write log to file: %s", g_strerror (errno));
+  errsv = errno;
+  g_printerr ("Can't write log to file: %s", g_strerror (errsv));
   return G_LOG_WRITER_UNHANDLED;
 }
 
@@ -978,11 +980,13 @@ do_pam_action_thread (pam_handle_t *pamh,
   g_autofree char *log_file = NULL;
   g_autofree char *program_name = NULL;
   g_autofree char *wait_thread_name = NULL;
+  g_autofd int pam_tty_fd = -1;
   g_autofd int stdin_fd = -1;
   g_autofd int stdout_fd = -1;
   g_autofd int stderr_fd = -1;
   g_autofd int log_file_fd = -1;
   const char *action_name;
+  int errsv;
   int exit_status;
   gboolean interactive_mode;
   GPid child_pid;
@@ -1017,6 +1021,7 @@ do_pam_action_thread (pam_handle_t *pamh,
   else
     log_file_fd = dup (STDERR_FILENO);
 
+  errsv = errno;
   action_data.log_file_fd = g_steal_fd (&log_file_fd);
   G_UNLOCK (logger);
 
@@ -1024,7 +1029,7 @@ do_pam_action_thread (pam_handle_t *pamh,
     {
       g_warning ("Impossible to open log file %s: %s",
                  (log_file && *log_file != '\0') ? log_file : "<sderr>",
-                 g_strerror (errno));
+                 g_strerror (errsv));
     }
 
   locker = g_mutex_locker_new (&G_LOCK_NAME (exec_module));
@@ -1089,18 +1094,43 @@ do_pam_action_thread (pam_handle_t *pamh,
   main_context = g_main_context_ref (module_data->main_context);
   context_pusher = g_main_context_pusher_new (main_context);
 
-  interactive_mode = isatty (STDIN_FILENO);
+  stdin_fd = STDIN_FILENO;
+  stdout_fd = STDOUT_FILENO;
+
+  const char *pam_tty;
+  if ((exit_status = pam_get_item (pamh, PAM_TTY, (const void **) &pam_tty)) != PAM_SUCCESS)
+    return exit_status;
+
+  if (pam_tty != NULL && *pam_tty != '\0')
+    {
+      g_debug ("Trying to use PAM TTY %s", pam_tty);
+      pam_tty_fd = open (pam_tty, O_RDWR, 0600);
+      errsv = errno;
+
+      if (pam_tty_fd >= 0)
+        {
+          stdin_fd = pam_tty_fd;
+          stdout_fd = pam_tty_fd;
+        }
+      else
+        {
+          g_debug ("Impossible to open PAM_TTY %s: %s", pam_tty, g_strerror (errsv));
+        }
+    }
+
+  interactive_mode = isatty (stdin_fd) && isatty (stdout_fd);
+  g_debug ("Running in interactive mode: %s", interactive_mode ? "true" : "false");
 
   if (interactive_mode)
     {
-      if ((stdin_fd = dup_fd_checked (STDIN_FILENO, &error)) < 0)
+      if ((stdin_fd = dup_fd_checked (stdin_fd, &error)) < 0)
         {
           notify_error (pamh, action, "can't duplicate stdin file descriptor: %s",
                         error->message);
           return PAM_SYSTEM_ERR;
         }
 
-      if ((stdout_fd = dup_fd_checked (STDOUT_FILENO, &error)) < 0)
+      if ((stdout_fd = dup_fd_checked (stdout_fd, &error)) < 0)
         {
           notify_error (pamh, action, "can't duplicate stdout file descriptor: %s",
                         error->message);
@@ -1113,6 +1143,11 @@ do_pam_action_thread (pam_handle_t *pamh,
                         error->message);
           return PAM_SYSTEM_ERR;
         }
+    }
+  else
+    {
+      g_steal_fd (&stdin_fd);
+      g_steal_fd (&stdout_fd);
     }
 
   action_data.connection_new_id =
