@@ -19,11 +19,22 @@ type AuthCachedInfo struct {
 	ProviderMetadata       map[string]interface{}
 	UserInfo               info.User
 	DeviceRegistrationData []byte
-	DeviceIsDisabled       bool
-	UserIsDisabled         bool
+	// NeedsAccessTokenForGraphAPI records that group lookup must first exchange
+	// the cached token for a Graph-scoped access token using device registration
+	// data. This is explicit auth state rather than provider-global mutable state.
+	NeedsAccessTokenForGraphAPI bool
+	DeviceIsDisabled            bool
+	UserIsDisabled              bool
+	// ObtainedViaEntraPasswordAuth is set when the token was obtained through the
+	// entra_password MFA flow. In that flow, libhimmelblau always issues tokens
+	// under the Microsoft Broker App ID, so IsTokenForDeviceRegistration returns
+	// true even when register_device=false. This flag lets authModeIsAvailable
+	// distinguish that case from a genuine device-registration token and still
+	// offer local Password mode.
+	ObtainedViaEntraPasswordAuth bool
 }
 
-// NewAuthCachedInfo creates a new AuthCachedInfo. It sets the provided token, rawIDToken, and
+// NewAuthCachedInfo creates a new AuthCachedInfo. It sets the provided token and rawIDToken and the provider-specific
 // extra fields which should be stored persistently.
 func NewAuthCachedInfo(token *oauth2.Token, rawIDToken string, extraFields map[string]interface{}) *AuthCachedInfo {
 	return &AuthCachedInfo{

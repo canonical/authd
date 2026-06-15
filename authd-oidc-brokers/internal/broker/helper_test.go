@@ -27,6 +27,8 @@ type brokerForTestConfig struct {
 	issuerURL                    string
 	forceAccessCheckWithProvider bool
 	registerDevice               bool
+	deviceAuthFlowDisabled       bool
+	entraPasswordFlowDisabled    bool
 	allowedUsers                 map[string]struct{}
 	allUsersAllowed              bool
 	ownerAllowed                 bool
@@ -41,11 +43,11 @@ type brokerForTestConfig struct {
 
 	getGroupsFails                bool
 	supportsDeviceRegistration    bool
+	supportsFetchingGroups        bool
 	supportsMetadata              bool
 	metadataGetErr                error
 	supportsUserDisabledCheck     bool
 	userDisabledErrorCode         string
-	supportsFetchingGroups        bool
 	requireNameClaimOnInitialAuth bool
 	firstCallDelay                int
 	secondCallDelay               int
@@ -91,6 +93,9 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	if cfg.registerDevice {
 		cfg.SetRegisterDevice(cfg.registerDevice)
 	}
+	if cfg.deviceAuthFlowDisabled || cfg.entraPasswordFlowDisabled {
+		cfg.SetFlows(!cfg.deviceAuthFlowDisabled, !cfg.entraPasswordFlowDisabled)
+	}
 	if cfg.homeBaseDir != "" {
 		cfg.SetHomeBaseDir(cfg.homeBaseDir)
 	}
@@ -119,19 +124,18 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 		cfg.SetOwnerExtraGroups(cfg.ownerExtraGroups)
 	}
 
-	provider := &testutils.MockProvider{
-		GetGroupsFails:                cfg.getGroupsFails,
-		RequireNameClaimOnInitialAuth: cfg.requireNameClaimOnInitialAuth,
-		FirstCallDelay:                cfg.firstCallDelay,
-		SecondCallDelay:               cfg.secondCallDelay,
-		GetGroupsFunc:                 cfg.getGroupsFunc,
+	provider := cfg.provider
+	if provider == nil {
+		mockProvider := &testutils.MockProvider{
+			GetGroupsFails:                cfg.getGroupsFails,
+			RequireNameClaimOnInitialAuth: cfg.requireNameClaimOnInitialAuth,
+			FirstCallDelay:                cfg.firstCallDelay,
+			SecondCallDelay:               cfg.secondCallDelay,
+			GetGroupsFunc:                 cfg.getGroupsFunc,
+		}
+		provider = brokerProviderWithOptionalCapabilities(mockProvider, cfg)
 	}
-
-	brokerProvider := brokerProviderWithOptionalCapabilities(provider, cfg)
-
-	if cfg.provider == nil {
-		cfg.SetProvider(provider)
-	}
+	cfg.SetProvider(provider)
 	if cfg.DataDir == "" {
 		cfg.DataDir = t.TempDir()
 	}
@@ -158,7 +162,7 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 		apiVersion = cfg.apiVersion
 	}
 
-	b, err := broker.New(cfg.Config, apiVersion, broker.WithCustomProvider(brokerProvider))
+	b, err := broker.New(cfg.Config, apiVersion, broker.WithCustomProvider(provider))
 	require.NoError(t, err, "Setup: New should not have returned an error")
 	return b
 }
@@ -231,19 +235,20 @@ type tokenOptions struct {
 	gecos    string
 	groups   []info.Group
 
-	expired                     bool
-	noRefreshToken              bool
-	refreshTokenExpired         bool
-	refreshTokenInactiveExpired bool
-	refreshTokenStale           bool
-	noIDToken                   bool
-	invalid                     bool
-	invalidClaims               bool
-	noUserInfo                  bool
-	isForDeviceRegistration     bool
-	noIsForDeviceRegistration   bool
-	deviceIsDisabled            bool
-	userIsDisabled              bool
+	expired                      bool
+	noRefreshToken               bool
+	refreshTokenExpired          bool
+	refreshTokenInactiveExpired  bool
+	refreshTokenStale            bool
+	noIDToken                    bool
+	invalid                      bool
+	invalidClaims                bool
+	noUserInfo                   bool
+	isForDeviceRegistration      bool
+	noIsForDeviceRegistration    bool
+	deviceIsDisabled             bool
+	userIsDisabled               bool
+	obtainedViaEntraPasswordAuth bool
 }
 
 func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInfo {
@@ -279,8 +284,9 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 			RefreshToken: "refreshtoken",
 			Expiry:       time.Now().Add(1000 * time.Hour),
 		},
-		DeviceIsDisabled: options.deviceIsDisabled,
-		UserIsDisabled:   options.userIsDisabled,
+		DeviceIsDisabled:             options.deviceIsDisabled,
+		UserIsDisabled:               options.userIsDisabled,
+		ObtainedViaEntraPasswordAuth: options.obtainedViaEntraPasswordAuth,
 	}
 
 	if options.expired {

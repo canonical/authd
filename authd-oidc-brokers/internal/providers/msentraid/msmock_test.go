@@ -48,6 +48,7 @@ func ensureMockMSServerForDeviceRegistration(t *testing.T) {
 type mockMSServer struct {
 	*httptest.Server
 
+	config             *mockMSServerConfig
 	rsaPrivateKey      *rsa.PrivateKey
 	transportKeyBySPKI map[string]*rsa.PublicKey
 	transportKeyMu     sync.RWMutex
@@ -58,6 +59,9 @@ type mockMSServerConfig struct {
 	// If empty, requests to the token endpoint will be accepted for any tenant.
 	TenantID             string
 	GroupEndpointHandler http.HandlerFunc
+	// RefreshHandler overrides the refresh_token grant response. Defaults to a
+	// successful token; set it to simulate a disabled/revoked user (e.g. AADSTS50057).
+	RefreshHandler http.HandlerFunc
 }
 
 func startMockMSServer(t *testing.T, config *mockMSServerConfig) (mockServer *mockMSServer, cleanup func()) {
@@ -73,6 +77,7 @@ func startMockMSServer(t *testing.T, config *mockMSServerConfig) (mockServer *mo
 	require.NoError(t, err, "failed to generate RSA private key")
 
 	m := &mockMSServer{
+		config:             config,
 		rsaPrivateKey:      rsaPrivateKey,
 		transportKeyBySPKI: make(map[string]*rsa.PublicKey),
 	}
@@ -96,7 +101,7 @@ func startMockMSServer(t *testing.T, config *mockMSServerConfig) (mockServer *mo
 			m.handleDeviceEnrollmentRequest(t, w, r)
 
 		// ===== graph.microsoft.com =====
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/me/transitiveMemberOf/graph.group"):
+		case r.Method == http.MethodGet && (strings.HasSuffix(r.URL.Path, "/me/transitiveMemberOf/graph.group") || strings.Contains(r.URL.Path, "/transitiveMemberOf/graph.group")):
 			config.GroupEndpointHandler(w, r)
 
 		default:
@@ -154,6 +159,9 @@ func (m *mockMSServer) handleTokenRequest(t *testing.T, w http.ResponseWriter, r
 	case "refresh_token":
 		m.handleRefreshTokenRequest(t, w, r)
 
+	case "client_credentials":
+		m.handleClientCredentialsRequest(t, w, r)
+
 	case "srv_challenge":
 		m.handleNonceRequest(t, w, r)
 
@@ -166,6 +174,28 @@ func (m *mockMSServer) handleTokenRequest(t *testing.T, w http.ResponseWriter, r
 	default:
 		t.Fatalf("unexpected grant_type in token request: %s", grantType)
 	}
+}
+
+func (m *mockMSServer) handleClientCredentialsRequest(t *testing.T, w http.ResponseWriter, r *http.Request) {
+	require.Equal(t, strings.TrimRight(m.URL, "/")+"/.default", r.Form.Get("scope"), "unexpected client credentials scope")
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"exp": float64(time.Now().Add(time.Hour).Unix()),
+	})
+	accessTokenStr, err := accessToken.SignedString(m.rsaPrivateKey)
+	require.NoError(t, err, "failed to sign app access token")
+
+	resp := map[string]interface{}{
+		"token_type":     "Bearer",
+		"expires_in":     3600,
+		"ext_expires_in": 3600,
+		"access_token":   accessTokenStr,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	err = json.NewEncoder(w).Encode(resp)
+	require.NoError(t, err, "failed to encode response")
 }
 
 func (m *mockMSServer) handleAuthorizeRequest(t *testing.T, w http.ResponseWriter, r *http.Request) {
@@ -276,7 +306,11 @@ func (m *mockMSServer) handleNonceRequest(t *testing.T, w http.ResponseWriter, _
 	require.NoError(t, err, "failed to encode response")
 }
 
-func (m *mockMSServer) handleRefreshTokenRequest(t *testing.T, w http.ResponseWriter, _ *http.Request) {
+func (m *mockMSServer) handleRefreshTokenRequest(t *testing.T, w http.ResponseWriter, r *http.Request) {
+	if m.config != nil && m.config.RefreshHandler != nil {
+		m.config.RefreshHandler(w, r)
+		return
+	}
 	fmt.Fprint(os.Stderr, "Mock MS server responding with access token from refresh\n")
 	resp := map[string]any{
 		"token_type":     "Bearer",
@@ -370,6 +404,18 @@ func simpleGroupHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
+}
+
+// disabledRefreshHandler simulates Entra rejecting a refresh_token grant for a
+// disabled user with AADSTS50057, mirroring the real token-endpoint response.
+func disabledRefreshHandler(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error":             "invalid_grant",
+		"error_description": "AADSTS50057: The user account is disabled.",
+		"error_codes":       []int{50057},
+	})
 }
 
 // localGroupHandler simulates a successful response with a list of local groups.

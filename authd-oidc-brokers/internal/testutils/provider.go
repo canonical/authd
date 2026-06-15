@@ -466,7 +466,7 @@ func (p *MockProvider) GetUserInfo(idToken info.Claimer, isRefresh bool) (info.U
 }
 
 // GetGroups returns the groups the user is a member of.
-func (p *MockProvider) GetGroups(ctx context.Context, clientID string, issuerURL string, token *oauth2.Token, providerMetadata map[string]interface{}, deviceRegistrationData []byte) ([]info.Group, error) {
+func (p *MockProvider) GetGroups(ctx context.Context, clientID string, issuerURL string, token *oauth2.Token, providerMetadata map[string]interface{}, deviceRegistrationData []byte, needsAccessTokenForGraphAPI bool) ([]info.Group, error) {
 	if p.GetGroupsFails {
 		return nil, errors.New("error requested in the mock")
 	}
@@ -485,24 +485,6 @@ func (p *MockProvider) GetGroups(ctx context.Context, clientID string, issuerURL
 	}
 
 	return userGroups, nil
-}
-
-type claims struct {
-	Email    string `json:"email"`
-	Sub      string `json:"sub"`
-	Home     string `json:"home"`
-	Shell    string `json:"shell"`
-	Gecos    string `json:"name"`
-	MustHave string `json:"must-have-claim"`
-}
-
-// userClaims returns the user claims parsed from the ID token.
-func (p *MockProvider) userClaims(idToken info.Claimer) (claims, error) {
-	var userClaims claims
-	if err := idToken.Claims(&userClaims); err != nil {
-		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
-	}
-	return userClaims, nil
 }
 
 // MockDeviceRegistererProvider wraps MockProvider and adds DeviceRegisterer support.
@@ -605,6 +587,24 @@ func (c *composedProvider) ProviderAs(target any) bool {
 		return true
 	}
 	return false
+}
+
+type claims struct {
+	Email    string `json:"email"`
+	Sub      string `json:"sub"`
+	Home     string `json:"home"`
+	Shell    string `json:"shell"`
+	Gecos    string `json:"name"`
+	MustHave string `json:"must-have-claim"`
+}
+
+// userClaims returns the user claims parsed from the ID token.
+func (p *MockProvider) userClaims(idToken info.Claimer) (claims, error) {
+	var userClaims claims
+	if err := idToken.Claims(&userClaims); err != nil {
+		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
+	}
+	return userClaims, nil
 }
 
 // ErrorResponseHandler returns a handler that responds with the given HTTP status code and JSON body.

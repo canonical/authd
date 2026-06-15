@@ -12,6 +12,8 @@ import (
 	"sync"
 	"text/template"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 	"github.com/canonical/authd/log"
 	"gopkg.in/ini.v1"
 )
@@ -60,6 +62,13 @@ const (
 	// ownerUserKeyword is the keyword for the `allowed_users` key that allows access to the owner.
 	ownerUserKeyword = "OWNER"
 
+	// flowsSection is the section name in the config file for the authentication flow control.
+	flowsSection = "flows"
+	// flowsDeviceAuthKey controls whether device_auth and device_auth_qr modes are enabled.
+	flowsDeviceAuthKey = "device_auth"
+	// flowsEntraPasswordKey controls whether entra_password mode is enabled.
+	flowsEntraPasswordKey = "entra_password"
+
 	// ownerAutoRegistrationConfigPath is the name of the file that will be auto-generated to register the owner.
 	ownerAutoRegistrationConfigPath     = "20-owner-autoregistration.conf"
 	ownerAutoRegistrationConfigTemplate = "templates/20-owner-autoregistration.conf.tmpl"
@@ -90,6 +99,10 @@ var (
 			sshSuffixesKeyOld:   {},
 			extraGroupsKey:      {},
 			ownerExtraGroupsKey: {},
+		},
+		flowsSection: {
+			flowsDeviceAuthKey:    {},
+			flowsEntraPasswordKey: {},
 		},
 	}
 )
@@ -128,7 +141,23 @@ type userConfig struct {
 	ownerExtraGroups      []string
 	extraScopes           []string
 
+	flows flowsConfig
+
 	provider provider
+}
+
+// flowsConfig holds the parsed [flows] section configuration.
+type flowsConfig struct {
+	DeviceAuth    bool
+	EntraPassword bool
+}
+
+// defaultFlowsConfig returns the default flows configuration (all modes enabled).
+func defaultFlowsConfig() flowsConfig {
+	return flowsConfig{
+		DeviceAuth:    true,
+		EntraPassword: true,
+	}
 }
 
 // GetDropInDir takes the broker configuration path and returns the drop in dir path.
@@ -220,7 +249,7 @@ func (uc *userConfig) populateUsersConfig(users *ini.Section) {
 }
 
 // parseConfigFromPath parses the config file and returns a map with the configuration keys and values.
-func parseConfigFromPath(cfgPath string, p provider) (userConfig, error) {
+func parseConfigFromPath(cfgPath string, p providers.Provider) (userConfig, error) {
 	content, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return userConfig{}, fmt.Errorf("could not open config file %q: %v", cfgPath, err)
@@ -293,7 +322,7 @@ func validateConfigFile(path string, iniCfg *ini.File) error {
 
 // parseConfig parses the config file and returns a userConfig struct with the configuration keys and values.
 // It also checks if the keys contain any placeholders and returns an error if they do.
-func parseConfig(cfg configFile, dropInCfgs []configFile, p provider) (userConfig, error) {
+func parseConfig(cfg configFile, dropInCfgs []configFile, p providers.Provider) (userConfig, error) {
 	uc := userConfig{provider: p, ownerMutex: &sync.RWMutex{}}
 
 	iniCfg, err := ini.Load(cfg.content)
@@ -324,7 +353,7 @@ func parseConfig(cfg configFile, dropInCfgs []configFile, p provider) (userConfi
 	if oidc != nil {
 		uc.issuerURL = oidc.Key(issuerKey).String()
 		uc.clientID = oidc.Key(clientIDKey).String()
-		uc.clientSecret = oidc.Key(clientSecret).String()
+		uc.clientSecret = strings.TrimSpace(oidc.Key(clientSecret).String())
 		uc.extraScopes = oidc.Key(extraScopesKey).Strings(",")
 
 		forceAccessCheckKey := forceAccessCheckWithProviderKey
@@ -342,6 +371,30 @@ func parseConfig(cfg configFile, dropInCfgs []configFile, p provider) (userConfi
 	if entraID != nil && entraID.HasKey(registerDeviceKey) {
 		// Already validated per-file above; ignore error.
 		uc.registerDevice, _ = entraID.Key(registerDeviceKey).Bool()
+	}
+
+	uc.flows, err = parseFlowsConfig(iniCfg.Section(flowsSection))
+	if err != nil {
+		return userConfig{}, err
+	}
+
+	// The entra_password flow can only retrieve groups from Microsoft Graph
+	// when device registration (PRT-based token exchange) or a client secret
+	// (app-only client credentials) is available. Without either, every
+	// entra_password login would fail at the group-fetch step, so disable the
+	// flow up front instead of letting users hit an undiagnosable denial.
+	// Only relevant for providers that support the flow at all. Use
+	// providers.ProviderAs (rather than a direct type assertion) so the
+	// capability is also detected through composed/wrapped providers.
+	_, supportsEntraPassword := providers.ProviderAs[himmelblau.EntraPasswordProvider](p)
+	if supportsEntraPassword && uc.flows.EntraPassword && !uc.registerDevice && uc.clientSecret == "" {
+		if !uc.flows.DeviceAuth {
+			return userConfig{}, fmt.Errorf("invalid configuration: %q is the only enabled authentication flow, but it requires %q to be enabled or a client secret to be configured to retrieve groups from Microsoft Graph",
+				flowsEntraPasswordKey, registerDeviceKey)
+		}
+		log.Warningf(context.Background(), "Disabling the %q flow: it requires %q to be enabled or a client secret to be configured to retrieve groups from Microsoft Graph",
+			flowsEntraPasswordKey, registerDeviceKey)
+		uc.flows.EntraPassword = false
 	}
 
 	uc.populateUsersConfig(iniCfg.Section(usersSection))
@@ -420,4 +473,38 @@ func (uc *userConfig) registerOwner(cfgPath, userName string) error {
 	uc.firstUserBecomesOwner = false
 
 	return nil
+}
+
+// parseFlowsConfig parses the [flows] section and returns a flowsConfig with defaults for missing keys.
+func parseFlowsConfig(section *ini.Section) (flowsConfig, error) {
+	fc := defaultFlowsConfig()
+
+	if section == nil {
+		return fc, nil
+	}
+
+	if section.HasKey(flowsDeviceAuthKey) {
+		val, err := section.Key(flowsDeviceAuthKey).Bool()
+		if err != nil {
+			log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (true)", flowsDeviceAuthKey, flowsSection)
+		} else {
+			fc.DeviceAuth = val
+		}
+	}
+
+	if section.HasKey(flowsEntraPasswordKey) {
+		val, err := section.Key(flowsEntraPasswordKey).Bool()
+		if err != nil {
+			log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (true)", flowsEntraPasswordKey, flowsSection)
+		} else {
+			fc.EntraPassword = val
+		}
+	}
+
+	if !fc.DeviceAuth && !fc.EntraPassword {
+		return flowsConfig{}, fmt.Errorf("invalid [%s] configuration: all authentication flows are disabled; at least one of %q or %q must be enabled",
+			flowsSection, flowsDeviceAuthKey, flowsEntraPasswordKey)
+	}
+
+	return fc, nil
 }
