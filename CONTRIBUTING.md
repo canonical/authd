@@ -62,7 +62,7 @@ PRs to our project are always welcome and can be a quick way to get your fix or 
 * Only fix/add the functionality in question **OR** address wide-spread whitespace/style issues, not both.
 * Add unit or integration tests for fixed or changed functionality.
 * Address a single concern in the least possible number of changed lines.
-* Include documentation in the repo or on our [docs site](https://documentation.ubuntu.com/authd/stable/).
+* Include documentation in the repo or on our [docs site](https://ubuntu.com/docs/authd/stable-docs/).
 * Be accompanied by a complete Pull Request template (loaded automatically when a PR is created).
 
 For changes that address core functionality or that would require breaking changes (e.g. a major release), it's best to open an Issue to discuss your proposal first. This is not required but can save time when creating and reviewing changes.
