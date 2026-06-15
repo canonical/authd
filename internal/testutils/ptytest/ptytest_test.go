@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -338,4 +339,38 @@ func TestSnapshotsDeduplication(t *testing.T) {
 			t.Errorf("snapshot %d is identical to %d, should have been deduped", i, i-1)
 		}
 	}
+}
+
+func TestLauncherForwardsReceivedSigTerm(t *testing.T) {
+	t.Parallel()
+
+	c := ptytest.Start(t, "bash", []string{"-c", `
+		trap 'echo GOT_SIGTERM; exit 0' TERM
+		echo ready
+		while :; do
+			sleep 0.1
+		done
+	`})
+
+	c.WaitFor(t, "ready")
+	require.NoError(t, syscall.Kill(c.LauncherPid(), syscall.SIGTERM))
+	c.WaitFor(t, "GOT_SIGTERM")
+	require.NoError(t, c.WaitForExit(t))
+}
+
+func TestLauncherForwardsReceivedSigInt(t *testing.T) {
+	t.Parallel()
+
+	c := ptytest.Start(t, "bash", []string{"-c", `
+		trap 'echo GOT_SIGINT; exit 0' INT
+		echo ready
+		while :; do
+			sleep 0.1
+		done
+	`})
+
+	c.WaitFor(t, "ready")
+	require.NoError(t, syscall.Kill(c.LauncherPid(), syscall.SIGINT))
+	c.WaitFor(t, "GOT_SIGINT")
+	require.NoError(t, c.WaitForExit(t))
 }
