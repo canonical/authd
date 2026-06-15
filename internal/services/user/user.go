@@ -313,6 +313,13 @@ func (s Service) DeleteUser(ctx context.Context, req *authd.DeleteUserRequest) (
 		log.Errorf(context.Background(), "failed to look up broker for user %q: %v", name, err)
 	}
 
+	// Look up the provider ID before deleting the user from the DB, so we can pass it
+	// to the broker for provider-ID keyed cache directory cleanup (API v3).
+	providerID, err := s.userManager.ProviderIDForUser(name, brokerID)
+	if err != nil {
+		log.Debugf(context.Background(), "could not look up provider ID for user %q: %v", name, err)
+	}
+
 	if err := s.userManager.DeleteUser(name, req.GetRemoveHome()); err != nil {
 		log.Errorf(ctx, "DeleteUser: %v", err)
 		return nil, grpcError(err)
@@ -327,7 +334,7 @@ func (s Service) DeleteUser(ctx context.Context, req *authd.DeleteUserRequest) (
 		if err != nil {
 			brokerCleanupFailedOrSkipped = true
 			log.Errorf(context.Background(), "failed to get broker %q for user %q: %v", brokerID, name, err)
-		} else if err := broker.DeleteUser(ctx, name); err != nil {
+		} else if err := broker.DeleteUser(ctx, name, providerID); err != nil {
 			brokerCleanupFailedOrSkipped = true
 			log.Errorf(context.Background(), "failed to delete user %q from broker %q: %v", name, brokerID, err)
 		}

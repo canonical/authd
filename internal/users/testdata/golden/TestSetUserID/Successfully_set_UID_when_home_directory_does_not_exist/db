@@ -61,4 +61,4 @@ users_to_groups:
       gid: 11111
     - uid: 54321
       gid: 99999
-schema_version: 2
+schema_version: 3

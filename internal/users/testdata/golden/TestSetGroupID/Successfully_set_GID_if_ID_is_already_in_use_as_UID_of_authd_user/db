@@ -57,4 +57,4 @@ users_to_groups:
       gid: 22222
     - uid: 54321
       gid: 99999
-schema_version: 2
+schema_version: 3

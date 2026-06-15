@@ -1,3 +1,3 @@
 access: granted
-data: '{"userinfo":{"name":"test-user@email.com","uuid":"saved-user-id","dir":"/home/test-user@email.com","shell":"/usr/bin/bash","gecos":"test-user@email.com","groups":[{"name":"old-group","ugid":""}]}}'
+data: '{"userinfo":{"name":"test-user@email.com","provider_id":"saved-user-id","dir":"/home/test-user@email.com","shell":"/usr/bin/bash","gecos":"test-user@email.com","groups":[{"name":"old-group","ugid":""}]}}'
 err: <nil>

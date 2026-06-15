@@ -13,25 +13,28 @@ type Group struct {
 
 // User represents the user information obtained from the provider.
 type User struct {
-	Name   string  `json:"name"`
-	UUID   string  `json:"uuid"`
-	Home   string  `json:"dir"`
-	Shell  string  `json:"shell"`
-	Gecos  string  `json:"gecos"`
-	Groups []Group `json:"groups"`
+	Name string `json:"name"`
+	// ProviderID is the stable OIDC subject identifier used to match returning users.
+	// For MS Entra ID this is the oid claim (stable per tenant); for other
+	// providers it is the standard sub claim.
+	ProviderID string  `json:"provider_id"`
+	Home       string  `json:"dir"`
+	Shell      string  `json:"shell"`
+	Gecos      string  `json:"gecos"`
+	Groups     []Group `json:"groups"`
 }
 
 // NewUser creates a new user with the specified values.
 //
 // It fills the defaults for Shell if it is empty.
-func NewUser(name, home, uuid, shell, gecos string, groups []Group) User {
+func NewUser(name, home, providerID, shell, gecos string, groups []Group) User {
 	u := User{
-		Name:   name,
-		Home:   home,
-		UUID:   uuid,
-		Shell:  shell,
-		Gecos:  gecos,
-		Groups: groups,
+		Name:       name,
+		Home:       home,
+		ProviderID: providerID,
+		Shell:      shell,
+		Gecos:      gecos,
+		Groups:     groups,
 	}
 
 	if u.Home == "" {

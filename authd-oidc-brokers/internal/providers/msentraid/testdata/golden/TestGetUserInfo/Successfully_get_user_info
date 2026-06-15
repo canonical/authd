@@ -1,5 +1,5 @@
 name: valid-user
-uuid: valid-sub
+providerid: valid-oid
 home: /home/valid-user
 shell: /bin/bash
 gecos: Valid User

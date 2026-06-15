@@ -473,6 +473,118 @@ func TestMigrationAddLockedColumnToUsersTable(t *testing.T) {
 	golden.CheckOrUpdate(t, dbContent)
 }
 
+func TestMigrationAddProviderIDColumnToUsersTable(t *testing.T) {
+	// Create a database from the testdata, which predates the provider_id column.
+	dbDir := t.TempDir()
+	sqlDump := "TestMigrationAddProviderIDColumnToUsersTable/two_users_without_provider_id_column.sql"
+	err := db.Z_ForTests_CreateDBFromDump(filepath.Join("testdata", sqlDump), dbDir)
+	require.NoError(t, err, "Setup: could not create database from testdata")
+
+	// Run the migrations
+	m, err := db.New(dbDir)
+	require.NoError(t, err)
+
+	// Check the content of the SQLite database. The pre-migration users must be preserved with an
+	// empty provider_id and the schema version must be bumped.
+	dbContent, err := db.Z_ForTests_DumpNormalizedYAML(m)
+	require.NoError(t, err)
+
+	golden.CheckOrUpdate(t, dbContent)
+}
+
+func TestMigrationAddProviderIDColumnIsIdempotent(t *testing.T) {
+	// Create a database from the testdata, which predates the provider_id column.
+	dbDir := t.TempDir()
+	sqlDump := "TestMigrationAddProviderIDColumnToUsersTable/two_users_without_provider_id_column.sql"
+	err := db.Z_ForTests_CreateDBFromDump(filepath.Join("testdata", sqlDump), dbDir)
+	require.NoError(t, err, "Setup: could not create database from testdata")
+
+	// Run the migrations a first time.
+	m, err := db.New(dbDir)
+	require.NoError(t, err)
+	want, err := db.Z_ForTests_DumpNormalizedYAML(m)
+	require.NoError(t, err)
+	m.Close()
+
+	// Re-open the database to make sure running the migrations again is a no-op.
+	m, err = db.New(dbDir)
+	require.NoError(t, err)
+	defer m.Close()
+
+	got, err := db.Z_ForTests_DumpNormalizedYAML(m)
+	require.NoError(t, err)
+
+	require.Equal(t, want, got, "Re-running migrations should not change the database")
+}
+
+// TestProviderIDUniquenessEnforcedAfterMigration ensures that the partial unique index created by
+// the provider_id migration is actually active for rows inserted after the migration: it enforces
+// uniqueness on (broker_id, provider_id) when both are non-empty, while still allowing multiple
+// users with an empty provider_id (i.e. pre-migration users and users authenticated via v2 brokers).
+func TestProviderIDUniquenessEnforcedAfterMigration(t *testing.T) {
+	// Create a database from the testdata, which predates the provider_id column and contains two
+	// pre-migration users that share the same broker_id and have an empty provider_id.
+	dbDir := t.TempDir()
+	sqlDump := "TestMigrationAddProviderIDColumnToUsersTable/two_users_without_provider_id_column.sql"
+	err := db.Z_ForTests_CreateDBFromDump(filepath.Join("testdata", sqlDump), dbDir)
+	require.NoError(t, err, "Setup: could not create database from testdata")
+
+	// Run the migrations, which creates the partial unique index.
+	m, err := db.New(dbDir)
+	require.NoError(t, err)
+	defer m.Close()
+
+	const brokerID = "broker-id"
+	group := db.GroupRow{Name: "group3", GID: 33333, UGID: "33333333"}
+
+	newUser := func(name string, uid uint32, providerID string) db.UserRow {
+		return db.UserRow{
+			Name:       name,
+			UID:        uid,
+			GID:        group.GID,
+			Dir:        "/home/" + name,
+			Shell:      "/bin/bash",
+			BrokerID:   brokerID,
+			ProviderID: providerID,
+		}
+	}
+
+	// The pre-migration users (empty provider_id, same broker_id) must have survived the migration.
+	_, err = m.UserByName("user1")
+	require.NoError(t, err, "Pre-migration user1 should still exist after migration")
+	_, err = m.UserByName("user2")
+	require.NoError(t, err, "Pre-migration user2 should still exist after migration")
+
+	// Inserting a user with a non-empty provider_id works.
+	err = m.UpdateUserEntry(newUser("user3", 3333, "provider-1"), []db.GroupRow{group}, nil)
+	require.NoError(t, err, "Inserting a user with a non-empty provider ID should succeed")
+
+	// Inserting a different user that reuses the same (broker_id, provider_id) must be rejected by
+	// the partial unique index created during the migration.
+	err = m.UpdateUserEntry(newUser("user4", 4444, "provider-1"), []db.GroupRow{group}, nil)
+	require.Error(t, err, "Inserting a user with a duplicate broker-scoped provider ID should fail")
+
+	// Inserting users with an empty provider_id is still allowed, even when they share the same
+	// broker_id (this is what keeps pre-migration and v2-broker users working).
+	err = m.UpdateUserEntry(newUser("user5", 5555, ""), []db.GroupRow{group}, nil)
+	require.NoError(t, err, "Inserting a user with an empty provider ID should succeed")
+	err = m.UpdateUserEntry(newUser("user6", 6666, ""), []db.GroupRow{group}, nil)
+	require.NoError(t, err, "Inserting another user with an empty provider ID should succeed")
+
+	// The same provider_id under a different broker_id must be allowed.
+	otherBrokerUser := newUser("user7", 7777, "provider-1")
+	otherBrokerUser.BrokerID = "other-broker-id"
+	err = m.UpdateUserEntry(otherBrokerUser, []db.GroupRow{group}, nil)
+	require.NoError(t, err, "Reusing a provider ID under a different broker should succeed")
+
+	// Check the resulting database: the duplicate user (user4) must not have been persisted, while
+	// all the allowed users must be present.
+	got, err := db.Z_ForTests_DumpNormalizedYAML(m)
+	require.NoError(t, err, "Created database should be valid yaml content")
+
+	golden.CheckOrUpdate(t, got)
+}
+
 func TestUpdateUserEntry(t *testing.T) {
 	t.Parallel()
 

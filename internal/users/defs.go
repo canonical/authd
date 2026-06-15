@@ -25,11 +25,13 @@ func userEntryFromUserRow(u db.UserRow) types.UserEntry {
 // and local groups slices.
 func userInfoFromUserAndGroupRows(u db.UserRow, groups []db.GroupRow, localGroups []string) *types.UserInfo {
 	ui := &types.UserInfo{
-		Name:  u.Name,
-		UID:   u.UID,
-		Gecos: u.Gecos,
-		Dir:   u.Dir,
-		Shell: u.Shell,
+		Name:       u.Name,
+		UID:        u.UID,
+		Gecos:      u.Gecos,
+		Dir:        u.Dir,
+		Shell:      u.Shell,
+		BrokerID:   u.BrokerID,
+		ProviderID: u.ProviderID,
 		Groups: sliceutils.Map(groups, func(g db.GroupRow) types.GroupInfo {
 			gid := g.GID
 			return types.GroupInfo{

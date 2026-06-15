@@ -90,7 +90,7 @@ func TestSetDefaultBrokerForUser(t *testing.T) {
 				want.ID = "does not exist"
 			}
 
-			err = m.SetDefaultBrokerForUser(want.ID, "user@example.com")
+			err = m.SetBroker(want.ID, "user@example.com")
 			if tc.wantErr {
 				require.Error(t, err, "SetDefaultBrokerForUser should return an error, but did not")
 				return
@@ -109,7 +109,7 @@ func TestBrokerForUser(t *testing.T) {
 	m, err := brokers.NewManager(context.Background(), filepath.Join(brokerConfFixtures, "valid_brokers"), nil)
 	require.NoError(t, err, "Setup: could not create manager")
 
-	err = m.SetDefaultBrokerForUser(brokers.LocalBrokerName, "user@example.com")
+	err = m.SetBroker(brokers.LocalBrokerName, "user@example.com")
 	require.NoError(t, err, "Setup: could not set default broker")
 
 	// Broker for user should return the assigned broker
@@ -225,7 +225,7 @@ func TestNewSession(t *testing.T) {
 				tc.sessionMode = "auth"
 			}
 
-			gotID, gotEKey, err := m.NewSession(tc.brokerID, tc.username, "some_lang", tc.sessionMode)
+			gotID, gotEKey, err := m.NewSession(tc.brokerID, tc.username, "some_lang", tc.sessionMode, "")
 			if tc.wantErr {
 				require.Error(t, err, "NewSession should return an error, but did not")
 				return
@@ -322,13 +322,13 @@ func TestStartAndEndSession(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		id, key, err := m.NewSession(b1.ID, "user1@example.com", "some_lang", "auth")
+		id, key, err := m.NewSession(b1.ID, "user1@example.com", "some_lang", "auth", "")
 		firstID, firstKey, firstErr = &id, &key, &err
 	}()
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		id, key, err := m.NewSession(b2.ID, "user2", "some_lang", "auth")
+		id, key, err := m.NewSession(b2.ID, "user2", "some_lang", "auth", "")
 		secondID, secondKey, secondErr = &id, &key, &err
 	}()
 	wg.Wait()

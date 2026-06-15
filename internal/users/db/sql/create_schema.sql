@@ -5,10 +5,12 @@ CREATE TABLE IF NOT EXISTS users (
     gecos     TEXT DEFAULT "",
     dir       TEXT DEFAULT "",
     shell     TEXT DEFAULT "/bin/bash",
-    broker_id TEXT DEFAULT "",
-    locked    BOOLEAN DEFAULT FALSE
+    broker_id   TEXT DEFAULT "",
+    locked      BOOLEAN DEFAULT FALSE,
+    provider_id TEXT DEFAULT ""  -- Stable provider identifier; uniqueness per broker is enforced by the partial index below
 );
 CREATE UNIQUE INDEX "idx_user_name" ON users ("name");
+CREATE UNIQUE INDEX "idx_user_broker_provider_id" ON users ("broker_id", "provider_id") WHERE broker_id != "" AND provider_id != "";
 
 CREATE TABLE IF NOT EXISTS groups (
     name TEXT NOT NULL,  -- Uniqueness is enforced by the index below

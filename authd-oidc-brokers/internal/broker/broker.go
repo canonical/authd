@@ -37,7 +37,7 @@ const (
 	// LatestAPIVersion is the latest API version supported by the broker. It should be incremented when a non backward
 	// compatible change is made to the API.
 	// Note: Remember to also bump the LatestAPIVersion in internal/brokers/dbusbroker.go.
-	LatestAPIVersion uint = 2
+	LatestAPIVersion uint = 3
 
 	maxAuthAttempts    = 3
 	maxRequestDuration = 5 * time.Second
@@ -66,9 +66,10 @@ type Broker struct {
 }
 
 type session struct {
-	username string
-	lang     string
-	mode     string
+	username   string
+	providerID string // stable provider identifier; empty until learned via auth or cache migration
+	lang       string
+	mode       string
 
 	selectedMode    string
 	authModes       []string
@@ -176,11 +177,63 @@ func normalizedIssuer(issuerURL string) string {
 	return issuer
 }
 
+// setCachePaths updates all session cache-file paths derived from dataDir.
+func setCachePaths(s *session, dataDir string) {
+	s.userDataDir = dataDir
+	s.tokenPath = filepath.Join(dataDir, "token.json")
+	s.passwordPath = filepath.Join(dataDir, "password")
+}
+
+// ensureProviderIDCacheDir migrates the session's on-disk cache from a username-based
+// directory to a provider ID-based one. It is idempotent: calling it twice with the
+// same provider ID has no effect.
+//
+// Two cases are handled:
+//  1. The provider ID-based directory already exists (e.g. a previous email change):
+//     session paths are updated and a compatibility symlink is created at the
+//     current username path so that future NewSession calls resolve it.
+//  2. The provider ID-based directory does not yet exist: the username directory is
+//     renamed to the provider ID path and a compatibility symlink is left behind.
+//
+// If the rename is not possible (e.g. the source directory was not yet
+// created) the function logs a warning and returns without changing paths.
+func (b *Broker) ensureProviderIDCacheDir(s *session, providerID string) {
+	providerIDDir, err := b.userDataDir(providerID)
+	if err != nil || providerIDDir == s.userDataDir {
+		return
+	}
+	// NOTE: s.providerID is set only after successfully switching cache directories.
+
+	if _, statErr := os.Stat(providerIDDir); statErr == nil {
+		// Provider ID-based directory already exists.
+		log.Infof(context.Background(), "Redirecting cache for user %q to existing provider ID-based directory %q", s.username, providerIDDir)
+		if linkErr := os.Symlink(providerIDDir, s.userDataDir); linkErr != nil && !os.IsExist(linkErr) {
+			log.Warningf(context.Background(), "Could not create cache compatibility symlink %q: %v", s.userDataDir, linkErr)
+		}
+		s.providerID = providerID
+		setCachePaths(s, providerIDDir)
+		return
+	}
+
+	if renameErr := os.Rename(s.userDataDir, providerIDDir); renameErr != nil {
+		if !os.IsNotExist(renameErr) {
+			log.Warningf(context.Background(), "Could not migrate cache directory %q to %q: %v", s.userDataDir, providerIDDir, renameErr)
+		}
+		return
+	}
+	log.Infof(context.Background(), "Migrated cache directory for user %q from %q to %q", s.username, s.userDataDir, providerIDDir)
+	if linkErr := os.Symlink(providerIDDir, s.userDataDir); linkErr != nil && !os.IsExist(linkErr) {
+		log.Warningf(context.Background(), "Could not create cache compatibility symlink %q: %v", s.userDataDir, linkErr)
+	}
+	s.providerID = providerID
+	setCachePaths(s, providerIDDir)
+}
+
 // userDataDir returns the path to the broker's data directory for the given user.
 // If the issuer URL or the username contains path traversal characters, an error is returned.
-func (b *Broker) userDataDir(username string) (string, error) {
-	if username == "" {
-		return "", errors.New("username cannot be empty")
+func (b *Broker) userDataDir(basePath string) (string, error) {
+	if basePath == "" {
+		return "", errors.New("base path cannot be empty")
 	}
 
 	issuer := normalizedIssuer(b.cfg.issuerURL)
@@ -191,18 +244,20 @@ func (b *Broker) userDataDir(username string) (string, error) {
 		return "", fmt.Errorf("invalid issuer URL %q: path traversal detected", b.cfg.issuerURL)
 	}
 
-	dir := filepath.Join(issuerDataDir, username)
-	// Check that the username does not contain path traversal characters by verifying that the resulting path is within
-	// the issuer data directory and the basename matches the username.
-	if !strings.HasPrefix(dir, issuerDataDir) || filepath.Base(dir) != username {
-		return "", fmt.Errorf("invalid username %q: path traversal detected", username)
+	dir := filepath.Join(issuerDataDir, basePath)
+	// Check that the base path does not contain path traversal characters by verifying that the resulting path is within
+	// the issuer data directory and the basename matches the base path.
+	if !strings.HasPrefix(dir, issuerDataDir) || filepath.Base(dir) != basePath {
+		return "", fmt.Errorf("invalid base path %q: path traversal detected", basePath)
 	}
 
 	return dir, nil
 }
 
-// NewSession creates a new session for the user.
-func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionKey string, err error) {
+// NewSession creates a new session for the user. providerID is the stable provider
+// identifier from authd's database; when non-empty it is used to locate the
+// provider ID-keyed cache directory directly, bypassing the username-based lookup.
+func (b *Broker) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
 	if username == "" {
 		return "", "", errors.New("username is required")
 	}
@@ -221,15 +276,56 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 		return "", "", fmt.Errorf("failed to marshal broker public key: %v", err)
 	}
 
-	s.userDataDir, err = b.userDataDir(username)
-	if err != nil {
-		return "", "", err
+	// When authd passes the provider ID (v3 API), try the provider ID-keyed cache directory
+	// first. This is the authoritative location after migration and handles
+	// the case where the username changed at the IdP (no symlink exists for
+	// the new email).
+	if providerID != "" {
+		if providerIDDir, providerIDErr := b.userDataDir(providerID); providerIDErr == nil {
+			if fi, statErr := os.Stat(providerIDDir); statErr == nil && fi.IsDir() {
+				s.providerID = providerID
+				setCachePaths(&s, providerIDDir)
+			}
+		}
 	}
 
-	// The token is stored in $DATA_DIR/$ISSUER/$USERNAME/token.json.
-	s.tokenPath = filepath.Join(s.userDataDir, "token.json")
-	// The password is stored in $DATA_DIR/$ISSUER/$USERNAME/password.
-	s.passwordPath = filepath.Join(s.userDataDir, "password")
+	// Fall back to the username-based path when provider ID lookup didn't resolve.
+	if s.userDataDir == "" {
+		s.userDataDir, err = b.userDataDir(username)
+		if err != nil {
+			return "", "", err
+		}
+		setCachePaths(&s, s.userDataDir)
+
+		// Attempt to migrate a legacy username-based cache directory to the provider ID-based layout.
+		// If the entry at the username path is already a compatibility symlink from a prior
+		// migration, resolve it and update paths.  If it is a real directory whose cached
+		// token contains a provider ID, rename the directory and leave the symlink behind.
+		if linkInfo, lstatErr := os.Lstat(s.userDataDir); lstatErr == nil {
+			switch {
+			case linkInfo.Mode()&os.ModeSymlink != 0:
+				if providerIDDir, evalErr := filepath.EvalSymlinks(s.userDataDir); evalErr == nil {
+					setCachePaths(&s, providerIDDir)
+					if cachedInfo, loadErr := token.LoadAuthInfo(s.tokenPath); loadErr == nil {
+						s.providerID = cachedInfo.UserInfo.ProviderID
+					}
+				} else {
+					// The compatibility symlink is dangling (its provider ID-keyed target was removed,
+					// e.g. by a partial DeleteUser). Leaving it in place would make every subsequent
+					// cache write resolve through the broken link and fail, denying the login with no way
+					// to recover. Remove it so the username path can be recreated as a fresh cache dir.
+					log.Warningf(context.Background(), "Removing dangling cache symlink %q: %v", s.userDataDir, evalErr)
+					if rmErr := os.Remove(s.userDataDir); rmErr != nil {
+						log.Warningf(context.Background(), "Could not remove dangling cache symlink %q: %v", s.userDataDir, rmErr)
+					}
+				}
+			case linkInfo.IsDir():
+				if cachedInfo, loadErr := token.LoadAuthInfo(s.tokenPath); loadErr == nil && cachedInfo.UserInfo.ProviderID != "" {
+					b.ensureProviderIDCacheDir(&s, cachedInfo.UserInfo.ProviderID)
+				}
+			}
+		}
+	}
 
 	// Construct an OIDC provider via OIDC discovery.
 	s.oidcServer, err = b.connectToOIDCServer(context.Background())
@@ -976,6 +1072,12 @@ func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (s
 		return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 	}
 
+	// On first successful online authentication, migrate the cache directory to
+	// provider ID-based storage so that the cache survives future email/username changes.
+	if authInfo.UserInfo.ProviderID != "" && session.providerID == "" {
+		b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID)
+	}
+
 	if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
 		log.Errorf(context.Background(), "Failed to store token: %s", err)
 		return AuthDenied, unexpectedErrMsg("failed to store token")
@@ -1081,17 +1183,47 @@ func (b *Broker) CancelIsAuthenticated(sessionID string) {
 }
 
 // DeleteUser removes all broker side data stored for the given user
-// from the broker's data directory.
-func (b *Broker) DeleteUser(username string) error {
-	userDataDir, err := b.userDataDir(username)
-	if err != nil {
-		return err
+// from the broker's data directory. providerID is the stable provider identifier;
+// when non-empty it is used to also remove any provider ID-keyed cache directory
+// created after the broker cache migration. username is always tried as a
+// fallback to support pre-migration caches.
+func (b *Broker) DeleteUser(username, providerID string) error {
+	if providerID != "" {
+		userDataDir, err := b.userDataDir(providerID)
+		if err != nil {
+			return err
+		}
+		if err := os.RemoveAll(userDataDir); err != nil {
+			return fmt.Errorf("could not remove provider ID-keyed user data directory %q: %w", userDataDir, err)
+		}
+		log.Debugf(context.Background(), "Deleted broker data for provider ID %q at %q", providerID, userDataDir)
 	}
 
-	if err := os.RemoveAll(userDataDir); err != nil {
-		return fmt.Errorf("could not remove user data directory %q: %w", userDataDir, err)
+	if username != "" {
+		userDataDir, err := b.userDataDir(username)
+		if err != nil {
+			return err
+		}
+
+		// If the username path is a compatibility symlink created by the provider ID cache
+		// migration, os.RemoveAll would only unlink the symlink and leave the real provider ID-keyed
+		// directory (token + password) on disk. Resolve the target before removing the symlink so we
+		// can also remove the target afterwards.
+		target, evalErr := filepath.EvalSymlinks(userDataDir)
+
+		if err := os.RemoveAll(userDataDir); err != nil {
+			return fmt.Errorf("could not remove user data directory %q: %w", userDataDir, err)
+		}
+
+		if evalErr == nil && target != userDataDir {
+			if err := os.RemoveAll(target); err != nil {
+				return fmt.Errorf("could not remove user data directory %q: %w", target, err)
+			}
+		}
+
+		log.Debugf(context.Background(), "Deleted broker data for user %q at %q", username, userDataDir)
 	}
-	log.Infof(context.Background(), "Deleted broker data for user %q at %q", username, userDataDir)
+
 	return nil
 }
 

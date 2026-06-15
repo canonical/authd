@@ -19,13 +19,17 @@ type schemaMigration struct {
 var schemaMigrations = []schemaMigration{
 	{
 		description: "Migrate to lowercase user and group names",
-		migrate: func(m *Manager) error {
+		migrate: func(m *Manager) (err error) {
 			// Start a transaction to ensure atomicity
 			tx, err := m.db.Begin()
+			if err != nil {
+				return fmt.Errorf("failed to start transaction: %w", err)
+			}
 
 			// Ensure the transaction is committed or rolled back
 			defer func() {
-				err = commitOrRollBackTransaction(err, tx)
+				// We don't want to lose the original error if commit/rollback also fails, so we join the errors together.
+				err = errors.Join(err, commitOrRollBackTransaction(err, tx))
 			}()
 
 			rows, err := tx.Query(`SELECT name FROM users`)
@@ -63,7 +67,7 @@ var schemaMigrations = []schemaMigration{
 	},
 	{
 		description: "Add column 'locked' to users table",
-		migrate: func(m *Manager) error {
+		migrate: func(m *Manager) (err error) {
 			// Start a transaction to ensure atomicity
 			tx, err := m.db.Begin()
 			if err != nil {
@@ -72,7 +76,8 @@ var schemaMigrations = []schemaMigration{
 
 			// Ensure the transaction is committed or rolled back
 			defer func() {
-				err = commitOrRollBackTransaction(err, tx)
+				// We don't want to lose the original error if commit/rollback also fails, so we join the errors together.
+				err = errors.Join(err, commitOrRollBackTransaction(err, tx))
 			}()
 
 			// Check if the 'locked' column already exists
@@ -92,6 +97,43 @@ var schemaMigrations = []schemaMigration{
 				return fmt.Errorf("failed to add 'locked' column to users table: %w", err)
 			}
 
+			return nil
+		},
+	},
+	{
+		description: "Add column 'provider_id' to users table for stable provider identifier",
+		migrate: func(m *Manager) (err error) {
+			tx, err := m.db.Begin()
+			if err != nil {
+				return fmt.Errorf("failed to start transaction: %w", err)
+			}
+
+			// Ensure the transaction is committed or rolled back
+			defer func() {
+				// We don't want to lose the original error if commit/rollback also fails, so we join the errors together.
+				err = errors.Join(err, commitOrRollBackTransaction(err, tx))
+			}()
+
+			var exists bool
+			err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM pragma_table_info('users') WHERE name = 'provider_id')").Scan(&exists)
+			if err != nil {
+				return fmt.Errorf("failed to check if 'provider_id' column exists: %w", err)
+			}
+			if !exists {
+				if _, err = tx.Exec(`ALTER TABLE users ADD COLUMN provider_id TEXT DEFAULT ""`); err != nil {
+					return fmt.Errorf("failed to add 'provider_id' column to users table: %w", err)
+				}
+			}
+
+			// Partial unique index: only enforce uniqueness when broker ID and provider ID are non-empty,
+			// allowing multiple existing users without provider identity (pre-migration state).
+			_, err = tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS "idx_user_broker_provider_id" ON users ("broker_id", "provider_id") WHERE broker_id != "" AND provider_id != ""`)
+			if err != nil {
+				return fmt.Errorf("failed to create provider ID index: %w", err)
+			}
+			if exists {
+				log.Debug(context.Background(), "'provider_id' column already exists in users table, ensured provider ID index")
+			}
 			return nil
 		},
 	},

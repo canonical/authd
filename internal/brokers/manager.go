@@ -125,8 +125,8 @@ func (m *Manager) AvailableBrokers() (r []*Broker) {
 	return r
 }
 
-// SetDefaultBrokerForUser memorizes which broker was used for which user.
-func (m *Manager) SetDefaultBrokerForUser(brokerID, username string) error {
+// SetBroker memorizes which broker was used for which user.
+func (m *Manager) SetBroker(brokerID, username string) error {
 	broker, err := m.BrokerFromID(brokerID)
 	if err != nil {
 		return fmt.Errorf("invalid broker: %v", err)
@@ -164,13 +164,13 @@ func (m *Manager) BrokerFromSessionID(id string) (broker *Broker, err error) {
 }
 
 // NewSession create a new session for the broker and store the sessionID on the manager.
-func (m *Manager) NewSession(brokerID, username, lang, mode string) (sessionID string, encryptionKey string, err error) {
+func (m *Manager) NewSession(brokerID, username, lang, mode, providerID string) (sessionID string, encryptionKey string, err error) {
 	broker, err := m.BrokerFromID(brokerID)
 	if err != nil {
 		return "", "", fmt.Errorf("invalid broker: %v", err)
 	}
 
-	sessionID, encryptionKey, err = broker.newSession(context.Background(), username, lang, mode)
+	sessionID, encryptionKey, err = broker.newSession(context.Background(), username, lang, mode, providerID)
 	if err != nil {
 		return "", "", err
 	}

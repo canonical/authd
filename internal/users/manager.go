@@ -150,6 +150,22 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		return errors.New("empty username")
 	}
 
+	// Try to resolve the user's stable identity via broker-scoped provider ID (sub/oid). If found under
+	// a different name, this is an email change at the IdP: use the old DB name as
+	// the lookup key for the "existing user" checks, then let the update rename it.
+	lookupName := u.Name
+	if u.BrokerID != "" && u.ProviderID != "" {
+		providerIDMatch, providerIDErr := m.db.UserByProviderID(u.BrokerID, u.ProviderID)
+		if providerIDErr != nil && !errors.Is(providerIDErr, db.NoDataFoundError{}) {
+			return fmt.Errorf("failed to look up user by provider ID: %w", providerIDErr)
+		}
+		if providerIDErr == nil && providerIDMatch.Name != u.Name {
+			log.Noticef(context.TODO(), "User identified by broker ID %q and provider ID %q: username changed from %q to %q",
+				u.BrokerID, u.ProviderID, providerIDMatch.Name, u.Name)
+			lookupName = providerIDMatch.Name
+		}
+	}
+
 	// Prepend the user private group
 	u.Groups = append([]types.GroupInfo{{Name: u.Name, UGID: u.Name}}, u.Groups...)
 	userPrivateGroup := &u.Groups[0]
@@ -157,11 +173,42 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 	var oldUserInfo *types.UserInfo
 	checkEqualUserExists := func() (exists bool, err error) {
 		// Check if the user already exists in the database.
-		oldUserInfo, err = m.getOldUserInfoFromDB(u.Name)
+		oldUserInfo, err = m.getOldUserInfoFromDB(lookupName)
 		if err != nil {
 			return false, err
 		}
 		if oldUserInfo == nil {
+			// A brand new user authenticated by a broker must come with a stable provider
+			// identifier so we can reliably re-identify them across username changes at the IdP.
+			if u.BrokerID != "" && u.ProviderID == "" {
+				return false, fmt.Errorf("broker %q did not provide a provider ID for user %q", u.BrokerID, u.Name)
+			}
+			return false, nil
+		}
+		if oldUserInfo.BrokerID != "" && u.BrokerID != "" && oldUserInfo.BrokerID != u.BrokerID {
+			// The broker ID scopes the stored provider ID and must not change once set: a user
+			// is bound to the broker they first authenticated with.
+			return false, fmt.Errorf("user %q is already bound to broker %q and cannot authenticate with broker %q",
+				u.Name, oldUserInfo.BrokerID, u.BrokerID)
+		}
+		if oldUserInfo.BrokerID != "" {
+			// The broker ID scopes the stored provider ID and should not change after it is set.
+			u.BrokerID = oldUserInfo.BrokerID
+		}
+		if oldUserInfo.BrokerID == "" && u.BrokerID != "" {
+			// First login after migration: persist broker ID in DB.
+			return false, nil
+		}
+		if oldUserInfo.ProviderID != "" && u.ProviderID == "" {
+			// Preserve already-recorded stable identity when brokers don't provide it (v2).
+			u.ProviderID = oldUserInfo.ProviderID
+		}
+		if oldUserInfo.ProviderID == "" && u.ProviderID != "" {
+			// First login after migration: persist provider ID in DB.
+			return false, nil
+		}
+		if lookupName != u.Name {
+			// Username changed (provider-ID matched rename): always trigger an update.
 			return false, nil
 		}
 		if !compareNewUserInfoWithUserInfoFromDB(u, *oldUserInfo) {
@@ -315,7 +362,8 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		}
 	}
 
-	userRow := db.NewUserRow(u.Name, u.UID, *userPrivateGroup.GID, u.Gecos, u.Dir, u.Shell)
+	userRow := db.NewUserRow(u.Name, u.UID, *userPrivateGroup.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.ProviderID)
+
 	if err = m.db.UpdateUserEntry(userRow, groupRows, localGroups); err != nil {
 		return err
 	}
@@ -323,6 +371,15 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 	// Update local groups.
 	if err := localentries.UpdateGroups(lockedEntries, u.Name, localGroups, oldLocalGroups); err != nil {
 		return err
+	}
+
+	// If the username changed (provider-ID matched rename), remove the old username from its local
+	// groups. This runs only after the database update has succeeded, so a failed rename (e.g. the
+	// new name collides with another user) cannot strip the still-existing old user from its groups.
+	if oldUserInfo != nil && lookupName != u.Name && len(oldLocalGroups) > 0 {
+		if err := localentries.UpdateGroups(lockedEntries, lookupName, nil, oldLocalGroups); err != nil {
+			return fmt.Errorf("failed to remove old username %q from local groups: %w", lookupName, err)
+		}
 	}
 
 	if err = checkHomeDirOwner(userRow.Dir, userRow.UID, userRow.GID); err != nil {
@@ -710,6 +767,20 @@ func (m *Manager) BrokerForUser(username string) (string, error) {
 	return u.BrokerID, nil
 }
 
+// ProviderIDForUser returns the stable provider identifier for the given user and broker.
+// Returns an empty string if the user has no matching identifier recorded (pre-migration, v2 broker, or another broker).
+func (m *Manager) ProviderIDForUser(username, brokerID string) (string, error) {
+	u, err := m.db.UserByName(username)
+	if err != nil {
+		return "", err
+	}
+	if brokerID != "" && u.BrokerID != "" && u.BrokerID != brokerID {
+		return "", nil
+	}
+
+	return u.ProviderID, nil
+}
+
 // UpdateBrokerForUser updates the broker ID for the given user.
 func (m *Manager) UpdateBrokerForUser(username, brokerID string) error {
 	if err := m.db.UpdateBrokerForUser(username, brokerID); err != nil {
@@ -826,6 +897,18 @@ func (m *Manager) DeleteGroup(groupname string) error {
 // IsUserLocked returns true if the user with the given user name is locked, false otherwise.
 func (m *Manager) IsUserLocked(username string) (bool, error) {
 	u, err := m.db.UserByName(username)
+	if err != nil {
+		return false, err
+	}
+
+	return u.Locked, nil
+}
+
+// IsUserLockedByProviderID returns true if the user identified by the given broker-scoped provider ID
+// is locked. It resolves the user by their stable identity rather than their name, so a lock set before
+// an IdP-side username change is still honored. Returns a NoDataFoundError if no user matches.
+func (m *Manager) IsUserLockedByProviderID(brokerID, providerID string) (bool, error) {
+	u, err := m.db.UserByProviderID(brokerID, providerID)
 	if err != nil {
 		return false, err
 	}
