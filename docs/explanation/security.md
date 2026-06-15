@@ -138,7 +138,7 @@ Replace `@example.com` with the domain of your identity provider.
 
 When a new user logs in for the first time, or when a user is added to a new
 group in the identity provider (for providers that support group management, see
-[Group management](https://documentation.ubuntu.com/authd/stable-docs/reference/group-management/)),
+[Group management](https://ubuntu.com/docs/authd/stable-docs/reference/group-management/)),
 authd automatically assigns a unique user ID (UID) and group ID (GID).
 
 Before assigning a UID or GID, authd checks that there are no collisions with
