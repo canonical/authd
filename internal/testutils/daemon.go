@@ -298,15 +298,28 @@ func BrokerCompletionSignalsDir(socketPath string) string {
 	return filepath.Join(filepath.Dir(socketPath), "broker-signals")
 }
 
+// BrokerCompletionSignalFilename returns the file name used for broker completion signals.
+func BrokerCompletionSignalFilename(username string) string {
+	return strings.ReplaceAll(username, "/", "_")
+}
+
+// BrokerCompletionSignalWaitingFilename returns the file name used for broker completion signals
+// as marker that we're currently waiting.
+func BrokerCompletionSignalWaitingFilename(username string) string {
+	return BrokerCompletionSignalFilename(username) + "_waiting"
+}
+
 // CreateBrokerCompletionSignal creates a signal file that tells the broker to complete
 // authentication for the given username. The broker polls for this file and deletes it
 // when found.
-func CreateBrokerCompletionSignal(t *testing.T, socketPath, username string) {
+func CreateBrokerCompletionSignal(t *testing.T, socketPath, username string) string {
 	t.Helper()
 
-	signalPath := filepath.Join(BrokerCompletionSignalsDir(socketPath), strings.ReplaceAll(username, "/", "_"))
+	signalPath := filepath.Join(BrokerCompletionSignalsDir(socketPath),
+		BrokerCompletionSignalFilename(username))
 	err := os.WriteFile(signalPath, []byte{}, 0600)
 	require.NoError(t, err, "Failed to create broker completion signal for %q", username)
+	return signalPath
 }
 
 // AuthdGoBuildArgs returns the `go build` arguments (run from [ProjectRoot])
