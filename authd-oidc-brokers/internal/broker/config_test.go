@@ -418,6 +418,39 @@ func TestRegisterOwner(t *testing.T) {
 	}
 }
 
+func TestRegisterOwnerRejectsInvalidChars(t *testing.T) {
+	t.Parallel()
+
+	p := &testutils.MockProvider{}
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "broker.conf")
+	require.NoError(t, os.WriteFile(cfgPath,
+		[]byte("[oidc]\nissuer = https://issuer.url.com\nclient_id = client_id\n"), 0600))
+
+	uc := userConfig{provider: p, ownerMutex: &sync.RWMutex{}}
+
+	tests := map[string]struct {
+		username string
+	}{
+		"newline_injection": {username: "attacker@evil.test\nallowed_users = ALL\nowner_extra_groups = sudo"},
+		"carriage_return":   {username: "user@x.com\ralert"},
+		"nul_byte":          {username: "user@x.com\x00evil"},
+		"bell_char":         {username: "user@x.com\x07evil"},
+		"escape_char":       {username: "user@x.com\x1bevil"},
+		"line_separator":    {username: "user@x.com\u2028evil"},
+		"zero_width_space":  {username: "user\u200bname"},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			err := uc.registerOwner(cfgPath, tc.username)
+			require.ErrorContains(t, err, "invalid characters")
+		})
+	}
+}
+
 func TestParseConfigUnknownSettings(t *testing.T) {
 	// This test is NOT parallel because it modifies the global log handler.
 	p := &testutils.MockProvider{}
