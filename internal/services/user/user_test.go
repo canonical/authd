@@ -466,6 +466,48 @@ func TestSetShell(t *testing.T) {
 	}
 }
 
+func TestSetHomeDir(t *testing.T) {
+	tests := map[string]struct {
+		sourceDB string
+
+		username           string
+		newHome            string
+		currentUserNotRoot bool
+
+		wantErr bool
+	}{
+		"Successfully_set_home_dir":                                  {username: "user1@example.com", newHome: "/home/user1-new"},
+		"Successfully_set_home_dir_when_username_has_uppercase_char": {username: "USER1@example.com", newHome: "/home/user1-new"},
+
+		"Error_when_not_root":                            {username: "user1@example.com", newHome: "/home/user1-new", currentUserNotRoot: true, wantErr: true},
+		"Error_when_username_is_empty":                   {newHome: "/home/user1-new", wantErr: true},
+		"Error_when_users_manager_fails_to_set_home_dir": {username: "doesnotexist", newHome: "/home/user1-new", wantErr: true},
+		"Error_when_path_is_not_absolute":                {username: "user1@example.com", newHome: "relative/path", wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			if !tc.wantErr {
+				userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
+			}
+
+			client, m := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
+
+			resp, err := client.SetHomeDir(context.Background(), &authd.SetHomeDirRequest{Name: tc.username, Home: tc.newHome})
+			if tc.wantErr {
+				require.Error(t, err, "SetHomeDir should return an error, but did not")
+				return
+			}
+			require.NoError(t, err, "SetHomeDir should not return an error, but did")
+
+			golden.CheckOrUpdateYAML(t, resp, golden.WithPath("response"))
+
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
+			require.NoError(t, err, "Setup: failed to dump database for comparing")
+			golden.CheckOrUpdate(t, dbContent, golden.WithPath("database"))
+		})
+	}
+}
+
 func TestDeleteUser(t *testing.T) {
 	tests := map[string]struct {
 		sourceDB           string
