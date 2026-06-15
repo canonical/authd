@@ -72,7 +72,7 @@ func genManPage(cmd *cobra.Command, path string) error {
 	fmt.Fprintf(buf, ".IP \" 1.\" 4\n")
 	fmt.Fprintf(buf, "authd documentation\n")
 	fmt.Fprintf(buf, ".RS 4\n")
-	fmt.Fprintf(buf, "\\%%https://documentation.ubuntu.com/authd\n")
+	fmt.Fprintf(buf, "\\%%https://ubuntu.com/docs/authd\n")
 	fmt.Fprintf(buf, ".RE\n")
 
 	if !shouldWriteManPage(path, buf.Bytes()) {
