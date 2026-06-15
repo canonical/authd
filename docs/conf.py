@@ -27,7 +27,7 @@ import yaml
 project = "authd"
 author = "Canonical Ltd."
 
-version = f"{os.environ.get('READTHEDOCS_VERSION', 'local')}"
+version = os.environ.get('READTHEDOCS_VERSION', 'local')
 
 # Sidebar documentation title; best kept reasonably short
 #
