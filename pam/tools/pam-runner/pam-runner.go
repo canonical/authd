@@ -7,6 +7,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -107,15 +108,20 @@ func main() {
 		log.Fatalf("Can't create service file %s: %v", serviceFile, err)
 	}
 
-	reader, readerFile, cleanup := openReader(pamTty)
+	reader, readerFile, pamTTYFile, cleanup := openReader(pamTty)
 	defer cleanup()
 
+	writer := io.Writer(output)
+	if pamTTYFile != nil && !sameFile(output, pamTTYFile) {
+		writer = io.MultiWriter(output, pamTTYFile)
+	}
+
 	conversationHandler := pam.ConversationFunc(func(s1 pam.Style, s2 string) (string, error) {
-		return noConversationHandler(output, s1, s2)
+		return noConversationHandler(writer, s1, s2)
 	})
 	if supportsConversation {
 		conversationHandler = pam.ConversationFunc(func(s1 pam.Style, s2 string) (string, error) {
-			return simpleConversationHandler(output, reader, readerFile, s1, s2)
+			return simpleConversationHandler(writer, reader, readerFile, s1, s2)
 		})
 	}
 
@@ -161,10 +167,10 @@ func main() {
 	pamRes := pamFunc(pamFlags)
 	user, _ := tx.GetItem(pam.User)
 
-	printPamResult(output, runnerAction.Result(), user, pamRes)
+	printPamResult(writer, runnerAction.Result(), user, pamRes)
 }
 
-func noConversationHandler(output *os.File, style pam.Style, msg string) (string, error) {
+func noConversationHandler(output io.Writer, style pam.Style, msg string) (string, error) {
 	switch style {
 	case pam.TextInfo:
 		fmt.Fprintf(output, "PAM Info Message: %s\n", msg)
@@ -176,7 +182,7 @@ func noConversationHandler(output *os.File, style pam.Style, msg string) (string
 	return "", nil
 }
 
-func simpleConversationHandler(output *os.File, reader *bufio.Reader, readerFile *os.File, style pam.Style, msg string) (string, error) {
+func simpleConversationHandler(output io.Writer, reader *bufio.Reader, readerFile *os.File, style pam.Style, msg string) (string, error) {
 	switch style {
 	case pam.TextInfo:
 		fmt.Fprintln(output, msg)
@@ -205,25 +211,37 @@ func simpleConversationHandler(output *os.File, reader *bufio.Reader, readerFile
 	return "", nil
 }
 
-func openReader(pamTTY string) (*bufio.Reader, *os.File, func()) {
+func openReader(pamTTY string) (*bufio.Reader, *os.File, *os.File, func()) {
 	if pamTTY == "" {
-		return bufio.NewReader(os.Stdin), os.Stdin, func() {}
+		return bufio.NewReader(os.Stdin), os.Stdin, nil, func() {}
 	}
 
 	pamTTYFile, err := os.OpenFile(pamTTY, os.O_RDWR, 0)
 	if err != nil {
 		log.Printf("Can't open PAM_TTY %q, falling back to stdin: %v", pamTTY, err)
-		return bufio.NewReader(os.Stdin), os.Stdin, func() {}
+		return bufio.NewReader(os.Stdin), os.Stdin, nil, func() {}
 	}
 
-	return bufio.NewReader(pamTTYFile), pamTTYFile, func() { pamTTYFile.Close() }
+	return bufio.NewReader(pamTTYFile), pamTTYFile, pamTTYFile, func() { pamTTYFile.Close() }
 }
 
-func printPamResult(output *os.File, resultAction pam_test.RunnerResultAction, user string, result error) {
+func printPamResult(output io.Writer, resultAction pam_test.RunnerResultAction, user string, result error) {
 	if user == "" {
 		user = "<unset>"
 	}
 	fmt.Fprintln(output, resultAction.MessageWithError(user, result))
+}
+
+func sameFile(a, b *os.File) bool {
+	ai, err := a.Stat()
+	if err != nil {
+		return false
+	}
+	bi, err := b.Stat()
+	if err != nil {
+		return false
+	}
+	return os.SameFile(ai, bi)
 }
 
 func getPkgConfigFlags(args []string) ([]string, error) {
