@@ -54,6 +54,12 @@ on:
       - reopened
       - labeled
   workflow_dispatch:
+    inputs:
+      broker-snap-channel:
+        description: 'Download broker snaps from this Snap Store channel instead of building from source (e.g. "candidate")'
+        required: false
+        default: ''
+        type: string
   schedule:
     - cron: '0 0 * * 1' # Runs every Monday at midnight
 
@@ -102,4 +108,5 @@ jobs:
       ubuntu-version: ${{ matrix.ubuntu-version }}
       files-hash: ${{ needs.compute-hash.outputs.files-hash }}
       force-fresh-image: ${{ github.event_name == 'schedule' }}
+      broker-snap-channel: ${{ inputs.broker-snap-channel || '' }}
     secrets: inherit
