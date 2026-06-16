@@ -825,6 +825,40 @@ func TestNativeAuthenticate(t *testing.T) {
 	}
 }
 
+// TestNativeAuthenticateFallbackNoPamTTY is meant to simulate a similar behavior
+// that we may have in PAM applications that are running with a non-interactive
+// terminal, but without PAM_TTY being set.
+// In this scenario the native UI should be chosen automatically by the PAM
+// module, without forcing any options.
+func TestNativeAuthenticateFallbackNoPamTTY(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	runner := newRedirectedIORunner(t)
+	user := testUserName(t, "native-fallback")
+	c := runner.startRedirectedIORunner(t, redirectedIOScenario{
+		// stdout is a non-terminal while stdin stays the controlling terminal.
+		ioRedirections: ">/dev/null",
+		// No PAM_TTY: we simulate that the client does not set any valid PAM_TTY.
+		noPamTTY: true,
+	}, clientOptions{PamUser: user})
+
+	waitForFileContains(t, runner.outputFile, "Choose your provider")
+	c.SendLine(t, "2")
+	waitForFileContains(t, runner.outputFile, "Gimme your password")
+	c.SendLine(t, "goodpass")
+
+	runner.requireSuccessEventually(t, authd.SessionMode_LOGIN, user)
+	c.RequireSuccessfulExit(t)
+
+	out, err := os.ReadFile(runner.outputFile)
+	require.NoError(t, err, "failed to read runner output file")
+	golden.CheckOrUpdate(t, string(out))
+}
+
 func TestNativeChangeAuthTok(t *testing.T) {
 	t.Parallel()
 
