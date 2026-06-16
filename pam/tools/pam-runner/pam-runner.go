@@ -201,13 +201,13 @@ func simpleConversationHandler(output io.Writer, reader *bufio.Reader, readerFil
 		return strings.TrimRight(line, "\n"), nil
 	case pam.PromptEchoOff:
 		fmt.Fprint(output, msg)
-		input, err := term.ReadPassword(int(readerFile.Fd()))
+		input, err := readPassword(reader, readerFile)
 		fmt.Fprint(output, "\n")
 		if err != nil {
 			log.Fatalf("PAM Password Prompt error: %v", err)
 			return "", err
 		}
-		return string(input), nil
+		return input, nil
 	default:
 		return "", fmt.Errorf("PAM style %d not implemented", style)
 	}
@@ -225,7 +225,41 @@ func openReader(pamTTY string) (*bufio.Reader, *os.File, *os.File, func()) {
 		return bufio.NewReader(os.Stdin), os.Stdin, nil, func() {}
 	}
 
-	return bufio.NewReader(pamTTYFile), pamTTYFile, pamTTYFile, func() { pamTTYFile.Close() }
+	cleanup := func() { pamTTYFile.Close() }
+
+	if stdinAvailable() {
+		log.Printf("PAM_TTY %q is set, but stdin is available; using stdin instead", pamTTY)
+		return bufio.NewReader(os.Stdin), os.Stdin, pamTTYFile, cleanup
+	}
+
+	return bufio.NewReader(pamTTYFile), pamTTYFile, pamTTYFile, cleanup
+}
+
+func readPassword(reader *bufio.Reader, readerFile *os.File) (string, error) {
+	if term.IsTerminal(int(readerFile.Fd())) {
+		input, err := term.ReadPassword(int(readerFile.Fd()))
+		return string(input), err
+	}
+
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(input, "\n"), nil
+}
+
+func stdinAvailable() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		return true
+	}
+
+	mode := fi.Mode()
+	return mode.IsRegular() || mode&os.ModeNamedPipe != 0
 }
 
 func printPamResult(output io.Writer, resultAction pam_test.RunnerResultAction, user string, result error) {
