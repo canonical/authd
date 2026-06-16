@@ -152,7 +152,7 @@ gbp buildpackage -S --git-ignore-new --git-export-dir=/tmp/authd-build
 
 Note that this should be performed for all the supported versions (noble and plucky at the moment):
 
-1. If you didn't create an sbuild schroot before:
+1. If you didn't create an sbuild schroot before (TODO: Consider using sbuild with unshare instead):
 
     ```shell
     mk-sbuild <release> --distro ubuntu
