@@ -7,7 +7,7 @@ runs:
 
     - name: Install glibc, PAM and GLib debug symbols
       shell: bash
-      run: |
+      run: |-
         # Install glibc, PAM and GLib debug symbols
         set -eu
 

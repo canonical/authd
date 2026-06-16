@@ -42,6 +42,6 @@ body:
   - type: textarea
     attributes:
       label: Alternatives and current workarounds
-      description: |
+      description: |-
         A clear and concise description of any alternatives you've considered or any workarounds that are currently in
         place.

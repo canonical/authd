@@ -113,7 +113,7 @@ runs:
 
     - name: Prepare tests artifacts path
       shell: bash
-      run: |
+      run: |-
         # Prepare tests artifacts path
         set -eu
 

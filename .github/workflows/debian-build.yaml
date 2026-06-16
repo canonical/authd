@@ -270,7 +270,7 @@ jobs:
 
       - name: Generate outputs
         id: outputs
-        run: |
+        run: |-
           (
             echo "pkg-name=${{ env.PKG_NAME }}"
             echo "pkg-version=${{ env.PKG_VERSION }}"

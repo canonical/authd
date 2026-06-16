@@ -78,7 +78,7 @@ updates:
       interval: "weekly"
     groups:
       minor-updates:
-        update-types: [ "minor", "patch" ]
+        update-types: ["minor", "patch"]
     commit-message:
       prefix: "deps(brokers/go)"
 
@@ -88,7 +88,7 @@ updates:
       interval: "weekly"
     groups:
       minor-updates:
-        update-types: [ "minor", "patch" ]
+        update-types: ["minor", "patch"]
     commit-message:
       prefix: "deps(brokers/go-tools)"
   ## rust-toolchain.toml

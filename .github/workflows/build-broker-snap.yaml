@@ -82,7 +82,7 @@ jobs:
         run: mv "${{ steps.build-broker-snap.outputs.snap }}" "${{ inputs.broker }}.snap"
 
       - name: Upload snap as OCI artifact
-        run: |
+        run: |-
           set -euo pipefail
 
           # Upload the snap to the OCI registry with the following tags:

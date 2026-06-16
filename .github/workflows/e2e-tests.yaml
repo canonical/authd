@@ -55,7 +55,7 @@ on:
       - labeled
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 1'  # Runs every Monday at midnight
+    - cron: '0 0 * * 1' # Runs every Monday at midnight
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -94,7 +94,7 @@ jobs:
       statuses: write
     strategy:
       matrix:
-        ubuntu-version: [ 'noble', 'resolute' ]
+        ubuntu-version: ['noble', 'resolute']
       fail-fast: false
     uses: ./.github/workflows/e2e-tests-provision-and-run.yaml
     with:

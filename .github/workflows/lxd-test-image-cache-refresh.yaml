@@ -29,8 +29,7 @@ jobs:
           restore-lxd-image-cache: "false"
 
       - name: Warm version-specific LXD test container
-        run: go test -count=1 ./pam/integration-tests \
-            -run 'TestSSHAuthenticate/Exit_if_user_is_not_pre-checked_on_ssh_service_on_ubuntu_26\.04$'
+        run: go test -count=1 ./pam/integration-tests \ -run 'TestSSHAuthenticate/Exit_if_user_is_not_pre-checked_on_ssh_service_on_ubuntu_26\.04$'
 
       - name: Export LXD test image for cache
         id: export-lxd-test-image
