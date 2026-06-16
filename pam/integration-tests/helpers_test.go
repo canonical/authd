@@ -38,9 +38,14 @@ type authdInstance struct {
 	cleanup          func()
 }
 
-// pamExecChildName is the file name of the authd-pam helper binary built by
-// [buildPAMExecChild] and forked by the PAM exec module.
-const pamExecChildName = "authd-pam"
+const (
+	// pamExecChildName is the file name of the authd-pam helper binary built by
+	// [buildPAMExecChild] and forked by the PAM exec module.
+	pamExecChildName = "authd-pam"
+
+	// pamRunnerName is the name of the pam-runner binary.
+	pamRunnerName = "pam_authd"
+)
 
 var (
 	sharedAuthdInstance = authdInstance{}
@@ -167,13 +172,14 @@ func buildPAMRunner(execPath string) (cleanup func(), err error) {
 	cmd.Dir = testutils.ProjectRoot()
 	cmd.Args = append(cmd.Args, testutils.GoBuildFlags()...)
 	cmd.Args = append(cmd.Args, "-gcflags=all=-N -l")
-	cmd.Args = append(cmd.Args, "-tags=withpamrunner", "-o", filepath.Join(execPath, "pam_authd"),
+	cmd.Args = append(cmd.Args, "-tags=withpamrunner", "-o",
+		filepath.Join(execPath, pamRunnerName),
 		"./pam/tools/pam-runner")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return func() {}, fmt.Errorf("%v: %s", err, out)
 	}
 
-	return func() { _ = os.Remove(filepath.Join(execPath, "pam_authd")) }, nil
+	return func() { _ = os.Remove(filepath.Join(execPath, pamRunnerName)) }, nil
 }
 
 // pamExecChildGoBuildArgs returns the `go build` arguments (run from
