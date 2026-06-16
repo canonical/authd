@@ -201,7 +201,7 @@ Note that this should be performed for all the supported versions (noble and plu
 
 ## Install authd in a VM
 
-1. Clean up previous installs
+1. Clean up previous installs (if any):
 
     ```shell
     sudo apt purge -y authd
