@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -16,6 +15,7 @@ import (
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/internal/testutils/ptytest"
 	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	"github.com/canonical/authd/pam/internal/adapter"
 	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/stretchr/testify/require"
 )
@@ -44,14 +44,12 @@ type nativePtyTestContext struct {
 func (r nativePtySessionRunner) start(t *testing.T, spec nativePtySessionSpec) *ptytest.Console {
 	t.Helper()
 
-	// Native PAM client uses text-based prompts via PAM conversation, so it
-	// needs the pam-runner to support conversations (unlike the CLI client
-	// which handles all interaction via its own bubbletea TUI).
-	cliEnv := append(r.cliEnv,
-		fmt.Sprintf("%s=1", pam_test.RunnerEnvSupportsConversation),
-	)
-	extraArgs := append([]string{"force_native_client=true"}, spec.extraArgs...)
-	c := startPAMRunner(t, r.clientPath, r.socketPath, spec.action, cliEnv, spec.clientOptions, extraArgs...)
+	if spec.clientOptions.ClientType == nil {
+		spec.clientOptions.ClientType = ptrValue(adapter.Native)
+	}
+
+	c := startPAMRunner(t, r.clientPath, r.socketPath, spec.action, r.cliEnv,
+		spec.clientOptions, spec.extraArgs...)
 	if spec.username != "" && spec.clientOptions.PamUser == "" {
 		nativeEnterUsername(t, c, spec.username)
 	}

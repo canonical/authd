@@ -17,6 +17,7 @@ import (
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/internal/testutils/ptytest"
 	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	"github.com/canonical/authd/pam/internal/adapter"
 	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/msteinert/pam/v2"
 	"github.com/stretchr/testify/require"
@@ -779,6 +780,10 @@ func TestCLIAuthenticate(t *testing.T) {
 			if tc.testRun != nil {
 				consoleOutput = tc.testRun(t, socketPath)
 			} else {
+				if tc.clientOptions.ClientType == nil {
+					tc.clientOptions.ClientType = ptrValue(adapter.InteractiveTerminal)
+				}
+
 				c := startCLIPAMRunner(t, clientPath, socketPath,
 					pam_test.RunnerActionLogin, cliEnv, tc.clientOptions, tc.extraArgs...)
 
