@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -922,6 +923,32 @@ func TestNativeAuthenticateRedirectedIO(t *testing.T) {
 			runner.requireSuccess(t, authd.SessionMode_LOGIN, user)
 		})
 	}
+}
+
+// TestNativeAuthenticateBackgroundDetachedStdin simulates something similar to
+// `bash -c 'sudo -S <<< "goodpass" id &'`: the runner is started in the
+// background with a controlling terminal that cannot be switched to raw mode,
+// so authd must automatically use the native PAM UI.
+func TestNativeAuthenticateBackgroundDetachedStdin(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	user := testUserName(t, "native-bg-detached")
+
+	runner := newRedirectedIORunner(t)
+	runner.startBackgroundDetachedRunner(t,
+		fmt.Sprintf(`printf '%%s\n' '2'; sleep %d; printf '%%s\n' 'goodpass'`,
+			testutils.MultipliedSleepDuration(1*time.Second)/time.Second),
+		clientOptions{PamUser: user})
+
+	runner.requireSuccessEventually(t, authd.SessionMode_LOGIN, user)
+
+	out, err := os.ReadFile(runner.outputFile)
+	require.NoError(t, err, "failed to read runner output file")
+	golden.CheckOrUpdate(t, string(out))
 }
 
 func TestNativeChangeAuthTok(t *testing.T) {

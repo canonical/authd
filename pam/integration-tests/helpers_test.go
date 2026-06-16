@@ -716,6 +716,39 @@ func (r redirectedIORunner) startRedirectedIORunner(t *testing.T, sc redirectedI
 	)
 }
 
+// startBackgroundDetachedRunner launches the PAM runner inside a PTY in an
+// orphaned process group, feeding stdinScript to its piped stdin, and returns
+// the path of the file that will contain the runner result.
+func (r redirectedIORunner) startBackgroundDetachedRunner(t *testing.T, stdinScript string, opts clientOptions,
+) {
+	t.Helper()
+
+	require.NotEmpty(t, stdinScript,
+		"Setup: background scenarios must feed the runner through a pipe")
+
+	env, runnerArgs := r.runnerEnv(t, opts)
+
+	// `set -m` enables job control so the backgrounded pipeline runs in its own
+	// process group. The inner subshell `( ... & )` starts the pipeline and
+	// exits immediately, orphaning that process group.
+	script := strings.Join([]string{
+		fmt.Sprintf("export %s=\"$(tty)\"", pam_test.RunnerEnvTty),
+		"set -m",
+		fmt.Sprintf(`( { %s; } | "$@" >/dev/null 2>&1 & )`, stdinScript),
+		fmt.Sprintf("sleep %d", testutils.MultipliedSleepDuration(60*time.Second)/time.Second),
+	}, "\n")
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "Setup: bash not found")
+
+	bashArgs := append([]string{"-c", script, "bash"}, runnerArgs...)
+	ptytest.Start(t, bashPath, bashArgs,
+		ptytest.WithEnv(env),
+		ptytest.WithSize(terminalWidth, 50),
+		ptytest.WithTimeout(30*time.Second),
+	)
+}
+
 func (r redirectedIORunner) requireSuccess(t *testing.T, sessionMode authd.SessionMode, user string) {
 	t.Helper()
 
