@@ -116,7 +116,7 @@ func startPAMRunnerWithPtyOpts(t *testing.T, clientPath string, socketPath strin
 ) *ptytest.Console {
 	t.Helper()
 
-	pamRunnerPath := filepath.Join(clientPath, "pam_authd")
+	pamRunnerPath := filepath.Join(clientPath, pamRunnerName)
 	args := []string{action.String(), "socket=" + socketPath}
 	args = append(args, extraArgs...)
 
