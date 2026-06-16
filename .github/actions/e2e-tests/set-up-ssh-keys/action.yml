@@ -23,7 +23,7 @@ runs:
     - name: Set up SSH keys for the VM provisioning
       id: set-ssh-keys
       shell: bash
-      run: |
+      run: |-
         set -eu
 
         mkdir -p "${HOME}/.ssh"

@@ -1,0 +1,19 @@
+name: yamlfmt check
+
+on:
+  pull_request:
+    paths:
+      - '.github/**'
+
+jobs:
+  yamlfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+      - name: check yamlfmt formatting
+        run: go run github.com/google/yamlfmt/cmd/yamlfmt@latest -lint .github
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true

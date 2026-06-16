@@ -312,7 +312,7 @@ jobs:
         uses: actions/github-script@v9
         if: always()
         with:
-          script: |
+          script: |-
             const state = '${{ steps.run-tests.outputs.state }}';
             const logUrl = '${{ steps.prepare-pages.outputs.log-url }}';
 

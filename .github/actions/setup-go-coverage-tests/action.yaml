@@ -10,7 +10,7 @@ runs:
 
     - name: Install coverage collection dependencies
       shell: bash
-      run: |
+      run: |-
         # Install coverage collection dependencies
         set -eu
 

@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test: [ "coverage", "asan" ]
+        test: ["coverage", "asan"]
     steps:
       - uses: actions/checkout@v6
         with:

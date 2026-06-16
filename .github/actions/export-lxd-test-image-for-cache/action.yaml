@@ -10,7 +10,7 @@ runs:
     - name: Export LXD test image for cache
       id: export
       shell: bash
-      run: |
+      run: |-
         set -euo pipefail
         set -x
 

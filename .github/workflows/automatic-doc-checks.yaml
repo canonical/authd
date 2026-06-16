@@ -11,7 +11,7 @@ on:
       - '.github/workflows/automatic-doc-checks.yaml'
       - 'docs/**'
   schedule:
-    - cron:  '0 12 * * MON'
+    - cron: '0 12 * * MON'
   # Manual trigger
   workflow_dispatch:
 

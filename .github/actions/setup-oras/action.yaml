@@ -13,7 +13,7 @@ runs:
   steps:
     - name: Install oras
       shell: bash
-      run: |
+      run: |-
         # Install oras CLI
         set -eu
 

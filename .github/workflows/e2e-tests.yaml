@@ -55,7 +55,7 @@ on:
       - labeled
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 1'  # Runs every Monday at midnight
+    - cron: '0 0 * * 1' # Runs every Monday at midnight
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -67,7 +67,7 @@ jobs:
     # Skip this job (and the provision-and-run job which depends on it) if the
     # PR is from a fork, as we don't have the permission to upload the Debian
     # package to the OCI registry in the provision-and-run workflow.
-    if: >
+    if: >-
       (
        github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
@@ -94,7 +94,7 @@ jobs:
       statuses: write
     strategy:
       matrix:
-        ubuntu-version: [ 'noble', 'resolute' ]
+        ubuntu-version: ['noble', 'resolute']
       fail-fast: false
     uses: ./.github/workflows/e2e-tests-provision-and-run.yaml
     with:

@@ -108,7 +108,7 @@ jobs:
       - name: Push branch
         if: ${{ env.modified == 'true' }}
         shell: bash
-        run: |
+        run: |-
           set -eu
 
           git config --system --add safe.directory "${PWD}"
