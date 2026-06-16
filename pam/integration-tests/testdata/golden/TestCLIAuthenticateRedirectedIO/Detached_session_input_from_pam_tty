@@ -1,0 +1,22 @@
+  Select your provider
+
+> 1. local
+  2. ExampleBroker
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+>
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+> ********
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+PAM Authenticate()
+  User: "user-integration-cli-redirected-io-detached-session-input-from-pam-tty@example.com"
+  Result: success
+PAM AcctMgmt()
+  User: "user-integration-cli-redirected-io-detached-session-input-from-pam-tty@example.com"
+  Result: success
+────────────────────────────────────────────────────────────────────────────────
