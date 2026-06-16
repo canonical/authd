@@ -714,6 +714,17 @@ func (r redirectedIORunner) startRedirectedIORunner(t *testing.T, sc redirectedI
 	)
 }
 
+func (r redirectedIORunner) requireSuccess(t *testing.T, sessionMode authd.SessionMode, user string) {
+	t.Helper()
+
+	content, err := os.ReadFile(r.outputFile)
+	require.NoError(t, err, "reading runner output file %q", r.outputFile)
+	out := string(content)
+
+	require.True(t, runnerOutputCheckSuccess(out, sessionMode, user),
+		"runner output is missing the expected authentication/account-management success:\n%s", out)
+}
+
 func (r redirectedIORunner) requireSuccessEventually(t *testing.T, sessionMode authd.SessionMode, user string) {
 	t.Helper()
 
