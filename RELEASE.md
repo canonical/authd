@@ -155,13 +155,13 @@ Note that this should be performed for all the supported versions (noble and plu
 1. If you didn't create an sbuild schroot before:
 
     ```shell
-    mk-sbuild plucky --distro ubuntu
+    mk-sbuild <release> --distro ubuntu
     ```
 
 2. Build the binary package to ensure it builds and that there are no lintian issues to address on the binary package:
 
     ```shell
-    sbuild -A -v --build-dep-resolver=aptitude -d plucky-amd64 \
+    sbuild -A -v --build-dep-resolver=aptitude -d <release>-amd64 \
       "$(ls -t1 /tmp/authd-build/authd_*.dsc | head -n1)"
     ```
 
