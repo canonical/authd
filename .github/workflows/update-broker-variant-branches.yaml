@@ -24,17 +24,21 @@ jobs:
     name: Update snap branches
     strategy:
       matrix:
-        branch_name: ["google", "msentraid", "oidc"]
+        branch_name: ["google-edge", "msentraid-edge", "oidc-edge"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
+      - name: Extract broker name
+        id: broker
+        run: echo "name=$(echo '${{ matrix.branch_name }}' | sed 's/-edge$//')" >> $GITHUB_OUTPUT
+
       - name: Prepare snapcraft.yaml
         # We can't symlink the snapcraft.yaml file here because it causes launchpad to fail with:
         # "The top level of snapcraft.yaml from ~ubuntu-enterprise-desktop/authd/+git/authd:oidc is not a mapping"
-        run: ./snap/scripts/prepare-variant --copy --broker ${{ matrix.branch_name }}
+        run: ./snap/scripts/prepare-variant --copy --broker ${{ steps.broker.outputs.name }}
 
       - name: Commit broker variant files
         run: |
@@ -43,7 +47,7 @@ jobs:
           git add --force .
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -m "Copy ${{ matrix.branch_name }} variant files"
+          git commit -m "Copy ${{ steps.broker.outputs.name }} variant files"
 
       - name: Push branch
         run: git push --force origin HEAD:${{ matrix.branch_name }}
