@@ -74,7 +74,8 @@ jobs:
        contains(github.event.pull_request.labels.*.name, 'e2e-tests')
       ) ||
       github.event_name == 'push' ||
-      github.event_name == 'release'
+      github.event_name == 'release' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       files-hash: ${{ steps.hash.outputs.hash }}
