@@ -13,8 +13,13 @@ import (
 	"github.com/canonical/authd/internal/services/permissions"
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/canonical/authd/internal/testutils/ptytest"
+	"github.com/canonical/authd/pam/internal/adapter"
 	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/stretchr/testify/require"
+)
+
+const (
+	AutoClientType adapter.PamClientType = -1
 )
 
 var separator = strings.Repeat("─", 80) + "\n"
@@ -68,6 +73,15 @@ func ptyRunnerEnv(t *testing.T, cliEnv []string, opts clientOptions) []string {
 		env = append(env, "XDG_SESSION_TYPE="+opts.SessionType)
 	}
 
+	if opts.ClientType == nil ||
+		*opts.ClientType == adapter.Native ||
+		*opts.ClientType == AutoClientType {
+		// Native PAM client uses text-based prompts via PAM conversation, so it
+		// needs the pam-runner to support conversations (unlike the CLI client
+		// which handles all interaction via its own bubbletea TUI).
+		env = append(env, fmt.Sprintf("%s=1", pam_test.RunnerEnvSupportsConversation))
+	}
+
 	if testutils.IsRace() {
 		raceLog := filepath.Join(t.TempDir(), "gorace.log")
 		env = append(env, fmt.Sprintf("GORACE=log_path=%s exitcode=0", raceLog))
@@ -84,6 +98,16 @@ func ptyRunnerEnv(t *testing.T, cliEnv []string, opts clientOptions) []string {
 	}
 
 	return env
+}
+
+// ptyRunnerArgs builds the command-line arguments for the PAM runner process when launched via ptytest.
+func ptyRunnerArgs(action pam_test.RunnerAction, socketPath string, opts clientOptions, extraArgs ...string) []string {
+	args := []string{action.String(), "socket=" + socketPath}
+	args = append(args, extraArgs...)
+	if opts.ClientType != nil && *opts.ClientType == adapter.Native {
+		args = append(args, "force_native_client=true")
+	}
+	return args
 }
 
 // startPAMRunner starts the PAM runner in a ptytest Console, returning the console.
@@ -104,6 +128,10 @@ func startCLIPAMRunner(t *testing.T, clientPath string, socketPath string,
 ) *ptytest.Console {
 	t.Helper()
 
+	if opts.ClientType == nil {
+		opts.ClientType = ptrValue(adapter.InteractiveTerminal)
+	}
+
 	return startPAMRunnerWithPtyOpts(t, clientPath, socketPath, action, cliEnv, opts,
 		[]ptytest.Option{ptytest.WithSnapshots()}, extraArgs...)
 }
@@ -117,9 +145,8 @@ func startPAMRunnerWithPtyOpts(t *testing.T, clientPath string, socketPath strin
 	t.Helper()
 
 	pamRunnerPath := filepath.Join(clientPath, pamRunnerName)
-	args := []string{action.String(), "socket=" + socketPath}
-	args = append(args, extraArgs...)
 
+	args := ptyRunnerArgs(action, socketPath, opts, extraArgs...)
 	env := ptyRunnerEnv(t, cliEnv, opts)
 
 	ptyOpts := []ptytest.Option{
