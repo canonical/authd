@@ -286,7 +286,7 @@ snapcraft pack
 
 ## Do the manual tests
 
-Create a new tab in the [spreadsheet](https://docs.google.com/spreadsheets/d/1FV9r-e9M_Hm_Se2FAaVGHxnsfd-omsRozW43G0qeI8g/edit?gid=1716960291#gid=1716960291) and go through the manual tests.
+Create a new tab in the [spreadsheet (internal)](https://docs.google.com/spreadsheets/d/1FV9r-e9M_Hm_Se2FAaVGHxnsfd-omsRozW43G0qeI8g) and go through the manual tests.
 
 If you find and fix any bugs:
 
