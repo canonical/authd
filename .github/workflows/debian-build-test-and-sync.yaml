@@ -35,7 +35,8 @@ jobs:
     #  - When this file is modified
     #  - On new tags
     #  - On github release
-    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+    if: >-
+      ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       contains(inputs.modified-files, 'debian/') ||
       contains(inputs.modified-files, '.github/workflows/debian.yaml') ||
       startsWith(github.ref, 'refs/tags/') ||
@@ -79,8 +80,9 @@ jobs:
     # Run only on:
     #  - Push events to main
     #  - On github release
-    if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      github.event_name == 'release' }}
+    if: >-
+      ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+        github.event_name == 'release' }}
 
     steps:
       - uses: actions/checkout@v6
