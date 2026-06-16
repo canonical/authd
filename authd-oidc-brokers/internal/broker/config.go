@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"unicode"
 
 	"gopkg.in/ini.v1"
 )
@@ -282,6 +283,14 @@ func (uc *userConfig) registerOwner(cfgPath, userName string) error {
 	// considered the owner.
 	uc.ownerMutex.Lock()
 	defer uc.ownerMutex.Unlock()
+
+	// Reject any non-graphic characters in the username before writing it to
+	// the INI drop-in config. Control characters allow INI key injection, and
+	// other non-graphic runes are not valid content for a generated config
+	// value.
+	if strings.ContainsFunc(userName, func(r rune) bool { return !unicode.IsGraphic(r) }) {
+		return fmt.Errorf("username %q contains invalid characters and cannot be used for owner registration", userName)
+	}
 
 	if cfgPath == "" {
 		uc.owner = uc.provider.NormalizeUsername(userName)
