@@ -22,6 +22,7 @@ import (
 	"github.com/canonical/authd/internal/services/errmessages"
 	"github.com/canonical/authd/internal/testlog"
 	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/pam/internal/adapter"
 	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -251,6 +252,7 @@ var (
 
 // clientOptions holds PAM client configuration for test cases.
 type clientOptions struct {
+	ClientType     *adapter.PamClientType
 	PamUser        string
 	PamEnv         []string
 	PamServiceName string
