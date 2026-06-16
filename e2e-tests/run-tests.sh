@@ -29,7 +29,7 @@ Options:
   -p, --password <password>    Password for the tests (can also be set via E2E_PASSWORD environment variable)
   -s, --totp-secret <secret>   Secret to generate OTP codes for the user's MFA (can also be set via TOTP_SECRET environment variable)
   -b, --broker <broker>        Broker to test (can also be set via BROKER environment variable)
-  -r, --release <release>      Ubuntu release to test (e.g., 'questing', can also be set via RELEASE environment variable)
+  -r, --release <release>      Ubuntu release to test (e.g., 'resolute', can also be set via RELEASE environment variable)
   -o, --output-dir DIR         Directory to store test outputs (default: temporary directory)
   -h, --help                   Show this help message and exit
       --rerunfailed            Re-run only the tests that failed in the previous run
