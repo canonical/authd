@@ -13,6 +13,7 @@ import (
 type Provider interface {
 	AdditionalScopes() []string
 	AuthOptions() []oauth2.AuthCodeOption
+	DisplayName() string
 	GetExtraFields(token *oauth2.Token) map[string]interface{}
 	GetMetadata(provider *oidc.Provider) (map[string]interface{}, error)
 
