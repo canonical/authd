@@ -24,6 +24,8 @@ jobs:
         include:
           - branch: noble
             ubuntu-version: noble
+          - branch: main
+            ubuntu-version: resolute
 
     name: Update ${{ matrix.ubuntu-version }} packaging related Rust files
     runs-on: ubuntu-latest

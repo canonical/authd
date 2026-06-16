@@ -27,7 +27,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        ubuntu-version: ['noble', 'questing', 'devel']
+        ubuntu-version: ['noble', 'resolute', 'devel']
     steps:
       - name: Delete deb OCI artifacts
         uses: actions/delete-package-versions@v5
