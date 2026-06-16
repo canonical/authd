@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"fmt"
 	"os"
 	"regexp"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/internal/testutils/ptytest"
 	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	"github.com/canonical/authd/pam/internal/adapter"
 	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/stretchr/testify/require"
 )
@@ -31,10 +31,6 @@ type nativePtySessionSpec struct {
 	username         string
 	extraArgs        []string
 	expectedExitCode int
-	// skipForceNative prevents force_native_client=true from being added to the
-	// PAM args, allowing the module to detect the client type from the environment
-	// (e.g. via TERM=dumb).
-	skipForceNative bool
 }
 
 type nativePtyTestContext struct {
@@ -47,17 +43,16 @@ type nativePtyTestContext struct {
 func (r nativePtySessionRunner) start(t *testing.T, spec nativePtySessionSpec) *ptytest.Console {
 	t.Helper()
 
-	// Native PAM client uses text-based prompts via PAM conversation, so it
-	// needs the pam-runner to support conversations (unlike the CLI client
-	// which handles all interaction via its own bubbletea TUI).
-	cliEnv := append(r.cliEnv,
-		fmt.Sprintf("%s=1", pam_test.RunnerEnvSupportsConversation),
-	)
-	extraArgs := spec.extraArgs
-	if !spec.skipForceNative {
-		extraArgs = append([]string{"force_native_client=true"}, extraArgs...)
+	if spec.clientOptions.ClientType == nil {
+		spec.clientOptions.ClientType = ptrValue(adapter.Native)
 	}
-	c := startPAMRunner(t, r.clientPath, r.socketPath, spec.action, cliEnv, spec.clientOptions, extraArgs...)
+	if *spec.clientOptions.ClientType == AutoClientType {
+		spec.clientOptions.ClientType = nil
+	}
+
+	c := startPAMRunner(t, r.clientPath, r.socketPath, spec.action, r.cliEnv,
+		spec.clientOptions, spec.extraArgs...)
+
 	if spec.username != "" && spec.clientOptions.PamUser == "" {
 		nativeEnterUsername(t, c, spec.username)
 	}
@@ -99,7 +94,6 @@ func TestNativeAuthenticate(t *testing.T) {
 		wantLocalGroups    bool
 		wantSeparateDaemon bool
 		skipRunnerCheck    bool
-		skipForceNative    bool
 		socketPath         string
 		extraArgs          []string
 		expectedUser       string
@@ -117,10 +111,9 @@ func TestNativeAuthenticate(t *testing.T) {
 			// Verify that TERM=dumb causes the module to fall back to native mode
 			// even without force_native_client=true. This covers non-interactive
 			// consumers like Emacs TRAMP, scripted sudo, and Ansible.
-			clientOptions:   clientOptions{Term: "dumb"},
-			skipForceNative: true,
-			test:            nativeSimpleAuthNonInteractive,
-			expectedUser:    testUserName(t, "dumb-terminal"),
+			clientOptions: clientOptions{Term: "dumb", ClientType: ptrValue(AutoClientType)},
+			test:          nativeSimpleAuthNonInteractive,
+			expectedUser:  testUserName(t, "dumb-terminal"),
 		},
 		"Authenticate_user_successfully_with_upper_case": {
 			clientOptions: clientOptions{PamUser: strings.ToUpper(testUserName(t, "upper-case-native"))},
@@ -793,11 +786,10 @@ func TestNativeAuthenticate(t *testing.T) {
 					cliEnv:     cliEnv,
 				},
 				baseSpec: nativePtySessionSpec{
-					action:          pam_test.RunnerActionLogin,
-					clientOptions:   clientOptions,
-					username:        username,
-					extraArgs:       tc.extraArgs,
-					skipForceNative: tc.skipForceNative,
+					action:        pam_test.RunnerActionLogin,
+					clientOptions: clientOptions,
+					username:      username,
+					extraArgs:     tc.extraArgs,
 				},
 				authdCancel: authdCancel,
 			}
