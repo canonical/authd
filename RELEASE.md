@@ -46,7 +46,7 @@ Debian packages and the broker snaps.
     git commit -m "Add changelog entry for $(dpkg-parsechangelog -SVersion)" debian/changelog
     ```
 
-5. Push and open a PR
+5. Push and open a PR. Use the changelog entry as the PR description.
 
 
 ## Download the source packages from the GitHub CI
