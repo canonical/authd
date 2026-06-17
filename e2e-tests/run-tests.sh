@@ -186,6 +186,13 @@ env \
         "${ROBOT_ARGS[@]}" \
         "$@" \
         "${TESTS_TO_RUN[@]}" \
-        || test_result=$?
+        &
+robot_pid=$!
+
+# Forward SIGTERM/SIGINT to robot so that CI job cancellation reaches it.
+# Without this, bash exits on SIGTERM but leaves robot running as an orphan.
+trap 'kill $robot_pid 2>/dev/null' SIGTERM SIGINT
+
+wait $robot_pid || test_result=$?
 
 exit "${test_result:-0}"
