@@ -54,6 +54,12 @@ on:
       - reopened
       - labeled
   workflow_dispatch:
+    inputs:
+      broker-snap-channel:
+        description: 'Download broker snaps from this Snap Store channel instead of building from source (e.g. "candidate")'
+        required: false
+        default: ''
+        type: string
   schedule:
     - cron: '0 0 * * 1' # Runs every Monday at midnight
 
@@ -74,7 +80,9 @@ jobs:
        contains(github.event.pull_request.labels.*.name, 'e2e-tests')
       ) ||
       github.event_name == 'push' ||
-      github.event_name == 'release'
+      github.event_name == 'release' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       files-hash: ${{ steps.hash.outputs.hash }}
@@ -101,4 +109,5 @@ jobs:
       ubuntu-version: ${{ matrix.ubuntu-version }}
       files-hash: ${{ needs.compute-hash.outputs.files-hash }}
       force-fresh-image: ${{ github.event_name == 'schedule' }}
+      broker-snap-channel: ${{ inputs.broker-snap-channel || '' }}
     secrets: inherit

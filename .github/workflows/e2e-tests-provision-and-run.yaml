@@ -15,6 +15,11 @@ on:
         type: boolean
         required: false
         default: false
+      broker-snap-channel:
+        description: 'If set, download the broker snap from this Snap Store channel instead of building it from source'
+        type: string
+        required: false
+        default: ''
     secrets:
       E2E_VM_SSH_PRIV_KEY:
         required: true
@@ -146,4 +151,5 @@ jobs:
     with:
       ubuntu-version: ${{ inputs.ubuntu-version }}
       broker: ${{ matrix.broker }}
+      broker-snap-channel: ${{ inputs.broker-snap-channel }}
     secrets: inherit
