@@ -64,7 +64,7 @@ on:
     - cron: '0 0 * * 1' # Runs every Monday at midnight
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.broker-snap-channel }}
   cancel-in-progress: true
 
 jobs:
