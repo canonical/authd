@@ -21,6 +21,11 @@ func New() GenericProvider {
 	return GenericProvider{}
 }
 
+// DisplayName returns the display name of the provider.
+func (p GenericProvider) DisplayName() string {
+	return "the identity provider"
+}
+
 // AdditionalScopes returns the generic scopes required by the provider.
 func (p GenericProvider) AdditionalScopes() []string {
 	return []string{}
