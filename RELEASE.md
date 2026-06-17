@@ -605,13 +605,13 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
 
     ```shell
     VERSION=x.y.z
-    git tag -s "${VERSION}" -m "Release broker version ${VERSION}" "${BASE}"
+    git tag -s "broker-${VERSION}" -m "Release broker version ${VERSION}" "${BASE}"
     ```
 
 7. Tag the commit itself with oidc-x.y.z:
 
     ```shell
-    git tag -s "${VERSION}" -m "Release authd-oidc version ${VERSION}"
+    git tag -s "oidc-${VERSION}" -m "Release authd-oidc version ${VERSION}"
     ```
 
 8. Push the tag and force push the commit to the packaging branch:
@@ -629,7 +629,7 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
         COMMIT=a254a2c # Replace with the actual commit ID
         git checkout msentraid
         git reset --hard "${COMMIT}"
-        git tag -s "${VERSION}" -m "Release authd-msentraid version ${VERSION}"
+        git tag -s "msentraid-${VERSION}" -m "Release authd-msentraid version ${VERSION}"
         git push --tags
         git push --force
         ```
@@ -643,7 +643,7 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
         COMMIT=3014df4 # Replace with the actual commit ID
         git checkout google
         git reset --hard "${COMMIT}"
-        git tag -s "${VERSION}" -m "Release authd-google version ${VERSION}"
+        git tag -s "google-${VERSION}" -m "Release authd-google version ${VERSION}"
         git push --tags
         git push --force
         ```
