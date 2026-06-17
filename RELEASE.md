@@ -175,15 +175,15 @@ Note that this should be performed for all the supported versions (noble and plu
     done
     ```
 
-2. Check that the builds are scheduled (usually takes \~2 minutes to show up): [https://launchpad.net/\~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+builds?build\_text=\&build\_state=all](https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+builds?build_text=&build_state=all)
+2. Check that the builds are scheduled (usually takes \~2 minutes to show up: https://launchpad.net/\~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+builds?build\_text=\&build\_state=all
 
 3. Wait for the builds to complete (should take around 15 minutes)
 
-4. Wait for the packages to be published (usually takes \~1h, but can take up to several hours): [https://launchpad.net/\~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages?field.name\_filter=\&field.status\_filter=\&field.series\_filter=](https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages?field.name_filter=&field.status_filter=&field.series_filter=)
+4. Wait for the packages to be published (usually takes \~1h, but can take up to several hours): https://launchpad.net/\~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages?field.name\_filter=\&field.status\_filter=\&field.series\_filter=
 
 ## Copy package from edge PPA to candidate PPA
 
-1. Go to [https://launchpad.net/\~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages](https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages)
+1. Go to https://launchpad.net/\~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages
 2. Click "Copy packages" in the top right
 3. Select the authd packages for all currently supported Ubuntu versions
 4. Destination PPA: authd candidate
@@ -192,12 +192,12 @@ Note that this should be performed for all the supported versions (noble and plu
 
 ## Copy snap release from edge to candidate channel
 
-1. Go to [https://snapcraft.io/authd-oidc/releases](https://snapcraft.io/authd-oidc/releases)
+1. Go to https://snapcraft.io/authd-oidc/releases
 2. For all architectures, drag and drop the release from the edge channel to the candidate channel
 3. Click "Review changes" in the top right and then "Save"
 4. Repeat the same for:
-   1. [https://snapcraft.io/authd-msentraid/releases](https://snapcraft.io/authd-msentraid/releases)
-   2. [https://snapcraft.io/authd-google/releases](https://snapcraft.io/authd-google/releases)
+   1. https://snapcraft.io/authd-msentraid/releases
+   2. https://snapcraft.io/authd-google/releases
 
 ## Install authd in a VM
 
@@ -448,22 +448,22 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
 ## Release the broker snaps with the new version
 
 1. Manually trigger import of the git repo:
-   * Go to [https://code.launchpad.net/\~ubuntu-enterprise-desktop/authd/+git/authd](https://code.launchpad.net/~ubuntu-enterprise-desktop/authd/+git/authd)
+   * Go to https://code.launchpad.net/\~ubuntu-enterprise-desktop/authd/+git/authd
    * Click "Import Now"
 
 2. Wait until the import succeeds.
 
 3. Request builds of the snaps by clicking "Request builds" at the bottom of the following pages.  Don’t fill out any fields, the defaults are fine.
-   1. [https://launchpad.net/\~ubuntu-enterprise-desktop/authd/+snap/authd-oidc](https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-oidc)
-   2. [https://launchpad.net/\~ubuntu-enterprise-desktop/authd/+snap/authd-msentraid](https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-msentraid)
-   3. [https://launchpad.net/\~ubuntu-enterprise-desktop/authd/+snap/authd-google](https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-google)
+   1. https://launchpad.net/\~ubuntu-enterprise-desktop/authd/+snap/authd-oidc
+   2. https://launchpad.net/\~ubuntu-enterprise-desktop/authd/+snap/authd-msentraid
+   3. https://launchpad.net/\~ubuntu-enterprise-desktop/authd/+snap/authd-google
 
 4. Wait until the builds succeed.
 
 5. Check that snapcraft.io lists the builds with the correct versions
-   * [https://dashboard.snapcraft.io/snaps/authd-oidc/](https://dashboard.snapcraft.io/snaps/authd-oidc/)
-   * [https://dashboard.snapcraft.io/snaps/authd-msentraid/](https://dashboard.snapcraft.io/snaps/authd-msentraid/)
-   * [https://dashboard.snapcraft.io/snaps/authd-google/](https://dashboard.snapcraft.io/snaps/authd-google/)
+   * https://dashboard.snapcraft.io/snaps/authd-oidc/
+   * https://dashboard.snapcraft.io/snaps/authd-msentraid/
+   * https://dashboard.snapcraft.io/snaps/authd-google/
 
 ## Test the published packages
 
@@ -471,7 +471,7 @@ Install the authd package from the edge PPA and the snaps from the edge channel 
 
 ## Copy package from edge PPA to stable PPA
 
-1. Go to [https://launchpad.net/\~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages](https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages)
+1. Go to https://launchpad.net/\~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages
 2. Click "Copy packages" in the top right
 3. Select the authd packages for all currently supported Ubuntu versions
 4. Destination PPA: authd stable
@@ -480,12 +480,12 @@ Install the authd package from the edge PPA and the snaps from the edge channel 
 
 ## Promote snap from edge channel to stable
 
-1. Go to [https://snapcraft.io/authd-oidc/releases](https://snapcraft.io/authd-oidc/releases)
+1. Go to https://snapcraft.io/authd-oidc/releases
 2. In the "0.x/edge" row, drag-and-drop both the AMD64 and the ARM64 releases to the "0.x/stable" row (do NOT use "Promote" to promote to latest/stable, we don't use that track).
 3. Click "Save"
 4. Repeat the same for:
-   1. [https://snapcraft.io/authd-msentraid/releases](https://snapcraft.io/authd-msentraid/releases)
-   2. [https://snapcraft.io/authd-google/releases](https://snapcraft.io/authd-google/releases)
+   1. https://snapcraft.io/authd-msentraid/releases
+   2. https://snapcraft.io/authd-google/releases
 
 ## Update the stable-docs branch
 
