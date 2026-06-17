@@ -225,7 +225,7 @@ git push origin main
    - To figure out the changes since the last release, it has proven useful to go through the merge commits since then:
 
        ```shell
-       PREVIOUS_TAG=$(git tag | tail -n1)
+       PREVIOUS_TAG=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n1)
        echo $PREVIOUS_TAG
        PREVIOUS_VERSION=${PREVIOUS_TAG#v}
        git log ${PREVIOUS_TAG}..
