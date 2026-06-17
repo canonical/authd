@@ -454,9 +454,9 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
 2. Wait until the import succeeds.
 
 3. Request builds of the snaps by clicking "Request builds" at the bottom of the following pages.  Don’t fill out any fields, the defaults are fine.
-   1. https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-oidc
-   2. https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-msentraid
-   3. https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-google
+   * https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-oidc
+   * https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-msentraid
+   * https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-google
 
 4. Wait until the builds succeed.
 
