@@ -34,10 +34,7 @@ get_version() {
     # Get the highest version tag which is prefixed with "broker-"
     current_branch=$(git branch --show-current)
     tag=$(git -c "versionsort.suffix=-pre" tag --sort=-v:refname --merged="${current_branch}" | grep -E '^broker-' | head -n 1)
-    version="${tag}"
-
-    # Strip the "broker-" prefix (if any)
-    version="${version#broker-}"
+    version="${tag#broker-}"
 
     if [ -z "${version}" ]; then
         # No tag found, use "0.0.0"
