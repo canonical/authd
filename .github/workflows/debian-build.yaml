@@ -29,6 +29,11 @@ jobs:
   build-deb:
     name: Build Debian package (${{ inputs.files-hash }})
     runs-on: ubuntu-latest
+    permissions:
+      # Needed by actions/checkout
+      contents: read
+      # Needed to push OCI artifact to ghcr.io
+      packages: write
     outputs:
       pkg-name: ${{ steps.outputs.outputs.pkg-name }}
       pkg-version: ${{ steps.outputs.outputs.pkg-version }}
