@@ -158,16 +158,8 @@ func RunTestInLXD(t *testing.T, ubuntuVersion string) bool {
 
 	// #nosec:G204 - we control the command arguments in tests
 	cmd := lxcCommand(args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	testlog.LogCommand(t, fmt.Sprintf("Running %s in LXD (Ubuntu %s)", t.Name(), ubuntuVersion), cmd)
-	err = cmd.Run()
-	if err != nil {
-		testlog.LogEndSeparator(t, fmt.Sprintf("%s in LXD (Ubuntu %s) failed", t.Name(), ubuntuVersion))
-		require.Fail(t, "Running %s in LXD (Ubuntu %s) failed: %v", t.Name(), ubuntuVersion, err)
-	}
-	testlog.LogEndSeparatorf(t, "%s in LXD finished", t.Name())
+	err = testlog.RunWithTiming(t, fmt.Sprintf("Running %s in LXD (Ubuntu %s)", t.Name(), ubuntuVersion), cmd)
+	require.NoError(t, err)
 
 	return true
 }
