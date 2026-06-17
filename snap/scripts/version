@@ -18,25 +18,25 @@ set -eu
 # Finally, the version is appended with ".dirty" if there are uncommitted changes.
 
 get_version() {
-    current_branch=$(git branch --show-current)
+    snap_name=$(grep "^name:" snap/snapcraft.yaml | sed 's/^name:[[:space:]]*//;s/^authd-//')
 
-    # If the current commit is tagged with a "$broker-*" tag, where $broker is
-    # the name of the current branch, use that tag as the version after stripping the prefix.
+    # If the current commit is tagged with a "$snap_name-*" tag, where $snap_name is
+    # the name from snapcraft.yaml, use that tag as the version after stripping the prefix.
     tags=$(git tag --points-at HEAD)
     for tag in ${tags}; do
-        if echo "${tag}" | grep -qE "^${current_branch}-"; then
-            version="${tag#${current_branch}-}"
+        if echo "${tag}" | grep -qE "^${snap_name}-"; then
+            version="${tag#"${snap_name}"-}"
             echo "${version}"
             return
         fi
     done
 
-    # Get the highest version tag which is prefixed with "broker-"
-    tag=$(git -c "versionsort.suffix=-pre" tag --sort=-v:refname --merged="${current_branch}" | grep -E '^broker-' | head -n 1)
+    # Get the highest version tag which is prefixed with the snap name suffix
+    tag=$(git -c "versionsort.suffix=-pre" tag --sort=-v:refname --merged="HEAD" | grep -E "^${snap_name}-" | head -n 1)
     version="${tag}"
 
-    # Strip the "broker-" prefix
-    version="${version#broker-}"
+    # Strip the snap name suffix prefix
+    version="${version#"${snap_name}"-}"
 
     if [ -z "${version}" ]; then
         # No tag found, use "0.0.0"
@@ -54,6 +54,7 @@ get_version() {
     version="${version}+$(git rev-parse --short=7 HEAD)"
 
     # If the current branch is not "main", append the short sha of the last commit
+    current_branch=$(git branch --show-current)
     if [ "${current_branch}" = "main" ]; then
         # Current branch is "main", return the version as is.
         echo "${version}"
