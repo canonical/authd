@@ -21,7 +21,8 @@ get_version() {
     broker=$(grep "^name:" snap/snapcraft.yaml | sed 's/^name:[[:space:]]*//;s/^authd-//')
 
     # If the current commit is tagged with a "$broker-*" tag, where $broker is
-    # the name from snapcraft.yaml, use that tag as the version after stripping the prefix.
+    # the name from snapcraft.yaml, use that tag as the version after stripping
+    # the prefix.
     tags=$(git tag --points-at HEAD)
     for tag in ${tags}; do
         if echo "${tag}" | grep -qE "^${broker}-"; then
