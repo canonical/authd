@@ -1,9 +1,218 @@
 # Releasing authd and the brokers
 
-This document describes the process of releasing stable releases of the authd
-Debian packages and the broker snaps.
+This document describes the process of releasing stable and bugfix releases of
+the authd Debian packages and the broker snaps.
 
-## Prepare release branch
+## Bugfix release - brokers
+
+### Prepare release branch
+
+1. Find the latest broker tag:
+
+    ```shell
+    git fetch --tags
+    LATEST_BROKER_TAG=$(git tag -l 'broker-[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n1)
+    echo "Latest broker tag: $LATEST_BROKER_TAG"
+    ```
+
+2. Set the new version for the broker (increase the patch version):
+
+    ```shell
+    OLD_VERSION=${LATEST_BROKER_TAG#broker-}
+    IFS='.' read -r MAJOR MINOR PATCH <<< "$OLD_VERSION"
+    VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+    echo "New version: $VERSION"
+    ```
+
+3. Check out a new branch from the latest broker tag:
+
+    ```shell
+    git checkout -b "release-brokers-$VERSION" "$LATEST_BROKER_TAG"
+    ```
+
+4. Cherry-pick the commits with the bug fixes to the release branch.
+
+5. Create a tag for the new broker version:
+
+    ```shell
+    git tag -s "broker-${VERSION}" -m "Release broker version ${VERSION}"
+    ```
+
+6. Push the release branch and tag:
+
+    ```shell
+    git push --no-verify origin "release-brokers-$VERSION" "broker-${VERSION}"
+    ```
+
+7. Open a PR from the release branch to main, using the `e2e-tests` tag to
+   trigger e2e-tests. Describe the changes in the PR description.
+
+    ```shell
+    gh pr create --base main --head "release-brokers-$VERSION" \
+        --label "e2e-tests" \
+        --title "Release broker version ${VERSION}"
+    ```
+
+### Prepare msentraid release branch
+
+1. Check out the `msentraid` branch:
+
+    ```shell
+    git checkout msentraid
+    ```
+
+2. Check that there are no unexpected changes compared to the latest msentraid tag:
+
+    ```shell
+    LATEST_MSENTRAID_TAG=$(git tag -l 'msentraid-[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n1)
+    git log -p "${LATEST_MSENTRAID_TAG}"..HEAD
+    ```
+
+3. Merge the new broker tag into the `msentraid` branch:
+
+    ```shell
+    git merge --no-ff "broker-$VERSION"
+    ```
+
+4. Prepare the snapcraft.yaml for building this broker variant
+
+    ```shell
+    ./snap/scripts/prepare-variant --copy --broker msentraid
+    ```
+
+    * If this produced any changes to the snapcraft.yaml, commit them:
+
+        ```shell
+        git add snap/snapcraft.yaml
+        git commit -m "Copy msentraid variant files for $VERSION"
+        ```
+
+5. Try building the snap locally (to reduce the chance that the launchpad build will fail):
+
+    ```shell
+    snapcraft pack
+    ```
+
+6. Create a tag for the new msentraid broker version:
+
+    ```shell
+    git tag -s "msentraid-${VERSION}" -m "Release authd-msentraid version ${VERSION}"
+    ```
+
+7. Push the branch and tag:
+
+    ```shell
+    git push --no-verify origin msentraid "msentraid-${VERSION}"
+    ```
+
+### Prepare google and oidc release branches
+
+Repeat the same steps as for the msentraid release branch, but replace
+`msentraid` with `google` and `oidc` respectively:
+
+```shell
+(
+set -euxo pipefail
+
+VARIANTS=("google" "oidc")
+for VARIANT in "${VARIANTS[@]}"; do
+    # Check out the branch
+    git checkout "$VARIANT"
+
+    # Check that there are no unexpected changes compared to the latest tag
+    LATEST_TAG=$(git tag -l "${VARIANT}-[0-9]*.[0-9]*.[0-9]*" --sort=-version:refname | head -n1)
+    echo "Latest $VARIANT tag: $LATEST_TAG"
+    git log -p "$LATEST_TAG"..HEAD || true
+
+    # Ask the user to confirm that the changes look good before proceeding
+    printf "Do the changes for %s look good? (y/n) " "$VARIANT" >&2
+    read REPLY < /dev/tty
+    if [ "$REPLY" != "${REPLY#[Yy]}" ]; then
+        :
+    else
+        echo "Aborting release process for $VARIANT. Please fix the issues and try again."
+        exit 1
+    fi
+
+    # Merge the new broker tag into the branch
+    git merge --no-ff "broker-$VERSION"
+
+    # Prepare the snapcraft.yaml for building this broker variant
+    ./snap/scripts/prepare-variant --copy --broker "$VARIANT"
+
+    # If this produced any changes to the snapcraft.yaml, commit them
+    if ! git diff --quiet snap/snapcraft.yaml; then
+        git add snap/snapcraft.yaml
+        git commit -m "Copy $VARIANT variant files for $VERSION"
+    fi
+
+    # Create a tag for the new broker version
+    git tag -s "${VARIANT}-${VERSION}" -m "Release authd-${VARIANT} version ${VERSION}"
+
+    # Push the branch and tag
+    git push --no-verify origin "$VARIANT" "${VARIANT}-${VERSION}"
+done
+)
+```
+
+### Build and test the snaps
+
+1. Wait for the CI jobs of the release branch PR to complete.
+
+2. Manually trigger import of the git repo:
+   * Go to https://code.launchpad.net/~ubuntu-enterprise-desktop/authd/+git/authd
+   * Click "Import Now"
+
+3. Wait until the import succeeds.
+
+4. Request builds of the snaps by clicking "Request builds" at the bottom of the following pages.  Don’t fill out any fields, the defaults are fine.
+   * https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-oidc
+   * https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-msentraid
+   * https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-google
+
+5. Wait until the builds succeed.
+
+6. Check that snapcraft.io lists the builds with the correct versions
+   * https://dashboard.snapcraft.io/snaps/authd-oidc/
+   * https://dashboard.snapcraft.io/snaps/authd-msentraid/
+   * https://dashboard.snapcraft.io/snaps/authd-google/
+
+7. Trigger the e2e-test workflow with the candidate build artifacts and wait for
+   it to complete successfully. Note: This step might be unnecessary if the
+   e2e-tests already succeded for the release branch.
+
+   ```shell
+   gh workflow run e2e-tests.yaml --ref main --field broker-snap-channel=candidate
+   ```
+
+### Promote snap from candidate to stable channel
+
+1. Go to [https://snapcraft.io/authd-oidc/releases](https://snapcraft.io/authd-oidc/releases)
+2. In the "0.x/candidate" row, drag-and-drop all releases to the "0.x/stable" row
+   (do NOT use "Promote" to promote to latest/stable, we don't use that track).
+3. Click "Save"
+4. Repeat the same for:
+   1. [https://snapcraft.io/authd-msentraid/releases](https://snapcraft.io/authd-msentraid/releases)
+   2. [https://snapcraft.io/authd-google/releases](https://snapcraft.io/authd-google/releases)
+
+### Merge release branch
+
+Merge the release branch to main. This ensures that new releases to the edge
+channel have a version greater than the stable release.
+
+```shell
+git checkout main
+git merge --no-ff "release-brokers-$VERSION"
+git push origin main
+```
+
+## Bugfix release - deb
+
+TBD
+
+## Stable release
+
+### Prepare release branch
 
 1. Ensure you’re on the main branch.
 2. Create the changelog entry
@@ -20,7 +229,7 @@ Debian packages and the broker snaps.
    - To figure out the changes since the last release, it has proven useful to go through the merge commits since then:
 
        ```shell
-       PREVIOUS_TAG=$(git tag | tail -n1)
+       PREVIOUS_TAG=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | head -n1)
        echo $PREVIOUS_TAG
        PREVIOUS_VERSION=${PREVIOUS_TAG#v}
        git log ${PREVIOUS_TAG}..
@@ -49,7 +258,7 @@ Debian packages and the broker snaps.
 5. Push and open a PR. Use the changelog entry as the PR description.
 
 
-## Download the source packages from the GitHub CI
+### Download the source packages from the GitHub CI
 
 1. Wait until the source packages from the "Build Debian package" CI jobs are available. This should take 2-3 minutes. Note that you don’t have to wait for the jobs to complete, the source package artifacts are available for download before that:
 
@@ -83,7 +292,7 @@ Debian packages and the broker snaps.
     done
     ```
 
-## Rebuild the source packages
+### Rebuild the source packages
 
 The GitHub CI adds a changelog entry which we don’t want to be included in the release.
 
@@ -140,7 +349,7 @@ The GitHub CI adds a changelog entry which we don’t want to be included in the
     done
     ```
 
-## Build the source package (obsolete if you download the source package from the GitHub CI)
+### Build the source package (obsolete if you download the source package from the GitHub CI)
 
 Build the source package (and ensure that there are no lintian issues on the source package):
 
@@ -148,7 +357,7 @@ Build the source package (and ensure that there are no lintian issues on the sou
 gbp buildpackage -S --git-ignore-new --git-export-dir=/tmp/authd-build
 ```
 
-## Build the binary package (obsolete if you download the binary package from the GitHub CI)
+### Build the binary package (obsolete if you download the binary package from the GitHub CI)
 
 Note that this should be performed for all the supported versions (noble and plucky at the moment):
 
@@ -165,7 +374,7 @@ Note that this should be performed for all the supported versions (noble and plu
       "$(ls -t1 /tmp/authd-build/authd_*.dsc | head -n1)"
     ```
 
-## Push the .changes file to the edge PPA
+### Push the .changes file to the edge PPA
 
 1. Push the files:
 
@@ -175,22 +384,22 @@ Note that this should be performed for all the supported versions (noble and plu
     done
     ```
 
-2. Check that the builds are scheduled (usually takes \~2 minutes to show up: https://launchpad.net/\~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+builds?build\_text=\&build\_state=all
+2. Check that the builds are scheduled (usually takes \~2 minutes to show up): https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+builds?build_text=&build_state=all
 
 3. Wait for the builds to complete (should take around 15 minutes)
 
-4. Wait for the packages to be published (usually takes \~1h, but can take up to several hours): https://launchpad.net/\~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages?field.name\_filter=\&field.status\_filter=\&field.series\_filter=
+4. Wait for the packages to be published (usually takes \~1h, but can take up to several hours): https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages?field.name_filter=&field.status_filter=&field.series_filter=
 
-## Copy package from edge PPA to candidate PPA
+### Copy package from edge PPA to candidate PPA
 
-1. Go to https://launchpad.net/\~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages
+1. Go to https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages
 2. Click "Copy packages" in the top right
 3. Select the authd packages for all currently supported Ubuntu versions
 4. Destination PPA: authd candidate
 5. Destination series: The the same series
 6. Copy options: Copy existing binaries
 
-## Copy snap release from edge to candidate channel
+### Copy snap release from edge to candidate channel
 
 1. Go to https://snapcraft.io/authd-oidc/releases
 2. For all architectures, drag and drop the release from the edge channel to the candidate channel
@@ -199,7 +408,7 @@ Note that this should be performed for all the supported versions (noble and plu
    1. https://snapcraft.io/authd-msentraid/releases
    2. https://snapcraft.io/authd-google/releases
 
-## Install authd in a VM
+### Install authd in a VM
 
 1. Clean up previous installs (if any):
 
@@ -227,7 +436,7 @@ Note that this should be performed for all the supported versions (noble and plu
     sudo dpkg -i $(ls -t ~/tmp/authd_*.deb | head -n1)
     ```
 
-## Build the authd-msentraid snap
+### Build the authd-msentraid snap
 
 ```shell
 git checkout msentraid
@@ -235,7 +444,7 @@ git pull
 snapcraft pack
 ```
 
-## Build the authd-google snap
+### Build the authd-google snap
 
 ```shell
 git checkout google
@@ -243,7 +452,7 @@ git pull
 snapcraft pack
 ```
 
-## Install the snaps
+### Install the snaps
 
 1. Clean up previous installs:
 
@@ -284,7 +493,7 @@ snapcraft pack
     sudo journalctl -u snap.authd-msentraid.authd-msentraid.service -u snap.authd-google.authd-google.service -e -n10 -f
     ```
 
-## Do the manual tests
+### Do the manual tests
 
 Create a new tab in the [spreadsheet (internal)](https://docs.google.com/spreadsheets/d/1FV9r-e9M_Hm_Se2FAaVGHxnsfd-omsRozW43G0qeI8g) and go through the manual tests.
 
@@ -318,7 +527,7 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
       2. Install the Debian package via `sudo apt install ./authd_*.deb` while the edge PPA is installed, to ensure that the dependencies like `gnome-shell` can be installed
    2. Or, to test with a package closer to the one that will be released, follow the "[Rebuild the source package](#rebuild-the-source-packages)" and "[Push the .changes file to the edge PPA](#push-the-changes-file-to-the-edge-ppa)" sections again.
 
-## Finalize the release branch
+### Finalize the release branch
 
 1. Amend the changelog to remove the `~preX` suffix
 
@@ -372,7 +581,7 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
 
 10. Merge the release branch to main
 
-## Tag the broker branches with the version
+### Tag the broker branches with the version
 
 1. Find the commit IDs which the [candidate release](https://snapcraft.io/authd-oidc/releases) of authd-oidc was built from.
    The first commit ID in the actual commit the release was built from, the second commit ID is the merge-base with the main branch.
@@ -400,13 +609,13 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
 
     ```shell
     VERSION=x.y.z
-    git tag -s "${VERSION}" -m "Release broker version ${VERSION}" "${BASE}"
+    git tag -s "broker-${VERSION}" -m "Release broker version ${VERSION}" "${BASE}"
     ```
 
 7. Tag the commit itself with oidc-x.y.z:
 
     ```shell
-    git tag -s "${VERSION}" -m "Release authd-oidc version ${VERSION}"
+    git tag -s "oidc-${VERSION}" -m "Release authd-oidc version ${VERSION}"
     ```
 
 8. Push the tag and force push the commit to the packaging branch:
@@ -424,7 +633,7 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
         COMMIT=a254a2c # Replace with the actual commit ID
         git checkout msentraid
         git reset --hard "${COMMIT}"
-        git tag -s "${VERSION}" -m "Release authd-msentraid version ${VERSION}"
+        git tag -s "msentraid-${VERSION}" -m "Release authd-msentraid version ${VERSION}"
         git push --tags
         git push --force
         ```
@@ -438,25 +647,25 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
         COMMIT=3014df4 # Replace with the actual commit ID
         git checkout google
         git reset --hard "${COMMIT}"
-        git tag -s "${VERSION}" -m "Release authd-google version ${VERSION}"
+        git tag -s "google-${VERSION}" -m "Release authd-google version ${VERSION}"
         git push --tags
         git push --force
         ```
 
     3. Request a build of the [authd-google snap](https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-google)
 
-## Release the broker snaps with the new version
+### Release the broker snaps with the new version
 
 1. Manually trigger import of the git repo:
-   * Go to https://code.launchpad.net/\~ubuntu-enterprise-desktop/authd/+git/authd
+   * Go to https://code.launchpad.net/~ubuntu-enterprise-desktop/authd/+git/authd
    * Click "Import Now"
 
 2. Wait until the import succeeds.
 
 3. Request builds of the snaps by clicking "Request builds" at the bottom of the following pages.  Don’t fill out any fields, the defaults are fine.
-   1. https://launchpad.net/\~ubuntu-enterprise-desktop/authd/+snap/authd-oidc
-   2. https://launchpad.net/\~ubuntu-enterprise-desktop/authd/+snap/authd-msentraid
-   3. https://launchpad.net/\~ubuntu-enterprise-desktop/authd/+snap/authd-google
+   * https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-oidc
+   * https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-msentraid
+   * https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-google
 
 4. Wait until the builds succeed.
 
@@ -465,20 +674,20 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
    * https://dashboard.snapcraft.io/snaps/authd-msentraid/
    * https://dashboard.snapcraft.io/snaps/authd-google/
 
-## Test the published packages
+### Test the published packages
 
 Install the authd package from the edge PPA and the snaps from the edge channel and try logging in via authd.
 
-## Copy package from edge PPA to stable PPA
+### Copy package from edge PPA to stable PPA
 
-1. Go to https://launchpad.net/\~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages
+1. Go to https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages
 2. Click "Copy packages" in the top right
 3. Select the authd packages for all currently supported Ubuntu versions
 4. Destination PPA: authd stable
 5. Destination series: The the same series
 6. Copy options: Rebuild the copied sources (because we build for more architectures in the stable PPA than in the edge PPA)
 
-## Promote snap from edge channel to stable
+### Promote snap from edge channel to stable
 
 1. Go to https://snapcraft.io/authd-oidc/releases
 2. In the "0.x/edge" row, drag-and-drop both the AMD64 and the ARM64 releases to the "0.x/stable" row (do NOT use "Promote" to promote to latest/stable, we don't use that track).
@@ -487,7 +696,9 @@ Install the authd package from the edge PPA and the snaps from the edge channel 
    1. https://snapcraft.io/authd-msentraid/releases
    2. https://snapcraft.io/authd-google/releases
 
-## Update the stable-docs branch
+## Post release steps
+
+### Update the stable-docs branch
 
 After publishing a new release, the `stable-docs` branch should contain the same version of the documentation as the release branch, so we have to update it.
 
@@ -509,7 +720,7 @@ After publishing a new release, the `stable-docs` branch should contain the same
    git push --force-with-lease origin stable-docs
    ```
 
-## Upload the source package to the Ubuntu archive
+### Upload the source package to the Ubuntu archive
 
 Since authd is also in the Ubuntu archive now, we also need to upload new releases there, targeting at least the next Ubuntu release, and maybe also existing ones, although that will require SRUs.
 
