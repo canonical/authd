@@ -51,8 +51,8 @@ var (
 	hostUbuntuVersion     string // e.g. "24.04"
 	hostMachineSlugOnce   sync.Once
 	hostMachineSlug       string
-	hostGoModCacheOnce    sync.Once
-	hostGoModCache        string
+	hostGoPkgOnce         sync.Once
+	hostGoPkg             string
 	hostCargoCacheOnce    sync.Once
 	hostCargoRegistryPath string
 	hostCargoGitPath      string
@@ -496,62 +496,47 @@ func ensureBindMount(t *testing.T, containerName string) {
 	}
 }
 
-// ensureGoModCacheMount adds a bind mount for the host's Go module cache so
-// version-specific LXD test containers can reuse already-downloaded modules.
+// ensureGoModCacheMount adds a bind mount for the host's Go package directory
+// so version-specific LXD test containers can reuse already-downloaded modules
+// and cached checksums without re-downloading.
 func ensureGoModCacheMount(t *testing.T, containerName string) {
 	t.Helper()
 
-	hostCache := hostGoModCachePath(t)
-	if hostCache == "" {
-		return
-	}
-
-	const (
-		deviceName    = "go-mod-cache"
-		containerPath = "/home/ubuntu/go/pkg/mod"
-	)
-
-	// #nosec:G204 - we control the command arguments
-	cmd := lxcCommand("config", "device", "show", containerName)
-	out, err := cmd.Output()
-	if err != nil {
-		lxcRun(t, "config", "device", "add", containerName, deviceName,
-			"disk", "source="+hostCache, "path="+containerPath)
-		return
-	}
-
-	if !bytes.Contains(out, []byte(deviceName+":")) {
-		lxcRun(t, "config", "device", "add", containerName, deviceName,
-			"disk", "source="+hostCache, "path="+containerPath)
+	hostPkg := hostGoPkgPath(t)
+	if hostPkg != "" {
+		ensureLXDDeviceMount(t, containerName, "go-pkg-cache", hostPkg, "/home/ubuntu/go/pkg")
 	}
 }
 
-func hostGoModCachePath(t *testing.T) string {
+func hostGoPkgPath(t *testing.T) string {
 	t.Helper()
 
-	hostGoModCacheOnce.Do(func() {
+	hostGoPkgOnce.Do(func() {
 		// #nosec:G204 - controlled command to query local Go environment
-		cmd := exec.Command("go", "env", "GOMODCACHE")
+		cmd := exec.Command("go", "env", "GOPATH")
 		out, err := cmd.Output()
 		if err != nil {
 			return
 		}
 
-		hostGoModCache = strings.TrimSpace(string(out))
-		if hostGoModCache == "" {
+		gopath := strings.TrimSpace(string(out))
+		if gopath == "" {
 			return
 		}
 
-		if err := os.MkdirAll(hostGoModCache, 0o750); err != nil {
-			hostGoModCache = ""
+		pkgPath := filepath.Join(gopath, "pkg")
+		if err := os.MkdirAll(pkgPath, 0o750); err != nil {
+			return
 		}
+
+		hostGoPkg = pkgPath
 	})
 
-	if hostGoModCache == "" {
-		t.Log("Host Go module cache unavailable; running LXD tests without shared GOMODCACHE")
+	if hostGoPkg == "" {
+		t.Log("Host Go package directory unavailable; running LXD tests without shared Go cache")
 	}
 
-	return hostGoModCache
+	return hostGoPkg
 }
 
 // ensureCargoCacheMounts adds bind mounts for the host's Cargo download caches
