@@ -4,8 +4,8 @@ set -eu
 # This scripts prints the version of the snap based on the git tags and the
 # current branch. The version is determined as follows:
 #
-# The highest version tag which is prefixed with the snap name and is merged
-# into the current branch is used as the base version.
+# The highest version tag which is prefixed with the snap name or "broker-" and
+# is merged into the current branch is used as the base version.
 # If there is no such tag, "0.0.0" is used as the base version.
 #
 # If the current commit is tagged, that tag is used as the version as is.
@@ -31,12 +31,13 @@ get_version() {
         fi
     done
 
-    # Get the highest version tag which is prefixed with the snap name
-    tag=$(git -c "versionsort.suffix=-pre" tag --sort=-v:refname --merged="HEAD" | grep -E "^${snap_name}-" | head -n 1)
+    # Get the highest version tag which is prefixed with "broker-"
+    current_branch=$(git branch --show-current)
+    tag=$(git -c "versionsort.suffix=-pre" tag --sort=-v:refname --merged="${current_branch}" | grep -E '^broker-' | head -n 1)
     version="${tag}"
 
-    # Strip the snap name prefix from the version
-    version="${version#"${snap_name}"-}"
+    # Strip the "broker-" prefix (if any)
+    version="${version#broker-}"
 
     if [ -z "${version}" ]; then
         # No tag found, use "0.0.0"
