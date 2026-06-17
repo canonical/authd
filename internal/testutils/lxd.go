@@ -165,7 +165,7 @@ func RunTestInLXD(t *testing.T, ubuntuVersion string) bool {
 	err = cmd.Run()
 	if err != nil {
 		testlog.LogEndSeparator(t, fmt.Sprintf("%s in LXD (Ubuntu %s) failed", t.Name(), ubuntuVersion))
-		t.Fatalf("Running %s in LXD (Ubuntu %s) failed: %v", t.Name(), ubuntuVersion, err)
+		require.Fail(t, "Running %s in LXD (Ubuntu %s) failed: %v", t.Name(), ubuntuVersion, err)
 	}
 	testlog.LogEndSeparatorf(t, "%s in LXD finished", t.Name())
 
