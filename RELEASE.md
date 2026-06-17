@@ -206,6 +206,10 @@ git merge --no-ff "release-brokers-$VERSION"
 git push origin main
 ```
 
+## Bugfix release - deb
+
+TBD
+
 ## Stable release
 
 ### Prepare release branch
