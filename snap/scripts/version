@@ -18,14 +18,14 @@ set -eu
 # Finally, the version is appended with ".dirty" if there are uncommitted changes.
 
 get_version() {
-    snap_name=$(grep "^name:" snap/snapcraft.yaml | sed 's/^name:[[:space:]]*//;s/^authd-//')
+    broker=$(grep "^name:" snap/snapcraft.yaml | sed 's/^name:[[:space:]]*//;s/^authd-//')
 
-    # If the current commit is tagged with a "$snap_name-*" tag, where $snap_name is
+    # If the current commit is tagged with a "$broker-*" tag, where $broker is
     # the name from snapcraft.yaml, use that tag as the version after stripping the prefix.
     tags=$(git tag --points-at HEAD)
     for tag in ${tags}; do
-        if echo "${tag}" | grep -qE "^${snap_name}-"; then
-            version="${tag#"${snap_name}"-}"
+        if echo "${tag}" | grep -qE "^${broker}-"; then
+            version="${tag#"${broker}"-}"
             echo "${version}"
             return
         fi
