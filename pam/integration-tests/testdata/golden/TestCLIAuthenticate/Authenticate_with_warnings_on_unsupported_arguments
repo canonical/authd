@@ -19,6 +19,7 @@ Gimme your password:
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
+  PAM_AUTHTOK: "goodpass"
 PAM Authenticate()
   User: "user2@example.com"
   Result: success

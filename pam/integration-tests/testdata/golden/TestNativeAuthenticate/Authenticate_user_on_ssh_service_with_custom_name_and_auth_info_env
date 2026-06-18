@@ -7,6 +7,7 @@ Choose your provider:
 Enter 'r' to cancel the request and go back to select the authentication method
 Gimme your password:
 >
+  PAM_AUTHTOK: "goodpass"
 PAM Authenticate()
   User: "user-integration-pre-check-ssh-auth-info-native-testnativeauthenticate@example.com"
   Result: success

@@ -52,6 +52,11 @@ const (
 	defaultConnectionTimeout = 2 * time.Second
 )
 
+// reportAuthtok is called after PAM_AUTHTOK is set. It is a no-op by default;
+// the pam_debug build overrides it to print the token so it appears in golden
+// files.
+var reportAuthtok = func(authtok string) {}
+
 var supportedArgs = []string{
 	"debug",               // When this is set to "true", then debug logging is enabled.
 	"logfile",             // The path of the file that will be used for logging.
@@ -353,6 +358,7 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 			if err := mTx.SetItem(pam.Authtok, returnValue.AuthTok); err != nil {
 				return err
 			}
+			reportAuthtok(returnValue.AuthTok)
 		}
 		return nil
 
