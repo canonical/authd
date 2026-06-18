@@ -99,6 +99,7 @@ Confirm password:
 
   Press escape key to go back to choose the provider
 ────────────────────────────────────────────────────────────────────────────────
+  PAM_AUTHTOK: "authd2404"
 PAM ChangeAuthTok()
   User: "user-mfa-integration-cli-passwd@example.com"
   Result: success
