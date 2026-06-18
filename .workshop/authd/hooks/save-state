@@ -1,0 +1,54 @@
+#!/bin/bash
+# save-state — preserve installed broker configuration across workshop refresh.
+#
+# Workshop calls this hook (as root) just before destroying the old container
+# during `workshop refresh` or `workshop restore`. Saves per-broker config to
+# $SDK_STATE_DIR so restore-state can replay them in the new container.
+#
+# $SDK_STATE_DIR survives the refresh transition but is removed when the
+# workshop stops, so this only preserves config for `workshop refresh` —
+# not for stop → start cycles or `workshop restore` (which rewinds the snapshot).
+set -euo pipefail
+
+state_dir="${SDK_STATE_DIR}/brokers"
+rm -rf "$state_dir"
+mkdir -p "$state_dir"
+
+saved=0
+for variant in google msentraid oidc; do
+    conf_dir="/etc/authd-${variant}"
+    [ -f "${conf_dir}/broker.conf" ] || continue
+
+    vdir="${state_dir}/${variant}"
+    mkdir -p "$vdir"
+
+    # Credentials / broker config (unique to this installation)
+    cp "${conf_dir}/broker.conf" "${vdir}/broker.conf"
+
+    # authd broker registration (dbus_name, object path)
+    [ -f "/etc/authd/brokers.d/${variant}.conf" ] \
+        && cp "/etc/authd/brokers.d/${variant}.conf" "${vdir}/authd.conf"
+
+    # D-Bus policy and name (allows the broker to own its bus name)
+    if [ -f "${vdir}/authd.conf" ]; then
+        dbus_name="$(sed -n 's/^dbus_name = //p' "${vdir}/authd.conf" 2>/dev/null || true)"
+        if [ -n "$dbus_name" ]; then
+            printf '%s\n' "$dbus_name" > "${vdir}/dbus_name"
+            [ -f "/usr/share/dbus-1/system.d/${dbus_name}.conf" ] \
+                && cp "/usr/share/dbus-1/system.d/${dbus_name}.conf" "${vdir}/dbus.conf"
+        fi
+    fi
+
+    # systemd service unit
+    [ -f "/etc/systemd/system/authd-${variant}.service" ] \
+        && cp "/etc/systemd/system/authd-${variant}.service" "${vdir}/service"
+
+    # Remember whether the service was active so restore-state can restart it
+    systemctl is-active --quiet "authd-${variant}.service" 2>/dev/null \
+        && touch "${vdir}/was-running"
+
+    saved=$((saved + 1))
+    printf 'Saved broker config: %s\n' "$variant"
+done
+
+printf 'Saved %d broker configuration(s).\n' "$saved"

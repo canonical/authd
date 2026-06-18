@@ -1,0 +1,78 @@
+#!/bin/bash
+# restore-state — rebuild and reconfigure brokers that were installed before
+# workshop refresh.
+#
+# Workshop calls this hook (as root) after all setup-project hooks have run,
+# reading $SDK_STATE_DIR written by save-state. Rebuilds each broker binary
+# using the workshop user's warm Go/Rust build caches, then restores config
+# files and re-enables the services that were running before the refresh.
+set -euo pipefail
+
+state_dir="${SDK_STATE_DIR}/brokers"
+if [ ! -d "$state_dir" ]; then
+    printf 'No broker state to restore.\n'
+    exit 0
+fi
+
+# Build into a directory owned by the workshop user; install from it as root.
+build_dir="$(mktemp -d)"
+chown workshop:workshop "$build_dir"
+trap 'rm -rf "$build_dir"' EXIT
+
+restored=0
+for variant in google msentraid oidc; do
+    src="${state_dir}/${variant}"
+    [ -f "${src}/broker.conf" ] || continue
+
+    printf 'Restoring broker: %s\n' "$variant"
+
+    # Rebuild the broker binary as the workshop user so the warm Go/Rust caches
+    # (populated by setup-project) are used instead of the empty root caches.
+    case "$variant" in
+        google)    tag="-tags=withgoogle" ;;
+        msentraid) tag="-tags=withmsentraid" ;;
+        oidc)      tag="" ;;
+    esac
+    if [ "$variant" = msentraid ]; then
+        sudo -u workshop --login bash -c \
+            "cd /project/authd-oidc-brokers \
+             && bash ./internal/providers/msentraid/himmelblau/generate.sh"
+    fi
+    # shellcheck disable=SC2086
+    sudo -u workshop --login bash -c \
+        "source /project/.workshop/authd/lib/env.sh \
+         && go build -C /project/authd-oidc-brokers ${tag} \
+            -o '${build_dir}/authd-${variant}' ./cmd/authd-oidc"
+    install -Dm755 "${build_dir}/authd-${variant}" "/usr/libexec/authd-${variant}"
+
+    # Restore D-Bus policy
+    if [ -f "${src}/dbus_name" ] && [ -f "${src}/dbus.conf" ]; then
+        dbus_name="$(cat "${src}/dbus_name")"
+        install -m644 "${src}/dbus.conf" "/usr/share/dbus-1/system.d/${dbus_name}.conf"
+        systemctl reload dbus
+    fi
+
+    # Restore authd broker registration
+    [ -f "${src}/authd.conf" ] \
+        && install -Dm644 "${src}/authd.conf" "/etc/authd/brokers.d/${variant}.conf"
+
+    # Restore credentials / broker config
+    install -d -m700 "/etc/authd-${variant}"
+    install -m600 "${src}/broker.conf" "/etc/authd-${variant}/broker.conf"
+
+    # Restore systemd service unit and re-enable if it was running before refresh
+    if [ -f "${src}/service" ]; then
+        install -m644 "${src}/service" "/etc/systemd/system/authd-${variant}.service"
+        systemctl daemon-reload
+    fi
+    if [ -f "${src}/was-running" ]; then
+        systemctl enable --now "authd-${variant}.service"
+    fi
+
+    restored=$((restored + 1))
+done
+
+if [ "$restored" -gt 0 ]; then
+    systemctl try-restart authd.service 2>/dev/null || true
+    printf '%d broker(s) restored.\n' "$restored"
+fi
