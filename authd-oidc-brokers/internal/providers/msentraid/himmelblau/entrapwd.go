@@ -121,6 +121,11 @@ const (
 	// re-enter the code without restarting the flow. See newMFAInitError for how
 	// this is detected.
 	MFAErrorRetryableCode
+	// MFAErrorPasswordRequired means the flow was started without a password but
+	// the account has no passwordless method available (no Authenticator
+	// number-matching, Temporary Access Pass, or FIDO), so a password is
+	// required. The user should fall back to the password flow.
+	MFAErrorPasswordRequired
 )
 
 // MFAInitError represents an error from initiating or continuing an MFA flow.
@@ -163,4 +168,10 @@ func (e *MFAInitError) IsMFARequired() bool {
 // can retry the code without restarting the flow.
 func (e *MFAInitError) IsMFARetryableCode() bool {
 	return e.Category == MFAErrorRetryableCode
+}
+
+// IsMFAPasswordRequired returns true if a passwordless flow was started but the
+// account has no passwordless method available, so a password is required.
+func (e *MFAInitError) IsMFAPasswordRequired() bool {
+	return e.Category == MFAErrorPasswordRequired
 }

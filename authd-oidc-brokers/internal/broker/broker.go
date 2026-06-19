@@ -1211,6 +1211,14 @@ func (b *Broker) entraPasswordlessAuth(ctx context.Context, session *session) (s
 	if err != nil {
 		var mfaErr *himmelblau.MFAInitError
 		if errors.As(err, &mfaErr) {
+			// The account has no passwordless method registered (no Authenticator
+			// number-matching, Temporary Access Pass, or FIDO), so Entra wants a
+			// password. Send the user to the password flow instead of failing.
+			if mfaErr.IsMFAPasswordRequired() {
+				log.Noticef(context.Background(), "Passwordless not available for user %q; redirecting to Entra password sign-in", session.username)
+				session.nextAuthModes = []string{authmodes.EntraPassword}
+				return AuthNext, errorMessage{Message: "Passwordless sign-in is not available for this account. Please sign in with your Entra ID password."}
+			}
 			return b.routeAADSTSError(mfaErr, session)
 		}
 		log.Errorf(context.Background(), "Entra passwordless authentication failed: %v", err)

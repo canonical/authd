@@ -43,6 +43,7 @@ var (
 	codeMFAPollContinue  = uint32(C.MFA_POLL_CONTINUE)
 	codeMFARequired      = uint32(C.MFA_REQUIRED)
 	codeAuthCodeReceived = uint32(C.AUTH_CODE_RECEIVED)
+	codePasswordRequired = uint32(C.PASSWORD_REQUIRED)
 )
 
 // mfaErrorCategory maps a libhimmelblau MSAL error code into an
@@ -54,6 +55,8 @@ func mfaErrorCategory(code uint32) MFAErrorCategory {
 		return MFAErrorPollContinue
 	case codeMFARequired:
 		return MFAErrorRequired
+	case codePasswordRequired:
+		return MFAErrorPasswordRequired
 	}
 	return MFAErrorOther
 }
