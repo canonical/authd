@@ -115,7 +115,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        ubuntu-version: ['noble', 'questing', 'devel']
+        ubuntu-version: ['noble', 'resolute', 'devel']
       fail-fast: false
     uses: ./.github/workflows/debian-build-test-and-sync.yaml
     with:

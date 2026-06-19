@@ -59,7 +59,7 @@ The tests need a VM to run. This can be easily setup by using the domain definit
 1. Download the Ubuntu cloud image for the target release (and resize it):
 
     ```bash
-    RELEASE=resolute  # Replace with your target release (e.g. noble, questing, resolute)
+    RELEASE=resolute  # Replace with your target release (e.g. noble, resolute)
     wget https://cloud-images.ubuntu.com/${RELEASE}/current/${RELEASE}-server-cloudimg-amd64.img
 
     qemu-img resize ${RELEASE}-server-cloudimg-amd64.img 10G

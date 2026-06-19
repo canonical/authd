@@ -32,7 +32,7 @@ packages:
   - policykit-desktop-privileges
   # Required to get the VM's IP address
   - qemu-guest-agent
-  # Default terminal on questing
+  # Default terminal on resolute
   - ptyxis
   # Required to forward the journal to the host
   - socat
