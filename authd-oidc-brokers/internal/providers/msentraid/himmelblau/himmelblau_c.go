@@ -5,6 +5,13 @@ package himmelblau
 //go:generate ./generate.sh
 
 /*
+// Define the feature macros that generate.sh enables when building the library
+// (changepassword, on_behalf_of). cbindgen guards the corresponding enum
+// variants and prototypes behind these macros, so cgo must define them to
+// compile the header against the same ABI the shared library exposes. Omitting
+// them drops the CHANGE_PASSWORD enum variant, which shifts every later
+// MSAL_ERROR_CODE value down by one and misclassifies MFA error codes.
+#cgo CFLAGS: -DCHANGEPASSWORD -DON_BEHALF_OF
 #cgo LDFLAGS: -L${SRCDIR} -lhimmelblau
 // Add the current directory to the library search path if we're building for testing,
 // because libhimmelblau is not installed in the standard search directories.
