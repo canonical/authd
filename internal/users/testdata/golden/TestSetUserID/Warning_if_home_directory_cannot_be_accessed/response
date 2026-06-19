@@ -1,0 +1,4 @@
+idchanged: true
+homedirownerchanged: false
+warnings:
+    - 'Warning: Could not get owner of home directory ''{{HOME}}'', not updating ownership.'

@@ -1,0 +1,76 @@
+Username: user name
+────────────────────────────────────────────────────────────────────────────────
+Username: user-mfa@example.com
+────────────────────────────────────────────────────────────────────────────────
+  Select your provider
+
+> 1. local
+  2. ExampleBroker
+
+  Press escape key to go back to user selection
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+>
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+  Select your authentication method
+
+> 1. Password authentication
+  2. Send URL to user-mfa@example.com
+  3. Use your fido device foo
+  4. Use your phone +33...
+  5. Use your phone +1...
+  6. Use a QR code
+  7. Authentication code
+
+  Press escape key to go back to choose the provider
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+>
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+> ********
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+Plug your fido device and press with your thumb
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+  Select your authentication method
+
+> 1. Use your fido device foo
+  2. Use your phone +33...
+  3. Authentication code
+
+  Press escape key to go back to choose the provider
+────────────────────────────────────────────────────────────────────────────────
+Plug your fido device and press with your thumb
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+Unlock your phone +33... or accept request on web interface
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+  Select your authentication method
+
+> 1. Use your phone +33...
+  2. Authentication code
+
+  Press escape key to go back to choose the provider
+────────────────────────────────────────────────────────────────────────────────
+Unlock your phone +33... or accept request on web interface
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+PAM Authenticate()
+  User: "user-mfa@example.com"
+  Result: success
+PAM AcctMgmt()
+  User: "user-mfa@example.com"
+  Result: success
+────────────────────────────────────────────────────────────────────────────────

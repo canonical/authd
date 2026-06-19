@@ -1,0 +1,36 @@
+#%PAM-1.0
+auth    [success=ok user_unknown=ignore default=bad] pam_succeed_if.so user != root quiet_success
+auth    [success=1 ignore=ignore default=die authinfo_unavail=ignore module_unknown=ignore] pam_authd.so
+# If authd ignored the request => local broker is selected,
+# then we continue with normal stack
+auth    substack        common-auth
+
+auth    requisite       pam_nologin.so
+auth    optional        pam_gnome_keyring.so
+
+account [default=ignore success=ok]	pam_authd.so
+# This is potentially loading pam_authd.again but we've checks in AcctMgmt() to
+# prevent this to happen when the gdm-authd service is used without GDM extensions.
+# Plus the model used by the services is different, so there's no risk for this to happen.
+@include common-account
+
+# SELinux needs to be the first session rule. This ensures that any
+# lingering context has been cleared. Without this it is possible
+# that a module could execute code in the wrong domain.
+session [success=ok ignore=ignore module_unknown=ignore default=bad]        pam_selinux.so close
+session required        pam_loginuid.so
+# SELinux needs to intervene at login time to ensure that the process
+# starts in the proper default security context. Only sessions which are
+# intended to run in the user's context should be run after this.
+# pam_selinux.so changes the SELinux context of the used TTY and configures
+# SELinux in order to transition to the user context with the next execve()
+# call.
+session [success=ok ignore=ignore module_unknown=ignore default=bad]        pam_selinux.so open
+session optional        pam_keyinit.so force revoke
+session required        pam_limits.so
+session required        pam_env.so readenv=1
+session required        pam_env.so readenv=1 envfile=/etc/default/locale
+@include common-session
+session optional        pam_mkhomedir.so
+session optional        pam_gnome_keyring.so auto_start
+@include common-password

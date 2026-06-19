@@ -1,0 +1,9 @@
+localgroup1
+localgroup2:
+localgroup3:x
+localgroup4:x:44
+localgroup5:x:45:
+localgroup6:x:46:
+localgroup7:x:47:
+localgroup8:x:48:
+#localgroup8:x:48:with-comment

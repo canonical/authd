@@ -1,0 +1,28 @@
+Username: user name
+────────────────────────────────────────────────────────────────────────────────
+Username: user-integration-simple-testcliauthenticate@example.com
+────────────────────────────────────────────────────────────────────────────────
+  Select your provider
+
+> 1. local
+  2. ExampleBroker
+
+  Press escape key to go back to user selection
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+>
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+> ********
+
+  Press escape key to go back to select the authentication method
+────────────────────────────────────────────────────────────────────────────────
+PAM Authenticate()
+  User: "user-integration-simple-testcliauthenticate@example.com"
+  Result: success
+PAM AcctMgmt()
+  User: "user-integration-simple-testcliauthenticate@example.com"
+  Result: success
+────────────────────────────────────────────────────────────────────────────────

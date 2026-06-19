@@ -1,0 +1,40 @@
+[package]
+name = "nss"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.91.0"
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+name = "nss_authd"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+# Allows to override the socket path used to connect to the grpc server, through the AUTHD_NSS_SOCKET env variable.
+custom_socket = []
+integration_tests = []
+should_pre_check_env = []
+
+[dependencies]
+libnss = "0.9.0"
+libc = "0.2.186"
+tonic-prost = "0.14.*"
+tonic = "0.14.*"
+prost = "0.14.*"
+rustix = { version = "1.1.4", features = ["use-libc"] }
+tokio = { version = "1.50.0", features = ["macros", "rt-multi-thread"] }
+tower = {  version = "0.4.13", features = ["util"] }
+log = "0.4.31"
+simple_logger = {version = "5.2.0", features = ["stderr"]}
+syslog = "7.0.0"
+ctor = "0.5.0"
+procfs = "0.17.0"
+hyper-util = "0.1.20"
+time = "0.3.41"
+once_cell = "1.21.4"
+
+[build-dependencies]
+tonic-prost-build = "0.14.*"
+cc = "1.2.63"

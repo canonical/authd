@@ -1,0 +1,4 @@
+# Vendored dependency contains an Apache NOTICE
+vendor/gopkg.in/yaml.v3/NOTICE
+# Vendored rust dependencies
+Cargo.lock

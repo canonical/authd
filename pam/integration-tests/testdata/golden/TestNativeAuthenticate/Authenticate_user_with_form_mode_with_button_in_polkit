@@ -1,0 +1,36 @@
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+Gimme your password:
+>
+== Authentication method selection ==
+  1. Password authentication
+  2. Send URL to user-integration-native-authenticate-user-with-form-mode-with-button-in-polkit@example.com
+  3. Use your fido device foo
+  4. Use your phone +33...
+  5. Use your phone +1...
+  6. Pin code
+  7. Authentication code
+Choose your authentication method:
+> 7
+== Authentication code ==
+  1. Proceed with Authentication code
+  2. Resend SMS (1 sent)
+Or enter 'r' to go back to select the authentication method
+Choose action:
+> 2
+== Authentication code ==
+  1. Proceed with Authentication code
+  2. Resend SMS (2 sent)
+Or enter 'r' to go back to select the authentication method
+Choose action:
+> 1
+== Authentication code ==
+Enter 'r' to cancel the request and go back to select the authentication method
+Enter your one time credential:
+> temporary pass00
+PAM Authenticate()
+  User: "user-integration-native-authenticate-user-with-form-mode-with-button-in-polkit@example.com"
+  Result: success
+PAM AcctMgmt()
+  User: "user-integration-native-authenticate-user-with-form-mode-with-button-in-polkit@example.com"
+  Result: success

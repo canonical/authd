@@ -1,0 +1,31 @@
+GroupByID:
+  "11111": '"not-a-valid-json"'
+  "22222": '"not-a-valid-json"'
+  "33333": '"not-a-valid-json"'
+  "99999": '"not-a-valid-json"'
+GroupByName:
+  commongroup: '"not-a-valid-json"'
+  group1: '"not-a-valid-json"'
+  group2: '"not-a-valid-json"'
+  group3: '"not-a-valid-json"'
+GroupToUsers:
+  "11111": '"not-a-valid-json"'
+  "22222": '"not-a-valid-json"'
+  "33333": '"not-a-valid-json"'
+  "99999": '"not-a-valid-json"'
+UserByID:
+  "1111": '"not-a-valid-json"'
+  "2222": '"not-a-valid-json"'
+  "3333": '"not-a-valid-json"'
+UserByName:
+  user1: '"not-a-valid-json"'
+  user2: '"not-a-valid-json"'
+  user3: '"not-a-valid-json"'
+UserToGroups:
+  "1111": '"not-a-valid-json"'
+  "2222": '"not-a-valid-json"'
+  "3333": '"not-a-valid-json"'
+UserToBroker:
+  "1111": 'not-a-valid-json'
+  "2222": 'not-a-valid-json'
+  "3333": 'not-a-valid-json'

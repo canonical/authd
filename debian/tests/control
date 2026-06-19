@@ -1,0 +1,4 @@
+Test-Command: debian/tests/run-tests.sh
+Features: test-name=go_tests
+Restrictions: allow-stderr
+Depends: @builddeps@

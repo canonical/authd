@@ -1,0 +1,51 @@
+#!/bin/bash
+
+set -euo pipefail
+
+usage() {
+    cat << EOF
+Usage: $0 [-C <dir>] [-h|--help] [golangci-lint args...]
+
+Run golangci-lint with the version specified in tools/go.mod.
+If no version is specified, the latest version is used.
+
+Options:
+  -C <dir>     Change to <dir> before running. The tools/ directory is looked
+               up relative to that directory.
+  -h, --help   Show this help message and exit.
+
+Any additional arguments are passed through to golangci-lint.
+EOF
+}
+
+TOOLS_DIR="$(dirname "$0")/../tools"
+
+# Parse our own options; stop at the first argument that isn't ours.
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -C)
+            cd "$2"
+            TOOLS_DIR="tools"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+version="$(
+    cd "${TOOLS_DIR}"
+    go mod edit --json | jq -r '.Require[] | select(.Path=="github.com/golangci/golangci-lint/v2") | .Version'
+)"
+if [ -z "${version}" ]; then
+    version="latest"
+fi
+
+echo >&2 "golangci-lint version ${version}"
+
+exec go run "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${version}" "$@"

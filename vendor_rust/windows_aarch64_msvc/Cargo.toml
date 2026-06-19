@@ -1,0 +1,23 @@
+[lib]
+name = "windows_aarch64_msvc"
+path = "src/lib.rs"
+
+[package]
+authors = ["Microsoft"]
+autobenches = false
+autobins = false
+autoexamples = false
+autolib = false
+autotests = false
+description = "Import lib for Windows"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+name = "windows_aarch64_msvc"
+readme = false
+repository = "https://github.com/microsoft/windows-rs"
+rust-version = "1.60"
+version = "0.53.0"
+
+[package.metadata.docs.rs]
+default-target = "x86_64-pc-windows-msvc"
+targets = []

@@ -1,0 +1,12 @@
+'''apport package hook for authd
+
+(c) 2023 Canonical Ltd.
+'''
+
+import apport.hookutils
+
+def add_info(report):
+    apport.hookutils.attach_related_packages(report, ["libpam-runtime", "libpam0g"])
+    apport.hookutils.attach_conffiles(report, 'authd')
+    apport.hookutils.attach_file_if_exists(report, '/etc/pam.d/common-auth')
+    apport.hookutils.attach_file_if_exists(report, '/etc/nsswitch.conf')

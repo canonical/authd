@@ -1,0 +1,17 @@
+Name: authd authentication
+Default: yes
+Priority: 1050
+
+Auth-Type: Primary
+Auth:
+	[success=end ignore=ignore default=die authinfo_unavail=ignore]	pam_authd_exec.so @AUTHD_DAEMONS_PATH@/authd-pam
+Account-Type: Additional
+Account:
+	[default=ignore success=ok]	pam_authd_exec.so @AUTHD_DAEMONS_PATH@/authd-pam
+Password-Type: Primary
+Password:
+	[success=end ignore=ignore default=die authinfo_unavail=ignore]	pam_authd_exec.so @AUTHD_DAEMONS_PATH@/authd-pam
+Session-Type: Additional
+Session-Interactive-Only: yes
+Session:
+	optional			pam_mkhomedir.so

@@ -1,0 +1,15 @@
+Usage:
+  authctl [flags]
+  authctl [command]
+
+Available Commands:
+  user        Commands related to users
+  group       Commands related to groups
+  help        Help about any command
+
+Flags:
+  -h, --help   help for authctl
+
+Use "authctl [command] --help" for more information about a command.
+
+unknown flag: --invalid-flag

@@ -1,0 +1,16 @@
+syntax = "proto3";
+package pam;
+
+option go_package = "github.com/canonical/authd/pam/internal/proto";
+
+// state represents the stage object for the UI.
+enum Stage {
+    // Stage_userSelection is to select a user.
+    userSelection = 0;
+    // Stage_brokerSelection is to select a broker.
+    brokerSelection = 1;
+    // Stage_authModeSelection is to select an authentication mode.
+    authModeSelection = 2;
+    // Stage_challenge lets the user enter a secret or wait for authentication from the broker.
+    challenge = 3;
+}

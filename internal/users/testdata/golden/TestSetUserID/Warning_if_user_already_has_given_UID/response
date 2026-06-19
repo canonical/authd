@@ -1,0 +1,4 @@
+idchanged: false
+homedirownerchanged: false
+warnings:
+    - User 'user1@example.com' already has UID 54321.

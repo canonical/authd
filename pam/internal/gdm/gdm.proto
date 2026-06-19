@@ -1,0 +1,174 @@
+syntax = "proto3";
+package gdm;
+
+option go_package = "github.com/canonical/authd/pam/gdm";
+
+import "authd.proto";
+import "pam.proto";
+
+enum DataType {
+    // DataType_unknownType is an unknown DataType.
+    unknownType = 0;
+    // DataType_hello is an hello DataType.
+    hello = 1;
+    // DataType_event is an event DataType.
+    event = 2;
+    // DataType_eventAck is an event DataType.
+    eventAck = 3;
+    // DataType_request is a request DataType.
+    request = 4;
+    // DataType_response is a response DataType.
+    response = 5;
+    // DataType_poll is a poll DataType.
+    poll = 6;
+    // DataType_pollResponse is a poll response DataType.
+    pollResponse = 7;
+}
+
+message Data {
+    DataType type = 1;
+
+    optional HelloData hello = 2;
+    optional RequestData request = 3;
+    optional ResponseData response = 4;
+    optional EventData event = 5;
+    repeated EventData pollResponse = 6;
+}
+
+message HelloData {
+    uint32 version = 1;
+}
+
+enum RequestType {
+    // RequestType_unknownRequest is an unknown request RequestType.
+    unknownRequest = 0;
+    // RequestType_updateBrokersList is an update brokers list RequestType.
+    updateBrokersList = 1;
+    // RequestType_composeAuthenticationView is an compose authentication view RequestType.
+    composeAuthenticationView = 2;
+    // RequestType_uiLayoutCapabilities is an ui layout capabilities RequestType.
+    uiLayoutCapabilities = 3;
+    // RequestType_changeStage is a change stage RequestType.
+    changeStage = 4;
+}
+
+message Requests {
+    message UiLayoutCapabilities {}
+    message ChangeStage {
+        pam.Stage stage = 1;
+    }
+}
+
+message RequestData {
+    RequestType type = 1;
+    oneof data {
+        Requests.UiLayoutCapabilities uiLayoutCapabilities = 10;
+        Requests.ChangeStage changeStage = 11;
+    }
+}
+
+message Responses {
+    message Ack {}
+    message UiLayoutCapabilities {
+        repeated authd.UILayout supportedUiLayouts = 10;
+    }
+}
+
+message ResponseData {
+    RequestType type = 1;
+    oneof data {
+        Responses.Ack ack = 10;
+        Responses.UiLayoutCapabilities uiLayoutCapabilities = 11;
+    }
+}
+
+enum EventType {
+    // EventType_unknownEvent is an unknown EventType.
+    unknownEvent = 0;
+    // EventType_userSelected is a user selected EventType.
+    userSelected = 1;
+    // EventType_brokersReceived is a broker received EventType.
+    brokersReceived = 2;
+    // EventType_brokerSelected is a broker selected EventType.
+    brokerSelected = 3;
+    // EventType_authModesReceived is an auth modes received EventType.
+    authModesReceived = 4;
+    // EventType_authModeSelected is an auth mode selected EventType.
+    authModeSelected = 5;
+    // EventType_reselectAuthMode is an reselect auth mode selected EventType.
+    reselectAuthMode = 6;
+    // EventType_authEvent is an auth event EventType.
+    authEvent = 7;
+    // EventType_uiLayoutReceived is an UI Layout Received EventType.
+    uiLayoutReceived = 8;
+    // EventType_startAuthentication is a start authentication EventType.
+    startAuthentication = 9;
+    // EventType_isAuthenticatedRequested is an authentication request EventType.
+    isAuthenticatedRequested = 10;
+    // EventType_isAuthenticationCancelled is authentication cancellation EventType.
+    isAuthenticatedCancelled = 11;
+    // EventType_stageChanged is stage changed EventType.
+    stageChanged = 12;
+}
+
+message Events {
+    message BrokersReceived {
+        repeated authd.ABResponse.BrokerInfo brokersInfos = 1;
+    }
+
+    message BrokerSelected {
+        string brokerId = 1;
+    }
+
+    message UserSelected{
+        string userId = 1;
+    }
+
+    message StartAuthentication{}
+
+    message AuthModesReceived {
+        repeated authd.GAMResponse.AuthenticationMode authModes = 1;
+    }
+
+    message AuthModeSelected {
+        string authModeId = 1;
+    }
+
+    message AuthEvent {
+        authd.IAResponse response = 1;
+    }
+
+    message ReselectAuthMode {}
+
+    message IsAuthenticatedRequested {
+        authd.IARequest.AuthenticationData authentication_data = 1;
+    }
+
+    message IsAuthenticatedCancelled {}
+
+    message StageChanged {
+        pam.Stage stage = 1;
+    }
+
+    message UiLayoutReceived {
+        authd.UILayout uiLayout = 1;
+    }
+}
+
+message EventData {
+    EventType type = 1;
+    oneof data {
+        Events.BrokersReceived brokersReceived = 10;
+        Events.BrokerSelected brokerSelected = 11;
+        Events.AuthModesReceived authModesReceived = 12;
+        Events.AuthModeSelected authModeSelected = 13;
+        Events.IsAuthenticatedRequested isAuthenticatedRequested = 14;
+        Events.StageChanged stageChanged = 15;
+        Events.UiLayoutReceived uiLayoutReceived = 16;
+        Events.AuthEvent authEvent = 17;
+        Events.ReselectAuthMode reselectAuthMode = 18;
+        Events.StartAuthentication startAuthentication = 19;
+        Events.UserSelected userSelected = 20;
+        Events.IsAuthenticatedCancelled isAuthenticatedCancelled = 21;
+    }
+}

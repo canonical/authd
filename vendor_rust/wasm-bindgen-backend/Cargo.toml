@@ -1,0 +1,53 @@
+[dependencies.bumpalo]
+version = "3.0.0"
+
+[dependencies.log]
+version = "0.4"
+
+[dependencies.proc-macro2]
+version = "1.0"
+
+[dependencies.quote]
+version = "1.0"
+
+[dependencies.syn]
+features = ["full"]
+version = "2.0"
+
+[dependencies.wasm-bindgen-shared]
+version = "=0.2.100"
+
+[features]
+extra-traits = ["syn/extra-traits"]
+
+[lib]
+name = "wasm_bindgen_backend"
+path = "src/lib.rs"
+
+[lints.clippy]
+large_enum_variant = "allow"
+new_without_default = "allow"
+overly_complex_bool_expr = "allow"
+too_many_arguments = "allow"
+type_complexity = "allow"
+
+[package]
+authors = ["The wasm-bindgen Developers"]
+autobenches = false
+autobins = false
+autoexamples = false
+autolib = false
+autotests = false
+description = """
+Backend code generation of the wasm-bindgen tool
+"""
+documentation = "https://docs.rs/wasm-bindgen-backend"
+edition = "2021"
+homepage = "https://rustwasm.github.io/wasm-bindgen/"
+include = ["/LICENSE-*", "/src"]
+license = "MIT OR Apache-2.0"
+name = "wasm-bindgen-backend"
+readme = false
+repository = "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/backend"
+rust-version = "1.57"
+version = "0.2.100"

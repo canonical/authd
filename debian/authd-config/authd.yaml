@@ -1,0 +1,24 @@
+## Configuration for the authd service
+
+## The verbosity level of the authd service.
+## 0 prints only errors and warnings.
+## 1 prints information messages.
+## 2 prints debug messages.
+#verbosity: 0
+
+## UID and GID allocation range for users and groups.
+##
+## These define the minimum and maximum UID and GID values assigned
+## to users and groups by authd.
+##
+## Ensure these ranges do not overlap with other UID/GID ranges in use.
+## For common ranges typically used on Linux, see:
+## https://systemd.io/UIDS-GIDS/#summary
+##
+## Note: The user private group (the group named after the user) is always
+## created with the same GID as the user’s UID, regardless of the GID_MIN
+## and GID_MAX values.
+#UID_MIN: 10000
+#UID_MAX: 60000
+#GID_MIN: 10000
+#GID_MAX: 60000

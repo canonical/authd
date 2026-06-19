@@ -1,0 +1,35 @@
+[dependencies.unicode-ident]
+version = "1.0.5"
+
+[lib]
+name = "wasm_bindgen_shared"
+path = "src/lib.rs"
+
+[lints.clippy]
+large_enum_variant = "allow"
+new_without_default = "allow"
+overly_complex_bool_expr = "allow"
+too_many_arguments = "allow"
+type_complexity = "allow"
+
+[package]
+authors = ["The wasm-bindgen Developers"]
+autobenches = false
+autobins = false
+autoexamples = false
+autolib = false
+autotests = false
+description = """
+Shared support between wasm-bindgen and wasm-bindgen cli, an internal
+dependency.
+"""
+documentation = "https://docs.rs/wasm-bindgen-shared"
+edition = "2021"
+homepage = "https://rustwasm.github.io/wasm-bindgen/"
+include = ["/build.rs", "/LICENSE-*", "/src"]
+license = "MIT OR Apache-2.0"
+name = "wasm-bindgen-shared"
+readme = false
+repository = "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/shared"
+rust-version = "1.57"
+version = "0.2.100"

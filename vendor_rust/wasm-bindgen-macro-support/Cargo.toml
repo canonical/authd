@@ -1,0 +1,51 @@
+[dependencies.proc-macro2]
+version = "1.0"
+
+[dependencies.quote]
+version = "1.0"
+
+[dependencies.syn]
+features = ["visit", "visit-mut", "full"]
+version = "2.0"
+
+[dependencies.wasm-bindgen-backend]
+version = "=0.2.100"
+
+[dependencies.wasm-bindgen-shared]
+version = "=0.2.100"
+
+[features]
+extra-traits = ["syn/extra-traits"]
+strict-macro = []
+
+[lib]
+name = "wasm_bindgen_macro_support"
+path = "src/lib.rs"
+
+[lints.clippy]
+large_enum_variant = "allow"
+new_without_default = "allow"
+overly_complex_bool_expr = "allow"
+too_many_arguments = "allow"
+type_complexity = "allow"
+
+[package]
+authors = ["The wasm-bindgen Developers"]
+autobenches = false
+autobins = false
+autoexamples = false
+autolib = false
+autotests = false
+description = """
+The part of the implementation of the `#[wasm_bindgen]` attribute that is not in the shared backend crate
+"""
+documentation = "https://docs.rs/wasm-bindgen"
+edition = "2021"
+homepage = "https://rustwasm.github.io/wasm-bindgen/"
+include = ["/LICENSE-*", "/src"]
+license = "MIT OR Apache-2.0"
+name = "wasm-bindgen-macro-support"
+readme = false
+repository = "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/macro-support"
+rust-version = "1.57"
+version = "0.2.100"

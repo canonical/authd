@@ -1,0 +1,93 @@
+#!/bin/bash
+
+# This is a wrapper script to run the Go tests and generate the coverage report.
+# The coverage will then be merged with the Rust one and the HTML version will be
+# exposed on localhost:6061.
+
+set -eu
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS] [-- GO_TEST_ARGS...]
+
+Run Go tests with coverage and generate an HTML report served on localhost:6061.
+
+OPTIONS:
+  -C <dir>    Change to <dir> before doing anything else
+  --help      Print this help message and exit
+
+GO_TEST_ARGS are passed directly to 'go test'.
+EOF
+}
+
+# Parse options
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -C)
+            if [[ -z "${2-}" ]]; then
+                echo "Error: -C requires a directory argument" >&2
+                usage >&2
+                exit 1
+            fi
+            cd "$2"
+            shift 2
+            ;;
+        --help)
+            usage
+            exit 0
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+# find_go_mod walks up the directory tree looking for the go.mod file.
+# If it doesn't find it, the script will be aborted.
+find_go_mod() {
+    cwd="$(pwd)"
+
+    while [ "$cwd" != "/" ]; do
+        if [ -f "$cwd/go.mod" ]; then
+            echo "$cwd"
+            return
+        fi
+        cwd=$(dirname "$cwd")
+    done
+    echo "Error: go.mod not found in parent path. Aborting!"
+    exit 1
+}
+
+projectroot="$(find_go_mod)"
+cov_dir="${projectroot}/coverage"
+mkdir -p "${cov_dir}"
+
+# start http server on 6061 if none
+if ! nc -z localhost 6061; then
+    nohup python3 -m http.server --directory "${cov_dir}" 6061 1>/dev/null 2>&1 &
+fi
+
+raw_cov_dir="${cov_dir}/raw_files"
+
+rm -fr "${raw_cov_dir}"
+mkdir -p "${raw_cov_dir}"
+
+# Run the tests adding the necessary flags to enable coverage
+# Overriding the default coverage directory is currently not an exported flag of go test
+# We need to override it using the test.gocoverdir flag instead.
+#TODO: Update when https://go-review.googlesource.com/c/go/+/456595 is merged.
+go test -cover -covermode=set -coverpkg=./... "$@"  -shuffle=on -args -test.gocoverdir="${raw_cov_dir}"
+
+# Convert the raw coverage data into textfmt so we can merge the Rust one into it
+go tool covdata textfmt -i="${raw_cov_dir}" -o="${cov_dir}/coverage.out"
+
+# Append the Rust coverage data to the Go one
+if [ -f "${raw_cov_dir}/rust-cov/rust2go_coverage" ]; then
+    cat "${raw_cov_dir}/rust-cov/rust2go_coverage" >>"${cov_dir}/coverage.out"
+fi
+
+# Filter out the testutils package and the pb.go file
+grep -v -e "testutils" -e "pb.go" "${cov_dir}/coverage.out" >"${cov_dir}/coverage.out.filtered"
+
+# Generate the HTML report
+go tool cover -o "${cov_dir}/index.html" -html="${cov_dir}/coverage.out.filtered"

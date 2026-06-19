@@ -1,0 +1,51 @@
+[dependencies.proc-macro2]
+default-features = false
+features = ["proc-macro"]
+version = "1.0.74"
+
+[dependencies.quote]
+default-features = false
+features = ["proc-macro"]
+version = "1.0.35"
+
+[dependencies.syn]
+default-features = false
+features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"]
+version = "2.0.81"
+
+[dev-dependencies.serde]
+version = "1"
+
+[features]
+default = []
+deserialize_in_place = []
+
+[lib]
+name = "serde_derive"
+path = "src/lib.rs"
+proc-macro = true
+
+[package]
+authors = ["Erick Tryzelaar <erick.tryzelaar@gmail.com>", "David Tolnay <dtolnay@gmail.com>"]
+autobenches = false
+autobins = false
+autoexamples = false
+autolib = false
+autotests = false
+categories = ["no-std", "no-std::no-alloc"]
+description = "Macros 1.1 implementation of #[derive(Serialize, Deserialize)]"
+documentation = "https://serde.rs/derive.html"
+edition = "2021"
+exclude = ["build.rs"]
+homepage = "https://serde.rs"
+keywords = ["serde", "serialization", "no_std", "derive"]
+license = "MIT OR Apache-2.0"
+name = "serde_derive"
+readme = "crates-io.md"
+repository = "https://github.com/serde-rs/serde"
+rust-version = "1.61"
+version = "1.0.228"
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--generate-link-to-definition", "--generate-macro-expansion", "--extern-html-root-url=core=https://doc.rust-lang.org", "--extern-html-root-url=alloc=https://doc.rust-lang.org", "--extern-html-root-url=std=https://doc.rust-lang.org", "--extern-html-root-url=proc_macro=https://doc.rust-lang.org"]
+targets = ["x86_64-unknown-linux-gnu"]

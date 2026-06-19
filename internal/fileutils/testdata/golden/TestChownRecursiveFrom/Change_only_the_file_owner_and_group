@@ -1,0 +1,3 @@
+dir: 0:0
+dir/subdir: 0:0
+dir/subdir/file: 1:1

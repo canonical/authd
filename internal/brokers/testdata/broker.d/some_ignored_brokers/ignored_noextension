@@ -1,0 +1,5 @@
+[authd]
+name = IgnoredBrokerWithNoExtension
+brand_icon = some_icon.png
+dbus_name = com.ubuntu.authd.IgnoredBrokerWithNoExtension
+dbus_object = /com/ubuntu/authd/IgnoredBrokerWithNoExtension

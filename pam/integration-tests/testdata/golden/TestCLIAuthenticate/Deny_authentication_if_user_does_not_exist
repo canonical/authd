@@ -1,0 +1,27 @@
+Username: user name
+────────────────────────────────────────────────────────────────────────────────
+Username: user-unexistent@example.com
+────────────────────────────────────────────────────────────────────────────────
+  Select your provider
+
+> 1. local
+  2. ExampleBroker
+
+  Press escape key to go back to user selection
+────────────────────────────────────────────────────────────────────────────────
+  Select your provider
+
+  1. local
+> 2. ExampleBroker
+
+PAM Error Message: user "user-unexistent@example.com" does not exist
+PAM Authenticate()
+  User: "user-unexistent@example.com"
+  Result: error: PAM exit code: 4
+    System error
+PAM Info Message: acct=incomplete
+PAM AcctMgmt()
+  User: "user-unexistent@example.com"
+  Result: error: PAM exit code: 25
+    The return value should be ignored by PAM dispatch
+────────────────────────────────────────────────────────────────────────────────

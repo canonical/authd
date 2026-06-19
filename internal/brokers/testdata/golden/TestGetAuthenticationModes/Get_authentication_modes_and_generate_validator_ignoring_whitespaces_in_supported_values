@@ -1,0 +1,6 @@
+MODES:
+[{"id":"mode1","label":"Mode 1"}]
+
+VALIDATORS:
+	layout-with-spaces:
+		entry: { required: true, supportedValues: [entry_type other_entry_type] }

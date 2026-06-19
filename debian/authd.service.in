@@ -1,0 +1,97 @@
+[Unit]
+Description=authd daemon service
+After=authd.socket
+Requires=authd.socket
+PartOf=authd.socket
+
+[Service]
+Type=notify
+ExecStart=@AUTHD_DAEMONS_PATH@/authd
+
+# Some daemon restrictions
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+NoNewPrivileges=true
+PrivateDevices=yes
+PrivateMounts=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+
+# This always corresponds to /var/lib/authd
+StateDirectory=authd
+StateDirectoryMode=0700
+
+# This always corresponds to /etc/authd
+ConfigurationDirectory=authd
+
+# Prevent writing to /usr and bootloader paths.
+# We don't use "full" or "strict", because home paths can be anywhere and so we need
+# to be able to write on / subfolders, excluding some we want to explicitly protect.
+ProtectSystem=true
+
+# This is similar to ProtectHome=read-only but we exclude /home since we may need to rename
+# the user directories
+ReadOnlyPaths=-/root
+ReadOnlyPaths=-/run/user
+
+# Deny access to places that we should not touch
+ReadOnlyPaths=-/bin
+ReadOnlyPaths=-/sbin
+ReadOnlyPaths=-/lib
+TemporaryFileSystem=/media:ro
+TemporaryFileSystem=/snap:ro
+TemporaryFileSystem=/var:ro
+BindReadOnlyPaths=-/var/run/dbus
+InaccessiblePaths=-/lost+found
+
+# We need to be able to change /etc/group and /etc/gshadow, this is not great
+# but it's required for local groups access. We can't just make those accessible
+# via TemporaryFileSystem + Binds because we'd still get a write failure on rename.
+ReadWritePaths=/etc
+
+# Still let's protect some important etc paths.
+BindReadOnlyPaths=-/etc/environment
+BindReadOnlyPaths=-/etc/fstab
+BindReadOnlyPaths=-/etc/localtime
+BindReadOnlyPaths=-/etc/login.defs
+BindReadOnlyPaths=-/etc/nsswitch.conf
+BindReadOnlyPaths=-/etc/passwd
+BindReadOnlyPaths=-/etc/shadow
+BindReadOnlyPaths=-/etc/subgid
+BindReadOnlyPaths=-/etc/sudo.conf
+BindReadOnlyPaths=-/etc/sudoers
+BindReadOnlyPaths=-/etc/sysctl.conf
+BindReadOnlyPaths=-/etc/timezone
+InaccessiblePaths=-/etc/apt
+InaccessiblePaths=-/etc/default
+InaccessiblePaths=-/etc/ssh
+InaccessiblePaths=-/etc/systemd
+ReadOnlyPaths=-/etc/pam.d
+ReadOnlyPaths=-/etc/security
+
+# Only permit system calls used by common system services, excluding any special purpose calls
+SystemCallFilter=@system-service
+
+# This makes all files and directories not associated with process management invisible in /proc
+ProcSubset=pid
+
+# CAP_CHOWN: Required by gpasswd to alter the shadow files.
+# CAP_DAC_OVERRIDE: Required to bypass discretionary access control checks.
+#                   Needed when chowning files not owned by the process (e.g.
+#                   changing ownership of the user's home directory when
+#                   updating a UID) and when removing the home directory during
+#                   user deletion.
+# CAP_SYS_PTRACE: Required by CheckUserBusy used by SetUserID to check if any
+#                 running processes are owned by the UID being modified.
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_SYS_PTRACE

@@ -1,0 +1,169 @@
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+Gimme your password:
+>
+== Authentication method selection ==
+  1. Password authentication
+  2. Send URL to user-integration-native-authenticate-user-with-qr-code@example.com
+  3. Use your fido device foo
+  4. Use your phone +33...
+  5. Use your phone +1...
+  6. Pin code
+  7. Use a QR code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+Choose your authentication method:
+> 7
+== Use a QR code ==
+Scan the qrcode or enter the code in the login page
+
+█████████████████████████████████
+█████████████████████████████████
+████ ▄▄▄▄▄ █  ▀▀█▄██ █ ▄▄▄▄▄ ████
+████ █   █ █▀▄██ ▄▄▄██ █   █ ████
+████ █▄▄▄█ ██▄ █ ▄ ▄▄█ █▄▄▄█ ████
+████▄▄▄▄▄▄▄█ ▀▄▀▄▀ ▀▄█▄▄▄▄▄▄▄████
+████▄█ ▄█ ▄ ▀█▄▀▀▄▄█ █▄▀█▄█ ▄████
+█████▀█▀▄ ▄ ▄▀█▀▀▀ ▀█▄▀▄▄▀▀██████
+████▄  █▀█▄▄▄██ █▀█▀█▄   █▄▄ ████
+████▀▄  ▀▄▄█ ▄▄█ ▀▄▀▀ ▀▀ █▄▄▀████
+███████▄▄█▄█  ▀▄▀▀█▀ ▄▄▄ ▄ ▄ ████
+████ ▄▄▄▄▄ █  █▄ ██▀ █▄█ █▄  ████
+████ █   █ █▀▄ ▄  ▀▀▄  ▄  ▀▀▀████
+████ █▄▄▄█ █▄█▄▄▄▄█ █  █ █ ▄█████
+████▄▄▄▄▄▄▄█▄█▄█▄█▄████▄▄▄▄▄▄████
+█████████████████████████████████
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+URL:  https://ubuntu.com
+Code: 1337
+
+  1. Wait for authentication result
+  2. Regenerate code
+Or enter 'r' to go back to select the authentication method
+Choose action:
+> 2
+== Use a QR code ==
+Scan the qrcode or enter the code in the login page
+
+█████████████████████████████████
+█████████████████████████████████
+████ ▄▄▄▄▄ █ ▄█▄▀ ████ ▄▄▄▄▄ ████
+████ █   █ █▀██▄█▄▄  █ █   █ ████
+████ █▄▄▄█ ██▀ █▄▄ ▄ █ █▄▄▄█ ████
+████▄▄▄▄▄▄▄█ ▀ ▀▄▀ ▀ █▄▄▄▄▄▄▄████
+████ █ ▄▀▄▄ █▀▄█▄▄▄█ █▄▀█▄█ ▄████
+████  █▄ ▄▄▄   ▀ ▀ ▀█▄▀▄▄▀▀██████
+████▄█▀ █▀▄█ ▀▀ █▀█▀█▄   █▄▄ ████
+████▀▄▀█▀█▄█ ▄▀█ ▀▄▀▀ ▀▀ █▄▄▀████
+███████▄▄█▄█▀██▄▀▀█▀ ▄▄▄ ▄ ▄ ████
+████ ▄▄▄▄▄ █  ▄▄ ██▀ █▄█ █▄  ████
+████ █   █ █▀█▀▄  ▀▀▄  ▄  ▀▀▀████
+████ █▄▄▄█ █▄  ▄▄▄█ █  █ █ ▄█████
+████▄▄▄▄▄▄▄█▄███▄█▄████▄▄▄▄▄▄████
+█████████████████████████████████
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+URL:  https://ubuntu.fr/
+Code: 1338
+
+  1. Wait for authentication result
+  2. Regenerate code
+Or enter 'r' to go back to select the authentication method
+Choose action:
+> 2
+== Use a QR code ==
+Scan the qrcode or enter the code in the login page
+
+█████████████████████████████████████
+█████████████████████████████████████
+████ ▄▄▄▄▄ █ ▄▄ ▀█▀ ▄▄ ▄▀█ ▄▄▄▄▄ ████
+████ █   █ █▀▀▀▄█▄▄▄▀▀██▀█ █   █ ████
+████ █▄▄▄█ ███▀▄█▄▀██▀▀ ██ █▄▄▄█ ████
+████▄▄▄▄▄▄▄█ ▀ ▀▄▀ █▄▀ ▀ █▄▄▄▄▄▄▄████
+████ █▄ █▄▄▄█▀ ▀ ▄▄▀ ▄▄ ▀█ ▀▀▄█▄ ████
+████▀▀▀█▄█▄ ▄▄█▀▄▀  ███▀▀▄▀  █▄▄▀████
+████████ █▄▀ ▄█▄█▀██▄ █ ▀▀▀██▄ ▀▀████
+████▀▄ ▄▀▄▄█▄████▀▄▀█▄▄▄ ▄▄ ▀█▄ ▄████
+█████▄▀▄▀ ▄▄█▄█  ▀███▀█▄ ▄█▀▄ ▀ █████
+████▄█ ▀ ▄▄ ▄▀█▀▀██▀▀ ▀█▄█▀▀██ ██████
+█████▄██▄█▄▄  ██▄ ▀ █▀▀  ▄▄▄   ▀▀████
+████ ▄▄▄▄▄ █ ██▀ ▄██ ▀▄▄ █▄█  █ █████
+████ █   █ █▀▀▄▄▄█ ▄▀▀██▄ ▄  ▀▄ ▄████
+████ █▄▄▄█ █▄ ▀▄██ ▄ ██ ▀█▀ ▀▀▄▀▄████
+████▄▄▄▄▄▄▄█▄▄█▄▄█▄▄▄▄█▄▄▄▄██▄█▄█████
+█████████████████████████████████████
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+URL:  https://ubuntuforum-br.org/
+Code: 1339
+
+  1. Wait for authentication result
+  2. Regenerate code
+Or enter 'r' to go back to select the authentication method
+Choose action:
+> 2
+== Use a QR code ==
+Scan the qrcode or enter the code in the login page
+
+█████████████████████████████████
+█████████████████████████████████
+████ ▄▄▄▄▄ █▀▄▀▀ ▀▀ ██ ▄▄▄▄▄ ████
+████ █   █ ██▄▀▄▀██▀▀█ █   █ ████
+████ █▄▄▄█ █▄▀▄ ▀   ██ █▄▄▄█ ████
+████▄▄▄▄▄▄▄█▄▀▄▀▄▀ █ █▄▄▄▄▄▄▄████
+████▄█▄▀▄▀▄▀▀█▄▀▀▄█▄ █▀█▄██▄▀████
+█████▄▀ █▄▄ █▀▄██▀ ▀▀▄ ▄██▄ ▄████
+█████  ▄█▀▄▄ █  ▄ ▀█▀▄ ▄█ █▄ ████
+████▄▀▀▀▄▄▄▄▀▄▀█▀▀██▄▄ ▄▀█▄ ▄████
+████▄███▄▄▄█▀█ ▄▄▄▄▀ ▄▄▄  █▀▀████
+████ ▄▄▄▄▄ ██▀██▀ █▄ █▄█  █  ████
+████ █   █ █▄  █ ▄██▄ ▄   ▀██████
+████ █▄▄▄█ █▄  █▄ ▀▄ █▀█ ▀█▀▄████
+████▄▄▄▄▄▄▄█▄▄███▄█▄▄██▄███▄▄████
+█████████████████████████████████
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+URL:  https://www.ubuntu-it.org/
+Code: 1340
+
+  1. Wait for authentication result
+  2. Regenerate code
+Or enter 'r' to go back to select the authentication method
+Choose action:
+> 2
+== Use a QR code ==
+Scan the qrcode or enter the code in the login page
+
+█████████████████████████████████
+█████████████████████████████████
+████ ▄▄▄▄▄ █  ▀▀█▄██ █ ▄▄▄▄▄ ████
+████ █   █ █▀▄██ ▄▄▄██ █   █ ████
+████ █▄▄▄█ ██▄ █ ▄ ▄▄█ █▄▄▄█ ████
+████▄▄▄▄▄▄▄█ ▀▄▀▄▀ ▀▄█▄▄▄▄▄▄▄████
+████▄█ ▄█ ▄ ▀█▄▀▀▄▄█ █▄▀█▄█ ▄████
+█████▀█▀▄ ▄ ▄▀█▀▀▀ ▀█▄▀▄▄▀▀██████
+████▄  █▀█▄▄▄██ █▀█▀█▄   █▄▄ ████
+████▀▄  ▀▄▄█ ▄▄█ ▀▄▀▀ ▀▀ █▄▄▀████
+███████▄▄█▄█  ▀▄▀▀█▀ ▄▄▄ ▄ ▄ ████
+████ ▄▄▄▄▄ █  █▄ ██▀ █▄█ █▄  ████
+████ █   █ █▀▄ ▄  ▀▀▄  ▄  ▀▀▀████
+████ █▄▄▄█ █▄█▄▄▄▄█ █  █ █ ▄█████
+████▄▄▄▄▄▄▄█▄█▄█▄█▄████▄▄▄▄▄▄████
+█████████████████████████████████
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+URL:  https://ubuntu.com
+Code: 1341
+
+  1. Wait for authentication result
+  2. Regenerate code
+Or enter 'r' to go back to select the authentication method
+Choose action:
+> 1
+PAM Authenticate()
+  User: "user-integration-native-authenticate-user-with-qr-code@example.com"
+  Result: success
+PAM AcctMgmt()
+  User: "user-integration-native-authenticate-user-with-qr-code@example.com"
+  Result: success

@@ -1,0 +1,4 @@
+FIRST CALL:
+	access: next
+	data: {"message": "It's fine to show a message here"}
+	err: <nil>

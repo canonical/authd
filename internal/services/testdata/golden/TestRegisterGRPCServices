@@ -1,0 +1,81 @@
+authd.PAM:
+    methods:
+        - name: AvailableBrokers
+          isclientstream: false
+          isserverstream: false
+        - name: EndSession
+          isclientstream: false
+          isserverstream: false
+        - name: GetAuthenticationModes
+          isclientstream: false
+          isserverstream: false
+        - name: GetPreviousBroker
+          isclientstream: false
+          isserverstream: false
+        - name: IsAuthenticated
+          isclientstream: false
+          isserverstream: false
+        - name: SelectAuthenticationMode
+          isclientstream: false
+          isserverstream: false
+        - name: SelectBroker
+          isclientstream: false
+          isserverstream: false
+        - name: SetDefaultBrokerForUser
+          isclientstream: false
+          isserverstream: false
+    metadata: authd.proto
+authd.UserService:
+    methods:
+        - name: DeleteGroup
+          isclientstream: false
+          isserverstream: false
+        - name: DeleteUser
+          isclientstream: false
+          isserverstream: false
+        - name: GetGroupByID
+          isclientstream: false
+          isserverstream: false
+        - name: GetGroupByName
+          isclientstream: false
+          isserverstream: false
+        - name: GetUserByID
+          isclientstream: false
+          isserverstream: false
+        - name: GetUserByName
+          isclientstream: false
+          isserverstream: false
+        - name: ListGroups
+          isclientstream: false
+          isserverstream: false
+        - name: ListUsers
+          isclientstream: false
+          isserverstream: false
+        - name: LockUser
+          isclientstream: false
+          isserverstream: false
+        - name: SetGroupID
+          isclientstream: false
+          isserverstream: false
+        - name: SetShell
+          isclientstream: false
+          isserverstream: false
+        - name: SetUserID
+          isclientstream: false
+          isserverstream: false
+        - name: UnlockUser
+          isclientstream: false
+          isserverstream: false
+    metadata: authd.proto
+grpc.health.v1.Health:
+    methods:
+        - name: Check
+          isclientstream: false
+          isserverstream: false
+        - name: List
+          isclientstream: false
+          isserverstream: false
+        - name: Watch
+          isclientstream: false
+          isserverstream: true
+    metadata: grpc/health/v1/health.proto

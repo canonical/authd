@@ -1,0 +1,15 @@
+users:
+    - name: otheruser@example.com
+      uid: 77777
+      gid: 88888
+      gecos: gecos for other user
+      dir: /home/otheruser@example.com
+      shell: /bin/sh/otheruser
+      broker_id: broker-id
+groups:
+    - name: group-success
+      gid: 88888
+      ugid: ugid-success
+users_to_groups:
+    - uid: 77777
+      gid: 88888

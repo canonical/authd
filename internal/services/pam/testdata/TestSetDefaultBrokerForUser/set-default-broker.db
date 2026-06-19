@@ -1,0 +1,74 @@
+users:
+    - name: userwithbroker@example.com
+      uid: 1111
+      gid: 11111
+      gecos: |-
+        userwithbroker gecos
+        On multiple lines
+      dir: /home/userwithbroker@example.com
+      shell: /bin/bash
+      broker_id: broker-id
+    - name: userwithinactivebroker@example.com
+      uid: 2222
+      gid: 22222
+      gecos: userwithinactivebroker
+      dir: /home/userwithinactivebroker@example.com
+      shell: /bin/dash
+      broker_id: inactive-broker-id
+    - name: userlocalbroker@example.com
+      uid: 3333
+      gid: 33333
+      gecos: userlocalbroker
+      dir: /home/userlocalbroker@example.com
+      shell: /bin/zsh
+    - name: usersetbroker@example.com
+      uid: 4444
+      gid: 44444
+      gecos: usersetbroker
+      dir: /home/usersetbroker@example.com
+      shell: /bin/dash
+    - name: userupdatebroker@example.com
+      uid: 5555
+      gid: 55555
+      gecos: userupdatebroker
+      dir: /home/userupdatebroker@example.com
+      shell: /bin/zsh
+      broker_id: tobereplaced-broker-id
+groups:
+    - name: group1
+      gid: 11111
+      ugid: group1
+    - name: group2
+      gid: 22222
+      ugid: group2
+    - name: group3
+      gid: 33333
+      ugid: group3
+    - name: group4
+      gid: 44444
+      ugid: group4
+    - name: group5
+      gid: 55555
+      ugid: group5
+    - name: commongroup
+      gid: 99999
+      ugid: commongroup
+users_to_groups:
+    - uid: 1111
+      gid: 11111
+    - uid: 2222
+      gid: 22222
+    - uid: 2222
+      gid: 99999
+    - uid: 3333
+      gid: 33333
+    - uid: 3333
+      gid: 99999
+    - uid: 4444
+      gid: 44444
+    - uid: 4444
+      gid: 99999
+    - uid: 5555
+      gid: 55555
+    - uid: 5555
+      gid: 99999

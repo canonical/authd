@@ -1,0 +1,37 @@
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+Gimme your password:
+>
+== Authentication method selection ==
+  1. Password authentication
+  2. Authentication code
+Or enter 'r' to go back to choose the provider
+Choose your authentication method:
+> 2
+== Authentication code ==
+  1. Proceed with Authentication code
+  2. Resend SMS (1 sent)
+Or enter 'r' to go back to select the authentication method
+Choose action:
+> 2
+== Authentication code ==
+  1. Proceed with Authentication code
+  2. Resend SMS (2 sent)
+Or enter 'r' to go back to select the authentication method
+Choose action:
+> 1
+== Authentication code ==
+Enter 'r' to cancel the request and go back to select the authentication method
+Enter your one time credential:
+> temporary pass00
+PAM Authenticate()
+  User: "user-auth-modes-totp_with_button,password-integration-native@example.com"
+  Result: success
+PAM AcctMgmt()
+  User: "user-auth-modes-totp_with_button,password-integration-native@example.com"
+  Result: success

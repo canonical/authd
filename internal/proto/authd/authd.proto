@@ -1,0 +1,248 @@
+syntax = "proto3";
+package authd;
+
+option go_package = "github.com/canonical/authd/internal/proto/authd";
+
+message Empty {
+}
+
+service PAM {
+  rpc AvailableBrokers(Empty) returns (ABResponse);
+  rpc GetPreviousBroker(GPBRequest) returns (GPBResponse);
+
+  rpc SelectBroker(SBRequest) returns (SBResponse);
+  rpc GetAuthenticationModes(GAMRequest) returns (GAMResponse);
+  rpc SelectAuthenticationMode(SAMRequest) returns (SAMResponse);
+  rpc IsAuthenticated(IARequest) returns (IAResponse);
+  rpc EndSession(ESRequest) returns (Empty);
+
+  rpc SetDefaultBrokerForUser(SDBFURequest) returns (Empty);
+}
+
+message GPBRequest {
+  string username = 1;
+}
+
+message GPBResponse {
+  string previous_broker = 1;
+}
+
+message ABResponse {
+  repeated BrokerInfo brokers_infos = 1;
+
+  message BrokerInfo {
+    string id = 1;
+    string name = 2;
+    optional string brand_icon = 3;
+  }
+}
+
+message StringResponse {
+  string msg = 1;
+}
+
+enum SessionMode {
+  UNDEFINED = 0;
+  LOGIN = 1;
+  CHANGE_PASSWORD = 2;
+}
+
+message SBRequest {
+  string broker_id = 1;
+  string username = 2;
+  string lang = 3;
+  SessionMode mode = 4;
+}
+
+message SBResponse {
+  string session_id = 1;
+  string encryption_key = 2;
+}
+
+message GAMRequest {
+  string session_id = 1;
+  repeated UILayout supported_ui_layouts = 2;
+}
+
+message UILayout {
+  string type = 1;
+
+  // common components.
+  optional string label = 2;
+  optional string button = 3;
+  optional string wait = 4;
+
+  // form only.
+  optional string entry = 5;
+
+  // qr code only.
+  optional string content = 6;
+  optional string code = 7;
+  optional bool renders_qrcode = 8;
+}
+
+message GAMResponse {
+  repeated AuthenticationMode authentication_modes = 1;
+
+  message AuthenticationMode {
+    string id = 1;
+    string label = 2;
+  }
+}
+
+message SAMRequest {
+  string session_id = 1;
+  string authentication_mode_id = 2;
+}
+
+message SAMResponse {
+  UILayout ui_layout_info = 1;
+}
+
+message IARequest {
+  string session_id = 1;
+
+  message AuthenticationData {
+    oneof item {
+      string secret = 1;
+      string wait = 2;
+      string skip = 3;
+
+      // FIXME: Drop this when gdm side is ready to update.
+      string challenge = 999;
+    }
+  }
+  AuthenticationData authentication_data = 2;
+}
+
+message IAResponse {
+  string access = 1;
+  string msg = 2;
+}
+
+message SDBFURequest {
+  string broker_id = 1;
+  string username = 2;
+}
+
+message ESRequest {
+  string session_id = 1;
+}
+
+service UserService {
+  rpc GetUserByName(GetUserByNameRequest) returns (User);
+  rpc GetUserByID(GetUserByIDRequest) returns (User);
+  rpc ListUsers(Empty) returns (Users);
+  rpc LockUser(LockUserRequest) returns (Empty);
+  rpc UnlockUser(UnlockUserRequest) returns (Empty);
+  rpc SetUserID(SetUserIDRequest) returns (SetUserIDResponse);
+  rpc SetGroupID(SetGroupIDRequest) returns (SetGroupIDResponse);
+  rpc SetShell(SetShellRequest) returns (SetShellResponse);
+  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+  rpc DeleteGroup(DeleteGroupRequest) returns (Empty);
+
+  rpc GetGroupByName(GetGroupByNameRequest) returns (Group);
+  rpc GetGroupByID(GetGroupByIDRequest) returns (Group);
+  rpc ListGroups(Empty) returns (Groups);
+}
+
+message GetUserByNameRequest{
+  string name = 1;
+  bool shouldPreCheck = 2;
+}
+
+message GetUserByIDRequest{
+  uint32 id = 1;
+}
+
+message LockUserRequest{
+  string name = 1;
+}
+
+message UnlockUserRequest{
+  string name = 1;
+}
+
+message DeleteUserRequest{
+  string name = 1;
+  // If true, remove the user's home directory.
+  bool remove_home = 2;
+}
+
+message DeleteGroupRequest{
+  string name = 1;
+}
+
+message GetGroupByNameRequest{
+  string name = 1;
+}
+
+message GetGroupByIDRequest{
+  uint32 id = 1;
+}
+
+message SetUserIDRequest {
+  string name = 1;
+  uint32 id = 2;
+  // The language to use for any warnings returned.
+  // Note: This is currently not implemented and warnings are always in English.
+  string lang = 3;
+}
+
+message SetUserIDResponse {
+  bool id_changed = 1;
+  bool home_dir_owner_changed = 2;
+  repeated string warnings = 3;
+}
+
+message SetGroupIDRequest {
+  string name = 1;
+  uint32 id = 2;
+  // The language to use for any warnings returned.
+  // Note: This is currently not implemented and warnings are always in English.
+  string lang = 3;
+}
+
+message SetGroupIDResponse {
+  bool id_changed = 1;
+  bool home_dir_owner_changed = 2;
+  repeated string warnings = 3;
+}
+
+message SetShellRequest {
+  string name = 1;
+  string shell = 2;
+}
+
+message SetShellResponse {
+  repeated string warnings = 1;
+}
+
+message DeleteUserResponse {
+  repeated string warnings = 1;
+}
+
+message User {
+  string name = 1;
+  uint32 uid = 2;
+  uint32 gid = 3;
+  string gecos = 4;
+  string homedir = 5;
+  string shell = 6;
+}
+
+message Users {
+  repeated User users = 1;
+}
+
+message Group {
+  string name = 1;
+  uint32 gid = 2;
+  repeated string members = 3;
+  // TODO: Rename this to tmpID
+  string passwd = 4;
+}
+
+message Groups {
+  repeated Group groups = 1;
+}

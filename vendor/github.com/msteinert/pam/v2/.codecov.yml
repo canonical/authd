@@ -1,0 +1,3 @@
+ignore:
+  # Ignore pam-moduler generated files
+  - "**/pam_module.go"

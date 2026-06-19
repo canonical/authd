@@ -1,0 +1,14 @@
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
+> 1
+auth=incomplete
+PAM Authenticate()
+  User: "user-integration-native-exit-authd-if-local-broker-is-selected@example.com"
+  Result: error: PAM exit code: 25
+    The return value should be ignored by PAM dispatch
+PAM AcctMgmt()
+  User: "user-integration-native-exit-authd-if-local-broker-is-selected@example.com"
+  Result: error: PAM exit code: 26
+    Critical error - immediate abort

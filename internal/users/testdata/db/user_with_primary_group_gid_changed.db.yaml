@@ -1,0 +1,13 @@
+users:
+    - name: user1@example.com
+      uid: 1111
+      gid: 60500
+      dir: /home/user1@example.com
+      shell: /bin/bash
+groups:
+    - name: user1@example.com
+      gid: 60500
+      ugid: user1@example.com
+users_to_groups:
+    - uid: 1111
+      gid: 60500

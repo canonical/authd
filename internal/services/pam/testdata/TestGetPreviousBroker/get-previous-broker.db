@@ -1,0 +1,47 @@
+users:
+    - name: userwithbroker@example.com
+      uid: 1111
+      gid: 11111
+      gecos: |-
+        userwithbroker gecos
+        On multiple lines
+      dir: /home/userwithbroker@example.com
+      shell: /bin/bash
+      broker_id: MOCKBROKERID
+    - name: userwithinactivebroker@example.com
+      uid: 2222
+      gid: 22222
+      gecos: userwithinactivebroker
+      dir: /home/userwithinactivebroker@example.com
+      shell: /bin/dash
+      broker_id: inactive-broker-id
+    - name: userwithoutbroker@example.com
+      uid: 3333
+      gid: 33333
+      gecos: userwithoutbroker
+      dir: /home/userwithoutbroker@example.com
+      shell: /bin/zsh
+groups:
+    - name: group1
+      gid: 11111
+      ugid: group1
+    - name: group2
+      gid: 22222
+      ugid: group2
+    - name: group3
+      gid: 33333
+      ugid: group3
+    - name: commongroup
+      gid: 99999
+      ugid: commongroup
+users_to_groups:
+    - uid: 1111
+      gid: 11111
+    - uid: 2222
+      gid: 22222
+    - uid: 2222
+      gid: 99999
+    - uid: 3333
+      gid: 33333
+    - uid: 3333
+      gid: 99999

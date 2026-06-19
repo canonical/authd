@@ -1,0 +1,6 @@
+MODES:
+[]
+
+VALIDATORS:
+	required-entry:
+		entry: { required: true, supportedValues: [entry_type other_entry_type] }

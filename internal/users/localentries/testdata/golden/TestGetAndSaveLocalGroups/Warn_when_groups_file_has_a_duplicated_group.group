@@ -1,0 +1,8 @@
+localgroup1:x:41:otheruser
+localgroup2:x:42:otheruser2
+localgroup3:x:43:invalidGID
+localgroup4:x:44:otheruser2
+cloudgroup1:x:9998:otheruser3
+cloudgroup2:x:9999:otheruser4
+localgroup4:x:123:again
+localgroup5:x:45:

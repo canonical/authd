@@ -1,0 +1,13 @@
+Username: user name
+────────────────────────────────────────────────────────────────────────────────
+PAM Error Message: unix:///authd/test_socket.sock stopped serving
+PAM Authenticate()
+  User: "<unset>"
+  Result: error: PAM exit code: 4
+    System error
+PAM Info Message: acct=incomplete
+PAM AcctMgmt()
+  User: "<unset>"
+  Result: error: PAM exit code: 25
+    The return value should be ignored by PAM dispatch
+────────────────────────────────────────────────────────────────────────────────

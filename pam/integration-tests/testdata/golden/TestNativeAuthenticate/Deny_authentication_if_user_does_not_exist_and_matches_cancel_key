@@ -1,0 +1,21 @@
+Username: r
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Or enter 'r' to go back to user selection
+Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication method
+Gimme your password:
+>
+PAM Error Message: user not found
+PAM Authenticate()
+  User: "r"
+  Result: error: PAM exit code: 7
+    Authentication failure
+acct=incomplete
+PAM AcctMgmt()
+  User: "r"
+  Result: error: PAM exit code: 25
+    The return value should be ignored by PAM dispatch

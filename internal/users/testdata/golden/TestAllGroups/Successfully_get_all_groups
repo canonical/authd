@@ -1,0 +1,28 @@
+- name: group1
+  gid: 11111
+  users:
+    - user1@example.com
+  passwd: ""
+- name: group2withoutugid
+  gid: 22222
+  users:
+    - user2@example.com
+  passwd: ""
+- name: group3
+  gid: 33333
+  users:
+    - user3@example.com
+  passwd: ""
+- name: group4
+  gid: 44444
+  users:
+    - userwithoutbroker@example.com
+  passwd: ""
+- name: commongroup
+  gid: 99999
+  users:
+    - user1@example.com
+    - user2@example.com
+    - user3@example.com
+    - userwithoutbroker@example.com
+  passwd: ""

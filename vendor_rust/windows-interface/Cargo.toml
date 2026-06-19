@@ -1,0 +1,52 @@
+[dependencies.proc-macro2]
+default-features = false
+version = "1.0"
+
+[dependencies.quote]
+default-features = false
+version = "1.0"
+
+[dependencies.syn]
+default-features = false
+features = ["parsing", "proc-macro", "printing", "full", "clone-impls"]
+version = "2.0"
+
+[dev-dependencies]
+
+[lib]
+name = "windows_interface"
+path = "src/lib.rs"
+proc-macro = true
+
+[lints.rust]
+missing_docs = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+
+[lints.rust.rust_2018_idioms]
+level = "warn"
+priority = -1
+
+[lints.rust.unexpected_cfgs]
+check-cfg = ["cfg(windows_raw_dylib, windows_debugger_visualizer, windows_slim_errors)"]
+level = "warn"
+priority = 0
+
+[package]
+authors = ["Microsoft"]
+autobenches = false
+autobins = false
+autoexamples = false
+autolib = false
+autotests = false
+description = "The interface macro for the windows crate"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+name = "windows-interface"
+readme = false
+repository = "https://github.com/microsoft/windows-rs"
+rust-version = "1.74"
+version = "0.59.1"
+
+[package.metadata.docs.rs]
+default-target = "x86_64-pc-windows-msvc"
+targets = []

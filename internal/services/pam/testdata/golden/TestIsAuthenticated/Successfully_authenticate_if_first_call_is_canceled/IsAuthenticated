@@ -1,0 +1,8 @@
+FIRST CALL:
+	access: 
+	msg: 
+	err: rpc error: code = Canceled desc = context canceled
+SECOND CALL:
+	access: granted
+	msg: 
+	err: <nil>

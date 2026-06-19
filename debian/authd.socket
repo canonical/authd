@@ -1,0 +1,15 @@
+[Unit]
+Description=Socket activation for authd daemon
+# Ensure there's no ordering cycle since authd needs to start after dbus
+DefaultDependencies=No
+Wants=dbus.service
+After=dbus.service
+Before=nss-user-lookup.target
+Wants=nss-user-lookup.target
+
+[Socket]
+ListenStream=/run/authd.sock
+FlushPending=yes
+
+[Install]
+WantedBy=sockets.target

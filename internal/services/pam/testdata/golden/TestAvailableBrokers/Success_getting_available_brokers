@@ -1,0 +1,6 @@
+- id: local_ID
+  name: local
+  brandicon: ""
+- id: BrokerMock_ID
+  name: BrokerMock
+  brandicon: mock_icon.png

@@ -1,0 +1,8 @@
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-ssh-exit-authd-if-local-broker-is-selected@example.com@localhost) Choose your provider:
+> 1
+PAM Authenticate() finished for user 'user-integration-pre-check-ssh-exit-authd-if-local-broker-is-selected@example.com'
+SSH PAM user 'user-integration-pre-check-ssh-exit-authd-if-local-broker-is-selected@example.com' using local broker
+(user-integration-pre-check-ssh-exit-authd-if-local-broker-is-selected@example.com@localhost) Password:

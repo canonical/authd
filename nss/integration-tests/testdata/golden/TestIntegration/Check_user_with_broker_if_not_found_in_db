@@ -1,0 +1,1 @@
+user-pre-check@example.com:x:{{UID}}:{{GID}}:gecos for user-pre-check@example.com:/home/user-pre-check@example.com:/bin/sh

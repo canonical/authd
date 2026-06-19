@@ -1,0 +1,8 @@
+MODES:
+[{"id":"mode1","label":"Mode 1"}]
+
+VALIDATORS:
+	optional-entry:
+		entry: { required: false, supportedValues: [entry_type other_entry_type] }
+	required-entry:
+		entry: { required: true, supportedValues: [entry_type other_entry_type] }
