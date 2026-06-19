@@ -56,7 +56,7 @@ parts:
       cp "$SNAPCRAFT_PROJECT_DIR/authd-oidc-brokers/rust-toolchain.toml" "$SNAPCRAFT_PART_SRC/"
     override-build: |
       cargo install cargo-c
-      cargo cbuild --release --lib --features=broker,changepassword,on_behalf_of
+      cargo cbuild --release --lib --features=broker,changepassword,on_behalf_of,set_timeout
       echo "Installing libhimmelblau.so and himmelblau.h"
       TARGET_TRIPLE=$(rustc -vV | awk '/host:/ {print $2}')
       install -D target/${TARGET_TRIPLE}/release/libhimmelblau.so ${CRAFT_PART_INSTALL}/lib/libhimmelblau.so.0

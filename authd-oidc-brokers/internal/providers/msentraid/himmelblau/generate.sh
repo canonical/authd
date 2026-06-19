@@ -24,7 +24,7 @@ set -x
 
 "${CARGO_HOME:-$HOME/.cargo}"/bin/cbindgen --config ./cbindgen.toml > himmelblau/himmelblau.h
 
-FEATURES="broker,changepassword,on_behalf_of"
+FEATURES="broker,changepassword,on_behalf_of,set_timeout"
 # Enable custom_oidc_discovery_url feature when not building a release,
 # which is the case when building inside snapcraft or when the RELEASE env
 # var is set (the latter can be used during development).
