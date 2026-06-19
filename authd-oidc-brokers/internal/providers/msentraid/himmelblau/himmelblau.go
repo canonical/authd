@@ -336,7 +336,15 @@ func AcquireAccessTokenForGraphAPI(
 // that can be used to complete the MFA challenge.
 // When withDeviceScope is true, the MFA flow requests scopes required for device
 // enrollment. When false, it uses standard scopes without enrollment resources.
+//
+// An empty password selects passwordless authentication: the Rust layer then
+// negotiates a passwordless method (Authenticator number-matching, TAP, ...)
+// based on the user's credential type. Passwordless authentication cannot
+// enroll a device, so callers must pass withDeviceScope=false in that case.
 func InitiateMFAFlowWithPassword(ctx context.Context, clientID, tenantID string, data *DeviceRegistrationData, username, password string, withDeviceScope bool) (*MFAFlowState, *MFAChallengeInfo, error) {
+	if password == "" && withDeviceScope {
+		return nil, nil, fmt.Errorf("passwordless authentication cannot be used for device enrollment")
+	}
 	brokerClientApp, err := brokerClientAppFor(clientID, tenantID, data)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to initialize broker client application: %v", err)

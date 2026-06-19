@@ -17,6 +17,11 @@ const (
 	// EntraPassword is the ID of the Entra ID password + MFA authentication method.
 	EntraPassword = "entra_password"
 
+	// EntraPasswordless is the ID of the Entra ID passwordless authentication
+	// method (e.g. Authenticator number-matching or Temporary Access Pass),
+	// which negotiates an MFA challenge without first submitting a password.
+	EntraPasswordless = "entra_passwordless"
+
 	// EntraMFAWait is the ID of the poll-based MFA follow-up mode.
 	EntraMFAWait = "entra_mfa_wait"
 
@@ -28,12 +33,13 @@ var (
 	// Label is a map of auth mode IDs to their display labels.
 	//nolint:gosec // G101: These are auth mode display labels, not credentials.
 	Label = map[string]string{
-		Password:      "Local Password Authentication",
-		Device:        "Device Authentication",
-		DeviceQr:      "Device Authentication",
-		NewPassword:   "Define your local password",
-		EntraPassword: "Sign in with Entra ID password",
-		EntraMFAWait:  "Waiting for MFA approval",
-		EntraMFACode:  "Enter your MFA code",
+		Password:          "Local Password Authentication",
+		Device:            "Device Authentication",
+		DeviceQr:          "Device Authentication",
+		NewPassword:       "Define your local password",
+		EntraPassword:     "Sign in with Entra ID password",
+		EntraPasswordless: "Sign in with Entra ID (passwordless)",
+		EntraMFAWait:      "Waiting for MFA approval",
+		EntraMFACode:      "Enter your MFA code",
 	}
 )

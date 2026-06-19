@@ -46,7 +46,7 @@ const (
 
 // reauthModes is the set of auth modes offered when the user must re-authenticate
 // (e.g. after token revocation, expiry, or password change).
-var reauthModes = []string{authmodes.EntraPassword, authmodes.Device, authmodes.DeviceQr}
+var reauthModes = []string{authmodes.EntraPassword, authmodes.EntraPasswordless, authmodes.Device, authmodes.DeviceQr}
 
 // Config is the configuration for the broker.
 type Config struct {
@@ -523,9 +523,9 @@ func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 			return false
 		}
 		return true
-	case authmodes.EntraPassword:
+	case authmodes.EntraPassword, authmodes.EntraPasswordless:
 		if session.isOffline {
-			log.Debugf(context.Background(), "Session is in offline mode, so Entra password authentication is not available")
+			log.Debugf(context.Background(), "Session is in offline mode, so Entra %s authentication is not available", authMode)
 			return false
 		}
 		if _, ok := providers.ProviderAs[himmelblau.EntraPasswordProvider](b.provider); !ok {
@@ -545,7 +545,7 @@ func (b *Broker) flowsConfigAllowsMode(mode string) bool {
 	switch mode {
 	case authmodes.Device, authmodes.DeviceQr:
 		return b.cfg.flows.DeviceAuth
-	case authmodes.EntraPassword:
+	case authmodes.EntraPassword, authmodes.EntraPasswordless:
 		return b.cfg.flows.EntraPassword
 	default:
 		return true
@@ -594,7 +594,7 @@ func (b *Broker) supportedAuthModesFromLayout(layout map[string]string) []string
 			modes = append(modes, authmodes.Password, authmodes.EntraPassword)
 		}
 		if strings.Contains(layout["wait"], "true") {
-			modes = append(modes, authmodes.EntraMFAWait)
+			modes = append(modes, authmodes.EntraPasswordless, authmodes.EntraMFAWait)
 		}
 		if slices.Contains(supportedEntries, "chars") {
 			modes = append(modes, authmodes.EntraMFACode)
@@ -697,6 +697,15 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 			"type":  "form",
 			"label": "Enter your Entra ID password",
 			"entry": "chars_password",
+		}
+
+	case authmodes.EntraPasswordless:
+		// Passwordless sign-in collects no secret: the layout is a wait form that
+		// authd auto-submits, which starts the MFA negotiation immediately.
+		uiLayout = map[string]string{
+			"type":  "form",
+			"label": "Contacting Entra ID...",
+			"wait":  "true",
 		}
 
 	case authmodes.EntraMFAWait:
@@ -828,6 +837,8 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		return b.newPassword(session, secret)
 	case authmodes.EntraPassword:
 		return b.entraPasswordAuth(ctx, session, secret)
+	case authmodes.EntraPasswordless:
+		return b.entraPasswordlessAuth(ctx, session)
 	case authmodes.EntraMFAWait:
 		return b.entraMFAWaitAuth(ctx, session)
 	case authmodes.EntraMFACode:
@@ -1159,7 +1170,70 @@ func (b *Broker) entraPasswordAuth(ctx context.Context, session *session, userPa
 	}
 	session.entraPasswordHash = passwordHash
 
-	// Determine MFA challenge type.
+	return b.routeMFAChallenge(session, challengeInfo)
+}
+
+// entraPasswordlessAuth starts an Entra ID MFA flow without submitting a
+// password. libhimmelblau negotiates a passwordless method (Authenticator
+// number-matching, Temporary Access Pass, ...) from the user's credential type.
+//
+// Passwordless cannot perform the initial device enrollment (there is no
+// password to derive it from), so the flow always runs without the device
+// scope. Group retrieval still works on an already-enrolled device via the PRT
+// exchange (which only needs the stored device keys, not an enrollment-scoped
+// token); on an unenrolled device it falls back to the app-only client-secret
+// path, if configured.
+func (b *Broker) entraPasswordlessAuth(ctx context.Context, session *session) (string, isAuthenticatedDataResponse) {
+	entraProvider, ok := providers.ProviderAs[himmelblau.EntraPasswordProvider](b.provider)
+	if !ok {
+		log.Error(context.Background(), "entra_passwordless mode selected but provider does not support it")
+		return AuthDenied, unexpectedErrMsg("provider does not support Entra passwordless authentication")
+	}
+
+	// A prior MFA flow may still be active if the step is restarted. Release it
+	// before starting a new one so the libhimmelblau continuation is not leaked.
+	clearEntraMFAState(session)
+
+	deviceRegistrationData := b.cachedDeviceRegistrationData(session)
+
+	// Never request the device scope: it routes the MFA flow through the
+	// enrollment-resource (Intune) path, which exists only to register a new
+	// device, and passwordless cannot perform the initial enrollment (there is no
+	// password to derive it from). This does not prevent group retrieval on an
+	// already-enrolled device: the PRT exchange (GetGroups strategy 2) mints the
+	// PRT from the device's stored keys plus the user's refresh token regardless
+	// of that token's scope, so a plain Graph-scoped passwordless token works. It
+	// is gated on the carried-over needsAccessTokenForGraphAPI flag, not on the
+	// device scope. On an unenrolled device, group retrieval falls back to the
+	// app-only client-secret path, if configured.
+	const withDeviceScope = false
+	flow, challengeInfo, err := entraProvider.InitiateEntraPasswordAuth(ctx, b.cfg.clientID, b.cfg.issuerURL, session.username, "", deviceRegistrationData, withDeviceScope)
+	if err != nil {
+		var mfaErr *himmelblau.MFAInitError
+		if errors.As(err, &mfaErr) {
+			return b.routeAADSTSError(mfaErr, session)
+		}
+		log.Errorf(context.Background(), "Entra passwordless authentication failed: %v", err)
+		return AuthDenied, errorMessage{Message: "Authentication failed. Please try again."}
+	}
+	if flow == nil || challengeInfo == nil {
+		himmelblau.FreeMFAFlowState(flow)
+		log.Error(context.Background(), "Entra passwordless authentication did not return a complete MFA challenge")
+		return AuthDenied, unexpectedErrMsg("provider returned incomplete MFA challenge")
+	}
+
+	session.mfaFlowActive = flow
+	session.mfaChallengeInfo = challengeInfo
+
+	return b.routeMFAChallenge(session, challengeInfo)
+}
+
+// routeMFAChallenge inspects the MFA challenge and sets the session's next auth
+// modes to the matching follow-up (code entry or out-of-band poll). FIDO methods
+// are rejected because they are not supported in terminal-based auth. On
+// rejection it clears the MFA state and returns a terminal AuthDenied; otherwise
+// it returns AuthNext for the broker to advance to the follow-up mode.
+func (b *Broker) routeMFAChallenge(session *session, challengeInfo *himmelblau.MFAChallengeInfo) (string, isAuthenticatedDataResponse) {
 	mfaMethod := challengeInfo.Method
 	pollingInterval := challengeInfo.PollingInterval
 

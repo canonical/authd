@@ -446,8 +446,15 @@ func initiateMFAFlow(broker *brokerClientApplication, username, password string)
 	cUsername := C.CString(username)
 	defer C.free(unsafe.Pointer(cUsername))
 
-	cPassword := C.CString(password)
-	defer C.free(unsafe.Pointer(cPassword))
+	// An empty password selects passwordless authentication: we pass a NULL
+	// password pointer so the Rust layer negotiates a passwordless method
+	// (Authenticator number-matching, TAP, ...) instead of submitting a
+	// password. A non-empty password is the classic password + MFA flow.
+	var cPassword *C.char
+	if password != "" {
+		cPassword = C.CString(password)
+		defer C.free(unsafe.Pointer(cPassword))
+	}
 
 	var flow *C.MFAAuthContinue
 	msalErr := C.broker_initiate_acquire_token_by_mfa_flow(

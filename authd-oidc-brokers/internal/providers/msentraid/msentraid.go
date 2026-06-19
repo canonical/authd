@@ -684,7 +684,7 @@ func (p *Provider) NormalizeUsername(username string) string {
 
 // SupportedOIDCAuthModes returns the OIDC authentication modes supported by the provider.
 func (p *Provider) SupportedOIDCAuthModes() []string {
-	return []string{authmodes.EntraPassword, authmodes.Device, authmodes.DeviceQr}
+	return []string{authmodes.EntraPassword, authmodes.EntraPasswordless, authmodes.Device, authmodes.DeviceQr}
 }
 
 // unmarshalOptionalDeviceRegistrationData decodes JSON device-registration data

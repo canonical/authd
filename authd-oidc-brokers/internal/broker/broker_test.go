@@ -907,28 +907,28 @@ func TestIsAuthenticated(t *testing.T) {
 		"Authenticating_with_password_when_refresh_token_is_expired_results_in_device_auth_as_next_mode": {
 			firstMode:         authmodes.Password,
 			token:             &tokenOptions{refreshTokenExpired: true},
-			wantNextAuthModes: []string{authmodes.EntraPassword, authmodes.Device, authmodes.DeviceQr},
+			wantNextAuthModes: []string{authmodes.EntraPassword, authmodes.EntraPasswordless, authmodes.Device, authmodes.DeviceQr},
 			wantSecondCall:    true,
 			secondMode:        authmodes.DeviceQr,
 		},
 		"Authenticating_with_password_when_refresh_token_is_expired_due_to_inactivity_results_in_device_auth_as_next_mode": {
 			firstMode:         authmodes.Password,
 			token:             &tokenOptions{refreshTokenInactiveExpired: true},
-			wantNextAuthModes: []string{authmodes.EntraPassword, authmodes.Device, authmodes.DeviceQr},
+			wantNextAuthModes: []string{authmodes.EntraPassword, authmodes.EntraPasswordless, authmodes.Device, authmodes.DeviceQr},
 			wantSecondCall:    true,
 			secondMode:        authmodes.DeviceQr,
 		},
 		"Authenticating_with_password_when_refresh_token_is_expired_due_to_ca_sign_in_frequency_results_in_device_auth_as_next_mode": {
 			firstMode:         authmodes.Password,
 			token:             &tokenOptions{refreshTokenStale: true},
-			wantNextAuthModes: []string{authmodes.EntraPassword, authmodes.Device, authmodes.DeviceQr},
+			wantNextAuthModes: []string{authmodes.EntraPassword, authmodes.EntraPasswordless, authmodes.Device, authmodes.DeviceQr},
 			wantSecondCall:    true,
 			secondMode:        authmodes.DeviceQr,
 		},
 		"Authenticating_with_password_when_no_refresh_token_results_in_device_auth_as_next_mode": {
 			firstMode:         authmodes.Password,
 			token:             &tokenOptions{noRefreshToken: true},
-			wantNextAuthModes: []string{authmodes.EntraPassword, authmodes.Device, authmodes.DeviceQr},
+			wantNextAuthModes: []string{authmodes.EntraPassword, authmodes.EntraPasswordless, authmodes.Device, authmodes.DeviceQr},
 			wantSecondCall:    true,
 			secondMode:        authmodes.DeviceQr,
 		},
@@ -1211,7 +1211,7 @@ func TestIsAuthenticated(t *testing.T) {
 			getGroupsFunc: func() ([]info.Group, error) {
 				return nil, &providerErrors.RetryWithDeviceAuthError{Err: errors.New("token acquisition failed")}
 			},
-			wantNextAuthModes: []string{authmodes.EntraPassword, authmodes.Device, authmodes.DeviceQr},
+			wantNextAuthModes: []string{authmodes.EntraPassword, authmodes.EntraPasswordless, authmodes.Device, authmodes.DeviceQr},
 		},
 	}
 	for name, tc := range tests {
@@ -2339,7 +2339,7 @@ func TestIsAuthenticatedPasswordGrantRevokedInvalidatesCachedCredentials(t *test
 	// reauthModes includes EntraPassword, but the provider does not implement
 	// EntraPasswordProvider, so authModeIsAvailable filters it out — only
 	// Device/DeviceQr survive into the actual offer.
-	require.Equal(t, []string{authmodes.EntraPassword, authmodes.Device, authmodes.DeviceQr}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{authmodes.EntraPassword, authmodes.EntraPasswordless, authmodes.Device, authmodes.DeviceQr}, b.GetNextAuthModes(sessionID))
 
 	_, err = os.Stat(b.PasswordFilepathForSession(sessionID))
 	require.ErrorIs(t, err, os.ErrNotExist)
