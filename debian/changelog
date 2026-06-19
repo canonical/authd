@@ -1,8 +1,8 @@
-authd (0.6.4+git260617+576+ecf17ab7) noble; urgency=medium
+authd (0.6.4+git260618+606+e1b5a4c5) noble; urgency=medium
 
-  * Github build. Run id: 27676279927. Run number: 576.
+  * Github build. Run id: 27767393972. Run number: 606.
 
- -- adombeck <18482300+adombeck@users.noreply.github.com>  Wed, 17 Jun 2026 08:33:37 +0000
+ -- Denison <denison.barbosa@canonical.com>  Thu, 18 Jun 2026 14:42:09 +0000
 
 authd (0.6.4) resolute; urgency=medium
 

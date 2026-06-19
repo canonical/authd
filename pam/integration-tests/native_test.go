@@ -2,7 +2,6 @@ package main_test
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -791,11 +790,6 @@ func TestNativeChangeAuthTok(t *testing.T) {
 
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")
-	}
-
-	// This test is flaky, see https://github.com/canonical/authd/issues/1330
-	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
-		t.Skip("skipping flaky test")
 	}
 
 	clientPath := t.TempDir()
