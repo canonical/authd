@@ -108,46 +108,23 @@ type isAuthenticatedCtx struct {
 	cancelFunc context.CancelFunc
 }
 
-// userInfoFromTokenExtras extracts user identity from OAuth token extras
-// (preferred_username, sub, name) rather than from a verified OIDC ID token.
-// Used exclusively by the Entra password + MFA flow.
-//
-// Trust model (weaker than the OIDC ID-token path, by necessity):
-//   - libhimmelblau obtains the token over its own TLS-authenticated session with
-//     Entra and exposes the claims by base64-decoding the JWT payload — it does NOT
-//     verify the token signature. We do not verify it here either.
-//   - The token is an Entra access token whose audience is a Microsoft first-party
-//     resource (e.g. the Device Registration Service or Graph), not our OIDC app, so
-//     the standard ID-token check (aud == our client ID) does not apply.
-//   - The signature itself is verifiable for at least the device-scoped MFA token:
-//     it is signed by a key published in the tenant JWKS and carries no header
-//     nonce, so signature + iss + tid verification is feasible and would harden this
-//     path against a TLS MITM (a forged certificate cannot forge Microsoft's signing
-//     key). It is not yet wired up: some tokens on this path (e.g. the Graph-scoped
-//     token on the client_secret path) carry a header nonce and verify differently,
-//     so it needs per-token handling — tracked as a follow-up.
-//   - Trust boundary today: TLS to Entra plus the VerifyUsername cross-check below,
-//     which ties the returned identity to the username the user actually
-//     authenticated as.
-//
 // verifyAndExtractEntraUserInfo verifies the Entra MFA access token's RS256
-// signature against the tenant JWKS — defense-in-depth against a TLS MITM, since
-// the claims on this path come from libhimmelblau decoding the token rather than a
-// verified OIDC ID token — and extracts the user info from its claims. It does NOT
-// cross-check the username against the session; first login does that via
-// userInfoFromTokenExtras.
+// signature against the tenant JWKS and extracts user info from that verified
+// access token. It does NOT cross-check the username against the session; first
+// login does that via userInfoFromTokenExtras.
 func (b *Broker) verifyAndExtractEntraUserInfo(ctx context.Context, token *oauth2.Token) (info.User, error) {
-	preferredUsername, _ := token.Extra("preferred_username").(string)
-	if preferredUsername == "" {
-		preferredUsername, _ = token.Extra("email").(string)
+	ep, ok := providers.ProviderAs[himmelblau.EntraPasswordProvider](b.provider)
+	if !ok {
+		return info.User{}, errors.New("provider does not support Entra password authentication")
 	}
-	if preferredUsername == "" {
-		return info.User{}, errors.New("token extras do not contain preferred_username")
+	if err := ep.VerifyAccessToken(ctx, b.cfg.issuerURL, token.AccessToken); err != nil {
+		return info.User{}, fmt.Errorf("access token verification failed: %w", err)
 	}
 
-	sub, _ := token.Extra("sub").(string)
-	gecos, _ := token.Extra("name").(string)
-	userInfo := info.NewUser(preferredUsername, "", sub, "", gecos, nil)
+	userInfo, err := ep.UserInfoFromAccessToken(token.AccessToken)
+	if err != nil {
+		return info.User{}, fmt.Errorf("could not extract user info from access token: %w", err)
+	}
 
 	if !filepath.IsAbs(userInfo.Home) {
 		userInfo.Home = filepath.Join(b.cfg.homeBaseDir, userInfo.Home)
@@ -156,10 +133,10 @@ func (b *Broker) verifyAndExtractEntraUserInfo(ctx context.Context, token *oauth
 	return userInfo, nil
 }
 
-// userInfoFromTokenExtras is verifyAndExtractEntraUserInfo plus a cross-check that
-// the returned identity matches the username the user authenticated as. Used on
-// first login (finishEntraAuth), where the username has not yet been bound to a
-// verified identity.
+// userInfoFromTokenExtras is verifyAndExtractEntraUserInfo plus a cross-check
+// that the returned access-token identity matches the username the user
+// authenticated as. Used on first login (finishEntraAuth), where the username
+// has not yet been bound to a verified identity.
 func (b *Broker) userInfoFromTokenExtras(ctx context.Context, session *session, token *oauth2.Token) (info.User, error) {
 	userInfo, err := b.verifyAndExtractEntraUserInfo(ctx, token)
 	if err != nil {
@@ -179,7 +156,8 @@ func (b *Broker) userInfoFromTokenExtras(ctx context.Context, session *session, 
 //
 // When userInfoOverride is nil, the default verified OIDC ID token path
 // (getUserInfo) is used. Callers that already resolved user info through a
-// different trust path (e.g. Entra MFA token extras) can pass it directly.
+// different trust path (e.g. a verified Entra MFA access token) can pass it
+// directly.
 func (b *Broker) populateAuthInfo(ctx context.Context, session *session, t *oauth2.Token, rawIDToken string, userInfoOverride *info.User) (*token.AuthCachedInfo, string, isAuthenticatedDataResponse) {
 	mp, mpOK := providers.ProviderAs[providers.MetadataProvider](b.provider)
 	var extraFields map[string]interface{}
@@ -1797,10 +1775,9 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	// rather than re-reading the token from disk.
 	oldAuthInfo := session.authInfo
 
-	// The MFA flow never returns an id_token: the libhimmelblau binding only
-	// surfaces preferred_username/sub/name (from the access token) as token
-	// extras. Carry over a cached RawIDToken from a previous login so we never
-	// persist an empty one.
+	// The Entra MFA path does not produce a verified raw OIDC ID token for authd to
+	// persist. Carry over a cached RawIDToken from a previous login so we never
+	// replace it with an empty one.
 	var rawIDToken string
 	if oldAuthInfo != nil {
 		rawIDToken = oldAuthInfo.RawIDToken
@@ -1808,7 +1785,8 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 
 	// The MFA token is issued for the Entra native API audience, so standard OIDC
 	// ID token verification (getUserInfo) would fail. Extract user info from the
-	// token extras instead — see userInfoFromTokenExtras for the trust model.
+	// access token after verifying it, then cross-check it against the session
+	// username.
 	userInfo, err := b.userInfoFromTokenExtras(ctx, session, t)
 	if err != nil {
 		log.Errorf(context.Background(), "could not get user info: %s", err)
@@ -2278,28 +2256,47 @@ func (b *Broker) refreshEntraPasswordToken(ctx context.Context, session *session
 		// logging in with the cached token.
 		return nil, fmt.Errorf("provider does not implement EntraPasswordProvider; cannot refresh entra_password token for user %q", oldToken.UserInfo.Name)
 	}
-	newTok, err := ep.RefreshEntraPasswordToken(ctx, b.cfg.issuerURL, oldToken.Token.RefreshToken)
+	refreshCtx, cancel := context.WithTimeout(ctx, maxRequestDuration)
+	defer cancel()
+	newTok, err := ep.RefreshEntraPasswordToken(refreshCtx, b.cfg.issuerURL, oldToken.Token.RefreshToken)
 	if err != nil {
 		return oldToken, err
 	}
-	// Rotate the refresh token.
-	oldToken.Token.RefreshToken = newTok.RefreshToken
+	refreshed := *oldToken
+	tokenCopy := *oldToken.Token
+	refreshed.Token = &tokenCopy
+	refreshed.Token.RefreshToken = newTok.RefreshToken
+	oldToken = &refreshed
+	cacheRotatedToken := func(reason string) {
+		if cacheErr := token.CacheAuthInfo(session.tokenPath, oldToken); cacheErr != nil {
+			log.Errorf(context.Background(), "Failed to store rotated refresh token after %s: %s", reason, cacheErr)
+		}
+	}
 
 	// Refresh the cached user info from the verified refreshed access token's
-	// claims, mirroring how refreshToken re-derives it from the ID token on the
-	// device-auth path. Keep the cached gecos if the refreshed token omits one,
-	// and keep groups (those are refreshed separately by getGroups).
-	if err := ep.VerifyAccessToken(ctx, b.cfg.issuerURL, newTok.AccessToken); err != nil {
+	// claims. Keep the cached gecos if the refreshed token omits one, and keep
+	// groups (those are refreshed separately by getGroups). Verification can hit
+	// the network itself (JWKS fetch), so give it its own request timeout rather
+	// than sharing whatever remains after the token refresh call.
+	verifyCtx, verifyCancel := context.WithTimeout(ctx, maxRequestDuration)
+	defer verifyCancel()
+	if err := ep.VerifyAccessToken(verifyCtx, b.cfg.issuerURL, newTok.AccessToken); err != nil {
+		// Refresh-token rotation has already succeeded server-side. Preserve the
+		// rotated token even though this login is denied, otherwise a local issue
+		// such as clock skew can strand the cache with a dead refresh token.
+		cacheRotatedToken("verification failure")
 		return oldToken, fmt.Errorf("access token verification failed: %w", err)
 	}
 	userInfo, err := ep.UserInfoFromAccessToken(newTok.AccessToken)
 	if err != nil {
+		cacheRotatedToken("user info extraction failure")
 		return oldToken, fmt.Errorf("could not refresh user info from the refreshed Entra token: %w", err)
 	}
 	// getUserInfo (the device-auth refresh path) re-checks this on every refresh,
 	// not just on first login; do the same here so a refreshed Entra token can't
 	// silently swap the cached identity.
 	if err := b.provider.VerifyUsername(session.username, userInfo.Name); err != nil {
+		cacheRotatedToken("username verification failure")
 		return oldToken, fmt.Errorf("username verification failed: %w", err)
 	}
 	if !filepath.IsAbs(userInfo.Home) {

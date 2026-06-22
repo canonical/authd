@@ -410,32 +410,13 @@ func AcquireTokenByMFAFlow(ctx context.Context, clientID, tenantID string, data 
 	}
 
 	// The access token from the native MFA flow is issued for the Entra native API
-	// and cannot be used with the standard OIDC UserInfo endpoint (different audience).
-	// Include the user's SPN (preferred_username) and UUID (sub) as token extras so that
-	// finishEntraAuth can recover user info without calling the UserInfo endpoint.
+	// and cannot be used with the standard OIDC UserInfo endpoint (different
+	// audience). Recover non-authoritative token extras from the access token only;
+	// broker identity binding parses the same access token after verifying it.
 	extras := map[string]interface{}{}
-	if spn, spnErr := spnFromUserToken(userToken); spnErr == nil && spn != "" {
-		extras["preferred_username"] = spn
-		log.Debugf(ctx, "MFA token SPN: %q", spn)
-	} else if spnErr != nil {
-		log.Debugf(ctx, "Could not get SPN from MFA token: %v", spnErr)
-	}
-	if sub, subErr := uuidFromUserToken(userToken); subErr == nil && sub != "" {
-		extras["sub"] = sub
-	} else if subErr != nil {
-		log.Debugf(ctx, "Could not get UUID from MFA token: %v", subErr)
-	}
-
-	// The Entra password flow returns an access token rather than an OIDC
-	// id_token, so recover the display name and any missing identity claims
-	// (name, scp, plus a preferred_username/sub fallback) from the access
-	// token JWT, which carries the "name" claim in every flow we use. The
-	// SPN/UUID extras set above take priority over duplicates.
 	if accessExtras := tokenExtrasFromAccessToken(ctx, accessToken); len(accessExtras) > 0 {
 		for k, v := range accessExtras {
-			if _, alreadySet := extras[k]; !alreadySet {
-				extras[k] = v
-			}
+			extras[k] = v
 		}
 	}
 

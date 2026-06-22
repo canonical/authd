@@ -425,26 +425,6 @@ func refreshTokenFromUserToken(userToken *C.UserToken) (refreshToken string, err
 	return C.GoString(cRefreshToken), nil
 }
 
-func spnFromUserToken(userToken *C.UserToken) (string, error) {
-	var cSPN *C.char
-	msalErr := C.user_token_spn(userToken, &cSPN)
-	if msalErr != nil {
-		return "", fmt.Errorf("failed to get SPN from user token: %v", msalErrorMsg(msalErr))
-	}
-	defer C.free(unsafe.Pointer(cSPN))
-	return C.GoString(cSPN), nil
-}
-
-func uuidFromUserToken(userToken *C.UserToken) (string, error) {
-	var cUUID *C.char
-	msalErr := C.user_token_uuid(userToken, &cUUID)
-	if msalErr != nil {
-		return "", fmt.Errorf("failed to get UUID from user token: %v", msalErrorMsg(msalErr))
-	}
-	defer C.free(unsafe.Pointer(cUUID))
-	return C.GoString(cUUID), nil
-}
-
 func initiateMFAFlow(broker *brokerClientApplication, username, password string) (*MFAFlowState, error) {
 	cUsername := C.CString(username)
 	defer C.free(unsafe.Pointer(cUsername))
