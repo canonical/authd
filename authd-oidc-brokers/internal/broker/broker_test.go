@@ -1941,6 +1941,43 @@ func advanceToEntraMFAWait(t *testing.T, b *broker.Broker, sessionID, key string
 	require.NoError(t, err)
 }
 
+// TestIsAuthenticatedEntraMFADeniesOnAccessTokenVerificationFailure verifies that
+// when the MFA access token fails signature verification (the TLS-MITM defense),
+// the login is denied rather than trusting the token's identity claims.
+func TestIsAuthenticatedEntraMFADeniesOnAccessTokenVerificationFailure(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := &mockEntraPasswordProvider{
+		MockProvider: &testutils.MockProvider{},
+		flowState:    &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{
+			Message:           "Approve the sign-in request",
+			PollingIntervalMs: 1,
+			MaxPollAttempts:   1,
+		},
+		mfaTokenResult:       newMFATokenResult(mfaAuthInfo.Token),
+		verifyAccessTokenErr: errors.New("token signature verification failed"),
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	advanceToEntraMFAWait(t, b, sessionID, key)
+
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthDenied, access,
+		"an access token that fails signature verification must be denied")
+}
+
 // TestIsAuthenticatedEntraMFAWaitPollsWhenMaxPollAttemptsZero verifies that a
 // MaxPollAttempts value of 0 (which libhimmelblau can produce from
 // expires_in/polling_interval flooring to zero) still polls rather than returning
