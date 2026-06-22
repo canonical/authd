@@ -107,28 +107,6 @@ type isAuthenticatedCtx struct {
 	cancelFunc context.CancelFunc
 }
 
-// userInfoFromTokenExtras extracts user identity from OAuth token extras
-// (preferred_username, sub, name) rather than from a verified OIDC ID token.
-// Used exclusively by the Entra password + MFA flow.
-//
-// Trust model (weaker than the OIDC ID-token path, by necessity):
-//   - libhimmelblau obtains the token over its own TLS-authenticated session with
-//     Entra and exposes the claims by base64-decoding the JWT payload — it does NOT
-//     verify the token signature. We do not verify it here either.
-//   - The token is an Entra access token whose audience is a Microsoft first-party
-//     resource (e.g. the Device Registration Service or Graph), not our OIDC app, so
-//     the standard ID-token check (aud == our client ID) does not apply.
-//   - The signature itself is verifiable for at least the device-scoped MFA token:
-//     it is signed by a key published in the tenant JWKS and carries no header
-//     nonce, so signature + iss + tid verification is feasible and would harden this
-//     path against a TLS MITM (a forged certificate cannot forge Microsoft's signing
-//     key). It is not yet wired up: some tokens on this path (e.g. the Graph-scoped
-//     token on the client_secret path) carry a header nonce and verify differently,
-//     so it needs per-token handling — tracked as a follow-up.
-//   - Trust boundary today: TLS to Entra plus the VerifyUsername cross-check below,
-//     which ties the returned identity to the username the user actually
-//     authenticated as.
-//
 // verifyAndExtractEntraUserInfo verifies the Entra MFA access token's RS256
 // signature against the tenant JWKS — defense-in-depth against a TLS MITM, since
 // the claims on this path come from libhimmelblau decoding the token rather than a
@@ -136,6 +114,14 @@ type isAuthenticatedCtx struct {
 // cross-check the username against the session; first login does that via
 // userInfoFromTokenExtras.
 func (b *Broker) verifyAndExtractEntraUserInfo(ctx context.Context, token *oauth2.Token) (info.User, error) {
+	ep, ok := providers.ProviderAs[himmelblau.EntraPasswordProvider](b.provider)
+	if !ok {
+		return info.User{}, errors.New("provider does not support Entra password authentication")
+	}
+	if err := ep.VerifyAccessToken(ctx, b.cfg.issuerURL, token.AccessToken); err != nil {
+		return info.User{}, fmt.Errorf("access token verification failed: %w", err)
+	}
+
 	preferredUsername, _ := token.Extra("preferred_username").(string)
 	if preferredUsername == "" {
 		preferredUsername, _ = token.Extra("email").(string)
