@@ -676,6 +676,9 @@ func (m *Manager) SetShell(username, shell string) (warnings []string, err error
 		return nil, errors.New("empty username")
 	}
 
+	m.userManagementMu.Lock()
+	defer m.userManagementMu.Unlock()
+
 	// Check if the user exists
 	_, err = m.db.UserByName(username)
 	if err != nil {
