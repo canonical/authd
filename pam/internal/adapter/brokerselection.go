@@ -46,7 +46,7 @@ func selectBroker(brokerID string) tea.Cmd {
 // newBrokerSelectionModel initializes an empty list with default options of brokerSelectionModel.
 func newBrokerSelectionModel(client authd.PAMClient, clientType PamClientType) brokerSelectionModel {
 	return brokerSelectionModel{
-		List:   NewList(clientType, "Select your provider"),
+		List:   NewList(clientType, "Select your provider:"),
 		client: client,
 	}
 }
