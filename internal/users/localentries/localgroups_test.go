@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sync"
 	"testing"
 
 	"github.com/canonical/authd/internal/fileutils"
@@ -365,67 +364,60 @@ func TestGetAndSaveLocalGroups(t *testing.T) {
 	}
 }
 
-//nolint:tparallel // This can't be parallel, but subtests can.
 func TestRacingGroupsLockingActions(t *testing.T) {
 	const nIterations = 50
 
 	testFilePath := filepath.Join("testdata", "no_users_in_our_groups.group")
 	testUserDBLocked := &localentries.UserDBLocked{}
 
-	wg := sync.WaitGroup{}
-	wg.Add(nIterations)
+	// Lock and get the values in parallel. The iterations are grouped under a
+	// dedicated subtest so that t.Run only returns once all of them are done.
+	// This avoids relying on a WaitGroup from a sibling parallel subtest, which
+	// deadlocks when the test parallelism is constrained (e.g. a single-CPU
+	// autopkgtest testbed) and the waiting subtest holds the only run slot.
+	t.Run("parallel_iterations", func(t *testing.T) {
+		for idx := range nIterations {
+			t.Run(fmt.Sprintf("iteration_%d", idx), func(t *testing.T) {
+				t.Parallel()
 
-	// Lock and get the values in parallel.
-	for idx := range nIterations {
-		t.Run(fmt.Sprintf("iteration_%d", idx), func(t *testing.T) {
-			t.Parallel()
+				var opts []localentries.Option
+				wantGroup := types.GroupEntry{Name: "root", GID: 0, Passwd: "x"}
+				useTestGroupFile := idx%3 == 0
 
-			t.Cleanup(wg.Done)
+				if useTestGroupFile {
+					// Mix the requests with test-only code paths...
+					opts = append(opts,
+						localentries.WithGroupPath(testFilePath),
+						localentries.WithUserDBLockedInstance(testUserDBLocked),
+						localentries.WithMockUserDBLocking(),
+					)
+					wantGroup = types.GroupEntry{Name: "localgroup1", GID: 41, Passwd: "x"}
+				}
 
-			var opts []localentries.Option
-			wantGroup := types.GroupEntry{Name: "root", GID: 0, Passwd: "x"}
-			useTestGroupFile := idx%3 == 0
+				entries, entriesUnlock, err := localentries.WithUserDBLock(opts...)
+				require.NoError(t, err, "Failed to lock the local entries")
+				t.Cleanup(func() {
+					err := entriesUnlock()
+					require.NoError(t, err, "entriesUnlock should not fail to unlock the local entries")
+				})
 
-			if useTestGroupFile {
-				// Mix the requests with test-only code paths...
-				opts = append(opts,
-					localentries.WithGroupPath(testFilePath),
-					localentries.WithUserDBLockedInstance(testUserDBLocked),
-					localentries.WithMockUserDBLocking(),
-				)
-				wantGroup = types.GroupEntry{Name: "localgroup1", GID: 41, Passwd: "x"}
-			}
-
-			entries, entriesUnlock, err := localentries.WithUserDBLock(opts...)
-			require.NoError(t, err, "Failed to lock the local entries")
-			t.Cleanup(func() {
-				err := entriesUnlock()
-				require.NoError(t, err, "entriesUnlock should not fail to unlock the local entries")
+				groups, err := localentries.GetGroupEntries(entries)
+				require.NoError(t, err, "GetEntries should not return an error, but did")
+				require.NotEmpty(t, groups, "Got empty groups (test groups: %v)", useTestGroupFile)
+				require.Contains(t, groups, wantGroup, "Expected group was not found  (test groups: %v)", useTestGroupFile)
 			})
-
-			groups, err := localentries.GetGroupEntries(entries)
-			require.NoError(t, err, "GetEntries should not return an error, but did")
-			require.NotEmpty(t, groups, "Got empty groups (test groups: %v)", useTestGroupFile)
-			require.Contains(t, groups, wantGroup, "Expected group was not found  (test groups: %v)", useTestGroupFile)
-		})
-	}
-
-	t.Run("final_check", func(t *testing.T) {
-		t.Parallel()
-		wg.Wait()
-
-		// Get a last unlock function, to see if we're all good...
-		entries, entriesUnlock, err := localentries.WithUserDBLock()
-		require.NoError(t, err, "Failed to lock the local entries")
-
-		require.NoError(t, err, "Unlock should not fail to lock the users group")
-
-		err = entriesUnlock()
-		require.NoError(t, err, "entriesUnlock should not fail to unlock the local entries")
-
-		// Ensure that we had cleaned up all the locks correctly!
-		require.Panics(t, func() { _, _ = localentries.GetGroupEntries(entries) })
+		}
 	})
+
+	// Get a last unlock function, to see if we're all good...
+	entries, entriesUnlock, err := localentries.WithUserDBLock()
+	require.NoError(t, err, "Failed to lock the local entries")
+
+	err = entriesUnlock()
+	require.NoError(t, err, "entriesUnlock should not fail to unlock the local entries")
+
+	// Ensure that we had cleaned up all the locks correctly!
+	require.Panics(t, func() { _, _ = localentries.GetGroupEntries(entries) })
 }
 
 func TestLockedInvalidActions(t *testing.T) {
