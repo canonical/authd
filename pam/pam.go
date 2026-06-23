@@ -119,6 +119,21 @@ func sendReturnMessageToPam(mTx pam.ModuleTransaction, retStatus adapter.PamRetu
 	}
 }
 
+func shouldSendAuthMessage(clientType adapter.PamClientType, msg string, isSuccess bool) bool {
+	if msg == "" {
+		return false
+	}
+
+	if isSuccess {
+		// Native clients (SSH, non-TTY) already display the success message
+		// via the native model's sendInfo path; skip the PAM-conversation echo
+		// to avoid printing it twice.
+		return clientType != adapter.Native
+	}
+
+	return true
+}
+
 // initLogging initializes the logging given the passed parameters.
 // It returns a function that should be called in order to reset the logging to
 // the default and potentially close the opened resources.
@@ -326,19 +341,26 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 		return pam.ErrAbort
 	}
 
-	sendReturnMessageToPam(mTx, exitStatus)
-
 	switch exitStatus := exitStatus.(type) {
 	case adapter.PamSuccess:
+		if shouldSendAuthMessage(pamClientType, exitStatus.Message(), true) {
+			sendReturnMessageToPam(mTx, exitStatus)
+		}
 		if err := mTx.SetData(authenticationBrokerIDKey, exitStatus.BrokerID); err != nil {
 			return err
 		}
 		return nil
 
 	case adapter.PamReturnError:
+		if shouldSendAuthMessage(pamClientType, exitStatus.Message(), false) {
+			sendReturnMessageToPam(mTx, exitStatus)
+		}
 		return fmt.Errorf("%w: %s", exitStatus.Status(), exitStatus.Message())
 
 	default:
+		// Preserve the previous behavior of showing any message associated with
+		// unexpected exit statuses before returning the system error.
+		sendReturnMessageToPam(mTx, exitStatus)
 		return fmt.Errorf("%w: unknown exit code: %#v", pam.ErrSystem, exitStatus)
 	}
 }
