@@ -23,7 +23,7 @@ Test changing local password of remote user
     # Log in with local user
     Log In
 
-    # Log in with remote user with device authentication
+    # Log in with remote user with device code flow
     Open Terminal
     Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
     Log Out From Terminal Session

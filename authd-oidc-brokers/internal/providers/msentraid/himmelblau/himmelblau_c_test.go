@@ -45,7 +45,7 @@ func TestMFAErrorCategoryMapping(t *testing.T) {
 	// AUTH_CODE_RECEIVED once the changepassword feature shifts the enum. That
 	// misclassified AUTH_CODE_RECEIVED as MFAErrorRequired and let the real
 	// MFA_REQUIRED (25) fall through to MFAErrorOther, breaking the
-	// "MFA required -> redirect to Device Authentication" fallback. Pin both
+	// "MFA required -> redirect to device code flow" fallback. Pin both
 	// directions so the literal bug cannot return.
 	require.Equal(t, MFAErrorOther, mfaErrorCategory(codeAuthCodeReceived),
 		"AUTH_CODE_RECEIVED must NOT be classified as MFAErrorRequired")

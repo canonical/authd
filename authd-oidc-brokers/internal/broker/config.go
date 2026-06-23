@@ -63,8 +63,8 @@ const (
 
 	// flowsSection is the section name in the config file for the authentication flow control.
 	flowsSection = "flows"
-	// flowsDeviceAuthKey controls whether device_auth and device_auth_qr modes are enabled.
-	flowsDeviceAuthKey = "device_auth"
+	// flowsDeviceAuthKey controls whether the device_auth and device_auth_qr modes are enabled.
+	flowsDeviceAuthKey = "device_code"
 	// flowsEntraPasswordKey controls whether entra_password mode is enabled.
 	flowsEntraPasswordKey = "entra_password"
 
@@ -506,7 +506,7 @@ func parseFlowsConfig(section *ini.Section) (flowsConfig, error) {
 	}
 
 	if !fc.DeviceAuth && !fc.EntraPassword {
-		return flowsConfig{}, fmt.Errorf("invalid [%s] configuration: all authentication flows are disabled; at least one of %q or %q must be enabled",
+		return flowsConfig{}, fmt.Errorf("invalid [%s] configuration: all authentication flows are disabled; at least one of the %q or %q flows must be enabled",
 			flowsSection, flowsDeviceAuthKey, flowsEntraPasswordKey)
 	}
 

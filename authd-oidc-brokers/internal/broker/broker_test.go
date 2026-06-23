@@ -362,16 +362,16 @@ func TestNewRejectsUnusableEntraPasswordWithoutGroupSource(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		deviceAuthEnabled bool
-		registerDevice    bool
-		clientSecret      string
+		deviceCodeFlowEnabled bool
+		registerDevice        bool
+		clientSecret          string
 
 		wantErr bool
 	}{
 		"Error_when_entra_password_is_the_only_flow_and_unusable": {wantErr: true},
-		"Error_when_device_auth_is_also_enabled_but_entra_password_is_still_unusable": {
-			deviceAuthEnabled: true,
-			wantErr:           true,
+		"Error_when_device_code_is_also_enabled_but_entra_password_is_still_unusable": {
+			deviceCodeFlowEnabled: true,
+			wantErr:               true,
 		},
 		"No_error_when_device_registration_makes_it_usable": {registerDevice: true},
 		"No_error_when_a_client_secret_makes_it_usable":     {clientSecret: "test-client-secret"},
@@ -384,7 +384,7 @@ func TestNewRejectsUnusableEntraPasswordWithoutGroupSource(t *testing.T) {
 			bCfg.Init()
 			bCfg.SetIssuerURL(defaultIssuerURL)
 			bCfg.SetClientID("test-client-id")
-			bCfg.SetFlows(tc.deviceAuthEnabled, true)
+			bCfg.SetFlows(tc.deviceCodeFlowEnabled, true)
 			bCfg.SetRegisterDevice(tc.registerDevice)
 			bCfg.SetClientSecret(tc.clientSecret)
 
@@ -3497,7 +3497,7 @@ func TestEntraPasswordRoutesAADSTSErrors(t *testing.T) {
 				issuerURL:              defaultIssuerURL,
 				deviceAuthFlowDisabled: tc.deviceAuthDisabled,
 				// Provide a group source (device registration) so a broker with
-				// device_auth disabled still satisfies the entra_password
+				// device_code disabled still satisfies the entra_password
 				// only-enabled-flow startup check in New().
 				registerDevice: true,
 			})
@@ -3631,7 +3631,7 @@ func TestEntraPasswordInvalidatesCachedCredentialsOnRemotePasswordChange(t *test
 }
 
 // TestIsAuthenticatedFIDOMethodRoutesToDevice verifies that a FIDO/security-key
-// MFA method redirects to Device Authentication (or denies when device auth is
+// MFA method redirects to the device code flow (or denies when device auth is
 // unavailable), and no credentials are cached in either case.
 func TestIsAuthenticatedFIDOMethodRoutesToDevice(t *testing.T) {
 	t.Parallel()
@@ -3642,7 +3642,7 @@ func TestIsAuthenticatedFIDOMethodRoutesToDevice(t *testing.T) {
 		wantNextModes      []string
 		wantMsgContains    string
 	}{
-		"Redirects_to_device":         {wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsgContains: "Device Authentication"},
+		"Redirects_to_device":         {wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsgContains: "device code flow"},
 		"Denied_when_device_disabled": {deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsgContains: "FIDO"},
 	}
 
@@ -3667,7 +3667,7 @@ func TestIsAuthenticatedFIDOMethodRoutesToDevice(t *testing.T) {
 				issuerURL:              defaultIssuerURL,
 				deviceAuthFlowDisabled: tc.deviceAuthDisabled,
 				// Provide a group source (device registration) so a broker with
-				// device_auth disabled still satisfies the entra_password
+				// device_code disabled still satisfies the entra_password
 				// only-enabled-flow startup check in New().
 				registerDevice: true,
 			})

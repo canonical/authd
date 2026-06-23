@@ -5,10 +5,12 @@ const (
 	// Password is the ID of the password authentication method.
 	Password = "password"
 
-	// Device is the ID of the device authentication method.
+	// Device is the ID of the device code flow.
+	// The ID value remains "device_auth" for compatibility.
 	Device = "device_auth"
 
-	// DeviceQr is the ID of the device authentication method when QrCode rendering is enabled.
+	// DeviceQr is the ID of the device code flow when QrCode rendering is enabled.
+	// The ID value remains "device_auth_qr" for compatibility.
 	DeviceQr = "device_auth_qr"
 
 	// NewPassword is the ID of the new password configuration method.
@@ -29,8 +31,8 @@ var (
 	//nolint:gosec // G101: These are auth mode display labels, not credentials.
 	Label = map[string]string{
 		Password:      "Local Password Authentication",
-		Device:        "Device Authentication",
-		DeviceQr:      "Device Authentication",
+		Device:        "Device code flow",
+		DeviceQr:      "Device code flow",
 		NewPassword:   "Define your local password",
 		EntraPassword: "Entra ID password",
 		EntraMFAWait:  "Waiting for MFA approval",

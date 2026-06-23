@@ -4,7 +4,7 @@ package layouts
 const (
 	// Form is the layout used by input forms UI layouts.
 	Form = "form"
-	// QrCode is the layout used by device authentication UI layouts.
+	// QrCode is the layout used by device code flow UI layouts.
 	QrCode = "qrcode"
 	// NewPassword the layout used by new password UI layouts.
 	NewPassword = "newpassword"

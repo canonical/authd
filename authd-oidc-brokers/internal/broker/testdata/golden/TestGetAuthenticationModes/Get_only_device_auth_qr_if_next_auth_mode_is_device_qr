@@ -1,2 +1,2 @@
 - id: device_auth_qr
-  label: Device Authentication
+  label: Device code flow

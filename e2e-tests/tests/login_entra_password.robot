@@ -22,7 +22,7 @@ Test Setup
     # groups from Microsoft Graph on first login.
     Change Broker Configuration    register_device    true
     Change Broker Configuration    entra_password    true
-    Change Broker Configuration    device_auth    false
+    Change Broker Configuration    device_code    false
 
 
 *** Variables ***
@@ -37,7 +37,7 @@ Test login with CLI using Entra ID password and MFA
     [Documentation]    Verify that a user can authenticate via the Entra ID direct-password
     ...    + MFA flow through the CLI (machinectl login).
     ...
-    ...    With device_auth disabled the broker auto-selects the single available
+    ...    With the device code flow disabled the broker auto-selects the single available
     ...    authentication mode (entra_password), so the user goes straight to the
     ...    password prompt after choosing the provider. After successful MFA the
     ...    Entra password is cached locally; the provisioning checks verify that
