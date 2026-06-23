@@ -30,7 +30,7 @@ var (
 	// Label is a map of auth mode IDs to their display labels.
 	//nolint:gosec // G101: These are auth mode display labels, not credentials.
 	Label = map[string]string{
-		Password:      "Local Password Authentication",
+		Password:      "Local password",
 		Device:        "Device code flow",
 		DeviceQr:      "Device code flow",
 		NewPassword:   "Define your local password",
