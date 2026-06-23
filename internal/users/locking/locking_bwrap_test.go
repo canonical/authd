@@ -36,8 +36,10 @@ func TestLockAndWriteUnlock(t *testing.T) {
 
 	groupFile := filepath.Join("/etc", "group")
 	newGroupContents := "testgroup:x:1001:testuser"
+	// The group file must end with a trailing newline, otherwise newer
+	// shadow-utils (e.g. gpasswd) refuse to open it.
 	//nolint:gosec // G306 The group file is expected to have permissions 0644
-	err := os.WriteFile(groupFile, []byte("root:x:0:\n"+newGroupContents), 0644)
+	err := os.WriteFile(groupFile, []byte("root:x:0:\n"+newGroupContents+"\n"), 0644)
 	require.NoError(t, err, "Writing group file")
 
 	// Try using gpasswd to modify the group file. This should succeed, because
@@ -92,8 +94,10 @@ func TestReadWhileLocked(t *testing.T) {
 	groupContents := `root:x:0:
 testgroup:x:1001:testuser`
 
+	// The group file must end with a trailing newline, otherwise newer
+	// shadow-utils refuse to open it.
 	//nolint:gosec // G306 The group file is expected to have permissions 0644
-	err := os.WriteFile(groupFile, []byte(groupContents), 0644)
+	err := os.WriteFile(groupFile, []byte(groupContents+"\n"), 0644)
 	require.NoError(t, err, "Writing group file")
 
 	err = userslocking.WriteLock()
@@ -137,8 +141,10 @@ func TestLockAndLockAgainGroupFileOverridden(t *testing.T) {
 	groupFile := filepath.Join("/etc", "group")
 	groupContents := "testgroup:x:1001:testuser"
 
+	// The group file must end with a trailing newline, otherwise newer
+	// shadow-utils (e.g. gpasswd) refuse to open it.
 	//nolint:gosec // G306 The group file is expected to have permissions 0644
-	err = os.WriteFile(groupFile, []byte(groupContents), 0644)
+	err = os.WriteFile(groupFile, []byte(groupContents+"\n"), 0644)
 	require.NoError(t, err, "Writing group file")
 
 	err = userslocking.WriteLock()
@@ -234,8 +240,10 @@ func TestLockingLockedDatabase(t *testing.T) {
 	groupFile := filepath.Join("/etc", "group")
 	groupContents := "testgroup:x:1001:testuser"
 
+	// The group file must end with a trailing newline, otherwise newer
+	// shadow-utils (e.g. gpasswd) refuse to open it.
 	//nolint:gosec // G306 The group file is expected to have permissions 0644
-	err := os.WriteFile(groupFile, []byte(groupContents), 0644)
+	err := os.WriteFile(groupFile, []byte(groupContents+"\n"), 0644)
 	require.NoError(t, err, "Writing group file")
 
 	ctx, cancel := context.WithCancel(context.Background())
