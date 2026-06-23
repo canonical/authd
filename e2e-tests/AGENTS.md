@@ -33,11 +33,15 @@ exist to close that gap:
    observable over SSH or in the journal, assert it there — it's deterministic
    and fast. The suite already does this where it can: see `Check Home Directory`
    and `Check If Owner Was Registered` in `resources/broker.resource`, which use
-   `SSH.Execute` instead of reading the screen.
+   `SSH.Execute` and `getent` instead of reading the screen.
 2. **OCR (`Match Text` / `Find Text` / `Read Text`).** Use this only when the
    behavior is genuinely only observable on screen (GDM, the PAM CLI/TUI inside
    a `machinectl` session, terminal output you can't reach over SSH). Follow the
    OCR hygiene rules below.
+
+Note that SSH is often *not* possible — e.g. anything happening inside the GDM
+greeter or a `machinectl login` session before the user's shell exists. Don't
+force an SSH assertion where it doesn't fit; use OCR and make it robust.
 
 ## Don't sleep — poll instead
 
@@ -144,6 +148,27 @@ file. The console history is saved to `rfdebug_history.log` in the output dir.
 
 For a region that OCR keeps misreading, the console also exposes `Grab
 Templates` and a region-of-interest selector to crop and scope matches.
+
+## OCR hygiene rules
+
+These come straight from patterns the existing suite relies on — reproduce them:
+
+- **Strip spaces and normalize case** when matching machine-generated codes. The
+  device user code handling in `Continue Log In With Remote User: Authenticate
+  In External Browser` removes OCR-inserted spaces and upper-cases the result,
+  because OCR adds phantom spaces and mis-cases characters.
+- **Prefer `regex:` matches** for anything variable. `Find Text` / `Match Text`
+  accept `regex:<pattern>`; use it instead of brittle exact strings when the
+  text contains values that vary or that OCR renders inconsistently.
+- **Scope with a `region`** when a short string risks matching elsewhere on
+  screen, or when OCR is unreliable over the full frame.
+- **Give realistic timeouts.** `Match Text` waits up to its timeout for text to
+  appear; remote/network-dependent screens use generous timeouts (e.g. `120`)
+  in the existing tests — match that, don't use the short default for slow
+  screens.
+- **Don't match the command echo.** When checking terminal output, use the
+  `base64 cmd-finished` trick (above) so you don't match the typed command
+  before it has run.
 
 ## Running and reading results
 
