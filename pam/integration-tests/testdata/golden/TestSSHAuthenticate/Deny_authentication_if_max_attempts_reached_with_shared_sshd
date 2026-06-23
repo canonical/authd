@@ -4,27 +4,27 @@
 (user-integration-pre-check-ssh-deny-authentication-if-max-attempts-reached-with-shared-sshd@example.com@localhost) Choose your provider:
 > 2
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 (user-integration-pre-check-ssh-deny-authentication-if-max-attempts-reached-with-shared-sshd@example.com@localhost) Gimme your password:
 >
 invalid password 'wrongpass', should be 'goodpass'
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 (user-integration-pre-check-ssh-deny-authentication-if-max-attempts-reached-with-shared-sshd@example.com@localhost) Gimme your password:
 >
 invalid password 'wrongpass', should be 'goodpass'
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 (user-integration-pre-check-ssh-deny-authentication-if-max-attempts-reached-with-shared-sshd@example.com@localhost) Gimme your password:
 >
 invalid password 'wrongpass', should be 'goodpass'
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 (user-integration-pre-check-ssh-deny-authentication-if-max-attempts-reached-with-shared-sshd@example.com@localhost) Gimme your password:
 >
 invalid password 'wrongpass', should be 'goodpass'
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 (user-integration-pre-check-ssh-deny-authentication-if-max-attempts-reached-with-shared-sshd@example.com@localhost) Gimme your password:
 >
 Maximum number of authentication attempts reached

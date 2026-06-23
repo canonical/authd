@@ -120,7 +120,7 @@ func TestCLIAuthenticate(t *testing.T) {
 
 				// Go to auth method selection first.
 				c.SendKey(t, ptytest.KeyEscape)
-				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `Select the authentication flow`)
 				c.WaitFor(t, `1\. Password authentication`)
 
 				// Select password auth.
@@ -132,7 +132,7 @@ func TestCLIAuthenticate(t *testing.T) {
 				c.WaitFor(t, `Plug your fido device and press with your thumb`)
 
 				c.SendKey(t, ptytest.KeyEscape)
-				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `Select the authentication flow`)
 				c.WaitFor(t, `1\. Use your fido device foo`)
 
 				c.SendKey(t, ptytest.KeyEnter) // Select first option
@@ -143,7 +143,7 @@ func TestCLIAuthenticate(t *testing.T) {
 				c.WaitFor(t, `Unlock your phone \+33`)
 
 				c.SendKey(t, ptytest.KeyEscape)
-				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `Select the authentication flow`)
 				c.WaitFor(t, `1\. Use your phone \+33`)
 
 				c.SendKey(t, ptytest.KeyEnter)
@@ -162,7 +162,7 @@ func TestCLIAuthenticate(t *testing.T) {
 				c.WaitFor(t, `Gimme your password`)
 
 				c.SendKey(t, ptytest.KeyEscape)
-				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `Select the authentication flow`)
 				c.WaitFor(t, `7\. Authentication code`)
 
 				c.Send(t, "7")
@@ -226,7 +226,7 @@ func TestCLIAuthenticate(t *testing.T) {
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 				c.SendKey(t, ptytest.KeyEscape)
-				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `Select the authentication flow`)
 				c.WaitFor(t, `6\. Use a QR code`)
 				c.Send(t, "6")
 				c.WaitFor(t, `Scan the qrcode or enter the code in the login page`)
@@ -364,7 +364,7 @@ func TestCLIAuthenticate(t *testing.T) {
 
 				// Switch to auth mode selection.
 				c.SendKey(t, ptytest.KeyEscape)
-				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `Select the authentication flow`)
 				c.WaitFor(t, `2\. Send URL to`)
 
 				// Select "Send URL to" mode.
@@ -373,7 +373,7 @@ func TestCLIAuthenticate(t *testing.T) {
 
 				// Go back to auth mode selection.
 				c.SendKey(t, ptytest.KeyEscape)
-				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `Select the authentication flow`)
 				c.WaitFor(t, `3\. Use your fido device foo`)
 
 				// Select "Use your fido device" mode.
@@ -382,7 +382,7 @@ func TestCLIAuthenticate(t *testing.T) {
 
 				// Go back and select password auth.
 				c.SendKey(t, ptytest.KeyEscape)
-				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `Select the authentication flow`)
 				c.WaitFor(t, `1\. Password authentication`)
 
 				c.Send(t, "1")
@@ -441,7 +441,7 @@ func TestCLIAuthenticate(t *testing.T) {
 
 				// Go back to auth method.
 				c.SendKey(t, ptytest.KeyEscape)
-				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `Select the authentication flow`)
 
 				// Go back to broker selection.
 				c.SendKey(t, ptytest.KeyEscape)
@@ -481,7 +481,7 @@ func TestCLIAuthenticate(t *testing.T) {
 				c.WaitFor(t, `Gimme your password`)
 
 				c.SendKey(t, ptytest.KeyEscape)
-				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `Select the authentication flow`)
 				c.WaitFor(t, `7\. Authentication code`)
 
 				c.Send(t, "7")
@@ -541,7 +541,7 @@ func TestCLIAuthenticate(t *testing.T) {
 
 				// Go back to auth method, then provider.
 				c.SendKey(t, ptytest.KeyEscape)
-				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `Select the authentication flow`)
 
 				c.SendKey(t, ptytest.KeyEscape)
 				c.WaitFor(t, `Select your provider`)
@@ -859,7 +859,7 @@ func cliAuthenticateWithQRCode(t *testing.T, c *ptytest.Console, signalFn func(s
 	cliSelectBroker(t, c)
 	c.WaitFor(t, `Gimme your password`)
 	c.SendKey(t, ptytest.KeyEscape)
-	c.WaitFor(t, `Select your authentication method`)
+	c.WaitFor(t, `Select the authentication flow`)
 	c.WaitFor(t, `6\. Use a QR code`)
 	c.Send(t, "6")
 	c.WaitFor(t, `Scan the qrcode or enter the code in the login page`)
@@ -973,21 +973,21 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 				c.SendKey(t, ptytest.KeyEscape)
-				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `Select the authentication flow`)
 				c.WaitFor(t, `1\. Password authentication`)
 				c.Send(t, "1")
 				c.WaitFor(t, `Gimme your password`)
 				cliSendPassword(t, c, "goodpass")
 				c.WaitFor(t, `Plug your fido device and press with your thumb`)
 				c.SendKey(t, ptytest.KeyEscape)
-				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `Select the authentication flow`)
 				c.WaitFor(t, `1\. Use your fido device foo`)
 				c.SendKey(t, ptytest.KeyEnter)
 				c.WaitFor(t, `Plug your fido device and press with your thumb`)
 				testutils.CreateBrokerCompletionSignal(t, socketPath, username)
 				c.WaitFor(t, `Unlock your phone \+33`)
 				c.SendKey(t, ptytest.KeyEscape)
-				c.WaitFor(t, `Select your authentication method`)
+				c.WaitFor(t, `Select the authentication flow`)
 				c.WaitFor(t, `1\. Use your phone \+33`)
 				c.SendKey(t, ptytest.KeyEnter)
 				c.WaitFor(t, `Unlock your phone \+33`)

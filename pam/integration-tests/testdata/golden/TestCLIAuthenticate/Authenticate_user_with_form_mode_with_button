@@ -12,9 +12,9 @@ Username: user-integration-form-w-button@example.com
 Gimme your password:
 >
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
-  Select your authentication method
+  Select the authentication flow
 
 > 1. Password authentication
   2. Send URL to user-integration-form-w-button@example.com
@@ -31,21 +31,21 @@ Enter your one time credential:
 
   [ Resend SMS (1 sent) ]
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
 Enter your one time credential:
 >
 
   [ Resend SMS (2 sent) ]
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
 Enter your one time credential:
 > temporary pass00
 
   [ Resend SMS (2 sent) ]
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
   PAM_AUTHTOK: "temporary pass00"
 PAM Authenticate()

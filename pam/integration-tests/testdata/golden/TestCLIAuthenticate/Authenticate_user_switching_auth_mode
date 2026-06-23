@@ -12,9 +12,9 @@ Username: user-integration-switch-mode@example.com
 Gimme your password:
 >
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
-  Select your authentication method
+  Select the authentication flow
 
 > 1. Password authentication
   2. Send URL to user-integration-switch-mode@example.com
@@ -29,9 +29,9 @@ Gimme your password:
 Click on the link received at user-integration-switch-mode@example.com or enter the code:
 >
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
-  Select your authentication method
+  Select the authentication flow
 
   1. Password authentication
 > 2. Send URL to user-integration-switch-mode@example.com
@@ -45,9 +45,9 @@ Click on the link received at user-integration-switch-mode@example.com or enter 
 ────────────────────────────────────────────────────────────────────────────────
 Plug your fido device and press with your thumb
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
-  Select your authentication method
+  Select the authentication flow
 
   1. Password authentication
   2. Send URL to user-integration-switch-mode@example.com
@@ -62,12 +62,12 @@ Plug your fido device and press with your thumb
 Gimme your password:
 >
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
 Gimme your password:
 > ********
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
   PAM_AUTHTOK: "goodpass"
 PAM Authenticate()

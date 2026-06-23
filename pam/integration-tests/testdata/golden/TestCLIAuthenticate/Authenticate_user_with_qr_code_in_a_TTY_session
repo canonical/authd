@@ -6,9 +6,9 @@
 Gimme your password:
 >
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
-  Select your authentication method
+  Select the authentication flow
 
 > 1. Password authentication
   2. Send URL to user-integration-qr-code-tty-session@example.com
@@ -61,7 +61,7 @@ Code: 1337
 
                         [ Regenerate code ]
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
 Scan the qrcode or enter the code in the login page
 
@@ -104,7 +104,7 @@ Code: 1338
 
                         [ Regenerate code ]
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
 Scan the qrcode or enter the code in the login page
 
@@ -151,7 +151,7 @@ Code: 1339
 
                             [ Regenerate code ]
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
 Scan the qrcode or enter the code in the login page
 
@@ -194,7 +194,7 @@ Code: 1340
 
                         [ Regenerate code ]
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
 Scan the qrcode or enter the code in the login page
 
@@ -237,7 +237,7 @@ Code: 1341
 
                         [ Regenerate code ]
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
 PAM Authenticate()
   User: "user-integration-qr-code-tty-session@example.com"
