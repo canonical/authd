@@ -540,8 +540,8 @@ func (m nativeModel) authModeSelection() tea.Cmd {
 		choices = append(choices, choicePair{id: am.Id, label: am.Label})
 	}
 
-	id, err := m.promptForChoice("Authentication method selection", choices,
-		"Choose your authentication method")
+	id, err := m.promptForChoice("Authentication flow selection", choices,
+		"Choose your authentication flow")
 	if errors.Is(err, errGoBack) {
 		return sendEvent(nativeGoBack{})
 	}
@@ -551,7 +551,7 @@ func (m nativeModel) authModeSelection() tea.Cmd {
 	if err != nil {
 		return sendEvent(pamError{
 			status: pam.ErrSystem,
-			msg:    fmt.Sprintf("Authentication method selection error: %v", err),
+			msg:    fmt.Sprintf("Authentication flow selection error: %v", err),
 		})
 	}
 
@@ -646,7 +646,7 @@ func (m nativeModel) handleFormChallenge(hasWait bool) tea.Cmd {
 
 	if hasWait {
 		// Duplicating some contents here, as it will be better for translators once we've them
-		instructions = "Leave the input field empty to wait for the alternative authentication method"
+		instructions = "Leave the input field empty to wait for the alternative authentication flow"
 		if m.uiLayout.GetEntry() == "" {
 			instructions = "Press Enter to wait for authentication"
 		}
