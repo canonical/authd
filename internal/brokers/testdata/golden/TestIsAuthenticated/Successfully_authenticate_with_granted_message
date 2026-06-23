@@ -1,4 +1,4 @@
 FIRST CALL:
 	access: granted
-	data: {"userinfo":{"Name":"ia_granted_with_data@example.com","UID":0,"Gecos":"gecos for ia_granted_with_data@example.com","Dir":"/home/ia_granted_with_data@example.com","Shell":"/bin/sh/ia_granted_with_data@example.com","Groups":[{"Name":"group-ia_granted_with_data@example.com","GID":null,"UGID":"ugid-ia_granted_with_data@example.com"}]},"message":"Your password was cached for offline login."}
+	data: {"userinfo":{"Name":"ia_granted_with_data@example.com","UID":0,"Gecos":"gecos for ia_granted_with_data@example.com","Dir":"/home/ia_granted_with_data@example.com","Shell":"/bin/sh/ia_granted_with_data@example.com","Groups":[{"Name":"group-ia_granted_with_data@example.com","GID":null,"UGID":"ugid-ia_granted_with_data@example.com"}]},"message":"Offline login is enabled with your Entra password"}
 	err: <nil>

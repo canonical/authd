@@ -215,3 +215,6 @@ const MaxRequestDuration = maxRequestDuration
 
 // MaxAuthAttempts exposes the broker's maxAuthAttempts for tests.
 const MaxAuthAttempts = maxAuthAttempts
+
+// CachedPasswordMessage exposes the broker's cachedPasswordMessage for tests.
+const CachedPasswordMessage = cachedPasswordMessage

@@ -1,4 +1,4 @@
 FIRST CALL:
 	access: granted
-	msg: {"message":"Your password was cached for offline login."}
+	msg: {"message":"Offline login is enabled with your Entra password"}
 	err: <nil>
