@@ -29,8 +29,8 @@ var (
 	//nolint:gosec // G101: These are auth mode display labels, not credentials.
 	Label = map[string]string{
 		Password:      "Local password",
-		Device:        "Device Authentication",
-		DeviceQr:      "Device Authentication",
+		Device:        "Device code flow",
+		DeviceQr:      "Device code flow",
 		NewPassword:   "Define your local password",
 		EntraPassword: "Entra ID password",
 		EntraMFAWait:  "Waiting for MFA approval",
