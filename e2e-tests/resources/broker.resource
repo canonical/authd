@@ -373,3 +373,36 @@ Check If User Was Added Properly
 Check User Groups
     [Arguments]    ${username}    ${remote_group}
     Match Text    ${username} sudo ${remote_group}    120
+
+
+Enable Device Registration
+    [Documentation]    Turns on automatic device registration in the broker config.
+    ...               The 'register_device' key lives in the '[msentraid]' section and is
+    ...               only meaningful for the msentraid broker.
+    Change Broker Configuration    register_device    true
+
+
+Check That Device Was Registered
+    [Documentation]    Verifies that device registration data was persisted for the user.
+    ...
+    ...               On successful registration the broker stores the device registration
+    ...               data in the user's cached token at
+    ...               <SNAP_DATA>/<issuer>/<username>/token.json. The data is held in the
+    ...               'DeviceRegistrationData' field, which is null when the device is not
+    ...               registered and a (base64-encoded) string once it is. We assert over
+    ...               SSH because the on-disk state is the authoritative outcome and is not
+    ...               observable on screen.
+    [Arguments]    ${username}
+    # The issuer (tenant-specific) is part of the path, so glob across issuer dirs.
+    # 'current' is a symlink to the snap revision, so '-L' is needed to descend
+    # into it.
+    ${token_path} =    SSH.Execute
+    ...    sudo find -L /var/snap/${BROKER_SNAP_NAME}/current -path '*/${username}/token.json'
+    Should Not Be Empty    ${token_path}
+    ...    msg=No token.json found for ${username}; device auth did not cache a token.
+    # DeviceRegistrationData is null when the device is not registered and a
+    # (base64-encoded) string once it is.
+    ${registered} =    SSH.Execute
+    ...    sudo jq -r '.DeviceRegistrationData != null and .DeviceRegistrationData != ""' '${token_path}'
+    Should Be Equal    ${registered}    true
+    ...    msg=token.json has no DeviceRegistrationData; the device was not registered.
