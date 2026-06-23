@@ -1853,6 +1853,11 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 			return AuthDenied, unexpectedErrMsg("failed to store password")
 		}
 		session.entraPasswordHash = ""
+
+		if msg, ok := data.(userInfoMessage); ok {
+			msg.Message = cachedPasswordMessage
+			data = msg
+		}
 	}
 
 	return access, data
