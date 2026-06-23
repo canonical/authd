@@ -132,7 +132,7 @@ Try Navigating Back to User Selection
     Hid.Keys Combo    Escape
 
     # The previous screen should be the authentication mode selection
-    Match Text    Select your authentication method    120
+    Match Text    Select the authentication flow    120
     Hid.Keys Combo    Escape
 
     # The previous screen should be the broker selection
