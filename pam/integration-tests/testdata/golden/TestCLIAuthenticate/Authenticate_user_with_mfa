@@ -2,7 +2,7 @@ Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 Username: user-mfa@example.com
 ────────────────────────────────────────────────────────────────────────────────
-  Select your provider
+  Select your provider:
 
 > 1. local
   2. ExampleBroker
@@ -14,7 +14,7 @@ Gimme your password:
 
   Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
-  Select the authentication flow
+  Select the authentication flow:
 
 > 1. Password authentication
   2. Send URL to user-mfa@example.com
@@ -40,7 +40,7 @@ Plug your fido device and press with your thumb
 
   Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
-  Select the authentication flow
+  Select the authentication flow:
 
 > 1. Use your fido device foo
   2. Use your phone +33...
@@ -56,7 +56,7 @@ Unlock your phone +33... or accept request on web interface
 
   Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
-  Select the authentication flow
+  Select the authentication flow:
 
 > 1. Use your phone +33...
   2. Authentication code

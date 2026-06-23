@@ -2,7 +2,7 @@ Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 Username: user-integration-switch-broker@example.com
 ────────────────────────────────────────────────────────────────────────────────
-  Select your provider
+  Select your provider:
 
 > 1. local
   2. ExampleBroker
@@ -14,7 +14,7 @@ Gimme your password:
 
   Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
-  Select the authentication flow
+  Select the authentication flow:
 
 > 1. Password authentication
   2. Send URL to user-integration-switch-broker@example.com
@@ -26,14 +26,14 @@ Gimme your password:
 
   Press escape key to go back to choose the provider
 ────────────────────────────────────────────────────────────────────────────────
-  Select your provider
+  Select your provider:
 
   1. local
 > 2. ExampleBroker
 
   Press escape key to go back to user selection
 ────────────────────────────────────────────────────────────────────────────────
-  Select your provider
+  Select your provider:
 
 > 1. local
   2. ExampleBroker

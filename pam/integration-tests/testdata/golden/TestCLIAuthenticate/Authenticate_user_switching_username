@@ -2,7 +2,7 @@ Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 Username: user-integration-switch-username@example.com
 ────────────────────────────────────────────────────────────────────────────────
-  Select your provider
+  Select your provider:
 
 > 1. local
   2. ExampleBroker
@@ -11,7 +11,7 @@ Username: user-integration-switch-username@example.com
 ────────────────────────────────────────────────────────────────────────────────
 Username: user-integration-username-switched@example.com
 ────────────────────────────────────────────────────────────────────────────────
-  Select your provider
+  Select your provider:
 
 > 1. local
   2. ExampleBroker

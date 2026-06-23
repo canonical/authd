@@ -1,4 +1,4 @@
-  Select your provider
+  Select your provider:
 
 > 1. local
   2. ExampleBroker
@@ -8,7 +8,7 @@ Gimme your password:
 
   Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
-  Select the authentication flow
+  Select the authentication flow:
 
 > 1. Password authentication
   2. Send URL to user-integration-qr-code-tty-session@example.com

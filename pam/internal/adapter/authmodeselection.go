@@ -52,7 +52,7 @@ func selectAuthMode(id string) tea.Cmd {
 // newAuthModeSelectionModel initializes an empty list with default options of authModeSelectionModel.
 func newAuthModeSelectionModel(clientType PamClientType) authModeSelectionModel {
 	return authModeSelectionModel{
-		List: NewList(clientType, "Select the authentication flow"),
+		List: NewList(clientType, "Select the authentication flow:"),
 	}
 }
 
