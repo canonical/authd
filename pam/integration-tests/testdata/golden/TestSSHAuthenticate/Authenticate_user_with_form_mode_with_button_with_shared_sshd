@@ -7,7 +7,7 @@
 Enter 'r' to cancel the request and go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button-with-shared-sshd@example.com@localhost) Gimme your password:
 >
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Password authentication
   2. Use a Login code
   3. Send URL to user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button-with-shared-sshd@example.com
@@ -17,7 +17,7 @@ Enter 'r' to cancel the request and go back to select the authentication flow
   7. Pin code
   8. Authentication code
 Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button-with-shared-sshd@example.com@localhost) Choose your authentication method:
+(user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button-with-shared-sshd@example.com@localhost) Choose your authentication flow:
 > 8
 == Authentication code ==
   1. Proceed with Authentication code

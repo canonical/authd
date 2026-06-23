@@ -2,7 +2,7 @@
 package authmodes
 
 const (
-	// Password is the ID of the password authentication method.
+	// Password is the ID of the password authentication flow.
 	Password = "password"
 
 	// Device is the ID of the device code flow.
@@ -16,7 +16,7 @@ const (
 	// NewPassword is the ID of the new password configuration method.
 	NewPassword = "newpassword"
 
-	// EntraPassword is the ID of the Entra ID password + MFA authentication method.
+	// EntraPassword is the ID of the Entra ID password + MFA authentication flow.
 	EntraPassword = "entra_password"
 
 	// EntraMFAWait is the ID of the poll-based MFA follow-up mode.
