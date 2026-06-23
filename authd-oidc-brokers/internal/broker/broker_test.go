@@ -1916,6 +1916,13 @@ func TestIsAuthenticatedEntraMFAWaitStartsPollingAtOne(t *testing.T) {
 	require.Equal(t, []int{1}, provider.recordedPollAttempts)
 	require.Equal(t, []string{""}, provider.recordedChallengeData)
 
+	var grantPayload struct {
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(data), &grantPayload))
+	require.Equal(t, broker.CachedPasswordMessage, grantPayload.Message,
+		"Entra MFA completion should attach the offline-password caching notice")
+
 	_, err = os.Stat(b.PasswordFilepathForSession(sessionID))
 	require.NoError(t, err, "Entra MFA completion should cache the offline password")
 	_, err = os.Stat(b.TokenPathForSession(sessionID))

@@ -312,7 +312,7 @@ func (b *BrokerBusMock) IsAuthenticated(sessionID, authenticationData string) (a
 
 	case "ia_granted_with_data":
 		access = authGranted
-		data = fmt.Sprintf(`{"userinfo": %s, "message": "Your password was cached for offline login."}`, userInfoFromName(sessionID, nil))
+		data = fmt.Sprintf(`{"userinfo": %s, "message": "Offline login is enabled with your Entra password"}`, userInfoFromName(sessionID, nil))
 
 	case "ia_granted_with_non_string_message":
 		access = authGranted
