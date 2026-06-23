@@ -17,12 +17,12 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login after updating authd to edge version
-    [Documentation]    Test login via CLI with device authentication and local password after switching to the edge PPA for authd.
+    [Documentation]    Test login via CLI with device code flow and local password after switching to the edge PPA for authd.
 
     # Log in with local user
     Log In
 
-    # Log in with remote user with device authentication
+    # Log in with remote user with device code flow
     Open Terminal
     Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
     # Check remote user is properly added to the system

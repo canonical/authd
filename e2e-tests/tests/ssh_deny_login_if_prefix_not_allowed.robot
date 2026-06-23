@@ -27,7 +27,7 @@ Test that login is denied if user is not allowed to log in via SSH
     # Log in with local user
     Log In
 
-    # Try to log in with not allowed remote user with device authentication through SSH
+    # Try to log in with not allowed remote user with device code flow through SSH
     ${domain} =    Fetch From Right    %{E2E_USER}    @
     ${username} =    Set Variable    other-user@${domain}
     Open Terminal

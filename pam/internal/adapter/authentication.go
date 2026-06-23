@@ -238,7 +238,7 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 		if m.mode == authd.SessionMode_CHANGE_PASSWORD {
 			// Only compare the new password with the current one if the session is for changing the password.
 			// If the session is for authentication, we allow the user to set the same password again, to avoid
-			// that the user is forced to change their password if e.g. device authentication is forced when
+			// that the user is forced to change their password if e.g. device code flow is forced when
 			// the refresh token is expired.
 			oldPassword = m.currentSecret
 		}
