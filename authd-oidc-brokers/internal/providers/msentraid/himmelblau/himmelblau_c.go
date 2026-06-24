@@ -452,11 +452,18 @@ func initiateMFAFlow(broker *brokerClientApplication, username, password string)
 	cPassword := C.CString(password)
 	defer C.free(unsafe.Pointer(cPassword))
 
+	// cgo maps the C typedef-enum `AuthOption` to Go's plain uint32 (not C.uint or
+	// C.AuthOption), so the function parameter `const enum AuthOption *` becomes
+	// *uint32 in the generated binding. uint32(C.NoDAGFallback) converts the cgo
+	// constant to the matching Go type.
+	options := [1]uint32{uint32(C.NoDAGFallback)}
 	var flow *C.MFAAuthContinue
 	msalErr := C.broker_initiate_acquire_token_by_mfa_flow(
 		(*C.BrokerClientApplication)(unsafe.Pointer(broker)),
 		cUsername,
 		cPassword,
+		&options[0],
+		C.uintptr_t(len(options)),
 		&flow,
 	)
 	if msalErr != nil {
@@ -524,6 +531,14 @@ func newMFAError(msalErr *C.MSAL_ERROR) *MFAError {
 	if category == MFAErrorOther && strings.Contains(msg, "AuthResponse indicates failure") {
 		category = MFAErrorRetryableCode
 	}
+	// When NoDAGFallback is active, libhimmelblau returns this sentinel instead
+	// of silently converting an MFA init failure into a DAG continuation.
+	// Treat it as MFAErrorRequired so the broker redirects to Device Authentication.
+	// The message is generated in third_party/libhimmelblau/src/auth.rs (dag_fallback!
+	// macro, NoDAGFallback branch). Keep this string in sync if the submodule is bumped.
+	if category == MFAErrorOther && msg == "MFA failed and DAG fallback is disabled" {
+		category = MFAErrorRequired
+	}
 	return &MFAError{
 		Category: category,
 		AADSTS:   int(msalErr.aadsts_code),
@@ -538,11 +553,14 @@ func initiateMFAFlowForEnrollment(broker *brokerClientApplication, username, pas
 	cPassword := C.CString(password)
 	defer C.free(unsafe.Pointer(cPassword))
 
+	options := [1]uint32{uint32(C.NoDAGFallback)}
 	var flow *C.MFAAuthContinue
 	msalErr := C.broker_initiate_acquire_token_by_mfa_flow_for_device_enrollment(
 		(*C.BrokerClientApplication)(unsafe.Pointer(broker)),
 		cUsername,
 		cPassword,
+		&options[0],
+		C.uintptr_t(len(options)),
 		&flow,
 	)
 	if msalErr != nil {
