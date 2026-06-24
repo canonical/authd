@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/canonical/authd/internal/decorate"
 	"github.com/canonical/authd/internal/services/errmessages"
@@ -51,14 +52,21 @@ func brokerUnavailableError(name string) error {
 }
 
 type dbusBroker struct {
-	name  string
-	iface dbusInterface
-
+	name       string
 	dbusObject dbus.BusObject
+
+	// iface is the broker D-Bus interface to call, resolved lazily on first
+	// use. We can't resolve it at construction time because that requires
+	// introspecting — and thus activating — the broker, which would drop a
+	// broker that fails to start from the available list. Deferring it keeps
+	// such a broker listed so the user gets a clear error on selection
+	// instead of the broker silently vanishing.
+	iface   dbusInterface
+	ifaceMu sync.Mutex
 }
 
 // newDbusBroker returns a dbus broker and broker attributes from its configuration file.
-func newDbusBroker(ctx context.Context, bus *dbus.Conn, configFile string) (b dbusBroker, name, brandIcon string, err error) {
+func newDbusBroker(ctx context.Context, bus *dbus.Conn, configFile string) (b *dbusBroker, name, brandIcon string, err error) {
 	defer decorate.OnError(&err, "D-Bus broker from configuration file: %q", configFile)
 
 	log.Debugf(ctx, "D-Bus broker configuration at %q", configFile)
@@ -88,14 +96,9 @@ func newDbusBroker(ctx context.Context, bus *dbus.Conn, configFile string) (b db
 		return b, "", "", fmt.Errorf("missing field for broker: %v", err)
 	}
 
-	dBroker := dbusBroker{
+	dBroker := &dbusBroker{
 		name:       nameVal.String(),
 		dbusObject: bus.Object(dbusName.String(), dbus.ObjectPath(objectName.String())),
-	}
-
-	dBroker.iface, err = getInterface(dBroker.dbusObject)
-	if err != nil {
-		return b, "", "", fmt.Errorf("could not detect broker interfaces: %v", err)
 	}
 
 	return dBroker, nameVal.String(), brandIconVal.String(), nil
@@ -169,9 +172,14 @@ func interfaceVersion(iface string) (int, error) {
 // NewSession calls the corresponding method on the broker bus and returns the session ID and encryption key.
 // On API v3, the providerID (stable provider identifier) is passed so the broker can locate the
 // provider ID-keyed cache directory directly. v2 brokers receive only username, lang, and mode.
-func (b dbusBroker) NewSession(ctx context.Context, username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
+func (b *dbusBroker) NewSession(ctx context.Context, username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
+	iface, err := b.resolveInterface()
+	if err != nil {
+		return "", "", brokerUnavailableError(b.name)
+	}
+
 	var call *dbus.Call
-	if b.iface.version < 3 {
+	if iface.version < 3 {
 		call, err = b.call(ctx, "NewSession", username, lang, mode)
 	} else {
 		call, err = b.call(ctx, "NewSession", username, lang, mode, providerID)
@@ -188,7 +196,7 @@ func (b dbusBroker) NewSession(ctx context.Context, username, lang, mode, provid
 }
 
 // GetAuthenticationModes calls the corresponding method on the broker bus and returns the authentication modes supported by it.
-func (b dbusBroker) GetAuthenticationModes(ctx context.Context, sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, err error) {
+func (b *dbusBroker) GetAuthenticationModes(ctx context.Context, sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, err error) {
 	call, err := b.call(ctx, "GetAuthenticationModes", sessionID, supportedUILayouts)
 	if err != nil {
 		return nil, err
@@ -201,7 +209,7 @@ func (b dbusBroker) GetAuthenticationModes(ctx context.Context, sessionID string
 }
 
 // SelectAuthenticationMode calls the corresponding method on the broker bus and returns the UI layout for the selected mode.
-func (b dbusBroker) SelectAuthenticationMode(ctx context.Context, sessionID, authenticationModeName string) (uiLayoutInfo map[string]string, err error) {
+func (b *dbusBroker) SelectAuthenticationMode(ctx context.Context, sessionID, authenticationModeName string) (uiLayoutInfo map[string]string, err error) {
 	call, err := b.call(ctx, "SelectAuthenticationMode", sessionID, authenticationModeName)
 	if err != nil {
 		return nil, err
@@ -214,7 +222,7 @@ func (b dbusBroker) SelectAuthenticationMode(ctx context.Context, sessionID, aut
 }
 
 // IsAuthenticated calls the corresponding method on the broker bus and returns the user information and access.
-func (b dbusBroker) IsAuthenticated(_ context.Context, sessionID, authenticationData string) (access, data string, err error) {
+func (b *dbusBroker) IsAuthenticated(_ context.Context, sessionID, authenticationData string) (access, data string, err error) {
 	// We don’t want to cancel the context when the parent call is cancelled.
 	call, err := b.call(context.Background(), "IsAuthenticated", sessionID, authenticationData)
 	if err != nil {
@@ -228,7 +236,7 @@ func (b dbusBroker) IsAuthenticated(_ context.Context, sessionID, authentication
 }
 
 // EndSession calls the corresponding method on the broker bus.
-func (b dbusBroker) EndSession(ctx context.Context, sessionID string) (err error) {
+func (b *dbusBroker) EndSession(ctx context.Context, sessionID string) (err error) {
 	if _, err := b.call(ctx, "EndSession", sessionID); err != nil {
 		return err
 	}
@@ -236,7 +244,7 @@ func (b dbusBroker) EndSession(ctx context.Context, sessionID string) (err error
 }
 
 // CancelIsAuthenticated calls the corresponding method on the broker bus.
-func (b dbusBroker) CancelIsAuthenticated(ctx context.Context, sessionID string) {
+func (b *dbusBroker) CancelIsAuthenticated(ctx context.Context, sessionID string) {
 	// We don’t want to cancel the context when the parent call is cancelled.
 	if _, err := b.call(context.Background(), "CancelIsAuthenticated", sessionID); err != nil {
 		log.Errorf(ctx, "could not cancel IsAuthenticated call for session %q: %v", sessionID, err)
@@ -244,7 +252,7 @@ func (b dbusBroker) CancelIsAuthenticated(ctx context.Context, sessionID string)
 }
 
 // UserPreCheck calls the corresponding method on the broker bus.
-func (b dbusBroker) UserPreCheck(ctx context.Context, username string) (userinfo string, err error) {
+func (b *dbusBroker) UserPreCheck(ctx context.Context, username string) (userinfo string, err error) {
 	call, err := b.call(ctx, "UserPreCheck", username)
 	if err != nil {
 		return "", err
@@ -259,9 +267,13 @@ func (b dbusBroker) UserPreCheck(ctx context.Context, username string) (userinfo
 // DeleteUser calls the corresponding method on the broker bus to delete broker side user data.
 // On API v3, the providerID (stable provider identifier) is passed so the broker can locate the
 // provider ID-keyed cache directory even after an email change. v2 brokers receive only the username.
-func (b dbusBroker) DeleteUser(ctx context.Context, username, providerID string) error {
-	var err error
-	if b.iface.version < 3 {
+func (b *dbusBroker) DeleteUser(ctx context.Context, username, providerID string) error {
+	iface, err := b.resolveInterface()
+	if err != nil {
+		return brokerUnavailableError(b.name)
+	}
+
+	if iface.version < 3 {
 		_, err = b.call(ctx, "DeleteUser", username)
 	} else {
 		_, err = b.call(ctx, "DeleteUser", username, providerID)
@@ -273,10 +285,35 @@ func (b dbusBroker) DeleteUser(ctx context.Context, username, providerID string)
 	return nil
 }
 
+// resolveInterface returns the broker D-Bus interface to call, detecting and
+// caching it on first use. Detection introspects (and thus activates) the
+// broker, so it's deferred until a call is actually made rather than done at
+// construction time.
+func (b *dbusBroker) resolveInterface() (dbusInterface, error) {
+	b.ifaceMu.Lock()
+	defer b.ifaceMu.Unlock()
+
+	if b.iface.name != "" {
+		return b.iface, nil
+	}
+
+	iface, err := getInterface(b.dbusObject)
+	if err != nil {
+		return dbusInterface{}, err
+	}
+	b.iface = iface
+	return iface, nil
+}
+
 // call is an abstraction over dbus calls to ensure we wrap the returned error to an ErrorToDisplay.
 // All wrapped errors will be logged, but not returned to the UI.
-func (b dbusBroker) call(ctx context.Context, method string, args ...interface{}) (*dbus.Call, error) {
-	dbusMethod := b.iface.name + "." + method
+func (b *dbusBroker) call(ctx context.Context, method string, args ...interface{}) (*dbus.Call, error) {
+	iface, err := b.resolveInterface()
+	if err != nil {
+		return nil, brokerUnavailableError(b.name)
+	}
+
+	dbusMethod := iface.name + "." + method
 	call := b.dbusObject.CallWithContext(ctx, dbusMethod, 0, args...)
 	if err := call.Err; err != nil {
 		var dbusError dbus.Error
