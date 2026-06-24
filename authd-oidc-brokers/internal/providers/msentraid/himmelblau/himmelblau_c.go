@@ -9,6 +9,15 @@ package himmelblau
 // Add the current directory to the library search path if we're building for testing,
 // because libhimmelblau is not installed in the standard search directories.
 #cgo !release LDFLAGS: -Wl,-rpath,${SRCDIR}
+// libhimmelblau is built with the set_timeout feature, which makes cbindgen emit the
+// timeout-aware, 6-argument broker_init under #if defined(SET_TIMEOUT) and the old
+// 5-argument one under #if !defined(SET_TIMEOUT). Since initBroker calls the
+// 6-argument variant, we must define SET_TIMEOUT so the header exposes it.
+//
+// The other features we enable (changepassword, on_behalf_of) don't need this:
+// their guarded declarations are never referenced from cgo, so the header compiles
+// fine whether or not their macros are defined.
+#cgo CFLAGS: -DSET_TIMEOUT
 #include "himmelblau.h"
 */
 import "C"
@@ -62,6 +71,10 @@ func initTPM(tctiName string) (tpm *boxedDynTPM, err error) {
 	return tpm, nil
 }
 
+// brokerHTTPTimeoutSecs extends libhimmelblau's 3-second default, which is too
+// short for Entra device enrollment.
+const brokerHTTPTimeoutSecs = 15
+
 func initBroker(authority, clientID string, transportKeyBytes, certKeyBytes []byte) (broker *brokerClientApplication, err error) {
 	cAuthority := C.CString(authority)
 	defer C.free(unsafe.Pointer(cAuthority))
@@ -98,11 +111,14 @@ func initBroker(authority, clientID string, transportKeyBytes, certKeyBytes []by
 		defer C.loadable_ms_device_enrollment_key_free(cCertKey)
 	}
 
+	cTimeoutSecs := C.uint64_t(brokerHTTPTimeoutSecs)
+
 	msalErr := C.broker_init(
 		cAuthority,
 		cClientID,
 		cTransportKey,
 		cCertKey,
+		&cTimeoutSecs,
 		(**C.BrokerClientApplication)(unsafe.Pointer(&broker)),
 	)
 	if msalErr != nil {
