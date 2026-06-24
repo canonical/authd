@@ -92,7 +92,9 @@ func RunTestInBubbleWrap(t *testing.T, args ...string) {
 		"--ro-bind", "/etc/localtime", "/etc/localtime",
 		"--ro-bind", "/etc/login.defs", "/etc/login.defs",
 		"--ro-bind", "/etc/nsswitch.conf", "/etc/nsswitch.conf",
-		"--ro-bind", "/etc/sudo.conf", "/etc/sudo.conf",
+		// sudo.conf is optional and absent on recent releases (sudo falls back
+		// to built-in defaults), so bind it only if it exists.
+		"--ro-bind-try", "/etc/sudo.conf", "/etc/sudo.conf",
 		"--ro-bind", "/etc/sudoers", "/etc/sudoers",
 		"--ro-bind-try", "/etc/timezone", "/etc/timezone",
 		"--ro-bind", "/etc/pam.d", "/etc/pam.d",
