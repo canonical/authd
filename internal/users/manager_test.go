@@ -1641,6 +1641,11 @@ func TestSetHomeDir(t *testing.T) {
 		createOldHome     bool
 		precreateNewHome  bool
 		sameAsCurrentHome bool
+		busyUser          bool
+		newHomeNotAccess  bool
+		oldHomeNotAccess  bool
+		renameFails       bool
+		dbReadOnly        bool
 
 		wantErr      bool
 		wantChanged  bool
@@ -1651,10 +1656,15 @@ func TestSetHomeDir(t *testing.T) {
 		"Update_db_only_when_old_home_missing": {wantChanged: true, wantWarnings: 1},
 		"No-op_when_user_already_has_home_dir": {sameAsCurrentHome: true, wantWarnings: 1},
 
-		"Error_when_destination_already_exists": {createOldHome: true, precreateNewHome: true, wantErr: true},
-		"Error_when_path_is_not_absolute":       {relativeNewHome: true, wantErr: true},
-		"Error_when_username_is_empty":          {emptyUsername: true, wantErr: true},
-		"Error_when_user_does_not_exist":        {nonExistentUser: true, wantErr: true},
+		"Error_when_destination_already_exists":   {createOldHome: true, precreateNewHome: true, wantErr: true},
+		"Error_when_path_is_not_absolute":         {relativeNewHome: true, wantErr: true},
+		"Error_when_username_is_empty":            {emptyUsername: true, wantErr: true},
+		"Error_when_user_does_not_exist":          {nonExistentUser: true, wantErr: true},
+		"Error_when_user_is_busy":                 {busyUser: true, createOldHome: true, wantErr: true},
+		"Error_when_new_home_path_not_accessible": {newHomeNotAccess: true, createOldHome: true, wantErr: true},
+		"Error_when_current_home_not_accessible":  {oldHomeNotAccess: true, wantErr: true},
+		"Error_when_rename_fails":                 {renameFails: true, createOldHome: true, wantErr: true},
+		"Error_and_rollback_when_db_update_fails": {dbReadOnly: true, createOldHome: true, wantErr: true},
 	}
 
 	for name, tc := range tests {
@@ -1682,10 +1692,44 @@ func TestSetHomeDir(t *testing.T) {
 				newHome = oldHome
 			}
 
+			// For the "new home not accessible" test, create a parent directory
+			// with no permissions so os.Lstat on the new home fails with EACCES.
+			if tc.newHomeNotAccess {
+				restrictedDir := filepath.Join(baseDir, "restricted")
+				require.NoError(t, os.MkdirAll(restrictedDir, 0o000), "Setup: could not create restricted directory")
+				newHome = filepath.Join(restrictedDir, "new")
+				t.Cleanup(func() { _ = os.Chmod(restrictedDir, 0o700) }) //nolint:gosec // test-only cleanup
+			}
+
+			// For the "old home not accessible" test, point the user at a path
+			// inside a restricted directory so os.Lstat fails with EACCES.
+			if tc.oldHomeNotAccess {
+				restrictedDir := filepath.Join(baseDir, "restricted")
+				require.NoError(t, os.MkdirAll(restrictedDir, 0o000), "Setup: could not create restricted directory")
+				oldHome = filepath.Join(restrictedDir, "old")
+				t.Cleanup(func() { _ = os.Chmod(restrictedDir, 0o700) }) //nolint:gosec // test-only cleanup
+			}
+
+			// For the "rename fails" test, make the parent of the new home
+			// read-only so os.Rename cannot create the new entry.
+			if tc.renameFails {
+				restrictedDir := filepath.Join(baseDir, "restricted")
+				require.NoError(t, os.MkdirAll(restrictedDir, 0o500), "Setup: could not create restricted directory")
+				newHome = filepath.Join(restrictedDir, "new")
+				t.Cleanup(func() { _ = os.Chmod(restrictedDir, 0o700) }) //nolint:gosec // test-only cleanup
+			}
+
 			// Point the user at our controlled old home directory.
 			if !tc.emptyUsername && !tc.nonExistentUser {
 				err = m.DB().SetHomeDir(username, oldHome)
 				require.NoError(t, err, "Setup: could not set initial home directory")
+			}
+
+			// For the busy-user test, set the user's UID to the current process
+			// UID so proc.CheckUserBusy finds an active process.
+			if tc.busyUser {
+				err = m.DB().SetUserID(username, uint32(os.Getuid())) //nolint:gosec // G115 - UID is always a valid uint32 in tests
+				require.NoError(t, err, "Setup: could not set user UID to current process UID")
 			}
 
 			if tc.createOldHome {
@@ -1696,14 +1740,29 @@ func TestSetHomeDir(t *testing.T) {
 				require.NoError(t, os.MkdirAll(newHome, 0o700), "Setup: could not pre-create new home directory")
 			}
 
+			// For the DB-read-only test, make the database directory read-only
+			// after setup so that SQLite cannot create the rollback journal
+			// file and the UPDATE in db.SetHomeDir fails.  The SELECT
+			// (UserByName) still succeeds because it is served from the
+			// already-open connection's page cache and needs no journal.
+			if tc.dbReadOnly {
+				require.NoError(t, os.Chmod(dbDir, 0o500), "Setup: could not make database directory read-only") //nolint:gosec // test-only permission change
+				t.Cleanup(func() { _ = os.Chmod(dbDir, 0o700) })                                                 //nolint:gosec // test-only cleanup
+			}
+
 			resp, err := m.SetHomeDir(username, newHome)
 			if tc.wantErr {
 				require.Error(t, err, "SetHomeDir should return an error")
 				// On error, the database record must remain unchanged.
-				if !tc.emptyUsername && !tc.nonExistentUser {
+				if !tc.emptyUsername && !tc.nonExistentUser && !tc.dbReadOnly {
 					u, lookupErr := m.UserByName(username)
 					require.NoError(t, lookupErr, "User should still exist")
 					require.Equal(t, oldHome, u.Dir, "Home directory in the database should be unchanged on error")
+				}
+				// For the dbReadOnly case, the directory was moved (rename succeeded)
+				// but the DB update failed, so the rollback should have moved it back.
+				if tc.dbReadOnly {
+					require.DirExists(t, oldHome, "Old home directory should have been rolled back")
 				}
 				return
 			}
