@@ -34,7 +34,7 @@ apps:
       - dbus-authd
     plugs:
       - network
-    restart-condition: always
+    restart-condition: never
     activates-on: [dbus-authd]
     environment:
       SYSLOG_IDENTIFIER: authd-msentraid
