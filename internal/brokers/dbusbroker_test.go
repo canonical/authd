@@ -160,3 +160,69 @@ func TestDbusBrokerCallUsesInterface(t *testing.T) {
 		})
 	}
 }
+
+func TestDbusBrokerCallTranslatesErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		callErr error
+
+		wantCanceled    bool
+		wantUnavailable bool
+		// wantPassthrough asserts the original error message is preserved
+		// (i.e. not replaced by the broker unavailable message).
+		wantPassthrough string
+	}{
+		// A broker that exits before exporting its objects (e.g. it failed to
+		// start) has already claimed its bus name, so D-Bus reports the call
+		// as hitting an unknown interface rather than an unknown service.
+		"Unknown_interface_is_reported_as_broker_unavailable": {
+			callErr:         dbus.Error{Name: "org.freedesktop.DBus.Error.UnknownInterface"},
+			wantUnavailable: true,
+		},
+		"Unknown_service_is_reported_as_broker_unavailable": {
+			callErr:         dbus.Error{Name: "org.freedesktop.DBus.Error.ServiceUnknown"},
+			wantUnavailable: true,
+		},
+		"Activation_timeout_is_reported_as_broker_unavailable": {
+			callErr:         dbus.Error{Name: "org.freedesktop.DBus.Error.TimedOut"},
+			wantUnavailable: true,
+		},
+		"Canceled_is_translated_to_context_canceled": {
+			callErr:      dbus.Error{Name: "com.ubuntu.authd.Canceled"},
+			wantCanceled: true,
+		},
+		"Unrelated_error_is_passed_through": {
+			callErr:         dbus.Error{Name: "com.ubuntu.authd.SomeBrokerError", Body: []interface{}{"boom"}},
+			wantPassthrough: "boom",
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			mock := &mockBusObject{callErr: tc.callErr}
+			b := dbusBroker{
+				name:       "mybroker",
+				iface:      dbusInterface{name: "com.ubuntu.authd.Broker2", version: 2},
+				dbusObject: mock,
+			}
+
+			_, err := b.call(context.Background(), "TestMethod")
+			require.Error(t, err, "call should return an error")
+
+			if tc.wantCanceled {
+				require.ErrorIs(t, err, context.Canceled, "Canceled should map to context.Canceled")
+				return
+			}
+			if tc.wantUnavailable {
+				require.Contains(t, err.Error(), "mybroker", "message should name the broker")
+				require.Contains(t, err.Error(), "Please contact your administrator.",
+					"message should tell the user to contact their administrator")
+				return
+			}
+			require.Contains(t, err.Error(), tc.wantPassthrough,
+				"unrelated errors should be passed through unchanged")
+		})
+	}
+}

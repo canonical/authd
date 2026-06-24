@@ -29,6 +29,27 @@ type dbusInterface struct {
 	version uint
 }
 
+// brokerUnavailableDBusErrors are the D-Bus error names that all indicate the
+// broker isn't running or failed to start. See call() for details.
+var brokerUnavailableDBusErrors = map[string]bool{
+	"org.freedesktop.DBus.Error.ServiceUnknown":      true,
+	"org.freedesktop.DBus.Error.TimedOut":            true,
+	"org.freedesktop.DBus.Error.NoReply":             true,
+	"org.freedesktop.DBus.Error.Disconnected":        true,
+	"org.freedesktop.DBus.Error.UnknownObject":       true,
+	"org.freedesktop.DBus.Error.UnknownInterface":    true,
+	"org.freedesktop.DBus.Error.UnknownMethod":       true,
+	"org.freedesktop.DBus.Error.Spawn.ChildExited":   true,
+	"org.freedesktop.DBus.Error.Spawn.ExecFailed":    true,
+	"org.freedesktop.DBus.Error.Spawn.ChildSignaled": true,
+	"org.freedesktop.DBus.Error.Spawn.Failed":        true,
+}
+
+func brokerUnavailableError(name string) error {
+	return errmessages.NewToDisplayError(
+		fmt.Errorf("Couldn't connect to broker %q. Please contact your administrator.", name)) //nolint:staticcheck,revive // ST1005 This error is displayed as is to the user.
+}
+
 type dbusBroker struct {
 	name  string
 	iface dbusInterface
@@ -259,13 +280,19 @@ func (b dbusBroker) call(ctx context.Context, method string, args ...interface{}
 	call := b.dbusObject.CallWithContext(ctx, dbusMethod, 0, args...)
 	if err := call.Err; err != nil {
 		var dbusError dbus.Error
-		// If the broker is not available ib dbus, the original "method was not provided by any .service files" isn't
-		// user-friendly, so we replace it with a better message.
-		if errors.As(err, &dbusError) && dbusError.Name == "org.freedesktop.DBus.Error.ServiceUnknown" {
-			err = fmt.Errorf("couldn't connect to broker %q. Is it running?", b.name)
-		}
 		if errors.As(err, &dbusError) && dbusError.Name == "com.ubuntu.authd.Canceled" {
 			return nil, context.Canceled
+		}
+		// When the broker isn't running, D-Bus reports it in several ways
+		// depending on how far activation got: ServiceUnknown if it has no
+		// activation file, Spawn errors or TimedOut if it never came up, and
+		// UnknownObject/UnknownInterface/UnknownMethod if it claimed its bus
+		// name (so activation succeeded) but exited before exporting its
+		// objects — which is what happens when the broker fails to start. None
+		// of those raw errors are user-friendly, so replace them all with a
+		// message that points at the actual problem.
+		if errors.As(err, &dbusError) && brokerUnavailableDBusErrors[dbusError.Name] {
+			return nil, brokerUnavailableError(b.name)
 		}
 		return nil, errmessages.NewToDisplayError(err)
 	}
