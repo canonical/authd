@@ -437,6 +437,7 @@ func TestIsAuthenticated(t *testing.T) {
 		// There is no wantErr as it's stored in the golden file.
 	}{
 		"Successfully_authenticate":                            {username: "success@example.com"},
+		"Successfully_authenticate_with_granted_message":       {username: "ia_granted_with_data@example.com"},
 		"Successfully_authenticate_if_first_call_is_canceled":  {username: "ia_second_call@example.com", secondCall: true, cancelFirstCall: true},
 		"Denies_authentication_when_broker_times_out":          {username: "ia_timeout@example.com"},
 		"Update_existing_DB_on_success":                        {username: "success@example.com", existingDB: "cache-with-user.db"},
