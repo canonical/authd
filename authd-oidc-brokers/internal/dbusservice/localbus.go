@@ -21,7 +21,7 @@ func (s *Service) getBus() (*dbus.Conn, error) {
 		return nil, err
 	}
 	log.Infof(context.Background(), "Using local bus address: %s", os.Getenv("DBUS_SYSTEM_BUS_ADDRESS"))
-	conn, err := dbus.ConnectSystemBus()
+	conn, err := dbus.ConnectSystemBus(dbus.WithIncomingInterceptor(s.gateIncomingCalls))
 	if err != nil {
 		return nil, err
 	}

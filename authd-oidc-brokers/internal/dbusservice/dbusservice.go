@@ -5,6 +5,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"sync"
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
@@ -30,10 +31,12 @@ var (
 // Service is the object representing the dbus service, which contains the exported interfaces and the necessary
 // information to disconnect from the bus and stop the service.
 type Service struct {
-	name       string
-	interfaces []*Interface
-	disconnect func()
-	serve      chan struct{}
+	name         string
+	interfaces   []*Interface
+	disconnect   func()
+	serve        chan struct{}
+	initializing chan struct{}
+	initOnce     sync.Once
 }
 
 // Interface is the object representing a dbus interface, which contains the broker to which delegate the calls and the
@@ -55,13 +58,30 @@ func New(_ context.Context, brokerConfig broker.Config) (*Service, error) {
 	object := dbus.ObjectPath(consts.DbusObject)
 
 	service := &Service{
-		name:  name,
-		serve: make(chan struct{}),
+		name:         name,
+		serve:        make(chan struct{}),
+		initializing: make(chan struct{}),
 	}
 
 	conn, err := service.getBus()
 	if err != nil {
 		return nil, err
+	}
+
+	// Claim the bus name before doing any fallible initialization below. The
+	// activating client is then unblocked, while the interceptor below keeps
+	// method calls queued until initialization completes. If initialization
+	// fails, disconnecting removes the name and fails the activating client's
+	// pending call immediately instead of waiting for D-Bus's 25s activation
+	// timeout.
+	reply, err := conn.RequestName(consts.DbusName, dbus.NameFlagDoNotQueue)
+	if err != nil {
+		service.disconnect()
+		return nil, err
+	}
+	if reply != dbus.RequestNameReplyPrimaryOwner {
+		service.disconnect()
+		return nil, fmt.Errorf("%q is already taken in the bus", name)
 	}
 
 	var introspectableBody string
@@ -106,17 +126,23 @@ func New(_ context.Context, brokerConfig broker.Config) (*Service, error) {
 		return nil, err
 	}
 
-	reply, err := conn.RequestName(consts.DbusName, dbus.NameFlagDoNotQueue)
-	if err != nil {
-		service.disconnect()
-		return nil, err
-	}
-	if reply != dbus.RequestNameReplyPrimaryOwner {
-		service.disconnect()
-		return nil, fmt.Errorf("%q is already taken in the bus", name)
-	}
-
+	service.initializationDone()
 	return service, nil
+}
+
+// gateIncomingCalls blocks D-Bus method calls until all broker interfaces have
+// been initialized and exported. Replies to calls made during initialization
+// must continue through the connection, so they are not gated.
+func (s *Service) gateIncomingCalls(msg *dbus.Message) {
+	if msg.Type == dbus.TypeMethodCall {
+		<-s.initializing
+	}
+}
+
+func (s *Service) initializationDone() {
+	s.initOnce.Do(func() {
+		close(s.initializing)
+	})
 }
 
 // Addr returns the address of the service.
