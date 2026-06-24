@@ -685,9 +685,9 @@ func (m *Manager) SetShell(username, shell string) (warnings []string, err error
 		return nil, err
 	}
 
-	err = checkValidShellPath(shell)
+	err = checkValidPasswdPath(shell)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid shell: %w", err)
 	}
 
 	err = checkValidShell(shell)
@@ -722,19 +722,12 @@ func (m *Manager) SetHomeDir(name, home string) (resp *SetHomeDirResp, err error
 		return nil, errors.New("empty username")
 	}
 
-	if err = checkValidHomePath(home); err != nil {
-		return nil, err
+	if err = checkValidPasswdPath(home); err != nil {
+		return nil, fmt.Errorf("invalid homedir: %w", err)
 	}
 
 	m.userManagementMu.Lock()
 	defer m.userManagementMu.Unlock()
-
-	// Call lckpwdf to avoid race conditions with other processes which modify
-	// the passwd database.
-	if err = userslocking.WriteLock(); err != nil {
-		return nil, err
-	}
-	defer func() { err = errors.Join(err, userslocking.WriteUnlock()) }()
 
 	// Check if the user exists.
 	oldUser, err := m.db.UserByName(name)

@@ -33,47 +33,27 @@ func checkValidPasswdField(value string) (err error) {
 	return nil
 }
 
-func checkValidShellPath(shell string) (err error) {
-	// Do the same checks as systemd-homed in shell_is_ok:
-	// https://github.com/systemd/systemd/blob/ba67af7efb7b743ba1974ef9ceb53fba0e3f9e21/src/home/homectl.c#L2812
-	if err = checkValidPasswdField(shell); err != nil {
+// checkValidPasswdPath checks if the provided path is valid using the same rules as systemd-homed's shell_is_ok function:
+//
+// 1. The path must be an absolute path.
+// 2. The path must be normalized (i.e., it must not contain any redundant components like "." or "..").
+// 3. The path must not exceed the maximum allowed length (PATH_MAX - 1).
+func checkValidPasswdPath(argPath string) (err error) {
+	if err = checkValidPasswdField(argPath); err != nil {
 		return err
 	}
 
-	if !path.IsAbs(shell) {
-		return errors.New("shell must be an absolute path")
+	if !path.IsAbs(argPath) {
+		return errors.New("must be an absolute path")
 	}
 
-	if shell != path.Clean(shell) {
-		return errors.New("shell path must be normalized")
-	}
-
-	// PATH_MAX is counted with the terminating null byte
-	if unix.PathMax-1 < len(shell) {
-		return errors.New("shell path is too long")
-	}
-
-	return nil
-}
-
-func checkValidHomePath(home string) (err error) {
-	// Apply the same path constraints as for the login shell: a home directory
-	// is also stored in the passwd "dir" field.
-	if err = checkValidPasswdField(home); err != nil {
-		return err
-	}
-
-	if !path.IsAbs(home) {
-		return errors.New("home directory must be an absolute path")
-	}
-
-	if home != path.Clean(home) {
-		return errors.New("home directory path must be normalized")
+	if argPath != path.Clean(argPath) {
+		return errors.New("path must be normalized")
 	}
 
 	// PATH_MAX is counted with the terminating null byte
-	if unix.PathMax-1 < len(home) {
-		return errors.New("home directory path is too long")
+	if unix.PathMax-1 < len(argPath) {
+		return errors.New("path is too long")
 	}
 
 	return nil
