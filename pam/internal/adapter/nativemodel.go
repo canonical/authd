@@ -318,6 +318,12 @@ func (m nativeModel) Update(msg tea.Msg) (nativeModel, tea.Cmd) {
 	case isAuthenticatedResultReceived:
 		access := msg.access
 		authMsg, err := dataToMsg(msg.msg)
+		if err != nil && access == auth.Granted {
+			// A malformed granted message must never fail an already-granted
+			// authentication; it is a purely cosmetic notice.
+			log.Warningf(context.TODO(), "Ignoring invalid granted message: %v", err)
+			authMsg, err = "", nil
+		}
 		if cmd := maybeSendPamError(err); cmd != nil {
 			return m, cmd
 		}

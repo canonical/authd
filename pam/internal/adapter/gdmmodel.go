@@ -266,6 +266,12 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 	case gdmIsAuthenticatedResultReceived:
 		access := msg.access
 		authMsg, err := dataToMsg(msg.msg)
+		if err != nil && access == auth.Granted {
+			// A malformed granted message must never fail an already-granted
+			// authentication; it is a purely cosmetic notice.
+			log.Warningf(context.TODO(), "Ignoring invalid granted message: %v", err)
+			authMsg, err = "", nil
+		}
 		if err != nil {
 			return m, sendEvent(pamError{status: pam.ErrSystem, msg: err.Error()})
 		}
