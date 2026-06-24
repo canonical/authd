@@ -62,7 +62,10 @@ parts:
       snapcraftctl pull
       cp "$SNAPCRAFT_PROJECT_DIR/authd-oidc-brokers/rust-toolchain.toml" "$SNAPCRAFT_PART_SRC/"
     override-build: |
-      cargo install cargo-c
+      # cargo-c is only needed to provide 'cargo cbuild'. Skip reinstalling it
+      # when it is already on PATH (e.g. from a previous build in a reused build
+      # instance) to avoid a crates.io index update and rebuild every time.
+      command -v cargo-cbuild >/dev/null || cargo install cargo-c
       cargo cbuild --release --lib --features=broker,changepassword,on_behalf_of,set_timeout
       echo "Installing libhimmelblau.so and himmelblau.h"
       TARGET_TRIPLE=$(rustc -vV | awk '/host:/ {print $2}')
