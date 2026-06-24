@@ -352,11 +352,19 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 
 		var authMsg string
 		if msg.access != auth.Cancelled {
-			msg, err := dataToMsg(msg.msg)
+			parsedMsg, err := dataToMsg(msg.msg)
 			if err != nil {
-				return m, sendEvent(pamError{status: pam.ErrSystem, msg: err.Error()})
+				// A malformed or unexpected message must never fail an
+				// authentication that the broker has already granted: the
+				// message is a purely cosmetic notice. For any other access we
+				// still surface the error.
+				if msg.access != auth.Granted {
+					return m, sendEvent(pamError{status: pam.ErrSystem, msg: err.Error()})
+				}
+				log.Warningf(context.TODO(), "Ignoring invalid granted message: %v", err)
+			} else {
+				authMsg = parsedMsg
 			}
-			authMsg = msg
 		}
 
 		switch msg.access {
