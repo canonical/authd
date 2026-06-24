@@ -3363,16 +3363,19 @@ func TestEntraPasswordRoutesAADSTSErrors(t *testing.T) {
 		wantNextModes []string
 		wantMsg       string
 	}{
-		"Account_locked":                             {aadsts: 50053, wantAccess: broker.AuthDenied, wantMsg: "locked"},
-		"Password_expired":                           {aadsts: 50055, wantAccess: broker.AuthDenied, wantMsg: "expired"},
-		"Invalid_credentials_retry":                  {aadsts: 50126, wantAccess: broker.AuthRetry, wantMsg: "Incorrect password"},
-		"Conditional_access_blocked":                 {aadsts: 53003, wantAccess: broker.AuthDenied, wantMsg: "Conditional Access"},
-		"MFA_enrollment_to_device":                   {aadsts: 50072, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
-		"MFA_enrollment_alt_to_device":               {aadsts: 50079, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
-		"MFA_enrollment_denied_when_device_disabled": {aadsts: 50072, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled"},
-		"MFA_required_to_device":                     {category: himmelblau.MFAErrorRequired, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA is required"},
-		"MFA_required_denied_when_device_disabled":   {category: himmelblau.MFAErrorRequired, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled"},
-		"Unhandled_AADSTS_denied":                    {aadsts: 99999, wantAccess: broker.AuthDenied, wantMsg: "AADSTS99999: simulated error. Please report this error"},
+		"Account_locked":                               {aadsts: 50053, wantAccess: broker.AuthDenied, wantMsg: "locked"},
+		"Password_expired":                             {aadsts: 50055, wantAccess: broker.AuthDenied, wantMsg: "expired"},
+		"Invalid_credentials_retry":                    {aadsts: 50126, wantAccess: broker.AuthRetry, wantMsg: "Incorrect password"},
+		"Conditional_access_blocked":                   {aadsts: 53003, wantAccess: broker.AuthDenied, wantMsg: "Conditional Access"},
+		"Interactive_auth_to_device":                   {aadsts: 16000, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
+		"Interactive_auth_denied_when_device_disabled": {aadsts: 16000, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled"},
+		"MFA_enrollment_to_device":                     {aadsts: 50072, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
+		"MFA_enrollment_alt_to_device":                 {aadsts: 50079, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
+		"Authenticator_registration_to_device":         {aadsts: 50203, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
+		"MFA_enrollment_denied_when_device_disabled":   {aadsts: 50072, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled"},
+		"MFA_required_to_device":                       {category: himmelblau.MFAErrorRequired, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA is required"},
+		"MFA_required_denied_when_device_disabled":     {category: himmelblau.MFAErrorRequired, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled"},
+		"Unhandled_AADSTS_denied":                      {aadsts: 99999, wantAccess: broker.AuthDenied, wantMsg: "AADSTS99999: simulated error. Please report this error"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {

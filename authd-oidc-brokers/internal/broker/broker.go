@@ -1871,8 +1871,15 @@ func (b *Broker) routeMFAInitError(mfaErr *himmelblau.MFAError, session *session
 	case 50057:
 		log.Noticef(context.Background(), "Login denied: user %q is disabled in %s (AADSTS50057)", session.username, b.provider.DisplayName())
 		return AuthDenied, errorMessage{Message: fmt.Sprintf("Your user account is disabled in %s, please contact your administrator.", b.provider.DisplayName())}
-	case 50072, 50079:
+	case 50072, 50079, 50203:
 		log.Noticef(context.Background(), "MFA enrollment required for user %q (AADSTS%d)", session.username, mfaErr.AADSTS)
+		if b.cfg.flows.DeviceAuth {
+			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
+			return AuthNext, errorMessage{Message: "MFA registration required. Please complete setup using Device Authentication."}
+		}
+		return AuthDenied, errorMessage{Message: "MFA registration required, but Device Authentication is disabled. Please contact your administrator."}
+	case 16000:
+		log.Noticef(context.Background(), "Interactive authentication required for user %q (AADSTS16000)", session.username)
 		if b.cfg.flows.DeviceAuth {
 			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
 			return AuthNext, errorMessage{Message: "MFA registration required. Please complete setup using Device Authentication."}
