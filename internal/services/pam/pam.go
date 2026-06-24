@@ -282,11 +282,15 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		}, nil
 	}
 
-	var uInfo types.UserInfo
-	if err := json.Unmarshal([]byte(data), &uInfo); err != nil {
+	var grantedData struct {
+		UserInfo types.UserInfo `json:"userinfo"`
+		Message  string         `json:"message,omitempty"`
+	}
+	if err := json.Unmarshal([]byte(data), &grantedData); err != nil {
 		log.Errorf(ctx, "IsAuthenticated: Could not unmarshal user data for session %q: %v", sessionID, err)
 		return nil, fmt.Errorf("user data from broker invalid: %v", err)
 	}
+	uInfo := grantedData.UserInfo
 
 	// authd uses lowercase user and group names
 	uInfo.Name = strings.ToLower(uInfo.Name)
@@ -315,9 +319,25 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		return nil, err
 	}
 
+	// IAResponse.Msg always carries a JSON {"message": ...} envelope (or an
+	// empty string when there is no message), matching the format used for
+	// non-granted responses and expected by the PAM client's dataToMsg parser.
+	// A granted login must never depend on this purely cosmetic message, so we
+	// only fail here if the broker-supplied message cannot be re-encoded, which
+	// should not happen for a valid string.
+	msg := ""
+	if grantedData.Message != "" {
+		m, err := json.Marshal(map[string]string{"message": grantedData.Message})
+		if err != nil {
+			log.Errorf(ctx, "IsAuthenticated: Could not marshal granted message for session %q: %v", sessionID, err)
+			return nil, fmt.Errorf("could not marshal granted message: %v", err)
+		}
+		msg = string(m)
+	}
+
 	return &authd.IAResponse{
 		Access: access,
-		Msg:    "",
+		Msg:    msg,
 	}, nil
 }
 
