@@ -49,6 +49,8 @@ parts:
   libhimmelblau:
     source: ./authd-oidc-brokers/third_party/libhimmelblau
     plugin: rust
+    # Force the rust plugin onto its rustup code path.
+    rust-channel: stable
     build-packages:
       - libssl-dev
     build-environment:
