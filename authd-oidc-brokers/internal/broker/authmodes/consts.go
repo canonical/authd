@@ -34,7 +34,7 @@ var (
 		Device:        "Device code flow",
 		DeviceQr:      "Device code flow",
 		NewPassword:   "Define your local password",
-		EntraPassword: "Entra ID password",
+		EntraPassword: "Entra ID password + MFA",
 		EntraMFAWait:  "Waiting for MFA approval",
 		EntraMFACode:  "Enter your MFA code",
 	}
