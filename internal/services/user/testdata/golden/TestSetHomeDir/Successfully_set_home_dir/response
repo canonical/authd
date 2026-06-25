@@ -1,0 +1,4 @@
+homedirchanged: true
+homedirmoved: false
+warnings:
+    - 'Warning: Current home directory ''/home/user1@example.com'' does not exist, not creating the new one.'

@@ -290,6 +290,32 @@ func (s Service) SetShell(ctx context.Context, req *authd.SetShellRequest) (*aut
 	}, nil
 }
 
+// SetHomeDir sets the home directory of a user.
+func (s Service) SetHomeDir(ctx context.Context, req *authd.SetHomeDirRequest) (*authd.SetHomeDirResponse, error) {
+	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
+		return nil, status.Error(codes.PermissionDenied, err.Error())
+	}
+
+	// authd uses lowercase usernames.
+	name := strings.ToLower(req.GetName())
+
+	if name == "" {
+		return nil, status.Error(codes.InvalidArgument, "no user name provided")
+	}
+
+	resp, err := s.userManager.SetHomeDir(name, req.GetHome())
+	if err != nil {
+		log.Errorf(ctx, "SetHomeDir: %v", err)
+		return nil, grpcError(err)
+	}
+
+	return &authd.SetHomeDirResponse{
+		HomeDirChanged: resp.HomeDirChanged,
+		HomeDirMoved:   resp.HomeDirMoved,
+		Warnings:       resp.Warnings,
+	}, nil
+}
+
 // DeleteUser removes the user with the given name from the authd database.
 func (s Service) DeleteUser(ctx context.Context, req *authd.DeleteUserRequest) (*authd.DeleteUserResponse, error) {
 	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
