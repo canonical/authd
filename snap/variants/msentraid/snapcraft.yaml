@@ -49,19 +49,31 @@ parts:
   libhimmelblau:
     source: ./authd-oidc-brokers/third_party/libhimmelblau
     plugin: rust
+    # Force the rust plugin onto its rustup code path.
+    rust-channel: stable
     build-packages:
       - libssl-dev
+    build-environment:
+      # Keep the compiled target/ outside the part's build tree so it survives
+      # snapcraft re-pulling the part. The home directory persists across builds
+      # in the same instance, so this avoids rebuilding libhimmelblau from
+      # scratch. (Only CARGO_TARGET_DIR is moved: CARGO_HOME stays at its
+      # default /root/.cargo, which already persists across builds).
+      - CARGO_TARGET_DIR: ${HOME}/.cache/authd-oidc-brokers/cargo-target
     override-pull: |
       snapcraftctl pull
       cp "$SNAPCRAFT_PROJECT_DIR/authd-oidc-brokers/rust-toolchain.toml" "$SNAPCRAFT_PART_SRC/"
     override-build: |
-      cargo install cargo-c
+      # cargo-c is only needed to provide 'cargo cbuild'. Skip reinstalling it
+      # when it is already on PATH (e.g. from a previous build in a reused build
+      # instance) to avoid a crates.io index update and rebuild every time.
+      command -v cargo-cbuild >/dev/null || cargo install cargo-c
       cargo cbuild --release --lib --features=broker,changepassword,on_behalf_of,set_timeout
       echo "Installing libhimmelblau.so and himmelblau.h"
       TARGET_TRIPLE=$(rustc -vV | awk '/host:/ {print $2}')
-      install -D target/${TARGET_TRIPLE}/release/libhimmelblau.so ${CRAFT_PART_INSTALL}/lib/libhimmelblau.so.0
+      install -D ${CARGO_TARGET_DIR}/${TARGET_TRIPLE}/release/libhimmelblau.so ${CRAFT_PART_INSTALL}/lib/libhimmelblau.so.0
       ln -s libhimmelblau.so.0 ${CRAFT_PART_INSTALL}/lib/libhimmelblau.so
-      install -D target/${TARGET_TRIPLE}/release/himmelblau.h ${CRAFT_PART_INSTALL}/include/himmelblau.h
+      install -D ${CARGO_TARGET_DIR}/${TARGET_TRIPLE}/release/himmelblau.h ${CRAFT_PART_INSTALL}/include/himmelblau.h
     prime:
       - -include/**
       - -lib/**.so
