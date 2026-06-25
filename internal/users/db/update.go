@@ -390,3 +390,20 @@ func (m *Manager) SetShell(username, shell string) error {
 	}
 	return nil
 }
+
+// SetHomeDir updates the home directory of a user.
+func (m *Manager) SetHomeDir(username, dir string) error {
+	query := `UPDATE users SET dir = ? WHERE name = ?`
+	res, err := m.db.Exec(query, dir, username)
+	if err != nil {
+		return fmt.Errorf("failed to update home directory for user: %w", err)
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return NewUserNotFoundError(username)
+	}
+	return nil
+}

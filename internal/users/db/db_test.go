@@ -1052,6 +1052,51 @@ func TestSetShell(t *testing.T) {
 	}
 }
 
+func TestSetHomeDir(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		nonExistentUser bool
+		closeDB         bool
+
+		wantErr bool
+	}{
+		"Update_existing_user_home_dir": {},
+
+		"Error_on_nonexistent_user": {nonExistentUser: true, wantErr: true},
+		"Error_when_db_is_closed":   {closeDB: true, wantErr: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			m := initDB(t, "one_user_and_group")
+
+			username := "user1"
+			if tc.nonExistentUser {
+				username = "nonexistent"
+			}
+
+			if tc.closeDB {
+				require.NoError(t, m.Close(), "Setup: could not close database")
+			}
+
+			err := m.SetHomeDir(username, "/home/new-home")
+			if tc.wantErr {
+				require.Error(t, err, "SetHomeDir should return an error for case %q", name)
+				return
+			}
+			require.NoError(t, err, "SetHomeDir should not return an error for case %q", name)
+
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(m)
+			require.NoError(t, err)
+
+			golden.CheckOrUpdate(t, dbContent)
+		})
+	}
+}
+
 func TestRemoveDb(t *testing.T) {
 	t.Parallel()
 
