@@ -76,3 +76,19 @@ Check That Remote User Can Run Sudo Commands
 
 Check that GNOME keyring is unlocked
     SSH.Execute As Current User    echo '' | secret-tool store --label=test test key
+
+
+Store Secret In GNOME Keyring
+    [Arguments]    ${secret}
+    # Storing succeeds only if the keyring is unlocked, so this both seeds a
+    # known secret and asserts the keyring is currently unlocked.
+    SSH.Execute As Current User    printf '%s' '${secret}' | secret-tool store --label=e2e-test e2e-test keyring-persistence
+
+
+Check Secret In GNOME Keyring
+    [Arguments]    ${expected_secret}
+    # Looking up the secret succeeds only if the *same* keyring that stored it is
+    # unlocked. If the password change re-created the keyring instead of re-keying
+    # it, the secret is gone and this fails.
+    ${secret} =    SSH.Execute As Current User    secret-tool lookup e2e-test keyring-persistence
+    Should Be Equal    ${secret}    ${expected_secret}
