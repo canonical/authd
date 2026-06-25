@@ -1,7 +1,7 @@
 .\" Generated from authctl man page generator
 .\" Do not edit manually
 .nh
-.TH "AUTHCTL" "1" "2026-05-26" "authd"
+.TH "AUTHCTL" "1" "2026-06-10" "authd"
 .SH NAME
 authctl \- Manage authd users and groups
 .SH SYNOPSIS
@@ -34,6 +34,19 @@ Files outside the user's home directory are not updated and must be changed manu
 \fBuser\fP \fBset-shell\fP \fI<name>\fP \fI<shell>\fP
 .RS 4
 Set the login shell for a user
+.RE
+.PP
+\fBuser\fP \fBset-home\fP \fI<user>\fP \fI<path>\fP
+.RS 4
+Set the home directory of a user managed by authd to the specified path.
+.sp
+The path must be absolute. The command must be run as root.
+.sp
+If the user's current home directory exists, its contents are moved to the new location. The move is performed with rename(2), so the new path must be on the same filesystem as the current home directory; otherwise the command fails and the directory must be moved manually.
+.sp
+The command fails without making any change if the new path already exists. If the user's current home directory does not exist, only the database record is updated and no directory is created.
+.sp
+The command refuses to run while the user has active processes.
 .RE
 .PP
 \fBuser\fP \fBdelete\fP \fI<user>\fP \fB[flags]\fP

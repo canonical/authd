@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"syscall"
 	"testing"
 
 	"github.com/canonical/authd/internal/fileutils"
@@ -324,6 +325,68 @@ func TestSetGroupID(t *testing.T) {
 			golden.CheckOrUpdateYAML(t, resp, golden.WithPath("response"))
 		})
 	}
+}
+
+// TestSetHomeDirAcrossFilesystems verifies that moving a home directory across
+// filesystems is reported as an error and leaves the user record and the
+// original directory untouched. An unprivileged user can't mount a tmpfs to
+// stage two distinct filesystems, so we run inside bubblewrap, where /tmp is a
+// tmpfs distinct from the bind-mounted host filesystem the working directory
+// lives on. Renaming between them produces a genuine EXDEV, exercising the real
+// syscall path rather than a simulated failure.
+func TestSetHomeDirAcrossFilesystems(t *testing.T) {
+	// Not parallel: SetHomeDir acquires the user-management write lock, which
+	// the test lock override reports as an error if already held.
+
+	if !testutils.RunningInBubblewrap() {
+		testutils.RunTestInBubbleWrap(t)
+		return
+	}
+
+	dbDir := t.TempDir()
+	err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_and_group.db.yaml"), dbDir)
+	require.NoError(t, err, "Setup: could not create database from testdata")
+
+	m := newManagerForTests(t, dbDir)
+
+	const username = "user1@example.com"
+
+	// oldHome lives under the working directory, which is bind-mounted from the
+	// host filesystem. newHome lives under /tmp, which bubblewrap mounts as a
+	// separate tmpfs, so the rename between them fails with EXDEV.
+	cwd, err := os.Getwd()
+	require.NoError(t, err, "Setup: could not get current working directory")
+	baseDir, err := os.MkdirTemp(cwd, "authd-test-xdev-*")
+	require.NoError(t, err, "Setup: could not create base directory on host filesystem")
+	t.Cleanup(func() { _ = os.RemoveAll(baseDir) })
+
+	oldHome := filepath.Join(baseDir, "old")
+	require.NoError(t, os.MkdirAll(oldHome, 0o700), "Setup: could not create old home directory")
+	require.NoError(t, os.WriteFile(filepath.Join(oldHome, "marker"), []byte("data"), 0o600), "Setup: could not create marker file")
+	setHome(t, m, username, oldHome)
+
+	newHome := filepath.Join(os.TempDir(), "authd-test-xdev-new")
+
+	// Sanity check that the two paths really are on different filesystems, so a
+	// passing test can't be a false negative from them sharing one.
+	var oldStat, newParentStat syscall.Stat_t
+	require.NoError(t, syscall.Stat(oldHome, &oldStat))
+	require.NoError(t, syscall.Stat(os.TempDir(), &newParentStat))
+	require.NotEqual(t, oldStat.Dev, newParentStat.Dev,
+		"Setup: old and new home directories must be on different filesystems to exercise EXDEV")
+
+	_, err = m.SetHomeDir(username, newHome)
+	require.Error(t, err, "SetHomeDir should fail when moving across filesystems")
+	// The EXDEV is deliberately not wrapped: SetHomeDir rewrites it into
+	// actionable guidance, so match on that message instead of errors.Is.
+	require.Contains(t, err.Error(), "EXDEV", "SetHomeDir error should report the cross-filesystem failure")
+
+	// On error, the database record and the original directory must be untouched.
+	u, err := m.UserByName(username)
+	require.NoError(t, err, "User should still exist")
+	require.Equal(t, oldHome, u.Dir, "Home directory in the database should be unchanged on error")
+	require.DirExists(t, oldHome, "Old home directory should still exist")
+	require.NoDirExists(t, newHome, "New home directory should not have been created")
 }
 
 // createTemporaryHome creates a temporary home directory for the given user.

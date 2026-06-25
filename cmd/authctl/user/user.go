@@ -18,5 +18,6 @@ func init() {
 	UserCmd.AddCommand(unlockCmd)
 	UserCmd.AddCommand(setUIDCmd)
 	UserCmd.AddCommand(setShellCmd)
+	UserCmd.AddCommand(setHomeDirCmd)
 	UserCmd.AddCommand(deleteCmd)
 }

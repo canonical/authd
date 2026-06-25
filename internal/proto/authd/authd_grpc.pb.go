@@ -395,6 +395,7 @@ const (
 	UserService_SetUserID_FullMethodName      = "/authd.UserService/SetUserID"
 	UserService_SetGroupID_FullMethodName     = "/authd.UserService/SetGroupID"
 	UserService_SetShell_FullMethodName       = "/authd.UserService/SetShell"
+	UserService_SetHomeDir_FullMethodName     = "/authd.UserService/SetHomeDir"
 	UserService_DeleteUser_FullMethodName     = "/authd.UserService/DeleteUser"
 	UserService_DeleteGroup_FullMethodName    = "/authd.UserService/DeleteGroup"
 	UserService_GetGroupByName_FullMethodName = "/authd.UserService/GetGroupByName"
@@ -414,6 +415,7 @@ type UserServiceClient interface {
 	SetUserID(ctx context.Context, in *SetUserIDRequest, opts ...grpc.CallOption) (*SetUserIDResponse, error)
 	SetGroupID(ctx context.Context, in *SetGroupIDRequest, opts ...grpc.CallOption) (*SetGroupIDResponse, error)
 	SetShell(ctx context.Context, in *SetShellRequest, opts ...grpc.CallOption) (*SetShellResponse, error)
+	SetHomeDir(ctx context.Context, in *SetHomeDirRequest, opts ...grpc.CallOption) (*SetHomeDirResponse, error)
 	DeleteUser(ctx context.Context, in *DeleteUserRequest, opts ...grpc.CallOption) (*DeleteUserResponse, error)
 	DeleteGroup(ctx context.Context, in *DeleteGroupRequest, opts ...grpc.CallOption) (*Empty, error)
 	GetGroupByName(ctx context.Context, in *GetGroupByNameRequest, opts ...grpc.CallOption) (*Group, error)
@@ -509,6 +511,16 @@ func (c *userServiceClient) SetShell(ctx context.Context, in *SetShellRequest, o
 	return out, nil
 }
 
+func (c *userServiceClient) SetHomeDir(ctx context.Context, in *SetHomeDirRequest, opts ...grpc.CallOption) (*SetHomeDirResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetHomeDirResponse)
+	err := c.cc.Invoke(ctx, UserService_SetHomeDir_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *userServiceClient) DeleteUser(ctx context.Context, in *DeleteUserRequest, opts ...grpc.CallOption) (*DeleteUserResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeleteUserResponse)
@@ -571,6 +583,7 @@ type UserServiceServer interface {
 	SetUserID(context.Context, *SetUserIDRequest) (*SetUserIDResponse, error)
 	SetGroupID(context.Context, *SetGroupIDRequest) (*SetGroupIDResponse, error)
 	SetShell(context.Context, *SetShellRequest) (*SetShellResponse, error)
+	SetHomeDir(context.Context, *SetHomeDirRequest) (*SetHomeDirResponse, error)
 	DeleteUser(context.Context, *DeleteUserRequest) (*DeleteUserResponse, error)
 	DeleteGroup(context.Context, *DeleteGroupRequest) (*Empty, error)
 	GetGroupByName(context.Context, *GetGroupByNameRequest) (*Group, error)
@@ -609,6 +622,9 @@ func (UnimplementedUserServiceServer) SetGroupID(context.Context, *SetGroupIDReq
 }
 func (UnimplementedUserServiceServer) SetShell(context.Context, *SetShellRequest) (*SetShellResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetShell not implemented")
+}
+func (UnimplementedUserServiceServer) SetHomeDir(context.Context, *SetHomeDirRequest) (*SetHomeDirResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetHomeDir not implemented")
 }
 func (UnimplementedUserServiceServer) DeleteUser(context.Context, *DeleteUserRequest) (*DeleteUserResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteUser not implemented")
@@ -790,6 +806,24 @@ func _UserService_SetShell_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_SetHomeDir_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetHomeDirRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).SetHomeDir(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_SetHomeDir_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).SetHomeDir(ctx, req.(*SetHomeDirRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _UserService_DeleteUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DeleteUserRequest)
 	if err := dec(in); err != nil {
@@ -918,6 +952,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetShell",
 			Handler:    _UserService_SetShell_Handler,
+		},
+		{
+			MethodName: "SetHomeDir",
+			Handler:    _UserService_SetHomeDir_Handler,
 		},
 		{
 			MethodName: "DeleteUser",
