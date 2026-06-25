@@ -658,13 +658,11 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_authEvent, // retry
 				gdm.EventType_startAuthentication,
 			},
-			// One authModeSelected/uiLayoutReceived per genuine selection (the
-			// three password-stage cycles in wantGdmRequests). The GDM echo of
-			// each selection must not add extra cycles.
-			wantGdmEventsCount: map[gdm.EventType]int{
-				gdm.EventType_authModeSelected: 3,
-				gdm.EventType_uiLayoutReceived: 3,
-			},
+			// The invariant that the GDM echo of a selection must not add an
+			// extra selection cycle is asserted deterministically in
+			// gdmmodel_authmode_echo_test.go. Asserting an exact event count
+			// here is racy because the test conversation handler delivers the
+			// echo and stage-change events concurrently with the model's polls.
 			wantStage: proto.Stage_challenge,
 			wantGdmAuthRes: []*authd.IAResponse{
 				{
@@ -1244,15 +1242,11 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_startAuthentication,
 				gdm.EventType_authEvent,
 			},
-			// Each genuine selection of the auth mode (the initial one and the
-			// re-selection after navigating back to authModeSelection) must
-			// produce exactly one selection cycle: the GDM echo of the
-			// selection must not add a third one.
-			wantGdmEventsCount: map[gdm.EventType]int{
-				gdm.EventType_authModeSelected:    2,
-				gdm.EventType_uiLayoutReceived:    2,
-				gdm.EventType_startAuthentication: 2,
-			},
+			// The invariant that the GDM echo of a selection must not add an
+			// extra selection cycle is asserted deterministically in
+			// gdmmodel_authmode_echo_test.go. Asserting an exact event count
+			// here is racy because the test conversation handler delivers the
+			// echo and stage-change events concurrently with the model's polls.
 			wantStage: proto.Stage_challenge,
 			wantGdmAuthRes: []*authd.IAResponse{
 				{Access: auth.Granted},
