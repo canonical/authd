@@ -105,6 +105,7 @@ func TestGdmModel(t *testing.T) {
 		wantPAMReturnValue PamReturnValue
 		wantGdmRequests    []gdm.RequestType
 		wantGdmEvents      []gdm.EventType
+		wantGdmEventsCount map[gdm.EventType]int
 		wantGdmAuthRes     []*authd.IAResponse
 		wantNoGdmRequests  []gdm.RequestType
 		wantNoGdmEvents    []gdm.EventType
@@ -706,10 +707,15 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_authModesReceived,
 				gdm.EventType_authModeSelected,
 				gdm.EventType_uiLayoutReceived,
-				gdm.EventType_authModeSelected,
-				gdm.EventType_uiLayoutReceived,
 				gdm.EventType_authEvent, // retry
 				gdm.EventType_startAuthentication,
+			},
+			// One authModeSelected/uiLayoutReceived per genuine selection (the
+			// three password-stage cycles in wantGdmRequests). The GDM echo of
+			// each selection must not add extra cycles.
+			wantGdmEventsCount: map[gdm.EventType]int{
+				gdm.EventType_authModeSelected: 3,
+				gdm.EventType_uiLayoutReceived: 3,
 			},
 			wantStage: proto.Stage_challenge,
 			wantGdmAuthRes: []*authd.IAResponse{
@@ -1289,6 +1295,15 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_uiLayoutReceived,
 				gdm.EventType_startAuthentication,
 				gdm.EventType_authEvent,
+			},
+			// Each genuine selection of the auth mode (the initial one and the
+			// re-selection after navigating back to authModeSelection) must
+			// produce exactly one selection cycle: the GDM echo of the
+			// selection must not add a third one.
+			wantGdmEventsCount: map[gdm.EventType]int{
+				gdm.EventType_authModeSelected:    2,
+				gdm.EventType_uiLayoutReceived:    2,
+				gdm.EventType_startAuthentication: 2,
 			},
 			wantStage: proto.Stage_challenge,
 			wantGdmAuthRes: []*authd.IAResponse{
@@ -2741,6 +2756,17 @@ func TestGdmModel(t *testing.T) {
 			require.True(t, isSupersetOf(receivedEventTypes, tc.wantGdmEvents),
 				"Required events have not been received: %v vs %v",
 				stringifySlice(tc.wantGdmEvents), stringifySlice(receivedEventTypes))
+
+			for evType, wantN := range tc.wantGdmEventsCount {
+				gotN := 0
+				for _, e := range receivedEventTypes {
+					if e == evType {
+						gotN++
+					}
+				}
+				require.Equal(t, wantN, gotN,
+					"GDM event %q received %d times, want %d", evType, gotN, wantN)
+			}
 
 			require.Empty(t, appState.wantMessages, "Wanted messages have not all been processed")
 
