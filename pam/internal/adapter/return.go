@@ -21,7 +21,12 @@ type PamReturnError interface {
 type PamSuccess struct {
 	BrokerID string
 	AuthTok  string
-	msg      string
+	// OldAuthTok is the previous local password, set only when the user changed
+	// their password (chauthtok) and entered the old one as part of the flow. It
+	// lets PAM_OLDAUTHTOK be set so modules like pam_gnome_keyring can re-key an
+	// existing secret store instead of orphaning it.
+	OldAuthTok string
+	msg        string
 }
 
 // Message returns the message that should be sent to pam as info message.

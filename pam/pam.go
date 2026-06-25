@@ -53,6 +53,10 @@ const (
 // files.
 var reportAuthtok = func(authtok string) {}
 
+// reportOldAuthtok is called after PAM_OLDAUTHTOK is set. Like reportAuthtok it
+// is a no-op by default and overridden by the pam_debug build.
+var reportOldAuthtok = func(oldAuthtok string) {}
+
 var supportedArgs = []string{
 	"debug",               // When this is set to "true", then debug logging is enabled.
 	"logfile",             // The path of the file that will be used for logging.
@@ -348,6 +352,12 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 				return err
 			}
 			reportAuthtok(returnValue.AuthTok)
+		}
+		if returnValue.OldAuthTok != "" {
+			if err := mTx.SetItem(pam.Oldauthtok, returnValue.OldAuthTok); err != nil {
+				return err
+			}
+			reportOldAuthtok(returnValue.OldAuthTok)
 		}
 		return nil
 
