@@ -174,10 +174,9 @@ func (p *mockMFATimeoutProvider) AcquireTokenByMFAFlow(_ context.Context, _, _ s
 
 // mockMFAWrongCodeThenSuccessProvider simulates an incorrect or expired
 // one-time code on the first code submission followed by a correct code on the
-// second. libhimmelblau reports a wrong code as a generic GeneralFailure with an
-// "AuthResponse indicates failure: ..." message (the code-submission path drops
-// the server's retry flag), while leaving the flow intact. newMFAError
-// promotes that to MFAErrorRetryableCode, which is what production consumers see.
+// second. libhimmelblau reports a wrong code as an MFAInvalidCode error (which
+// authd maps to MFAErrorRetryableCode via the C enum code), while leaving the
+// flow intact. This is what production consumers see.
 type mockMFAWrongCodeThenSuccessProvider struct {
 	*mockEntraPasswordProvider
 	codeAttempts int

@@ -49,9 +49,12 @@ import (
 // not 24 — 24 is AUTH_CODE_RECEIVED). These are package vars (not a cgo import in
 // the test) so the mapping can be unit-tested; test files cannot import cgo.
 var (
-	codeMFAPollContinue  = uint32(C.MFA_POLL_CONTINUE)
-	codeMFARequired      = uint32(C.MFA_REQUIRED)
-	codeAuthCodeReceived = uint32(C.AUTH_CODE_RECEIVED)
+	codeMFAPollContinue     = uint32(C.MFA_POLL_CONTINUE)
+	codeMFARequired         = uint32(C.MFA_REQUIRED)
+	codeAuthCodeReceived    = uint32(C.AUTH_CODE_RECEIVED)
+	codeAuthorizationDenied = uint32(C.AUTHORIZATION_DENIED)
+	codeMFAInvalidCode      = uint32(C.MFA_INVALID_CODE)
+	codeMFADAGFallbackDisab = uint32(C.MFA_DAG_FALLBACK_DISABLED)
 )
 
 // mfaErrorCategory maps a libhimmelblau MSAL error code into an
@@ -62,6 +65,12 @@ func mfaErrorCategory(code uint32) MFAErrorCategory {
 	case codeMFAPollContinue:
 		return MFAErrorPollContinue
 	case codeMFARequired:
+		return MFAErrorRequired
+	case codeAuthorizationDenied:
+		return MFAErrorDenied
+	case codeMFAInvalidCode:
+		return MFAErrorRetryableCode
+	case codeMFADAGFallbackDisab:
 		return MFAErrorRequired
 	}
 	return MFAErrorOther
@@ -504,41 +513,6 @@ func newMFAError(msalErr *C.MSAL_ERROR) *MFAError {
 	defer C.error_free(msalErr)
 	msg := C.GoString(msalErr.msg)
 	category := mfaErrorCategory(msalErr.code)
-	// libhimmelblau surfaces user-denied MFA (authorization_state==1) as a
-	// GENERAL_FAILURE with the message "Authorization denied" rather than a
-	// dedicated C error code. Promote that to MFAErrorDenied so the broker's
-	// denial-specific branch is reachable.
-	if category == MFAErrorOther && strings.EqualFold(msg, "authorization denied") {
-		category = MFAErrorDenied
-	}
-	// libhimmelblau's code-submission branch of acquire_token_by_mfa_flow
-	// discards the server's "retry" flag and AADSTS error code for an incorrect
-	// or expired one-time code, returning a generic GeneralFailure with the
-	// message "AuthResponse indicates failure: ...". Its polling branch, by
-	// contrast, surfaces a structured MFA_POLL_CONTINUE. Promote the code-path
-	// failure to MFAErrorRetryableCode so consumers can re-prompt for the code
-	// without depending on libhimmelblau's error text themselves.
-	//
-	// The robust fix lives upstream: make the EndAuth code-submission branch
-	// honor auth_response.retry and return MFA_POLL_CONTINUE (mirroring the
-	// polling branch), after which this promotion would become unnecessary. That
-	// change was deliberately NOT made because acquire_token_by_mfa_flow is a
-	// PUBLIC API shared with other consumers (e.g. himmelblau-idm) that do not
-	// expect MFA_POLL_CONTINUE on the code path. The matched text is unique to
-	// that branch (the poll branch uses "did not indicate success") and the
-	// libhimmelblau submodule is pinned, so this match is safe — keep it in sync
-	// if the submodule is bumped. See third_party/libhimmelblau/src/auth.rs.
-	if category == MFAErrorOther && strings.Contains(msg, "AuthResponse indicates failure") {
-		category = MFAErrorRetryableCode
-	}
-	// When NoDAGFallback is active, libhimmelblau returns this sentinel instead
-	// of silently converting an MFA init failure into a DAG continuation.
-	// Treat it as MFAErrorRequired so the broker redirects to Device Authentication.
-	// The message is generated in third_party/libhimmelblau/src/auth.rs (dag_fallback!
-	// macro, NoDAGFallback branch). Keep this string in sync if the submodule is bumped.
-	if category == MFAErrorOther && msg == "MFA failed and DAG fallback is disabled" {
-		category = MFAErrorRequired
-	}
 	return &MFAError{
 		Category: category,
 		AADSTS:   int(msalErr.aadsts_code),
