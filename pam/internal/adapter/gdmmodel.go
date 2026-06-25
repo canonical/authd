@@ -34,6 +34,14 @@ type gdmModel struct {
 	// further conversation with GDM should happen.
 	conversationsStopped  bool
 	stoppingConversations bool
+
+	// pendingEchoAuthModeID is the auth mode we last told GDM to select and
+	// whose echo we still expect back. GDM echoes our selection in its next
+	// poll; acting on that echo would issue a second SelectAuthenticationMode
+	// RPC (and, for device auth, mint a second device code that orphans the
+	// in-flight poll). It is consumed (cleared) by the first matching echo, so
+	// a later genuine re-selection of the same mode is still honored.
+	pendingEchoAuthModeID string
 }
 
 type gdmPollResponse struct {
@@ -111,7 +119,7 @@ func (m gdmModel) pollGdm() tea.Cmd {
 	}
 }
 
-func (m gdmModel) handlePollResponse(gdmPollResults []*gdm.EventData) tea.Cmd {
+func (m *gdmModel) handlePollResponse(gdmPollResults []*gdm.EventData) tea.Cmd {
 	if log.IsLevelEnabled(log.DebugLevel) {
 		for _, result := range gdmPollResults {
 			log.Debugf(context.TODO(), "GDM poll response: %v", result.SafeString())
@@ -140,6 +148,19 @@ func (m gdmModel) handlePollResponse(gdmPollResults []*gdm.EventData) tea.Cmd {
 				return sendEvent(pamError{
 					status: pam.ErrSystem, msg: "missing auth mode id",
 				})
+			}
+			// GDM echoes back the auth mode we just told it to select. Ignore
+			// that one echo to avoid issuing a duplicate SelectAuthenticationMode
+			// RPC (which, for device auth, mints a second device code and
+			// orphans the in-flight poll). This is a one-shot per selection:
+			// a later genuine re-selection of the same mode (the user picking
+			// it again) is honored because the pending echo has been consumed.
+			if res.AuthModeSelected.AuthModeId == m.pendingEchoAuthModeID {
+				log.Debugf(context.TODO(),
+					"Ignoring GDM auth mode selection echo for %q",
+					res.AuthModeSelected.AuthModeId)
+				m.pendingEchoAuthModeID = ""
+				break
 			}
 			commands = append(commands, selectAuthMode(res.AuthModeSelected.AuthModeId))
 
@@ -211,7 +232,8 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case gdmPollResponse:
-		return m, m.handlePollResponse(msg.pollResponse)
+		cmd := m.handlePollResponse(msg.pollResponse)
+		return m, cmd
 
 	case gdmPollDone:
 		return m, tea.Sequence(
@@ -219,6 +241,10 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 			m.pollGdm())
 
 	case StageChanged:
+		// A genuine (re-)selection always follows a stage change into the
+		// authModeSelection stage, so any echo we were still expecting from a
+		// previous selection is no longer relevant once the stage changes.
+		m.pendingEchoAuthModeID = ""
 		return m, m.changeStage(msg.Stage)
 
 	case userSelected:
@@ -242,6 +268,7 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 		})
 
 	case AuthModeSelected:
+		m.pendingEchoAuthModeID = msg.ID
 		return m, m.emitEvent(&gdm.EventData_AuthModeSelected{
 			AuthModeSelected: &gdm.Events_AuthModeSelected{AuthModeId: msg.ID},
 		})
