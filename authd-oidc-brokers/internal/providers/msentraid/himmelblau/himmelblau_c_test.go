@@ -34,6 +34,12 @@ func TestMFAErrorCategoryMapping(t *testing.T) {
 		"MFA_POLL_CONTINUE must map to MFAErrorPollContinue")
 	require.Equal(t, MFAErrorRequired, mfaErrorCategory(codeMFARequired),
 		"MFA_REQUIRED must map to MFAErrorRequired")
+	require.Equal(t, MFAErrorDenied, mfaErrorCategory(codeAuthorizationDenied),
+		"AUTHORIZATION_DENIED must map to MFAErrorDenied")
+	require.Equal(t, MFAErrorRetryableCode, mfaErrorCategory(codeMFAInvalidCode),
+		"MFA_INVALID_CODE must map to MFAErrorRetryableCode")
+	require.Equal(t, MFAErrorRequired, mfaErrorCategory(codeMFADAGFallbackDisab),
+		"MFA_DAG_FALLBACK_DISABLED must map to MFAErrorRequired")
 
 	// The original bug hardcoded mfaRequiredCode=24, which is actually
 	// AUTH_CODE_RECEIVED once the changepassword feature shifts the enum. That
@@ -52,4 +58,7 @@ func TestMFAErrorCategoryMapping(t *testing.T) {
 	require.Equal(t, uint32(14), codeMFAPollContinue, "MFA_POLL_CONTINUE is expected to be 14")
 	require.Equal(t, uint32(24), codeAuthCodeReceived, "AUTH_CODE_RECEIVED is expected to be 24")
 	require.Equal(t, uint32(25), codeMFARequired, "MFA_REQUIRED is expected to be 25 (changepassword enabled)")
+	require.Equal(t, uint32(26), codeAuthorizationDenied, "AUTHORIZATION_DENIED is expected to be 26")
+	require.Equal(t, uint32(27), codeMFAInvalidCode, "MFA_INVALID_CODE is expected to be 27")
+	require.Equal(t, uint32(28), codeMFADAGFallbackDisab, "MFA_DAG_FALLBACK_DISABLED is expected to be 28")
 }
