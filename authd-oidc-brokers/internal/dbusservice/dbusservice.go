@@ -7,6 +7,7 @@ import (
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
+	"github.com/canonical/authd/log"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 )
@@ -93,10 +94,11 @@ func New(_ context.Context, brokerConfig broker.Config) (*Service, error) {
 
 	var introspectableBody string
 	for i, iface := range interfaceNames {
+		log.Debugf(context.Background(), "Initializing broker for interface %s", iface)
 		b, err := broker.New(brokerConfig, uint(i)+1) // There's no 0 version, so we start from 1.
 		if err != nil {
 			service.disconnect()
-			return nil, fmt.Errorf("error initializing broker for %q: %v", iface, err)
+			return nil, err
 		}
 
 		s := &Interface{
