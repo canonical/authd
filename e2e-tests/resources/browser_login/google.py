@@ -45,6 +45,11 @@ class WrongTOTPCodeError(Exception):
     pass
 
 
+def _matches_phrase(matches: list[str], *phrases: str) -> bool:
+    lowered = [match.lower() for match in matches]
+    return any(phrase.lower() in match for match in lowered for phrase in phrases)
+
+
 class GoogleLoginFlow:
     """Drives the browser through the Google device-code OAuth flow.
 
@@ -133,27 +138,27 @@ class GoogleLoginFlow:
 
         Returns True when the success page has been reached.
         """
-        if _SUCCESS in matches:
+        if _matches_phrase(matches, _SUCCESS):
             self._handle_success_page()
             return True
 
         # We check the error cases first, because the patterns of the other
         # pages also match in the error cases.
-        if _WRONG_TOTP in matches or _WRONG_NUMBER_OF_DIGITS in matches:
+        if _matches_phrase(matches, _WRONG_TOTP, _WRONG_NUMBER_OF_DIGITS):
             raise WrongTOTPCodeError("TOTP code was rejected")
-        if _EMAIL_NOT_FOUND in matches or _EMAIL_INVALID in matches:
+        if _matches_phrase(matches, "find your google account", _EMAIL_INVALID):
             self._handle_wrong_email()
-        elif _WRONG_PASSWORD in matches:
+        elif _matches_phrase(matches, _WRONG_PASSWORD):
             self._handle_wrong_password()
-        elif _SIGN_IN in matches:
+        elif _matches_phrase(matches, _SIGN_IN):
             self._handle_sign_in_page()
-        elif _ENTER_PASSWORD in matches:
+        elif _matches_phrase(matches, _ENTER_PASSWORD):
             self._handle_enter_password_page()
-        elif _TWO_STEP in matches or _VERIFY_YOU in matches:
+        elif _matches_phrase(matches, _TWO_STEP, "verify it", "verification code"):
             self._handle_totp_page()
-        elif _CHOOSE_ACCOUNT in matches:
+        elif _matches_phrase(matches, _CHOOSE_ACCOUNT):
             self._handle_choose_account_page()
-        elif _SIGNING_BACK_IN in matches:
+        elif _matches_phrase(matches, "signing back in"):
             self._handle_signing_back_in_page()
         else:
             raise RuntimeError(f"Unexpected page with patterns: {matches}")
