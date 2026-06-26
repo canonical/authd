@@ -31,6 +31,14 @@ export default {
       return new Response("Not found", { status: 404 });
     }
 
+    // When a directory holds nothing but a single subdirectory, there's no
+    // real choice to make, so redirect straight into it instead of showing a
+    // dead-end listing.
+    const uniquePrefixes = [...new Set(delimitedPrefixes)];
+    if (wantsDirectory && !objects.length && uniquePrefixes.length === 1) {
+      return Response.redirect(new URL(`/${uniquePrefixes[0]}`, url), 302);
+    }
+
     // Calculate parent path for '..' link
     let parent = null;
     if (prefix) {
@@ -41,7 +49,7 @@ export default {
 
     // Show a 'log' shortcut only on directories that actually contain a
     // log.html, so it doesn't appear on intermediate dirs where it 404s.
-    const sortedPrefixes = [...new Set(delimitedPrefixes)].sort();
+    const sortedPrefixes = [...uniquePrefixes].sort();
     const hasLog = await Promise.all(
       sortedPrefixes.map(p => env.BUCKET.head(`${p}log.html`).then(o => o !== null))
     );
