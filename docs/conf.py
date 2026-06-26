@@ -29,6 +29,14 @@ author = "Canonical Ltd."
 
 version = os.environ.get('READTHEDOCS_VERSION', 'local')
 
+# Register the stable/edge build variant as a Sphinx tag so that
+# {only} directives can be used for conditional rendering
+
+if version == "edge-docs":
+    tags.add("edge")
+else:
+    tags.add("stable")
+
 # Sidebar documentation title; best kept reasonably short
 #
 # TODO: To include a version number, add it here (hardcoded or automated).
