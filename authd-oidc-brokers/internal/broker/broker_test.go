@@ -2151,6 +2151,208 @@ func TestDeleteUserDoesNotRemoveMismatchedSymlinkTarget(t *testing.T) {
 	})
 }
 
+// runDeviceAuthAndNewPassword drives a full online device-auth followed by the
+// newpassword step for the given session, the same two IsAuthenticated calls the
+// PAM flow performs. It returns the access result of each call.
+func runDeviceAuthAndNewPassword(t *testing.T, b *broker.Broker, sessionID, key, newPassword string) (deviceAuthAccess, newPasswordAccess string) {
+	t.Helper()
+
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+	deviceAuthAccess, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err, "Device auth IsAuthenticated should not error")
+
+	updateAuthModes(t, b, sessionID, authmodes.NewPassword)
+	secret := encryptSecret(t, newPassword, key)
+	newPasswordData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, secret)
+	newPasswordAccess, _, err = b.IsAuthenticated(sessionID, newPasswordData)
+	require.NoError(t, err, "New password IsAuthenticated should not error")
+
+	return deviceAuthAccess, newPasswordAccess
+}
+
+// TestDeviceAuthRedirectsToExistingProviderIDDir covers the case where the broker is
+// updated but authd is not (so NewSession receives no provider ID) and the provider
+// ID-keyed cache directory already exists from a previous login, but the current
+// username path does not yet resolve to it. This is what an email change at the IdP
+// looks like to the broker: it only sees the current username plus the provider ID it
+// learns online. The provider ID is learned during the online device auth, so the
+// redirect to the existing directory must happen there, before device registration and
+// the new password are written. The session must end up using the existing provider ID
+// directory (preserving the cached token, including any device registration data), with
+// a compatibility symlink left at the username path.
+//
+// The mock provider's live ID token is fixed to email "test-user@email.com" and sub
+// "test-user-id", and VerifyUsername requires the session username to match that email,
+// so the session uses that username; the pre-existing provider ID directory standing in
+// for the prior login is what exercises the redirect.
+func TestDeviceAuthRedirectsToExistingProviderIDDir(t *testing.T) {
+	t.Parallel()
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		issuerURL:             defaultIssuerURL,
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+	})
+
+	const (
+		username   = "test-user@email.com"
+		providerID = "test-user-id"
+	)
+	providerIDDir, err := b.UserDataDir(providerID)
+	require.NoError(t, err, "Setup: deriving the provider ID data dir should not fail")
+	usernameDir, err := b.UserDataDir(username)
+	require.NoError(t, err, "Setup: deriving the username data dir should not fail")
+
+	// Simulate the cache left behind by the previous login: the provider ID directory
+	// already exists and holds a cached token.
+	require.NoError(t, os.MkdirAll(providerIDDir, 0700), "Setup: creating the existing provider ID dir should not fail")
+	require.NoError(t, os.WriteFile(filepath.Join(providerIDDir, "token.json"), []byte("previous-login-token"), 0600),
+		"Setup: writing the existing provider ID token should not fail")
+
+	// authd has not been updated, so it does not pass a provider ID to NewSession, and
+	// the username path does not resolve to the provider ID dir yet.
+	sessionID, key, err := b.NewSession(username, "some lang", sessionmode.Login, "")
+	require.NoError(t, err, "NewSession should not fail")
+	require.Equal(t, usernameDir, b.UserDataDirForSession(sessionID),
+		"Before device auth the session should still resolve to the username dir")
+
+	deviceAccess, newPasswordAccess := runDeviceAuthAndNewPassword(t, b, sessionID, key, "brand-new-password")
+	require.Equal(t, broker.AuthNext, deviceAccess, "Device auth should advance to the new password step")
+	require.Equal(t, broker.AuthGranted, newPasswordAccess, "New password step should grant access")
+
+	// The session must have been redirected to the pre-existing provider ID directory,
+	// so the new password overwrites the password in that directory rather than creating
+	// a fresh username-keyed cache directory.
+	require.Equal(t, providerIDDir, b.UserDataDirForSession(sessionID),
+		"The session should use the existing provider ID cache dir after device auth")
+
+	// The freshly re-acquired token and the new password must have been written into the
+	// existing provider ID directory, not into a separate username-keyed directory. The
+	// redirect happens before deviceAuth reads the previous token for its device
+	// registration data, so the device is not re-registered as a side effect.
+	_, err = os.Stat(filepath.Join(providerIDDir, "token.json"))
+	require.NoError(t, err, "The refreshed token should be in the provider ID dir")
+	_, err = os.Stat(filepath.Join(providerIDDir, "password"))
+	require.NoError(t, err, "The new password should be in the provider ID dir")
+
+	requireIssuerCacheTree(t, filepath.Dir(providerIDDir), map[string]string{
+		"test-user-id":            "dir",
+		"test-user-id/token.json": "file",
+		"test-user-id/password":   "file",
+		"test-user@email.com":     "symlink -> test-user-id",
+	})
+}
+
+// TestOfflineLoginCacheDirectoryResolution covers how the cache directory is resolved
+// when the first login after the broker update happens while offline. The provider ID
+// can only be learned online (from a token refresh), so:
+//   - an already-migrated cache is still resolved through its compatibility symlink;
+//   - a legacy directory whose cached token already carries a provider ID is migrated
+//     even offline (the migration happens in NewSession, not gated on being online);
+//   - a legacy directory whose cached token has no provider ID stays put until the next
+//     online login.
+func TestOfflineLoginCacheDirectoryResolution(t *testing.T) {
+	t.Parallel()
+
+	const (
+		username   = "user@example.com"
+		providerID = "saved-user-id"
+	)
+
+	tests := map[string]struct {
+		// alreadyMigrated sets up a provider ID dir plus a compatibility symlink at the
+		// username path (an already-migrated cache).
+		alreadyMigrated bool
+		// legacyDirWithProviderID sets up a real username dir whose cached token carries
+		// a provider ID (migratable even offline).
+		legacyDirWithProviderID bool
+		// legacyDirWithoutProviderID sets up a real username dir whose cached token has no
+		// provider ID (not migratable offline).
+		legacyDirWithoutProviderID bool
+
+		wantSessionDirIsProviderIDDir bool
+		wantIssuerTree                map[string]string
+	}{
+		"Already_migrated_cache_stays_on_provider_ID_dir": {
+			alreadyMigrated:               true,
+			wantSessionDirIsProviderIDDir: true,
+			wantIssuerTree: map[string]string{
+				"saved-user-id":            "dir",
+				"saved-user-id/token.json": "file",
+				"user@example.com":         "symlink -> saved-user-id",
+			},
+		},
+		"Legacy_cache_with_provider_ID_migrates_offline": {
+			legacyDirWithProviderID:       true,
+			wantSessionDirIsProviderIDDir: true,
+			wantIssuerTree: map[string]string{
+				"saved-user-id":            "dir",
+				"saved-user-id/token.json": "file",
+				"user@example.com":         "symlink -> saved-user-id",
+			},
+		},
+		"Legacy_cache_without_provider_ID_stays_on_username_dir": {
+			legacyDirWithoutProviderID:    true,
+			wantSessionDirIsProviderIDDir: false,
+			wantIssuerTree: map[string]string{
+				"user@example.com":            "dir",
+				"user@example.com/token.json": "file",
+			},
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Force offline mode by making OIDC discovery unreachable.
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				customHandlers: map[string]testutils.EndpointHandler{
+					"/.well-known/openid-configuration": testutils.UnavailableHandler(),
+				},
+			})
+
+			usernameDir, err := b.UserDataDir(username)
+			require.NoError(t, err, "Setup: deriving the username data dir should not fail")
+			providerIDDir, err := b.UserDataDir(providerID)
+			require.NoError(t, err, "Setup: deriving the provider ID data dir should not fail")
+			require.NoError(t, os.MkdirAll(filepath.Dir(usernameDir), 0700), "Setup: creating the issuer dir should not fail")
+
+			switch {
+			case tc.alreadyMigrated:
+				require.NoError(t, os.MkdirAll(providerIDDir, 0700), "Setup: creating the provider ID dir")
+				generateAndStoreCachedInfo(t, tokenOptions{}, filepath.Join(providerIDDir, "token.json"))
+				require.NoError(t, os.Symlink(providerIDDir, usernameDir), "Setup: creating the compatibility symlink")
+			case tc.legacyDirWithProviderID:
+				require.NoError(t, os.MkdirAll(usernameDir, 0700), "Setup: creating the legacy username dir")
+				// generateCachedInfo stores a token whose ProviderID is "saved-user-id".
+				generateAndStoreCachedInfo(t, tokenOptions{}, filepath.Join(usernameDir, "token.json"))
+			case tc.legacyDirWithoutProviderID:
+				require.NoError(t, os.MkdirAll(usernameDir, 0700), "Setup: creating the legacy username dir")
+				// A token without a provider ID cannot be migrated offline.
+				require.NoError(t, os.WriteFile(filepath.Join(usernameDir, "token.json"), []byte("{}"), 0600),
+					"Setup: writing the legacy token without a provider ID")
+			}
+
+			sessionID, _, err := b.NewSession(username, "some lang", sessionmode.Login, "")
+			require.NoError(t, err, "NewSession should not fail offline")
+
+			gotOffline, err := b.IsOffline(sessionID)
+			require.NoError(t, err, "IsOffline should not error")
+			require.True(t, gotOffline, "The session should be offline")
+
+			if tc.wantSessionDirIsProviderIDDir {
+				require.Equal(t, providerIDDir, b.UserDataDirForSession(sessionID),
+					"The session should resolve to the provider ID dir")
+			} else {
+				require.Equal(t, usernameDir, b.UserDataDirForSession(sessionID),
+					"The session should stay on the username dir")
+			}
+
+			requireIssuerCacheTree(t, filepath.Dir(usernameDir), tc.wantIssuerTree)
+		})
+	}
+}
+
 // TestEnsureProviderIDCacheDir exercises the cache migration helper that moves a
 // session's on-disk cache from a username-based directory to a provider ID-based
 // one. It covers the early-return guards (invalid/empty provider ID, already
