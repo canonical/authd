@@ -1326,10 +1326,11 @@ func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (s
 	}
 
 	if session.isOffline {
-		// Cache directory migration to the provider ID-keyed layout is performed only during online
-		// authentication. Offline auth intentionally skips it: the migration runs on the next online
-		// login instead. As a consequence, a first post-update login that happens while offline stays
-		// on the username-keyed cache until the user next authenticates online.
+		// Skip the migration below when offline: it learns the provider ID from the freshly
+		// authenticated user info, which is only available online. NewSession still migrates an
+		// offline session when the cached token already carries a provider ID, so this only defers
+		// the migration for a legacy cache whose token predates the provider ID (it then migrates on
+		// the next online login).
 		return AuthGranted, userInfoMessage{UserInfo: authInfo.UserInfo}
 	}
 
