@@ -39,12 +39,20 @@ export default {
       parent = idx === -1 ? "" : trimmed.slice(0, idx + 1);
     }
 
+    // Show a 'log' shortcut only on directories that actually contain a
+    // log.html, so it doesn't appear on intermediate dirs where it 404s.
+    const sortedPrefixes = [...new Set(delimitedPrefixes)].sort();
+    const hasLog = await Promise.all(
+      sortedPrefixes.map(p => env.BUCKET.head(`${p}log.html`).then(o => o !== null))
+    );
+
     const rows = [
       // Add '..' row if not at root
       ...(parent !== null ? [`<li><a href="/${parent}">..</a></li>`] : []),
-      ...[...new Set(delimitedPrefixes)].sort().map(p => {
+      ...sortedPrefixes.map((p, i) => {
         const name = p.replace(prefix, "");
-        return `<li><a href="/${p}">${name}</a></li>`;
+        const log = hasLog[i] ? ` [<a href="/${p}log.html">log</a>]` : "";
+        return `<li><a href="/${p}">${name}</a>${log}</li>`;
       }),
       ...objects.map(o => {
         const name = o.key.replace(prefix, "");
