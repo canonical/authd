@@ -23,13 +23,15 @@ type UserRow struct {
 	Shell string
 
 	// BrokerID specifies the broker the user last successfully authenticated with.
-	BrokerID string `yaml:"broker_id,omitempty"`
+	// It is always serialized (no omitempty) because it scopes the user's identity.
+	BrokerID string `yaml:"broker_id"`
 
 	Locked bool `yaml:"locked,omitempty"`
 
 	// ProviderID is the stable provider identifier. Empty for pre-migration users
-	// and users authenticated via v2 brokers. It is scoped by BrokerID.
-	ProviderID string `yaml:"provider_id,omitempty"`
+	// and users authenticated via v2 brokers. It is scoped by BrokerID and is always
+	// serialized (no omitempty) so the user's identity fields are explicit in dumps.
+	ProviderID string `yaml:"provider_id"`
 }
 
 // NewUserRow creates a new UserRow.

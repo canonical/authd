@@ -9,6 +9,7 @@ users:
       shell: /bin/bash
       broker_id: broker-id
       locked: true
+      provider_id: ""
     - name: user2@example.com
       uid: 2222
       gid: 22222
@@ -16,6 +17,7 @@ users:
       dir: /home/user2@example.com
       shell: /bin/dash
       broker_id: broker-id
+      provider_id: ""
     - name: user3@example.com
       uid: 3333
       gid: 33333
@@ -23,12 +25,15 @@ users:
       dir: /home/user3@example.com
       shell: /bin/zsh
       broker_id: broker-id
+      provider_id: ""
     - name: userwithoutbroker@example.com
       uid: 4444
       gid: 44444
       gecos: userwithoutbroker
       dir: /home/userwithoutbroker@example.com
       shell: /bin/sh
+      broker_id: ""
+      provider_id: ""
 groups:
     - name: group1
       gid: 11111

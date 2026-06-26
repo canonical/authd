@@ -8,6 +8,7 @@ users:
       dir: /home/user1@example.com
       shell: /doesnotexist
       broker_id: broker-id
+      provider_id: ""
 groups:
     - name: group1@example.com
       gid: 11111

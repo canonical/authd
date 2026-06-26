@@ -6,6 +6,7 @@ users:
       dir: /home/testuser
       shell: /bin/bash
       broker_id: broker-id
+      provider_id: ""
 groups:
     - name: testgroup
       gid: 11111

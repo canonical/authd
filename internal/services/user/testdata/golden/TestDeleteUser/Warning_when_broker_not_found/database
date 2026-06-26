@@ -6,6 +6,7 @@ users:
       dir: /home/user2@example.com
       shell: /bin/dash
       broker_id: broker-id
+      provider_id: ""
     - name: user3@example.com
       uid: 3333
       gid: 33333
@@ -13,6 +14,7 @@ users:
       dir: /home/user3@example.com
       shell: /bin/zsh
       broker_id: broker-id
+      provider_id: ""
 groups:
     - name: group2
       gid: 22222

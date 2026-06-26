@@ -6,6 +6,7 @@ users:
       dir: /home/user2@example.com
       shell: /bin/dash
       broker_id: "1902181170"
+      provider_id: ""
     - name: user3@example.com
       uid: 3333
       gid: 33333
@@ -13,6 +14,7 @@ users:
       dir: /home/user3@example.com
       shell: /bin/zsh
       broker_id: "1902181170"
+      provider_id: ""
     - name: delete_error@example.com
       uid: 4444
       gid: 44444
@@ -20,6 +22,7 @@ users:
       dir: /home/delete_error@example.com
       shell: /bin/bash
       broker_id: "1902181170"
+      provider_id: ""
 groups:
     - name: group2
       gid: 22222
