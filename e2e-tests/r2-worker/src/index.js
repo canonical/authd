@@ -1,3 +1,33 @@
+// List a directory, following pagination so entries don't disappear.
+async function listDir(bucket, prefix) {
+  const objects = [];
+  const delimitedPrefixes = [];
+  let cursor;
+
+  do {
+    const listing = await bucket.list({ prefix, delimiter: "/", cursor });
+    objects.push(...listing.objects);
+    delimitedPrefixes.push(...listing.delimitedPrefixes);
+    cursor = listing.truncated ? listing.cursor : undefined;
+  } while (cursor);
+
+  return { objects, uniquePrefixes: [...new Set(delimitedPrefixes)] };
+}
+
+// A directory collapses (redirects straight through) when it holds nothing
+// but a single subdirectory, so there's no real choice to make.
+function collapsesTo({ objects, uniquePrefixes }) {
+  return !objects.length && uniquePrefixes.length === 1 ? uniquePrefixes[0] : null;
+}
+
+// Immediate parent of a directory prefix; "" for a top-level dir, null at root.
+function parentOf(prefix) {
+  if (!prefix) return null;
+  const trimmed = prefix.replace(/\/$/, "");
+  const idx = trimmed.lastIndexOf("/");
+  return idx === -1 ? "" : trimmed.slice(0, idx + 1);
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -14,37 +44,27 @@ export default {
       }
     }
 
-    // List the directory, following pagination so entries don't disappear.
     const prefix = path ? path.replace(/\/?$/, "/") : "";
-    const objects = [];
-    const delimitedPrefixes = [];
-    let cursor;
+    const { objects, uniquePrefixes } = await listDir(env.BUCKET, prefix);
 
-    do {
-      const listing = await env.BUCKET.list({ prefix, delimiter: "/", cursor });
-      objects.push(...listing.objects);
-      delimitedPrefixes.push(...listing.delimitedPrefixes);
-      cursor = listing.truncated ? listing.cursor : undefined;
-    } while (cursor);
-
-    if (!objects.length && !delimitedPrefixes.length) {
+    if (!objects.length && !uniquePrefixes.length) {
       return new Response("Not found", { status: 404 });
     }
 
-    // When a directory holds nothing but a single subdirectory, there's no
-    // real choice to make, so redirect straight into it instead of showing a
-    // dead-end listing.
-    const uniquePrefixes = [...new Set(delimitedPrefixes)];
-    if (wantsDirectory && !objects.length && uniquePrefixes.length === 1) {
-      return Response.redirect(new URL(`/${uniquePrefixes[0]}`, url), 302);
+    // Redirect straight through collapsing directories instead of showing a
+    // dead-end listing with a single entry.
+    const collapseTarget = collapsesTo({ objects, uniquePrefixes });
+    if (wantsDirectory && collapseTarget) {
+      return Response.redirect(new URL(`/${collapseTarget}`, url), 302);
     }
 
-    // Calculate parent path for '..' link
-    let parent = null;
-    if (prefix) {
-      const trimmed = prefix.replace(/\/$/, "");
-      const idx = trimmed.lastIndexOf("/");
-      parent = idx === -1 ? "" : trimmed.slice(0, idx + 1);
+    // Compute the '..' target, walking up past ancestors that would only
+    // redirect back down here, so '..' lands somewhere with a real choice.
+    let parent = parentOf(prefix);
+    while (parent) {
+      const grandparent = parentOf(parent);
+      if (collapsesTo(await listDir(env.BUCKET, parent)) === null) break;
+      parent = grandparent;
     }
 
     // Show a 'log' shortcut only on directories that actually contain a
