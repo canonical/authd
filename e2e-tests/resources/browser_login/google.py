@@ -26,16 +26,16 @@ TOTP_CODE_MAX_TRIES = 5
 _ENTER_CODE = "Enter the code displayed on your device"
 _SIGN_IN = "Email or phone"
 _ENTER_PASSWORD = "Enter your password"
-_VERIFY_YOU = "Verify it’s you"
+_VERIFY_YOU = "Verify it['’]s you"
 _TWO_STEP = "2-Step Verification"
 _PATTERN_ENTER_TOTP = f"{_TWO_STEP}|{_VERIFY_YOU}"
 _CHOOSE_ACCOUNT = "Choose an account"
-_SIGNING_BACK_IN = "You’re signing back in"
+_SIGNING_BACK_IN = "You['’]re signing back in"
 _SUCCESS = "Continue on your device"
 _WRONG_TOTP = "Wrong code. Try again."
 _WRONG_NUMBER_OF_DIGITS = "Wrong number of digits. Try again."
 _PATTERN_WRONG_TOTP = f"{_WRONG_TOTP}|{_WRONG_NUMBER_OF_DIGITS}"
-_EMAIL_NOT_FOUND = "Couldn’t find your Google Account"
+_EMAIL_NOT_FOUND = "Couldn['’]t find your Google Account"
 _EMAIL_INVALID = "Enter a valid email or phone number"
 _PATTERN_WRONG_EMAIL = f"{_EMAIL_NOT_FOUND}|{_EMAIL_INVALID}"
 _WRONG_PASSWORD = "Wrong password"
@@ -43,6 +43,11 @@ _WRONG_PASSWORD = "Wrong password"
 
 class WrongTOTPCodeError(Exception):
     pass
+
+
+def _matches_phrase(matches: list[str], *phrases: str) -> bool:
+    lowered = [match.lower() for match in matches]
+    return any(phrase.lower() in match for match in lowered for phrase in phrases)
 
 
 class GoogleLoginFlow:
@@ -133,27 +138,27 @@ class GoogleLoginFlow:
 
         Returns True when the success page has been reached.
         """
-        if _SUCCESS in matches:
+        if _matches_phrase(matches, _SUCCESS):
             self._handle_success_page()
             return True
 
         # We check the error cases first, because the patterns of the other
         # pages also match in the error cases.
-        if _WRONG_TOTP in matches or _WRONG_NUMBER_OF_DIGITS in matches:
+        if _matches_phrase(matches, _WRONG_TOTP, _WRONG_NUMBER_OF_DIGITS):
             raise WrongTOTPCodeError("TOTP code was rejected")
-        if _EMAIL_NOT_FOUND in matches or _EMAIL_INVALID in matches:
+        if _matches_phrase(matches, "find your google account", _EMAIL_INVALID):
             self._handle_wrong_email()
-        elif _WRONG_PASSWORD in matches:
+        elif _matches_phrase(matches, _WRONG_PASSWORD):
             self._handle_wrong_password()
-        elif _SIGN_IN in matches:
+        elif _matches_phrase(matches, _SIGN_IN):
             self._handle_sign_in_page()
-        elif _ENTER_PASSWORD in matches:
+        elif _matches_phrase(matches, _ENTER_PASSWORD):
             self._handle_enter_password_page()
-        elif _TWO_STEP in matches or _VERIFY_YOU in matches:
+        elif _matches_phrase(matches, _TWO_STEP, "verify it", "verification code"):
             self._handle_totp_page()
-        elif _CHOOSE_ACCOUNT in matches:
+        elif _matches_phrase(matches, _CHOOSE_ACCOUNT):
             self._handle_choose_account_page()
-        elif _SIGNING_BACK_IN in matches:
+        elif _matches_phrase(matches, "signing back in"):
             self._handle_signing_back_in_page()
         else:
             raise RuntimeError(f"Unexpected page with patterns: {matches}")
