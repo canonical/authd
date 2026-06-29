@@ -2,20 +2,11 @@
 set -euo pipefail
 set -x
 
-YARF_REPO_URL="https://github.com/adombeck/yarf"
-
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 YARF_DIR="${SCRIPT_DIR}/.yarf"
 
-# Clone the YARF repository if it doesn't exist
-if [ ! -d "$YARF_DIR" ]; then
-    echo "Cloning YARF repository into $YARF_DIR..."
-    git clone --depth=1 "$YARF_REPO_URL" "$YARF_DIR"
-else
-    echo "YARF repository already exists at $YARF_DIR, pulling latest changes..."
-    cd "$YARF_DIR"
-    git pull
-fi
+# Ensure that the YARF submodule is initialized
+git -C "${SCRIPT_DIR}/.." submodule update --init --depth=1 e2e-tests/.yarf
 
 # Install uv snap if not already installed
 if ! command -v uv &> /dev/null; then
