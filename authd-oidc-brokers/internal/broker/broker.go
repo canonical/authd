@@ -65,8 +65,9 @@ type Broker struct {
 	cfg        Config
 	apiVersion uint
 
-	provider providers.Provider
-	oidcCfg  oidc.Config
+	provider         providers.Provider
+	oidcCfg          oidc.Config
+	oidcClientSecret string
 
 	currentSessions   map[string]session
 	currentSessionsMu sync.RWMutex
@@ -254,12 +255,21 @@ func New(cfg Config, apiVersion uint, args ...Option) (b *Broker, err error) {
 		clientID = consts.MicrosoftBrokerAppID
 	}
 
+	// The Microsoft Broker App is a public client and must never send a secret,
+	// even when client_secret is configured (for Graph API fallback). Resolve
+	// this once so that NewSession never needs to re-derive it from the client ID.
+	oidcClientSecret := cfg.clientSecret
+	if clientID == consts.MicrosoftBrokerAppID {
+		oidcClientSecret = ""
+	}
+
 	b = &Broker{
-		cfg:        cfg,
-		apiVersion: apiVersion,
-		provider:   opts.provider,
-		oidcCfg:    oidc.Config{ClientID: clientID},
-		privateKey: privateKey,
+		cfg:              cfg,
+		apiVersion:       apiVersion,
+		provider:         opts.provider,
+		oidcCfg:          oidc.Config{ClientID: clientID},
+		oidcClientSecret: oidcClientSecret,
+		privateKey:       privateKey,
 
 		currentSessions:   make(map[string]session),
 		currentSessionsMu: sync.RWMutex{},
@@ -363,11 +373,10 @@ func (b *Broker) NewSession(username, lang, mode string) (sessionID, encryptionK
 	}
 	// Append extra scopes from config
 	scopes = append(scopes, b.cfg.extraScopes...)
-
 	if s.oidcServer != nil {
 		s.oauth2Config = oauth2.Config{
 			ClientID:     b.oidcCfg.ClientID,
-			ClientSecret: b.cfg.clientSecret,
+			ClientSecret: b.oidcClientSecret,
 			Endpoint:     s.oidcServer.Endpoint(),
 			Scopes:       scopes,
 		}
