@@ -90,7 +90,7 @@ write_files:
 
       [Service]
       Type=simple
-      ExecStart=/bin/bash -o pipefail -c 'journalctl -b --lines=all -o export -f | socat - ${SOCAT_ADDRESS}'
+      ExecStart=/usr/bin/socat ${SOCAT_ADDRESS} EXEC:'journalctl -b --lines=all -o export -f'
       OOMScoreAdjust=-1000
       Restart=always
       RestartSec=1
