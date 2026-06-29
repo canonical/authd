@@ -9,6 +9,7 @@ Resource            kvm.resource
 Resource            resources/utils.resource
 Resource            resources/authd.resource
 Library             ./Browser.py    AS    Browser
+Library             ./TOTP.py    AS    TOTP
 Library             Hid.py    AS    Hid
 Library             OperatingSystem
 Library             String
@@ -373,3 +374,31 @@ Check If User Was Added Properly
 Check User Groups
     [Arguments]    ${username}    ${remote_group}
     Match Text    ${username} sudo ${remote_group}    120
+
+
+Log In With Remote User Through CLI: Entra Password
+    [Arguments]    ${username}
+    Try machinectl login Prompt
+    Hid.Type String    ${username}
+    Hid.Keys Combo    Return
+
+    Match Text    Select your provider    15
+    Match Text    2. ${PROVIDER_DISPLAY_NAME}
+    Hid.Type String    2
+
+    # With device_auth disabled there is only one mode; the PAM module auto-selects
+    # it and goes directly to the Entra ID password prompt.
+    Match Text    Enter your Entra ID password    30
+    Hid.Type String    %{E2E_PASSWORD}
+    Hid.Keys Combo    Return
+
+    # Wait for the MFA code prompt and enter a fresh TOTP code.
+    Match Text    Enter your MFA code    120
+    ${totp_code} =    TOTP.Generate Totp Code
+    Hid.Type String    ${totp_code}
+    Hid.Keys Combo    Return
+
+    # Wait for the authenticated shell prompt. Plain Match Text is fuzzy enough
+    # to false-positive on the preceding machinectl login line, so keep this in
+    # regex mode and require the remote-shell prefix after the username.
+    Match Text    regex:${username}@ubuntu:    120
