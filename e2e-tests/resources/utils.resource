@@ -76,6 +76,11 @@ Log Out
 
 Wait Until GDM Login Screen Ready
     Match Text    Not listed    180
+    # Sometimes the "Not listed" is shown for a brief moment before the other
+    # list items of the login screen are displayed, which resulted in the wrong
+    # list item being clicked in the next step. To avoid that, we sleep for
+    # 2 seconds to ensure the login screen is fully loaded before proceeding.
+    BuiltIn.Sleep    2
 
 
 Wait Until Desktop Ready
