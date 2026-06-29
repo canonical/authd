@@ -106,8 +106,12 @@ write_files:
       After=systemd-journald.service
       After=network.target
       Requires=network.target
-      # Disable rate limiting
-      StartLimitIntervalSec=0
+      # Stop respawning a few minutes after the host stops listening (i.e. once
+      # the tests have finished), to avoid burning CPU forever. The window is
+      # generous enough to survive the gaps between test suites, when the host
+      # listener is briefly down.
+      StartLimitIntervalSec=600
+      StartLimitBurst=300
 
       [Service]
       Type=simple
