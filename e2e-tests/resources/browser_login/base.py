@@ -30,6 +30,7 @@ gi.require_version("WebKit2", "4.1")
 from gi.repository import Gtk  # type: ignore
 
 from browser_window import BrowserWindow, ascii_string_to_key_events  # noqa: F401
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from generate_totp import generate_totp  # noqa: F401
 
 logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.INFO)
