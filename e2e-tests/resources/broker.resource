@@ -48,7 +48,6 @@ Select Provider
     Match Text    2. ${PROVIDER_DISPLAY_NAME}
 
     Hid.Type String    2
-    Builtin.Sleep    2
 
 
 Regenerate QR Code
@@ -100,11 +99,9 @@ Log In With Remote User Through CLI: Local Password
     Try machinectl login Prompt
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
-    Builtin.Sleep    2
     Match Text    Enter your local password:    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
-    Builtin.Sleep    2
     Match Text    ${username}@ubuntu:~$    120
 
 
