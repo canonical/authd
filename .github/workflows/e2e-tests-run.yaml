@@ -23,6 +23,8 @@ on:
         required: false
       E2E_MSENTRA_CLIENT_ID:
         required: false
+      E2E_MSENTRA_CLIENT_SECRET:
+        required: false
       E2E_MSENTRA_USERNAME:
         required: false
       E2E_MSENTRA_PASSWORD:
@@ -228,6 +230,7 @@ jobs:
             E2E_USER=${{ secrets.E2E_MSENTRA_USERNAME }}
             E2E_PASSWORD=${{ secrets.E2E_MSENTRA_PASSWORD }}
             TOTP_SECRET=${{ secrets.E2E_MSENTRA_TOTP_SECRET }}
+            export AUTHD_MSENTRAID_CLIENT_SECRET=${{ secrets.E2E_MSENTRA_CLIENT_SECRET }}
           elif [ "${{ inputs.broker }}" = "authd-google" ]; then
             E2E_USER=${{ secrets.E2E_GOOGLE_USERNAME }}
             E2E_PASSWORD=${{ secrets.E2E_GOOGLE_PASSWORD }}

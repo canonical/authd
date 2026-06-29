@@ -172,6 +172,9 @@ function install_broker() {
 			-e "s|<CLIENT_SECRET>|${client_secret}|g" \
 			-e "s/^#entra_password = .*/entra_password = false/" \
 			/var/snap/${broker}/current/broker.conf
+        if [ -n "${client_secret}" ]; then
+            sed -i -e "s/^#client_secret = .*/client_secret = ${client_secret}/" /var/snap/${broker}/current/broker.conf
+        fi
 		echo 'verbosity: 2' > /var/snap/${broker}/current/${broker}.yaml
 		systemctl restart authd.service
 		snap restart "${broker}"
