@@ -269,7 +269,7 @@ Log In With Remote User Through GDM: QR Code
 
 Start Log In With Remote User Through GDM: QR Code
     [Arguments]    ${username}
-    Match Text    Not listed    180
+    Wait Until GDM Login Screen Ready
     Move Pointer To Not listed
     Left Button Click
 
@@ -301,7 +301,7 @@ Continue Log In With Remote User Through GDM: Define Local Password
 
 Log In With Remote User Through GDM: Local Password
     [Arguments]    ${username}    ${local_password}
-    Match Text    Not listed    180
+    Wait Until GDM Login Screen Ready
     Move Pointer To Not listed
     Left Button Click
     # Enter the username
