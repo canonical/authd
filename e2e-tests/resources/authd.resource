@@ -37,17 +37,14 @@ Change Password
     Hid.Keys Combo    Return
 
     Match Text    Enter your local password:    15
-    Builtin.Sleep    2
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
     Match Text    New password:    15
-    Builtin.Sleep    2
     Hid.Type String    ${new_password}
     Hid.Keys Combo    Return
 
     Match Text    Confirm password:    15
-    Builtin.Sleep    2
     Hid.Type String    ${new_password}
     Hid.Keys Combo    Return
 
@@ -83,12 +80,9 @@ Check That Remote User Can Run Sudo Commands
     [Arguments]    ${local_password}
     Hid.Type String    sudo touch sudo-test.txt
     Hid.Keys Combo    Return
-    Builtin.Sleep    2
     Match Text    Enter your local password:    15
-    Builtin.Sleep    2
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
-    Builtin.Sleep    2
     Hid.Type String    ls -l
     Hid.Keys Combo    Return
     Match Text    sudo-test.txt    15
