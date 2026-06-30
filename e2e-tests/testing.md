@@ -30,30 +30,32 @@ cp e2e-tests/e2e-tests-msentraid.env.template e2e-tests/e2e-tests-msentraid.env
 
 These files are gitignored.
 
-For VM provisioning, also copy `e2e-tests/vm/config.env.template` to `e2e-tests/vm/config.env` and
 For VM provisioning, also copy `e2e-tests/vm/config.env.template` to
 `e2e-tests/vm/config.env` and set your SSH public key path (and optionally the
 default Ubuntu release and VM name prefix).
+
 ### 3. Provision the VM
 
 ```bash
 ./e2e-tests/vm/provision.sh --broker <broker> --release <release>
 ```
 
-This sets up a libvirt VM with Ubuntu, installs authd and the broker, and creates the snapshots required by the tests.
 This sets up a libvirt VM with Ubuntu, installs authd and the broker, and
-creates the snapshots required by the tests. Run `./e2e-tests/vm/provision.sh
---help` for all available options (e.g. `--force` to reprovision, `--authd-deb`
-to install a locally built authd package instead of pulling from the PPA).
+creates the snapshots required by the tests. By default, authd is installed from
+the edge PPA and the broker from the edge channel snap. Use `--authd-deb` to
+install a locally built authd package, or `--broker-snap` to install a locally
+built broker snap. Run `./e2e-tests/vm/provision.sh --help` for all available
+options, including `--force` to reprovision.
+
 ### 4. Set up YARF
 
 ```bash
 ./e2e-tests/setup-yarf.sh
 ```
 
-This initializes the YARF git submodule and installs it into a Python virtual environment.
 This initializes the YARF git submodule and installs it into a Python virtual
 environment.
+
 ## Running the tests
 
 ```bash

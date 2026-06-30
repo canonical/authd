@@ -7,12 +7,14 @@ CONFIG_FILE="${SCRIPT_DIR}/config.env"
 
 usage(){
     cat << EOF
-Usage: $0 [--config-file <config file>] [--release <release>] [--broker <broker>] [--force]
+Usage: $0 [--config-file <config file>] [--release <release>] [--broker <broker>] [--authd-deb <deb>] [--broker-snap <snap>] [--force]
 
 Options:
   --config-file <config file>  Path to the configuration file (default: config.env)
   --release <release>          Ubuntu release to provision (e.g. noble, resolute); overrides config file
   --broker <broker>            The broker to install ("authd-google", "authd-msentraid", ...)
+  --authd-deb <deb>            Path to the authd deb file to install (default: install from the edge PPA)
+  --broker-snap <snap>         Path to the broker snap file to install (default: install from the edge channel)
   --force                      Force provisioning: remove existing VM and artifacts and create a fresh VM
   -h, --help                   Show this help message and exit
 
@@ -37,6 +39,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --b|--broker)
             BROKER="$2"
+            shift 2
+            ;;
+        --authd-deb)
+            AUTHD_DEB="$2"
+            shift 2
+            ;;
+        --broker-snap)
+            BROKER_SNAP="$2"
             shift 2
             ;;
         -h|--help)
@@ -67,4 +77,6 @@ set -x
   --config-file "${CONFIG_FILE}" \
   ${RELEASE_ARG:+--release "${RELEASE_ARG}"} \
   ${BROKER:+--broker "${BROKER}"} \
+  ${AUTHD_DEB:+--authd-deb "${AUTHD_DEB}"} \
+  ${BROKER_SNAP:+--broker-snap "${BROKER_SNAP}"} \
   ${FORCE:+--force}
