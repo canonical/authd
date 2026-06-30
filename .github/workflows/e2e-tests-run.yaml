@@ -318,7 +318,7 @@ jobs:
             const response = await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              sha: context.sha,
+              sha: context.payload.pull_request?.head?.sha ?? context.sha,
               state: '${{ steps.run-tests.outputs.state }}',
               target_url: '${{ steps.prepare-pages.outputs.log-url }}',
               description: 'View logs',
