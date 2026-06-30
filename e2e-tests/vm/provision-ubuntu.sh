@@ -59,13 +59,15 @@ fi
 
 # Set default config file if not provided
 if [ -z "${CONFIG_FILE:-}" ]; then
-    CONFIG_FILE="${SCRIPT_DIR}/config.sh"
+    CONFIG_FILE="${SCRIPT_DIR}/config.env"
 fi
 
 # Load the configuration file (if it exists)
 if [ -f "${CONFIG_FILE}" ]; then
-    # shellcheck source=config.sh disable=SC1091
+    set -a
+    # shellcheck source=config.env disable=SC1091
     source "${CONFIG_FILE}"
+    set +a
 fi
 
 # shellcheck source=lib/libprovision.sh

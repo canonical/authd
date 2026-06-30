@@ -30,9 +30,10 @@ cp e2e-tests/e2e-tests-msentraid.env.template e2e-tests/e2e-tests-msentraid.env
 
 These files are gitignored.
 
-For VM provisioning, also copy `e2e-tests/vm/config.sh.template` to `e2e-tests/vm/config.sh` and
-set your SSH public key path (and optionally the default Ubuntu release and VM name prefix).
-
+For VM provisioning, also copy `e2e-tests/vm/config.env.template` to `e2e-tests/vm/config.env` and
+For VM provisioning, also copy `e2e-tests/vm/config.env.template` to
+`e2e-tests/vm/config.env` and set your SSH public key path (and optionally the
+default Ubuntu release and VM name prefix).
 ### 3. Provision the VM
 
 ```bash

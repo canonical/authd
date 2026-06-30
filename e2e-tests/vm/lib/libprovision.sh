@@ -15,7 +15,7 @@ function assert_env_vars() {
 
     if [ "${#missing[@]}" -ne 0 ]; then
         printf 'Missing required env vars: %s\n' "${missing[*]}" >&2
-        printf 'Create a config file from the template at e2e-tests/vm/config.sh.template\n' >&2
+        printf 'Create a config file from the template at e2e-tests/vm/config.env.template\n' >&2
         printf 'or set the missing variables in the environment.\n' >&2
         exit 1
     fi

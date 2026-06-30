@@ -3,14 +3,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-CONFIG_FILE="${SCRIPT_DIR}/config.sh"
+CONFIG_FILE="${SCRIPT_DIR}/config.env"
 
 usage(){
     cat << EOF
 Usage: $0 [--config-file <config file>] [--force]
 
 Options:
-  --config-file <config file>  Path to the configuration file (default: config.sh)
+  --config-file <config file>  Path to the configuration file (default: config.env)
   --broker <broker>            The broker to install ("authd-google", "authd-msentraid", ...)
   --force                      Force provisioning: remove existing VM and artifacts and create a fresh VM
   -h, --help                   Show this help message and exit
