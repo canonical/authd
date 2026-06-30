@@ -11,6 +11,10 @@ Test Teardown   utils.Test Teardown
 
 *** Keywords ***
 Test Setup
+    # entra_password is an Entra ID-specific broker option; other brokers
+    # (e.g. google) don't offer it, so there is nothing to test there.
+    Skip If    '${BROKER_SNAP_NAME}' != 'authd-msentraid'
+    ...    entra_password is only supported by the msentraid broker
     utils.Test Setup    snapshot=%{BROKER}-installed
     # Enable the Entra ID password flow and disable device auth so only the
     # new password+MFA mode is offered, avoiding a provider-selection menu.
