@@ -546,6 +546,34 @@ func TestIsAuthenticated(t *testing.T) {
 	}
 }
 
+func TestIsAuthenticated_FailDelay(t *testing.T) {
+	t.Parallel()
+
+	client := newPamClient(t, nil, globalBrokerManager)
+
+	sessionID := startSession(t, client, "ia_denied@example.com")
+	iaReq := &authd.IARequest{
+		SessionId:          sessionID,
+		AuthenticationData: &authd.IARequest_AuthenticationData{},
+	}
+
+	// The first authFailDelayThreshold failures should not be delayed.
+	for i := range pam.AuthFailDelayThreshold {
+		start := time.Now()
+		_, err := client.IsAuthenticated(context.Background(), iaReq)
+		require.NoError(t, err, "IsAuthenticated should not return an error")
+		require.Less(t, time.Since(start), pam.AuthFailDelay,
+			"attempt %d of %d should not trigger the fail delay", i+1, pam.AuthFailDelayThreshold)
+	}
+
+	// The next failure should be delayed.
+	start := time.Now()
+	_, err := client.IsAuthenticated(context.Background(), iaReq)
+	require.NoError(t, err, "IsAuthenticated should not return an error")
+	require.GreaterOrEqual(t, time.Since(start), pam.AuthFailDelay,
+		"attempt after threshold should be delayed")
+}
+
 func TestIDGeneration(t *testing.T) {
 	t.Parallel()
 	usernamePrefix := t.Name()
