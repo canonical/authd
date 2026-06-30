@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os/user"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/canonical/authd/internal/brokers"
 	"github.com/canonical/authd/internal/brokers/auth"
@@ -25,11 +27,74 @@ import (
 
 var _ authd.PAMServer = Service{}
 
+const (
+	// authFailDelayThreshold is the number of consecutive authentication failures before
+	// a delay is imposed on subsequent attempts, to mitigate brute-force attacks.
+	authFailDelayThreshold = 3
+	// authFailDelay is the delay imposed after authFailDelayThreshold consecutive failures.
+	authFailDelay = 2 * time.Second
+	// authFailResetWindow is the duration after the last failure before the failure count
+	// is automatically reset, to avoid penalizing users indefinitely.
+	authFailResetWindow = 15 * time.Minute
+	// authFailMaxTracked is the maximum number of distinct usernames tracked simultaneously
+	// to bound memory usage.
+	authFailMaxTracked = 10000
+)
+
+// authFailEntry holds the failure count and the time of the most recent failure for one user.
+type authFailEntry struct {
+	count    int
+	lastFail time.Time
+}
+
+// authFailTracker counts consecutive per-user authentication failures and imposes
+// a delay once the threshold is reached.
+type authFailTracker struct {
+	mu      sync.Mutex
+	entries map[string]*authFailEntry
+}
+
+func newAuthFailTracker() *authFailTracker {
+	return &authFailTracker{entries: make(map[string]*authFailEntry)}
+}
+
+// recordFailure increments the failure count for username and returns the new count.
+// If the previous failure is older than authFailResetWindow the counter is reset first.
+// When the tracker is at capacity new usernames are not added and 0 is returned.
+func (t *authFailTracker) recordFailure(username string) int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	e, ok := t.entries[username]
+	if ok && time.Since(e.lastFail) >= authFailResetWindow {
+		// Stale entry: treat as fresh start.
+		ok = false
+	}
+	if !ok {
+		if len(t.entries) >= authFailMaxTracked {
+			// At capacity; skip tracking to avoid unbounded memory growth.
+			return 0
+		}
+		e = &authFailEntry{}
+		t.entries[username] = e
+	}
+	e.count++
+	e.lastFail = time.Now()
+	return e.count
+}
+
+// recordSuccess resets the failure count for username.
+func (t *authFailTracker) recordSuccess(username string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.entries, username)
+}
+
 // Service is the implementation of the PAM module service.
 type Service struct {
 	userManager       *users.Manager
 	brokerManager     *brokers.Manager
 	permissionManager *permissions.Manager
+	failedAuths       *authFailTracker
 
 	authd.UnimplementedPAMServer
 }
@@ -42,6 +107,7 @@ func NewService(ctx context.Context, userManager *users.Manager, brokerManager *
 		userManager:       userManager,
 		brokerManager:     brokerManager,
 		permissionManager: permissionManager,
+		failedAuths:       newAuthFailTracker(),
 	}
 }
 
@@ -284,7 +350,20 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 
 	log.Debugf(ctx, "%s: Authentication result: %s", sessionID, access)
 
+	username := s.brokerManager.UsernameFromSessionID(sessionID)
+
 	if access != auth.Granted {
+		if access == auth.Denied || access == auth.DeniedMaxTries {
+			if count := s.failedAuths.recordFailure(username); count > authFailDelayThreshold {
+				log.Debugf(ctx, "%s: Delaying response after %d consecutive authentication failures for %q", sessionID, count, username)
+				timer := time.NewTimer(authFailDelay)
+				select {
+				case <-timer.C:
+				case <-ctx.Done():
+					timer.Stop()
+				}
+			}
+		}
 		return &authd.IAResponse{
 			Access: access,
 			Msg:    data,
@@ -347,6 +426,8 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 			msg = string(messageData)
 		}
 	}
+
+	s.failedAuths.recordSuccess(username)
 
 	return &authd.IAResponse{
 		Access: access,

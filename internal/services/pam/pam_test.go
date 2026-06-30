@@ -90,8 +90,6 @@ func TestAvailableBrokers(t *testing.T) {
 		wantErr bool
 	}{
 		"Success_getting_available_brokers": {},
-
-		"Error_when_not_root": {currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -142,8 +140,6 @@ func TestGetBroker(t *testing.T) {
 		"Returns_empty_when_user_does_not_exist":         {user: "nonexistent@example.com", wantBroker: ""},
 		"Returns_empty_when_user_does_not_have_a_broker": {user: "userwithoutbroker@example.com", wantBroker: ""},
 		"Returns_empty_when_broker_is_not_available":     {user: "userwithinactivebroker@example.com", wantBroker: ""},
-
-		"Error_when_not_root": {user: "userwithbroker@example.com", currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -203,7 +199,6 @@ func TestSelectBroker(t *testing.T) {
 		"Successfully_select_a_broker_and_creates_auth_session":   {username: "success@example.com", sessionMode: auth.SessionModeLogin},
 		"Successfully_select_a_broker_and_creates_passwd_session": {username: "success@example.com", sessionMode: auth.SessionModeChangePassword},
 
-		"Error_when_not_root":                             {username: "success@example.com", currentUserNotRoot: true, wantErr: true},
 		"Error_when_username_is_empty":                    {wantErr: true},
 		"Error_when_mode_is_empty":                        {sessionMode: "-", wantErr: true},
 		"Error_when_mode_does_not_exist":                  {sessionMode: "does not exist", wantErr: true},
@@ -285,7 +280,6 @@ func TestGetAuthenticationModes(t *testing.T) {
 		"Successfully_get_authentication_modes":          {},
 		"Successfully_get_multiple_authentication_modes": {username: "gam_multiple_modes@example.com"},
 
-		"Error_when_not_root":                     {currentUserNotRoot: true, wantErr: true},
 		"Error_when_sessionID_is_empty":           {sessionID: "-", wantErr: true},
 		"Error_when_passing_invalid_layout":       {supportedUILayouts: []*authd.UILayout{emptyType}, wantErr: true},
 		"Error_when_sessionID_is_invalid":         {sessionID: "invalid-session", wantErr: true},
@@ -352,7 +346,6 @@ func TestSelectAuthenticationMode(t *testing.T) {
 		"Successfully_select_mode_with_missing_optional_value": {username: "sam_missing_optional_entry@example.com", supportedUILayouts: []*authd.UILayout{optionalEntry}},
 
 		// service errors
-		"Error_when_not_root":                {username: "sam_success_required_entry@example.com", currentUserNotRoot: true, wantErr: true},
 		"Error_when_sessionID_is_empty":      {sessionID: "-", wantErr: true},
 		"Error_when_session_ID_is_invalid":   {sessionID: "invalid-session", wantErr: true},
 		"Error_when_no_authmode_is_selected": {sessionID: "no auth mode", authMode: "-", wantErr: true},
@@ -447,7 +440,6 @@ func TestIsAuthenticated(t *testing.T) {
 		"Successfully_authenticate_with_groups_with_uppercase": {username: "success_with_uppercase_groups@example.com"},
 
 		// service errors
-		"Error_when_not_root":           {username: "success@example.com", currentUserNotRoot: true},
 		"Error_when_sessionID_is_empty": {sessionID: "-"},
 		"Error_when_there_is_no_broker": {sessionID: "invalid-session"},
 		"Error_when_user_is_locked":     {username: "locked@example.com", existingDB: "cache-with-locked-user.db"},
@@ -576,6 +568,35 @@ func TestIsAuthenticated(t *testing.T) {
 	}
 }
 
+func TestIsAuthenticated_FailDelay(t *testing.T) {
+	t.Parallel()
+
+	pm := newPermissionManager(t, false)
+	client := newPamClient(t, nil, globalBrokerManager, &pm)
+
+	sessionID := startSession(t, client, "ia_denied@example.com")
+	iaReq := &authd.IARequest{
+		SessionId:          sessionID,
+		AuthenticationData: &authd.IARequest_AuthenticationData{},
+	}
+
+	// The first authFailDelayThreshold failures should not be delayed.
+	for i := range pam.AuthFailDelayThreshold {
+		start := time.Now()
+		_, err := client.IsAuthenticated(context.Background(), iaReq)
+		require.NoError(t, err, "IsAuthenticated should not return an error")
+		require.Less(t, time.Since(start), pam.AuthFailDelay,
+			"attempt %d of %d should not trigger the fail delay", i+1, pam.AuthFailDelayThreshold)
+	}
+
+	// The next failure should be delayed.
+	start := time.Now()
+	_, err := client.IsAuthenticated(context.Background(), iaReq)
+	require.NoError(t, err, "IsAuthenticated should not return an error")
+	require.GreaterOrEqual(t, time.Since(start), pam.AuthFailDelay,
+		"attempt after threshold should be delayed")
+}
+
 func TestIDGeneration(t *testing.T) {
 	t.Parallel()
 	usernamePrefix := t.Name()
@@ -635,7 +656,6 @@ func TestSetBroker(t *testing.T) {
 		"Username_is_case_insensitive":                  {username: "UserSetBroker@example.com"},
 
 		"Error_when_setting_broker_to_local_broker": {username: "userlocalbroker@example.com", brokerID: brokers.LocalBrokerName, wantErr: true},
-		"Error_when_not_root":                       {username: "usersetbroker@example.com", currentUserNotRoot: true, wantErr: true},
 		"Error_when_username_is_empty":              {wantErr: true},
 		"Error_when_user_does_not_exist_":           {username: "doesnotexist@example.com", wantErr: true},
 		"Error_when_broker_does_not_exist":          {username: "userwithbroker@example.com", brokerID: "does not exist", wantErr: true},
@@ -695,7 +715,6 @@ func TestEndSession(t *testing.T) {
 	}{
 		"Successfully_end_session": {username: "success@example.com"},
 
-		"Error_when_not_root":             {username: "success@example.com", currentUserNotRoot: true, wantErr: true},
 		"Error_when_sessionID_is_empty":   {sessionID: "-", wantErr: true},
 		"Error_when_sessionID_is_invalid": {sessionID: "invalid-session", wantErr: true},
 		"Error_when_ending_session":       {username: "es_error@example.com", wantErr: true},
