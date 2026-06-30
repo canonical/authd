@@ -9,10 +9,11 @@ DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/authd-e2e-tests"
 
 usage(){
     cat << EOF
-Usage: $0 [--config-file <file>] [--authd-deb <deb>] [--broker-snap <snap>]
+Usage: $0 [--config-file <file>] [--release <release>] [--authd-deb <deb>] [--broker-snap <snap>]
 
 Options:
-   --config-file <file>  Path to the configuration file (default: config.sh)
+   --config-file <file>  Path to the configuration file (default: config.env)
+   --release <release>   Ubuntu release to provision (e.g. noble, resolute); overrides config file
    --force              Force installation of authd and brokers even if snapshots already exist.
                         The existing snapshots will be deleted and recreated with the new installation.
    --broker <broker>    The broker to install ("authd-google", "authd-msentraid", ...)
@@ -28,6 +29,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --config-file)
             CONFIG_FILE="$2"
+            shift 2
+            ;;
+        --release)
+            RELEASE_ARG="$2"
             shift 2
             ;;
         --force)
@@ -106,6 +111,9 @@ if [ -n "${BROKER:-}" ]; then
     fi
     unset _env_file
 fi
+
+# CLI --release overrides the config file value
+RELEASE="${RELEASE_ARG:-${RELEASE:-}}"
 
 assert_env_vars RELEASE VM_NAME_BASE BROKER
 

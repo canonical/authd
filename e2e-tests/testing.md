@@ -37,7 +37,7 @@ default Ubuntu release and VM name prefix).
 ### 3. Provision the VM
 
 ```bash
-./e2e-tests/vm/provision.sh --broker <broker>
+./e2e-tests/vm/provision.sh --broker <broker> --release <release>
 ```
 
 This sets up a libvirt VM with Ubuntu, installs authd and the broker, and creates the snapshots required by the tests.

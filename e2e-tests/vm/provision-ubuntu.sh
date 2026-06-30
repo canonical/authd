@@ -11,10 +11,11 @@ DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/authd-e2e-tests"
 
 usage(){
     cat << EOF
-Usage: $0 [--config-file <file>] [--force]
+Usage: $0 [--config-file <file>] [--release <release>] [--force]
 
 Options:
-   --config-file <file>  Path to the configuration file (default: config.sh)
+   --config-file <file>  Path to the configuration file (default: config.env)
+   --release <release>   Ubuntu release to provision (e.g. noble, resolute); overrides config file
    --force               Force provisioning: remove existing VM and artifacts and create a fresh VM
    --no-snapshot         Do not create a snapshot after initial setup
   -h, --help             Show this help message and exit
@@ -27,6 +28,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --config-file)
             CONFIG_FILE="$2"
+            shift 2
+            ;;
+        --release)
+            RELEASE_ARG="$2"
             shift 2
             ;;
         --force)
@@ -72,6 +77,9 @@ fi
 
 # shellcheck source=lib/libprovision.sh
 source "${LIB_DIR}/libprovision.sh"
+
+# CLI --release overrides the config file value
+RELEASE="${RELEASE_ARG:-${RELEASE:-}}"
 
 assert_env_vars RELEASE VM_NAME_BASE
 
