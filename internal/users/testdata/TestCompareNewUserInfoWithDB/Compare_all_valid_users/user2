@@ -2,6 +2,7 @@ name: user2@example.com
 gecos: User2
 dir: /home/user2@example.com
 shell: /bin/dash
+broker_id: broker-id
 groups:
     - name: group2withoutugid
       ugid: ""

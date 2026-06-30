@@ -23,7 +23,7 @@ import (
 const LocalBrokerName = "local"
 
 type brokerer interface {
-	NewSession(ctx context.Context, username, lang, mode string) (sessionID, encryptionKey string, err error)
+	NewSession(ctx context.Context, username, lang, mode, providerID string) (sessionID, encryptionKey string, err error)
 	GetAuthenticationModes(ctx context.Context, sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, err error)
 	SelectAuthenticationMode(ctx context.Context, sessionID, authenticationModeName string) (uiLayoutInfo map[string]string, err error)
 	IsAuthenticated(ctx context.Context, sessionID, authenticationData string) (access, data string, err error)
@@ -31,7 +31,10 @@ type brokerer interface {
 	CancelIsAuthenticated(ctx context.Context, sessionID string)
 
 	UserPreCheck(ctx context.Context, username string) (userinfo string, err error)
-	DeleteUser(ctx context.Context, username string) error
+	// DeleteUser removes broker-side data for the user. providerID is the stable provider
+	// identifier and is used by v3 brokers to locate the provider ID-keyed cache directory.
+	// v2 brokers ignore the providerID parameter.
+	DeleteUser(ctx context.Context, username, providerID string) error
 }
 
 // Broker represents a broker object that can be used for authentication.
@@ -96,8 +99,8 @@ func newBroker(ctx context.Context, configFile string, bus *dbus.Conn) (b Broker
 }
 
 // newSession calls the broker corresponding method, expanding sessionID with the broker ID prefix.
-func (b Broker) newSession(ctx context.Context, username, lang, mode string) (sessionID, encryptionKey string, err error) {
-	sessionID, encryptionKey, err = b.brokerer.NewSession(ctx, username, lang, mode)
+func (b Broker) newSession(ctx context.Context, username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
+	sessionID, encryptionKey, err = b.brokerer.NewSession(ctx, username, lang, mode, providerID)
 	if err != nil {
 		return "", "", err
 	}
@@ -279,9 +282,11 @@ func (b Broker) UserPreCheck(ctx context.Context, username string) (userinfo str
 }
 
 // DeleteUser calls the broker to delete any broker side data associated with the user.
-func (b Broker) DeleteUser(ctx context.Context, username string) error {
+// providerID is the stable provider identifier; v3 brokers use it to locate the provider ID-keyed
+// cache directory. Pass an empty string when the provider ID is not available.
+func (b Broker) DeleteUser(ctx context.Context, username, providerID string) error {
 	log.Debugf(ctx, "Deleting user %q", username)
-	return b.brokerer.DeleteUser(ctx, username)
+	return b.brokerer.DeleteUser(ctx, username, providerID)
 }
 
 // generateValidators generates layout validators based on what is supported by the system.

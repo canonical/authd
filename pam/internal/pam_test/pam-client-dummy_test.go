@@ -69,47 +69,47 @@ func TestAvailableBrokers(t *testing.T) {
 	}
 }
 
-func TestGetPreviousBroker(t *testing.T) {
+func TestGetBroker(t *testing.T) {
 	t.Parallel()
 
 	testCases := map[string]struct {
 		client authd.PAMClient
-		args   *authd.GPBRequest
+		args   *authd.GBRequest
 
-		wantRet   *authd.GPBResponse
+		wantRet   *authd.GBResponse
 		wantError error
 	}{
 		"With_empty_options": {
 			client:  NewDummyClient(nil),
-			wantRet: &authd.GPBResponse{},
+			wantRet: &authd.GBResponse{},
 		},
 		"With_Error_return_value": {
-			client:    NewDummyClient(nil, WithGetPreviousBrokerReturn("", errTest)),
+			client:    NewDummyClient(nil, WithGetBrokerReturn("", errTest)),
 			wantError: errTest,
 		},
 		"With_defined_return_value": {
-			client: NewDummyClient(nil, WithGetPreviousBrokerReturn("my-previous-broker", nil)),
-			wantRet: &authd.GPBResponse{
-				PreviousBroker: "my-previous-broker",
+			client: NewDummyClient(nil, WithGetBrokerReturn("my-broker", nil)),
+			wantRet: &authd.GBResponse{
+				Broker: "my-broker",
 			},
 		},
 		"With_defined_empty_return_value": {
-			client:  NewDummyClient(nil, WithGetPreviousBrokerReturn("", nil)),
-			wantRet: &authd.GPBResponse{},
+			client:  NewDummyClient(nil, WithGetBrokerReturn("", nil)),
+			wantRet: &authd.GBResponse{},
 		},
 		"With_predefined_default_for_user_empty_return_value": {
 			client: NewDummyClient(nil,
-				WithPreviousBrokerForUser("user0", "broker0"),
-				WithPreviousBrokerForUser("user1@example.com", "broker1"),
+				WithBrokerForUser("user0", "broker0"),
+				WithBrokerForUser("user1@example.com", "broker1"),
 			),
-			args:    &authd.GPBRequest{Username: "user1@example.com"},
-			wantRet: &authd.GPBResponse{PreviousBroker: "broker1"},
+			args:    &authd.GBRequest{Username: "user1@example.com"},
+			wantRet: &authd.GBResponse{Broker: "broker1"},
 		},
 
 		// Error cases
 		"Error_with_missing_user": {
-			client:    NewDummyClient(nil, WithGetPreviousBrokerReturn("", nil)),
-			args:      &authd.GPBRequest{},
+			client:    NewDummyClient(nil, WithGetBrokerReturn("", nil)),
+			args:      &authd.GBRequest{},
 			wantError: errors.New("no username provided"),
 		},
 	}
@@ -117,7 +117,7 @@ func TestGetPreviousBroker(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			ret, err := tc.client.GetPreviousBroker(context.TODO(), tc.args)
+			ret, err := tc.client.GetBroker(context.TODO(), tc.args)
 			require.Equal(t, tc.wantError, err)
 			require.Equal(t, tc.wantRet, ret)
 		})
@@ -1167,7 +1167,7 @@ func TestSetDefaultBrokerForUser(t *testing.T) {
 
 	testCases := map[string]struct {
 		client authd.PAMClient
-		args   *authd.SDBFURequest
+		args   *authd.STBRequest
 
 		wantError error
 	}{
@@ -1176,12 +1176,12 @@ func TestSetDefaultBrokerForUser(t *testing.T) {
 			wantError: errors.New("no input values provided"),
 		},
 		"With_Error_return_value": {
-			client:    NewDummyClient(nil, WithSetDefaultBrokerReturn(errTest)),
+			client:    NewDummyClient(nil, WithSetBrokerReturn(errTest)),
 			wantError: errTest,
 		},
 		"With_valid_arguments": {
-			client: NewDummyClient(nil, WithSetDefaultBrokerReturn(nil)),
-			args: &authd.SDBFURequest{
+			client: NewDummyClient(nil, WithSetBrokerReturn(nil)),
+			args: &authd.STBRequest{
 				BrokerId: "broker-id",
 				Username: "username",
 			},
@@ -1190,12 +1190,12 @@ func TestSetDefaultBrokerForUser(t *testing.T) {
 		// Error cases
 		"Error_if_no_user_name_is_provided": {
 			client:    NewDummyClient(nil),
-			args:      &authd.SDBFURequest{BrokerId: "broker-id"},
+			args:      &authd.STBRequest{BrokerId: "broker-id"},
 			wantError: errors.New("no valid username provided"),
 		},
 		"Error_if_no_broker_ID_is_provided": {
 			client:    NewDummyClient(nil),
-			args:      &authd.SDBFURequest{Username: "username"},
+			args:      &authd.STBRequest{Username: "username"},
 			wantError: errors.New("no valid broker ID provided"),
 		},
 	}
@@ -1203,7 +1203,7 @@ func TestSetDefaultBrokerForUser(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			ret, err := tc.client.SetDefaultBrokerForUser(context.TODO(), tc.args)
+			ret, err := tc.client.SetBroker(context.TODO(), tc.args)
 			require.Equal(t, err, tc.wantError)
 			if err != nil {
 				require.Nil(t, ret)
@@ -1215,10 +1215,10 @@ func TestSetDefaultBrokerForUser(t *testing.T) {
 			if tc.args == nil {
 				return
 			}
-			retBroker, err := tc.client.GetPreviousBroker(context.TODO(),
-				&authd.GPBRequest{Username: tc.args.Username})
+			retBroker, err := tc.client.GetBroker(context.TODO(),
+				&authd.GBRequest{Username: tc.args.Username})
 			require.NoError(t, err)
-			require.Equal(t, tc.args.BrokerId, retBroker.PreviousBroker)
+			require.Equal(t, tc.args.BrokerId, retBroker.Broker)
 		})
 	}
 }

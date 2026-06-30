@@ -7,6 +7,7 @@ users:
       shell: /bin/bash
       broker_id: broker-id
       locked: true
+      provider_id: ""
 groups:
     - name: group1
       gid: 11111
@@ -14,4 +15,4 @@ groups:
 users_to_groups:
     - uid: 1111
       gid: 11111
-schema_version: 2
+schema_version: 3

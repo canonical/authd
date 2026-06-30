@@ -5,6 +5,8 @@ users:
       gecos: gecos for success_with_uppercase_groups@example.com
       dir: /home/success_with_uppercase_groups@example.com
       shell: /bin/sh/success_with_uppercase_groups@example.com
+      broker_id: "1902181170"
+      provider_id: providerid-success_with_uppercase_groups@example.com
 groups:
     - name: success_with_uppercase_groups@example.com
       gid: 1111
@@ -27,4 +29,4 @@ users_to_groups:
       gid: 33333
     - uid: 1111
       gid: 44444
-schema_version: 2
+schema_version: 3

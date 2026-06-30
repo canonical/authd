@@ -363,7 +363,7 @@ func TestDeleteUser(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			err := b.DeleteUser(context.Background(), tc.username)
+			err := b.DeleteUser(context.Background(), tc.username, "")
 			if tc.wantErr {
 				require.Error(t, err, "DeleteUser should return an error, but did not")
 				return

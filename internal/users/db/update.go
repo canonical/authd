@@ -57,12 +57,28 @@ func handleUserUpdate(db queryable, u UserRow) error {
 		return err
 	}
 
-	// If a user with the same UID exists, we need to ensure that it's the same user or fail the update otherwise.
+	// If a user with the same UID exists, we need to ensure that it's the same user or that the
+	// name change was authorised (i.e. the provider ID matched during UpdateUser).
 	if existingUser.Name != "" && existingUser.Name != u.Name {
-		log.Errorf(context.TODO(), "UID %d for user %q already in use by user %q",
-			u.UID, u.Name, existingUser.Name)
-		return fmt.Errorf("UID for user %q already in use by a different user %q",
-			u.Name, existingUser.Name)
+		if u.ProviderID == "" || existingUser.ProviderID != u.ProviderID || existingUser.BrokerID != u.BrokerID {
+			log.Errorf(context.TODO(), "UID %d for user %q already in use by user %q",
+				u.UID, u.Name, existingUser.Name)
+			return fmt.Errorf("UID for user %q already in use by a different user %q",
+				u.Name, existingUser.Name)
+		}
+
+		// Make sure that the new username is not already taken by another user.
+		userWithNewName, err := userByName(db, u.Name)
+		if err != nil && !errors.Is(err, NoDataFoundError{}) {
+			return err
+		}
+		if err == nil && userWithNewName.UID != u.UID {
+			log.Errorf(context.TODO(), "Username %q already in use by a different user", u.Name)
+			return fmt.Errorf("username %q already in use by a different user", u.Name)
+		}
+
+		log.Infof(context.TODO(), "Username changed for UID %d from %q to %q (broker-scoped provider-ID matched)",
+			u.UID, existingUser.Name, u.Name)
 	}
 
 	// Ensure that we use the same homedir as the one we have in the database.
@@ -76,6 +92,12 @@ func handleUserUpdate(db queryable, u UserRow) error {
 		log.Debugf(context.TODO(), "Not updating shell to %q because it's already set to %q", u.Shell, existingUser.Shell)
 		u.Shell = existingUser.Shell
 	}
+
+	// Preserve the locked state. It is managed exclusively via LockUser/UnlockUser and is never
+	// carried in the broker-provided UserInfo, so a regular update (including a provider-ID rename)
+	// must not reset it. Without this, an IdP-side username change would silently re-enable a
+	// disabled account.
+	u.Locked = existingUser.Locked
 
 	return insertOrUpdateUserByID(db, u)
 }
@@ -92,10 +114,16 @@ func handleGroupsUpdate(db queryable, groups []GroupRow) error {
 		// If a group with the same GID exists, we need to ensure that it's the same group or fail the update otherwise.
 		// Ignore the case that the UGID of the existing group is empty, which means that the group was stored without a
 		// UGID, which was the case before https://github.com/canonical/authd/pull/647.
+		// Also allow a UGID rename when the existing group is a private-group-style record (UGID == Name):
+		// those are keyed by username, so an IdP-side username change legitimately changes both.
 		if groupExists && existingGroup.UGID != "" && existingGroup.UGID != group.UGID {
-			log.Errorf(context.TODO(), "GID %d for group with UGID %q already in use by a group with UGID %q", group.GID, group.UGID, existingGroup.UGID)
-			return fmt.Errorf("GID for group %q already in use by a different group %q",
-				group.Name, existingGroup.Name)
+			if existingGroup.UGID == existingGroup.Name {
+				log.Infof(context.TODO(), "Renaming private group %q: UGID changing from %q to %q", existingGroup.Name, existingGroup.UGID, group.UGID)
+			} else {
+				log.Errorf(context.TODO(), "GID %d for group with UGID %q already in use by a group with UGID %q", group.GID, group.UGID, existingGroup.UGID)
+				return fmt.Errorf("GID for group %q already in use by a different group %q",
+					group.Name, existingGroup.Name)
+			}
 		}
 
 		log.Debugf(context.Background(), "Updating entry of group %q (%+v)", group.Name, group)
@@ -328,7 +356,7 @@ func (m *Manager) SetGroupID(groupName string, newGID uint32) ([]UserRow, error)
 	oldGID := oldGroup.GID
 
 	// Get the list of users whose primary group is the old GID
-	query := `SELECT name, uid, gid, gecos, dir, shell, broker_id, locked FROM users WHERE gid = ?`
+	query := `SELECT name, uid, gid, gecos, dir, shell, broker_id, locked, provider_id FROM users WHERE gid = ?`
 	rows, err := tx.Query(query, oldGID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get users with old group as primary group: %w", err)
@@ -338,7 +366,7 @@ func (m *Manager) SetGroupID(groupName string, newGID uint32) ([]UserRow, error)
 	var users []UserRow
 	for rows.Next() {
 		var u UserRow
-		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked)
+		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
 		if err != nil {
 			return nil, fmt.Errorf("scan error: %w", err)
 		}

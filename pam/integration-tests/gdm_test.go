@@ -1097,7 +1097,13 @@ func TestGdmModule(t *testing.T) {
 			gdm_test.RequireEqualData(t, tc.wantAuthResponses, gh.authResponses,
 				"Authentication responses do not match")
 
-			requirePreviousBrokerForUser(t, socketPath, "", pamUser)
+			// On a granted authentication the user is now bound to the broker in the
+			// database, so the previous broker is set right after authentication.
+			brokerAfterAuth := ""
+			if tc.wantError == nil {
+				brokerAfterAuth = gh.selectedBrokerName
+			}
+			requirePreviousBrokerForUser(t, socketPath, brokerAfterAuth, pamUser)
 
 			require.ErrorIs(t, gh.tx.AcctMgmt(pamFlags), tc.wantAcctMgmtErr,
 				"Account Management PAM Error messages do not match")
@@ -1202,7 +1208,7 @@ func TestGdmModuleAcctMgmtWithoutGdmExtension(t *testing.T) {
 	}
 
 	require.NoError(t, gh.tx.Authenticate(pamFlags), "Setup: Authentication failed")
-	requirePreviousBrokerForUser(t, socketPath, "", pamUser)
+	requirePreviousBrokerForUser(t, socketPath, gh.selectedBrokerName, pamUser)
 
 	// We disable gdm extension support, as if it was the case when the module is loaded
 	// again from the exec module.
@@ -1211,7 +1217,7 @@ func TestGdmModuleAcctMgmtWithoutGdmExtension(t *testing.T) {
 
 	require.ErrorIs(t, gh.tx.AcctMgmt(pamFlags), pam_test.ErrIgnore,
 		"Account Management PAM Error message do not match")
-	requirePreviousBrokerForUser(t, socketPath, "", pamUser)
+	requirePreviousBrokerForUser(t, socketPath, gh.selectedBrokerName, pamUser)
 }
 
 func buildPAMModule(t *testing.T) string {

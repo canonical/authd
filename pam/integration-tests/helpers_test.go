@@ -220,15 +220,15 @@ func requirePreviousBrokerForUser(t *testing.T, socketPath string, brokerName st
 	pamClient := authd.NewPAMClient(conn)
 	brokers, err := pamClient.AvailableBrokers(context.TODO(), nil)
 	require.NoError(t, err, "Can't get available brokers")
-	prevBroker, err := pamClient.GetPreviousBroker(context.TODO(), &authd.GPBRequest{Username: user})
-	require.NoError(t, err, "Can't get previous broker")
+	prevBroker, err := pamClient.GetBroker(context.TODO(), &authd.GBRequest{Username: user})
+	require.NoError(t, err, "Can't get  broker")
 	var prevBrokerID string
 	for _, b := range brokers.BrokersInfos {
 		if b.Name == brokerName {
 			prevBrokerID = b.Id
 		}
 	}
-	require.Equal(t, prevBroker.PreviousBroker, prevBrokerID)
+	require.Equal(t, prevBroker.Broker, prevBrokerID)
 }
 
 func sleepDuration(in time.Duration) time.Duration {
