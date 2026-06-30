@@ -73,10 +73,21 @@ sleep when there is genuinely no observable signal to poll on.
 1. **Model on the closest existing test.** Find the `.robot` file under `tests/`
    that most resembles what you're adding and follow its structure (setup,
    teardown, keyword usage).
-2. **Reuse keywords; don't reinvent them.** The shared vocabulary lives in
-   `resources/utils.resource`, `resources/authd.resource`, and
-   `resources/broker.resource`. Compose from these instead of writing new
-   low-level keystroke/OCR sequences. High-value keywords and idioms:
+2. **Reuse keywords; don't reinvent them.** Before writing a keyword that
+   might already exist, check these sources:
+   - **authd shared resources** in `resources/utils.resource`,
+     `resources/authd.resource`, and `resources/broker.resource`.
+   - **YARF built-ins** (`Hid.*`, `Match Text`, `Find Text`, `Read Text`,
+     etc.) — see the [YARF keyword reference](https://canonical-yarf.readthedocs-hosted.com/en/latest/reference/)
+     or browse `.yarf/docs/reference/rf_libraries/`.
+   - **Robot Framework standard libraries** (`BuiltIn`, `Collections`,
+     `OperatingSystem`, `String`, `Process`, `SSH`, …) — see
+     https://robotframework.org/robotframework/; if the Context7 MCP tool
+     is available, you can also use that (library ID 
+     `/robotframework/robotframework`).
+
+   Compose from these instead of writing new low-level keystroke/OCR
+   sequences. High-value keywords and idioms:
    - `Log In`, `Wait Until Desktop Ready`, `Open Terminal`,
      `Run Command In Terminal` — GDM/desktop/terminal lifecycle.
    - `Try machinectl login Prompt` — retries the `machinectl login` prompt,
