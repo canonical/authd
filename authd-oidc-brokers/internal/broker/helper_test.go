@@ -175,7 +175,7 @@ func newSessionForTests(t *testing.T, b *broker.Broker, username, mode string) (
 		mode = sessionmode.Login
 	}
 
-	id, key, err := b.NewSession(username, "some lang", mode)
+	id, key, err := b.NewSession(username, "some lang", mode, "")
 	require.NoError(t, err, "Setup: NewSession should not have returned an error")
 
 	return id, key
@@ -307,11 +307,11 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 			options.gecos = options.username
 		}
 		tok.UserInfo = info.User{
-			Name:  options.username,
-			UUID:  "saved-user-id",
-			Home:  "/home/" + options.username,
-			Gecos: options.gecos,
-			Shell: "/usr/bin/bash",
+			Name:       options.username,
+			ProviderID: "saved-user-id",
+			Home:       "/home/" + options.username,
+			Gecos:      options.gecos,
+			Shell:      "/usr/bin/bash",
 			Groups: []info.Group{
 				{Name: "saved-remote-group", UGID: "12345"},
 				{Name: "saved-local-group", UGID: ""},

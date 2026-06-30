@@ -9,5 +9,7 @@ func (u UserInfo) Equals(other UserInfo) bool {
 		u.Gecos == other.Gecos &&
 		u.Dir == other.Dir &&
 		u.Shell == other.Shell &&
+		u.BrokerID == other.BrokerID &&
+		u.ProviderID == other.ProviderID &&
 		sliceutils.EqualContentFunc(u.Groups, other.Groups, GroupInfo.Equals)
 }

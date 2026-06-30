@@ -130,6 +130,30 @@ func (b *Broker) UserDataDir(username string) (string, error) {
 	return b.userDataDir(username)
 }
 
+// EnsuredCachePaths captures the cache-related fields of a session after running
+// ensureProviderIDCacheDir, so that tests can assert on the resulting state.
+type EnsuredCachePaths struct {
+	ProviderID   string
+	UserDataDir  string
+	TokenPath    string
+	PasswordPath string
+}
+
+// EnsureProviderIDCacheDir builds a session for username whose cache paths are
+// rooted at currentDataDir, runs ensureProviderIDCacheDir for providerID and
+// returns the resulting cache-related session fields.
+func (b *Broker) EnsureProviderIDCacheDir(username, currentDataDir, providerID string) EnsuredCachePaths {
+	s := &session{username: username}
+	setCachePaths(s, currentDataDir)
+	b.ensureProviderIDCacheDir(s, providerID)
+	return EnsuredCachePaths{
+		ProviderID:   s.providerID,
+		UserDataDir:  s.userDataDir,
+		TokenPath:    s.tokenPath,
+		PasswordPath: s.passwordPath,
+	}
+}
+
 // NormalizedIssuer exposes the broker's normalizedIssuer method for tests.
 func (b *Broker) NormalizedIssuer(issuerURL string) string {
 	return normalizedIssuer(issuerURL)

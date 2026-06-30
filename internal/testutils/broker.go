@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	latestAPIVersion = 2
+	latestAPIVersion = 3
 
 	dbusInterface = "com.ubuntu.authd.Broker"
 	objectPathFmt = "/com/ubuntu/authd/%s"
@@ -128,7 +128,7 @@ func writeConfig(cfgDir, name string) (string, error) {
 }
 
 // NewSession returns default values to be used in tests or an error if requested.
-func (b *BrokerBusMock) NewSession(username, lang, mode string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+func (b *BrokerBusMock) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
 	parsedUsername := parseSessionID(username)
 	if parsedUsername == "ns_error" {
 		return "", "", dbus.MakeFailedError(fmt.Errorf("broker %q: NewSession errored out", b.name))
@@ -352,7 +352,7 @@ func (b *BrokerBusMock) UserPreCheck(username string) (userinfo string, dbusErr 
 }
 
 // DeleteUser removes broker side user data or returns an error if requested.
-func (b *BrokerBusMock) DeleteUser(username string) (dbusErr *dbus.Error) {
+func (b *BrokerBusMock) DeleteUser(username, providerID string) (dbusErr *dbus.Error) {
 	if strings.Contains(username, "delete_error") {
 		return dbus.MakeFailedError(fmt.Errorf("broker %q: DeleteUser errored out", b.name))
 	}
@@ -426,19 +426,19 @@ func userInfoFromName(sessionID string, extraGroups []groupJSONInfo) string {
 	}
 
 	user := struct {
-		Name   string
-		UUID   string
-		Dir    string
-		Shell  string
-		Groups []groupJSONInfo
-		Gecos  string
-	}{Name: name, Dir: home, Shell: shell, Groups: groups, Gecos: gecos}
+		Name       string
+		ProviderID string
+		Dir        string
+		Shell      string
+		Groups     []groupJSONInfo
+		Gecos      string
+	}{Name: name, ProviderID: "providerid-" + name, Dir: home, Shell: shell, Groups: groups, Gecos: gecos}
 
 	// only used for tests, we can ignore the template execution error as the returned data will be failing.
 	var buf bytes.Buffer
 	_ = template.Must(template.New("").Parse(`{
 		"name": "{{.Name}}",
-		"uuid": "{{.UUID}}",
+		"provider_id": "{{.ProviderID}}",
 		"gecos": "{{.Gecos}}",
 		"dir": "{{.Dir}}",
 		"shell": "{{.Shell}}",

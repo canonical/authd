@@ -5,6 +5,7 @@ gecos: |-
     On multiple lines
 dir: /home/user1@example.com
 shell: /bin/bash
+broker_id: broker-id
 groups:
     - name: group1
       gid: 11111

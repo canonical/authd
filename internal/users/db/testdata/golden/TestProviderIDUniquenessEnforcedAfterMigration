@@ -1,0 +1,73 @@
+users:
+    - name: user1
+      uid: 1111
+      gid: 11111
+      gecos: User1 gecos
+      dir: /home/user1
+      shell: /bin/bash
+      broker_id: broker-id
+      provider_id: ""
+    - name: user2
+      uid: 2222
+      gid: 22222
+      gecos: User2 gecos
+      dir: /home/user2
+      shell: /bin/bash
+      broker_id: broker-id
+      provider_id: ""
+    - name: user3
+      uid: 3333
+      gid: 33333
+      gecos: ""
+      dir: /home/user3
+      shell: /bin/bash
+      broker_id: broker-id
+      provider_id: provider-1
+    - name: user5
+      uid: 5555
+      gid: 33333
+      gecos: ""
+      dir: /home/user5
+      shell: /bin/bash
+      broker_id: broker-id
+      provider_id: ""
+    - name: user6
+      uid: 6666
+      gid: 33333
+      gecos: ""
+      dir: /home/user6
+      shell: /bin/bash
+      broker_id: broker-id
+      provider_id: ""
+    - name: user7
+      uid: 7777
+      gid: 33333
+      gecos: ""
+      dir: /home/user7
+      shell: /bin/bash
+      broker_id: other-broker-id
+      provider_id: provider-1
+groups:
+    - name: group1
+      gid: 11111
+      ugid: "12345678"
+    - name: group2
+      gid: 22222
+      ugid: "87654321"
+    - name: group3
+      gid: 33333
+      ugid: "33333333"
+users_to_groups:
+    - uid: 1111
+      gid: 11111
+    - uid: 2222
+      gid: 22222
+    - uid: 3333
+      gid: 33333
+    - uid: 5555
+      gid: 33333
+    - uid: 6666
+      gid: 33333
+    - uid: 7777
+      gid: 33333
+schema_version: 3

@@ -267,7 +267,7 @@ func New(name string) (b *Broker, fullName, brandIcon string) {
 }
 
 // NewSession creates a new session for the specified user.
-func (b *Broker) NewSession(ctx context.Context, username, lang, mode string) (sessionID, encryptionKey string, err error) {
+func (b *Broker) NewSession(ctx context.Context, username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
 	sessionID = uuid.New().String()
 	info := sessionInfo{
 		username:        username,
@@ -929,7 +929,7 @@ func (b *Broker) UserPreCheck(ctx context.Context, username string) (string, err
 }
 
 // DeleteUser removes any broker side data associated with the user.
-func (b *Broker) DeleteUser(ctx context.Context, username string) error {
+func (b *Broker) DeleteUser(ctx context.Context, username, providerID string) error {
 	exampleUsersMu.Lock()
 	defer exampleUsersMu.Unlock()
 
@@ -1025,19 +1025,19 @@ func userInfoFromName(name string) string {
 	})
 
 	user := struct {
-		Name   string
-		UUID   string
-		Dir    string
-		Shell  string
-		Groups []groupJSONInfo
-		Gecos  string
+		Name       string
+		ProviderID string
+		Dir        string
+		Shell      string
+		Groups     []groupJSONInfo
+		Gecos      string
 	}{
-		Name:   name,
-		UUID:   "uuid-" + name,
-		Dir:    filepath.Join(homeBaseDir, name),
-		Shell:  "/bin/sh",
-		Groups: []groupJSONInfo{{Name: "group-" + name, UGID: "ugid-" + name}},
-		Gecos:  "gecos for " + name,
+		Name:       name,
+		ProviderID: "providerid-" + name,
+		Dir:        filepath.Join(homeBaseDir, name),
+		Shell:      "/bin/sh",
+		Groups:     []groupJSONInfo{{Name: "group-" + name, UGID: "ugid-" + name}},
+		Gecos:      "gecos for " + name,
 	}
 
 	switch name {
@@ -1056,7 +1056,7 @@ func userInfoFromName(name string) string {
 	var buf bytes.Buffer
 	_ = template.Must(template.New("").Parse(`{
 		"name": "{{.Name}}",
-		"uuid": "{{.UUID}}",
+		"provider_id": "{{.ProviderID}}",
 		"gecos": "{{.Gecos}}",
 		"dir": "{{.Dir}}",
 		"shell": "{{.Shell}}",

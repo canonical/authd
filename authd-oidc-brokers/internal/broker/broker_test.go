@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -27,6 +28,54 @@ import (
 )
 
 var defaultIssuerURL string
+
+func requireIssuerCacheTree(t *testing.T, issuerDir string, want map[string]string) {
+	t.Helper()
+
+	got := make(map[string]string)
+	err := filepath.WalkDir(issuerDir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == issuerDir {
+			return nil
+		}
+
+		rel, err := filepath.Rel(issuerDir, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+
+		if entry.Type()&os.ModeSymlink != 0 {
+			target, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			targetPath := target
+			if !filepath.IsAbs(targetPath) {
+				targetPath = filepath.Join(filepath.Dir(path), targetPath)
+			}
+			if targetRel, err := filepath.Rel(issuerDir, targetPath); err == nil && targetRel != "." && targetRel != ".." && !strings.HasPrefix(targetRel, ".."+string(os.PathSeparator)) {
+				target = targetRel
+			}
+			got[rel] = "symlink -> " + filepath.ToSlash(target)
+			return nil
+		}
+
+		if entry.IsDir() {
+			got[rel] = "dir"
+			return nil
+		}
+		got[rel] = "file"
+		return nil
+	})
+	if errors.Is(err, os.ErrNotExist) && len(want) == 0 {
+		return
+	}
+	require.NoError(t, err, "Walking issuer cache directory should not fail")
+	require.Equal(t, want, got, "Issuer cache directory tree does not match")
+}
 
 func TestNew(t *testing.T) {
 	t.Parallel()
@@ -146,7 +195,7 @@ func TestNewSession(t *testing.T) {
 				username = "test-user"
 			}
 
-			id, _, err := b.NewSession(username, "lang", sessionmode.Login)
+			id, _, err := b.NewSession(username, "lang", sessionmode.Login, "")
 			t.Logf("NewSession returned id: %q, err: %v", id, err)
 			if tc.wantErr {
 				require.Error(t, err, "NewSession should have returned an error")
@@ -158,6 +207,138 @@ func TestNewSession(t *testing.T) {
 			require.NoError(t, err, "Session should have been created")
 
 			require.Equal(t, tc.wantOffline, gotOffline, "Session should have been created in the expected mode")
+		})
+	}
+}
+
+// TestNewSessionRecoversFromDanglingCacheSymlink verifies that when the username cache path is a
+// dangling compatibility symlink (its provider ID-keyed target was removed, e.g. by a partial
+// DeleteUser), NewSession removes the broken link and falls back to a fresh username-based cache
+// directory. Without this, the resolved cache path stays under the dangling symlink and every
+// subsequent token/password write fails, denying the login with no way to recover.
+func TestNewSessionRecoversFromDanglingCacheSymlink(t *testing.T) {
+	t.Parallel()
+
+	b := newBrokerForTests(t, &brokerForTestConfig{issuerURL: defaultIssuerURL})
+
+	const username = "user@example.com"
+	userDataDir, err := b.UserDataDir(username)
+	require.NoError(t, err, "Setup: deriving the username data dir should not fail")
+	require.NoError(t, os.MkdirAll(filepath.Dir(userDataDir), 0700), "Setup: create the issuer dir")
+
+	// A compatibility symlink left behind by a prior migration, whose provider ID-keyed target no
+	// longer exists.
+	missingTarget, err := b.UserDataDir("provider-id-removed")
+	require.NoError(t, err)
+	require.NoError(t, os.Symlink(missingTarget, userDataDir), "Setup: create dangling compat symlink")
+	_, statErr := os.Stat(userDataDir)
+	require.Error(t, statErr, "Setup: the symlink should be dangling")
+
+	sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, "")
+	require.NoError(t, err, "NewSession should not error on a dangling symlink")
+
+	// The dangling symlink must have been removed so the path can be recreated as a real directory.
+	_, lstatErr := os.Lstat(userDataDir)
+	require.ErrorIs(t, lstatErr, os.ErrNotExist, "the dangling cache symlink should have been removed")
+
+	// Caching the token must now succeed (it would have failed through the dangling link).
+	tokenPath := b.TokenPathForSession(sessionID)
+	require.NoError(t, os.MkdirAll(filepath.Dir(tokenPath), 0700), "creating the fresh cache dir should succeed")
+	require.NoError(t, os.WriteFile(tokenPath, []byte("{}"), 0600),
+		"writing the token to the recovered cache path should succeed")
+	requireIssuerCacheTree(t, filepath.Dir(userDataDir), map[string]string{
+		"user@example.com":            "dir",
+		"user@example.com/token.json": "file",
+	})
+}
+
+func TestNewSessionWithProviderIDRepairsUsernameCompatibilityPath(t *testing.T) {
+	t.Parallel()
+
+	b := newBrokerForTests(t, &brokerForTestConfig{issuerURL: defaultIssuerURL})
+
+	const (
+		username   = "user@example.com"
+		providerID = "provider-id-123"
+	)
+	usernameDir, err := b.UserDataDir(username)
+	require.NoError(t, err, "Setup: deriving the username data dir should not fail")
+	providerIDDir, err := b.UserDataDir(providerID)
+	require.NoError(t, err, "Setup: deriving the provider ID data dir should not fail")
+
+	require.NoError(t, os.MkdirAll(usernameDir, 0700), "Setup: creating stale username cache dir should not fail")
+	require.NoError(t, os.WriteFile(filepath.Join(usernameDir, "token.json"), []byte("cached-token-marker"), 0600),
+		"Setup: writing stale username token should not fail")
+	require.NoError(t, os.MkdirAll(providerIDDir, 0700), "Setup: creating provider ID cache dir should not fail")
+	require.NoError(t, os.WriteFile(filepath.Join(providerIDDir, "token.json"), []byte("cached-token-marker"), 0600),
+		"Setup: writing provider ID token should not fail")
+
+	sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, providerID)
+	require.NoError(t, err, "NewSession should not error when repairing a stale username cache dir")
+	require.Equal(t, providerIDDir, b.UserDataDirForSession(sessionID), "Session should use the provider ID cache dir")
+
+	info, err := os.Lstat(usernameDir)
+	require.NoError(t, err, "The username compatibility path should exist")
+	require.NotZero(t, info.Mode()&os.ModeSymlink, "The username compatibility path should be a symlink")
+	target, err := filepath.EvalSymlinks(usernameDir)
+	require.NoError(t, err, "The username compatibility symlink should resolve")
+	require.Equal(t, providerIDDir, target, "The username compatibility symlink should target the provider ID cache dir")
+	requireIssuerCacheTree(t, filepath.Dir(usernameDir), map[string]string{
+		"provider-id-123":            "dir",
+		"provider-id-123/token.json": "file",
+		"user@example.com":           "symlink -> provider-id-123",
+	})
+}
+
+// TestNewSessionRemovesUnsafeCacheSymlink verifies that when the username cache path is a
+// compatibility symlink resolving to an unsafe target (outside the issuer cache directory or a
+// non-directory), NewSession removes the link and falls back to a fresh username-based cache
+// directory instead of writing through it.
+func TestNewSessionRemovesUnsafeCacheSymlink(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		// targetOutsideIssuer points the symlink at a directory outside the issuer cache tree.
+		targetOutsideIssuer bool
+		// targetIsFile points the symlink at a regular file instead of a directory.
+		targetIsFile bool
+	}{
+		"Target_points_outside_issuer_cache_directory": {targetOutsideIssuer: true},
+		"Target_is_not_a_directory":                    {targetIsFile: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			b := newBrokerForTests(t, &brokerForTestConfig{issuerURL: defaultIssuerURL})
+
+			const username = "user@example.com"
+			userDataDir, err := b.UserDataDir(username)
+			require.NoError(t, err, "Setup: deriving the username data dir should not fail")
+			require.NoError(t, os.MkdirAll(filepath.Dir(userDataDir), 0700), "Setup: create the issuer dir")
+
+			var target string
+			switch {
+			case tc.targetOutsideIssuer:
+				target = filepath.Join(t.TempDir(), "outside")
+				require.NoError(t, os.MkdirAll(target, 0700), "Setup: create the out-of-tree target")
+			case tc.targetIsFile:
+				target, err = b.UserDataDir("provider-id-file")
+				require.NoError(t, err)
+				require.NoError(t, os.WriteFile(target, []byte("not a dir"), 0600), "Setup: create the file target")
+			}
+			require.NoError(t, os.Symlink(target, userDataDir), "Setup: create unsafe compat symlink")
+
+			sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, "")
+			require.NoError(t, err, "NewSession should not error on an unsafe symlink")
+
+			_, lstatErr := os.Lstat(userDataDir)
+			require.ErrorIs(t, lstatErr, os.ErrNotExist, "the unsafe cache symlink should have been removed")
+
+			tokenPath := b.TokenPathForSession(sessionID)
+			require.NoError(t, os.MkdirAll(filepath.Dir(tokenPath), 0700), "creating the fresh cache dir should succeed")
+			require.NoError(t, os.WriteFile(tokenPath, []byte("{}"), 0600),
+				"writing the token to the recovered cache path should succeed")
 		})
 	}
 }
@@ -1254,11 +1435,20 @@ func TestIsAuthenticated(t *testing.T) {
 			// Ensure that the directory structure is generic to avoid golden file conflicts
 			if _, err := os.Stat(filepath.Dir(b.TokenPathForSession(sessionID))); err == nil {
 				issuerDir := filepath.Dir(filepath.Dir(b.TokenPathForSession(sessionID)))
-				newIsserDir := filepath.Join(filepath.Dir(issuerDir), "provider_url")
-				err := os.Rename(issuerDir, newIsserDir)
+				newIssuerDir := filepath.Join(filepath.Dir(issuerDir), "provider_url")
+				err := os.Rename(issuerDir, newIssuerDir)
 				if err != nil {
 					require.ErrorIs(t, err, os.ErrNotExist, "Teardown: Failed to rename token directory")
 					t.Logf("Failed to rename token directory: %v", err)
+				}
+
+				// Remove compatibility symlinks left by cache migration.
+				// These point to temp directories and break golden file comparison.
+				entries, _ := os.ReadDir(newIssuerDir)
+				for _, entry := range entries {
+					if entry.Type()&os.ModeSymlink != 0 {
+						os.Remove(filepath.Join(newIssuerDir, entry.Name()))
+					}
 				}
 			}
 
@@ -1407,10 +1597,19 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			// Ensure that the directory structure is generic to avoid golden file conflicts
 			issuerDataDir := filepath.Dir(b.UserDataDirForSession(firstSession))
 			if _, err := os.Stat(issuerDataDir); err == nil {
-				err := os.Rename(issuerDataDir, filepath.Join(filepath.Dir(issuerDataDir), "provider_url"))
+				newIssuerDir := filepath.Join(filepath.Dir(issuerDataDir), "provider_url")
+				err := os.Rename(issuerDataDir, newIssuerDir)
 				if err != nil {
 					require.ErrorIs(t, err, os.ErrNotExist, "Teardown: Failed to rename issuer data directory")
 					t.Logf("Failed to rename issuer data directory: %v", err)
+				}
+
+				// Remove compatibility symlinks left by cache migration.
+				entries, _ := os.ReadDir(newIssuerDir)
+				for _, entry := range entries {
+					if entry.Type()&os.ModeSymlink != 0 {
+						os.Remove(filepath.Join(newIssuerDir, entry.Name()))
+					}
 				}
 			}
 			golden.CheckOrUpdateFileTree(t, outDir)
@@ -1798,15 +1997,36 @@ func TestUserDataDir(t *testing.T) {
 func TestDeleteUser(t *testing.T) {
 	t.Parallel()
 
+	const providerID = "provider-id-123"
+
 	tests := map[string]struct {
-		username        string
-		createUserDir   bool
-		readOnlyDataDir bool
+		username   string
+		providerID string
+
+		createUserDir       bool
+		createProviderIDDir bool
+		// usernameIsSymlink makes the username path a compatibility symlink pointing
+		// to the provider ID-keyed directory, as created by the cache migration.
+		usernameIsSymlink bool
+		readOnlyDataDir   bool
 
 		wantErr bool
 	}{
 		"Successfully_delete_existing_user":        {username: "user@example.com", createUserDir: true},
 		"Successfully_delete_unknown_user_is_noop": {username: "unknown@example.com"},
+
+		// Deleting by username when the username path is a compatibility symlink
+		// created by the cache migration must also remove the provider ID-keyed
+		// target, otherwise the token and password would be left behind on disk.
+		"Successfully_delete_symlinked_user_and_provider_ID_target": {
+			username: "user@example.com", usernameIsSymlink: true, createProviderIDDir: true,
+		},
+		"Successfully_delete_by_username_and_provider_ID": {
+			username: "user@example.com", providerID: providerID, usernameIsSymlink: true, createProviderIDDir: true,
+		},
+		"Successfully_delete_by_provider_ID_only": {
+			providerID: providerID, createProviderIDDir: true,
+		},
 
 		"Error_when_user_data_dir_cannot_be_removed":     {username: "user@example.com", createUserDir: true, readOnlyDataDir: true, wantErr: true},
 		"Error_when_userDataDir_could_not_be_determined": {username: "", wantErr: true},
@@ -1819,13 +2039,25 @@ func TestDeleteUser(t *testing.T) {
 				issuerURL: defaultIssuerURL,
 			})
 
-			// Derive the path where DeleteUser will look for the user's data
-			userDataDir, err := b.UserDataDir(tc.username)
-			if tc.username == "" {
-				require.Error(t, err, "Setup: UserDataDir should have returned an error for empty username")
+			// providerIDDir is always derived from the constant provider ID: the
+			// on-disk cache directory exists regardless of whether the provider ID is
+			// passed to DeleteUser. Creating it first also creates the shared issuer
+			// directory needed to place the username symlink.
+			providerIDDir, err := b.UserDataDir(providerID)
+			require.NoError(t, err, "Setup: UserDataDir for provider ID should not have returned an error")
+
+			// Derive the path where DeleteUser will look for the user's data.
+			userDataDir, errUser := b.UserDataDir(tc.username)
+
+			// An empty username (and no provider ID) only verifies that the data dir
+			// path could not be derived.
+			if tc.username == "" && tc.providerID == "" {
+				require.Error(t, errUser, "Setup: UserDataDir should have returned an error for empty username")
 				return
 			}
-			require.NoError(t, err, "Setup: UserDataDir should not have returned an error for valid username")
+			if tc.username != "" {
+				require.NoError(t, errUser, "Setup: UserDataDir should not have returned an error for valid username")
+			}
 
 			if tc.createUserDir {
 				err := os.MkdirAll(userDataDir, 0700)
@@ -1836,6 +2068,19 @@ func TestDeleteUser(t *testing.T) {
 				require.NoError(t, err, "Setup: could not write dummy token file")
 			}
 
+			if tc.createProviderIDDir {
+				// Create the real provider ID-keyed directory with cached data.
+				generateAndStoreCachedInfo(t, tokenOptions{}, filepath.Join(providerIDDir, "token.json"))
+				err := os.WriteFile(filepath.Join(providerIDDir, "password"), []byte("hashed"), 0600)
+				require.NoError(t, err, "Setup: could not write dummy password file")
+			}
+
+			if tc.usernameIsSymlink {
+				// Reproduce the compatibility symlink left behind by the cache migration.
+				err := os.Symlink(providerIDDir, userDataDir)
+				require.NoError(t, err, "Setup: could not create compatibility symlink")
+			}
+
 			if tc.readOnlyDataDir {
 				// Make the issuer directory read-only so RemoveAll fails on the user subdir
 				issuerDir := filepath.Dir(userDataDir)
@@ -1844,15 +2089,559 @@ func TestDeleteUser(t *testing.T) {
 				t.Cleanup(func() { _ = os.Chmod(issuerDir, 0700) }) //nolint:gosec // Restore full permissions after test
 			}
 
-			err = b.DeleteUser(tc.username)
+			err = b.DeleteUser(tc.username, tc.providerID)
 			if tc.wantErr {
 				require.Error(t, err, "DeleteUser should return an error, but did not")
 				return
 			}
 			require.NoError(t, err, "DeleteUser should not return an error, but did")
 
-			// Verify the user data directory no longer exists
-			require.NoDirExists(t, userDataDir, "User data directory should have been removed")
+			if tc.username != "" {
+				// Verify the user data directory (or compatibility symlink) no longer exists.
+				_, lstatErr := os.Lstat(userDataDir)
+				require.ErrorIs(t, lstatErr, os.ErrNotExist, "User data path should have been removed")
+			}
+			if tc.providerID != "" || tc.usernameIsSymlink {
+				// The provider ID-keyed directory (token + password) must be gone too.
+				require.NoDirExists(t, providerIDDir, "Provider ID directory should have been removed")
+			}
+		})
+	}
+}
+
+func TestDeleteUserDoesNotRemoveMismatchedSymlinkTarget(t *testing.T) {
+	t.Parallel()
+
+	b := newBrokerForTests(t, &brokerForTestConfig{issuerURL: defaultIssuerURL})
+
+	const (
+		username        = "user@example.com"
+		providerID      = "provider-id-123"
+		otherProviderID = "provider-id-other"
+	)
+
+	userDataDir, err := b.UserDataDir(username)
+	require.NoError(t, err, "Setup: deriving the username data dir should not fail")
+	providerIDDir, err := b.UserDataDir(providerID)
+	require.NoError(t, err, "Setup: deriving the provider ID data dir should not fail")
+	otherProviderIDDir, err := b.UserDataDir(otherProviderID)
+	require.NoError(t, err, "Setup: deriving the other provider ID data dir should not fail")
+
+	require.NoError(t, os.MkdirAll(providerIDDir, 0700), "Setup: creating provider ID cache dir should not fail")
+	require.NoError(t, os.WriteFile(filepath.Join(providerIDDir, "token.json"), []byte("delete-me"), 0600),
+		"Setup: writing provider ID token should not fail")
+	require.NoError(t, os.MkdirAll(otherProviderIDDir, 0700), "Setup: creating other provider ID cache dir should not fail")
+	require.NoError(t, os.WriteFile(filepath.Join(otherProviderIDDir, "token.json"), []byte("keep-me"), 0600),
+		"Setup: writing other provider ID token should not fail")
+	require.NoError(t, os.Symlink(otherProviderIDDir, userDataDir), "Setup: creating mismatched compatibility symlink should not fail")
+
+	err = b.DeleteUser(username, providerID)
+	require.NoError(t, err, "DeleteUser should not fail on a mismatched compatibility symlink")
+
+	_, err = os.Lstat(userDataDir)
+	require.ErrorIs(t, err, os.ErrNotExist, "The stale username symlink should be removed")
+	require.NoDirExists(t, providerIDDir, "The requested provider ID cache dir should be removed")
+	require.DirExists(t, otherProviderIDDir, "The unrelated provider ID cache dir should be preserved")
+	gotToken, err := os.ReadFile(filepath.Join(otherProviderIDDir, "token.json"))
+	require.NoError(t, err, "Reading the preserved provider ID token should not fail")
+	require.Equal(t, "keep-me", string(gotToken), "The unrelated provider ID cache should not be modified")
+	requireIssuerCacheTree(t, filepath.Dir(userDataDir), map[string]string{
+		"provider-id-other":            "dir",
+		"provider-id-other/token.json": "file",
+	})
+}
+
+// runDeviceAuthAndNewPassword drives a full online device-auth followed by the
+// newpassword step for the given session, the same two IsAuthenticated calls the
+// PAM flow performs. It returns the access result of each call.
+func runDeviceAuthAndNewPassword(t *testing.T, b *broker.Broker, sessionID, key, newPassword string) (deviceAuthAccess, newPasswordAccess string) {
+	t.Helper()
+
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+	deviceAuthAccess, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err, "Device auth IsAuthenticated should not error")
+
+	updateAuthModes(t, b, sessionID, authmodes.NewPassword)
+	secret := encryptSecret(t, newPassword, key)
+	newPasswordData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, secret)
+	newPasswordAccess, _, err = b.IsAuthenticated(sessionID, newPasswordData)
+	require.NoError(t, err, "New password IsAuthenticated should not error")
+
+	return deviceAuthAccess, newPasswordAccess
+}
+
+// TestDeviceAuthRedirectsToExistingProviderIDDir covers the case where the broker is
+// updated but authd is not (so NewSession receives no provider ID) and the provider
+// ID-keyed cache directory already exists from a previous login, but the current
+// username path does not yet resolve to it. This is what an email change at the IdP
+// looks like to the broker: it only sees the current username plus the provider ID it
+// learns online. The provider ID is learned during the online device auth, so the
+// redirect to the existing directory must happen there, before device registration and
+// the new password are written. The session must end up using the existing provider ID
+// directory (preserving the cached token, including any device registration data), with
+// a compatibility symlink left at the username path.
+//
+// The mock provider's live ID token is fixed to email "test-user@email.com" and sub
+// "test-user-id", and VerifyUsername requires the session username to match that email,
+// so the session uses that username; the pre-existing provider ID directory standing in
+// for the prior login is what exercises the redirect.
+func TestDeviceAuthRedirectsToExistingProviderIDDir(t *testing.T) {
+	t.Parallel()
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		issuerURL:             defaultIssuerURL,
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+	})
+
+	const (
+		username   = "test-user@email.com"
+		providerID = "test-user-id"
+	)
+	providerIDDir, err := b.UserDataDir(providerID)
+	require.NoError(t, err, "Setup: deriving the provider ID data dir should not fail")
+	usernameDir, err := b.UserDataDir(username)
+	require.NoError(t, err, "Setup: deriving the username data dir should not fail")
+
+	// Simulate the cache left behind by the previous login: the provider ID directory
+	// already exists and holds a cached token.
+	require.NoError(t, os.MkdirAll(providerIDDir, 0700), "Setup: creating the existing provider ID dir should not fail")
+	require.NoError(t, os.WriteFile(filepath.Join(providerIDDir, "token.json"), []byte("previous-login-token"), 0600),
+		"Setup: writing the existing provider ID token should not fail")
+
+	// authd has not been updated, so it does not pass a provider ID to NewSession, and
+	// the username path does not resolve to the provider ID dir yet.
+	sessionID, key, err := b.NewSession(username, "some lang", sessionmode.Login, "")
+	require.NoError(t, err, "NewSession should not fail")
+	require.Equal(t, usernameDir, b.UserDataDirForSession(sessionID),
+		"Before device auth the session should still resolve to the username dir")
+
+	deviceAccess, newPasswordAccess := runDeviceAuthAndNewPassword(t, b, sessionID, key, "brand-new-password")
+	require.Equal(t, broker.AuthNext, deviceAccess, "Device auth should advance to the new password step")
+	require.Equal(t, broker.AuthGranted, newPasswordAccess, "New password step should grant access")
+
+	// The session must have been redirected to the pre-existing provider ID directory,
+	// so the new password overwrites the password in that directory rather than creating
+	// a fresh username-keyed cache directory.
+	require.Equal(t, providerIDDir, b.UserDataDirForSession(sessionID),
+		"The session should use the existing provider ID cache dir after device auth")
+
+	// The freshly re-acquired token and the new password must have been written into the
+	// existing provider ID directory, not into a separate username-keyed directory. The
+	// redirect happens before deviceAuth reads the previous token for its device
+	// registration data, so the device is not re-registered as a side effect.
+	_, err = os.Stat(filepath.Join(providerIDDir, "token.json"))
+	require.NoError(t, err, "The refreshed token should be in the provider ID dir")
+	_, err = os.Stat(filepath.Join(providerIDDir, "password"))
+	require.NoError(t, err, "The new password should be in the provider ID dir")
+
+	requireIssuerCacheTree(t, filepath.Dir(providerIDDir), map[string]string{
+		"test-user-id":            "dir",
+		"test-user-id/token.json": "file",
+		"test-user-id/password":   "file",
+		"test-user@email.com":     "symlink -> test-user-id",
+	})
+}
+
+// TestOfflineLoginCacheDirectoryResolution covers how the cache directory is resolved
+// when the first login after the broker update happens while offline. The provider ID
+// can only be learned online (from a token refresh), so:
+//   - an already-migrated cache is still resolved through its compatibility symlink;
+//   - a legacy directory whose cached token already carries a provider ID is migrated
+//     even offline (the migration happens in NewSession, not gated on being online);
+//   - a legacy directory whose cached token has no provider ID stays put until the next
+//     online login.
+func TestOfflineLoginCacheDirectoryResolution(t *testing.T) {
+	t.Parallel()
+
+	const (
+		username   = "user@example.com"
+		providerID = "saved-user-id"
+	)
+
+	tests := map[string]struct {
+		// alreadyMigrated sets up a provider ID dir plus a compatibility symlink at the
+		// username path (an already-migrated cache).
+		alreadyMigrated bool
+		// legacyDirWithProviderID sets up a real username dir whose cached token carries
+		// a provider ID (migratable even offline).
+		legacyDirWithProviderID bool
+		// legacyDirWithoutProviderID sets up a real username dir whose cached token has no
+		// provider ID (not migratable offline).
+		legacyDirWithoutProviderID bool
+
+		wantSessionDirIsProviderIDDir bool
+		wantIssuerTree                map[string]string
+	}{
+		"Already_migrated_cache_stays_on_provider_ID_dir": {
+			alreadyMigrated:               true,
+			wantSessionDirIsProviderIDDir: true,
+			wantIssuerTree: map[string]string{
+				"saved-user-id":            "dir",
+				"saved-user-id/token.json": "file",
+				"user@example.com":         "symlink -> saved-user-id",
+			},
+		},
+		"Legacy_cache_with_provider_ID_migrates_offline": {
+			legacyDirWithProviderID:       true,
+			wantSessionDirIsProviderIDDir: true,
+			wantIssuerTree: map[string]string{
+				"saved-user-id":            "dir",
+				"saved-user-id/token.json": "file",
+				"user@example.com":         "symlink -> saved-user-id",
+			},
+		},
+		"Legacy_cache_without_provider_ID_stays_on_username_dir": {
+			legacyDirWithoutProviderID:    true,
+			wantSessionDirIsProviderIDDir: false,
+			wantIssuerTree: map[string]string{
+				"user@example.com":            "dir",
+				"user@example.com/token.json": "file",
+			},
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// Force offline mode by making OIDC discovery unreachable.
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				customHandlers: map[string]testutils.EndpointHandler{
+					"/.well-known/openid-configuration": testutils.UnavailableHandler(),
+				},
+			})
+
+			usernameDir, err := b.UserDataDir(username)
+			require.NoError(t, err, "Setup: deriving the username data dir should not fail")
+			providerIDDir, err := b.UserDataDir(providerID)
+			require.NoError(t, err, "Setup: deriving the provider ID data dir should not fail")
+			require.NoError(t, os.MkdirAll(filepath.Dir(usernameDir), 0700), "Setup: creating the issuer dir should not fail")
+
+			switch {
+			case tc.alreadyMigrated:
+				require.NoError(t, os.MkdirAll(providerIDDir, 0700), "Setup: creating the provider ID dir")
+				generateAndStoreCachedInfo(t, tokenOptions{}, filepath.Join(providerIDDir, "token.json"))
+				require.NoError(t, os.Symlink(providerIDDir, usernameDir), "Setup: creating the compatibility symlink")
+			case tc.legacyDirWithProviderID:
+				require.NoError(t, os.MkdirAll(usernameDir, 0700), "Setup: creating the legacy username dir")
+				// generateCachedInfo stores a token whose ProviderID is "saved-user-id".
+				generateAndStoreCachedInfo(t, tokenOptions{}, filepath.Join(usernameDir, "token.json"))
+			case tc.legacyDirWithoutProviderID:
+				require.NoError(t, os.MkdirAll(usernameDir, 0700), "Setup: creating the legacy username dir")
+				// A token without a provider ID cannot be migrated offline.
+				require.NoError(t, os.WriteFile(filepath.Join(usernameDir, "token.json"), []byte("{}"), 0600),
+					"Setup: writing the legacy token without a provider ID")
+			}
+
+			sessionID, _, err := b.NewSession(username, "some lang", sessionmode.Login, "")
+			require.NoError(t, err, "NewSession should not fail offline")
+
+			gotOffline, err := b.IsOffline(sessionID)
+			require.NoError(t, err, "IsOffline should not error")
+			require.True(t, gotOffline, "The session should be offline")
+
+			if tc.wantSessionDirIsProviderIDDir {
+				require.Equal(t, providerIDDir, b.UserDataDirForSession(sessionID),
+					"The session should resolve to the provider ID dir")
+			} else {
+				require.Equal(t, usernameDir, b.UserDataDirForSession(sessionID),
+					"The session should stay on the username dir")
+			}
+
+			requireIssuerCacheTree(t, filepath.Dir(usernameDir), tc.wantIssuerTree)
+		})
+	}
+}
+
+// TestEnsureProviderIDCacheDir exercises the cache migration helper that moves a
+// session's on-disk cache from a username-based directory to a provider ID-based
+// one. It covers the early-return guards (invalid/empty provider ID, already
+// migrated, unreadable provider ID directory), the redirect-to-existing-directory
+// path (including when the compatibility symlink already exists or cannot be
+// created) and the rename-based migration path (success and failures).
+func TestEnsureProviderIDCacheDir(t *testing.T) {
+	t.Parallel()
+
+	const (
+		username   = "user@example.com"
+		providerID = "provider-id-123"
+	)
+
+	tests := map[string]struct {
+		// providerIDOverride replaces the provider ID passed to the function.
+		// Use "-" to pass an empty provider ID.
+		providerIDOverride string
+		// currentDirIsProviderIDDir makes the session's current data dir already
+		// point to the provider ID directory, reproducing an already-migrated session.
+		currentDirIsProviderIDDir bool
+
+		createProviderIDDir bool
+		createUsernameDir   bool
+		usernameIsSymlink   bool
+		// readOnlyIssuerDir denies writes (but allows traversal) on the issuer dir,
+		// so symlink creation and rename fail.
+		readOnlyIssuerDir bool
+		// noExecIssuerDir denies traversal on the issuer dir, so the provider ID
+		// directory existence check fails.
+		noExecIssuerDir        bool
+		providerIDTokenContent string
+
+		wantProviderIDSet          bool
+		wantDataDirIsProviderIDDir bool
+		wantSymlinkAtUsername      bool
+		wantProviderIDDirExists    bool
+		wantUsernameDirExists      bool
+		wantProviderIDTokenContent string
+		wantIssuerTree             map[string]string
+	}{
+		"No_op_when_provider_ID_is_empty": {
+			providerIDOverride:    "-",
+			createUsernameDir:     true,
+			wantUsernameDirExists: true,
+			wantIssuerTree: map[string]string{
+				"user@example.com":            "dir",
+				"user@example.com/token.json": "file",
+			},
+		},
+		"No_op_when_provider_ID_contains_path_traversal": {
+			providerIDOverride:    "../escape",
+			createUsernameDir:     true,
+			wantUsernameDirExists: true,
+			wantIssuerTree: map[string]string{
+				"user@example.com":            "dir",
+				"user@example.com/token.json": "file",
+			},
+		},
+		"No_op_when_session_is_already_on_the_provider_ID_directory": {
+			currentDirIsProviderIDDir:  true,
+			createProviderIDDir:        true,
+			wantDataDirIsProviderIDDir: true,
+			wantProviderIDDirExists:    true,
+			wantIssuerTree: map[string]string{
+				"provider-id-123":            "dir",
+				"provider-id-123/token.json": "file",
+			},
+		},
+		"No_op_when_provider_ID_directory_status_cannot_be_determined": {
+			createUsernameDir:     true,
+			noExecIssuerDir:       true,
+			wantUsernameDirExists: true,
+			wantIssuerTree: map[string]string{
+				"user@example.com":            "dir",
+				"user@example.com/token.json": "file",
+			},
+		},
+
+		"Redirects_to_existing_provider_ID_directory_with_a_compatibility_symlink": {
+			createProviderIDDir:        true,
+			wantProviderIDSet:          true,
+			wantDataDirIsProviderIDDir: true,
+			wantSymlinkAtUsername:      true,
+			wantProviderIDDirExists:    true,
+			wantIssuerTree: map[string]string{
+				"provider-id-123":            "dir",
+				"provider-id-123/token.json": "file",
+				"user@example.com":           "symlink -> provider-id-123",
+			},
+		},
+		"Redirects_to_existing_provider_ID_directory_when_symlink_already_exists": {
+			createProviderIDDir:        true,
+			usernameIsSymlink:          true,
+			wantProviderIDSet:          true,
+			wantDataDirIsProviderIDDir: true,
+			wantSymlinkAtUsername:      true,
+			wantProviderIDDirExists:    true,
+			wantIssuerTree: map[string]string{
+				"provider-id-123":            "dir",
+				"provider-id-123/token.json": "file",
+				"user@example.com":           "symlink -> provider-id-123",
+			},
+		},
+		"Redirects_to_existing_provider_ID_directory_by_consolidating_username_directory": {
+			createProviderIDDir:        true,
+			createUsernameDir:          true,
+			wantProviderIDSet:          true,
+			wantDataDirIsProviderIDDir: true,
+			wantSymlinkAtUsername:      true,
+			wantProviderIDDirExists:    true,
+			wantIssuerTree: map[string]string{
+				"provider-id-123":            "dir",
+				"provider-id-123/token.json": "file",
+				"user@example.com":           "symlink -> provider-id-123",
+			},
+		},
+		"Does_not_consolidate_when_existing_provider_ID_cache_differs": {
+			createProviderIDDir:        true,
+			providerIDTokenContent:     "different-token-marker",
+			createUsernameDir:          true,
+			wantProviderIDDirExists:    true,
+			wantUsernameDirExists:      true,
+			wantProviderIDTokenContent: "different-token-marker",
+			wantIssuerTree: map[string]string{
+				"provider-id-123":             "dir",
+				"provider-id-123/token.json":  "file",
+				"user@example.com":            "dir",
+				"user@example.com/token.json": "file",
+			},
+		},
+		"Redirects_to_existing_provider_ID_directory_even_when_symlink_cannot_be_created": {
+			createProviderIDDir:     true,
+			readOnlyIssuerDir:       true,
+			wantProviderIDDirExists: true,
+			wantIssuerTree: map[string]string{
+				"provider-id-123":            "dir",
+				"provider-id-123/token.json": "file",
+			},
+		},
+
+		"Migrates_username_directory_to_provider_ID_directory": {
+			createUsernameDir:          true,
+			wantProviderIDSet:          true,
+			wantDataDirIsProviderIDDir: true,
+			wantSymlinkAtUsername:      true,
+			wantProviderIDDirExists:    true,
+			wantIssuerTree: map[string]string{
+				"provider-id-123":            "dir",
+				"provider-id-123/token.json": "file",
+				"user@example.com":           "symlink -> provider-id-123",
+			},
+		},
+		"No_op_when_username_directory_does_not_exist": {
+			// Nothing exists on disk yet, so create the provider ID cache directory before
+			// the first token/password write and keep a username compatibility symlink.
+			wantProviderIDSet:          true,
+			wantDataDirIsProviderIDDir: true,
+			wantSymlinkAtUsername:      true,
+			wantProviderIDDirExists:    true,
+			wantIssuerTree: map[string]string{
+				"provider-id-123":  "dir",
+				"user@example.com": "symlink -> provider-id-123",
+			},
+		},
+		"Does_not_migrate_when_rename_fails": {
+			createUsernameDir:     true,
+			readOnlyIssuerDir:     true,
+			wantUsernameDirExists: true,
+			wantIssuerTree: map[string]string{
+				"user@example.com":            "dir",
+				"user@example.com/token.json": "file",
+			},
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			b := newBrokerForTests(t, &brokerForTestConfig{issuerURL: defaultIssuerURL})
+
+			providerIDArg := providerID
+			switch tc.providerIDOverride {
+			case "":
+			case "-":
+				providerIDArg = ""
+			default:
+				providerIDArg = tc.providerIDOverride
+			}
+
+			usernameDir, err := b.UserDataDir(username)
+			require.NoError(t, err, "Setup: deriving the username data dir should not fail")
+			// providerIDDir is always derived from the constant provider ID so that
+			// assertions have a stable path even for the invalid-provider-ID cases.
+			providerIDDir, err := b.UserDataDir(providerID)
+			require.NoError(t, err, "Setup: deriving the provider ID data dir should not fail")
+
+			issuerDir := filepath.Dir(usernameDir)
+			require.NoError(t, os.MkdirAll(issuerDir, 0700), "Setup: creating the issuer dir should not fail")
+
+			const tokenContent = "cached-token-marker"
+			if tc.createProviderIDDir {
+				providerIDTokenContent := tokenContent
+				if tc.providerIDTokenContent != "" {
+					providerIDTokenContent = tc.providerIDTokenContent
+				}
+				require.NoError(t, os.MkdirAll(providerIDDir, 0700), "Setup: creating the provider ID dir")
+				require.NoError(t, os.WriteFile(filepath.Join(providerIDDir, "token.json"), []byte(providerIDTokenContent), 0600),
+					"Setup: writing the provider ID token file")
+			}
+			if tc.createUsernameDir {
+				require.NoError(t, os.MkdirAll(usernameDir, 0700), "Setup: creating the username dir")
+				require.NoError(t, os.WriteFile(filepath.Join(usernameDir, "token.json"), []byte(tokenContent), 0600),
+					"Setup: writing the username token file")
+			}
+			if tc.usernameIsSymlink {
+				require.NoError(t, os.Symlink(providerIDDir, usernameDir), "Setup: creating the compatibility symlink")
+			}
+
+			currentDataDir := usernameDir
+			if tc.currentDirIsProviderIDDir {
+				currentDataDir = providerIDDir
+			}
+
+			// Restrict the issuer dir permissions to exercise the failure branches,
+			// restoring them right after the call so that the assertions (and the
+			// TempDir cleanup) can read the tree again.
+			restorePerms := func() {}
+			switch {
+			case tc.readOnlyIssuerDir:
+				require.NoError(t, os.Chmod(issuerDir, 0500), "Setup: making the issuer dir read-only") //nolint:gosec // Intentional for testing.
+				restorePerms = func() { _ = os.Chmod(issuerDir, 0700) }                                 //nolint:gosec // Restore after testing.
+			case tc.noExecIssuerDir:
+				require.NoError(t, os.Chmod(issuerDir, 0000), "Setup: making the issuer dir non-traversable")
+				restorePerms = func() { _ = os.Chmod(issuerDir, 0700) } //nolint:gosec // Restore after testing.
+			}
+			t.Cleanup(restorePerms)
+
+			got := b.EnsureProviderIDCacheDir(username, currentDataDir, providerIDArg)
+			restorePerms()
+
+			if tc.wantProviderIDSet {
+				require.Equal(t, providerID, got.ProviderID, "Provider ID should have been set on the session")
+			} else {
+				require.Empty(t, got.ProviderID, "Provider ID should not have been set on the session")
+			}
+
+			wantDataDir := currentDataDir
+			if tc.wantDataDirIsProviderIDDir {
+				wantDataDir = providerIDDir
+			}
+			require.Equal(t, wantDataDir, got.UserDataDir, "Session data dir does not match the expected one")
+			require.Equal(t, filepath.Join(wantDataDir, "token.json"), got.TokenPath, "Session token path does not match")
+			require.Equal(t, filepath.Join(wantDataDir, "password"), got.PasswordPath, "Session password path does not match")
+
+			if tc.wantProviderIDDirExists {
+				require.DirExists(t, providerIDDir, "Provider ID directory should exist")
+				if tc.createProviderIDDir || tc.createUsernameDir {
+					wantProviderIDTokenContent := tokenContent
+					if tc.wantProviderIDTokenContent != "" {
+						wantProviderIDTokenContent = tc.wantProviderIDTokenContent
+					}
+					// The cached token must be reachable through the provider ID dir.
+					gotToken, err := os.ReadFile(filepath.Join(providerIDDir, "token.json"))
+					require.NoError(t, err, "Reading the provider ID token file should not fail")
+					require.Equal(t, wantProviderIDTokenContent, string(gotToken), "The cached token should have been preserved")
+				}
+			} else {
+				require.NoDirExists(t, providerIDDir, "Provider ID directory should not exist")
+			}
+
+			if tc.wantSymlinkAtUsername {
+				info, err := os.Lstat(usernameDir)
+				require.NoError(t, err, "The username path should exist")
+				require.NotZero(t, info.Mode()&os.ModeSymlink, "The username path should be a compatibility symlink")
+				target, err := filepath.EvalSymlinks(usernameDir)
+				require.NoError(t, err, "The compatibility symlink should resolve")
+				require.Equal(t, providerIDDir, target, "The compatibility symlink should point to the provider ID dir")
+			}
+
+			if tc.wantUsernameDirExists {
+				info, err := os.Lstat(usernameDir)
+				require.NoError(t, err, "The username path should still exist")
+				require.Zero(t, info.Mode()&os.ModeSymlink, "The username path should still be a real directory")
+			}
+
+			if tc.wantIssuerTree != nil {
+				requireIssuerCacheTree(t, issuerDir, tc.wantIssuerTree)
+			}
 		})
 	}
 }

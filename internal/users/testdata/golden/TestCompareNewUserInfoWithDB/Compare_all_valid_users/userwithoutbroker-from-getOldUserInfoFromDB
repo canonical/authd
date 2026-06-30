@@ -3,6 +3,8 @@ uid: 4444
 gecos: userwithoutbroker
 dir: /home/userwithoutbroker@example.com
 shell: /bin/sh
+broker_id: ""
+provider_id: ""
 groups:
     - name: group4
       gid: 44444

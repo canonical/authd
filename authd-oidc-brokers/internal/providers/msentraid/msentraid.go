@@ -127,10 +127,18 @@ func (p *Provider) GetUserInfo(claimer info.Claimer, _ bool) (info.User, error) 
 		return info.User{}, err
 	}
 
+	// Use oid as the stable identifier: Entra ID's sub is pairwise per application
+	// (it changes if the app registration changes), while oid is stable across all
+	// apps within a tenant.
+	stableID := userClaims.Oid
+	if stableID == "" {
+		return info.User{}, fmt.Errorf("oid claim is missing from the ID token")
+	}
+
 	return info.NewUser(
 		userClaims.PreferredUserName,
 		userClaims.Home,
-		userClaims.Sub,
+		stableID,
 		userClaims.Shell,
 		userClaims.Gecos,
 		nil,
@@ -199,10 +207,12 @@ func (p *Provider) GetGroups(
 
 type claims struct {
 	PreferredUserName string `json:"preferred_username"`
-	Sub               string `json:"sub"`
-	Home              string `json:"home"`
-	Shell             string `json:"shell"`
-	Gecos             string `json:"name"`
+	// Oid is the Object ID — the stable, cross-application identifier for a user
+	// within an Entra ID tenant.
+	Oid   string `json:"oid"`
+	Home  string `json:"home"`
+	Shell string `json:"shell"`
+	Gecos string `json:"name"`
 }
 
 // userClaims returns the user claims parsed from the ID token.

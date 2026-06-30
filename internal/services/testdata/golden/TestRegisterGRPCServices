@@ -9,7 +9,7 @@ authd.PAM:
         - name: GetAuthenticationModes
           isclientstream: false
           isserverstream: false
-        - name: GetPreviousBroker
+        - name: GetBroker
           isclientstream: false
           isserverstream: false
         - name: IsAuthenticated
@@ -21,7 +21,7 @@ authd.PAM:
         - name: SelectBroker
           isclientstream: false
           isserverstream: false
-        - name: SetDefaultBrokerForUser
+        - name: SetBroker
           isclientstream: false
           isserverstream: false
     metadata: authd.proto

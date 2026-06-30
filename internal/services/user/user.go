@@ -328,15 +328,16 @@ func (s Service) DeleteUser(ctx context.Context, req *authd.DeleteUserRequest) (
 		return nil, status.Error(codes.InvalidArgument, "no user name provided")
 	}
 
-	// Look up which broker owns this user before removing them from the DB, so
-	// we can attempt broker-side cleanup afterwards. A failure here is non-fatal
-	// for the deletion itself.
+	// Look up which broker owns this user and the user's stable provider ID before removing them
+	// from the DB, so we can attempt broker-side cleanup afterwards and pass the provider ID for
+	// provider-ID keyed cache directory cleanup (API v3). A failure here is non-fatal for the
+	// deletion itself.
 	var warnings []string
 	var brokerCleanupFailedOrSkipped bool
-	brokerID, err := s.userManager.BrokerForUser(name)
+	brokerID, providerID, err := s.userManager.BrokerAndProviderIDForUser(name)
 	if err != nil {
 		brokerCleanupFailedOrSkipped = true
-		log.Errorf(context.Background(), "failed to look up broker for user %q: %v", name, err)
+		log.Errorf(context.Background(), "failed to look up broker and provider ID for user %q: %v", name, err)
 	}
 
 	if err := s.userManager.DeleteUser(name, req.GetRemoveHome()); err != nil {
@@ -353,7 +354,7 @@ func (s Service) DeleteUser(ctx context.Context, req *authd.DeleteUserRequest) (
 		if err != nil {
 			brokerCleanupFailedOrSkipped = true
 			log.Errorf(context.Background(), "failed to get broker %q for user %q: %v", brokerID, name, err)
-		} else if err := broker.DeleteUser(ctx, name); err != nil {
+		} else if err := broker.DeleteUser(ctx, name, providerID); err != nil {
 			brokerCleanupFailedOrSkipped = true
 			log.Errorf(context.Background(), "failed to delete user %q from broker %q: %v", name, brokerID, err)
 		}

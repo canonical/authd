@@ -9,9 +9,9 @@ import (
 	"github.com/canonical/authd/log"
 )
 
-const allUserColumns = "name, uid, gid, gecos, dir, shell, broker_id, locked"
-const publicUserColumns = "name, uid, gid, gecos, dir, shell, broker_id, locked"
-const allUserColumnsWithPlaceholders = "name = ?, uid = ?, gid = ?, gecos = ?, dir = ?, shell = ?, broker_id = ?, locked = ?"
+const allUserColumns = "name, uid, gid, gecos, dir, shell, broker_id, locked, provider_id"
+const publicUserColumns = "name, uid, gid, gecos, dir, shell, broker_id, locked, provider_id"
+const allUserColumnsWithPlaceholders = "name = ?, uid = ?, gid = ?, gecos = ?, dir = ?, shell = ?, broker_id = ?, locked = ?, provider_id = ?"
 
 // UserRow represents a user row in the database.
 type UserRow struct {
@@ -23,20 +23,28 @@ type UserRow struct {
 	Shell string
 
 	// BrokerID specifies the broker the user last successfully authenticated with.
-	BrokerID string `yaml:"broker_id,omitempty"`
+	// It is always serialized (no omitempty) because it scopes the user's identity.
+	BrokerID string `yaml:"broker_id"`
 
 	Locked bool `yaml:"locked,omitempty"`
+
+	// ProviderID is the stable provider identifier. Empty for pre-migration users
+	// and users authenticated via v2 brokers. It is scoped by BrokerID and is always
+	// serialized (no omitempty) so the user's identity fields are explicit in dumps.
+	ProviderID string `yaml:"provider_id"`
 }
 
 // NewUserRow creates a new UserRow.
-func NewUserRow(name string, uid, gid uint32, gecos, dir, shell string) UserRow {
+func NewUserRow(name string, uid, gid uint32, gecos, dir, shell, brokerID, providerID string) UserRow {
 	return UserRow{
-		Name:  name,
-		UID:   uid,
-		GID:   gid,
-		Gecos: gecos,
-		Dir:   dir,
-		Shell: shell,
+		Name:       name,
+		UID:        uid,
+		GID:        gid,
+		Gecos:      gecos,
+		Dir:        dir,
+		Shell:      shell,
+		BrokerID:   brokerID,
+		ProviderID: providerID,
 	}
 }
 
@@ -50,7 +58,7 @@ func userByID(db queryable, uid uint32) (UserRow, error) {
 	row := db.QueryRow(query, uid)
 
 	var u UserRow
-	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked)
+	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return UserRow{}, NewUIDNotFoundError(uid)
 	}
@@ -71,9 +79,30 @@ func userByName(db queryable, name string) (UserRow, error) {
 	row := db.QueryRow(query, name)
 
 	var u UserRow
-	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked)
+	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return UserRow{}, NewUserNotFoundError(name)
+	}
+	if err != nil {
+		return UserRow{}, fmt.Errorf("query error: %w", err)
+	}
+
+	return u, nil
+}
+
+// UserByProviderID returns a user matching this broker-scoped provider ID or an error if no entry was found.
+func (m *Manager) UserByProviderID(brokerID, providerID string) (UserRow, error) {
+	return userByProviderID(m.db, brokerID, providerID)
+}
+
+func userByProviderID(db queryable, brokerID, providerID string) (UserRow, error) {
+	query := fmt.Sprintf(`SELECT %s FROM users WHERE broker_id = ? AND provider_id = ?`, publicUserColumns)
+	row := db.QueryRow(query, brokerID, providerID)
+
+	var u UserRow
+	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return UserRow{}, NoDataFoundError{fmt.Sprintf("user with broker ID %q and provider ID %q not found", brokerID, providerID)}
 	}
 	if err != nil {
 		return UserRow{}, fmt.Errorf("query error: %w", err)
@@ -98,7 +127,7 @@ func allUsers(db queryable) ([]UserRow, error) {
 	var users []UserRow
 	for rows.Next() {
 		var u UserRow
-		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked)
+		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
 		if err != nil {
 			return nil, fmt.Errorf("scan error: %w", err)
 		}
@@ -130,8 +159,8 @@ func insertOrUpdateUserByID(db queryable, u UserRow) error {
 // userExists checks if a user with the same name or UID already exists in the database.
 func userExists(db queryable, u UserRow) (bool, error) {
 	query := `
-		SELECT 1 FROM users 
-		WHERE name = ? OR uid = ? 
+		SELECT 1 FROM users
+		WHERE name = ? OR uid = ?
 		LIMIT 1`
 	row := db.QueryRow(query, u.Name, u.UID)
 
@@ -151,8 +180,8 @@ func userExists(db queryable, u UserRow) (bool, error) {
 // insertUser inserts a new user into the database.
 func insertUser(db queryable, u UserRow) error {
 	log.Debugf(context.Background(), "Inserting user %v", u.Name)
-	query := fmt.Sprintf(`INSERT INTO users (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, allUserColumns)
-	_, err := db.Exec(query, u.Name, u.UID, u.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.Locked)
+	query := fmt.Sprintf(`INSERT INTO users (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, allUserColumns)
+	_, err := db.Exec(query, u.Name, u.UID, u.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.Locked, u.ProviderID)
 	if err != nil {
 		return fmt.Errorf("insert user error: %w", err)
 	}
@@ -163,7 +192,7 @@ func insertUser(db queryable, u UserRow) error {
 func updateUserByID(db queryable, u UserRow) error {
 	log.Debugf(context.Background(), "Updating user %v", u.Name)
 	query := fmt.Sprintf(`UPDATE users SET %s WHERE uid = ?`, allUserColumnsWithPlaceholders)
-	_, err := db.Exec(query, u.Name, u.UID, u.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.Locked, u.UID)
+	_, err := db.Exec(query, u.Name, u.UID, u.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.Locked, u.ProviderID, u.UID)
 	if err != nil {
 		return fmt.Errorf("update user error: %w", err)
 	}
@@ -207,7 +236,7 @@ func usersWithPrimaryGroup(db queryable, gid uint32) ([]UserRow, error) {
 	var users []UserRow
 	for rows.Next() {
 		var u UserRow
-		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked)
+		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
 		if err != nil {
 			return nil, fmt.Errorf("scan error: %w", err)
 		}

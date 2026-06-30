@@ -9,7 +9,7 @@ import (
 var (
 	validIDToken = &testIDToken{
 		claims: `{"preferred_username": "valid-user",
-		"sub": "valid-sub",
+		"oid": "valid-oid",
 		"home": "/home/valid-user",
 		"shell": "/bin/bash",
 		"name": "Valid User"}`,
@@ -17,6 +17,13 @@ var (
 
 	invalidIDToken = &testIDToken{
 		claims: "invalid claims",
+	}
+
+	missingOIDClaimIDToken = &testIDToken{
+		claims: `{"preferred_username": "valid-user",
+		"home": "/home/valid-user",
+		"shell": "/bin/bash",
+		"name": "Valid User"}`,
 	}
 )
 

@@ -68,29 +68,30 @@ func TestGetInterface(t *testing.T) {
 		interfaces []string
 		callErr    error
 
-		wantInterface string
+		wantInterface dbusInterface
 		wantErr       bool
 	}{
 		"Single_base_interface": {
 			interfaces:    []string{"com.ubuntu.authd.Broker"},
-			wantInterface: "com.ubuntu.authd.Broker",
+			wantInterface: dbusInterface{name: "com.ubuntu.authd.Broker", version: 1},
 		},
 		"Returns_highest_supported_version": {
-			interfaces:    []string{"com.ubuntu.authd.Broker1", "com.ubuntu.authd.Broker2", "com.ubuntu.authd.Broker3"},
-			wantInterface: "com.ubuntu.authd.Broker2",
+			interfaces: []string{"com.ubuntu.authd.Broker1", "com.ubuntu.authd.Broker2", "com.ubuntu.authd.Broker3",
+				"com.ubuntu.authd.Broker999"}, // This one should be ignored as it's above the latest supported API version.
+			wantInterface: dbusInterface{name: "com.ubuntu.authd.Broker3", version: 3},
 		},
 		"Versioned_interfaces_with_unversioned": {
 			interfaces:    []string{"com.ubuntu.authd.Broker2", "com.ubuntu.authd.Broker", "com.ubuntu.authd.Broker1"},
-			wantInterface: "com.ubuntu.authd.Broker2",
+			wantInterface: dbusInterface{name: "com.ubuntu.authd.Broker2", version: 2},
 		},
 		"Unrelated_interfaces_are_excluded": {
 			interfaces: []string{"com.ubuntu.authd.Broker2", "org.freedesktop.DBus.Introspectable",
 				"com.ubuntu.authd.Broker1", "com.ubuntu.authd.BrokerUnrelated"},
-			wantInterface: "com.ubuntu.authd.Broker2",
+			wantInterface: dbusInterface{name: "com.ubuntu.authd.Broker2", version: 2},
 		},
 		"Single_versioned_interface": {
 			interfaces:    []string{"com.ubuntu.authd.Broker1"},
-			wantInterface: "com.ubuntu.authd.Broker1",
+			wantInterface: dbusInterface{name: "com.ubuntu.authd.Broker1", version: 1},
 		},
 
 		"Error_when_no_supported_interfaces": {
@@ -98,7 +99,7 @@ func TestGetInterface(t *testing.T) {
 			wantErr:    true,
 		},
 		"Error_when_all_interfaces_above_latest_version": {
-			interfaces: []string{"com.ubuntu.authd.Broker3", "com.ubuntu.authd.Broker4"},
+			interfaces: []string{"com.ubuntu.authd.Broker4", "com.ubuntu.authd.Broker5"},
 			wantErr:    true,
 		},
 		"Error_when_introspect_fails": {
@@ -130,15 +131,15 @@ func TestDbusBrokerCallUsesInterface(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		iface            string
+		iface            dbusInterface
 		wantMethodCalled string
 	}{
 		"Uses_base_interface": {
-			iface:            "com.ubuntu.authd.Broker",
+			iface:            dbusInterface{name: "com.ubuntu.authd.Broker", version: 1},
 			wantMethodCalled: "com.ubuntu.authd.Broker.TestMethod",
 		},
 		"Uses_versioned_interface": {
-			iface:            "com.ubuntu.authd.Broker2",
+			iface:            dbusInterface{name: "com.ubuntu.authd.Broker2", version: 2},
 			wantMethodCalled: "com.ubuntu.authd.Broker2.TestMethod",
 		},
 	}

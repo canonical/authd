@@ -100,26 +100,22 @@ func TestGetUserInfo(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		invalidIDToken     bool
-		tokenScopes        []string
-		providerMetadata   map[string]any
-		acquireAccessToken bool
-
-		groupEndpointHandler http.HandlerFunc
+		IDToken *testIDToken
 
 		wantErr bool
 	}{
 		"Successfully_get_user_info": {},
 
-		"Error_when_id_token_claims_are_invalid": {invalidIDToken: true, wantErr: true},
+		"Error_when_id_token_is_missing_required_oid_claims": {IDToken: missingOIDClaimIDToken, wantErr: true},
+		"Error_when_id_token_claims_are_invalid":             {IDToken: invalidIDToken, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
 			idToken := validIDToken
-			if tc.invalidIDToken {
-				idToken = invalidIDToken
+			if tc.IDToken != nil {
+				idToken = tc.IDToken
 			}
 
 			p := msentraid.New()

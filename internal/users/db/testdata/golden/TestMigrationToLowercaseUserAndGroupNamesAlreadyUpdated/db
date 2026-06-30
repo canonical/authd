@@ -6,6 +6,7 @@ users:
       dir: /home/testuser
       shell: /bin/bash
       broker_id: broker-id
+      provider_id: ""
 groups:
     - name: testgroup
       gid: 11111
@@ -13,4 +14,4 @@ groups:
 users_to_groups:
     - uid: 1111
       gid: 11111
-schema_version: 2
+schema_version: 3
