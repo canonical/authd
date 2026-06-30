@@ -364,9 +364,8 @@ Check Configuration Value
 
 Check If Owner Was Registered
     [Arguments]    ${username}
-    Hid.Type String    cat ${BROKER_CFG_DIR}/20-owner-autoregistration.conf
-    Hid.Keys Combo    Return
-    Match Text    owner = ${username}    120
+    ${content} =    SSH.Execute    sudo cat ${BROKER_CFG_DIR}/20-owner-autoregistration.conf
+    Should Contain    ${content}    owner = ${username}
 
 
 Check Home Directory
