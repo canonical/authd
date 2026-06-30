@@ -89,8 +89,37 @@ Continue Log In With Remote User Through CLI: Define Local Password
     Hid.Keys Combo    Return
 
     # Wait for the login to complete
-    ${timeout_sec} =    Set Variable    120
-    Match Text    ${username}@ubuntu    ${timeout_sec}
+    Wait For Shell Prompt After Login    ${username}@ubuntu
+
+
+Wait For Shell Prompt After Login
+    [Documentation]    Waits for the shell prompt that indicates a successful login.
+    ...
+    ...                If the prompt never appears, inspects the journal to tell
+    ...                the specific "granted but System error" failure apart from
+    ...                an ordinary login failure before attributing it to a known
+    ...                bug. An ordinary wrong-password failure is logged by login
+    ...                as "Authentication failure", whereas the flaky failure
+    ...                tracked in https://github.com/canonical/authd/issues/1642
+    ...                is logged as "System error": PAM_SYSTEM_ERR returned by the
+    ...                (stable) authd PAM module *after* the broker already
+    ...                granted access. The edge/fixed authd never returns that, so
+    ...                this only matches the actual #1642 failure.
+    [Arguments]    ${shell_prompt}    ${timeout_sec}=120
+    ${status}    ${error} =    Run Keyword And Ignore Error
+    ...    Match Text    ${shell_prompt}    ${timeout_sec}
+    IF    '${status}' == 'PASS'    RETURN
+
+    # TODO: Remove this #1642 check once the next authd stable release is out,
+    # since it includes the fix for https://github.com/canonical/authd/issues/1642.
+    # The shell prompt did not appear. Only attribute the failure to #1642 if the
+    # journal shows login failing with a PAM "System error".
+    ${system_error} =    SSH.Execute
+    ...    sudo journalctl --no-pager --since "10 minutes ago" | grep "FAILED LOGIN" | grep "System error" || true
+    IF    $system_error != ''
+        Fail    Login failed with a PAM "System error" after authentication succeeded. This is the flaky failure tracked in https://github.com/canonical/authd/issues/1642.\n\nMatching journal line(s):\n${system_error}
+    END
+    Fail    ${error}
 
 
 Log In With Remote User Through CLI: Local Password
@@ -105,7 +134,7 @@ Log In With Remote User Through CLI: Local Password
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
     Builtin.Sleep    2
-    Match Text    ${username}@ubuntu:~$    120
+    Wait For Shell Prompt After Login    ${username}@ubuntu:~$
 
 
 Check That su To Local User Goes To Local Broker
