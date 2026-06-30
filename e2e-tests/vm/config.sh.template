@@ -1,19 +1,9 @@
 # Configuration file for provisioning the e2e-tests VM.
-# This file is intended for CI use, where the VM is provisioned automatically.
-# For local test runs, specify --broker and --release on the command line;
-# IdP user credentials go in e2e-tests/e2e-tests-<broker>.env (gitignored).
+# This file is for CI use and for local VM provisioning (running provision.sh).
+# It only contains VM-level settings; broker credentials go in
+# e2e-tests/e2e-tests-<broker>.env (see the .env.template files there).
 # Copy this template to config.sh and customize the values for your environment.
 
 export SSH_PUBLIC_KEY_FILE="${HOME}/.ssh/id_rsa.pub"
 export VM_NAME_BASE=e2e-runner
 export RELEASE=resolute
-
-# authd-msentraid broker configuration
-export AUTHD_MSENTRAID_ISSUER_ID=
-export AUTHD_MSENTRAID_CLIENT_ID=
-export AUTHD_MSENTRAID_USER=
-
-# authd-google broker configuration
-export AUTHD_GOOGLE_CLIENT_ID=
-export AUTHD_GOOGLE_CLIENT_SECRET=
-export AUTHD_GOOGLE_USER=

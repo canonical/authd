@@ -17,8 +17,21 @@ sudo ./e2e-tests/install-deps.sh
 
 ### 2. Configure
 
-Copy `e2e-tests/vm/config.sh.template` to `e2e-tests/vm/config.sh` and fill in the values for your environment
-(SSH key path, Ubuntu release, broker name, and identity provider credentials).
+For each broker you want to test, copy the corresponding template and fill in
+your credentials:
+
+```bash
+# For authd-google:
+cp e2e-tests/e2e-tests-google.env.template e2e-tests/e2e-tests-google.env
+
+# For authd-msentraid:
+cp e2e-tests/e2e-tests-msentraid.env.template e2e-tests/e2e-tests-msentraid.env
+```
+
+These files are gitignored.
+
+For VM provisioning, also copy `e2e-tests/vm/config.sh.template` to `e2e-tests/vm/config.sh` and
+set your SSH public key path (and optionally the default Ubuntu release and VM name prefix).
 
 ### 3. Provision the VM
 

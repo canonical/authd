@@ -92,6 +92,19 @@ fi
 # shellcheck source=lib/libprovision.sh
 source "${LIB_DIR}/libprovision.sh"
 
+# Load broker-specific credentials from e2e-tests-<broker>.env if it exists.
+# BROKER is known at this point (from CLI args or config file).
+if [ -n "${BROKER:-}" ]; then
+    _env_file="${SCRIPT_DIR}/../e2e-tests-${BROKER#authd-}.env"
+    if [ -f "${_env_file}" ]; then
+        set -a
+        # shellcheck disable=SC1090
+        source "${_env_file}"
+        set +a
+    fi
+    unset _env_file
+fi
+
 assert_env_vars RELEASE VM_NAME_BASE BROKER
 
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-${DATA_DIR}/${RELEASE}}"
