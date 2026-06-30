@@ -26,7 +26,7 @@ versions](ref::changing-versions).
 ::::{only} edge
 :::{admonition} This guide is for the edge release of authd
 :class: important
-It describes how to install the edge version of authd and its brokers, which is not recommended for production use. 
+It describes how to install the **edge** version of authd and its brokers, which is not recommended for production use. 
 
 If you want to try the **stable** version, read the installation guide in authd's [stable documentation](https://ubuntu.com/docs/authd/stable-docs/howto/install-authd) or read our guide on [changing authd
 versions](ref::changing-versions).
