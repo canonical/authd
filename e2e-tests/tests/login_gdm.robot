@@ -24,10 +24,8 @@ Test login with GDM
     Log In With Remote User Through GDM: QR Code    ${username}    ${local_password}
 
     # Check remote user is properly added to the system
-    Open Terminal
     Check If User Was Added Properly    ${username}
     Check Home Directory    ${username}
-    Close Focused Window
     Log Out
 
     # Log in with remote user with local password via GDM

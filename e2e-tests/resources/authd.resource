@@ -21,14 +21,12 @@ Disable Authd Socket And Service
 
 Get NSS Passwd Entry For Remote User
     [Arguments]    ${username}
-    Hid.Type String    getent passwd ${username}
-    Hid.Keys Combo    Return
+    SSH.Execute    getent passwd ${username}
 
 
 Get NSS Group Entries For Remote User
     [Arguments]    ${username}
-    Hid.Type String    groups ${username}
-    Hid.Keys Combo    Return
+    SSH.Execute    groups ${username}
 
 
 Change Password
