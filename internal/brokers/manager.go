@@ -26,6 +26,7 @@ type Manager struct {
 	usersToBrokerMu sync.RWMutex
 
 	transactionsToBroker   map[string]*Broker
+	sessionsToUsername     map[string]string
 	transactionsToBrokerMu sync.RWMutex
 
 	cleanup func()
@@ -112,6 +113,7 @@ func NewManager(ctx context.Context, brokersConfPath string, configuredBrokers [
 
 		usersToBroker:        make(map[string]*Broker),
 		transactionsToBroker: make(map[string]*Broker),
+		sessionsToUsername:   make(map[string]string),
 
 		cleanup: cleanup,
 	}, nil
@@ -180,6 +182,7 @@ func (m *Manager) NewSession(brokerID, username, lang, mode, providerID string) 
 	log.Debugf(context.Background(), "%s: New %s session for %q",
 		sessionID, mode, username)
 	m.transactionsToBroker[sessionID] = broker
+	m.sessionsToUsername[sessionID] = username
 	return sessionID, encryptionKey, nil
 }
 
@@ -197,10 +200,18 @@ func (m *Manager) EndSession(sessionID string) error {
 
 	m.transactionsToBrokerMu.Lock()
 	log.Debugf(context.Background(), "%s: End session %q",
-		sessionID, m.transactionsToBroker[sessionID].Name)
+		sessionID, b.Name)
 	delete(m.transactionsToBroker, sessionID)
+	delete(m.sessionsToUsername, sessionID)
 	m.transactionsToBrokerMu.Unlock()
 	return nil
+}
+
+// UsernameFromSessionID returns the username associated with the given session ID.
+func (m *Manager) UsernameFromSessionID(sessionID string) string {
+	m.transactionsToBrokerMu.RLock()
+	defer m.transactionsToBrokerMu.RUnlock()
+	return m.sessionsToUsername[sessionID]
 }
 
 // BrokerExists returns true if the brokerID is known by the manager.
