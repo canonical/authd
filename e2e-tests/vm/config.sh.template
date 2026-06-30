@@ -1,4 +1,7 @@
-# Provisioning configuration file for authd end-to-end tests
+# Configuration file for provisioning the e2e-tests VM.
+# This file is intended for CI use, where the VM is provisioned automatically.
+# For local test runs, specify --broker and --release on the command line;
+# IdP user credentials go in e2e-tests/e2e-tests-<broker>.env (gitignored).
 # Copy this template to config.sh and customize the values for your environment.
 
 export SSH_PUBLIC_KEY_FILE="${HOME}/.ssh/id_rsa.pub"

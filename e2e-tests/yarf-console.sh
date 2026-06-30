@@ -47,6 +47,27 @@ EOF
 ROOT_DIR=$(dirname "$(readlink -f "$0")")
 TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
 
+# Load broker-specific credentials from e2e-tests-<broker>.env before argument
+# parsing, so that explicit CLI flags take priority over values from the file.
+_scan_broker="${BROKER:-}"
+_scan_args=("$@")
+for ((i=0; i<${#_scan_args[@]}; i++)); do
+    if [[ "${_scan_args[$i]}" == "--broker" || "${_scan_args[$i]}" == "-b" ]]; then
+        _scan_broker="${_scan_args[$((i+1))]:-}"
+        break
+    fi
+done
+if [[ -n "${_scan_broker:-}" ]]; then
+    _env_file="${ROOT_DIR}/e2e-tests-${_scan_broker#authd-}.env"
+    if [[ -f "${_env_file}" ]]; then
+        set -a
+        # shellcheck disable=SC1090
+        source "${_env_file}"
+        set +a
+    fi
+fi
+unset _scan_broker _scan_args _env_file
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --broker|-b)

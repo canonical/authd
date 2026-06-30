@@ -147,11 +147,11 @@ Templates` and a region-of-interest selector to crop and scope matches.
 
 ## Running and reading results
 
-Run a single test (or omit the file to run all) using the existing script. The
-`*.env` files hold the per-IdP user/secret variables:
+Run a single test (or omit the file to run all) using the existing script. It automatically loads the
+broker's `.env` file (e.g. `e2e-tests-google.env`), so no extra wrapper is needed:
 
 ```bash
-env -f e2e-tests/e2e-tests-google.env e2e-tests/run-tests.sh \
+e2e-tests/run-tests.sh \
     --broker authd-google --release noble ./e2e-tests/tests/login_gdm.robot
 ```
 

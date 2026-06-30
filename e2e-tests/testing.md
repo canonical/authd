@@ -46,7 +46,7 @@ environment.
 ./e2e-tests/run-tests.sh --broker <broker> --release <release> [test.robot...]
 ```
 
-The required identity-provider credentials (`E2E_USER`, `E2E_PASSWORD`, `TOTP_SECRET`) can be passed as environment
-variables or via the corresponding command-line flags. Omit the test file argument to run the full suite.
-
-Run `./e2e-tests/run-tests.sh --help` for all available options, including `--rerunfailed` and `--output-dir`.
+`run-tests.sh` automatically loads the broker's `.env` file (e.g.
+`e2e-tests-google.env` for `authd-google`). Omit the test file argument to run
+the full suite. Run `./e2e-tests/run-tests.sh --help` for all available options,
+including `--rerunfailed` and `--output-dir`.
