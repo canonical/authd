@@ -8,7 +8,7 @@ message Empty {
 
 service PAM {
   rpc AvailableBrokers(Empty) returns (ABResponse);
-  rpc GetPreviousBroker(GPBRequest) returns (GPBResponse);
+  rpc GetBroker(GBRequest) returns (GBResponse);
 
   rpc SelectBroker(SBRequest) returns (SBResponse);
   rpc GetAuthenticationModes(GAMRequest) returns (GAMResponse);
@@ -16,15 +16,15 @@ service PAM {
   rpc IsAuthenticated(IARequest) returns (IAResponse);
   rpc EndSession(ESRequest) returns (Empty);
 
-  rpc SetDefaultBrokerForUser(SDBFURequest) returns (Empty);
+  rpc SetBroker(STBRequest) returns (Empty);
 }
 
-message GPBRequest {
+message GBRequest {
   string username = 1;
 }
 
-message GPBResponse {
-  string previous_broker = 1;
+message GBResponse {
+  string broker = 1;
 }
 
 message ABResponse {
@@ -120,7 +120,7 @@ message IAResponse {
   string msg = 2;
 }
 
-message SDBFURequest {
+message STBRequest {
   string broker_id = 1;
   string username = 2;
 }

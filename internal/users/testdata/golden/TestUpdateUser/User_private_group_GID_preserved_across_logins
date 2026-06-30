@@ -5,6 +5,8 @@ users:
       gecos: gecos for user1@example.com
       dir: /home/user1@example.com
       shell: /bin/bash
+      broker_id: ""
+      provider_id: ""
 groups:
     - name: user1@example.com
       gid: 60500
@@ -12,4 +14,4 @@ groups:
 users_to_groups:
     - uid: 1111
       gid: 60500
-schema_version: 2
+schema_version: 3

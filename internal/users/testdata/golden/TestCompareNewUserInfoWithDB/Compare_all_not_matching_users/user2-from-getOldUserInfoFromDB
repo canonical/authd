@@ -3,6 +3,8 @@ uid: 2222
 gecos: User2
 dir: /home/user2@example.com
 shell: /bin/dash
+broker_id: broker-id
+provider_id: ""
 groups:
     - name: group2withoutugid
       gid: 22222

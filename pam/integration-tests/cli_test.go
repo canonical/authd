@@ -867,6 +867,13 @@ func cliAuthenticateWithQRCode(t *testing.T, c *ptytest.Console, signalFn func(s
 	c.WaitFor(t, `6\. Use a QR code`)
 	c.Send(t, "6")
 	c.WaitFor(t, `Scan the qrcode or enter the code in the login page`)
+	// The QR view (label, QR matrix, URL, Code) is emitted as a single render,
+	// but in a TTY it exceeds the PTY read buffer and arrives in several reads.
+	// A WaitFor poll can therefore land between the chunk carrying the "Scan the
+	// qrcode" label (top of the view) and the one carrying "Code:" (bottom),
+	// snapshotting a half-drawn QR matrix. Discard that intermediate frame; the
+	// "Code:" frame below is a complete superset that captures the same screen.
+	c.DiscardLastSnapshot()
 	c.WaitFor(t, `Code:\s*1337`)
 	// The Regenerate button has a 500ms reselectionWaitTime guard to
 	// prevent accidental double-clicks right after mode selection.

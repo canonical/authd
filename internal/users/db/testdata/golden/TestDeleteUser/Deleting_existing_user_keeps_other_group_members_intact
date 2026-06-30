@@ -6,6 +6,7 @@ users:
       dir: /home/user2
       shell: /bin/dash
       broker_id: broker-id
+      provider_id: ""
     - name: user3
       uid: 3333
       gid: 33333
@@ -13,12 +14,15 @@ users:
       dir: /home/user3
       shell: /bin/zsh
       broker_id: broker-id
+      provider_id: ""
     - name: userwithoutbroker
       uid: 4444
       gid: 44444
       gecos: userwithoutbroker
       dir: /home/userwithoutbroker
       shell: /bin/sh
+      broker_id: ""
+      provider_id: ""
 groups:
     - name: group1
       gid: 11111
@@ -48,4 +52,4 @@ users_to_groups:
       gid: 44444
     - uid: 4444
       gid: 99999
-schema_version: 2
+schema_version: 3

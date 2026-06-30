@@ -8,6 +8,7 @@ users:
       dir: /home/user1@example.com
       shell: /bin/sh
       broker_id: broker-id
+      provider_id: ""
     - name: user2@example.com
       uid: 2222
       gid: 22222
@@ -15,6 +16,7 @@ users:
       dir: /home/user2@example.com
       shell: /bin/dash
       broker_id: broker-id
+      provider_id: ""
     - name: user3@example.com
       uid: 3333
       gid: 33333
@@ -22,6 +24,7 @@ users:
       dir: /home/user3@example.com
       shell: /bin/zsh
       broker_id: broker-id
+      provider_id: ""
 groups:
     - name: group1
       gid: 11111
@@ -46,4 +49,4 @@ users_to_groups:
       gid: 33333
     - uid: 3333
       gid: 99999
-schema_version: 2
+schema_version: 3
