@@ -19,16 +19,6 @@ Disable Authd Socket And Service
     SSH.Execute    systemctl mask --now authd.service
 
 
-Get NSS Passwd Entry For Remote User
-    [Arguments]    ${username}
-    SSH.Execute    getent passwd ${username}
-
-
-Get NSS Group Entries For Remote User
-    [Arguments]    ${username}
-    SSH.Execute    groups ${username}
-
-
 Change Password
     [Arguments]    ${local_password}    ${new_password}
     Hid.Type String    passwd
