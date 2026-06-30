@@ -1,8 +1,8 @@
-authd (0.6.4+git260625+665+00fd6af0) resolute; urgency=medium
+authd (0.6.4+git260629+672+7980edd0) resolute; urgency=medium
 
-  * Github build. Run id: 28170369053. Run number: 665.
+  * Github build. Run id: 28367505499. Run number: 672.
 
- -- Denison <denison.barbosa@canonical.com>  Thu, 25 Jun 2026 12:34:30 +0000
+ -- Denison <denison.barbosa@canonical.com>  Mon, 29 Jun 2026 11:07:21 +0000
 
 authd (0.6.4) resolute; urgency=medium
 

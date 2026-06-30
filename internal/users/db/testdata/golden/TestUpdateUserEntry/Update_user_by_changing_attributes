@@ -5,6 +5,8 @@ users:
       gecos: New user1 gecos
       dir: /home/user1
       shell: /bin/bash
+      broker_id: ""
+      provider_id: ""
 groups:
     - name: group1
       gid: 11111
@@ -12,4 +14,4 @@ groups:
 users_to_groups:
     - uid: 1111
       gid: 11111
-schema_version: 2
+schema_version: 3

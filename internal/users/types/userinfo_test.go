@@ -77,7 +77,38 @@ func TestUserInfoEquals(t *testing.T) {
 			want: true,
 		},
 
+		"Equal_when_provider_ID_is_equal": {
+			u1:   types.UserInfo{Name: "user1", ProviderID: "subject-abc"},
+			u2:   types.UserInfo{Name: "user1", ProviderID: "subject-abc"},
+			want: true,
+		},
+		"Equal_when_broker_ID_is_equal": {
+			u1:   types.UserInfo{Name: "user1", BrokerID: "broker-id"},
+			u2:   types.UserInfo{Name: "user1", BrokerID: "broker-id"},
+			want: true,
+		},
+
 		// Failing cases.
+		"Fails_if_ProviderID_differs": {
+			u1:   types.UserInfo{Name: "user1", ProviderID: "subject-abc"},
+			u2:   types.UserInfo{Name: "user1", ProviderID: "subject-xyz"},
+			want: false,
+		},
+		"Fails_if_ProviderID_is_set_on_one_only": {
+			u1:   types.UserInfo{Name: "user1", ProviderID: "subject-abc"},
+			u2:   types.UserInfo{Name: "user1"},
+			want: false,
+		},
+		"Fails_if_BrokerID_differs": {
+			u1:   types.UserInfo{Name: "user1", BrokerID: "broker-id"},
+			u2:   types.UserInfo{Name: "user1", BrokerID: "other-broker-id"},
+			want: false,
+		},
+		"Fails_if_BrokerID_is_set_on_one_only": {
+			u1:   types.UserInfo{Name: "user1", BrokerID: "broker-id"},
+			u2:   types.UserInfo{Name: "user1"},
+			want: false,
+		},
 		"Fails_if_names_differ": {
 			u1:   types.UserInfo{Name: "user1"},
 			u2:   types.UserInfo{Name: "user2"},
