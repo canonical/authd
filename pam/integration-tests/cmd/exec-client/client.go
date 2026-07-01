@@ -23,10 +23,9 @@ import (
 )
 
 var (
-	pamFlags      = flag.Int64("flags", 0, "pam flags")
-	serverAddress = flag.String("server-address", "", "the dbus connection address to use to communicate with module")
-	logFile       = flag.String("client-log", "", "the file where to save logs")
-	argsFile      = flag.String("client-args-file", "", "the file where arguments are saved")
+	pamFlags = flag.Int64("flags", 0, "pam flags")
+	logFile  = flag.String("client-log", "", "the file where to save logs")
+	argsFile = flag.String("client-args-file", "", "the file where arguments are saved")
 )
 
 func main() {
@@ -52,20 +51,29 @@ func mainFunc() error {
 		return fmt.Errorf("%w: not enough arguments", pam_test.ErrInvalid)
 	}
 
-	serverAddressEnv := os.Getenv("AUTHD_PAM_SERVER_ADDRESS")
-	if serverAddressEnv != "" {
-		*serverAddress = serverAddressEnv
-	}
-
-	if serverAddress == nil {
+	serverAddress := os.Getenv("AUTHD_PAM_SERVER_ADDRESS")
+	if serverAddress == "" {
 		return fmt.Errorf("%w: no connection provided", pam_test.ErrInvalid)
 	}
 
-	mTx, closeFunc, err := newModuleWrapper(*serverAddress)
+	mTx, closeFunc, err := newModuleWrapper(serverAddress)
 	if err != nil {
 		return fmt.Errorf("%w: can't connect to server: %w", pam_test.ErrInvalid, err)
 	}
-	defer closeFunc()
+
+	clientReturned := make(chan struct{})
+	defer func() {
+		close(clientReturned)
+		closeFunc()
+	}()
+
+	go func() {
+		select {
+		case <-clientReturned:
+		case <-mTx.Context().Done():
+			panic(fmt.Sprintf("D-Bus Connection lost: %v", mTx.Context().Err()))
+		}
+	}()
 
 	action, args := args[0], args[1:]
 

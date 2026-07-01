@@ -18,33 +18,35 @@ import (
 )
 
 type moduleWrapper struct {
-	pam.ModuleTransaction
+	dbusmodule.Transaction
 }
 
-func newModuleWrapper(serverAddress string) (pam.ModuleTransaction, func(), error) {
+// Statically Ensure that [moduleWrapper] implements [pam.ModuleTransaction].
+var _ pam.ModuleTransaction = &moduleWrapper{}
+
+func newModuleWrapper(serverAddress string) (moduleWrapper, func(), error) {
 	mTx, closeFunc, err := dbusmodule.NewTransaction(serverAddress)
-	return &moduleWrapper{mTx}, closeFunc, err
+	return moduleWrapper{mTx}, closeFunc, err
 }
 
 // SimulateClientPanic forces the client to panic with the provided text.
-func (m *moduleWrapper) CallUnhandledMethod() error {
+func (m moduleWrapper) CallUnhandledMethod() error {
 	method := "com.ubuntu.authd.pam.UnhandledMethod"
-	tx, _ := m.ModuleTransaction.(*dbusmodule.Transaction)
-	return tx.BusObject().Call(method, dbus.FlagNoAutoStart).Err
+	return m.BusObject().Call(method, dbus.FlagNoAutoStart).Err
 }
 
 // SimulateClientPanic forces the client to panic with the provided text.
-func (m *moduleWrapper) SimulateClientPanic(text string) {
+func (m moduleWrapper) SimulateClientPanic(text string) {
 	panic(text)
 }
 
 // SimulateClientError forces the client to return a new Go error with no PAM type.
-func (m *moduleWrapper) SimulateClientError(errorMsg string) error {
+func (m moduleWrapper) SimulateClientError(errorMsg string) error {
 	return errors.New(errorMsg)
 }
 
 // SimulateClientSignal sends a signal to the child process.
-func (m *moduleWrapper) SimulateClientSignal(sig syscall.Signal, shouldExit bool) {
+func (m moduleWrapper) SimulateClientSignal(sig syscall.Signal, shouldExit bool) {
 	pid := os.Getpid()
 	log.Debugf(context.Background(), "Sending signal %v to self pid (%v)",
 		sig, pid)

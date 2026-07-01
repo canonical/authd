@@ -44,6 +44,9 @@ const (
 	// do this again.
 	alreadyAuthenticatedKey = "authd.already-authenticated-flag"
 
+	// loggingInitializedKey indicates logging was already initialized.
+	loggingInitializedKey = "authd.logging-initialized-flag"
+
 	// gdmServiceName is the name of the service that is loaded by GDM.
 	// Keep this in sync with the service file installed by the package.
 	gdmServiceName = "gdm-authd"
@@ -123,11 +126,24 @@ func sendReturnMessageToPam(mTx pam.ModuleTransaction, retStatus adapter.PamRetu
 // It returns a function that should be called in order to reset the logging to
 // the default and potentially close the opened resources.
 func initLogging(mTx pam.ModuleTransaction, args map[string]string, flags pam.Flags) (func(), error) {
+	alreadyInitialized, err := mTx.GetData(loggingInitializedKey)
+	if err != nil && !errors.Is(err, pam.ErrNoModuleData) {
+		return nil, err
+	}
+	if initialized, ok := alreadyInitialized.(bool); ok && initialized {
+		return func() {}, nil
+	}
+
 	log.SetLevel(log.InfoLevel)
-	resetFunc := func() {}
+	resetFunc := func() { _ = mTx.SetData(loggingInitializedKey, nil) }
+
 	if args["debug"] == "true" {
+		baseResetFunc := resetFunc
 		log.SetLevel(log.DebugLevel)
-		resetFunc = func() { log.SetLevel(log.InfoLevel) }
+		resetFunc = func() {
+			log.SetLevel(log.InfoLevel)
+			baseResetFunc()
+		}
 	}
 
 	isSilent := flags&pam.Silent != 0
@@ -151,6 +167,12 @@ func initLogging(mTx pam.ModuleTransaction, args map[string]string, flags pam.Fl
 			// We're silent on PAM side, but we want to still log to a file
 			log.SetHandler(nil)
 		}
+		if err := mTx.SetData(loggingInitializedKey, true); err != nil {
+			resetFunc()
+			log.SetOutput(os.Stderr)
+			f.Close()
+			return nil, err
+		}
 		return func() {
 			resetFunc()
 			log.SetOutput(os.Stderr)
@@ -170,12 +192,21 @@ func initLogging(mTx pam.ModuleTransaction, args map[string]string, flags pam.Fl
 
 	if !journal.Enabled() || args["disable_journal"] == "true" {
 		disableTerminalLogging()
+		if err := mTx.SetData(loggingInitializedKey, true); err != nil {
+			resetFunc()
+			return nil, err
+		}
 		return resetFunc, nil
 	}
 
 	// Force logging to the journal because we're running as a PAM module and don't want to clutter the output of the
 	// program that has loaded us.
 	log.InitJournalHandler(true)
+	if err := mTx.SetData(loggingInitializedKey, true); err != nil {
+		resetFunc()
+		log.SetHandler(nil)
+		return nil, err
+	}
 
 	return func() {
 		resetFunc()

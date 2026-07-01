@@ -14,8 +14,7 @@ import (
 )
 
 var (
-	pamFlags      = flag.Int64("flags", 0, "pam flags")
-	serverAddress = flag.String("server-address", "", "the dbus connection to use to communicate with module")
+	pamFlags = flag.Int64("flags", 0, "pam flags")
 )
 
 func init() {
@@ -35,20 +34,29 @@ func mainFunc() error {
 		return errors.New("not enough arguments")
 	}
 
-	serverAddressEnv := os.Getenv("AUTHD_PAM_SERVER_ADDRESS")
-	if serverAddressEnv != "" {
-		*serverAddress = serverAddressEnv
-	}
-
-	if serverAddress == nil {
+	serverAddress := os.Getenv("AUTHD_PAM_SERVER_ADDRESS")
+	if serverAddress == "" {
 		return fmt.Errorf("%w: no connection provided", pam.ErrSystem)
 	}
 
-	mTx, closeFunc, err := dbusmodule.NewTransaction(*serverAddress)
+	mTx, closeFunc, err := dbusmodule.NewTransaction(serverAddress)
 	if err != nil {
 		return fmt.Errorf("%w: can't connect to server: %w", pam.ErrSystem, err)
 	}
 	defer closeFunc()
+
+	actionDone := make(chan struct{})
+	defer close(actionDone)
+
+	go func() {
+		select {
+		case <-actionDone:
+		case <-mTx.Context().Done():
+			log.Warningf(context.Background(), "[%v] D-Bus Connection closed: %v",
+				os.Getpid(), mTx.Context().Err())
+			os.Exit(255)
+		}
+	}()
 
 	action, args := args[0], args[1:]
 
@@ -56,6 +64,21 @@ func mainFunc() error {
 	if pamFlags != nil {
 		flags = pam.Flags(*pamFlags)
 	}
+
+	// Initialize logging early so lifecycle logs emitted by main-exec (including
+	// disconnect handling) follow the same debug/logfile/silent behavior used by
+	// PAM action handlers.
+	parsedArgs, _ := parseArgs(args)
+	resetLogging, err := initLogging(mTx, parsedArgs, flags)
+	if err != nil {
+		return fmt.Errorf("%w: can't initialize logger: %v", pam.ErrSystem, err)
+	}
+	defer resetLogging()
+
+	log.Debugf(context.Background(), "[%v] Connected to D-Bus server %q",
+		os.Getpid(), serverAddress)
+	log.Debugf(context.Background(), "[%v] Starting action %q (%v)",
+		os.Getpid(), action, flags)
 
 	switch action {
 	case "authenticate":
