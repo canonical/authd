@@ -143,6 +143,7 @@ ARTIFACTS_DIR="${ARTIFACTS_DIR:-${DATA_DIR}/${RELEASE}}"
 if [ -z "${VM_NAME:-}" ]; then
     VM_NAME="${VM_NAME_BASE}-${RELEASE}"
 fi
+export VM_NAME
 
 # Check if we have all required artifacts
 IMAGE="${ARTIFACTS_DIR}/${VM_NAME}.qcow2"
