@@ -55,7 +55,7 @@ parts:
     build-environment:
       - GOBIN: ${CRAFT_PART_INSTALL}/bin
     override-build: |
-      go mod download all
+      for i in 1 2 3; do go mod download all && break || sleep 10; done
       go mod vendor
       VERSION=$(craftctl get version)
       go build -tags=release -ldflags "-X=github.com/canonical/authd/authd-oidc-brokers/internal/consts.Version=${VERSION}" -o ${GOBIN}/authd-oidc ./cmd/authd-oidc
@@ -81,7 +81,7 @@ parts:
     build-environment:
       - GOBIN: ${CRAFT_PART_INSTALL}/bin
     override-build: |
-      go mod download all
+      for i in 1 2 3; do go mod download all && break || sleep 10; done
       go mod vendor
       go build -o ${GOBIN}/semver semver/semver.go
   # Build the snap version from the git repository and current tree state.
