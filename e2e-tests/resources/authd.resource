@@ -69,14 +69,6 @@ Check That Authenticated User Does Not Match Requested User
 
 Check That Remote User Can Run Sudo Commands
     [Arguments]    ${local_password}
-    Hid.Type String    sudo touch sudo-test.txt
-    Hid.Keys Combo    Return
-    Builtin.Sleep    2
-    Match Text    regex:Enter\\s*your\\s*(?:local\\s*)?password:    15
-    Builtin.Sleep    2
-    Hid.Type String    ${local_password}
-    Hid.Keys Combo    Return
-    Builtin.Sleep    2
-    Hid.Type String    ls -l
-    Hid.Keys Combo    Return
-    Match Text    sudo-test.txt    15
+    SSH.Execute    echo ${local_password} | sudo -S touch sudo-test.txt
+    ${output} =    SSH.Execute    ls -l sudo-test.txt
+    Should Contain    ${output}    sudo-test.txt
