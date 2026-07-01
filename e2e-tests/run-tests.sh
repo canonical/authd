@@ -53,6 +53,15 @@ for ((i=0; i<${#_scan_args[@]}; i++)); do
 done
 if [[ -n "${_scan_broker:-}" ]]; then
     _env_file="${ROOT_DIR}/e2e-tests-${_scan_broker#authd-}.env"
+    if [[ ! -f "${_env_file}" ]]; then
+        # Fall back to the main worktree when running from a linked worktree.
+        # git rev-parse --git-common-dir returns an absolute path only for
+        # linked worktrees; in the main worktree it returns a relative ".git".
+        _git_common_dir=$(git -C "${ROOT_DIR}" rev-parse --git-common-dir 2>/dev/null || true)
+        if [[ "${_git_common_dir}" == /* ]]; then
+            _env_file="$(dirname "${_git_common_dir}")/e2e-tests/e2e-tests-${_scan_broker#authd-}.env"
+        fi
+    fi
     if [[ -f "${_env_file}" ]]; then
         set -a
         # shellcheck disable=SC1090
@@ -60,7 +69,7 @@ if [[ -n "${_scan_broker:-}" ]]; then
         set +a
     fi
 fi
-unset _scan_broker _scan_args _env_file
+unset _scan_broker _scan_args _env_file _git_common_dir
 
 # Parse command line arguments
 TESTS_TO_RUN=()

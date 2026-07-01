@@ -86,6 +86,16 @@ fi
 # Set default config file if not provided
 if [ -z "${CONFIG_FILE:-}" ]; then
     CONFIG_FILE="${SCRIPT_DIR}/config.env"
+    if [[ ! -f "${CONFIG_FILE}" ]]; then
+        # Fall back to the main worktree when running from a linked worktree.
+        # git rev-parse --git-common-dir returns an absolute path only for
+        # linked worktrees; in the main worktree it returns a relative ".git".
+        _git_common_dir=$(git -C "${SCRIPT_DIR}" rev-parse --git-common-dir 2>/dev/null || true)
+        if [[ "${_git_common_dir}" == /* ]]; then
+            CONFIG_FILE="$(dirname "${_git_common_dir}")/e2e-tests/vm/config.env"
+        fi
+        unset _git_common_dir
+    fi
 fi
 
 # Load the configuration file (if it exists)
@@ -103,13 +113,22 @@ source "${LIB_DIR}/libprovision.sh"
 # BROKER is known at this point (from CLI args or config file).
 if [ -n "${BROKER:-}" ]; then
     _env_file="${SCRIPT_DIR}/../e2e-tests-${BROKER#authd-}.env"
+    if [[ ! -f "${_env_file}" ]]; then
+        # Fall back to the main worktree when running from a linked worktree.
+        # git rev-parse --git-common-dir returns an absolute path only for
+        # linked worktrees; in the main worktree it returns a relative ".git".
+        _git_common_dir=$(git -C "${SCRIPT_DIR}" rev-parse --git-common-dir 2>/dev/null || true)
+        if [[ "${_git_common_dir}" == /* ]]; then
+            _env_file="$(dirname "${_git_common_dir}")/e2e-tests/e2e-tests-${BROKER#authd-}.env"
+        fi
+    fi
     if [ -f "${_env_file}" ]; then
         set -a
         # shellcheck disable=SC1090
         source "${_env_file}"
         set +a
     fi
-    unset _env_file
+    unset _env_file _git_common_dir
 fi
 
 # CLI --release overrides the config file value
