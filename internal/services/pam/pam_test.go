@@ -597,6 +597,41 @@ func TestIsAuthenticated_FailDelay(t *testing.T) {
 		"attempt after threshold should be delayed")
 }
 
+func TestIsAuthenticated_FailDelayTrackerFull(t *testing.T) {
+	// Cannot be parallel: temporarily overrides the package-level authFailMaxTracked.
+	//nolint:paralleltest // modifies package-level authFailMaxTracked, cannot run in parallel
+
+	// Use a tracker that can only hold a single entry so we can fill it with
+	// one bogus username and then verify the delay is still applied to a
+	// second, previously unseen username (fail-secure behaviour).
+	orig := *pam.AuthFailMaxTracked
+	*pam.AuthFailMaxTracked = 1
+	t.Cleanup(func() { *pam.AuthFailMaxTracked = orig })
+
+	pm := newPermissionManager(t, false)
+	client := newPamClient(t, nil, globalBrokerManager, &pm)
+
+	// Fill the tracker with a bogus username.
+	bogusSession := startSession(t, client, "ia_denied@example.com")
+	_, _ = client.IsAuthenticated(context.Background(), &authd.IARequest{
+		SessionId:          bogusSession,
+		AuthenticationData: &authd.IARequest_AuthenticationData{},
+	})
+
+	// A different user's first failure should still be delayed even though the
+	// tracker is full (fill-attack protection).
+	targetSession := startSession(t, client, "ia_denied_second@example.com")
+	iaReq := &authd.IARequest{
+		SessionId:          targetSession,
+		AuthenticationData: &authd.IARequest_AuthenticationData{},
+	}
+
+	start := time.Now()
+	_, _ = client.IsAuthenticated(context.Background(), iaReq)
+	require.GreaterOrEqual(t, time.Since(start), pam.AuthFailDelay,
+		"first failure for new user should be delayed when tracker is full")
+}
+
 func TestIDGeneration(t *testing.T) {
 	t.Parallel()
 	usernamePrefix := t.Name()

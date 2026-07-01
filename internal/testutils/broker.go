@@ -302,7 +302,7 @@ func (b *BrokerBusMock) IsAuthenticated(sessionID, authenticationData string) (a
 		access = authDenied
 		data = ""
 
-	case "ia_denied":
+	case "ia_denied", "ia_denied_second":
 		access = authDenied
 		data = `{"message": "access denied"}`
 
