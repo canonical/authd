@@ -358,6 +358,10 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 func (s Service) SetBroker(ctx context.Context, req *authd.STBRequest) (empty *authd.Empty, err error) {
 	defer decorate.OnError(&err, "can't set default broker %q for user %q", req.GetBrokerId(), req.GetUsername())
 
+	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
+		return nil, status.Error(codes.PermissionDenied, err.Error())
+	}
+
 	// authd usernames are lowercase
 	username := strings.ToLower(req.GetUsername())
 	brokerID := req.GetBrokerId()
