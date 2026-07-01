@@ -81,7 +81,9 @@ source "${LIB_DIR}/libprovision.sh"
 # CLI --release overrides the config file value
 RELEASE="${RELEASE_ARG:-${RELEASE:-}}"
 
-assert_env_vars RELEASE VM_NAME_BASE
+VM_NAME_BASE="${VM_NAME_BASE:-e2e-runner}"
+
+assert_env_vars RELEASE
 
 if [ -z "${CI:-}" ]; then
     assert_env_vars SSH_PUBLIC_KEY_FILE

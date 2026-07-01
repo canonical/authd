@@ -134,7 +134,9 @@ fi
 # CLI --release overrides the config file value
 RELEASE="${RELEASE_ARG:-${RELEASE:-}}"
 
-assert_env_vars RELEASE VM_NAME_BASE BROKER
+VM_NAME_BASE="${VM_NAME_BASE:-e2e-runner}"
+
+assert_env_vars RELEASE BROKER
 
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-${DATA_DIR}/${RELEASE}}"
 
