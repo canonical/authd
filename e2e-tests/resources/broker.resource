@@ -347,6 +347,22 @@ Log In With Remote User Through GDM: Local Password
     Wait Until Desktop Ready
 
 
+Log In With Remote User Through GDM: Entra Password
+    [Arguments]    ${username}
+    Start Log In With Remote User Through GDM: QR Code    ${username}
+    Select Broker Through GDM
+    # With device_auth disabled there is only one mode; the PAM module auto-selects
+    # it and goes directly to the Entra ID password prompt.
+    Match Text    Enter your Entra ID password    120
+    Hid.Type String    %{E2E_PASSWORD}
+    Hid.Keys Combo    Return
+    Match Text    Enter your MFA code    120
+    ${totp_code} =    TOTP.Generate Totp Code
+    Hid.Type String    ${totp_code}
+    Hid.Keys Combo    Return
+    Wait Until Desktop Ready
+
+
 Check User Information
     [Arguments]    ${username}
     ${output} =    SSH.Execute    getent passwd ${username}
