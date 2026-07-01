@@ -19,7 +19,11 @@ func (m *Manager) GetOldUserInfoFromDB(name string) (oldUserInfo *types.UserInfo
 }
 
 func CompareNewUserInfoWithUserInfoFromDB(newUserInfo, dbUserInfo types.UserInfo) bool {
-	return compareNewUserInfoWithUserInfoFromDB(newUserInfo, dbUserInfo)
+	return len(diffNormalizedUserInfo(newUserInfo, dbUserInfo)) == 0
+}
+
+func DiffNewUserInfoWithUserInfoFromDB(newUserInfo, dbUserInfo types.UserInfo) []string {
+	return diffNormalizedUserInfo(newUserInfo, dbUserInfo)
 }
 
 func (m *Manager) UsersWithPrimaryGroup(gid uint32) ([]string, error) {
