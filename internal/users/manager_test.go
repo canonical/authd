@@ -1654,6 +1654,41 @@ func TestCompareNewUserInfoWithDB(t *testing.T) {
 	}
 }
 
+func TestDiffNewUserInfoWithDBNormalizesMatchingGroupsWhenGroupCountsDiffer(t *testing.T) {
+	t.Parallel()
+
+	userPrivateGroupGID := uint32(11111)
+	existingGroupGID := uint32(22222)
+
+	dbUserInfo := types.UserInfo{
+		Name:  "user1@example.com",
+		UID:   1111,
+		Gecos: "User1 gecos",
+		Dir:   "/home/user1@example.com",
+		Shell: "/bin/bash",
+		Groups: []types.GroupInfo{
+			{Name: "user1@example.com", UGID: "user1@example.com", GID: &userPrivateGroupGID},
+			{Name: "group1@example.com", UGID: "12345678", GID: &existingGroupGID},
+		},
+	}
+
+	newUserInfo := types.UserInfo{
+		Name:  "user1@example.com",
+		Gecos: "User1 gecos",
+		Dir:   "/home/user1@example.com",
+		Shell: "/bin/bash",
+		Groups: []types.GroupInfo{
+			{Name: "user1@example.com", UGID: "user1@example.com"},
+			{Name: "group1@example.com", UGID: "12345678"},
+			{Name: "group2@example.com", UGID: "87654321"},
+		},
+	}
+
+	got := users.DiffNewUserInfoWithUserInfoFromDB(newUserInfo, dbUserInfo)
+
+	require.Equal(t, []string{`group "group2@example.com" added`}, got)
+}
+
 func TestRegisterUserPreAuthWhenLocked(t *testing.T) {
 	// This cannot be parallel
 

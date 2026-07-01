@@ -30,7 +30,7 @@ Log In
 Log In With Password
     [Arguments]    ${password}
     Wait Until GDM Login Screen Ready
-    Wait Until User Selected
+    Select User
     Hid.Type String    ${password}
     Hid.Keys Combo    Return
     Wait Until Desktop Ready
@@ -39,7 +39,7 @@ Log In With Password
 Log In And Set Password
     [Arguments]    ${new_password}
     Wait Until GDM Login Screen Ready
-    Wait Until User Selected
+    Select User
     Hid.Type String    ubuntu
     Hid.Keys Combo    Return
 
@@ -60,7 +60,7 @@ Log In And Set Password
     Wait Until Desktop Ready
 
 
-Wait Until User Selected
+Select User
     Wait Until Keyword Succeeds    120 sec    1 sec
     ...    Try Select User
 
