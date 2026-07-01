@@ -2,16 +2,16 @@
 Resource        resources/utils.resource
 Resource        resources/authd.resource
 Resource        resources/broker.resource
+Resource        resources/checkpoints.resource
 
 # Test Tags       robot:exit-on-failure
 
-Test Setup    utils.Test Setup    snapshot=%{BROKER}-installed
+Test Setup    checkpoints.authd User Created
 Test Teardown   utils.Test Teardown
 
 
 *** Variables ***
 ${username}    %{E2E_USER}
-${local_password}    qwer1234
 ${new_uid}    60500
 
 
@@ -20,13 +20,7 @@ Test authctl user set-uid
     [Documentation]    Test that authctl user set-uid changes the UID of a
     ...    remote user and updates the home directory ownership.
 
-    Log In
-
-    Open Terminal
-    Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
     Check If User Was Added Properly    ${username}
-    Log Out From Terminal Session
-    Close Focused Window
 
     ${home_dir} =    SSH.Execute    getent passwd ${username} | cut -d: -f6
     Should Not Be Empty    ${home_dir}
