@@ -61,9 +61,10 @@ def _elapsed(seconds: float) -> str:
 
 def _status_colour(status: str) -> str:
     return {
-        "PASS": _GREEN,
-        "FAIL": _RED,
-        "SKIP": _YELLOW,
+        "PASS":    _GREEN,
+        "FAIL":    _RED,
+        "SKIP":    _YELLOW,
+        "NOT RUN": _DIM,
     }.get(status, _WHITE)
 
 
@@ -135,8 +136,9 @@ class Listener(ListenerV3):
         colour = _status_colour(result.status)
         message = _sanitize_html(result.message) if result.message else ""
         msg = f"  {_DIM}{message}{_RESET}" if message else ""
+        status_str = 'PASS' if result.passed else result.status
         _write(
-            f"{colour}{_BOLD}{'PASS' if result.passed else result.status:4}{_RESET}"
+            f"{colour}{_BOLD}{status_str}{_RESET}"
             f"  {_BOLD}{data.name}{_RESET}"
             f"  {_DIM}{_elapsed(elapsed)}{_RESET}"
             f"{msg}"

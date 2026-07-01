@@ -17,7 +17,6 @@ Test Setup
 
 
 *** Variables ***
-${local_password}    qwer1234
 
 
 *** Test Cases ***

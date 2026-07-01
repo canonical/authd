@@ -18,7 +18,6 @@ Test Setup
 
 *** Variables ***
 ${username}    %{E2E_USER}
-${local_password}    qwer1234
 
 
 *** Test Cases ***

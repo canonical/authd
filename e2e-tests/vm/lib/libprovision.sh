@@ -157,6 +157,15 @@ function has_snapshot() {
     virsh snapshot-list "${VM_NAME}" | grep -q "${snapshot_name}"
 }
 
+function lock_vm() {
+    local lock_dir="${XDG_RUNTIME_DIR:-/tmp}/authd-e2e-vms"
+    mkdir -p "${lock_dir}"
+    # Keep this descriptor open until the runner exits, not just during setup.
+    exec {VM_LOCK_FD}>"${lock_dir}/${VM_NAME}.lock"
+    echo "Waiting for exclusive access to VM '${VM_NAME}'"
+    flock "${VM_LOCK_FD}"
+}
+
 function force_create_snapshot() {
     local snapshot_name="$1"
     if has_snapshot "${snapshot_name}"; then

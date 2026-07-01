@@ -2,16 +2,16 @@
 Resource        resources/utils.resource
 Resource        resources/authd.resource
 Resource        resources/broker.resource
+Resource        resources/checkpoints.resource
 
 # Test Tags       robot:exit-on-failure
 
-Test Setup    utils.Test Setup    snapshot=%{BROKER}-installed
+Test Setup    checkpoints.authd User Created
 Test Teardown   utils.Test Teardown
 
 
 *** Variables ***
 ${username}    %{E2E_USER}
-${local_password}    qwer1234
 
 
 *** Test Cases ***
@@ -19,13 +19,6 @@ Test second login succeeds with force_access_check_with_provider enabled
     [Documentation]    Verify that a registered user can log in with their local
     ...    password when force_access_check_with_provider is enabled and
     ...    the identity provider is reachable.
-
-    Log In
-
-    Open Terminal
-    Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
-    Log Out From Terminal Session
-    Close Focused Window
 
     Change Broker Configuration    force_access_check_with_provider    true
 
@@ -37,13 +30,6 @@ Test second login fails with force_access_check_with_provider enabled offline
     [Documentation]    Verify that a registered user cannot log in when
     ...    force_access_check_with_provider is enabled and the identity
     ...    provider is unreachable.
-
-    Log In
-
-    Open Terminal
-    Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
-    Log Out From Terminal Session
-    Close Focused Window
 
     Change Broker Configuration    force_access_check_with_provider    true
 
