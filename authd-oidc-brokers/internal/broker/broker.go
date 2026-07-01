@@ -228,6 +228,19 @@ func New(cfg Config, apiVersion uint, args ...Option) (b *Broker, err error) {
 	if cfg.clientID == "" {
 		err = errors.Join(err, errors.New("client ID is required and was not provided"))
 	}
+	// The entra_password flow can only retrieve groups from Microsoft Graph when
+	// device registration or a client secret is available (see the matching check
+	// in isAuthModeAvailable). If neither is configured, the flow is unusable, so
+	// fail here rather than silently falling back at login time: a startup failure
+	// is far more visible to the administrator than a per-login denial.
+	if cfg.flows.EntraPassword && !cfg.registerDevice && cfg.clientSecret == "" {
+		if _, ok := providers.ProviderAs[himmelblau.EntraPasswordProvider](opts.provider); ok {
+			err = errors.Join(err, fmt.Errorf(
+				"invalid configuration: the %[1]q flow is enabled in [%[2]s], but it cannot retrieve group memberships from Microsoft Graph without %[3]q enabled or a %[4]q configured; "+
+					"fix this by either disabling %[1]q, enabling %[3]q, or granting the app the GroupMember.Read.All application permission and configuring a %[4]q",
+				flowsEntraPasswordKey, flowsSection, registerDeviceKey, clientSecret))
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -923,16 +936,9 @@ func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 		// when device registration (PRT-based token exchange) or a client secret
 		// (app-only client credentials) is available. Without either, every
 		// entra_password login would fail at the group-fetch step, so don't offer
-		// the mode rather than letting users hit an undiagnosable denial.
-		//
-		// This availability is decided here (per login) rather than at config-parse
-		// time on purpose: an earlier version disabled the flow while parsing the
-		// config (mutating the user's [flows] setting, and erroring out when
-		// entra_password was the only enabled flow). That coupled config parsing to
-		// provider capabilities and rejected otherwise-valid configs at startup.
-		// The trade-off of deciding it here: if entra_password is the only enabled
-		// flow and no group source is configured, the user is no longer rejected at
-		// startup but instead sees "no authentication modes available" at login.
+		// the mode rather than letting users hit an undiagnosable denial. New()
+		// already rejects that configuration for real broker startup, so this is a
+		// defensive guard for tests or manually constructed brokers.
 		if !b.cfg.registerDevice && b.cfg.clientSecret == "" {
 			log.Debugf(context.Background(), "The %q flow requires %q to be enabled or a client secret to be configured to retrieve groups from Microsoft Graph, so it is not available", flowsEntraPasswordKey, registerDeviceKey)
 			return false

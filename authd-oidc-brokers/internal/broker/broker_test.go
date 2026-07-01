@@ -354,6 +354,52 @@ func TestNew(t *testing.T) {
 	}
 }
 
+// TestNewRejectsUnusableEntraPasswordWithoutGroupSource verifies that New fails
+// fast when entra_password is enabled but can't retrieve groups from Microsoft
+// Graph (no device registration, no client secret) — rather than starting
+// successfully and only failing once a user logs in.
+func TestNewRejectsUnusableEntraPasswordWithoutGroupSource(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		deviceAuthEnabled bool
+		registerDevice    bool
+		clientSecret      string
+
+		wantErr bool
+	}{
+		"Error_when_entra_password_is_the_only_flow_and_unusable": {wantErr: true},
+		"Error_when_device_auth_is_also_enabled_but_entra_password_is_still_unusable": {
+			deviceAuthEnabled: true,
+			wantErr:           true,
+		},
+		"No_error_when_device_registration_makes_it_usable": {registerDevice: true},
+		"No_error_when_a_client_secret_makes_it_usable":     {clientSecret: "test-client-secret"},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			bCfg := &broker.Config{DataDir: t.TempDir()}
+			bCfg.Init()
+			bCfg.SetIssuerURL(defaultIssuerURL)
+			bCfg.SetClientID("test-client-id")
+			bCfg.SetFlows(tc.deviceAuthEnabled, true)
+			bCfg.SetRegisterDevice(tc.registerDevice)
+			bCfg.SetClientSecret(tc.clientSecret)
+
+			provider := &mockEntraPasswordProvider{MockProvider: &testutils.MockProvider{}}
+			b, err := broker.New(*bCfg, broker.LatestAPIVersion, broker.WithCustomProvider(provider))
+			if tc.wantErr {
+				require.Error(t, err, "New should have returned an error")
+				return
+			}
+			require.NoError(t, err, "New should not have returned an error")
+			require.NotNil(t, b, "New should have returned a non-nil broker")
+		})
+	}
+}
+
 func TestNewSession(t *testing.T) {
 	t.Parallel()
 
@@ -2599,22 +2645,19 @@ func TestGetAuthenticationModesFiltersNextAuthModesByFlows(t *testing.T) {
 	}}, modes)
 }
 
-// TestGetAuthenticationModesEntraPasswordRequiresGroupSource verifies the
-// availability gate (in authModeIsAvailable) that only offers the
-// entra_password flow when a Microsoft Graph group source is available, i.e.
-// device registration or a client secret. Without one, every entra_password
-// login would fail at the group-fetch step, so the mode must not be offered.
+// TestGetAuthenticationModesEntraPasswordRequiresGroupSource verifies that once
+// the broker has started successfully, the entra_password mode is offered only
+// when a Microsoft Graph group source is available, i.e. device registration or
+// a client secret. The missing-group-source case is rejected earlier by New().
 func TestGetAuthenticationModesEntraPasswordRequiresGroupSource(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
 		registerDevice bool
 		clientSecret   string
-		wantEntraPwd   bool
 	}{
-		"Offered_with_device_registration": {registerDevice: true, wantEntraPwd: true},
-		"Offered_with_client_secret":       {clientSecret: "test-client-secret", wantEntraPwd: true},
-		"Filtered_without_group_source":    {registerDevice: false, wantEntraPwd: false},
+		"Offered_with_device_registration": {registerDevice: true},
+		"Offered_with_client_secret":       {clientSecret: "test-client-secret"},
 	}
 
 	for name, tc := range tests {
@@ -2649,11 +2692,7 @@ func TestGetAuthenticationModesEntraPasswordRequiresGroupSource(t *testing.T) {
 			for _, m := range modes {
 				ids = append(ids, m["id"])
 			}
-			if tc.wantEntraPwd {
-				require.Contains(t, ids, authmodes.EntraPassword, "entra_password should be offered when a group source is available")
-			} else {
-				require.NotContains(t, ids, authmodes.EntraPassword, "entra_password should be filtered out without a group source")
-			}
+			require.Contains(t, ids, authmodes.EntraPassword, "entra_password should be offered when a group source is available")
 		})
 	}
 }
@@ -3403,6 +3442,10 @@ func TestEntraPasswordRoutesAADSTSErrors(t *testing.T) {
 				provider:               provider,
 				issuerURL:              defaultIssuerURL,
 				deviceAuthFlowDisabled: tc.deviceAuthDisabled,
+				// Provide a group source (device registration) so a broker with
+				// device_auth disabled still satisfies the entra_password
+				// only-enabled-flow startup check in New().
+				registerDevice: true,
 			})
 
 			sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
@@ -3569,6 +3612,10 @@ func TestIsAuthenticatedFIDOMethodRoutesToDevice(t *testing.T) {
 				provider:               provider,
 				issuerURL:              defaultIssuerURL,
 				deviceAuthFlowDisabled: tc.deviceAuthDisabled,
+				// Provide a group source (device registration) so a broker with
+				// device_auth disabled still satisfies the entra_password
+				// only-enabled-flow startup check in New().
+				registerDevice: true,
 			})
 
 			sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)

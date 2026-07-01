@@ -15,6 +15,7 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/sessionmode"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/golang-jwt/jwt/v5"
@@ -145,6 +146,14 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	}
 	if cfg.ClientID() == "" {
 		cfg.SetClientID("test-client-id")
+	}
+	if !cfg.entraPasswordFlowDisabled && cfg.clientSecret == "" && !cfg.registerDevice {
+		if _, ok := providers.ProviderAs[himmelblau.EntraPasswordProvider](provider); ok {
+			// Most Entra password broker tests are not exercising startup validation;
+			// give them a minimal Graph group source so they keep building a valid
+			// broker after New() started rejecting unusable entra_password configs.
+			cfg.SetClientSecret("test-client-secret")
+		}
 	}
 
 	if cfg.IssuerURL() == "" {
