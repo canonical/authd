@@ -1,18 +1,17 @@
 *** Settings ***
 Resource        resources/utils.resource
 Resource        resources/authd.resource
-
 Resource        resources/broker.resource
+Resource        resources/checkpoints.resource
 
 # Test Tags       robot:exit-on-failure
 
-Test Setup    utils.Test Setup    snapshot=%{BROKER}-installed
+Test Setup    checkpoints.authd User Created
 Test Teardown   utils.Test Teardown
 
 
 *** Variables ***
 ${username}    %{E2E_USER}
-${local_password}    qwer1234
 ${non_allowed_user}    different-user
 
 
@@ -34,17 +33,12 @@ Test allowed_users values with cached local password authentication
     ...      4. allowed_users=<non-allowed-user>            → login fails
     ...      5. allowed_users=ALL                           → login succeeds
 
-    Log In
-
-    # Perform device code flow once to register the user and cache their
-    # local password.  All subsequent logins reuse this cached password.
-    Open Terminal
-    Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
-    Log Out From Terminal Session
-
-    # The initial login auto-registers the user as owner via a drop-in config.
+    # The checkpoint capture includes owner auto-registration.
     # Remove it so that OWNER-based scenarios start from a clean state.
     Remove Registered Owner
+
+    # Open a terminal window to be reused across all login scenarios below.
+    Open Terminal
 
     # Scenario 1: OWNER + owner=<username> → success
     Change allowed_users In Broker Configuration    OWNER

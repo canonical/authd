@@ -13,7 +13,6 @@ Test Teardown   utils.Test Teardown
 *** Variables ***
 ${snapshot}    %{BROKER}-installed
 ${username}    %{E2E_USER}
-${local_password}    qwer1234
 
 
 *** Test Cases ***

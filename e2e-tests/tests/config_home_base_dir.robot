@@ -9,7 +9,6 @@ Test Teardown   utils.Test Teardown
 
 *** Variables ***
 ${username}    %{E2E_USER}
-${local_password}    qwer1234
 ${first_home_base_dir}    /srv/authd-first-homes
 ${second_home_base_dir}    /srv/authd-second-homes
 
