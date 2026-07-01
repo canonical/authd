@@ -9,10 +9,11 @@ DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/authd-e2e-tests"
 
 usage(){
     cat << EOF
-Usage: $0 [--config-file <file>] [--authd-deb <deb>] [--broker-snap <snap>]
+Usage: $0 [--config-file <file>] [--release <release>] [--authd-deb <deb>] [--broker-snap <snap>]
 
 Options:
-   --config-file <file>  Path to the configuration file (default: config.sh)
+   --config-file <file>  Path to the configuration file (default: config.env)
+   --release <release>   Ubuntu release to provision (e.g. noble, resolute); overrides config file
    --force              Force installation of authd and brokers even if snapshots already exist.
                         The existing snapshots will be deleted and recreated with the new installation.
    --broker <broker>    The broker to install ("authd-google", "authd-msentraid", ...)
@@ -28,6 +29,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --config-file)
             CONFIG_FILE="$2"
+            shift 2
+            ;;
+        --release)
+            RELEASE_ARG="$2"
             shift 2
             ;;
         --force)
@@ -80,25 +85,65 @@ fi
 
 # Set default config file if not provided
 if [ -z "${CONFIG_FILE:-}" ]; then
-    CONFIG_FILE="${SCRIPT_DIR}/config.sh"
+    CONFIG_FILE="${SCRIPT_DIR}/config.env"
+    if [[ ! -f "${CONFIG_FILE}" ]]; then
+        # Fall back to the main worktree when running from a linked worktree.
+        # git rev-parse --git-common-dir returns an absolute path only for
+        # linked worktrees; in the main worktree it returns a relative ".git".
+        _git_common_dir=$(git -C "${SCRIPT_DIR}" rev-parse --git-common-dir 2>/dev/null || true)
+        if [[ "${_git_common_dir}" == /* ]]; then
+            CONFIG_FILE="$(dirname "${_git_common_dir}")/e2e-tests/vm/config.env"
+        fi
+        unset _git_common_dir
+    fi
 fi
 
 # Load the configuration file (if it exists)
 if [ -f "${CONFIG_FILE}" ]; then
-    # shellcheck source=config.sh disable=SC1091
+    set -a
+    # shellcheck source=config.env disable=SC1091
     source "${CONFIG_FILE}"
+    set +a
 fi
 
 # shellcheck source=lib/libprovision.sh
 source "${LIB_DIR}/libprovision.sh"
 
-assert_env_vars RELEASE VM_NAME_BASE BROKER
+# Load broker-specific credentials from e2e-tests-<broker>.env if it exists.
+# BROKER is known at this point (from CLI args or config file).
+if [ -n "${BROKER:-}" ]; then
+    _env_file="${SCRIPT_DIR}/../e2e-tests-${BROKER#authd-}.env"
+    if [[ ! -f "${_env_file}" ]]; then
+        # Fall back to the main worktree when running from a linked worktree.
+        # git rev-parse --git-common-dir returns an absolute path only for
+        # linked worktrees; in the main worktree it returns a relative ".git".
+        _git_common_dir=$(git -C "${SCRIPT_DIR}" rev-parse --git-common-dir 2>/dev/null || true)
+        if [[ "${_git_common_dir}" == /* ]]; then
+            _env_file="$(dirname "${_git_common_dir}")/e2e-tests/e2e-tests-${BROKER#authd-}.env"
+        fi
+    fi
+    if [ -f "${_env_file}" ]; then
+        set -a
+        # shellcheck disable=SC1090
+        source "${_env_file}"
+        set +a
+    fi
+    unset _env_file _git_common_dir
+fi
+
+# CLI --release overrides the config file value
+RELEASE="${RELEASE_ARG:-${RELEASE:-}}"
+
+VM_NAME_BASE="${VM_NAME_BASE:-e2e-runner}"
+
+assert_env_vars RELEASE BROKER
 
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-${DATA_DIR}/${RELEASE}}"
 
 if [ -z "${VM_NAME:-}" ]; then
     VM_NAME="${VM_NAME_BASE}-${RELEASE}"
 fi
+export VM_NAME
 
 # Check if we have all required artifacts
 IMAGE="${ARTIFACTS_DIR}/${VM_NAME}.qcow2"
@@ -146,7 +191,8 @@ function install_broker() {
     # Assert that required environment variables are set.
     # The issuer ID is optional (authd-google has a default one).
     # The client secret is also optional (authd-msentraid does not require it).
-    assert_env_vars "${client_id_var}"
+    local broker_env_template="e2e-tests/e2e-tests-${broker#authd-}.env.template"
+    assert_env_vars --template "${broker_env_template}" "${client_id_var}"
 
     local issuer_id="${!issuer_id_var:-}"
     local client_id="${!client_id_var}"

@@ -11,10 +11,11 @@ DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/authd-e2e-tests"
 
 usage(){
     cat << EOF
-Usage: $0 [--config-file <file>] [--force]
+Usage: $0 [--config-file <file>] [--release <release>] [--force]
 
 Options:
-   --config-file <file>  Path to the configuration file (default: config.sh)
+   --config-file <file>  Path to the configuration file (default: config.env)
+   --release <release>   Ubuntu release to provision (e.g. noble, resolute); overrides config file
    --force               Force provisioning: remove existing VM and artifacts and create a fresh VM
    --no-snapshot         Do not create a snapshot after initial setup
   -h, --help             Show this help message and exit
@@ -27,6 +28,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --config-file)
             CONFIG_FILE="$2"
+            shift 2
+            ;;
+        --release)
+            RELEASE_ARG="$2"
             shift 2
             ;;
         --force)
@@ -59,19 +64,26 @@ fi
 
 # Set default config file if not provided
 if [ -z "${CONFIG_FILE:-}" ]; then
-    CONFIG_FILE="${SCRIPT_DIR}/config.sh"
+    CONFIG_FILE="${SCRIPT_DIR}/config.env"
 fi
 
 # Load the configuration file (if it exists)
 if [ -f "${CONFIG_FILE}" ]; then
-    # shellcheck source=config.sh disable=SC1091
+    set -a
+    # shellcheck source=config.env disable=SC1091
     source "${CONFIG_FILE}"
+    set +a
 fi
 
 # shellcheck source=lib/libprovision.sh
 source "${LIB_DIR}/libprovision.sh"
 
-assert_env_vars RELEASE VM_NAME_BASE
+# CLI --release overrides the config file value
+RELEASE="${RELEASE_ARG:-${RELEASE:-}}"
+
+VM_NAME_BASE="${VM_NAME_BASE:-e2e-runner}"
+
+assert_env_vars RELEASE
 
 if [ -z "${CI:-}" ]; then
     assert_env_vars SSH_PUBLIC_KEY_FILE

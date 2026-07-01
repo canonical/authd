@@ -1,2 +1,3 @@
-/vm/config.sh
+/*.env
+/vm/config.env
 

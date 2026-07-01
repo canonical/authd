@@ -30,5 +30,4 @@ Test that owner is auto-updated in broker configuration
     Close Focused Window
 
     # Check that owner was updated in broker configuration
-    Open Terminal In Sudo Mode
-    Check If Owner Was Registered    ${username}
+    Wait Until Keyword Succeeds    30s    1s    Check If Owner Was Registered    ${username}

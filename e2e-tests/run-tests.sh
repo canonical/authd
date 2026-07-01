@@ -41,6 +41,36 @@ TESTS_DIR="${ROOT_DIR}/tests"
 LISTENER_DIR="${ROOT_DIR}/listener"
 TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
 
+# Load broker-specific credentials from e2e-tests-<broker>.env before argument
+# parsing, so that explicit CLI flags take priority over values from the file.
+_scan_broker="${BROKER:-}"
+_scan_args=("$@")
+for ((i=0; i<${#_scan_args[@]}; i++)); do
+    if [[ "${_scan_args[$i]}" == "--broker" || "${_scan_args[$i]}" == "-b" ]]; then
+        _scan_broker="${_scan_args[$((i+1))]:-}"
+        break
+    fi
+done
+if [[ -n "${_scan_broker:-}" ]]; then
+    _env_file="${ROOT_DIR}/e2e-tests-${_scan_broker#authd-}.env"
+    if [[ ! -f "${_env_file}" ]]; then
+        # Fall back to the main worktree when running from a linked worktree.
+        # git rev-parse --git-common-dir returns an absolute path only for
+        # linked worktrees; in the main worktree it returns a relative ".git".
+        _git_common_dir=$(git -C "${ROOT_DIR}" rev-parse --git-common-dir 2>/dev/null || true)
+        if [[ "${_git_common_dir}" == /* ]]; then
+            _env_file="$(dirname "${_git_common_dir}")/e2e-tests/e2e-tests-${_scan_broker#authd-}.env"
+        fi
+    fi
+    if [[ -f "${_env_file}" ]]; then
+        set -a
+        # shellcheck disable=SC1090
+        source "${_env_file}"
+        set +a
+    fi
+fi
+unset _scan_broker _scan_args _env_file _git_common_dir
+
 # Parse command line arguments
 TESTS_TO_RUN=()
 while [[ $# -gt 0 ]]; do

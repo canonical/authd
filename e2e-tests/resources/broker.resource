@@ -348,25 +348,20 @@ Log In With Remote User Through GDM: Local Password
 
 Check User Information
     [Arguments]    ${username}
-    Match Text    ${username}:x:    120
+    ${output} =    SSH.Execute    getent passwd ${username}
+    Should Contain    ${output}    ${username}:x:
 
 
 Check Configuration Value
     [Arguments]    ${config_key}    ${expected_value}
-    Hid.Type String    cat ${BROKER_CFG}
-    # TODO: Even though the Hid.Type String works for most characters now, it seems like there are still issues with
-    # some special characters like `|`, so we still need the workaround here.
-    Hid.Keys Combo    Shift_L    |
-    Hid.Type String    grep ${config_key}
-    Hid.Keys Combo    Return
-    Match Text    ${expected_value}    120
+    ${content} =    SSH.Execute    sudo grep ${config_key} ${BROKER_CFG}
+    Should Contain    ${content}    ${expected_value}
 
 
 Check If Owner Was Registered
     [Arguments]    ${username}
-    Hid.Type String    cat ${BROKER_CFG_DIR}/20-owner-autoregistration.conf
-    Hid.Keys Combo    Return
-    Match Text    owner = ${username}    120
+    ${content} =    SSH.Execute    sudo cat ${BROKER_CFG_DIR}/20-owner-autoregistration.conf
+    Should Contain    ${content}    owner = ${username}
 
 
 Check Home Directory
@@ -391,17 +386,17 @@ Check That SSH Connection Is Closed
 
 Check If User Was Added Properly
     [Arguments]    ${username}
-    Get NSS Passwd Entry For Remote User    ${username}
-    Check User Information    ${username}
+    Wait Until Keyword Succeeds    30s    1s    Check User Information    ${username}
     IF    '${BROKER_SNAP_NAME}' == 'authd-msentraid'
-        Get NSS Group Entries For Remote User    ${username}
-        Check User Groups    ${username}    ${remote_group}
+        Wait Until Keyword Succeeds    120s    1s    Check User Groups    ${username}    ${remote_group}
         Check That Remote User Can Run Sudo Commands    ${local_password}
     END
 
 Check User Groups
     [Arguments]    ${username}    ${remote_group}
-    Match Text    ${username} sudo ${remote_group}    120
+    ${output} =    SSH.Execute    groups ${username}
+    Should Contain    ${output}    sudo
+    Should Contain    ${output}    ${remote_group}
 
 
 Enable Device Registration
