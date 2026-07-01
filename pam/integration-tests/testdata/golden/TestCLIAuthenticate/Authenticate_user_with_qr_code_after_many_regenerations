@@ -56,7 +56,4 @@ Code: 1337
 PAM Authenticate()
   User: "user-integration-qrcode-static-regenerate@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-integration-qrcode-static-regenerate@example.com"
-  Result: success
 ────────────────────────────────────────────────────────────────────────────────

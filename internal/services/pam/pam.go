@@ -17,7 +17,6 @@ import (
 	"github.com/canonical/authd/internal/brokers/layouts"
 	"github.com/canonical/authd/internal/decorate"
 	"github.com/canonical/authd/internal/proto/authd"
-	"github.com/canonical/authd/internal/services/permissions"
 	"github.com/canonical/authd/internal/users"
 	"github.com/canonical/authd/internal/users/types"
 	"github.com/canonical/authd/log"
@@ -109,25 +108,23 @@ func (t *authFailTracker) recordSuccess(username string) {
 
 // Service is the implementation of the PAM module service.
 type Service struct {
-	userManager       *users.Manager
-	brokerManager     *brokers.Manager
-	permissionManager *permissions.Manager
-	failedAuths       *authFailTracker
-	authFailConfig    Config
+	userManager    *users.Manager
+	brokerManager  *brokers.Manager
+	failedAuths    *authFailTracker
+	authFailConfig Config
 
 	authd.UnimplementedPAMServer
 }
 
 // NewService returns a new PAM GRPC service.
-func NewService(ctx context.Context, userManager *users.Manager, brokerManager *brokers.Manager, permissionManager *permissions.Manager, cfg Config) Service {
+func NewService(ctx context.Context, userManager *users.Manager, brokerManager *brokers.Manager, cfg Config) Service {
 	log.Debug(ctx, "Building new gRPC PAM service")
 
 	return Service{
-		userManager:       userManager,
-		brokerManager:     brokerManager,
-		permissionManager: permissionManager,
-		failedAuths:       newAuthFailTracker(cfg),
-		authFailConfig:    cfg,
+		userManager:    userManager,
+		brokerManager:  brokerManager,
+		failedAuths:    newAuthFailTracker(cfg),
+		authFailConfig: cfg,
 	}
 }
 
@@ -447,49 +444,25 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		}
 	}
 
+	// Set the broker as the default for the user on each successful authentication,
+	// unless it's the local broker (which is selected based on NSS resolution, not stored).
+	if broker.ID != brokers.LocalBrokerName {
+		if err = s.brokerManager.SetBroker(broker.ID, uInfo.Name); err != nil {
+			log.Errorf(ctx, "IsAuthenticated: Could not set default broker %q for user %q: %v", broker.ID, uInfo.Name, err)
+			return nil, err
+		}
+		if err = s.userManager.UpdateBrokerForUser(uInfo.Name, broker.ID); err != nil {
+			log.Errorf(ctx, "IsAuthenticated: Could not update broker for user %q in database: %v", uInfo.Name, err)
+			return nil, err
+		}
+	}
+
 	s.failedAuths.recordSuccess(username)
 
 	return &authd.IAResponse{
 		Access: access,
 		Msg:    msg,
 	}, nil
-}
-
-// SetBroker sets the default broker for the given user.
-func (s Service) SetBroker(ctx context.Context, req *authd.STBRequest) (empty *authd.Empty, err error) {
-	defer decorate.OnError(&err, "can't set default broker %q for user %q", req.GetBrokerId(), req.GetUsername())
-
-	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
-		return nil, status.Error(codes.PermissionDenied, err.Error())
-	}
-
-	// authd usernames are lowercase
-	username := strings.ToLower(req.GetUsername())
-	brokerID := req.GetBrokerId()
-
-	if username == "" {
-		log.Errorf(ctx, "SetBroker: No user name given")
-		return nil, status.Error(codes.InvalidArgument, "no user name given")
-	}
-
-	// Don't allow setting the default broker to the local broker, because the decision to use the local broker should
-	// be made each time the user tries to log in, based on whether the user is provided by any other NSS service.
-	if brokerID == brokers.LocalBrokerName {
-		log.Errorf(ctx, "SetBroker: Can't set local broker as default for user %q", username)
-		return nil, status.Error(codes.InvalidArgument, "can't set local broker as default")
-	}
-
-	if err = s.brokerManager.SetBroker(brokerID, username); err != nil {
-		log.Errorf(ctx, "SetBroker: Could not set default broker %q for user %q: %v", brokerID, username, err)
-		return &authd.Empty{}, err
-	}
-
-	if err = s.userManager.UpdateBrokerForUser(username, brokerID); err != nil {
-		log.Errorf(ctx, "SetBroker: Could not update broker for user %q in database: %v", username, err)
-		return &authd.Empty{}, err
-	}
-
-	return &authd.Empty{}, nil
 }
 
 // EndSession asks the broker associated with the sessionID to end the session.

@@ -43,7 +43,7 @@ func NewManager(ctx context.Context, dbDir, brokersConfPath string, configuredBr
 	permissionManager := permissions.New()
 
 	userService := user.NewService(ctx, userManager, brokerManager, &permissionManager)
-	pamService := pam.NewService(ctx, userManager, brokerManager, &permissionManager, pamConfig)
+	pamService := pam.NewService(ctx, userManager, brokerManager, pamConfig)
 
 	return Manager{
 		userManager:   userManager,

@@ -31,6 +31,3 @@ Enter your one time credential:
 PAM Authenticate()
   User: "user-integration-native-authenticate-user-with-form-mode-with-button-in-polkit@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-integration-native-authenticate-user-with-form-mode-with-button-in-polkit@example.com"
-  Result: success

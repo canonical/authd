@@ -839,11 +839,18 @@ func cliChangePasswordWithRetry(t *testing.T, c *ptytest.Console, firstNew, firs
 	cliSendPassword(t, c, secondNew)
 }
 
-// cliWaitForResult waits for the complete PAM AcctMgmt() result block.
+// cliWaitForResult waits for the complete PAM Authenticate() result block.
 func cliWaitForResult(t *testing.T, c *ptytest.Console) {
 	t.Helper()
 
-	waitForRunnerResult(t, c, pam_test.RunnerResultActionAcctMgmt)
+	waitForRunnerResult(t, c, pam_test.RunnerResultActionAuthenticate)
+}
+
+// cliWaitForChangeAuthTokResult waits for the complete PAM ChangeAuthTok() result block.
+func cliWaitForChangeAuthTokResult(t *testing.T, c *ptytest.Console) {
+	t.Helper()
+
+	waitForRunnerResult(t, c, pam_test.RunnerResultActionChangeAuthTok)
 }
 
 func cliAuthenticateWithQRCode(t *testing.T, c *ptytest.Console, signalFn func(string), username string) {
@@ -910,7 +917,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSendPassword(t, c, "authd2404")
 				c.WaitFor(t, `Confirm password`)
 				cliSendPassword(t, c, "authd2404")
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 
 				c2 := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionLogin, cliEnv, clientOptions{})
@@ -941,7 +948,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSendPassword(t, c, "authd2404")
 				c.WaitFor(t, `Confirm password`)
 				cliSendPassword(t, c, "authd2404")
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 
 				c2 := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionLogin, cliEnv, clientOptions{})
@@ -989,7 +996,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSendPassword(t, c, "authd2404")
 				c.WaitFor(t, `Confirm password`)
 				cliSendPassword(t, c, "authd2404")
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1004,7 +1011,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSendPassword(t, c1, "goodpass")
 				cliChangePasswordWithRetry(t, c1, "noble2404", "noble2404",
 					`new password does not match criteria`, "authd2404")
-				cliWaitForResult(t, c1)
+				cliWaitForChangeAuthTokResult(t, c1)
 				c1.RequireSuccessfulExit(t)
 
 				// Repeat the flow to verify that after a rejection, the user can still change the password successfully.
@@ -1017,7 +1024,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSendPassword(t, c2, "authd2404")
 				cliChangePasswordWithRetry(t, c2, "noble2404", "noble2404",
 					`new password does not match criteria`, "goodpass")
-				cliWaitForResult(t, c2)
+				cliWaitForChangeAuthTokResult(t, c2)
 				c2.RequireSuccessfulExit(t)
 
 				return ptySanitizeSnapshots(t, c1) + ptySanitizeSnapshots(t, c2)
@@ -1037,7 +1044,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSendPassword(t, c, "authd2404")
 				c.WaitFor(t, `Confirm password`)
 				cliSendPassword(t, c, "authd2404")
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1052,7 +1059,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSendPassword(t, c, "goodpass")
 				cliChangePasswordWithRetry(t, c, "authd2404", "badpass",
 					`Password entries don't match`, "authd2404")
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1079,7 +1086,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSendPassword(t, c, "authd2404")
 				c.WaitFor(t, `Confirm password`)
 				cliSendPassword(t, c, "authd2404")
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1107,9 +1114,9 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				c.WaitFor(t, `Maximum number of authentication attempts reached`)
 				// The snapshot at this point is flaky: sometimes the PAM result
 				// has already been rendered alongside the error message, sometimes
-				// not. Discard it; cliWaitForResult captures the stable final state.
+				// not. Discard it; cliWaitForChangeAuthTokResult captures the stable final state.
 				c.DiscardLastSnapshot()
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1121,7 +1128,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
 				cliEnterUsername(t, c, username)
 				cliSelectBroker(t, c)
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1134,7 +1141,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				c.WaitFor(t, `Select your provider`)
 				c.WaitFor(t, `1\. local`)
 				c.SendKey(t, ptytest.KeyEnter)
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1147,7 +1154,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 				c.SendKey(t, ptytest.KeyCtrlC)
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1160,7 +1167,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 				c.SendKey(t, ptytest.KeyCtrlD)
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1232,8 +1239,5 @@ func TestPamCLIRunStandalone(t *testing.T) {
 
 	if !strings.Contains(outStr, pam.ErrAuthinfoUnavail.Error()) {
 		t.Errorf("Expected output to contain %s", pam.ErrAuthinfoUnavail.Error())
-	}
-	if !strings.Contains(outStr, pam.ErrIgnore.Error()) {
-		t.Errorf("Expected output to contain %s", pam.ErrIgnore.Error())
 	}
 }
