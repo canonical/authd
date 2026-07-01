@@ -83,6 +83,8 @@ parts:
     plugin: nil
     build-snaps:
       - go
+    build-packages:
+      - retry
     after:
       - libhimmelblau
       - version
@@ -92,7 +94,7 @@ parts:
       - CGO_LDFLAGS: -L${CRAFT_STAGE}/lib -lhimmelblau
       - GOBIN: ${CRAFT_PART_INSTALL}/bin
     override-build: |
-      go mod download all
+      retry -t 3 -d 10 -- go mod download all
       go mod vendor
       VERSION=$(craftctl get version)
       go build -tags=withmsentraid,release -ldflags "-X=github.com/canonical/authd/authd-oidc-brokers/internal/consts.Version=${VERSION}" -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc
@@ -113,10 +115,12 @@ parts:
     plugin: nil
     build-snaps:
       - go
+    build-packages:
+      - retry
     build-environment:
       - GOBIN: ${CRAFT_PART_INSTALL}/bin
     override-build: |
-      go mod download all
+      retry -t 3 -d 10 -- go mod download all
       go mod vendor
       go build -o ${GOBIN}/semver semver/semver.go
   # Build the snap version from the git repository and current tree state.
