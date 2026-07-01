@@ -32,6 +32,7 @@ typedef struct {
 } MockPasswd;
 
 static MockPasswd passwd_entities[512];
+static atomic_int passwd_entities_count;
 
 __attribute__((constructor))
 void constructor (void)
@@ -96,6 +97,17 @@ is_valid_test_user (const char *name)
   return is_supported_test_fake_user (name);
 }
 
+static uid_t
+get_effective_uid (void)
+{
+  static uid_t effective_uid = (uid_t) -1;
+
+  if (effective_uid == (uid_t) -1)
+    effective_uid = getuid () != 0 ? getuid () : 65534;
+
+  return effective_uid;
+}
+
 static bool
 is_lower_case (const char *str)
 {
@@ -122,7 +134,6 @@ getpwnam (const char *name)
   static struct passwd * (*orig_getpwnam) (const char *name) = NULL;
   struct passwd *passwd_entity = NULL;
   struct passwd *source_entity = NULL;
-  static atomic_int last_entity_idx;
   int entity_idx;
 #ifdef AUTHD_TESTS_SSH_USE_AUTHD_NSS
   struct passwd *nss_entity = NULL;
@@ -184,7 +195,7 @@ getpwnam (const char *name)
     }
 #endif /* AUTHD_TESTS_SSH_USE_AUTHD_NSS */
 
-  for (size_t i = atomic_load (&last_entity_idx); i != 0; --i)
+  for (size_t i = atomic_load (&passwd_entities_count); i != 0; --i)
     {
       struct passwd *cached_entity = &passwd_entities[i].parent;
 
@@ -211,7 +222,7 @@ getpwnam (const char *name)
       return passwd_entity;
     }
 
-  entity_idx = atomic_fetch_add_explicit (&last_entity_idx, 1,
+  entity_idx = atomic_fetch_add_explicit (&passwd_entities_count, 1,
                                           memory_order_relaxed);
   assert (entity_idx < SIZE_OF_ARRAY (passwd_entities));
 
@@ -277,10 +288,8 @@ getpwnam (const char *name)
    * (65534) as a safe non-root fallback. Auth-failure tests never actually
    * set up a user session, so the uid only needs to pass pre-auth checks.
    */
-  uid_t effective_uid = getuid () != 0 ? getuid () : 65534;
-  uid_t effective_gid = getgid () != 0 ? getgid () : 65534;
-  passwd_entity->pw_uid = effective_uid;
-  passwd_entity->pw_gid = effective_gid;
+  passwd_entity->pw_uid = get_effective_uid ();
+  passwd_entity->pw_gid = getgid () != 0 ? getgid () : 65534;
 
   fprintf (stderr, "sshd_preloader[%d]: Simulating to be fake user %s (%d:%d)\n",
            getpid (), passwd_entity->pw_name, passwd_entity->pw_uid,
@@ -325,7 +334,7 @@ getpwnam_r (const char *name, struct passwd *pwd, char *buf, size_t buflen,
        * OpenSSH's root-login special handling (PermitRootLogin checks, etc.).
        * Use nobody (65534) as a safe non-root fallback when running as root.
        */
-      pwd->pw_uid = getuid () != 0 ? getuid () : 65534;
+      pwd->pw_uid = get_effective_uid ();
       pwd->pw_gid = getgid () != 0 ? getgid () : 65534;
       return 0;
     }
@@ -341,6 +350,64 @@ getpwnam_r (const char *name, struct passwd *pwd, char *buf, size_t buflen,
 
   *pwd = *pw;
   *result = pwd;
+  return 0;
+}
+
+/*
+ * Override getpwuid() so that lookups by the fake UID (e.g. login_get_lastlog
+ * in OpenSSH 10.2+) resolve to the current test user rather than failing.
+ * Without this, sshd aborts the PTY allocation when it cannot find an account
+ * for uid=<effective_uid>, causing the session to close immediately after
+ * authentication.
+ */
+struct passwd *
+getpwuid (uid_t uid)
+{
+  static struct passwd pw;
+  struct passwd *result = NULL;
+  static char buf[4096];
+
+  if (getpwuid_r (uid, &pw, buf, sizeof (buf), &result) != 0)
+    return NULL;
+
+  return result;
+}
+
+/*
+ * Override getpwuid_r() for the same reason as getpwuid().
+ */
+int
+getpwuid_r (uid_t uid, struct passwd *pwd, char *buf, size_t buflen,
+            struct passwd **result)
+{
+  static int (*orig_getpwuid_r) (uid_t, struct passwd *, char *, size_t,
+                                 struct passwd **) = NULL;
+
+  if (orig_getpwuid_r == NULL)
+    {
+      orig_getpwuid_r = dlsym (RTLD_NEXT, "getpwuid_r");
+      assert (orig_getpwuid_r);
+    }
+
+  if (uid != get_effective_uid ())
+    return orig_getpwuid_r (uid, pwd, buf, buflen, result);
+
+  /* Return the first cached fake-user entry whose UID matches. */
+  for (size_t i = 0; i < (size_t) atomic_load (&passwd_entities_count); ++i)
+    {
+      struct passwd *cached = &passwd_entities[i].parent;
+
+      if (cached->pw_name && cached->pw_uid == uid)
+        {
+          fprintf (stderr, "sshd_preloader[%d]: getpwuid_r(%d) - returning cached entry for %s\n",
+                   getpid (), (int) uid, cached->pw_name);
+          *pwd = *cached;
+          *result = pwd;
+          return 0;
+        }
+    }
+
+  *result = NULL;
   return 0;
 }
 
