@@ -51,7 +51,6 @@ type options struct {
 	endSessionErr error
 
 	brokerForUser map[string]string
-	setBrokerErr  error
 
 	uiLayouts map[string]*authd.UILayout
 	authModes map[string]*authd.GAMResponse_AuthenticationMode
@@ -171,13 +170,6 @@ func WithIsAuthenticatedMessage(message string) func(o *options) {
 func WithEndSessionReturn(err error) func(o *options) {
 	return func(o *options) {
 		o.endSessionErr = err
-	}
-}
-
-// WithSetBrokerReturn is the option to define the SetBroker return values.
-func WithSetBrokerReturn(err error) func(o *options) {
-	return func(o *options) {
-		o.setBrokerErr = err
 	}
 }
 
@@ -513,27 +505,6 @@ func (dc *DummyClient) EndSession(ctx context.Context, in *authd.ESRequest, opts
 	}
 	dc.currentSessionID = ""
 	dc.selectedUsername = ""
-	return &authd.Empty{}, nil
-}
-
-// SetBroker simulates SetBroker using the provided parameters.
-func (dc *DummyClient) SetBroker(ctx context.Context, in *authd.STBRequest, opts ...grpc.CallOption) (*authd.Empty, error) {
-	log.Debugf(ctx, "SetBroker Called: %#v", in)
-	dc.mu.Lock()
-	defer dc.mu.Unlock()
-	if dc.setBrokerErr != nil {
-		return nil, dc.setBrokerErr
-	}
-	if in == nil {
-		return nil, errors.New("no input values provided")
-	}
-	if in.Username == "" {
-		return nil, errors.New("no valid username provided")
-	}
-	if in.BrokerId == "" {
-		return nil, errors.New("no valid broker ID provided")
-	}
-	dc.brokerForUser[in.Username] = in.BrokerId
 	return &authd.Empty{}, nil
 }
 

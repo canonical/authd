@@ -40,6 +40,3 @@ Gimme your password:
 PAM Authenticate()
   User: "user-integration-native-prevent-preset-user-from-switching-username@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-integration-native-prevent-preset-user-from-switching-username@example.com"
-  Result: success

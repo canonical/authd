@@ -453,45 +453,25 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		}
 	}
 
+	// Set the broker as the default for the user on each successful authentication,
+	// unless it's the local broker (which is selected based on NSS resolution, not stored).
+	if broker.ID != brokers.LocalBrokerName {
+		if err = s.brokerManager.SetBroker(broker.ID, uInfo.Name); err != nil {
+			log.Errorf(ctx, "IsAuthenticated: Could not set default broker %q for user %q: %v", broker.ID, uInfo.Name, err)
+			return nil, err
+		}
+		if err = s.userManager.UpdateBrokerForUser(uInfo.Name, broker.ID); err != nil {
+			log.Errorf(ctx, "IsAuthenticated: Could not update broker for user %q in database: %v", uInfo.Name, err)
+			return nil, err
+		}
+	}
+
 	s.failedAuths.recordSuccess(username)
 
 	return &authd.IAResponse{
 		Access: access,
 		Msg:    msg,
 	}, nil
-}
-
-// SetBroker sets the default broker for the given user.
-func (s Service) SetBroker(ctx context.Context, req *authd.STBRequest) (empty *authd.Empty, err error) {
-	defer decorate.OnError(&err, "can't set default broker %q for user %q", req.GetBrokerId(), req.GetUsername())
-
-	// authd usernames are lowercase
-	username := strings.ToLower(req.GetUsername())
-	brokerID := req.GetBrokerId()
-
-	if username == "" {
-		log.Errorf(ctx, "SetBroker: No user name given")
-		return nil, status.Error(codes.InvalidArgument, "no user name given")
-	}
-
-	// Don't allow setting the default broker to the local broker, because the decision to use the local broker should
-	// be made each time the user tries to log in, based on whether the user is provided by any other NSS service.
-	if brokerID == brokers.LocalBrokerName {
-		log.Errorf(ctx, "SetBroker: Can't set local broker as default for user %q", username)
-		return nil, status.Error(codes.InvalidArgument, "can't set local broker as default")
-	}
-
-	if err = s.brokerManager.SetBroker(brokerID, username); err != nil {
-		log.Errorf(ctx, "SetBroker: Could not set default broker %q for user %q: %v", brokerID, username, err)
-		return &authd.Empty{}, err
-	}
-
-	if err = s.userManager.UpdateBrokerForUser(username, brokerID); err != nil {
-		log.Errorf(ctx, "SetBroker: Could not update broker for user %q in database: %v", username, err)
-		return &authd.Empty{}, err
-	}
-
-	return &authd.Empty{}, nil
 }
 
 // EndSession asks the broker associated with the sessionID to end the session.

@@ -651,64 +651,6 @@ func TestIDGeneration(t *testing.T) {
 	}
 }
 
-func TestSetBroker(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		username string
-		brokerID string
-
-		wantErr bool
-	}{
-		"Set_broker_for_existing_user_with_no_broker":   {username: "usersetbroker@example.com"},
-		"Update_broker_for_existing_user_with_a_broker": {username: "userupdatebroker@example.com"},
-		"Username_is_case_insensitive":                  {username: "UserSetBroker@example.com"},
-
-		"Error_when_setting_broker_to_local_broker": {username: "userlocalbroker@example.com", brokerID: brokers.LocalBrokerName, wantErr: true},
-		"Error_when_username_is_empty":              {wantErr: true},
-		"Error_when_user_does_not_exist_":           {username: "doesnotexist@example.com", wantErr: true},
-		"Error_when_broker_does_not_exist":          {username: "userwithbroker@example.com", brokerID: "does not exist", wantErr: true},
-	}
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			dbDir := t.TempDir()
-			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join(testutils.TestFamilyPath(t), "set-broker.db"), dbDir)
-			require.NoError(t, err, "Setup: could not create database from testdata")
-
-			m, err := users.NewManager(users.DefaultConfig, dbDir)
-			require.NoError(t, err, "Setup: could not create user manager")
-			t.Cleanup(func() { _ = m.Stop() })
-			client := newPamClient(t, m, globalBrokerManager)
-
-			if tc.brokerID == "" {
-				tc.brokerID = mockBrokerGeneratedID
-			}
-
-			stbReq := &authd.STBRequest{
-				BrokerId: tc.brokerID,
-				Username: tc.username,
-			}
-			_, err = client.SetBroker(context.Background(), stbReq)
-			if tc.wantErr {
-				require.Error(t, err, "SetBroker should return an error, but did not")
-				return
-			}
-			require.NoError(t, err, "SetBroker should not return an error, but did")
-
-			gbResp, err := client.GetBroker(context.Background(), &authd.GBRequest{Username: tc.username})
-			require.NoError(t, err, "GetBroker should not return an error")
-			require.Equal(t, tc.brokerID, gbResp.GetBroker(), "SetBroker should set the default broker as expected")
-
-			// Check that database has been updated too.
-			gotDB, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
-			require.NoError(t, err, "Setup: failed to dump database for comparing")
-			golden.CheckOrUpdate(t, gotDB, golden.WithPath("cache.db"))
-		})
-	}
-}
-
 func TestEndSession(t *testing.T) {
 	t.Parallel()
 

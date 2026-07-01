@@ -1087,16 +1087,14 @@ func nativeWaitForLoginPasswordPrompt(t *testing.T, c *ptytest.Console) {
 	}
 }
 
-// nativeWaitForResult waits for the PAM runner result line.
+// nativeWaitForResult waits for the PAM runner Authenticate result line.
 func nativeWaitForResult(t *testing.T, c *ptytest.Console) {
 	t.Helper()
-	waitForRunnerResult(t, c, pam_test.RunnerResultActionAcctMgmt)
+	waitForRunnerResult(t, c, pam_test.RunnerResultActionAuthenticate)
 }
 
 // nativeWaitForChangeAuthTokResult waits for the PAM runner ChangeAuthTok result.
-// AcctMgmt is the last action to complete, so waiting for it ensures the whole
-// authentication token change has finished.
 func nativeWaitForChangeAuthTokResult(t *testing.T, c *ptytest.Console) {
 	t.Helper()
-	waitForRunnerResult(t, c, pam_test.RunnerResultActionAcctMgmt)
+	waitForRunnerResult(t, c, pam_test.RunnerResultActionChangeAuthTok)
 }

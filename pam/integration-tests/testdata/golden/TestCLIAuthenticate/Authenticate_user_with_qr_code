@@ -160,7 +160,4 @@ Code: 1341
 PAM Authenticate()
   User: "user-integration-qr-code@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-integration-qr-code@example.com"
-  Result: success
 ────────────────────────────────────────────────────────────────────────────────

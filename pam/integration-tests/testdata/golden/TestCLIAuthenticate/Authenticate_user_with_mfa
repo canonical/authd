@@ -70,7 +70,4 @@ Unlock your phone +33... or accept request on web interface
 PAM Authenticate()
   User: "user-mfa@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-mfa@example.com"
-  Result: success
 ────────────────────────────────────────────────────────────────────────────────

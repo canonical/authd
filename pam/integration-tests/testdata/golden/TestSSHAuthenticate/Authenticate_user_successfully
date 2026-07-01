@@ -8,7 +8,6 @@ Enter 'r' to cancel the request and go back to select the authentication method
 (user-integration-pre-check-ssh-authenticate-user-successfully@example.com@localhost) Gimme your password:
 >
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully@example.com'
-PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_successfully]
   HOME=${AUTHD_TEST_HOME}
   LOGNAME=user-integration-pre-check-ssh-authenticate-user-successfully@example.com

@@ -12,6 +12,3 @@ Gimme your password:
 PAM Authenticate()
   User: "user-integration-selection-upper-case-native-testnativeauthenticate@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-integration-selection-upper-case-native-testnativeauthenticate@example.com"
-  Result: success

@@ -44,9 +44,6 @@ Enter your one time credential:
 PAM Authenticate()
   User: "user-integration-remember-mode@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-integration-remember-mode@example.com"
-  Result: success
 ────────────────────────────────────────────────────────────────────────────────
 
 === Second Login (broker/mode remembered) ===
@@ -69,9 +66,6 @@ Enter your one time credential:
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
 PAM Authenticate()
-  User: "user-integration-remember-mode@example.com"
-  Result: success
-PAM AcctMgmt()
   User: "user-integration-remember-mode@example.com"
   Result: success
 ────────────────────────────────────────────────────────────────────────────────
