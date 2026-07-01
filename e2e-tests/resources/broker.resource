@@ -216,10 +216,12 @@ Block Network Access To Identity Provider
 # them before restarting the broker snap once. For example:
 #     Change Broker Configuration    entra_password=true    device_auth=false
 # Each key should match both commented and uncommented lines in the config file.
+# Fails if a key is not found in the config file.
 Change Broker Configuration
     [Arguments]    &{config}
     FOR    ${key}    ${value}    IN    &{config}
         SSH.Execute    sudo sed -i 's|^#*${key} =.*|${key} = ${value}|g' ${BROKER_CFG}
+        SSH.Execute    grep -q '^${key} = ' ${BROKER_CFG}
     END
     SSH.Execute    sudo snap restart ${BROKER_SNAP_NAME}
 
