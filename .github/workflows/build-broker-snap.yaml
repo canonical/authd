@@ -18,7 +18,7 @@ jobs:
       # Needed to push/pull OCI artifact to/from ghcr.io
       packages: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # The authd-msentraid broker requires the libhimmelblau submodule.
           submodules: recursive

@@ -77,7 +77,7 @@ jobs:
 
           sudo apt-get update
           sudo apt-get install -y ${{ env.go_build_dependencies }}
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Go code sanity check
         uses: canonical/desktop-engineering/gh-actions/go/code-sanity@v2
         with:
@@ -111,7 +111,7 @@ jobs:
     name: "Shell: Code sanity"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Run ShellCheck
         uses: ludeeus/action-shellcheck@master
         with:
@@ -133,7 +133,7 @@ jobs:
           # so we always need to install the protobuf compilers
           # when building the NSS crate.
           sudo apt-get install -y protobuf-compiler
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Rust code sanity check
         uses: canonical/desktop-engineering/gh-actions/rust/code-sanity@main
         with:
@@ -159,7 +159,7 @@ jobs:
 
           scan_build_dir=$(mktemp -d --tmpdir scan-build-dir-XXXXXX)
           echo SCAN_BUILD_REPORTS_PATH="${scan_build_dir}" >> $GITHUB_ENV
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Run scan build on GDM extensions
         run: |
           set -eu
@@ -192,7 +192,7 @@ jobs:
       # containers.
       AUTHD_TESTS_USE_LXD: true
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: setup-go-tests
         uses: ./.github/actions/setup-go-tests
       - uses: ./.github/actions/setup-go-coverage-tests
@@ -253,7 +253,7 @@ jobs:
 
       - name: Save LXD test image cache
         if: always() && steps.setup-go-tests.outputs.lxd-image-cache-matched-key == '' && steps.export-lxd-test-image.outputs.cache-exported == 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/authd-lxd-image-cache/ubuntu-${{ env.LXD_UBUNTU_VERSION }}.tar
           key: ${{ steps.setup-go-tests.outputs.lxd-image-cache-primary-key }}
@@ -273,7 +273,7 @@ jobs:
       # containers.
       AUTHD_TESTS_USE_LXD: true
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: setup-go-tests
         uses: ./.github/actions/setup-go-tests
       - uses: ./.github/actions/setup-go-coverage-tests
@@ -333,7 +333,7 @@ jobs:
 
       - name: Save LXD test image cache
         if: always() && steps.setup-go-tests.outputs.lxd-image-cache-matched-key == '' && steps.export-lxd-test-image.outputs.cache-exported == 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/authd-lxd-image-cache/ubuntu-${{ env.LXD_UBUNTU_VERSION }}.tar
           key: ${{ steps.setup-go-tests.outputs.lxd-image-cache-primary-key }}
@@ -345,7 +345,7 @@ jobs:
     name: "Go Tests with Race Detector"
     runs-on: ubuntu-24.04 # ubuntu-latest-runner
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - id: setup-go-tests
         uses: ./.github/actions/setup-go-tests
       # Installation of debug symbols takes a long time (and fails currently),
@@ -375,7 +375,7 @@ jobs:
     name: "Go PAM tests with Address Sanitizer"
     runs-on: ubuntu-24.04 # ubuntu-latest-runner
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-go-tests
       # Installation of debug symbols takes a long time (and fails currently),
       # so we skip it for now. Enable on demand.

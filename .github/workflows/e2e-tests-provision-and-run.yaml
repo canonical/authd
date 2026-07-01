@@ -42,12 +42,12 @@ jobs:
       # Needed to push OCI artifact to ghcr.io
       packages: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Restore cached VM image (if available)
         id: restore-cache
         if: ${{ !inputs.force-fresh-image }}
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-version }}.qcow2
           key: >-
@@ -97,7 +97,7 @@ jobs:
           echo "Previous cache (if any) deleted"
 
       - name: Cache the VM image
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: always() && steps.provision-vm.outcome == 'success'
         with:
           path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-version }}.qcow2

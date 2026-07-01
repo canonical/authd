@@ -41,7 +41,7 @@ jobs:
       pkg-src-changes: ${{ steps.outputs.outputs.pkg-src-changes }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-oras
         with:

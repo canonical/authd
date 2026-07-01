@@ -33,7 +33,7 @@ jobs:
     name: "Go: Code sanity"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
 
@@ -53,7 +53,7 @@ jobs:
     name: "Shell: Code sanity"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Run ShellCheck
         uses: ludeeus/action-shellcheck@master
         with:
@@ -67,7 +67,7 @@ jobs:
       matrix:
         test: ["coverage", "asan"]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - uses: actions/setup-go@v6
