@@ -2342,12 +2342,25 @@ func (b *Broker) refreshEntraPasswordToken(ctx context.Context, session *session
 func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *token.AuthCachedInfo) (*token.AuthCachedInfo, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
-	// set cached token expiry time to one hour in the past
-	// this makes sure the token is refreshed even if it has not 'actually' expired
-	oldToken.Token.Expiry = time.Now().Add(-time.Hour)
-	oauthToken, err := session.oauth2Config.TokenSource(timeoutCtx, oldToken.Token).Token()
+	// Build a token carrying only the refresh token, like refreshEntraPasswordToken
+	// does: oauth2.Token.Valid() requires a non-empty AccessToken, so omitting it
+	// forces TokenSource to hit the token endpoint even if the cached token has not
+	// actually expired, without mutating the caller's cached oldToken.
+	oauthToken, err := session.oauth2Config.TokenSource(timeoutCtx, &oauth2.Token{RefreshToken: oldToken.Token.RefreshToken}).Token()
 	if err != nil {
 		return nil, err
+	}
+	refreshed := *oldToken
+	tokenCopy := *oldToken.Token
+	refreshed.Token = &tokenCopy
+	if oauthToken.RefreshToken != "" {
+		refreshed.Token.RefreshToken = oauthToken.RefreshToken
+	}
+	oldToken = &refreshed
+	cacheRotatedToken := func(reason string) {
+		if cacheErr := token.CacheAuthInfo(session.tokenPath, oldToken); cacheErr != nil {
+			log.Errorf(context.Background(), "Failed to store rotated refresh token after %s: %s", reason, cacheErr)
+		}
 	}
 
 	// Update the raw ID token. Treat an absent, null, or empty id_token the same:
@@ -2368,7 +2381,11 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 
 	t.UserInfo, err = b.getUserInfo(ctx, session, oauthToken, rawIDToken, true)
 	if err != nil {
-		return nil, err
+		// Token refresh has already succeeded server-side. Preserve a rotated
+		// refresh token even if a later local validation step fails, otherwise the
+		// cache can be stranded with a refresh token the provider already invalidated.
+		cacheRotatedToken("user info refresh failure")
+		return oldToken, err
 	}
 	if t.UserInfo.Gecos == "" {
 		t.UserInfo.Gecos = oldToken.UserInfo.Gecos

@@ -2861,6 +2861,60 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDetectsDisabledUser(t *testing.
 	require.True(t, cached.UserIsDisabled, "UserIsDisabled must be cached after an AADSTS50057 refresh rejection")
 }
 
+// TestIsAuthenticatedPasswordRefreshPreservesRotationOnUserInfoError verifies
+// that the generic OIDC refresh path preserves a rotated refresh token even if
+// a later local validation step (here: ID-token verification in getUserInfo)
+// fails. Otherwise the cache can be stranded with a refresh token the provider
+// already invalidated server-side.
+func TestIsAuthenticatedPasswordRefreshPreservesRotationOnUserInfoError(t *testing.T) {
+	t.Parallel()
+
+	const correctPassword = "password"
+	const listenAddress = "127.0.0.1:31317"
+	const rotatedRefreshToken = "rotated-refresh-token"
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		listenAddress:         listenAddress,
+		customHandlers: map[string]testutils.EndpointHandler{
+			"/token": func(w http.ResponseWriter, _ *http.Request) {
+				response := fmt.Sprintf(`{
+					"access_token": "accesstoken",
+					"refresh_token": %q,
+					"token_type": "Bearer",
+					"scope": %q,
+					"expires_in": 3600,
+					"id_token": ".invalid."
+				}`, rotatedRefreshToken, strings.Join(consts.DefaultScopes, " "))
+				w.Header().Add("Content-Type", "application/json")
+				_, _ = w.Write([]byte(response))
+			},
+		},
+	})
+
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	seeded := generateCachedInfo(t, tokenOptions{})
+	require.NoError(t, token.CacheAuthInfo(b.TokenPathForSession(sessionID), seeded))
+	require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+
+	access, _, err := b.IsAuthenticated(sessionID, authData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthDenied, access,
+		"a refreshed token whose ID token cannot be verified must deny the returning login")
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.Equal(t, rotatedRefreshToken, cached.Token.RefreshToken,
+		"a local user-info failure must not discard an already-rotated refresh token")
+	require.Equal(t, seeded.RawIDToken, cached.RawIDToken,
+		"a failed local validation must not replace the cached raw ID token")
+}
+
 // TestIsAuthenticatedPasswordEntraTokenRefreshRotatesRefreshToken verifies that a
 // successful Entra password token refresh on a returning login rotates the cached
 // refresh token (kept fresh on each login, like the device-auth flow) and that the
