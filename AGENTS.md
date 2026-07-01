@@ -122,6 +122,8 @@ Explain why, not what — the diff shows what changed.
 - For bug fixes, describe the observable symptom before the root cause
 - Document non-obvious decisions and rejected alternatives
 - One-liners are fine for mechanical changes; anything behavioral needs a body
+- Try to keep the subject line at 72 characters or less; wrap body lines at 72 characters
+  (URLs that cannot be split are the only accepted exception)
 
 Don't narrate your activity ("Fixed X as requested") or describe the diff
 ("Add null check before calling Process()").
