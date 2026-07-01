@@ -2,7 +2,7 @@
 package authmodes
 
 const (
-	// Password is the ID of the password authentication method.
+	// Password is the ID of the password authentication flow.
 	Password = "password"
 
 	// Device is the ID of the device authentication method.
