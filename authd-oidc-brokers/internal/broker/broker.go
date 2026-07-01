@@ -905,7 +905,7 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 	case authmodes.Password:
 		uiLayout = map[string]string{
 			"type":  "form",
-			"label": "Enter your local password",
+			"label": "Enter your password",
 			"entry": "chars_password",
 		}
 
