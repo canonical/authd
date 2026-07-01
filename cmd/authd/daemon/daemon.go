@@ -10,6 +10,7 @@ import (
 	"github.com/canonical/authd/internal/daemon"
 	"github.com/canonical/authd/internal/decorate"
 	"github.com/canonical/authd/internal/services"
+	"github.com/canonical/authd/internal/services/pam"
 	"github.com/canonical/authd/internal/users"
 	"github.com/canonical/authd/log"
 	"github.com/spf13/cobra"
@@ -46,6 +47,7 @@ type daemonConfig struct {
 	Verbosity   int
 	Paths       systemPaths
 	UsersConfig *users.Config `mapstructure:",squash" yaml:",inline"`
+	PAMConfig   *pam.Config   `mapstructure:",squash" yaml:",inline"`
 }
 
 type options struct {
@@ -91,6 +93,7 @@ func New(args ...Option) *App {
 					Socket:      "",
 				},
 				UsersConfig: &users.DefaultConfig,
+				PAMConfig:   &pam.DefaultConfig,
 			}
 
 			// Install and unmarshall configuration
@@ -152,7 +155,12 @@ func (a *App) serve(config daemonConfig) error {
 		panic("Users config must be set! This is a programmer error.")
 	}
 
-	m, err := services.NewManager(ctx, dbDir, config.Paths.BrokersConf, config.Brokers, *config.UsersConfig)
+	if config.PAMConfig == nil {
+		// This is an assert, since we assume that the daemonConfig on [New] is properly defined.
+		panic("PAM config must be set! This is a programmer error.")
+	}
+
+	m, err := services.NewManager(ctx, dbDir, config.Paths.BrokersConf, config.Brokers, *config.UsersConfig, *config.PAMConfig)
 	if err != nil {
 		close(a.ready)
 		return err

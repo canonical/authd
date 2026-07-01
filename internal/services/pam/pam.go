@@ -26,19 +26,28 @@ import (
 
 var _ authd.PAMServer = Service{}
 
-const (
-	// authFailDelayThreshold is the number of consecutive authentication failures before
+// authFailMaxTracked is the maximum number of distinct usernames tracked simultaneously
+// to bound memory usage.
+var authFailMaxTracked = 10000
+
+// Config holds the configurable parameters for the PAM service.
+type Config struct {
+	// AuthFailDelayThreshold is the number of consecutive authentication failures before
 	// a delay is imposed on subsequent attempts, to mitigate brute-force attacks.
-	authFailDelayThreshold = 3
-	// authFailDelay is the delay imposed after authFailDelayThreshold consecutive failures.
-	authFailDelay = 2 * time.Second
-	// authFailResetWindow is the duration after the last failure before the failure count
+	AuthFailDelayThreshold int `mapstructure:"auth_fail_delay_threshold" yaml:"auth_fail_delay_threshold"`
+	// AuthFailDelay is the delay imposed after AuthFailDelayThreshold consecutive failures.
+	AuthFailDelay time.Duration `mapstructure:"auth_fail_delay" yaml:"auth_fail_delay"`
+	// AuthFailResetWindow is the duration after the last failure before the failure count
 	// is automatically reset, to avoid penalizing users indefinitely.
-	authFailResetWindow = 15 * time.Minute
-	// authFailMaxTracked is the maximum number of distinct usernames tracked simultaneously
-	// to bound memory usage.
-	authFailMaxTracked = 10000
-)
+	AuthFailResetWindow time.Duration `mapstructure:"auth_fail_reset_window" yaml:"auth_fail_reset_window"`
+}
+
+// DefaultConfig is the default configuration for the PAM service.
+var DefaultConfig = Config{
+	AuthFailDelayThreshold: 3,
+	AuthFailDelay:          2 * time.Second,
+	AuthFailResetWindow:    15 * time.Minute,
+}
 
 // authFailEntry holds the failure count and the time of the most recent failure for one user.
 type authFailEntry struct {
@@ -49,22 +58,26 @@ type authFailEntry struct {
 // authFailTracker counts consecutive per-user authentication failures and imposes
 // a delay once the threshold is reached.
 type authFailTracker struct {
-	mu      sync.Mutex
-	entries map[string]*authFailEntry
+	mu          sync.Mutex
+	entries     map[string]*authFailEntry
+	resetWindow time.Duration
 }
 
-func newAuthFailTracker() *authFailTracker {
-	return &authFailTracker{entries: make(map[string]*authFailEntry)}
+func newAuthFailTracker(cfg Config) *authFailTracker {
+	return &authFailTracker{
+		entries:     make(map[string]*authFailEntry),
+		resetWindow: cfg.AuthFailResetWindow,
+	}
 }
 
 // recordFailure increments the failure count for username and returns the new count.
-// If the previous failure is older than authFailResetWindow the counter is reset first.
+// If the previous failure is older than resetWindow the counter is reset first.
 // When the tracker is at capacity new usernames are not added and 0 is returned.
 func (t *authFailTracker) recordFailure(username string) int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	e, ok := t.entries[username]
-	if ok && time.Since(e.lastFail) >= authFailResetWindow {
+	if ok && time.Since(e.lastFail) >= t.resetWindow {
 		// Stale entry: treat as fresh start.
 		ok = false
 	}
@@ -90,21 +103,23 @@ func (t *authFailTracker) recordSuccess(username string) {
 
 // Service is the implementation of the PAM module service.
 type Service struct {
-	userManager       *users.Manager
-	brokerManager     *brokers.Manager
-	failedAuths       *authFailTracker
+	userManager    *users.Manager
+	brokerManager  *brokers.Manager
+	failedAuths    *authFailTracker
+	authFailConfig Config
 
 	authd.UnimplementedPAMServer
 }
 
 // NewService returns a new PAM GRPC service.
-func NewService(ctx context.Context, userManager *users.Manager, brokerManager *brokers.Manager) Service {
+func NewService(ctx context.Context, userManager *users.Manager, brokerManager *brokers.Manager, cfg Config) Service {
 	log.Debug(ctx, "Building new gRPC PAM service")
 
 	return Service{
-		userManager:       userManager,
-		brokerManager:     brokerManager,
-		failedAuths:       newAuthFailTracker(),
+		userManager:    userManager,
+		brokerManager:  brokerManager,
+		failedAuths:    newAuthFailTracker(cfg),
+		authFailConfig: cfg,
 	}
 }
 
@@ -360,9 +375,9 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 
 	if access != auth.Granted {
 		if access == auth.Denied || access == auth.DeniedMaxTries {
-			if count := s.failedAuths.recordFailure(username); count > authFailDelayThreshold {
+			if count := s.failedAuths.recordFailure(username); count > s.authFailConfig.AuthFailDelayThreshold {
 				log.Debugf(ctx, "%s: Delaying response after %d consecutive authentication failures for %q", sessionID, count, username)
-				timer := time.NewTimer(authFailDelay)
+				timer := time.NewTimer(s.authFailConfig.AuthFailDelay)
 				select {
 				case <-timer.C:
 				case <-ctx.Done():

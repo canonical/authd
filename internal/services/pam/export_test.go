@@ -1,6 +1,7 @@
 package pam
 
-const (
-	AuthFailDelayThreshold = authFailDelayThreshold
-	AuthFailDelay          = authFailDelay
+// Re-export DefaultConfig fields for use in tests.
+var (
+	AuthFailDelayThreshold = DefaultConfig.AuthFailDelayThreshold
+	AuthFailDelay          = DefaultConfig.AuthFailDelay
 )
