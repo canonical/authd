@@ -1,6 +1,12 @@
 #!/bin/bash
 
 function assert_env_vars() {
+    local template="e2e-tests/vm/config.env.template"
+    if [[ "${1:-}" == "--template" ]]; then
+        template="$2"
+        shift 2
+    fi
+
     local missing=()
     if [ "$#" -eq 0 ]; then
         return
@@ -15,7 +21,7 @@ function assert_env_vars() {
 
     if [ "${#missing[@]}" -ne 0 ]; then
         printf 'Missing required env vars: %s\n' "${missing[*]}" >&2
-        printf 'Create a config file from the template at e2e-tests/vm/config.env.template\n' >&2
+        printf 'Create a config file from the template at %s\n' "${template}" >&2
         printf 'or set the missing variables in the environment.\n' >&2
         exit 1
     fi

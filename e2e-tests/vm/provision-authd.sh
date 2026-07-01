@@ -191,7 +191,8 @@ function install_broker() {
     # Assert that required environment variables are set.
     # The issuer ID is optional (authd-google has a default one).
     # The client secret is also optional (authd-msentraid does not require it).
-    assert_env_vars "${client_id_var}"
+    local broker_env_template="e2e-tests/e2e-tests-${broker#authd-}.env.template"
+    assert_env_vars --template "${broker_env_template}" "${client_id_var}"
 
     local issuer_id="${!issuer_id_var:-}"
     local client_id="${!client_id_var}"
