@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions: {}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - id: setup-go-tests
         uses: ./.github/actions/setup-go-tests
@@ -40,7 +40,7 @@ jobs:
 
       - name: Save LXD test image cache
         if: always() && steps.export-lxd-test-image.outputs.cache-exported == 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/authd-lxd-image-cache/ubuntu-${{ env.LXD_UBUNTU_VERSION }}.tar
           key: ${{ steps.setup-go-tests.outputs.lxd-image-cache-primary-key }}

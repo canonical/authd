@@ -62,7 +62,7 @@ jobs:
     outputs:
       files-hash: ${{ steps.hash.outputs.hash }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Compute hash of build-relevant files
         id: hash
         run: |
@@ -76,7 +76,7 @@ jobs:
       list: ${{ fromJSON(steps.git-diff.outputs.modified_files) }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 100
 

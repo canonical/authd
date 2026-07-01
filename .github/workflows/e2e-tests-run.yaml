@@ -74,7 +74,7 @@ jobs:
       # Needed to use the commit statuses API to show a PR check for the e2e-test logs
       statuses: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-oras
         with:
@@ -206,7 +206,7 @@ jobs:
             --broker-snap "${{ steps.download-broker-snap-from-store.outputs.snap || steps.download-broker-snap-from-oci.outputs.snap }}"
 
       - name: Checkout YARF repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: adombeck/yarf
           path: ${{ env.E2E_TESTS_DIR }}/.yarf
