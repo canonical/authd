@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os/user"
 	"strings"
 	"sync"
@@ -72,7 +73,8 @@ func newAuthFailTracker(cfg Config) *authFailTracker {
 
 // recordFailure increments the failure count for username and returns the new count.
 // If the previous failure is older than resetWindow the counter is reset first.
-// When the tracker is at capacity new usernames are not added and 0 is returned.
+// When the tracker is at capacity the username is not stored, but math.MaxInt is
+// returned so that the delay is still applied (fail-secure).
 func (t *authFailTracker) recordFailure(username string) int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -83,8 +85,11 @@ func (t *authFailTracker) recordFailure(username string) int {
 	}
 	if !ok {
 		if len(t.entries) >= authFailMaxTracked {
-			// At capacity; skip tracking to avoid unbounded memory growth.
-			return 0
+			// At capacity: return a count that always exceeds the threshold so
+			// the delay is applied.  This prevents a fill attack (flooding the
+			// tracker with bogus usernames) from disabling brute-force protection
+			// for the real target.
+			return math.MaxInt
 		}
 		e = &authFailEntry{}
 		t.entries[username] = e
