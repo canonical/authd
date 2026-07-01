@@ -74,7 +74,7 @@ func TestNewService(t *testing.T) {
 	require.NoError(t, err, "Setup: could not create user manager")
 
 	pm := permissions.New()
-	service := pam.NewService(context.Background(), m, globalBrokerManager, &pm)
+	service := pam.NewService(context.Background(), m, globalBrokerManager, &pm, pam.DefaultConfig)
 
 	brokers, err := service.AvailableBrokers(context.Background(), &authd.Empty{})
 	require.NoError(t, err, "can’t create the service directly")
@@ -798,7 +798,7 @@ func newPamClient(t *testing.T, m *users.Manager, brokerManager *brokers.Manager
 		t.Cleanup(func() { _ = m.Stop() })
 	}
 
-	service := pam.NewService(context.Background(), m, brokerManager, pm)
+	service := pam.NewService(context.Background(), m, brokerManager, pm, pam.DefaultConfig)
 
 	grpcServer := grpc.NewServer(permissions.WithUnixPeerCreds(), grpc.ChainUnaryInterceptor(errmessages.RedactErrorInterceptor))
 	authd.RegisterPAMServer(grpcServer, service)
