@@ -23,7 +23,7 @@ Test that invalid broker issuer prevents remote logins
     Log In
 
     # Change broker configuration to an invalid issuer
-    Change Broker Configuration    issuer    invalid
+    Change Broker Configuration    issuer=invalid
 
     # Try to log in with remote user when broker has invalid issuer
     Open Terminal

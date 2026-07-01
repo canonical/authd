@@ -56,9 +56,10 @@ Replacing local password with Entra password re-keys the keyring
 
     # Enable the Entra ID password flow and disable device auth so the next
     # GDM login goes through the Entra password + MFA path.
-    Change Broker Configuration    entra_password    true
-    Change Broker Configuration    device_auth    false
-    Change Broker Configuration    register_device    true
+    Change Broker Configuration
+    ...    entra_password=true
+    ...    device_auth=false
+    ...    register_device=true
 
     # Log in with the Entra ID password via GDM. pam_authd sets PAM_AUTHTOK to
     # the Entra password, which matches the re-keyed keyring password, so

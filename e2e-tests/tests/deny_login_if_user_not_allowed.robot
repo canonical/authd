@@ -23,7 +23,7 @@ Test that changing owner prevents remote logins
     Log In
 
     # Change owner to another user
-    Change Broker Configuration    owner    different-user
+    Change Broker Configuration    owner=different-user
 
     # Log in with remote user with device authentication
     Open Terminal

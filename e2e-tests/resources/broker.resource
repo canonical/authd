@@ -212,12 +212,15 @@ Block Network Access To Identity Provider
 
 
 # Uses sed to change the broker configuration.
-# It should match both commented and uncommented lines.
-# The full command looks like:
-#     sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${BROKER_CFG}
+# Accepts one or more key=value pairs as named arguments and applies all of
+# them before restarting the broker snap once. For example:
+#     Change Broker Configuration    entra_password=true    device_auth=false
+# Each key should match both commented and uncommented lines in the config file.
 Change Broker Configuration
-    [Arguments]    ${config_key}    ${config_value}
-    SSH.Execute    sudo sed -i 's|^#*${config_key} =.*|${config_key} = ${config_value}|g' ${BROKER_CFG}
+    [Arguments]    &{config}
+    FOR    ${key}    ${value}    IN    &{config}
+        SSH.Execute    sudo sed -i 's|^#*${key} =.*|${key} = ${value}|g' ${BROKER_CFG}
+    END
     SSH.Execute    sudo snap restart ${BROKER_SNAP_NAME}
 
 
@@ -420,7 +423,7 @@ Enable Device Registration
     [Documentation]    Turns on automatic device registration in the broker config.
     ...               The 'register_device' key lives in the '[msentraid]' section and is
     ...               only meaningful for the msentraid broker.
-    Change Broker Configuration    register_device    true
+    Change Broker Configuration    register_device=true
 
 
 Check That Device Was Registered

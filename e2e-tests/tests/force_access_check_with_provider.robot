@@ -26,9 +26,9 @@ Test second login succeeds with force_access_check_with_provider enabled
     Log Out From Terminal Session
     Close Focused Window
 
-    Change Broker Configuration    force_access_check_with_provider    true
+    Change Broker Configuration    force_access_check_with_provider=true
 
-    Open Terminal In Sudo Mode
+
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
 
 
@@ -43,9 +43,7 @@ Test second login fails with force_access_check_with_provider enabled offline
     Log Out From Terminal Session
     Close Focused Window
 
-    Change Broker Configuration    force_access_check_with_provider    true
-
-    # Block outbound HTTPS to simulate the identity provider being unreachable.
+    Change Broker Configuration    force_access_check_with_provider=true
     Block Network Access To Identity Provider
 
     Open Terminal In Sudo Mode

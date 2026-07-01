@@ -46,7 +46,7 @@ Test allowed_users values with cached local password authentication
 
     # Scenario 1: OWNER + owner=<username> → success
     Change allowed_users In Broker Configuration    OWNER
-    Change Broker Configuration    owner    ${username}
+    Change Broker Configuration    owner=${username}
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
     Log Out From Terminal Session
 
@@ -54,7 +54,7 @@ Test allowed_users values with cached local password authentication
     # Using a non-empty wrong owner so the broker performs a deterministic
     # username comparison and denies access. An empty owner would trigger
     # auto-registration (covered by config_owner_auto_update.robot), not denial.
-    Change Broker Configuration    owner    ${non_allowed_user}
+    Change Broker Configuration    owner=${non_allowed_user}
     Log In With Remote User Through CLI: Local Password And Expect Failure    ${username}    ${local_password}
 
     # Scenario 3: explicit username → success
