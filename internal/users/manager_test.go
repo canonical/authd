@@ -286,7 +286,9 @@ func TestUpdateUser(t *testing.T) {
 }
 
 func TestUpdateUserProviderIDHandling(t *testing.T) {
-	t.Parallel()
+	// This test and its subtests are intentionally not parallel: some subtests use SetupGroupMock,
+	// which mutates the process-global localentries options. Running concurrently with other tests
+	// that read those options (e.g. via UpdateUser) would race on them.
 
 	newUser := func(name, providerID string, groups ...types.GroupInfo) types.UserInfo {
 		return types.UserInfo{
@@ -301,8 +303,6 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 	}
 
 	t.Run("Persist_providerid_on_first_post_migration_login", func(t *testing.T) {
-		t.Parallel()
-
 		dbDir := t.TempDir()
 		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_and_group.db.yaml"), dbDir)
 		require.NoError(t, err, "Setup: could not create database from testdata")
@@ -353,8 +353,6 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		// without an explicit collision check the UPDATE hits the raw UNIQUE(name) constraint and
 		// surfaces an opaque SQLite error. The rename must instead fail with a clear message and leave
 		// both existing users intact.
-		t.Parallel()
-
 		dbDir := t.TempDir()
 		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "two_users_with_providerid_and_local_group.db.yaml"), dbDir)
 		require.NoError(t, err, "Setup: could not create database from testdata")
@@ -436,8 +434,6 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 	})
 
 	t.Run("Provider_ID_match_is_scoped_by_broker", func(t *testing.T) {
-		t.Parallel()
-
 		dbDir := t.TempDir()
 		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_and_group_with_providerid.db.yaml"), dbDir)
 		require.NoError(t, err, "Setup: could not create database from testdata")
@@ -463,8 +459,6 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 	})
 
 	t.Run("Preserve_providerid_when_broker_does_not_return_it", func(t *testing.T) {
-		t.Parallel()
-
 		dbDir := t.TempDir()
 		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_and_group_with_providerid.db.yaml"), dbDir)
 		require.NoError(t, err, "Setup: could not create database from testdata")
@@ -480,8 +474,6 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 	})
 
 	t.Run("Reject_login_with_a_different_broker", func(t *testing.T) {
-		t.Parallel()
-
 		dbDir := t.TempDir()
 		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_and_group_with_providerid.db.yaml"), dbDir)
 		require.NoError(t, err, "Setup: could not create database from testdata")
@@ -504,8 +496,6 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		// but the existing DB row has {UGID: oldname} under the same GID.  Without the fix in
 		// handleGroupsUpdate this triggers a spurious "GID already in use" error because the UGID
 		// change looks like a hijack.
-		t.Parallel()
-
 		dbDir := t.TempDir()
 		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_with_private_group_ugid_equals_name.db.yaml"), dbDir)
 		require.NoError(t, err, "Setup: could not create database from testdata")
@@ -523,8 +513,6 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 	})
 
 	t.Run("Reject_new_user_without_provider_ID", func(t *testing.T) {
-		t.Parallel()
-
 		dbDir := t.TempDir()
 		m := newManagerForTests(t, dbDir)
 
@@ -536,8 +524,6 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 	})
 
 	t.Run("Reject_provider_ID_without_broker_ID", func(t *testing.T) {
-		t.Parallel()
-
 		dbDir := t.TempDir()
 		m := newManagerForTests(t, dbDir)
 
