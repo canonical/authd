@@ -1,0 +1,4 @@
+FIRST CALL:
+	access: granted
+	msg: {"message":"Offline login is enabled with your Entra password"}
+	err: <nil>

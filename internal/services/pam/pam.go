@@ -291,19 +291,21 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		}, nil
 	}
 
-	var uInfo types.UserInfo
-	if err := json.Unmarshal([]byte(data), &uInfo); err != nil {
+	var grantedData struct {
+		UserInfo types.UserInfo `json:"userinfo"`
+		Message  string         `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(data), &grantedData); err != nil {
 		log.Errorf(ctx, "IsAuthenticated: Could not unmarshal user data for session %q: %v", sessionID, err)
 		return nil, fmt.Errorf("user data from broker invalid: %v", err)
 	}
-
+	uInfo := grantedData.UserInfo
 	// authd uses lowercase user and group names
 	uInfo.Name = strings.ToLower(uInfo.Name)
 	uInfo.BrokerID = broker.ID
 	for i, g := range uInfo.Groups {
 		uInfo.Groups[i].Name = strings.ToLower(g.Name)
 	}
-
 	// Check if the user is locked. We can only do this after the broker has granted access, because we want to avoid
 	// leaking whether a user exists or not to unauthenticated users.
 	// TODO: We might want to let the broker know whether the user is locked or not, so that it can avoid storing any
@@ -313,7 +315,6 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		log.Errorf(ctx, "IsAuthenticated: Could not check if user %q is locked: %v", uInfo.Name, err)
 		return nil, fmt.Errorf("could not check if user %q is locked: %w", uInfo.Name, err)
 	}
-
 	// The username may have changed at the IdP, in which case the locked row is still stored under the
 	// previous name and the name-based lookup above misses it. Resolve the stable identity by the
 	// broker-scoped provider ID and honor its locked state too.
@@ -324,22 +325,32 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 			return nil, fmt.Errorf("could not check if user %q is locked: %w", uInfo.Name, err)
 		}
 	}
-
 	// Throw an error if the user trying to authenticate already exists in the database and is locked.
 	if userIsLocked {
 		log.Noticef(ctx, "Authentication failure: user %q is locked", uInfo.Name)
 		return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("user %s is locked", uInfo.Name))
 	}
-
 	// Update database and local groups on granted auth.
 	if err := s.userManager.UpdateUser(uInfo); err != nil {
 		log.Errorf(ctx, "IsAuthenticated: Could not update user %q in database: %v", uInfo.Name, err)
 		return nil, err
 	}
+	// IAResponse.Msg carries a JSON {"message": ...} envelope (or an empty
+	// string when there is no message), matching the format expected by the
+	// PAM client's dataToMsg parser.
+	msg := ""
+	if grantedData.Message != "" {
+		messageData, err := json.Marshal(map[string]string{"message": grantedData.Message})
+		if err != nil {
+			log.Warningf(ctx, "IsAuthenticated: Could not marshal granted message for session %q, ignoring: %v", sessionID, err)
+		} else {
+			msg = string(messageData)
+		}
+	}
 
 	return &authd.IAResponse{
 		Access: access,
-		Msg:    "",
+		Msg:    msg,
 	}, nil
 }
 
