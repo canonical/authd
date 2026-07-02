@@ -840,7 +840,7 @@ func (b *Broker) availableAuthModes(session session) (availableModes []string, e
 	default:
 		// Session is for login. Check which auth modes are available.
 		// The order of the modes is important, because authd picks the first supported one.
-		// Password authentication should be the first option if available, to avoid performing device authentication
+		// Password authentication should be the first option if available, to avoid re-doing the device code flow
 		// when it's not necessary.
 		modes := append([]string{authmodes.Password}, b.provider.SupportedOnlineAuthModes()...)
 		for _, mode := range modes {
@@ -904,19 +904,19 @@ func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 		return true
 	case authmodes.Device, authmodes.DeviceQr:
 		if !b.cfg.flows.DeviceAuth {
-			log.Debugf(context.Background(), "Device authentication is disabled in the [flows] config, so it is not available")
+			log.Debugf(context.Background(), "The device code flow is disabled in the [flows] config, so it is not available")
 			return false
 		}
 		if session.oidcServer == nil {
-			log.Debugf(context.Background(), "OIDC server is not initialized, so device authentication is not available")
+			log.Debugf(context.Background(), "OIDC server is not initialized, so the device code flow is not available")
 			return false
 		}
 		if session.oidcServer.Endpoint().DeviceAuthURL == "" {
-			log.Debugf(context.Background(), "OIDC server does not support device authentication, so device authentication is not available")
+			log.Debugf(context.Background(), "OIDC server does not support the device code flow, so it is not available")
 			return false
 		}
 		if session.isOffline {
-			log.Noticef(context.Background(), "Session is in offline mode, so device authentication is not available")
+			log.Noticef(context.Background(), "Session is in offline mode, so the device code flow is not available")
 			return false
 		}
 		return true
@@ -1047,7 +1047,7 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 		// Workaround to cater for RFC compliant oauth2 server. Public providers do not properly
 		// implement the RFC, (probably) because they assume that device clients are public.
 		// As described in https://datatracker.ietf.org/doc/html/rfc8628#section-3.1
-		// device authentication requests must provide client authentication, similar to that for
+		// device code flow requests must provide client authentication, similar to that for
 		// the token endpoint.
 		// The golang/oauth2 library does not implement this, see https://github.com/golang/oauth2/issues/685.
 		// We implement a workaround for implementing the client_secret_post client authn method.
@@ -1065,7 +1065,7 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 		log.Debug(ctx, "Sending Device Authorization Request to retrieve device code...")
 		response, err := session.oauth2Config.DeviceAuth(ctx, authOpts...)
 		if err != nil {
-			return nil, fmt.Errorf("could not generate Device Authentication code layout: %v", err)
+			return nil, fmt.Errorf("could not generate device code flow layout: %v", err)
 		}
 		log.Debugf(ctx, "Retrieved device code. Device Authorization Response: %#v", response)
 		session.deviceAuthResponse = response
@@ -1266,7 +1266,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	log.Debug(ctx, "Exchanged device code for token.")
 
 	if t.RefreshToken == "" {
-		log.Warningf(context.Background(), "No refresh token returned for user during device authentication. You might have to add the 'offline_access' scope to the 'extra_scopes' setting.")
+		log.Warningf(context.Background(), "No refresh token returned for user during device code flow. You might have to add the 'offline_access' scope to the 'extra_scopes' setting.")
 	}
 
 	rawIDToken, ok := t.Extra("id_token").(string)
@@ -1446,12 +1446,12 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 	}
 	var retryWithDeviceAuthError *providerErrors.RetryWithDeviceAuthError
 	if errors.As(err, &retryWithDeviceAuthError) {
-		log.Errorf(context.Background(), "Token acquisition failed: %s. Try again using device authentication.", err)
+		log.Errorf(context.Background(), "Token acquisition failed: %s. Try again using the device code flow.", err)
 		// The token acquisition failed unexpectedly.
 		// One possible reason is that the device was deleted by an administrator in Entra ID.
-		// In this case, the user can perform device authentication again to get a new token
+		// In this case, the user can perform device code flow again to get a new token
 		// and register the device again, allowing the user to log in.
-		// We delete the device registration data to cause device authentication to re-register the device.
+		// We delete the device registration data to cause device code flow to re-register the device.
 		authInfo.DeviceRegistrationData = nil
 		if err = token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
 			log.Errorf(context.Background(), "Failed to store token: %s", err)
@@ -1558,16 +1558,16 @@ func (b *Broker) entraPasswordAuth(ctx context.Context, session *session, userPa
 	// FIDO/security-key MFA is not yet wired up in this terminal-based flow.
 	// This is an implementation gap, not a fundamental limitation: libhimmelblau
 	// can do FIDO (see https://github.com/himmelblau-idm/himmelblau/blob/main/src/common/src/auth.rs).
-	// TODO: support FIDO MFA directly without redirecting to Device Authentication.
+	// TODO: support FIDO MFA directly without redirecting to the device code flow.
 	if isFIDOMethod(mfaMethod) {
-		log.Noticef(context.Background(), "FIDO MFA method %q detected for user %q; redirecting to Device Authentication", mfaMethod, session.username)
+		log.Noticef(context.Background(), "FIDO MFA method %q detected for user %q; redirecting to the device code flow", mfaMethod, session.username)
 		session.entraPasswordHash = ""
 		clearEntraMFAState(session)
 		if b.cfg.flows.DeviceAuth {
 			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
-			return AuthNext, errorMessage{Message: "This account requires FIDO/security key authentication. Please complete authentication using Device Authentication."}
+			return AuthNext, errorMessage{Message: "This account requires FIDO/security key authentication. Please complete authentication using the device code flow."}
 		}
-		return AuthDenied, errorMessage{Message: "This account requires FIDO/security key authentication, which is not yet supported in this mode. Device Authentication is also unavailable. Please contact your administrator."}
+		return AuthDenied, errorMessage{Message: "This account requires FIDO/security key authentication, which is not yet supported in this mode. The device code flow is also unavailable. Please contact your administrator."}
 	}
 
 	switch {
@@ -1895,16 +1895,16 @@ func (b *Broker) routeMFAInitError(mfaErr *himmelblau.MFAError, session *session
 		log.Noticef(context.Background(), "MFA enrollment required for user %q (AADSTS%d)", session.username, mfaErr.AADSTS)
 		if b.cfg.flows.DeviceAuth {
 			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
-			return AuthNext, errorMessage{Message: "MFA registration required. Please complete setup using Device Authentication."}
+			return AuthNext, errorMessage{Message: "MFA registration required. Please complete setup using the device code flow."}
 		}
-		return AuthDenied, errorMessage{Message: "MFA registration required, but Device Authentication is disabled. Please contact your administrator."}
+		return AuthDenied, errorMessage{Message: "MFA registration required, but the device code flow is disabled. Please contact your administrator."}
 	case 16000:
 		log.Noticef(context.Background(), "Interactive authentication required for user %q (AADSTS16000)", session.username)
 		if b.cfg.flows.DeviceAuth {
 			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
-			return AuthNext, errorMessage{Message: "MFA registration required. Please complete setup using Device Authentication."}
+			return AuthNext, errorMessage{Message: "MFA registration required. Please complete setup using the device code flow."}
 		}
-		return AuthDenied, errorMessage{Message: "MFA registration required, but Device Authentication is disabled. Please contact your administrator."}
+		return AuthDenied, errorMessage{Message: "MFA registration required, but the device code flow is disabled. Please contact your administrator."}
 	case 50126:
 		log.Noticef(context.Background(), "Invalid credentials for user %q", session.username)
 		return AuthRetry, errorMessage{Message: "Incorrect password, please try again."}
@@ -1920,12 +1920,12 @@ func (b *Broker) routeMFAInitError(mfaErr *himmelblau.MFAError, session *session
 		if mfaErr.IsMFARequired() {
 			// The native password MFA flow could not be set up; redirect to Device
 			// Authentication which handles MFA via a separate flow.
-			log.Noticef(context.Background(), "MFA required for user %q; redirecting to Device Authentication", session.username)
+			log.Noticef(context.Background(), "MFA required for user %q; redirecting to the device code flow", session.username)
 			if b.cfg.flows.DeviceAuth {
 				session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
-				return AuthNext, errorMessage{Message: "MFA is required. Please complete authentication using Device Authentication."}
+				return AuthNext, errorMessage{Message: "MFA is required. Please complete authentication using the device code flow."}
 			}
-			return AuthDenied, errorMessage{Message: "MFA is required but Device Authentication is disabled. Please contact your administrator."}
+			return AuthDenied, errorMessage{Message: "MFA is required but the device code flow is disabled. Please contact your administrator."}
 		}
 		log.Errorf(context.Background(), "Unhandled AADSTS error %d: %s", mfaErr.AADSTS, mfaErr.Message)
 		return AuthDenied, unexpectedErrMsg(mfaErr.Error())

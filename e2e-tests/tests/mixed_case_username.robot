@@ -17,12 +17,12 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login with mixed case username
-    [Documentation]    Test login with mixed case username via CLI with device authentication and local password.
+    [Documentation]    Test login with mixed case username via CLI with device code flow and local password.
 
     # Log in with local user
     Log In
 
-    # Log in with remote user using mixed case username with device authentication
+    # Log in with remote user using mixed case username with device code flow
     Open Terminal
     Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
     # Check remote user is properly added to the system

@@ -14,7 +14,7 @@ var ErrDeviceDisabled = stderrors.New("device is disabled")
 var ErrInvalidRedirectURI = stderrors.New("invalid redirect URI")
 
 // RetryWithDeviceAuthError is returned when token acquisition fails and the user should retry
-// using device authentication (e.g. because the device was deleted by an administrator).
+// using device code flow (e.g. because the device was deleted by an administrator).
 type RetryWithDeviceAuthError struct {
 	Err error
 }
@@ -23,7 +23,7 @@ func (e *RetryWithDeviceAuthError) Error() string {
 	if e.Err != nil {
 		return e.Err.Error()
 	}
-	return "token acquisition failed, retry with device authentication"
+	return "token acquisition failed, retry with device code flow"
 }
 
 func (e *RetryWithDeviceAuthError) Unwrap() error {

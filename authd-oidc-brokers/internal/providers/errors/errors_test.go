@@ -23,7 +23,7 @@ func TestRetryWithDeviceAuthError(t *testing.T) {
 		t.Parallel()
 
 		err := &providerErrors.RetryWithDeviceAuthError{}
-		require.Equal(t, "token acquisition failed, retry with device authentication", err.Error())
+		require.Equal(t, "token acquisition failed, retry with device code flow", err.Error())
 	})
 
 	t.Run("Unwrap_returns_wrapped_error", func(t *testing.T) {
