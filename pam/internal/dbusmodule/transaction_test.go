@@ -1,6 +1,7 @@
 package dbusmodule_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -21,7 +22,7 @@ func TestTransactionConnectionError(t *testing.T) {
 	t.Parallel()
 
 	tx, cleanup, err := dbusmodule.NewTransaction("invalid-address")
-	require.Nil(t, tx, "Transaction must be unset")
+	require.Zero(t, tx, "Transaction must be unset")
 	require.Nil(t, cleanup, "Cleanup func must be unset")
 	require.NotNil(t, err, "Error must be set")
 }
@@ -30,9 +31,7 @@ func TestTransactionHandler(t *testing.T) {
 	t.Parallel()
 
 	tx, _ := prepareTransaction(t, nil)
-	dbusTx, ok := tx.(*dbusmodule.Transaction)
-	require.True(t, ok, "Transaction should be a dbus module Transaction")
-	require.ErrorIs(t, dbusTx.InvokeHandler(nil, 0, nil), pam.ErrAbort)
+	require.ErrorIs(t, tx.InvokeHandler(nil, 0, nil), pam.ErrAbort)
 }
 
 func TestTransactionSetEnv(t *testing.T) {
@@ -603,6 +602,19 @@ func TestStartBinaryConv(t *testing.T) {
 	}
 }
 
+func TestDisconnectionHandler(t *testing.T) {
+	address, _, cleanup := prepareTestServerWithCleanup(t, nil)
+	tx, txCleanup, err := dbusmodule.NewTransaction(address,
+		dbusmodule.WithSharedConnection(true))
+	require.NoError(t, err, "Setup: Can't connect to %s", address)
+	t.Cleanup(txCleanup)
+
+	require.NoError(t, tx.Context().Err(), "Context must not be cancelled")
+	cleanup()
+	<-tx.Context().Done()
+	require.ErrorIs(t, tx.Context().Err(), context.Canceled, "Context must be cancelled")
+}
+
 type methodCallExpectations struct {
 	methodReturns   []methodReturn
 	wantMethodCalls []methodCall
@@ -628,13 +640,14 @@ func requireDbusErrorIs(t *testing.T, err error, wantError error) {
 	}
 }
 
-func prepareTransaction(t *testing.T, expectedReturns []methodReturn) (pam.ModuleTransaction, *testServer) {
+func prepareTransaction(t *testing.T, expectedReturns []methodReturn) (dbusmodule.Transaction, *testServer) {
 	t.Helper()
 
 	address, obj := prepareTestServer(t, expectedReturns)
 	tx, cleanup, err := dbusmodule.NewTransaction(address,
 		dbusmodule.WithSharedConnection(true))
 	require.NoError(t, err, "Setup: Can't connect to %s", address)
+	t.Cleanup(func() { <-tx.Context().Done() })
 	t.Cleanup(cleanup)
 
 	t.Logf("Using bus at address %s", address)
@@ -643,6 +656,13 @@ func prepareTransaction(t *testing.T, expectedReturns []methodReturn) (pam.Modul
 }
 
 func prepareTestServer(t *testing.T, expectedReturns []methodReturn) (string, *testServer) {
+	t.Helper()
+
+	obj, conn, _ := prepareTestServerWithCleanup(t, expectedReturns)
+	return obj, conn
+}
+
+func prepareTestServerWithCleanup(t *testing.T, expectedReturns []methodReturn) (address string, obj *testServer, cleanup func()) {
 	t.Helper()
 
 	address, cleanup, err := testutils.StartBusMock()
@@ -657,7 +677,7 @@ func prepareTestServer(t *testing.T, expectedReturns []methodReturn) (string, *t
 		}
 	})
 
-	obj := &testServer{t: t, mu: &sync.Mutex{}, returns: expectedReturns}
+	obj = &testServer{t: t, mu: &sync.Mutex{}, returns: expectedReturns}
 	err = conn.Export(obj, objectPath, ifaceName)
 	require.NoError(t, err, "Setup: Exporting test server object to bus failed")
 
@@ -666,7 +686,7 @@ func prepareTestServer(t *testing.T, expectedReturns []methodReturn) (string, *t
 	require.Equal(t, reply, dbus.RequestNameReplyPrimaryOwner,
 		"Setup: can't get dbus name")
 
-	return address, obj
+	return address, obj, cleanup
 }
 
 func TestMain(m *testing.M) {

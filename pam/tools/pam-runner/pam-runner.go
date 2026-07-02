@@ -7,55 +7,30 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 
 	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/msteinert/pam/v2"
 	"golang.org/x/term"
 )
 
-// exitOnSIGINT installs an explicit SIGINT handler that terminates the process.
-//
-// pam-runner is a test-only stand-in for a real foreground PAM application
-// (login, sshd, ...), which is normally launched with SIGINT at its default
-// disposition and so terminates when the user presses Ctrl+C during
-// authentication. However, when the integration test process is itself started
-// with SIGINT ignored (as happens in CI, where there is no controlling
-// terminal), pam-runner inherits the ignored disposition across exec, and the
-// Go runtime preserves an inherited ignored SIGINT (it installs no handler for
-// it). Ctrl+C would then be silently discarded and interrupt-handling tests
-// would hang. Calling signal.Notify overrides the inherited SIG_IGN so that
-// SIGINT reliably terminates the process, matching a normally-launched app.
-func exitOnSIGINT() {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT)
-	go func() {
-		<-sigChan
-		// Conventional shell exit status for SIGINT. This intentionally does
-		// not preserve WIFSIGNALED semantics; the PTY tests only require that
-		// the prompt is aborted and the process exits.
-		os.Exit(130)
-	}()
-}
-
 // Simulating pam on the CLI for manual testing.
 func main() {
-	exitOnSIGINT()
-
 	logFile := os.Getenv(pam_test.RunnerEnvLogFile)
+	outputFile := os.Getenv(pam_test.RunnerEnvOutputFile)
 	supportsConversation := os.Getenv(pam_test.RunnerEnvSupportsConversation) != ""
 	execModule := os.Getenv(pam_test.RunnerEnvExecModule)
 	execChildPath := os.Getenv(pam_test.RunnerEnvExecChildPath)
 	testName := os.Getenv(pam_test.RunnerEnvTestName)
 	pamUser := os.Getenv(pam_test.RunnerEnvUser)
 	pamEnvs := os.Getenv(pam_test.RunnerEnvEnvs)
+	pamTty := os.Getenv(pam_test.RunnerEnvTty)
 	pamService := os.Getenv(pam_test.RunnerEnvService)
 	timeoutDuration := os.Getenv(pam_test.RunnerEnvConnectionTimeout)
 
@@ -88,6 +63,16 @@ func main() {
 		defaultArgs = append(defaultArgs, "logfile="+logFile)
 		defaultArgs = append(defaultArgs, "--exec-debug", "--exec-log", logFile)
 	}
+
+	if outputFile == "" {
+		outputFile = os.Stdout.Name()
+	}
+
+	output, err := os.OpenFile(outputFile, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0600)
+	if err != nil {
+		log.Fatalf("Can't open output file %s: %v", outputFile, err)
+	}
+	defer output.Close()
 
 	for _, env := range []string{
 		"GOCOVERDIR",
@@ -123,9 +108,21 @@ func main() {
 		log.Fatalf("Can't create service file %s: %v", serviceFile, err)
 	}
 
-	conversationHandler := pam.ConversationFunc(noConversationHandler)
+	reader, readerFile, pamTTYFile, cleanup := openReader(pamTty)
+	defer cleanup()
+
+	writer := io.Writer(output)
+	if pamTTYFile != nil && !sameFile(output, pamTTYFile) {
+		writer = io.MultiWriter(output, pamTTYFile)
+	}
+
+	conversationHandler := pam.ConversationFunc(func(s1 pam.Style, s2 string) (string, error) {
+		return noConversationHandler(writer, s1, s2)
+	})
 	if supportsConversation {
-		conversationHandler = pam.ConversationFunc(simpleConversationHandler)
+		conversationHandler = pam.ConversationFunc(func(s1 pam.Style, s2 string) (string, error) {
+			return simpleConversationHandler(writer, reader, readerFile, s1, s2)
+		})
 	}
 
 	tx, err := pam.StartConfDir(filepath.Base(serviceFile), pamUser,
@@ -138,6 +135,12 @@ func main() {
 	err = tx.PutEnv("AUTHD_PAM_CLI_TEST_NAME=" + testName)
 	if err != nil {
 		log.Fatalf("Impossible to set environment: %v", err)
+	}
+
+	if pamTty != "" {
+		if err := tx.SetItem(pam.Tty, pamTty); err != nil {
+			log.Fatalf("Impossible to set PAM_TTY environment: %v", err)
+		}
 	}
 
 	if pamEnvs != "" {
@@ -164,58 +167,118 @@ func main() {
 	pamRes := pamFunc(pamFlags)
 	user, _ := tx.GetItem(pam.User)
 
-	printPamResult(runnerAction.Result(), user, pamRes)
+	printPamResult(writer, runnerAction.Result(), user, pamRes)
 
 	// Simulate setting auth broker as default.
-	printPamResult(pam_test.RunnerResultActionAcctMgmt, user, tx.AcctMgmt(pamFlags))
+	printPamResult(writer, pam_test.RunnerResultActionAcctMgmt, user, tx.AcctMgmt(pamFlags))
 }
 
-func noConversationHandler(style pam.Style, msg string) (string, error) {
+func noConversationHandler(output io.Writer, style pam.Style, msg string) (string, error) {
 	switch style {
 	case pam.TextInfo:
-		fmt.Fprintf(os.Stderr, "PAM Info Message: %s\n", msg)
+		fmt.Fprintf(output, "PAM Info Message: %s\n", msg)
 	case pam.ErrorMsg:
-		fmt.Fprintf(os.Stderr, "PAM Error Message: %s\n", msg)
+		fmt.Fprintf(output, "PAM Error Message: %s\n", msg)
 	default:
 		return "", fmt.Errorf("PAM style %d not implemented", style)
 	}
 	return "", nil
 }
 
-func simpleConversationHandler(style pam.Style, msg string) (string, error) {
+func simpleConversationHandler(output io.Writer, reader *bufio.Reader, readerFile *os.File, style pam.Style, msg string) (string, error) {
 	switch style {
 	case pam.TextInfo:
-		fmt.Println(msg)
+		fmt.Fprintln(output, msg)
 	case pam.ErrorMsg:
-		return noConversationHandler(style, msg)
+		return noConversationHandler(output, style, msg)
 	case pam.PromptEchoOn:
-		fmt.Print(msg)
-		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		fmt.Fprint(output, msg)
+		line, err := reader.ReadString('\n')
 		if err != nil {
 			log.Fatalf("PAM Prompt error: %v", err)
 			return "", err
 		}
 		return strings.TrimRight(line, "\n"), nil
 	case pam.PromptEchoOff:
-		fmt.Print(msg)
-		input, err := term.ReadPassword(int(os.Stdin.Fd()))
-		fmt.Print("\n")
+		fmt.Fprint(output, msg)
+		input, err := readPassword(reader, readerFile)
+		fmt.Fprint(output, "\n")
 		if err != nil {
 			log.Fatalf("PAM Password Prompt error: %v", err)
 			return "", err
 		}
-		return string(input), nil
+		return input, nil
 	default:
 		return "", fmt.Errorf("PAM style %d not implemented", style)
 	}
 	return "", nil
 }
 
-func printPamResult(resultAction pam_test.RunnerResultAction, user string, result error) {
+func openReader(pamTTY string) (*bufio.Reader, *os.File, *os.File, func()) {
+	if pamTTY == "" {
+		return bufio.NewReader(os.Stdin), os.Stdin, nil, func() {}
+	}
+
+	pamTTYFile, err := os.OpenFile(pamTTY, os.O_RDWR, 0)
+	if err != nil {
+		log.Printf("Can't open PAM_TTY %q, falling back to stdin: %v", pamTTY, err)
+		return bufio.NewReader(os.Stdin), os.Stdin, nil, func() {}
+	}
+
+	cleanup := func() { pamTTYFile.Close() }
+
+	if stdinAvailable() {
+		log.Printf("PAM_TTY %q is set, but stdin is available; using stdin instead", pamTTY)
+		return bufio.NewReader(os.Stdin), os.Stdin, pamTTYFile, cleanup
+	}
+
+	return bufio.NewReader(pamTTYFile), pamTTYFile, pamTTYFile, cleanup
+}
+
+func readPassword(reader *bufio.Reader, readerFile *os.File) (string, error) {
+	if term.IsTerminal(int(readerFile.Fd())) {
+		input, err := term.ReadPassword(int(readerFile.Fd()))
+		return string(input), err
+	}
+
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(input, "\n"), nil
+}
+
+func stdinAvailable() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		return true
+	}
+
+	mode := fi.Mode()
+	return mode.IsRegular() || mode&os.ModeNamedPipe != 0
+}
+
+func printPamResult(output io.Writer, resultAction pam_test.RunnerResultAction, user string, result error) {
 	if user == "" {
 		user = "<unset>"
 	}
-	fmt.Println(resultAction.MessageWithError(user, result))
+	fmt.Fprintln(output, resultAction.MessageWithError(user, result))
+}
+
+func sameFile(a, b *os.File) bool {
+	ai, err := a.Stat()
+	if err != nil {
+		return false
+	}
+	bi, err := b.Stat()
+	if err != nil {
+		return false
+	}
+	return os.SameFile(ai, bi)
 }
 
 func getPkgConfigFlags(args []string) ([]string, error) {

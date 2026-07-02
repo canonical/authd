@@ -4,12 +4,14 @@
 package ptytest
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -20,6 +22,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/canonical/authd/internal/testlog"
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
@@ -32,6 +35,11 @@ const (
 	KeyBackspace = '\x7f'
 	KeyCtrlC     = '\x03'
 	KeyCtrlD     = '\x04'
+)
+
+var (
+	launcherOnce sync.Once
+	launcherPath string
 )
 
 // ansiRegex matches ANSI escape sequences (CSI, OSC, and simple escapes).
@@ -181,6 +189,8 @@ type interaction struct {
 // Console represents a running command in a PTY.
 type Console struct {
 	cmd          *exec.Cmd
+	commandPID   int
+	commandPath  string
 	ptmx         *os.File
 	opts         options
 	mu           sync.RWMutex
@@ -264,6 +274,48 @@ func setWinsize(fd uintptr, ws *winsize) error {
 	return nil
 }
 
+func launcherBinary(t *testing.T) string {
+	t.Helper()
+
+	launcherOnce.Do(func() {
+		buildDir, err := os.MkdirTemp("", "ptytest-launcher-")
+		if err != nil {
+			t.Errorf("ptytest: failed to create launcher build dir: %v", err)
+			return
+		}
+
+		launcherPath = filepath.Join(buildDir, "ptytest-launcher")
+		cmd := exec.Command("go", "build")
+		cmd.Dir = testutils.ProjectRoot()
+		cmd.Args = append(cmd.Args, testutils.GoBuildFlags()...)
+		cmd.Args = append(cmd.Args, "-o", launcherPath, "./internal/testutils/ptytest/launcher")
+
+		if err := testlog.RunWithTiming(nil, "Building ptytest launcher", cmd); err != nil {
+			t.Errorf("ptytest: failed to build launcher: %v", err)
+			return
+		}
+	})
+
+	return launcherPath
+}
+
+func readLauncherPID(t *testing.T, control *os.File, name string) int {
+	t.Helper()
+
+	line, err := bufio.NewReader(control).ReadString('\n')
+	require.NoError(t, err, "ptytest: launcher failed to report pid for command %q", name)
+
+	line = strings.TrimSpace(line)
+	pidText, ok := strings.CutPrefix(line, "pid ")
+	if !ok {
+		require.FailNowf(t, "ptytest: launcher failed", "unexpected launcher response for %q: %s", name, line)
+	}
+
+	pid, err := strconv.Atoi(pidText)
+	require.NoError(t, err, "ptytest: invalid launcher pid response %q", line)
+	return pid
+}
+
 // Start spawns the command in a PTY and returns a Console.
 // The command is automatically terminated and the PTY cleaned up when the test ends.
 func Start(t *testing.T, name string, args []string, opts ...Option) *Console {
@@ -284,11 +336,19 @@ func Start(t *testing.T, name string, args []string, opts ...Option) *Console {
 		require.FailNow(t, err.Error(), "ptytest: failed to set winsize")
 	}
 
+	controlRead, controlWrite, err := os.Pipe()
+	require.NoError(t, err, "ptytest: failed to create launcher control pipe")
+	defer controlRead.Close()
+
+	launcherArgs := []string{name}
+	launcherArgs = append(launcherArgs, args...)
+
 	//nolint:gosec // G204: The command is provided by the caller (test code).
-	cmd := exec.Command(name, args...)
+	cmd := exec.Command(launcherBinary(t), launcherArgs...)
 	cmd.Stdin = pts
 	cmd.Stdout = pts
 	cmd.Stderr = pts
+	cmd.ExtraFiles = []*os.File{controlWrite}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setsid:  true,
 		Setctty: true,
@@ -302,16 +362,21 @@ func Start(t *testing.T, name string, args []string, opts ...Option) *Console {
 	}
 
 	if err := cmd.Start(); err != nil {
+		controlWrite.Close()
 		pts.Close()
 		ptmx.Close()
 		require.FailNow(t, err.Error(), "ptytest: failed to start command %q", name)
 	}
+	controlWrite.Close()
+	commandPID := readLauncherPID(t, controlRead, name)
 
 	// Close the slave side in the parent — the child owns it.
 	pts.Close()
 
 	c := &Console{
 		cmd:             cmd,
+		commandPID:      commandPID,
+		commandPath:     name,
 		ptmx:            ptmx,
 		opts:            o,
 		done:            make(chan error, 1),
@@ -354,8 +419,8 @@ func Start(t *testing.T, name string, args []string, opts ...Option) *Console {
 
 	t.Cleanup(func() { c.Close(t) })
 
-	t.Logf("ptytest: started %q %v (pid %d, pty %s, %dx%d)",
-		name, args, cmd.Process.Pid, ptmx.Name(), o.cols, o.rows)
+	t.Logf("ptytest: started %q %v (pid %d, launcher pid %d, pty %s, %dx%d)",
+		name, args, c.Pid(), cmd.Process.Pid, ptmx.Name(), o.cols, o.rows)
 
 	return c
 }
@@ -752,6 +817,56 @@ func (c *Console) RewriteLastSnapshot(rewrite func(string) string) {
 	c.snapshots[len(c.snapshots)-1] = rewrite(c.snapshots[len(c.snapshots)-1])
 }
 
+// CmdPath returns the executable path of the spawned command.
+func (c *Console) CmdPath() string {
+	if c.commandPath != "" {
+		return c.commandPath
+	}
+	return c.cmd.Path
+}
+
+// Env returns the value of an environment variable passed to the spawned command.
+func (c *Console) Env(key string) (string, bool) {
+	prefix := key + "="
+	for _, env := range c.opts.env {
+		if strings.HasPrefix(env, prefix) {
+			return strings.TrimPrefix(env, prefix), true
+		}
+	}
+	return "", false
+}
+
+// Pid returns the PID of the spawned command.
+func (c *Console) Pid() int {
+	if c.commandPID != 0 {
+		return c.commandPID
+	}
+	return c.LauncherPid()
+}
+
+// LauncherPid returns the PID of the launcher command.
+func (c *Console) LauncherPid() int {
+	if c.cmd == nil || c.cmd.Process == nil {
+		return 0
+	}
+	return c.cmd.Process.Pid
+}
+
+// Signal sends a signal to the spawned command.
+func (c *Console) Signal(t *testing.T, sig os.Signal) {
+	t.Helper()
+
+	if c.cmd == nil || c.cmd.Process == nil {
+		require.FailNow(t, "ptytest: no process to signal")
+		return
+	}
+	pid := c.Pid()
+	sysSig, ok := sig.(syscall.Signal)
+	require.True(t, ok, "ptytest: unsupported signal type %T", sig)
+	require.NoError(t, syscall.Kill(pid, sysSig),
+		"ptytest: failed to send signal %s to pid %d", sig, pid)
+}
+
 // Close terminates the command (if still running) and cleans up the PTY.
 // It is safe to call multiple times. It is also called automatically on
 // test cleanup.
@@ -766,6 +881,9 @@ func (c *Console) Close(t *testing.T) {
 
 	// Try graceful shutdown first: close the PTY (sends EOF/SIGHUP to child).
 	c.ptmx.Close()
+	if c.cmd != nil && c.cmd.Process != nil {
+		_ = syscall.Kill(-c.cmd.Process.Pid, syscall.SIGHUP)
+	}
 
 	select {
 	case <-c.done:
@@ -773,7 +891,8 @@ func (c *Console) Close(t *testing.T) {
 		t.Logf("ptytest: process %d exited gracefully after PTY close", c.cmd.Process.Pid)
 	case <-time.After(5 * time.Second):
 		// Force kill.
-		t.Logf("ptytest: killing process %d (did not exit after PTY close)", c.cmd.Process.Pid)
+		t.Logf("ptytest: killing launcher process %d (command pid %d did not exit after PTY close)",
+			c.cmd.Process.Pid, c.Pid())
 		c.logProcessDiagnostics(t)
 		_ = c.cmd.Process.Kill()
 		<-c.done
@@ -920,7 +1039,7 @@ func (c *Console) logProcessDiagnostics(t *testing.T) {
 	if c.cmd == nil || c.cmd.Process == nil {
 		return
 	}
-	rootPID := c.cmd.Process.Pid
+	rootPID := c.Pid()
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "ptytest: process diagnostics for command tree rooted at pid %d:\n", rootPID)
