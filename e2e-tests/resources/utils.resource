@@ -85,33 +85,23 @@ Wait Until GDM Login Screen Ready
 
 Wait Until Desktop Ready
     Wait Until Keyword Succeeds    1 min    1 sec
-    ...    Try Desktop Ready
+    ...    Check Desktop Session Ready
     # Before 26.04, GNOME Shell sometimes starts with the Activities overview
     # opened, see https://bugs.launchpad.net/ubuntu/+source/gnome-shell/+bug/2145704.
-    # That causes the next steps to fail, so we need to ensure the overview is
-    # closed before proceeding.
-    ${matches}=    Find Text    Type to search
-    IF    ${matches}
-        Log    Activities Overview is open, closing it
-        Close Activities Overview
-    END
+    # That causes the next steps to fail, so we always dismiss it before
+    # proceeding. Escape is a no-op when the overview is already closed.
+    Close Activities Overview
 
 Close Activities Overview
-    WHILE    True
-        Hid.Keys Combo    Escape
-        BuiltIn.Sleep    1
-        ${matches}=    Find Text    Type to search
-        IF    not ${matches}
-            BREAK
-        END
-    END
+    Hid.Keys Combo    Escape
+    BuiltIn.Sleep    0.5
+    Hid.Keys Combo    Escape
 
 
-Try Desktop Ready
-    Hid.Move Pointer To Proportional    1    1
-    BuiltIn.Sleep    1
-    Hid.Move Pointer To Proportional    0    1
-    Match Text    Show Apps    2
+Check Desktop Session Ready
+    SSH.Execute As Current User
+    ...    systemctl --user is-active graphical-session.target
+    ...    timeout=5
 
 
 Open Terminal

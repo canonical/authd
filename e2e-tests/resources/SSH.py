@@ -58,14 +58,17 @@ class SSH:
 
     @keyword
     async def execute_as_current_user(self, command: str, timeout: int|None = 30) -> str:
-        # Get the user that is currently logged in by checking which user the
-        # gnome-shell process runs as
-        stdout = await self.execute("ps -C gnome-shell -o user=")
-        users = stdout.strip().split("\n")
-        if len(users) == 0:
-            raise RuntimeError("No user is currently logged in")
-        elif len(users) > 1:
-            raise RuntimeError(f"Multiple users are logged in: {users}")
-        user = users[0].strip()
+        # Use systemd-logind to find the active graphical session on seat0.
+        # Class=user excludes GDM greeter sessions, so the command fails (and
+        # the caller retries) until the real user session becomes active.
+        result = await self.execute(
+            "session=$(loginctl show-seat seat0 -p ActiveSession --value) && "
+            "class=$(loginctl show-session \"$session\" -p Class --value) && "
+            "[ \"$class\" = 'user' ] && "
+            "loginctl show-session \"$session\" -p Name --value"
+        )
+        user = result.strip()
+        if not user:
+            raise RuntimeError("No active user session on seat0")
         logger.info(f"Running command as user '{user}'")
         return await self.execute_as_user(user, command, timeout)
