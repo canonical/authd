@@ -13,13 +13,25 @@ This project consists of two components:
 
 authd is delivered as a Debian package for Ubuntu Desktop and Ubuntu Server.
 
-```{admonition} (Optional) Switching from stable to edge
+::::{only} stable
+:::{admonition} This guide is for the stable release of authd
 :class: important
-This guide describes how to install the stable version of authd and its brokers, which is recommended for production use. 
+It describes how to install the **stable** version of authd and its brokers, which is recommended for production use. 
 
-If you want to try the **edge** version, read our guide on [changing authd
+If you want to try the **edge** version, read the installation guide in authd's [edge documentation](https://ubuntu.com/docs/authd/edge-docs/howto/install-authd) or read the guide on [changing authd
 versions](ref::changing-versions).
-```
+:::
+::::
+
+::::{only} edge
+:::{admonition} This guide is for the edge release of authd
+:class: important
+It describes how to install the **edge** version of authd and its brokers, which is not recommended for production use. 
+
+If you want to try the **stable** version, read the installation guide in authd's [stable documentation](https://ubuntu.com/docs/authd/stable-docs/howto/install-authd) or read our guide on [changing authd
+versions](ref::changing-versions).
+:::
+::::
 
 ## System requirements
 
@@ -29,6 +41,7 @@ versions](ref::changing-versions).
 
 ## Install authd
 
+::::{only} stable
 On Ubuntu 26.04 LTS, `authd` is available directly from the Ubuntu archive.
 
 :::{admonition} Add PPA before installing on Ubuntu 24.04
@@ -39,6 +52,15 @@ On Ubuntu 24.04 LTS, `authd` must be installed from the [stable PPA](https://lau
 sudo add-apt-repository ppa:ubuntu-enterprise-desktop/authd
 ```
 :::
+::::
+
+::::{only} edge
+Before installing authd, add the [edge PPA](https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge):
+
+```shell
+sudo add-apt-repository ppa:ubuntu-enterprise-desktop/authd-edge
+```
+::::
 
 Install authd and any additional Debian packages needed for your system of
 choice:
@@ -67,49 +89,74 @@ sudo apt install authd
 The brokers are provided as snap packages and are available from the Snap Store.
 Install the broker corresponding to the identity provider that you want to use:
 
-:::::{tab-set}
+::::::{tab-set}
 :sync-group: broker
 
-::::{tab-item} Google IAM
+:::::{tab-item} Google IAM
 :sync: google
 
 To install the Google IAM broker, run the following command:
 
+::::{only} stable
 ```shell
 sudo snap install authd-google
 ```
+::::
+
+::::{only} edge
+```shell
+sudo snap install authd-google --edge
+```
+::::
+
 At this stage, you have installed the main service and an identity broker to
 authenticate against Google IAM.
 
-::::
+:::::
 
-::::{tab-item} Microsoft Entra ID
+:::::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
 To install the Microsoft Entra ID broker, run the following command:
 
+::::{only} stable
 ```shell
 sudo snap install authd-msentraid
 ```
+::::
+
+::::{only} edge
+```shell
+sudo snap install authd-msentraid --edge
+```
+::::
 
 At this stage, you have installed the main service and an identity broker to
 authenticate against Microsoft Entra ID.
 
-::::
+:::::
 
-::::{tab-item} Keycloak
+:::::{tab-item} Keycloak
 :sync: keycloak
 
 Keycloak can be used with the generic OIDC broker. Install the broker with the
 following command:
 
+::::{only} stable
 ```shell
 sudo snap install authd-oidc
 ```
+::::
+
+::::{only} edge
+```shell
+sudo snap install authd-oidc --edge
+```
+::::
 
 At this stage, you have installed the main service and an identity broker to
 authenticate against Keycloak or any other OIDC provider.
 
-::::
-
 :::::
+
+::::::
