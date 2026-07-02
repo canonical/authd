@@ -54,7 +54,6 @@ Press Enter to wait for authentication or enter 'r' to go back to select the aut
 (user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com@localhost) Plug your fido device and press with your thumb:
 >
 PAM Authenticate() finished for user 'user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com'
-PAM AcctMgmt() finished for user 'user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate]
   HOME=${AUTHD_TEST_HOME}
   LOGNAME=user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com

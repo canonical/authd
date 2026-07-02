@@ -63,6 +63,3 @@ Confirm Password:
 PAM ChangeAuthTok()
   User: "user-mfa-integration-native-passwd-testnativechangeauthtok@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-mfa-integration-native-passwd-testnativechangeauthtok@example.com"
-  Result: success

@@ -22,3 +22,18 @@
 #UID_MAX: 60000
 #GID_MIN: 10000
 #GID_MAX: 60000
+
+## Brute-force mitigation settings for authentication failures.
+##
+## auth_fail_delay_threshold: number of consecutive failures for a single user
+## before a delay is imposed on subsequent attempts.
+#auth_fail_delay_threshold: 3
+##
+## auth_fail_delay: duration of the delay imposed once the threshold is reached.
+## Accepts Go duration strings (e.g. "2s", "500ms").
+#auth_fail_delay: 2s
+##
+## auth_fail_reset_window: duration of inactivity after the last failure before
+## the failure count is automatically reset.
+## Accepts Go duration strings (e.g. "15m", "1h").
+#auth_fail_reset_window: 15m

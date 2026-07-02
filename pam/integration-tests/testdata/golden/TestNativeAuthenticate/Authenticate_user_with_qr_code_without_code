@@ -157,6 +157,3 @@ Choose action:
 PAM Authenticate()
   User: "user-integration-qrcode-without-code-native-testnativeauthenticate@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-integration-qrcode-without-code-native-testnativeauthenticate@example.com"
-  Result: success

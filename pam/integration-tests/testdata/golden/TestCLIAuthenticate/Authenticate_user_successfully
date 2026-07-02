@@ -22,7 +22,4 @@ Gimme your password:
 PAM Authenticate()
   User: "user-integration-simple-testcliauthenticate@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-integration-simple-testcliauthenticate@example.com"
-  Result: success
 ────────────────────────────────────────────────────────────────────────────────

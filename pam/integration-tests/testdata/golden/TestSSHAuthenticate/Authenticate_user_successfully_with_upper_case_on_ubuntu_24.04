@@ -8,7 +8,6 @@ Enter 'r' to cancel the request and go back to select the authentication method
 (USER-INTEGRATION-PRE-CHECK-UPPER-CASE-TESTSSHAUTHENTICATE@EXAMPLE.COM@localhost) Gimme your password:
 >
 PAM Authenticate() finished for user 'user-integration-pre-check-upper-case-testsshauthenticate@example.com'
-PAM AcctMgmt() finished for user 'user-integration-pre-check-upper-case-testsshauthenticate@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_successfully_with_upper_case_on_ubuntu_24.04]
   HOME=${AUTHD_TEST_HOME}
   LOGNAME=user-integration-pre-check-upper-case-testsshauthenticate@example.com

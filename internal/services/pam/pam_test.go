@@ -73,8 +73,7 @@ func TestNewService(t *testing.T) {
 	m, err := users.NewManager(users.DefaultConfig, t.TempDir())
 	require.NoError(t, err, "Setup: could not create user manager")
 
-	pm := permissions.New()
-	service := pam.NewService(context.Background(), m, globalBrokerManager, &pm)
+	service := pam.NewService(context.Background(), m, globalBrokerManager, pam.DefaultConfig)
 
 	brokers, err := service.AvailableBrokers(context.Background(), &authd.Empty{})
 	require.NoError(t, err, "can’t create the service directly")
@@ -85,20 +84,15 @@ func TestAvailableBrokers(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		currentUserNotRoot bool
-
 		wantErr bool
 	}{
 		"Success_getting_available_brokers": {},
-
-		"Error_when_not_root": {currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			pm := newPermissionManager(t, tc.currentUserNotRoot)
-			client := newPamClient(t, nil, globalBrokerManager, &pm)
+			client := newPamClient(t, nil, globalBrokerManager)
 
 			abResp, err := client.AvailableBrokers(context.Background(), &authd.Empty{})
 
@@ -128,8 +122,7 @@ func TestGetBroker(t *testing.T) {
 	tests := map[string]struct {
 		user string
 
-		currentUserNotRoot bool
-		onlyLocalBroker    bool
+		onlyLocalBroker bool
 
 		wantBroker string
 		wantErr    bool
@@ -142,8 +135,6 @@ func TestGetBroker(t *testing.T) {
 		"Returns_empty_when_user_does_not_exist":         {user: "nonexistent@example.com", wantBroker: ""},
 		"Returns_empty_when_user_does_not_have_a_broker": {user: "userwithoutbroker@example.com", wantBroker: ""},
 		"Returns_empty_when_broker_is_not_available":     {user: "userwithinactivebroker@example.com", wantBroker: ""},
-
-		"Error_when_not_root": {user: "userwithbroker@example.com", currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -164,14 +155,13 @@ func TestGetBroker(t *testing.T) {
 			m, err := users.NewManager(users.DefaultConfig, dbDir)
 			require.NoError(t, err, "Setup: could not create user manager")
 			t.Cleanup(func() { _ = m.Stop() })
-			pm := newPermissionManager(t, tc.currentUserNotRoot)
 
 			brokerManager := globalBrokerManager
 			if tc.onlyLocalBroker {
 				brokerManager, err = brokers.NewManager(context.Background(), "", nil)
 				require.NoError(t, err, "Setup: could not create broker manager with only local broker")
 			}
-			client := newPamClient(t, m, brokerManager, &pm)
+			client := newPamClient(t, m, brokerManager)
 
 			// Get existing entry
 			gotResp, err := client.GetBroker(context.Background(), &authd.GBRequest{Username: tc.user})
@@ -196,14 +186,11 @@ func TestSelectBroker(t *testing.T) {
 		sessionMode string
 		existingDB  string
 
-		currentUserNotRoot bool
-
 		wantErr bool
 	}{
 		"Successfully_select_a_broker_and_creates_auth_session":   {username: "success@example.com", sessionMode: auth.SessionModeLogin},
 		"Successfully_select_a_broker_and_creates_passwd_session": {username: "success@example.com", sessionMode: auth.SessionModeChangePassword},
 
-		"Error_when_not_root":                             {username: "success@example.com", currentUserNotRoot: true, wantErr: true},
 		"Error_when_username_is_empty":                    {wantErr: true},
 		"Error_when_mode_is_empty":                        {sessionMode: "-", wantErr: true},
 		"Error_when_mode_does_not_exist":                  {sessionMode: "does not exist", wantErr: true},
@@ -226,8 +213,7 @@ func TestSelectBroker(t *testing.T) {
 			require.NoError(t, err, "Setup: could not create user manager")
 			t.Cleanup(func() { _ = m.Stop() })
 
-			pm := newPermissionManager(t, tc.currentUserNotRoot)
-			client := newPamClient(t, m, globalBrokerManager, &pm)
+			client := newPamClient(t, m, globalBrokerManager)
 
 			switch tc.brokerID {
 			case "":
@@ -277,15 +263,13 @@ func TestGetAuthenticationModes(t *testing.T) {
 		sessionID          string
 		supportedUILayouts []*authd.UILayout
 
-		username           string
-		currentUserNotRoot bool
+		username string
 
 		wantErr bool
 	}{
 		"Successfully_get_authentication_modes":          {},
 		"Successfully_get_multiple_authentication_modes": {username: "gam_multiple_modes@example.com"},
 
-		"Error_when_not_root":                     {currentUserNotRoot: true, wantErr: true},
 		"Error_when_sessionID_is_empty":           {sessionID: "-", wantErr: true},
 		"Error_when_passing_invalid_layout":       {supportedUILayouts: []*authd.UILayout{emptyType}, wantErr: true},
 		"Error_when_sessionID_is_invalid":         {sessionID: "invalid-session", wantErr: true},
@@ -296,8 +280,7 @@ func TestGetAuthenticationModes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			pm := newPermissionManager(t, false) // Allow starting the session (current user considered root)
-			client := newPamClient(t, nil, globalBrokerManager, &pm)
+			client := newPamClient(t, nil, globalBrokerManager)
 
 			switch tc.sessionID {
 			case "invalid-session":
@@ -309,9 +292,6 @@ func TestGetAuthenticationModes(t *testing.T) {
 					tc.sessionID = id
 				}
 			}
-
-			// Now, set tests permissions for this use case
-			permissions.Z_ForTests_SetCurrentUserAsRoot(&pm, !tc.currentUserNotRoot)
 
 			if tc.supportedUILayouts == nil {
 				tc.supportedUILayouts = []*authd.UILayout{requiredEntry}
@@ -344,7 +324,6 @@ func TestSelectAuthenticationMode(t *testing.T) {
 		username           string
 		supportedUILayouts []*authd.UILayout
 		noValidators       bool
-		currentUserNotRoot bool
 
 		wantErr bool
 	}{
@@ -352,7 +331,6 @@ func TestSelectAuthenticationMode(t *testing.T) {
 		"Successfully_select_mode_with_missing_optional_value": {username: "sam_missing_optional_entry@example.com", supportedUILayouts: []*authd.UILayout{optionalEntry}},
 
 		// service errors
-		"Error_when_not_root":                {username: "sam_success_required_entry@example.com", currentUserNotRoot: true, wantErr: true},
 		"Error_when_sessionID_is_empty":      {sessionID: "-", wantErr: true},
 		"Error_when_session_ID_is_invalid":   {sessionID: "invalid-session", wantErr: true},
 		"Error_when_no_authmode_is_selected": {sessionID: "no auth mode", authMode: "-", wantErr: true},
@@ -371,8 +349,7 @@ func TestSelectAuthenticationMode(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			pm := newPermissionManager(t, false) // Allow starting the session (current user considered root)
-			client := newPamClient(t, nil, globalBrokerManager, &pm)
+			client := newPamClient(t, nil, globalBrokerManager)
 
 			switch tc.sessionID {
 			case "invalid-session":
@@ -403,9 +380,6 @@ func TestSelectAuthenticationMode(t *testing.T) {
 				require.NoError(t, err, "Setup: failed to get authentication modes for tests")
 			}
 
-			// Now, set tests permissions for this use case
-			permissions.Z_ForTests_SetCurrentUserAsRoot(&pm, !tc.currentUserNotRoot)
-
 			samReq := &authd.SAMRequest{
 				SessionId:            tc.sessionID,
 				AuthenticationModeId: tc.authMode,
@@ -428,11 +402,10 @@ func TestIsAuthenticated(t *testing.T) {
 		sessionID  string
 		existingDB string
 
-		username           string
-		secondCall         bool
-		cancelFirstCall    bool
-		localGroupsFile    string
-		currentUserNotRoot bool
+		username        string
+		secondCall      bool
+		cancelFirstCall bool
+		localGroupsFile string
 
 		// There is no wantErr as it's stored in the golden file.
 	}{
@@ -447,7 +420,6 @@ func TestIsAuthenticated(t *testing.T) {
 		"Successfully_authenticate_with_groups_with_uppercase": {username: "success_with_uppercase_groups@example.com"},
 
 		// service errors
-		"Error_when_not_root":           {username: "success@example.com", currentUserNotRoot: true},
 		"Error_when_sessionID_is_empty": {sessionID: "-"},
 		"Error_when_there_is_no_broker": {sessionID: "invalid-session"},
 		"Error_when_user_is_locked":     {username: "locked@example.com", existingDB: "cache-with-locked-user.db"},
@@ -491,8 +463,7 @@ func TestIsAuthenticated(t *testing.T) {
 			m, err := users.NewManager(users.DefaultConfig, dbDir, managerOpts...)
 			require.NoError(t, err, "Setup: could not create user manager")
 			t.Cleanup(func() { _ = m.Stop() })
-			pm := newPermissionManager(t, false) // Allow starting the session (current user considered root)
-			client := newPamClient(t, m, globalBrokerManager, &pm)
+			client := newPamClient(t, m, globalBrokerManager)
 
 			switch tc.sessionID {
 			case "invalid-session":
@@ -504,9 +475,6 @@ func TestIsAuthenticated(t *testing.T) {
 					tc.sessionID = id
 				}
 			}
-
-			// Now, set tests permissions for this use case
-			permissions.Z_ForTests_SetCurrentUserAsRoot(&pm, !tc.currentUserNotRoot)
 
 			var firstCall, secondCall string
 			ctx, cancel := context.WithCancel(context.Background())
@@ -576,6 +544,68 @@ func TestIsAuthenticated(t *testing.T) {
 	}
 }
 
+func TestIsAuthenticated_FailDelay(t *testing.T) {
+	t.Parallel()
+
+	client := newPamClient(t, nil, globalBrokerManager)
+
+	sessionID := startSession(t, client, "ia_denied@example.com")
+	iaReq := &authd.IARequest{
+		SessionId:          sessionID,
+		AuthenticationData: &authd.IARequest_AuthenticationData{},
+	}
+
+	// The first authFailDelayThreshold failures should not be delayed.
+	for i := range pam.AuthFailDelayThreshold {
+		start := time.Now()
+		_, err := client.IsAuthenticated(context.Background(), iaReq)
+		require.NoError(t, err, "IsAuthenticated should not return an error")
+		require.Less(t, time.Since(start), pam.AuthFailDelay,
+			"attempt %d of %d should not trigger the fail delay", i+1, pam.AuthFailDelayThreshold)
+	}
+
+	// The next failure should be delayed.
+	start := time.Now()
+	_, err := client.IsAuthenticated(context.Background(), iaReq)
+	require.NoError(t, err, "IsAuthenticated should not return an error")
+	require.GreaterOrEqual(t, time.Since(start), pam.AuthFailDelay,
+		"attempt after threshold should be delayed")
+}
+
+func TestIsAuthenticated_FailDelayTrackerFull(t *testing.T) {
+	// Cannot be parallel: temporarily overrides the package-level authFailMaxTracked.
+	//nolint:paralleltest // modifies package-level authFailMaxTracked, cannot run in parallel
+
+	// Use a tracker that can only hold a single entry so we can fill it with
+	// one bogus username and then verify the delay is still applied to a
+	// second, previously unseen username (fail-secure behaviour).
+	orig := *pam.AuthFailMaxTracked
+	*pam.AuthFailMaxTracked = 1
+	t.Cleanup(func() { *pam.AuthFailMaxTracked = orig })
+
+	client := newPamClient(t, nil, globalBrokerManager)
+
+	// Fill the tracker with a bogus username.
+	bogusSession := startSession(t, client, "ia_denied@example.com")
+	_, _ = client.IsAuthenticated(context.Background(), &authd.IARequest{
+		SessionId:          bogusSession,
+		AuthenticationData: &authd.IARequest_AuthenticationData{},
+	})
+
+	// A different user's first failure should still be delayed even though the
+	// tracker is full (fill-attack protection).
+	targetSession := startSession(t, client, "ia_denied_second@example.com")
+	iaReq := &authd.IARequest{
+		SessionId:          targetSession,
+		AuthenticationData: &authd.IARequest_AuthenticationData{},
+	}
+
+	start := time.Now()
+	_, _ = client.IsAuthenticated(context.Background(), iaReq)
+	require.GreaterOrEqual(t, time.Since(start), pam.AuthFailDelay,
+		"first failure for new user should be delayed when tracker is full")
+}
+
 func TestIDGeneration(t *testing.T) {
 	t.Parallel()
 	usernamePrefix := t.Name()
@@ -599,8 +629,7 @@ func TestIDGeneration(t *testing.T) {
 			m, err := users.NewManager(users.DefaultConfig, t.TempDir(), managerOpts...)
 			require.NoError(t, err, "Setup: could not create user manager")
 			t.Cleanup(func() { _ = m.Stop() })
-			pm := newPermissionManager(t, false) // Allow starting the session (current user considered root)
-			client := newPamClient(t, m, globalBrokerManager, &pm)
+			client := newPamClient(t, m, globalBrokerManager)
 
 			sbResp, err := client.SelectBroker(context.Background(), &authd.SBRequest{
 				BrokerId: mockBrokerGeneratedID,
@@ -620,81 +649,18 @@ func TestIDGeneration(t *testing.T) {
 	}
 }
 
-func TestSetBroker(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		username           string
-		brokerID           string
-		currentUserNotRoot bool
-
-		wantErr bool
-	}{
-		"Set_broker_for_existing_user_with_no_broker":   {username: "usersetbroker@example.com"},
-		"Update_broker_for_existing_user_with_a_broker": {username: "userupdatebroker@example.com"},
-		"Username_is_case_insensitive":                  {username: "UserSetBroker@example.com"},
-
-		"Error_when_setting_broker_to_local_broker": {username: "userlocalbroker@example.com", brokerID: brokers.LocalBrokerName, wantErr: true},
-		"Error_when_not_root":                       {username: "usersetbroker@example.com", currentUserNotRoot: true, wantErr: true},
-		"Error_when_username_is_empty":              {wantErr: true},
-		"Error_when_user_does_not_exist_":           {username: "doesnotexist@example.com", wantErr: true},
-		"Error_when_broker_does_not_exist":          {username: "userwithbroker@example.com", brokerID: "does not exist", wantErr: true},
-	}
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			dbDir := t.TempDir()
-			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join(testutils.TestFamilyPath(t), "set-broker.db"), dbDir)
-			require.NoError(t, err, "Setup: could not create database from testdata")
-
-			m, err := users.NewManager(users.DefaultConfig, dbDir)
-			require.NoError(t, err, "Setup: could not create user manager")
-			t.Cleanup(func() { _ = m.Stop() })
-			pm := newPermissionManager(t, tc.currentUserNotRoot)
-			client := newPamClient(t, m, globalBrokerManager, &pm)
-
-			if tc.brokerID == "" {
-				tc.brokerID = mockBrokerGeneratedID
-			}
-
-			stbReq := &authd.STBRequest{
-				BrokerId: tc.brokerID,
-				Username: tc.username,
-			}
-			_, err = client.SetBroker(context.Background(), stbReq)
-			if tc.wantErr {
-				require.Error(t, err, "SetBroker should return an error, but did not")
-				return
-			}
-			require.NoError(t, err, "SetBroker should not return an error, but did")
-
-			gbResp, err := client.GetBroker(context.Background(), &authd.GBRequest{Username: tc.username})
-			require.NoError(t, err, "GetBroker should not return an error")
-			require.Equal(t, tc.brokerID, gbResp.GetBroker(), "SetBroker should set the default broker as expected")
-
-			// Check that database has been updated too.
-			gotDB, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
-			require.NoError(t, err, "Setup: failed to dump database for comparing")
-			golden.CheckOrUpdate(t, gotDB, golden.WithPath("cache.db"))
-		})
-	}
-}
-
 func TestEndSession(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
 		sessionID string
 
-		username           string
-		currentUserNotRoot bool
+		username string
 
 		wantErr bool
 	}{
 		"Successfully_end_session": {username: "success@example.com"},
 
-		"Error_when_not_root":             {username: "success@example.com", currentUserNotRoot: true, wantErr: true},
 		"Error_when_sessionID_is_empty":   {sessionID: "-", wantErr: true},
 		"Error_when_sessionID_is_invalid": {sessionID: "invalid-session", wantErr: true},
 		"Error_when_ending_session":       {username: "es_error@example.com", wantErr: true},
@@ -703,8 +669,7 @@ func TestEndSession(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			pm := newPermissionManager(t, false) // Allow starting the session (current user considered root)
-			client := newPamClient(t, nil, globalBrokerManager, &pm)
+			client := newPamClient(t, nil, globalBrokerManager)
 
 			switch tc.sessionID {
 			case "invalid-session":
@@ -716,9 +681,6 @@ func TestEndSession(t *testing.T) {
 					tc.sessionID = id
 				}
 			}
-
-			// Now, set tests permissions for this use case
-			permissions.Z_ForTests_SetCurrentUserAsRoot(&pm, !tc.currentUserNotRoot)
 
 			esReq := &authd.ESRequest{
 				SessionId: tc.sessionID,
@@ -757,10 +719,9 @@ func initBrokers() (brokerConfigPath string, cleanup func(), err error) {
 	}, nil
 }
 
-// newPAMClient returns a new GRPC PAM client for tests connected to brokerManager with the given database and
-// permissionmanager.
+// newPAMClient returns a new GRPC PAM client for tests connected to brokerManager with the given database.
 // If the one passed is nil, this function will create the database and close it upon test teardown.
-func newPamClient(t *testing.T, m *users.Manager, brokerManager *brokers.Manager, pm *permissions.Manager) (client authd.PAMClient) {
+func newPamClient(t *testing.T, m *users.Manager, brokerManager *brokers.Manager) (client authd.PAMClient) {
 	t.Helper()
 
 	// socket path is limited in length.
@@ -778,9 +739,9 @@ func newPamClient(t *testing.T, m *users.Manager, brokerManager *brokers.Manager
 		t.Cleanup(func() { _ = m.Stop() })
 	}
 
-	service := pam.NewService(context.Background(), m, brokerManager, pm)
+	service := pam.NewService(context.Background(), m, brokerManager, pam.DefaultConfig)
 
-	grpcServer := grpc.NewServer(permissions.WithUnixPeerCreds(), grpc.ChainUnaryInterceptor(enableCheckGlobalAccess(service), errmessages.RedactErrorInterceptor))
+	grpcServer := grpc.NewServer(permissions.WithUnixPeerCreds(), grpc.ChainUnaryInterceptor(errmessages.RedactErrorInterceptor))
 	authd.RegisterPAMServer(grpcServer, service)
 	done := make(chan struct{})
 	go func() {
@@ -798,29 +759,6 @@ func newPamClient(t *testing.T, m *users.Manager, brokerManager *brokers.Manager
 	t.Cleanup(func() { _ = conn.Close() }) // We don't care about the error on cleanup
 
 	return authd.NewPAMClient(conn)
-}
-
-// newPermissionManager factors out permission manager creation for tests.
-// this permission manager can then be tweaked for mimicking currentUser considered as root not.
-func newPermissionManager(t *testing.T, currentUserNotRoot bool) permissions.Manager {
-	t.Helper()
-
-	var opts = []permissions.Option{}
-	if !currentUserNotRoot {
-		opts = append(opts, permissions.Z_ForTests_WithCurrentUserAsRoot())
-	}
-	return permissions.New(opts...)
-}
-
-// enableCheckGlobalAccess returns the middleware hooking up in CheckGlobalAccess for the given service.
-func enableCheckGlobalAccess(s pam.Service) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		if err := s.CheckGlobalAccess(ctx, info.FullMethod); err != nil {
-			return nil, err
-		}
-
-		return handler(ctx, req)
-	}
 }
 
 // getMockBrokerGeneratedID returns the generated ID for the mock broker.

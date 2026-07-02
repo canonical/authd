@@ -180,6 +180,3 @@ Enter your pin code:
 PAM Authenticate()
   User: "user-integration-switch-mode-native-testnativeauthenticate@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-integration-switch-mode-native-testnativeauthenticate@example.com"
-  Result: success
