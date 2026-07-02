@@ -275,7 +275,20 @@ func (b *Broker) ensureCompatibilitySymlink(linkPath, target string) error {
 		return fmt.Errorf("cache compatibility symlink already points to %q", existingTarget)
 	}
 
-	return nil
+	// The symlink resolves to the right target, but may be stored as an absolute
+	// path. Normalize it to a relative path so it survives a snap revision bump
+	// that moves the entire data directory prefix.
+	rawLink, err := os.Readlink(linkPath)
+	if err != nil {
+		return err
+	}
+	if rawLink == relTarget {
+		return nil
+	}
+	if rmErr := os.Remove(linkPath); rmErr != nil {
+		return fmt.Errorf("could not replace absolute cache compatibility symlink %q: %w", linkPath, rmErr)
+	}
+	return os.Symlink(relTarget, linkPath)
 }
 
 func consolidateKnownCacheFiles(sourceDir, targetDir string) error {

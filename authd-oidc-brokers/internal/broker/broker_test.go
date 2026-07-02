@@ -280,6 +280,9 @@ func TestNewSessionWithProviderIDRepairsUsernameCompatibilityPath(t *testing.T) 
 	info, err := os.Lstat(usernameDir)
 	require.NoError(t, err, "The username compatibility path should exist")
 	require.NotZero(t, info.Mode()&os.ModeSymlink, "The username compatibility path should be a symlink")
+	rawLink, err := os.Readlink(usernameDir)
+	require.NoError(t, err, "os.Readlink on the compatibility symlink should not fail")
+	require.False(t, filepath.IsAbs(rawLink), "compatibility symlink should be stored as a relative path, got %q", rawLink)
 	target, err := filepath.EvalSymlinks(usernameDir)
 	require.NoError(t, err, "The username compatibility symlink should resolve")
 	require.Equal(t, providerIDDir, target, "The username compatibility symlink should target the provider ID cache dir")
@@ -2638,6 +2641,9 @@ func TestEnsureProviderIDCacheDir(t *testing.T) {
 				info, err := os.Lstat(usernameDir)
 				require.NoError(t, err, "The username path should exist")
 				require.NotZero(t, info.Mode()&os.ModeSymlink, "The username path should be a compatibility symlink")
+				rawLink, err := os.Readlink(usernameDir)
+				require.NoError(t, err, "os.Readlink on the compatibility symlink should not fail")
+				require.False(t, filepath.IsAbs(rawLink), "compatibility symlink should be stored as a relative path, got %q", rawLink)
 				target, err := filepath.EvalSymlinks(usernameDir)
 				require.NoError(t, err, "The compatibility symlink should resolve")
 				require.Equal(t, providerIDDir, target, "The compatibility symlink should point to the provider ID dir")
@@ -2654,6 +2660,50 @@ func TestEnsureProviderIDCacheDir(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestCompatibilitySymlinkSurvivesIssuerTreeMove verifies that the compatibility
+// symlink created by ensureCompatibilitySymlink is stored as a relative path and
+// therefore continues to resolve correctly after the entire issuer cache tree is
+// moved (e.g. during a snap revision bump that renames the data directory prefix).
+func TestCompatibilitySymlinkSurvivesIssuerTreeMove(t *testing.T) {
+	t.Parallel()
+
+	b := newBrokerForTests(t, &brokerForTestConfig{issuerURL: defaultIssuerURL})
+
+	const (
+		username   = "user@example.com"
+		providerID = "provider-id-123"
+	)
+
+	usernameDir, err := b.UserDataDir(username)
+	require.NoError(t, err, "Setup: deriving the username data dir should not fail")
+	providerIDDir, err := b.UserDataDir(providerID)
+	require.NoError(t, err, "Setup: deriving the provider ID data dir should not fail")
+
+	issuerDir := filepath.Dir(usernameDir)
+	require.NoError(t, os.MkdirAll(providerIDDir, 0700), "Setup: creating the provider ID dir")
+	require.NoError(t, os.WriteFile(filepath.Join(providerIDDir, "token.json"), []byte("cached-token"), 0600),
+		"Setup: writing the provider ID token file")
+
+	got := b.EnsureProviderIDCacheDir(username, usernameDir, providerID)
+	require.Equal(t, providerIDDir, got.UserDataDir, "Session should use the provider ID cache dir")
+
+	// The raw symlink value must be relative so it is not tied to the current path prefix.
+	rawLink, err := os.Readlink(usernameDir)
+	require.NoError(t, err, "os.Readlink on the compatibility symlink should not fail")
+	require.False(t, filepath.IsAbs(rawLink), "compatibility symlink should be stored as a relative path, got %q", rawLink)
+
+	// Simulate a snap revision bump by moving the entire issuer tree to a new prefix.
+	newIssuerDir := filepath.Join(t.TempDir(), "new-revision", filepath.Base(issuerDir))
+	require.NoError(t, os.MkdirAll(filepath.Dir(newIssuerDir), 0700), "Setup: creating parent of new issuer dir")
+	require.NoError(t, os.Rename(issuerDir, newIssuerDir), "Moving the issuer tree should not fail")
+
+	newUsernameDir := filepath.Join(newIssuerDir, username)
+	resolvedTarget, err := filepath.EvalSymlinks(newUsernameDir)
+	require.NoError(t, err, "compatibility symlink should still resolve after the issuer tree is moved")
+	require.Equal(t, filepath.Join(newIssuerDir, providerID), resolvedTarget,
+		"compatibility symlink should point to the provider ID dir in the new location")
 }
 
 func TestMain(m *testing.M) {
