@@ -178,8 +178,13 @@ fi
 mkdir -p "${TEST_RUNS_DIR}"
 ln -sf --no-target-directory "${OUTPUT_DIR}" "${TEST_RUNS_DIR}/${BROKER}-latest"
 
-# Activate YARF environment
+# Set up YARF environment if not already set up
 YARF_DIR="${ROOT_DIR}/.yarf"
+if ! [ -f "${YARF_DIR}/.venv/bin/activate" ]; then
+    "${ROOT_DIR}/setup-yarf.sh"
+fi
+
+# Activate YARF environment
 if [ ! -d "${YARF_DIR}" ]; then
     echo >&2  "YARF directory not found at ${YARF_DIR}. Please run setup_yarf.sh first."
     exit 1
