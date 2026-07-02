@@ -1,0 +1,62 @@
+#!/bin/bash
+# setup-base — system provisioning that is baked into the workshop snapshot.
+#
+# Runs ONCE, as root, against the base image before the project is mounted and
+# before systemd is supervising services. It is therefore restricted to package
+# installation and static file writes: no access to /project and no `systemctl`.
+# Everything that needs the project tree or a running systemd lives in
+# setup-project instead. Go and Rust come from Workshop Store SDKs.
+#
+# Per Workshop best practice, system (apt) packages belong here — the install is
+# part of the snapshot, so `workshop refresh` never pays for it again.
+set -euo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+
+# --- Build- and test-time system dependencies -------------------------------
+# Build dependencies are taken from debian/control; the test dependencies
+# (bubblewrap, cracklib, dbus, uidmap) match what authd's CI installs so that
+# `workshop run -- test` behaves like CI.
+apt-get update
+apt-get install --yes --no-install-recommends \
+    ca-certificates curl git make gcc pkgconf \
+    protobuf-compiler \
+    libpam0g-dev libglib2.0-dev libpwquality-dev libc6-dev libssl-dev systemd-dev \
+    bubblewrap cracklib-runtime dbus uidmap python3 \
+    openssh-server \
+    apparmor-profiles \
+    jq
+
+# --- Project tool PATH -------------------------------------------------------
+# Hooks do NOT get /etc/profile.d sourced, but interactive `workshop shell`
+# sessions do. Store SDKs provide the core toolchains; this profile adds the
+# per-user tool install locations used by `go install` and cargo.
+cat > /etc/profile.d/authd-dev.sh <<'PROFILE'
+# authd Workshop dev environment - project tool PATH
+export PATH="${HOME}/go/bin:${HOME}/.cargo/bin:${PATH}"
+PROFILE
+chmod 0644 /etc/profile.d/authd-dev.sh
+
+# --- Passwordless sudo for the workshop user ---------------------------------
+# setup-project and the dev actions run as the unprivileged `workshop` user but
+# must install into /usr and /etc and drive systemd, exactly like the Debian
+# package's maintainer scripts do as root. Grant sudo so they can.
+cat > /etc/sudoers.d/authd-dev <<'SUDOERS'
+workshop ALL=(ALL) NOPASSWD:ALL
+SUDOERS
+chmod 0440 /etc/sudoers.d/authd-dev
+
+# --- sshd: route cloud-identity logins through PAM ---------------------------
+# authd authenticates SSH users over PAM keyboard-interactive (the exec module's
+# native UI mode). The authd PAM stack itself is wired by pam-auth-update in
+# setup-project; here we only make sshd defer to PAM for `user@domain` logins.
+cat > /etc/ssh/sshd_config.d/authd.conf <<'SSHD'
+UsePAM yes
+KbdInteractiveAuthentication yes
+SSHD
+chmod 0644 /etc/ssh/sshd_config.d/authd.conf
+
+# --- AppArmor profile required by the bubblewrap-based integration tests ------
+if [ -f /usr/share/apparmor/extra-profiles/bwrap-userns-restrict ]; then
+    ln -sf /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/
+fi

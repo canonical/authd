@@ -1,0 +1,37 @@
+#!/bin/bash
+# check-health — report whether the installed authd stack is usable.
+#
+# Runs after the setup hooks (and on demand via `workshop refresh`). Workshop
+# executes this hook as root, so checks that care about the developer's login
+# environment explicitly drop to the `workshop` user. A clean run reports okay;
+# otherwise the concise Workshop status points to the full validate action.
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source /project/.workshop/authd/lib/health-checks.sh
+
+authd_collect_health_problems
+
+if [ "${#AUTHD_HEALTH_PROBLEMS[@]}" -eq 0 ]; then
+    workshopctl set-health okay
+else
+    # workshopctl enforces a 7–70 character message limit. Keep this short;
+    # `workshop run -- validate` prints the full per-check breakdown.
+    workshopctl set-health --code=authd-stack-unhealthy error \
+        "${#AUTHD_HEALTH_PROBLEMS[@]} check(s) failed; run: validate"
+fi
+
+# Design note: exit behaviour for check-health
+#
+# This hook currently exits 0 (success) even when health is bad.  Workshop
+# treats the change as "succeeded" with a degraded health status visible via
+# `workshop info`.  This is consistent with the Workshop-recommended pattern:
+# the hook's exit code reflects whether the check ran successfully, not whether
+# the stack is healthy — health is communicated exclusively via `workshopctl`.
+#
+# An alternative is to `exit 1` explicitly on failure, which causes
+# `workshop launch --wait-on-error` to pause at the unhealthy state for
+# immediate inspection. The downside: a transient service hiccup or a missing
+# broker (which check-health does not currently test, but may in the future)
+# would block the launch/refresh workflow, forcing a manual `--continue` or
+# `--abort`.

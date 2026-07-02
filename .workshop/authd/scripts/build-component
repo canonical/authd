@@ -1,0 +1,175 @@
+#!/bin/bash
+set -euo pipefail
+
+AUTHD_PROJECT_DIR="${AUTHD_PROJECT_DIR:-/project}"
+AUTHD_DAEMONS_PATH="${AUTHD_DAEMONS_PATH:-/usr/libexec}"
+AUTHD_AUTHD_PROTO_GENERATED=0
+AUTHD_PAM_SOURCES_GENERATED=0
+AUTHD_BUILD_COMPONENT_TMPDIR=""
+
+authd_cleanup_build_dir() {
+    if [ -n "${AUTHD_BUILD_COMPONENT_TMPDIR:-}" ]; then
+        rm -rf -- "${AUTHD_BUILD_COMPONENT_TMPDIR}"
+    fi
+}
+
+authd_prepare_build_environment() {
+    # shellcheck disable=SC1091
+    source "${AUTHD_PROJECT_DIR}/.workshop/authd/lib/env.sh"
+    cd "${AUTHD_PROJECT_DIR}"
+
+    AUTHD_MULTIARCH="$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
+    AUTHD_PAM_DIR="/usr/lib/${AUTHD_MULTIARCH}/security"
+    AUTHD_NSS_DIR="/usr/lib/${AUTHD_MULTIARCH}"
+}
+
+authd_generate_authd_proto() {
+    if [ "$AUTHD_AUTHD_PROTO_GENERATED" = 1 ]; then
+        return 0
+    fi
+
+    go generate ./internal/proto/authd/
+    AUTHD_AUTHD_PROTO_GENERATED=1
+}
+
+authd_generate_pam_sources() {
+    if [ "$AUTHD_PAM_SOURCES_GENERATED" = 1 ]; then
+        return 0
+    fi
+
+    authd_generate_authd_proto
+    go generate ./pam/internal/gdm/
+    go generate ./pam/
+    AUTHD_PAM_SOURCES_GENERATED=1
+}
+
+authd_build_authd() {
+    local build_dir="$1"
+    local restart_services="${2:-yes}"
+
+    authd_generate_authd_proto
+    go build -o "${build_dir}/authd" ./cmd/authd
+    sudo install -Dm755 "${build_dir}/authd" "${AUTHD_DAEMONS_PATH}/authd"
+
+    if [ "$restart_services" = yes ] && systemctl list-unit-files authd.service >/dev/null 2>&1; then
+        sudo systemctl restart authd.service
+    fi
+}
+
+authd_build_authctl() {
+    local build_dir="$1"
+
+    authd_generate_authd_proto
+    go build -o "${build_dir}/authctl" ./cmd/authctl
+    sudo install -Dm755 "${build_dir}/authctl" /usr/bin/authctl
+}
+
+authd_build_pam() {
+    local build_dir="$1"
+
+    authd_generate_pam_sources
+    go build -o "${build_dir}/authd-pam" ./pam
+    sudo install -Dm755 "${build_dir}/authd-pam" "${AUTHD_DAEMONS_PATH}/authd-pam"
+    sudo install -Dm644 pam/go-exec/pam_authd_exec.so "${AUTHD_PAM_DIR}/pam_authd_exec.so"
+    if [ -f pam/pam_authd.so ]; then
+        sudo install -Dm644 pam/pam_authd.so "${AUTHD_PAM_DIR}/pam_authd.so"
+    fi
+}
+
+authd_build_nss() {
+    cargo build --release -p nss
+    sudo install -Dm644 "${AUTHD_PROJECT_DIR}/target/release/libnss_authd.so" "${AUTHD_NSS_DIR}/libnss_authd.so.2"
+    sudo ldconfig
+}
+
+# Build and install a single broker binary. Not called directly; use
+# authd_build_brokers instead so generate.sh is handled correctly.
+_authd_build_one_broker() {
+    local name="$1" tag="$2" build_dir="$3"
+    # shellcheck disable=SC2086
+    go build -C "${AUTHD_PROJECT_DIR}/authd-oidc-brokers" $tag -o "${build_dir}/authd-${name}" ./cmd/authd-oidc
+    sudo install -Dm755 "${build_dir}/authd-${name}" "${AUTHD_DAEMONS_PATH}/authd-${name}"
+    # Restart the broker service if it is currently running so the new binary
+    # takes effect immediately (mirrors what authd_build_authd does for authd).
+    sudo systemctl try-restart "authd-${name}.service" 2>/dev/null || true
+}
+
+authd_build_brokers() {
+    local build_dir="$1"
+    shift
+
+    # Collect variant names from remaining args. Each arg may itself be a
+    # comma-separated list (e.g. "google,oidc"); expand those too. Default
+    # to "all" when no variant is given.
+    local variants=()
+    if [ $# -eq 0 ]; then
+        variants=(all)
+    else
+        for arg in "$@"; do
+            IFS=',' read -ra parts <<< "$arg"
+            variants+=("${parts[@]}")
+        done
+    fi
+
+    # libhimmelblau (cargo) is slow; only run it when msentraid or all is
+    # requested, and only once even if both appear in the list.
+    local need_himmelblau=0
+    for v in "${variants[@]}"; do
+        [ "$v" = msentraid ] || [ "$v" = all ] && { need_himmelblau=1; break; }
+    done
+    if [ "$need_himmelblau" = 1 ]; then
+        (cd "${AUTHD_PROJECT_DIR}/authd-oidc-brokers" && bash ./internal/providers/msentraid/himmelblau/generate.sh)
+    fi
+
+    for v in "${variants[@]}"; do
+        case "$v" in
+            google)    _authd_build_one_broker google    "-tags=withgoogle"    "$build_dir" ;;
+            msentraid) _authd_build_one_broker msentraid "-tags=withmsentraid" "$build_dir" ;;
+            oidc)      _authd_build_one_broker oidc      ""                    "$build_dir" ;;
+            all)
+                _authd_build_one_broker google    "-tags=withgoogle"    "$build_dir"
+                _authd_build_one_broker msentraid "-tags=withmsentraid" "$build_dir"
+                _authd_build_one_broker oidc      ""                    "$build_dir"
+                ;;
+            *) echo "Unknown broker variant '${v}'. Valid values: google, msentraid, oidc, all" >&2; return 2 ;;
+        esac
+    done
+}
+
+authd_build_component() {
+    local component="${1:-all}"
+    local build_dir="$2"
+    local restart_services="${3:-yes}"
+    shift 3
+
+    case "$component" in
+        authd)   authd_build_authd   "$build_dir" "$restart_services" ;;
+        authctl) authd_build_authctl "$build_dir" ;;
+        pam)     authd_build_pam     "$build_dir" ;;
+        nss)     authd_build_nss ;;
+        brokers) authd_build_brokers "$build_dir" "$@" ;;
+        all)
+            authd_build_authd "$build_dir" "$restart_services"
+            authd_build_authctl "$build_dir"
+            authd_build_pam "$build_dir"
+            authd_build_nss
+            ;;
+        *) echo "Usage: workshop run -- build [authd|authctl|pam|nss|brokers [variant...]|all]" >&2; return 2 ;;
+    esac
+}
+
+authd_build_component_main() {
+    local component="${1:-all}"
+    shift
+
+    authd_prepare_build_environment
+    AUTHD_BUILD_COMPONENT_TMPDIR="$(mktemp -d)"
+    trap authd_cleanup_build_dir EXIT
+
+    authd_build_component "$component" "$AUTHD_BUILD_COMPONENT_TMPDIR" yes "$@"
+    echo "Rebuilt: ${component}${*:+ (${*})}"
+}
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    authd_build_component_main "$@"
+fi
