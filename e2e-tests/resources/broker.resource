@@ -212,12 +212,17 @@ Block Network Access To Identity Provider
 
 
 # Uses sed to change the broker configuration.
-# It should match both commented and uncommented lines.
-# The full command looks like:
-#     sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${BROKER_CFG}
+# Accepts one or more key=value pairs as named arguments and applies all of
+# them before restarting the broker snap once. For example:
+#     Change Broker Configuration    entra_password=true    device_auth=false
+# Each key should match both commented and uncommented lines in the config file.
+# Fails if a key is not found in the config file.
 Change Broker Configuration
-    [Arguments]    ${config_key}    ${config_value}
-    SSH.Execute    sudo sed -i 's|^#*${config_key} =.*|${config_key} = ${config_value}|g' ${BROKER_CFG}
+    [Arguments]    &{config}
+    FOR    ${key}    ${value}    IN    &{config}
+        SSH.Execute    sudo sed -i 's|^#*${key} =.*|${key} = ${value}|g' ${BROKER_CFG}
+        SSH.Execute    grep -q '^${key} = ' ${BROKER_CFG}
+    END
     SSH.Execute    sudo snap restart ${BROKER_SNAP_NAME}
 
 
@@ -347,6 +352,22 @@ Log In With Remote User Through GDM: Local Password
     Wait Until Desktop Ready
 
 
+Log In With Remote User Through GDM: Entra Password
+    [Arguments]    ${username}
+    Start Log In With Remote User Through GDM: QR Code    ${username}
+    Select Broker Through GDM
+    # With device_auth disabled there is only one mode; the PAM module auto-selects
+    # it and goes directly to the Entra ID password prompt.
+    Match Text    Enter your Entra ID password    120
+    Hid.Type String    %{E2E_PASSWORD}
+    Hid.Keys Combo    Return
+    Match Text    Enter your MFA code    120
+    ${totp_code} =    TOTP.Generate Totp Code
+    Hid.Type String    ${totp_code}
+    Hid.Keys Combo    Return
+    Wait Until Desktop Ready
+
+
 Check User Information
     [Arguments]    ${username}
     ${output} =    SSH.Execute    getent passwd ${username}
@@ -404,7 +425,7 @@ Enable Device Registration
     [Documentation]    Turns on automatic device registration in the broker config.
     ...               The 'register_device' key lives in the '[msentraid]' section and is
     ...               only meaningful for the msentraid broker.
-    Change Broker Configuration    register_device    true
+    Change Broker Configuration    register_device=true
 
 
 Check That Device Was Registered

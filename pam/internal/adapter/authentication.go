@@ -240,6 +240,8 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 			// If the session is for authentication, we allow the user to set the same password again, to avoid
 			// that the user is forced to change their password if e.g. device authentication is forced when
 			// the refresh token is expired.
+			// TODO: This will not select the correct secret in case the last authentication step uses a secret
+			// which is not the local password (e.g. OTP).
 			oldPassword = m.currentSecret
 		}
 
@@ -361,7 +363,35 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 
 		switch msg.access {
 		case auth.Granted:
-			return m, sendEvent(PamSuccess{BrokerID: m.currentBrokerID, msg: authMsg})
+			var secret string
+			// TODO: This will not select the correct secret in case the last authentication step uses a secret
+			// which is not the local password (e.g. OTP).
+			if msg.secret != nil {
+				secret = *msg.secret
+			} else if m.currentSecret != "" {
+				secret = m.currentSecret
+			} else {
+				log.Warningf(context.Background(), "authentication granted, but no secret is available, cannot set PAM_AUTHTOK")
+			}
+
+			// During a password change the user authenticates with their old local
+			// password before setting the new one, so the previous step's secret is
+			// the old password. Pass it along as PAM_OLDAUTHTOK so pam_gnome_keyring
+			// can re-key the existing keyring instead of leaving it locked under the
+			// old password. We only do this when the old and new secrets differ and
+			// the new one came from this step (msg.secret), to avoid setting a
+			// spurious PAM_OLDAUTHTOK during plain authentication.
+			var oldSecret string
+			if m.mode == authd.SessionMode_CHANGE_PASSWORD && msg.secret != nil &&
+				m.currentSecret != "" && m.currentSecret != secret {
+				oldSecret = m.currentSecret
+			}
+			return m, sendEvent(PamSuccess{
+				BrokerID:   m.currentBrokerID,
+				AuthTok:    secret,
+				OldAuthTok: oldSecret,
+				msg:        authMsg,
+			})
 
 		case auth.Retry:
 			m.errorMsg = authMsg

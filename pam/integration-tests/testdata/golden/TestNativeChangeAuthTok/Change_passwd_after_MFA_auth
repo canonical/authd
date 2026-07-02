@@ -60,6 +60,8 @@ Enter your new password:
 >
 Confirm Password:
 >
+  PAM_AUTHTOK: "authd2404"
+  PAM_OLDAUTHTOK: "goodpass"
 PAM ChangeAuthTok()
   User: "user-mfa-integration-native-passwd-testnativechangeauthtok@example.com"
   Result: success

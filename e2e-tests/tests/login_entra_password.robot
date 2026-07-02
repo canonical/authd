@@ -20,9 +20,10 @@ Test Setup
     # new password+MFA mode is offered, avoiding a provider-selection menu.
     # entra_password requires register_device=true (or a client_secret) to fetch
     # groups from Microsoft Graph on first login.
-    Change Broker Configuration    register_device    true
-    Change Broker Configuration    entra_password    true
-    Change Broker Configuration    device_auth    false
+    Change Broker Configuration
+    ...    register_device=true
+    ...    entra_password=true
+    ...    device_auth=false
 
 
 *** Variables ***

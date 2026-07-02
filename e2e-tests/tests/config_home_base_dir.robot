@@ -19,7 +19,7 @@ Test login keeps existing home directory after changing home base dir
     [Documentation]    Verify that a first login uses the configured home_base_dir and that changing the value later does not move an existing user home directory.
 
     SSH.Execute    sudo mkdir -p ${first_home_base_dir} ${second_home_base_dir}
-    Change Broker Configuration    home_base_dir    ${first_home_base_dir}
+    Change Broker Configuration    home_base_dir=${first_home_base_dir}
 
     # Log in with local user.
     Log In
@@ -36,7 +36,7 @@ Test login keeps existing home directory after changing home base dir
     Close Focused Window
 
     # Change the config after the user already exists.
-    Change Broker Configuration    home_base_dir    ${second_home_base_dir}
+    Change Broker Configuration    home_base_dir=${second_home_base_dir}
 
     # Second login should still use the original home directory from the database.
     Open Terminal

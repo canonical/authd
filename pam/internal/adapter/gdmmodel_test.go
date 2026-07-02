@@ -48,7 +48,7 @@ func TestGdmModel(t *testing.T) {
 	// However we do return a PAM error in such case because that's what we're
 	// going to return to the PAM stack in case authentication process has not
 	// been completed fully.
-	gdmTestEarlyStopExitStatus := errNoExitStatus
+	gdmTestEarlyStopReturnValue := pamNoReturnValue
 
 	gdmTestIgnoreStage := proto.Stage(-1)
 
@@ -101,7 +101,7 @@ func TestGdmModel(t *testing.T) {
 		convError        map[string]error
 		timeout          time.Duration
 
-		wantExitStatus     PamReturnStatus
+		wantPAMReturnValue PamReturnValue
 		wantGdmRequests    []gdm.RequestType
 		wantGdmEvents      []gdm.EventType
 		wantGdmAuthRes     []*authd.IAResponse
@@ -129,7 +129,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_startAuthentication,
 				gdm.EventType_authEvent,
 			},
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"Broker_selection_stage_caused_by_PAM_user_selection": {
 			pamUser: "pam-preset-user",
@@ -148,8 +148,8 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_startAuthentication,
 				gdm.EventType_authEvent,
 			},
-			wantStage:      proto.Stage_brokerSelection,
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantStage:          proto.Stage_brokerSelection,
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"Broker_selection_stage_caused_by_client_side_user_selection": {
 			gdmEvents: []*gdm.EventData{
@@ -171,8 +171,8 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_startAuthentication,
 				gdm.EventType_authEvent,
 			},
-			wantStage:      proto.Stage_brokerSelection,
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantStage:          proto.Stage_brokerSelection,
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"Challenge_stage_caused_by_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -199,8 +199,8 @@ func TestGdmModel(t *testing.T) {
 			wantNoGdmEvents: []gdm.EventType{
 				gdm.EventType_authEvent,
 			},
-			wantStage:      proto.Stage_challenge,
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantStage:          proto.Stage_challenge,
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"Challenge_stage_caused_by_client_side_broker_and_authMode_selection": {
 			gdmEvents: []*gdm.EventData{
@@ -235,8 +235,8 @@ func TestGdmModel(t *testing.T) {
 			wantNoGdmEvents: []gdm.EventType{
 				gdm.EventType_authEvent,
 			},
-			wantStage:      proto.Stage_challenge,
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantStage:          proto.Stage_challenge,
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"Authenticated_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -269,9 +269,9 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_startAuthentication,
 				gdm.EventType_authEvent,
 			},
-			wantGdmAuthRes: []*authd.IAResponse{{Access: auth.Granted}},
-			wantStage:      proto.Stage_challenge,
-			wantExitStatus: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantGdmAuthRes:     []*authd.IAResponse{{Access: auth.Granted}},
+			wantStage:          proto.Stage_challenge,
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id, AuthTok: "gdm-good-password"},
 		},
 		"Authenticated_with_preset_PAM_user_using_legacy_challenge_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -304,9 +304,9 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_startAuthentication,
 				gdm.EventType_authEvent,
 			},
-			wantGdmAuthRes: []*authd.IAResponse{{Access: auth.Granted}},
-			wantStage:      proto.Stage_challenge,
-			wantExitStatus: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantGdmAuthRes:     []*authd.IAResponse{{Access: auth.Granted}},
+			wantStage:          proto.Stage_challenge,
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id, AuthTok: "gdm-good-password"},
 		},
 		"Authenticated_with_preset_PAM_user_updated_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -360,9 +360,9 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_startAuthentication,
 				gdm.EventType_authEvent,
 			},
-			wantGdmAuthRes: []*authd.IAResponse{{Access: auth.Granted}},
-			wantStage:      proto.Stage_challenge,
-			wantExitStatus: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantGdmAuthRes:     []*authd.IAResponse{{Access: auth.Granted}},
+			wantStage:          proto.Stage_challenge,
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id, AuthTok: "gdm-good-password"},
 		},
 		"Authenticated_with_message_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(multiBrokerClientOptions),
@@ -404,8 +404,9 @@ func TestGdmModel(t *testing.T) {
 				Access: auth.Granted,
 				Msg:    "Hi GDM, it's a pleasure to get you in!",
 			}},
-			wantExitStatus: PamSuccess{
+			wantPAMReturnValue: PamSuccess{
 				BrokerID: firstBrokerInfo.Id,
+				AuthTok:  "gdm-good-password",
 				msg:      "Hi GDM, it's a pleasure to get you in!",
 			},
 		},
@@ -494,8 +495,9 @@ func TestGdmModel(t *testing.T) {
 			wantGdmAuthRes: []*authd.IAResponse{{
 				Access: auth.Granted,
 			}},
-			wantExitStatus: PamSuccess{
+			wantPAMReturnValue: PamSuccess{
 				BrokerID: firstBrokerInfo.Id,
+				AuthTok:  "gdm-good-password",
 			},
 		},
 		"New_password_changed_with_message_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
@@ -539,8 +541,9 @@ func TestGdmModel(t *testing.T) {
 				Access: auth.Granted,
 				Msg:    "Hi GDM, it's a pleasure to change your password!",
 			}},
-			wantExitStatus: PamSuccess{
+			wantPAMReturnValue: PamSuccess{
 				BrokerID: firstBrokerInfo.Id,
+				AuthTok:  "gdm-good-password",
 				msg:      "Hi GDM, it's a pleasure to change your password!",
 			},
 		},
@@ -605,8 +608,9 @@ func TestGdmModel(t *testing.T) {
 					Msg:    "Hi GDM, it's a pleasure to change your password!",
 				},
 			},
-			wantExitStatus: PamSuccess{
+			wantPAMReturnValue: PamSuccess{
 				BrokerID: firstBrokerInfo.Id,
+				AuthTok:  "gdm-good-password",
 				msg:      "Hi GDM, it's a pleasure to change your password!",
 			},
 		},
@@ -716,7 +720,7 @@ func TestGdmModel(t *testing.T) {
 					Msg:    "The password is the same as the old one",
 				},
 			},
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"Authentication_is_ignored_if_not_requested_by_model_first": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -743,8 +747,8 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_startAuthentication,
 				gdm.EventType_authEvent,
 			},
-			wantStage:      proto.Stage_userSelection,
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantStage:          proto.Stage_userSelection,
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"Cancelled_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(multiBrokerClientOptions),
@@ -775,9 +779,9 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_startAuthentication,
 				gdm.EventType_authEvent,
 			},
-			wantStage:      proto.Stage_challenge,
-			wantGdmAuthRes: []*authd.IAResponse{{Access: auth.Cancelled}},
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantStage:          proto.Stage_challenge,
+			wantGdmAuthRes:     []*authd.IAResponse{{Access: auth.Cancelled}},
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"Explicitly_cancelled_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(multiBrokerClientOptions),
@@ -807,8 +811,8 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_uiLayoutReceived,
 				gdm.EventType_startAuthentication,
 			},
-			wantStage:      proto.Stage_challenge,
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantStage:          proto.Stage_challenge,
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"Explicitly_cancelled_for_a_waiting_auth_mode_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(multiBrokerClientOptions),
@@ -847,9 +851,9 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_startAuthentication,
 				gdm.EventType_authEvent,
 			},
-			wantGdmAuthRes: []*authd.IAResponse{{Access: auth.Cancelled}},
-			wantStage:      proto.Stage_challenge,
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantGdmAuthRes:     []*authd.IAResponse{{Access: auth.Cancelled}},
+			wantStage:          proto.Stage_challenge,
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"Implicitly_cancelled_for_a_waiting_auth_mode_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(multiBrokerClientOptions),
@@ -892,9 +896,9 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_startAuthentication,
 				gdm.EventType_authEvent,
 			},
-			wantGdmAuthRes: []*authd.IAResponse{{Access: auth.Cancelled}},
-			wantStage:      proto.Stage_brokerSelection,
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantGdmAuthRes:     []*authd.IAResponse{{Access: auth.Cancelled}},
+			wantStage:          proto.Stage_brokerSelection,
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"Authenticated_with_preset_PAM_user_and_server_side_broker_and_authMode_selection_and_after_various_retries": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -948,8 +952,8 @@ func TestGdmModel(t *testing.T) {
 				{Access: auth.Retry},
 				{Access: auth.Granted},
 			},
-			wantStage:      proto.Stage_challenge,
-			wantExitStatus: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantStage:          proto.Stage_challenge,
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id, AuthTok: "gdm-good-password"},
 		},
 		"Authenticated_after_client_side_user_and_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(multiBrokerClientOptions),
@@ -988,9 +992,9 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_startAuthentication,
 				gdm.EventType_authEvent,
 			},
-			wantStage:      proto.Stage_challenge,
-			wantGdmAuthRes: []*authd.IAResponse{{Access: auth.Granted}},
-			wantExitStatus: PamSuccess{BrokerID: secondBrokerInfo.Id},
+			wantStage:          proto.Stage_challenge,
+			wantGdmAuthRes:     []*authd.IAResponse{{Access: auth.Granted}},
+			wantPAMReturnValue: PamSuccess{BrokerID: secondBrokerInfo.Id, AuthTok: "gdm-good-password"},
 		},
 		"Authenticated_after_client_side_user_and_broker_and_authMode_selection_and_after_various_retries": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -1052,8 +1056,8 @@ func TestGdmModel(t *testing.T) {
 				{Access: auth.Retry},
 				{Access: auth.Granted},
 			},
-			wantStage:      proto.Stage_challenge,
-			wantExitStatus: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantStage:          proto.Stage_challenge,
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id, AuthTok: "gdm-good-password"},
 		},
 		"Cancelled_auth_after_client_side_user_and_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -1095,9 +1099,9 @@ func TestGdmModel(t *testing.T) {
 			wantMessages: []tea.Msg{
 				startAuthentication{},
 			},
-			wantGdmAuthRes: []*authd.IAResponse{{Access: auth.Cancelled}},
-			wantStage:      proto.Stage_challenge,
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantGdmAuthRes:     []*authd.IAResponse{{Access: auth.Cancelled}},
+			wantStage:          proto.Stage_challenge,
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"AuthMode_selection_stage_from_client_after_server_side_broker_and_auth_mode_selection_if_there_is_only_one_auth_mode": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -1135,8 +1139,8 @@ func TestGdmModel(t *testing.T) {
 			wantNoGdmEvents: []gdm.EventType{
 				gdm.EventType_authEvent,
 			},
-			wantStage:      proto.Stage_authModeSelection,
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantStage:          proto.Stage_authModeSelection,
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"AuthMode_selection_stage_from_client_after_server_side_broker_and_auth_mode_selection_with_multiple_auth_modes": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -1175,8 +1179,8 @@ func TestGdmModel(t *testing.T) {
 			wantNoGdmEvents: []gdm.EventType{
 				gdm.EventType_authEvent,
 			},
-			wantStage:      proto.Stage_authModeSelection,
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantStage:          proto.Stage_authModeSelection,
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"AuthMode_selection_stage_from_client_after_client_side_broker_and_auth_mode_selection_if_there_is_only_one_auth_mode": {
 			gdmEvents: []*gdm.EventData{
@@ -1221,8 +1225,8 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_startAuthentication,
 				gdm.EventType_authEvent,
 			},
-			wantStage:      proto.Stage_authModeSelection,
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantStage:          proto.Stage_authModeSelection,
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"Authenticated_after_auth_selection_stage_from_client_after_client_side_broker_and_auth_mode_selection_if_there_is_only_one_auth_mode": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -1288,7 +1292,7 @@ func TestGdmModel(t *testing.T) {
 			wantGdmAuthRes: []*authd.IAResponse{
 				{Access: auth.Granted},
 			},
-			wantExitStatus: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id, AuthTok: "gdm-good-password"},
 		},
 		"Authenticated_after_auth_selection_stage_from_client_after_client_side_broker_and_auth_mode_selection_with_multiple_auth_modes": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -1355,7 +1359,7 @@ func TestGdmModel(t *testing.T) {
 			wantGdmAuthRes: []*authd.IAResponse{
 				{Access: auth.Granted},
 			},
-			wantExitStatus: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id, AuthTok: "1234"},
 		},
 		"Authenticated_with_qrcode_after_auth_selection_stage_from_client_after_client_side_broker_and_auth_mode_selection": {
 			supportedLayouts: []*authd.UILayout{
@@ -1426,7 +1430,7 @@ func TestGdmModel(t *testing.T) {
 			wantGdmAuthRes: []*authd.IAResponse{
 				{Access: auth.Granted},
 			},
-			wantExitStatus: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id},
 		},
 		"Authenticated_with_qrcode_regenerated_after_auth_selection_stage_from_client_after_client_side_broker_and_auth_mode_selection": {
 			timeout: 30 * time.Second,
@@ -1513,7 +1517,7 @@ func TestGdmModel(t *testing.T) {
 				{Access: auth.Cancelled},
 				{Access: auth.Granted},
 			},
-			wantExitStatus: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id},
 		},
 		"Authenticated_with_qrcode_regenerated_after_wait_started_at_auth_selection_stage_from_client_after_client_side_broker_and_auth_mode_selection": {
 			supportedLayouts: []*authd.UILayout{
@@ -1602,7 +1606,7 @@ func TestGdmModel(t *testing.T) {
 				{Access: auth.Cancelled},
 				{Access: auth.Granted},
 			},
-			wantExitStatus: PamSuccess{BrokerID: firstBrokerInfo.Id},
+			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id},
 		},
 		"Broker_selection_stage_from_client_after_client_side_broker_and_auth_mode_selection_if_there_is_only_one_auth_mode": {
 			gdmEvents: []*gdm.EventData{
@@ -1655,8 +1659,8 @@ func TestGdmModel(t *testing.T) {
 			wantNoGdmEvents: []gdm.EventType{
 				gdm.EventType_authEvent,
 			},
-			wantStage:      proto.Stage_brokerSelection,
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantStage:          proto.Stage_brokerSelection,
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"User_selection_stage_from_client_after_client_side_broker_and_auth_mode_selection_if_there_is_only_one_auth_mode": {
 			gdmEvents: []*gdm.EventData{
@@ -1718,8 +1722,8 @@ func TestGdmModel(t *testing.T) {
 			wantNoGdmEvents: []gdm.EventType{
 				gdm.EventType_authEvent,
 			},
-			wantStage:      proto.Stage_userSelection,
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			wantStage:          proto.Stage_userSelection,
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 
 		// Error cases
@@ -1733,7 +1737,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_brokersReceived,
 				gdm.EventType_userSelected,
 			},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrCredUnavail,
 				msg:    "UI does not support any layouts",
 			},
@@ -1749,15 +1753,15 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_brokersReceived,
 				gdm.EventType_userSelected,
 			},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrAuthinfoUnavail,
 				msg:    "could not get current available brokers: brokers loading failed",
 			},
 			wantNoBrokers: true,
 		},
 		"Error_on_forced_quit": {
-			messages:       []tea.Msg{tea.Quit()},
-			wantExitStatus: gdmTestEarlyStopExitStatus,
+			messages:           []tea.Msg{tea.Quit()},
+			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 			wantNoGdmEvents: []gdm.EventType{
 				gdm.EventType_userSelected,
 			},
@@ -1777,7 +1781,7 @@ func TestGdmModel(t *testing.T) {
 			wantNoGdmEvents: []gdm.EventType{
 				gdm.EventType_userSelected,
 			},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    "Sending GDM poll failed: Conversation error: poll response data member 0 invalid: missing event data",
 			},
@@ -1793,7 +1797,7 @@ func TestGdmModel(t *testing.T) {
 			wantNoGdmEvents: []gdm.EventType{
 				gdm.EventType_userSelected,
 			},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    "Sending GDM poll failed: Conversation error: poll response data member 0 invalid: missing event type",
 			},
@@ -1809,7 +1813,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_brokersReceived,
 				gdm.EventType_userSelected,
 			},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrAuthinfoUnavail,
 				msg:    "No brokers available",
 			},
@@ -1828,7 +1832,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_userSelected,
 				gdm.EventType_brokersReceived,
 			},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    "error during broker selection",
 			},
@@ -1849,7 +1853,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_brokersReceived,
 				gdm.EventType_brokerSelected,
 			},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    "no session ID returned by broker",
 			},
@@ -1869,7 +1873,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_brokersReceived,
 				gdm.EventType_brokerSelected,
 			},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    "no encryption key returned by broker",
 			},
@@ -1891,7 +1895,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_userSelected,
 				gdm.EventType_brokersReceived,
 			},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    "encryption key sent by broker is not a valid base64 encoded string: illegal base64 data at input byte 2",
 			},
@@ -1914,7 +1918,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_userSelected,
 				gdm.EventType_brokersReceived,
 			},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    gdmTestIgnoredMessage,
 			},
@@ -1945,7 +1949,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_brokerSelected,
 			},
 			wantStage: gdmTestIgnoreStage,
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    "invalid empty UI Layout information from broker",
 			},
@@ -1976,7 +1980,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_brokerSelected,
 			},
 			wantStage: gdmTestIgnoreStage,
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrCredUnavail,
 				msg:    "no supported authentication mode available for this provider",
 			},
@@ -2006,7 +2010,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_brokersReceived,
 			},
 			wantStage: gdmTestIgnoreStage,
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    "can't select authentication mode: error selecting auth mode",
 			},
@@ -2043,7 +2047,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_uiLayoutReceived,
 			},
 			wantStage: gdmTestIgnoreStage,
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    `Sending GDM event failed: Conversation error: unknown layout type: "invalid layout"`,
 			},
@@ -2080,7 +2084,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_uiLayoutReceived,
 			},
 			wantStage: proto.Stage_challenge,
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    "some authentication error",
 			},
@@ -2115,7 +2119,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_uiLayoutReceived,
 			},
 			wantStage: gdmTestIgnoreStage,
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    "invalid json data from provider: invalid character 'i' looking for beginning of value",
 			},
@@ -2163,7 +2167,7 @@ func TestGdmModel(t *testing.T) {
 				Access: auth.Denied,
 				Msg:    "you're not allowed!",
 			}},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrAuth,
 				msg:    "you're not allowed!",
 			},
@@ -2207,7 +2211,7 @@ func TestGdmModel(t *testing.T) {
 			},
 			wantStage:      gdmTestIgnoreStage,
 			wantGdmAuthRes: []*authd.IAResponse{{Access: auth.Denied}},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrAuth,
 				msg:    "Access denied",
 			},
@@ -2260,7 +2264,7 @@ func TestGdmModel(t *testing.T) {
 				{Access: auth.Retry},
 				{Access: auth.Denied},
 			},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrAuth,
 				msg:    "Access denied",
 			},
@@ -2302,7 +2306,7 @@ func TestGdmModel(t *testing.T) {
 				Access: auth.Denied,
 				Msg:    `Access "" is not valid`,
 			}},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    `Unknown authentication access: ""`,
 			},
@@ -2347,7 +2351,7 @@ func TestGdmModel(t *testing.T) {
 				Access: auth.Denied,
 				Msg:    `Access "no way you get here!" is not valid`,
 			}},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    `Unknown authentication access: "no way you get here!"`,
 			},
@@ -2374,7 +2378,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_authEvent,
 			},
 			wantStage: gdmTestIgnoreStage,
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    `unknown PAM stage: "-1"`,
 			},
@@ -2385,14 +2389,14 @@ func TestGdmModel(t *testing.T) {
 					Type: gdm.DataType_hello,
 				}): errors.New("this is an hello error"),
 			},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrCredUnavail,
 				msg:    "GDM initialization failed: Conversation error: this is an hello error",
 			},
 		},
 		"Error_during_hello_on_protocol_mismatch": {
 			protoVersion: 99999999,
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrCredUnavail,
 				msg:    "GDM protocol initialization failed, type hello, version 99999999",
 			},
@@ -2401,7 +2405,7 @@ func TestGdmModel(t *testing.T) {
 			convError: map[string]error{
 				gdm_test.DataToJSON(t, &gdm.Data{Type: gdm.DataType_poll}): errors.New("this is a poll error"),
 			},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    "Sending GDM poll failed: Conversation error: this is a poll error",
 			},
@@ -2423,7 +2427,7 @@ func TestGdmModel(t *testing.T) {
 			gdmEvents: []*gdm.EventData{
 				gdm_test.ChangeStageEvent(proto.Stage_brokerSelection),
 			},
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    "Changing GDM stage failed: Conversation error: this is a stage change error",
 			},
@@ -2439,7 +2443,7 @@ func TestGdmModel(t *testing.T) {
 				}): errors.New("this is an UI capabilities request error"),
 			},
 			wantNoBrokers: true,
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    "Sending GDM UI capabilities Request failed: Conversation error: this is an UI capabilities request error",
 			},
@@ -2483,7 +2487,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_authEvent,
 			},
 			wantStage: proto.Stage_userSelection,
-			wantExitStatus: pamError{
+			wantPAMReturnValue: pamError{
 				status: pam.ErrPermDenied,
 				msg:    `Changing username "gdm-pam-preset-user" to "another-selected-user" is not allowed`,
 			},
@@ -2506,8 +2510,8 @@ func TestGdmModel(t *testing.T) {
 			messagesToSend := tc.messages
 			messagesToWait := append(tc.messages, tc.wantMessages...)
 
-			if tc.wantExitStatus != gdmTestEarlyStopExitStatus {
-				messagesToWait = append(messagesToWait, tc.wantExitStatus)
+			if tc.wantPAMReturnValue != gdmTestEarlyStopReturnValue {
+				messagesToWait = append(messagesToWait, tc.wantPAMReturnValue)
 			}
 
 			gdmMutex := sync.Mutex{}
@@ -2527,9 +2531,9 @@ func TestGdmModel(t *testing.T) {
 				wantRequests:         tc.wantGdmRequests,
 			}
 
-			var exitStatus PamReturnStatus
+			var pamReturnValue PamReturnValue
 			uiModel := newUIModelForClients(pam_test.NewModuleTransactionDummy(gdmHandler),
-				Gdm, tc.sessionMode, tc.client, nil, &exitStatus)
+				Gdm, tc.sessionMode, tc.client, nil, &pamReturnValue)
 
 			appState := gdmTestUIModel{
 				uiModel:             uiModel,
@@ -2673,20 +2677,20 @@ func TestGdmModel(t *testing.T) {
 			appState.mu.Lock()
 			defer appState.mu.Unlock()
 
-			if tc.wantExitStatus.Message() == gdmTestIgnoredMessage {
-				switch wantRet := tc.wantExitStatus.(type) {
+			if tc.wantPAMReturnValue.Message() == gdmTestIgnoredMessage {
+				switch wantRet := tc.wantPAMReturnValue.(type) {
 				case PamReturnError:
-					exitErr, ok := exitStatus.(PamReturnError)
-					require.True(t, ok, "exit status should be an error")
-					require.Equal(t, wantRet.Status(), exitErr.Status())
+					pamErr, ok := pamReturnValue.(PamReturnError)
+					require.True(t, ok, "Expected PAM return value to be an error")
+					require.Equal(t, wantRet.Status(), pamErr.Status())
 				case PamSuccess:
-					_, ok := exitStatus.(PamSuccess)
-					require.True(t, ok, "exit status should be a success")
+					_, ok := pamReturnValue.(PamSuccess)
+					require.True(t, ok, "Expected PAM return value to be a success")
 				default:
-					t.Fatalf("Unexpected exit status: %v", wantRet)
+					t.Fatalf("Unexpected type for wantPAMReturnValue: %T", tc.wantPAMReturnValue)
 				}
 			} else {
-				require.Equal(t, tc.wantExitStatus, exitStatus)
+				require.Equal(t, tc.wantPAMReturnValue, pamReturnValue)
 			}
 
 			require.True(t, appState.gdmModel.conversationsStopped,
@@ -2728,14 +2732,14 @@ func TestGdmModel(t *testing.T) {
 
 			gdm_test.RequireEqualData(t, tc.wantGdmAuthRes, gdmHandler.authEvents)
 
-			if r, ok := tc.wantExitStatus.(PamReturnError); ok {
-				// If the model exited with error and that matches, we don't
-				// care much comparing all the expectations, since the final exit status
+			if r, ok := tc.wantPAMReturnValue.(PamReturnError); ok {
+				// If the model returned an error and that matches, we don't
+				// care much comparing all the expectations, since the final return value
 				// is matching what we expect.
 				switch r.Status() {
 				case pam.ErrIgnore, pam.ErrAuth:
 				default:
-					if r != gdmTestEarlyStopExitStatus {
+					if r != gdmTestEarlyStopReturnValue {
 						return
 					}
 					if slices.Contains(tc.messages, tea.Quit()) {

@@ -23,10 +23,11 @@ Test Setup
     # by falling back to the app-only Graph token (client credentials).
     ${secret}=    Get Environment Variable    AUTHD_MSENTRAID_CLIENT_SECRET
     Should Not Be Empty    ${secret}    AUTHD_MSENTRAID_CLIENT_SECRET must be set to run this test
-    Change Broker Configuration    client_secret    ${secret}
-    Change Broker Configuration    register_device    false
-    Change Broker Configuration    entra_password    true
-    Change Broker Configuration    device_auth    false
+    Change Broker Configuration
+    ...    client_secret=${secret}
+    ...    register_device=false
+    ...    entra_password=true
+    ...    device_auth=false
 
 
 *** Variables ***

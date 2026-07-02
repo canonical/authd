@@ -53,7 +53,8 @@ class SSH:
         command = (f"sudo -u {user} "
                    f"XDG_RUNTIME_DIR=/run/user/$(id -u {user}) "
                    f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u {user})/bus "
-                   f"{command}")
+                   "-- "
+                   f"sh -c \"{command}\"")
         return await self.execute(command, timeout)
 
     @keyword
