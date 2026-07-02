@@ -317,7 +317,7 @@ func (m nativeModel) Update(msg tea.Msg) (nativeModel, tea.Cmd) {
 
 	case isAuthenticatedResultReceived:
 		access := msg.access
-		authMsg, err := dataToMsg(msg.msg)
+		authMsg, err := grantedTolerantMsg(access, msg.msg)
 		if cmd := maybeSendPamError(err); cmd != nil {
 			return m, cmd
 		}

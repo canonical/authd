@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 )
@@ -18,7 +19,11 @@ type Provider interface {
 	GetUserInfo(claimer info.Claimer, isRefresh bool) (info.User, error)
 	IsTokenExpiredError(err *oauth2.RetrieveError) bool
 	NormalizeUsername(username string) string
-	SupportedOIDCAuthModes() []string
+	// SupportedOnlineAuthModes returns the authentication modes that require a
+	// working connection to the identity provider (in contrast to the local
+	// password mode, which the broker prepends). These are not necessarily OIDC
+	// flows: entra_password issues OAuth 2.0 tokens without an OIDC id_token.
+	SupportedOnlineAuthModes() []string
 	VerifyUsername(requestedUsername, authenticatedUsername string) error
 }
 
@@ -31,6 +36,7 @@ type GroupFetcher interface {
 		token *oauth2.Token,
 		providerMetadata map[string]interface{},
 		deviceRegistrationData []byte,
+		needsAccessTokenForGraphAPI bool,
 	) ([]info.Group, error)
 }
 
@@ -42,7 +48,12 @@ type MetadataProvider interface {
 
 // DeviceRegisterer is implemented by providers that support device registration.
 type DeviceRegisterer interface {
-	IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error)
+	// IsTokenForDeviceRegistration reports whether the cached token carries
+	// device-registration data (i.e. the device was registered). This is the
+	// authoritative signal: tokens issued by the Microsoft Broker App (e.g. the
+	// entra_password MFA flow) are not device-registration tokens unless a device
+	// was actually registered.
+	IsTokenForDeviceRegistration(authInfo *token.AuthCachedInfo) bool
 	MaybeRegisterDevice(
 		ctx context.Context,
 		token *oauth2.Token,
@@ -56,6 +67,13 @@ type DeviceRegisterer interface {
 // from token refresh errors.
 type UserDisabledChecker interface {
 	IsUserDisabledError(err *oauth2.RetrieveError) bool
+}
+
+// GraphClientSecretSetter is implemented by providers that can use the OIDC
+// app's client secret for app-only (client credentials) group lookup as a
+// fallback when the delegated token cannot be used against the Graph API.
+type GraphClientSecretSetter interface {
+	SetGraphClientSecret(secret string)
 }
 
 // Capability is an optional interface that allows a Provider to expose optional

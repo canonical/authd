@@ -97,8 +97,9 @@ func (p GenericProvider) VerifyUsername(requestedUsername, username string) erro
 	return nil
 }
 
-// SupportedOIDCAuthModes returns the OIDC authentication modes supported by the provider.
-func (p GenericProvider) SupportedOIDCAuthModes() []string {
+// SupportedOnlineAuthModes returns the authentication modes supported by the
+// provider that require a connection to the identity provider.
+func (p GenericProvider) SupportedOnlineAuthModes() []string {
 	return []string{authmodes.Device, authmodes.DeviceQr}
 }
 

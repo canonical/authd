@@ -24,6 +24,7 @@ import (
 	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/genericprovider"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/canonical/authd/log"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/go-jose/go-jose/v4"
@@ -38,8 +39,6 @@ const (
 	InactiveExpiredRefreshToken = "inactive-expired-refresh-token"
 	// StaleRefreshToken is used to test the expired refresh token due to a not-before policy (simulates Keycloak "Stale token").
 	StaleRefreshToken = "stale-refresh-token"
-	// IsForDeviceRegistrationClaim is the claim used to indicate to the mock provider if the token is for device registration.
-	IsForDeviceRegistrationClaim = "is_for_device_registration"
 )
 
 // MockKey is the RSA key used to sign the JWTs for the mock provider.
@@ -466,7 +465,7 @@ func (p *MockProvider) GetUserInfo(idToken info.Claimer, isRefresh bool) (info.U
 }
 
 // GetGroups returns the groups the user is a member of.
-func (p *MockProvider) GetGroups(ctx context.Context, clientID string, issuerURL string, token *oauth2.Token, providerMetadata map[string]interface{}, deviceRegistrationData []byte) ([]info.Group, error) {
+func (p *MockProvider) GetGroups(ctx context.Context, clientID string, issuerURL string, token *oauth2.Token, providerMetadata map[string]interface{}, deviceRegistrationData []byte, needsAccessTokenForGraphAPI bool) ([]info.Group, error) {
 	if p.GetGroupsFails {
 		return nil, errors.New("error requested in the mock")
 	}
@@ -487,42 +486,16 @@ func (p *MockProvider) GetGroups(ctx context.Context, clientID string, issuerURL
 	return userGroups, nil
 }
 
-type claims struct {
-	Email    string `json:"email"`
-	Sub      string `json:"sub"`
-	Home     string `json:"home"`
-	Shell    string `json:"shell"`
-	Gecos    string `json:"name"`
-	MustHave string `json:"must-have-claim"`
-}
-
-// userClaims returns the user claims parsed from the ID token.
-func (p *MockProvider) userClaims(idToken info.Claimer) (claims, error) {
-	var userClaims claims
-	if err := idToken.Claims(&userClaims); err != nil {
-		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
-	}
-	return userClaims, nil
-}
-
 // MockDeviceRegistererProvider wraps MockProvider and adds DeviceRegisterer support.
 // Use this when tests need the provider to implement the DeviceRegisterer interface.
 type MockDeviceRegistererProvider struct {
 	*MockProvider
 }
 
-// IsTokenForDeviceRegistration checks if the token is for device registration.
-func (p *MockDeviceRegistererProvider) IsTokenForDeviceRegistration(token *oauth2.Token) (bool, error) {
-	if token == nil {
-		return false, errors.New("token is nil")
-	}
-
-	isForDeviceRegistration, ok := token.Extra(IsForDeviceRegistrationClaim).(bool)
-	if !ok {
-		return false, fmt.Errorf("token does not contain %q claim", IsForDeviceRegistrationClaim)
-	}
-
-	return isForDeviceRegistration, nil
+// IsTokenForDeviceRegistration reports whether the cached token carries
+// device-registration data.
+func (p *MockDeviceRegistererProvider) IsTokenForDeviceRegistration(authInfo *token.AuthCachedInfo) bool {
+	return authInfo != nil && len(authInfo.DeviceRegistrationData) > 0
 }
 
 // MaybeRegisterDevice is a no-op for the mock device registrar.
@@ -605,6 +578,24 @@ func (c *composedProvider) ProviderAs(target any) bool {
 		return true
 	}
 	return false
+}
+
+type claims struct {
+	Email    string `json:"email"`
+	Sub      string `json:"sub"`
+	Home     string `json:"home"`
+	Shell    string `json:"shell"`
+	Gecos    string `json:"name"`
+	MustHave string `json:"must-have-claim"`
+}
+
+// userClaims returns the user claims parsed from the ID token.
+func (p *MockProvider) userClaims(idToken info.Claimer) (claims, error) {
+	var userClaims claims
+	if err := idToken.Claims(&userClaims); err != nil {
+		return claims{}, fmt.Errorf("failed to get ID token claims: %v", err)
+	}
+	return userClaims, nil
 }
 
 // ErrorResponseHandler returns a handler that responds with the given HTTP status code and JSON body.

@@ -409,6 +409,52 @@ func TestGdmModel(t *testing.T) {
 				msg:      "Hi GDM, it's a pleasure to get you in!",
 			},
 		},
+		"Authenticated_with_invalid_message_still_succeeds_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
+			clientOptions: append(slices.Clone(multiBrokerClientOptions),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithIsAuthenticatedReturn(&authd.IAResponse{
+					Access: auth.Granted,
+					// A bare (non-JSON) message must never fail an
+					// already-granted authentication: it is dropped, not fatal.
+					Msg: "You're in, but this is not a valid JSON envelope!",
+				}, nil),
+			),
+			pamUser: "pam-preset-user-and-daemon-selected-broker",
+			messages: []tea.Msg{
+				gdmTestWaitForStage{
+					stage: proto.Stage_challenge,
+					commands: []tea.Cmd{
+						sendEvent(gdmTestSendAuthDataWhenReady{&authd.IARequest_AuthenticationData_Secret{
+							Secret: "gdm-good-password",
+						}}),
+					},
+				},
+			},
+			wantSelectedBroker: firstBrokerInfo.Id,
+			wantGdmRequests: []gdm.RequestType{
+				gdm.RequestType_uiLayoutCapabilities,
+				gdm.RequestType_changeStage, // -> broker Selection
+				gdm.RequestType_changeStage, // -> authMode Selection
+				gdm.RequestType_changeStage, // -> password
+			},
+			wantGdmEvents: []gdm.EventType{
+				gdm.EventType_userSelected,
+				gdm.EventType_brokersReceived,
+				gdm.EventType_brokerSelected,
+				gdm.EventType_authModeSelected,
+				gdm.EventType_uiLayoutReceived,
+				gdm.EventType_authEvent,
+				gdm.EventType_startAuthentication,
+			},
+			wantStage: proto.Stage_challenge,
+			wantGdmAuthRes: []*authd.IAResponse{{
+				Access: auth.Granted,
+				Msg:    "",
+			}},
+			wantExitStatus: PamSuccess{
+				BrokerID: firstBrokerInfo.Id,
+			},
+		},
 		"New_password_changed_after_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerNewPasswordClientOptions),
 				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),

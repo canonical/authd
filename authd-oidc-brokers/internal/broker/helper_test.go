@@ -15,6 +15,7 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/sessionmode"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/golang-jwt/jwt/v5"
@@ -25,8 +26,11 @@ import (
 type brokerForTestConfig struct {
 	broker.Config
 	issuerURL                    string
+	clientSecret                 string
 	forceAccessCheckWithProvider bool
 	registerDevice               bool
+	deviceAuthFlowDisabled       bool
+	entraPasswordFlowDisabled    bool
 	allowedUsers                 map[string]struct{}
 	allUsersAllowed              bool
 	ownerAllowed                 bool
@@ -41,11 +45,11 @@ type brokerForTestConfig struct {
 
 	getGroupsFails                bool
 	supportsDeviceRegistration    bool
+	supportsFetchingGroups        bool
 	supportsMetadata              bool
 	metadataGetErr                error
 	supportsUserDisabledCheck     bool
 	userDisabledErrorCode         string
-	supportsFetchingGroups        bool
 	requireNameClaimOnInitialAuth bool
 	firstCallDelay                int
 	secondCallDelay               int
@@ -85,11 +89,17 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	if cfg.issuerURL != "" {
 		cfg.SetIssuerURL(cfg.issuerURL)
 	}
+	if cfg.clientSecret != "" {
+		cfg.SetClientSecret(cfg.clientSecret)
+	}
 	if cfg.forceAccessCheckWithProvider {
 		cfg.SetforceAccessCheckWithProvider(cfg.forceAccessCheckWithProvider)
 	}
 	if cfg.registerDevice {
 		cfg.SetRegisterDevice(cfg.registerDevice)
+	}
+	if cfg.deviceAuthFlowDisabled || cfg.entraPasswordFlowDisabled {
+		cfg.SetFlows(!cfg.deviceAuthFlowDisabled, !cfg.entraPasswordFlowDisabled)
 	}
 	if cfg.homeBaseDir != "" {
 		cfg.SetHomeBaseDir(cfg.homeBaseDir)
@@ -119,24 +129,31 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 		cfg.SetOwnerExtraGroups(cfg.ownerExtraGroups)
 	}
 
-	provider := &testutils.MockProvider{
-		GetGroupsFails:                cfg.getGroupsFails,
-		RequireNameClaimOnInitialAuth: cfg.requireNameClaimOnInitialAuth,
-		FirstCallDelay:                cfg.firstCallDelay,
-		SecondCallDelay:               cfg.secondCallDelay,
-		GetGroupsFunc:                 cfg.getGroupsFunc,
+	provider := cfg.provider
+	if provider == nil {
+		mockProvider := &testutils.MockProvider{
+			GetGroupsFails:                cfg.getGroupsFails,
+			RequireNameClaimOnInitialAuth: cfg.requireNameClaimOnInitialAuth,
+			FirstCallDelay:                cfg.firstCallDelay,
+			SecondCallDelay:               cfg.secondCallDelay,
+			GetGroupsFunc:                 cfg.getGroupsFunc,
+		}
+		provider = brokerProviderWithOptionalCapabilities(mockProvider, cfg)
 	}
-
-	brokerProvider := brokerProviderWithOptionalCapabilities(provider, cfg)
-
-	if cfg.provider == nil {
-		cfg.SetProvider(provider)
-	}
+	cfg.SetProvider(provider)
 	if cfg.DataDir == "" {
 		cfg.DataDir = t.TempDir()
 	}
 	if cfg.ClientID() == "" {
 		cfg.SetClientID("test-client-id")
+	}
+	if !cfg.entraPasswordFlowDisabled && cfg.clientSecret == "" && !cfg.registerDevice {
+		if _, ok := providers.ProviderAs[himmelblau.EntraPasswordProvider](provider); ok {
+			// Most Entra password broker tests are not exercising startup validation;
+			// give them a minimal Graph group source so they keep building a valid
+			// broker after New() started rejecting unusable entra_password configs.
+			cfg.SetClientSecret("test-client-secret")
+		}
 	}
 
 	if cfg.IssuerURL() == "" {
@@ -158,7 +175,7 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 		apiVersion = cfg.apiVersion
 	}
 
-	b, err := broker.New(cfg.Config, apiVersion, broker.WithCustomProvider(brokerProvider))
+	b, err := broker.New(cfg.Config, apiVersion, broker.WithCustomProvider(provider))
 	require.NoError(t, err, "Setup: New should not have returned an error")
 	return b
 }
@@ -231,19 +248,19 @@ type tokenOptions struct {
 	gecos    string
 	groups   []info.Group
 
-	expired                     bool
-	noRefreshToken              bool
-	refreshTokenExpired         bool
-	refreshTokenInactiveExpired bool
-	refreshTokenStale           bool
-	noIDToken                   bool
-	invalid                     bool
-	invalidClaims               bool
-	noUserInfo                  bool
-	isForDeviceRegistration     bool
-	noIsForDeviceRegistration   bool
-	deviceIsDisabled            bool
-	userIsDisabled              bool
+	expired                      bool
+	noRefreshToken               bool
+	refreshTokenExpired          bool
+	refreshTokenInactiveExpired  bool
+	refreshTokenStale            bool
+	noIDToken                    bool
+	invalid                      bool
+	invalidClaims                bool
+	noUserInfo                   bool
+	isForDeviceRegistration      bool
+	deviceIsDisabled             bool
+	userIsDisabled               bool
+	obtainedViaEntraPasswordAuth bool
 }
 
 func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInfo {
@@ -279,8 +296,9 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 			RefreshToken: "refreshtoken",
 			Expiry:       time.Now().Add(1000 * time.Hour),
 		},
-		DeviceIsDisabled: options.deviceIsDisabled,
-		UserIsDisabled:   options.userIsDisabled,
+		DeviceIsDisabled:             options.deviceIsDisabled,
+		UserIsDisabled:               options.userIsDisabled,
+		ObtainedViaEntraPasswordAuth: options.obtainedViaEntraPasswordAuth,
 	}
 
 	if options.expired {
@@ -298,8 +316,8 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 	if options.refreshTokenStale {
 		tok.Token.RefreshToken = testutils.StaleRefreshToken
 	}
-	if !options.noIsForDeviceRegistration {
-		tok.ExtraFields = map[string]any{testutils.IsForDeviceRegistrationClaim: options.isForDeviceRegistration}
+	if options.isForDeviceRegistration {
+		tok.DeviceRegistrationData = []byte("device-registration-data")
 	}
 
 	if !options.noUserInfo {

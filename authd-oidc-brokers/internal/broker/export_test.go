@@ -2,14 +2,27 @@ package broker
 
 import (
 	"sync"
+
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
+)
+
+// IsFIDOMethod and IsPromptMethod expose the unexported MFA method classifiers for tests.
+var (
+	IsFIDOMethod   = isFIDOMethod
+	IsPromptMethod = isPromptMethod
 )
 
 func (cfg *Config) Init() {
 	cfg.ownerMutex = &sync.RWMutex{}
+	cfg.flows = defaultFlowsConfig()
 }
 
 func (cfg *Config) SetClientID(clientID string) {
 	cfg.clientID = clientID
+}
+
+func (cfg *Config) SetClientSecret(clientSecret string) {
+	cfg.clientSecret = clientSecret
 }
 
 func (cfg *Config) SetIssuerURL(issuerURL string) {
@@ -67,6 +80,12 @@ func (cfg *Config) SetOwnerExtraGroups(ownerExtraGroups []string) {
 
 func (cfg *Config) SetAllowedSSHSuffixes(allowedSSHSuffixes []string) {
 	cfg.allowedSSHSuffixes = allowedSSHSuffixes
+}
+
+func (cfg *Config) SetFlows(deviceAuth, entraPassword bool) {
+	cfg.flows = defaultFlowsConfig()
+	cfg.flows.DeviceAuth = deviceAuth
+	cfg.flows.EntraPassword = entraPassword
 }
 
 func (cfg *Config) SetProvider(provider provider) {
@@ -222,3 +241,19 @@ const MaxRequestDuration = maxRequestDuration
 
 // MaxAuthAttempts exposes the broker's maxAuthAttempts for tests.
 const MaxAuthAttempts = maxAuthAttempts
+
+// CachedPasswordMessage exposes the broker's cachedPasswordMessage for tests.
+const CachedPasswordMessage = cachedPasswordMessage
+
+// SetSessionMFAFlowActive lets tests set mfaFlowActive on a session without
+// going through entraPasswordAuth. The challenge info is left nil so that
+// tests can exercise the "flow active but no challenge metadata" guard in
+// entraMFAWaitAuth.
+func (b *Broker) SetSessionMFAFlowActive(sessionID string, flow *himmelblau.MFAFlowState) error {
+	s, err := b.getSession(sessionID)
+	if err != nil {
+		return err
+	}
+	s.mfaFlowActive = flow
+	return b.updateSession(sessionID, s)
+}

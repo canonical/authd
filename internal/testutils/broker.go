@@ -310,6 +310,14 @@ func (b *BrokerBusMock) IsAuthenticated(sessionID, authenticationData string) (a
 		access = authNext
 		data = `{"message": "It's fine to show a message here"}`
 
+	case "ia_granted_with_data":
+		access = authGranted
+		data = fmt.Sprintf(`{"userinfo": %s, "message": "Offline login is enabled with your Entra password"}`, userInfoFromName(sessionID, nil))
+
+	case "ia_granted_with_non_string_message":
+		access = authGranted
+		data = fmt.Sprintf(`{"userinfo": %s, "message": 42}`, userInfoFromName(sessionID, nil))
+
 	case "ia_next_with_invalid_data":
 		access = authNext
 		data = `{"msg": "there should not be a message here"}`

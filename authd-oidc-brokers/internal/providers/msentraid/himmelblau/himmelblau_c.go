@@ -5,6 +5,13 @@ package himmelblau
 //go:generate ./generate.sh
 
 /*
+// Define the feature macros that generate.sh enables when building the library
+// (changepassword, on_behalf_of). cbindgen guards the corresponding enum
+// variants and prototypes behind these macros, so cgo must define them to
+// compile the header against the same ABI the shared library exposes. Omitting
+// them drops the CHANGE_PASSWORD enum variant, which shifts every later
+// MSAL_ERROR_CODE value down by one and misclassifies MFA error codes.
+#cgo CFLAGS: -DCHANGEPASSWORD -DON_BEHALF_OF
 #cgo LDFLAGS: -L${SRCDIR} -lhimmelblau
 // Add the current directory to the library search path if we're building for testing,
 // because libhimmelblau is not installed in the standard search directories.
@@ -32,6 +39,43 @@ import (
 	"github.com/canonical/authd/log"
 )
 
+// MSAL_ERROR_CODE values, derived from the cgo enum constants rather than
+// hardcoded, so they always match the header the binding was compiled against.
+//
+// The enum values are NOT stable integers: several variants (e.g. CHANGE_PASSWORD)
+// are gated behind cargo features, so the numeric value of later variants such as
+// MFA_REQUIRED shifts depending on the feature set the library was built with
+// (MFA_REQUIRED is 25 with the changepassword feature that generate.sh enables,
+// not 24 — 24 is AUTH_CODE_RECEIVED). These are package vars (not a cgo import in
+// the test) so the mapping can be unit-tested; test files cannot import cgo.
+var (
+	codeMFAPollContinue     = uint32(C.MFA_POLL_CONTINUE)
+	codeMFARequired         = uint32(C.MFA_REQUIRED)
+	codeAuthCodeReceived    = uint32(C.AUTH_CODE_RECEIVED)
+	codeAuthorizationDenied = uint32(C.AUTHORIZATION_DENIED)
+	codeMFAInvalidCode      = uint32(C.MFA_INVALID_CODE)
+	codeMFADAGFallbackDisab = uint32(C.MFA_DAG_FALLBACK_DISABLED)
+)
+
+// mfaErrorCategory maps a libhimmelblau MSAL error code into an
+// MFAErrorCategory so the broker can branch on outcomes without
+// referencing the underlying numeric codes.
+func mfaErrorCategory(code uint32) MFAErrorCategory {
+	switch code {
+	case codeMFAPollContinue:
+		return MFAErrorPollContinue
+	case codeMFARequired:
+		return MFAErrorRequired
+	case codeAuthorizationDenied:
+		return MFAErrorDenied
+	case codeMFAInvalidCode:
+		return MFAErrorRetryableCode
+	case codeMFADAGFallbackDisab:
+		return MFAErrorRequired
+	}
+	return MFAErrorOther
+}
+
 // Entra AADSTS error codes as defined in
 // https://learn.microsoft.com/en-us/entra/identity-platform/reference-error-codes
 const (
@@ -50,8 +94,11 @@ type boxedDynTPM C.BoxedDynTpm
 type brokerClientApplication C.BrokerClientApplication
 
 func setTracingFilter(filter string) error {
+	// Do NOT free this C string: set_module_tracing_filter takes ownership of it
+	// (the Rust side reclaims it via CString::from_raw and drops it), so freeing
+	// it here would be a double free. The const char* in the header is misleading.
 	if msalErr := C.set_module_tracing_filter(C.CString(filter)); msalErr != nil {
-		return fmt.Errorf("failed to set libhimmelblau tracing filter: %v", C.GoString(msalErr.msg))
+		return fmt.Errorf("failed to set libhimmelblau tracing filter: %v", msalErrorMsg(msalErr))
 	}
 
 	return nil
@@ -65,7 +112,7 @@ func initTPM(tctiName string) (tpm *boxedDynTPM, err error) {
 	}
 
 	if msalErr := C.tpm_init(cTctiName, (**C.BoxedDynTpm)(unsafe.Pointer(&tpm))); msalErr != nil {
-		return nil, fmt.Errorf("failed to initialize TPM: %v", C.GoString(msalErr.msg))
+		return nil, fmt.Errorf("failed to initialize TPM: %v", msalErrorMsg(msalErr))
 	}
 
 	return tpm, nil
@@ -93,7 +140,7 @@ func initBroker(authority, clientID string, transportKeyBytes, certKeyBytes []by
 			&cTransportKey,
 		)
 		if msalErr != nil {
-			return nil, fmt.Errorf("failed to deserialize transport key: %v", C.GoString(msalErr.msg))
+			return nil, fmt.Errorf("failed to deserialize transport key: %v", msalErrorMsg(msalErr))
 		}
 		defer C.loadable_ms_oapxbc_rsa_key_free(cTransportKey)
 	}
@@ -106,7 +153,7 @@ func initBroker(authority, clientID string, transportKeyBytes, certKeyBytes []by
 			&cCertKey,
 		)
 		if msalErr != nil {
-			return nil, fmt.Errorf("failed to deserialize cert key: %v", C.GoString(msalErr.msg))
+			return nil, fmt.Errorf("failed to deserialize cert key: %v", msalErrorMsg(msalErr))
 		}
 		defer C.loadable_ms_device_enrollment_key_free(cCertKey)
 	}
@@ -122,7 +169,7 @@ func initBroker(authority, clientID string, transportKeyBytes, certKeyBytes []by
 		(**C.BrokerClientApplication)(unsafe.Pointer(&broker)),
 	)
 	if msalErr != nil {
-		return nil, fmt.Errorf("failed to initialize broker client: %v", C.GoString(msalErr.msg))
+		return nil, fmt.Errorf("failed to initialize broker client: %v", msalErrorMsg(msalErr))
 	}
 
 	return broker, nil
@@ -145,7 +192,7 @@ func initEnrollAttrs(domain, hostname, osVersion string) (attrs *C.EnrollAttrs, 
 		&attrs,
 	)
 	if msalErr != nil {
-		return nil, fmt.Errorf("failed to initialize enroll attributes: %v", C.GoString(msalErr.msg))
+		return nil, fmt.Errorf("failed to initialize enroll attributes: %v", msalErrorMsg(msalErr))
 	}
 
 	// TODO: Do we not have to free the attrs?
@@ -156,7 +203,7 @@ func initEnrollAttrs(domain, hostname, osVersion string) (attrs *C.EnrollAttrs, 
 func generateAuthValue() (authValue string, err error) {
 	var cAuthValue *C.char
 	if msalErr := C.auth_value_generate(&cAuthValue); msalErr != nil {
-		return "", fmt.Errorf("failed to generate auth value: %v", C.GoString(msalErr.msg))
+		return "", fmt.Errorf("failed to generate auth value: %v", msalErrorMsg(msalErr))
 	}
 	defer C.free(unsafe.Pointer(cAuthValue))
 
@@ -170,7 +217,7 @@ func createTPMMachineKey(tpm *boxedDynTPM, authValue string) (key *C.LoadableMac
 	var loadableMachineKey *C.LoadableMachineKey
 	msalErr := C.tpm_machine_key_create((*C.BoxedDynTpm)(unsafe.Pointer(tpm)), cAuthValue, &loadableMachineKey)
 	if msalErr != nil {
-		return nil, nil, fmt.Errorf("failed to create loadable machine key: %v", C.GoString(msalErr.msg))
+		return nil, nil, fmt.Errorf("failed to create loadable machine key: %v", msalErrorMsg(msalErr))
 	}
 
 	cleanup = func() { C.loadable_machine_key_free(loadableMachineKey) }
@@ -183,7 +230,7 @@ func loadTPMMachineKey(tpm *boxedDynTPM, authValue string, loadableMachineKey *C
 	defer C.free(unsafe.Pointer(cAuthValue))
 
 	if msalErr := C.tpm_machine_key_load((*C.BoxedDynTpm)(unsafe.Pointer(tpm)), cAuthValue, loadableMachineKey, &key); msalErr != nil {
-		return nil, nil, fmt.Errorf("failed to load TPM machine key: %v", C.GoString(msalErr.msg))
+		return nil, nil, fmt.Errorf("failed to load TPM machine key: %v", msalErrorMsg(msalErr))
 	}
 
 	cleanup = func() { C.machine_key_free(key) }
@@ -210,7 +257,7 @@ func enrollDevice(broker *brokerClientApplication, refreshToken string, attrs *C
 		&cDeviceID,
 	)
 	if msalErr != nil {
-		return nil, fmt.Errorf("failed to enroll device: %v", C.GoString(msalErr.msg))
+		return nil, fmt.Errorf("failed to enroll device: %v", msalErrorMsg(msalErr))
 	}
 	defer C.loadable_ms_oapxbc_rsa_key_free(cTransportKey)
 	defer C.loadable_ms_device_enrollment_key_free(cCertKey)
@@ -224,7 +271,7 @@ func enrollDevice(broker *brokerClientApplication, refreshToken string, attrs *C
 	defer C.free(unsafe.Pointer(cSerializedCertKey))
 	msalErr = C.serialize_loadable_ms_device_enrolment_key(cCertKey, &cSerializedCertKey, &cSerializedCertKeyLen)
 	if msalErr != nil {
-		return nil, fmt.Errorf("failed to serialize device enrollment key: %v", C.GoString(msalErr.msg))
+		return nil, fmt.Errorf("failed to serialize device enrollment key: %v", msalErrorMsg(msalErr))
 	}
 	if cSerializedCertKeyLen > 0 {
 		certKey = C.GoBytes(unsafe.Pointer(cSerializedCertKey), C.int(cSerializedCertKeyLen))
@@ -236,7 +283,7 @@ func enrollDevice(broker *brokerClientApplication, refreshToken string, attrs *C
 	defer C.free(unsafe.Pointer(cSerializedTransportKey))
 	msalErr = C.serialize_loadable_ms_oapxbc_rsa_key(cTransportKey, &cSerializedTransportKey, &cSerializedTransportKeyLen)
 	if msalErr != nil {
-		return nil, fmt.Errorf("failed to serialize transport key: %v", C.GoString(msalErr.msg))
+		return nil, fmt.Errorf("failed to serialize transport key: %v", msalErrorMsg(msalErr))
 	}
 	if cSerializedTransportKeyLen > 0 {
 		transportKey = C.GoBytes(unsafe.Pointer(cSerializedTransportKey), C.int(cSerializedTransportKeyLen))
@@ -255,7 +302,7 @@ func serializeLoadableMachineKey(loadableMachineKey *C.LoadableMachineKey) (key 
 	defer C.free(unsafe.Pointer(cSerializedKey))
 	msalErr := C.serialize_loadable_machine_key(loadableMachineKey, &cSerializedKey, &cSerializedKeyLen)
 	if msalErr != nil {
-		return nil, fmt.Errorf("failed to serialize loadable machine key: %v", C.GoString(msalErr.msg))
+		return nil, fmt.Errorf("failed to serialize loadable machine key: %v", msalErrorMsg(msalErr))
 	}
 	if cSerializedKeyLen > 0 {
 		key = C.GoBytes(unsafe.Pointer(cSerializedKey), C.int(cSerializedKeyLen))
@@ -265,13 +312,18 @@ func serializeLoadableMachineKey(loadableMachineKey *C.LoadableMachineKey) (key 
 }
 
 func deserializeLoadableMachineKey(key []byte) (loadableMachineKey *C.LoadableMachineKey, cleanup func(), err error) {
+	// The C call below indexes &key[0], so an empty key would panic.
+	if len(key) == 0 {
+		return nil, nil, fmt.Errorf("no machine key provided to deserialize")
+	}
+
 	msalErr := C.deserialize_loadable_machine_key(
 		(*C.uint8_t)(unsafe.Pointer(&key[0])),
 		C.size_t(len(key)),
 		&loadableMachineKey,
 	)
 	if msalErr != nil {
-		return nil, nil, fmt.Errorf("failed to deserialize loadable machine key: %v", C.GoString(msalErr.msg))
+		return nil, nil, fmt.Errorf("failed to deserialize loadable machine key: %v", msalErrorMsg(msalErr))
 	}
 
 	cleanup = func() { C.loadable_machine_key_free(loadableMachineKey) }
@@ -280,6 +332,11 @@ func deserializeLoadableMachineKey(key []byte) (loadableMachineKey *C.LoadableMa
 }
 
 func acquireTokenByRefreshToken(broker *brokerClientApplication, refreshToken string, scopes []string, requestResource string, clientID string, tpm *boxedDynTPM, machineKey *C.MachineKey) (token *C.UserToken, cleanup func(), err error) {
+	// The C call below indexes &cScopes[0], so an empty scope list would panic.
+	if len(scopes) == 0 {
+		return nil, nil, fmt.Errorf("no scopes provided for token acquisition")
+	}
+
 	cRefreshToken := C.CString(refreshToken)
 	defer C.free(unsafe.Pointer(cRefreshToken))
 
@@ -310,16 +367,17 @@ func acquireTokenByRefreshToken(broker *brokerClientApplication, refreshToken st
 		&cScopes[0],
 		C.int(len(scopes)),
 		cRequestResource,
-		// We could use `nil` here instead of the client ID if we also use `nil` as the client ID
-		// in the `broker_init` call, which means that the user doesn't even have to register
-		// an OIDC app in Entra. However, that has the effect that we can't fetch the groups
-		// of the user.
+		// on_behalf_of client ID. Passing it per-call (rather than only via
+		// broker_init) is what lets us resolve the user's groups: it requests the
+		// token on behalf of the caller's OIDC app. The per-call value takes
+		// precedence over the broker app's default on_behalf_of client ID.
 		cClientID,
 		(*C.BoxedDynTpm)(unsafe.Pointer(tpm)),
 		machineKey,
 		&userToken,
 	)
 	if msalErr != nil {
+		defer C.error_free(msalErr)
 		// Error codes can be returned by libhimmelblau as a single code in the aadsts_code field or
 		// as a list of error codes in the acquire_token_error_codes field.
 		errorCodes := []C.uint32_t{msalErr.aadsts_code}
@@ -358,9 +416,218 @@ func accessTokenFromUserToken(userToken *C.UserToken) (accessToken string, err e
 	var cAccessToken *C.char
 	msalErr := C.user_token_access_token(userToken, &cAccessToken)
 	if msalErr != nil {
-		return "", fmt.Errorf("failed to get access token: %v", C.GoString(msalErr.msg))
+		return "", fmt.Errorf("failed to get access token: %v", msalErrorMsg(msalErr))
 	}
 	defer C.free(unsafe.Pointer(cAccessToken))
 
 	return C.GoString(cAccessToken), nil
+}
+
+func refreshTokenFromUserToken(userToken *C.UserToken) (refreshToken string, err error) {
+	var cRefreshToken *C.char
+	msalErr := C.user_token_refresh_token(userToken, &cRefreshToken)
+	if msalErr != nil {
+		return "", fmt.Errorf("failed to get refresh token: %v", msalErrorMsg(msalErr))
+	}
+	defer C.free(unsafe.Pointer(cRefreshToken))
+
+	return C.GoString(cRefreshToken), nil
+}
+
+func initiateMFAFlow(broker *brokerClientApplication, username, password string) (*MFAFlowState, error) {
+	cUsername := C.CString(username)
+	defer C.free(unsafe.Pointer(cUsername))
+
+	cPassword := C.CString(password)
+	defer C.free(unsafe.Pointer(cPassword))
+
+	// cgo maps the C typedef-enum `AuthOption` to Go's plain uint32 (not C.uint or
+	// C.AuthOption), so the function parameter `const enum AuthOption *` becomes
+	// *uint32 in the generated binding. uint32(C.NoDAGFallback) converts the cgo
+	// constant to the matching Go type.
+	options := [1]uint32{uint32(C.NoDAGFallback)}
+	var flow *C.MFAAuthContinue
+	msalErr := C.broker_initiate_acquire_token_by_mfa_flow(
+		(*C.BrokerClientApplication)(unsafe.Pointer(broker)),
+		cUsername,
+		cPassword,
+		&options[0],
+		C.uintptr_t(len(options)),
+		&flow,
+	)
+	if msalErr != nil {
+		return nil, newMFAError(msalErr)
+	}
+	return newMFAFlowState(flow), nil
+}
+
+// newMFAFlowState wraps a C MFAAuthContinue pointer in the shared MFAFlowState type.
+func newMFAFlowState(flow *C.MFAAuthContinue) *MFAFlowState {
+	return &MFAFlowState{
+		opaque:  flow,
+		release: func() { C.mfa_auth_continue_free(flow) },
+	}
+}
+
+// cFlow extracts the C MFAAuthContinue pointer from an MFAFlowState.
+func cFlow(state *MFAFlowState) *C.MFAAuthContinue {
+	if state == nil {
+		return nil
+	}
+	flow, ok := state.opaque.(*C.MFAAuthContinue)
+	if !ok {
+		return nil
+	}
+	return flow
+}
+
+// msalErrorMsg extracts the message from a C MSAL_ERROR and frees it.
+// Use it on one-shot error-reporting paths to avoid leaking the error struct.
+func msalErrorMsg(msalErr *C.MSAL_ERROR) string {
+	defer C.error_free(msalErr)
+	return C.GoString(msalErr.msg)
+}
+
+// newMFAError builds an MFAError from an msalErr and frees it.
+func newMFAError(msalErr *C.MSAL_ERROR) *MFAError {
+	defer C.error_free(msalErr)
+	msg := C.GoString(msalErr.msg)
+	category := mfaErrorCategory(msalErr.code)
+	return &MFAError{
+		Category: category,
+		AADSTS:   int(msalErr.aadsts_code),
+		Message:  msg,
+	}
+}
+
+func initiateMFAFlowForEnrollment(broker *brokerClientApplication, username, password string) (*MFAFlowState, error) {
+	cUsername := C.CString(username)
+	defer C.free(unsafe.Pointer(cUsername))
+
+	cPassword := C.CString(password)
+	defer C.free(unsafe.Pointer(cPassword))
+
+	options := [1]uint32{uint32(C.NoDAGFallback)}
+	var flow *C.MFAAuthContinue
+	msalErr := C.broker_initiate_acquire_token_by_mfa_flow_for_device_enrollment(
+		(*C.BrokerClientApplication)(unsafe.Pointer(broker)),
+		cUsername,
+		cPassword,
+		&options[0],
+		C.uintptr_t(len(options)),
+		&flow,
+	)
+	if msalErr != nil {
+		return nil, newMFAError(msalErr)
+	}
+
+	return newMFAFlowState(flow), nil
+}
+
+func acquireTokenByMFAFlow(broker *brokerClientApplication, username string, flow *MFAFlowState, authData string, pollAttempt int) (token *C.UserToken, cleanup func(), err error) {
+	if flow == nil {
+		return nil, nil, fmt.Errorf("missing MFA flow state")
+	}
+	// Hold the flow lock for the duration of the C call so that a concurrent
+	// FreeMFAFlowState (e.g. from EndSession after a cancelled poll) cannot
+	// free the MFAAuthContinue while it is in use.
+	flow.mu.Lock()
+	defer flow.mu.Unlock()
+	cf := cFlow(flow)
+	if cf == nil {
+		return nil, nil, fmt.Errorf("MFA flow state has been released")
+	}
+
+	cUsername := C.CString(username)
+	defer C.free(unsafe.Pointer(cUsername))
+
+	var cAuthData *C.char
+	if authData != "" {
+		cAuthData = C.CString(authData)
+		defer C.free(unsafe.Pointer(cAuthData))
+	}
+
+	var userToken *C.UserToken
+	msalErr := C.broker_acquire_token_by_mfa_flow(
+		(*C.BrokerClientApplication)(unsafe.Pointer(broker)),
+		cUsername,
+		cAuthData,
+		C.int(pollAttempt),
+		cf,
+		&userToken,
+	)
+	if msalErr != nil {
+		return nil, nil, newMFAError(msalErr)
+	}
+
+	cleanup = func() { C.user_token_free(userToken) }
+	return userToken, cleanup, nil
+}
+
+// The mfaFlow* accessors read the continuation state, so they take flow.mu to
+// honour MFAFlowState's locking contract (a concurrent FreeMFAFlowState must not
+// release the state mid-read). They are currently only called at flow creation,
+// before the flow is shared, but locking keeps them safe if that ever changes.
+func mfaFlowMessage(flow *MFAFlowState) (string, error) {
+	if flow == nil {
+		return "", fmt.Errorf("missing MFA flow state")
+	}
+	flow.mu.Lock()
+	defer flow.mu.Unlock()
+	c := cFlow(flow)
+	if c == nil {
+		return "", fmt.Errorf("missing MFA flow state")
+	}
+	var cMsg *C.char
+	msalErr := C.mfa_auth_continue_msg(c, &cMsg)
+	if msalErr != nil {
+		return "", fmt.Errorf("failed to get MFA continue message: %v", msalErrorMsg(msalErr))
+	}
+	defer C.free(unsafe.Pointer(cMsg))
+	return C.GoString(cMsg), nil
+}
+
+func mfaFlowMethod(flow *MFAFlowState) (string, error) {
+	if flow == nil {
+		return "", fmt.Errorf("missing MFA flow state")
+	}
+	flow.mu.Lock()
+	defer flow.mu.Unlock()
+	c := cFlow(flow)
+	if c == nil {
+		return "", fmt.Errorf("missing MFA flow state")
+	}
+	var cMethod *C.char
+	msalErr := C.mfa_auth_continue_mfa_method(c, &cMethod)
+	if msalErr != nil {
+		return "", fmt.Errorf("failed to get MFA method: %v", msalErrorMsg(msalErr))
+	}
+	defer C.free(unsafe.Pointer(cMethod))
+	return C.GoString(cMethod), nil
+}
+
+func mfaFlowPollingInterval(flow *MFAFlowState) int {
+	if flow == nil {
+		return -1
+	}
+	flow.mu.Lock()
+	defer flow.mu.Unlock()
+	c := cFlow(flow)
+	if c == nil {
+		return -1
+	}
+	return int(C.mfa_auth_continue_polling_interval(c))
+}
+
+func mfaFlowMaxPollAttempts(flow *MFAFlowState) int {
+	if flow == nil {
+		return -1
+	}
+	flow.mu.Lock()
+	defer flow.mu.Unlock()
+	c := cFlow(flow)
+	if c == nil {
+		return -1
+	}
+	return int(C.mfa_auth_continue_max_poll_attempts(c))
 }

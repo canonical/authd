@@ -7,16 +7,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/log"
 	"github.com/golang-jwt/jwt/v5"
@@ -132,6 +135,63 @@ func TestGetUserInfo(t *testing.T) {
 	}
 }
 
+func TestUserInfoFromAccessToken(t *testing.T) {
+	t.Parallel()
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"oid":  "saved-user-id",
+		"upn":  "test-user@email.com",
+		"name": "test-user",
+	})
+	accessTokenStr, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err, "Failed to sign access token")
+
+	got, err := msentraid.New().UserInfoFromAccessToken(accessTokenStr)
+	require.NoError(t, err, "UserInfoFromAccessToken should not return an error")
+	require.Equal(t, info.NewUser("test-user@email.com", "", "saved-user-id", "", "test-user", nil), got)
+}
+
+func TestRefreshEntraPasswordToken(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		refreshHandler http.HandlerFunc
+		wantErr        bool
+		wantErrSubstr  string
+	}{
+		"Active_user_refresh_succeeds": {},
+		"Disabled_user_returns_AADSTS50057": {
+			refreshHandler: disabledRefreshHandler,
+			wantErr:        true,
+			wantErrSubstr:  "AADSTS50057",
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			mockServer, cleanup := startMockMSServer(t, &mockMSServerConfig{RefreshHandler: tc.refreshHandler})
+			t.Cleanup(cleanup)
+
+			got, err := msentraid.New().RefreshEntraPasswordToken(
+				context.Background(),
+				mockServer.URL+"/tenant-id/v2.0",
+				"refreshtoken",
+			)
+			if tc.wantErr {
+				require.Error(t, err, "RefreshEntraPasswordToken should fail")
+				require.Contains(t, err.Error(), tc.wantErrSubstr, "unexpected error from refresh")
+				return
+			}
+			require.NoError(t, err, "RefreshEntraPasswordToken should succeed for an active user")
+			require.NotEmpty(t, got.AccessToken, "expected a rotated token on success")
+			require.Nil(t, got.Extra("preferred_username"), "refresh should not add redundant preferred_username extras")
+			require.Nil(t, got.Extra("sub"), "refresh should not add redundant sub extras")
+			require.Nil(t, got.Extra("name"), "refresh should not add redundant name extras")
+		})
+	}
+}
+
 func TestGetGroups(t *testing.T) {
 	t.Parallel()
 
@@ -190,7 +250,6 @@ func TestGetGroups(t *testing.T) {
 			}
 
 			p := msentraid.New()
-			p.SetNeedsAccessTokenForGraphAPI(tc.acquireAccessToken)
 			p.SetTokenScopesForGraphAPI(tc.tokenScopes)
 
 			got, err := p.GetGroups(
@@ -200,6 +259,7 @@ func TestGetGroups(t *testing.T) {
 				token,
 				tc.providerMetadata,
 				deviceRegistrationData,
+				tc.acquireAccessToken,
 			)
 			if tc.wantErr {
 				require.Error(t, err, "GetUserInfo should return an error")
@@ -212,51 +272,233 @@ func TestGetGroups(t *testing.T) {
 	}
 }
 
+func TestGetGroupsUsesCurrentTokenWhenAlreadyGraphCapable(t *testing.T) {
+	t.Parallel()
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"scp": "GroupMember.Read.All User.Read",
+	})
+	accessTokenStr, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err, "Failed to sign access token")
+
+	token := &oauth2.Token{
+		AccessToken:  accessTokenStr,
+		RefreshToken: "refreshtoken",
+		Expiry:       time.Now().Add(1000 * time.Hour),
+	}
+
+	mockServer, cleanup := startMockMSServer(t, nil)
+	t.Cleanup(cleanup)
+
+	p := msentraid.New()
+
+	got, err := p.GetGroups(
+		context.Background(),
+		"",
+		"",
+		token,
+		map[string]any{"msgraph_host": mockServer.URL},
+		nil,
+		true,
+	)
+	require.NoError(t, err, "GetGroups should use the current token when it already has Graph scopes")
+	require.ElementsMatch(t, []info.Group{
+		{Name: "group1", UGID: "id1"},
+		{Name: "group2", UGID: "id2"},
+	}, got)
+}
+
+func TestGetGroupsUsesClientCredentialsFallback(t *testing.T) {
+	t.Parallel()
+
+	mockServer, cleanup := startMockMSServer(t, nil)
+	t.Cleanup(cleanup)
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"oid": "00000000-0000-0000-0000-000000000000",
+	})
+	accessTokenStr, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err, "Failed to sign access token")
+
+	token := &oauth2.Token{
+		AccessToken:  accessTokenStr,
+		RefreshToken: "refreshtoken",
+		Expiry:       time.Now().Add(1000 * time.Hour),
+	}
+
+	p := msentraid.New()
+	p.SetGraphClientSecret("client-secret")
+
+	got, err := p.GetGroups(
+		context.Background(),
+		"client-id",
+		mockServer.URL+"/tenant-id/v2.0",
+		token,
+		map[string]any{"msgraph_host": mockServer.URL},
+		nil,
+		false,
+	)
+	require.NoError(t, err, "GetGroups should fall back to client credentials when the delegated token lacks Graph scope")
+	require.ElementsMatch(t, []info.Group{
+		{Name: "group1", UGID: "id1"},
+		{Name: "group2", UGID: "id2"},
+	}, got)
+}
+
+func TestGetGroupsDeviceRegistrationTokenDoesNotUseClientCredentials(t *testing.T) {
+	t.Parallel()
+
+	mockServer, cleanup := startMockMSServer(t, nil)
+	t.Cleanup(cleanup)
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"oid": "00000000-0000-0000-0000-000000000000",
+	})
+	accessTokenStr, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err, "Failed to sign access token")
+
+	token := &oauth2.Token{
+		AccessToken:  accessTokenStr,
+		RefreshToken: "refreshtoken",
+		Expiry:       time.Now().Add(1000 * time.Hour),
+	}
+
+	p := msentraid.New()
+	p.SetGraphClientSecret("client-secret")
+
+	// needsAccessTokenForGraphAPI=true marks a device-registration token, which
+	// must be exchanged via the PRT path (strategy 2) rather than the app-only
+	// client-credentials path, even when a client secret is configured. With no
+	// device registration data the PRT path fails, but it must NOT silently fall
+	// through to client credentials (which would otherwise succeed here).
+	_, err = p.GetGroups(
+		context.Background(),
+		"client-id",
+		mockServer.URL+"/tenant-id/v2.0",
+		token,
+		map[string]any{"msgraph_host": mockServer.URL},
+		nil,
+		true,
+	)
+	require.Error(t, err, "GetGroups must not use client credentials for a device-registration token")
+	require.Contains(t, err.Error(), "device registration",
+		"GetGroups should fail on the device-registration token-exchange path, not client credentials")
+}
+
+func TestGetGroupsInvalidTokenWithClientCredentialsReturnsError(t *testing.T) {
+	t.Parallel()
+
+	mockServer, cleanup := startMockMSServer(t, nil)
+	t.Cleanup(cleanup)
+
+	token := &oauth2.Token{AccessToken: "invalid-token"}
+
+	p := msentraid.New()
+	p.SetGraphClientSecret("client-secret")
+
+	_, err := p.GetGroups(
+		context.Background(),
+		"client-id",
+		mockServer.URL+"/tenant-id/v2.0",
+		token,
+		map[string]any{"msgraph_host": mockServer.URL},
+		nil,
+		false,
+	)
+	require.Error(t, err, "GetGroups should return an error instead of panicking on invalid delegated tokens")
+}
+
+func TestGetGroupsClientCredentialsUsesConfiguredIssuerAndGraphHosts(t *testing.T) {
+	t.Parallel()
+
+	const (
+		clientID     = "client-id"
+		clientSecret = "client-secret"
+		tenantID     = "tenant-id"
+		userOID      = "user-oid"
+	)
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"oid": userOID,
+		"scp": "User.Read",
+	})
+	accessTokenStr, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err, "Failed to sign access token")
+
+	var tokenEndpointCalled atomic.Bool
+	var graphEndpointCalled atomic.Bool
+	var mockServer *httptest.Server
+	mockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/"+tenantID+"/oauth2/v2.0/token":
+			tokenEndpointCalled.Store(true)
+			require.NoError(t, r.ParseForm(), "failed to parse client credentials form")
+			require.Equal(t, "client_credentials", r.Form.Get("grant_type"))
+			require.Equal(t, clientID, r.Form.Get("client_id"))
+			require.Equal(t, clientSecret, r.Form.Get("client_secret"))
+			require.Equal(t, mockServer.URL+"/.default", r.Form.Get("scope"))
+
+			appToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"exp": time.Now().Add(time.Hour).Unix()})
+			appTokenStr, err := appToken.SignedString(testutils.MockKey)
+			require.NoError(t, err, "failed to sign app token")
+
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{"access_token":%q,"token_type":"Bearer","expires_in":3600}`, appTokenStr)
+
+		case r.Method == http.MethodGet &&
+			strings.Contains(r.URL.Path, "/users/"+userOID+"/") &&
+			strings.Contains(r.URL.Path, "/transitiveMemberOf/") &&
+			strings.HasSuffix(r.URL.Path, "graph.group"):
+			graphEndpointCalled.Store(true)
+			simpleGroupHandler(w, r)
+
+		default:
+			require.Fail(t, "unexpected request", "method=%s path=%s", r.Method, r.URL.Path)
+		}
+	}))
+	t.Cleanup(mockServer.Close)
+
+	p := msentraid.New()
+	p.SetGraphClientSecret(clientSecret)
+
+	got, err := p.GetGroups(
+		context.Background(),
+		clientID,
+		fmt.Sprintf("%s/%s/v2.0", mockServer.URL, tenantID),
+		&oauth2.Token{AccessToken: accessTokenStr},
+		map[string]any{"msgraph_host": mockServer.URL + "/v1.0"},
+		nil,
+		false,
+	)
+	require.NoError(t, err, "GetGroups should use client credentials against configured hosts")
+	require.True(t, tokenEndpointCalled.Load(), "client credentials token endpoint should have been called")
+	require.True(t, graphEndpointCalled.Load(), "Graph users endpoint should have been called")
+	require.ElementsMatch(t, []info.Group{
+		{Name: "group1", UGID: "id1"},
+		{Name: "group2", UGID: "id2"},
+	}, got)
+}
+
 func TestIsTokenForDeviceRegistration(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		appID        string
-		invalidToken bool
+		deviceRegistrationData []byte
 
-		want    bool
-		wantErr bool
+		want bool
 	}{
-		"Success_when_token_has_microsoft_broker_app_ID": {appID: consts.MicrosoftBrokerAppID, want: true},
-		"Success_when_token_has_other_app_ID":            {appID: "some-other-app-id", want: false},
-		"Success_when_token_has_empty_app_ID":            {appID: "", want: false},
-
-		"Error_when_token_has_no_app_ID": {appID: "-", wantErr: true},
-		"Error_when_token_is_invalid":    {invalidToken: true, wantErr: true},
+		"True_when_device_registration_data_is_present": {deviceRegistrationData: []byte("device-registration-data"), want: true},
+		"False_when_device_registration_data_is_absent": {deviceRegistrationData: nil, want: false},
+		"False_when_device_registration_data_is_empty":  {deviceRegistrationData: []byte{}, want: false},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			claims := jwt.MapClaims{"appid": tc.appID}
-			if tc.appID == "-" {
-				claims = jwt.MapClaims{}
-			}
-
-			accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-			accessTokenString, err := accessToken.SignedString(testutils.MockKey)
-			require.NoError(t, err, "Failed to sign access token")
-
-			if tc.invalidToken {
-				accessTokenString = "invalid-token"
-			}
-
-			token := &oauth2.Token{AccessToken: accessTokenString}
-
 			p := msentraid.New()
-			got, err := p.IsTokenForDeviceRegistration(token)
+			got := p.IsTokenForDeviceRegistration(&token.AuthCachedInfo{DeviceRegistrationData: tc.deviceRegistrationData})
 
-			if tc.wantErr {
-				require.Error(t, err, "IsTokenForDeviceRegistration should return an error")
-				return
-			}
-			require.NoError(t, err, "IsTokenForDeviceRegistration should not return an error")
 			require.Equal(t, tc.want, got, "IsTokenForDeviceRegistration should return the expected value")
 		})
 	}

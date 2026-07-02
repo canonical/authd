@@ -24,6 +24,9 @@ func newInterfaceForTests(t *testing.T) *dbusservice.Interface {
 	require.NoError(t, os.WriteFile(confPath, []byte(`[oidc]
 issuer = `+defaultIssuerURL+`
 client_id = test-client-id
+
+[flows]
+entra_password = false
 `), 0600), "Setup: writing broker config should not fail")
 
 	cfg := broker.Config{ConfigFile: confPath, DataDir: t.TempDir()}

@@ -352,11 +352,11 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 
 		var authMsg string
 		if msg.access != auth.Cancelled {
-			msg, err := dataToMsg(msg.msg)
+			var err error
+			authMsg, err = grantedTolerantMsg(msg.access, msg.msg)
 			if err != nil {
 				return m, sendEvent(pamError{status: pam.ErrSystem, msg: err.Error()})
 			}
-			authMsg = msg
 		}
 
 		switch msg.access {
@@ -557,6 +557,19 @@ func dataToMsg(data string) (string, error) {
 		return "", fmt.Errorf("no message entry in json data from provider: %v", v)
 	}
 	return r, nil
+}
+
+// grantedTolerantMsg parses data via dataToMsg, treating a malformed or
+// unexpected message as non-fatal when access is auth.Granted: the message is
+// then a purely cosmetic notice, so an already-granted login must never fail
+// because of it. For any other access the error is returned unchanged.
+func grantedTolerantMsg(access string, data string) (string, error) {
+	msg, err := dataToMsg(data)
+	if err != nil && access == auth.Granted {
+		log.Warningf(context.TODO(), "Ignoring invalid granted message: %v", err)
+		return "", nil
+	}
+	return msg, err
 }
 
 func (authData *isAuthenticatedRequestedSend) encryptSecretIfPresent(publicKey *rsa.PublicKey) (*string, error) {

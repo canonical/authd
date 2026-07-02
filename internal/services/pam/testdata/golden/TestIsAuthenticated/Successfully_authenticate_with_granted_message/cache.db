@@ -1,0 +1,22 @@
+users:
+    - name: ia_granted_with_data@example.com
+      uid: 1111
+      gid: 1111
+      gecos: gecos for ia_granted_with_data@example.com
+      dir: /home/ia_granted_with_data@example.com
+      shell: /bin/sh/ia_granted_with_data@example.com
+      broker_id: "1902181170"
+      provider_id: providerid-ia_granted_with_data@example.com
+groups:
+    - name: ia_granted_with_data@example.com
+      gid: 1111
+      ugid: ia_granted_with_data@example.com
+    - name: group-ia_granted_with_data@example.com
+      gid: 22222
+      ugid: ugid-ia_granted_with_data@example.com
+users_to_groups:
+    - uid: 1111
+      gid: 1111
+    - uid: 1111
+      gid: 22222
+schema_version: 3

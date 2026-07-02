@@ -13,3 +13,4 @@ allowedSSHSuffixes=[@issuer.url.com]
 extraGroups=[]
 ownerExtraGroups=[]
 extraScopes=[groups offline_access some_other_scope]
+flows={true true}
