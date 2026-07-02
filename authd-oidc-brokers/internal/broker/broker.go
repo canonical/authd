@@ -243,9 +243,18 @@ func (b *Broker) cacheSymlinkTarget(linkPath string) (string, error) {
 }
 
 func (b *Broker) ensureCompatibilitySymlink(linkPath, target string) error {
+	// Use a relative symlink so that the link remains valid when the path prefix
+	// changes (e.g. a snap revision bump moves everything from .../316/... to
+	// .../317/... while the relative offset between the two sibling directories
+	// stays the same).
+	relTarget, err := filepath.Rel(filepath.Dir(linkPath), target)
+	if err != nil {
+		return fmt.Errorf("could not compute relative symlink target for %q → %q: %w", linkPath, target, err)
+	}
+
 	info, err := os.Lstat(linkPath)
 	if errors.Is(err, os.ErrNotExist) {
-		return os.Symlink(target, linkPath)
+		return os.Symlink(relTarget, linkPath)
 	}
 	if err != nil {
 		return err
@@ -260,13 +269,26 @@ func (b *Broker) ensureCompatibilitySymlink(linkPath, target string) error {
 		if rmErr := os.Remove(linkPath); rmErr != nil {
 			return fmt.Errorf("could not replace invalid cache compatibility symlink %q: %w", linkPath, rmErr)
 		}
-		return os.Symlink(target, linkPath)
+		return os.Symlink(relTarget, linkPath)
 	}
 	if filepath.Clean(existingTarget) != filepath.Clean(target) {
 		return fmt.Errorf("cache compatibility symlink already points to %q", existingTarget)
 	}
 
-	return nil
+	// The symlink resolves to the right target, but may be stored as an absolute
+	// path. Normalize it to a relative path so it survives a snap revision bump
+	// that moves the entire data directory prefix.
+	rawLink, err := os.Readlink(linkPath)
+	if err != nil {
+		return err
+	}
+	if rawLink == relTarget {
+		return nil
+	}
+	if rmErr := os.Remove(linkPath); rmErr != nil {
+		return fmt.Errorf("could not replace absolute cache compatibility symlink %q: %w", linkPath, rmErr)
+	}
+	return os.Symlink(relTarget, linkPath)
 }
 
 func consolidateKnownCacheFiles(sourceDir, targetDir string) error {
