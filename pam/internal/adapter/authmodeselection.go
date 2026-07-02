@@ -143,13 +143,18 @@ func (m authModeSelectionModel) Update(msg tea.Msg) (authModeSelectionModel, tea
 
 		cmd := m.SetItems(allAuthModes)
 
-		// Autoselect first auth mode if any, as soon as we've the focus.
+		// Auto-select the first auth mode when available.
+		// For InteractiveTerminal, always select immediately because the
+		// authModeSelection stage is skipped entirely (see model.go).
+		// For GDM/Native, defer the selection until the auth mode selection
+		// stage is active (list is focused), so the stage transition completes
+		// before we request the corresponding UI layout.
 		if len(m.availableAuthModes) == 0 {
 			return m, cmd
 		}
 
 		firstAuthModeID := m.availableAuthModes[0].Id
-		if !m.Focused() {
+		if m.clientType != InteractiveTerminal && !m.Focused() {
 			m.autoSelectedAuthModeID = firstAuthModeID
 			return m, cmd
 		}
