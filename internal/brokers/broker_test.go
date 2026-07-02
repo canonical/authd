@@ -213,6 +213,8 @@ func TestIsAuthenticated(t *testing.T) {
 		cancelFirstCall bool
 	}{
 		"Successfully_authenticate":                                        {sessionID: "success"},
+		"Successfully_authenticate_with_granted_message":                   {sessionID: "ia_granted_with_data"},
+		"Ignores_non_string_message_in_granted_response":                   {sessionID: "ia_granted_with_non_string_message"},
 		"Successfully_authenticate_after_cancelling_first_call":            {sessionID: "ia_second_call", secondCall: true},
 		"Denies_authentication_when_broker_times_out":                      {sessionID: "ia_timeout"},
 		"Adds_default_groups_even_if_broker_did_not_set_them":              {sessionID: "ia_info_empty_groups"},

@@ -265,7 +265,7 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 
 	case gdmIsAuthenticatedResultReceived:
 		access := msg.access
-		authMsg, err := dataToMsg(msg.msg)
+		authMsg, err := grantedTolerantMsg(access, msg.msg)
 		if err != nil {
 			return m, sendEvent(pamError{status: pam.ErrSystem, msg: err.Error()})
 		}
