@@ -113,6 +113,12 @@ register_device = invalid
 
 	"invalid-ini": `=invalid`,
 
+	"override_template": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+`,
+
 	"overwrite_lower_precedence": `
 [oidc]
 issuer = https://lower-precedence-issuer.url.com
@@ -153,6 +159,10 @@ func TestParseConfig(t *testing.T) {
 			configType: "valid+flows_disabled",
 			dropInType: "flows",
 		},
+		"Successfully_parse_config_when_placeholders_are_overridden_by_drop_in": {
+			configType: "template",
+			dropInType: "override-template",
+		},
 
 		"Do_not_fail_if_values_contain_a_single_template_delimiter": {configType: "singles"},
 
@@ -166,7 +176,8 @@ func TestParseConfig(t *testing.T) {
 		"Error_if_config_contains_invalid_values":                {configType: "invalid_boolean_value", wantErr: true},
 		"Error_if_config_contains_invalid_register_device_value": {configType: "invalid_register_device_value", wantErr: true},
 		"Error_if_drop_in_file_is_invalid":                       {dropInType: "invalid-ini", wantErr: true, wantErrContainsDropInConfigPath: true},
-		"Error_if_drop_in_file_is_not_updated":                   {dropInType: "template", wantErr: true, wantErrContainsDropInConfigPath: true},
+		"Error_if_drop_in_file_is_not_updated":                   {dropInType: "template", wantErr: true},
+		"Successfully_parse_config_when_drop_in_placeholder_is_overridden_by_later_drop_in": {dropInType: "override-template-later"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -220,6 +231,15 @@ func TestParseConfig(t *testing.T) {
 				require.NoError(t, err, "Setup: Failed to write drop-in file")
 			case "template":
 				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["template"]), 0600)
+				require.NoError(t, err, "Setup: Failed to write drop-in file")
+			case "override-template":
+				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["override_template"]), 0600)
+				require.NoError(t, err, "Setup: Failed to write drop-in file")
+			case "override-template-later":
+				// 00-drop-in.conf has template placeholders; 01-drop-in.conf overrides them.
+				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["template"]), 0600)
+				require.NoError(t, err, "Setup: Failed to write drop-in file")
+				err = os.WriteFile(filepath.Join(dropInDir, "01-drop-in.conf"), []byte(configTypes["override_template"]), 0600)
 				require.NoError(t, err, "Setup: Failed to write drop-in file")
 			}
 
