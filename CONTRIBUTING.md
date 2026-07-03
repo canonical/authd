@@ -270,6 +270,29 @@ When you submit a PR, there are automated checks for typos and broken links.
 Please run the tests locally before submitting the PR to save yourself and your
 reviewers time.
 
+### Building stable and edge versions of the documentation
+
+authd publishes two versions of its documentation: stable-docs and edge-docs.
+By default, `make run` previews the stable version.
+
+To preview a specific version, set `READTHEDOCS_VERSION` before running `make run`:
+
+**Edge**:
+
+```shell
+READTHEDOCS_VERSION=edge-docs make run
+```
+
+**Stable**:
+
+```shell
+READTHEDOCS_VERSION=stable-docs make run
+```
+
+Some content is conditionally rendered depending on the version. This includes
+the version warning banner in the edge documentation and installation
+instructions that are specific to each version.
+
 ### Testing the documentation
 
 Automatic checks will be run on any PR relating to documentation to verify
