@@ -187,8 +187,8 @@ jobs:
     name: "Go Tests with Coverage Collection"
     runs-on: ubuntu-26.04 # ubuntu-latest
     env:
-      RAW_COVERAGE_DIR: ${{ github.workspace }}/raw-coverage
-      COVERAGE_DIR: ${{ github.workspace }}/coverage
+      RAW_COVERAGE_DIR: /tmp/raw-coverage
+      COVERAGE_DIR: /tmp/coverage
       # Also run tests which require a different Ubuntu version, which we run in LXD
       # containers.
       AUTHD_TESTS_USE_LXD: true
