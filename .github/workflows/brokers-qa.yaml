@@ -8,6 +8,7 @@ on:
     paths:
       - ".github/workflows/brokers-qa.yaml"
       - "authd-oidc-brokers/**"
+      - "!authd-oidc-brokers/conf/**"
       - "!authd-oidc-brokers/e2e-tests/**"
       - "!authd-oidc-brokers/po/**"
       - "!authd-oidc-brokers/.gitignore"
@@ -16,6 +17,7 @@ on:
     paths:
       - ".github/workflows/brokers-qa.yaml"
       - "authd-oidc-brokers/**"
+      - "!authd-oidc-brokers/conf/**"
       - "!authd-oidc-brokers/e2e-tests/**"
       - "!authd-oidc-brokers/po/**"
       - "!authd-oidc-brokers/.gitignore"
