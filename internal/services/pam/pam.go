@@ -73,13 +73,14 @@ func newAuthFailTracker(cfg Config) *authFailTracker {
 
 // recordFailure increments the failure count for username and returns the new count.
 // If the previous failure is older than resetWindow the counter is reset first.
+// A resetWindow of 0 keeps failures accumulated indefinitely (no inactivity reset).
 // When the tracker is at capacity the username is not stored, but math.MaxInt is
 // returned so that the delay is still applied (fail-secure).
 func (t *authFailTracker) recordFailure(username string) int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	e, ok := t.entries[username]
-	if ok && time.Since(e.lastFail) >= t.resetWindow {
+	if ok && t.resetWindow > 0 && time.Since(e.lastFail) >= t.resetWindow {
 		// Stale entry: treat as fresh start.
 		ok = false
 	}

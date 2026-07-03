@@ -36,5 +36,6 @@
 ##
 ## auth_fail_reset_window: duration of inactivity after the last failure before
 ## the failure count is automatically reset.
-## Accepts durations like "15m", "1h", "30s".
+## Accepts durations like "15m", "1h", "30s". Set to 0 to keep failures
+## accumulated indefinitely (no inactivity reset).
 #auth_fail_reset_window: 15m
