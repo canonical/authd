@@ -49,53 +49,53 @@ sudo ppa-purge ppa:ubuntu-enterprise-desktop/authd-edge
 
 You can also switch to the edge channel of the broker snap:
 
-::::{tab-set}
-:sync-group: broker
+:::::{tab-set}
+::sync-group: broker
 
-:::{tab-item} Google IAM
-:sync: google
-
-```shell
-sudo snap switch authd-google --edge
-sudo snap refresh authd-google
-```
-:::
-
-:::{tab-item} Microsoft Entra ID
-:sync: msentraid
+::::{tab-item} Microsoft Entra ID
+::sync: msentraid
 
 ```shell
 sudo snap switch authd-msentraid --edge
 sudo snap refresh authd-msentraid
 ```
-:::
 ::::
+
+::::{tab-item} Google IAM
+::sync: google
+
+```shell
+sudo snap switch authd-google --edge
+sudo snap refresh authd-google
+```
+::::
+:::::
 
 Keep in mind that this version is not tested and may be incompatible with the current released version of authd.
 
 To switch back to stable after trying the edge channel:
 
-::::{tab-set}
-:sync-group: broker
+:::::{tab-set}
+::sync-group: broker
 
-:::{tab-item} Google IAM
-:sync: google
-
-```shell
-sudo snap switch authd-google --stable
-sudo snap refresh authd-google
-```
-:::
-
-:::{tab-item} Microsoft Entra ID
-:sync: msentraid
+::::{tab-item} Microsoft Entra ID
+::sync: msentraid
 
 ```shell
 sudo snap switch authd-msentraid --stable
 sudo snap refresh authd-msentraid
 ```
-:::
 ::::
+
+::::{tab-item} Google IAM
+::sync: google
+
+```shell
+sudo snap switch authd-google --stable
+sudo snap refresh authd-google
+```
+::::
+:::::
 
 ```{note}
 If using an edge release, you can read the
