@@ -29,18 +29,18 @@ full transition to the cloud.
 ::::{tab-set}
 :sync-group: broker
 
-:::{tab-item} Google IAM
-:sync: google
-
-* <a href="howto/install-authd/?broker=google">Install authd and the Google IAM broker</a>
-* <a href="howto/configure-authd/?broker=google">Configure the Google IAM broker</a>
-:::
-
 :::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
 * <a href="howto/install-authd/?broker=msentraid">Install authd and the Microsoft Entra ID broker</a>
 * <a href="howto/configure-authd/?broker=msentraid">Configure the Microsoft Entra ID broker</a>
+:::
+
+:::{tab-item} Google IAM
+:sync: google
+
+* <a href="howto/install-authd/?broker=google">Install authd and the Google IAM broker</a>
+* <a href="howto/configure-authd/?broker=google">Configure the Google IAM broker</a>
 :::
 :::{tab-item} Keycloak
 :sync: keycloak

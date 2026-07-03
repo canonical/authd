@@ -12,8 +12,8 @@ Several brokers can be installed and enabled on a system.
 
 | Provider       | Broker snap                                             | Install as a snap              | Configure                                                                            | Provider docs                                                            |
 | ---            |---------------------------------------------------------|--------------------------------|--------------------------------------------------------------------------------------|--------------------------------------------------------------------------|
-| Google IAM     | [authd-google](https://snapcraft.io/authd-google)       | `snap install authd-google`    | <a href="../../howto/configure-authd/?broker=google">Google IAM guide</a>            | [Google](https://cloud.google.com/iam/docs/overview)                     |
 | Microsoft Entra ID    | [authd-msentraid](https://snapcraft.io/authd-msentraid) | `snap install authd-msentraid` | <a href="../../howto/configure-authd/?broker=msentraid">Microsoft Entra ID guide</a> | [Microsoft](https://learn.microsoft.com/en-us/entra/fundamentals/whatis) |
+| Google IAM     | [authd-google](https://snapcraft.io/authd-google)       | `snap install authd-google`    | <a href="../../howto/configure-authd/?broker=google">Google IAM guide</a>            | [Google](https://cloud.google.com/iam/docs/overview)                     |
 | Keycloak | [authd-oidc](https://snapcraft.io/authd-oidc)           | `snap install authd-oidc`      | <a href="../../howto/configure-authd/?broker=keycloak">Keycloak guide</a>            | [Keycloak](https://www.keycloak.org/documentation)  |
 
 
@@ -22,11 +22,6 @@ Support for multiple additional providers is planned for future releases of auth
 ```
 
 ## Authentication methods
-
-### Google IAM
-
-Google IAM supports device code authentication, where the user visits a URL
-and enters a code to complete authentication.
 
 ### Microsoft Entra ID
 
@@ -46,6 +41,11 @@ Both methods are enabled by default and can be individually controlled via the
 The **Entra password + MFA** flow has additional requirements for resolving group
 membership, depending on whether device registration is enabled. See
 [Group membership resolution with Entra password + MFA](reference::group-membership-resolution).
+
+### Google IAM
+
+Google IAM supports device code authentication, where the user visits a URL
+and enters a code to complete authentication.
 
 ### Keycloak
 
