@@ -379,7 +379,7 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 	username := s.brokerManager.UsernameFromSessionID(sessionID)
 
 	if access != auth.Granted {
-		if access == auth.Denied || access == auth.DeniedMaxTries {
+		if access == auth.Denied || access == auth.DeniedMaxTries || access == auth.Retry {
 			if count := s.failedAuths.recordFailure(username); count > s.authFailConfig.AuthFailDelayThreshold {
 				log.Debugf(ctx, "%s: Delaying response after %d consecutive authentication failures for %q", sessionID, count, username)
 				timer := time.NewTimer(s.authFailConfig.AuthFailDelay)

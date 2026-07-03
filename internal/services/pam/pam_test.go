@@ -574,6 +574,43 @@ func TestIsAuthenticated_FailDelay(t *testing.T) {
 		"attempt after threshold should be delayed")
 }
 
+// TestIsAuthenticated_FailDelay_Retry verifies that auth.Retry responses also
+// count toward the failure-delay threshold.  An attacker who uses a fresh
+// session for every guess always receives auth.Retry (the per-session
+// DeniedMaxTries counter never fires), so without this the delay would never
+// trigger.
+func TestIsAuthenticated_FailDelay_Retry(t *testing.T) {
+	t.Parallel()
+
+	client := newPamClient(t, nil, globalBrokerManager)
+
+	// Each call uses a fresh session, mimicking an attacker who resets the
+	// per-session retry counter by reconnecting.
+	makeRetryAttempt := func() {
+		t.Helper()
+		sessionID := startSession(t, client, "ia_retry@example.com")
+		_, err := client.IsAuthenticated(context.Background(), &authd.IARequest{
+			SessionId:          sessionID,
+			AuthenticationData: &authd.IARequest_AuthenticationData{},
+		})
+		require.NoError(t, err, "IsAuthenticated should not return an error")
+	}
+
+	// The first authFailDelayThreshold failures should not be delayed.
+	for i := range pam.AuthFailDelayThreshold {
+		start := time.Now()
+		makeRetryAttempt()
+		require.Less(t, time.Since(start), pam.AuthFailDelay,
+			"attempt %d of %d should not trigger the fail delay", i+1, pam.AuthFailDelayThreshold)
+	}
+
+	// The next failure should be delayed even though it is in a new session.
+	start := time.Now()
+	makeRetryAttempt()
+	require.GreaterOrEqual(t, time.Since(start), pam.AuthFailDelay,
+		"retry attempt after threshold should be delayed")
+}
+
 func TestIsAuthenticated_FailDelayTrackerFull(t *testing.T) {
 	// Cannot be parallel: temporarily overrides the package-level authFailMaxTracked.
 	//nolint:paralleltest // modifies package-level authFailMaxTracked, cannot run in parallel
