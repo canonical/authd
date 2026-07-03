@@ -9,7 +9,7 @@ sudo apt-get update && sudo apt-get -y install \
     guestfish \
     libvirt-clients-qemu \
     libvirt-daemon-system \
-    qemu-kvm \
+    qemu-system-x86 \
     retry \
     socat \
     xvfb \
