@@ -625,23 +625,17 @@ The Google IAM broker does not support configuring authentication flows.
 
 The `[flows]` section of the broker configuration file controls which
 authentication flows are offered to the user at login. By default, both
-device authentication (browser-based) and direct Entra password authentication
-(with MFA) are enabled.
+direct Entra password authentication (with MFA) and device authentication
+(browser-based) are enabled.
 
 ```ini
 [flows]
-## Enable browser-based device authentication flow (default: true)
-#device_auth = true
-
 ## Enable direct Entra password + MFA authentication (default: true)
 #entra_password = true
+
+## Enable browser-based device authentication flow (default: true)
+#device_auth = true
 ```
-
-### Device authentication
-
-When `device_auth` is enabled, the user is presented with a device code and
-a URL to visit in a browser to complete authentication. This is the standard
-OIDC device authorisation flow.
 
 ### Entra password authentication
 
@@ -659,6 +653,12 @@ FIDO2/WebAuthn security keys are currently not supported for the direct password
 If only FIDO methods are registered, the user is prompted to switch to device
 authentication instead.
 ```
+
+### Device authentication
+
+When `device_auth` is enabled, the user is presented with a device code and
+a URL to visit in a browser to complete authentication. This is the standard
+OIDC device authorization flow.
 
 ### Disabling a flow
 
