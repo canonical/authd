@@ -263,8 +263,10 @@ func parseConfigFromPath(cfgPath string, p provider) (userConfig, error) {
 	return parseConfig(cfgFile, dropInFiles, p)
 }
 
-// validateConfigFile checks a parsed ini config for validity: template placeholders and parseable boolean fields.
-func validateConfigFile(path string, iniCfg *ini.File) error {
+// validatePlaceholders checks that no values in iniCfg still contain unedited
+// template placeholders (e.g. "<ISSUER_ID>"). path is used only for the error
+// message and should be the main config file path.
+func validatePlaceholders(path string, iniCfg *ini.File) error {
 	var placeholderErr error
 	for _, section := range iniCfg.Sections() {
 		for _, key := range section.Keys() {
@@ -277,7 +279,13 @@ func validateConfigFile(path string, iniCfg *ini.File) error {
 	if placeholderErr != nil {
 		return fmt.Errorf("config file %q has invalid values, did you edit the config file?\n%w", path, placeholderErr)
 	}
+	return nil
+}
 
+// validateConfigFile checks a parsed ini config for validity: parseable boolean
+// fields, and logs warnings for unknown sections/keys. It does not check for
+// template placeholders; call validatePlaceholders for that.
+func validateConfigFile(path string, iniCfg *ini.File) error {
 	// Log warnings for unknown sections and keys.
 	for _, section := range iniCfg.Sections() {
 		if section.Name() == ini.DefaultSection {
@@ -329,6 +337,9 @@ func parseConfig(cfg configFile, dropInCfgs []configFile, p provider) (userConfi
 		return userConfig{}, fmt.Errorf("error in config file %q: %w", cfg.path, err)
 	}
 
+	// Validate syntax of the main config, but defer the placeholder check until
+	// after all drop-ins are applied: drop-in files in broker.conf.d are allowed
+	// to override placeholder values from the main config.
 	if err := validateConfigFile(cfg.path, iniCfg); err != nil {
 		return userConfig{}, err
 	}
@@ -346,6 +357,11 @@ func parseConfig(cfg configFile, dropInCfgs []configFile, p provider) (userConfi
 		if err := iniCfg.Append(dropIn.content); err != nil {
 			return userConfig{}, fmt.Errorf("error in drop-in config file %q: %w", dropIn.path, err)
 		}
+	}
+
+	// Check that all placeholders from the main config were overridden by drop-ins.
+	if err := validatePlaceholders(cfg.path, iniCfg); err != nil {
+		return userConfig{}, err
 	}
 
 	oidc := iniCfg.Section(oidcSection)
