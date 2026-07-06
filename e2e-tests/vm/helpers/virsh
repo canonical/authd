@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-exec sudo -E /usr/bin/virsh "$@"
+exec sudo /usr/bin/virsh "$@"
