@@ -1,0 +1,29 @@
+users:
+    - name: testselectbroker/error_when_user_is_bound_to_a_different_broker_separator_bound@example.com
+      uid: 1111
+      gid: 11111
+      gecos: bound user
+      dir: /home/bound@example.com
+      shell: /bin/bash
+      broker_id: some-other-broker-id
+      provider_id: some-provider-id
+    - name: testselectbroker/error_when_user_is_bound_to_non-local_broker_selects_local_separator_bound@example.com
+      uid: 2222
+      gid: 22222
+      gecos: bound user
+      dir: /home/bound@example.com
+      shell: /bin/bash
+      broker_id: some-other-broker-id
+      provider_id: some-provider-id-2
+groups:
+    - name: testselectbroker/error_when_user_is_bound_to_a_different_broker_separator_bound@example.com
+      gid: 11111
+      ugid: testselectbroker/error_when_user_is_bound_to_a_different_broker_separator_bound@example.com
+    - name: testselectbroker/error_when_user_is_bound_to_non-local_broker_selects_local_separator_bound@example.com
+      gid: 22222
+      ugid: testselectbroker/error_when_user_is_bound_to_non-local_broker_selects_local_separator_bound@example.com
+users_to_groups:
+    - uid: 1111
+      gid: 11111
+    - uid: 2222
+      gid: 22222
