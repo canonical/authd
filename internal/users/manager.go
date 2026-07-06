@@ -872,20 +872,6 @@ func (m *Manager) BrokerForUser(username string) (string, error) {
 	return u.BrokerID, nil
 }
 
-// ProviderIDForUser returns the stable provider identifier for the given user and broker.
-// Returns an empty string if the user has no matching identifier recorded (pre-migration, v2 broker, or another broker).
-func (m *Manager) ProviderIDForUser(username, brokerID string) (string, error) {
-	u, err := m.db.UserByName(username)
-	if err != nil {
-		return "", err
-	}
-	if brokerID != "" && u.BrokerID != "" && u.BrokerID != brokerID {
-		return "", nil
-	}
-
-	return u.ProviderID, nil
-}
-
 // BrokerAndProviderIDForUser returns the broker ID and the stable provider identifier recorded
 // for the user in a single database lookup. Both values are empty if not recorded (pre-migration
 // user, v2 broker, or local user).
