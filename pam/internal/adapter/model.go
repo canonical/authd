@@ -65,7 +65,8 @@ type uiModel struct {
 	sessionMode authd.SessionMode
 
 	// client is the [authd.PAMClient] handle used to communicate with authd.
-	client authd.PAMClient
+	client      authd.PAMClient
+	serviceName string
 
 	sessionStartingForBroker string
 	userIsBoundToBroker      bool
@@ -149,6 +150,7 @@ func newUIModelForClients(mTx pam.ModuleTransaction, clientType PamClientType, m
 		pamReturnValue: pamReturnValue,
 		client:         pamClient,
 	}
+	m.serviceName, _ = mTx.GetItem(pam.Service)
 
 	if m.pamReturnValue != nil {
 		*m.pamReturnValue = pamNoReturnValue
@@ -307,7 +309,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		safeMessageDebug(msg)
 		if m.sessionStartingForBroker == "" {
 			m.sessionStartingForBroker = msg.BrokerID
-			return m, startBrokerSession(m.client, msg.BrokerID, m.username(), m.sessionMode)
+			return m, startBrokerSession(m.client, msg.BrokerID, m.username(), m.serviceName, m.sessionMode)
 		}
 		if m.sessionStartingForBroker != msg.BrokerID {
 			return m, tea.Sequence(endSession(m.client, m.currentSession), sendEvent(msg))
