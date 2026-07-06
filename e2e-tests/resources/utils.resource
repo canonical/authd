@@ -111,7 +111,7 @@ Try Desktop Ready
     Hid.Move Pointer To Proportional    1    1
     BuiltIn.Sleep    1
     Hid.Move Pointer To Proportional    0    1
-    Match Text    Show Apps    2
+    Match Text    Show Apps    5
 
 
 Open Terminal
