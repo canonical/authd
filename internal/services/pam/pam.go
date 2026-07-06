@@ -156,13 +156,22 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 		return nil, status.Error(codes.InvalidArgument, "invalid session mode")
 	}
 
-	// Look up the user's stable provider identifier from the database.
-	// If the user doesn't exist yet (first login), the lookup fails silently
-	// and an empty identifier is passed to the broker.
-	userProviderID, err := s.userManager.ProviderIDForUser(username, brokerID)
+	// Look up the user's stored broker and stable provider identifier. If the
+	// user is already bound to a different broker, reject early before opening
+	// a session that would inevitably fail after authentication completes.
+	storedBrokerID, userProviderID, err := s.userManager.BrokerAndProviderIDForUser(username)
 	if err != nil && !errors.Is(err, users.NoDataFoundError{}) {
-		log.Errorf(ctx, "SelectBroker: Could not look up provider ID for user %q and broker %q: %v", username, brokerID, err)
-		return nil, fmt.Errorf("could not look up provider ID for user %q: %w", username, err)
+		log.Errorf(ctx, "SelectBroker: Could not look up broker and provider ID for user %q: %v", username, err)
+		return nil, fmt.Errorf("could not look up broker for user %q: %w", username, err)
+	}
+	if storedBrokerID != "" && storedBrokerID != brokerID {
+		log.Errorf(ctx, "SelectBroker: User %q is bound to broker %q and cannot authenticate with broker %q", username, storedBrokerID, brokerID)
+		return nil, status.Errorf(codes.PermissionDenied, "user %q is already bound to broker %q and cannot authenticate with broker %q", username, storedBrokerID, brokerID)
+	}
+	// If the requested broker doesn't match the stored one, the provider ID
+	// from the stored broker is not applicable.
+	if storedBrokerID != brokerID {
+		userProviderID = ""
 	}
 
 	// Create a session and Memorize selected broker for it.

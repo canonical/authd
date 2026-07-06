@@ -472,9 +472,11 @@ func ensureContainerReady(t *testing.T, containerName string) {
 }
 
 // ensureBindMount adds the project source tree bind-mount to the container if
-// it is not already present.
+// it is not already present with the correct path.
 func ensureBindMount(t *testing.T, containerName string) {
 	t.Helper()
+
+	projectRoot := ProjectRoot()
 
 	// #nosec:G204 - we control the command arguments
 	cmd := lxcCommand("config", "device", "show", containerName)
@@ -482,15 +484,23 @@ func ensureBindMount(t *testing.T, containerName string) {
 	if err != nil {
 		// If we can't read devices, try to add (it will fail if already present,
 		// which is harmless).
-		projectRoot := ProjectRoot()
 		lxcRun(t, "config", "device", "add", containerName, "project",
 			"disk", "source="+projectRoot, "path="+projectRoot)
 		return
 	}
 
-	// The device config is YAML; just check if "project:" appears in it.
 	if !bytes.Contains(out, []byte("project:")) {
-		projectRoot := ProjectRoot()
+		lxcRun(t, "config", "device", "add", containerName, "project",
+			"disk", "source="+projectRoot, "path="+projectRoot)
+		return
+	}
+
+	// The device exists: check that it points to the current project root.
+	// The YAML output contains the source path as a value, so a simple substring
+	// check is sufficient.
+	if !bytes.Contains(out, []byte("source: "+projectRoot+"\n")) {
+		// The bind-mount points to a different checkout; replace it.
+		lxcRun(t, "config", "device", "remove", containerName, "project")
 		lxcRun(t, "config", "device", "add", containerName, "project",
 			"disk", "source="+projectRoot, "path="+projectRoot)
 	}
