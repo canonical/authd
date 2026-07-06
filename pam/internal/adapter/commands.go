@@ -21,7 +21,7 @@ func sendEvent(msg tea.Msg) tea.Cmd {
 }
 
 // startBrokerSession returns the sessionID after marking a broker as current.
-func startBrokerSession(client authd.PAMClient, brokerID, username string, mode authd.SessionMode) tea.Cmd {
+func startBrokerSession(client authd.PAMClient, brokerID, username, serviceName string, mode authd.SessionMode) tea.Cmd {
 	return func() tea.Msg {
 		if brokerID == brokers.LocalBrokerName {
 			return pamError{status: pam.ErrIgnore}
@@ -39,10 +39,11 @@ func startBrokerSession(client authd.PAMClient, brokerID, username string, mode 
 		lang = strings.TrimSuffix(lang, ".UTF-8")
 
 		sbReq := &authd.SBRequest{
-			BrokerId: brokerID,
-			Username: username,
-			Lang:     lang,
-			Mode:     mode,
+			BrokerId:    brokerID,
+			Username:    username,
+			Lang:        lang,
+			Mode:        mode,
+			ServiceName: serviceName,
 		}
 
 		sbResp, err := client.SelectBroker(context.TODO(), sbReq)

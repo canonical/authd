@@ -814,6 +814,11 @@ func getMockBrokerGeneratedID(brokerManager *brokers.Manager) (string, error) {
 // startSession is a helper that starts a session on the mock broker.
 func startSession(t *testing.T, client authd.PAMClient, username string) string {
 	t.Helper()
+	return startSessionWithService(t, client, username, "")
+}
+
+func startSessionWithService(t *testing.T, client authd.PAMClient, username, serviceName string) string {
+	t.Helper()
 
 	if username == "" {
 		username = "user@example.com"
@@ -823,9 +828,10 @@ func startSession(t *testing.T, client authd.PAMClient, username string) string 
 	username = t.Name() + testutils.IDSeparator + username
 
 	sbResp, err := client.SelectBroker(context.Background(), &authd.SBRequest{
-		BrokerId: mockBrokerGeneratedID,
-		Username: username,
-		Mode:     authd.SessionMode_LOGIN,
+		BrokerId:    mockBrokerGeneratedID,
+		Username:    username,
+		Mode:        authd.SessionMode_LOGIN,
+		ServiceName: serviceName,
 	})
 	require.NoError(t, err, "Setup: failed to create session for tests")
 	return sbResp.GetSessionId()
