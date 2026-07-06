@@ -7,3 +7,4 @@ settings:
   status_mapping:
     opened: Untriaged
     closed: Done
+  epic_key: UDENG-9739
