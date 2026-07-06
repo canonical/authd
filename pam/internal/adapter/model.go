@@ -149,7 +149,11 @@ func newUIModelForClients(mTx pam.ModuleTransaction, clientType PamClientType, m
 		pamReturnValue: pamReturnValue,
 		client:         pamClient,
 	}
-	m.serviceName, _ = mTx.GetItem(pam.Service)
+	var err error
+	m.serviceName, err = mTx.GetItem(pam.Service)
+	if err != nil {
+		log.Warningf(context.TODO(), "failed to get the PAM service name: %v", err)
+	}
 
 	if m.pamReturnValue != nil {
 		*m.pamReturnValue = pamNoReturnValue

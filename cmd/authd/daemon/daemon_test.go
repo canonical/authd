@@ -14,6 +14,7 @@ import (
 	"github.com/canonical/authd/cmd/authd/daemon"
 	"github.com/canonical/authd/internal/consts"
 	"github.com/canonical/authd/internal/fileutils"
+	"github.com/canonical/authd/internal/services/pam"
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/canonical/authd/internal/users"
 	userslocking "github.com/canonical/authd/internal/users/locking"
@@ -311,6 +312,7 @@ func TestNoConfigSetDefaults(t *testing.T) {
 	require.Equal(t, consts.DefaultBrokersConfPath, a.Config().Paths.BrokersConf, "Default brokers configuration path")
 	require.Equal(t, consts.DefaultDatabaseDir, a.Config().Paths.Database, "Default database directory")
 	require.Equal(t, &users.DefaultConfig, a.Config().UsersConfig, "Default Users Config")
+	require.Equal(t, &pam.DefaultConfig, a.Config().PAMConfig, "Default PAM Config")
 	require.Equal(t, "", a.Config().Paths.Socket, "No socket address as default")
 }
 
