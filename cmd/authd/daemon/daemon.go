@@ -47,7 +47,7 @@ type daemonConfig struct {
 	Verbosity   int
 	Paths       systemPaths
 	UsersConfig *users.Config `mapstructure:",squash" yaml:",inline"`
-	PAMConfig   *pam.Config   `mapstructure:",squash" yaml:",inline"`
+	PAMConfig   *pam.Config   `mapstructure:"pam" yaml:"pam"`
 }
 
 type options struct {
