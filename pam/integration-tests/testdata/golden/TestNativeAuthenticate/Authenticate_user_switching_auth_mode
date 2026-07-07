@@ -177,6 +177,7 @@ Choose your authentication method:
 Enter 'r' to cancel the request and go back to select the authentication method
 Enter your pin code:
 > 4242
+  PAM_AUTHTOK: "4242"
 PAM Authenticate()
   User: "user-integration-switch-mode-native-testnativeauthenticate@example.com"
   Result: success

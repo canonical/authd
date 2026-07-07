@@ -25,7 +25,7 @@ type gdmModel struct {
 	waitingAuth bool
 
 	// Given the bubbletea async nature we may end up receiving and forwarding
-	// events after we've got a PamReturnStatus and even after the PAM module
+	// events after we've got a PamReturnValue and even after the PAM module
 	// has returned to libpam caller (since go goroutines can still be alive).
 	// However, after the quit point we should really not interact anymore with
 	// GDM or we'll make it crash (as it doesn't expect any conversation

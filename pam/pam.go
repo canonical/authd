@@ -48,6 +48,15 @@ const (
 	defaultConnectionTimeout = 2 * time.Second
 )
 
+// reportAuthtok is called after PAM_AUTHTOK is set. It is a no-op by default;
+// the pam_debug build overrides it to print the token so it appears in golden
+// files.
+var reportAuthtok = func(authtok string) {}
+
+// reportOldAuthtok is called after PAM_OLDAUTHTOK is set. Like reportAuthtok it
+// is a no-op by default and overridden by the pam_debug build.
+var reportOldAuthtok = func(oldAuthtok string) {}
+
 var supportedArgs = []string{
 	"debug",               // When this is set to "true", then debug logging is enabled.
 	"logfile",             // The path of the file that will be used for logging.
@@ -94,7 +103,7 @@ func showPamMessage(mTx pam.ModuleTransaction, style pam.Style, msg string) erro
 	return nil
 }
 
-func sendReturnMessageToPam(mTx pam.ModuleTransaction, retStatus adapter.PamReturnStatus) {
+func sendReturnMessageToPam(mTx pam.ModuleTransaction, retStatus adapter.PamReturnValue) {
 	msg := retStatus.Message()
 	if msg == "" {
 		return
@@ -324,8 +333,8 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 	}
 	defer closeConn()
 
-	var exitStatus adapter.PamReturnStatus
-	appState := adapter.NewUIModel(mTx, pamClientType, mode, conn, &exitStatus)
+	var pamReturnValue adapter.PamReturnValue
+	appState := adapter.NewUIModel(mTx, pamClientType, mode, conn, &pamReturnValue)
 	teaOpts = append(teaOpts, tea.WithFilter(adapter.MsgFilter))
 	p := tea.NewProgram(appState, teaOpts...)
 	if _, err := p.Run(); err != nil {
@@ -333,24 +342,36 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 		return pam.ErrAbort
 	}
 
-	switch exitStatus := exitStatus.(type) {
+	switch returnValue := pamReturnValue.(type) {
 	case adapter.PamSuccess:
-		if shouldSendAuthMessage(pamClientType, exitStatus.Message(), true) {
-			sendReturnMessageToPam(mTx, exitStatus)
+		if shouldSendAuthMessage(pamClientType, returnValue.Message(), true) {
+			sendReturnMessageToPam(mTx, returnValue)
+		}
+		if returnValue.AuthTok != "" {
+			if err := mTx.SetItem(pam.Authtok, returnValue.AuthTok); err != nil {
+				return err
+			}
+			reportAuthtok(returnValue.AuthTok)
+		}
+		if returnValue.OldAuthTok != "" {
+			if err := mTx.SetItem(pam.Oldauthtok, returnValue.OldAuthTok); err != nil {
+				return err
+			}
+			reportOldAuthtok(returnValue.OldAuthTok)
 		}
 		return nil
 
 	case adapter.PamReturnError:
-		if shouldSendAuthMessage(pamClientType, exitStatus.Message(), false) {
-			sendReturnMessageToPam(mTx, exitStatus)
+		if shouldSendAuthMessage(pamClientType, returnValue.Message(), false) {
+			sendReturnMessageToPam(mTx, returnValue)
 		}
-		return fmt.Errorf("%w: %s", exitStatus.Status(), exitStatus.Message())
+		return fmt.Errorf("%w: %s", returnValue.Status(), returnValue.Message())
 
 	default:
 		// Preserve the previous behavior of showing any message associated with
 		// unexpected exit statuses before returning the system error.
-		sendReturnMessageToPam(mTx, exitStatus)
-		return fmt.Errorf("%w: unknown exit code: %#v", pam.ErrSystem, exitStatus)
+		sendReturnMessageToPam(mTx, returnValue)
+		return fmt.Errorf("%w: unknown exit code: %#v", pam.ErrSystem, returnValue)
 	}
 }
 
