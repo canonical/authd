@@ -352,6 +352,15 @@ on_exec_module_removed (pam_handle_t *pamh,
   if (server)
     g_dbus_server_stop (server);
 
+  /* Drain any callbacks queued by stopping the server (e.g., the pending
+   * GTask from g_socket_listener_accept_socket_async inside GDBusServer)
+   * so that GLib releases those objects before the main context is freed.
+   * Without this, they are reported as memory leaks by AddressSanitizer.
+   */
+  while (module_data->main_context &&
+         g_main_context_iteration (module_data->main_context, FALSE))
+    ;
+
   g_clear_object (&module_data->cancellable);
   g_clear_pointer (&module_data->main_context, g_main_context_unref);
   g_free (module_data);
