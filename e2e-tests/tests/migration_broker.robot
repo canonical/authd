@@ -36,6 +36,11 @@ Test login with broker on edge channel
     Log Out From Terminal Session
     Close Terminal In Sudo Mode
 
+    # Disable entra_password before upgrading: the edge broker refuses to start
+    # if this flow is enabled without register_device or a client_secret, which
+    # are both not configured.
+    Disable Entra Password Via Drop In
+
     # Switch to edge channel for the broker snap
     Enable Edge Broker
 
