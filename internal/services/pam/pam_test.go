@@ -546,6 +546,32 @@ func TestIsAuthenticated(t *testing.T) {
 	}
 }
 
+func TestConfigWarnOnUnknownServices(t *testing.T) {
+	pamDDir := t.TempDir()
+	pamDDirAlt := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(pamDDirAlt, "sshd"), []byte{}, 0600),
+		"Setup: could not create PAM service file")
+
+	cfg := pam.Config{
+		BruteForceMitigationConfig: pam.DefaultConfig.BruteForceMitigationConfig,
+		Services: map[string]pam.BruteForceOverride{
+			"sshd":        {},
+			"no-such-app": {},
+		},
+	}
+
+	var warnings []string
+	log.SetLevelHandler(log.WarnLevel, func(_ context.Context, _ log.Level, format string, args ...interface{}) {
+		warnings = append(warnings, fmt.Sprintf(format, args...))
+	})
+	t.Cleanup(func() { log.SetLevelHandler(log.WarnLevel, nil) })
+
+	cfg.WarnOnUnknownServices(context.Background(), []string{pamDDir, pamDDirAlt})
+
+	require.Len(t, warnings, 1, "Expected exactly one warning for the missing service")
+	require.Contains(t, warnings[0], `"no-such-app"`, "Warning should mention the missing service name")
+}
+
 func TestIsAuthenticated_FailDelay_PerService(t *testing.T) {
 	t.Parallel()
 

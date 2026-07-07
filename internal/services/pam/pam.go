@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
 	"os/user"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -91,6 +93,28 @@ func (c Config) ForService(name string) BruteForceMitigationConfig {
 		result.AuthFailResetWindow = *override.AuthFailResetWindow
 	}
 	return result
+}
+
+// WarnOnUnknownServices logs a warning for each service name in cfg.Services that
+// does not have a corresponding PAM configuration file in pamDDirs.
+// We don't treat this as an error to avoid authd failing to start when a PAM service
+// is removed from the system but still present in the config file.
+func (c Config) WarnOnUnknownServices(ctx context.Context, pamDDirs []string) {
+	for name := range c.Services {
+		found := false
+		for _, pamDDir := range pamDDirs {
+			if _, err := os.Stat(filepath.Join(pamDDir, name)); err == nil {
+				found = true
+				break
+			} else if !os.IsNotExist(err) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			log.Warningf(ctx, "PAM service %q configured in authd but not found in %s", name, strings.Join(pamDDirs, " or "))
+		}
+	}
 }
 
 // durPtr returns a pointer to the given duration value.
