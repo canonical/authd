@@ -34,11 +34,12 @@ class Journal:
         os.makedirs(self.output_dir, exist_ok=True)
 
         if os.getenv("SYSTEMD_SUPPORTS_VSOCK"):
+            vm_name = VMUtils.vm_name()
             self.process = ExecUtils.Popen(
                 [
                     "/lib/systemd/systemd-journal-remote",
                     f"--listen-raw=vsock:{HOST_CID}:{PORT}",
-                    f"--output={self.output_dir}",
+                    f"--output={self.output_dir}/{vm_name}.journal",
                 ],
                 stderr=subprocess.PIPE,
             )
