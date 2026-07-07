@@ -30,7 +30,7 @@ Test authctl user set-uid
 
     ${home_dir} =    SSH.Execute    getent passwd ${username} | cut -d: -f6
     Should Not Be Empty    ${home_dir}
-    SSH.Execute    sudo -u ${username} touch ${home_dir}/test-file
+    SSH.Execute As User    ${username}    touch ${home_dir}/test-file
 
     # Terminate the remote user's session so that proc.CheckUserBusy (which
     # rejects set-uid when any process runs under that UID) does not block the

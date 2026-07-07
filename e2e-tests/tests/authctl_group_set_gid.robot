@@ -36,7 +36,7 @@ Test authctl group set-gid
 
     ${home_dir} =    SSH.Execute    getent passwd ${username} | cut -d: -f6
     Should Not Be Empty    ${home_dir}
-    SSH.Execute    sudo -u ${username} touch ${home_dir}/test-file
+    SSH.Execute As User    ${username}    touch ${home_dir}/test-file
 
     ${output} =    SSH.Execute    sudo authctl group set-gid ${group_name} ${new_gid} 2>&1
     Should Contain    ${output}    GID of group '${group_name}' set to ${new_gid}.
