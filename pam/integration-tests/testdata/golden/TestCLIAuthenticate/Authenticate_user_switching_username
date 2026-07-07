@@ -28,10 +28,8 @@ Gimme your password:
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
+  PAM_AUTHTOK: "goodpass"
 PAM Authenticate()
-  User: "user-integration-username-switched@example.com"
-  Result: success
-PAM AcctMgmt()
   User: "user-integration-username-switched@example.com"
   Result: success
 ────────────────────────────────────────────────────────────────────────────────

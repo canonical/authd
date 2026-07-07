@@ -16,7 +16,6 @@ service PAM {
   rpc IsAuthenticated(IARequest) returns (IAResponse);
   rpc EndSession(ESRequest) returns (Empty);
 
-  rpc SetBroker(STBRequest) returns (Empty);
 }
 
 message GBRequest {
@@ -120,10 +119,6 @@ message IAResponse {
   string msg = 2;
 }
 
-message STBRequest {
-  string broker_id = 1;
-  string username = 2;
-}
 
 message ESRequest {
   string session_id = 1;

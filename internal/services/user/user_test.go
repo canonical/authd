@@ -620,7 +620,7 @@ func newUserServiceClient(t *testing.T, dbFile string, currentUserNotRoot ...boo
 	}
 	service := user.NewService(context.Background(), userManager, brokerManager, &permissionsManager)
 
-	grpcServer := grpc.NewServer(permissions.WithUnixPeerCreds(), grpc.ChainUnaryInterceptor(enableCheckGlobalAccess(service), errmessages.RedactErrorInterceptor))
+	grpcServer := grpc.NewServer(permissions.WithUnixPeerCreds(), grpc.ChainUnaryInterceptor(errmessages.RedactErrorInterceptor))
 	authd.RegisterUserServiceServer(grpcServer, service)
 	done := make(chan struct{})
 	go func() {
@@ -638,16 +638,6 @@ func newUserServiceClient(t *testing.T, dbFile string, currentUserNotRoot ...boo
 	t.Cleanup(func() { _ = conn.Close() }) // We don't care about the error on cleanup
 
 	return authd.NewUserServiceClient(conn), userManager
-}
-
-func enableCheckGlobalAccess(s user.Service) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		if err := s.CheckGlobalAccess(ctx, info.FullMethod); err != nil {
-			return nil, err
-		}
-
-		return handler(ctx, req)
-	}
 }
 
 // newUserManagerForTests returns a user manager object cleaned up with the test ends.

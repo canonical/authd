@@ -82,8 +82,6 @@ const (
 	RunnerResultActionAuthenticate RunnerResultAction = iota
 	// RunnerResultActionChangeAuthTok is the string for ChangeAuthTok action.
 	RunnerResultActionChangeAuthTok
-	// RunnerResultActionAcctMgmt is the string for the AcctMgmt action.
-	RunnerResultActionAcctMgmt
 )
 
 func (result RunnerResultAction) String() string {
@@ -92,8 +90,6 @@ func (result RunnerResultAction) String() string {
 		return "PAM Authenticate()"
 	case RunnerResultActionChangeAuthTok:
 		return "PAM ChangeAuthTok()"
-	case RunnerResultActionAcctMgmt:
-		return "PAM AcctMgmt()"
 	default:
 		panic(fmt.Sprintf("Invalid PAM result %d", result))
 	}

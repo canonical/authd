@@ -13,6 +13,7 @@ import (
 	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/canonical/authd/internal/services"
 	"github.com/canonical/authd/internal/services/errmessages"
+	"github.com/canonical/authd/internal/services/pam"
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/internal/users"
@@ -43,7 +44,7 @@ func TestNewManager(t *testing.T) {
 				t.Setenv("DBUS_SYSTEM_BUS_ADDRESS", tc.systemBusSocket)
 			}
 
-			m, err := services.NewManager(context.Background(), tc.dbDir, t.TempDir(), nil, users.DefaultConfig)
+			m, err := services.NewManager(context.Background(), tc.dbDir, t.TempDir(), nil, users.DefaultConfig, pam.DefaultConfig)
 			if tc.wantErr {
 				require.Error(t, err, "NewManager should have returned an error, but did not")
 				return
@@ -58,7 +59,7 @@ func TestNewManager(t *testing.T) {
 func TestRegisterGRPCServices(t *testing.T) {
 	t.Parallel()
 
-	m, err := services.NewManager(context.Background(), t.TempDir(), t.TempDir(), nil, users.DefaultConfig)
+	m, err := services.NewManager(context.Background(), t.TempDir(), t.TempDir(), nil, users.DefaultConfig, pam.DefaultConfig)
 	require.NoError(t, err, "Setup: could not create manager for the test")
 	defer require.NoError(t, m.Stop(), "Teardown: Stop should not have returned an error, but did")
 
@@ -75,7 +76,7 @@ func TestRegisterGRPCServices(t *testing.T) {
 func TestAccessAuthorization(t *testing.T) {
 	t.Parallel()
 
-	m, err := services.NewManager(context.Background(), t.TempDir(), t.TempDir(), nil, users.DefaultConfig)
+	m, err := services.NewManager(context.Background(), t.TempDir(), t.TempDir(), nil, users.DefaultConfig, pam.DefaultConfig)
 	require.NoError(t, err, "Setup: could not create manager for the test")
 	defer require.NoError(t, m.Stop(), "Teardown: Stop should not have returned an error, but did")
 
@@ -100,10 +101,10 @@ func TestAccessAuthorization(t *testing.T) {
 	conn, err := grpc.NewClient("unix://"+socketPath, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithUnaryInterceptor(errmessages.FormatErrorMessage))
 	require.NoError(t, err, "Setup: could not dial the server")
 
-	// Global authorization for PAM is always denied for non root user.
+	// PAM calls are allowed for non-root users.
 	pamClient := authd.NewPAMClient(conn)
 	_, err = pamClient.AvailableBrokers(context.Background(), &authd.Empty{})
-	require.Error(t, err, "PAM calls are not allowed to any random user")
+	require.NoError(t, err, "PAM calls should be allowed for non-root users")
 
 	// Global authorization for the user service is always granted for non root user.
 	userServiceClient := authd.NewUserServiceClient(conn)
