@@ -18,7 +18,7 @@ Variables           ./broker_vars.py
 
 *** Keywords ***
 Enable Edge Broker
-    SSH.Execute    sudo snap refresh ${BROKER_SNAP_NAME} --edge
+    SSH.Execute    snap refresh ${BROKER_SNAP_NAME} --edge
 
 
 Disable Entra Password Via Drop In
@@ -36,9 +36,9 @@ Disable Entra Password Via Drop In
 
 
 Disable Broker And Purge Config
-    SSH.Execute    sudo snap stop ${BROKER_SNAP_NAME}
-    SSH.Execute    sudo rm ${AUTHD_BROKER_CFG}
-    SSH.Execute    sudo systemctl restart authd.service
+    SSH.Execute    snap stop ${BROKER_SNAP_NAME}
+    SSH.Execute    rm ${AUTHD_BROKER_CFG}
+    SSH.Execute    systemctl restart authd.service
 
 
 Log In With Remote User Through CLI: QR Code
@@ -213,16 +213,16 @@ Remove Registered Owner
     [Documentation]    Removes the auto-registration drop-in that the broker creates when
     ...               the first user logs in, so that subsequent OWNER-based tests start
     ...               from a known-clean state.
-    SSH.Execute    sudo rm -f ${BROKER_CFG_DIR}/20-owner-autoregistration.conf
-    SSH.Execute    sudo snap restart ${BROKER_SNAP_NAME}
+    SSH.Execute    rm -f ${BROKER_CFG_DIR}/20-owner-autoregistration.conf
+    SSH.Execute    snap restart ${BROKER_SNAP_NAME}
 
 
 Block Network Access To Identity Provider
     [Documentation]    Blocks outbound HTTPS traffic (IPv4 and IPv6) to simulate the identity
     ...               provider being unreachable. The iptables rules are automatically reverted
     ...               when the VM snapshot is restored at the start of the next test.
-    SSH.Execute    sudo iptables -I OUTPUT -p tcp --dport 443 -j REJECT
-    SSH.Execute    sudo ip6tables -I OUTPUT -p tcp --dport 443 -j REJECT
+    SSH.Execute    iptables -I OUTPUT -p tcp --dport 443 -j REJECT
+    SSH.Execute    ip6tables -I OUTPUT -p tcp --dport 443 -j REJECT
 
 
 # Uses sed to change the broker configuration.
@@ -231,22 +231,22 @@ Block Network Access To Identity Provider
 #     sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${BROKER_CFG}
 Change Broker Configuration
     [Arguments]    ${config_key}    ${config_value}
-    SSH.Execute    sudo sed -i 's|^#*${config_key} =.*|${config_key} = ${config_value}|g' ${BROKER_CFG}
-    SSH.Execute    sudo snap restart ${BROKER_SNAP_NAME}
+    SSH.Execute    sed -i 's|^#*${config_key} =.*|${config_key} = ${config_value}|g' ${BROKER_CFG}
+    SSH.Execute    snap restart ${BROKER_SNAP_NAME}
 
 
 # Pretty much the same as the function above, but since YARF does not have support for
 # shifted characters yet, we need to do some workarounds.
 Change allowed_users In Broker Configuration
     [Arguments]    ${config_value}
-    SSH.Execute    sudo sed -i 's/^#*allowed_users =.*/allowed_users = ${config_value}/g' ${BROKER_CFG}
-    SSH.Execute    sudo snap restart ${BROKER_SNAP_NAME}
+    SSH.Execute    sed -i 's/^#*allowed_users =.*/allowed_users = ${config_value}/g' ${BROKER_CFG}
+    SSH.Execute    snap restart ${BROKER_SNAP_NAME}
 
 
 Comment Key In Broker Configuration
     [Arguments]    ${config_key}
-    SSH.Execute    sudo sed -i 's/^#*${config_key} =.*/#${config_key} = .*/g' ${BROKER_CFG}
-    SSH.Execute    sudo snap restart ${BROKER_SNAP_NAME}
+    SSH.Execute    sed -i 's/^#*${config_key} =.*/#${config_key} = .*/g' ${BROKER_CFG}
+    SSH.Execute    snap restart ${BROKER_SNAP_NAME}
 
 
 Log In With Remote User Through SSH: QR Code
@@ -369,13 +369,13 @@ Check User Information
 
 Check Configuration Value
     [Arguments]    ${config_key}    ${expected_value}
-    ${content} =    SSH.Execute    sudo grep ${config_key} ${BROKER_CFG}
+    ${content} =    SSH.Execute    grep ${config_key} ${BROKER_CFG}
     Should Contain    ${content}    ${expected_value}
 
 
 Check If Owner Was Registered
     [Arguments]    ${username}
-    ${content} =    SSH.Execute    sudo cat ${BROKER_CFG_DIR}/20-owner-autoregistration.conf
+    ${content} =    SSH.Execute    cat ${BROKER_CFG_DIR}/20-owner-autoregistration.conf
     Should Contain    ${content}    owner = ${username}
 
 
@@ -383,7 +383,7 @@ Check Home Directory
     [Arguments]    ${username}    ${base_dir}=/home
     ${home_dir} =    SSH.Execute    getent passwd ${username} | cut -d: -f6
     Should Start With    ${home_dir}    ${base_dir}/
-    ${ownership} =    SSH.Execute    sudo stat -c %U:%G ${home_dir}
+    ${ownership} =    SSH.Execute    stat -c %U:%G ${home_dir}
     Should Be Equal    ${ownership}    ${username}:${username}
 
 

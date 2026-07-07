@@ -38,7 +38,7 @@ Test authctl group set-gid
     Should Not Be Empty    ${home_dir}
     SSH.Execute As User    ${username}    touch ${home_dir}/test-file
 
-    ${output} =    SSH.Execute    sudo authctl group set-gid ${group_name} ${new_gid} 2>&1
+    ${output} =    SSH.Execute    authctl group set-gid ${group_name} ${new_gid} 2>&1
     Should Contain    ${output}    GID of group '${group_name}' set to ${new_gid}.
 
     ${actual_gid} =    SSH.Execute    getent group ${group_name} | cut -d: -f3
@@ -52,7 +52,7 @@ Test authctl group set-gid
 
     ${home_gid} =    SSH.Execute    stat -c %g ${home_dir}
     Should Be Equal As Strings    ${home_gid}    ${new_gid}
-    ${file_gid} =    SSH.Execute    sudo stat -c %g ${home_dir}/test-file
+    ${file_gid} =    SSH.Execute    stat -c %g ${home_dir}/test-file
     Should Be Equal As Strings    ${file_gid}    ${new_gid}
 
     # This test case tests a bug that was fixed in https://github.com/canonical/authd/pull/1422/

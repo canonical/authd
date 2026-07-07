@@ -36,10 +36,10 @@ Test authctl user set-uid
     # rejects set-uid when any process runs under that UID) does not block the
     # operation.  Use loginctl to tear down the session gracefully, then poll
     # until all processes have exited rather than relying on a hard sleep.
-    SSH.Execute    sudo loginctl terminate-user ${username} || true
+    SSH.Execute    loginctl terminate-user ${username} || true
     Wait Until Keyword Succeeds    30s    1s    SSH.Execute    test -z "$(pgrep -u ${username})"
 
-    ${output} =    SSH.Execute    sudo authctl user set-uid ${username} ${new_uid} 2>&1
+    ${output} =    SSH.Execute    authctl user set-uid ${username} ${new_uid} 2>&1
     Should Contain    ${output}    UID of user '${username}' set to ${new_uid}.
 
     ${actual_uid} =    SSH.Execute    getent passwd ${username} | cut -d: -f3
@@ -53,7 +53,7 @@ Test authctl user set-uid
 
     ${home_uid} =    SSH.Execute    stat -c %u ${home_dir}
     Should Be Equal As Strings    ${home_uid}    ${new_uid}
-    ${file_uid} =    SSH.Execute    sudo stat -c %u ${home_dir}/test-file
+    ${file_uid} =    SSH.Execute    stat -c %u ${home_dir}/test-file
     Should Be Equal As Strings    ${file_uid}    ${new_uid}
 
     Open Terminal
