@@ -155,11 +155,24 @@ func (m authModeSelectionModel) Update(msg tea.Msg) (authModeSelectionModel, tea
 
 		firstAuthModeID := m.availableAuthModes[0].Id
 		if m.clientType != InteractiveTerminal && !m.Focused() {
-			m.autoSelectedAuthModeID = firstAuthModeID
+			// Preserve a deferred external selection (set before modes arrived).
+			if m.autoSelectedAuthModeID == "" {
+				m.autoSelectedAuthModeID = firstAuthModeID
+			}
 			return m, cmd
 		}
 
-		return m, tea.Sequence(cmd, selectAuthMode(firstAuthModeID))
+		// When already focused, honor a pending selection from before modes
+		// arrived (e.g. GDM client sent AuthModeSelected while stage change
+		// arrived before the mode list was fetched). Fall back to the first
+		// available mode.
+		selectedID := firstAuthModeID
+		if m.autoSelectedAuthModeID != "" && validAuthModeID(m.autoSelectedAuthModeID, m.availableAuthModes) {
+			selectedID = m.autoSelectedAuthModeID
+		}
+		m.autoSelectedAuthModeID = ""
+
+		return m, tea.Sequence(cmd, selectAuthMode(selectedID))
 
 	case listItemSelected:
 		if !m.Focused() {
@@ -175,6 +188,14 @@ func (m authModeSelectionModel) Update(msg tea.Msg) (authModeSelectionModel, tea
 		safeMessageDebug(msg)
 		// Ensure auth mode id is valid
 		if !validAuthModeID(msg.id, m.availableAuthModes) {
+			if len(m.availableAuthModes) == 0 {
+				// Modes not yet available; the stage change arrived before the
+				// mode list was fetched (e.g. GDM/Native MFA path in model.go
+				// where changeStageCmd runs before getModesCmd). Defer this
+				// selection; it will be applied when authModesReceived fires.
+				m.autoSelectedAuthModeID = msg.id
+				return m, nil
+			}
 			log.Infof(context.TODO(), "authentication mode %q is not part of currently available authentication mode", msg.id)
 			return m, nil
 		}
