@@ -67,6 +67,7 @@ Unlock your phone +33... or accept request on web interface
 
   Press escape key to go back to select the authentication method
 ────────────────────────────────────────────────────────────────────────────────
+  PAM_AUTHTOK: "goodpass"
 PAM Authenticate()
   User: "user-mfa@example.com"
   Result: success
