@@ -21,6 +21,20 @@ Enable Edge Broker
     SSH.Execute    sudo snap refresh ${BROKER_SNAP_NAME} --edge
 
 
+Disable Entra Password Via Drop In
+    [Documentation]    Writes a drop-in that sets entra_password = false.
+    ...
+    ...                More robust than Change Broker Configuration for this key,
+    ...                because stable snapshots provisioned before the [flows]
+    ...                section was added may not contain an entra_password line
+    ...                at all, causing a silent sed no-op.
+    # TODO(stable-release): Can be removed once the stable broker has been
+    #                       updated to include the [flows] section.
+    SSH.Execute    mkdir -p ${BROKER_CFG_DIR}
+    SSH.Execute    printf '[flows]\nentra_password = false\n' > ${BROKER_CFG_DIR}/99-disable-entra-password.conf
+    SSH.Execute    snap restart ${BROKER_SNAP_NAME}
+
+
 Disable Broker And Purge Config
     SSH.Execute    sudo snap stop ${BROKER_SNAP_NAME}
     SSH.Execute    sudo rm ${AUTHD_BROKER_CFG}
