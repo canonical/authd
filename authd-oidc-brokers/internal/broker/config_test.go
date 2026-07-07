@@ -576,6 +576,16 @@ unknown_key = some_value
 `,
 			wantErr: `unknown key "unknown_key" in section "users" in config file`,
 		},
+		"Error_for_key_outside_any_section": {
+			config: `
+owner = someuser
+
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+`,
+			wantErr: `keys outside of any section in config file`,
+		},
 	}
 
 	for name, tc := range tests {

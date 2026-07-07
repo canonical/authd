@@ -289,6 +289,9 @@ func validateConfigFile(path string, iniCfg *ini.File) error {
 	// Return errors for unknown sections and keys.
 	for _, section := range iniCfg.Sections() {
 		if section.Name() == ini.DefaultSection {
+			if len(section.Keys()) > 0 {
+				return fmt.Errorf("keys outside of any section in config file %q", path)
+			}
 			continue
 		}
 		sectionKeys, ok := knownConfigKeys[section.Name()]
