@@ -246,6 +246,3 @@ Choose action:
 PAM Authenticate()
   User: "user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-integration-native-authenticate-user-with-qr-code-in-a-tty-session@example.com"
-  Result: success

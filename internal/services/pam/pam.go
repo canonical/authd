@@ -6,15 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os/user"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/canonical/authd/internal/brokers"
 	"github.com/canonical/authd/internal/brokers/auth"
 	"github.com/canonical/authd/internal/brokers/layouts"
 	"github.com/canonical/authd/internal/decorate"
 	"github.com/canonical/authd/internal/proto/authd"
-	"github.com/canonical/authd/internal/services/permissions"
 	"github.com/canonical/authd/internal/users"
 	"github.com/canonical/authd/internal/users/types"
 	"github.com/canonical/authd/log"
@@ -25,23 +27,105 @@ import (
 
 var _ authd.PAMServer = Service{}
 
+// authFailMaxTracked is the maximum number of distinct usernames tracked simultaneously
+// to bound memory usage.
+var authFailMaxTracked = 10000
+
+// Config holds the configurable parameters for the PAM service.
+type Config struct {
+	// AuthFailDelayThreshold is the number of consecutive authentication failures before
+	// a delay is imposed on subsequent attempts, to mitigate brute-force attacks.
+	AuthFailDelayThreshold int `mapstructure:"auth_fail_delay_threshold" yaml:"auth_fail_delay_threshold"`
+	// AuthFailDelay is the delay imposed after AuthFailDelayThreshold consecutive failures.
+	AuthFailDelay time.Duration `mapstructure:"auth_fail_delay" yaml:"auth_fail_delay"`
+	// AuthFailResetWindow is the duration after the last failure before the failure count
+	// is automatically reset, to avoid penalizing users indefinitely.
+	AuthFailResetWindow time.Duration `mapstructure:"auth_fail_reset_window" yaml:"auth_fail_reset_window"`
+}
+
+// DefaultConfig is the default configuration for the PAM service.
+var DefaultConfig = Config{
+	AuthFailDelayThreshold: 3,
+	AuthFailDelay:          2 * time.Second,
+	AuthFailResetWindow:    15 * time.Minute,
+}
+
+// authFailEntry holds the failure count and the time of the most recent failure for one user.
+type authFailEntry struct {
+	count    int
+	lastFail time.Time
+}
+
+// authFailTracker counts consecutive per-user authentication failures and imposes
+// a delay once the threshold is reached.
+type authFailTracker struct {
+	mu          sync.Mutex
+	entries     map[string]*authFailEntry
+	resetWindow time.Duration
+}
+
+func newAuthFailTracker(cfg Config) *authFailTracker {
+	return &authFailTracker{
+		entries:     make(map[string]*authFailEntry),
+		resetWindow: cfg.AuthFailResetWindow,
+	}
+}
+
+// recordFailure increments the failure count for username and returns the new count.
+// If the previous failure is older than resetWindow the counter is reset first.
+// A resetWindow of 0 keeps failures accumulated indefinitely (no inactivity reset).
+// When the tracker is at capacity the username is not stored, but math.MaxInt is
+// returned so that the delay is still applied (fail-secure).
+func (t *authFailTracker) recordFailure(username string) int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	e, ok := t.entries[username]
+	if ok && t.resetWindow > 0 && time.Since(e.lastFail) >= t.resetWindow {
+		// Stale entry: treat as fresh start.
+		ok = false
+	}
+	if !ok {
+		if len(t.entries) >= authFailMaxTracked {
+			// At capacity: return a count that always exceeds the threshold so
+			// the delay is applied.  This prevents a fill attack (flooding the
+			// tracker with bogus usernames) from disabling brute-force protection
+			// for the real target.
+			return math.MaxInt
+		}
+		e = &authFailEntry{}
+		t.entries[username] = e
+	}
+	e.count++
+	e.lastFail = time.Now()
+	return e.count
+}
+
+// recordSuccess resets the failure count for username.
+func (t *authFailTracker) recordSuccess(username string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.entries, username)
+}
+
 // Service is the implementation of the PAM module service.
 type Service struct {
-	userManager       *users.Manager
-	brokerManager     *brokers.Manager
-	permissionManager *permissions.Manager
+	userManager    *users.Manager
+	brokerManager  *brokers.Manager
+	failedAuths    *authFailTracker
+	authFailConfig Config
 
 	authd.UnimplementedPAMServer
 }
 
 // NewService returns a new PAM GRPC service.
-func NewService(ctx context.Context, userManager *users.Manager, brokerManager *brokers.Manager, permissionManager *permissions.Manager) Service {
+func NewService(ctx context.Context, userManager *users.Manager, brokerManager *brokers.Manager, cfg Config) Service {
 	log.Debug(ctx, "Building new gRPC PAM service")
 
 	return Service{
-		userManager:       userManager,
-		brokerManager:     brokerManager,
-		permissionManager: permissionManager,
+		userManager:    userManager,
+		brokerManager:  brokerManager,
+		failedAuths:    newAuthFailTracker(cfg),
+		authFailConfig: cfg,
 	}
 }
 
@@ -293,7 +377,20 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 
 	log.Debugf(ctx, "%s: Authentication result: %s", sessionID, access)
 
+	username := s.brokerManager.UsernameFromSessionID(sessionID)
+
 	if access != auth.Granted {
+		if access == auth.Denied || access == auth.DeniedMaxTries || access == auth.Retry {
+			if count := s.failedAuths.recordFailure(username); count > s.authFailConfig.AuthFailDelayThreshold {
+				log.Debugf(ctx, "%s: Delaying response after %d consecutive authentication failures for %q", sessionID, count, username)
+				timer := time.NewTimer(s.authFailConfig.AuthFailDelay)
+				select {
+				case <-timer.C:
+				case <-ctx.Done():
+					timer.Stop()
+				}
+			}
+		}
 		return &authd.IAResponse{
 			Access: access,
 			Msg:    data,
@@ -357,43 +454,25 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		}
 	}
 
+	// Set the broker as the default for the user on each successful authentication,
+	// unless it's the local broker (which is selected based on NSS resolution, not stored).
+	if broker.ID != brokers.LocalBrokerName {
+		if err = s.brokerManager.SetBroker(broker.ID, uInfo.Name); err != nil {
+			log.Errorf(ctx, "IsAuthenticated: Could not set default broker %q for user %q: %v", broker.ID, uInfo.Name, err)
+			return nil, err
+		}
+		if err = s.userManager.UpdateBrokerForUser(uInfo.Name, broker.ID); err != nil {
+			log.Errorf(ctx, "IsAuthenticated: Could not update broker for user %q in database: %v", uInfo.Name, err)
+			return nil, err
+		}
+	}
+
+	s.failedAuths.recordSuccess(username)
+
 	return &authd.IAResponse{
 		Access: access,
 		Msg:    msg,
 	}, nil
-}
-
-// SetBroker sets the default broker for the given user.
-func (s Service) SetBroker(ctx context.Context, req *authd.STBRequest) (empty *authd.Empty, err error) {
-	defer decorate.OnError(&err, "can't set default broker %q for user %q", req.GetBrokerId(), req.GetUsername())
-
-	// authd usernames are lowercase
-	username := strings.ToLower(req.GetUsername())
-	brokerID := req.GetBrokerId()
-
-	if username == "" {
-		log.Errorf(ctx, "SetBroker: No user name given")
-		return nil, status.Error(codes.InvalidArgument, "no user name given")
-	}
-
-	// Don't allow setting the default broker to the local broker, because the decision to use the local broker should
-	// be made each time the user tries to log in, based on whether the user is provided by any other NSS service.
-	if brokerID == brokers.LocalBrokerName {
-		log.Errorf(ctx, "SetBroker: Can't set local broker as default for user %q", username)
-		return nil, status.Error(codes.InvalidArgument, "can't set local broker as default")
-	}
-
-	if err = s.brokerManager.SetBroker(brokerID, username); err != nil {
-		log.Errorf(ctx, "SetBroker: Could not set default broker %q for user %q: %v", brokerID, username, err)
-		return &authd.Empty{}, err
-	}
-
-	if err = s.userManager.UpdateBrokerForUser(username, brokerID); err != nil {
-		log.Errorf(ctx, "SetBroker: Could not update broker for user %q in database: %v", username, err)
-		return &authd.Empty{}, err
-	}
-
-	return &authd.Empty{}, nil
 }
 
 // EndSession asks the broker associated with the sessionID to end the session.

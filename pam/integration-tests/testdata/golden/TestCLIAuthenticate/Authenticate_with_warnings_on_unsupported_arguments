@@ -22,7 +22,4 @@ Gimme your password:
 PAM Authenticate()
   User: "user2@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user2@example.com"
-  Result: success
 ────────────────────────────────────────────────────────────────────────────────
