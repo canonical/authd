@@ -32,10 +32,10 @@ Test login with CLI
     Close Focused Window
 
     # Log in with remote user with local password
-    Open Terminal In Sudo Mode
+    Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
-    Log Out From Terminal Session
-    Close Terminal In Sudo Mode
+    Log Out From su Session
+    Close Focused Window
 
     # Try to change username during su login, it should not be possible
     Open Terminal

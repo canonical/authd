@@ -31,10 +31,10 @@ Test login with broker on edge channel
     Close Focused Window
 
     # Log in with remote user with local password
-    Open Terminal In Sudo Mode
+    Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
-    Log Out From Terminal Session
-    Close Terminal In Sudo Mode
+    Log Out From su Session
+    Close Focused Window
 
     # Disable entra_password before upgrading: the edge broker refuses to start
     # if this flow is enabled without register_device or a client_secret, which
@@ -45,6 +45,6 @@ Test login with broker on edge channel
     Enable Edge Broker
 
     # Log in with remote user with local password after upgrading
-    Open Terminal In Sudo Mode
+    Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
     Check Home Directory    ${username}

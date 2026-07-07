@@ -141,14 +141,11 @@ Log In With Remote User Through CLI: Local Password
     [Arguments]    ${username}    ${local_password}
     Hid.Type String    clear
     Hid.Keys Combo    Return
-    Try machinectl login Prompt
-    Hid.Type String    ${username}
+    Hid.Type String    su ${username}
     Hid.Keys Combo    Return
-    Builtin.Sleep    2
     Match Text    regex:Enter\\s*your\\s*(?:local\\s*)?password:    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
-    Builtin.Sleep    2
     Wait For Shell Prompt After Login    ${username}@ubuntu:~$
 
 
@@ -193,19 +190,13 @@ Log In With Remote User Through CLI: Local Password And Expect Failure
     [Arguments]    ${username}    ${local_password}
     Hid.Type String    clear
     Hid.Keys Combo    Return
-    Try machinectl login Prompt
-    Hid.Type String    ${username}
+    Hid.Type String    su ${username}
     Hid.Keys Combo    Return
-    Builtin.Sleep    2
     Match Text    regex:Enter\\s*your\\s*(?:local\\s*)?password:    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
     Check That Remote User Is Not Allowed To Log In
-    # Exit the machinectl session (three ^] within 1 s exits the session).
-    Hid.Keys Combo    Control_L    ]
-    Hid.Keys Combo    Control_L    ]
-    Hid.Keys Combo    Control_L    ]
-    # Wait until the shell prompt is back before the next login attempt.
+    # su exits automatically after authentication failure; wait for the shell prompt.
     Match Text    @ubuntu:~$    30
 
 

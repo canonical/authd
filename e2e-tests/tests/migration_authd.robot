@@ -31,16 +31,16 @@ Test login after updating authd to edge version
     Close Focused Window
 
     # Log in with remote user with local password
-    Open Terminal In Sudo Mode
+    Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
-    Log Out From Terminal Session
-    Close Terminal In Sudo Mode
+    Log Out From su Session
+    Close Focused Window
 
     # Switch to the edge PPA for authd
     Enable Edge Repository For Authd
     Update Authd
 
     # Log in with remote user with local password after upgrading
-    Open Terminal In Sudo Mode
+    Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
     Check Home Directory    ${username}

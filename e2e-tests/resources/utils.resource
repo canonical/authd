@@ -169,6 +169,13 @@ Log Out From Terminal Session
     Hid.Keys Combo    Control_L    ]
 
 
+Log Out From su Session
+    Match Text    @ubuntu    120
+    Hid.Type String    exit
+    Hid.Keys Combo    Return
+    Match Text    @ubuntu:~$    30
+
+
 Log Out From SSH Session
     Hid.Type String    exit
     Hid.Keys Combo    Return
