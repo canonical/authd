@@ -10,6 +10,3 @@ Gimme your password:
 PAM Authenticate()
   User: "user-integration-native-authenticate-with-warnings-on-unsupported-arguments@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-integration-native-authenticate-with-warnings-on-unsupported-arguments@example.com"
-  Result: success

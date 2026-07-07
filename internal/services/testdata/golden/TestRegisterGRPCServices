@@ -21,9 +21,6 @@ authd.PAM:
         - name: SelectBroker
           isclientstream: false
           isserverstream: false
-        - name: SetBroker
-          isclientstream: false
-          isserverstream: false
     metadata: authd.proto
 authd.UserService:
     methods:

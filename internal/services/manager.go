@@ -27,7 +27,7 @@ type Manager struct {
 }
 
 // NewManager returns a new manager after creating all necessary items for our business logic.
-func NewManager(ctx context.Context, dbDir, brokersConfPath string, configuredBrokers []string, usersConfig users.Config) (m Manager, err error) {
+func NewManager(ctx context.Context, dbDir, brokersConfPath string, configuredBrokers []string, usersConfig users.Config, pamConfig pam.Config) (m Manager, err error) {
 	log.Debug(ctx, "Building authd object")
 
 	brokerManager, err := brokers.NewManager(ctx, brokersConfPath, configuredBrokers)
@@ -43,7 +43,7 @@ func NewManager(ctx context.Context, dbDir, brokersConfPath string, configuredBr
 	permissionManager := permissions.New()
 
 	userService := user.NewService(ctx, userManager, brokerManager, &permissionManager)
-	pamService := pam.NewService(ctx, userManager, brokerManager, &permissionManager)
+	pamService := pam.NewService(ctx, userManager, brokerManager, pamConfig)
 
 	return Manager{
 		userManager:   userManager,
@@ -57,7 +57,7 @@ func NewManager(ctx context.Context, dbDir, brokersConfPath string, configuredBr
 func (m Manager) RegisterGRPCServices(ctx context.Context) *grpc.Server {
 	log.Debug(ctx, "Registering gRPC services")
 
-	opts := []grpc.ServerOption{permissions.WithUnixPeerCreds(), grpc.ChainUnaryInterceptor(m.globalPermissions, errmessages.RedactErrorInterceptor)}
+	opts := []grpc.ServerOption{permissions.WithUnixPeerCreds(), grpc.ChainUnaryInterceptor(errmessages.RedactErrorInterceptor)}
 	grpcServer := grpc.NewServer(opts...)
 
 	healthCheck := health.NewServer()

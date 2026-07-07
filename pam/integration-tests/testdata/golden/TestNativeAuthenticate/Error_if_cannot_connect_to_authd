@@ -3,8 +3,3 @@ PAM Authenticate()
   User: "user-integration-native-error-if-cannot-connect-to-authd@example.com"
   Result: error: PAM exit code: 9
     Authentication service cannot retrieve authentication info
-acct=incomplete
-PAM AcctMgmt()
-  User: "user-integration-native-error-if-cannot-connect-to-authd@example.com"
-  Result: error: PAM exit code: 25
-    The return value should be ignored by PAM dispatch

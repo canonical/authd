@@ -22,7 +22,4 @@ Gimme your password:
 PAM Authenticate()
   User: "user-local-groups-integration-auth-cli@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-local-groups-integration-auth-cli@example.com"
-  Result: success
 ────────────────────────────────────────────────────────────────────────────────

@@ -1162,67 +1162,6 @@ func TestEndSession(t *testing.T) {
 	}
 }
 
-func TestSetDefaultBrokerForUser(t *testing.T) {
-	t.Parallel()
-
-	testCases := map[string]struct {
-		client authd.PAMClient
-		args   *authd.STBRequest
-
-		wantError error
-	}{
-		"With_empty_options": {
-			client:    NewDummyClient(nil),
-			wantError: errors.New("no input values provided"),
-		},
-		"With_Error_return_value": {
-			client:    NewDummyClient(nil, WithSetBrokerReturn(errTest)),
-			wantError: errTest,
-		},
-		"With_valid_arguments": {
-			client: NewDummyClient(nil, WithSetBrokerReturn(nil)),
-			args: &authd.STBRequest{
-				BrokerId: "broker-id",
-				Username: "username",
-			},
-		},
-
-		// Error cases
-		"Error_if_no_user_name_is_provided": {
-			client:    NewDummyClient(nil),
-			args:      &authd.STBRequest{BrokerId: "broker-id"},
-			wantError: errors.New("no valid username provided"),
-		},
-		"Error_if_no_broker_ID_is_provided": {
-			client:    NewDummyClient(nil),
-			args:      &authd.STBRequest{Username: "username"},
-			wantError: errors.New("no valid broker ID provided"),
-		},
-	}
-	for name, tc := range testCases {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			ret, err := tc.client.SetBroker(context.TODO(), tc.args)
-			require.Equal(t, err, tc.wantError)
-			if err != nil {
-				require.Nil(t, ret)
-				return
-			}
-
-			require.Equal(t, &authd.Empty{}, ret)
-
-			if tc.args == nil {
-				return
-			}
-			retBroker, err := tc.client.GetBroker(context.TODO(),
-				&authd.GBRequest{Username: tc.args.Username})
-			require.NoError(t, err)
-			require.Equal(t, tc.args.BrokerId, retBroker.Broker)
-		})
-	}
-}
-
 func TestMain(m *testing.M) {
 	var err error
 	privateKey, err = rsa.GenerateKey(rand.Reader, 2048)

@@ -32,8 +32,3 @@ PAM Authenticate()
   User: "user-integration-native-deny-authentication-if-max-attempts-reached@example.com"
   Result: error: PAM exit code: 11
     Have exhausted maximum number of retries for service
-acct=incomplete
-PAM AcctMgmt()
-  User: "user-integration-native-deny-authentication-if-max-attempts-reached@example.com"
-  Result: error: PAM exit code: 25
-    The return value should be ignored by PAM dispatch

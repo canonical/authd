@@ -36,7 +36,6 @@ func TestCLIAuthenticate(t *testing.T) {
 		username string // typed at the Username: prompt (empty = use pamUser as preset)
 
 		clientOptions      clientOptions
-		currentUserNotRoot bool
 		wantLocalGroups    bool
 		expectedExitCode   int
 		extraArgs          []string
@@ -557,14 +556,6 @@ func TestCLIAuthenticate(t *testing.T) {
 			},
 		},
 
-		"Deny_authentication_if_current_user_is_not_considered_as_root": {
-			currentUserNotRoot: true,
-			expectedExitCode:   0,
-			test: func(t *testing.T, c *ptytest.Console) {
-				t.Helper()
-				cliWaitForResult(t, c)
-			},
-		},
 		"Deny_authentication_if_max_attempts_reached": {
 			username:         "user-integration-max-attempts@example.com",
 			expectedExitCode: 0,
@@ -702,7 +693,7 @@ func TestCLIAuthenticate(t *testing.T) {
 
 			var socketPath, groupFileOutput string
 			var cancelAuthd func()
-			if tc.wantLocalGroups || tc.currentUserNotRoot || tc.useCancelableAuthd {
+			if tc.wantLocalGroups || tc.useCancelableAuthd {
 				var groupFile string
 				groupFileOutput, groupFile = prepareGroupFiles(t)
 
@@ -713,9 +704,7 @@ func TestCLIAuthenticate(t *testing.T) {
 				args := []testutils.DaemonOption{
 					testutils.WithGroupFile(groupFile),
 					testutils.WithGroupFileOutput(groupFileOutput),
-				}
-				if !tc.currentUserNotRoot {
-					args = append(args, testutils.WithCurrentUserAsRoot)
+					testutils.WithCurrentUserAsRoot,
 				}
 
 				if tc.useCancelableAuthd {
@@ -850,11 +839,18 @@ func cliChangePasswordWithRetry(t *testing.T, c *ptytest.Console, firstNew, firs
 	cliSendPassword(t, c, secondNew)
 }
 
-// cliWaitForResult waits for the complete PAM AcctMgmt() result block.
+// cliWaitForResult waits for the complete PAM Authenticate() result block.
 func cliWaitForResult(t *testing.T, c *ptytest.Console) {
 	t.Helper()
 
-	waitForRunnerResult(t, c, pam_test.RunnerResultActionAcctMgmt)
+	waitForRunnerResult(t, c, pam_test.RunnerResultActionAuthenticate)
+}
+
+// cliWaitForChangeAuthTokResult waits for the complete PAM ChangeAuthTok() result block.
+func cliWaitForChangeAuthTokResult(t *testing.T, c *ptytest.Console) {
+	t.Helper()
+
+	waitForRunnerResult(t, c, pam_test.RunnerResultActionChangeAuthTok)
 }
 
 func cliAuthenticateWithQRCode(t *testing.T, c *ptytest.Console, signalFn func(string), username string) {
@@ -905,8 +901,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 	cliEnv := preparePamRunnerTest(t, clientPath)
 
 	tests := map[string]struct {
-		username           string
-		currentUserNotRoot bool
+		username string
 
 		test func(t *testing.T, socketPath, username string) string
 	}{
@@ -922,7 +917,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSendPassword(t, c, "authd2404")
 				c.WaitFor(t, `Confirm password`)
 				cliSendPassword(t, c, "authd2404")
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 
 				c2 := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionLogin, cliEnv, clientOptions{})
@@ -953,7 +948,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSendPassword(t, c, "authd2404")
 				c.WaitFor(t, `Confirm password`)
 				cliSendPassword(t, c, "authd2404")
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 
 				c2 := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionLogin, cliEnv, clientOptions{})
@@ -1001,7 +996,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSendPassword(t, c, "authd2404")
 				c.WaitFor(t, `Confirm password`)
 				cliSendPassword(t, c, "authd2404")
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1016,7 +1011,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSendPassword(t, c1, "goodpass")
 				cliChangePasswordWithRetry(t, c1, "noble2404", "noble2404",
 					`new password does not match criteria`, "authd2404")
-				cliWaitForResult(t, c1)
+				cliWaitForChangeAuthTokResult(t, c1)
 				c1.RequireSuccessfulExit(t)
 
 				// Repeat the flow to verify that after a rejection, the user can still change the password successfully.
@@ -1029,7 +1024,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSendPassword(t, c2, "authd2404")
 				cliChangePasswordWithRetry(t, c2, "noble2404", "noble2404",
 					`new password does not match criteria`, "goodpass")
-				cliWaitForResult(t, c2)
+				cliWaitForChangeAuthTokResult(t, c2)
 				c2.RequireSuccessfulExit(t)
 
 				return ptySanitizeSnapshots(t, c1) + ptySanitizeSnapshots(t, c2)
@@ -1049,7 +1044,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSendPassword(t, c, "authd2404")
 				c.WaitFor(t, `Confirm password`)
 				cliSendPassword(t, c, "authd2404")
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1064,7 +1059,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSendPassword(t, c, "goodpass")
 				cliChangePasswordWithRetry(t, c, "authd2404", "badpass",
 					`Password entries don't match`, "authd2404")
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1091,7 +1086,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSendPassword(t, c, "authd2404")
 				c.WaitFor(t, `Confirm password`)
 				cliSendPassword(t, c, "authd2404")
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1119,9 +1114,9 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				c.WaitFor(t, `Maximum number of authentication attempts reached`)
 				// The snapshot at this point is flaky: sometimes the PAM result
 				// has already been rendered alongside the error message, sometimes
-				// not. Discard it; cliWaitForResult captures the stable final state.
+				// not. Discard it; cliWaitForChangeAuthTokResult captures the stable final state.
 				c.DiscardLastSnapshot()
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1133,17 +1128,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
 				cliEnterUsername(t, c, username)
 				cliSelectBroker(t, c)
-				cliWaitForResult(t, c)
-				c.RequireSuccessfulExit(t)
-				return ptySanitizeSnapshots(t, c)
-			},
-		},
-		"Prevent_change_password_if_current_user_is_not_root_as_can_not_authenticate": {
-			currentUserNotRoot: true,
-			test: func(t *testing.T, socketPath, username string) string {
-				t.Helper()
-				c := startCLIPAMRunner(t, clientPath, socketPath, pam_test.RunnerActionPasswd, cliEnv, clientOptions{})
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1156,7 +1141,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				c.WaitFor(t, `Select your provider`)
 				c.WaitFor(t, `1\. local`)
 				c.SendKey(t, ptytest.KeyEnter)
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1169,7 +1154,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 				c.SendKey(t, ptytest.KeyCtrlC)
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1182,7 +1167,7 @@ func TestCLIChangeAuthTok(t *testing.T) {
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 				c.SendKey(t, ptytest.KeyCtrlD)
-				cliWaitForResult(t, c)
+				cliWaitForChangeAuthTokResult(t, c)
 				c.RequireSuccessfulExit(t)
 				return ptySanitizeSnapshots(t, c)
 			},
@@ -1197,19 +1182,14 @@ func TestCLIChangeAuthTok(t *testing.T) {
 			if err := os.WriteFile(groupFile, nil, 0o600); err != nil {
 				t.Fatalf("Setup: could not create group file: %v", err)
 			}
-			var socketPath string
-			if tc.currentUserNotRoot {
-				socketPath = runAuthd(t, testutils.WithGroupFile(groupFile))
-			} else {
-				socketPath = runAuthd(t,
-					testutils.WithCurrentUserAsRoot,
-					testutils.WithGroupFile(groupFile),
-					testutils.WithGroupFileOutput(groupFile),
-				)
-			}
+			socketPath := runAuthd(t,
+				testutils.WithCurrentUserAsRoot,
+				testutils.WithGroupFile(groupFile),
+				testutils.WithGroupFileOutput(groupFile),
+			)
 
 			username := tc.username
-			if username == "" && !tc.currentUserNotRoot {
+			if username == "" {
 				username = testUserName(t, "cli-passwd")
 			}
 
@@ -1259,8 +1239,5 @@ func TestPamCLIRunStandalone(t *testing.T) {
 
 	if !strings.Contains(outStr, pam.ErrAuthinfoUnavail.Error()) {
 		t.Errorf("Expected output to contain %s", pam.ErrAuthinfoUnavail.Error())
-	}
-	if !strings.Contains(outStr, pam.ErrIgnore.Error()) {
-		t.Errorf("Expected output to contain %s", pam.ErrIgnore.Error())
 	}
 }

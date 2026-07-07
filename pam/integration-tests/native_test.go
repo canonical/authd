@@ -2,7 +2,6 @@ package main_test
 
 import (
 	"fmt"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -86,7 +85,6 @@ func TestNativeAuthenticate(t *testing.T) {
 		username string
 
 		clientOptions      clientOptions
-		currentUserNotRoot bool
 		wantLocalGroups    bool
 		wantSeparateDaemon bool
 		skipRunnerCheck    bool
@@ -540,11 +538,6 @@ func TestNativeAuthenticate(t *testing.T) {
 			test:          func(t *testing.T, c *ptytest.Console) { t.Helper(); nativeWaitForResult(t, c) },
 			expectedUser:  "root",
 		},
-		"Deny_authentication_if_current_user_is_not_considered_as_root": {
-			currentUserNotRoot: true,
-			test:               func(t *testing.T, c *ptytest.Console) { t.Helper(); nativeWaitForResult(t, c) },
-			expectedUser:       testUserName(t, "native"),
-		},
 		"Deny_authentication_if_max_attempts_reached": {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
@@ -698,20 +691,17 @@ func TestNativeAuthenticate(t *testing.T) {
 					testutils.WithGroupFileOutput(groupFileOutput),
 				)
 				t.Cleanup(authdCancel)
-			case tc.wantLocalGroups || tc.currentUserNotRoot:
+			case tc.wantLocalGroups:
 				var groupFile string
 				groupFileOutput, groupFile = prepareGroupFiles(t)
 				if tc.wantLocalGroups {
 					groupFileOutput = groupFile
 				}
-				args := []testutils.DaemonOption{
+				socketPath = runAuthd(t,
+					testutils.WithCurrentUserAsRoot,
 					testutils.WithGroupFile(groupFile),
 					testutils.WithGroupFileOutput(groupFileOutput),
-				}
-				if !tc.currentUserNotRoot {
-					args = append(args, testutils.WithCurrentUserAsRoot)
-				}
-				socketPath = runAuthd(t, args...)
+				)
 			default:
 				socketPath, groupFileOutput = sharedAuthd(t)
 			}
@@ -798,11 +788,10 @@ func TestNativeChangeAuthTok(t *testing.T) {
 	tests := map[string]struct {
 		username string
 
-		clientOptions      clientOptions
-		currentUserNotRoot bool
-		skipRunnerCheck    bool
-		expectedUser       string
-		expectedExitCode   int
+		clientOptions    clientOptions
+		skipRunnerCheck  bool
+		expectedUser     string
+		expectedExitCode int
 
 		test            func(t *testing.T, c *ptytest.Console)
 		testWithSignals func(t *testing.T, c *ptytest.Console, signalFn func(username string))
@@ -953,13 +942,6 @@ func TestNativeChangeAuthTok(t *testing.T) {
 				nativeWaitForChangeAuthTokResult(t, c)
 			},
 		},
-		"Prevent_change_password_if_current_user_is_not_root_as_can_not_authenticate": {
-			currentUserNotRoot: true,
-			test: func(t *testing.T, c *ptytest.Console) {
-				t.Helper()
-				nativeWaitForChangeAuthTokResult(t, c)
-			},
-		},
 		"Exit_authd_if_local_broker_is_selected": {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
@@ -984,17 +966,12 @@ func TestNativeChangeAuthTok(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			var socketPath string
-			if tc.currentUserNotRoot {
-				socketPath = runAuthd(t, testutils.WithGroupFile(filepath.Join(t.TempDir(), "group")))
-			} else {
-				socketPath, _ = sharedAuthd(t)
-			}
+			socketPath, _ := sharedAuthd(t)
 
 			clientOptions := tc.clientOptions
 			username := tc.username
 			expectedUser := tc.expectedUser
-			if clientOptions.PamUser == "" && username == "" && !tc.currentUserNotRoot {
+			if clientOptions.PamUser == "" && username == "" {
 				username = testUserName(t, "native-passwd")
 			}
 			if expectedUser == "" {
@@ -1110,16 +1087,14 @@ func nativeWaitForLoginPasswordPrompt(t *testing.T, c *ptytest.Console) {
 	}
 }
 
-// nativeWaitForResult waits for the PAM runner result line.
+// nativeWaitForResult waits for the PAM runner Authenticate result line.
 func nativeWaitForResult(t *testing.T, c *ptytest.Console) {
 	t.Helper()
-	waitForRunnerResult(t, c, pam_test.RunnerResultActionAcctMgmt)
+	waitForRunnerResult(t, c, pam_test.RunnerResultActionAuthenticate)
 }
 
 // nativeWaitForChangeAuthTokResult waits for the PAM runner ChangeAuthTok result.
-// AcctMgmt is the last action to complete, so waiting for it ensures the whole
-// authentication token change has finished.
 func nativeWaitForChangeAuthTokResult(t *testing.T, c *ptytest.Console) {
 	t.Helper()
-	waitForRunnerResult(t, c, pam_test.RunnerResultActionAcctMgmt)
+	waitForRunnerResult(t, c, pam_test.RunnerResultActionChangeAuthTok)
 }
