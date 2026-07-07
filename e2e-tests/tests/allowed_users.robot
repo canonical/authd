@@ -18,9 +18,9 @@ ${non_allowed_user}    different-user
 
 *** Test Cases ***
 Test allowed_users values with cached local password authentication
-    [Documentation]    Verify all allowed_users scenarios with a single device auth.
+    [Documentation]    Verify all allowed_users scenarios with a single device code flow.
     ...
-    ...    The test registers the remote user once via device authentication (QR code),
+    ...    The test registers the remote user once via device code flow (QR code),
     ...    which caches a local password.  All five allowed_users scenarios are then
     ...    exercised using local-password authentication only, so the browser flow is
     ...    not repeated for every scenario.
@@ -34,7 +34,7 @@ Test allowed_users values with cached local password authentication
 
     Log In
 
-    # Perform device authentication once to register the user and cache their
+    # Perform device code flow once to register the user and cache their
     # local password.  All subsequent logins reuse this cached password.
     Open Terminal
     Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}

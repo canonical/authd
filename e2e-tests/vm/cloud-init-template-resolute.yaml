@@ -74,7 +74,7 @@ write_files:
   - path: /etc/ssh/sshd_config.d/authd.conf
     content: |
       UsePAM yes
-      # The device authentication flow can take longer than the default
+      # The device code flow can take longer than the default
       # LoginGraceTime of 2 minutes, which would cause sshd to abort the
       # connection with "Timeout before authentication".
       LoginGraceTime 300

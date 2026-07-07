@@ -26,7 +26,7 @@ Test Setup
     Change Broker Configuration    client_secret    ${secret}
     Change Broker Configuration    register_device    false
     Change Broker Configuration    entra_password    true
-    Change Broker Configuration    device_auth    false
+    Change Broker Configuration    device_code    false
 
 
 *** Variables ***

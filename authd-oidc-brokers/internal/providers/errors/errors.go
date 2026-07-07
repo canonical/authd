@@ -13,20 +13,23 @@ var ErrDeviceDisabled = stderrors.New("device is disabled")
 // ErrInvalidRedirectURI is returned when the redirect URI of the client application is missing or invalid.
 var ErrInvalidRedirectURI = stderrors.New("invalid redirect URI")
 
-// RetryWithDeviceAuthError is returned when token acquisition fails and the user should retry
-// using device authentication (e.g. because the device was deleted by an administrator).
-type RetryWithDeviceAuthError struct {
+// RetryWithDeviceCodeFlowError is returned when token acquisition fails and the user should retry
+// using device code flow (e.g. because the device was deleted by an administrator).
+type RetryWithDeviceCodeFlowError struct {
 	Err error
 }
 
-func (e *RetryWithDeviceAuthError) Error() string {
+// RetryWithDeviceAuthError is kept as an alias for backward compatibility.
+type RetryWithDeviceAuthError = RetryWithDeviceCodeFlowError
+
+func (e *RetryWithDeviceCodeFlowError) Error() string {
 	if e.Err != nil {
 		return e.Err.Error()
 	}
-	return "token acquisition failed, retry with device authentication"
+	return "token acquisition failed, retry with device code flow"
 }
 
-func (e *RetryWithDeviceAuthError) Unwrap() error {
+func (e *RetryWithDeviceCodeFlowError) Unwrap() error {
 	return e.Err
 }
 

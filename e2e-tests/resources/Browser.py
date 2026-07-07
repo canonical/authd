@@ -37,7 +37,7 @@ class Browser:
 
     @keyword
     def login(self, usercode: str, output_dir: str = "."):
-        """Perform device authentication with the given username, password and
+        """Perform device code flow with the given username, password and
         usercode using a broker-specific browser automation script. The window
         opened by the script is run off screen using Xvfb unless ``SHOW_WEBVIEW``
         is set. Output is streamed to stderr in real time and also logged to the

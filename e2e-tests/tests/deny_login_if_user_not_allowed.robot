@@ -25,7 +25,7 @@ Test that changing owner prevents remote logins
     # Change owner to another user
     Change Broker Configuration    owner    different-user
 
-    # Log in with remote user with device authentication
+    # Log in with remote user with device code flow
     Open Terminal
     Start Log In With Remote User Through CLI: QR Code    ${username}
     Select Provider

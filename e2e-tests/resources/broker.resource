@@ -443,8 +443,8 @@ Log In With Remote User Through CLI: Entra Password
     Match Text    2. ${PROVIDER_DISPLAY_NAME}
     Hid.Type String    2
 
-    # With device_auth disabled there is only one mode; the PAM module auto-selects
-    # it and goes directly to the Entra ID password prompt.
+    # With the device code flow disabled there is only one flow; the PAM module
+    # auto-selects it and goes directly to the Entra ID password prompt.
     Match Text    Enter your Entra ID password    30
     Hid.Type String    %{E2E_PASSWORD}
     Hid.Keys Combo    Return

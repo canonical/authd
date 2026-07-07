@@ -18,9 +18,9 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login with GDM
-    [Documentation]    Test login via GDM with device authentication and local password.
+    [Documentation]    Test login via GDM with device code flow and local password.
 
-    # Log in with remote user with device authentication via GDM
+    # Log in with remote user with device code flow via GDM
     Log In With Remote User Through GDM: QR Code    ${username}    ${local_password}
 
     # Check remote user is properly added to the system

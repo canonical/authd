@@ -15,9 +15,9 @@ ${local_password}    qwer1234
 
 
 *** Test Cases ***
-Test device registration during device authentication
+Test device registration during device code flow
     [Documentation]    Verify that enabling 'register_device' causes the machine to be
-    ...    registered as a device in Microsoft Entra ID during device authentication.
+    ...    registered as a device in Microsoft Entra ID during device code flow.
     ...
     ...    With 'register_device = true' the device-auth login flow is unchanged from the
     ...    user's perspective; the broker additionally registers the device and persists the
