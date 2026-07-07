@@ -52,7 +52,7 @@ authd uses brokers to interface with cloud identity providers through a
 Currently [MS Entra ID](https://learn.microsoft.com/en-us/entra/fundamentals/whatis)
 and [Google IAM](https://cloud.google.com/iam/docs/overview)
 are supported as identity providers.
-They allow you to authenticate using MFA and the device authentication flow.
+They allow you to authenticate using MFA and the device code flow.
 
 For development purposes, authd also provides an
 [example broker](https://github.com/canonical/authd/tree/main/examplebroker)
