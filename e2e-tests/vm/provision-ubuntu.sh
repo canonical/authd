@@ -265,6 +265,14 @@ if ! cloud_init_finished "${IMAGE}"; then
     # Detach the cloud-init ISO
     virsh detach-disk "${VM_NAME}" vdb --config
 
+    # Disable cloud-init so it does not re-run on subsequent boots.
+    # The initial setup is complete; without this, cloud-init would
+    # re-execute its final stage (including power_state: poweroff) on
+    # any subsequent boot from this image, because the snapshot used as
+    # the base image is taken before cloud-init's final stage writes its
+    # completion semaphores.
+    sudo guestfish -a "${IMAGE}" -i touch /etc/cloud/cloud-init.disabled
+
     if [ -z "${NO_SNAPSHOT:-}" ]; then
         boot_system
         # Create a snapshot of the initial setup
