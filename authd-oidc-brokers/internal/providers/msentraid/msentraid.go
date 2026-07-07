@@ -979,7 +979,10 @@ func (p *Provider) IsTokenExpiredError(err *oauth2.RetrieveError) bool {
 	}
 
 	expiredPrefixes := []string{
+		"AADSTS50078:",  // MFA session expired due to sign-in frequency (Conditional Access)
+		"AADSTS50089:",  // refresh token expired or revoked by user or admin
 		"AADSTS50173:",  // grant revoked (password change/reset)
+		"AADSTS70008:",  // refresh token expired due to inactivity (legacy code for AADSTS700082)
 		"AADSTS70043:",  // refresh token expired due to sign-in frequency (Conditional Access)
 		"AADSTS700082:", // refresh token expired due to inactivity
 	}

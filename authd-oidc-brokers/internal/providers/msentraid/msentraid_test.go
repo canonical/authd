@@ -631,7 +631,10 @@ func TestIsTokenExpiredError(t *testing.T) {
 
 		wantExpired bool
 	}{
+		"AADSTS50078_mfa_session_expired":              {errorCode: "invalid_grant", errorDescription: "AADSTS50078: Presented multi-factor authentication has expired due to policies configured by your administrator.", wantExpired: true},
+		"AADSTS50089_flow_token_expired":               {errorCode: "invalid_grant", errorDescription: "AADSTS50089: Flow token has expired. User needs to reauthenticate.", wantExpired: true},
 		"AADSTS50173_token_expired":                    {errorCode: "invalid_grant", errorDescription: "AADSTS50173: The provided grant has expired", wantExpired: true},
+		"AADSTS70008_token_expired_due_to_inactivity":  {errorCode: "invalid_grant", errorDescription: "AADSTS70008: The refresh token has expired due to inactivity.", wantExpired: true},
 		"AADSTS70043_token_expired":                    {errorCode: "invalid_grant", errorDescription: "AADSTS70043: The refresh token has expired or is invalid", wantExpired: true},
 		"AADSTS700082_token_expired_due_to_inactivity": {errorCode: "invalid_grant", errorDescription: "AADSTS700082: The refresh token has expired due to inactivity.", wantExpired: true},
 
