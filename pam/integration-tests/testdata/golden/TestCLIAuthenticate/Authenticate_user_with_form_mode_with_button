@@ -50,7 +50,4 @@ Enter your one time credential:
 PAM Authenticate()
   User: "user-integration-form-w-button@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-integration-form-w-button@example.com"
-  Result: success
 ────────────────────────────────────────────────────────────────────────────────

@@ -8,8 +8,3 @@ PAM Authenticate()
   User: "user-integration-native-exit-if-authd-is-stopped@example.com"
   Result: error: PAM exit code: 4
     System error
-acct=incomplete
-PAM AcctMgmt()
-  User: "user-integration-native-exit-if-authd-is-stopped@example.com"
-  Result: error: PAM exit code: 25
-    The return value should be ignored by PAM dispatch

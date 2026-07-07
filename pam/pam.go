@@ -34,10 +34,6 @@ type pamModule struct {
 }
 
 const (
-	// authenticationBrokerIDKey is the Key used to store the data in the
-	// PAM module for the second stage authentication to select the default
-	// broker for the current user.
-	authenticationBrokerIDKey = "authd.authentication-broker-id"
 
 	// alreadyAuthenticatedKey is the Key used to store in the library that
 	// we've already authenticated with this module and so that we should not
@@ -328,10 +324,6 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 	}
 	defer closeConn()
 
-	if err := mTx.SetData(authenticationBrokerIDKey, nil); err != nil {
-		return err
-	}
-
 	var exitStatus adapter.PamReturnStatus
 	appState := adapter.NewUIModel(mTx, pamClientType, mode, conn, &exitStatus)
 	teaOpts = append(teaOpts, tea.WithFilter(adapter.MsgFilter))
@@ -345,9 +337,6 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 	case adapter.PamSuccess:
 		if shouldSendAuthMessage(pamClientType, exitStatus.Message(), true) {
 			sendReturnMessageToPam(mTx, exitStatus)
-		}
-		if err := mTx.SetData(authenticationBrokerIDKey, exitStatus.BrokerID); err != nil {
-			return err
 		}
 		return nil
 
@@ -365,89 +354,9 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 	}
 }
 
-// AcctMgmt sets any used brokerID as default for the user.
-func (h *pamModule) AcctMgmt(mTx pam.ModuleTransaction, flags pam.Flags, args []string) (err error) {
-	parsedArgs, logArgsIssues := parseArgs(args)
-	closeLogging, err := initLogging(mTx, parsedArgs, flags)
-	defer closeLogging()
-	defer func() {
-		log.Debugf(context.TODO(), "AcctMgmt: exiting with error %v", err)
-	}()
-	if err != nil {
-		return err
-	}
-	logArgsIssues()
-
-	// We ignore AcctMgmt in case we're loading the module through the exec client
-	serviceName, err := mTx.GetItem(pam.Service)
-	if err != nil {
-		log.Warningf(context.TODO(), "Impossible to get PAM service name: %v", err)
-		return pam.ErrIgnore
-	}
-	if serviceName == gdmServiceName && !gdm.IsPamExtensionSupported(gdm.PamExtensionCustomJSON) {
-		return pam.ErrIgnore
-	}
-
-	brokerData, err := mTx.GetData(authenticationBrokerIDKey)
-	if err != nil && errors.Is(err, pam.ErrNoModuleData) {
-		return pam.ErrIgnore
-	}
-	if brokerData == nil {
-		// PAM can return no data without an error after that has been unset:
-		// See: https://github.com/linux-pam/linux-pam/pull/780
-		return pam.ErrIgnore
-	}
-
-	brokerIDUsedToAuthenticate, ok := brokerData.(string)
-	if !ok {
-		msg := fmt.Sprintf("broker data has an invalid type %#v", brokerData)
-		log.Errorf(context.TODO(), msg)
-		if err := showPamMessage(mTx, pam.ErrorMsg, msg); err != nil {
-			log.Warningf(context.TODO(), "Impossible to show PAM message: %v", err)
-		}
-
-		return pam.ErrIgnore
-	}
-
-	// Only set the brokerID as default if we stored one after authentication.
-	if brokerIDUsedToAuthenticate == "" {
-		return pam.ErrIgnore
-	}
-
-	// Get current user for broker
-	user, err := mTx.GetItem(pam.User)
-	if err != nil {
-		log.Errorf(context.TODO(), "AcctMgmt: could not get user from PAM: %v", err)
-		return err
-	}
-
-	if user == "" {
-		if err := showPamMessage(mTx, pam.ErrorMsg, "Can't get user from PAM"); err != nil {
-			log.Warningf(context.TODO(), "Impossible to show PAM message: %v", err)
-		}
-		return pam.ErrIgnore
-	}
-
-	client, closeConn, err := newClient(parsedArgs)
-	if err != nil {
-		log.Debugf(context.TODO(), "%s", err)
-		return pam.ErrAuthinfoUnavail
-	}
-	defer closeConn()
-
-	req := authd.STBRequest{
-		BrokerId: brokerIDUsedToAuthenticate,
-		Username: user,
-	}
-	if _, err := client.SetBroker(context.TODO(), &req); err != nil {
-		msg := err.Error()
-		if err := showPamMessage(mTx, pam.ErrorMsg, msg); err != nil {
-			log.Warningf(context.TODO(), "Impossible to show PAM message: %v", err)
-		}
-		return pam.ErrIgnore
-	}
-
-	return nil
+// AcctMgmt is ignored because broker selection is now handled server-side during IsAuthenticated.
+func (h *pamModule) AcctMgmt(_ pam.ModuleTransaction, _ pam.Flags, _ []string) error {
+	return pam.ErrIgnore
 }
 
 func newClientConnection(args map[string]string) (conn *grpc.ClientConn, closeConn func(), err error) {

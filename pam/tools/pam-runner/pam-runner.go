@@ -166,8 +166,6 @@ func main() {
 
 	printPamResult(runnerAction.Result(), user, pamRes)
 
-	// Simulate setting auth broker as default.
-	printPamResult(pam_test.RunnerResultActionAcctMgmt, user, tx.AcctMgmt(pamFlags))
 }
 
 func noConversationHandler(style pam.Style, msg string) (string, error) {

@@ -165,7 +165,6 @@ func TestGdmModule(t *testing.T) {
 		wantAuthResponses    []*authd.IAResponse
 		wantPamInfoMessages  []string
 		wantPamErrorMessages []string
-		wantAcctMgmtErr      error
 	}{
 		"Authenticates_user": {
 			eventPollResponses: map[gdm.EventType][]*gdm.EventData{
@@ -778,16 +777,14 @@ func TestGdmModule(t *testing.T) {
 			wantPamErrorMessages: []string{
 				"GDM protocol initialization failed, type hello, version 9999",
 			},
-			wantError:       pam.ErrCredUnavail,
-			wantAcctMgmtErr: pam_test.ErrIgnore,
+			wantError: pam.ErrCredUnavail,
 		},
 		"Error_on_connection_failure": {
 			moduleArgs: []string{"socket=/some-path/not-existent-socket"},
 			wantPamErrorMessages: []string{
 				"could not connect to unix:///some-path/not-existent-socket: service took too long to respond. Disconnecting client",
 			},
-			wantError:       pam.ErrAuthinfoUnavail,
-			wantAcctMgmtErr: pam_test.ErrIgnore,
+			wantError: pam.ErrAuthinfoUnavail,
 		},
 		"Error_on_missing_user": {
 			pamUser: ptrValue(""),
@@ -799,32 +796,28 @@ func TestGdmModule(t *testing.T) {
 			wantPamErrorMessages: []string{
 				"error InvalidArgument from server: no user name provided",
 			},
-			wantError:       pam.ErrSystem,
-			wantAcctMgmtErr: pam_test.ErrIgnore,
+			wantError: pam.ErrSystem,
 		},
 		"Error_on_no_supported_layouts": {
 			supportedLayouts: []*authd.UILayout{},
 			wantPamErrorMessages: []string{
 				"UI does not support any layouts",
 			},
-			wantError:       pam.ErrCredUnavail,
-			wantAcctMgmtErr: pam_test.ErrIgnore,
+			wantError: pam.ErrCredUnavail,
 		},
 		"Error_on_unknown_broker": {
 			brokerName: "Not a valid broker!",
 			wantPamErrorMessages: []string{
 				"Changing GDM stage failed: Conversation error",
 			},
-			wantError:       pam.ErrSystem,
-			wantAcctMgmtErr: pam_test.ErrIgnore,
+			wantError: pam.ErrSystem,
 		},
 		"Error_(ignored)_on_local_broker_causes_fallback_error": {
 			brokerName: brokers.LocalBrokerName,
 			wantPamInfoMessages: []string{
 				"auth=incomplete",
 			},
-			wantError:       pam_test.ErrIgnore,
-			wantAcctMgmtErr: pam.ErrAbort,
+			wantError: pam_test.ErrIgnore,
 		},
 		"Error_on_authenticating_user_with_too_many_retries": {
 			wantAuthModeIDs: []string{
@@ -881,8 +874,7 @@ func TestGdmModule(t *testing.T) {
 			wantPamErrorMessages: []string{
 				"Maximum number of authentication attempts reached",
 			},
-			wantError:       pam.ErrMaxtries,
-			wantAcctMgmtErr: pam_test.ErrIgnore,
+			wantError: pam.ErrMaxtries,
 		},
 		"Error_on_authenticating_unknown_user": {
 			pamUser: ptrValue("user-unknown"),
@@ -903,8 +895,7 @@ func TestGdmModule(t *testing.T) {
 					Msg:    "user not found",
 				},
 			},
-			wantError:       pam.ErrAuth,
-			wantAcctMgmtErr: pam_test.ErrIgnore,
+			wantError: pam.ErrAuth,
 		},
 		"Error_on_invalid_fido_ack": {
 			pamUserPrefix:   examplebroker.UserIntegrationMfaPrefix,
@@ -931,8 +922,7 @@ func TestGdmModule(t *testing.T) {
 					Msg:    fido1AuthID + " should have wait set to true",
 				},
 			},
-			wantError:       pam.ErrAuth,
-			wantAcctMgmtErr: pam_test.ErrIgnore,
+			wantError: pam.ErrAuth,
 		},
 	}
 	for name, tc := range testCases {
@@ -1105,9 +1095,6 @@ func TestGdmModule(t *testing.T) {
 			}
 			requirePreviousBrokerForUser(t, socketPath, brokerAfterAuth, pamUser)
 
-			require.ErrorIs(t, gh.tx.AcctMgmt(pamFlags), tc.wantAcctMgmtErr,
-				"Account Management PAM Error messages do not match")
-
 			require.Empty(t, gh.selectedAuthModeIDs,
 				"Some Authentication Modes IDs have not been selected")
 			require.Empty(t, gh.selectedUILayouts,
@@ -1207,9 +1194,6 @@ func TestGdmModuleAcctMgmtWithoutGdmExtension(t *testing.T) {
 		pamFlags = pam.Silent
 	}
 
-	require.NoError(t, gh.tx.Authenticate(pamFlags), "Setup: Authentication failed")
-	requirePreviousBrokerForUser(t, socketPath, gh.selectedBrokerName, pamUser)
-
 	// We disable gdm extension support, as if it was the case when the module is loaded
 	// again from the exec module.
 	gdm.AdvertisePamExtensions(nil)
@@ -1217,7 +1201,6 @@ func TestGdmModuleAcctMgmtWithoutGdmExtension(t *testing.T) {
 
 	require.ErrorIs(t, gh.tx.AcctMgmt(pamFlags), pam_test.ErrIgnore,
 		"Account Management PAM Error message do not match")
-	requirePreviousBrokerForUser(t, socketPath, gh.selectedBrokerName, pamUser)
 }
 
 func buildPAMModule(t *testing.T) string {

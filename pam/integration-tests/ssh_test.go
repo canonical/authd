@@ -659,10 +659,11 @@ func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socket
 		{Action: pam_test.Auth, Control: pam_test.Required, Module: "pam_unix.so"},
 
 		{Action: pam_test.Account, Control: pam_test.NewControl(accountControl), Module: module, Args: moduleArgs},
-		{
-			Action: pam_test.Account, Control: pam_test.Optional, Module: "pam_echo.so",
-			Args: []string{fmt.Sprintf("%s finished for user '%%u'", pam_test.RunnerResultActionAcctMgmt.Message(""))},
-		},
+		// pam_permit provides a fallback PAM_SUCCESS so that account management
+		// succeeds even when the authd module returns PAM_IGNORE (e.g. for local
+		// users).  In a real system other primary modules (e.g. pam_unix) fill
+		// this role; in the test environment authd is the only account module.
+		{Action: pam_test.Account, Control: pam_test.Required, Module: pam_test.Permit.String()},
 		{Action: pam_test.Session, Control: pam_test.Optional, Module: mkHomeModule, Args: []string{"debug", "skel=" + skelDir}},
 		{Action: pam_test.Session, Control: pam_test.Requisite, Module: pam_test.Permit.String()},
 	})

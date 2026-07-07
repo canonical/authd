@@ -102,7 +102,4 @@ Confirm password:
 PAM ChangeAuthTok()
   User: "user-mfa-integration-cli-passwd@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-mfa-integration-cli-passwd@example.com"
-  Result: success
 ────────────────────────────────────────────────────────────────────────────────

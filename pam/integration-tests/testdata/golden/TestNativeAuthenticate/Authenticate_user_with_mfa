@@ -56,6 +56,3 @@ Plug your fido device and press with your thumb:
 PAM Authenticate()
   User: "user-mfa-integration-auth-native-testnativeauthenticate@example.com"
   Result: success
-PAM AcctMgmt()
-  User: "user-mfa-integration-auth-native-testnativeauthenticate@example.com"
-  Result: success

@@ -8,7 +8,6 @@ Enter 'r' to cancel the request and go back to select the authentication method
 (user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it@example.com@localhost) Gimme your password:
 >
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it@example.com'
-PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_locks_and_unlocks_it]
   HOME=${AUTHD_TEST_HOME}
   LOGNAME=user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it@example.com
@@ -42,7 +41,6 @@ Enter 'r' to cancel the request and go back to select the authentication method
 (user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it@example.com@localhost) Gimme your password:
 >
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it@example.com'
-PAM AcctMgmt() finished for user 'user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it@example.com'
  SSHD: Connected to ssh via authd module! [TestSSHAuthenticate/Authenticate_user_locks_and_unlocks_it]
   HOME=${AUTHD_TEST_HOME}
   LOGNAME=user-integration-pre-check-ssh-authenticate-user-locks-and-unlocks-it@example.com
