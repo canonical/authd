@@ -55,11 +55,11 @@ Start Log In With Remote User Through CLI: QR Code
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
 
-    Match Text    Select your provider    15
+    Match Text    Select your provider:    15
 
 
 Select Provider
-    Match Text    Select your provider    15
+    Match Text    Select your provider:    15
     Match Text    2. ${PROVIDER_DISPLAY_NAME}
 
     Hid.Type String    2
@@ -178,17 +178,17 @@ Try Navigating Back to User Selection
     Hid.Keys Combo    Escape
 
     # The previous screen should be the authentication mode selection
-    Match Text    Select your authentication method    120
+    Match Text    Select the authentication flow:    120
     Hid.Keys Combo    Escape
 
     # The previous screen should be the broker selection
-    Match Text    Select your provider    120
+    Match Text    Select your provider:    120
     Hid.Keys Combo    Escape
 
     # The previous screen is the username prompt, but it shouldn't be possible to get there
-    Match Text    Select your provider    120
+    Match Text    Select your provider:    120
     Hid.Keys Combo    Escape
-    Match Text    Select your provider    120
+    Match Text    Select your provider:    120
 
 
 Log In With Remote User Through CLI: Local Password And Expect Failure
@@ -449,7 +449,7 @@ Log In With Remote User Through CLI: Entra Password
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
 
-    Match Text    Select your provider    15
+    Match Text    Select your provider:    15
     Match Text    2. ${PROVIDER_DISPLAY_NAME}
     Hid.Type String    2
 

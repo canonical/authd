@@ -4,7 +4,7 @@
 Choose your provider:
 > 2
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 Gimme your password:
 >
 == Authentication method selection ==
@@ -20,7 +20,7 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 2
 == Send URL to user-integration-switch-mode-native-testnativeauthenticate@example.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication method
+Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication flow
 Click on the link received at user-integration-switch-mode-native-testnativeauthenticate@example.com or enter the code:
 > r
 == Authentication method selection ==
@@ -36,7 +36,7 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 3
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
@@ -52,7 +52,7 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 4
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
@@ -68,7 +68,7 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 5
 == Use your phone +1... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 Unlock your phone +1... or accept request on web interface:
 > r
 == Authentication method selection ==
@@ -84,7 +84,7 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 6
 == Pin code ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 Enter your pin code:
 > r
 == Authentication method selection ==
@@ -124,7 +124,7 @@ Code: 1337
 
   1. Wait for authentication result
   2. Regenerate code
-Or enter 'r' to go back to select the authentication method
+Or enter 'r' to go back to select the authentication flow
 Choose action:
 > r
 == Authentication method selection ==
@@ -142,7 +142,7 @@ Choose your authentication method:
 == Authentication code ==
   1. Proceed with Authentication code
   2. Resend SMS (1 sent)
-Or enter 'r' to go back to select the authentication method
+Or enter 'r' to go back to select the authentication flow
 Choose action:
 > r
 == Authentication method selection ==
@@ -174,7 +174,7 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 6
 == Pin code ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 Enter your pin code:
 > 4242
   PAM_AUTHTOK: "4242"
