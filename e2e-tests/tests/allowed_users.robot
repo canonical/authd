@@ -18,12 +18,14 @@ ${non_allowed_user}    different-user
 
 *** Test Cases ***
 Test allowed_users values with cached local password authentication
-    [Documentation]    Verify all allowed_users scenarios with a single device code flow.
+    [Documentation]    Verify all allowed_users scenarios with a single device
+    ...    code flow.
     ...
-    ...    The test registers the remote user once via device code flow (QR code),
-    ...    which caches a local password.  All five allowed_users scenarios are then
-    ...    exercised using local-password authentication only, so the browser flow is
-    ...    not repeated for every scenario.
+    ...    The test registers the remote user once via device code flow
+    ...    (QR code), which caches a local password.  All five
+    ...    allowed_users scenarios are then exercised using local-password
+    ...    authentication only, so the browser flow is not repeated for
+    ...    every scenario.
     ...
     ...    Scenarios covered (in order):
     ...      1. allowed_users=OWNER, owner=<username>       → login succeeds

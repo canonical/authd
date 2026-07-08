@@ -18,7 +18,9 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test that owner is auto-updated in broker configuration
-    [Documentation]    This test verifies that when a local user logs in, the broker configuration is automatically updated to set the owner to the logged-in user.
+    [Documentation]    This test verifies that when a local user logs in, the
+    ...    broker configuration is automatically updated to set the owner
+    ...    to the logged-in user.
 
     # Log in with local user
     Log In

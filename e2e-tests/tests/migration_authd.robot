@@ -17,7 +17,8 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login after updating authd to edge version
-    [Documentation]    Test login via CLI with device code flow and local password after switching to the edge PPA for authd.
+    [Documentation]    Test login via CLI with device code flow and local
+    ...    password after switching to the edge PPA for authd.
 
     # Log in with local user
     Log In
