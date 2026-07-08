@@ -31,5 +31,5 @@ Test login with mixed case username
     Close Focused Window
 
     # Log in with remote user using mixed case username with local password
-    Open Terminal In Sudo Mode
+    Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}

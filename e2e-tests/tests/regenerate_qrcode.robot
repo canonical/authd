@@ -39,5 +39,5 @@ Test login with CLI and QR code regeneration
     Close Focused Window
 
     # Log in with remote user with local password
-    Open Terminal In Sudo Mode
+    Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}

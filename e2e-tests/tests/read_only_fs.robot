@@ -35,5 +35,5 @@ Test login with GDM
     Wait Until Keyword Succeeds    30s    1s    SSH.Execute    findmnt -n -o OPTIONS / | grep -qw ro
 
     # Log in with remote user with local password
-    Open Terminal In Sudo Mode
+    Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}

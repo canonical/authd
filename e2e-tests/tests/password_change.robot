@@ -33,9 +33,9 @@ Test changing local password of remote user
     Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
     Change Password    ${local_password}    ${new_password}
-    Log Out From Terminal Session
+    Log Out From su Session
     Close Focused Window
 
     # Log in with remote user with local password
-    Open Terminal In Sudo Mode
+    Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${new_password}

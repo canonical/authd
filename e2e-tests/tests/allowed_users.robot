@@ -48,7 +48,7 @@ Test allowed_users values with cached local password authentication
     Change allowed_users In Broker Configuration    OWNER
     Change Broker Configuration    owner    ${username}
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
-    Log Out From Terminal Session
+    Log Out From su Session
 
     # Scenario 2: OWNER + owner=different-user → failure
     # Using a non-empty wrong owner so the broker performs a deterministic
@@ -60,7 +60,7 @@ Test allowed_users values with cached local password authentication
     # Scenario 3: explicit username → success
     Change allowed_users In Broker Configuration    ${username}
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
-    Log Out From Terminal Session
+    Log Out From su Session
 
     # Scenario 4: non-allowed username → failure
     Change allowed_users In Broker Configuration    ${non_allowed_user}
@@ -69,6 +69,6 @@ Test allowed_users values with cached local password authentication
     # Scenario 5: ALL → success
     Change allowed_users In Broker Configuration    ALL
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
-    Log Out From Terminal Session
+    Log Out From su Session
 
     Close Focused Window
