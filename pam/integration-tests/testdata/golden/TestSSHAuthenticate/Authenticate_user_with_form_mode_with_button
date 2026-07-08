@@ -4,7 +4,7 @@
 (user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button@example.com@localhost) Choose your provider:
 > 2
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button@example.com@localhost) Gimme your password:
 >
 == Authentication method selection ==
@@ -22,17 +22,17 @@ Or enter 'r' to go back to choose the provider
 == Authentication code ==
   1. Proceed with Authentication code
   2. Resend SMS (1 sent)
-Or enter 'r' to go back to select the authentication method
+Or enter 'r' to go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button@example.com@localhost) Choose action:
 > 2
 == Authentication code ==
   1. Proceed with Authentication code
   2. Resend SMS (2 sent)
-Or enter 'r' to go back to select the authentication method
+Or enter 'r' to go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button@example.com@localhost) Choose action:
 > 1
 == Authentication code ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button@example.com@localhost) Enter your one time credential:
 > temporary pass00
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-with-form-mode-with-button@example.com'

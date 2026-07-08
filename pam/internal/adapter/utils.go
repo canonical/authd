@@ -242,7 +242,7 @@ func safeMessageDebugWithPrefix(prefix string, msg tea.Msg, formatAndArgs ...any
 func goBackLabel(previousStage proto.Stage) string {
 	switch previousStage {
 	case proto.Stage_authModeSelection:
-		return "go back to select the authentication method"
+		return "go back to select the authentication flow"
 	case proto.Stage_brokerSelection:
 		return "go back to choose the provider"
 	case proto.Stage_challenge:

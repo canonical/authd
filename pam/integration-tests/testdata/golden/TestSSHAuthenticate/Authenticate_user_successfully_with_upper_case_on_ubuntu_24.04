@@ -4,7 +4,7 @@
 (USER-INTEGRATION-PRE-CHECK-UPPER-CASE-TESTSSHAUTHENTICATE@EXAMPLE.COM@localhost) Choose your provider:
 > 2
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 (USER-INTEGRATION-PRE-CHECK-UPPER-CASE-TESTSSHAUTHENTICATE@EXAMPLE.COM@localhost) Gimme your password:
 >
 PAM Authenticate() finished for user 'user-integration-pre-check-upper-case-testsshauthenticate@example.com'

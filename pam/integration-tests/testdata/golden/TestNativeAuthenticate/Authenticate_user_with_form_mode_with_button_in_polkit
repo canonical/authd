@@ -1,5 +1,5 @@
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 Gimme your password:
 >
 == Authentication method selection ==
@@ -15,17 +15,17 @@ Choose your authentication method:
 == Authentication code ==
   1. Proceed with Authentication code
   2. Resend SMS (1 sent)
-Or enter 'r' to go back to select the authentication method
+Or enter 'r' to go back to select the authentication flow
 Choose action:
 > 2
 == Authentication code ==
   1. Proceed with Authentication code
   2. Resend SMS (2 sent)
-Or enter 'r' to go back to select the authentication method
+Or enter 'r' to go back to select the authentication flow
 Choose action:
 > 1
 == Authentication code ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 Enter your one time credential:
 > temporary pass00
   PAM_AUTHTOK: "temporary pass00"
