@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/canonical/authd/internal/brokers"
 	"github.com/canonical/authd/internal/brokers/auth"
 	"github.com/canonical/authd/internal/brokers/layouts"
 	"github.com/canonical/authd/internal/proto/authd"
@@ -1817,6 +1818,24 @@ func TestGdmModel(t *testing.T) {
 			wantPAMReturnValue: pamError{
 				status: pam.ErrAuthinfoUnavail,
 				msg:    "No brokers available",
+			},
+		},
+		"Error_ignore_when_only_local_broker_is_available": {
+			clientOptions: append(slices.Clone(singleBrokerClientOptions),
+				pam_test.WithAvailableBrokers([]*authd.ABResponse_BrokerInfo{
+					{Id: brokers.LocalBrokerName},
+				}, nil),
+			),
+			wantGdmRequests: []gdm.RequestType{
+				gdm.RequestType_uiLayoutCapabilities,
+			},
+			wantNoGdmEvents: []gdm.EventType{
+				gdm.EventType_brokersReceived,
+				gdm.EventType_userSelected,
+			},
+			wantNoBrokers: true,
+			wantPAMReturnValue: pamError{
+				status: pam.ErrIgnore,
 			},
 		},
 		"Error_on_invalid_broker_selection": {
