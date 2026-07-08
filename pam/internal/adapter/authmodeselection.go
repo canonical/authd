@@ -143,18 +143,34 @@ func (m authModeSelectionModel) Update(msg tea.Msg) (authModeSelectionModel, tea
 
 		cmd := m.SetItems(allAuthModes)
 
-		// Autoselect first auth mode if any, as soon as we've the focus.
+		// Auto-select the first auth mode when available.
+		// For InteractiveTerminal, always select immediately because the
+		// authModeSelection stage is skipped entirely (see model.go).
+		// For GDM/Native, defer the selection until the auth mode selection
+		// stage is active (list is focused), so the stage transition completes
+		// before we request the corresponding UI layout.
 		if len(m.availableAuthModes) == 0 {
 			return m, cmd
 		}
 
 		firstAuthModeID := m.availableAuthModes[0].Id
-		if !m.Focused() {
-			m.autoSelectedAuthModeID = firstAuthModeID
+		selectedID := firstAuthModeID
+		if validAuthModeID(m.autoSelectedAuthModeID, m.availableAuthModes) {
+			selectedID = m.autoSelectedAuthModeID
+		}
+
+		if m.clientType != InteractiveTerminal && !m.Focused() {
+			m.autoSelectedAuthModeID = selectedID
 			return m, cmd
 		}
 
-		return m, tea.Sequence(cmd, selectAuthMode(firstAuthModeID))
+		// When already focused, honor a pending selection from before modes
+		// arrived (e.g. GDM client sent AuthModeSelected while stage change
+		// arrived before the mode list was fetched). Fall back to the first
+		// available mode.
+		m.autoSelectedAuthModeID = ""
+
+		return m, tea.Sequence(cmd, selectAuthMode(selectedID))
 
 	case listItemSelected:
 		if !m.Focused() {
@@ -170,6 +186,14 @@ func (m authModeSelectionModel) Update(msg tea.Msg) (authModeSelectionModel, tea
 		safeMessageDebug(msg)
 		// Ensure auth mode id is valid
 		if !validAuthModeID(msg.id, m.availableAuthModes) {
+			if len(m.availableAuthModes) == 0 {
+				// Modes not yet available; the stage change arrived before the
+				// mode list was fetched (e.g. GDM/Native MFA path in model.go
+				// where changeStageCmd runs before getModesCmd). Defer this
+				// selection; it will be applied when authModesReceived fires.
+				m.autoSelectedAuthModeID = msg.id
+				return m, nil
+			}
 			log.Infof(context.TODO(), "authentication mode %q is not part of currently available authentication mode", msg.id)
 			return m, nil
 		}
