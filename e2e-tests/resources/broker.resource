@@ -465,7 +465,5 @@ Log In With Remote User Through CLI: Entra Password
     Hid.Type String    ${totp_code}
     Hid.Keys Combo    Return
 
-    # Wait for the authenticated shell prompt. Plain Match Text is fuzzy enough
-    # to false-positive on the preceding machinectl login line, so keep this in
-    # regex mode and require the remote-shell prefix after the username.
-    Match Text    regex:${username}@ubuntu:    120
+    # Wait for the authenticated shell prompt.
+    Match Text    ${username}@ubuntu:~$    120
