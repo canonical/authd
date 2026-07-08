@@ -127,6 +127,12 @@ func IsTerminalTTY(mTx pam.ModuleTransaction) bool {
 	return isTerminalTTYValue
 }
 
+// IsDumbTerminal returns whether the TERM environment variable is set to "dumb".
+// Dumb terminals do not support escape sequences and cannot render the TUI.
+func IsDumbTerminal() bool {
+	return os.Getenv("TERM") == "dumb"
+}
+
 func maybeSendPamError(err error) tea.Cmd {
 	if err == nil {
 		return nil
