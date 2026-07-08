@@ -69,6 +69,13 @@ write_files:
       [org/gnome/desktop/interface]
       text-scaling-factor=1.25
 
+      # Ptyxis defaults to a 10pt font, which is smaller than the 12pt
+      # gnome-terminal font used on Noble.
+      # Use a larger fixed font to improve OCR accuracy.
+      [org/gnome/Ptyxis]
+      use-system-font=false
+      font-name='Monospace 12'
+
   - path: /etc/ssh/sshd_config.d/root.conf
     content: |
       ${CI_ROOT_SSHD_CONFIG}
