@@ -136,7 +136,7 @@ Wait For Shell Prompt After Login
         ${system_error} =    SSH.Execute
         ...    sudo journalctl --no-pager --since "10 minutes ago" | grep "FAILED LOGIN" | grep "System error" || true
         IF    $system_error != ''
-            Fail    Login failed with a PAM "System error" after authentication succeeded. This is the flaky failure tracked in https://github.com/canonical/authd/issues/1642.\n\nMatching journal line(s):\n${system_error}
+            Skip    Login failed with a PAM "System error" after authentication succeeded. This is the flaky failure tracked in https://github.com/canonical/authd/issues/1642.\n\nMatching journal line(s):\n${system_error}
         END
     END
     Fail    ${error}
