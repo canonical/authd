@@ -4,7 +4,7 @@
 (user-integration-pre-check-ssh-authenticate-user-with-qr-code-with-shared-sshd@example.com@localhost) Choose your provider:
 > 2
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-with-qr-code-with-shared-sshd@example.com@localhost) Gimme your password:
 >
 == Authentication method selection ==
@@ -27,7 +27,7 @@ Code: 1337
 
   1. Wait for authentication result
   2. Regenerate code
-Or enter 'r' to go back to select the authentication method
+Or enter 'r' to go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-with-qr-code-with-shared-sshd@example.com@localhost) Choose action:
 > 2
 == Use a Login code ==
@@ -38,7 +38,7 @@ Code: 1338
 
   1. Wait for authentication result
   2. Regenerate code
-Or enter 'r' to go back to select the authentication method
+Or enter 'r' to go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-with-qr-code-with-shared-sshd@example.com@localhost) Choose action:
 > 2
 == Use a Login code ==
@@ -49,7 +49,7 @@ Code: 1339
 
   1. Wait for authentication result
   2. Regenerate code
-Or enter 'r' to go back to select the authentication method
+Or enter 'r' to go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-with-qr-code-with-shared-sshd@example.com@localhost) Choose action:
 > 2
 == Use a Login code ==
@@ -60,7 +60,7 @@ Code: 1340
 
   1. Wait for authentication result
   2. Regenerate code
-Or enter 'r' to go back to select the authentication method
+Or enter 'r' to go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-with-qr-code-with-shared-sshd@example.com@localhost) Choose action:
 > 2
 == Use a Login code ==
@@ -71,7 +71,7 @@ Code: 1341
 
   1. Wait for authentication result
   2. Regenerate code
-Or enter 'r' to go back to select the authentication method
+Or enter 'r' to go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-with-qr-code-with-shared-sshd@example.com@localhost) Choose action:
 > 1
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-with-qr-code-with-shared-sshd@example.com'

@@ -4,7 +4,7 @@
 (user-integration-pre-check-ssh-authenticate-user-successfully-with-shared-sshd@example.com@localhost) Choose your provider:
 > 2
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-successfully-with-shared-sshd@example.com@localhost) Gimme your password:
 >
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-authenticate-user-successfully-with-shared-sshd@example.com'

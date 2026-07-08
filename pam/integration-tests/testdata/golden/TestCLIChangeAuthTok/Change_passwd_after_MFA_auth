@@ -2,7 +2,7 @@ Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 Username: user-mfa-integration-cli-passwd@example.com
 ────────────────────────────────────────────────────────────────────────────────
-  Select your provider
+  Select your provider:
 
 > 1. local
   2. ExampleBroker
@@ -12,9 +12,9 @@ Username: user-mfa-integration-cli-passwd@example.com
 Gimme your password:
 >
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
-  Select your authentication method
+  Select the authentication flow:
 
 > 1. Password authentication
   2. Send URL to user-mfa-integration-cli-passwd@example.com
@@ -29,18 +29,18 @@ Gimme your password:
 Gimme your password:
 >
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
 Gimme your password:
 > ********
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
 Plug your fido device and press with your thumb
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
-  Select your authentication method
+  Select the authentication flow:
 
 > 1. Use your fido device foo
   2. Use your phone +33...
@@ -50,13 +50,13 @@ Plug your fido device and press with your thumb
 ────────────────────────────────────────────────────────────────────────────────
 Plug your fido device and press with your thumb
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
 Unlock your phone +33... or accept request on web interface
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
-  Select your authentication method
+  Select the authentication flow:
 
 > 1. Use your phone +33...
   2. Authentication code
@@ -65,7 +65,7 @@ Unlock your phone +33... or accept request on web interface
 ────────────────────────────────────────────────────────────────────────────────
 Unlock your phone +33... or accept request on web interface
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
 Enter your new password
 

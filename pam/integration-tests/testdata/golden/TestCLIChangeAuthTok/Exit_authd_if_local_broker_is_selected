@@ -2,14 +2,14 @@ Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 Username: user-integration-cli-passwd-exit-authd-if-local-broker-is-selected@example.com
 ────────────────────────────────────────────────────────────────────────────────
-  Select your provider
+  Select your provider:
 
 > 1. local
   2. ExampleBroker
 
   Press escape key to go back to user selection
 ────────────────────────────────────────────────────────────────────────────────
-  Select your provider
+  Select your provider:
 
 > 1. local
   2. ExampleBroker

@@ -7,7 +7,7 @@ Unsupported input
 (user-integration-pre-check-ssh-prevent-user-from-switching-username-with-shared-sshd@example.com@localhost) Choose your provider:
 > 2
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 (user-integration-pre-check-ssh-prevent-user-from-switching-username-with-shared-sshd@example.com@localhost) Gimme your password:
 >
 == Authentication method selection ==
@@ -34,7 +34,7 @@ Unsupported input
 (user-integration-pre-check-ssh-prevent-user-from-switching-username-with-shared-sshd@example.com@localhost) Choose your provider:
 > 2
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 (user-integration-pre-check-ssh-prevent-user-from-switching-username-with-shared-sshd@example.com@localhost) Gimme your password:
 >
 PAM Authenticate() finished for user 'user-integration-pre-check-ssh-prevent-user-from-switching-username-with-shared-sshd@example.com'
