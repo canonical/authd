@@ -18,8 +18,8 @@ ${local_password}    qwer1234
 *** Test Cases ***
 Test login with broker version under test
     [Documentation]    Test login with the broker version under test with
-    ...                device code flow and local password, before and after
-    ...                upgrading the broker.
+    ...    device code flow and local password, before and after upgrading
+    ...    the broker.
 
     # Log in with local user
     Log In

@@ -18,11 +18,9 @@ ${local_password}    qwer1234
 *** Test Cases ***
 Test login after upgrading authd and broker
     [Documentation]    This test verifies that after upgrading authd to the
-    ...                version under test and the broker to the version under
-    ...                test,
-    ...                remote users can still log in using device code flow and
-    ...                local password, and their accounts are properly set up
-    ...                on the system.
+    ...    version under test and the broker to the version under test, remote
+    ...    users can still log in using device code flow and local password,
+    ...    and their accounts are properly set up on the system.
 
     # Log in with local user
     Log In

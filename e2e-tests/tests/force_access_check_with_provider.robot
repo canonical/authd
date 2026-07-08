@@ -16,8 +16,9 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test second login succeeds with force_access_check_with_provider enabled
-    [Documentation]    Verify that a registered user can log in with their local password
-    ...    when force_access_check_with_provider is enabled and the identity provider is reachable.
+    [Documentation]    Verify that a registered user can log in with their local
+    ...    password when force_access_check_with_provider is enabled and
+    ...    the identity provider is reachable.
 
     Log In
 
@@ -34,7 +35,8 @@ Test second login succeeds with force_access_check_with_provider enabled
 
 Test second login fails with force_access_check_with_provider enabled offline
     [Documentation]    Verify that a registered user cannot log in when
-    ...    force_access_check_with_provider is enabled and the identity provider is unreachable.
+    ...    force_access_check_with_provider is enabled and the identity
+    ...    provider is unreachable.
 
     Log In
 

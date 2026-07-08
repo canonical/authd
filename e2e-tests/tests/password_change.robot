@@ -18,7 +18,8 @@ ${new_password}    passwd1234
 
 *** Test Cases ***
 Test changing local password of remote user
-    [Documentation]    This test verifies that a remote user can change their local password and subsequently log in using the new password.
+    [Documentation]    This test verifies that a remote user can change their
+    ...    local password and subsequently log in using the new password.
 
     # Log in with local user
     Log In
