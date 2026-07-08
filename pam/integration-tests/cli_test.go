@@ -41,6 +41,10 @@ func TestCLIAuthenticate(t *testing.T) {
 		extraArgs          []string
 		socketPath         string // override socket path
 		useCancelableAuthd bool
+		// flaky marks tests that are known to fail intermittently in certain
+		// environments (e.g. ASAN + Go thread-registry corruption). They are
+		// skipped when AUTHD_SKIP_FLAKY_TESTS is set.
+		flaky bool
 
 		test func(t *testing.T, c *ptytest.Console)
 		// testWithSignals is like test but receives a signalFn that creates a broker
@@ -601,8 +605,14 @@ func TestCLIAuthenticate(t *testing.T) {
 				cliWaitForResult(t, c)
 			},
 		},
+		// This test is flaky under ASAN: authd-pam's Go runtime occasionally
+		// crashes with an ASAN-internal CHECK failure (ThreadRegistry::StartThread
+		// receives a corrupt thread index) caused by ASAN's thread registry being
+		// corrupted by Go's memory management when many ASAN-instrumented processes
+		// run in parallel. The test itself is correct and passes in non-ASAN runs.
 		"Deny_authentication_if_newpassword_does_not_match_required_criteria": {
 			username: "user-needs-reset@example.com",
+			flaky:    true,
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 
@@ -697,6 +707,10 @@ func TestCLIAuthenticate(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
+			if tc.flaky && os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
+				t.Skip("skipping flaky test")
+			}
 
 			var socketPath, groupFileOutput string
 			var cancelAuthd func()
