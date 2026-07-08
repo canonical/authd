@@ -173,22 +173,20 @@ Check That Username Cannot Be Changed When Using su
 
 
 Try Navigating Back to User Selection
-    # First screen is the autoselected local password mode
+    # First screen is the autoselected local password flow
     Match Text    regex:Enter\\s*your\\s*(?:local\\s*)?password:    120
     Hid.Keys Combo    Escape
 
-    # The previous screen should be the authentication mode selection
+    # The previous screen should be the authentication flow selection
     Match Text    Select the authentication flow:    120
     Hid.Keys Combo    Escape
 
-    # The previous screen should be the broker selection
-    Match Text    Select your provider:    120
+    # For existing users the provider is already known, so the provider-selection
+    # screen is skipped.  Pressing Escape should not navigate back to user or
+    # provider selection; the user is stuck at the authentication-flow screen.
+    Match Text    Select the authentication flow:    120
     Hid.Keys Combo    Escape
-
-    # The previous screen is the username prompt, but it shouldn't be possible to get there
-    Match Text    Select your provider:    120
-    Hid.Keys Combo    Escape
-    Match Text    Select your provider:    120
+    Match Text    Select the authentication flow:    120
 
 
 Log In With Remote User Through CLI: Local Password And Expect Failure
