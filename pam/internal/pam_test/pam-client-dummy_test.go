@@ -102,8 +102,10 @@ func TestGetBroker(t *testing.T) {
 				WithBrokerForUser("user0", "broker0"),
 				WithBrokerForUser("user1@example.com", "broker1"),
 			),
-			args:    &authd.GBRequest{Username: "user1@example.com"},
-			wantRet: &authd.GBResponse{Broker: "broker1"},
+			args: &authd.GBRequest{Username: "user1@example.com"},
+			wantRet: &authd.GBResponse{
+				Broker: "broker1",
+			},
 		},
 
 		// Error cases

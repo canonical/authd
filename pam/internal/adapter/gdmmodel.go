@@ -231,6 +231,11 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 			BrokersReceived: &gdm.Events_BrokersReceived{BrokersInfos: msg.brokers},
 		})
 
+	case brokerBoundToUser:
+		return m, m.emitEvent(&gdm.EventData_BrokerSelected{
+			BrokerSelected: &gdm.Events_BrokerSelected{BrokerId: msg.brokerID},
+		})
+
 	case brokerSelected:
 		return m, m.emitEvent(&gdm.EventData_BrokerSelected{
 			BrokerSelected: &gdm.Events_BrokerSelected{BrokerId: msg.brokerID},
