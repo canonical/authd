@@ -27,6 +27,10 @@ type nativePtySessionSpec struct {
 	username         string
 	extraArgs        []string
 	expectedExitCode int
+	// skipForceNative prevents force_native_client=true from being added to the
+	// PAM args, allowing the module to detect the client type from the environment
+	// (e.g. via TERM=dumb).
+	skipForceNative bool
 }
 
 type nativePtyTestContext struct {
@@ -45,7 +49,10 @@ func (r nativePtySessionRunner) start(t *testing.T, spec nativePtySessionSpec) *
 	cliEnv := append(r.cliEnv,
 		fmt.Sprintf("%s=1", pam_test.RunnerEnvSupportsConversation),
 	)
-	extraArgs := append([]string{"force_native_client=true"}, spec.extraArgs...)
+	extraArgs := spec.extraArgs
+	if !spec.skipForceNative {
+		extraArgs = append([]string{"force_native_client=true"}, extraArgs...)
+	}
 	c := startPAMRunner(t, r.clientPath, r.socketPath, spec.action, cliEnv, spec.clientOptions, extraArgs...)
 	if spec.username != "" && spec.clientOptions.PamUser == "" {
 		nativeEnterUsername(t, c, spec.username)
@@ -88,6 +95,7 @@ func TestNativeAuthenticate(t *testing.T) {
 		wantLocalGroups    bool
 		wantSeparateDaemon bool
 		skipRunnerCheck    bool
+		skipForceNative    bool
 		socketPath         string
 		extraArgs          []string
 		expectedUser       string
@@ -100,6 +108,15 @@ func TestNativeAuthenticate(t *testing.T) {
 		"Authenticate_user_successfully": {
 			test:         nativeSimpleAuth,
 			expectedUser: testUserName(t, "native"),
+		},
+		"Authenticate_user_successfully_with_dumb_terminal": {
+			// Verify that TERM=dumb causes the module to fall back to native mode
+			// even without force_native_client=true. This covers non-interactive
+			// consumers like Emacs TRAMP, scripted sudo, and Ansible.
+			clientOptions:   clientOptions{Term: "dumb"},
+			skipForceNative: true,
+			test:            nativeSimpleAuthNonInteractive,
+			expectedUser:    testUserName(t, "dumb-terminal"),
 		},
 		"Authenticate_user_successfully_with_upper_case": {
 			clientOptions: clientOptions{PamUser: strings.ToUpper(testUserName(t, "upper-case-native"))},
@@ -734,10 +751,11 @@ func TestNativeAuthenticate(t *testing.T) {
 					cliEnv:     cliEnv,
 				},
 				baseSpec: nativePtySessionSpec{
-					action:        pam_test.RunnerActionLogin,
-					clientOptions: clientOptions,
-					username:      username,
-					extraArgs:     tc.extraArgs,
+					action:          pam_test.RunnerActionLogin,
+					clientOptions:   clientOptions,
+					username:        username,
+					extraArgs:       tc.extraArgs,
+					skipForceNative: tc.skipForceNative,
 				},
 				authdCancel: authdCancel,
 			}
@@ -1039,7 +1057,7 @@ func nativeReloginAfterPasswordChange(t *testing.T, ctx *nativePtyTestContext) {
 // nativeSelectBroker waits for provider selection and selects ExampleBroker.
 func nativeSelectBroker(t *testing.T, c *ptytest.Console) {
 	t.Helper()
-	c.WaitFor(t, `(?s)== Provider selection ==.*2\. ExampleBroker.*Choose your provider:`)
+	c.WaitFor(t, `(?s)== Provider selection ==.*2\. ExampleBroker.*Choose your provider`)
 	sendEchoedLine(t, c, "2")
 }
 
@@ -1048,6 +1066,20 @@ func nativeSimpleAuth(t *testing.T, c *ptytest.Console) {
 	t.Helper()
 	nativeSelectBroker(t, c)
 	c.WaitFor(t, `Gimme your password:`)
+	c.SendLine(t, "goodpass")
+	nativeWaitForResult(t, c)
+}
+
+// nativeSimpleAuthNonInteractive performs basic native authentication for
+// non-interactive sessions (e.g. TERM=dumb), where prompts lack the ": \n> "
+// interactive suffix so sendEchoedLine cannot be used.  In non-interactive
+// mode promptForInput uses format "%s", so the broker label "Gimme your
+// password" is sent verbatim (no colon appended by the formatter).
+func nativeSimpleAuthNonInteractive(t *testing.T, c *ptytest.Console) {
+	t.Helper()
+	c.WaitFor(t, `(?s)== Provider selection ==.*2\. ExampleBroker.*Choose your provider`)
+	c.SendLine(t, "2")
+	c.WaitFor(t, `Gimme your password`)
 	c.SendLine(t, "goodpass")
 	nativeWaitForResult(t, c)
 }
