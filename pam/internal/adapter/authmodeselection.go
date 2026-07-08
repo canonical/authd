@@ -154,11 +154,13 @@ func (m authModeSelectionModel) Update(msg tea.Msg) (authModeSelectionModel, tea
 		}
 
 		firstAuthModeID := m.availableAuthModes[0].Id
+		selectedID := firstAuthModeID
+		if validAuthModeID(m.autoSelectedAuthModeID, m.availableAuthModes) {
+			selectedID = m.autoSelectedAuthModeID
+		}
+
 		if m.clientType != InteractiveTerminal && !m.Focused() {
-			// Preserve a deferred external selection (set before modes arrived).
-			if m.autoSelectedAuthModeID == "" {
-				m.autoSelectedAuthModeID = firstAuthModeID
-			}
+			m.autoSelectedAuthModeID = selectedID
 			return m, cmd
 		}
 
@@ -166,10 +168,6 @@ func (m authModeSelectionModel) Update(msg tea.Msg) (authModeSelectionModel, tea
 		// arrived (e.g. GDM client sent AuthModeSelected while stage change
 		// arrived before the mode list was fetched). Fall back to the first
 		// available mode.
-		selectedID := firstAuthModeID
-		if m.autoSelectedAuthModeID != "" && validAuthModeID(m.autoSelectedAuthModeID, m.availableAuthModes) {
-			selectedID = m.autoSelectedAuthModeID
-		}
 		m.autoSelectedAuthModeID = ""
 
 		return m, tea.Sequence(cmd, selectAuthMode(selectedID))
