@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/canonical/authd/internal/brokers"
 	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/canonical/authd/log"
 	"github.com/canonical/authd/pam/internal/proto"
@@ -165,8 +166,16 @@ func getAvailableBrokers(client authd.PAMClient) tea.Cmd {
 			}
 		}
 
+		bs := brokersInfo.BrokersInfos
+		// If only the local broker is available, this PAM module cannot authenticate.
+		// Return PAM_IGNORE early so the next PAM module (e.g. pam_unix) can take
+		// over instead.
+		if len(bs) == 1 && bs[0].GetId() == brokers.LocalBrokerName {
+			return pamError{status: pam.ErrIgnore}
+		}
+
 		return brokersListReceived{
-			brokers: brokersInfo.BrokersInfos,
+			brokers: bs,
 		}
 	}
 }

@@ -417,11 +417,11 @@ func (m nativeModel) sendError(errorMsg string, args ...any) error {
 	return err
 }
 
-func (m nativeModel) sendInfo(infoMsg string, args ...any) error {
+func (m nativeModel) sendInfo(infoMsg string) error {
 	if infoMsg == "" {
 		return nil
 	}
-	_, err := m.pamMTx.StartStringConvf(pam.TextInfo, infoMsg, args...)
+	_, err := m.pamMTx.StartStringConvf(pam.TextInfo, infoMsg)
 	return err
 }
 
@@ -431,7 +431,10 @@ type choicePair struct {
 }
 
 func (m nativeModel) promptForChoiceWithMessage(title string, message string, choices []choicePair, prompt string) (string, error) {
-	msg := fmt.Sprintf("== %s ==\n", title)
+	var msg string
+	if m.serviceName != polkitServiceName {
+		msg = fmt.Sprintf("== %s ==\n", title)
+	}
 	if message != "" {
 		msg += message + "\n"
 	}
@@ -657,9 +660,18 @@ func (m nativeModel) handleFormChallenge(hasWait bool) tea.Cmd {
 	}
 
 	if goBackLabel := m.goBackActionLabel(); goBackLabel != "" {
-		instructions = "\n" + fmt.Sprintf(instructions, nativeCancelKey, m.goBackActionLabel())
+		instructions = fmt.Sprintf(instructions, nativeCancelKey, m.goBackActionLabel())
 	}
-	if cmd := maybeSendPamError(m.sendInfo("== %s ==%s", authMode, instructions)); cmd != nil {
+	var info string
+	if m.serviceName != polkitServiceName {
+		info = fmt.Sprintf("== %s ==", authMode)
+		if instructions != "" {
+			info += "\n" + instructions
+		}
+	} else {
+		info = instructions
+	}
+	if cmd := maybeSendPamError(m.sendInfo(info)); cmd != nil {
 		return cmd
 	}
 
@@ -816,11 +828,20 @@ func (m nativeModel) newPasswordChallenge(previousPassword *string) tea.Cmd {
 	if previousPassword == nil {
 		var instructions string
 		if goBackLabel := m.goBackActionLabel(); goBackLabel != "" {
-			instructions = fmt.Sprintf("\nEnter '%[1]s' to cancel the request and %[2]s",
+			instructions = fmt.Sprintf("Enter '%[1]s' to cancel the request and %[2]s",
 				nativeCancelKey, goBackLabel)
 		}
 		title := m.selectedAuthModeLabel("Password Update")
-		if cmd := maybeSendPamError(m.sendInfo("== %s ==%s", title, instructions)); cmd != nil {
+		var info string
+		if m.serviceName != polkitServiceName {
+			info = fmt.Sprintf("== %s ==", title)
+			if instructions != "" {
+				info += "\n" + instructions
+			}
+		} else {
+			info = instructions
+		}
+		if cmd := maybeSendPamError(m.sendInfo(info)); cmd != nil {
 			return cmd
 		}
 	}
