@@ -110,16 +110,18 @@ Continue Log In With Remote User Through CLI: Define Local Password
 Wait For Shell Prompt After Login
     [Documentation]    Waits for the shell prompt that indicates a successful login.
     ...
-    ...                If the prompt never appears, inspects the journal to tell
-    ...                the specific "granted but System error" failure apart from
-    ...                an ordinary login failure before attributing it to a known
+    ...                If the prompt never appears and the test is one of the two
+    ...                migration tests that run the stable authd, inspects the journal
+    ...                to tell the specific "granted but System error" failure apart
+    ...                from an ordinary login failure before attributing it to a known
     ...                bug. An ordinary wrong-password failure is logged by login
     ...                as "Authentication failure", whereas the flaky failure
     ...                tracked in https://github.com/canonical/authd/issues/1642
     ...                is logged as "System error": PAM_SYSTEM_ERR returned by the
     ...                (stable) authd PAM module *after* the broker already
     ...                granted access. The edge/fixed authd never returns that, so
-    ...                this only matches the actual #1642 failure.
+    ...                this check is restricted to the migration tests (the only tests
+    ...                that run the stable authd) to avoid masking genuine failures.
     [Arguments]    ${shell_prompt}    ${timeout_sec}=120
     ${status}    ${error} =    Run Keyword And Ignore Error
     ...    Match Text    ${shell_prompt}    ${timeout_sec}
@@ -127,12 +129,15 @@ Wait For Shell Prompt After Login
 
     # TODO: Remove this #1642 check once the next authd stable release is out,
     # since it includes the fix for https://github.com/canonical/authd/issues/1642.
-    # The shell prompt did not appear. Only attribute the failure to #1642 if the
-    # journal shows login failing with a PAM "System error".
-    ${system_error} =    SSH.Execute
-    ...    sudo journalctl --no-pager --since "10 minutes ago" | grep "FAILED LOGIN" | grep "System error" || true
-    IF    $system_error != ''
-        Fail    Login failed with a PAM "System error" after authentication succeeded. This is the flaky failure tracked in https://github.com/canonical/authd/issues/1642.\n\nMatching journal line(s):\n${system_error}
+    # The shell prompt did not appear. Only attribute the failure to #1642 if we are
+    # running one of the migration tests (where the stable, unfixed authd is active)
+    # and the journal shows login failing with a PAM "System error".
+    IF    '${TEST NAME}' == 'Test login after updating authd to edge version' or '${TEST NAME}' == 'Test login after upgrading authd and broker to edge channel'
+        ${system_error} =    SSH.Execute
+        ...    sudo journalctl --no-pager --since "10 minutes ago" | grep "FAILED LOGIN" | grep "System error" || true
+        IF    $system_error != ''
+            Skip    Login failed with a PAM "System error" after authentication succeeded. This is the flaky failure tracked in https://github.com/canonical/authd/issues/1642.\n\nMatching journal line(s):\n${system_error}
+        END
     END
     Fail    ${error}
 
