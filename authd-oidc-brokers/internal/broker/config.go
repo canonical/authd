@@ -283,23 +283,25 @@ func validatePlaceholders(path string, iniCfg *ini.File) error {
 }
 
 // validateConfigFile checks a parsed ini config for validity: parseable boolean
-// fields, and logs warnings for unknown sections/keys. It does not check for
+// fields, and returns errors for unknown sections/keys. It does not check for
 // template placeholders; call validatePlaceholders for that.
 func validateConfigFile(path string, iniCfg *ini.File) error {
-	// Log warnings for unknown sections and keys.
+	// Return errors for unknown sections and keys.
 	for _, section := range iniCfg.Sections() {
 		if section.Name() == ini.DefaultSection {
+			if len(section.Keys()) > 0 {
+				return fmt.Errorf("keys outside of any section in config file %q", path)
+			}
 			continue
 		}
 		sectionKeys, ok := knownConfigKeys[section.Name()]
 		if !ok {
-			log.Warningf(context.Background(), "unknown section %q in config file, ignoring", section.Name())
-			continue
+			return fmt.Errorf("unknown section %q in config file %q", section.Name(), path)
 		}
 
 		for _, key := range section.Keys() {
 			if _, ok := sectionKeys[key.Name()]; !ok {
-				log.Warningf(context.Background(), "unknown key %q in section %q in config file, ignoring", key.Name(), section.Name())
+				return fmt.Errorf("unknown key %q in section %q in config file %q", key.Name(), section.Name(), path)
 			}
 		}
 	}
