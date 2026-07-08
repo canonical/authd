@@ -412,12 +412,34 @@ jobs:
           echo "Running PAM integration tests"
           pushd ./pam/integration-tests
           go test -asan -gcflags=all="${GO_GC_FLAGS}" -c
-          go tool test2json -p pam/integrations-test ./integration-tests.test \
-            -test.v=test2json \
-            -test.failfast \
-            -test.timeout ${GO_TESTS_TIMEOUT} | \
-          gotestfmt --logfile "${AUTHD_TESTS_ARTIFACTS_PATH}/gotestfmt.pam-integration-tests-asan.log" || \
-          exit_code=$?
+
+          run_pam_integration_tests() {
+            local log_suffix="${1:-}"
+            go tool test2json -p pam/integrations-test ./integration-tests.test \
+              -test.v=test2json \
+              -test.failfast \
+              -test.timeout ${GO_TESTS_TIMEOUT} | \
+            gotestfmt --logfile "${AUTHD_TESTS_ARTIFACTS_PATH}/gotestfmt.pam-integration-tests-asan${log_suffix}.log"
+          }
+
+          if run_pam_integration_tests; then
+            :
+          else
+            exit_code=$?
+            # Retry once if all ASAN errors are ASAN-internal check failures (e.g.
+            # ThreadRegistry::StartThread invariant), not real memory bugs detected by
+            # ASAN. Real detections (heap-buffer-overflow, use-after-free, etc.) are
+            # never retried.
+            if grep -rl "AddressSanitizer:" "${AUTHD_TESTS_ARTIFACTS_PATH}"/asan.log* 2>/dev/null | grep -q . && \
+               ! grep -rh "AddressSanitizer:" "${AUTHD_TESTS_ARTIFACTS_PATH}"/asan.log* | grep -qv "CHECK failed"; then
+              echo "ASAN internal check failure detected — retrying once"
+              for f in "${AUTHD_TESTS_ARTIFACTS_PATH}"/asan.log*; do
+                [ -e "${f}" ] && mv "${f}" "${f}.prev"
+              done
+              exit_code=0
+              run_pam_integration_tests "-retry" || exit_code=$?
+            fi
+          fi
           popd
 
           # We don't need the xtrace output after this point
