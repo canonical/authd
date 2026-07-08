@@ -1,0 +1,11 @@
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication flow
+Gimme your password
+  PAM_AUTHTOK: "goodpass"
+PAM Authenticate()
+  User: "user-integration-native-authenticate-user-successfully-with-dumb-terminal@example.com"
+  Result: success

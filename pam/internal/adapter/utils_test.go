@@ -314,6 +314,39 @@ func TestSafeMessageDebug(t *testing.T) {
 	}
 }
 
+func TestIsDumbTerminal(t *testing.T) {
+	// Cannot be parallel due to t.Setenv modifying the process environment.
+
+	tests := map[string]struct {
+		term string
+		want bool
+	}{
+		"Returns_true_when_TERM_is_dumb": {
+			term: "dumb",
+			want: true,
+		},
+		"Returns_false_when_TERM_is_xterm": {
+			term: "xterm",
+			want: false,
+		},
+		"Returns_false_when_TERM_is_xterm-256color": {
+			term: "xterm-256color",
+			want: false,
+		},
+		"Returns_false_when_TERM_is_empty": {
+			term: "",
+			want: false,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("TERM", tc.term)
+			require.Equal(t, tc.want, IsDumbTerminal())
+		})
+	}
+}
+
 func TestFormatAlignedFields(t *testing.T) {
 	t.Parallel()
 
