@@ -17,8 +17,8 @@ ${new_uid}    60500
 
 *** Test Cases ***
 Test authctl user set-uid
-    [Documentation]    Test that authctl user set-uid changes the UID of a remote user
-    ...    and updates the home directory ownership.
+    [Documentation]    Test that authctl user set-uid changes the UID of a
+    ...    remote user and updates the home directory ownership.
 
     Log In
 

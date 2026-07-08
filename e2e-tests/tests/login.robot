@@ -17,7 +17,8 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login with CLI
-    [Documentation]    Test login via CLI with device code flow and local password.
+    [Documentation]    Test login via CLI with device code flow and local
+    ...    password.
 
     # Log in with local user
     Log In

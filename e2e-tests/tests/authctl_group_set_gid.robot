@@ -17,8 +17,8 @@ ${new_gid}    60500
 
 *** Test Cases ***
 Test authctl group set-gid
-    [Documentation]    Test that authctl group set-gid changes the GID of a remote group
-    ...    and updates the home directory ownership.
+    [Documentation]    Test that authctl group set-gid changes the GID of a
+    ...    remote group and updates the home directory ownership.
 
     Log In
 

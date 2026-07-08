@@ -22,7 +22,8 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test that login is denied if user is not allowed to log in via SSH
-    [Documentation]    Test that login via SSH is denied when the user is not allowed by the ssh_allowed_suffixes_first_auth setting.
+    [Documentation]    Test that login via SSH is denied when the user is not
+    ...    allowed by the ssh_allowed_suffixes_first_auth setting.
 
     # Log in with local user
     Log In

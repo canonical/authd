@@ -18,7 +18,8 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login with GDM
-    [Documentation]    Test that a user can log in with a local password when the filesystem is read-only.
+    [Documentation]    Test that a user can log in with a local password when
+    ...    the filesystem is read-only.
 
     # Log in with local user
     Log In
