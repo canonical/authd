@@ -345,10 +345,33 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		return m, tea.Sequence(
-			getAuthenticationModes(m.client, m.currentSession.sessionID, m.authModeSelectionModel.SupportedUILayouts()),
-			sendEvent(ChangeStage{proto.Stage_authModeSelection}),
-		)
+		getModesCmd := getAuthenticationModes(m.client, m.currentSession.sessionID, m.authModeSelectionModel.SupportedUILayouts())
+
+		// For InteractiveTerminal, skip the authModeSelection stage entirely.
+		// The first auth mode is auto-selected immediately when modes arrive
+		// (see authModesReceived), so transitioning to the authModeSelection
+		// stage would only cause the auth mode list to flash briefly on screen
+		// before the auto-selected challenge view replaces it.
+		if m.clientType == InteractiveTerminal {
+			return m, getModesCmd
+		}
+
+		changeStageCmd := sendEvent(ChangeStage{proto.Stage_authModeSelection})
+
+		// For native/SSH mode during MFA (auth.Next), the stage is still
+		// "challenge". We need to transition through authModeSelection so
+		// that the subsequent auto-selection properly triggers a new challenge
+		// via the normal stage change path (Compose → ChangeStage{challenge}
+		// → StageChanged → nativeChallengeRequested).
+		// Stage change must happen BEFORE fetching modes, so that when
+		// authModesReceived fires the list is already focused and the
+		// immediate auto-selection is safe (no risk of the deferred
+		// ChangeStage{authModeSelection} pulling us back after challenge starts).
+		if m.clientType == Native && m.currentStage() == proto.Stage_challenge {
+			return m, tea.Sequence(changeStageCmd, getModesCmd)
+		}
+
+		return m, tea.Sequence(getModesCmd, changeStageCmd)
 
 	case AuthModeSelected:
 		safeMessageDebug(msg)
