@@ -462,8 +462,9 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 			return nil, err
 		}
 		if err = s.userManager.UpdateBrokerForUser(uInfo.Name, broker.ID); err != nil {
+			// A write failure (e.g. read-only filesystem) must not prevent a
+			// successfully authenticated user from logging in.
 			log.Errorf(ctx, "IsAuthenticated: Could not update broker for user %q in database: %v", uInfo.Name, err)
-			return nil, err
 		}
 	}
 
