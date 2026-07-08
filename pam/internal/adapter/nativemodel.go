@@ -648,7 +648,7 @@ func (m nativeModel) handleFormChallenge(hasWait bool) tea.Cmd {
 	}
 
 	if hasWait {
-		// Duplicating some contents here, as it will be better for translators once we've them
+		// Duplicating some contents here, as it will be better for translators once we have them
 		instructions = "Leave the input field empty to wait for the alternative authentication flow"
 		if m.uiLayout.GetEntry() == "" {
 			instructions = "Press Enter to wait for authentication"
