@@ -230,6 +230,13 @@ func TestCLIAuthenticate(t *testing.T) {
 				c.WaitFor(t, `6\. Use a QR code`)
 				c.Send(t, "6")
 				c.WaitFor(t, `Scan the qrcode or enter the code in the login page`)
+				// The QR view exceeds the PTY read buffer and arrives in
+				// several reads. A WaitFor poll can land between the chunk
+				// carrying "Scan the qrcode" and the one carrying "Code:",
+				// snapshotting a half-drawn QR matrix. Discard that
+				// intermediate frame; the "Code:" frame is a complete
+				// superset that captures the same screen.
+				c.DiscardLastSnapshot()
 				c.WaitFor(t, `Code:\s*1337`)
 				c.Send(t, "	")
 				c.Send(t, strings.Repeat("\r", 100))
