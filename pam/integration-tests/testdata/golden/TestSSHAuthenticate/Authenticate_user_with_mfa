@@ -4,7 +4,7 @@
 (user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa@example.com@localhost) Choose your provider:
 > 2
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 (user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa@example.com@localhost) Gimme your password:
 >
 == Authentication method selection ==
@@ -20,11 +20,11 @@ Or enter 'r' to go back to choose the provider
 (user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa@example.com@localhost) Choose your authentication method:
 > 1
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 (user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa@example.com@localhost) Gimme your password:
 >
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 (user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa@example.com@localhost) Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
@@ -35,7 +35,7 @@ Or enter 'r' to go back to choose the provider
 (user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa@example.com@localhost) Choose your authentication method:
 > 1
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 (user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa@example.com@localhost) Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
@@ -46,11 +46,11 @@ Or enter 'r' to go back to choose the provider
 (user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa@example.com@localhost) Choose your authentication method:
 > 2
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 (user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa@example.com@localhost) Unlock your phone +33... or accept request on web interface:
 >
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 (user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa@example.com@localhost) Plug your fido device and press with your thumb:
 >
 PAM Authenticate() finished for user 'user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa@example.com'

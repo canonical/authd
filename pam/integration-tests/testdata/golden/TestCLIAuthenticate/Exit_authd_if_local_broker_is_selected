@@ -2,14 +2,14 @@ Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 Username: user-local-broker
 ────────────────────────────────────────────────────────────────────────────────
-  Select your provider
+  Select your provider:
 
 > 1. local
   2. ExampleBroker
 
   Press escape key to go back to user selection
 ────────────────────────────────────────────────────────────────────────────────
-  Select your provider
+  Select your provider:
 
 > 1. local
   2. ExampleBroker

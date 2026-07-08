@@ -3,7 +3,7 @@ Username: user name
 ────────────────────────────────────────────────────────────────────────────────
 Username: user-integration-remember-mode@example.com
 ────────────────────────────────────────────────────────────────────────────────
-  Select your provider
+  Select your provider:
 
 > 1. local
   2. ExampleBroker
@@ -13,9 +13,9 @@ Username: user-integration-remember-mode@example.com
 Gimme your password:
 >
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
-  Select your authentication method
+  Select the authentication flow:
 
 > 1. Password authentication
   2. Send URL to user-integration-remember-mode@example.com
@@ -32,14 +32,14 @@ Enter your one time credential:
 
   [ Resend SMS (1 sent) ]
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
 Enter your one time credential:
 > temporary pass0
 
   [ Resend SMS (1 sent) ]
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
   PAM_AUTHTOK: "temporary pass0"
 PAM Authenticate()
@@ -57,14 +57,14 @@ Enter your one time credential:
 
   [ Resend SMS (1 sent) ]
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
 Enter your one time credential:
 > temporary pass0
 
   [ Resend SMS (1 sent) ]
 
-  Press escape key to go back to select the authentication method
+  Press escape key to go back to select the authentication flow
 ────────────────────────────────────────────────────────────────────────────────
   PAM_AUTHTOK: "temporary pass0"
 PAM Authenticate()

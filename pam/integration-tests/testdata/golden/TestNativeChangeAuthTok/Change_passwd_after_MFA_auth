@@ -6,7 +6,7 @@ Or enter 'r' to go back to user selection
 Choose your provider:
 > 2
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 Gimme your password:
 >
 == Authentication method selection ==
@@ -22,11 +22,11 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 1
 == Password authentication ==
-Enter 'r' to cancel the request and go back to select the authentication method
+Enter 'r' to cancel the request and go back to select the authentication flow
 Gimme your password:
 >
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 Plug your fido device and press with your thumb:
 > r
 == Authentication method selection ==
@@ -37,11 +37,11 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 1
 == Use your fido device foo ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 Plug your fido device and press with your thumb:
 >
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 Unlock your phone +33... or accept request on web interface:
 > r
 == Authentication method selection ==
@@ -51,7 +51,7 @@ Or enter 'r' to go back to choose the provider
 Choose your authentication method:
 > 1
 == Use your phone +33... ==
-Press Enter to wait for authentication or enter 'r' to go back to select the authentication method
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 Unlock your phone +33... or accept request on web interface:
 >
 == Password reset ==
