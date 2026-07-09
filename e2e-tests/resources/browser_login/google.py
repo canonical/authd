@@ -207,11 +207,20 @@ class GoogleLoginFlow:
 
     def _handle_wrong_email(self) -> None:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-wrong-email")
-        self._browser.send_key_taps(len(self._username) * [Gdk.KEY_BackSpace])
+        self._clear_input_field(self._username)
 
     def _handle_wrong_password(self) -> None:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-wrong-password")
-        self._browser.send_key_taps(len(self._password) * [Gdk.KEY_BackSpace])
+        self._clear_input_field(self._password)
+
+    def _clear_input_field(self, field_value: str) -> None:
+        """Delete all text from the focused input field.
+
+        Sends twice as many BackSpace events as the length of field_value to
+        account for text that may have accumulated from multiple typing attempts.
+        Extra BackSpaces beyond the actual content are harmless.
+        """
+        self._browser.send_key_taps(2 * len(field_value) * [Gdk.KEY_BackSpace])
 
 def login(browser, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):
     GoogleLoginFlow(browser, username, password, device_code, totp_secret, screenshot_dir).run()
