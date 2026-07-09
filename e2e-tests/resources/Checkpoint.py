@@ -175,11 +175,22 @@ class Checkpoint:
             self._restore_and_start(builtin, f'{broker}-installed')
             try:
                 builtin.run_keyword(setup_keyword)
+                # Stop receiving journal from the VM before snapshotting:
+                # a virsh memory snapshot captures the VM's TCP state, so an
+                # active socat connection on port 55000 ends up ESTABLISHED in
+                # the snapshot.  On restore the VM would reject new connections
+                # until its TCP stack times out the stale entry, causing
+                # "Connection refused" in the first consumer test.
+                builtin.run_keyword('Journal.Stop Receiving Journal')
+                builtin.run_keyword('VNCRecorder.Stop Recording')
                 builtin.run_keyword('Snapshot.Create', snapshot)
                 builtin.run_keyword('Checkpoint.Mark Checkpoint Available', name)
             except Exception:
                 builtin.run_keyword('Checkpoint.Mark Checkpoint Failed', name)
                 raise
+            # Restart journal and recording for the creator test's body.
+            builtin.run_keyword('Journal.Start Receiving Journal')
+            builtin.run_keyword('VNCRecorder.Start Recording')
         elif status == 'in_progress':
             resolved = builtin.run_keyword(
                 'Checkpoint.Wait For Checkpoint', name
