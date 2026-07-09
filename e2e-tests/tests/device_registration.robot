@@ -4,6 +4,7 @@ Resource        resources/authd.resource
 Resource        resources/broker.resource
 
 # Test Tags       robot:exit-on-failure
+Test Tags         requires:msentraid
 
 Test Setup    utils.Test Setup    snapshot=%{BROKER}-installed
 Test Teardown   utils.Test Teardown
@@ -22,9 +23,6 @@ Test device registration during device code flow
     ...    With 'register_device = true' the device-auth login flow is unchanged from the
     ...    user's perspective; the broker additionally registers the device and persists the
     ...    resulting registration data in the user's cached token.
-
-    Skip If    '%{BROKER}' != 'authd-msentraid'
-    ...    msg=Device registration is only supported by the msentraid broker.
 
     # Enable device registration before the first remote login, so the device is
     # registered as part of that login.
