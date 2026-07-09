@@ -17,6 +17,9 @@ extend-python-path = [
     "e2e-tests/.yarf/yarf/rf_libraries/variables",
 ]
 
+[tool.robotcode-analyze]
+semantic-model = true
+
 [env]
 # These environment variables are used in our Robot Framework libraries to
 # determine which broker and release to test against. Setting them here allows
