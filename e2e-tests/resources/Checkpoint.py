@@ -185,6 +185,7 @@ class Checkpoint:
                 'Checkpoint.Wait For Checkpoint', name
             )
             if resolved != 'available':
+                builtin.run_keyword('BuiltIn.Set Tags', 'checkpoint-failed')
                 raise RuntimeError(
                     f"Checkpoint '{name}' failed in a concurrent test; "
                     "re-run the suite to retry."
@@ -193,6 +194,7 @@ class Checkpoint:
         elif status == 'available':
             self._restore_and_start(builtin, snapshot)
         else:
+            builtin.run_keyword('BuiltIn.Set Tags', 'checkpoint-failed')
             raise RuntimeError(
                 f"Checkpoint '{name}' previously failed; "
                 "re-run the suite to retry."
