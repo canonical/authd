@@ -5,13 +5,23 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sync"
 	"sync/atomic"
 
 	"github.com/canonical/authd/log"
 	"github.com/msteinert/pam/v2"
 )
 
-var conversations atomic.Int32
+var (
+	// convMu serialises all PAM conversations. The GDM conversation
+	// callback (pam_conv.conv) is not goroutine-safe, so concurrent
+	// calls from the Bubble Tea event loop goroutines must be prevented.
+	// conversations is incremented before acquiring the lock so that
+	// ConversationInProgress correctly reflects pending callers.
+	convMu        sync.Mutex
+	conversations atomic.Int32
+)
+
 var secretRegex = regexp.MustCompile(`"secret"\s*:\s*"(?:[^"\\]|\\.)*"`)
 
 // ConversationInProgress checks if conversations are currently active.
@@ -20,8 +30,12 @@ func ConversationInProgress() bool {
 }
 
 func sendToGdm(pamMTx pam.ModuleTransaction, data []byte) ([]byte, error) {
+	// Count this call before acquiring the lock so that
+	// ConversationInProgress returns true while we are waiting.
 	conversations.Add(1)
 	defer conversations.Add(-1)
+	convMu.Lock()
+	defer convMu.Unlock()
 	binReq, err := NewBinaryJSONProtoRequest(data)
 	if err != nil {
 		return nil, err
