@@ -207,7 +207,13 @@ class GoogleLoginFlow:
 
     def _handle_wrong_email(self) -> None:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-wrong-email")
+        # The error message stays in the DOM after clearing the field, so the
+        # next wait_for_pattern would still see it and re-enter this handler.
+        # Clear the field and retype the email immediately so the form is
+        # resubmitted and the error is dismissed within this single dispatch.
         self._clear_input_field(self._username)
+        self._browser.send_key_taps(
+            ascii_string_to_key_events(self._username) + [Gdk.KEY_Return])
 
     def _handle_wrong_password(self) -> None:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-wrong-password")
