@@ -857,7 +857,7 @@ func TestGdmModel(t *testing.T) {
 			wantStage:          proto.Stage_challenge,
 			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
-		"Implicitly_cancelled_for_a_waiting_auth_mode_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
+		"Back_to_broker_selection_skips_to_user_selection_for_a_waiting_auth_mode_with_preset_PAM_user_and_server_side_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(multiBrokerClientOptions),
 				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedWantWait(time.Millisecond*1500),
@@ -874,9 +874,6 @@ func TestGdmModel(t *testing.T) {
 							events: []*gdm.EventData{
 								gdm_test.ChangeStageEvent(proto.Stage_brokerSelection),
 							},
-							commands: []tea.Cmd{
-								sendEvent(gdmTestWaitForStage{stage: proto.Stage_brokerSelection}),
-							},
 						}),
 					},
 				},
@@ -884,10 +881,9 @@ func TestGdmModel(t *testing.T) {
 			wantSelectedBroker: firstBrokerInfo.Id,
 			wantGdmRequests: []gdm.RequestType{
 				gdm.RequestType_uiLayoutCapabilities,
-				gdm.RequestType_changeStage, // -> broker Selection
 				gdm.RequestType_changeStage, // -> authMode Selection
 				gdm.RequestType_changeStage, // -> form with wait
-				gdm.RequestType_changeStage, // -> broker selection
+				gdm.RequestType_changeStage, // -> user selection
 			},
 			wantGdmEvents: []gdm.EventType{
 				gdm.EventType_userSelected,
@@ -899,7 +895,7 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_authEvent,
 			},
 			wantGdmAuthRes:     []*authd.IAResponse{{Access: auth.Cancelled}},
-			wantStage:          proto.Stage_brokerSelection,
+			wantStage:          proto.Stage_userSelection,
 			wantPAMReturnValue: gdmTestEarlyStopReturnValue,
 		},
 		"Authenticated_with_preset_PAM_user_and_server_side_broker_and_authMode_selection_and_after_various_retries": {

@@ -347,6 +347,11 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ChangeStage:
 		safeMessageDebug(msg)
+		// If the user is bound to a broker, skip broker selection when navigating
+		// back (e.g. GDM sends StageChanged{brokerSelection} on back-navigation).
+		if msg.Stage == proto.Stage_brokerSelection && m.userIsBoundToBroker {
+			msg.Stage = proto.Stage_userSelection
+		}
 		return m, m.changeStage(msg.Stage)
 
 	case StageChanged:
