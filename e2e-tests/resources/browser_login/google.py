@@ -176,6 +176,9 @@ class GoogleLoginFlow:
 
     def _handle_sign_in_page(self) -> None:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-enter-username")
+        # Clear any text that may have accumulated in the field from previous
+        # attempts (due to the page-load race described in _handle_wrong_email).
+        self._clear_input_field(self._username)
         self._browser.send_key_taps(
             ascii_string_to_key_events(self._username) + [Gdk.KEY_Return])
 
