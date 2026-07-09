@@ -154,6 +154,9 @@ if [ -n "${RERUNFAILED:-}" ]; then
     echo "Rerunning failed tests from previous run in ${PREVIOUS_TEST_RUN_DIR}"
     ROBOT_ARGS+=(--rerunfailed "${PREVIOUS_TEST_RUN_DIR}/output.xml")
 fi
+if [[ "${BROKER}" != "authd-msentraid" ]]; then
+    ROBOT_ARGS+=(--exclude requires:msentraid)
+fi
 
 # Launch the domain if it's not already running, so that we can get its VNC port
 if ! virsh domstate "${VM_NAME}" | grep -q '^running'; then
