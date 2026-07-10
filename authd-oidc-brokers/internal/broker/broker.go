@@ -51,7 +51,7 @@ const (
 
 // reauthModes is the set of auth modes offered when the user must re-authenticate
 // (e.g. after token revocation, expiry, or password change).
-var reauthModes = []string{authmodes.EntraPassword, authmodes.Device, authmodes.DeviceQr}
+var reauthModes = []string{authmodes.EntraAuth, authmodes.Device, authmodes.DeviceQr}
 
 // Config is the configuration for the broker.
 type Config struct {
@@ -112,13 +112,13 @@ type session struct {
 	tokenPath               string
 
 	// Data to pass from one request to another.
-	deviceAuthResponse    *oauth2.DeviceAuthResponse
-	authInfo              *token.AuthCachedInfo
-	mfaFlowActive         *himmelblau.MFAFlowState
-	mfaChallengeInfo      *himmelblau.MFAChallengeInfo
-	entraPasswordHash     string // pre-computed hash (not plaintext) for offline use
-	entraPasswordRequired bool
-	fidoPIN               string // security key PIN, kept in memory only while the FIDO exchange runs
+	deviceAuthResponse        *oauth2.DeviceAuthResponse
+	authInfo                  *token.AuthCachedInfo
+	mfaFlowActive             *himmelblau.MFAFlowState
+	mfaChallengeInfo          *himmelblau.MFAChallengeInfo
+	entraAuthPasswordHash     string // pre-computed hash (not plaintext) for offline use
+	entraAuthPasswordRequired bool
+	fidoPIN                   string // security key PIN, kept in memory only while the FIDO exchange runs
 
 	isAuthenticating *isAuthenticatedCtx
 }
@@ -128,14 +128,14 @@ type isAuthenticatedCtx struct {
 	cancelFunc context.CancelFunc
 }
 
-// verifyAndExtractEntraUserInfo verifies the Entra MFA access token's RS256
+// verifyAndExtractEntraUserInfo verifies the Entra auth access token's RS256
 // signature against the tenant JWKS and extracts user info from that verified
 // access token. It does NOT cross-check the username against the session; first
 // login does that via userInfoFromTokenExtras.
 func (b *Broker) verifyAndExtractEntraUserInfo(ctx context.Context, token *oauth2.Token) (info.User, error) {
-	ep, ok := providers.ProviderAs[himmelblau.EntraPasswordProvider](b.provider)
+	ep, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](b.provider)
 	if !ok {
-		return info.User{}, errors.New("provider does not support Entra password authentication")
+		return info.User{}, errors.New("provider does not support Entra authentication")
 	}
 	if err := ep.VerifyAccessToken(ctx, b.cfg.issuerURL, token.AccessToken); err != nil {
 		return info.User{}, fmt.Errorf("access token verification failed: %w", err)
@@ -249,17 +249,17 @@ func New(cfg Config, apiVersion uint, args ...Option) (b *Broker, err error) {
 	if cfg.clientID == "" {
 		err = errors.Join(err, errors.New("client ID is required and was not provided"))
 	}
-	// The entra_password flow can only retrieve groups from Microsoft Graph when
+	// The entra_auth flow can only retrieve groups from Microsoft Graph when
 	// device registration or a client secret is available (see the matching check
 	// in authModeIsAvailable). If neither is configured, the flow is unusable, so
 	// fail at startup rather than silently falling back at login time: a startup
 	// failure is far more visible to the administrator than a per-login denial.
-	if cfg.flows.EntraPassword && !cfg.registerDevice && cfg.clientSecret == "" {
-		if _, ok := providers.ProviderAs[himmelblau.EntraPasswordProvider](opts.provider); ok {
+	if cfg.flows.EntraAuth && !cfg.registerDevice && cfg.clientSecret == "" {
+		if _, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](opts.provider); ok {
 			err = errors.Join(err, fmt.Errorf(
 				"invalid configuration: the %[1]q flow is enabled in [%[2]s], but it cannot retrieve group memberships from Microsoft Graph without %[3]q enabled or a %[4]q configured; "+
 					"fix this by either disabling %[1]q, enabling %[3]q, or granting the app the GroupMember.Read.All application permission and configuring a %[4]q",
-				flowsEntraPasswordKey, flowsSection, registerDeviceKey, clientSecret))
+				flowsEntraAuthKey, flowsSection, registerDeviceKey, clientSecret))
 		}
 	}
 	if err != nil {
@@ -942,19 +942,19 @@ func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 			return false
 		}
 		return true
-	case authmodes.EntraPassword:
-		if _, ok := providers.ProviderAs[himmelblau.EntraPasswordProvider](b.provider); !ok {
+	case authmodes.EntraAuth:
+		if _, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](b.provider); !ok {
 			return false
 		}
-		if !b.cfg.flows.EntraPassword {
-			log.Debugf(context.Background(), "The %q flow is disabled in the [flows] config, so it is not available", authmodes.EntraPassword)
+		if !b.cfg.flows.EntraAuth {
+			log.Debugf(context.Background(), "The %q flow is disabled in the [flows] config, so it is not available", authmodes.EntraAuth)
 			return false
 		}
 		if session.isOffline {
 			log.Debugf(context.Background(), "Session is in offline mode, so Entra %s authentication is not available", authMode)
 			return false
 		}
-		// The entra_password flow can only retrieve groups from Microsoft Graph
+		// The entra_auth flow can only retrieve groups from Microsoft Graph
 		// when device registration (PRT-based token exchange) or a client
 		// secret (app-only client credentials) is available. Without either,
 		// every login would fail at the group-fetch step, so don't offer the
@@ -962,11 +962,11 @@ func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 		// rejects that configuration at startup, so this is a defensive guard
 		// for tests or manually constructed brokers.
 		if !b.cfg.registerDevice && b.cfg.clientSecret == "" {
-			log.Debugf(context.Background(), "The %q flow requires %q to be enabled or a client secret to be configured to retrieve groups from Microsoft Graph, so it is not available", flowsEntraPasswordKey, registerDeviceKey)
+			log.Debugf(context.Background(), "The %q flow requires %q to be enabled or a client secret to be configured to retrieve groups from Microsoft Graph, so it is not available", flowsEntraAuthKey, registerDeviceKey)
 			return false
 		}
 		return true
-	case authmodes.EntraMFAWait, authmodes.EntraMFACode, authmodes.EntraMFAFido, authmodes.EntraMFAFidoPin:
+	case authmodes.EntraAuthWait, authmodes.EntraAuthCode, authmodes.EntraAuthFido, authmodes.EntraAuthFidoPin:
 		// MFA follow-up modes are always available when offered via AuthNext.
 		return true
 	}
@@ -1012,13 +1012,13 @@ func (b *Broker) supportedAuthModesFromLayout(layout map[string]string) []string
 	case "form":
 		var modes []string
 		if slices.Contains(supportedEntries, "chars_password") {
-			modes = append(modes, authmodes.Password, authmodes.EntraPassword, authmodes.EntraMFAFidoPin)
+			modes = append(modes, authmodes.Password, authmodes.EntraAuth, authmodes.EntraAuthFidoPin)
 		}
 		if strings.Contains(layout["wait"], "true") {
-			modes = append(modes, authmodes.EntraMFAWait, authmodes.EntraMFAFido)
+			modes = append(modes, authmodes.EntraAuthWait, authmodes.EntraAuthFido)
 		}
 		if slices.Contains(supportedEntries, "chars") {
-			modes = append(modes, authmodes.EntraMFACode)
+			modes = append(modes, authmodes.EntraAuthCode)
 		}
 		return modes
 
@@ -1113,8 +1113,8 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 			"entry": "chars_password",
 		}
 
-	case authmodes.EntraPassword:
-		if session.entraPasswordRequired {
+	case authmodes.EntraAuth:
+		if session.entraAuthPasswordRequired {
 			uiLayout = map[string]string{
 				"type":  "form",
 				"label": "Enter your Entra ID password",
@@ -1128,7 +1128,7 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 			}
 		}
 
-	case authmodes.EntraMFAWait:
+	case authmodes.EntraAuthWait:
 		mfaWaitLabel := "Waiting for MFA approval..."
 		if session.mfaChallengeInfo != nil && session.mfaChallengeInfo.Message != "" {
 			mfaWaitLabel = session.mfaChallengeInfo.Message
@@ -1139,21 +1139,21 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 			"wait":  "true",
 		}
 
-	case authmodes.EntraMFACode:
+	case authmodes.EntraAuthCode:
 		uiLayout = map[string]string{
 			"type":  "form",
 			"entry": "chars",
 			"label": "Enter your MFA code",
 		}
 
-	case authmodes.EntraMFAFido:
+	case authmodes.EntraAuthFido:
 		uiLayout = map[string]string{
 			"type":  "form",
 			"label": "Insert your security key and touch it",
 			"wait":  "true",
 		}
 
-	case authmodes.EntraMFAFidoPin:
+	case authmodes.EntraAuthFidoPin:
 		uiLayout = map[string]string{
 			"type":  "form",
 			"entry": "chars_password",
@@ -1224,8 +1224,8 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 			iadResponse = errorMessage{Message: "Maximum number of authentication attempts reached"}
 			// Free any in-progress MFA flow immediately rather than waiting for
 			// EndSession — consistent with all other terminal paths.
-			session.entraPasswordHash = ""
-			clearEntraMFAState(&session)
+			session.entraAuthPasswordHash = ""
+			clearEntraAuthState(&session)
 		}
 	}
 
@@ -1269,16 +1269,16 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		return b.passwordAuth(ctx, session, secret)
 	case authmodes.NewPassword:
 		return b.newPassword(session, secret)
-	case authmodes.EntraPassword:
-		return b.entraPasswordAuth(ctx, session, secret)
-	case authmodes.EntraMFAWait:
-		return b.entraMFAWaitAuth(ctx, session)
-	case authmodes.EntraMFACode:
-		return b.entraMFACodeAuth(ctx, session, secret)
-	case authmodes.EntraMFAFido:
-		return b.entraMFAFidoAuth(ctx, session)
-	case authmodes.EntraMFAFidoPin:
-		return b.entraMFAFidoPinAuth(session, secret)
+	case authmodes.EntraAuth:
+		return b.entraAuth(ctx, session, secret)
+	case authmodes.EntraAuthWait:
+		return b.entraAuthWaitAuth(ctx, session)
+	case authmodes.EntraAuthCode:
+		return b.entraAuthCodeAuth(ctx, session, secret)
+	case authmodes.EntraAuthFido:
+		return b.entraAuthFidoAuth(ctx, session)
+	case authmodes.EntraAuthFidoPin:
+		return b.entraAuthFidoPinAuth(session, secret)
 	default:
 		log.Errorf(context.Background(), "unknown authentication mode %q", session.selectedMode)
 		return AuthDenied, unexpectedErrMsg("unknown authentication mode")
@@ -1388,7 +1388,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 
 	// Refresh the token on every online login (even if it has not expired) to
 	// re-verify the account with the provider. This refresh is also the live
-	// disabled/revoked-user check. Entra password + MFA tokens are issued by the
+	// disabled/revoked-user check. Tokens obtained via the Entra auth flow are issued by the
 	// Microsoft Broker App and are refreshed as a public client (no client_secret)
 	// via the provider; all other tokens use the OIDC app refresh. Both paths feed
 	// the same error classification below.
@@ -1401,8 +1401,8 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 			session.nextAuthModes = reauthModes
 			return AuthNext, errorMessage{Message: "Remote authentication failed: No refresh token. Please contact your administrator."}
 		}
-		if authInfo.ObtainedViaEntraPasswordAuth {
-			authInfo, err = b.refreshEntraPasswordToken(ctx, session, authInfo)
+		if authInfo.ObtainedViaEntraAuth {
+			authInfo, err = b.refreshEntraToken(ctx, session, authInfo)
 		} else {
 			authInfo, err = b.refreshToken(ctx, session, authInfo)
 		}
@@ -1523,24 +1523,24 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 	return b.finishAuth(session, authInfo)
 }
 
-func (b *Broker) entraPasswordAuth(ctx context.Context, session *session, userPassword string) (string, isAuthenticatedDataResponse) {
-	entraProvider, ok := providers.ProviderAs[himmelblau.EntraPasswordProvider](b.provider)
+func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword string) (string, isAuthenticatedDataResponse) {
+	entraProvider, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](b.provider)
 	if !ok {
-		log.Error(context.Background(), "entra_password mode selected but provider does not support it")
-		return AuthDenied, unexpectedErrMsg("provider does not support Entra password authentication")
+		log.Error(context.Background(), "entra_auth mode selected but provider does not support it")
+		return AuthDenied, unexpectedErrMsg("provider does not support Entra authentication")
 	}
 	passwordSubmitted := userPassword != ""
-	if session.entraPasswordRequired && !passwordSubmitted {
+	if session.entraAuthPasswordRequired && !passwordSubmitted {
 		return AuthRetry, errorMessage{Message: "Please enter your Entra ID password."}
 	}
 
 	// A prior MFA flow may still be active if the password step is restarted
 	// (e.g. the user navigates back to re-enter the password). Release it before
 	// starting a new one so the libhimmelblau continuation it owns is not leaked.
-	clearEntraMFAState(session)
+	clearEntraAuthState(session)
 
 	// Load the cached auth info once at the start of the flow and stash it on the
-	// session, so the second step (entra_mfa_wait/entra_mfa_code → finishEntraAuth)
+	// session, so the second step (entra_auth_wait/entra_auth_code → finishEntraAuth)
 	// reuses it instead of re-reading the token from disk on every call.
 	//
 	// A load error is non-fatal: it is expected on a first login (no cached token
@@ -1553,7 +1553,7 @@ func (b *Broker) entraPasswordAuth(ctx context.Context, session *session, userPa
 	}
 	session.authInfo = cachedAuthInfo
 
-	// Existing device registration data for the MFA flow (from the cached info).
+	// Existing device registration data for the Entra auth flow (from the cached info).
 	deviceRegistrationData := b.cachedDeviceRegistrationData(session)
 
 	// Use device-scoped MFA only after a real password has been submitted.
@@ -1568,7 +1568,7 @@ func (b *Broker) entraPasswordAuth(ctx context.Context, session *session, userPa
 	// whether it fetches the WebAuthn challenge; without it, Entra reports
 	// PASSWORD_REQUIRED for unplugged-key sessions and passwordless FIDO-only
 	// accounts are misrouted to a password prompt. The actual local-vs-remote
-	// gate is entraMFAFidoAuth, which waits for a key up to fidoDeviceWaitTimeout
+	// gate is entraAuthFidoAuth, which waits for a key up to fidoDeviceWaitTimeout
 	// and then falls back to the device code flow, so a headless/SSH session
 	// where no key can appear is not stranded.
 	var authOpts []himmelblau.AuthOption
@@ -1576,7 +1576,7 @@ func (b *Broker) entraPasswordAuth(ctx context.Context, session *session, userPa
 		authOpts = append(authOpts, himmelblau.AuthOptionFido)
 	}
 
-	flow, challengeInfo, err := entraProvider.InitiateEntraPasswordAuth(ctx, b.cfg.clientID, b.cfg.issuerURL, session.username, userPassword, deviceRegistrationData, withDeviceScope, authOpts...)
+	flow, challengeInfo, err := entraProvider.InitiateEntraAuth(ctx, b.cfg.clientID, b.cfg.issuerURL, session.username, userPassword, deviceRegistrationData, withDeviceScope, authOpts...)
 	if err != nil {
 		var mfaErr *himmelblau.MFAError
 		if errors.As(err, &mfaErr) {
@@ -1584,16 +1584,16 @@ func (b *Broker) entraPasswordAuth(ctx context.Context, session *session, userPa
 		}
 		// A non-MFAError here is unexpected (the provider should classify expected
 		// failures as MFAError); surface it as a reportable bug.
-		log.Errorf(context.Background(), "Entra password authentication failed: %v", err)
-		return AuthDenied, unexpectedErrMsg("failed to initiate Entra password flow")
+		log.Errorf(context.Background(), "Entra authentication failed: %v", err)
+		return AuthDenied, unexpectedErrMsg("failed to initiate Entra authentication flow")
 	}
 	if flow == nil || challengeInfo == nil {
 		himmelblau.FreeMFAFlowState(flow)
-		log.Error(context.Background(), "Entra password authentication did not return a complete MFA challenge")
+		log.Error(context.Background(), "Entra authentication did not return a complete MFA challenge")
 		return AuthDenied, unexpectedErrMsg("provider returned incomplete MFA challenge")
 	}
 
-	// InitiateEntraPasswordAuth is a non-preemptible cgo call; if the request was
+	// InitiateEntraAuth is a non-preemptible cgo call; if the request was
 	// cancelled while it was in flight, IsAuthenticated already returned via its
 	// ctx.Done() branch without persisting this session update. Stashing the flow
 	// on session at that point would make it unreachable, leaking the native
@@ -1601,14 +1601,14 @@ func (b *Broker) entraPasswordAuth(ctx context.Context, session *session, userPa
 	// as the equivalent check in finishEntraAuth).
 	if ctx.Err() != nil {
 		himmelblau.FreeMFAFlowState(flow)
-		log.Noticef(context.Background(), "Entra password authentication succeeded but the request was cancelled; discarding MFA flow for user %q", session.username)
+		log.Noticef(context.Background(), "Entra authentication succeeded but the request was cancelled; discarding MFA flow for user %q", session.username)
 		return AuthCancelled, nil
 	}
 
 	session.mfaFlowActive = flow
 	session.mfaChallengeInfo = challengeInfo
-	session.entraPasswordRequired = false
-	session.entraPasswordHash = ""
+	session.entraAuthPasswordRequired = false
+	session.entraAuthPasswordHash = ""
 
 	if passwordSubmitted {
 		// Hash the password immediately to narrow the plaintext memory window.
@@ -1616,10 +1616,10 @@ func (b *Broker) entraPasswordAuth(ctx context.Context, session *session, userPa
 		passwordHash, hashErr := password.HashPassword(userPassword)
 		if hashErr != nil {
 			log.Errorf(context.Background(), "Failed to hash password: %v", hashErr)
-			clearEntraMFAState(session)
+			clearEntraAuthState(session)
 			return AuthDenied, unexpectedErrMsg("failed to process password")
 		}
-		session.entraPasswordHash = passwordHash
+		session.entraAuthPasswordHash = passwordHash
 	}
 
 	return b.routeMFAChallenge(session, challengeInfo)
@@ -1641,41 +1641,41 @@ func (b *Broker) routeMFAChallenge(session *session, challengeInfo *himmelblau.M
 	switch {
 	case isPromptMethod(mfaMethod):
 		// Code-entry MFA: user must type a code (OTP, SMS, etc.).
-		session.nextAuthModes = []string{authmodes.EntraMFACode}
+		session.nextAuthModes = []string{authmodes.EntraAuthCode}
 	case isPollMethod(mfaMethod):
 		// Poll-based MFA: approval happens out of band (push notification or
 		// phone call), so wait and poll. The poll loop applies a default
 		// interval if the challenge does not carry a positive one.
-		session.nextAuthModes = []string{authmodes.EntraMFAWait}
+		session.nextAuthModes = []string{authmodes.EntraAuthWait}
 	case pollingInterval > 0:
 		// Unknown method: a polling interval hints that approval happens out of band.
 		log.Warningf(context.Background(), "Unknown MFA method %q with polling interval %dms, treating it as a poll-based method", mfaMethod, pollingInterval)
-		session.nextAuthModes = []string{authmodes.EntraMFAWait}
+		session.nextAuthModes = []string{authmodes.EntraAuthWait}
 	default:
 		log.Warningf(context.Background(), "Unknown MFA method %q without a polling interval, treating it as a code-entry method", mfaMethod)
-		session.nextAuthModes = []string{authmodes.EntraMFACode}
+		session.nextAuthModes = []string{authmodes.EntraAuthCode}
 	}
 
 	return AuthNext, nil
 }
 
-func clearEntraMFAState(session *session) {
+func clearEntraAuthState(session *session) {
 	himmelblau.FreeMFAFlowState(session.mfaFlowActive)
 	session.mfaFlowActive = nil
 	session.mfaChallengeInfo = nil
 	session.fidoPIN = ""
 }
 
-// restartFromEntraPassword handles a terminal MFA-step failure: it clears the
+// restartFromEntraAuth handles a terminal MFA-step failure: it clears the
 // now-dead MFA state (including the cached password hash) and directs the
-// client back to entra_password so it can restart the flow rather than
+// client back to entra_auth so it can restart the flow rather than
 // re-entering a dead follow-up mode, showing msg to the user.
-func restartFromEntraPassword(session *session, msg string) (string, isAuthenticatedDataResponse) {
-	needsPassword := session.entraPasswordRequired || session.entraPasswordHash != ""
-	session.entraPasswordHash = ""
-	session.entraPasswordRequired = needsPassword
-	clearEntraMFAState(session)
-	session.nextAuthModes = []string{authmodes.EntraPassword}
+func restartFromEntraAuth(session *session, msg string) (string, isAuthenticatedDataResponse) {
+	needsPassword := session.entraAuthPasswordRequired || session.entraAuthPasswordHash != ""
+	session.entraAuthPasswordHash = ""
+	session.entraAuthPasswordRequired = needsPassword
+	clearEntraAuthState(session)
+	session.nextAuthModes = []string{authmodes.EntraAuth}
 	return AuthNext, errorMessage{Message: msg}
 }
 
@@ -1696,16 +1696,16 @@ func replayCompletedMFA(session *session, mode string) (string, isAuthenticatedD
 
 // denyAndClearMFA frees the MFA flow and wipes the cached password hash, then
 // denies with data. Terminal FIDO/MFA failures use it; success paths keep the
-// hash for offline caching, so clearEntraMFAState alone must not wipe it.
+// hash for offline caching, so clearEntraAuthState alone must not wipe it.
 func denyAndClearMFA(session *session, data isAuthenticatedDataResponse) (string, isAuthenticatedDataResponse) {
-	session.entraPasswordHash = ""
-	clearEntraMFAState(session)
+	session.entraAuthPasswordHash = ""
+	clearEntraAuthState(session)
 	return AuthDenied, data
 }
 
 // cachedDeviceRegistrationData returns the device registration data from the
 // session's cached auth info (loaded once at the start of the flow by
-// entraPasswordAuth), or nil if there is no cached token or it carries none.
+// entraAuth), or nil if there is no cached token or it carries none.
 func (b *Broker) cachedDeviceRegistrationData(session *session) []byte {
 	if session.authInfo != nil {
 		return session.authInfo.DeviceRegistrationData
@@ -1713,15 +1713,15 @@ func (b *Broker) cachedDeviceRegistrationData(session *session) []byte {
 	return nil
 }
 
-func (b *Broker) entraMFAWaitAuth(ctx context.Context, session *session) (string, isAuthenticatedDataResponse) {
-	entraProvider, ok := providers.ProviderAs[himmelblau.EntraPasswordProvider](b.provider)
+func (b *Broker) entraAuthWaitAuth(ctx context.Context, session *session) (string, isAuthenticatedDataResponse) {
+	entraProvider, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](b.provider)
 	if !ok {
-		log.Error(context.Background(), "entra_mfa_wait mode selected but provider does not support it")
+		log.Error(context.Background(), "entra_auth_wait mode selected but provider does not support it")
 		return AuthDenied, unexpectedErrMsg("provider does not support Entra MFA")
 	}
 
 	if session.mfaFlowActive == nil {
-		return replayCompletedMFA(session, authmodes.EntraMFAWait)
+		return replayCompletedMFA(session, authmodes.EntraAuthWait)
 	}
 	if session.mfaChallengeInfo == nil {
 		log.Error(context.Background(), "MFA wait mode selected but no MFA challenge metadata is available")
@@ -1765,8 +1765,8 @@ func (b *Broker) entraMFAWaitAuth(ctx context.Context, session *session) (string
 			// A user denial is terminal — handle it first, even if our poll
 			// deadline happened to elapse during this (non-preemptible) call.
 			if errors.As(err, &mfaErr) && mfaErr.IsMFADenied() {
-				session.entraPasswordHash = ""
-				clearEntraMFAState(session)
+				session.entraAuthPasswordHash = ""
+				clearEntraAuthState(session)
 				log.Noticef(context.Background(), "MFA authentication denied for user %q", session.username)
 				return AuthDenied, errorMessage{Message: "MFA authentication was denied."}
 			}
@@ -1781,11 +1781,11 @@ func (b *Broker) entraMFAWaitAuth(ctx context.Context, session *session) (string
 			}
 			// Genuine MFA failure.
 			log.Errorf(context.Background(), "MFA poll failed: %v", err)
-			return restartFromEntraPassword(session, "MFA authentication failed. Please try again.")
+			return restartFromEntraAuth(session, "MFA authentication failed. Please try again.")
 		}
 
 		// MFA approved — finish auth.
-		clearEntraMFAState(session)
+		clearEntraAuthState(session)
 		return b.finishEntraAuth(ctx, session, oauthToken)
 	}
 
@@ -1796,7 +1796,7 @@ func (b *Broker) entraMFAWaitAuth(ctx context.Context, session *session) (string
 // endExpiredMFAPoll handles a poll-loop exit caused by the internal poll
 // deadline elapsing, the caller cancelling the request, or the maximum number
 // of poll attempts being exhausted. It clears the now-dead MFA state and directs
-// the client back to entra_password so it can restart the flow, distinguishing a
+// the client back to entra_auth so it can restart the flow, distinguishing a
 // caller cancellation (AuthCancelled) from a wall-clock timeout (AuthNext).
 func (b *Broker) endExpiredMFAPoll(ctx context.Context, session *session) (string, isAuthenticatedDataResponse) {
 	if ctx.Err() != nil {
@@ -1814,18 +1814,18 @@ func (b *Broker) endExpiredMFAPoll(ctx context.Context, session *session) (strin
 		return AuthCancelled, nil
 	}
 	log.Noticef(context.Background(), "MFA poll timed out for user %q", session.username)
-	return restartFromEntraPassword(session, "MFA approval timed out. Please try again.")
+	return restartFromEntraAuth(session, "MFA approval timed out. Please try again.")
 }
 
-func (b *Broker) entraMFACodeAuth(ctx context.Context, session *session, code string) (string, isAuthenticatedDataResponse) {
-	entraProvider, ok := providers.ProviderAs[himmelblau.EntraPasswordProvider](b.provider)
+func (b *Broker) entraAuthCodeAuth(ctx context.Context, session *session, code string) (string, isAuthenticatedDataResponse) {
+	entraProvider, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](b.provider)
 	if !ok {
-		log.Error(context.Background(), "entra_mfa_code mode selected but provider does not support it")
+		log.Error(context.Background(), "entra_auth_code mode selected but provider does not support it")
 		return AuthDenied, unexpectedErrMsg("provider does not support Entra MFA")
 	}
 
 	if session.mfaFlowActive == nil {
-		return replayCompletedMFA(session, authmodes.EntraMFACode)
+		return replayCompletedMFA(session, authmodes.EntraAuthCode)
 	}
 
 	deviceRegistrationData := b.cachedDeviceRegistrationData(session)
@@ -1839,8 +1839,8 @@ func (b *Broker) entraMFACodeAuth(ctx context.Context, session *session, code st
 		var mfaErr *himmelblau.MFAError
 		if errors.As(err, &mfaErr) && mfaErr.IsMFADenied() {
 			log.Noticef(context.Background(), "MFA code verification denied for user %q", session.username)
-			session.entraPasswordHash = ""
-			clearEntraMFAState(session)
+			session.entraAuthPasswordHash = ""
+			clearEntraAuthState(session)
 			return AuthDenied, errorMessage{Message: "MFA authentication was denied."}
 		}
 		if errors.As(err, &mfaErr) && mfaErr.IsMFARetryableCode() {
@@ -1848,24 +1848,24 @@ func (b *Broker) entraMFACodeAuth(ctx context.Context, session *session, code st
 			// rather than discarding the flow and forcing password re-entry.
 			// The MFA flow remains valid on this path (libhimmelblau only
 			// advances flow.ctx/flow_token on success), so the next code
-			// submission reuses it. AuthRetry stays on the entra_mfa_code mode
+			// submission reuses it. AuthRetry stays on the entra_auth_code mode
 			// and is capped by maxAuthAttempts, so repeated wrong codes still
 			// end in denial.
 			log.Noticef(context.Background(), "Incorrect MFA code for user %q, re-prompting", session.username)
 			return AuthRetry, errorMessage{Message: "Incorrect or expired code. Please try again."}
 		}
 		log.Noticef(context.Background(), "MFA code verification failed for user %q: %v", session.username, err)
-		return restartFromEntraPassword(session, "MFA authentication failed. Please try again.")
+		return restartFromEntraAuth(session, "MFA authentication failed. Please try again.")
 	}
 
-	clearEntraMFAState(session)
+	clearEntraAuthState(session)
 	return b.finishEntraAuth(ctx, session, oauthToken)
 }
 
 // routeFIDOChallenge decides how to continue when Entra ID selected a
 // FIDO/security-key method. When this build can perform the assertion and the
 // challenge carries the WebAuthn data, continue with the local FIDO modes even
-// if no key is plugged in yet: the entra_mfa_fido step waits (bounded by
+// if no key is plugged in yet: the entra_auth_fido step waits (bounded by
 // fidoDeviceWaitTimeout) for the user to insert and touch it, then falls back
 // to the device code flow on a machine where no key appears. Redirect to the
 // device code flow immediately only when local FIDO is impossible at all (no
@@ -1886,11 +1886,11 @@ func (b *Broker) routeFIDOChallenge(session *session, challengeInfo *himmelblau.
 			log.Warningf(context.Background(), "Could not determine whether the security key requires a PIN: %v", err)
 		}
 		if pinRequired && session.fidoPIN == "" {
-			session.nextAuthModes = []string{authmodes.EntraMFAFidoPin}
+			session.nextAuthModes = []string{authmodes.EntraAuthFidoPin}
 			return AuthNext, nil
 		}
 	}
-	session.nextAuthModes = []string{authmodes.EntraMFAFido}
+	session.nextAuthModes = []string{authmodes.EntraAuthFido}
 	return AuthNext, nil
 }
 
@@ -1898,8 +1898,8 @@ func (b *Broker) routeFIDOChallenge(session *session, challengeInfo *himmelblau.
 // the device code flow (or denies when that flow is disabled). It is the
 // fallback for FIDO challenges that cannot be completed on this machine.
 func (b *Broker) redirectFIDOToDeviceAuth(session *session) (string, isAuthenticatedDataResponse) {
-	session.entraPasswordHash = ""
-	clearEntraMFAState(session)
+	session.entraAuthPasswordHash = ""
+	clearEntraAuthState(session)
 	if b.cfg.flows.DeviceAuth {
 		session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
 		return AuthNext, errorMessage{Message: "This account requires FIDO/security key authentication. Please complete authentication using the device code flow."}
@@ -1913,33 +1913,33 @@ func (b *Broker) redirectFIDOToDeviceAuth(session *session) (string, isAuthentic
 // falls back to the device code flow where Entra runs the ceremony in a
 // browser; a password session restarts the password flow instead.
 func (b *Broker) failFIDOAssertion(session *session) (string, isAuthenticatedDataResponse) {
-	if session.entraPasswordHash == "" {
+	if session.entraAuthPasswordHash == "" {
 		return b.redirectFIDOToDeviceAuth(session)
 	}
-	return restartFromEntraPassword(session, "Security key authentication failed. Please try again.")
+	return restartFromEntraAuth(session, "Security key authentication failed. Please try again.")
 }
 
-// entraMFAFidoPinAuth stores the security key PIN on the session and advances
+// entraAuthFidoPinAuth stores the security key PIN on the session and advances
 // to the assertion mode. The PIN never leaves broker memory: it is passed to
 // the local WebAuthn ceremony and cleared with the MFA state.
-func (b *Broker) entraMFAFidoPinAuth(session *session, pin string) (string, isAuthenticatedDataResponse) {
+func (b *Broker) entraAuthFidoPinAuth(session *session, pin string) (string, isAuthenticatedDataResponse) {
 	if session.mfaFlowActive == nil {
-		return replayCompletedMFA(session, authmodes.EntraMFAFidoPin)
+		return replayCompletedMFA(session, authmodes.EntraAuthFidoPin)
 	}
 	if pin == "" {
 		return AuthRetry, errorMessage{Message: "Please enter your security key PIN."}
 	}
 
 	session.fidoPIN = pin
-	session.nextAuthModes = []string{authmodes.EntraMFAFido}
+	session.nextAuthModes = []string{authmodes.EntraAuthFido}
 	return AuthNext, nil
 }
 
-// fidoDevicePollInterval is how often entraMFAFidoAuth re-checks for an
+// fidoDevicePollInterval is how often entraAuthFidoAuth re-checks for an
 // inserted security key while showing the "insert your security key" screen.
 const fidoDevicePollInterval = 500 * time.Millisecond
 
-// fidoDeviceWaitTimeout bounds how long entraMFAFidoAuth waits for a key to be
+// fidoDeviceWaitTimeout bounds how long entraAuthFidoAuth waits for a key to be
 // inserted before falling back to the device code flow. A headless or SSH
 // session cannot attach a security key, so without a bound the "insert your
 // security key" screen would block forever; the timeout gives an interactive
@@ -1947,27 +1947,27 @@ const fidoDevicePollInterval = 500 * time.Millisecond
 // can appear. It is a var so tests can shorten it.
 var fidoDeviceWaitTimeout = 60 * time.Second
 
-// entraMFAFidoAuth performs the WebAuthn assertion with the local security
+// entraAuthFidoAuth performs the WebAuthn assertion with the local security
 // key and completes the MFA flow with the resulting assertion.
-func (b *Broker) entraMFAFidoAuth(ctx context.Context, session *session) (string, isAuthenticatedDataResponse) {
-	entraProvider, ok := providers.ProviderAs[himmelblau.EntraPasswordProvider](b.provider)
+func (b *Broker) entraAuthFidoAuth(ctx context.Context, session *session) (string, isAuthenticatedDataResponse) {
+	entraProvider, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](b.provider)
 	if !ok {
-		log.Error(context.Background(), "entra_mfa_fido mode selected but provider does not support it")
+		log.Error(context.Background(), "entra_auth_fido mode selected but provider does not support it")
 		return denyAndClearMFA(session, unexpectedErrMsg("provider does not support Entra MFA"))
 	}
 	if b.fido == nil {
-		log.Error(context.Background(), "entra_mfa_fido mode selected but this build has no FIDO support")
+		log.Error(context.Background(), "entra_auth_fido mode selected but this build has no FIDO support")
 		return denyAndClearMFA(session, unexpectedErrMsg("FIDO authentication is not available"))
 	}
 	if session.mfaFlowActive == nil {
-		return replayCompletedMFA(session, authmodes.EntraMFAFido)
+		return replayCompletedMFA(session, authmodes.EntraAuthFido)
 	}
 	if session.mfaChallengeInfo == nil || session.mfaChallengeInfo.FidoChallenge == "" {
 		log.Error(context.Background(), "FIDO mode selected but no FIDO challenge is available")
 		return denyAndClearMFA(session, unexpectedErrMsg("no active FIDO challenge"))
 	}
 
-	// The entra_mfa_fido screen says "Insert your security key and touch it", so
+	// The entra_auth_fido screen says "Insert your security key and touch it", so
 	// wait here for a key to be connected rather than failing over immediately
 	// when none is plugged in yet. Give up after fidoDeviceWaitTimeout and fall
 	// back to the device code flow: a headless/SSH session can never attach a
@@ -2015,7 +2015,7 @@ func (b *Broker) entraMFAFidoAuth(ctx context.Context, session *session) (string
 		return b.failFIDOAssertion(session)
 	}
 
-	clearEntraMFAState(session)
+	clearEntraAuthState(session)
 	return b.finishEntraAuth(ctx, session, oauthToken)
 }
 
@@ -2027,16 +2027,16 @@ func (b *Broker) routeFIDOAssertionError(ctx context.Context, session *session, 
 	switch {
 	case errors.Is(err, fido.ErrPINRequired):
 		session.fidoPIN = ""
-		session.nextAuthModes = []string{authmodes.EntraMFAFidoPin}
+		session.nextAuthModes = []string{authmodes.EntraAuthFidoPin}
 		return AuthNext, errorMessage{Message: "Your security key requires a PIN."}
 	case errors.Is(err, fido.ErrPINInvalid):
 		log.Noticef(context.Background(), "Incorrect security key PIN for user %q, re-prompting", session.username)
 		session.fidoPIN = ""
-		session.nextAuthModes = []string{authmodes.EntraMFAFidoPin}
+		session.nextAuthModes = []string{authmodes.EntraAuthFidoPin}
 		return AuthNext, errorMessage{Message: "Incorrect security key PIN. Please try again."}
 	case errors.Is(err, fido.ErrPINBlocked):
 		log.Noticef(context.Background(), "Security key PIN blocked for user %q", session.username)
-		if session.entraPasswordHash == "" {
+		if session.entraAuthPasswordHash == "" {
 			return b.redirectFIDOToDeviceAuth(session)
 		}
 		return denyAndClearMFA(session, errorMessage{Message: "The security key PIN is blocked. Remove and reinsert the key, then try again."})
@@ -2079,7 +2079,7 @@ func (b *Broker) routeFIDOAssertionError(ctx context.Context, session *session, 
 
 func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken *oauth2.Token) (string, isAuthenticatedDataResponse) {
 	// Ensure any cached password hash is cleared from memory on all exit paths.
-	defer func() { session.entraPasswordHash = "" }()
+	defer func() { session.entraAuthPasswordHash = "" }()
 
 	// AcquireTokenByMFAFlow returns (nil, nil) only on a provider contract
 	// violation, but this is the trust boundary into the generic broker: guard
@@ -2101,7 +2101,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	}
 
 	t := mfaToken
-	// Reuse the auth info loaded once at the start of the flow (entraPasswordAuth)
+	// Reuse the auth info loaded once at the start of the flow (entraAuth)
 	// rather than re-reading the token from disk.
 	oldAuthInfo := session.authInfo
 
@@ -2127,11 +2127,11 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 		return access, data
 	}
 
-	// Mark this token as having been obtained via the entra_password flow so
+	// Mark this token as having been obtained via the entra_auth flow so
 	// that returning logins refresh it through the Microsoft Broker App public
 	// refresh path (the liveness/revocation check) rather than the OIDC app
 	// refresh.
-	authInfo.ObtainedViaEntraPasswordAuth = true
+	authInfo.ObtainedViaEntraAuth = true
 
 	// Carry over device registration data from a previous login when we are not
 	// (re-)registering the device in this one. authInfo is built fresh from the
@@ -2157,7 +2157,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 		// prefer registration, but if it fails before any local device state
 		// exists and an app-only Graph path is configured, continue without
 		// registration instead of denying the login.
-		if session.entraPasswordHash == "" && oldAuthInfo == nil && b.cfg.clientSecret != "" {
+		if session.entraAuthPasswordHash == "" && oldAuthInfo == nil && b.cfg.clientSecret != "" {
 			log.Warningf(context.Background(), "Device registration failed for first-time passwordless Entra login for user %q; falling back to app-only Graph lookup", session.username)
 		} else {
 			return access, data
@@ -2185,7 +2185,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	// newpassword step (like the device-auth flow does) so offline logins
 	// keep working; an existing local password stays valid, so returning
 	// users are not asked to redefine one on every login.
-	if session.entraPasswordHash == "" && !passwordFileExists(*session) {
+	if session.entraAuthPasswordHash == "" && !passwordFileExists(*session) {
 		session.authInfo = authInfo
 		session.nextAuthModes = []string{authmodes.NewPassword}
 		return AuthNext, nil
@@ -2200,12 +2200,12 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	// after finishAuth so that a denial there cannot leave a password file on
 	// disk without a cached token (token-then-password matches the ordering of
 	// the device-auth flow).
-	if session.entraPasswordHash != "" {
-		if hashErr := password.StoreHashedPassword(session.entraPasswordHash, session.passwordPath); hashErr != nil {
+	if session.entraAuthPasswordHash != "" {
+		if hashErr := password.StoreHashedPassword(session.entraAuthPasswordHash, session.passwordPath); hashErr != nil {
 			log.Errorf(context.Background(), "Failed to store password hash: %v", hashErr)
 			return AuthDenied, unexpectedErrMsg("failed to store password")
 		}
-		session.entraPasswordHash = ""
+		session.entraAuthPasswordHash = ""
 
 		if msg, ok := data.(userInfoMessage); ok {
 			msg.Message = cachedPasswordMessage
@@ -2216,13 +2216,13 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	return access, data
 }
 
-// routeMFAInitError routes the AADSTS errors returned by InitiateEntraPasswordAuth
+// routeMFAInitError routes the AADSTS errors returned by InitiateEntraAuth
 // (the MFA init step) to appropriate broker responses.
 func (b *Broker) routeMFAInitError(mfaErr *himmelblau.MFAError, session *session) (string, isAuthenticatedDataResponse) {
 	if mfaErr.IsMFAPasswordRequired() {
 		log.Debugf(context.Background(), "Passwordless Entra authentication for user %q requires password entry", session.username)
-		session.entraPasswordRequired = true
-		session.nextAuthModes = []string{authmodes.EntraPassword}
+		session.entraAuthPasswordRequired = true
+		session.nextAuthModes = []string{authmodes.EntraAuth}
 		// Do not send an intermediate AuthNext message here: GDM shows any
 		// auth.Next message as a transient challenge state before it requests
 		// the next layout, which creates a redundant spinner-only screen with
@@ -2625,26 +2625,26 @@ func (b *Broker) updateSession(sessionID string, session session) error {
 	return nil
 }
 
-// refreshEntraPasswordToken refreshes an Entra password + MFA token for the
+// refreshEntraToken refreshes a token obtained via the Entra auth flow for the
 // liveness/revocation check on a returning login. The provider performs a public
 // refresh (no client_secret) as the Microsoft Broker App; on success the rotated
 // refresh token replaces the cached one (kept fresh on each login, like the
 // device-auth refresh). Errors are returned unwrapped so the caller classifies them
 // with the same checks it uses for device-auth (IsUserDisabledError → AADSTS50057,
 // IsTokenExpiredError → AADSTS50173, isAADSTSGrantRevokedError, net.Error → offline).
-func (b *Broker) refreshEntraPasswordToken(ctx context.Context, session *session, oldToken *token.AuthCachedInfo) (*token.AuthCachedInfo, error) {
-	ep, ok := providers.ProviderAs[himmelblau.EntraPasswordProvider](b.provider)
+func (b *Broker) refreshEntraToken(ctx context.Context, session *session, oldToken *token.AuthCachedInfo) (*token.AuthCachedInfo, error) {
+	ep, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](b.provider)
 	if !ok {
-		// The token was obtained via the entra_password flow, so the provider that
-		// issued it must implement EntraPasswordProvider. If it no longer does, the
+		// The token was obtained via the entra_auth flow, so the provider that
+		// issued it must implement EntraAuthProvider. If it no longer does, the
 		// deployment is misconfigured: fail the login rather than skipping the
 		// liveness/revocation check, which would let a deleted/disabled user keep
 		// logging in with the cached token.
-		return nil, fmt.Errorf("provider does not implement EntraPasswordProvider; cannot refresh entra_password token for user %q", oldToken.UserInfo.Name)
+		return nil, fmt.Errorf("provider does not implement EntraAuthProvider; cannot refresh entra_auth token for user %q", oldToken.UserInfo.Name)
 	}
 	refreshCtx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
-	newTok, err := ep.RefreshEntraPasswordToken(refreshCtx, b.cfg.issuerURL, oldToken.Token.RefreshToken)
+	newTok, err := ep.RefreshEntraToken(refreshCtx, b.cfg.issuerURL, oldToken.Token.RefreshToken)
 	if err != nil {
 		return oldToken, err
 	}
@@ -2701,7 +2701,7 @@ func (b *Broker) refreshEntraPasswordToken(ctx context.Context, session *session
 func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *token.AuthCachedInfo) (*token.AuthCachedInfo, error) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
-	// Build a token carrying only the refresh token, like refreshEntraPasswordToken
+	// Build a token carrying only the refresh token, like refreshEntraToken
 	// does: oauth2.Token.Valid() requires a non-empty AccessToken, so omitting it
 	// forces TokenSource to hit the token endpoint even if the cached token has not
 	// actually expired, without mutating the caller's cached oldToken.

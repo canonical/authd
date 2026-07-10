@@ -338,7 +338,7 @@ func AcquireAccessTokenForGraphAPI(
 	return accessToken, nil
 }
 
-// InitiateMFAFlowWithPassword starts the password/passwordless + MFA flow for a user.
+// InitiateMFAFlow starts the password/passwordless + MFA flow for a user.
 // It submits the user's credentials to Entra ID and returns an MFAFlowState
 // that can be used to complete the MFA challenge.
 // When withDeviceScope is true, the MFA flow requests scopes required for device
@@ -351,7 +351,7 @@ func AcquireAccessTokenForGraphAPI(
 // security key, ...) from the user's credential type. Passwordless
 // authentication cannot enroll a device (there is no password to derive the
 // enrollment from), so callers must pass withDeviceScope=false in that case.
-func InitiateMFAFlowWithPassword(ctx context.Context, clientID, tenantID string, data *DeviceRegistrationData, username, password string, withDeviceScope bool, authOpts ...AuthOption) (*MFAFlowState, *MFAChallengeInfo, error) {
+func InitiateMFAFlow(ctx context.Context, clientID, tenantID string, data *DeviceRegistrationData, username, password string, withDeviceScope bool, authOpts ...AuthOption) (*MFAFlowState, *MFAChallengeInfo, error) {
 	if password == "" && withDeviceScope {
 		return nil, nil, fmt.Errorf("passwordless authentication cannot be used for device enrollment")
 	}

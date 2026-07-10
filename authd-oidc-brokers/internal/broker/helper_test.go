@@ -30,7 +30,7 @@ type brokerForTestConfig struct {
 	forceAccessCheckWithProvider bool
 	registerDevice               bool
 	deviceAuthFlowDisabled       bool
-	entraPasswordFlowDisabled    bool
+	entraAuthFlowDisabled        bool
 	allowedUsers                 map[string]struct{}
 	allUsersAllowed              bool
 	ownerAllowed                 bool
@@ -99,8 +99,8 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	if cfg.registerDevice {
 		cfg.SetRegisterDevice(cfg.registerDevice)
 	}
-	if cfg.deviceAuthFlowDisabled || cfg.entraPasswordFlowDisabled {
-		cfg.SetFlows(!cfg.deviceAuthFlowDisabled, !cfg.entraPasswordFlowDisabled)
+	if cfg.deviceAuthFlowDisabled || cfg.entraAuthFlowDisabled {
+		cfg.SetFlows(!cfg.deviceAuthFlowDisabled, !cfg.entraAuthFlowDisabled)
 	}
 	if cfg.homeBaseDir != "" {
 		cfg.SetHomeBaseDir(cfg.homeBaseDir)
@@ -148,11 +148,11 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	if cfg.ClientID() == "" {
 		cfg.SetClientID("test-client-id")
 	}
-	if !cfg.entraPasswordFlowDisabled && cfg.clientSecret == "" && !cfg.registerDevice {
-		if _, ok := providers.ProviderAs[himmelblau.EntraPasswordProvider](provider); ok {
-			// Most Entra password broker tests are not exercising startup validation;
+	if !cfg.entraAuthFlowDisabled && cfg.clientSecret == "" && !cfg.registerDevice {
+		if _, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](provider); ok {
+			// Most Entra auth broker tests are not exercising startup validation;
 			// give them a minimal Graph group source so they keep building a valid
-			// broker after New() started rejecting unusable entra_password configs.
+			// broker after New() started rejecting unusable entra_auth configs.
 			cfg.SetClientSecret("test-client-secret")
 		}
 	}
@@ -259,19 +259,19 @@ type tokenOptions struct {
 	gecos    string
 	groups   []info.Group
 
-	expired                      bool
-	noRefreshToken               bool
-	refreshTokenExpired          bool
-	refreshTokenInactiveExpired  bool
-	refreshTokenStale            bool
-	noIDToken                    bool
-	invalid                      bool
-	invalidClaims                bool
-	noUserInfo                   bool
-	isForDeviceRegistration      bool
-	deviceIsDisabled             bool
-	userIsDisabled               bool
-	obtainedViaEntraPasswordAuth bool
+	expired                     bool
+	noRefreshToken              bool
+	refreshTokenExpired         bool
+	refreshTokenInactiveExpired bool
+	refreshTokenStale           bool
+	noIDToken                   bool
+	invalid                     bool
+	invalidClaims               bool
+	noUserInfo                  bool
+	isForDeviceRegistration     bool
+	deviceIsDisabled            bool
+	userIsDisabled              bool
+	obtainedViaEntraAuth        bool
 }
 
 func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInfo {
@@ -307,9 +307,9 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 			RefreshToken: "refreshtoken",
 			Expiry:       time.Now().Add(1000 * time.Hour),
 		},
-		DeviceIsDisabled:             options.deviceIsDisabled,
-		UserIsDisabled:               options.userIsDisabled,
-		ObtainedViaEntraPasswordAuth: options.obtainedViaEntraPasswordAuth,
+		DeviceIsDisabled:     options.deviceIsDisabled,
+		UserIsDisabled:       options.userIsDisabled,
+		ObtainedViaEntraAuth: options.obtainedViaEntraAuth,
 	}
 
 	if options.expired {

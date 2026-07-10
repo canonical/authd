@@ -191,7 +191,7 @@ func (p *Provider) UserInfoFromAccessToken(accessToken string) (info.User, error
 //  1. Client credentials (app-only): used when a [oidc] client_secret is
 //     configured and the current token does not already carry the
 //     GroupMember.Read.All scope. This is the path that makes the
-//     entra_password + MFA flow work *without* device registration: the
+//     entra_auth flow work *without* device registration: the
 //     delegated token issued by the Microsoft Broker App during native MFA
 //     cannot be exchanged for a Graph-scoped delegated token for our OIDC app
 //     (the FOCI scope wall — see below), so we fall back to an
@@ -250,8 +250,8 @@ func (p *Provider) GetGroups(
 	// (needsAccessTokenForGraphAPI): those have a PRT that can be exchanged for a
 	// Graph-scoped token (strategy 2), which preserves the user's delegated
 	// session semantics. This keeps register_device=true logins — both
-	// device-code and entra_password — on the PRT path even when a client_secret
-	// is configured, so only entra_password-without-device-registration tokens
+	// device-code and entra_auth — on the PRT path even when a client_secret
+	// is configured, so only entra_auth-without-device-registration tokens
 	// take the app-only path.
 	if p.graphClientSecret != "" && !accessTokenHasGraphScope && !needsAccessTokenForGraphAPI {
 		if parseErr != nil {
@@ -740,7 +740,7 @@ func (p *Provider) NormalizeUsername(username string) string {
 // SupportedOnlineAuthModes returns the authentication modes supported by the
 // provider that require a connection to Entra ID.
 func (p *Provider) SupportedOnlineAuthModes() []string {
-	return []string{authmodes.EntraPassword, authmodes.Device, authmodes.DeviceQr}
+	return []string{authmodes.EntraAuth, authmodes.Device, authmodes.DeviceQr}
 }
 
 // unmarshalOptionalDeviceRegistrationData decodes JSON device-registration data
@@ -756,8 +756,8 @@ func unmarshalOptionalDeviceRegistrationData(raw []byte) (*himmelblau.DeviceRegi
 	return data, nil
 }
 
-// InitiateEntraPasswordAuth starts the Entra password/passwordless + MFA flow.
-func (p *Provider) InitiateEntraPasswordAuth(
+// InitiateEntraAuth starts the Entra password/passwordless + MFA flow.
+func (p *Provider) InitiateEntraAuth(
 	ctx context.Context,
 	clientID string,
 	issuerURL string,
@@ -773,7 +773,7 @@ func (p *Provider) InitiateEntraPasswordAuth(
 		return nil, nil, err
 	}
 
-	return himmelblau.InitiateMFAFlowWithPassword(ctx, clientID, tid, data, username, password, withDeviceScope, authOpts...)
+	return himmelblau.InitiateMFAFlow(ctx, clientID, tid, data, username, password, withDeviceScope, authOpts...)
 }
 
 // AcquireTokenByMFAFlow completes the MFA challenge.
@@ -797,7 +797,7 @@ func (p *Provider) AcquireTokenByMFAFlow(
 	return himmelblau.AcquireTokenByMFAFlow(ctx, clientID, tid, data, username, flow, authData, pollAttempt)
 }
 
-// RefreshEntraPasswordToken refreshes the cached Entra password/passwordless + MFA refresh
+// RefreshEntraToken refreshes the cached Entra auth-flow refresh
 // token as the Microsoft Broker app (a public client, no client_secret) for basic
 // scopes only, to re-verify the account on a returning login. The Broker app is the
 // client that issued the family refresh token during the MFA flow; the configured
@@ -806,10 +806,10 @@ func (p *Provider) AcquireTokenByMFAFlow(
 // register_device setting. A failure is returned as the underlying
 // *oauth2.RetrieveError so the broker can classify it exactly like the device-auth
 // refresh.
-func (p *Provider) RefreshEntraPasswordToken(ctx context.Context, issuerURL, refreshToken string) (*oauth2.Token, error) {
+func (p *Provider) RefreshEntraToken(ctx context.Context, issuerURL, refreshToken string) (*oauth2.Token, error) {
 	tokenURL, err := clientCredentialsTokenURL(issuerURL)
 	if err != nil {
-		return nil, fmt.Errorf("could not build token URL for Entra password refresh: %w", err)
+		return nil, fmt.Errorf("could not build token URL for Entra auth refresh: %w", err)
 	}
 
 	cfg := oauth2.Config{
@@ -884,7 +884,7 @@ func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername strin
 }
 
 // IsTokenForDeviceRegistration reports whether the cached token carries
-// device-registration data. The entra_password MFA flow issues tokens under the
+// device-registration data. The entra_auth flow issues tokens under the
 // Microsoft Broker App ID too, so the App ID alone cannot distinguish a
 // device-registration token; the presence of device-registration data can.
 func (p *Provider) IsTokenForDeviceRegistration(authInfo *token.AuthCachedInfo) bool {

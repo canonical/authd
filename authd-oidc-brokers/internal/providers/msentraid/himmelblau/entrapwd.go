@@ -9,10 +9,10 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// EntraPasswordProvider is an optional interface that providers can implement
+// EntraAuthProvider is an optional interface that providers can implement
 // to support the Entra ID password + MFA authentication flow.
-type EntraPasswordProvider interface {
-	// InitiateEntraPasswordAuth starts the Entra password/passwordless + MFA flow.
+type EntraAuthProvider interface {
+	// InitiateEntraAuth starts the Entra password/passwordless + MFA flow.
 	// It submits credentials and returns an MFA challenge state.
 	// clientID is the OIDC application client ID (on_behalf_of_client_id);
 	// it is used to build the OIDC app inside the Rust layer so that the
@@ -22,7 +22,7 @@ type EntraPasswordProvider interface {
 	// When false, it uses only MS Graph scopes.
 	// authOpts toggles optional flow behaviors (e.g. AuthOptionFido to let
 	// Entra ID negotiate a FIDO/security-key challenge).
-	InitiateEntraPasswordAuth(
+	InitiateEntraAuth(
 		ctx context.Context,
 		clientID string,
 		issuerURL string,
@@ -48,7 +48,7 @@ type EntraPasswordProvider interface {
 		deviceRegistrationData []byte,
 	) (*oauth2.Token, error)
 
-	// RefreshEntraPasswordToken refreshes a cached Entra password/passwordless + MFA refresh
+	// RefreshEntraToken refreshes a cached Entra password/passwordless + MFA refresh
 	// token to re-verify the account against Entra ID on a returning login, the
 	// same way the device-auth flow's token refresh does. It is a plain OAuth2
 	// refresh as a public client (no client_secret) for basic scopes only — never
@@ -59,7 +59,7 @@ type EntraPasswordProvider interface {
 	// persisted). On an Entra rejection it returns an *oauth2.RetrieveError so the
 	// broker can classify it with the same checks it uses for device-auth
 	// (IsUserDisabledError → AADSTS50057, IsTokenExpiredError → AADSTS50173, etc.).
-	RefreshEntraPasswordToken(
+	RefreshEntraToken(
 		ctx context.Context,
 		issuerURL string,
 		refreshToken string,
@@ -122,7 +122,7 @@ const (
 	// AuthOptionNoDAGFallback suppresses the silent Device Authorization Grant
 	// fallback in libhimmelblau. The broker surfaces MFA challenges through
 	// dedicated auth modes and never wants the DAG fallback, so this is always
-	// passed by InitiateMFAFlowWithPassword.
+	// passed by InitiateMFAFlow.
 	AuthOptionNoDAGFallback AuthOption = iota
 
 	// AuthOptionFido advertises that the caller can perform a FIDO/WebAuthn

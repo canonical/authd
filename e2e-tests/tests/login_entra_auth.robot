@@ -13,12 +13,12 @@ Test Teardown   utils.Test Teardown
 *** Keywords ***
 Test Setup
     utils.Test Setup    snapshot=%{BROKER}-installed
-    # Enable the Entra ID password flow and disable device auth so only the
+    # Enable the Entra auth flow and disable device auth so only the
     # new password+MFA mode is offered, avoiding a provider-selection menu.
-    # entra_password requires register_device=true (or a client_secret) to fetch
+    # entra_auth requires register_device=true (or a client_secret) to fetch
     # groups from Microsoft Graph on first login.
     Change Broker Configuration    register_device    true
-    Change Broker Configuration    entra_password    true
+    Change Broker Configuration    entra_auth    true
     Change Broker Configuration    device_code    false
 
 
@@ -30,12 +30,12 @@ ${local_password}    %{E2E_PASSWORD}
 
 
 *** Test Cases ***
-Test login with CLI using Entra ID password and MFA
+Test login with CLI using Entra auth and MFA
     [Documentation]    Verify that a user can authenticate via the Entra ID direct-password
     ...    + MFA flow through the CLI (machinectl login).
     ...
     ...    With the device code flow disabled the broker auto-selects the single available
-    ...    authentication mode (entra_password), so the user goes straight to the
+    ...    authentication mode (entra_auth), so the user goes straight to the
     ...    password prompt after choosing the provider. After successful MFA the
     ...    Entra password is cached locally; the provisioning checks verify that
     ...    the cached password works for sudo.
@@ -45,7 +45,7 @@ Test login with CLI using Entra ID password and MFA
 
     # First login: Entra ID password + TOTP MFA.
     Open Terminal
-    Log In With Remote User Through CLI: Entra Password    ${username}
+    Log In With Remote User Through CLI: Entra Auth    ${username}
     # This shared provisioning check covers NSS, group membership, and the
     # cached local-password path via sudo.
     Check If User Was Added Properly    ${username}
