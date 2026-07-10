@@ -10,7 +10,7 @@ Choose your provider:
 Enter 'r' to cancel the request and go back to select the authentication flow
 Gimme your password:
 >
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Password authentication
   2. Send URL to user-integration-native-prevent-preset-user-from-switching-username@example.com
   3. Use your fido device foo
@@ -20,7 +20,7 @@ Gimme your password:
   7. Use a QR code
   8. Authentication code
 Or enter 'r' to go back to choose the provider
-Choose your authentication method:
+Choose your authentication flow:
 > r
 == Provider selection ==
   1. local
