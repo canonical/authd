@@ -255,6 +255,37 @@ Try machinectl login Prompt
         ${tries} =    Evaluate    ${tries} - 1
     END
 
+Terminal Password Change
+    [arguments]    ${new_password}
+    Hid.Type String    passwd
+    Hid.Keys Combo    Return
+    Match Text    Current password:    5
+    Hid.Type String    ubuntu
+    Hid.Keys Combo    Return
+    Match Text    New password:    5
+    Hid.Type String    ${new_password}
+    Hid.Keys Combo    Return
+    Match Text    Retype new password:    5
+    Hid.Type String    ${new_password}
+    Hid.Keys Combo    Return
+    Match Text    passwd: password updated successfully    30
+    Clear Terminal
+
+Terminal Password Change Error
+    [arguments]    ${new_password}    ${expected_error}
+    Hid.Type String    passwd
+    Hid.Keys Combo    Return
+    Match Text    Current password:    5
+    Hid.Type String    ubuntu
+    Hid.Keys Combo    Return
+    Match Text    New password:    5
+    Hid.Type String    ${new_password}
+    Hid.Keys Combo    Return
+    Match Text    ${expected_error}
+    Hid.Keys Combo    Control_L    d
+    Match Text    password unchanged     10 
+    Match Text    ubuntu@ubuntu:~$    10
+    Clear Terminal
 
 Force Password Change
     Hid.Type String    passwd -e ubuntu
