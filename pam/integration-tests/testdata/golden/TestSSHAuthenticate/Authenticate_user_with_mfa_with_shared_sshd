@@ -7,7 +7,7 @@
 Enter 'r' to cancel the request and go back to select the authentication flow
 (user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com@localhost) Gimme your password:
 >
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Password authentication
   2. Use a Login code
   3. Send URL to user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com
@@ -17,7 +17,7 @@ Enter 'r' to cancel the request and go back to select the authentication flow
   7. Pin code
   8. Authentication code
 Or enter 'r' to go back to choose the provider
-(user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com@localhost) Choose your authentication method:
+(user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com@localhost) Choose your authentication flow:
 > 1
 == Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication flow
@@ -27,23 +27,23 @@ Enter 'r' to cancel the request and go back to select the authentication flow
 Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 (user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com@localhost) Plug your fido device and press with your thumb:
 > r
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Use your fido device foo
   2. Use your phone +33...
   3. Authentication code
 Or enter 'r' to go back to choose the provider
-(user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com@localhost) Choose your authentication method:
+(user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com@localhost) Choose your authentication flow:
 > 1
 == Use your fido device foo ==
 Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 (user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com@localhost) Plug your fido device and press with your thumb:
 > r
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Use your fido device foo
   2. Use your phone +33...
   3. Authentication code
 Or enter 'r' to go back to choose the provider
-(user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com@localhost) Choose your authentication method:
+(user-mfa-integration-pre-check-ssh-authenticate-user-with-mfa-with-shared-sshd@example.com@localhost) Choose your authentication flow:
 > 2
 == Use your phone +33... ==
 Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow

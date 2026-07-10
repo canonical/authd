@@ -122,7 +122,7 @@ func TestCLIAuthenticate(t *testing.T) {
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 
-				// Go to auth method selection first.
+				// Go to auth flow selection first.
 				c.SendKey(t, ptytest.KeyEscape)
 				c.WaitFor(t, `Select the authentication flow:`)
 				c.WaitFor(t, `1\. Password authentication`)
@@ -450,7 +450,7 @@ func TestCLIAuthenticate(t *testing.T) {
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 
-				// Go back to auth method.
+				// Go back to auth flow.
 				c.SendKey(t, ptytest.KeyEscape)
 				c.WaitFor(t, `Select the authentication flow:`)
 
@@ -511,7 +511,7 @@ func TestCLIAuthenticate(t *testing.T) {
 				c2.WaitFor(t, regexp.QuoteMeta(username))
 				c2.SendKey(t, ptytest.KeyEnter)
 
-				// Should go directly to auth code (no broker/auth method selection).
+				// Should go directly to auth code (no broker/auth flow selection).
 				c2.WaitFor(t, `Enter your one time credential`)
 				c2.WaitFor(t, `Resend SMS \(1 sent\)`)
 
@@ -550,7 +550,7 @@ func TestCLIAuthenticate(t *testing.T) {
 				cliSelectBroker(t, c)
 				c.WaitFor(t, `Gimme your password`)
 
-				// Go back to auth method, then provider.
+				// Go back to auth flow, then provider.
 				c.SendKey(t, ptytest.KeyEscape)
 				c.WaitFor(t, `Select the authentication flow:`)
 
