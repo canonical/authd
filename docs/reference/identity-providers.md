@@ -10,11 +10,11 @@ authd supports identity providers through its identity brokers.
 Each broker is available as a snap.
 Several brokers can be installed and enabled on a system.
 
-| Provider       | Broker snap                                             | Install as a snap              | Configure                                                                            | Provider docs                                                            |
-| ---            |---------------------------------------------------------|--------------------------------|--------------------------------------------------------------------------------------|--------------------------------------------------------------------------|
-| Google IAM     | [authd-google](https://snapcraft.io/authd-google)       | `snap install authd-google`    | <a href="../../howto/configure-authd/?broker=google">Google IAM guide</a>            | [Google](https://cloud.google.com/iam/docs/overview)                     |
-| Microsoft Entra ID    | [authd-msentraid](https://snapcraft.io/authd-msentraid) | `snap install authd-msentraid` | <a href="../../howto/configure-authd/?broker=msentraid">Microsoft Entra ID guide</a> | [Microsoft](https://learn.microsoft.com/en-us/entra/fundamentals/whatis) |
-| Keycloak | [authd-oidc](https://snapcraft.io/authd-oidc)           | `snap install authd-oidc`      | <a href="../../howto/configure-authd/?broker=keycloak">Keycloak guide</a>            | [Keycloak](https://www.keycloak.org/documentation)  |
+| Provider       | Broker snap                                             | Install as a snap              | Configure                                                                            | Flows                                                                                   |
+| ---            |---------------------------------------------------------|--------------------------------|--------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------|
+| Google IAM     | [authd-google](https://snapcraft.io/authd-google)       | `snap install authd-google`    | <a href="../../howto/configure-authd/?broker=google">Google IAM guide</a>            | [Device code flow](/reference/authentication-flows)                                     |
+| Microsoft Entra ID    | [authd-msentraid](https://snapcraft.io/authd-msentraid) | `snap install authd-msentraid` | <a href="../../howto/configure-authd/?broker=msentraid">Microsoft Entra ID guide</a> | [Device code flow, Entra password + MFA](/reference/authentication-flows)               |
+| Keycloak | [authd-oidc](https://snapcraft.io/authd-oidc)           | `snap install authd-oidc`      | <a href="../../howto/configure-authd/?broker=keycloak">Keycloak guide</a>            | [Device code flow](/reference/authentication-flows)                                     |
 
 
 ```{note}
@@ -23,34 +23,11 @@ Support for multiple additional providers is planned for future releases of auth
 
 ## Authentication flows
 
-### Google IAM
+See [Authentication flows](/reference/authentication-flows) for details on the
+flows supported by each provider.
 
-Google IAM supports the **device code flow**, where the user visits a URL
-and enters a code to complete authentication.
+## Provider documentation
 
-### Microsoft Entra ID
-
-Microsoft Entra ID supports the following authentication flows:
-
-- **Device code flow**: The user visits a URL and enters a code to
-  authenticate. Works with all account types.
-- **Entra password + MFA**: The user authenticates directly with their Entra ID
-  password, followed by a multi-factor authentication (MFA) challenge. On
-  success, authd reuses the same Entra password as the local cached password for
-  subsequent logins. Not all accounts can complete this flow. Accounts without
-  an MFA method enrolled, accounts whose only MFA method is a FIDO2/passkey
-  credential, and federated (on-premises AD FS) accounts fall back to the
-  device code flow if it's enabled, or are denied otherwise.
-
-Both flows are enabled by default and can be individually configured using the
-`[flows]` section of the broker configuration file. See
-[Configure authentication flows](ref::config-auth-flows) for details.
-
-The **Entra password + MFA** flow has additional requirements for resolving group
-membership, depending on whether device registration is enabled. See
-[Group membership resolution with Entra password + MFA](reference::group-membership-resolution).
-
-### Keycloak
-
-Keycloak supports the **device code flow**, where the user visits a URL and
-enters a code to complete authentication.
+- [Google IAM](https://cloud.google.com/iam/docs/overview)
+- [Microsoft Entra ID](https://learn.microsoft.com/en-us/entra/fundamentals/whatis)
+- [Keycloak](https://www.keycloak.org/documentation)
