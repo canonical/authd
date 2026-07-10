@@ -9,7 +9,7 @@ Choose your provider:
 Enter 'r' to cancel the request and go back to select the authentication flow
 Gimme your password:
 >
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Password authentication
   2. Send URL to user-mfa-integration-native-passwd-testnativechangeauthtok@example.com
   3. Use your fido device foo
@@ -19,7 +19,7 @@ Gimme your password:
   7. Use a QR code
   8. Authentication code
 Or enter 'r' to go back to choose the provider
-Choose your authentication method:
+Choose your authentication flow:
 > 1
 == Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication flow
@@ -29,12 +29,12 @@ Gimme your password:
 Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 Plug your fido device and press with your thumb:
 > r
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Use your fido device foo
   2. Use your phone +33...
   3. Authentication code
 Or enter 'r' to go back to choose the provider
-Choose your authentication method:
+Choose your authentication flow:
 > 1
 == Use your fido device foo ==
 Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
@@ -44,11 +44,11 @@ Plug your fido device and press with your thumb:
 Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 Unlock your phone +33... or accept request on web interface:
 > r
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Use your phone +33...
   2. Authentication code
 Or enter 'r' to go back to choose the provider
-Choose your authentication method:
+Choose your authentication flow:
 > 1
 == Use your phone +33... ==
 Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow

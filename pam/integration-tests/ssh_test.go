@@ -1019,10 +1019,10 @@ func sshPtyMfaAuth(t *testing.T, args sshPtyArgs) {
 	sshPtySelectBroker(t, c)
 	c.WaitFor(t, `Gimme your password`)
 
-	// Cancel and go to auth method selection.
+	// Cancel and go to auth flow selection.
 	c.SendLine(t, "r")
 	c.WaitFor(t, `1\. Password authentication`)
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Select password auth.
 	c.SendLine(t, "1")
@@ -1032,10 +1032,10 @@ func sshPtyMfaAuth(t *testing.T, args sshPtyArgs) {
 	// MFA: fido device.
 	c.WaitFor(t, `Plug your fido device and press with your thumb`)
 
-	// Cancel and go back to auth method selection (MFA modes only).
+	// Cancel and go back to auth flow selection (MFA modes only).
 	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `1\. Use your fido device foo`)
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Re-select fido auth.
 	c.SendLine(t, "1")
@@ -1044,7 +1044,7 @@ func sshPtyMfaAuth(t *testing.T, args sshPtyArgs) {
 	// Cancel again.
 	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `2\. Use your phone \+33`)
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Select phone auth.
 	c.SendLine(t, "2")
@@ -1074,10 +1074,10 @@ func sshPtyFormWithButton(t *testing.T, args sshPtyArgs) {
 	sshPtySelectBroker(t, c)
 	c.WaitFor(t, `Gimme your password`)
 
-	// Cancel to auth method selection.
+	// Cancel to auth flow selection.
 	c.SendLine(t, "r")
 	c.WaitFor(t, `8\. Authentication code`)
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Select Authentication code.
 	sendEchoedLine(t, c, "8")
@@ -1108,10 +1108,10 @@ func sshPtyQRCode(t *testing.T, args sshPtyArgs) {
 	sshPtySelectBroker(t, c)
 	c.WaitFor(t, `Gimme your password`)
 
-	// Cancel to auth method selection.
+	// Cancel to auth flow selection.
 	c.SendLine(t, "r")
 	c.WaitFor(t, `2\. Use a Login code`)
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Select Login code mode.
 	sendEchoedLine(t, c, "2")
@@ -1146,10 +1146,10 @@ func sshPtySwitchAuthMode(t *testing.T, args sshPtyArgs) {
 	sshPtySelectBroker(t, c)
 	c.WaitFor(t, `Gimme your password`)
 
-	// Cancel to auth method selection.
+	// Cancel to auth flow selection.
 	c.SendLine(t, "r")
 	c.WaitFor(t, `3\. Send URL to `)
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Select "Send URL to" mode.
 	sendEchoedLine(t, c, "3")
@@ -1158,7 +1158,7 @@ func sshPtySwitchAuthMode(t *testing.T, args sshPtyArgs) {
 	// Go back.
 	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `4\. Use your fido device foo`)
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Select fido.
 	sendEchoedLine(t, c, "4")
@@ -1167,7 +1167,7 @@ func sshPtySwitchAuthMode(t *testing.T, args sshPtyArgs) {
 	// Go back.
 	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `5\. Use your phone \+33`)
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Select phone +33.
 	sendEchoedLine(t, c, "5")
@@ -1176,7 +1176,7 @@ func sshPtySwitchAuthMode(t *testing.T, args sshPtyArgs) {
 	// Go back.
 	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `6\. Use your phone \+1`)
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Select phone +1.
 	sendEchoedLine(t, c, "6")
@@ -1185,7 +1185,7 @@ func sshPtySwitchAuthMode(t *testing.T, args sshPtyArgs) {
 	// Go back.
 	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `7\. Pin code`)
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Select pin code.
 	sendEchoedLine(t, c, "7")
@@ -1194,7 +1194,7 @@ func sshPtySwitchAuthMode(t *testing.T, args sshPtyArgs) {
 	// Go back.
 	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `2\. Use a Login code`)
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Select Login code (QR).
 	sendEchoedLine(t, c, "2")
@@ -1203,7 +1203,7 @@ func sshPtySwitchAuthMode(t *testing.T, args sshPtyArgs) {
 	// Go back.
 	sendEchoedLine(t, c, "r")
 	c.WaitFor(t, `8\. Authentication code`)
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Select Authentication code.
 	sendEchoedLine(t, c, "8")
@@ -1211,16 +1211,16 @@ func sshPtySwitchAuthMode(t *testing.T, args sshPtyArgs) {
 
 	// Go back.
 	sendEchoedLine(t, c, "r")
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Try invalid selection.
 	sendEchoedLine(t, c, "invalid-selection")
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Try negative number.
 	sendEchoedLine(t, c, "-1")
 	c.WaitFor(t, `7\. Pin code`)
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Select Pin code.
 	sendEchoedLine(t, c, "7")
@@ -1244,9 +1244,9 @@ func sshPtySwitchLocalBroker(t *testing.T, args sshPtyArgs) {
 	sshPtySelectBroker(t, c)
 	c.WaitFor(t, `Gimme your password`)
 
-	// Cancel to auth method selection.
+	// Cancel to auth flow selection.
 	c.SendLine(t, "r")
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Go back to provider selection.
 	sendEchoedLine(t, c, "r")
@@ -1286,9 +1286,9 @@ func sshPtySwitchPresetUsername(t *testing.T, args sshPtyArgs) {
 	sendEchoedLine(t, c, "2")
 	c.WaitFor(t, `Gimme your password`)
 
-	// Cancel to auth method.
+	// Cancel to auth flow.
 	c.SendLine(t, "r")
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Go back to provider.
 	sendEchoedLine(t, c, "r")
@@ -1323,10 +1323,10 @@ func sshPtyRememberBrokerAndMode(t *testing.T, args sshPtyArgs) {
 	sshPtySelectBroker(t, c)
 	c.WaitFor(t, `Gimme your password`)
 
-	// Cancel to auth method selection.
+	// Cancel to auth flow selection.
 	c.SendLine(t, "r")
 	c.WaitFor(t, `8\. Authentication code`)
-	c.WaitFor(t, `Choose your authentication method`)
+	c.WaitFor(t, `Choose your authentication flow`)
 
 	// Select Authentication code.
 	sendEchoedLine(t, c, "8")
