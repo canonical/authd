@@ -21,17 +21,17 @@ Enable Edge Broker
     SSH.Execute    snap refresh ${BROKER_SNAP_NAME} --edge
 
 
-Disable Entra Password Via Drop In
-    [Documentation]    Writes a drop-in that sets entra_password = false.
+Disable Entra Auth Via Drop In
+    [Documentation]    Writes a drop-in that sets entra_auth = false.
     ...
     ...                More robust than Change Broker Configuration for this key,
     ...                because stable snapshots provisioned before the [flows]
-    ...                section was added may not contain an entra_password line
+    ...                section was added may not contain an entra_auth line
     ...                at all, causing a silent sed no-op.
     # TODO(stable-release): Can be removed once the stable broker has been
     #                       updated to include the [flows] section.
     SSH.Execute    mkdir -p ${BROKER_CFG_DIR}
-    SSH.Execute    printf '[flows]\nentra_password = false\n' > ${BROKER_CFG_DIR}/99-disable-entra-password.conf
+    SSH.Execute    printf '[flows]\nentra_auth = false\n' > ${BROKER_CFG_DIR}/99-disable-entra-auth.conf
     SSH.Execute    snap restart ${BROKER_SNAP_NAME}
 
 
@@ -443,7 +443,7 @@ Check That Device Was Registered
     ...    msg=token.json has no DeviceRegistrationData; the device was not registered.
 
 
-Log In With Remote User Through CLI: Entra Password
+Log In With Remote User Through CLI: Entra Auth
     [Arguments]    ${username}
     Try machinectl login Prompt
     Hid.Type String    ${username}

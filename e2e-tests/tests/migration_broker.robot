@@ -36,10 +36,10 @@ Test login with broker on edge channel
     Log Out From su Session
     Close Focused Window
 
-    # Disable entra_password before upgrading: the edge broker refuses to start
+    # Disable entra_auth before upgrading: the edge broker refuses to start
     # if this flow is enabled without register_device or a client_secret, which
     # are both not configured.
-    Disable Entra Password Via Drop In
+    Disable Entra Auth Via Drop In
 
     # Switch to edge channel for the broker snap
     Enable Edge Broker
