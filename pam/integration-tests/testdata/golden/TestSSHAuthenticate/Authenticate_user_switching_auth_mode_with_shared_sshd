@@ -7,7 +7,7 @@
 Enter 'r' to cancel the request and go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Gimme your password:
 >
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Password authentication
   2. Use a Login code
   3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com
@@ -17,13 +17,13 @@ Enter 'r' to cancel the request and go back to select the authentication flow
   7. Pin code
   8. Authentication code
 Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication method:
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication flow:
 > 3
 == Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com ==
-Leave the input field empty to wait for the alternative authentication method or enter 'r' to go back to select the authentication flow
+Leave the input field empty to wait for the alternative authentication flow or enter 'r' to go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Click on the link received at user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com or enter the code:
 > r
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Password authentication
   2. Use a Login code
   3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com
@@ -33,13 +33,13 @@ Leave the input field empty to wait for the alternative authentication method or
   7. Pin code
   8. Authentication code
 Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication method:
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication flow:
 > 4
 == Use your fido device foo ==
 Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Plug your fido device and press with your thumb:
 > r
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Password authentication
   2. Use a Login code
   3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com
@@ -49,13 +49,13 @@ Press Enter to wait for authentication or enter 'r' to go back to select the aut
   7. Pin code
   8. Authentication code
 Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication method:
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication flow:
 > 5
 == Use your phone +33... ==
 Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Unlock your phone +33... or accept request on web interface:
 > r
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Password authentication
   2. Use a Login code
   3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com
@@ -65,13 +65,13 @@ Press Enter to wait for authentication or enter 'r' to go back to select the aut
   7. Pin code
   8. Authentication code
 Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication method:
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication flow:
 > 6
 == Use your phone +1... ==
 Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Unlock your phone +1... or accept request on web interface:
 > r
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Password authentication
   2. Use a Login code
   3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com
@@ -81,13 +81,13 @@ Press Enter to wait for authentication or enter 'r' to go back to select the aut
   7. Pin code
   8. Authentication code
 Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication method:
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication flow:
 > 7
 == Pin code ==
 Enter 'r' to cancel the request and go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Enter your pin code:
 > r
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Password authentication
   2. Use a Login code
   3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com
@@ -97,7 +97,7 @@ Enter 'r' to cancel the request and go back to select the authentication flow
   7. Pin code
   8. Authentication code
 Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication method:
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication flow:
 > 2
 == Use a Login code ==
 Enter the code in the login page
@@ -110,7 +110,7 @@ Code: 1337
 Or enter 'r' to go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose action:
 > r
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Password authentication
   2. Use a Login code
   3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com
@@ -120,7 +120,7 @@ Or enter 'r' to go back to select the authentication flow
   7. Pin code
   8. Authentication code
 Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication method:
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication flow:
 > 8
 == Authentication code ==
   1. Proceed with Authentication code
@@ -128,7 +128,7 @@ Or enter 'r' to go back to choose the provider
 Or enter 'r' to go back to select the authentication flow
 (user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose action:
 > r
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Password authentication
   2. Use a Login code
   3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com
@@ -138,13 +138,13 @@ Or enter 'r' to go back to select the authentication flow
   7. Pin code
   8. Authentication code
 Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication method:
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication flow:
 > invalid-selection
 Unsupported input
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication method:
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication flow:
 > -1
 Invalid selection
-== Authentication method selection ==
+== Authentication flow selection ==
   1. Password authentication
   2. Use a Login code
   3. Send URL to user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com
@@ -154,7 +154,7 @@ Invalid selection
   7. Pin code
   8. Authentication code
 Or enter 'r' to go back to choose the provider
-(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication method:
+(user-integration-pre-check-ssh-authenticate-user-switching-auth-mode-with-shared-sshd@example.com@localhost) Choose your authentication flow:
 > 7
 == Pin code ==
 Enter 'r' to cancel the request and go back to select the authentication flow
