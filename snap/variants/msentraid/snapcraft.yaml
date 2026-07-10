@@ -34,6 +34,12 @@ apps:
       - dbus-authd
     plugs:
       - network
+      # Access to FIDO2/U2F security keys for the local WebAuthn MFA step.
+      # Not auto-connected by default: run
+      #   snap connect authd-msentraid:u2f-devices
+      # to enable it. Without the connection no key is reachable, so a FIDO
+      # login waits briefly for one and then falls back to the device code flow.
+      - u2f-devices
     restart-condition: never
     activates-on: [dbus-authd]
     environment:
@@ -85,6 +91,12 @@ parts:
       - go
     build-packages:
       - retry
+      # Headers for the cgo bindings to libfido2 (internal/fido).
+      - libfido2-dev
+    stage-packages:
+      # Runtime library for the FIDO2 WebAuthn assertions; core24 does not
+      # provide it.
+      - libfido2-1
     after:
       - libhimmelblau
       - version

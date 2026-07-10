@@ -20,6 +20,7 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/sessionmode"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/fido"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/password"
 	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
@@ -51,6 +52,10 @@ type mockEntraPasswordProvider struct {
 	initErr               error
 	recordedPollAttempts  []int
 	recordedChallengeData []string
+	recordedInitAuthOpts  [][]himmelblau.AuthOption
+	recordedInitPasswords []string
+	recordedInitDevScopes []bool
+	registerDeviceCalls   int
 	refreshResult         *oauth2.Token // returned by RefreshEntraPasswordToken (defaults to a rotated token)
 	refreshErr            error         // when set, RefreshEntraPasswordToken returns it (e.g. AADSTS50057)
 	refreshDelay          time.Duration
@@ -97,7 +102,10 @@ func (p *mockGrantRevokedProvider) IsTokenExpiredError(err *oauth2.RetrieveError
 
 var mockDeviceRegistrationData = []byte(`{"device_id":"test-device-id","cert_key":"Y2VydA==","transport_key":"dHJhbnNwb3J0","auth_value":"test-auth-value","tpm_machine_key":"dHBtLW1hY2hpbmUta2V5"}`)
 
-func (p *mockEntraPasswordProvider) InitiateEntraPasswordAuth(_ context.Context, _, _ string, _, _ string, _ []byte, _ bool) (*himmelblau.MFAFlowState, *himmelblau.MFAChallengeInfo, error) {
+func (p *mockEntraPasswordProvider) InitiateEntraPasswordAuth(_ context.Context, _, _ string, _, password string, _ []byte, withDeviceScope bool, authOpts ...himmelblau.AuthOption) (*himmelblau.MFAFlowState, *himmelblau.MFAChallengeInfo, error) {
+	p.recordedInitAuthOpts = append(p.recordedInitAuthOpts, authOpts)
+	p.recordedInitPasswords = append(p.recordedInitPasswords, password)
+	p.recordedInitDevScopes = append(p.recordedInitDevScopes, withDeviceScope)
 	if p.initErr != nil {
 		return nil, nil, p.initErr
 	}
@@ -150,6 +158,7 @@ func (p *mockEntraPasswordProvider) IsTokenForDeviceRegistration(authInfo *token
 }
 
 func (p *mockEntraPasswordProvider) MaybeRegisterDevice(_ context.Context, _ *oauth2.Token, _ string, _ string, oldData []byte) ([]byte, func(), error) {
+	p.registerDeviceCalls++
 	if len(oldData) > 0 {
 		return oldData, func() {}, nil
 	}
@@ -169,6 +178,7 @@ type mockDeviceRegistrationFailProvider struct {
 }
 
 func (p *mockDeviceRegistrationFailProvider) MaybeRegisterDevice(_ context.Context, _ *oauth2.Token, _ string, _ string, oldData []byte) ([]byte, func(), error) {
+	p.registerDeviceCalls++
 	if len(oldData) > 0 {
 		// Re-use existing registration — failure is only on first registration.
 		return oldData, func() {}, nil
@@ -189,6 +199,26 @@ type mockMFATimeoutProvider struct {
 func (p *mockMFATimeoutProvider) AcquireTokenByMFAFlow(_ context.Context, _, _ string, _ string, _ *himmelblau.MFAFlowState, _ string, _ int, _ []byte) (*oauth2.Token, error) {
 	// Always return poll-continue so the loop exhausts max attempts.
 	return nil, &himmelblau.MFAError{Category: himmelblau.MFAErrorPollContinue, Message: "MFA poll continue"}
+}
+
+// mockPasswordRequiredThenSuccessProvider simulates a passwordless probe that
+// discovers the account needs a password, followed by a successful password+MFA
+// initialization.
+type mockPasswordRequiredThenSuccessProvider struct {
+	*mockEntraPasswordProvider
+}
+
+func (p *mockPasswordRequiredThenSuccessProvider) InitiateEntraPasswordAuth(_ context.Context, _, _ string, _, password string, _ []byte, withDeviceScope bool, authOpts ...himmelblau.AuthOption) (*himmelblau.MFAFlowState, *himmelblau.MFAChallengeInfo, error) {
+	p.recordedInitAuthOpts = append(p.recordedInitAuthOpts, authOpts)
+	p.recordedInitPasswords = append(p.recordedInitPasswords, password)
+	p.recordedInitDevScopes = append(p.recordedInitDevScopes, withDeviceScope)
+	if len(p.recordedInitPasswords) == 1 {
+		return nil, nil, &himmelblau.MFAError{
+			Category: himmelblau.MFAErrorPasswordRequired,
+			Message:  "password required",
+		}
+	}
+	return p.flowState, p.challengeInfo, nil
 }
 
 // mockMFAWrongCodeThenSuccessProvider simulates an incorrect or expired
@@ -222,6 +252,21 @@ type mockMFANilTokenProvider struct {
 
 func (p *mockMFANilTokenProvider) AcquireTokenByMFAFlow(_ context.Context, _, _ string, _ string, _ *himmelblau.MFAFlowState, _ string, _ int, _ []byte) (*oauth2.Token, error) {
 	return nil, nil
+}
+
+// mockInvalidFIDOAssertionProvider simulates Entra rejecting the local FIDO
+// assertion during the MFA continuation step.
+type mockInvalidFIDOAssertionProvider struct {
+	*mockEntraPasswordProvider
+}
+
+func (p *mockInvalidFIDOAssertionProvider) AcquireTokenByMFAFlow(_ context.Context, _, _ string, _ string, _ *himmelblau.MFAFlowState, authData string, pollAttempt int, _ []byte) (*oauth2.Token, error) {
+	p.recordedChallengeData = append(p.recordedChallengeData, authData)
+	p.recordedPollAttempts = append(p.recordedPollAttempts, pollAttempt)
+	return nil, &himmelblau.MFAError{
+		AADSTS:  135020,
+		Message: "AADSTS135020: Invalid Fido assertion.",
+	}
 }
 
 // mockMFAAlwaysWrongCodeProvider simulates every submitted one-time code being
@@ -355,9 +400,10 @@ func TestNew(t *testing.T) {
 }
 
 // TestNewRejectsUnusableEntraPasswordWithoutGroupSource verifies that New fails
-// fast when entra_password is enabled but can't retrieve groups from Microsoft
-// Graph (no device registration, no client secret) — rather than starting
-// successfully and only failing once a user logs in.
+// fast whenever entra_password is enabled but can't retrieve groups from
+// Microsoft Graph (no device registration, no client secret). The failure is
+// unconditional: having other flows (e.g. device_code) enabled does not suppress
+// it, because a silent runtime fallback would hide a misconfiguration from admins.
 func TestNewRejectsUnusableEntraPasswordWithoutGroupSource(t *testing.T) {
 	t.Parallel()
 
@@ -368,13 +414,10 @@ func TestNewRejectsUnusableEntraPasswordWithoutGroupSource(t *testing.T) {
 
 		wantErr bool
 	}{
-		"Error_when_entra_password_is_the_only_flow_and_unusable": {wantErr: true},
-		"Error_when_device_code_is_also_enabled_but_entra_password_is_still_unusable": {
-			deviceCodeFlowEnabled: true,
-			wantErr:               true,
-		},
-		"No_error_when_device_registration_makes_it_usable": {registerDevice: true},
-		"No_error_when_a_client_secret_makes_it_usable":     {clientSecret: "test-client-secret"},
+		"Error_when_entra_password_enabled_without_group_source": {wantErr: true},
+		"Error_even_when_device_code_is_also_enabled":            {deviceCodeFlowEnabled: true, wantErr: true},
+		"No_error_when_device_registration_makes_it_usable":      {registerDevice: true},
+		"No_error_when_a_client_secret_makes_it_usable":          {clientSecret: "test-client-secret"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -2157,6 +2200,181 @@ func TestEndSessionReleasesPendingMFAFlow(t *testing.T) {
 	require.Equal(t, 1, released, "EndSession should release any pending MFA flow state")
 }
 
+func TestEntraPasswordProbePromptsForPasswordWhenRequired(t *testing.T) {
+	t.Parallel()
+
+	provider := &mockPasswordRequiredThenSuccessProvider{
+		mockEntraPasswordProvider: &mockEntraPasswordProvider{
+			MockProvider: &testutils.MockProvider{},
+			flowState:    &himmelblau.MFAFlowState{},
+			challengeInfo: &himmelblau.MFAChallengeInfo{
+				Message:           "Approve the sign-in request in Microsoft Authenticator",
+				Method:            "PhoneAppNotification",
+				PollingIntervalMs: 1,
+				MaxPollAttempts:   1,
+			},
+		},
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+		registerDevice:        true,
+	})
+
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraPassword))
+
+	layout, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraPassword)
+	require.NoError(t, err)
+	require.Equal(t, "true", layout["wait"], "the initial Entra password selection should probe without asking for a password")
+	require.Empty(t, layout["entry"], "the passwordless probe must not expose a password field")
+
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraPassword}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{""}, provider.recordedInitPasswords,
+		"the first call should be a passwordless probe")
+	require.Equal(t, []bool{false}, provider.recordedInitDevScopes,
+		"passwordless probing must never request device-scoped auth")
+	require.Equal(t, "{}", data,
+		"PASSWORD_REQUIRED should transition directly to the real password form, not an intermediate message-only next state")
+
+	layout, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraPassword)
+	require.NoError(t, err)
+	require.Equal(t, "chars_password", layout["entry"],
+		"PASSWORD_REQUIRED should turn the same auth mode into a password prompt")
+	require.Empty(t, layout["wait"], "the password prompt must not be an auto-submit wait layout")
+
+	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
+	access, _, err = b.IsAuthenticated(sessionID, passwordAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraMFAWait}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{"", "password"}, provider.recordedInitPasswords,
+		"the second call should submit the user-entered password")
+	require.Equal(t, []bool{false, true}, provider.recordedInitDevScopes,
+		"device-scoped auth should be used only after a password was submitted")
+	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID),
+		"the offline password must not be cached until MFA succeeds")
+}
+
+func TestEntraPasswordPasswordlessSuccessDoesNotCacheOfflinePassword(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := &mockEntraPasswordProvider{
+		MockProvider: &testutils.MockProvider{},
+		flowState:    &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{
+			Message:           "Open your Authenticator app and approve the sign-in request",
+			Method:            "PhoneAppNotification",
+			PollingIntervalMs: 1,
+			MaxPollAttempts:   1,
+		},
+		mfaTokenResult: newMFATokenResult(mfaAuthInfo.Token),
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+		registerDevice:        true,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, username, sessionmode.Login)
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraPassword))
+	_, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraPassword)
+	require.NoError(t, err)
+
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraMFAWait}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{""}, provider.recordedInitPasswords,
+		"passwordless initiation should not submit a password")
+	require.Equal(t, []bool{false}, provider.recordedInitDevScopes,
+		"passwordless initiation must not request device-scoped auth even when device registration is enabled")
+
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFAWait))
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
+	require.NoError(t, err)
+
+	access, _, err = b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access,
+		"first-time passwordless logins should chain to local password creation")
+	require.Equal(t, []string{authmodes.NewPassword}, b.GetNextAuthModes(sessionID))
+	_, err = os.Stat(b.TokenPathForSession(sessionID))
+	require.NoError(t, err, "passwordless auth should cache the token once device registration succeeds")
+	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID),
+		"passwordless auth has no verified Entra password to cache for offline login")
+	require.Equal(t, 1, provider.registerDeviceCalls,
+		"passwordless auth should attempt first-time device registration after MFA succeeds")
+}
+
+func TestEntraPasswordPasswordlessTimeoutRestartsPasswordlessProbe(t *testing.T) {
+	t.Parallel()
+
+	provider := &mockMFATimeoutProvider{
+		mockEntraPasswordProvider: &mockEntraPasswordProvider{
+			MockProvider: &testutils.MockProvider{},
+			flowState:    &himmelblau.MFAFlowState{},
+			challengeInfo: &himmelblau.MFAChallengeInfo{
+				Message:           "Open your Authenticator app and approve the sign-in request",
+				Method:            "PhoneAppNotification",
+				PollingIntervalMs: 1,
+				MaxPollAttempts:   1,
+			},
+		},
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+		registerDevice:        true,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraPassword))
+	_, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraPassword)
+	require.NoError(t, err)
+
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraMFAWait}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{""}, provider.recordedInitPasswords,
+		"the first step should be a passwordless probe")
+
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFAWait))
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
+	require.NoError(t, err)
+
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Contains(t, data, "timed out")
+	require.Equal(t, []string{authmodes.EntraPassword}, b.GetNextAuthModes(sessionID))
+
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraPassword))
+	layout, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraPassword)
+	require.NoError(t, err)
+	require.Equal(t, "true", layout["wait"],
+		"a passwordless MFA timeout should restart discovery, not assume the user has an Entra password")
+	require.Empty(t, layout["entry"])
+}
+
 func TestIsAuthenticatedEntraMFAWaitStartsPollingAtOne(t *testing.T) {
 	t.Parallel()
 
@@ -2440,6 +2658,57 @@ func TestIsAuthenticatedEntraMFAWaitDeniedWhenDeviceRegistrationFails(t *testing
 	require.Equal(t, broker.AuthDenied, access,
 		"device registration failure must deny auth: without device registration the token exchange and group resolution cannot succeed")
 	require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be valid JSON")
+}
+
+func TestIsAuthenticatedEntraMFAWaitFallsBackToClientSecretWhenPasswordlessRegistrationFails(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := &mockDeviceRegistrationFailProvider{
+		mockEntraPasswordProvider: &mockEntraPasswordProvider{
+			MockProvider: &testutils.MockProvider{},
+			flowState:    &himmelblau.MFAFlowState{},
+			challengeInfo: &himmelblau.MFAChallengeInfo{
+				Message:           "Approve the sign-in request in Microsoft Authenticator",
+				Method:            "PhoneAppNotification",
+				PollingIntervalMs: 5000,
+				MaxPollAttempts:   10,
+			},
+			mfaTokenResult: newMFATokenResult(mfaAuthInfo.Token),
+		},
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+		clientSecret:          "test-client-secret",
+		registerDevice:        true,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, username, sessionmode.Login)
+	updateAuthModes(t, b, sessionID, authmodes.EntraPassword)
+
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraMFAWait}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{""}, provider.recordedInitPasswords,
+		"the mixed-config path should still start with a passwordless probe")
+
+	updateAuthModes(t, b, sessionID, authmodes.EntraMFAWait)
+	access, _, err = b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access,
+		"first-time passwordless MFA should fall back to app-only Graph lookup when registration fails but a client secret is configured")
+	require.Equal(t, []string{authmodes.NewPassword}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, 1, provider.registerDeviceCalls,
+		"device registration should still be attempted before falling back to the client-secret path")
+	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID),
+		"passwordless fallback should still defer offline password caching until the local password step")
 }
 
 func TestIsAuthenticatedEntraMFADeniedWhenInitialGroupFetchFails(t *testing.T) {
@@ -3465,7 +3734,7 @@ func TestEntraPasswordRoutesAADSTSErrors(t *testing.T) {
 		"Account_locked":                               {aadsts: 50053, wantAccess: broker.AuthDenied, wantMsg: "locked"},
 		"Password_expired":                             {aadsts: 50055, wantAccess: broker.AuthDenied, wantMsg: "expired"},
 		"Invalid_credentials_retry":                    {aadsts: 50126, wantAccess: broker.AuthRetry, wantMsg: "Incorrect password"},
-		"Conditional_access_blocked":                   {aadsts: 53003, wantAccess: broker.AuthDenied, wantMsg: "Conditional Access"},
+		"Conditional_access_blocked":                   {aadsts: 53003, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "Conditional Access"},
 		"Interactive_auth_to_device":                   {aadsts: 16000, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
 		"Interactive_auth_denied_when_device_disabled": {aadsts: 16000, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled"},
 		"MFA_enrollment_to_device":                     {aadsts: 50072, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
@@ -4885,6 +5154,47 @@ func TestEntraMFAWaitAuthNoActiveMFAFlow(t *testing.T) {
 	require.Equal(t, broker.AuthDenied, access, "entra_mfa_wait with no active MFA flow must deny")
 }
 
+// TestEntraMFAWaitAuthReplaysStaleDuplicateCall verifies that a duplicate
+// IsAuthenticated call for entra_mfa_wait, arriving after the session already
+// completed successfully and moved on to a different mode, replays that
+// transition instead of denying an already-successful login. This is the
+// broker-level guard for a client sending a stray repeat call after success
+// (observed in practice with entra_mfa_fido, whose success path also frees
+// mfaFlowActive and switches nextAuthModes in one step).
+func TestEntraMFAWaitAuthReplaysStaleDuplicateCall(t *testing.T) {
+	t.Parallel()
+
+	provider := &mockEntraPasswordProvider{
+		MockProvider:  &testutils.MockProvider{},
+		flowState:     &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{PollingIntervalMs: 1, MaxPollAttempts: 1},
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@example.com", sessionmode.Login)
+
+	err := b.SetAvailableMode(sessionID, authmodes.EntraMFAWait)
+	require.NoError(t, err)
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
+	require.NoError(t, err)
+
+	// Simulate a prior successful call already having freed mfaFlowActive and
+	// chained to a different mode.
+	b.SetNextAuthModes(sessionID, []string{authmodes.NewPassword})
+
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access,
+		"a stray duplicate call after success must replay the transition, not deny")
+	require.Equal(t, []string{authmodes.NewPassword}, b.GetNextAuthModes(sessionID))
+}
+
 // TestEntraMFAWaitAuthNoChallengeMeta verifies that entraMFAWaitAuth returns
 // AuthDenied when the session has an active MFA flow but no challenge metadata
 // (another provider contract violation guard).
@@ -4972,6 +5282,40 @@ func TestEntraMFACodeAuthNoActiveMFAFlow(t *testing.T) {
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthDenied, access, "entra_mfa_code with no active MFA flow must deny")
+}
+
+// TestEntraMFACodeAuthReplaysStaleDuplicateCall mirrors
+// TestEntraMFAWaitAuthReplaysStaleDuplicateCall for entra_mfa_code.
+func TestEntraMFACodeAuthReplaysStaleDuplicateCall(t *testing.T) {
+	t.Parallel()
+
+	provider := &mockEntraPasswordProvider{
+		MockProvider:  &testutils.MockProvider{},
+		flowState:     &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{},
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@example.com", sessionmode.Login)
+
+	err := b.SetAvailableMode(sessionID, authmodes.EntraMFACode)
+	require.NoError(t, err)
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFACode)
+	require.NoError(t, err)
+
+	b.SetNextAuthModes(sessionID, []string{authmodes.NewPassword})
+
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access,
+		"a stray duplicate call after success must replay the transition, not deny")
+	require.Equal(t, []string{authmodes.NewPassword}, b.GetNextAuthModes(sessionID))
 }
 
 // TestIsAuthenticatedEntraMFAUsesVerifiedAccessTokenIdentity verifies that
@@ -5188,4 +5532,732 @@ func TestMain(m *testing.M) {
 	defer cleanup()
 
 	m.Run()
+}
+
+// mockFIDOAuthenticator implements broker.FIDOAuthenticator for tests.
+type mockFIDOAuthenticator struct {
+	devicePresent  bool
+	requiresPIN    bool
+	requiresPINErr error
+	assertion      string
+	assertErrs     []error // consumed one per Assert call; a nil entry means success
+
+	assertCalls        int
+	recordedChallenges []string
+	recordedAllowLists [][]string
+	recordedPINs       []string
+}
+
+func (m *mockFIDOAuthenticator) DevicePresent() bool { return m.devicePresent }
+
+func (m *mockFIDOAuthenticator) DeviceRequiresPIN() (bool, error) {
+	return m.requiresPIN, m.requiresPINErr
+}
+
+func (m *mockFIDOAuthenticator) Assert(_ context.Context, challenge string, allowList []string, pin string) (string, error) {
+	m.recordedChallenges = append(m.recordedChallenges, challenge)
+	m.recordedAllowLists = append(m.recordedAllowLists, allowList)
+	m.recordedPINs = append(m.recordedPINs, pin)
+	call := m.assertCalls
+	m.assertCalls++
+	if call < len(m.assertErrs) && m.assertErrs[call] != nil {
+		return "", m.assertErrs[call]
+	}
+	return m.assertion, nil
+}
+
+// newFIDOChallengeProvider returns a provider whose password step yields a
+// FidoKey challenge carrying WebAuthn data.
+func newFIDOChallengeProvider(mfaTokenResult *oauth2.Token) *mockEntraPasswordProvider {
+	return &mockEntraPasswordProvider{
+		MockProvider: &testutils.MockProvider{},
+		flowState:    &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{
+			Message:       "Use your security key",
+			Method:        "FidoKey",
+			FidoChallenge: "fido-challenge",
+			FidoAllowList: []string{"Y3JlZA=="},
+		},
+		mfaTokenResult: mfaTokenResult,
+	}
+}
+
+// TestIsAuthenticatedFIDOChallengeRouting verifies how a FidoKey challenge is
+// routed after the password step: to the local FIDO modes whenever this build
+// can perform the assertion (PIN mode first when a connected key requires one,
+// otherwise the assertion mode, which waits for a key to be inserted), and to
+// Device Authentication only when Entra sent no WebAuthn challenge.
+func TestIsAuthenticatedFIDOChallengeRouting(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		fido            *mockFIDOAuthenticator
+		noChallengeData bool
+
+		wantNextModes    []string
+		wantFidoInitOpts bool
+	}{
+		"Routes_to_fido_mode": {
+			fido:             &mockFIDOAuthenticator{devicePresent: true},
+			wantNextModes:    []string{authmodes.EntraMFAFido},
+			wantFidoInitOpts: true,
+		},
+		"Routes_to_pin_mode_when_key_requires_pin": {
+			fido:             &mockFIDOAuthenticator{devicePresent: true, requiresPIN: true},
+			wantNextModes:    []string{authmodes.EntraMFAFidoPin},
+			wantFidoInitOpts: true,
+		},
+		"Routes_to_fido_mode_when_pin_check_fails": {
+			fido:             &mockFIDOAuthenticator{devicePresent: true, requiresPINErr: errors.New("device error")},
+			wantNextModes:    []string{authmodes.EntraMFAFido},
+			wantFidoInitOpts: true,
+		},
+		"Waits_on_fido_mode_when_no_device_is_present_yet": {
+			fido:             &mockFIDOAuthenticator{devicePresent: false},
+			wantNextModes:    []string{authmodes.EntraMFAFido},
+			wantFidoInitOpts: true,
+		},
+		"Redirects_to_device_when_challenge_has_no_webauthn_data": {
+			fido:             &mockFIDOAuthenticator{devicePresent: true},
+			noChallengeData:  true,
+			wantNextModes:    []string{authmodes.Device, authmodes.DeviceQr},
+			wantFidoInitOpts: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := newFIDOChallengeProvider(nil)
+			if tc.noChallengeData {
+				provider.challengeInfo.FidoChallenge = ""
+				provider.challengeInfo.FidoAllowList = nil
+			}
+
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config:                broker.Config{DataDir: t.TempDir()},
+				ownerAllowed:          true,
+				firstUserBecomesOwner: true,
+				provider:              provider,
+				fidoAuthenticator:     tc.fido,
+				issuerURL:             defaultIssuerURL,
+				registerDevice:        true,
+			})
+
+			sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+			updateAuthModes(t, b, sessionID, authmodes.EntraPassword)
+
+			passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
+			access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
+			require.NoError(t, err)
+			require.Equal(t, broker.AuthNext, access)
+			require.Equal(t, tc.wantNextModes, b.GetNextAuthModes(sessionID))
+
+			wantOpts := []himmelblau.AuthOption(nil)
+			if tc.wantFidoInitOpts {
+				wantOpts = []himmelblau.AuthOption{himmelblau.AuthOptionFido}
+			}
+			require.Equal(t, [][]himmelblau.AuthOption{wantOpts}, provider.recordedInitAuthOpts,
+				"the FIDO auth option must be passed exactly when local FIDO support exists, so passwordless discovery still finds FIDO-only accounts even without a plugged-in key")
+		})
+	}
+}
+
+// TestIsAuthenticatedEntraMFAFidoSucceeds walks the full security-key MFA
+// chain: password -> PIN entry -> assertion -> granted.
+func TestIsAuthenticatedEntraMFAFidoSucceeds(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := newFIDOChallengeProvider(newMFATokenResult(mfaAuthInfo.Token))
+	fidoMock := &mockFIDOAuthenticator{
+		devicePresent: true,
+		requiresPIN:   true,
+		assertion:     `{"id":"assertion"}`,
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		fidoAuthenticator:     fidoMock,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	updateAuthModes(t, b, sessionID, authmodes.EntraPassword)
+
+	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
+	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraMFAFidoPin}, b.GetNextAuthModes(sessionID))
+
+	// PIN entry step.
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFAFidoPin))
+	layout, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAFidoPin)
+	require.NoError(t, err)
+	require.Equal(t, "chars_password", layout["entry"], "the PIN prompt must be a hidden entry")
+
+	pinAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "123456", key))
+	access, _, err = b.IsAuthenticated(sessionID, pinAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraMFAFido}, b.GetNextAuthModes(sessionID))
+
+	// Assertion step.
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFAFido))
+	layout, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAFido)
+	require.NoError(t, err)
+	require.Equal(t, "true", layout["wait"], "the assertion step must be a wait layout")
+
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access)
+	require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be valid JSON")
+
+	require.Equal(t, []string{"fido-challenge"}, fidoMock.recordedChallenges)
+	require.Equal(t, [][]string{{"Y3JlZA=="}}, fidoMock.recordedAllowLists)
+	require.Equal(t, []string{"123456"}, fidoMock.recordedPINs,
+		"the assertion must run with the PIN collected in the PIN step")
+	require.Equal(t, []string{`{"id":"assertion"}`}, provider.recordedChallengeData,
+		"the assertion JSON must be submitted to the MFA flow as auth data")
+	require.Equal(t, []int{0}, provider.recordedPollAttempts)
+
+	_, err = os.Stat(b.PasswordFilepathForSession(sessionID))
+	require.NoError(t, err, "FIDO MFA completion should cache the offline password")
+	_, err = os.Stat(b.TokenPathForSession(sessionID))
+	require.NoError(t, err, "FIDO MFA completion should cache the refreshed token")
+}
+
+// TestIsAuthenticatedEntraMFAFidoResumesAfterTransientCancel is a regression
+// test for the security-key login loop: a transient PAM cancel during the
+// WebAuthn assertion (e.g. GDM re-selecting the "touch your key" wait mode)
+// must leave the MFA flow intact so the resumed assertion completes. Tearing
+// the flow down on cancel stranded the session without an active MFA flow, so
+// the next assertion dead-ended and looped the user back through the password
+// probe.
+func TestIsAuthenticatedEntraMFAFidoResumesAfterTransientCancel(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := newFIDOChallengeProvider(newMFATokenResult(mfaAuthInfo.Token))
+	fidoMock := &mockFIDOAuthenticator{
+		devicePresent: true,
+		assertion:     `{"id":"assertion"}`,
+		// The first ceremony is cancelled; the second (nil entry) succeeds.
+		assertErrs: []error{fido.ErrCanceled},
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		fidoAuthenticator:     fidoMock,
+		issuerURL:             defaultIssuerURL,
+		registerDevice:        true,
+	})
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	advanceToEntraMFAFido(t, b, sessionID, key)
+
+	// First assertion is cancelled mid-ceremony.
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthCancelled, access, "a cancelled assertion must report cancellation")
+
+	// The resumed assertion on the same session must complete, rather than
+	// dead-ending on a torn-down flow and looping back to the password probe.
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFAFido))
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAFido)
+	require.NoError(t, err)
+
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access, "the resumed security-key assertion must succeed")
+	require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be valid JSON")
+}
+
+func TestPasswordlessFIDOFailureFallsBackToDeviceAuth(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]error{
+		"Generic_failure": errors.New("credential mismatch"),
+		"Blocked_PIN":     fido.ErrPINBlocked,
+	}
+	for name, assertErr := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := newFIDOChallengeProvider(nil)
+			fidoMock := &mockFIDOAuthenticator{
+				devicePresent: true,
+				assertErrs:    []error{assertErr},
+			}
+
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config:                broker.Config{DataDir: t.TempDir()},
+				ownerAllowed:          true,
+				firstUserBecomesOwner: true,
+				provider:              provider,
+				fidoAuthenticator:     fidoMock,
+				issuerURL:             defaultIssuerURL,
+				registerDevice:        true,
+			})
+
+			sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+			require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraPassword))
+			layout, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraPassword)
+			require.NoError(t, err)
+			require.Equal(t, "true", layout["wait"], "initial Entra Password selection should probe passwordless methods")
+
+			access, _, err := b.IsAuthenticated(sessionID, "{}")
+			require.NoError(t, err)
+			require.Equal(t, broker.AuthNext, access)
+			require.Equal(t, []string{authmodes.EntraMFAFido}, b.GetNextAuthModes(sessionID))
+			require.Equal(t, []string{""}, provider.recordedInitPasswords,
+				"the FIDO challenge should come from the passwordless probe")
+
+			require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFAFido))
+			_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAFido)
+			require.NoError(t, err)
+
+			access, _, err = b.IsAuthenticated(sessionID, "{}")
+			require.NoError(t, err)
+			require.Equal(t, broker.AuthNext, access)
+			require.Equal(t, []string{authmodes.Device, authmodes.DeviceQr}, b.GetNextAuthModes(sessionID))
+			require.NoFileExists(t, b.PasswordFilepathForSession(sessionID),
+				"a failed passwordless FIDO probe must not cache an offline password")
+		})
+	}
+}
+
+// TestPasswordlessProbeWithoutLocalKeyWaitsForInsertion verifies that a
+// passwordless FIDO-only account still routes to the local security-key step
+// when no key is plugged in yet: that step waits for insertion rather than
+// falling back to the device code flow.
+func TestPasswordlessProbeWithoutLocalKeyWaitsForInsertion(t *testing.T) {
+	t.Parallel()
+
+	provider := newFIDOChallengeProvider(nil)
+	fidoMock := &mockFIDOAuthenticator{devicePresent: false}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		fidoAuthenticator:     fidoMock,
+		issuerURL:             defaultIssuerURL,
+		registerDevice:        true,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraPassword))
+	layout, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraPassword)
+	require.NoError(t, err)
+	require.Equal(t, "true", layout["wait"], "the passwordless probe must auto-submit")
+	require.Empty(t, layout["entry"], "the passwordless probe must not prompt for an Entra password")
+
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraMFAFido}, b.GetNextAuthModes(sessionID),
+		"a passwordless FIDO-only account without a plugged-in key must wait on the security-key step, not fall back to device auth")
+	require.Equal(t, []string{""}, provider.recordedInitPasswords,
+		"the unplugged-key path must still start with a passwordless probe")
+	require.Equal(t, [][]himmelblau.AuthOption{{himmelblau.AuthOptionFido}}, provider.recordedInitAuthOpts,
+		"the passwordless probe must still advertise FIDO capability so Entra reveals the FIDO-only path")
+}
+
+// TestFIDOWaitTimesOutToDeviceAuth verifies that the security-key step does not
+// block forever when no key is ever inserted (a headless or SSH session): it
+// waits up to fidoDeviceWaitTimeout and then falls back to the device code flow.
+func TestFIDOWaitTimesOutToDeviceAuth(t *testing.T) {
+	restore := broker.SetFIDODeviceWaitTimeout(20 * time.Millisecond)
+	defer restore()
+
+	provider := newFIDOChallengeProvider(nil)
+	fidoMock := &mockFIDOAuthenticator{devicePresent: false}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		fidoAuthenticator:     fidoMock,
+		issuerURL:             defaultIssuerURL,
+		registerDevice:        true,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraPassword))
+	_, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraPassword)
+	require.NoError(t, err)
+
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraMFAFido}, b.GetNextAuthModes(sessionID))
+
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFAFido))
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAFido)
+	require.NoError(t, err)
+
+	access, _, err = b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.Device, authmodes.DeviceQr}, b.GetNextAuthModes(sessionID),
+		"a security-key step with no key ever inserted must fall back to the device code flow")
+}
+
+func TestPasswordlessFIDOSuccessRegistersDeviceAndChainsToNewPassword(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := newFIDOChallengeProvider(newMFATokenResult(mfaAuthInfo.Token))
+	fidoMock := &mockFIDOAuthenticator{
+		devicePresent: true,
+		assertion:     `{"id":"assertion"}`,
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		fidoAuthenticator:     fidoMock,
+		issuerURL:             defaultIssuerURL,
+		registerDevice:        true,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, username, sessionmode.Login)
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraPassword))
+	_, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraPassword)
+	require.NoError(t, err)
+
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraMFAFido}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{""}, provider.recordedInitPasswords,
+		"the FIDO challenge should come from the passwordless probe")
+
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFAFido))
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAFido)
+	require.NoError(t, err)
+
+	access, _, err = b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access,
+		"first-time passwordless FIDO should chain to local password creation after registering the device")
+	require.Equal(t, []string{authmodes.NewPassword}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, 1, provider.registerDeviceCalls,
+		"passwordless FIDO should attempt first-time device registration after MFA succeeds")
+	require.Equal(t, []string{`{"id":"assertion"}`}, provider.recordedChallengeData,
+		"the assertion JSON must be submitted to the MFA flow as auth data")
+	_, err = os.Stat(b.TokenPathForSession(sessionID))
+	require.NoError(t, err, "passwordless FIDO should cache the token once device registration succeeds")
+	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID),
+		"passwordless FIDO should still wait for the local password step before caching an offline password")
+}
+
+func TestPasswordlessServerRejectedFIDOFallsBackToDeviceAuth(t *testing.T) {
+	t.Parallel()
+
+	provider := &mockInvalidFIDOAssertionProvider{mockEntraPasswordProvider: newFIDOChallengeProvider(nil)}
+	fidoMock := &mockFIDOAuthenticator{
+		devicePresent: true,
+		assertion:     `{"id":"assertion"}`,
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		fidoAuthenticator:     fidoMock,
+		issuerURL:             defaultIssuerURL,
+		registerDevice:        true,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraPassword))
+	_, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraPassword)
+	require.NoError(t, err)
+
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraMFAFido}, b.GetNextAuthModes(sessionID))
+
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFAFido))
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAFido)
+	require.NoError(t, err)
+
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.Device, authmodes.DeviceQr}, b.GetNextAuthModes(sessionID),
+		"a passwordless FIDO assertion rejected by Entra must fall back to device auth instead of re-probing FIDO forever")
+	require.Contains(t, data, "device code flow")
+	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID),
+		"a passwordless FIDO rejection must not cache an offline password")
+}
+
+// TestEntraMFAFidoAuthReplaysStaleDuplicateCall verifies that a duplicate
+// IsAuthenticated call for entra_mfa_fido, arriving after the session already
+// completed the WebAuthn assertion and chained to a different mode (freeing
+// mfaFlowActive in the process), replays that transition instead of denying
+// an already-successful login. This is the case observed in practice: GDM
+// sent a second IsAuthenticated for entra_mfa_fido right after a successful
+// assertion had already moved the session to newpassword.
+func TestEntraMFAFidoAuthReplaysStaleDuplicateCall(t *testing.T) {
+	t.Parallel()
+
+	provider := newFIDOChallengeProvider(nil)
+	fidoMock := &mockFIDOAuthenticator{devicePresent: true}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		fidoAuthenticator:     fidoMock,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFAFido))
+	_, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAFido)
+	require.NoError(t, err)
+
+	// Simulate a prior successful call already having freed mfaFlowActive and
+	// chained to a different mode, without ever running the assertion here.
+	b.SetNextAuthModes(sessionID, []string{authmodes.NewPassword})
+
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access,
+		"a stray duplicate call after success must replay the transition, not deny")
+	require.Equal(t, []string{authmodes.NewPassword}, b.GetNextAuthModes(sessionID))
+	require.Empty(t, fidoMock.recordedChallenges, "a replayed call must not re-run the WebAuthn assertion")
+}
+
+// advanceToEntraMFAFido submits the Entra password for the session and selects
+// the entra_mfa_fido mode, leaving the session ready for the assertion
+// IsAuthenticated("{}").
+func advanceToEntraMFAFido(t *testing.T, b *broker.Broker, sessionID, key string) {
+	t.Helper()
+
+	updateAuthModes(t, b, sessionID, authmodes.EntraPassword)
+	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
+
+	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraMFAFido}, b.GetNextAuthModes(sessionID))
+
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFAFido))
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAFido)
+	require.NoError(t, err)
+}
+
+// TestIsAuthenticatedEntraMFAFidoAssertionErrors verifies the routing of
+// local WebAuthn ceremony failures.
+func TestIsAuthenticatedEntraMFAFidoAssertionErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		assertErr error
+
+		wantAccess      string
+		wantNextModes   []string
+		wantMsgContains string
+	}{
+		"PIN_required_routes_to_pin_mode": {
+			assertErr:       fido.ErrPINRequired,
+			wantAccess:      broker.AuthNext,
+			wantNextModes:   []string{authmodes.EntraMFAFidoPin},
+			wantMsgContains: "PIN",
+		},
+		"Invalid_PIN_reprompts_for_pin": {
+			assertErr:       fido.ErrPINInvalid,
+			wantAccess:      broker.AuthNext,
+			wantNextModes:   []string{authmodes.EntraMFAFidoPin},
+			wantMsgContains: "Incorrect",
+		},
+		"Blocked_PIN_denies": {
+			assertErr:       fido.ErrPINBlocked,
+			wantAccess:      broker.AuthDenied,
+			wantMsgContains: "blocked",
+		},
+		"Touch_timeout_retries_the_same_mode": {
+			assertErr:       fido.ErrTimeout,
+			wantAccess:      broker.AuthRetry,
+			wantMsgContains: "not touched in time",
+		},
+		"Cancellation_cancels": {
+			assertErr:  fido.ErrCanceled,
+			wantAccess: broker.AuthCancelled,
+		},
+		"Unplugged_device_retries_and_waits_for_reinsertion": {
+			assertErr:       fido.ErrNoDevice,
+			wantAccess:      broker.AuthRetry,
+			wantMsgContains: "reinsert",
+		},
+		"Other_failures_restart_from_password": {
+			assertErr:       errors.New("assertion exploded"),
+			wantAccess:      broker.AuthNext,
+			wantNextModes:   []string{authmodes.EntraPassword},
+			wantMsgContains: "failed",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := newFIDOChallengeProvider(nil)
+			fidoMock := &mockFIDOAuthenticator{
+				devicePresent: true,
+				assertErrs:    []error{tc.assertErr},
+			}
+
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config:                broker.Config{DataDir: t.TempDir()},
+				ownerAllowed:          true,
+				firstUserBecomesOwner: true,
+				provider:              provider,
+				fidoAuthenticator:     fidoMock,
+				issuerURL:             defaultIssuerURL,
+				registerDevice:        true,
+			})
+
+			sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+			advanceToEntraMFAFido(t, b, sessionID, key)
+
+			access, data, err := b.IsAuthenticated(sessionID, "{}")
+			require.NoError(t, err)
+			require.Equal(t, tc.wantAccess, access)
+
+			if tc.wantNextModes != nil {
+				require.Equal(t, tc.wantNextModes, b.GetNextAuthModes(sessionID))
+			}
+			if tc.wantMsgContains != "" {
+				var payload struct {
+					Message string `json:"message"`
+				}
+				require.NoError(t, json.Unmarshal([]byte(data), &payload))
+				require.Contains(t, payload.Message, tc.wantMsgContains)
+			}
+
+			require.NoFileExists(t, b.PasswordFilepathForSession(sessionID))
+		})
+	}
+}
+
+// TestIsAuthenticatedEntraMFAFidoPinValidation verifies the PIN entry mode's
+// input handling.
+func TestIsAuthenticatedEntraMFAFidoPinValidation(t *testing.T) {
+	t.Parallel()
+
+	provider := newFIDOChallengeProvider(nil)
+	fidoMock := &mockFIDOAuthenticator{devicePresent: true, requiresPIN: true}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		fidoAuthenticator:     fidoMock,
+		issuerURL:             defaultIssuerURL,
+		registerDevice:        true,
+	})
+
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	updateAuthModes(t, b, sessionID, authmodes.EntraPassword)
+
+	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
+	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraMFAFidoPin}, b.GetNextAuthModes(sessionID))
+
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFAFidoPin))
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAFidoPin)
+	require.NoError(t, err)
+
+	// An empty PIN must re-prompt rather than run the ceremony without one.
+	emptyPinData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "", key))
+	access, data, err := b.IsAuthenticated(sessionID, emptyPinData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthRetry, access)
+
+	var payload struct {
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(data), &payload))
+	require.Contains(t, payload.Message, "PIN")
+	require.Zero(t, fidoMock.assertCalls, "no assertion may run without the PIN")
+}
+
+// TestIsAuthenticatedEntraMFAFidoRejectedByEntra verifies the routing when the
+// local ceremony succeeds but Entra ID rejects the assertion.
+func TestIsAuthenticatedEntraMFAFidoRejectedByEntra(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		denied bool
+
+		wantAccess    string
+		wantNextModes []string
+	}{
+		"Denied_assertion_denies":            {denied: true, wantAccess: broker.AuthDenied},
+		"Other_errors_restart_from_password": {wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.EntraPassword}},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			// A nil mfaTokenResult makes the mock's AcquireTokenByMFAFlow fail
+			// with a generic error; the denied variant wraps it to return the
+			// MFA-denied classification instead.
+			base := newFIDOChallengeProvider(nil)
+			fidoMock := &mockFIDOAuthenticator{devicePresent: true, assertion: `{"id":"assertion"}`}
+
+			cfg := &brokerForTestConfig{
+				Config:                broker.Config{DataDir: t.TempDir()},
+				ownerAllowed:          true,
+				firstUserBecomesOwner: true,
+				provider:              base,
+				fidoAuthenticator:     fidoMock,
+				issuerURL:             defaultIssuerURL,
+				registerDevice:        true,
+			}
+			if tc.denied {
+				cfg.provider = &mockMFADeniedProvider{mockEntraPasswordProvider: base}
+			}
+			b := newBrokerForTests(t, cfg)
+
+			sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+			advanceToEntraMFAFido(t, b, sessionID, key)
+
+			access, _, err := b.IsAuthenticated(sessionID, "{}")
+			require.NoError(t, err)
+			require.Equal(t, tc.wantAccess, access)
+			if tc.wantNextModes != nil {
+				require.Equal(t, tc.wantNextModes, b.GetNextAuthModes(sessionID))
+			}
+			require.NoFileExists(t, b.PasswordFilepathForSession(sessionID))
+		})
+	}
 }

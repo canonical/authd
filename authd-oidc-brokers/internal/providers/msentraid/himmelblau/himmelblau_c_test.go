@@ -40,6 +40,8 @@ func TestMFAErrorCategoryMapping(t *testing.T) {
 		"MFA_INVALID_CODE must map to MFAErrorRetryableCode")
 	require.Equal(t, MFAErrorRequired, mfaErrorCategory(codeMFADAGFallbackDisab),
 		"MFA_DAG_FALLBACK_DISABLED must map to MFAErrorRequired")
+	require.Equal(t, MFAErrorPasswordRequired, mfaErrorCategory(codePasswordRequired),
+		"PASSWORD_REQUIRED must map to MFAErrorPasswordRequired")
 
 	// The original bug hardcoded mfaRequiredCode=24, which is actually
 	// AUTH_CODE_RECEIVED once the changepassword feature shifts the enum. That
@@ -61,4 +63,25 @@ func TestMFAErrorCategoryMapping(t *testing.T) {
 	require.Equal(t, uint32(26), codeAuthorizationDenied, "AUTHORIZATION_DENIED is expected to be 26")
 	require.Equal(t, uint32(27), codeMFAInvalidCode, "MFA_INVALID_CODE is expected to be 27")
 	require.Equal(t, uint32(28), codeMFADAGFallbackDisab, "MFA_DAG_FALLBACK_DISABLED is expected to be 28")
+}
+
+// TestCAuthOptionsMapping pins the translation from portable AuthOption values
+// to the C AuthOption enum.
+func TestCAuthOptionsMapping(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, cAuthOptions(nil),
+		"no options must produce an empty slice")
+	require.Equal(t, []uint32{cAuthOptionNoDAGFallback},
+		cAuthOptions([]AuthOption{AuthOptionNoDAGFallback}),
+		"AuthOptionNoDAGFallback must map to the C NoDAGFallback option")
+	require.Equal(t, []uint32{cAuthOptionNoDAGFallback, cAuthOptionFido},
+		cAuthOptions([]AuthOption{AuthOptionNoDAGFallback, AuthOptionFido}),
+		"AuthOptionFido must map to the C Fido option")
+	require.Equal(t, []uint32{cAuthOptionPasswordless},
+		cAuthOptions([]AuthOption{AuthOptionPasswordless}),
+		"AuthOptionPasswordless must map to the C Passwordless option")
+	require.Equal(t, []uint32{cAuthOptionNoDAGFallback, cAuthOptionFido},
+		cAuthOptions([]AuthOption{AuthOptionNoDAGFallback, AuthOptionFido, AuthOption(-1)}),
+		"unknown options must be ignored")
 }

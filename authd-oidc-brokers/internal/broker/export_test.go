@@ -2,6 +2,7 @@ package broker
 
 import (
 	"sync"
+	"time"
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 )
@@ -11,6 +12,15 @@ var (
 	IsFIDOMethod   = isFIDOMethod
 	IsPromptMethod = isPromptMethod
 )
+
+// SetFIDODeviceWaitTimeout overrides how long entraMFAFidoAuth waits for a
+// security key before falling back to the device code flow, so tests need not
+// wait the production timeout. It returns a func that restores the default.
+func SetFIDODeviceWaitTimeout(d time.Duration) (restore func()) {
+	prev := fidoDeviceWaitTimeout
+	fidoDeviceWaitTimeout = d
+	return func() { fidoDeviceWaitTimeout = prev }
+}
 
 func (cfg *Config) Init() {
 	cfg.ownerMutex = &sync.RWMutex{}
@@ -85,7 +95,7 @@ func (cfg *Config) SetAllowedSSHSuffixes(allowedSSHSuffixes []string) {
 func (cfg *Config) SetFlows(deviceAuth, entraPassword bool) {
 	cfg.flows = defaultFlowsConfig()
 	cfg.flows.DeviceAuth = deviceAuth
-	cfg.flows.EntraPassword = entraPassword
+	cfg.flows.EntraPassword = entraMFA
 }
 
 func (cfg *Config) SetProvider(provider provider) {

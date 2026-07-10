@@ -12,7 +12,7 @@ import (
 // EntraPasswordProvider is an optional interface that providers can implement
 // to support the Entra ID password + MFA authentication flow.
 type EntraPasswordProvider interface {
-	// InitiateEntraPasswordAuth starts the Entra password + MFA flow.
+	// InitiateEntraPasswordAuth starts the Entra password/passwordless + MFA flow.
 	// It submits credentials and returns an MFA challenge state.
 	// clientID is the OIDC application client ID (on_behalf_of_client_id);
 	// it is used to build the OIDC app inside the Rust layer so that the
@@ -20,6 +20,8 @@ type EntraPasswordProvider interface {
 	// When withDeviceScope is true, the MFA flow adds Intune enrollment
 	// resources to the token request (needed for PRT-based token exchange).
 	// When false, it uses only MS Graph scopes.
+	// authOpts toggles optional flow behaviors (e.g. AuthOptionFido to let
+	// Entra ID negotiate a FIDO/security-key challenge).
 	InitiateEntraPasswordAuth(
 		ctx context.Context,
 		clientID string,
@@ -27,6 +29,7 @@ type EntraPasswordProvider interface {
 		username, password string,
 		deviceRegistrationData []byte,
 		withDeviceScope bool,
+		authOpts ...AuthOption,
 	) (*MFAFlowState, *MFAChallengeInfo, error)
 
 	// AcquireTokenByMFAFlow completes the MFA challenge.
@@ -45,7 +48,7 @@ type EntraPasswordProvider interface {
 		deviceRegistrationData []byte,
 	) (*oauth2.Token, error)
 
-	// RefreshEntraPasswordToken refreshes a cached Entra password + MFA refresh
+	// RefreshEntraPasswordToken refreshes a cached Entra password/passwordless + MFA refresh
 	// token to re-verify the account against Entra ID on a returning login, the
 	// same way the device-auth flow's token refresh does. It is a plain OAuth2
 	// refresh as a public client (no client_secret) for basic scopes only — never
@@ -111,12 +114,43 @@ func FreeMFAFlowState(flow *MFAFlowState) {
 	flow.opaque = nil
 }
 
+// AuthOption toggles optional behaviors of the MFA flow initiation, mirroring
+// libhimmelblau's AuthOption without exposing its C enum values.
+type AuthOption int
+
+const (
+	// AuthOptionNoDAGFallback suppresses the silent Device Authorization Grant
+	// fallback in libhimmelblau. The broker surfaces MFA challenges through
+	// dedicated auth modes and never wants the DAG fallback, so this is always
+	// passed by InitiateMFAFlowWithPassword.
+	AuthOptionNoDAGFallback AuthOption = iota
+
+	// AuthOptionFido advertises that the caller can perform a FIDO/WebAuthn
+	// assertion. Without it, Entra ID may still select a FIDO method for the
+	// user, but libhimmelblau does not fetch the WebAuthn challenge, so the
+	// flow cannot be completed locally.
+	AuthOptionFido
+
+	// AuthOptionPasswordless asks libhimmelblau to attempt passwordless factors
+	// (Authenticator number-matching, TAP, FIDO/security key, ...) as primary
+	// authentication. It is the intent switch, orthogonal to the password
+	// argument: InitiateMFAFlow sets it whenever no password is supplied.
+	AuthOptionPasswordless
+)
+
 // MFAChallengeInfo describes the MFA challenge that must be presented to the user.
 type MFAChallengeInfo struct {
 	Message           string
 	Method            string
 	PollingIntervalMs int
 	MaxPollAttempts   int
+
+	// FidoChallenge is the WebAuthn challenge to sign when a FIDO method was
+	// negotiated. Empty for non-FIDO challenges.
+	FidoChallenge string
+	// FidoAllowList contains the credential IDs (base64-encoded) that Entra ID
+	// accepts for the FIDO assertion. Empty for non-FIDO challenges.
+	FidoAllowList []string
 }
 
 // MFAErrorCategory classifies an MFA error so the broker can route
@@ -139,6 +173,10 @@ const (
 	// re-enter the code without restarting the flow. See newMFAError for how
 	// this is detected.
 	MFAErrorRetryableCode
+	// MFAErrorPasswordRequired means a passwordless flow found no usable
+	// passwordless method for the account, so authentication needs the
+	// password flow instead.
+	MFAErrorPasswordRequired
 )
 
 // MFAError represents an error from initiating or continuing an MFA flow.
@@ -181,4 +219,11 @@ func (e *MFAError) IsMFARequired() bool {
 // can retry the code without restarting the flow.
 func (e *MFAError) IsMFARetryableCode() bool {
 	return e.Category == MFAErrorRetryableCode
+}
+
+// IsMFAPasswordRequired returns true if the error indicates that a
+// passwordless flow found no usable passwordless method for the account, so
+// authentication needs the password flow instead.
+func (e *MFAError) IsMFAPasswordRequired() bool {
+	return e.Category == MFAErrorPasswordRequired
 }

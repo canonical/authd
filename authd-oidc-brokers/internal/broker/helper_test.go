@@ -41,6 +41,7 @@ type brokerForTestConfig struct {
 	homeBaseDir                  string
 	allowedSSHSuffixes           []string
 	provider                     providers.Provider
+	fidoAuthenticator            broker.FIDOAuthenticator
 	apiVersion                   uint
 
 	getGroupsFails                bool
@@ -175,7 +176,17 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 		apiVersion = cfg.apiVersion
 	}
 
-	b, err := broker.New(cfg.Config, apiVersion, broker.WithCustomProvider(provider))
+	opts := []broker.Option{broker.WithCustomProvider(provider)}
+	// Override the FIDO authenticator when a mock is provided: the real one
+	// enumerates USB devices, which would make tests depend on the hardware
+	// plugged into the machine running them. When no mock is provided, leave
+	// the default (nil in non-withmsentraid builds) so fidoAvailable()
+	// reports false.
+	if cfg.fidoAuthenticator != nil {
+		opts = append(opts, broker.WithCustomFIDOAuthenticator(cfg.fidoAuthenticator))
+	}
+
+	b, err := broker.New(cfg.Config, apiVersion, opts...)
 	require.NoError(t, err, "Setup: New should not have returned an error")
 	return b
 }

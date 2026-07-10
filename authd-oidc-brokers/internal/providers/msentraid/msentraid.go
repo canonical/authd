@@ -756,7 +756,7 @@ func unmarshalOptionalDeviceRegistrationData(raw []byte) (*himmelblau.DeviceRegi
 	return data, nil
 }
 
-// InitiateEntraPasswordAuth starts the Entra password + MFA flow.
+// InitiateEntraPasswordAuth starts the Entra password/passwordless + MFA flow.
 func (p *Provider) InitiateEntraPasswordAuth(
 	ctx context.Context,
 	clientID string,
@@ -764,6 +764,7 @@ func (p *Provider) InitiateEntraPasswordAuth(
 	username, password string,
 	deviceRegistrationData []byte,
 	withDeviceScope bool,
+	authOpts ...himmelblau.AuthOption,
 ) (*himmelblau.MFAFlowState, *himmelblau.MFAChallengeInfo, error) {
 	tid := tenantID(issuerURL)
 
@@ -772,7 +773,7 @@ func (p *Provider) InitiateEntraPasswordAuth(
 		return nil, nil, err
 	}
 
-	return himmelblau.InitiateMFAFlowWithPassword(ctx, clientID, tid, data, username, password, withDeviceScope)
+	return himmelblau.InitiateMFAFlowWithPassword(ctx, clientID, tid, data, username, password, withDeviceScope, authOpts...)
 }
 
 // AcquireTokenByMFAFlow completes the MFA challenge.
@@ -796,14 +797,15 @@ func (p *Provider) AcquireTokenByMFAFlow(
 	return himmelblau.AcquireTokenByMFAFlow(ctx, clientID, tid, data, username, flow, authData, pollAttempt)
 }
 
-// RefreshEntraPasswordToken refreshes the cached Entra password + MFA refresh token
-// as the Microsoft Broker app (a public client, no client_secret) for basic scopes
-// only, to re-verify the account on a returning login. The Broker app is the client
-// that issued the family refresh token during the MFA flow; the configured OIDC app
-// cannot redeem it. Basic scopes (never Microsoft Graph) avoid the Broker-app↔Graph
-// preauthorization wall (AADSTS65002), so this works for any register_device setting.
-// A failure is returned as the underlying *oauth2.RetrieveError so the broker can
-// classify it exactly like the device-auth refresh.
+// RefreshEntraPasswordToken refreshes the cached Entra password/passwordless + MFA refresh
+// token as the Microsoft Broker app (a public client, no client_secret) for basic
+// scopes only, to re-verify the account on a returning login. The Broker app is the
+// client that issued the family refresh token during the MFA flow; the configured
+// OIDC app cannot redeem it. Basic scopes (never Microsoft Graph) avoid the
+// Broker-app↔Graph preauthorization wall (AADSTS65002), so this works for any
+// register_device setting. A failure is returned as the underlying
+// *oauth2.RetrieveError so the broker can classify it exactly like the device-auth
+// refresh.
 func (p *Provider) RefreshEntraPasswordToken(ctx context.Context, issuerURL, refreshToken string) (*oauth2.Token, error) {
 	tokenURL, err := clientCredentialsTokenURL(issuerURL)
 	if err != nil {
