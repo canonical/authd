@@ -151,7 +151,7 @@ func TestUserInfoFromAccessToken(t *testing.T) {
 	require.Equal(t, info.NewUser("test-user@email.com", "", "saved-user-id", "", "test-user", nil), got)
 }
 
-func TestRefreshEntraPasswordToken(t *testing.T) {
+func TestRefreshEntraToken(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
@@ -173,17 +173,17 @@ func TestRefreshEntraPasswordToken(t *testing.T) {
 			mockServer, cleanup := startMockMSServer(t, &mockMSServerConfig{RefreshHandler: tc.refreshHandler})
 			t.Cleanup(cleanup)
 
-			got, err := msentraid.New().RefreshEntraPasswordToken(
+			got, err := msentraid.New().RefreshEntraToken(
 				context.Background(),
 				mockServer.URL+"/tenant-id/v2.0",
 				"refreshtoken",
 			)
 			if tc.wantErr {
-				require.Error(t, err, "RefreshEntraPasswordToken should fail")
+				require.Error(t, err, "RefreshEntraToken should fail")
 				require.Contains(t, err.Error(), tc.wantErrSubstr, "unexpected error from refresh")
 				return
 			}
-			require.NoError(t, err, "RefreshEntraPasswordToken should succeed for an active user")
+			require.NoError(t, err, "RefreshEntraToken should succeed for an active user")
 			require.NotEmpty(t, got.AccessToken, "expected a rotated token on success")
 			require.Nil(t, got.Extra("preferred_username"), "refresh should not add redundant preferred_username extras")
 			require.Nil(t, got.Extra("sub"), "refresh should not add redundant sub extras")

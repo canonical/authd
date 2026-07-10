@@ -22,7 +22,7 @@ type Provider interface {
 	// SupportedOnlineAuthModes returns the authentication modes that require a
 	// working connection to the identity provider (in contrast to the local
 	// password mode, which the broker prepends). These are not necessarily OIDC
-	// flows: entra_password issues OAuth 2.0 tokens without an OIDC id_token.
+	// flows: entra_auth issues OAuth 2.0 tokens without an OIDC id_token.
 	SupportedOnlineAuthModes() []string
 	VerifyUsername(requestedUsername, authenticatedUsername string) error
 }
@@ -51,7 +51,7 @@ type DeviceRegisterer interface {
 	// IsTokenForDeviceRegistration reports whether the cached token carries
 	// device-registration data (i.e. the device was registered). This is the
 	// authoritative signal: tokens issued by the Microsoft Broker App (e.g. the
-	// entra_password MFA flow) are not device-registration tokens unless a device
+	// entra_auth flow) are not device-registration tokens unless a device
 	// was actually registered.
 	IsTokenForDeviceRegistration(authInfo *token.AuthCachedInfo) bool
 	MaybeRegisterDevice(

@@ -69,7 +69,7 @@ client_id = client_id
 
 [flows]
 device_code = false
-entra_password = false
+entra_auth = false
 `,
 
 	"valid+one_flow_disabled": `
@@ -79,7 +79,7 @@ client_id = client_id
 
 [flows]
 device_code = false
-entra_password = true
+entra_auth = true
 `,
 
 	"invalid_device_code_value": `
@@ -91,13 +91,13 @@ client_id = client_id
 device_code = not-a-bool
 `,
 
-	"invalid_entra_password_value": `
+	"invalid_entra_auth_value": `
 [oidc]
 issuer = https://issuer.url.com
 client_id = client_id
 
 [flows]
-entra_password = not-a-bool
+entra_auth = not-a-bool
 `,
 
 	"invalid_register_device_value": `
@@ -128,9 +128,9 @@ client_id = lower_precedence_client_id
 issuer = https://higher-precedence-issuer.url.com
 `,
 
-	"overwrite_enable_entra_password": `
+	"overwrite_enable_entra_auth": `
 [flows]
-entra_password = true
+entra_auth = true
 `,
 }
 
@@ -146,13 +146,13 @@ func TestParseConfig(t *testing.T) {
 		wantErr                         bool
 		wantErrContainsDropInConfigPath bool
 	}{
-		"Successfully_parse_config_file":                               {},
-		"Successfully_parse_config_file_with_optional_values":          {configType: "valid+optional"},
-		"Successfully_parse_config_file_with_register_device":          {configType: "valid+register_device"},
-		"Successfully_parse_config_file_with_flow_values":              {configType: "valid+one_flow_disabled"},
-		"Warns_and_uses_default_for_invalid_device_code_value":         {configType: "invalid_device_code_value"},
-		"Warns_and_uses_default_for_invalid_entra_password_flow_value": {configType: "invalid_entra_password_value"},
-		"Successfully_parse_config_with_drop_in_files":                 {dropInType: "valid"},
+		"Successfully_parse_config_file":                           {},
+		"Successfully_parse_config_file_with_optional_values":      {configType: "valid+optional"},
+		"Successfully_parse_config_file_with_register_device":      {configType: "valid+register_device"},
+		"Successfully_parse_config_file_with_flow_values":          {configType: "valid+one_flow_disabled"},
+		"Warns_and_uses_default_for_invalid_device_code_value":     {configType: "invalid_device_code_value"},
+		"Warns_and_uses_default_for_invalid_entra_auth_flow_value": {configType: "invalid_entra_auth_value"},
+		"Successfully_parse_config_with_drop_in_files":             {dropInType: "valid"},
 		"Successfully_parse_config_with_flow_drop_in_files": {
 			configType: "valid+flows_disabled",
 			dropInType: "flows",
@@ -216,7 +216,7 @@ func TestParseConfig(t *testing.T) {
 				err = os.WriteFile(confPath, []byte(configTypes["valid+optional"]), 0600)
 				require.NoError(t, err, "Setup: Failed to write config file")
 			case "flows":
-				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["overwrite_enable_entra_password"]), 0600)
+				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["overwrite_enable_entra_auth"]), 0600)
 				require.NoError(t, err, "Setup: Failed to write drop-in file")
 			case "unreadable-dir":
 				err = os.Chmod(dropInDir, 0000)

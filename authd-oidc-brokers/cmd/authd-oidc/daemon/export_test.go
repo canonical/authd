@@ -75,10 +75,10 @@ issuer = %s
 client_id = client_id
 
 [flows]
-# These tests don't exercise the entra_password flow, and the default
+# These tests don't exercise the entra_auth flow, and the default
 # (enabled) would fail startup validation under the withmsentraid tag
 # because no client_secret or register_device is configured here.
-entra_password = false
+entra_auth = false
 `, providerURL)
 	err = os.WriteFile(p, []byte(brokerCfg), 0600)
 	require.NoError(t, err, "Setup: could not create broker configuration for tests")
