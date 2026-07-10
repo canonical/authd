@@ -53,6 +53,7 @@ typedef struct _ActionData
   ModuleData      *module_data;
 
   GMainLoop       *loop;
+  GMainContext    *caller_context;
   GDBusConnection *connection;
   GCancellable    *cancellable;
   ActionType       current_action;
@@ -309,6 +310,7 @@ action_module_data_cleanup (ActionData *action_data)
 
   g_clear_object (&action_data->cancellable);
   g_clear_pointer (&action_data->loop, g_main_loop_unref);
+  g_clear_pointer (&action_data->caller_context, g_main_context_unref);
   g_clear_handle_id (&action_data->child_pid, g_spawn_close_pid);
 
   G_LOCK (logger);
@@ -648,6 +650,7 @@ on_pam_method_call (GDBusConnection       *connection,
     }
   else if (g_str_equal (method_name, "Prompt"))
     {
+      g_autoptr(GMainContextPusher) caller_context_pusher G_GNUC_UNUSED = NULL;
       g_autofree char *response = NULL;
       const char *prompt;
       int style;
@@ -655,6 +658,9 @@ on_pam_method_call (GDBusConnection       *connection,
 
       g_variant_get (parameters, "(i&s)", &style, &prompt);
 
+      /* PAM conversation callbacks belong to the calling application. */
+      caller_context_pusher =
+        g_main_context_pusher_new (action_data->caller_context);
       ret = pam_prompt (pamh, style, &response, "%s", prompt);
       g_dbus_method_invocation_return_value (invocation,
                                              g_variant_new ("(is)", ret,
@@ -969,7 +975,8 @@ do_pam_action_thread (pam_handle_t *pamh,
                       ActionType    action,
                       int           flags,
                       int           argc,
-                      const char  **argv)
+                      const char  **argv,
+                      GMainContext *caller_context)
 {
   ModuleData *module_data = NULL;
   g_autoptr(GMutexLocker) G_GNUC_UNUSED locker = NULL;
@@ -1094,6 +1101,7 @@ do_pam_action_thread (pam_handle_t *pamh,
 
   action_data.module_data = module_data;
   action_data.cancellable = g_cancellable_new ();
+  action_data.caller_context = g_main_context_ref (caller_context);
 
   main_context = g_main_context_ref (module_data->main_context);
   context_pusher = g_main_context_pusher_new (main_context);
@@ -1222,24 +1230,6 @@ do_pam_action_thread (pam_handle_t *pamh,
   return exit_status;
 }
 
-typedef struct
-{
-  pam_handle_t *pamh;
-  ActionType    action;
-  int           flags;
-  int           argc;
-  const char  **argv;
-} ActionThreadArgs;
-
-static inline gpointer
-do_pam_action_thread_adapter (gpointer data)
-{
-  ActionThreadArgs * args = data;
-  return GINT_TO_POINTER (do_pam_action_thread (args->pamh,
-                                                args->action, args->flags,
-                                                args->argc, args->argv));
-}
-
 static inline int
 do_pam_action (pam_handle_t *pamh,
                ActionType    action,
@@ -1247,7 +1237,7 @@ do_pam_action (pam_handle_t *pamh,
                int           argc,
                const char  **argv)
 {
-  g_autoptr(GThread) thread = NULL;
+  g_autoptr(GMainContext) caller_context = NULL;
 
 #ifndef AUTHD_TEST_EXEC_MODULE
   /* These actions aren't implemented in the go side, so let's just simplify
@@ -1265,15 +1255,8 @@ do_pam_action (pam_handle_t *pamh,
     }
 #endif
 
-  thread = g_thread_new (action_type_to_string (action),
-                         do_pam_action_thread_adapter, &(ActionThreadArgs){
-    .pamh = pamh,
-    .action = action,
-    .flags = flags,
-    .argc = argc,
-    .argv = argv,
-  });
-  return GPOINTER_TO_INT (g_thread_join (g_steal_pointer (&thread)));
+  caller_context = g_main_context_ref_thread_default ();
+  return do_pam_action_thread (pamh, action, flags, argc, argv, caller_context);
 }
 
 #define DEFINE_PAM_WRAPPER(name) \
