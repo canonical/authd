@@ -129,7 +129,7 @@ Ensure the API permission type is set to **Delegated** for each permission.
 The {guilabel}`GroupMember.Read.All` permission needs admin consent. Click on
 {guilabel}`Grant admin consent for <TENANT_NAME>` to provide this consent.
 
-If you plan to use the device code flow, you also need to allow public client
+If you plan to use the [device code flow](#device-code-flow), you also need to allow public client
 flows. In {menuselection}`Manage --> Authentication (Preview) --> Settings`,
 ensure that {guilabel}`Allow public client flows` is set to **Enabled**. This
 isn't required if only the Entra password flow is used, since it authenticates
@@ -515,7 +515,8 @@ The authd-oidc broker does not support device registration.
 ::::{tab-item} Google IAM
 :sync: google
 
-The Google IAM broker only supports the device code flow.
+The Google IAM broker only supports the device code flow, where the user visits a URL
+and enters a code to complete authentication.
 ::::
 
 ::::{tab-item} Microsoft Entra ID
@@ -532,7 +533,7 @@ Entra password + MFA and device code flow
 #entra_password = true
 
 ## Enable browser-based device code flow (default: true)
-#device_auth = true
+#device_code = true
 ```
 
 ### Entra password + MFA flow
@@ -555,31 +556,16 @@ instead.
 
 ### Device code flow
 
-When `device_auth` is enabled, the user is presented with a device code and
+When `device_code` is enabled, the user is presented with a device code and
 a URL to visit in a browser to complete authentication. This is the standard
 OAuth 2.0 Device Authorization Grant flow.
-
-### Disabling a flow
-
-To disable a flow, set its value to `false`:
-
-```ini
-[flows]
-## Disable Entra password + MFA, only offer device code flow
-entra_password = false
-```
-
-```{warning}
-At least one active bootstrap authentication flow must remain enabled. If both
-`device_auth` and `entra_password` are disabled, the broker logs an error and
-new users cannot authenticate until one of those flows is re-enabled.
-```
 ::::
 
 ::::{tab-item} Keycloak
 :sync: keycloak
 
-The authd-oidc broker does not support configuring authentication flows.
+The authd-oidc broker only supports the device code flow, where the user visits a URL
+and enters a code to complete authentication.
 ::::
 :::::
 
