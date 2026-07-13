@@ -425,18 +425,25 @@ func (m nativeModel) sendInfo(infoMsg string) error {
 	return err
 }
 
+func (m nativeModel) formatInfo(title, message string) string {
+	if m.serviceName == polkitServiceName {
+		return message
+	}
+	if message == "" {
+		return fmt.Sprintf("== %s ==", title)
+	}
+	return fmt.Sprintf("== %s ==\n%s", title, message)
+}
+
 type choicePair struct {
 	id    string
 	label string
 }
 
 func (m nativeModel) promptForChoiceWithMessage(title string, message string, choices []choicePair, prompt string) (string, error) {
-	var msg string
-	if m.serviceName != polkitServiceName {
-		msg = fmt.Sprintf("== %s ==\n", title)
-	}
-	if message != "" {
-		msg += message + "\n"
+	msg := m.formatInfo(title, message)
+	if msg != "" {
+		msg += "\n"
 	}
 
 	for i, choice := range choices {
@@ -662,15 +669,7 @@ func (m nativeModel) handleFormChallenge(hasWait bool) tea.Cmd {
 	if goBackLabel := m.goBackActionLabel(); goBackLabel != "" {
 		instructions = fmt.Sprintf(instructions, nativeCancelKey, m.goBackActionLabel())
 	}
-	var info string
-	if m.serviceName != polkitServiceName {
-		info = fmt.Sprintf("== %s ==", authMode)
-		if instructions != "" {
-			info += "\n" + instructions
-		}
-	} else {
-		info = instructions
-	}
+	info := m.formatInfo(authMode, instructions)
 	if cmd := maybeSendPamError(m.sendInfo(info)); cmd != nil {
 		return cmd
 	}
@@ -832,15 +831,7 @@ func (m nativeModel) newPasswordChallenge(previousPassword *string) tea.Cmd {
 				nativeCancelKey, goBackLabel)
 		}
 		title := m.selectedAuthModeLabel("Password Update")
-		var info string
-		if m.serviceName != polkitServiceName {
-			info = fmt.Sprintf("== %s ==", title)
-			if instructions != "" {
-				info += "\n" + instructions
-			}
-		} else {
-			info = instructions
-		}
+		info := m.formatInfo(title, instructions)
 		if cmd := maybeSendPamError(m.sendInfo(info)); cmd != nil {
 			return cmd
 		}
