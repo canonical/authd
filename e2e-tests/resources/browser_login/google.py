@@ -176,6 +176,9 @@ class GoogleLoginFlow:
 
     def _handle_sign_in_page(self) -> None:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-enter-username")
+        # Clear any text that may have accumulated in the field from previous
+        # attempts (due to the page-load race described in _handle_wrong_email).
+        self._clear_input_field(self._username)
         self._browser.send_key_taps(
             ascii_string_to_key_events(self._username) + [Gdk.KEY_Return])
 
@@ -207,11 +210,26 @@ class GoogleLoginFlow:
 
     def _handle_wrong_email(self) -> None:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-wrong-email")
-        self._browser.send_key_taps(len(self._username) * [Gdk.KEY_BackSpace])
+        # The error message stays in the DOM after clearing the field, so the
+        # next wait_for_pattern would still see it and re-enter this handler.
+        # Clear the field and retype the email immediately so the form is
+        # resubmitted and the error is dismissed within this single dispatch.
+        self._clear_input_field(self._username)
+        self._browser.send_key_taps(
+            ascii_string_to_key_events(self._username) + [Gdk.KEY_Return])
 
     def _handle_wrong_password(self) -> None:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-wrong-password")
-        self._browser.send_key_taps(len(self._password) * [Gdk.KEY_BackSpace])
+        self._clear_input_field(self._password)
+
+    def _clear_input_field(self, field_value: str) -> None:
+        """Delete all text from the focused input field.
+
+        Sends twice as many BackSpace events as the length of field_value to
+        account for text that may have accumulated from multiple typing attempts.
+        Extra BackSpaces beyond the actual content are harmless.
+        """
+        self._browser.send_key_taps(2 * len(field_value) * [Gdk.KEY_BackSpace])
 
 def login(browser, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):
     GoogleLoginFlow(browser, username, password, device_code, totp_secret, screenshot_dir).run()
