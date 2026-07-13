@@ -132,7 +132,7 @@ The {guilabel}`GroupMember.Read.All` permission needs admin consent. Click on
 If you plan to use the [device code flow](#device-code-flow), you also need to allow public client
 flows. In {menuselection}`Manage --> Authentication (Preview) --> Settings`,
 ensure that {guilabel}`Allow public client flows` is set to **Enabled**. This
-isn't required if only the Entra password flow is used, since it authenticates
+isn't required if only the Entra authentication flow is used, since it authenticates
 through the Microsoft Broker App rather than through this application
 registration.
 
@@ -524,21 +524,21 @@ and enters a code to complete authentication.
 
 The `[flows]` section of the broker configuration file controls which
 authentication flows are offered to the user at login. By default, both
-Entra password + MFA and device code flow
+Entra authentication and device code flow
 (browser-based) are enabled.
 
 ```ini
 [flows]
-## Enable Entra password + MFA authentication (default: true)
-#entra_password = true
+## Enable Entra authentication (default: true)
+#entra_auth = true
 
 ## Enable browser-based device code flow (default: true)
 #device_code = true
 ```
 
-### Entra password + MFA flow
+### Entra authentication flow
 
-When `entra_password` is enabled, the user can enter their Entra ID password
+When `entra_auth` is enabled, the user can enter their Entra ID password
 directly. After password verification, Microsoft Entra ID requires a second
 factor (MFA). The broker automatically handles the MFA challenge:
 
@@ -549,7 +549,7 @@ factor (MFA). The broker automatically handles the MFA challenge:
 
 ```{admonition} FIDO2/WebAuthn security key support
 :class: note
-FIDO2/WebAuthn security keys are currently not supported for the Entra password + MFA flow.
+FIDO2/WebAuthn security keys are currently not supported for the Entra authentication flow.
 If only FIDO methods are registered, the user is prompted to switch to the device code flow
 instead.
 ```

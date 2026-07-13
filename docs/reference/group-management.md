@@ -42,10 +42,10 @@ There are three types of groups:
 1. **Remote group**: All the other Azure groups the user is a member of.
 
 (reference::group-membership-resolution)=
-### Group membership resolution with Entra password + MFA
+### Group membership resolution with Entra authentication
 
 Group membership is read from the Microsoft Graph API. The access token obtained
-from the **Entra password + MFA** flow does not carry the `GroupMember.Read.All`
+from the **Entra authentication** flow does not carry the `GroupMember.Read.All`
 scope, so the groups are resolved in one of two ways:
 
 - **With device registration** (`register_device = true`): the device's primary
@@ -58,5 +58,5 @@ scope, so the groups are resolved in one of two ways:
   permission with tenant admin consent.
 
 If neither device registration nor a client secret is available, the
-**Entra password + MFA** flow is disabled at startup, because group membership
+**Entra authentication** flow is disabled at startup, because group membership
 could not be resolved.
