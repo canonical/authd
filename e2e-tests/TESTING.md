@@ -17,22 +17,33 @@ sudo ./e2e-tests/install-deps.sh
 
 ### 2. Configure
 
+#### Broker credentials
+
 For each broker you want to test, copy the corresponding template and fill in
-your credentials:
+your credentials (these files are gitignored):
+
+- For `authd-google`:
+  ```bash
+  cp e2e-tests/e2e-tests-google.env.template e2e-tests/e2e-tests-google.env
+  ```
+- For `authd-msentraid`:
+  ```bash
+  cp e2e-tests/e2e-tests-msentraid.env.template e2e-tests/e2e-tests-msentraid.env
+  ```
+
+#### VM provisioning config
+
+Copy `e2e-tests/vm/config.env.template` to `e2e-tests/vm/config.env` and set
+your SSH public key path (and optionally the default Ubuntu release and VM name
+prefix).
+
+If your SSH key is protected by a passphrase, add it to ssh-agent before
+provisioning. Note that ssh-agent entries do not persist across sessions, so
+you will need to run this again each time you start a new session:
 
 ```bash
-# For authd-google:
-cp e2e-tests/e2e-tests-google.env.template e2e-tests/e2e-tests-google.env
-
-# For authd-msentraid:
-cp e2e-tests/e2e-tests-msentraid.env.template e2e-tests/e2e-tests-msentraid.env
+ssh-add /path/to/key
 ```
-
-These files are gitignored.
-
-For VM provisioning, also copy `e2e-tests/vm/config.env.template` to
-`e2e-tests/vm/config.env` and set your SSH public key path (and optionally the
-default Ubuntu release and VM name prefix).
 
 ### 3. Provision the VM
 
