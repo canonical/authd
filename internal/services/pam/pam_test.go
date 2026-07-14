@@ -403,6 +403,7 @@ func TestIsAuthenticated(t *testing.T) {
 	tests := map[string]struct {
 		sessionID  string
 		existingDB string
+		dbReadOnly bool
 
 		username        string
 		secondCall      bool
@@ -420,6 +421,12 @@ func TestIsAuthenticated(t *testing.T) {
 		"Update_local_groups":                                  {username: "success_with_local_groups@example.com", localGroupsFile: "valid.group"},
 		"Successfully_authenticate_user_with_uppercase":        {username: "SUCCESS@example.com"},
 		"Successfully_authenticate_with_groups_with_uppercase": {username: "success_with_uppercase_groups@example.com"},
+
+		// DB write failure: UpdateBrokerForUser fails (read-only filesystem) but auth still succeeds.
+		// UpdateUser is a no-op because the DB already has up-to-date user info; the first actual
+		// write attempt (UpdateBrokerForUser) fails when SQLite cannot create the rollback-journal
+		// file in a read-only directory.
+		"Successfully_authenticate_even_if_db_write_fails": {username: "success@example.com", existingDB: "cache-with-uptodate-user.db", dbReadOnly: true},
 
 		// service errors
 		"Error_when_sessionID_is_empty": {sessionID: "-"},
@@ -465,6 +472,16 @@ func TestIsAuthenticated(t *testing.T) {
 			m, err := users.NewManager(users.DefaultConfig, dbDir, managerOpts...)
 			require.NoError(t, err, "Setup: could not create user manager")
 			t.Cleanup(func() { _ = m.Stop() })
+
+			if tc.dbReadOnly {
+				// Make the directory read-only after the manager has opened its
+				// connection so that SQLite cannot create the rollback-journal
+				// file.  Reads still succeed because they are served from the
+				// already-open connection's page cache.
+				require.NoError(t, os.Chmod(dbDir, 0o500), "Setup: could not make database directory read-only") //nolint:gosec // test-only permission change
+				t.Cleanup(func() { _ = os.Chmod(dbDir, 0o700) })                                                 //nolint:gosec // test-only cleanup
+			}
+
 			client := newPamClient(t, m, globalBrokerManager)
 
 			switch tc.sessionID {
