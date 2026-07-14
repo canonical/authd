@@ -128,6 +128,12 @@ Explain why, not what — the diff shows what changed.
 Don't narrate your activity ("Fixed X as requested") or describe the diff
 ("Add null check before calling Process()").
 
+### How to commit with correct wrapping
+
+Use `git commit -F -` with a heredoc and insert explicit newlines at
+word boundaries before reaching 72 characters. Do **not** use
+`git commit -m "..."` for multi-line messages — it will not wrap.
+
 ## Dependencies & Tools
 - **Go**: See `go.mod` for version requirements, uses go modules with vendoring
 - **Rust**: Cargo with vendor filtering (see `Cargo.toml` workspace)
