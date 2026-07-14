@@ -226,6 +226,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 
 		wantUserAlreadyExist bool
 		wantNotLoggedInUser  bool
+		wantNoHomeDir        bool
 		wantLocalGroups      bool
 
 		test func(t *testing.T, args sshPtyArgs)
@@ -255,21 +256,20 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			user:          "USER-SSH2@example.com",
 			test:          sshPtySimpleAuth,
 		},
-		// On Ubuntu 26.04 (OpenSSH 10.2+) check_pam_user() was added to sshd and
-		// rejects logins where PAM_USER doesn't match pw_name, so uppercase
-		// usernames are denied before authentication even starts.
+		// On Ubuntu 26.04 (OpenSSH 10.2+), check_pam_user() rejects logins
+		// when authd canonicalizes PAM_USER differently from the requested name.
 		"Deny_authentication_if_username_has_uppercase_on_ubuntu_26.04": {
 			ubuntuVersion: "26.04",
 			user: strings.ToUpper(testUserNameFull(t,
 				examplebroker.UserIntegrationPreCheckPrefix, "upper-case")),
-			wantNotLoggedInUser: true,
-			test:                sshPtyUppercaseRejected,
+			wantNoHomeDir: true,
+			test:          sshPtyUppercaseRejected,
 		},
 		"Deny_authentication_if_username_has_uppercase_and_already_registered_on_ubuntu_26.04": {
-			ubuntuVersion:       "26.04",
-			user:                "USER-SSH2@example.com",
-			wantNotLoggedInUser: true,
-			test:                sshPtyUppercaseRejected,
+			ubuntuVersion: "26.04",
+			user:          "USER-SSH2@example.com",
+			wantNoHomeDir: true,
+			test:          sshPtyUppercaseRejected,
 		},
 		"Authenticate_user_with_mfa": {
 			userPrefix: examplebroker.UserIntegrationMfaPrefix,
@@ -576,7 +576,11 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 					}
 				}
 
-				if !tc.wantUserAlreadyExist {
+				if tc.wantNoHomeDir {
+					_, err := os.Stat(userHome)
+					require.ErrorIs(t, err, os.ErrNotExist,
+						"Unexpected error checking for %q", userHome)
+				} else if !tc.wantUserAlreadyExist {
 					stat, err := os.Stat(userHome)
 					require.NoError(t, err, "Home directory does not exist: %q", userHome)
 					require.True(t, stat.IsDir(), "%q is not a directory", userHome)
@@ -1000,15 +1004,29 @@ func sshPtyUppercaseRejected(t *testing.T, args sshPtyArgs) {
 	c := startSSHForPty(t, args)
 
 	// sshd 10.2 rejects uppercase usernames because PAM_USER doesn't match pw_name.
-	// The PAM module detects this and returns a helpful error.
-	out := c.WaitFor(t, `uppercase characters|Disconnected from|Connection closed|Choose your provider`)
-	if strings.Contains(out, "Choose your provider") {
-		c.SendKey(t, ptytest.KeyCtrlC)
-	}
+	// Since sshd 10.2p1-2ubuntu3.3 that rejection is deferred until after PAM authentication.
+	// Complete that flow to verify it still rejects the login.
+	sshPtyCompleteDeferredUsernameRejection(t, c, "goodpass")
+	c.RequireExitCode(t, 255)
 	c.Close(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyCompleteDeferredUsernameRejection(t *testing.T, c *ptytest.Console, password string) {
+	t.Helper()
+
+	out := c.WaitFor(t, `uppercase characters|Connection closed|Choose your provider|Gimme your password`)
+	if strings.Contains(out, "Choose your provider") {
+		sendEchoedLine(t, c, "2")
+		c.WaitFor(t, `Gimme your password`)
+	} else if !strings.Contains(out, "Gimme your password") {
+		return
+	}
+
+	c.SendLine(t, password)
+	c.WaitFor(t, `uppercase characters|Disconnected from|Connection closed`)
 }
 
 func sshPtyMfaAuth(t *testing.T, args sshPtyArgs) {
@@ -1458,16 +1476,14 @@ func sshPtyMandatoryPasswordResetThenUppercaseRejected(t *testing.T, args sshPty
 
 	c.RequireSuccessfulExit(t)
 
-	// Second auth with uppercase username - should be rejected.
+	// Second auth with uppercase username may be rejected after PAM authentication.
+	got := sshPtySanitizeOutput(t, c.RawOutput())
 	upperUser := strings.ToUpper(args.user)
 	c2 := startSSHForPtyWithUser(t, args, upperUser)
-	c2.WaitFor(t, `uppercase characters|Disconnected from|Connection closed`)
-
+	sshPtyCompleteDeferredUsernameRejection(t, c2, "authd2404")
 	c2.RequireExitCode(t, 255)
 
-	// Combine outputs.
-	got := sshPtySanitizeOutput(t, c.RawOutput()) +
-		sshPtySanitizeOutput(t, c2.RawOutput())
+	got += sshPtySanitizeOutput(t, c2.RawOutput())
 	golden.CheckOrUpdate(t, got)
 }
 

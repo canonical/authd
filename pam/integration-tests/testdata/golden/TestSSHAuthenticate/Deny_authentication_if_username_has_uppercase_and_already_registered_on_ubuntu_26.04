@@ -1,1 +1,12 @@
-Connection closed by ${SSH_HOST} port ${SSH_PORT}
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(USER-SSH2@example.com@localhost) Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication flow
+(USER-SSH2@example.com@localhost) Gimme your password:
+>
+PAM Authenticate() finished for user 'user-ssh2@example.com'
+Received disconnect from ${SSH_HOST} port ${SSH_PORT} Too many authentication failures
+Disconnected from ${SSH_HOST} port ${SSH_PORT}
