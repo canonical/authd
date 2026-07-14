@@ -51,6 +51,7 @@ typedef struct
 typedef struct _ActionData
 {
   ModuleData      *module_data;
+  GMainContext    *action_context;
 
   GMainLoop       *loop;
   GDBusConnection *connection;
@@ -62,6 +63,10 @@ typedef struct _ActionData
   guint            object_registered_id;
   guint            log_handler_id;
   int              log_file_fd;
+
+#ifdef AUTHD_TEST_MODULE
+  GThread *main_thread;
+#endif
 } ActionData;
 
 const char *UBUNTU_AUTHD_PAM_OBJECT_NODE =
@@ -183,6 +188,64 @@ action_type_to_string (ActionType action_type)
     }
 
   g_return_val_if_reached ("unknown");
+}
+
+typedef struct
+{
+  pam_handle_t *pamh;
+
+  char *prompt;
+  int   style;
+  int   ret;
+  char *response;
+
+  GMutex   completion_mutex;
+  GCond    completion_cond;
+  gboolean completed;
+
+#ifdef AUTHD_TEST_MODULE
+  GThread      *main_thread;
+  GMainContext *action_context;
+#endif
+} PromptInvocationData;
+
+static void
+prompt_invocation_data_clear (PromptInvocationData *prompt_data)
+{
+  g_clear_pointer (&prompt_data->prompt, g_free);
+  g_clear_pointer (&prompt_data->response, g_free);
+#ifdef AUTHD_TEST_MODULE
+  g_clear_pointer (&prompt_data->action_context, g_main_context_unref);
+#endif
+
+  g_cond_clear (&prompt_data->completion_cond);
+  g_mutex_clear (&prompt_data->completion_mutex);
+}
+
+G_DEFINE_AUTO_CLEANUP_CLEAR_FUNC (PromptInvocationData,
+                                  prompt_invocation_data_clear);
+
+static gboolean
+invoke_prompt_on_main_thread (gpointer data)
+{
+  PromptInvocationData *prompt_data = data;
+
+#ifdef AUTHD_TEST_MODULE
+  g_assert (prompt_data->main_thread == g_thread_self ());
+  g_assert (g_main_context_is_owner (prompt_data->action_context));
+#endif
+
+  prompt_data->ret = pam_prompt (prompt_data->pamh,
+                                 prompt_data->style,
+                                 &prompt_data->response, "%s",
+                                 prompt_data->prompt);
+
+  g_mutex_lock (&prompt_data->completion_mutex);
+  prompt_data->completed = TRUE;
+  g_cond_signal (&prompt_data->completion_cond);
+  g_mutex_unlock (&prompt_data->completion_mutex);
+
+  return G_SOURCE_REMOVE;
 }
 
 G_GNUC_PRINTF (3, 4)
@@ -308,13 +371,14 @@ action_module_data_cleanup (ActionData *action_data)
   g_log_set_debug_enabled (FALSE);
 
   g_clear_object (&action_data->cancellable);
+  g_clear_pointer (&action_data->action_context, g_main_context_unref);
   g_clear_pointer (&action_data->loop, g_main_loop_unref);
   g_clear_handle_id (&action_data->child_pid, g_spawn_close_pid);
 
   G_LOCK (logger);
   if (action_data->log_handler_id)
     g_log_remove_handler (G_LOG_DOMAIN, action_data->log_handler_id);
-#if AUTHD_TEST_MODULE
+#ifdef AUTHD_TEST_MODULE
   /* During tests we are catching catch all the domains! */
   g_log_set_default_handler (g_log_default_handler, NULL);
 #endif
@@ -405,9 +469,9 @@ is_debug_logging_enabled ()
 
 typedef struct
 {
-  pid_t              child_pid;
-  GMainLoop         *main_loop;
-  GDBusConnection  **connection_ptr;
+  pid_t             child_pid;
+  GMainLoop        *main_loop;
+  GDBusConnection **connection_ptr;
 } WaitChildThreadData;
 
 static gpointer
@@ -648,17 +712,42 @@ on_pam_method_call (GDBusConnection       *connection,
     }
   else if (g_str_equal (method_name, "Prompt"))
     {
-      g_autofree char *response = NULL;
-      const char *prompt;
+      g_auto(PromptInvocationData) prompt_data = {0};
+      g_autofree char *prompt = NULL;
       int style;
-      int ret;
 
-      g_variant_get (parameters, "(i&s)", &style, &prompt);
+      g_variant_get (parameters, "(is)", &style, &prompt);
 
-      ret = pam_prompt (pamh, style, &response, "%s", prompt);
+      prompt_data = (PromptInvocationData){
+        .pamh = action_data->module_data->pamh,
+#ifdef AUTHD_TEST_MODULE
+        .main_thread = action_data->main_thread,
+        .action_context = g_main_context_ref (action_data->action_context),
+#endif
+        .style = style,
+        .prompt = g_steal_pointer (&prompt),
+      };
+
+      g_mutex_init (&prompt_data.completion_mutex);
+      g_cond_init (&prompt_data.completion_cond);
+
+      g_main_context_invoke (action_data->action_context,
+                             invoke_prompt_on_main_thread,
+                             &prompt_data);
+
+      g_mutex_lock (&prompt_data.completion_mutex);
+      while (!prompt_data.completed)
+        {
+          g_cond_wait (&prompt_data.completion_cond,
+                       &prompt_data.completion_mutex);
+        }
+      g_mutex_unlock (&prompt_data.completion_mutex);
+
       g_dbus_method_invocation_return_value (invocation,
-                                             g_variant_new ("(is)", ret,
-                                                            response ? response : ""));
+                                             g_variant_new ("(is)",
+                                                            prompt_data.ret,
+                                                            prompt_data.response ?
+                                                            prompt_data.response : ""));
     }
   else
     {
@@ -968,6 +1057,10 @@ static int
 do_pam_action_thread (pam_handle_t *pamh,
                       ActionType    action,
                       int           flags,
+                      GMainContext *action_context,
+#ifdef AUTHD_TEST_MODULE
+                      GThread      *main_thread,
+#endif
                       int           argc,
                       const char  **argv)
 {
@@ -1093,7 +1186,11 @@ do_pam_action_thread (pam_handle_t *pamh,
   g_atomic_pointer_compare_and_exchange (&module_data->server, NULL, g_object_ref (server));
 
   action_data.module_data = module_data;
+  action_data.action_context = g_main_context_ref (action_context);
   action_data.cancellable = g_cancellable_new ();
+#ifdef AUTHD_TEST_MODULE
+  action_data.main_thread = main_thread;
+#endif
 
   main_context = g_main_context_ref (module_data->main_context);
   context_pusher = g_main_context_pusher_new (main_context);
@@ -1229,15 +1326,41 @@ typedef struct
   int           flags;
   int           argc;
   const char  **argv;
+#ifdef AUTHD_TEST_MODULE
+  GThread      *main_thread;
+#endif
+  GMainContext *action_context;
+  GMainLoop    *action_loop;
 } ActionThreadArgs;
+
+static inline gboolean
+quit_loop_source_callback (gpointer data)
+{
+  GMainLoop *action_loop = data;
+
+  g_main_loop_quit (action_loop);
+  return G_SOURCE_REMOVE;
+}
 
 static inline gpointer
 do_pam_action_thread_adapter (gpointer data)
 {
   ActionThreadArgs * args = data;
-  return GINT_TO_POINTER (do_pam_action_thread (args->pamh,
-                                                args->action, args->flags,
-                                                args->argc, args->argv));
+  int ret = do_pam_action_thread (args->pamh,
+                                  args->action, args->flags,
+                                  args->action_context,
+#ifdef AUTHD_TEST_MODULE
+                                  args->main_thread,
+#endif
+                                  args->argc, args->argv);
+
+  g_main_context_invoke_full (args->action_context,
+                              G_PRIORITY_DEFAULT,
+                              quit_loop_source_callback,
+                              g_main_loop_ref (args->action_loop),
+                              (GDestroyNotify) g_main_loop_unref);
+
+  return GINT_TO_POINTER (ret);
 }
 
 static inline int
@@ -1247,6 +1370,8 @@ do_pam_action (pam_handle_t *pamh,
                int           argc,
                const char  **argv)
 {
+  g_autoptr(GMainContext) action_context = NULL;
+  g_autoptr(GMainLoop) action_loop = NULL;
   g_autoptr(GThread) thread = NULL;
 
 #ifndef AUTHD_TEST_EXEC_MODULE
@@ -1260,19 +1385,33 @@ do_pam_action (pam_handle_t *pamh,
     case action_type_open_session:
     case action_type_close_session:
       return PAM_IGNORE;
+
     default:
       break;
     }
 #endif
 
-  thread = g_thread_new (action_type_to_string (action),
-                         do_pam_action_thread_adapter, &(ActionThreadArgs){
+  action_context = g_main_context_new ();
+  action_loop = g_main_loop_new (action_context, FALSE);
+
+  ActionThreadArgs thread_args = {
     .pamh = pamh,
     .action = action,
     .flags = flags,
+#ifdef AUTHD_TEST_MODULE
+    .main_thread = g_thread_self (),
+#endif
     .argc = argc,
     .argv = argv,
-  });
+    .action_context = action_context,
+    .action_loop = action_loop,
+  };
+
+  thread = g_thread_new (action_type_to_string (action),
+                         do_pam_action_thread_adapter, &thread_args);
+
+  g_main_loop_run (action_loop);
+
   return GPOINTER_TO_INT (g_thread_join (g_steal_pointer (&thread)));
 }
 
