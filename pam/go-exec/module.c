@@ -757,6 +757,9 @@ on_pam_method_call (GDBusConnection       *connection,
       variant_key = sanitize_variant_key (key);
       ret = pam_set_data (pamh, variant_key, variant, on_variant_data_removed);
       g_dbus_method_invocation_return_value (invocation, g_variant_new ("(i)", ret));
+
+      if (ret != PAM_SUCCESS)
+        g_clear_pointer (&variant, g_variant_unref);
     }
   else if (g_str_equal (method_name, "UnsetData"))
     {
