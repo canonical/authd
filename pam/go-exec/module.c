@@ -190,6 +190,44 @@ action_type_to_string (ActionType action_type)
   g_return_val_if_reached ("unknown");
 }
 
+typedef struct
+{
+  ActionData   *action_data;
+  char         *message;
+
+  GMutex        completion_mutex;
+  GCond         completion_cond;
+  gboolean      completed;
+} PamErrorInvocationData;
+
+static gboolean
+invoke_pam_error_on_action_context (gpointer data)
+{
+  PamErrorInvocationData *invocation = data;
+  ActionData *action_data = invocation->action_data;
+
+#if AUTHD_TEST_MODULE
+  g_assert (action_data->main_thread == g_thread_self ());
+#endif
+
+  pam_error (action_data->pamh, "%s", invocation->message);
+
+  g_mutex_lock (&invocation->completion_mutex);
+  invocation->completed = TRUE;
+  g_cond_signal (&invocation->completion_cond);
+  g_mutex_unlock (&invocation->completion_mutex);
+
+  return G_SOURCE_REMOVE;
+}
+
+static void
+pam_error_invocation_data_clear (gpointer data)
+{
+  PamErrorInvocationData *invocation = data;
+
+  g_clear_pointer (&invocation->message, g_free);
+}
+
 G_GNUC_PRINTF (2, 3)
 static void
 notify_error (ActionData *action_data,
@@ -214,7 +252,29 @@ notify_error (ActionData *action_data,
   else
     g_warning ("%s: %s", action, message);
 
-  pam_error (action_data->pamh, "%s: %s", action, message);
+  PamErrorInvocationData invocation = {
+    .action_data = action_data,
+    .message = g_strdup_printf ("%s: %s", action, message),
+    .completed = FALSE,
+  };
+
+  g_mutex_init (&invocation.completion_mutex);
+  g_cond_init (&invocation.completion_cond);
+
+  g_assert (action_data->action_context);
+  g_main_context_invoke_full (action_data->action_context,
+                              G_PRIORITY_DEFAULT,
+                              invoke_pam_error_on_action_context,
+                              &invocation,
+                              pam_error_invocation_data_clear);
+
+  g_mutex_lock (&invocation.completion_mutex);
+  while (!invocation.completed)
+    g_cond_wait (&invocation.completion_cond, &invocation.completion_mutex);
+  g_mutex_unlock (&invocation.completion_mutex);
+
+  g_cond_clear (&invocation.completion_cond);
+  g_mutex_clear (&invocation.completion_mutex);
 }
 
 static GLogWriterOutput
@@ -505,7 +565,7 @@ invoke_prompt_on_main_thread (gpointer data)
   g_autofree char *response = NULL;
   int ret;
 
-#if AUTHD_TEST_MODULE
+#ifdef AUTHD_TEST_MODULE
   g_assert (action_data->main_thread == g_thread_self ());
   g_assert (g_main_context_is_owner (action_data->action_context));
 #endif
@@ -1036,9 +1096,12 @@ do_pam_action_thread (pam_handle_t *pamh,
   ModuleData *module_data = NULL;
   g_autoptr(GMutexLocker) G_GNUC_UNUSED locker = NULL;
   g_auto(ActionData) action_data = {
-    .current_action = action,
     .pamh = pamh,
-    0
+    .current_action = action,
+    .action_context = g_main_context_ref (action_context),
+#ifdef AUTHD_TEST_MODULE
+    .main_thread = main_thread,
+#endif
   };
   g_autoptr(GMainContextPusher) context_pusher G_GNUC_UNUSED = NULL;
   g_autoptr(GMainContext) main_context = NULL;
@@ -1159,11 +1222,7 @@ do_pam_action_thread (pam_handle_t *pamh,
   g_atomic_pointer_compare_and_exchange (&module_data->server, NULL, g_object_ref (server));
 
   action_data.module_data = module_data;
-  action_data.action_context = g_main_context_ref (action_context);
   action_data.cancellable = g_cancellable_new ();
-#ifdef AUTHD_TEST_MODULE
-  action_data.main_thread = main_thread;
-#endif
 
   main_context = g_main_context_ref (module_data->main_context);
   context_pusher = g_main_context_pusher_new (main_context);
