@@ -190,29 +190,31 @@ action_type_to_string (ActionType action_type)
   g_return_val_if_reached ("unknown");
 }
 
-G_GNUC_PRINTF (3, 4)
+G_GNUC_PRINTF (2, 3)
 static void
-notify_error (pam_handle_t *pamh,
-              ActionType    action_type,
-              const char   *format,
+notify_error (ActionData *action_data,
+              const char *format,
               ...)
 {
-  const char *action = action_type_to_string (action_type);
   g_autofree char *message = NULL;
+  const char *action;
   va_list args;
 
+  g_return_if_fail (action_data != NULL);
   g_return_if_fail (format != NULL);
 
   va_start (args, format);
   message = g_strdup_vprintf (format, args);
   va_end (args);
 
+  action = action_type_to_string (action_data->current_action);
+
   if (isatty (STDERR_FILENO)) \
     g_debug ("%s: %s", action, message);
   else
     g_warning ("%s: %s", action, message);
 
-  pam_error (pamh, "%s: %s", action, message);
+  pam_error (action_data->pamh, "%s: %s", action, message);
 }
 
 static GLogWriterOutput
@@ -762,7 +764,6 @@ on_new_connection (G_GNUC_UNUSED GDBusServer *server,
   g_autoptr(GDBusNodeInfo) node = NULL;
   g_autoptr(GError) error = NULL;
   ActionData *action_data = user_data;
-  pam_handle_t *pamh = action_data->pamh;
   GCredentials *credentials;
   pid_t client_pid;
 
@@ -770,21 +771,21 @@ on_new_connection (G_GNUC_UNUSED GDBusServer *server,
 
   if (action_data->connection)
     {
-      notify_error (pamh, action_data->current_action,
+      notify_error (action_data,
                     "Another client is already using this connection");
       return FALSE;
     }
 
   if (!G_IS_CREDENTIALS (credentials))
     {
-      notify_error (pamh, action_data->current_action,
+      notify_error (action_data,
                     "Impossible to get credentials, refusing the connection...");
       return FALSE;
     }
 
   if ((client_pid = g_credentials_get_unix_pid (credentials, &error)) == -1)
     {
-      notify_error (pamh, action_data->current_action,
+      notify_error (action_data,
                     "Impossible to get client PID (%s), refusing the connection...",
                     error->message);
       return FALSE;
@@ -801,7 +802,7 @@ on_new_connection (G_GNUC_UNUSED GDBusServer *server,
     {
       const char *test_name;
 
-      test_name = pam_getenv (pamh, "AUTHD_PAM_CLI_TEST_NAME");
+      test_name = pam_getenv (action_data->pamh, "AUTHD_PAM_CLI_TEST_NAME");
       g_debug ("%s: Client pid %d does not match with expected %d",
                test_name, client_pid, action_data->child_pid);
 
@@ -812,7 +813,7 @@ on_new_connection (G_GNUC_UNUSED GDBusServer *server,
 
   if (client_pid != action_data->child_pid && client_pid != getpid ())
     {
-      notify_error (pamh, action_data->current_action,
+      notify_error (action_data,
                     "Child PID is not matching the expected one");
       return FALSE;
     }
@@ -820,7 +821,7 @@ on_new_connection (G_GNUC_UNUSED GDBusServer *server,
   node = g_dbus_node_info_new_for_xml (UBUNTU_AUTHD_PAM_OBJECT_NODE, &error);
   if (!node)
     {
-      notify_error (pamh, action_data->current_action,
+      notify_error (action_data,
                     "Can't create node: %s", error->message);
       return FALSE;
     }
@@ -1082,7 +1083,7 @@ do_pam_action_thread (pam_handle_t *pamh,
   if (!handle_module_options (argc, argv, &args, &env_variables, &log_file, &error))
     {
       G_UNLOCK (logger);
-      notify_error (pamh, action, "impossible to parse arguments: %s", error->message);
+      notify_error (&action_data, "impossible to parse arguments: %s", error->message);
       return PAM_SYSTEM_ERR;
     }
 
@@ -1123,13 +1124,13 @@ do_pam_action_thread (pam_handle_t *pamh,
   module_data = setup_shared_module_data (pamh);
   if (module_data == NULL)
     {
-      notify_error (pamh, action, "can't create module data");
+      notify_error (&action_data, "can't create module data");
       return PAM_SYSTEM_ERR;
     }
 
   if (!args || args->len < 1)
     {
-      notify_error (pamh, action, "no executable provided");
+      notify_error (&action_data, "no executable provided");
       return PAM_MODULE_UNKNOWN;
     }
 
@@ -1137,20 +1138,20 @@ do_pam_action_thread (pam_handle_t *pamh,
 
   if (!exe || *exe == '\0')
     {
-      notify_error (pamh, action, "no valid module name provided");
+      notify_error (&action_data, "no valid module name provided");
       return PAM_MODULE_UNKNOWN;
     }
 
   if (!g_file_test (exe, G_FILE_TEST_IS_EXECUTABLE))
     {
-      notify_error (pamh, action, "Impossible to use %s as PAM executable", exe);
+      notify_error (&action_data, "Impossible to use %s as PAM executable", exe);
       return PAM_MODULE_UNKNOWN;
     }
 
   server = setup_dbus_server (pamh, module_data, &error);
   if (!server)
     {
-      notify_error (pamh, action, "can't create D-Bus connection: %s", error->message);
+      notify_error (&action_data, "can't create D-Bus connection: %s", error->message);
       return PAM_SYSTEM_ERR;
     }
 
@@ -1173,21 +1174,21 @@ do_pam_action_thread (pam_handle_t *pamh,
     {
       if ((stdin_fd = dup_fd_checked (STDIN_FILENO, &error)) < 0)
         {
-          notify_error (pamh, action, "can't duplicate stdin file descriptor: %s",
+          notify_error (&action_data, "can't duplicate stdin file descriptor: %s",
                         error->message);
           return PAM_SYSTEM_ERR;
         }
 
       if ((stdout_fd = dup_fd_checked (STDOUT_FILENO, &error)) < 0)
         {
-          notify_error (pamh, action, "can't duplicate stdout file descriptor: %s",
+          notify_error (&action_data, "can't duplicate stdout file descriptor: %s",
                         error->message);
           return PAM_SYSTEM_ERR;
         }
 
       if ((stderr_fd = dup_fd_checked (STDERR_FILENO, &error)) < 0)
         {
-          notify_error (pamh, action, "can't duplicate stderr file descriptor: %s",
+          notify_error (&action_data, "can't duplicate stderr file descriptor: %s",
                         error->message);
           return PAM_SYSTEM_ERR;
         }
@@ -1255,7 +1256,7 @@ do_pam_action_thread (pam_handle_t *pamh,
                                stderr_fd,
                                &error))
     {
-      notify_error (pamh, action, "can't launch %s: %s", exe, error->message);
+      notify_error (&action_data, "can't launch %s: %s", exe, error->message);
       return PAM_SYSTEM_ERR;
     }
 
@@ -1276,7 +1277,7 @@ do_pam_action_thread (pam_handle_t *pamh,
 
   if (exit_status < 0)
     {
-      notify_error (pamh, action, "Waiting for PID %" G_PID_FORMAT
+      notify_error (&action_data, "Waiting for PID %" G_PID_FORMAT
                     " failed with error %s", child_pid,
                     g_strerror (-exit_status));
       exit_status = PAM_SYSTEM_ERR;
