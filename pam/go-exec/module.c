@@ -298,6 +298,7 @@ notify_error (ActionData *action_data,
               ...)
 {
   g_autofree char *message = NULL;
+  g_autofree char *prompt = NULL;
   const char *action;
   va_list args;
 
@@ -309,13 +310,14 @@ notify_error (ActionData *action_data,
   va_end (args);
 
   action = action_type_to_string (action_data->current_action);
+  prompt = g_strdup_printf ("%s: %s", action, message);
 
   if (isatty (STDERR_FILENO)) \
-    g_debug ("%s: %s", action, message);
+    g_debug ("%s", prompt);
   else
-    g_warning ("%s: %s", action, message);
+    g_warning ("%s", prompt);
 
-  pam_error (action_data->pamh, "%s: %s", action, message);
+  conversation_invocation_run (action_data, PAM_ERROR_MSG, prompt, NULL);
 }
 
 static GLogWriterOutput
@@ -1086,9 +1088,13 @@ do_pam_action_thread (pam_handle_t *pamh,
   ModuleData *module_data = NULL;
   g_autoptr(GMutexLocker) G_GNUC_UNUSED locker = NULL;
   g_auto(ActionData) action_data = {
-    .current_action = action,
     .pamh = pamh,
-    0
+    .cancellable = g_cancellable_new (),
+    .current_action = action,
+    .action_context = g_main_context_ref (action_context),
+#ifdef AUTHD_TEST_MODULE
+    .main_thread = main_thread,
+#endif
   };
   g_autoptr(GMainContextPusher) context_pusher G_GNUC_UNUSED = NULL;
   g_autoptr(GMainContext) main_context = NULL;
@@ -1209,11 +1215,6 @@ do_pam_action_thread (pam_handle_t *pamh,
   g_atomic_pointer_compare_and_exchange (&module_data->server, NULL, g_object_ref (server));
 
   action_data.module_data = module_data;
-  action_data.action_context = g_main_context_ref (action_context);
-  action_data.cancellable = g_cancellable_new ();
-#ifdef AUTHD_TEST_MODULE
-  action_data.main_thread = main_thread;
-#endif
 
   main_context = g_main_context_ref (module_data->main_context);
   context_pusher = g_main_context_pusher_new (main_context);
