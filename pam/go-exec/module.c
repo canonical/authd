@@ -503,19 +503,10 @@ setup_shared_module_data (pam_handle_t *pamh)
   return module_data;
 }
 
-static gboolean
+static inline gboolean
 is_debug_logging_enabled ()
 {
-  const char *debug_messages;
-
-  if (g_log_get_debug_enabled ())
-    return TRUE;
-
-  if (!(debug_messages = g_getenv ("G_MESSAGES_DEBUG")))
-    return FALSE;
-
-  return g_str_equal (debug_messages, "all") ||
-         strstr (debug_messages, G_LOG_DOMAIN);
+  return !g_log_writer_default_would_drop (G_LOG_LEVEL_DEBUG, G_LOG_DOMAIN);
 }
 
 typedef struct
