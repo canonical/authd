@@ -190,42 +190,85 @@ action_type_to_string (ActionType action_type)
   g_return_val_if_reached ("unknown");
 }
 
-typedef struct
-{
-  ActionData   *action_data;
-  char         *message;
+typedef struct _ConversationInvocationData ConversationInvocationData;
+typedef void (*ConversationDoneCallback) (ConversationInvocationData *invocation);
 
-  GMutex        completion_mutex;
-  GCond         completion_cond;
-  gboolean      completed;
-} PamErrorInvocationData;
+struct _ConversationInvocationData
+{
+  ActionData              *action_data;
+  char                    *message;
+  int                      style;
+  int                      ret;
+  char                    *response;
+  ConversationDoneCallback done_callback;
+  gpointer                 callback_data;
+  GDestroyNotify           callback_data_destroy;
+};
+
+static void
+conversation_invocation_data_free (gpointer data)
+{
+  ConversationInvocationData *invocation = data;
+
+  g_clear_pointer (&invocation->message, g_free);
+  g_clear_pointer (&invocation->response, g_free);
+
+  if (invocation->callback_data_destroy)
+    {
+      g_clear_pointer (&invocation->callback_data,
+                       invocation->callback_data_destroy);
+    }
+
+  g_free (invocation);
+}
+
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (ConversationInvocationData,
+                               conversation_invocation_data_free);
 
 static gboolean
-invoke_pam_error_on_action_context (gpointer data)
+invoke_conversation_on_action_context (gpointer data)
 {
-  PamErrorInvocationData *invocation = data;
+  ConversationInvocationData *invocation = data;
   ActionData *action_data = invocation->action_data;
+  char **response_ptr = NULL;
 
 #if AUTHD_TEST_MODULE
   g_assert (action_data->main_thread == g_thread_self ());
+  g_assert (g_main_context_is_owner (action_data->action_context));
 #endif
 
-  pam_error (action_data->pamh, "%s", invocation->message);
+  if (invocation->style == PAM_PROMPT_ECHO_ON ||
+      invocation->style == PAM_PROMPT_ECHO_OFF)
+    response_ptr = &invocation->response;
 
-  g_mutex_lock (&invocation->completion_mutex);
-  invocation->completed = TRUE;
-  g_cond_signal (&invocation->completion_cond);
-  g_mutex_unlock (&invocation->completion_mutex);
+  invocation->ret = pam_prompt (action_data->pamh,
+                                invocation->style,
+                                response_ptr,
+                                "%s",
+                                invocation->message);
+
+  if (invocation->done_callback)
+    invocation->done_callback (invocation);
 
   return G_SOURCE_REMOVE;
 }
 
-static void
-pam_error_invocation_data_clear (gpointer data)
+typedef struct
 {
-  PamErrorInvocationData *invocation = data;
+  GMutex    completion_mutex;
+  GCond     completion_cond;
+  gboolean  completed;
+} NotifyConversationData;
 
-  g_clear_pointer (&invocation->message, g_free);
+static void
+notify_conversation_done (ConversationInvocationData *invocation)
+{
+  NotifyConversationData *notify_data = invocation->callback_data;
+
+  g_mutex_lock (&notify_data->completion_mutex);
+  notify_data->completed = TRUE;
+  g_cond_signal (&notify_data->completion_cond);
+  g_mutex_unlock (&notify_data->completion_mutex);
 }
 
 G_GNUC_PRINTF (2, 3)
@@ -235,6 +278,8 @@ notify_error (ActionData *action_data,
               ...)
 {
   g_autofree char *message = NULL;
+  g_autoptr(ConversationInvocationData) invocation = NULL;
+  NotifyConversationData notify_data = { .completed = FALSE };
   const char *action;
   va_list args;
 
@@ -252,29 +297,32 @@ notify_error (ActionData *action_data,
   else
     g_warning ("%s: %s", action, message);
 
-  PamErrorInvocationData invocation = {
+  invocation = g_new0 (ConversationInvocationData, 1);
+  *invocation = (ConversationInvocationData){
     .action_data = action_data,
+    .style = PAM_ERROR_MSG,
     .message = g_strdup_printf ("%s: %s", action, message),
-    .completed = FALSE,
+    .done_callback = notify_conversation_done,
+    .callback_data = &notify_data,
   };
 
-  g_mutex_init (&invocation.completion_mutex);
-  g_cond_init (&invocation.completion_cond);
+  g_mutex_init (&notify_data.completion_mutex);
+  g_cond_init (&notify_data.completion_cond);
 
   g_assert (action_data->action_context);
   g_main_context_invoke_full (action_data->action_context,
                               G_PRIORITY_DEFAULT,
-                              invoke_pam_error_on_action_context,
-                              &invocation,
-                              pam_error_invocation_data_clear);
+                              invoke_conversation_on_action_context,
+                              g_steal_pointer (&invocation),
+                              conversation_invocation_data_free);
 
-  g_mutex_lock (&invocation.completion_mutex);
-  while (!invocation.completed)
-    g_cond_wait (&invocation.completion_cond, &invocation.completion_mutex);
-  g_mutex_unlock (&invocation.completion_mutex);
+  g_mutex_lock (&notify_data.completion_mutex);
+  while (!notify_data.completed)
+    g_cond_wait (&notify_data.completion_cond, &notify_data.completion_mutex);
+  g_mutex_unlock (&notify_data.completion_mutex);
 
-  g_cond_clear (&invocation.completion_cond);
-  g_mutex_clear (&invocation.completion_mutex);
+  g_cond_clear (&notify_data.completion_cond);
+  g_mutex_clear (&notify_data.completion_mutex);
 }
 
 static GLogWriterOutput
@@ -551,14 +599,6 @@ sanitize_variant_key (const char *key)
 
 typedef struct
 {
-  ActionData            *action_data;
-  GDBusMethodInvocation *invocation;
-  char                  *prompt;
-  int                    style;
-} PromptInvocationData;
-
-typedef struct
-{
   GDBusMethodInvocation *invocation;
   gchar                  *response;
   int                    ret;
@@ -589,47 +629,22 @@ return_invocation_on_main_thread (gpointer data)
   return G_SOURCE_REMOVE;
 }
 
-static gboolean
-invoke_prompt_on_main_thread (gpointer data)
+static void
+conversation_prompt_done (ConversationInvocationData *invocation)
 {
-  PromptInvocationData *prompt_data = data;
-  ActionData *action_data = prompt_data->action_data;
+  ActionData *action_data = invocation->action_data;
   g_autoptr(ReturnInvocationData) return_data = NULL;
-  g_autofree char *response = NULL;
-  int ret;
-
-#ifdef AUTHD_TEST_MODULE
-  g_assert (action_data->main_thread == g_thread_self ());
-  g_assert (g_main_context_is_owner (action_data->action_context));
-#endif
-
-  ret = pam_prompt (action_data->pamh,
-                    prompt_data->style,
-                    &response, "%s",
-                    prompt_data->prompt);
 
   return_data = g_new0 (ReturnInvocationData, 1);
-  return_data->ret = ret;
-  return_data->invocation = g_object_ref (prompt_data->invocation);
-  return_data->response = g_steal_pointer (&response);
+  return_data->ret = invocation->ret;
+  return_data->invocation = g_object_ref (invocation->callback_data);
+  return_data->response = g_strdup (invocation->response ? invocation->response : "");
 
   g_main_context_invoke_full (action_data->module_data->main_context,
                               G_PRIORITY_DEFAULT,
                               return_invocation_on_main_thread,
                               g_steal_pointer (&return_data),
                               return_invocation_data_free);
-
-  return G_SOURCE_REMOVE;
-}
-
-static void
-prompt_invocation_data_free (gpointer data)
-{
-  PromptInvocationData *prompt_data = data;
-
-  g_clear_object (&prompt_data->invocation);
-  g_clear_pointer (&prompt_data->prompt, g_free);
-  g_free (prompt_data);
 }
 
 static void
@@ -801,25 +816,27 @@ on_pam_method_call (GDBusConnection       *connection,
     }
   else if (g_str_equal (method_name, "Prompt"))
     {
-      PromptInvocationData *prompt_data = NULL;
+      ConversationInvocationData *prompt_data = NULL;
       g_autofree char *prompt = NULL;
       int style;
 
       g_variant_get (parameters, "(is)", &style, &prompt);
-      prompt_data = g_new0 (PromptInvocationData, 1);
+      prompt_data = g_new0 (ConversationInvocationData, 1);
 
-      *prompt_data = (PromptInvocationData){
+      *prompt_data = (ConversationInvocationData){
         .action_data = action_data,
-        .invocation = g_object_ref (invocation),
         .style = style,
-        .prompt = g_steal_pointer (&prompt),
+        .message = g_steal_pointer (&prompt),
+        .done_callback = conversation_prompt_done,
+        .callback_data = g_object_ref (invocation),
+        .callback_data_destroy = (GDestroyNotify) g_object_unref,
       };
 
       g_main_context_invoke_full (action_data->action_context,
                                   G_PRIORITY_DEFAULT,
-                                  invoke_prompt_on_main_thread,
+                                  invoke_conversation_on_action_context,
                                   g_steal_pointer (&prompt_data),
-                                  prompt_invocation_data_free);
+                                  conversation_invocation_data_free);
     }
   else
     {
