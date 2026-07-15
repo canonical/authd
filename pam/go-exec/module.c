@@ -557,11 +557,44 @@ typedef struct
   int                    style;
 } PromptInvocationData;
 
+typedef struct
+{
+  GDBusMethodInvocation *invocation;
+  gchar                  *response;
+  int                    ret;
+} ReturnInvocationData;
+
+static void
+return_invocation_data_free (gpointer data)
+{
+  ReturnInvocationData *return_data = data;
+
+  g_clear_object (&return_data->invocation);
+  g_clear_pointer (&return_data->response, g_free);
+  g_free (return_data);
+}
+
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (ReturnInvocationData, return_invocation_data_free)
+
+static gboolean
+return_invocation_on_main_thread (gpointer data)
+{
+  ReturnInvocationData *return_data = data;
+
+  g_dbus_method_invocation_return_value (return_data->invocation,
+                                         g_variant_new ("(is)",
+                                                        return_data->ret,
+                                                        return_data->response));
+
+  return G_SOURCE_REMOVE;
+}
+
 static gboolean
 invoke_prompt_on_main_thread (gpointer data)
 {
   PromptInvocationData *prompt_data = data;
   ActionData *action_data = prompt_data->action_data;
+  g_autoptr(ReturnInvocationData) return_data = NULL;
   g_autofree char *response = NULL;
   int ret;
 
@@ -575,9 +608,16 @@ invoke_prompt_on_main_thread (gpointer data)
                     &response, "%s",
                     prompt_data->prompt);
 
-  g_dbus_method_invocation_return_value (prompt_data->invocation,
-                                         g_variant_new ("(is)", ret,
-                                                        response ? response : ""));
+  return_data = g_new0 (ReturnInvocationData, 1);
+  return_data->ret = ret;
+  return_data->invocation = g_object_ref (prompt_data->invocation);
+  return_data->response = g_steal_pointer (&response);
+
+  g_main_context_invoke_full (action_data->module_data->main_context,
+                              G_PRIORITY_DEFAULT,
+                              return_invocation_on_main_thread,
+                              g_steal_pointer (&return_data),
+                              return_invocation_data_free);
 
   return G_SOURCE_REMOVE;
 }
