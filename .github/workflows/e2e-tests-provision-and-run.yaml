@@ -20,6 +20,11 @@ on:
         type: string
         required: false
         default: ''
+      authd-ppa:
+        description: 'If set, use this PPA instead of authd-edge when installing the authd package and its dependencies'
+        type: string
+        required: false
+        default: ''
     secrets:
       E2E_VM_SSH_PRIV_KEY:
         required: true
@@ -152,4 +157,5 @@ jobs:
       ubuntu-version: ${{ inputs.ubuntu-version }}
       broker: ${{ matrix.broker }}
       broker-snap-channel: ${{ inputs.broker-snap-channel }}
+      authd-ppa: ${{ inputs.authd-ppa }}
     secrets: inherit
