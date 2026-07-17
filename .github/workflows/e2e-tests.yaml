@@ -53,6 +53,7 @@ on:
       - synchronize
       - reopened
       - labeled
+      - edited
   workflow_dispatch:
     inputs:
       broker-snap-channel:
@@ -110,4 +111,14 @@ jobs:
       files-hash: ${{ needs.compute-hash.outputs.files-hash }}
       force-fresh-image: ${{ github.event_name == 'schedule' }}
       broker-snap-channel: ${{ inputs.broker-snap-channel || '' }}
+      # PRs opt in by adding "e2e-ppa: authd-dev" to their description.
+      authd-ppa: >-
+        ${{
+          github.event_name == 'pull_request' &&
+          contains(
+            github.event.pull_request.body,
+            'e2e-ppa: authd-dev'
+          ) &&
+          'ubuntu-enterprise-desktop/authd-dev' || ''
+        }}
     secrets: inherit
