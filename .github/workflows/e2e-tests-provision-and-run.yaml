@@ -25,6 +25,11 @@ on:
         type: string
         required: false
         default: ''
+      e2e-tests-description:
+        description: 'PR description containing an optional e2e-tests: suite list'
+        type: string
+        required: false
+        default: ''
     secrets:
       E2E_VM_SSH_PRIV_KEY:
         required: true
@@ -158,4 +163,5 @@ jobs:
       broker: ${{ matrix.broker }}
       broker-snap-channel: ${{ inputs.broker-snap-channel }}
       authd-ppa: ${{ inputs.authd-ppa }}
+      e2e-tests-description: ${{ inputs.e2e-tests-description }}
     secrets: inherit
