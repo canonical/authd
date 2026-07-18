@@ -52,6 +52,16 @@ When running the tests in GitHub CI, add `e2e-ppa: authd-dev` to the pull reques
 description to install the authd package and its dependencies from the
 `ubuntu-enterprise-desktop/authd-dev` PPA instead of `authd-edge`.
 
+To run only selected end-to-end test suites in GitHub CI, add an `e2e-tests:`
+line to the pull request description, followed by a space-separated list of
+suite filenames:
+
+```text
+e2e-tests: login_gdm.robot login_cli.robot
+```
+
+Without this marker, GitHub CI runs the complete end-to-end test suite.
+
 ### 4. Set up YARF
 
 ```bash
