@@ -4,6 +4,16 @@
 include /usr/share/dpkg/pkg-info.mk
 include /usr/share/rustc/architecture.mk
 
+ifeq ($(DEB_DISTRIBUTION),noble)
+GNOME_SHELL_BREAKS := gnome-shell (<< 46.3.1-1ubuntu1+authd1~24.04.1)
+else ifeq ($(DEB_DISTRIBUTION),resolute)
+GNOME_SHELL_BREAKS := gnome-shell (<< 50.1-0ubuntu1.1+authd2~26.04.1)
+else ifeq ($(DEB_DISTRIBUTION),stonking)
+GNOME_SHELL_BREAKS := gnome-shell (<< 50.2-3ubuntu1+authd1~26.10.1)
+else
+$(error Unsupported distribution "$(DEB_DISTRIBUTION)" for gnome-shell dependency)
+endif
+
 # The package name for authd, used only locally to avoid repetitions
 AUTHD_GO_PACKAGE := $(shell grep-dctrl -s XS-Go-Import-Path -n - ./debian/control)
 
@@ -59,6 +69,9 @@ export BUILT_PAM_LIBS_PATH := obj-$(DEB_HOST_GNU_TYPE)/src/$(AUTHD_GO_PACKAGE)/p
 %:
 	# --without=single-binary can be removed with dh 15.
 	dh $@ --buildsystem=golang --with=golang,apport --without=single-binary
+
+override_dh_gencontrol:
+	dh_gencontrol -- -Vauthd:gnome-shell-breaks="$(GNOME_SHELL_BREAKS)"
 
 override_dh_auto_clean:
 	dh_auto_clean
