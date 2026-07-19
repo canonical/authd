@@ -1011,10 +1011,19 @@ func (b *Broker) supportedAuthModesFromLayout(layout map[string]string) []string
 
 	case "form":
 		var modes []string
+		supportsWait := strings.Contains(layout["wait"], "true")
 		if slices.Contains(supportedEntries, "chars_password") {
-			modes = append(modes, authmodes.Password, authmodes.EntraAuth, authmodes.EntraAuthFidoPin)
+			modes = append(modes, authmodes.Password, authmodes.EntraAuthFidoPin)
+			// The entra_auth mode needs both entry capabilities: its initial
+			// passwordless-probe layout is a wait-only form, and its password
+			// layout is a chars_password form. Offering it to a client that
+			// cannot render one of them would make the mode unselectable
+			// (authd rejects layouts with undeclared fields).
+			if supportsWait {
+				modes = append(modes, authmodes.EntraAuth)
+			}
 		}
-		if strings.Contains(layout["wait"], "true") {
+		if supportsWait {
 			modes = append(modes, authmodes.EntraAuthWait, authmodes.EntraAuthFido)
 		}
 		if slices.Contains(supportedEntries, "chars") {

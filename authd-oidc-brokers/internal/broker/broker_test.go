@@ -659,7 +659,14 @@ func TestNewSessionRemovesUnsafeCacheSymlink(t *testing.T) {
 }
 
 var supportedUILayouts = map[string]map[string]string{
+	// All real authd PAM clients declare wait on their form layout; entra_auth
+	// requires it for the passwordless-probe screen.
 	"form": {
+		"type":  "form",
+		"entry": "chars_password",
+		"wait":  "true",
+	},
+	"form-without-wait": {
 		"type":  "form",
 		"entry": "chars_password",
 	},
@@ -3023,6 +3030,47 @@ func TestGetAuthenticationModesEntraAuthRequiresGroupSource(t *testing.T) {
 			require.Contains(t, ids, authmodes.EntraAuth, "entra_auth should be offered when a group source is available")
 		})
 	}
+}
+
+// TestGetAuthenticationModesEntraAuthRequiresWaitCapability verifies that
+// entra_auth is not offered to a client whose form layout cannot render the
+// wait-based passwordless probe screen: authd rejects layouts carrying fields
+// the client did not declare, so offering the mode would make it permanently
+// unselectable for such a client.
+func TestGetAuthenticationModesEntraAuthRequiresWaitCapability(t *testing.T) {
+	t.Parallel()
+
+	provider := &mockEntraAuthProvider{
+		MockProvider:  &testutils.MockProvider{},
+		flowState:     &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{},
+	}
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		registerDevice:        true,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "", sessionmode.Login)
+	b.SetNextAuthModes(sessionID, []string{authmodes.EntraAuth, authmodes.DeviceQr})
+
+	modes, err := b.GetAuthenticationModes(sessionID, []map[string]string{
+		supportedUILayouts["form-without-wait"],
+		supportedUILayouts["qrcode"],
+	})
+	require.NoError(t, err)
+
+	var ids []string
+	for _, m := range modes {
+		ids = append(ids, m["id"])
+	}
+	require.NotContains(t, ids, authmodes.EntraAuth,
+		"entra_auth must not be offered when the form layout does not support wait")
+	require.Contains(t, ids, authmodes.DeviceQr,
+		"other modes must remain offered")
 }
 
 func TestIsAuthenticatedPasswordGrantRevokedInvalidatesCachedCredentials(t *testing.T) {
