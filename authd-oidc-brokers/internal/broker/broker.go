@@ -1689,9 +1689,13 @@ func restartFromEntraAuth(session *session, msg string) (string, isAuthenticated
 }
 
 // replayCompletedMFA handles a stray IsAuthenticated call for an MFA follow-up
-// mode that arrives once mfaFlowActive is already nil: the assertion/poll
-// succeeded and chained to a different mode. It replays that stored transition
-// (AuthNext) instead of denying an already-successful login; with no pending
+// mode that arrives once mfaFlowActive is already nil: the previous call
+// finished this step — successfully (chaining to the next mode) or with a
+// failure that redirected elsewhere (restartFromEntraAuth,
+// redirectFIDOToDeviceAuth) — and stored its transition in nextAuthModes. It
+// replays that stored transition (AuthNext) instead of denying, steering the
+// duplicate call to wherever the original outcome pointed (the message of a
+// failed original was already delivered with that response); with no pending
 // transition it denies. These flows are single-use, so replaying the stored
 // transition is the only safe response to a duplicate call.
 func replayCompletedMFA(session *session, mode string) (string, isAuthenticatedDataResponse) {
@@ -1774,10 +1778,8 @@ func (b *Broker) entraAuthWaitAuth(ctx context.Context, session *session) (strin
 			// A user denial is terminal — handle it first, even if our poll
 			// deadline happened to elapse during this (non-preemptible) call.
 			if errors.As(err, &mfaErr) && mfaErr.IsMFADenied() {
-				session.entraAuthPasswordHash = ""
-				clearEntraAuthState(session)
 				log.Noticef(context.Background(), "MFA authentication denied for user %q", session.username)
-				return AuthDenied, errorMessage{Message: "MFA authentication was denied."}
+				return denyAndClearMFA(session, errorMessage{Message: "MFA authentication was denied."})
 			}
 			// AcquireTokenByMFAFlow is a non-preemptible CGo call: our poll
 			// deadline (or the caller's cancellation) can elapse while it is in
@@ -1848,9 +1850,7 @@ func (b *Broker) entraAuthCodeAuth(ctx context.Context, session *session, code s
 		var mfaErr *himmelblau.MFAError
 		if errors.As(err, &mfaErr) && mfaErr.IsMFADenied() {
 			log.Noticef(context.Background(), "MFA code verification denied for user %q", session.username)
-			session.entraAuthPasswordHash = ""
-			clearEntraAuthState(session)
-			return AuthDenied, errorMessage{Message: "MFA authentication was denied."}
+			return denyAndClearMFA(session, errorMessage{Message: "MFA authentication was denied."})
 		}
 		if errors.As(err, &mfaErr) && mfaErr.IsMFARetryableCode() {
 			// An incorrect or expired one-time code: re-prompt for the code
@@ -2491,16 +2491,24 @@ func (b *Broker) EndSession(sessionID string) error {
 	// strand the resumed session with a released flow), so freeing here is what
 	// guarantees the flow is not leaked on a genuinely terminal cancel.
 	//
-	// Freeing here is safe even when a goroutine is mid-flight: FreeMFAFlowState
+	// Freeing is safe even when a goroutine is mid-flight: FreeMFAFlowState
 	// takes MFAFlowState.mu and nils its release callback, so it waits for any
 	// concurrent AcquireTokenByMFAFlow to finish, runs the underlying C free
 	// exactly once, and is a no-op if that goroutine also frees the flow on its
 	// own terminal path. Sessions are stored by value, so there is no shared
 	// write to mfaFlowActive itself (confirmed race-clean under `go test -race`).
+	//
 	if session.isAuthenticating != nil {
 		b.CancelIsAuthenticated(sessionID)
+		// Free on a separate goroutine: waiting on MFAFlowState.mu can block
+		// for the remainder of an in-flight cgo network call (cancellation is
+		// only observed between poll iterations), and EndSession answers a
+		// D-Bus call on the PAM teardown path, which must not stall for
+		// seconds. Nothing after this depends on the free having completed.
+		go himmelblau.FreeMFAFlowState(session.mfaFlowActive)
+	} else {
+		himmelblau.FreeMFAFlowState(session.mfaFlowActive)
 	}
-	himmelblau.FreeMFAFlowState(session.mfaFlowActive)
 
 	b.currentSessionsMu.Lock()
 	defer b.currentSessionsMu.Unlock()

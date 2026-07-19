@@ -44,6 +44,20 @@ func newTrackedMFAFlowState(release func()) *himmelblau.MFAFlowState {
 	return flow
 }
 
+func lockMFAFlowStateForTests(flow *himmelblau.MFAFlowState) func() {
+	muField := reflect.ValueOf(flow).Elem().FieldByName("mu")
+	//nolint:gosec // G103: unsafe pointer required to lock the unexported MFA flow mutex for testing purposes only.
+	mu, ok := reflect.NewAt(muField.Type(), unsafe.Pointer(muField.UnsafeAddr())).Interface().(interface {
+		Lock()
+		Unlock()
+	})
+	if !ok {
+		panic("MFA flow mutex has an unexpected type")
+	}
+	mu.Lock()
+	return mu.Unlock
+}
+
 type mockEntraAuthProvider struct {
 	*testutils.MockProvider
 	flowState             *himmelblau.MFAFlowState
@@ -65,6 +79,20 @@ type mockEntraAuthProvider struct {
 	verifyAccessTokenErr  error      // when set, VerifyAccessToken returns it (signature verification failure)
 	accessTokenUserInfo   *info.User // when set, UserInfoFromAccessToken returns this user info
 	userInfoFromTokenErr  error      // when set, UserInfoFromAccessToken returns this error
+}
+
+type blockingMFAProvider struct {
+	*mockEntraAuthProvider
+	started  chan struct{}
+	unblock  chan struct{}
+	finished chan struct{}
+}
+
+func (p *blockingMFAProvider) AcquireTokenByMFAFlow(_ context.Context, _, _ string, _ string, _ *himmelblau.MFAFlowState, _ string, _ int, _ []byte) (*oauth2.Token, error) {
+	p.started <- struct{}{}
+	<-p.unblock
+	close(p.finished)
+	return nil, context.Canceled
 }
 
 func (p *mockEntraAuthProvider) VerifyAccessToken(ctx context.Context, _, _ string) error {
@@ -2205,6 +2233,98 @@ func TestEndSessionReleasesPendingMFAFlow(t *testing.T) {
 	err = b.EndSession(sessionID)
 	require.NoError(t, err)
 	require.Equal(t, 1, released, "EndSession should release any pending MFA flow state")
+}
+
+func TestEndSessionDoesNotBlockOnInFlightMFA(t *testing.T) {
+	t.Parallel()
+
+	released := make(chan struct{}, 1)
+	flow := newTrackedMFAFlowState(func() { released <- struct{}{} })
+	provider := &blockingMFAProvider{
+		mockEntraAuthProvider: &mockEntraAuthProvider{
+			MockProvider: &testutils.MockProvider{},
+			flowState:    flow,
+			challengeInfo: &himmelblau.MFAChallengeInfo{
+				Message:           "Approve the sign-in request in Microsoft Authenticator",
+				Method:            "PhoneAppNotification",
+				PollingIntervalMs: 5000,
+				MaxPollAttempts:   10,
+			},
+		},
+		started:  make(chan struct{}),
+		unblock:  make(chan struct{}),
+		finished: make(chan struct{}),
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
+	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
+
+	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+
+	unlockFlow := lockMFAFlowStateForTests(flow)
+	updateAuthModes(t, b, sessionID, authmodes.EntraAuthWait)
+
+	authDone := make(chan error, 1)
+	go func() {
+		_, _, err := b.IsAuthenticated(sessionID, `{}`)
+		authDone <- err
+	}()
+
+	select {
+	case <-provider.started:
+	case <-time.After(time.Second):
+		t.Fatal("MFA continuation did not start")
+	}
+
+	endSessionDone := make(chan error, 1)
+	go func() {
+		endSessionDone <- b.EndSession(sessionID)
+	}()
+
+	select {
+	case err := <-endSessionDone:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("EndSession waited for the in-flight MFA continuation")
+	}
+
+	select {
+	case <-released:
+		t.Fatal("MFA flow released while its continuation still held the lock")
+	default:
+	}
+
+	close(provider.unblock)
+	select {
+	case <-provider.finished:
+	case <-time.After(time.Second):
+		t.Fatal("MFA continuation did not finish")
+	}
+
+	unlockFlow()
+	select {
+	case <-released:
+	case <-time.After(time.Second):
+		t.Fatal("MFA flow was not released after the continuation lock became available")
+	}
+
+	select {
+	case err := <-authDone:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("cancelled authentication did not return")
+	}
 }
 
 func TestEntraAuthProbePromptsForPasswordWhenRequired(t *testing.T) {
