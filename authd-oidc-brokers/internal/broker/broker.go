@@ -2152,13 +2152,17 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	cleanup, access, data := b.maybeRegisterDevice(ctx, session, authInfo, t, deviceRegistrationData)
 	defer cleanup()
 	if access != "" {
-		// Keep the existing client-secret group-fetch fallback for first-time
-		// passwordless Entra logins in mixed configs: register_device=true should
-		// prefer registration, but if it fails before any local device state
-		// exists and an app-only Graph path is configured, continue without
-		// registration instead of denying the login.
-		if session.entraAuthPasswordHash == "" && oldAuthInfo == nil && b.cfg.clientSecret != "" {
-			log.Warningf(context.Background(), "Device registration failed for first-time passwordless Entra login for user %q; falling back to app-only Graph lookup", session.username)
+		// Keep the existing client-secret group-fetch fallback for passwordless
+		// Entra logins in mixed configs: register_device=true should prefer
+		// registration, but if it fails before any local device state exists and
+		// an app-only Graph path is configured, continue without registration
+		// instead of denying the login. Keyed on the absence of device data (not
+		// on "first login"): a returning user whose first login already used
+		// this fallback has a cached token without device data, and denying them
+		// on a repeated registration failure would lock out an account that
+		// could log in before.
+		if session.entraAuthPasswordHash == "" && len(deviceRegistrationData) == 0 && b.cfg.clientSecret != "" {
+			log.Warningf(context.Background(), "Device registration failed for passwordless Entra login for user %q; falling back to app-only Graph lookup", session.username)
 		} else {
 			return access, data
 		}

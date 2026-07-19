@@ -2711,6 +2711,65 @@ func TestIsAuthenticatedEntraAuthWaitFallsBackToClientSecretWhenPasswordlessRegi
 		"passwordless fallback should still defer offline password caching until the local password step")
 }
 
+// TestIsAuthenticatedEntraAuthWaitFallbackAppliesToReturningPasswordlessLogins
+// covers the returning variant of the client-secret fallback: the user's first
+// passwordless login already used it (so the cached token carries no device
+// registration data) and device registration keeps failing. The fallback must
+// be keyed on the missing device data, not on "first login" — otherwise a user
+// who could log in yesterday is denied on every later online login, since the
+// device-data-less token also disqualifies the local password mode online.
+func TestIsAuthenticatedEntraAuthWaitFallbackAppliesToReturningPasswordlessLogins(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := &mockDeviceRegistrationFailProvider{
+		mockEntraAuthProvider: &mockEntraAuthProvider{
+			MockProvider: &testutils.MockProvider{},
+			flowState:    &himmelblau.MFAFlowState{},
+			challengeInfo: &himmelblau.MFAChallengeInfo{
+				Message:           "Approve the sign-in request in Microsoft Authenticator",
+				Method:            "PhoneAppNotification",
+				PollingIntervalMs: 5000,
+				MaxPollAttempts:   10,
+			},
+			mfaTokenResult: newMFATokenResult(mfaAuthInfo.Token),
+		},
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+		clientSecret:          "test-client-secret",
+		registerDevice:        true,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, username, sessionmode.Login)
+	// State left behind by the first fallback login: a cached token without
+	// device registration data and a local password.
+	generateAndStoreCachedInfo(t,
+		tokenOptions{username: username, issuer: defaultIssuerURL, obtainedViaEntraAuth: true},
+		b.TokenPathForSession(sessionID))
+	require.NoError(t,
+		password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID)),
+		"Setup: storing the local password should succeed")
+
+	updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraAuthWait}, b.GetNextAuthModes(sessionID))
+
+	updateAuthModes(t, b, sessionID, authmodes.EntraAuthWait)
+	access, _, err = b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access,
+		"a returning passwordless login whose cached token has no device data must keep using the app-only Graph fallback when registration fails again")
+}
+
 func TestIsAuthenticatedEntraAuthDeniedWhenInitialGroupFetchFails(t *testing.T) {
 	t.Parallel()
 
