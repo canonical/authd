@@ -485,7 +485,10 @@ func initiateMFAFlow(broker *brokerClientApplication, username, password string,
 		(*C.BrokerClientApplication)(unsafe.Pointer(broker)),
 		cUsername,
 		cPassword,
-		&options[0],
+		// Not &options[0]: cAuthOptions ignores unknown values, so the slice
+		// can be empty and indexing it would panic. SliceData returns nil for
+		// a nil slice, and the C API accepts NULL with length 0.
+		unsafe.SliceData(options),
 		C.uintptr_t(len(options)),
 		&flow,
 	)
@@ -547,7 +550,8 @@ func initiateMFAFlowForEnrollment(broker *brokerClientApplication, username, pas
 		(*C.BrokerClientApplication)(unsafe.Pointer(broker)),
 		cUsername,
 		cPassword,
-		&options[0],
+		// See initiateMFAFlow: the slice can be empty, so use SliceData.
+		unsafe.SliceData(options),
 		C.uintptr_t(len(options)),
 		&flow,
 	)
