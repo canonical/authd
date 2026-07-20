@@ -9,7 +9,7 @@ DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/authd-e2e-tests"
 
 usage(){
     cat << EOF
-Usage: $0 [--config-file <file>] [--release <release>] [--authd-deb <deb>] [--broker-snap <snap>]
+Usage: $0 [--config-file <file>] [--release <release>] [--authd-deb <deb>] [--authd-ppa <ppa>] [--broker-snap <snap>]
 
 Options:
    --config-file <file>  Path to the configuration file (default: config.env)
@@ -18,6 +18,8 @@ Options:
                         The existing snapshots will be deleted and recreated with the new installation.
    --broker <broker>    The broker to install ("authd-google", "authd-msentraid", ...)
    --authd-deb <deb>    Path to the authd deb file to install (default: install from the edge PPA)
+   --authd-ppa <ppa>    PPA to use instead of authd-edge when installing authd
+                        and its dependencies
    --broker-snap <snap> Path to the broker snap file to install (default: install from the edge channel)
   -h, --help             Show this help message and exit
 
@@ -45,6 +47,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --authd-deb)
             AUTHD_DEB="$2"
+            shift 2
+            ;;
+        --authd-ppa)
+            AUTHD_PPA="$2"
             shift 2
             ;;
         --broker-snap)
@@ -292,9 +298,9 @@ fi
 # Revert to the pre-authd setup snapshot before installing the version to test
 restore_snapshot_and_sync_time "$PRE_AUTHD_SNAPSHOT"
 
-# Add the edge PPA. We also need that when installing authd from a deb file,
-# because it depends on gnome-shell from the edge PPA.
-PPA="ubuntu-enterprise-desktop/authd-edge"
+# Add the PPA needed to resolve dependencies for the authd package under test.
+# authd-edge remains the default for local and normal CI runs.
+PPA="${AUTHD_PPA:-ubuntu-enterprise-desktop/authd-edge}"
 $SSH "add-apt-repository -y ppa:${PPA}"
 
 # Configure authd to be verbose. We do this before installing authd to avoid

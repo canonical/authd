@@ -14,6 +14,11 @@ on:
         required: false
         type: string
         default: ''
+      authd-ppa:
+        description: 'If set, use this PPA instead of authd-edge when installing the authd package and its dependencies'
+        required: false
+        type: string
+        default: ''
     secrets:
       E2E_VM_SSH_PRIV_KEY:
         required: true
@@ -199,6 +204,7 @@ jobs:
           # broker credentials from the environment)
           ${{ env.E2E_TESTS_DIR }}/vm/provision-authd.sh \
             --authd-deb "${{ steps.download-authd-deb.outputs.deb }}" \
+            ${{ inputs.authd-ppa && format('--authd-ppa {0}', inputs.authd-ppa) || '' }} \
             --broker-snap "${{ steps.download-broker-snap-from-store.outputs.snap || steps.download-broker-snap-from-oci.outputs.snap }}"
 
       - name: Checkout YARF repo

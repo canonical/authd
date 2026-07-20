@@ -43,9 +43,14 @@ default Ubuntu release and VM name prefix).
 This sets up a libvirt VM with Ubuntu, installs authd and the broker, and
 creates the snapshots required by the tests. By default, authd is installed from
 the edge PPA and the broker from the edge channel snap. Use `--authd-deb` to
-install a locally built authd package, or `--broker-snap` to install a locally
+install a locally built authd package, `--authd-ppa <ppa>` to select a different
+PPA for authd and its dependencies, or `--broker-snap` to install a locally
 built broker snap. Run `./e2e-tests/vm/provision.sh --help` for all available
 options, including `--force` to reprovision.
+
+When running the tests in GitHub CI, add `e2e-ppa: authd-dev` to the pull request
+description to install the authd package and its dependencies from the
+`ubuntu-enterprise-desktop/authd-dev` PPA instead of `authd-edge`.
 
 ### 4. Set up YARF
 
