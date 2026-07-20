@@ -52,6 +52,7 @@ parts:
     # Force the rust plugin onto its rustup code path.
     rust-channel: stable
     build-packages:
+      - curl
       - libssl-dev
     build-environment:
       # Keep the compiled target/ outside the part's build tree so it survives
@@ -64,10 +65,9 @@ parts:
       snapcraftctl pull
       cp "$SNAPCRAFT_PROJECT_DIR/authd-oidc-brokers/rust-toolchain.toml" "$SNAPCRAFT_PART_SRC/"
     override-build: |
-      # cargo-c is only needed to provide 'cargo cbuild'. Skip reinstalling it
-      # when it is already on PATH (e.g. from a previous build in a reused build
-      # instance) to avoid a crates.io index update and rebuild every time.
-      command -v cargo-cbuild >/dev/null || cargo install --locked cargo-c
+      # Install cargo-c's prebuilt static binary so its build-time Rust MSRV
+      # does not constrain the Rust toolchain used for libhimmelblau.
+      "$SNAPCRAFT_PROJECT_DIR/authd-oidc-brokers/tools/install-cargo-c"
       cargo cbuild --release --lib --features=broker,changepassword,on_behalf_of,set_timeout
       echo "Installing libhimmelblau.so and himmelblau.h"
       TARGET_TRIPLE=$(rustc -vV | awk '/host:/ {print $2}')
