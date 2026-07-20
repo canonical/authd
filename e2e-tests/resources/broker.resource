@@ -73,7 +73,21 @@ Regenerate QR Code
     Match Text    ${DEVICE_URL}    15
 
 
+Ensure No Stray Entra TAP
+    [Documentation]    Best-effort: deletes a Temporary Access Pass left active on
+    ...    %{E2E_USER} so Entra can't intercept this sign-in with a TAP challenge
+    ...    instead of the expected password/MFA prompt. A stray TAP can linger from
+    ...    an unrelated run; see resources/EntraTAP.py. Only clears TAPs older than
+    ...    5 minutes, since the release channels run concurrently against the same
+    ...    account and a fresh TAP may still be in legitimate use by the
+    ...    passwordless test in another channel. No-op for brokers other than
+    ...    msentraid.
+    IF    '%{BROKER}' != 'authd-msentraid'    RETURN
+    Run Keyword And Warn On Failure    EntraTAP.Delete TAP For User    %{E2E_USER}    min_age_minutes=5
+
+
 Continue Log In With Remote User: Authenticate In External Browser
+    Ensure No Stray Entra TAP
     # Wait until the verification URL and login code are displayed
     Match Text    ${DEVICE_URL}
     # Read the user code.
@@ -446,6 +460,7 @@ Check That Device Was Registered
 
 Log In With Remote User Through CLI: Entra Auth
     [Arguments]    ${username}
+    Ensure No Stray Entra TAP
     Try machinectl login Prompt
     Hid.Type String    ${username}
     Hid.Keys Combo    Return

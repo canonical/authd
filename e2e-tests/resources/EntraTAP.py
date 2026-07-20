@@ -17,6 +17,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
 from robot.api.deco import keyword, library
 
@@ -181,14 +182,18 @@ class EntraTAP:
             time.sleep(2)
 
     @keyword
-    def delete_tap_for_user(self, user_upn: str) -> None:
-        """Delete any Temporary Access Pass currently active for *user_upn*.
+    def delete_tap_for_user(self, user_upn: str, min_age_minutes: int = 0) -> None:
+        """Delete a Temporary Access Pass for *user_upn*, if one exists.
 
-        No-op if the user has none. Call this from a test teardown so a TAP
-        never lingers on a shared account and gets picked up by unrelated
-        passwordless probes. Requires ``AUTHD_MSENTRAID_ISSUER_ID``,
-        ``AUTHD_MSENTRAID_CLIENT_ID``, and ``AUTHD_MSENTRAID_CLIENT_SECRET``
-        to be set.
+        No-op if the user has none. If ``min_age_minutes`` is set, a TAP
+        younger than that is left alone instead of deleted: the msentraid
+        e2e suite runs three release channels concurrently against the same
+        account, so a very fresh TAP may belong to a passwordless test that's
+        still running in another channel rather than being a stray one. Call
+        with the default of 0 from a test's own teardown, where the TAP being
+        deleted is unambiguously the one that test itself just used. Requires
+        ``AUTHD_MSENTRAID_ISSUER_ID``, ``AUTHD_MSENTRAID_CLIENT_ID``, and
+        ``AUTHD_MSENTRAID_CLIENT_SECRET`` to be set.
         """
         issuer = os.environ["AUTHD_MSENTRAID_ISSUER_ID"]
         client_id = os.environ["AUTHD_MSENTRAID_CLIENT_ID"]
@@ -201,5 +206,23 @@ class EntraTAP:
         existing = self._graph(token, "GET", tap_path)
         for method in (existing or {}).get("value", []):
             tap_id = method.get("id")
-            if tap_id:
-                self._graph(token, "DELETE", f"{tap_path}/{tap_id}")
+            if not tap_id:
+                continue
+            if min_age_minutes and not self._older_than(method, min_age_minutes):
+                continue
+            self._graph(token, "DELETE", f"{tap_path}/{tap_id}")
+
+    def _older_than(self, method: dict, min_age_minutes: int) -> bool:
+        """Return whether *method*'s ``createdDateTime`` is at least *min_age_minutes* old.
+
+        Treated as old enough if the timestamp is missing or unparseable,
+        since that shouldn't get in the way of clearing an otherwise-stale TAP.
+        """
+        created = method.get("createdDateTime")
+        if not created:
+            return True
+        try:
+            created_at = datetime.fromisoformat(created.replace("Z", "+00:00"))
+        except ValueError:
+            return True
+        return datetime.now(timezone.utc) - created_at >= timedelta(minutes=min_age_minutes)
