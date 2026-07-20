@@ -1,0 +1,76 @@
+name: Update cargo-c
+
+on:
+  schedule:
+    # Every Thursday at 09:00 UTC.
+    - cron: '0 9 * * 4'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-cargo-c
+
+jobs:
+  update-cargo-c:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Update to the latest cargo-c release
+        id: update
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INSTALL_SCRIPT: authd-oidc-brokers/tools/install-cargo-c
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release=$(gh api repos/lu-zero/cargo-c/releases/latest)
+          version=$(jq --raw-output '.tag_name | ltrimstr("v")' <<<"${release}")
+          aarch64_sha256=$(jq --raw-output '
+            .assets[]
+            | select(.name == "cargo-c-aarch64-unknown-linux-musl.tar.gz")
+            | .digest
+            | ltrimstr("sha256:")
+          ' <<<"${release}")
+          x86_64_sha256=$(jq --raw-output '
+            .assets[]
+            | select(.name == "cargo-c-x86_64-unknown-linux-musl.tar.gz")
+            | .digest
+            | ltrimstr("sha256:")
+          ' <<<"${release}")
+
+          if [[ -z "${version}" || "${version}" == "null" ||
+                -z "${aarch64_sha256}" || "${aarch64_sha256}" == "null" ||
+                -z "${x86_64_sha256}" || "${x86_64_sha256}" == "null" ]]; then
+            echo "Latest cargo-c release is missing a required Linux artifact" >&2
+            exit 1
+          fi
+
+          sed -i \
+            -e "s/^CARGO_C_VERSION=.*/CARGO_C_VERSION=${version}/" \
+            -e "s/^CARGO_C_AARCH64_SHA256=.*/CARGO_C_AARCH64_SHA256=${aarch64_sha256}/" \
+            -e "s/^CARGO_C_X86_64_SHA256=.*/CARGO_C_X86_64_SHA256=${x86_64_sha256}/" \
+            "${INSTALL_SCRIPT}"
+
+          if git diff --quiet -- "${INSTALL_SCRIPT}"; then
+            echo "No cargo-c update is needed"
+          else
+            echo "modified=true" >> "${GITHUB_OUTPUT}"
+            echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Create pull request
+        if: steps.update.outputs.modified == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          branch: auto-update-cargo-c
+          delete-branch: true
+          commit-message: "deps(snap): update cargo-c to v${{ steps.update.outputs.version }}"
+          title: "deps(snap): update cargo-c to v${{ steps.update.outputs.version }}"
+          body: |
+            Updates cargo-c from its latest stable GitHub release.
+          labels: automated pr, e2e-tests
