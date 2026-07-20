@@ -224,10 +224,10 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		interactiveShell bool
 		ubuntuVersion    string
 
-		wantUserAlreadyExist bool
-		wantNotLoggedInUser  bool
-		wantNoHomeDir        bool
-		wantLocalGroups      bool
+		wantUserAlreadyExist  bool
+		wantUserNotInDatabase bool
+		wantNoHomeDir         bool
+		wantLocalGroups       bool
 
 		test func(t *testing.T, args sshPtyArgs)
 	}{
@@ -320,8 +320,8 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			test: sshPtySwitchAuthMode,
 		},
 		"Authenticate_user_switching_to_local_broker": {
-			wantNotLoggedInUser: true,
-			test:                sshPtySwitchLocalBroker,
+			wantUserNotInDatabase: true,
+			test:                  sshPtySwitchLocalBroker,
 		},
 		"Authenticate_user_and_add_it_to_local_group": {
 			userPrefix:      examplebroker.UserIntegrationLocalGroupsPrefix,
@@ -333,42 +333,42 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			test: sshPtyRememberBrokerAndMode,
 		},
 		"Autoselect_local_broker_for_local_user": {
-			user:                "root",
-			isLocalUser:         true,
-			wantNotLoggedInUser: true,
-			test:                sshPtyLocalUserPreset,
+			user:                  "root",
+			isLocalUser:           true,
+			wantUserNotInDatabase: true,
+			test:                  sshPtyLocalUserPreset,
 		},
 		"Authenticate_user_locks_and_unlocks_it": {
 			test: sshPtyLocksUnlocks,
 		},
 
 		"Deny_authentication_if_max_attempts_reached": {
-			wantNotLoggedInUser: true,
-			test:                sshPtyMaxAttempts,
+			wantUserNotInDatabase: true,
+			test:                  sshPtyMaxAttempts,
 		},
 		"Deny_authentication_if_user_does_not_exist_on_ubuntu_24.04": {
-			ubuntuVersion:       "24.04",
-			user:                examplebroker.UserIntegrationUnexistent,
-			wantNotLoggedInUser: true,
-			test:                sshPtyUnexistentUser,
+			ubuntuVersion:         "24.04",
+			user:                  examplebroker.UserIntegrationUnexistent,
+			wantUserNotInDatabase: true,
+			test:                  sshPtyUnexistentUser,
 		},
 		"Deny_authentication_if_user_does_not_exist_on_ubuntu_26.04": {
-			ubuntuVersion:       "26.04",
-			user:                examplebroker.UserIntegrationUnexistent,
-			wantNotLoggedInUser: true,
-			test:                sshPtyUnexistentUser,
+			ubuntuVersion:         "26.04",
+			user:                  examplebroker.UserIntegrationUnexistent,
+			wantUserNotInDatabase: true,
+			test:                  sshPtyUnexistentUser,
 		},
 		"Deny_authentication_if_user_does_not_exist_and_matches_cancel_key_on_ubuntu_24.04": {
-			ubuntuVersion:       "24.04",
-			user:                "r",
-			wantNotLoggedInUser: true,
-			test:                sshPtyCancelKeyUser,
+			ubuntuVersion:         "24.04",
+			user:                  "r",
+			wantUserNotInDatabase: true,
+			test:                  sshPtyCancelKeyUser,
 		},
 		"Deny_authentication_if_user_does_not_exist_and_matches_cancel_key_on_ubuntu_26.04": {
-			ubuntuVersion:       "26.04",
-			user:                "r",
-			wantNotLoggedInUser: true,
-			test:                sshPtyCancelKeyUser,
+			ubuntuVersion:         "26.04",
+			user:                  "r",
+			wantUserNotInDatabase: true,
+			test:                  sshPtyCancelKeyUser,
 		},
 		"Deny_authentication_if_newpassword_does_not_match_required_criteria": {
 			userPrefix: examplebroker.UserIntegrationNeedsResetPrefix,
@@ -380,39 +380,39 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		},
 
 		"Exit_authd_if_local_broker_is_selected": {
-			wantNotLoggedInUser: true,
-			test:                sshPtyLocalBroker,
+			wantUserNotInDatabase: true,
+			test:                  sshPtyLocalBroker,
 		},
 		"Exit_if_user_is_not_pre-checked_on_ssh_service_on_ubuntu_24.04": {
-			ubuntuVersion:       "24.04",
-			user:                examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed@example.com",
-			pamServiceName:      "sshd",
-			wantNotLoggedInUser: true,
-			test:                sshPtyLocalSSH,
+			ubuntuVersion:         "24.04",
+			user:                  examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed@example.com",
+			pamServiceName:        "sshd",
+			wantUserNotInDatabase: true,
+			test:                  sshPtyLocalSSH,
 		},
 		"Exit_if_user_is_not_pre-checked_on_ssh_service_on_ubuntu_26.04": {
-			ubuntuVersion:       "26.04",
-			user:                examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed@example.com",
-			pamServiceName:      "sshd",
-			wantNotLoggedInUser: true,
-			test:                sshPtyLocalSSH,
+			ubuntuVersion:         "26.04",
+			user:                  examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed@example.com",
+			pamServiceName:        "sshd",
+			wantUserNotInDatabase: true,
+			test:                  sshPtyLocalSSH,
 		},
 		"Exit_authd_if_user_sigints": {
-			wantNotLoggedInUser: true,
-			test:                sshPtySigint,
+			wantUserNotInDatabase: true,
+			test:                  sshPtySigint,
 		},
 
 		"Error_if_cannot_connect_to_authd_on_ubuntu_24.04": {
-			ubuntuVersion:       "24.04",
-			socketPath:          "/some-path/not-existent-socket",
-			wantNotLoggedInUser: true,
-			test:                sshPtyConnectionError,
+			ubuntuVersion:         "24.04",
+			socketPath:            "/some-path/not-existent-socket",
+			wantUserNotInDatabase: true,
+			test:                  sshPtyConnectionError,
 		},
 		"Error_if_cannot_connect_to_authd_on_ubuntu_26.04": {
-			ubuntuVersion:       "26.04",
-			socketPath:          "/some-path/not-existent-socket",
-			wantNotLoggedInUser: true,
-			test:                sshPtyConnectionError,
+			ubuntuVersion:         "26.04",
+			socketPath:            "/some-path/not-existent-socket",
+			wantUserNotInDatabase: true,
+			test:                  sshPtyConnectionError,
 		},
 	}
 	for name, tc := range tests {
@@ -554,7 +554,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			tc.test(t, args)
 
 			// After the test interaction is complete, verify user state.
-			if tc.wantNotLoggedInUser {
+			if tc.wantUserNotInDatabase {
 				if userClient != nil {
 					requireNoAuthdUser(t, userClient, user)
 				}
