@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+CARGO_C_VERSION=0.10.24
+CARGO_C_AARCH64_SHA256=d1fac5dbecdc5f4c833e815d6d1717cdb762799e15ccfd122b08e5955a138394
+CARGO_C_X86_64_SHA256=503a6de066897b810051f2944e4157629c580d0e36219cddb39ad45116d0e8f5
+
+cargo_c_bin="${CARGO_HOME:-${HOME}/.cargo}/bin/cargo-cbuild"
+if [ -x "${cargo_c_bin}" ] \
+  && "${cargo_c_bin}" --version | grep -qF "cargo-c ${CARGO_C_VERSION}+"; then
+  echo "cargo-c ${CARGO_C_VERSION} is already installed, skipping download"
+  exit 0
+fi
+
+case "$(uname -m)" in
+  x86_64)
+    cargo_c_arch=x86_64-unknown-linux-musl
+    cargo_c_sha256="${CARGO_C_X86_64_SHA256}"
+    ;;
+  aarch64)
+    cargo_c_arch=aarch64-unknown-linux-musl
+    cargo_c_sha256="${CARGO_C_AARCH64_SHA256}"
+    ;;
+  *)
+    echo "Unsupported cargo-c build architecture: $(uname -m)" >&2
+    exit 1
+    ;;
+esac
+
+cargo_c_archive="cargo-c-${cargo_c_arch}.tar.gz"
+temp_dir=$(mktemp --directory)
+trap 'rm -rf "${temp_dir}"' EXIT
+
+curl --fail --location --silent --show-error --retry 3 \
+  --output "${temp_dir}/${cargo_c_archive}" \
+  "https://github.com/lu-zero/cargo-c/releases/download/v${CARGO_C_VERSION}/${cargo_c_archive}"
+echo "${cargo_c_sha256}  ${temp_dir}/${cargo_c_archive}" | sha256sum --check
+tar --extract --gzip --file "${temp_dir}/${cargo_c_archive}" \
+  --directory "${temp_dir}" cargo-cbuild
+install -Dm755 "${temp_dir}/cargo-cbuild" "${CARGO_HOME:-${HOME}/.cargo}/bin/cargo-cbuild"

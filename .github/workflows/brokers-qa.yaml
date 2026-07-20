@@ -39,6 +39,12 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Cache cargo-c binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-cbuild
+          key: ${{ runner.os }}-cargo-c-${{ hashFiles('authd-oidc-brokers/tools/install-cargo-c') }}
+
       - name: Build libhimmelblau
         # The code sanity check fails if himmelblau.h does not exist, so we generate it first.
         run: go generate --tags withmsentraid ./internal/providers/msentraid/...
@@ -91,6 +97,12 @@ jobs:
           go install github.com/AlekSi/gocov-xml@latest
           go install github.com/adombeck/gocov/gocov@latest
           dotnet tool install -g dotnet-reportgenerator-globaltool
+
+      - name: Cache cargo-c binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-cbuild
+          key: ${{ runner.os }}-cargo-c-${{ hashFiles('authd-oidc-brokers/tools/install-cargo-c') }}
 
       - name: Build libhimmelblau
         run: go generate --tags withmsentraid ./internal/providers/msentraid/...

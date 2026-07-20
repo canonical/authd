@@ -13,7 +13,8 @@ if [ -z "${GIT_DIR}" ]; then
   exit 1
 fi
 
-cargo install --locked cargo-c cbindgen
+"${GIT_DIR}/authd-oidc-brokers/tools/install-cargo-c"
+cargo install --locked cbindgen
 
 cd "${GIT_DIR}/authd-oidc-brokers/third_party/libhimmelblau"
 
