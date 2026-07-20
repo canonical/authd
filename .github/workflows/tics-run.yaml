@@ -12,6 +12,7 @@ env:
     clang-tools
     clang
     dotnet8
+    libfido2-dev
     libglib2.0-dev
     libpam-dev
     libpwquality-dev

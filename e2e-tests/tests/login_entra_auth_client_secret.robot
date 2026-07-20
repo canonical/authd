@@ -16,13 +16,13 @@ Test Setup
     # Inject the OIDC client secret into broker.conf at runtime. The base
     # snapshot ships with the secret commented out (so public-client flows are
     # not broken by AADSTS700025); this test is the only one that needs it,
-    # because entra_password must stay available with register_device=false
+    # because entra_auth must stay available with register_device=false
     # by falling back to the app-only Graph token (client credentials).
     ${secret}=    Get Environment Variable    AUTHD_MSENTRAID_CLIENT_SECRET
     Should Not Be Empty    ${secret}    AUTHD_MSENTRAID_CLIENT_SECRET must be set to run this test
     Change Broker Configuration    client_secret    ${secret}
     Change Broker Configuration    register_device    false
-    Change Broker Configuration    entra_password    true
+    Change Broker Configuration    entra_auth    true
     Change Broker Configuration    device_code    false
 
 
@@ -34,21 +34,21 @@ ${local_password}    %{E2E_PASSWORD}
 
 
 *** Test Cases ***
-Test login with CLI using Entra ID password and MFA with client secret
+Test login with CLI using Entra auth and MFA with client secret
     [Documentation]    Verify that the Entra ID direct-password + MFA flow works
     ...    through the CLI when device registration is disabled and the broker is
     ...    provisioned with a client secret.
     ...
     ...    The client secret is injected into broker.conf at setup (not baked into
     ...    the snapshot), so the base snapshot stays secret-free for public-client
-    ...    flows. This covers the alternate configuration where entra_password stays
+    ...    flows. This covers the alternate configuration where entra_auth stays
     ...    available without register_device=true because Microsoft Graph access
     ...    comes from the configured application secret instead.
 
     Log In
 
     Open Terminal
-    Log In With Remote User Through CLI: Entra Password    ${username}
+    Log In With Remote User Through CLI: Entra Auth    ${username}
     # This shared provisioning check covers NSS, group membership, and the
     # cached local-password path via sudo.
     Check If User Was Added Properly    ${username}

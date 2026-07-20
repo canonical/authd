@@ -10,6 +10,7 @@ Resource            resources/utils.resource
 Resource            resources/authd.resource
 Library             ./Browser.py    AS    Browser
 Library             ./TOTP.py    AS    TOTP
+Library             ./EntraTAP.py    AS    EntraTAP
 Library             Hid.py    AS    Hid
 Library             OperatingSystem
 Library             String
@@ -21,17 +22,17 @@ Enable Edge Broker
     SSH.Execute    snap refresh ${BROKER_SNAP_NAME} --edge
 
 
-Disable Entra Password Via Drop In
-    [Documentation]    Writes a drop-in that sets entra_password = false.
+Disable Entra Auth Via Drop In
+    [Documentation]    Writes a drop-in that sets entra_auth = false.
     ...
     ...                More robust than Change Broker Configuration for this key,
     ...                because stable snapshots provisioned before the [flows]
-    ...                section was added may not contain an entra_password line
+    ...                section was added may not contain an entra_auth line
     ...                at all, causing a silent sed no-op.
     # TODO(stable-release): Can be removed once the stable broker has been
     #                       updated to include the [flows] section.
     SSH.Execute    mkdir -p ${BROKER_CFG_DIR}
-    SSH.Execute    printf '[flows]\nentra_password = false\n' > ${BROKER_CFG_DIR}/99-disable-entra-password.conf
+    SSH.Execute    printf '[flows]\nentra_auth = false\n' > ${BROKER_CFG_DIR}/99-disable-entra-auth.conf
     SSH.Execute    snap restart ${BROKER_SNAP_NAME}
 
 
@@ -72,7 +73,21 @@ Regenerate QR Code
     Match Text    ${DEVICE_URL}    15
 
 
+Ensure No Stray Entra TAP
+    [Documentation]    Best-effort: deletes a Temporary Access Pass left active on
+    ...    %{E2E_USER} so Entra can't intercept this sign-in with a TAP challenge
+    ...    instead of the expected password/MFA prompt. A stray TAP can linger from
+    ...    an unrelated run; see resources/EntraTAP.py. Only clears TAPs older than
+    ...    5 minutes, since the release channels run concurrently against the same
+    ...    account and a fresh TAP may still be in legitimate use by the
+    ...    passwordless test in another channel. No-op for brokers other than
+    ...    msentraid.
+    IF    '%{BROKER}' != 'authd-msentraid'    RETURN
+    Run Keyword And Warn On Failure    EntraTAP.Delete TAP For User    %{E2E_USER}    min_age_minutes=5
+
+
 Continue Log In With Remote User: Authenticate In External Browser
+    Ensure No Stray Entra TAP
     # Wait until the verification URL and login code are displayed
     Match Text    ${DEVICE_URL}
     # Read the user code.
@@ -443,8 +458,9 @@ Check That Device Was Registered
     ...    msg=token.json has no DeviceRegistrationData; the device was not registered.
 
 
-Log In With Remote User Through CLI: Entra Password
+Log In With Remote User Through CLI: Entra Auth
     [Arguments]    ${username}
+    Ensure No Stray Entra TAP
     Try machinectl login Prompt
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
@@ -467,3 +483,23 @@ Log In With Remote User Through CLI: Entra Password
 
     # Wait for the authenticated shell prompt.
     Match Text    ${username}@ubuntu:~$    120
+
+
+Log In With Remote User Through CLI: Entra Passwordless TAP
+    [Arguments]    ${username}    ${local_password}    ${tap_code}
+    Try machinectl login Prompt
+    Hid.Type String    ${username}
+    Hid.Keys Combo    Return
+
+    Match Text    Select your provider:    15
+    Match Text    2. ${PROVIDER_DISPLAY_NAME}
+    Hid.Type String    2
+
+    # Passwordless probe: entra_auth auto-selects and Entra returns a TAP
+    # code-entry challenge instead of a password prompt.
+    Match Text    Enter your MFA code:    120    similarity=88
+    Hid.Type String    ${tap_code}
+    Hid.Keys Combo    Return
+
+    # No cached Entra password: chain into newpassword to set a local one.
+    Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}

@@ -55,6 +55,7 @@ var (
 	codeAuthorizationDenied = uint32(C.AUTHORIZATION_DENIED)
 	codeMFAInvalidCode      = uint32(C.MFA_INVALID_CODE)
 	codeMFADAGFallbackDisab = uint32(C.MFA_DAG_FALLBACK_DISABLED)
+	codePasswordRequired    = uint32(C.PASSWORD_REQUIRED)
 )
 
 // mfaErrorCategory maps a libhimmelblau MSAL error code into an
@@ -72,6 +73,8 @@ func mfaErrorCategory(code uint32) MFAErrorCategory {
 		return MFAErrorRetryableCode
 	case codeMFADAGFallbackDisab:
 		return MFAErrorRequired
+	case codePasswordRequired:
+		return MFAErrorPasswordRequired
 	}
 	return MFAErrorOther
 }
@@ -434,24 +437,58 @@ func refreshTokenFromUserToken(userToken *C.UserToken) (refreshToken string, err
 	return C.GoString(cRefreshToken), nil
 }
 
-func initiateMFAFlow(broker *brokerClientApplication, username, password string) (*MFAFlowState, error) {
+// cgo maps the C typedef-enum `AuthOption` to Go's plain uint32 (not C.uint or
+// C.AuthOption), so the initiate functions' parameter `const enum AuthOption *`
+// becomes *uint32 in the generated binding. These constants convert the cgo
+// enum values to the matching Go type; they are variables only so that tests
+// can reference them without importing "C".
+var (
+	cAuthOptionNoDAGFallback = uint32(C.NoDAGFallback)
+	cAuthOptionFido          = uint32(C.Fido)
+	cAuthOptionPasswordless  = uint32(C.Passwordless)
+)
+
+// cAuthOptions translates portable AuthOption values to the C AuthOption enum.
+// Unknown options are ignored.
+func cAuthOptions(authOpts []AuthOption) []uint32 {
+	var options []uint32
+	for _, opt := range authOpts {
+		switch opt {
+		case AuthOptionNoDAGFallback:
+			options = append(options, cAuthOptionNoDAGFallback)
+		case AuthOptionFido:
+			options = append(options, cAuthOptionFido)
+		case AuthOptionPasswordless:
+			options = append(options, cAuthOptionPasswordless)
+		}
+	}
+	return options
+}
+
+func initiateMFAFlow(broker *brokerClientApplication, username, password string, authOpts []AuthOption) (*MFAFlowState, error) {
 	cUsername := C.CString(username)
 	defer C.free(unsafe.Pointer(cUsername))
 
-	cPassword := C.CString(password)
-	defer C.free(unsafe.Pointer(cPassword))
+	// An empty password is passed as a NULL pointer: there is simply no secret
+	// to submit. Passwordless method negotiation is driven by
+	// AuthOptionPasswordless in authOpts (added by InitiateMFAFlow), not by the
+	// NULL password itself.
+	var cPassword *C.char
+	if password != "" {
+		cPassword = C.CString(password)
+		defer C.free(unsafe.Pointer(cPassword))
+	}
 
-	// cgo maps the C typedef-enum `AuthOption` to Go's plain uint32 (not C.uint or
-	// C.AuthOption), so the function parameter `const enum AuthOption *` becomes
-	// *uint32 in the generated binding. uint32(C.NoDAGFallback) converts the cgo
-	// constant to the matching Go type.
-	options := [1]uint32{uint32(C.NoDAGFallback)}
+	options := cAuthOptions(authOpts)
 	var flow *C.MFAAuthContinue
 	msalErr := C.broker_initiate_acquire_token_by_mfa_flow(
 		(*C.BrokerClientApplication)(unsafe.Pointer(broker)),
 		cUsername,
 		cPassword,
-		&options[0],
+		// Not &options[0]: cAuthOptions ignores unknown values, so the slice
+		// can be empty and indexing it would panic. SliceData returns nil for
+		// a nil slice, and the C API accepts NULL with length 0.
+		unsafe.SliceData(options),
 		C.uintptr_t(len(options)),
 		&flow,
 	)
@@ -500,20 +537,21 @@ func newMFAError(msalErr *C.MSAL_ERROR) *MFAError {
 	}
 }
 
-func initiateMFAFlowForEnrollment(broker *brokerClientApplication, username, password string) (*MFAFlowState, error) {
+func initiateMFAFlowForEnrollment(broker *brokerClientApplication, username, password string, authOpts []AuthOption) (*MFAFlowState, error) {
 	cUsername := C.CString(username)
 	defer C.free(unsafe.Pointer(cUsername))
 
 	cPassword := C.CString(password)
 	defer C.free(unsafe.Pointer(cPassword))
 
-	options := [1]uint32{uint32(C.NoDAGFallback)}
+	options := cAuthOptions(authOpts)
 	var flow *C.MFAAuthContinue
 	msalErr := C.broker_initiate_acquire_token_by_mfa_flow_for_device_enrollment(
 		(*C.BrokerClientApplication)(unsafe.Pointer(broker)),
 		cUsername,
 		cPassword,
-		&options[0],
+		// See initiateMFAFlow: the slice can be empty, so use SliceData.
+		unsafe.SliceData(options),
 		C.uintptr_t(len(options)),
 		&flow,
 	)
@@ -630,4 +668,60 @@ func mfaFlowMaxPollAttempts(flow *MFAFlowState) int {
 		return -1
 	}
 	return int(C.mfa_auth_continue_max_poll_attempts(c))
+}
+
+// mfaFlowFidoChallenge returns the WebAuthn challenge negotiated for a FIDO
+// method, or "" when the flow is not a FIDO flow (the C accessor reports the
+// absence as a NULL string without an error).
+func mfaFlowFidoChallenge(flow *MFAFlowState) (string, error) {
+	if flow == nil {
+		return "", fmt.Errorf("missing MFA flow state")
+	}
+	flow.mu.Lock()
+	defer flow.mu.Unlock()
+	c := cFlow(flow)
+	if c == nil {
+		return "", fmt.Errorf("missing MFA flow state")
+	}
+	var cChallenge *C.char
+	msalErr := C.mfa_auth_continue_fido_challenge(c, &cChallenge)
+	if msalErr != nil {
+		return "", fmt.Errorf("failed to get FIDO challenge: %v", msalErrorMsg(msalErr))
+	}
+	if cChallenge == nil {
+		return "", nil
+	}
+	defer C.free(unsafe.Pointer(cChallenge))
+	return C.GoString(cChallenge), nil
+}
+
+// mfaFlowFidoAllowList returns the credential IDs Entra ID accepts for the
+// FIDO assertion, or nil when the flow is not a FIDO flow.
+func mfaFlowFidoAllowList(flow *MFAFlowState) ([]string, error) {
+	if flow == nil {
+		return nil, fmt.Errorf("missing MFA flow state")
+	}
+	flow.mu.Lock()
+	defer flow.mu.Unlock()
+	c := cFlow(flow)
+	if c == nil {
+		return nil, fmt.Errorf("missing MFA flow state")
+	}
+	var cList **C.char
+	var cCount C.int
+	msalErr := C.mfa_auth_continue_fido_allow_list(c, &cList, &cCount)
+	if msalErr != nil {
+		return nil, fmt.Errorf("failed to get FIDO allow list: %v", msalErrorMsg(msalErr))
+	}
+	if cList == nil || cCount <= 0 {
+		return nil, nil
+	}
+	defer C.mfa_auth_continue_free_fido_allow_list(cList, cCount)
+
+	entries := unsafe.Slice(cList, int(cCount))
+	allowList := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		allowList = append(allowList, C.GoString(entry))
+	}
+	return allowList, nil
 }

@@ -65,8 +65,8 @@ const (
 	flowsSection = "flows"
 	// flowsDeviceAuthKey controls whether the device_auth and device_auth_qr modes are enabled.
 	flowsDeviceAuthKey = "device_code"
-	// flowsEntraPasswordKey controls whether entra_password mode is enabled.
-	flowsEntraPasswordKey = "entra_password"
+	// flowsEntraAuthKey controls whether entra_auth mode is enabled.
+	flowsEntraAuthKey = "entra_auth"
 
 	// ownerAutoRegistrationConfigPath is the name of the file that will be auto-generated to register the owner.
 	ownerAutoRegistrationConfigPath     = "20-owner-autoregistration.conf"
@@ -100,8 +100,8 @@ var (
 			ownerExtraGroupsKey: {},
 		},
 		flowsSection: {
-			flowsDeviceAuthKey:    {},
-			flowsEntraPasswordKey: {},
+			flowsDeviceAuthKey: {},
+			flowsEntraAuthKey:  {},
 		},
 	}
 )
@@ -147,15 +147,15 @@ type userConfig struct {
 
 // flowsConfig holds the parsed [flows] section configuration.
 type flowsConfig struct {
-	DeviceAuth    bool
-	EntraPassword bool
+	DeviceAuth bool
+	EntraAuth  bool
 }
 
 // defaultFlowsConfig returns the default flows configuration (all modes enabled).
 func defaultFlowsConfig() flowsConfig {
 	return flowsConfig{
-		DeviceAuth:    true,
-		EntraPassword: true,
+		DeviceAuth: true,
+		EntraAuth:  true,
 	}
 }
 
@@ -498,18 +498,18 @@ func parseFlowsConfig(section *ini.Section) (flowsConfig, error) {
 		}
 	}
 
-	if section.HasKey(flowsEntraPasswordKey) {
-		val, err := section.Key(flowsEntraPasswordKey).Bool()
+	if section.HasKey(flowsEntraAuthKey) {
+		val, err := section.Key(flowsEntraAuthKey).Bool()
 		if err != nil {
-			log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (true)", flowsEntraPasswordKey, flowsSection)
+			log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (true)", flowsEntraAuthKey, flowsSection)
 		} else {
-			fc.EntraPassword = val
+			fc.EntraAuth = val
 		}
 	}
 
-	if !fc.DeviceAuth && !fc.EntraPassword {
+	if !fc.DeviceAuth && !fc.EntraAuth {
 		return flowsConfig{}, fmt.Errorf("invalid [%s] configuration: all authentication flows are disabled; at least one of the %q or %q flows must be enabled",
-			flowsSection, flowsDeviceAuthKey, flowsEntraPasswordKey)
+			flowsSection, flowsDeviceAuthKey, flowsEntraAuthKey)
 	}
 
 	return fc, nil

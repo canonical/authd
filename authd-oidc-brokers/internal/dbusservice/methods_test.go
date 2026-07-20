@@ -26,7 +26,7 @@ issuer = `+defaultIssuerURL+`
 client_id = test-client-id
 
 [flows]
-entra_password = false
+entra_auth = false
 `), 0600), "Setup: writing broker config should not fail")
 
 	cfg := broker.Config{ConfigFile: confPath, DataDir: t.TempDir()}

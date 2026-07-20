@@ -45,6 +45,14 @@ jobs:
           path: ~/.cargo/bin/cargo-cbuild
           key: ${{ runner.os }}-cargo-c-${{ hashFiles('authd-oidc-brokers/tools/install-cargo-c') }}
 
+      - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
+      - name: Install dependencies
+        run: |
+          set -eu
+          sudo apt-get update
+          # Headers for the cgo bindings to libfido2 (internal/fido).
+          sudo apt-get install -y libfido2-dev
+
       - name: Build libhimmelblau
         # The code sanity check fails if himmelblau.h does not exist, so we generate it first.
         run: go generate --tags withmsentraid ./internal/providers/msentraid/...
@@ -87,7 +95,9 @@ jobs:
         run: |
           set -eu
           sudo apt-get update
-          sudo apt-get install -y git-delta
+          # libfido2-dev provides the headers for the cgo bindings to libfido2
+          # (internal/fido).
+          sudo apt-get install -y git-delta libfido2-dev
 
       - name: Install coverage collection dependencies
         if: matrix.test == 'coverage'
