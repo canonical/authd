@@ -83,6 +83,11 @@ Wait Until GDM Login Screen Ready
     BuiltIn.Sleep    2
 
 
+Wait Until System Is Running Or Degraded
+    Wait Until Keyword Succeeds    3 min    1 sec
+    ...    SSH.Execute    output=$(systemctl is-system-running --wait) || [ "$output" = degraded ]
+
+
 Wait Until Desktop Ready
     Wait Until Keyword Succeeds    1 min    1 sec
     ...    Try Desktop Ready

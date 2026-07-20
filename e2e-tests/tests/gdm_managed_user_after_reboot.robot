@@ -23,8 +23,7 @@ Managed user is listed by GDM after reboot
     ${display_name} =    SSH.Execute    getent passwd ${username} | cut -d: -f5 | cut -d, -f1
 
     Run Keyword And Ignore Error    SSH.Execute    systemctl reboot
-    Wait Until Keyword Succeeds    3 min    1 sec
-    ...    SSH.Execute    systemctl is-system-running --wait
+    Wait Until System Is Running Or Degraded
 
     Wait Until GDM Login Screen Ready
     Match Text    ${display_name}    30
