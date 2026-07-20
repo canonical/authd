@@ -15,7 +15,8 @@ import (
 
 // Transaction is a [pam.Transaction] with dbus support.
 type Transaction struct {
-	obj dbus.BusObject
+	conn *dbus.Conn
+	obj  dbus.BusObject
 }
 
 type options struct {
@@ -38,10 +39,13 @@ const objectPath = "/com/ubuntu/authd/pam"
 // FIXME: dbus.Variant does not support maybe types, so we're using a variant string instead.
 const variantNothing = "<@mv nothing>"
 
+// Statically Ensure that [Transaction] implements [pam.ModuleTransaction].
+var _ pam.ModuleTransaction = &Transaction{}
+
 // NewTransaction creates a new [dbusmodule.Transaction] with the provided connection.
 // A [pam.ModuleTransaction] implementation is returned together with a cleanup function that
 // should be called to release the connection.
-func NewTransaction(address string, o ...TransactionOptions) (tx pam.ModuleTransaction, cleanup func(), err error) {
+func NewTransaction(address string, o ...TransactionOptions) (tx Transaction, cleanup func(), err error) {
 	opts := options{}
 	for _, f := range o {
 		f(&opts)
@@ -50,31 +54,38 @@ func NewTransaction(address string, o ...TransactionOptions) (tx pam.ModuleTrans
 	log.Debugf(context.TODO(), "Connecting to %s", address)
 	conn, err := dbus.Dial(address)
 	if err != nil {
-		return nil, nil, err
+		return Transaction{}, nil, err
 	}
 	cleanup = func() { conn.Close() }
 	if err = conn.Auth(nil); err != nil {
 		cleanup()
-		return nil, nil, err
+		return Transaction{}, nil, err
 	}
 	if opts.isSharedConnection {
 		if err = conn.Hello(); err != nil {
 			cleanup()
-			return nil, nil, err
+			return Transaction{}, nil, err
 		}
 	}
 	obj := conn.Object(ifaceName, objectPath)
-	return &Transaction{obj: obj}, cleanup, nil
+
+	return Transaction{conn: conn, obj: obj}, cleanup, nil
 }
 
 // BusObject gets the DBus object.
-func (tx *Transaction) BusObject() dbus.BusObject {
+func (tx Transaction) BusObject() dbus.BusObject {
 	return tx.obj
+}
+
+// Context returns the context associated with the connection.  The
+// context will be cancelled when the connection is closed.
+func (tx Transaction) Context() context.Context {
+	return tx.conn.Context()
 }
 
 // SetData allows to save any value in the module data that is preserved
 // during the whole time the module is loaded.
-func (tx *Transaction) SetData(key string, data any) error {
+func (tx Transaction) SetData(key string, data any) error {
 	if data == nil {
 		return dbusUnsetter(tx.obj, "UnsetData", key)
 	}
@@ -83,7 +94,7 @@ func (tx *Transaction) SetData(key string, data any) error {
 
 // GetData allows to get any value from the module data saved using SetData
 // that is preserved across the whole time the module is loaded.
-func (tx *Transaction) GetData(key string) (any, error) {
+func (tx Transaction) GetData(key string) (any, error) {
 	// See the FIXME on variantNothing, all this should be managed by variant.
 	data, err := dbusGetter[any](tx.obj, "GetData", key)
 	if data == variantNothing {
@@ -93,12 +104,12 @@ func (tx *Transaction) GetData(key string) (any, error) {
 }
 
 // SetItem sets a PAM item.
-func (tx *Transaction) SetItem(item pam.Item, value string) error {
+func (tx Transaction) SetItem(item pam.Item, value string) error {
 	return dbusSetter(tx.obj, "SetItem", item, value)
 }
 
 // GetItem retrieves a PAM item.
-func (tx *Transaction) GetItem(item pam.Item) (string, error) {
+func (tx Transaction) GetItem(item pam.Item) (string, error) {
 	return dbusGetter[string](tx.obj, "GetItem", item)
 }
 
@@ -107,7 +118,7 @@ func (tx *Transaction) GetItem(item pam.Item) (string, error) {
 // NAME=value will set a variable to a value.
 // NAME= will set a variable to an empty value.
 // NAME (without an "=") will delete a variable.
-func (tx *Transaction) PutEnv(nameVal string) error {
+func (tx Transaction) PutEnv(nameVal string) error {
 	if !strings.Contains(nameVal, "=") {
 		return dbusUnsetter(tx.obj, "UnsetEnv", nameVal)
 	}
@@ -116,7 +127,7 @@ func (tx *Transaction) PutEnv(nameVal string) error {
 }
 
 // GetEnv is used to retrieve a PAM environment variable.
-func (tx *Transaction) GetEnv(name string) string {
+func (tx Transaction) GetEnv(name string) string {
 	env, err := dbusGetter[string](tx.obj, "GetEnv", name)
 	if err != nil {
 		return ""
@@ -125,7 +136,7 @@ func (tx *Transaction) GetEnv(name string) string {
 }
 
 // GetEnvList returns a copy of the PAM environment as a map.
-func (tx *Transaction) GetEnvList() (map[string]string, error) {
+func (tx Transaction) GetEnvList() (map[string]string, error) {
 	var r int
 	var envMap map[string]string
 	method := fmt.Sprintf("%s.GetEnvList", ifaceName)
@@ -143,7 +154,7 @@ func (tx *Transaction) GetEnvList() (map[string]string, error) {
 
 // GetUser is similar to GetItem(User), but it would start a conversation if
 // no user is currently set in PAM.
-func (tx *Transaction) GetUser(prompt string) (string, error) {
+func (tx Transaction) GetUser(prompt string) (string, error) {
 	user, err := tx.GetItem(pam.User)
 	if err != nil {
 		return "", err
@@ -162,7 +173,7 @@ func (tx *Transaction) GetUser(prompt string) (string, error) {
 
 // StartStringConv starts a text-based conversation using the provided style
 // and prompt.
-func (tx *Transaction) StartStringConv(style pam.Style, prompt string) (
+func (tx Transaction) StartStringConv(style pam.Style, prompt string) (
 	pam.StringConvResponse, error) {
 	res, err := tx.StartConv(pam.NewStringConvRequest(style, prompt))
 	if err != nil {
@@ -177,19 +188,19 @@ func (tx *Transaction) StartStringConv(style pam.Style, prompt string) (
 }
 
 // StartStringConvf allows to start string conversation with formatting support.
-func (tx *Transaction) StartStringConvf(style pam.Style, format string, args ...interface{}) (
+func (tx Transaction) StartStringConvf(style pam.Style, format string, args ...interface{}) (
 	pam.StringConvResponse, error) {
 	return tx.StartStringConv(style, fmt.Sprintf(format, args...))
 }
 
 // StartBinaryConv starts a binary conversation using the provided bytes.
-func (tx *Transaction) StartBinaryConv(bytes []byte) (
+func (tx Transaction) StartBinaryConv(bytes []byte) (
 	pam.BinaryConvResponse, error) {
 	return nil, fmt.Errorf("%w: binary conversations are not supported", pam.ErrConv)
 }
 
 // StartConv initiates a PAM conversation using the provided ConvRequest.
-func (tx *Transaction) StartConv(req pam.ConvRequest) (
+func (tx Transaction) StartConv(req pam.ConvRequest) (
 	pam.ConvResponse, error) {
 	resp, err := tx.StartConvMulti([]pam.ConvRequest{req})
 	if err != nil {
@@ -201,7 +212,7 @@ func (tx *Transaction) StartConv(req pam.ConvRequest) (
 	return resp[0], nil
 }
 
-func (tx *Transaction) handleStringRequest(req pam.StringConvRequest) (pam.StringConvResponse, error) {
+func (tx Transaction) handleStringRequest(req pam.StringConvRequest) (pam.StringConvResponse, error) {
 	if req.Style() == pam.BinaryPrompt {
 		return nil, fmt.Errorf("%w: binary style is not supported", pam.ErrConv)
 	}
@@ -225,7 +236,7 @@ func (tx *Transaction) handleStringRequest(req pam.StringConvRequest) (pam.Strin
 }
 
 // StartConvMulti initiates a PAM conversation with multiple ConvRequest's.
-func (tx *Transaction) StartConvMulti(requests []pam.ConvRequest) (
+func (tx Transaction) StartConvMulti(requests []pam.ConvRequest) (
 	responses []pam.ConvResponse, err error) {
 	defer decorate.OnError(&err, "%v", err)
 
@@ -251,7 +262,7 @@ func (tx *Transaction) StartConvMulti(requests []pam.ConvRequest) (
 }
 
 // InvokeHandler is called by the C code to invoke the proper handler.
-func (tx *Transaction) InvokeHandler(handler pam.ModuleHandlerFunc,
+func (tx Transaction) InvokeHandler(handler pam.ModuleHandlerFunc,
 	flags pam.Flags, args []string) error {
 	return pam.ErrAbort
 }

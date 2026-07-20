@@ -2,9 +2,12 @@ package main_test
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/canonical/authd/examplebroker"
 	"github.com/canonical/authd/internal/proto/authd"
@@ -13,6 +16,7 @@ import (
 	"github.com/canonical/authd/internal/testutils/ptytest"
 	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
 	"github.com/canonical/authd/pam/internal/pam_test"
+	"github.com/stretchr/testify/require"
 )
 
 type nativePtySessionRunner struct {
@@ -658,7 +662,7 @@ func TestNativeAuthenticate(t *testing.T) {
 		},
 		"Exit_authd_if_user_sigints": {
 			skipRunnerCheck:  true,
-			expectedExitCode: 130,
+			expectedExitCode: 128 + int(syscall.SIGINT),
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				nativeSelectBroker(t, c)
@@ -681,6 +685,44 @@ func TestNativeAuthenticate(t *testing.T) {
 			},
 			expectedUser: testUserName(t, "native"),
 		},
+		//nolint:dupl // This is not a duplicate test
+		"Exit_the_pam_client_if_parent_pam_application_is_stopped": {
+			skipRunnerCheck:  true,
+			expectedExitCode: 128 + int(syscall.SIGTERM),
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+
+				c.WaitFor(t, `Choose your provider:`)
+
+				parentPID := c.Pid()
+				helperPID := findPAMExecChildPID(t, parentPID)
+				t.Logf("Found %s helper child pid %d under PAM runner pid %d",
+					pamExecChildName, helperPID, parentPID)
+
+				runnerLogPath, ok := c.Env(pam_test.RunnerEnvLogFile)
+				require.True(t, ok, "missing %s in pty runner environment", pam_test.RunnerEnvLogFile)
+				t.Logf("Found %s logfile path: %s", pamExecChildName, runnerLogPath)
+
+				// Kill the parent PAM application. This tears down the
+				// private D-Bus server that the PAM module was hosting for
+				// the helper, which is the condition the helper is supposed
+				// to detect.
+				c.Signal(t, syscall.SIGTERM)
+
+				// The helper must terminate on its own once it sees the
+				// disconnect.
+				require.Eventually(t, func() bool {
+					return syscall.Kill(helperPID, 0) == syscall.ESRCH
+				}, sleepDuration(1*time.Second), 50*time.Millisecond,
+					"authd-pam helper child (pid %d) was not terminated after parent was killed",
+					helperPID)
+
+				content, err := os.ReadFile(runnerLogPath)
+				require.NoError(t, err, "failed to read PAM runner log file")
+				require.Contains(t, string(content), "D-Bus Connection closed")
+			},
+		},
+
 		"Error_if_cannot_connect_to_authd": {
 			socketPath: "/some-path/not-existent-socket",
 			test: func(t *testing.T, c *ptytest.Console) {
@@ -970,7 +1012,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 		},
 		"Exit_authd_if_user_sigints": {
 			skipRunnerCheck:  true,
-			expectedExitCode: 130,
+			expectedExitCode: 128 + int(syscall.SIGINT),
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				nativeSelectBroker(t, c)
