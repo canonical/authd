@@ -2273,7 +2273,7 @@ func TestEndSessionDoesNotBlockOnInFlightMFA(t *testing.T) {
 	require.Equal(t, broker.AuthNext, access)
 
 	unlockFlow := lockMFAFlowStateForTests(flow)
-	updateAuthModes(t, b, sessionID, authmodes.EntraAuthWait)
+	updateAuthModes(t, b, sessionID, authmodes.EntraMFAWait)
 
 	authDone := make(chan error, 1)
 	go func() {
@@ -2381,7 +2381,7 @@ func TestEntraAuthProbePromptsForPasswordWhenRequired(t *testing.T) {
 	access, _, err = b.IsAuthenticated(sessionID, passwordAuthData)
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
-	require.Equal(t, []string{authmodes.EntraAuthWait}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{authmodes.EntraMFAWait}, b.GetNextAuthModes(sessionID))
 	require.Equal(t, []string{"", "password"}, provider.recordedInitPasswords,
 		"the second call should submit the user-entered password")
 	require.Equal(t, []bool{false, true}, provider.recordedInitDevScopes,
@@ -2424,14 +2424,14 @@ func TestEntraAuthPasswordlessSuccessDoesNotCacheOfflinePassword(t *testing.T) {
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
-	require.Equal(t, []string{authmodes.EntraAuthWait}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{authmodes.EntraMFAWait}, b.GetNextAuthModes(sessionID))
 	require.Equal(t, []string{""}, provider.recordedInitPasswords,
 		"passwordless initiation should not submit a password")
 	require.Equal(t, []bool{false}, provider.recordedInitDevScopes,
 		"passwordless initiation must not request device-scoped auth even when device registration is enabled")
 
-	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraAuthWait))
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthWait)
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFAWait))
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
 
 	access, _, err = b.IsAuthenticated(sessionID, "{}")
@@ -2480,12 +2480,12 @@ func TestEntraAuthPasswordlessTimeoutRestartsPasswordlessProbe(t *testing.T) {
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
-	require.Equal(t, []string{authmodes.EntraAuthWait}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{authmodes.EntraMFAWait}, b.GetNextAuthModes(sessionID))
 	require.Equal(t, []string{""}, provider.recordedInitPasswords,
 		"the first step should be a passwordless probe")
 
-	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraAuthWait))
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthWait)
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFAWait))
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
 
 	access, data, err := b.IsAuthenticated(sessionID, "{}")
@@ -2502,7 +2502,7 @@ func TestEntraAuthPasswordlessTimeoutRestartsPasswordlessProbe(t *testing.T) {
 	require.Empty(t, layout["entry"])
 }
 
-func TestIsAuthenticatedEntraAuthWaitStartsPollingAtOne(t *testing.T) {
+func TestIsAuthenticatedEntraMFAWaitStartsPollingAtOne(t *testing.T) {
 	t.Parallel()
 
 	username := "test-user@email.com"
@@ -2535,14 +2535,14 @@ func TestIsAuthenticatedEntraAuthWaitStartsPollingAtOne(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
 	require.Equal(t, "{}", data, "AuthNext after password should carry no message (avoids PAM read-delay)")
-	require.Equal(t, []string{authmodes.EntraAuthWait}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{authmodes.EntraMFAWait}, b.GetNextAuthModes(sessionID))
 
-	err = b.SetAvailableMode(sessionID, authmodes.EntraAuthWait)
+	err = b.SetAvailableMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err, "Setup: SetAvailableMode should not have returned an error")
-	layout, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthWait)
+	layout, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err, "Setup: SelectAuthenticationMode should not have returned an error")
 	require.Equal(t, "Approve the sign-in request in Microsoft Authenticator", layout["label"],
-		"entra_auth_wait layout label should reflect the MFA challenge message")
+		"entra_mfa_wait layout label should reflect the MFA challenge message")
 
 	access, data, err = b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
@@ -2564,9 +2564,9 @@ func TestIsAuthenticatedEntraAuthWaitStartsPollingAtOne(t *testing.T) {
 	require.NoError(t, err, "Entra MFA completion should cache the refreshed token")
 }
 
-// advanceToEntraAuthWait submits the Entra password for the session and selects the
-// entra_auth_wait mode, leaving the session ready for the polling IsAuthenticated("{}").
-func advanceToEntraAuthWait(t *testing.T, b *broker.Broker, sessionID, key string) {
+// advanceToEntraMFAWait submits the Entra password for the session and selects the
+// entra_mfa_wait mode, leaving the session ready for the polling IsAuthenticated("{}").
+func advanceToEntraMFAWait(t *testing.T, b *broker.Broker, sessionID, key string) {
 	t.Helper()
 
 	updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
@@ -2575,10 +2575,10 @@ func advanceToEntraAuthWait(t *testing.T, b *broker.Broker, sessionID, key strin
 	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
-	require.Equal(t, []string{authmodes.EntraAuthWait}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{authmodes.EntraMFAWait}, b.GetNextAuthModes(sessionID))
 
-	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraAuthWait))
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthWait)
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFAWait))
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
 }
 
@@ -2611,7 +2611,7 @@ func TestIsAuthenticatedEntraAuthDeniesOnAccessTokenVerificationFailure(t *testi
 	})
 
 	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
-	advanceToEntraAuthWait(t, b, sessionID, key)
+	advanceToEntraMFAWait(t, b, sessionID, key)
 
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
@@ -2619,11 +2619,11 @@ func TestIsAuthenticatedEntraAuthDeniesOnAccessTokenVerificationFailure(t *testi
 		"an access token that fails signature verification must be denied")
 }
 
-// TestIsAuthenticatedEntraAuthWaitPollsWhenMaxPollAttemptsZero verifies that a
+// TestIsAuthenticatedEntraMFAWaitPollsWhenMaxPollAttemptsZero verifies that a
 // MaxPollAttempts value of 0 (which libhimmelblau can produce from
 // expires_in/polling_interval flooring to zero) still polls rather than returning
 // an immediate, false "MFA timed out".
-func TestIsAuthenticatedEntraAuthWaitPollsWhenMaxPollAttemptsZero(t *testing.T) {
+func TestIsAuthenticatedEntraMFAWaitPollsWhenMaxPollAttemptsZero(t *testing.T) {
 	t.Parallel()
 
 	username := "test-user@email.com"
@@ -2644,7 +2644,7 @@ func TestIsAuthenticatedEntraAuthWaitPollsWhenMaxPollAttemptsZero(t *testing.T) 
 	})
 
 	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
-	advanceToEntraAuthWait(t, b, sessionID, key)
+	advanceToEntraMFAWait(t, b, sessionID, key)
 
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
@@ -2676,18 +2676,18 @@ func TestIsAuthenticatedEntraAuthDeniesOnNilToken(t *testing.T) {
 	})
 
 	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
-	advanceToEntraAuthWait(t, b, sessionID, key)
+	advanceToEntraMFAWait(t, b, sessionID, key)
 
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthDenied, access, "a (nil, nil) MFA result must deny, not panic")
 }
 
-// TestIsAuthenticatedEntraAuthWaitNumberMatchingLabelShown verifies that when the MFA
+// TestIsAuthenticatedEntraMFAWaitNumberMatchingLabelShown verifies that when the MFA
 // challenge message from libhimmelblau includes a number-matching code (e.g.
-// PhoneAppNotification with entropy), that message is used as the entra_auth_wait
+// PhoneAppNotification with entropy), that message is used as the entra_mfa_wait
 // layout label so the user can see the number to match in the Authenticator app.
-func TestIsAuthenticatedEntraAuthWaitNumberMatchingLabelShown(t *testing.T) {
+func TestIsAuthenticatedEntraMFAWaitNumberMatchingLabelShown(t *testing.T) {
 	t.Parallel()
 
 	username := "test-user@email.com"
@@ -2717,29 +2717,29 @@ func TestIsAuthenticatedEntraAuthWaitNumberMatchingLabelShown(t *testing.T) {
 
 	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
 
-	// Submit password – broker should offer entra_auth_wait for PhoneAppNotification.
+	// Submit password – broker should offer entra_mfa_wait for PhoneAppNotification.
 	updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
 	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
 
 	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
-	require.Equal(t, []string{authmodes.EntraAuthWait}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{authmodes.EntraMFAWait}, b.GetNextAuthModes(sessionID))
 
-	err = b.SetAvailableMode(sessionID, authmodes.EntraAuthWait)
+	err = b.SetAvailableMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
-	layout, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthWait)
+	layout, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
 	require.Equal(t, numberMatchingMsg, layout["label"],
-		"entra_auth_wait label must show the number-matching message so the user can approve in the Authenticator app")
+		"entra_mfa_wait label must show the number-matching message so the user can approve in the Authenticator app")
 }
 
-// TestIsAuthenticatedEntraAuthWaitDeniedWhenDeviceRegistrationFails verifies
+// TestIsAuthenticatedEntraMFAWaitDeniedWhenDeviceRegistrationFails verifies
 // that authentication is denied when device registration fails, even after
 // successful MFA. Without device registration the token exchange cannot be
 // completed and group membership cannot be resolved, so granting access would
 // leave the user in a broken state.
-func TestIsAuthenticatedEntraAuthWaitDeniedWhenDeviceRegistrationFails(t *testing.T) {
+func TestIsAuthenticatedEntraMFAWaitDeniedWhenDeviceRegistrationFails(t *testing.T) {
 	t.Parallel()
 
 	username := "test-user@email.com"
@@ -2776,10 +2776,10 @@ func TestIsAuthenticatedEntraAuthWaitDeniedWhenDeviceRegistrationFails(t *testin
 	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
-	require.Equal(t, []string{authmodes.EntraAuthWait}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{authmodes.EntraMFAWait}, b.GetNextAuthModes(sessionID))
 
 	// Step 2: MFA poll — device registration fails and auth should be denied.
-	updateAuthModes(t, b, sessionID, authmodes.EntraAuthWait)
+	updateAuthModes(t, b, sessionID, authmodes.EntraMFAWait)
 	access, data, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthDenied, access,
@@ -2787,7 +2787,7 @@ func TestIsAuthenticatedEntraAuthWaitDeniedWhenDeviceRegistrationFails(t *testin
 	require.True(t, json.Valid([]byte(data)), "IsAuthenticated returned data must be valid JSON")
 }
 
-func TestIsAuthenticatedEntraAuthWaitFallsBackToClientSecretWhenPasswordlessRegistrationFails(t *testing.T) {
+func TestIsAuthenticatedEntraMFAWaitFallsBackToClientSecretWhenPasswordlessRegistrationFails(t *testing.T) {
 	t.Parallel()
 
 	username := "test-user@email.com"
@@ -2822,11 +2822,11 @@ func TestIsAuthenticatedEntraAuthWaitFallsBackToClientSecretWhenPasswordlessRegi
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
-	require.Equal(t, []string{authmodes.EntraAuthWait}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{authmodes.EntraMFAWait}, b.GetNextAuthModes(sessionID))
 	require.Equal(t, []string{""}, provider.recordedInitPasswords,
 		"the mixed-config path should still start with a passwordless probe")
 
-	updateAuthModes(t, b, sessionID, authmodes.EntraAuthWait)
+	updateAuthModes(t, b, sessionID, authmodes.EntraMFAWait)
 	access, _, err = b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access,
@@ -2838,14 +2838,14 @@ func TestIsAuthenticatedEntraAuthWaitFallsBackToClientSecretWhenPasswordlessRegi
 		"passwordless fallback should still defer offline password caching until the local password step")
 }
 
-// TestIsAuthenticatedEntraAuthWaitFallbackAppliesToReturningPasswordlessLogins
+// TestIsAuthenticatedEntraMFAWaitFallbackAppliesToReturningPasswordlessLogins
 // covers the returning variant of the client-secret fallback: the user's first
 // passwordless login already used it (so the cached token carries no device
 // registration data) and device registration keeps failing. The fallback must
 // be keyed on the missing device data, not on "first login" — otherwise a user
 // who could log in yesterday is denied on every later online login, since the
 // device-data-less token also disqualifies the local password mode online.
-func TestIsAuthenticatedEntraAuthWaitFallbackAppliesToReturningPasswordlessLogins(t *testing.T) {
+func TestIsAuthenticatedEntraMFAWaitFallbackAppliesToReturningPasswordlessLogins(t *testing.T) {
 	t.Parallel()
 
 	username := "test-user@email.com"
@@ -2888,9 +2888,9 @@ func TestIsAuthenticatedEntraAuthWaitFallbackAppliesToReturningPasswordlessLogin
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
-	require.Equal(t, []string{authmodes.EntraAuthWait}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{authmodes.EntraMFAWait}, b.GetNextAuthModes(sessionID))
 
-	updateAuthModes(t, b, sessionID, authmodes.EntraAuthWait)
+	updateAuthModes(t, b, sessionID, authmodes.EntraMFAWait)
 	access, _, err = b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthGranted, access,
@@ -2930,9 +2930,9 @@ func TestIsAuthenticatedEntraAuthDeniedWhenInitialGroupFetchFails(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
 
-	err = b.SetAvailableMode(sessionID, authmodes.EntraAuthWait)
+	err = b.SetAvailableMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthWait)
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
 
 	access, data, err := b.IsAuthenticated(sessionID, "{}")
@@ -2983,9 +2983,9 @@ func TestIsAuthenticatedEntraAuthUsesCachedGroupsWhenRefreshFails(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
 
-	err = b.SetAvailableMode(sessionID, authmodes.EntraAuthWait)
+	err = b.SetAvailableMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthWait)
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
 
 	access, data, err := b.IsAuthenticated(sessionID, "{}")
@@ -3046,9 +3046,9 @@ func TestIsAuthenticatedEntraAuthSurfacesForDisplayErrorOnFirstLogin(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
 
-	err = b.SetAvailableMode(sessionID, authmodes.EntraAuthWait)
+	err = b.SetAvailableMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthWait)
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
 
 	access, data, err := b.IsAuthenticated(sessionID, "{}")
@@ -3710,7 +3710,7 @@ func TestDeviceAuthClearsDeviceRegistrationDataWhenRegistrationDisabled(t *testi
 }
 
 // TestIsAuthenticatedPhoneAppOTPRoutesToMFACode verifies that PhoneAppOTP
-// (Authenticator TOTP) is routed to entra_auth_code even when pollingInterval > 0,
+// (Authenticator TOTP) is routed to entra_mfa_code even when pollingInterval > 0,
 // and that AcquireTokenByMFAFlow is called with poll_attempt=0 and the user's code.
 func TestIsAuthenticatedPhoneAppOTPRoutesToMFACode(t *testing.T) {
 	t.Parallel()
@@ -3739,7 +3739,7 @@ func TestIsAuthenticatedPhoneAppOTPRoutesToMFACode(t *testing.T) {
 
 	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
 
-	// Step 1: Submit password — broker should recognise PhoneAppOTP and offer entra_auth_code.
+	// Step 1: Submit password — broker should recognise PhoneAppOTP and offer entra_mfa_code.
 	updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
 	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
 
@@ -3747,13 +3747,13 @@ func TestIsAuthenticatedPhoneAppOTPRoutesToMFACode(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
 	require.Equal(t, "{}", data, "AuthNext after password should carry no message (avoids PAM read-delay)")
-	require.Equal(t, []string{authmodes.EntraAuthCode}, b.GetNextAuthModes(sessionID),
-		"PhoneAppOTP should route to entra_auth_code, not entra_auth_wait")
+	require.Equal(t, []string{authmodes.EntraMFACode}, b.GetNextAuthModes(sessionID),
+		"PhoneAppOTP should route to entra_mfa_code, not entra_mfa_wait")
 
 	// Step 2: Submit the OTP code — should call AcquireTokenByMFAFlow with poll_attempt=0.
-	err = b.SetAvailableMode(sessionID, authmodes.EntraAuthCode)
+	err = b.SetAvailableMode(sessionID, authmodes.EntraMFACode)
 	require.NoError(t, err, "Setup: SetAvailableMode should not have returned an error")
-	layout, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthCode)
+	layout, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraMFACode)
 	require.NoError(t, err, "Setup: SelectAuthenticationMode should not have returned an error")
 	require.Equal(t, "Enter your MFA code", layout["label"],
 		"The input label should remain generic")
@@ -3776,11 +3776,11 @@ func TestIsAuthenticatedPhoneAppOTPRoutesToMFACode(t *testing.T) {
 	require.NoError(t, err, "Entra MFA completion should cache the refreshed token")
 }
 
-// TestIsAuthenticatedEntraAuthCodeWrongCodeRetries verifies that an incorrect or
+// TestIsAuthenticatedEntraMFACodeWrongCodeRetries verifies that an incorrect or
 // expired one-time code keeps the MFA flow alive and re-prompts for the code
 // (AuthRetry) rather than discarding the flow and forcing password re-entry. A
 // subsequent correct code then completes authentication.
-func TestIsAuthenticatedEntraAuthCodeWrongCodeRetries(t *testing.T) {
+func TestIsAuthenticatedEntraMFACodeWrongCodeRetries(t *testing.T) {
 	t.Parallel()
 
 	username := "test-user@email.com"
@@ -3810,17 +3810,17 @@ func TestIsAuthenticatedEntraAuthCodeWrongCodeRetries(t *testing.T) {
 
 	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
 
-	// Step 1: Submit password — routed to entra_auth_code (PhoneAppOTP).
+	// Step 1: Submit password — routed to entra_mfa_code (PhoneAppOTP).
 	updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
 	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
 	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
-	require.Equal(t, []string{authmodes.EntraAuthCode}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{authmodes.EntraMFACode}, b.GetNextAuthModes(sessionID))
 
-	err = b.SetAvailableMode(sessionID, authmodes.EntraAuthCode)
+	err = b.SetAvailableMode(sessionID, authmodes.EntraMFACode)
 	require.NoError(t, err, "Setup: SetAvailableMode should not have returned an error")
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthCode)
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFACode)
 	require.NoError(t, err, "Setup: SelectAuthenticationMode should not have returned an error")
 
 	// Step 2: Submit a wrong code — should retry (stay on the code prompt), keep
@@ -3845,7 +3845,7 @@ func TestIsAuthenticatedEntraAuthCodeWrongCodeRetries(t *testing.T) {
 	require.NoError(t, err, "successful MFA completion should cache the offline password")
 }
 
-func TestIsAuthenticatedEntraAuthWaitDenialReturnsAuthDenied(t *testing.T) {
+func TestIsAuthenticatedEntraMFAWaitDenialReturnsAuthDenied(t *testing.T) {
 	t.Parallel()
 
 	provider := &mockMFADeniedProvider{
@@ -3877,9 +3877,9 @@ func TestIsAuthenticatedEntraAuthWaitDenialReturnsAuthDenied(t *testing.T) {
 	require.Equal(t, broker.AuthNext, access, "password submission should transition to MFA")
 
 	// Select the MFA wait mode.
-	err = b.SetAvailableMode(sessionID, authmodes.EntraAuthWait)
+	err = b.SetAvailableMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthWait)
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
 
 	// Poll - the mock will return a denial on first poll.
@@ -3894,7 +3894,7 @@ func TestIsAuthenticatedEntraAuthWaitDenialReturnsAuthDenied(t *testing.T) {
 	require.Contains(t, payload.Message, "denied")
 }
 
-func TestIsAuthenticatedEntraAuthWaitTimeoutReturnsAuthNext(t *testing.T) {
+func TestIsAuthenticatedEntraMFAWaitTimeoutReturnsAuthNext(t *testing.T) {
 	t.Parallel()
 
 	provider := &mockMFATimeoutProvider{
@@ -3925,9 +3925,9 @@ func TestIsAuthenticatedEntraAuthWaitTimeoutReturnsAuthNext(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
 
-	err = b.SetAvailableMode(sessionID, authmodes.EntraAuthWait)
+	err = b.SetAvailableMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthWait)
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
 
 	// Poll - the mock always returns MFA_POLL_CONTINUE, so max attempts will be exhausted.
@@ -4191,9 +4191,9 @@ func TestIsAuthenticatedFIDOMethodRoutesToDevice(t *testing.T) {
 	}
 }
 
-// TestIsAuthenticatedEntraAuthCodeDenied verifies that a denied code submission
+// TestIsAuthenticatedEntraMFACodeDenied verifies that a denied code submission
 // returns AuthDenied.
-func TestIsAuthenticatedEntraAuthCodeDenied(t *testing.T) {
+func TestIsAuthenticatedEntraMFACodeDenied(t *testing.T) {
 	t.Parallel()
 
 	provider := &mockMFADeniedProvider{
@@ -4222,9 +4222,9 @@ func TestIsAuthenticatedEntraAuthCodeDenied(t *testing.T) {
 	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
-	require.Equal(t, []string{authmodes.EntraAuthCode}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{authmodes.EntraMFACode}, b.GetNextAuthModes(sessionID))
 
-	updateAuthModes(t, b, sessionID, authmodes.EntraAuthCode)
+	updateAuthModes(t, b, sessionID, authmodes.EntraMFACode)
 	codeAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "123456", key))
 	access, data, err := b.IsAuthenticated(sessionID, codeAuthData)
 	require.NoError(t, err)
@@ -4237,10 +4237,10 @@ func TestIsAuthenticatedEntraAuthCodeDenied(t *testing.T) {
 	require.Contains(t, payload.Message, "denied")
 }
 
-// TestIsAuthenticatedEntraAuthCodeFailureRoutesBack verifies that a non-denial
+// TestIsAuthenticatedEntraMFACodeFailureRoutesBack verifies that a non-denial
 // failure during code verification clears the dead MFA state and routes the
 // client back to entra_auth rather than the now-dead code mode.
-func TestIsAuthenticatedEntraAuthCodeFailureRoutesBack(t *testing.T) {
+func TestIsAuthenticatedEntraMFACodeFailureRoutesBack(t *testing.T) {
 	t.Parallel()
 
 	provider := &mockEntraAuthProvider{
@@ -4269,7 +4269,7 @@ func TestIsAuthenticatedEntraAuthCodeFailureRoutesBack(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
 
-	updateAuthModes(t, b, sessionID, authmodes.EntraAuthCode)
+	updateAuthModes(t, b, sessionID, authmodes.EntraMFACode)
 	codeAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "123456", key))
 	access, data, err := b.IsAuthenticated(sessionID, codeAuthData)
 	require.NoError(t, err)
@@ -4322,7 +4322,7 @@ func TestIsAuthenticatedEntraAuthFallsBackToEmailClaim(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
 
-	updateAuthModes(t, b, sessionID, authmodes.EntraAuthCode)
+	updateAuthModes(t, b, sessionID, authmodes.EntraMFACode)
 	codeAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "123456", key))
 	access, _, err = b.IsAuthenticated(sessionID, codeAuthData)
 	require.NoError(t, err)
@@ -5324,10 +5324,10 @@ func TestEntraAuthNilFlowOrChallenge(t *testing.T) {
 	require.Equal(t, broker.AuthDenied, access, "nil flow/challenge from provider must deny")
 }
 
-// TestEntraAuthWaitAuthProviderNotSupported verifies that entraAuthWaitAuth
+// TestEntraMFAWaitAuthProviderNotSupported verifies that entraMFAWaitAuth
 // returns AuthDenied when the broker's provider does not implement
 // EntraAuthProvider.
-func TestEntraAuthWaitAuthProviderNotSupported(t *testing.T) {
+func TestEntraMFAWaitAuthProviderNotSupported(t *testing.T) {
 	t.Parallel()
 
 	b := newBrokerForTests(t, &brokerForTestConfig{
@@ -5338,20 +5338,20 @@ func TestEntraAuthWaitAuthProviderNotSupported(t *testing.T) {
 
 	sessionID, _ := newSessionForTests(t, b, "test-user@example.com", sessionmode.Login)
 
-	err := b.SetAvailableMode(sessionID, authmodes.EntraAuthWait)
+	err := b.SetAvailableMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthWait)
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
 
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
-	require.Equal(t, broker.AuthDenied, access, "entra_auth_wait with unsupported provider must deny")
+	require.Equal(t, broker.AuthDenied, access, "entra_mfa_wait with unsupported provider must deny")
 }
 
-// TestEntraAuthWaitAuthNoActiveMFAFlow verifies that entraAuthWaitAuth returns
+// TestEntraMFAWaitAuthNoActiveMFAFlow verifies that entraMFAWaitAuth returns
 // AuthDenied when the session has no active MFA flow (the password step was
 // never completed).
-func TestEntraAuthWaitAuthNoActiveMFAFlow(t *testing.T) {
+func TestEntraMFAWaitAuthNoActiveMFAFlow(t *testing.T) {
 	t.Parallel()
 
 	provider := &mockEntraAuthProvider{
@@ -5369,26 +5369,26 @@ func TestEntraAuthWaitAuthNoActiveMFAFlow(t *testing.T) {
 
 	sessionID, _ := newSessionForTests(t, b, "test-user@example.com", sessionmode.Login)
 
-	// Jump straight to entra_auth_wait without running entra_auth first,
+	// Jump straight to entra_mfa_wait without running entra_auth first,
 	// so session.mfaFlowActive remains nil.
-	err := b.SetAvailableMode(sessionID, authmodes.EntraAuthWait)
+	err := b.SetAvailableMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthWait)
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
 
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
-	require.Equal(t, broker.AuthDenied, access, "entra_auth_wait with no active MFA flow must deny")
+	require.Equal(t, broker.AuthDenied, access, "entra_mfa_wait with no active MFA flow must deny")
 }
 
-// TestEntraAuthWaitAuthReplaysStaleDuplicateCall verifies that a duplicate
-// IsAuthenticated call for entra_auth_wait, arriving after the session already
+// TestEntraMFAWaitAuthReplaysStaleDuplicateCall verifies that a duplicate
+// IsAuthenticated call for entra_mfa_wait, arriving after the session already
 // completed successfully and moved on to a different mode, replays that
 // transition instead of denying an already-successful login. This is the
 // broker-level guard for a client sending a stray repeat call after success
 // (observed in practice with entra_auth_fido, whose success path also frees
 // mfaFlowActive and switches nextAuthModes in one step).
-func TestEntraAuthWaitAuthReplaysStaleDuplicateCall(t *testing.T) {
+func TestEntraMFAWaitAuthReplaysStaleDuplicateCall(t *testing.T) {
 	t.Parallel()
 
 	provider := &mockEntraAuthProvider{
@@ -5406,9 +5406,9 @@ func TestEntraAuthWaitAuthReplaysStaleDuplicateCall(t *testing.T) {
 
 	sessionID, _ := newSessionForTests(t, b, "test-user@example.com", sessionmode.Login)
 
-	err := b.SetAvailableMode(sessionID, authmodes.EntraAuthWait)
+	err := b.SetAvailableMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthWait)
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
 
 	// Simulate a prior successful call already having freed mfaFlowActive and
@@ -5422,10 +5422,10 @@ func TestEntraAuthWaitAuthReplaysStaleDuplicateCall(t *testing.T) {
 	require.Equal(t, []string{authmodes.NewPassword}, b.GetNextAuthModes(sessionID))
 }
 
-// TestEntraAuthWaitAuthNoChallengeMeta verifies that entraAuthWaitAuth returns
+// TestEntraMFAWaitAuthNoChallengeMeta verifies that entraMFAWaitAuth returns
 // AuthDenied when the session has an active MFA flow but no challenge metadata
 // (another provider contract violation guard).
-func TestEntraAuthWaitAuthNoChallengeMeta(t *testing.T) {
+func TestEntraMFAWaitAuthNoChallengeMeta(t *testing.T) {
 	t.Parallel()
 
 	provider := &mockEntraAuthProvider{
@@ -5443,9 +5443,9 @@ func TestEntraAuthWaitAuthNoChallengeMeta(t *testing.T) {
 
 	sessionID, _ := newSessionForTests(t, b, "test-user@example.com", sessionmode.Login)
 
-	err := b.SetAvailableMode(sessionID, authmodes.EntraAuthWait)
+	err := b.SetAvailableMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthWait)
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
 
 	// Set only the flow; leave mfaChallengeInfo nil to exercise the guard.
@@ -5454,12 +5454,12 @@ func TestEntraAuthWaitAuthNoChallengeMeta(t *testing.T) {
 
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
-	require.Equal(t, broker.AuthDenied, access, "entra_auth_wait with nil challenge metadata must deny")
+	require.Equal(t, broker.AuthDenied, access, "entra_mfa_wait with nil challenge metadata must deny")
 }
 
-// TestEntraAuthCodeAuthProviderNotSupported verifies that entraAuthCodeAuth
+// TestEntraMFACodeAuthProviderNotSupported verifies that entraMFACodeAuth
 // returns AuthDenied when the provider does not implement EntraAuthProvider.
-func TestEntraAuthCodeAuthProviderNotSupported(t *testing.T) {
+func TestEntraMFACodeAuthProviderNotSupported(t *testing.T) {
 	t.Parallel()
 
 	b := newBrokerForTests(t, &brokerForTestConfig{
@@ -5470,19 +5470,19 @@ func TestEntraAuthCodeAuthProviderNotSupported(t *testing.T) {
 
 	sessionID, _ := newSessionForTests(t, b, "test-user@example.com", sessionmode.Login)
 
-	err := b.SetAvailableMode(sessionID, authmodes.EntraAuthCode)
+	err := b.SetAvailableMode(sessionID, authmodes.EntraMFACode)
 	require.NoError(t, err)
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthCode)
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFACode)
 	require.NoError(t, err)
 
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
-	require.Equal(t, broker.AuthDenied, access, "entra_auth_code with unsupported provider must deny")
+	require.Equal(t, broker.AuthDenied, access, "entra_mfa_code with unsupported provider must deny")
 }
 
-// TestEntraAuthCodeAuthNoActiveMFAFlow verifies that entraAuthCodeAuth returns
+// TestEntraMFACodeAuthNoActiveMFAFlow verifies that entraMFACodeAuth returns
 // AuthDenied when the session has no active MFA flow.
-func TestEntraAuthCodeAuthNoActiveMFAFlow(t *testing.T) {
+func TestEntraMFACodeAuthNoActiveMFAFlow(t *testing.T) {
 	t.Parallel()
 
 	provider := &mockEntraAuthProvider{
@@ -5500,20 +5500,20 @@ func TestEntraAuthCodeAuthNoActiveMFAFlow(t *testing.T) {
 
 	sessionID, _ := newSessionForTests(t, b, "test-user@example.com", sessionmode.Login)
 
-	// Jump straight to entra_auth_code without running entra_auth first.
-	err := b.SetAvailableMode(sessionID, authmodes.EntraAuthCode)
+	// Jump straight to entra_mfa_code without running entra_auth first.
+	err := b.SetAvailableMode(sessionID, authmodes.EntraMFACode)
 	require.NoError(t, err)
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthCode)
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFACode)
 	require.NoError(t, err)
 
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
-	require.Equal(t, broker.AuthDenied, access, "entra_auth_code with no active MFA flow must deny")
+	require.Equal(t, broker.AuthDenied, access, "entra_mfa_code with no active MFA flow must deny")
 }
 
-// TestEntraAuthCodeAuthReplaysStaleDuplicateCall mirrors
-// TestEntraAuthWaitAuthReplaysStaleDuplicateCall for entra_auth_code.
-func TestEntraAuthCodeAuthReplaysStaleDuplicateCall(t *testing.T) {
+// TestEntraMFACodeAuthReplaysStaleDuplicateCall mirrors
+// TestEntraMFAWaitAuthReplaysStaleDuplicateCall for entra_mfa_code.
+func TestEntraMFACodeAuthReplaysStaleDuplicateCall(t *testing.T) {
 	t.Parallel()
 
 	provider := &mockEntraAuthProvider{
@@ -5531,9 +5531,9 @@ func TestEntraAuthCodeAuthReplaysStaleDuplicateCall(t *testing.T) {
 
 	sessionID, _ := newSessionForTests(t, b, "test-user@example.com", sessionmode.Login)
 
-	err := b.SetAvailableMode(sessionID, authmodes.EntraAuthCode)
+	err := b.SetAvailableMode(sessionID, authmodes.EntraMFACode)
 	require.NoError(t, err)
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthCode)
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFACode)
 	require.NoError(t, err)
 
 	b.SetNextAuthModes(sessionID, []string{authmodes.NewPassword})
@@ -5579,7 +5579,7 @@ func TestIsAuthenticatedEntraAuthUsesVerifiedAccessTokenIdentity(t *testing.T) {
 	})
 
 	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
-	advanceToEntraAuthWait(t, b, sessionID, key)
+	advanceToEntraMFAWait(t, b, sessionID, key)
 
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
@@ -5622,7 +5622,7 @@ func TestIsAuthenticatedEntraAuthDeniesOnUsernameMismatch(t *testing.T) {
 	})
 
 	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
-	advanceToEntraAuthWait(t, b, sessionID, key)
+	advanceToEntraMFAWait(t, b, sessionID, key)
 
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
@@ -5669,8 +5669,8 @@ func TestIsAuthenticatedEntraAuthDenialsDoNotCachePassword(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
 
-	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraAuthWait))
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthWait)
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFAWait))
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFAWait)
 	require.NoError(t, err)
 
 	access, _, err = b.IsAuthenticated(sessionID, "{}")
@@ -5680,13 +5680,13 @@ func TestIsAuthenticatedEntraAuthDenialsDoNotCachePassword(t *testing.T) {
 	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID), "a denied Entra MFA login must not cache an offline password")
 }
 
-// TestIsAuthenticatedEntraAuthCodeMaxAttemptsLockout verifies that repeated
+// TestIsAuthenticatedEntraMFACodeMaxAttemptsLockout verifies that repeated
 // retryable wrong MFA codes are capped by maxAuthAttempts: after
 // MaxAuthAttempts wrong submissions the broker returns AuthDeniedMaxTries
 // (not AuthRetry) and releases the in-progress MFA flow immediately rather
 // than waiting for EndSession. This is the lockout counterpart to the
-// single-retry-then-success test (TestIsAuthenticatedEntraAuthCodeWrongCodeRetries).
-func TestIsAuthenticatedEntraAuthCodeMaxAttemptsLockout(t *testing.T) {
+// single-retry-then-success test (TestIsAuthenticatedEntraMFACodeWrongCodeRetries).
+func TestIsAuthenticatedEntraMFACodeMaxAttemptsLockout(t *testing.T) {
 	t.Parallel()
 
 	username := "test-user@email.com"
@@ -5716,16 +5716,16 @@ func TestIsAuthenticatedEntraAuthCodeMaxAttemptsLockout(t *testing.T) {
 
 	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
 
-	// Step 1: Submit password — routed to entra_auth_code (PhoneAppOTP).
+	// Step 1: Submit password — routed to entra_mfa_code (PhoneAppOTP).
 	updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
 	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
 	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
-	require.Equal(t, []string{authmodes.EntraAuthCode}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{authmodes.EntraMFACode}, b.GetNextAuthModes(sessionID))
 
-	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraAuthCode))
-	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthCode)
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFACode))
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFACode)
 	require.NoError(t, err)
 
 	// Step 2: Submit wrong codes up to MaxAuthAttempts-1 — each must retry,

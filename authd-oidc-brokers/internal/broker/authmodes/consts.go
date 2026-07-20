@@ -19,11 +19,11 @@ const (
 	// EntraAuth is the ID of the Entra ID password/passwordless authentication method.
 	EntraAuth = "entra_auth"
 
-	// EntraAuthWait is the ID of the poll-based MFA follow-up mode.
-	EntraAuthWait = "entra_auth_wait"
+	// EntraMFAWait is the ID of the poll-based MFA follow-up mode.
+	EntraMFAWait = "entra_mfa_wait"
 
-	// EntraAuthCode is the ID of the code-entry MFA follow-up mode.
-	EntraAuthCode = "entra_auth_code"
+	// EntraMFACode is the ID of the code-entry MFA follow-up mode.
+	EntraMFACode = "entra_mfa_code"
 
 	// EntraAuthFido is the ID of the security-key MFA follow-up mode, which
 	// performs the WebAuthn assertion with a locally connected FIDO2 device.
@@ -42,8 +42,8 @@ var (
 		DeviceQr:         "Device code flow",
 		NewPassword:      "Define your local password",
 		EntraAuth:        "Entra ID authentication",
-		EntraAuthWait:    "Waiting for MFA approval",
-		EntraAuthCode:    "Enter your MFA code",
+		EntraMFAWait:     "Waiting for MFA approval",
+		EntraMFACode:     "Enter your MFA code",
 		EntraAuthFido:    "Use your security key",
 		EntraAuthFidoPin: "Enter your security key PIN",
 	}

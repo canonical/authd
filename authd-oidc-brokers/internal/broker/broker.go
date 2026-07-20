@@ -966,7 +966,7 @@ func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 			return false
 		}
 		return true
-	case authmodes.EntraAuthWait, authmodes.EntraAuthCode, authmodes.EntraAuthFido, authmodes.EntraAuthFidoPin:
+	case authmodes.EntraMFAWait, authmodes.EntraMFACode, authmodes.EntraAuthFido, authmodes.EntraAuthFidoPin:
 		// MFA follow-up modes are always available when offered via AuthNext.
 		return true
 	}
@@ -1024,10 +1024,10 @@ func (b *Broker) supportedAuthModesFromLayout(layout map[string]string) []string
 			}
 		}
 		if supportsWait {
-			modes = append(modes, authmodes.EntraAuthWait, authmodes.EntraAuthFido)
+			modes = append(modes, authmodes.EntraMFAWait, authmodes.EntraAuthFido)
 		}
 		if slices.Contains(supportedEntries, "chars") {
-			modes = append(modes, authmodes.EntraAuthCode)
+			modes = append(modes, authmodes.EntraMFACode)
 		}
 		return modes
 
@@ -1137,7 +1137,7 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 			}
 		}
 
-	case authmodes.EntraAuthWait:
+	case authmodes.EntraMFAWait:
 		mfaWaitLabel := "Waiting for MFA approval..."
 		if session.mfaChallengeInfo != nil && session.mfaChallengeInfo.Message != "" {
 			mfaWaitLabel = session.mfaChallengeInfo.Message
@@ -1148,7 +1148,7 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 			"wait":  "true",
 		}
 
-	case authmodes.EntraAuthCode:
+	case authmodes.EntraMFACode:
 		uiLayout = map[string]string{
 			"type":  "form",
 			"entry": "chars",
@@ -1280,10 +1280,10 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		return b.newPassword(session, secret)
 	case authmodes.EntraAuth:
 		return b.entraAuth(ctx, session, secret)
-	case authmodes.EntraAuthWait:
-		return b.entraAuthWaitAuth(ctx, session)
-	case authmodes.EntraAuthCode:
-		return b.entraAuthCodeAuth(ctx, session, secret)
+	case authmodes.EntraMFAWait:
+		return b.entraMFAWaitAuth(ctx, session)
+	case authmodes.EntraMFACode:
+		return b.entraMFACodeAuth(ctx, session, secret)
 	case authmodes.EntraAuthFido:
 		return b.entraAuthFidoAuth(ctx, session)
 	case authmodes.EntraAuthFidoPin:
@@ -1549,7 +1549,7 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 	clearEntraAuthState(session)
 
 	// Load the cached auth info once at the start of the flow and stash it on the
-	// session, so the second step (entra_auth_wait/entra_auth_code → finishEntraAuth)
+	// session, so the second step (entra_mfa_wait/entra_mfa_code → finishEntraAuth)
 	// reuses it instead of re-reading the token from disk on every call.
 	//
 	// A load error is non-fatal: it is expected on a first login (no cached token
@@ -1650,19 +1650,19 @@ func (b *Broker) routeMFAChallenge(session *session, challengeInfo *himmelblau.M
 	switch {
 	case isPromptMethod(mfaMethod):
 		// Code-entry MFA: user must type a code (OTP, SMS, etc.).
-		session.nextAuthModes = []string{authmodes.EntraAuthCode}
+		session.nextAuthModes = []string{authmodes.EntraMFACode}
 	case isPollMethod(mfaMethod):
 		// Poll-based MFA: approval happens out of band (push notification or
 		// phone call), so wait and poll. The poll loop applies a default
 		// interval if the challenge does not carry a positive one.
-		session.nextAuthModes = []string{authmodes.EntraAuthWait}
+		session.nextAuthModes = []string{authmodes.EntraMFAWait}
 	case pollingInterval > 0:
 		// Unknown method: a polling interval hints that approval happens out of band.
 		log.Warningf(context.Background(), "Unknown MFA method %q with polling interval %dms, treating it as a poll-based method", mfaMethod, pollingInterval)
-		session.nextAuthModes = []string{authmodes.EntraAuthWait}
+		session.nextAuthModes = []string{authmodes.EntraMFAWait}
 	default:
 		log.Warningf(context.Background(), "Unknown MFA method %q without a polling interval, treating it as a code-entry method", mfaMethod)
-		session.nextAuthModes = []string{authmodes.EntraAuthCode}
+		session.nextAuthModes = []string{authmodes.EntraMFACode}
 	}
 
 	return AuthNext, nil
@@ -1726,15 +1726,15 @@ func (b *Broker) cachedDeviceRegistrationData(session *session) []byte {
 	return nil
 }
 
-func (b *Broker) entraAuthWaitAuth(ctx context.Context, session *session) (string, isAuthenticatedDataResponse) {
+func (b *Broker) entraMFAWaitAuth(ctx context.Context, session *session) (string, isAuthenticatedDataResponse) {
 	entraProvider, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](b.provider)
 	if !ok {
-		log.Error(context.Background(), "entra_auth_wait mode selected but provider does not support it")
+		log.Error(context.Background(), "entra_mfa_wait mode selected but provider does not support it")
 		return AuthDenied, unexpectedErrMsg("provider does not support Entra MFA")
 	}
 
 	if session.mfaFlowActive == nil {
-		return replayCompletedMFA(session, authmodes.EntraAuthWait)
+		return replayCompletedMFA(session, authmodes.EntraMFAWait)
 	}
 	if session.mfaChallengeInfo == nil {
 		log.Error(context.Background(), "MFA wait mode selected but no MFA challenge metadata is available")
@@ -1828,15 +1828,15 @@ func (b *Broker) endExpiredMFAPoll(ctx context.Context, session *session) (strin
 	return restartFromEntraAuth(session, "MFA approval timed out. Please try again.")
 }
 
-func (b *Broker) entraAuthCodeAuth(ctx context.Context, session *session, code string) (string, isAuthenticatedDataResponse) {
+func (b *Broker) entraMFACodeAuth(ctx context.Context, session *session, code string) (string, isAuthenticatedDataResponse) {
 	entraProvider, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](b.provider)
 	if !ok {
-		log.Error(context.Background(), "entra_auth_code mode selected but provider does not support it")
+		log.Error(context.Background(), "entra_mfa_code mode selected but provider does not support it")
 		return AuthDenied, unexpectedErrMsg("provider does not support Entra MFA")
 	}
 
 	if session.mfaFlowActive == nil {
-		return replayCompletedMFA(session, authmodes.EntraAuthCode)
+		return replayCompletedMFA(session, authmodes.EntraMFACode)
 	}
 
 	deviceRegistrationData := b.cachedDeviceRegistrationData(session)
@@ -1857,7 +1857,7 @@ func (b *Broker) entraAuthCodeAuth(ctx context.Context, session *session, code s
 			// rather than discarding the flow and forcing password re-entry.
 			// The MFA flow remains valid on this path (libhimmelblau only
 			// advances flow.ctx/flow_token on success), so the next code
-			// submission reuses it. AuthRetry stays on the entra_auth_code mode
+			// submission reuses it. AuthRetry stays on the entra_mfa_code mode
 			// and is capped by maxAuthAttempts, so repeated wrong codes still
 			// end in denial.
 			log.Noticef(context.Background(), "Incorrect MFA code for user %q, re-prompting", session.username)

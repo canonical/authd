@@ -258,7 +258,7 @@ const CachedPasswordMessage = cachedPasswordMessage
 // SetSessionMFAFlowActive lets tests set mfaFlowActive on a session without
 // going through entraAuth. The challenge info is left nil so that
 // tests can exercise the "flow active but no challenge metadata" guard in
-// entraAuthWaitAuth.
+// entraMFAWaitAuth.
 func (b *Broker) SetSessionMFAFlowActive(sessionID string, flow *himmelblau.MFAFlowState) error {
 	s, err := b.getSession(sessionID)
 	if err != nil {
