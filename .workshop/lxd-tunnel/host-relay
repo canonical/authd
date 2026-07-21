@@ -1,0 +1,76 @@
+#!/bin/bash
+set -euo pipefail
+
+readonly UNIT="authd-workshop-lxd-relay.service"
+readonly RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+readonly RELAY_SOCKET="${RUNTIME_DIR}/authd-workshop-lxd.socket"
+readonly LXD_SOCKET="/var/snap/lxd/common/lxd/unix.socket"
+
+usage() {
+    cat >&2 <<EOF
+Usage: .workshop/lxd-tunnel/host-relay <start|stop|status>
+
+Manage the opt-in host-side relay used by the authd Workshop to reach LXD.
+EOF
+}
+
+die() {
+    echo "host-lxd-relay: $*" >&2
+    exit 1
+}
+
+start_relay() {
+    command -v lxc >/dev/null 2>&1 ||
+        die "lxc is not installed on the host"
+    command -v socat >/dev/null 2>&1 ||
+        die "socat is not installed; run 'sudo apt install socat'"
+    [ -S "${LXD_SOCKET}" ] ||
+        die "LXD socket not found at ${LXD_SOCKET}"
+    lxc query local:/1.0 >/dev/null 2>&1 ||
+        die "the current user cannot access LXD; add it to the lxd group and log in again"
+
+    if systemctl --user is-active --quiet "${UNIT}"; then
+        echo "Host LXD relay is already running at ${RELAY_SOCKET}."
+        return
+    fi
+
+    rm -f -- "${RELAY_SOCKET}"
+    systemd-run --user \
+        --unit="${UNIT%.service}" \
+        --collect \
+        --service-type=exec \
+        --property=Restart=on-failure \
+        --property=RestartSec=2s \
+        /usr/bin/socat \
+        "UNIX-LISTEN:${RELAY_SOCKET},fork,mode=0600,unlink-close" \
+        "UNIX-CONNECT:${LXD_SOCKET}" >/dev/null
+
+    for _ in $(seq 1 50); do
+        if [ -S "${RELAY_SOCKET}" ]; then
+            echo "Host LXD relay is running at ${RELAY_SOCKET}."
+            return
+        fi
+        sleep 0.1
+    done
+
+    systemctl --user status --no-pager "${UNIT}" >&2 || true
+    die "relay socket was not created"
+}
+
+stop_relay() {
+    if systemctl --user is-active --quiet "${UNIT}"; then
+        systemctl --user stop "${UNIT}"
+    fi
+    rm -f -- "${RELAY_SOCKET}"
+    echo "Host LXD relay is stopped."
+}
+
+case "${1:-}" in
+    start) start_relay ;;
+    stop) stop_relay ;;
+    status) systemctl --user status --no-pager "${UNIT}" ;;
+    *)
+        usage
+        exit 2
+        ;;
+esac

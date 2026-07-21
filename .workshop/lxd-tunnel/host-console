@@ -1,0 +1,28 @@
+#!/bin/bash
+set -euo pipefail
+
+readonly VM="${AUTHD_COMPANION_VM_NAME:-authd-gdm}"
+
+die() {
+    echo "host-console: $*" >&2
+    exit 1
+}
+
+[ "$#" -eq 0 ] ||
+    die "this command does not accept arguments"
+
+if [ -x /snap/lxd/current/bin/lxc ]; then
+    # Bypass the snap launcher so the host viewer inherits the real Wayland
+    # runtime directory instead of the snap-specific XDG_RUNTIME_DIR.
+    lxc_client=/snap/lxd/current/bin/lxc
+else
+    lxc_client="$(command -v lxc)" ||
+        die "lxc is not installed on the host"
+fi
+
+if ! command -v remote-viewer >/dev/null 2>&1 &&
+    ! command -v spicy >/dev/null 2>&1; then
+    die "no SPICE client found; install virt-viewer or spice-client-gtk"
+fi
+
+exec "${lxc_client}" console "local:${VM}" --type=vga

@@ -1,0 +1,10 @@
+#!/bin/bash
+set -eux
+
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update
+apt-get install --yes --no-install-recommends ca-certificates snapd socat
+snap install lxd --channel=6/stable
+
+mkdir -p /var/lib/workshop/run/host-lxd

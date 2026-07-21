@@ -1,0 +1,10 @@
+# In-project SDK providing an LXD client for the manual GDM companion VM.
+#
+# The lxd plug receives the host LXD UNIX socket through Workshop's tunnel
+# interface. The workshop definition deliberately requires a manual connection
+# because controlling the host LXD daemon is host-root-equivalent.
+name: lxd-tunnel
+plugs:
+  lxd:
+    interface: tunnel
+    endpoint: /var/lib/workshop/run/host-lxd/unix.socket

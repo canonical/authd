@@ -13,7 +13,7 @@
 #   ssh -p 2222 user@domain@localhost   # exercise the real PAM login path
 #
 # Provisioning lives in the project-authd in-project SDK (.workshop/authd/).
-# Graphical GDM greeter testing still needs a VM.
+# Graphical GDM testing uses the opt-in companion-vm-* actions below.
 name: authd-dev
 base: ubuntu@24.04
 
@@ -33,11 +33,23 @@ sdks:
       ssh:
         interface: tunnel
         endpoint: localhost:22
+  # Installs an LXD client whose UNIX socket is supplied by the host through a
+  # manually connected tunnel. The connection is intentionally not declared
+  # below: access to the host LXD daemon is host-root-equivalent and must be
+  # explicitly granted by the developer.
+  - name: project-lxd-tunnel
   - name: system
     plugs:
       ssh:
         interface: tunnel
         endpoint: localhost:2222
+    slots:
+      lxd:
+        interface: tunnel
+        # LXD proxy devices drop supplementary groups, so they cannot open the
+        # root:lxd daemon socket directly. The opt-in host relay retains the
+        # developer's lxd group and exposes this user-owned socket instead.
+        endpoint: $XDG_RUNTIME_DIR/authd-workshop-lxd.socket
 
 actions:
   # Rebuild + reinstall one component (or all) without a full refresh.
@@ -64,7 +76,7 @@ actions:
 
   # Build, configure and start an OIDC broker from source.
   #   workshop run -- broker google    --client-id ID --client-secret-file PATH_IN_WORKSHOP [--ssh-suffixes '@gmail.com']
-  #   workshop run -- broker msentraid --issuer URL --client-id ID
+  #   workshop run -- broker msentraid --issuer URL --client-id ID [--client-secret-file PATH_IN_WORKSHOP]
   #   workshop run -- broker oidc      --issuer URL --client-id ID [--client-secret SECRET]
   # Prefer --client-secret-file PATH to keep secrets out of shell history.
   broker: exec /project/.workshop/authd/scripts/install-broker "$@"
@@ -123,3 +135,16 @@ actions:
       AUTHD_PAM_RUNNER_EXEC_MODULE="/usr/lib/${multiarch}/security/pam_authd_exec.so" \
       AUTHD_PAM_RUNNER_EXEC_CHILD_PATH=/usr/libexec/authd-pam \
       "${pam_runner}" login "$@"
+
+  # Manage an Ubuntu Desktop VM on the host LXD daemon for manual GDM testing.
+  # Access is host-root-equivalent, so connect the host LXD tunnel explicitly:
+  #   .workshop/lxd-tunnel/host-relay start
+  #   workshop connect authd-dev/project-lxd-tunnel:lxd authd-dev/system:lxd
+  companion-vm-create: exec /project/.workshop/authd/scripts/companion-vm-ctl create "$@"
+  companion-vm-sync: exec /project/.workshop/authd/scripts/companion-vm-ctl sync "$@"
+  companion-vm-start: exec /project/.workshop/authd/scripts/companion-vm-ctl start "$@"
+  companion-vm-stop: exec /project/.workshop/authd/scripts/companion-vm-ctl stop "$@"
+  companion-vm-reset: exec /project/.workshop/authd/scripts/companion-vm-ctl reset "$@"
+  companion-vm-shell: exec /project/.workshop/authd/scripts/companion-vm-ctl shell "$@"
+  companion-vm-status: exec /project/.workshop/authd/scripts/companion-vm-ctl status "$@"
+  companion-vm-delete: exec /project/.workshop/authd/scripts/companion-vm-ctl delete "$@"

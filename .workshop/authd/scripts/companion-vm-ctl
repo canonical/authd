@@ -1,0 +1,668 @@
+#!/bin/bash
+set -euo pipefail
+
+readonly VM="${AUTHD_COMPANION_VM_NAME:-authd-gdm}"
+readonly BASE_SNAPSHOT="${AUTHD_COMPANION_VM_SNAPSHOT:-base-desktop}"
+readonly POOL="${AUTHD_COMPANION_VM_POOL:-workshop}"
+readonly NETWORK="${AUTHD_COMPANION_VM_NETWORK:-workshopbr0}"
+readonly WORKSHOP_NAME="authd-dev"
+readonly LXD_SOCKET_DIR="/var/lib/workshop/run/host-lxd"
+
+# How long to wait for slow, one-off VM operations. Override if the host is
+# slower than usual (e.g. nested virtualization, a loaded CI runner).
+readonly AGENT_TIMEOUT="${AUTHD_COMPANION_VM_AGENT_TIMEOUT:-120}"
+readonly GDM_TIMEOUT="${AUTHD_COMPANION_VM_GDM_TIMEOUT:-180}"
+readonly CLOUD_INIT_TIMEOUT="${AUTHD_COMPANION_VM_CLOUD_INIT_TIMEOUT:-30m}"
+
+export LXD_DIR="${LXD_SOCKET_DIR}"
+export PATH="/snap/bin:${PATH}"
+
+TEMP_PATHS=()
+
+cleanup_temp_paths() {
+    local path
+
+    for path in "${TEMP_PATHS[@]}"; do
+        rm -rf -- "${path}"
+    done
+}
+trap cleanup_temp_paths EXIT
+
+usage() {
+    cat >&2 <<EOF
+Usage: workshop run -- companion-vm-<command>
+
+Commands:
+  create  Provision the Ubuntu Desktop VM and create its clean base snapshot
+  sync    Rebuild and copy authd plus configured brokers into the VM
+  start   Start the VM
+  stop    Stop the VM
+  reset   Restore the clean desktop snapshot and start the VM
+  shell   Open a login shell as the local ubuntu user
+  status  Show VM state and access commands
+  delete  Delete the VM and its snapshots
+EOF
+}
+
+die() {
+    echo "companion-vm: $*" >&2
+    exit 1
+}
+
+require_no_args() {
+    [ "$#" -eq 0 ] || {
+        usage
+        die "this command does not accept arguments"
+    }
+}
+
+require_lxd() {
+    command -v lxc >/dev/null 2>&1 ||
+        die "the LXD client is missing; run 'workshop refresh' to install project-lxd-tunnel"
+
+    if ! lxc query /1.0 >/dev/null 2>&1; then
+        cat >&2 <<EOF
+companion-vm: the host LXD connection is unavailable.
+
+This connection grants the workshop control of the host LXD daemon and is
+therefore intentionally manual. Run these commands from the project root on
+the host:
+
+  .workshop/lxd-tunnel/host-relay start
+  workshop connect ${WORKSHOP_NAME}/project-lxd-tunnel:lxd ${WORKSHOP_NAME}/system:lxd
+EOF
+        exit 1
+    fi
+}
+
+instance_exists() {
+    lxc info "${VM}" >/dev/null 2>&1
+}
+
+snapshot_exists() {
+    lxc query "/1.0/instances/${VM}/snapshots/${BASE_SNAPSHOT}" >/dev/null 2>&1
+}
+
+vm_status() {
+    lxc query "/1.0/instances/${VM}/state" 2>/dev/null |
+        sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' ||
+        true
+}
+
+wait_for_agent() {
+    local instance="${1:-${VM}}"
+    echo "Waiting for the LXD agent in ${instance}..."
+    for _ in $(seq 1 "${AGENT_TIMEOUT}"); do
+        if lxc exec -T "${instance}" -- true >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+
+    die "the LXD agent in ${instance} did not become ready within ${AGENT_TIMEOUT} seconds"
+}
+
+wait_for_gdm() {
+    local elapsed=0
+    local interval=2
+
+    echo "Waiting for the GDM greeter..."
+    while [ "${elapsed}" -lt "${GDM_TIMEOUT}" ]; do
+        if lxc exec -T "${VM}" -- sh -c \
+            'systemctl is-active --quiet gdm3.service &&
+             pgrep --uid gdm --exact gnome-shell >/dev/null'; then
+            return 0
+        fi
+        sleep "${interval}"
+        elapsed=$((elapsed + interval))
+    done
+
+    lxc exec -T "${VM}" -- systemctl status --no-pager \
+        dbus.service systemd-logind.service gdm3.service || true
+    die "the GDM greeter did not become ready within ${GDM_TIMEOUT} seconds"
+}
+
+start_vm() {
+    local status
+    status="$(vm_status)"
+
+    case "${status}" in
+        Running)
+            ;;
+        Stopped)
+            echo "Starting ${VM}..."
+            lxc start "${VM}"
+            ;;
+        "")
+            die "${VM} does not exist; run 'workshop run -- companion-vm-create'"
+            ;;
+        *)
+            die "${VM} cannot be started from state '${status}'"
+            ;;
+    esac
+
+    wait_for_agent
+}
+
+stop_vm() {
+    local status
+    status="$(vm_status)"
+
+    case "${status}" in
+        Stopped)
+            return 0
+            ;;
+        "")
+            die "${VM} does not exist"
+            ;;
+    esac
+
+    echo "Stopping ${VM}..."
+    if ! lxc stop "${VM}" --timeout 180; then
+        echo "Graceful shutdown timed out; forcing ${VM} off..." >&2
+        lxc stop "${VM}" --force
+    fi
+}
+
+print_access() {
+    cat <<EOF
+
+Companion VM: ${VM}
+Local login:  ubuntu / ubuntu
+
+Open the graphical GDM console from the host:
+
+  .workshop/lxd-tunnel/host-console
+
+Open a guest shell through Workshop:
+
+  workshop run -- companion-vm-shell
+EOF
+}
+
+create_vm() {
+    require_no_args "$@"
+
+    if instance_exists; then
+        if snapshot_exists; then
+            echo "${VM} already exists."
+            print_access
+            return 0
+        fi
+        die "${VM} exists without ${BASE_SNAPSHOT}; delete it, then run create again"
+    fi
+
+    lxc storage show "${POOL}" >/dev/null 2>&1 ||
+        die "host LXD storage pool '${POOL}' does not exist"
+    lxc network show "${NETWORK}" >/dev/null 2>&1 ||
+        die "host LXD network '${NETWORK}' does not exist"
+
+    local userdata
+    userdata="$(mktemp -t authd-gdm-userdata.XXXXXX.yaml)"
+    TEMP_PATHS+=("${userdata}")
+
+    cat >"${userdata}" <<'CLOUD_CONFIG'
+#cloud-config
+package_update: true
+package_upgrade: false
+ssh_pwauth: true
+users:
+  - name: ubuntu
+    uid: 1000
+    gecos: Ubuntu
+    groups: [adm, audio, cdrom, dialout, dip, netdev, plugdev, sudo, video]
+    sudo: [ "ALL=(ALL) NOPASSWD:ALL" ]
+    lock_passwd: false
+    shell: /bin/bash
+chpasswd:
+  expire: false
+  users:
+    - { name: ubuntu, password: ubuntu, type: text }
+packages:
+  - ubuntu-desktop-minimal
+  - curl
+  - spice-vdagent
+  - libpam-pwquality
+  - libsecret-tools
+  - openssh-server
+write_files:
+  - path: /etc/dconf/profile/user
+    content: |
+      user-db:user
+      system-db:local
+  - path: /etc/dconf/db/local.d/00-authd-workshop
+    content: |
+      [org/gnome/settings-daemon/plugins/power]
+      sleep-inactive-ac-type='nothing'
+      sleep-inactive-ac-timeout=0
+
+      [org/gnome/desktop/session]
+      idle-delay=uint32 0
+
+      [org/gnome/desktop/screensaver]
+      lock-enabled=false
+  - path: /usr/share/gdm/dconf/00-authd-workshop
+    content: |
+      [org/gnome/desktop/interface]
+      text-scaling-factor=1.25
+runcmd:
+  - dconf update
+  - systemctl set-default graphical.target
+  - systemctl mask systemd-networkd-wait-online.service
+  - systemctl mask apt-daily.service apt-daily.timer apt-daily-upgrade.service apt-daily-upgrade.timer
+final_message: "authd GDM companion VM provisioning finished after $UPTIME seconds"
+CLOUD_CONFIG
+
+    echo "Creating ${VM}..."
+    lxc init ubuntu:24.04 "${VM}" --vm \
+        --storage "${POOL}" \
+        --network "${NETWORK}" \
+        --config limits.cpu=4 \
+        --config limits.memory=6GiB \
+        --device root,size=20GiB \
+        --config "cloud-init.user-data=$(cat "${userdata}")"
+
+    lxc start "${VM}"
+    wait_for_agent
+
+    echo "Waiting for cloud-init (desktop package installation can take several minutes)..."
+    if ! lxc exec -T "${VM}" -- timeout "${CLOUD_INIT_TIMEOUT}" cloud-init status --wait; then
+        lxc exec -T "${VM}" -- cloud-init status --long || true
+        die "cloud-init did not complete successfully"
+    fi
+
+    # shellcheck disable=SC2016
+    lxc exec -T "${VM}" -- sh -c \
+        'for card in /dev/dri/card*; do [ -c "${card}" ] && exit 0; done; exit 1' ||
+        die "the VM has no DRM device; its graphical console cannot run GDM"
+    lxc exec -T "${VM}" -- systemctl restart gdm3.service
+    wait_for_gdm
+
+    stop_vm
+    echo "Creating clean desktop snapshot ${VM}/${BASE_SNAPSHOT}..."
+    lxc snapshot "${VM}" "${BASE_SNAPSHOT}"
+
+    start_vm
+    wait_for_gdm
+    print_access
+}
+
+push_file() {
+    local source="$1"
+    local destination="$2"
+    local mode="$3"
+    local staged_destination="${destination}.authd-sync.$$"
+
+    [ -r "${source}" ] || die "required source file is missing or unreadable: ${source}"
+    if ! lxc file push \
+        --create-dirs \
+        --uid 0 \
+        --gid 0 \
+        --mode "${mode}" \
+        "${source}" \
+        "${VM}${staged_destination}"; then
+        lxc exec -T "${VM}" -- rm -f -- "${staged_destination}" >/dev/null 2>&1 || true
+        return 1
+    fi
+
+    # Keep the old inode valid for processes that have an executable or shared
+    # library mapped while making the new file visible atomically.
+    if ! lxc exec -T "${VM}" -- mv -f -- "${staged_destination}" "${destination}"; then
+        lxc exec -T "${VM}" -- rm -f -- "${staged_destination}" >/dev/null 2>&1 || true
+        return 1
+    fi
+}
+
+push_root_file() {
+    local source="$1"
+    local destination="$2"
+    local mode="$3"
+    local staged
+
+    staged="$(mktemp -t authd-companion-file.XXXXXX)"
+    TEMP_PATHS+=("${staged}")
+    # The source needs sudo; the user-owned temporary file deliberately does not.
+    # shellcheck disable=SC2024
+    sudo cat "${source}" >"${staged}"
+    push_file "${staged}" "${destination}" "${mode}"
+    rm -f "${staged}"
+}
+
+copy_root_tree() {
+    local path="$1"
+    local relative="${path#/}"
+
+    [ -d "${path}" ] || die "required source directory is missing: ${path}"
+    sudo tar --numeric-owner -C / -cf - "${relative}" |
+        lxc exec -T "${VM}" -- tar --numeric-owner -C / -xf -
+}
+
+guest_fetch_url() {
+    local url="$1"
+
+    if lxc exec -T "${VM}" -- test -x /usr/bin/curl; then
+        lxc exec -T "${VM}" -- /usr/bin/curl \
+            --fail \
+            --silent \
+            --show-error \
+            --connect-timeout 10 \
+            --max-time 20 \
+            --output /dev/null \
+            "${url}"
+        return
+    fi
+
+    if lxc exec -T "${VM}" -- test -x /usr/bin/wget; then
+        lxc exec -T "${VM}" -- /usr/bin/wget \
+            --quiet \
+            --timeout=20 \
+            --tries=1 \
+            --output-document=/dev/null \
+            "${url}"
+        return
+    fi
+
+    die "${VM} has no HTTP client; recreate it with 'workshop run -- companion-vm-delete' followed by 'workshop run -- companion-vm-create'"
+}
+
+broker_is_enabled_or_active() {
+    local unit="$1"
+
+    systemctl is-enabled --quiet "${unit}" 2>/dev/null ||
+        systemctl is-active --quiet "${unit}"
+}
+
+check_broker_connectivity() {
+    local registration variant config issuer discovery_url unit
+    local registrations=()
+
+    while IFS= read -r registration; do
+        registrations+=("${registration}")
+    done < <(sudo find /etc/authd/brokers.d -maxdepth 1 -type f -name '*.conf' -print | sort)
+
+    for registration in "${registrations[@]}"; do
+        variant="$(basename "${registration}" .conf)"
+        config="/etc/authd-${variant}/broker.conf"
+        sudo test -r "${config}" ||
+            die "broker ${variant} is registered but ${config} is missing or unreadable"
+        unit="authd-${variant}.service"
+        if ! broker_is_enabled_or_active "${unit}"; then
+            echo "Skipping provider check for disabled broker ${variant}."
+            continue
+        fi
+
+        issuer="$(
+            sudo sed -n \
+                's/^[[:space:]]*issuer[[:space:]]*=[[:space:]]*//p' \
+                "${config}" |
+                head -n 1
+        )"
+        [ -n "${issuer}" ] ||
+            die "broker ${variant} has no issuer configured in ${config}"
+        discovery_url="${issuer%/}/.well-known/openid-configuration"
+
+        echo "Checking ${variant} provider connectivity from ${VM}..."
+        if ! guest_fetch_url "${discovery_url}"; then
+            lxc exec -T "${VM}" -- sh -c \
+                'ip -brief address; ip route; resolvectl status' >&2 || true
+            die "${VM} cannot reach the ${variant} provider at ${issuer}"
+        fi
+    done
+}
+
+sync_brokers() {
+    local registration variant dbus_name policy service unit native_library
+    local multiarch
+    local copied=0
+    local enabled_services=()
+    local registrations=()
+
+    multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
+
+    while IFS= read -r registration; do
+        registrations+=("${registration}")
+    done < <(sudo find /etc/authd/brokers.d -maxdepth 1 -type f -name '*.conf' -print | sort)
+
+    for registration in "${registrations[@]}"; do
+        variant="$(basename "${registration}" .conf)"
+        [[ "${variant}" =~ ^[a-z0-9-]+$ ]] ||
+            die "invalid broker registration filename: ${registration}"
+
+        [ -x "/usr/libexec/authd-${variant}" ] ||
+            die "broker ${variant} is configured but /usr/libexec/authd-${variant} is missing"
+        [ -d "/etc/authd-${variant}" ] ||
+            die "broker ${variant} is configured but /etc/authd-${variant} is missing"
+
+        dbus_name="$(sudo sed -n 's/^dbus_name = //p' "${registration}")"
+        [[ "${dbus_name}" =~ ^[A-Za-z0-9_.-]+$ ]] ||
+            die "could not determine a safe D-Bus name for broker ${variant}"
+        policy="/usr/share/dbus-1/system.d/${dbus_name}.conf"
+        unit="authd-${variant}.service"
+        service="/etc/systemd/system/${unit}"
+
+        echo "Copying configured ${variant} broker..."
+        if lxc exec -T "${VM}" -- systemctl cat "${unit}" >/dev/null 2>&1; then
+            lxc exec -T "${VM}" -- systemctl stop "${unit}"
+        fi
+        push_file "/usr/libexec/authd-${variant}" "/usr/libexec/authd-${variant}" 0755
+        if [ "${variant}" = msentraid ]; then
+            native_library="$(
+                ldd "/usr/libexec/authd-${variant}" |
+                    awk '$1 == "libhimmelblau.so.0" && $2 == "=>" { print $3; exit }'
+            )"
+            [ -r "${native_library}" ] ||
+                die "could not locate libhimmelblau.so.0 for the Microsoft Entra ID broker"
+            push_file "${native_library}" \
+                "/usr/lib/${multiarch}/libhimmelblau.so.0" 0644
+        fi
+        push_root_file "${registration}" "/etc/authd/brokers.d/${variant}.conf" 0644
+        push_file "${policy}" "${policy}" 0644
+        push_file "${service}" "${service}" 0644
+        copy_root_tree "/etc/authd-${variant}"
+
+        if broker_is_enabled_or_active "${unit}"; then
+            enabled_services+=("${unit}")
+        fi
+        copied=$((copied + 1))
+    done
+
+    if [ "${copied}" -eq 0 ]; then
+        echo "No broker is configured in the workshop; the VM will expose only local login." >&2
+        echo "Configure one with 'workshop run -- broker ...', then sync again." >&2
+        return
+    fi
+
+    lxc exec -T "${VM}" -- systemctl daemon-reload
+    lxc exec -T "${VM}" -- ldconfig
+    lxc exec -T "${VM}" -- bash -s <<'RELOAD_DBUS'
+set -euo pipefail
+
+restore_authd_nss() {
+    sed -i --regexp-extended \
+        '/^(passwd|group|shadow):/ { /\bauthd\b/! s/$/ authd/ }' \
+        /etc/nsswitch.conf
+}
+trap restore_authd_nss EXIT
+
+# D-Bus flushes its user and group caches while reloading policy. Keep that
+# operation independent of authd, which itself needs D-Bus during activation.
+sed -i --regexp-extended \
+    '/^(passwd|group|shadow):/ s/[[:space:]]+authd([[:space:]]|$)/\1/' \
+    /etc/nsswitch.conf
+systemctl kill --kill-whom=main --signal=HUP dbus.service
+timeout 10s busctl --system list >/dev/null
+RELOAD_DBUS
+
+    for service in "${enabled_services[@]}"; do
+        lxc exec -T "${VM}" -- systemctl enable "${service}"
+        if ! lxc exec -T "${VM}" -- systemctl restart "${service}" ||
+            ! lxc exec -T "${VM}" -- systemctl is-active --quiet "${service}"; then
+            lxc exec -T "${VM}" -- systemctl status --no-pager "${service}" || true
+            die "${service} did not become active after synchronization"
+        fi
+    done
+}
+
+sync_vm() {
+    require_no_args "$@"
+    instance_exists ||
+        die "${VM} does not exist; run 'workshop run -- companion-vm-create'"
+
+    start_vm
+
+    local host_arch guest_arch multiarch build_dir
+    host_arch="$(dpkg --print-architecture)"
+    guest_arch="$(lxc exec -T "${VM}" -- dpkg --print-architecture)"
+    [ "${host_arch}" = "${guest_arch}" ] ||
+        die "workshop architecture ${host_arch} does not match VM architecture ${guest_arch}"
+    multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
+
+    check_broker_connectivity
+
+    # shellcheck disable=SC1091
+    source /project/.workshop/authd/lib/env.sh
+    # shellcheck disable=SC1091
+    source /project/.workshop/authd/scripts/build-component
+    cd /project
+
+    build_dir="$(mktemp -d -t authd-companion-build.XXXXXX)"
+    TEMP_PATHS+=("${build_dir}")
+    # Used by authd_cleanup_build_dir from the sourced build-component script.
+    # shellcheck disable=SC2034
+    AUTHD_BUILD_COMPONENT_TMPDIR="${build_dir}"
+
+    echo "Rebuilding the authd stack from the current source tree..."
+    authd_prepare_build_environment
+    authd_build_component all "${build_dir}" no
+
+    echo "Stopping GDM and authd while files are replaced..."
+    lxc exec -T "${VM}" -- systemctl stop gdm3.service
+    lxc exec -T "${VM}" -- systemctl stop authd.socket 2>/dev/null || true
+
+    push_file /usr/libexec/authd /usr/libexec/authd 0755
+    push_file /usr/bin/authctl /usr/bin/authctl 0755
+    push_file /usr/libexec/authd-pam /usr/libexec/authd-pam 0755
+    push_file "/usr/lib/${multiarch}/security/pam_authd.so" \
+        "/usr/lib/${multiarch}/security/pam_authd.so" 0644
+    push_file "/usr/lib/${multiarch}/security/pam_authd_exec.so" \
+        "/usr/lib/${multiarch}/security/pam_authd_exec.so" 0644
+    push_file "/usr/lib/${multiarch}/libnss_authd.so.2" \
+        "/usr/lib/${multiarch}/libnss_authd.so.2" 0644
+    push_root_file /etc/authd/authd.yaml /etc/authd/authd.yaml 0600
+    push_file /usr/share/pam-configs/authd /usr/share/pam-configs/authd 0644
+    push_file /project/debian/authd.gdm-authd.pam /etc/pam.d/gdm-authd 0644
+    push_file /etc/systemd/system/authd.service /etc/systemd/system/authd.service 0644
+    push_file /etc/systemd/system/authd.socket /etc/systemd/system/authd.socket 0644
+
+    lxc exec -T "${VM}" -- bash -s <<'GUEST_SETUP'
+set -euo pipefail
+
+install -d -m 0755 /etc/authd /etc/authd/brokers.d
+install -d -m 0700 /var/lib/authd
+DEBIAN_FRONTEND=noninteractive pam-auth-update --package
+sed -i --regexp-extended \
+    '/^(passwd|group|shadow):/ { /\bauthd\b/! s/$/ authd/ }' \
+    /etc/nsswitch.conf
+ldconfig
+systemctl daemon-reload
+systemctl enable authd.socket
+GUEST_SETUP
+
+    sync_brokers
+
+    lxc exec -T "${VM}" -- systemctl restart authd.socket
+    lxc exec -T "${VM}" -- systemctl restart gdm3.service
+    wait_for_gdm
+
+    echo "authd and the configured brokers are synchronized with ${VM}."
+    print_access
+
+    authd_cleanup_build_dir
+}
+
+reset_vm() {
+    require_no_args "$@"
+    instance_exists || die "${VM} does not exist"
+    snapshot_exists ||
+        die "${VM}/${BASE_SNAPSHOT} does not exist; recreate the companion VM"
+
+    stop_vm
+    echo "Restoring ${VM}/${BASE_SNAPSHOT}..."
+    lxc restore "${VM}" "${BASE_SNAPSHOT}"
+    start_vm
+    wait_for_gdm
+    print_access
+}
+
+delete_vm() {
+    require_no_args "$@"
+
+    if ! instance_exists; then
+        echo "${VM} does not exist; nothing to delete."
+        return 0
+    fi
+
+    stop_vm
+    echo "Deleting ${VM} and its snapshots..."
+    lxc delete "${VM}"
+}
+
+show_status() {
+    require_no_args "$@"
+
+    if ! instance_exists; then
+        echo "${VM}: not created"
+        return 0
+    fi
+
+    echo "${VM}: $(vm_status)"
+    if snapshot_exists; then
+        echo "Base snapshot: ${VM}/${BASE_SNAPSHOT}"
+    else
+        echo "Base snapshot: missing"
+    fi
+    print_access
+}
+
+shell_vm() {
+    require_no_args "$@"
+    instance_exists || die "${VM} does not exist"
+    start_vm
+    exec lxc exec -t "${VM}" -- su --login ubuntu
+}
+
+main() {
+    local command="${1:-}"
+    [ -n "${command}" ] || {
+        usage
+        exit 2
+    }
+    shift
+
+    require_lxd
+
+    case "${command}" in
+        create) create_vm "$@" ;;
+        sync) sync_vm "$@" ;;
+        start)
+            require_no_args "$@"
+            start_vm
+            wait_for_gdm
+            print_access
+            ;;
+        stop)
+            require_no_args "$@"
+            stop_vm
+            ;;
+        reset) reset_vm "$@" ;;
+        shell) shell_vm "$@" ;;
+        status) show_status "$@" ;;
+        delete) delete_vm "$@" ;;
+        *)
+            usage
+            exit 2
+            ;;
+    esac
+}
+
+main "$@"
