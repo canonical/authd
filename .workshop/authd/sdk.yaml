@@ -1,0 +1,20 @@
+# In-project SDK for the authd development workshop.
+#
+# Referenced from .workshop.yaml as `project-authd`. It carries the
+# lifecycle hooks that build + install the authd stack from source. Go and Rust
+# come from Store SDKs listed in .workshop.yaml. There is no build step:
+# Workshop auto-discovers hooks/<name> directly (see the Workshop SDK reference),
+# and check-health verifies both system state and the workshop-user login
+# environment.
+#
+# Hooks provided (all auto-discovered, order is Workshop-defined):
+#   setup-base      — root, pre-boot: system packages, PATH, sudo, sshd PAM
+#   setup-project   — workshop user, /project: build + install the authd stack
+#   check-health    — report whether the installed stack is healthy
+#   save-state      — root, before refresh/restore: save broker config to SDK_STATE_DIR
+#   restore-state   — root, after setup-project: rebuild + restore saved broker config
+#
+# `workshop refresh` and `workshop restore` preserve installed broker
+# configuration through save-state/restore-state. A normal stop/start keeps the
+# container filesystem and does not need those hooks.
+name: authd

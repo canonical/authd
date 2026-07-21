@@ -1,0 +1,93 @@
+#!/bin/bash
+# setup-project — build and install the authd stack into the running workshop.
+#
+# Runs on every `workshop launch` and `workshop refresh`, as the `workshop`
+# user, with the project mounted at /project and systemd supervising services.
+# This is the "batteries-included" install: Store SDKs provide the pinned Go and
+# Rust toolchains, then this hook generates code, builds the daemon / PAM modules
+# / NSS module, and installs them system-wide together with the PAM, NSS and
+# systemd wiring — the same set the Debian package ships (see debian/install,
+# debian/rules, debian/postinst), reproduced for a from-source dev workflow.
+#
+# It is idempotent: a refresh rebuilds and reinstalls from the current source.
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source /project/.workshop/authd/lib/env.sh
+cd /project
+
+log() { printf '\033[0;34m[setup-project]\033[0m %s\n' "$*"; }
+
+# Mark /project as git-safe for the workshop user. The workshop-mounted volume
+# is typically owned by the host user's UID, which differs from the workshop
+# user's UID inside the container; without this git refuses to operate with a
+# "dubious ownership" error. Persisting it in ~/.gitconfig keeps project-level
+# Git operations working without a blanket safe.directory '*' workaround.
+if ! git config --global --get-all safe.directory 2>/dev/null | grep -Fx /project >/dev/null; then
+    git config --global --add safe.directory /project
+fi
+
+# Initialise the libhimmelblau submodule required by broker builds.
+# A fresh clone without `--recurse-submodules` will have an empty directory
+# here; this is a no-op when the submodule is already present.
+log "Initialising git submodules"
+git submodule update --init -- authd-oidc-brokers/third_party/libhimmelblau
+
+# shellcheck disable=SC1091
+source /project/.workshop/authd/scripts/build-component
+authd_prepare_build_environment
+
+# --- 1. protoc Go plugins (versions pinned via tools/tools.go) ---------------
+# Install only the build-time tools (protoc plugins + pam-moduler). golangci-lint
+# is deliberately excluded: it is dev/lint-only and compiling it from source is
+# very slow (~5 min on a cold cache), which makes every launch unnecessarily long.
+log "Installing protoc Go plugins"
+(cd tools && grep -h -o '_ "[^"]*"' ./*.go | cut -d'"' -f2 | sort -u \
+    | grep -v 'golangci-lint' | xargs -r go install)
+
+# --- 2. Build ----------------------------------------------------------------
+build="$(mktemp -d)"
+trap 'rm -rf "$build"' EXIT
+log "Building authd, authctl, the PAM exec helper and the NSS module"
+authd_build_component all "$build" no
+
+# --- 3. Install config and shell completions (mirrors debian/install) --------
+# State and config directories + default config (mode 700, like the package).
+sudo install -d -m700 /etc/authd /etc/authd/brokers.d /var/lib/authd
+sudo install -m600 debian/authd-config/authd.yaml /etc/authd/authd.yaml
+
+log "Installing shell completions"
+go generate ./shell-completion/
+sudo install -Dm644 shell-completion/bash/authctl /usr/share/bash-completion/completions/authctl
+sudo install -Dm644 shell-completion/zsh/_authctl /usr/share/zsh/vendor-completions/_authctl
+sudo install -Dm644 shell-completion/fish/authctl.fish /usr/share/fish/vendor_completions.d/authctl.fish
+
+# --- 4. Wire PAM and NSS (mirrors debian/postinst) ---------------------------
+log "Configuring PAM and NSS"
+sudo install -d /usr/share/pam-configs
+sed "s|@AUTHD_DAEMONS_PATH@|${AUTHD_DAEMONS_PATH}|g" debian/pam-configs/authd.in \
+    | sudo tee /usr/share/pam-configs/authd >/dev/null
+sudo DEBIAN_FRONTEND=noninteractive pam-auth-update --package
+# Append `authd` to the passwd/group/shadow lines if not already present.
+sudo sed -i --regexp-extended \
+    '/^(passwd|group|shadow):/ { /\bauthd\b/! s/$/ authd/ }' /etc/nsswitch.conf
+
+# --- 5. systemd units --------------------------------------------------------
+log "Installing systemd units"
+sed "s|@AUTHD_DAEMONS_PATH@|${AUTHD_DAEMONS_PATH}|g" debian/authd.service.in \
+    | sudo tee /etc/systemd/system/authd.service >/dev/null
+sudo install -m644 debian/authd.socket /etc/systemd/system/authd.socket
+# Dev override: run the daemon at maximum verbosity (-vvv, per AGENTS.md).
+sudo install -d /etc/systemd/system/authd.service.d
+printf '[Service]\nExecStart=\nExecStart=%s/authd -vvv\n' "${AUTHD_DAEMONS_PATH}" \
+    | sudo tee /etc/systemd/system/authd.service.d/dev-verbose.conf >/dev/null
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now authd.socket
+sudo systemctl try-restart authd.service
+sudo systemctl restart ssh
+
+log "authd stack installed. Run tests or configure a broker:"
+log "  workshop run -- test"
+log "  workshop run -- broker google    --client-id ID --client-secret-file PATH"
+log "  workshop run -- broker msentraid --issuer URL   --client-id ID"

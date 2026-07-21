@@ -88,6 +88,24 @@ from your main PR.
 
 ## Contributing to the code
 
+### Development environment (recommended)
+
+The quickest way to get a complete, isolated authd stack — daemon, PAM and NSS
+modules, `systemd`, D-Bus and `sshd`, all built from source and installed, with
+brokers available through an action — is the
+[Workshop](https://ubuntu.com/workshop/docs/)-based dev environment:
+
+```shell
+sudo snap install workshop
+workshop launch --wait-on-error # build + install authd, PAM and NSS
+workshop run -- validate        # confirm it's healthy
+workshop run -- test            # run the Go test suite (race by default)
+```
+
+The Workshop environment is container-based, so graphical GDM greeter testing
+still needs a VM. The rest of this section documents how to build and install
+the binaries manually, which the Workshop environment automates.
+
 ### Required dependencies
 
 This project has several build dependencies. You can install these dependencies from the top of the source tree using the `apt` command as follows:
