@@ -110,8 +110,29 @@ workshop run -- broker google --client-id ID --client-secret-file PATH
 workshop run -- login user@domain
 ```
 
-The Workshop environment is container-based, so graphical GDM greeter testing
-still needs a VM. The rest of this section documents how to build and install
+The Workshop environment includes an opt-in Ubuntu Desktop LXD companion VM
+for graphical GDM greeter testing. Host LXD access is intentionally manual
+because it is equivalent to root access. The companion VM also requires host
+LXD, `socat`, and a SPICE viewer such as `remote-viewer` or `spicy`:
+
+```shell
+# Run these two commands on the host, from the project root.
+.workshop/lxd-tunnel/host-relay start
+workshop connect authd-dev/lxd-tunnel:lxd authd-dev/system:lxd
+
+# Provision once, then rebuild and synchronize authd and configured brokers.
+workshop run -- companion-vm create
+workshop run -- companion-vm sync
+```
+
+Open the greeter with `.workshop/lxd-tunnel/host-console` from the host.
+Use `workshop run -- companion-vm reset` to return to the clean VM snapshot
+or `workshop run -- companion-vm delete` when finished. The manual tunnel
+must be reconnected after `workshop refresh` or `workshop restore`. When the
+companion VM is no longer needed, release the host-root-equivalent LXD access
+with `.workshop/lxd-tunnel/host-relay stop` (and
+`workshop disconnect authd-dev/lxd-tunnel:lxd`) — the relay keeps running
+until stopped. The rest of this section documents how to build and install
 the binaries manually, which the Workshop environment automates.
 
 ### Required dependencies

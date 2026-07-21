@@ -13,7 +13,7 @@
 #   ssh -p 2222 user@domain@localhost   # exercise the real PAM login path
 #
 # Provisioning lives in the project-authd in-project SDK (.workshop/authd/).
-# Graphical GDM greeter testing still needs a VM.
+# Graphical GDM testing uses the opt-in companion-vm action below.
 name: authd-dev
 base: ubuntu@26.04
 
@@ -33,11 +33,25 @@ sdks:
       ssh:
         interface: tunnel
         endpoint: localhost:22
+  # Carries the tunnel plug for the host LXD socket; the LXD client itself is
+  # installed lazily on first `companion-vm` use (see companion-vm-ctl's
+  # ensure_lxd_client), so a plain launch/refresh never pays for it. The
+  # connection is intentionally not declared below: access to the host LXD
+  # daemon is host-root-equivalent and must be explicitly granted by the
+  # developer.
+  - name: project-lxd-tunnel
   - name: system
     plugs:
       ssh:
         interface: tunnel
         endpoint: localhost:2222
+    slots:
+      lxd:
+        interface: tunnel
+        # LXD proxy devices drop supplementary groups, so they cannot open the
+        # root:lxd daemon socket directly. The opt-in host relay retains the
+        # developer's lxd group and exposes this user-owned socket instead.
+        endpoint: $XDG_RUNTIME_DIR/authd-workshop-lxd.socket
 
 actions:
   # Rebuild + reinstall one component (or all) without a full refresh.
@@ -47,7 +61,9 @@ actions:
   #   workshop run -- build brokers google oidc      → skip slow msentraid/cargo step
   #   workshop run -- build brokers google,oidc      → comma-separated, same result
   # `all` covers the authd stack only; brokers are built separately.
-  # A full reinstall from a clean source state is just `workshop refresh`.
+  # `workshop refresh` reapplies setup-project after a tracked definition or
+  # SDK change; `workshop restore` rolls back runtime changes to the last
+  # successful launch or refresh.
   build: exec /project/.workshop/authd/scripts/build-component "$@"
 
   # Run the Go test suite (race detection by default; root tests skipped).
@@ -73,7 +89,7 @@ actions:
   # automatically once --client-id is given; use --start/--no-start to
   # override that default explicitly.
   #   workshop run -- broker google    --client-id ID --client-secret-file PATH_IN_WORKSHOP [--ssh-suffixes '@gmail.com']
-  #   workshop run -- broker msentraid --issuer URL --client-id ID
+  #   workshop run -- broker msentraid --issuer URL --client-id ID [--client-secret-file PATH_IN_WORKSHOP]
   #   workshop run -- broker oidc      --issuer URL --client-id ID [--client-secret SECRET]
   #   workshop run -- broker google --start   # (re)start after editing broker.conf by hand
   # Prefer --client-secret-file PATH to keep secrets out of shell history.
@@ -119,4 +135,14 @@ actions:
       -o UserKnownHostsFile=/dev/null \
       "${user}@localhost"
 
-
+  # Manage an Ubuntu Desktop VM on the host LXD daemon for manual GDM testing.
+  # Access is host-root-equivalent, so connect the host LXD tunnel explicitly:
+  #   .workshop/lxd-tunnel/host-relay start
+  #   workshop connect authd-dev/lxd-tunnel:lxd authd-dev/system:lxd
+  # When done, release the host access again (see host-relay's usage):
+  #   .workshop/lxd-tunnel/host-relay stop
+  #
+  #   workshop run -- companion-vm create   # provision the VM (then run sync)
+  #   workshop run -- companion-vm sync     # rebuild + copy authd and brokers
+  #   workshop run -- companion-vm start|stop|reset|shell|status|delete
+  companion-vm: exec /project/.workshop/authd/scripts/companion-vm-ctl "$@"
