@@ -66,3 +66,9 @@ gdm_custom_json_request_is_valid_authd (GdmPamExtensionJSONProtocol *request)
 
   return strncmp (request->protocol_name, JSON_PROTO_NAME, sizeof (request->protocol_name)) == 0;
 }
+
+static inline void
+gdm_custom_json_request_free (GdmPamExtensionJSONProtocol *message)
+{
+  GDM_PAM_EXTENSION_CUSTOM_JSON_RESPONSE_FREE (message);
+}
