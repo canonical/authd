@@ -2,13 +2,13 @@
 
 /* -*- Mode: C; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 8 -*-
  *
- * Based on https://gitlab.gnome.org/GNOME/gdm/-/blob/8c3fbd5ddefb8097d990a12581453582ec71a32f/pam-extensions/gdm-custom-json-pam-extension.h
+ * Based on https://gitlab.gnome.org/GNOME/gdm/-/blob/9038d1c82c504385d9a85cbdbaa7a5ab2d484520/pam-extensions/gdm-custom-json-pam-extension.h
  *
  * Copyright (C) 2023 Canonical Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
+ * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
@@ -39,27 +39,58 @@ typedef struct {
 #define GDM_PAM_EXTENSION_CUSTOM_JSON "org.gnome.DisplayManager.UserVerifier.CustomJSON"
 #define GDM_PAM_EXTENSION_CUSTOM_JSON_SIZE sizeof (GdmPamExtensionJSONProtocol)
 
-#define GDM_PAM_EXTENSION_CUSTOM_JSON_REQUEST_INIT(request, proto_name, proto_version, json_str) \
-{ \
-        size_t proto_len = strnlen ((proto_name), sizeof ((request)->protocol_name) - 1); \
-        GDM_PAM_EXTENSION_LOOK_UP_TYPE (GDM_PAM_EXTENSION_CUSTOM_JSON, &((request)->header.type)); \
-        (request)->header.length = htobe32 (GDM_PAM_EXTENSION_CUSTOM_JSON_SIZE); \
-        memcpy ((char *)(request)->protocol_name, (proto_name), proto_len); \
-        ((char *)((request)->protocol_name))[proto_len] = '\0'; \
-        (request)->version = (proto_version); \
-        (request)->json = (char *) (json_str); \
+static inline void
+init_json_protocol_base (GdmPamExtensionJSONProtocol *protocol,
+                         const char                  *proto_name,
+                         unsigned int                 proto_version)
+{
+        size_t proto_len = strnlen (proto_name, sizeof (protocol->protocol_name) - 1);
+
+        gdm_pam_extension_look_up_type (GDM_PAM_EXTENSION_CUSTOM_JSON, &protocol->header.type);
+        protocol->header.length = htobe32 (GDM_PAM_EXTENSION_CUSTOM_JSON_SIZE);
+        memcpy ((char *) protocol->protocol_name, proto_name, proto_len);
+        ((char *) protocol->protocol_name)[proto_len] = '\0';
+        protocol->version = proto_version;
 }
 
-#define GDM_PAM_EXTENSION_CUSTOM_JSON_RESPONSE_INIT(response, proto_name, proto_version) \
-{ \
-        size_t proto_len = strnlen ((proto_name), sizeof ((response)->protocol_name) - 1); \
-        GDM_PAM_EXTENSION_LOOK_UP_TYPE (GDM_PAM_EXTENSION_CUSTOM_JSON, &((response)->header.type)); \
-        (response)->header.length = htobe32 (GDM_PAM_EXTENSION_CUSTOM_JSON_SIZE); \
-        memcpy ((char *)(response)->protocol_name, (proto_name), proto_len); \
-        ((char *)((response)->protocol_name))[proto_len] = '\0'; \
-        (response)->version = (proto_version); \
-        (response)->json = NULL; \
+static inline void
+gdm_pam_extension_custom_json_request_init (GdmPamExtensionJSONProtocol *request,
+                                            const char                  *proto_name,
+                                            unsigned int                 proto_version,
+                                            const char                  *json_str)
+{
+        init_json_protocol_base (request, proto_name, proto_version);
+        request->json = (char *) json_str;
 }
 
-#define GDM_PAM_EXTENSION_REPLY_TO_CUSTOM_JSON_RESPONSE(reply) \
-        ((GdmPamExtensionJSONProtocol *) (void *) reply->resp)
+static inline void
+gdm_pam_extension_custom_json_response_init (GdmPamExtensionJSONProtocol *response,
+                                             const char                  *proto_name,
+                                             unsigned int                 proto_version)
+{
+        init_json_protocol_base (response, proto_name, proto_version);
+        response->json = NULL;
+}
+
+static inline GdmPamExtensionJSONProtocol *
+gdm_pam_extension_reply_to_custom_json_response (const struct pam_response *reply)
+{
+        return (GdmPamExtensionJSONProtocol *) (void *) reply->resp;
+}
+
+static inline void
+gdm_pam_extension_custom_json_response_free (GdmPamExtensionJSONProtocol *response)
+{
+        if (response == NULL)
+                return;
+
+        if (response->json != NULL) {
+                gdm_pam_extension_zero_buffer (response->json, strlen (response->json));
+                free (response->json);
+        }
+        free (response);
+}
+
+#ifdef __G_LIB_H__
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (GdmPamExtensionJSONProtocol, gdm_pam_extension_custom_json_response_free)
+#endif
