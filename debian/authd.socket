@@ -6,6 +6,8 @@ Wants=dbus.service
 After=dbus.service
 Before=nss-user-lookup.target
 Wants=nss-user-lookup.target
+# Start the daemon before AccountsService queries NSS for its cached users.
+Wants=authd.service
 
 [Socket]
 ListenStream=/run/authd.sock

@@ -3,6 +3,8 @@ Description=authd daemon service
 After=authd.socket
 Requires=authd.socket
 PartOf=authd.socket
+# AccountsService starts after this target to populate the GDM user list.
+Before=nss-user-lookup.target
 
 [Service]
 Type=notify

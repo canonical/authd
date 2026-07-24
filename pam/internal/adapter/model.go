@@ -108,7 +108,8 @@ type GetAuthenticationModesRequested struct{}
 
 // AuthModeSelected is triggered when the authentication mode has been chosen.
 type AuthModeSelected struct {
-	ID string
+	ID      string
+	fromGDM bool
 }
 
 // UILayoutReceived means that we got the ui layout to display by the broker.
