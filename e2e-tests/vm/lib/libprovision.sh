@@ -62,10 +62,16 @@ function force_create_snapshot() {
 
     if virsh domstate "${VM_NAME}" | grep -q '^running'; then
         # If the VM is running, we have to use --memspec to create the snapshot
-        local memfile="${IMAGE%.qcow2}-${snapshot_name}.mem"
+        # Libvirt's default disk filename is derived from the snapshot name.
+        # A failed or metadata-only-deleted snapshot can leave that file behind.
+        local snapshot_id
+        snapshot_id="$(date +%s%N)"
+        local diskfile="${IMAGE%.qcow2}.${snapshot_name}.${snapshot_id}"
+        local memfile="${IMAGE%.qcow2}-${snapshot_name}.${snapshot_id}.mem"
         time virsh snapshot-create-as \
           --domain "${VM_NAME}" \
           --name "${snapshot_name}" \
+          --diskspec "vda,file=${diskfile},snapshot=external" \
           --memspec "${memfile},snapshot=external"
         return
     fi
