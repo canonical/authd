@@ -30,7 +30,12 @@ _BROKER_CONFIGS = {
         "PROVIDER_DISPLAY_NAME": "Google",
         "DEVICE_URL": "google.com/device",
         # TODO: Same as above — simplify once stable ships the new format.
-        "DEVICE_URL_REGEX": r"(?:URL:\s*)?(https:\/\/)?google.com\/device\n(?:(?:Code|Login code):\s*|\s*)([A-Za-z\- ]+)",
+        # The colon is optional (:?) and the code may appear on the next line
+        # because GDM renders the label and value as separate widgets in its dialog.
+        # The capture group permits OCR-inserted whitespace and accepts code
+        # segments of three or four letters. Requiring at least one hyphen keeps
+        # adjacent GDM UI text from being captured with the code.
+        "DEVICE_URL_REGEX": r"(?:URL:\s*)?(https:\/\/)?google.com\/device\n(?:(?:Code|Login code):?\s*\n?|\s*)([A-Za-z](?:\s*[A-Za-z]){2,3}(?:\s*-\s*[A-Za-z](?:\s*[A-Za-z]){2,3})+(?![A-Za-z]))",
         "remote_group": "",
     },
 }
