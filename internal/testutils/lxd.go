@@ -147,6 +147,7 @@ func RunTestInLXD(t *testing.T, ubuntuVersion string) bool {
 		goTestArgs = append(goTestArgs, "-v")
 	}
 	if coverDir := CoverDirForTests(); coverDir != "" {
+		lxcExec(t, containerName, "mkdir", "-p", coverDir)
 		goTestArgs = append(goTestArgs, "-cover", fmt.Sprintf("-test.gocoverdir=%s", coverDir))
 	}
 	goTestArgs = append(goTestArgs, ".")

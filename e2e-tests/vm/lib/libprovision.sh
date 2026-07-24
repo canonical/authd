@@ -76,7 +76,26 @@ function force_create_snapshot() {
 function restore_snapshot_and_sync_time() {
     local snapshot_name="$1"
     virsh snapshot-revert "${VM_NAME}" --snapshotname "${snapshot_name}"
-    sync_time
+    # Reverting a disk-only snapshot leaves the VM shut off because
+    # there is no saved memory state to resume from. Start it if needed.
+    if ! virsh domstate "${VM_NAME}" | grep -q '^running'; then
+        boot_system
+    fi
+    # Cloud-init may have run its power_state module and shut the VM down
+    # after booting (e.g. if this snapshot predates the cloud-init disable).
+    # Detect this via sync_time: if the VM shuts down mid-sync, wait for it
+    # to stop fully and reboot — cloud-init does not re-run after completing
+    # its first run.
+    if ! sync_time; then
+        if virsh domstate "${VM_NAME}" | grep -q '^running'; then
+            # VM is still running; sync_time failed for an unrelated reason.
+            return 1
+        fi
+        timeout 120 retry --delay 1 -- \
+            sh -c "virsh domstate \"${VM_NAME}\" | grep -q '^shut off'"
+        boot_system
+        sync_time
+    fi
 }
 
 function sync_time() {

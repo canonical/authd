@@ -265,8 +265,24 @@ fi
 if has_snapshot "$PRE_AUTHD_SNAPSHOT"; then
     restore_snapshot_and_sync_time "$PRE_AUTHD_SNAPSHOT"
 else
+    # Disable cloud-init before booting so it does not re-run its final
+    # stage (which includes power_state: poweroff) during provisioning.
+    # The base image was snapshotted before cloud-init's final stage
+    # completed, so without this cloud-init would put the VM into
+    # "shutting down" state mid-provisioning.
+    sudo guestfish -a "${IMAGE}" -i touch /etc/cloud/cloud-init.disabled
     # Ensure the VM is running to perform initial setup
     boot_system
+    # If cloud-init still powered off the VM despite the above (e.g. because
+    # the image's ext4 journal replay undid the guestfish write), detect the
+    # shutdown and handle it: wait for the VM to fully stop, then disable
+    # cloud-init again on the now-clean filesystem and reboot.
+    if ! virsh domstate "${VM_NAME}" | grep -q '^running'; then
+        timeout 120 retry --delay 1 -- \
+            sh -c "virsh domstate \"${VM_NAME}\" | grep -q '^shut off'"
+        sudo guestfish -a "${IMAGE}" -i touch /etc/cloud/cloud-init.disabled
+        boot_system
+    fi
     # Create a pre-authd setup snapshot
     force_create_snapshot "$PRE_AUTHD_SNAPSHOT"
 fi
