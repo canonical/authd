@@ -121,4 +121,11 @@ jobs:
           ) &&
           'ubuntu-enterprise-desktop/authd-dev' || ''
         }}
+      # PRs can limit the suites by adding, for example,
+      # "e2e-tests: login_gdm.robot login_cli.robot" to their description.
+      e2e-tests-description: >-
+        ${{
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.body || ''
+        }}
     secrets: inherit

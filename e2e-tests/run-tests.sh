@@ -111,6 +111,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --)
             shift
+            TESTS_TO_RUN+=("$@")
             break
             ;;
         -*)
