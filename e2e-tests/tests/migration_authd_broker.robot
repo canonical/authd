@@ -12,12 +12,14 @@ Test Teardown   utils.Test Teardown
 
 *** Variables ***
 ${username}    %{E2E_USER}
-${local_password}    qwer1234
 
 
 *** Test Cases ***
 Test login after upgrading authd and broker to edge channel
-    [Documentation]    This test verifies that after upgrading both authd and the broker to the edge channel, remote users can still log in using device code flow and local password, and their accounts are properly set up on the system.
+    [Documentation]    This test verifies that after upgrading both authd and
+    ...    the broker to the edge channel, remote users can still log in
+    ...    using device code flow and local password, and their accounts
+    ...    are properly set up on the system.
 
     # Log in with local user
     Log In

@@ -36,14 +36,15 @@ ${local_password}    %{E2E_PASSWORD}
 *** Test Cases ***
 Test login with CLI using Entra ID password and MFA with client secret
     [Documentation]    Verify that the Entra ID direct-password + MFA flow works
-    ...    through the CLI when device registration is disabled and the broker is
-    ...    provisioned with a client secret.
+    ...    through the CLI when device registration is disabled and the
+    ...    broker is provisioned with a client secret.
     ...
-    ...    The client secret is injected into broker.conf at setup (not baked into
-    ...    the snapshot), so the base snapshot stays secret-free for public-client
-    ...    flows. This covers the alternate configuration where entra_password stays
-    ...    available without register_device=true because Microsoft Graph access
-    ...    comes from the configured application secret instead.
+    ...    The client secret is injected into broker.conf at setup (not
+    ...    baked into the snapshot), so the base snapshot stays
+    ...    secret-free for public-client flows. This covers the alternate
+    ...    configuration where entra_password stays available without
+    ...    register_device=true because Microsoft Graph access comes from
+    ...    the configured application secret instead.
 
     Log In
 

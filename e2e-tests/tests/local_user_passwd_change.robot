@@ -16,7 +16,8 @@ ${new_password}    Passwd1234
 
 *** Test Cases ***
 Test changing local password of local user
-    [Documentation]    This test verifies that a local user can still change their local password with authd installed.
+    [Documentation]    This test verifies that a local user can still change
+    ...    their local password with authd installed.
 
     # Log in with local user
     Log In

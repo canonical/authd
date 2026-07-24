@@ -31,14 +31,15 @@ ${local_password}    %{E2E_PASSWORD}
 
 *** Test Cases ***
 Test login with CLI using Entra ID password and MFA
-    [Documentation]    Verify that a user can authenticate via the Entra ID direct-password
-    ...    + MFA flow through the CLI (machinectl login).
+    [Documentation]    Verify that a user can authenticate via the Entra ID
+    ...    direct-password + MFA flow through the CLI (machinectl login).
     ...
-    ...    With the device code flow disabled the broker auto-selects the single available
-    ...    authentication mode (entra_password), so the user goes straight to the
-    ...    password prompt after choosing the provider. After successful MFA the
-    ...    Entra password is cached locally; the provisioning checks verify that
-    ...    the cached password works for sudo.
+    ...    With the device code flow disabled the broker auto-selects the
+    ...    single available authentication mode (entra_password), so the
+    ...    user goes straight to the password prompt after choosing the
+    ...    provider. After successful MFA the Entra password is cached
+    ...    locally; the provisioning checks verify that the cached
+    ...    password works for sudo.
 
     # Log in with local user (brings up the desktop so we can open a terminal).
     Log In

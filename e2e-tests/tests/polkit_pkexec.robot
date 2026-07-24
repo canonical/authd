@@ -2,16 +2,16 @@
 Resource        resources/utils.resource
 Resource        resources/authd.resource
 Resource        resources/broker.resource
+Resource        resources/checkpoints.resource
 
 # Test Tags       robot:exit-on-failure
 
-Test Setup    utils.Test Setup    snapshot=%{BROKER}-installed
+Test Setup    checkpoints.authd User Logged In Via GDM
 Test Teardown   utils.Test Teardown
 
 
 *** Variables ***
 ${username}    %{E2E_USER}
-${local_password}    qwer1234
 
 
 *** Test Cases ***
@@ -23,7 +23,8 @@ Test polkit authentication as authd user via pkexec after initial GDM login
     ...    for their own credentials rather than falling back to the local admin
     ...    (ubuntu) user.
 
-    Log In With Remote User Through GDM: QR Code    ${username}    ${local_password}
+    # The logged-in-via-gdm checkpoint has already logged in as the authd
+    # user; the GNOME desktop is active with the authd user's session.
     Check If User Was Added Properly    ${username}
 
     # Add the authd user to the sudo group so that polkit authenticates them as

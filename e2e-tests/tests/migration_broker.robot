@@ -12,12 +12,13 @@ Test Teardown   utils.Test Teardown
 
 *** Variables ***
 ${username}    %{E2E_USER}
-${local_password}    qwer1234
 
 
 *** Test Cases ***
 Test login with broker on edge channel
-    [Documentation]    Test login with broker on edge channel with device code flow and local password, before and after upgrading authd and broker to edge channel.
+    [Documentation]    Test login with broker on edge channel with device code
+    ...    flow and local password, before and after upgrading authd and
+    ...    broker to edge channel.
 
     # Log in with local user
     Log In
