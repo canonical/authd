@@ -105,6 +105,7 @@ func TestGdmModel(t *testing.T) {
 		wantPAMReturnValue PamReturnValue
 		wantGdmRequests    []gdm.RequestType
 		wantGdmEvents      []gdm.EventType
+		wantGdmEventsCount map[gdm.EventType]int
 		wantGdmAuthRes     []*authd.IAResponse
 		wantNoGdmRequests  []gdm.RequestType
 		wantNoGdmEvents    []gdm.EventType
@@ -706,11 +707,14 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_authModesReceived,
 				gdm.EventType_authModeSelected,
 				gdm.EventType_uiLayoutReceived,
-				gdm.EventType_authModeSelected,
-				gdm.EventType_uiLayoutReceived,
 				gdm.EventType_authEvent, // retry
 				gdm.EventType_startAuthentication,
 			},
+			// The invariant that the GDM echo of a selection must not add an
+			// extra selection cycle is asserted deterministically in
+			// gdmmodel_authmode_echo_test.go. Asserting an exact event count
+			// here is racy because the test conversation handler delivers the
+			// echo and stage-change events concurrently with the model's polls.
 			wantStage: proto.Stage_challenge,
 			wantGdmAuthRes: []*authd.IAResponse{
 				{
@@ -1290,6 +1294,11 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_startAuthentication,
 				gdm.EventType_authEvent,
 			},
+			// The invariant that the GDM echo of a selection must not add an
+			// extra selection cycle is asserted deterministically in
+			// gdmmodel_authmode_echo_test.go. Asserting an exact event count
+			// here is racy because the test conversation handler delivers the
+			// echo and stage-change events concurrently with the model's polls.
 			wantStage: proto.Stage_challenge,
 			wantGdmAuthRes: []*authd.IAResponse{
 				{Access: auth.Granted},
@@ -2741,6 +2750,17 @@ func TestGdmModel(t *testing.T) {
 			require.True(t, isSupersetOf(receivedEventTypes, tc.wantGdmEvents),
 				"Required events have not been received: %v vs %v",
 				stringifySlice(tc.wantGdmEvents), stringifySlice(receivedEventTypes))
+
+			for evType, wantN := range tc.wantGdmEventsCount {
+				gotN := 0
+				for _, e := range receivedEventTypes {
+					if e == evType {
+						gotN++
+					}
+				}
+				require.Equal(t, wantN, gotN,
+					"GDM event %q received %d times, want %d", evType, gotN, wantN)
+			}
 
 			require.Empty(t, appState.wantMessages, "Wanted messages have not all been processed")
 
