@@ -1,0 +1,150 @@
+# authd development workshop.
+#
+# A single-container dev environment that builds, installs and runs authd's
+# daemon, PAM modules and NSS module from source, with systemd, D-Bus, NSS and
+# sshd wired up for real PAM/NSS login testing. OIDC brokers are built and
+# configured on demand with the `broker` action.
+#
+# Quick start:
+#   workshop launch --wait-on-error   # build + install authd, PAM and NSS
+#   workshop run -- validate   # confirm the stack is healthy
+#   workshop run -- broker google --client-id ID --client-secret SECRET
+#   workshop run -- broker google --client-id ID --client-secret-file /tmp/google-secret
+#   ssh -p 2222 user@domain@localhost   # exercise the real PAM login path
+#
+# Provisioning lives in the project-authd in-project SDK (.workshop/authd/).
+# Graphical GDM testing uses the opt-in companion-vm-* actions below.
+name: authd-dev
+base: ubuntu@24.04
+
+sdks:
+  - name: go
+    channel: 1.25/stable
+  - name: rust
+
+  # Project-specific SDK: hooks build + install the authd stack. See
+  # .workshop/authd/.
+  - name: project-authd
+    slots:
+      # Expose the in-workshop sshd to the host so cloud-identity SSH logins can
+      # be tested through authd's PAM module. Auto-connects to the system plug
+      # below (matching name, localhost). Host port 2222 must be free at launch,
+      # or the tunnel won't activate — see `workshop info` for the live address.
+      ssh:
+        interface: tunnel
+        endpoint: localhost:22
+  # Installs an LXD client whose UNIX socket is supplied by the host through a
+  # manually connected tunnel. The connection is intentionally not declared
+  # below: access to the host LXD daemon is host-root-equivalent and must be
+  # explicitly granted by the developer.
+  - name: project-lxd-tunnel
+  - name: system
+    plugs:
+      ssh:
+        interface: tunnel
+        endpoint: localhost:2222
+    slots:
+      lxd:
+        interface: tunnel
+        # LXD proxy devices drop supplementary groups, so they cannot open the
+        # root:lxd daemon socket directly. The opt-in host relay retains the
+        # developer's lxd group and exposes this user-owned socket instead.
+        endpoint: $XDG_RUNTIME_DIR/authd-workshop-lxd.socket
+
+actions:
+  # Rebuild + reinstall one component (or all) without a full refresh.
+  #   workshop run -- build [authd|authctl|pam|nss|brokers [variant...]|all]
+  # `brokers` rebuilds OIDC broker binaries. Accepts one or more variants after:
+  #   workshop run -- build brokers                  → all three
+  #   workshop run -- build brokers google oidc      → skip slow msentraid/cargo step
+  #   workshop run -- build brokers google,oidc      → comma-separated, same result
+  # `all` covers the authd stack only; brokers are built separately.
+  # A full reinstall from a clean source state is just `workshop refresh`.
+  build: exec /project/.workshop/authd/scripts/build-component "$@"
+
+  # Run the Go test suite (race detection by default). This mirrors the Go
+  # portion of CI; the Rust/NSS suite is not run here — exercise it from
+  # `workshop shell` with `cargo test` if needed.
+  #   workshop run -- test                  # -race ./...
+  #   workshop run -- test ./pam/...        # forwarded to `go test`
+  test: |
+    source /project/.workshop/authd/lib/env.sh
+    cd /project
+    args=("$@")
+    [ "${#args[@]}" -eq 0 ] && args=(-race ./...)
+    AUTHD_SKIP_ROOT_TESTS=1 go test "${args[@]}"
+
+  # Build, configure and start an OIDC broker from source.
+  #   workshop run -- broker google    --client-id ID --client-secret-file PATH_IN_WORKSHOP [--ssh-suffixes '@gmail.com']
+  #   workshop run -- broker msentraid --issuer URL --client-id ID [--client-secret-file PATH_IN_WORKSHOP]
+  #   workshop run -- broker oidc      --issuer URL --client-id ID [--client-secret SECRET]
+  # Prefer --client-secret-file PATH to keep secrets out of shell history.
+  broker: exec /project/.workshop/authd/scripts/install-broker "$@"
+
+  # Re-run the health checks on demand and print them (human-readable).
+  validate: |
+    source /project/.workshop/authd/lib/health-checks.sh
+    authd_print_validate_report
+
+  # Follow logs for the daemon, a specific broker, or everything.
+  #   workshop run -- logs [authd|google|msentraid|oidc|all]
+  logs: |
+    target="${1:-all}"
+    case "$target" in
+      all)                   exec sudo journalctl -f -u authd.service -u 'authd-*.service' ;;
+      authd)                 exec sudo journalctl -fu authd.service ;;
+      google|msentraid|oidc) exec sudo journalctl -fu "authd-${target}.service" ;;
+      *)                     exec sudo journalctl -fu "$target" ;;
+    esac
+
+  # Run golangci-lint via the project's version-pinned wrapper.
+  # The first invocation compiles the linter (slow); subsequent ones use the
+  # cached binary. Pass -C authd-oidc-brokers to lint the broker subtree.
+  #   workshop run -- lint [golangci-lint args...]
+  #   workshop run -- lint -C authd-oidc-brokers run
+  lint: |
+    source /project/.workshop/authd/lib/env.sh
+    cd /project
+    exec scripts/golangci-lint "$@"
+
+  # Authenticate and open a real login shell via sshd → PAM → authd.
+  # Connects to the container's own sshd (localhost:22), which goes through the
+  # full PAM/authd/NSS stack and drops you into a shell as the cloud user.
+  # Equivalent to `ssh -p 2222 user@domain@localhost` from the host.
+  #   workshop run -- login user@domain
+  login: |
+    exec ssh \
+      -o StrictHostKeyChecking=no \
+      -o UserKnownHostsFile=/dev/null \
+      "${1:?Usage: workshop run -- login user@domain}" localhost
+
+  # Test the PAM authentication protocol without opening a session.
+  # Useful for debugging PAM flows: runs Authenticate() + AcctMgmt() and prints
+  # the result, without creating a shell. Two-step so sudo never needs Go in
+  # its PATH: build as workshop user, run binary as root (PAM callers are root).
+  #   workshop run -- pam-test [force_native_client=true ...]
+  pam-test: |
+    source /project/.workshop/authd/lib/env.sh
+    cd /project
+    multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
+    pam_runner="$(mktemp /tmp/pam-runner-XXXXXX)"
+    trap 'rm -f "${pam_runner}"' EXIT
+    go build -tags=withpamrunner -o "${pam_runner}" ./pam/tools/pam-runner
+    sudo env \
+      AUTHD_PAM_RUNNER_SUPPORTS_CONVERSATION=1 \
+      AUTHD_PAM_RUNNER_EXEC_MODULE="/usr/lib/${multiarch}/security/pam_authd_exec.so" \
+      AUTHD_PAM_RUNNER_EXEC_CHILD_PATH=/usr/libexec/authd-pam \
+      "${pam_runner}" login "$@"
+
+  # Manage an Ubuntu Desktop VM on the host LXD daemon for manual GDM testing.
+  # Access is host-root-equivalent, so connect the host LXD tunnel explicitly:
+  #   .workshop/lxd-tunnel/host-relay start
+  #   workshop connect authd-dev/project-lxd-tunnel:lxd authd-dev/system:lxd
+  companion-vm-create: exec /project/.workshop/authd/scripts/companion-vm-ctl create "$@"
+  companion-vm-sync: exec /project/.workshop/authd/scripts/companion-vm-ctl sync "$@"
+  companion-vm-start: exec /project/.workshop/authd/scripts/companion-vm-ctl start "$@"
+  companion-vm-stop: exec /project/.workshop/authd/scripts/companion-vm-ctl stop "$@"
+  companion-vm-reset: exec /project/.workshop/authd/scripts/companion-vm-ctl reset "$@"
+  companion-vm-shell: exec /project/.workshop/authd/scripts/companion-vm-ctl shell "$@"
+  companion-vm-status: exec /project/.workshop/authd/scripts/companion-vm-ctl status "$@"
+  companion-vm-delete: exec /project/.workshop/authd/scripts/companion-vm-ctl delete "$@"
