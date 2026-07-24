@@ -27,6 +27,7 @@ type Manager struct {
 
 	transactionsToBroker   map[string]*Broker
 	sessionsToUsername     map[string]string
+	sessionsToServiceName  map[string]string
 	transactionsToBrokerMu sync.RWMutex
 
 	cleanup func()
@@ -111,9 +112,10 @@ func NewManager(ctx context.Context, brokersConfPath string, configuredBrokers [
 		brokers:      brokers,
 		brokersOrder: brokersOrder,
 
-		usersToBroker:        make(map[string]*Broker),
-		transactionsToBroker: make(map[string]*Broker),
-		sessionsToUsername:   make(map[string]string),
+		usersToBroker:         make(map[string]*Broker),
+		transactionsToBroker:  make(map[string]*Broker),
+		sessionsToUsername:    make(map[string]string),
+		sessionsToServiceName: make(map[string]string),
 
 		cleanup: cleanup,
 	}, nil
@@ -166,7 +168,7 @@ func (m *Manager) BrokerFromSessionID(id string) (broker *Broker, err error) {
 }
 
 // NewSession create a new session for the broker and store the sessionID on the manager.
-func (m *Manager) NewSession(brokerID, username, lang, mode, providerID string) (sessionID string, encryptionKey string, err error) {
+func (m *Manager) NewSession(brokerID, username, lang, mode, providerID, serviceName string) (sessionID string, encryptionKey string, err error) {
 	broker, err := m.BrokerFromID(brokerID)
 	if err != nil {
 		return "", "", fmt.Errorf("invalid broker: %v", err)
@@ -183,6 +185,7 @@ func (m *Manager) NewSession(brokerID, username, lang, mode, providerID string) 
 		sessionID, mode, username)
 	m.transactionsToBroker[sessionID] = broker
 	m.sessionsToUsername[sessionID] = username
+	m.sessionsToServiceName[sessionID] = serviceName
 	return sessionID, encryptionKey, nil
 }
 
@@ -203,6 +206,7 @@ func (m *Manager) EndSession(sessionID string) error {
 		sessionID, b.Name)
 	delete(m.transactionsToBroker, sessionID)
 	delete(m.sessionsToUsername, sessionID)
+	delete(m.sessionsToServiceName, sessionID)
 	m.transactionsToBrokerMu.Unlock()
 	return nil
 }
@@ -212,6 +216,13 @@ func (m *Manager) UsernameFromSessionID(sessionID string) string {
 	m.transactionsToBrokerMu.RLock()
 	defer m.transactionsToBrokerMu.RUnlock()
 	return m.sessionsToUsername[sessionID]
+}
+
+// ServiceNameFromSessionID returns the PAM service name associated with the given session ID.
+func (m *Manager) ServiceNameFromSessionID(sessionID string) string {
+	m.transactionsToBrokerMu.RLock()
+	defer m.transactionsToBrokerMu.RUnlock()
+	return m.sessionsToServiceName[sessionID]
 }
 
 // BrokerExists returns true if the brokerID is known by the manager.

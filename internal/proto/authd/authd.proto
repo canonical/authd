@@ -51,6 +51,7 @@ message SBRequest {
   string username = 2;
   string lang = 3;
   SessionMode mode = 4;
+  string service_name = 5;
 }
 
 message SBResponse {
