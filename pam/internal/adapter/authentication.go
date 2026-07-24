@@ -126,6 +126,7 @@ type authenticationModel struct {
 	mode       authd.SessionMode
 
 	inProgress       bool
+	inputLocked      bool
 	currentModel     authenticationComponent
 	currentSessionID string
 	currentBrokerID  string
@@ -203,6 +204,8 @@ func (m *authenticationModel) cancelIsAuthenticated() tea.Cmd {
 
 // Update handles events and actions.
 func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel, command tea.Cmd) {
+	var focusCmd tea.Cmd
+
 	switch msg := msg.(type) {
 	case StageChanged:
 		if msg.Stage != pam_proto.Stage_challenge {
@@ -218,10 +221,14 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 	case startAuthentication:
 		safeMessageDebug(msg, "current model %v, focused %v",
 			m.currentModel, m.Focused())
-		if !m.Focused() {
+		if !m.Focused() && !m.inputLocked {
 			return m, nil
 		}
 		m.inProgress = true
+		if m.inputLocked {
+			m.inputLocked = false
+			focusCmd = m.currentModel.Focus()
+		}
 
 	case stopAuthentication:
 		safeMessageDebug(msg, "current model %v, focused %v",
@@ -284,6 +291,12 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 
 	case isAuthenticatedRequested:
 		safeMessageDebug(msg)
+
+		// Hide the input if we are in interactive terminal mode and the authentication request is for a secret (password).
+		if _, hasSecret := msg.item.(*authd.IARequest_AuthenticationData_Secret); hasSecret && m.clientType == InteractiveTerminal {
+			m.inputLocked = true
+			m.Blur()
+		}
 
 		authTracker := m.authTracker
 
@@ -457,7 +470,7 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 		model, cmd = m.currentModel.Update(msg)
 		m.currentModel = convertTo[authenticationComponent](model)
 	}
-	return m, cmd
+	return m, tea.Batch(focusCmd, cmd)
 }
 
 // Focus focuses this model.
@@ -561,6 +574,7 @@ func (m authenticationModel) View() string {
 func (m *authenticationModel) Reset() tea.Cmd {
 	log.Debugf(context.TODO(), "%T: Reset", m)
 	m.inProgress = false
+	m.inputLocked = false
 	m.currentModel = nil
 	m.currentSessionID = ""
 	m.currentBrokerID = ""
