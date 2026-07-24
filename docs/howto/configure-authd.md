@@ -270,24 +270,6 @@ In some cases, forcing the access check may prevent login, such as when there ar
 Additional information on the forced access check is provided in the [security
 overview](ref::force-auth-security).
 
-(ref::config-extra-scopes)=
-
-## Configure extra scopes
-
-Some identity providers require additional OIDC scopes beyond the default ones
-to function correctly. For example, Okta requires the `offline_access` scope to
-return a refresh token in the authentication response.
-
-You can specify extra scopes in the `oidc` section of the broker configuration
-file:
-
-```ini
-[oidc]
-...
-## Comma-separated list of extra OIDC scopes to request
-extra_scopes = offline_access
-```
-
 (ref::config-allowed-users)=
 ## Configure allowed users
 
