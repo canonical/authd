@@ -39,7 +39,6 @@ typedef enum _ActionType {
 typedef struct
 {
   /* Per module-instance data */
-  pam_handle_t *pamh;
   GDBusServer  *server;
   GMainContext *main_context;
   GCancellable *cancellable;
@@ -50,7 +49,9 @@ typedef struct
 /* Per action data, protected by the static mutex */
 typedef struct _ActionData
 {
+  pam_handle_t    *pamh;
   ModuleData      *module_data;
+  GMainContext    *action_context;
 
   GMainLoop       *loop;
   GDBusConnection *connection;
@@ -62,6 +63,10 @@ typedef struct _ActionData
   guint            object_registered_id;
   guint            log_handler_id;
   int              log_file_fd;
+
+#ifdef AUTHD_TEST_MODULE
+  GThread *main_thread;
+#endif
 } ActionData;
 
 const char *UBUNTU_AUTHD_PAM_OBJECT_NODE =
@@ -185,29 +190,139 @@ action_type_to_string (ActionType action_type)
   g_return_val_if_reached ("unknown");
 }
 
-G_GNUC_PRINTF (3, 4)
+typedef struct _ConversationInvocationData ConversationInvocationData;
+typedef void (*ConversationDoneCallback) (ConversationInvocationData *invocation);
+
+struct _ConversationInvocationData
+{
+  ActionData              *action_data;
+  char                    *message;
+  int                      style;
+  int                      ret;
+  char                    *response;
+  ConversationDoneCallback done_callback;
+  gpointer                 callback_data;
+  GDestroyNotify           callback_data_destroy;
+};
+
 static void
-notify_error (pam_handle_t *pamh,
-              ActionType    action_type,
-              const char   *format,
+conversation_invocation_data_free (gpointer data)
+{
+  ConversationInvocationData *invocation = data;
+
+  g_clear_pointer (&invocation->message, g_free);
+  g_clear_pointer (&invocation->response, g_free);
+
+  if (invocation->callback_data_destroy)
+    {
+      g_clear_pointer (&invocation->callback_data,
+                       invocation->callback_data_destroy);
+    }
+
+  g_free (invocation);
+}
+
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (ConversationInvocationData,
+                               conversation_invocation_data_free);
+
+static gboolean
+invoke_conversation_on_action_context (gpointer data)
+{
+  ConversationInvocationData *invocation = data;
+  ActionData *action_data = invocation->action_data;
+  char **response_ptr = NULL;
+
+#if AUTHD_TEST_MODULE
+  g_assert (action_data->main_thread == g_thread_self ());
+  g_assert (g_main_context_is_owner (action_data->action_context));
+#endif
+
+  if (invocation->style == PAM_PROMPT_ECHO_ON ||
+      invocation->style == PAM_PROMPT_ECHO_OFF)
+    response_ptr = &invocation->response;
+
+  invocation->ret = pam_prompt (action_data->pamh,
+                                invocation->style,
+                                response_ptr,
+                                "%s",
+                                invocation->message);
+
+  if (invocation->done_callback)
+    invocation->done_callback (invocation);
+
+  return G_SOURCE_REMOVE;
+}
+
+typedef struct
+{
+  GMutex    completion_mutex;
+  GCond     completion_cond;
+  gboolean  completed;
+} NotifyConversationData;
+
+static void
+notify_conversation_done (ConversationInvocationData *invocation)
+{
+  NotifyConversationData *notify_data = invocation->callback_data;
+
+  g_mutex_lock (&notify_data->completion_mutex);
+  notify_data->completed = TRUE;
+  g_cond_signal (&notify_data->completion_cond);
+  g_mutex_unlock (&notify_data->completion_mutex);
+}
+
+G_GNUC_PRINTF (2, 3)
+static void
+notify_error (ActionData *action_data,
+              const char *format,
               ...)
 {
-  const char *action = action_type_to_string (action_type);
   g_autofree char *message = NULL;
+  g_autoptr(ConversationInvocationData) invocation = NULL;
+  NotifyConversationData notify_data = { .completed = FALSE };
+  const char *action;
   va_list args;
 
+  g_return_if_fail (action_data != NULL);
   g_return_if_fail (format != NULL);
 
   va_start (args, format);
   message = g_strdup_vprintf (format, args);
   va_end (args);
 
+  action = action_type_to_string (action_data->current_action);
+
   if (isatty (STDERR_FILENO)) \
     g_debug ("%s: %s", action, message);
   else
     g_warning ("%s: %s", action, message);
 
-  pam_error (pamh, "%s: %s", action, message);
+  invocation = g_new0 (ConversationInvocationData, 1);
+  *invocation = (ConversationInvocationData){
+    .action_data = action_data,
+    .style = PAM_ERROR_MSG,
+    .message = g_strdup_printf ("%s: %s", action, message),
+    .done_callback = notify_conversation_done,
+    .callback_data = &notify_data,
+  };
+
+  g_mutex_init (&notify_data.completion_mutex);
+  g_cond_init (&notify_data.completion_cond);
+
+  g_assert (action_data->action_context);
+  g_main_context_invoke_full (action_data->action_context,
+                              G_PRIORITY_DEFAULT,
+                              invoke_conversation_on_action_context,
+                              g_steal_pointer (&invocation),
+                              conversation_invocation_data_free);
+
+  g_mutex_lock (&notify_data.completion_mutex);
+  while (!notify_data.completed)
+    g_cond_wait (&notify_data.completion_cond, &notify_data.completion_mutex);
+  g_mutex_unlock (&notify_data.completion_mutex);
+
+  g_cond_clear (&notify_data.completion_cond);
+  g_mutex_clear (&notify_data.completion_mutex);
 }
 
 static GLogWriterOutput
@@ -308,13 +423,14 @@ action_module_data_cleanup (ActionData *action_data)
   g_log_set_debug_enabled (FALSE);
 
   g_clear_object (&action_data->cancellable);
+  g_clear_pointer (&action_data->action_context, g_main_context_unref);
   g_clear_pointer (&action_data->loop, g_main_loop_unref);
   g_clear_handle_id (&action_data->child_pid, g_spawn_close_pid);
 
   G_LOCK (logger);
   if (action_data->log_handler_id)
     g_log_remove_handler (G_LOG_DOMAIN, action_data->log_handler_id);
-#if AUTHD_TEST_MODULE
+#ifdef AUTHD_TEST_MODULE
   /* During tests we are catching catch all the domains! */
   g_log_set_default_handler (g_log_default_handler, NULL);
 #endif
@@ -382,32 +498,22 @@ setup_shared_module_data (pam_handle_t *pamh)
       return NULL;
     }
 
-  module_data->pamh = pamh;
   module_data->cancellable = g_cancellable_new ();
 
   return module_data;
 }
 
-static gboolean
+static inline gboolean
 is_debug_logging_enabled ()
 {
-  const char *debug_messages;
-
-  if (g_log_get_debug_enabled ())
-    return TRUE;
-
-  if (!(debug_messages = g_getenv ("G_MESSAGES_DEBUG")))
-    return FALSE;
-
-  return g_str_equal (debug_messages, "all") ||
-         strstr (debug_messages, G_LOG_DOMAIN);
+  return !g_log_writer_default_would_drop (G_LOG_LEVEL_DEBUG, G_LOG_DOMAIN);
 }
 
 typedef struct
 {
-  pid_t              child_pid;
-  GMainLoop         *main_loop;
-  GDBusConnection  **connection_ptr;
+  pid_t             child_pid;
+  GMainLoop        *main_loop;
+  GDBusConnection **connection_ptr;
 } WaitChildThreadData;
 
 static gpointer
@@ -482,6 +588,56 @@ sanitize_variant_key (const char *key)
   return g_strdup_printf ("exec-module-variant-%s", key);
 }
 
+typedef struct
+{
+  GDBusMethodInvocation *invocation;
+  gchar                  *response;
+  int                    ret;
+} ReturnInvocationData;
+
+static void
+return_invocation_data_free (gpointer data)
+{
+  ReturnInvocationData *return_data = data;
+
+  g_clear_object (&return_data->invocation);
+  g_clear_pointer (&return_data->response, g_free);
+  g_free (return_data);
+}
+
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (ReturnInvocationData, return_invocation_data_free)
+
+static gboolean
+return_invocation_on_main_thread (gpointer data)
+{
+  ReturnInvocationData *return_data = data;
+
+  g_dbus_method_invocation_return_value (return_data->invocation,
+                                         g_variant_new ("(is)",
+                                                        return_data->ret,
+                                                        return_data->response));
+
+  return G_SOURCE_REMOVE;
+}
+
+static void
+conversation_prompt_done (ConversationInvocationData *invocation)
+{
+  ActionData *action_data = invocation->action_data;
+  g_autoptr(ReturnInvocationData) return_data = NULL;
+
+  return_data = g_new0 (ReturnInvocationData, 1);
+  return_data->ret = invocation->ret;
+  return_data->invocation = g_object_ref (invocation->callback_data);
+  return_data->response = g_strdup (invocation->response ? invocation->response : "");
+
+  g_main_context_invoke_full (action_data->module_data->main_context,
+                              G_PRIORITY_DEFAULT,
+                              return_invocation_on_main_thread,
+                              g_steal_pointer (&return_data),
+                              return_invocation_data_free);
+}
+
 static void
 on_pam_method_call (GDBusConnection       *connection,
                     const char            *sender,
@@ -493,7 +649,7 @@ on_pam_method_call (GDBusConnection       *connection,
                     void                  *user_data)
 {
   ActionData *action_data = user_data;
-  pam_handle_t *pamh = action_data->module_data->pamh;
+  pam_handle_t *pamh = action_data->pamh;
 
   if (is_debug_logging_enabled ())
     {
@@ -607,6 +763,9 @@ on_pam_method_call (GDBusConnection       *connection,
       variant_key = sanitize_variant_key (key);
       ret = pam_set_data (pamh, variant_key, variant, on_variant_data_removed);
       g_dbus_method_invocation_return_value (invocation, g_variant_new ("(i)", ret));
+
+      if (ret != PAM_SUCCESS)
+        g_clear_pointer (&variant, g_variant_unref);
     }
   else if (g_str_equal (method_name, "UnsetData"))
     {
@@ -648,17 +807,27 @@ on_pam_method_call (GDBusConnection       *connection,
     }
   else if (g_str_equal (method_name, "Prompt"))
     {
-      g_autofree char *response = NULL;
-      const char *prompt;
+      ConversationInvocationData *prompt_data = NULL;
+      g_autofree char *prompt = NULL;
       int style;
-      int ret;
 
-      g_variant_get (parameters, "(i&s)", &style, &prompt);
+      g_variant_get (parameters, "(is)", &style, &prompt);
+      prompt_data = g_new0 (ConversationInvocationData, 1);
 
-      ret = pam_prompt (pamh, style, &response, "%s", prompt);
-      g_dbus_method_invocation_return_value (invocation,
-                                             g_variant_new ("(is)", ret,
-                                                            response ? response : ""));
+      *prompt_data = (ConversationInvocationData){
+        .action_data = action_data,
+        .style = style,
+        .message = g_steal_pointer (&prompt),
+        .done_callback = conversation_prompt_done,
+        .callback_data = g_object_ref (invocation),
+        .callback_data_destroy = (GDestroyNotify) g_object_unref,
+      };
+
+      g_main_context_invoke_full (action_data->action_context,
+                                  G_PRIORITY_DEFAULT,
+                                  invoke_conversation_on_action_context,
+                                  g_steal_pointer (&prompt_data),
+                                  conversation_invocation_data_free);
     }
   else
     {
@@ -706,7 +875,6 @@ on_new_connection (G_GNUC_UNUSED GDBusServer *server,
   g_autoptr(GDBusNodeInfo) node = NULL;
   g_autoptr(GError) error = NULL;
   ActionData *action_data = user_data;
-  pam_handle_t *pamh = action_data->module_data->pamh;
   GCredentials *credentials;
   pid_t client_pid;
 
@@ -714,21 +882,21 @@ on_new_connection (G_GNUC_UNUSED GDBusServer *server,
 
   if (action_data->connection)
     {
-      notify_error (pamh, action_data->current_action,
+      notify_error (action_data,
                     "Another client is already using this connection");
       return FALSE;
     }
 
   if (!G_IS_CREDENTIALS (credentials))
     {
-      notify_error (pamh, action_data->current_action,
+      notify_error (action_data,
                     "Impossible to get credentials, refusing the connection...");
       return FALSE;
     }
 
   if ((client_pid = g_credentials_get_unix_pid (credentials, &error)) == -1)
     {
-      notify_error (pamh, action_data->current_action,
+      notify_error (action_data,
                     "Impossible to get client PID (%s), refusing the connection...",
                     error->message);
       return FALSE;
@@ -745,7 +913,7 @@ on_new_connection (G_GNUC_UNUSED GDBusServer *server,
     {
       const char *test_name;
 
-      test_name = pam_getenv (pamh, "AUTHD_PAM_CLI_TEST_NAME");
+      test_name = pam_getenv (action_data->pamh, "AUTHD_PAM_CLI_TEST_NAME");
       g_debug ("%s: Client pid %d does not match with expected %d",
                test_name, client_pid, action_data->child_pid);
 
@@ -756,7 +924,7 @@ on_new_connection (G_GNUC_UNUSED GDBusServer *server,
 
   if (client_pid != action_data->child_pid && client_pid != getpid ())
     {
-      notify_error (pamh, action_data->current_action,
+      notify_error (action_data,
                     "Child PID is not matching the expected one");
       return FALSE;
     }
@@ -764,7 +932,7 @@ on_new_connection (G_GNUC_UNUSED GDBusServer *server,
   node = g_dbus_node_info_new_for_xml (UBUNTU_AUTHD_PAM_OBJECT_NODE, &error);
   if (!node)
     {
-      notify_error (pamh, action_data->current_action,
+      notify_error (action_data,
                     "Can't create node: %s", error->message);
       return FALSE;
     }
@@ -794,8 +962,9 @@ on_new_connection (G_GNUC_UNUSED GDBusServer *server,
 }
 
 static GDBusServer *
-setup_dbus_server (ModuleData *module_data,
-                   GError    **error)
+setup_dbus_server (pam_handle_t *pamh,
+                   ModuleData   *module_data,
+                   GError      **error)
 {
   GDBusServer *server = NULL;
   g_autoptr(GMainContextPusher) context_pusher G_GNUC_UNUSED = NULL;
@@ -820,7 +989,7 @@ setup_dbus_server (ModuleData *module_data,
 
   context_pusher = g_main_context_pusher_new (main_context);
 
-  pam_get_item (module_data->pamh, PAM_SERVICE, (const void **) &service_name);
+  pam_get_item (pamh, PAM_SERVICE, (const void **) &service_name);
   guid = g_dbus_generate_guid ();
   server_addr = g_strdup_printf ("unix:abstract=authd-%s-%s", service_name, guid);
 
@@ -968,12 +1137,23 @@ static int
 do_pam_action_thread (pam_handle_t *pamh,
                       ActionType    action,
                       int           flags,
+                      GMainContext *action_context,
+#ifdef AUTHD_TEST_MODULE
+                      GThread      *main_thread,
+#endif
                       int           argc,
                       const char  **argv)
 {
   ModuleData *module_data = NULL;
   g_autoptr(GMutexLocker) G_GNUC_UNUSED locker = NULL;
-  g_auto(ActionData) action_data = {.current_action = action, 0};
+  g_auto(ActionData) action_data = {
+    .pamh = pamh,
+    .current_action = action,
+    .action_context = g_main_context_ref (action_context),
+#ifdef AUTHD_TEST_MODULE
+    .main_thread = main_thread,
+#endif
+  };
   g_autoptr(GMainContextPusher) context_pusher G_GNUC_UNUSED = NULL;
   g_autoptr(GMainContext) main_context = NULL;
   g_autoptr(GError) error = NULL;
@@ -1017,7 +1197,7 @@ do_pam_action_thread (pam_handle_t *pamh,
   if (!handle_module_options (argc, argv, &args, &env_variables, &log_file, &error))
     {
       G_UNLOCK (logger);
-      notify_error (pamh, action, "impossible to parse arguments: %s", error->message);
+      notify_error (&action_data, "impossible to parse arguments: %s", error->message);
       return PAM_SYSTEM_ERR;
     }
 
@@ -1058,13 +1238,13 @@ do_pam_action_thread (pam_handle_t *pamh,
   module_data = setup_shared_module_data (pamh);
   if (module_data == NULL)
     {
-      notify_error (pamh, action, "can't create module data");
+      notify_error (&action_data, "can't create module data");
       return PAM_SYSTEM_ERR;
     }
 
   if (!args || args->len < 1)
     {
-      notify_error (pamh, action, "no executable provided");
+      notify_error (&action_data, "no executable provided");
       return PAM_MODULE_UNKNOWN;
     }
 
@@ -1072,20 +1252,20 @@ do_pam_action_thread (pam_handle_t *pamh,
 
   if (!exe || *exe == '\0')
     {
-      notify_error (pamh, action, "no valid module name provided");
+      notify_error (&action_data, "no valid module name provided");
       return PAM_MODULE_UNKNOWN;
     }
 
   if (!g_file_test (exe, G_FILE_TEST_IS_EXECUTABLE))
     {
-      notify_error (pamh, action, "Impossible to use %s as PAM executable", exe);
+      notify_error (&action_data, "Impossible to use %s as PAM executable", exe);
       return PAM_MODULE_UNKNOWN;
     }
 
-  server = setup_dbus_server (module_data, &error);
+  server = setup_dbus_server (pamh, module_data, &error);
   if (!server)
     {
-      notify_error (pamh, action, "can't create D-Bus connection: %s", error->message);
+      notify_error (&action_data, "can't create D-Bus connection: %s", error->message);
       return PAM_SYSTEM_ERR;
     }
 
@@ -1104,21 +1284,21 @@ do_pam_action_thread (pam_handle_t *pamh,
     {
       if ((stdin_fd = dup_fd_checked (STDIN_FILENO, &error)) < 0)
         {
-          notify_error (pamh, action, "can't duplicate stdin file descriptor: %s",
+          notify_error (&action_data, "can't duplicate stdin file descriptor: %s",
                         error->message);
           return PAM_SYSTEM_ERR;
         }
 
       if ((stdout_fd = dup_fd_checked (STDOUT_FILENO, &error)) < 0)
         {
-          notify_error (pamh, action, "can't duplicate stdout file descriptor: %s",
+          notify_error (&action_data, "can't duplicate stdout file descriptor: %s",
                         error->message);
           return PAM_SYSTEM_ERR;
         }
 
       if ((stderr_fd = dup_fd_checked (STDERR_FILENO, &error)) < 0)
         {
-          notify_error (pamh, action, "can't duplicate stderr file descriptor: %s",
+          notify_error (&action_data, "can't duplicate stderr file descriptor: %s",
                         error->message);
           return PAM_SYSTEM_ERR;
         }
@@ -1186,7 +1366,7 @@ do_pam_action_thread (pam_handle_t *pamh,
                                stderr_fd,
                                &error))
     {
-      notify_error (pamh, action, "can't launch %s: %s", exe, error->message);
+      notify_error (&action_data, "can't launch %s: %s", exe, error->message);
       return PAM_SYSTEM_ERR;
     }
 
@@ -1207,7 +1387,7 @@ do_pam_action_thread (pam_handle_t *pamh,
 
   if (exit_status < 0)
     {
-      notify_error (pamh, action, "Waiting for PID %" G_PID_FORMAT
+      notify_error (&action_data, "Waiting for PID %" G_PID_FORMAT
                     " failed with error %s", child_pid,
                     g_strerror (-exit_status));
       exit_status = PAM_SYSTEM_ERR;
@@ -1229,15 +1409,41 @@ typedef struct
   int           flags;
   int           argc;
   const char  **argv;
+#ifdef AUTHD_TEST_MODULE
+  GThread      *main_thread;
+#endif
+  GMainContext *action_context;
+  GMainLoop    *action_loop;
 } ActionThreadArgs;
+
+static inline gboolean
+quit_loop_source_callback (gpointer data)
+{
+  GMainLoop *action_loop = data;
+
+  g_main_loop_quit (action_loop);
+  return G_SOURCE_REMOVE;
+}
 
 static inline gpointer
 do_pam_action_thread_adapter (gpointer data)
 {
   ActionThreadArgs * args = data;
-  return GINT_TO_POINTER (do_pam_action_thread (args->pamh,
-                                                args->action, args->flags,
-                                                args->argc, args->argv));
+  int ret = do_pam_action_thread (args->pamh,
+                                  args->action, args->flags,
+                                  args->action_context,
+#ifdef AUTHD_TEST_MODULE
+                                  args->main_thread,
+#endif
+                                  args->argc, args->argv);
+
+  g_main_context_invoke_full (args->action_context,
+                              G_PRIORITY_DEFAULT,
+                              quit_loop_source_callback,
+                              g_main_loop_ref (args->action_loop),
+                              (GDestroyNotify) g_main_loop_unref);
+
+  return GINT_TO_POINTER (ret);
 }
 
 static inline int
@@ -1247,6 +1453,8 @@ do_pam_action (pam_handle_t *pamh,
                int           argc,
                const char  **argv)
 {
+  g_autoptr(GMainContext) action_context = NULL;
+  g_autoptr(GMainLoop) action_loop = NULL;
   g_autoptr(GThread) thread = NULL;
 
 #ifndef AUTHD_TEST_EXEC_MODULE
@@ -1260,19 +1468,33 @@ do_pam_action (pam_handle_t *pamh,
     case action_type_open_session:
     case action_type_close_session:
       return PAM_IGNORE;
+
     default:
       break;
     }
 #endif
 
-  thread = g_thread_new (action_type_to_string (action),
-                         do_pam_action_thread_adapter, &(ActionThreadArgs){
+  action_context = g_main_context_new ();
+  action_loop = g_main_loop_new (action_context, FALSE);
+
+  ActionThreadArgs thread_args = {
     .pamh = pamh,
     .action = action,
     .flags = flags,
+  #ifdef AUTHD_TEST_MODULE
+    .main_thread = g_thread_self (),
+  #endif
     .argc = argc,
     .argv = argv,
-  });
+    .action_context = action_context,
+    .action_loop = action_loop,
+  };
+
+  thread = g_thread_new (action_type_to_string (action),
+                         do_pam_action_thread_adapter, &thread_args);
+
+  g_main_loop_run (action_loop);
+
   return GPOINTER_TO_INT (g_thread_join (g_steal_pointer (&thread)));
 }
 

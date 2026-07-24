@@ -26,9 +26,9 @@ const execServiceName = "exec-module"
 func TestExecModule(t *testing.T) {
 	t.Parallel()
 
-	// This test is flaky, see https://github.com/canonical/authd/issues/966
-	if os.Getenv("AUTHD_SKIP_FLAKY_TESTS") != "" {
-		t.Skip("skipping flaky test")
+	// This test is flaky in s390x, see https://github.com/canonical/authd/issues/966
+	if runtime.GOARCH == "s390x" {
+		t.Skip("skipping on s390x due to known instability")
 	}
 
 	t.Cleanup(pam_test.MaybeDoLeakCheck)
