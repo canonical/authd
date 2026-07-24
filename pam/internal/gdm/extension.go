@@ -122,8 +122,7 @@ func (msg *jsonProtoMessage) release() {
 		return
 	}
 
-	C.free(unsafe.Pointer(msg.json))
-	C.free(unsafe.Pointer(msg))
+	C.gdm_custom_json_request_free((*C.GdmPamExtensionJSONProtocol)(msg))
 }
 
 func (msg *jsonProtoMessage) protoName() string {
