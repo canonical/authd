@@ -224,9 +224,10 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		interactiveShell bool
 		ubuntuVersion    string
 
-		wantUserAlreadyExist bool
-		wantNotLoggedInUser  bool
-		wantLocalGroups      bool
+		wantUserAlreadyExist  bool
+		wantUserNotInDatabase bool
+		wantNoHomeDir         bool
+		wantLocalGroups       bool
 
 		test func(t *testing.T, args sshPtyArgs)
 	}{
@@ -255,21 +256,20 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			user:          "USER-SSH2@example.com",
 			test:          sshPtySimpleAuth,
 		},
-		// On Ubuntu 26.04 (OpenSSH 10.2+) check_pam_user() was added to sshd and
-		// rejects logins where PAM_USER doesn't match pw_name, so uppercase
-		// usernames are denied before authentication even starts.
+		// On Ubuntu 26.04 (OpenSSH 10.2+), check_pam_user() rejects logins
+		// when authd canonicalizes PAM_USER differently from the requested name.
 		"Deny_authentication_if_username_has_uppercase_on_ubuntu_26.04": {
 			ubuntuVersion: "26.04",
 			user: strings.ToUpper(testUserNameFull(t,
 				examplebroker.UserIntegrationPreCheckPrefix, "upper-case")),
-			wantNotLoggedInUser: true,
-			test:                sshPtyUppercaseRejected,
+			wantNoHomeDir: true,
+			test:          sshPtyUppercaseRejected,
 		},
 		"Deny_authentication_if_username_has_uppercase_and_already_registered_on_ubuntu_26.04": {
-			ubuntuVersion:       "26.04",
-			user:                "USER-SSH2@example.com",
-			wantNotLoggedInUser: true,
-			test:                sshPtyUppercaseRejected,
+			ubuntuVersion: "26.04",
+			user:          "USER-SSH2@example.com",
+			wantNoHomeDir: true,
+			test:          sshPtyUppercaseRejected,
 		},
 		"Authenticate_user_with_mfa": {
 			userPrefix: examplebroker.UserIntegrationMfaPrefix,
@@ -320,8 +320,8 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			test: sshPtySwitchAuthMode,
 		},
 		"Authenticate_user_switching_to_local_broker": {
-			wantNotLoggedInUser: true,
-			test:                sshPtySwitchLocalBroker,
+			wantUserNotInDatabase: true,
+			test:                  sshPtySwitchLocalBroker,
 		},
 		"Authenticate_user_and_add_it_to_local_group": {
 			userPrefix:      examplebroker.UserIntegrationLocalGroupsPrefix,
@@ -333,42 +333,42 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			test: sshPtyRememberBrokerAndMode,
 		},
 		"Autoselect_local_broker_for_local_user": {
-			user:                "root",
-			isLocalUser:         true,
-			wantNotLoggedInUser: true,
-			test:                sshPtyLocalUserPreset,
+			user:                  "root",
+			isLocalUser:           true,
+			wantUserNotInDatabase: true,
+			test:                  sshPtyLocalUserPreset,
 		},
 		"Authenticate_user_locks_and_unlocks_it": {
 			test: sshPtyLocksUnlocks,
 		},
 
 		"Deny_authentication_if_max_attempts_reached": {
-			wantNotLoggedInUser: true,
-			test:                sshPtyMaxAttempts,
+			wantUserNotInDatabase: true,
+			test:                  sshPtyMaxAttempts,
 		},
 		"Deny_authentication_if_user_does_not_exist_on_ubuntu_24.04": {
-			ubuntuVersion:       "24.04",
-			user:                examplebroker.UserIntegrationUnexistent,
-			wantNotLoggedInUser: true,
-			test:                sshPtyUnexistentUser,
+			ubuntuVersion:         "24.04",
+			user:                  examplebroker.UserIntegrationUnexistent,
+			wantUserNotInDatabase: true,
+			test:                  sshPtyUnexistentUser,
 		},
 		"Deny_authentication_if_user_does_not_exist_on_ubuntu_26.04": {
-			ubuntuVersion:       "26.04",
-			user:                examplebroker.UserIntegrationUnexistent,
-			wantNotLoggedInUser: true,
-			test:                sshPtyUnexistentUser,
+			ubuntuVersion:         "26.04",
+			user:                  examplebroker.UserIntegrationUnexistent,
+			wantUserNotInDatabase: true,
+			test:                  sshPtyUnexistentUser,
 		},
 		"Deny_authentication_if_user_does_not_exist_and_matches_cancel_key_on_ubuntu_24.04": {
-			ubuntuVersion:       "24.04",
-			user:                "r",
-			wantNotLoggedInUser: true,
-			test:                sshPtyCancelKeyUser,
+			ubuntuVersion:         "24.04",
+			user:                  "r",
+			wantUserNotInDatabase: true,
+			test:                  sshPtyCancelKeyUser,
 		},
 		"Deny_authentication_if_user_does_not_exist_and_matches_cancel_key_on_ubuntu_26.04": {
-			ubuntuVersion:       "26.04",
-			user:                "r",
-			wantNotLoggedInUser: true,
-			test:                sshPtyCancelKeyUser,
+			ubuntuVersion:         "26.04",
+			user:                  "r",
+			wantUserNotInDatabase: true,
+			test:                  sshPtyCancelKeyUser,
 		},
 		"Deny_authentication_if_newpassword_does_not_match_required_criteria": {
 			userPrefix: examplebroker.UserIntegrationNeedsResetPrefix,
@@ -380,39 +380,39 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		},
 
 		"Exit_authd_if_local_broker_is_selected": {
-			wantNotLoggedInUser: true,
-			test:                sshPtyLocalBroker,
+			wantUserNotInDatabase: true,
+			test:                  sshPtyLocalBroker,
 		},
 		"Exit_if_user_is_not_pre-checked_on_ssh_service_on_ubuntu_24.04": {
-			ubuntuVersion:       "24.04",
-			user:                examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed@example.com",
-			pamServiceName:      "sshd",
-			wantNotLoggedInUser: true,
-			test:                sshPtyLocalSSH,
+			ubuntuVersion:         "24.04",
+			user:                  examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed@example.com",
+			pamServiceName:        "sshd",
+			wantUserNotInDatabase: true,
+			test:                  sshPtyLocalSSH,
 		},
 		"Exit_if_user_is_not_pre-checked_on_ssh_service_on_ubuntu_26.04": {
-			ubuntuVersion:       "26.04",
-			user:                examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed@example.com",
-			pamServiceName:      "sshd",
-			wantNotLoggedInUser: true,
-			test:                sshPtyLocalSSH,
+			ubuntuVersion:         "26.04",
+			user:                  examplebroker.UserIntegrationPrefix + "ssh-service-not-allowed@example.com",
+			pamServiceName:        "sshd",
+			wantUserNotInDatabase: true,
+			test:                  sshPtyLocalSSH,
 		},
 		"Exit_authd_if_user_sigints": {
-			wantNotLoggedInUser: true,
-			test:                sshPtySigint,
+			wantUserNotInDatabase: true,
+			test:                  sshPtySigint,
 		},
 
 		"Error_if_cannot_connect_to_authd_on_ubuntu_24.04": {
-			ubuntuVersion:       "24.04",
-			socketPath:          "/some-path/not-existent-socket",
-			wantNotLoggedInUser: true,
-			test:                sshPtyConnectionError,
+			ubuntuVersion:         "24.04",
+			socketPath:            "/some-path/not-existent-socket",
+			wantUserNotInDatabase: true,
+			test:                  sshPtyConnectionError,
 		},
 		"Error_if_cannot_connect_to_authd_on_ubuntu_26.04": {
-			ubuntuVersion:       "26.04",
-			socketPath:          "/some-path/not-existent-socket",
-			wantNotLoggedInUser: true,
-			test:                sshPtyConnectionError,
+			ubuntuVersion:         "26.04",
+			socketPath:            "/some-path/not-existent-socket",
+			wantUserNotInDatabase: true,
+			test:                  sshPtyConnectionError,
 		},
 	}
 	for name, tc := range tests {
@@ -554,7 +554,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			tc.test(t, args)
 
 			// After the test interaction is complete, verify user state.
-			if tc.wantNotLoggedInUser {
+			if tc.wantUserNotInDatabase {
 				if userClient != nil {
 					requireNoAuthdUser(t, userClient, user)
 				}
@@ -576,7 +576,11 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 					}
 				}
 
-				if !tc.wantUserAlreadyExist {
+				if tc.wantNoHomeDir {
+					_, err := os.Stat(userHome)
+					require.ErrorIs(t, err, os.ErrNotExist,
+						"Unexpected error checking for %q", userHome)
+				} else if !tc.wantUserAlreadyExist {
 					stat, err := os.Stat(userHome)
 					require.NoError(t, err, "Home directory does not exist: %q", userHome)
 					require.True(t, stat.IsDir(), "%q is not a directory", userHome)
@@ -1000,15 +1004,29 @@ func sshPtyUppercaseRejected(t *testing.T, args sshPtyArgs) {
 	c := startSSHForPty(t, args)
 
 	// sshd 10.2 rejects uppercase usernames because PAM_USER doesn't match pw_name.
-	// The PAM module detects this and returns a helpful error.
-	out := c.WaitFor(t, `uppercase characters|Disconnected from|Connection closed|Choose your provider`)
-	if strings.Contains(out, "Choose your provider") {
-		c.SendKey(t, ptytest.KeyCtrlC)
-	}
+	// Since sshd 10.2p1-2ubuntu3.3 that rejection is deferred until after PAM authentication.
+	// Complete that flow to verify it still rejects the login.
+	sshPtyCompleteDeferredUsernameRejection(t, c, "goodpass")
+	c.RequireExitCode(t, 255)
 	c.Close(t)
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
+}
+
+func sshPtyCompleteDeferredUsernameRejection(t *testing.T, c *ptytest.Console, password string) {
+	t.Helper()
+
+	out := c.WaitFor(t, `uppercase characters|Connection closed|Choose your provider|Gimme your password`)
+	if strings.Contains(out, "Choose your provider") {
+		sendEchoedLine(t, c, "2")
+		c.WaitFor(t, `Gimme your password`)
+	} else if !strings.Contains(out, "Gimme your password") {
+		return
+	}
+
+	c.SendLine(t, password)
+	c.WaitFor(t, `uppercase characters|Disconnected from|Connection closed`)
 }
 
 func sshPtyMfaAuth(t *testing.T, args sshPtyArgs) {
@@ -1458,16 +1476,14 @@ func sshPtyMandatoryPasswordResetThenUppercaseRejected(t *testing.T, args sshPty
 
 	c.RequireSuccessfulExit(t)
 
-	// Second auth with uppercase username - should be rejected.
+	// Second auth with uppercase username may be rejected after PAM authentication.
+	got := sshPtySanitizeOutput(t, c.RawOutput())
 	upperUser := strings.ToUpper(args.user)
 	c2 := startSSHForPtyWithUser(t, args, upperUser)
-	c2.WaitFor(t, `uppercase characters|Disconnected from|Connection closed`)
-
+	sshPtyCompleteDeferredUsernameRejection(t, c2, "authd2404")
 	c2.RequireExitCode(t, 255)
 
-	// Combine outputs.
-	got := sshPtySanitizeOutput(t, c.RawOutput()) +
-		sshPtySanitizeOutput(t, c2.RawOutput())
+	got += sshPtySanitizeOutput(t, c2.RawOutput())
 	golden.CheckOrUpdate(t, got)
 }
 
