@@ -129,13 +129,15 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-          # Chunk qcow2 into stable fixed-size layers (64 MiB)
-          WORKDIR=$(mktemp -d)
-          split -b 64M "$IMAGE_PATH" "$WORKDIR/chunk-"
-
-          # Push as a layered OCI artifact (each chunk becomes a layer)
-          cd "$WORKDIR"
-          oras push "${OCI_REPO}:${OCI_TAG}" chunk-* --artifact-type application/vnd.qemu.qcow2
+          # Push the qcow2 as a single layer. It used to be split into
+          # many small chunks hoping unchanged chunks would be deduped
+          # and skipped, but in practice each provisioning run bakes in
+          # new random data (UUIDs, timestamps, ...) so virtually no
+          # chunks are ever reused - we just paid for dozens of extra
+          # API requests per push, which was tripping ghcr.io's
+          # secondary rate limit.
+          oras push "${OCI_REPO}:${OCI_TAG}" "$IMAGE_PATH" \
+            --artifact-type application/vnd.qemu.qcow2
 
   build-deb:
     uses: ./.github/workflows/debian-build.yaml

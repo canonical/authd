@@ -160,9 +160,7 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-          oras pull "${OCI_REPO}:${OCI_TAG}"
-          cat chunk-* > "$IMAGE_PATH"
-          rm chunk-*
+          oras pull "${OCI_REPO}:${OCI_TAG}" -o "$(dirname "$IMAGE_PATH")"
           echo "image-path=${IMAGE_PATH}" >> $GITHUB_OUTPUT
 
       - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
