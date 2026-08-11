@@ -1522,6 +1522,10 @@ func TestGdmModel(t *testing.T) {
 			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id},
 		},
 		"Authenticated_with_qrcode_regenerated_after_wait_started_at_auth_selection_stage_from_client_after_client_side_broker_and_auth_mode_selection": {
+			// This test has one more event cycle than its sibling test above,
+			// so it needs at least as much time to avoid flaking on loaded CI
+			// runners.
+			timeout: 30 * time.Second,
 			supportedLayouts: []*authd.UILayout{
 				pam_test.FormUILayout(pam_test.WithWait(true)),
 				pam_test.QrCodeUILayout(),
