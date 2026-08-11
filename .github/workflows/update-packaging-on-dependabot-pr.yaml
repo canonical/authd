@@ -1,0 +1,428 @@
+name: Update packaging files on Dependabot PR
+
+# Dependabot's dependency PRs only bump entries in Cargo.lock resp.
+# go.mod/go.sum, which then makes several packaging related files out of date:
+#   * Cargo.lock itself may not be exactly what `cargo generate-lockfile`
+#     from the cargo version pinned in debian/control (the one used to build
+#     the package on Noble, our oldest supported Ubuntu release) would
+#     produce.
+#   * debian/control's XS-Vendored-Sources-Rust field, which lists all
+#     vendored crates.
+#   * debian/copyright, which contains license/copyright info for all
+#     vendored dependencies. Note that this covers both vendored trees, the
+#     Rust one in vendor_rust/ and the Go one in vendor/, so it also needs to
+#     be regenerated for Go dependency updates.
+#
+# This workflow regenerates all of them and pushes the changes back to the
+# Dependabot PR branch, so the PR is ready to merge without manual
+# intervention.
+#
+# Only the root manifests are handled, because only their dependencies are
+# vendored into the source package. Updates to tools/, authd-oidc-brokers/ and
+# the GitHub Actions and submodule ecosystems don't affect any packaging file.
+#
+# Each file is regenerated in the environment which the file has to match, each
+# as its own job running in a `container:` of that environment:
+#   * Cargo.lock and XS-Vendored-Sources-Rust in `generate-cargo`, which runs in
+#     a Noble container because Noble is the oldest supported release and thus
+#     the one whose cargo and dh-cargo the lockfile and the field have to
+#     please. Note that the default cargo in Noble is too old to even parse our
+#     Cargo.toml, so the pinned cargo-X.Y package's bin dir has to be put in
+#     PATH first. This job also vendors vendor_rust/ locally to compute
+#     XS-Vendored-Sources-Rust, but doesn't pass that tree on: it's cheaper to
+#     let `generate-copyright` re-vendor it than to shuttle the whole vendored
+#     source tree between jobs as an artifact. It skips this regeneration
+#     entirely for go_modules PRs, since Cargo.lock/XS-Vendored-Sources-Rust
+#     cannot change when only Go dependencies are updated.
+#   * debian/copyright in `generate-copyright`, which runs in an ubuntu:devel
+#     container because it needs python3-anytree, which doesn't exist in
+#     Noble, and because the debian/copyright check in debian-build.yaml runs
+#     licenserecon in an ubuntu:devel container too. It re-vendors both
+#     vendor_rust/ (from the Cargo.lock produced by `generate-cargo`) and
+#     vendor/ (from go.sum, already on the PR branch): both are fully
+#     determined by those lockfiles, so re-vendoring them here is equivalent
+#     to reusing the trees from another job, without the artifact-transfer
+#     cost.
+#
+# The work is split into three jobs to avoid ever having a write-scoped
+# GITHUB_TOKEN available while running code from the PR (cargo,
+# cargo-vendor-filterer, go and scripts/generate-vendored-copyright all
+# execute code coming from the vendored dependencies):
+#   * `generate-cargo` and `generate-copyright` have only read permissions.
+#     Together they check out the PR branch, regenerate the packaging files
+#     and, if anything changed, `generate-copyright` uploads them as a build
+#     artifact.
+#   * `commit-and-push` has the write-scoped token. It never runs any repo
+#     script, cargo or go command: it only checks out the PR branch,
+#     overwrites the files with the artifact produced by `generate-copyright`,
+#     then commits and pushes.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'Cargo.lock'
+      - 'go.mod'
+      - 'go.sum'
+
+# Only ever run one instance per PR branch, and cancel any run that's
+# superseded by a newer push.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Keep in sync with the version pinned in debian-build.yaml, so all
+  # workflows vendor sources the same way.
+  CARGO_VENDOR_FILTERER_VERSION: 0.5.16
+
+jobs:
+  generate-cargo:
+    name: Regenerate Cargo.lock and XS-Vendored-Sources-Rust
+    # Only run for Dependabot PRs updating the root Rust or Go dependencies.
+    # Dependabot PRs are always opened from a branch in this repository (never
+    # a fork), so it's safe to check out the head branch here. The PR author is
+    # checked instead of github.actor, because the latter is whoever triggered
+    # the event, which is not Dependabot when a maintainer pushes a fixup to
+    # the PR branch.
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      (
+        startsWith(github.event.pull_request.head.ref, 'dependabot/cargo/') ||
+        startsWith(github.event.pull_request.head.ref, 'dependabot/go_modules/')
+      )
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:noble
+    permissions:
+      contents: read
+    env:
+      IS_CARGO_PR: ${{ startsWith(github.event.pull_request.head.ref, 'dependabot/cargo/') }}
+    defaults:
+      run:
+        # ubuntu:noble doesn't set bash as the default shell for run steps
+        # (unlike ubuntu-latest runners), so `set -o pipefail` below would
+        # otherwise fail under the container's default sh/dash.
+        shell: bash
+
+    steps:
+      # actions/checkout needs git, which isn't part of the ubuntu:noble
+      # image, so it has to be installed before checking out.
+      - name: Install git
+        run: |
+          set -euo pipefail
+          apt-get update -y
+          apt-get install -y --no-install-recommends ca-certificates git
+
+      - name: Checkout the PR branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          # No write-scoped token is available in this job, and none is
+          # needed since this job never pushes anything.
+          persist-credentials: false
+
+      - name: Determine cargo version to use
+        if: env.IS_CARGO_PR == 'true'
+        run: |
+          set -euo pipefail
+
+          # Extract the version from debian/control's Build-Depends (e.g.
+          # "cargo (>= 1.91) | cargo-1.91,") so this workflow automatically
+          # follows whatever version is pinned there, which is the one used for
+          # the Noble package build.
+          CARGO_NOBLE_VERSION=$(grep -oP -m1 'cargo-\K[0-9]+\.[0-9]+' debian/control || true)
+          if [ -z "${CARGO_NOBLE_VERSION}" ]; then
+            echo "Could not determine cargo version from debian/control" >&2
+            exit 1
+          fi
+          echo "CARGO_NOBLE_VERSION=${CARGO_NOBLE_VERSION}" >> "${GITHUB_ENV}"
+
+      - name: Install build dependencies
+        if: env.IS_CARGO_PR == 'true'
+        run: |
+          set -euo pipefail
+
+          apt-get update -y
+          # build-essential is needed to build and link cargo-vendor-filterer.
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            dh-cargo \
+            libssl-dev \
+            pkg-config \
+            "cargo-${CARGO_NOBLE_VERSION}"
+
+          # dh-cargo pulls in the unversioned cargo package, which on Noble is
+          # far too old to even parse our Cargo.toml, so put the pinned
+          # cargo's plain bin dir first in PATH. Unlike
+          # debian/get-depends-cargo-bin-paths.sh, this doesn't need to add
+          # the dh-cargo wrapper dir too: that wrapper forces offline/vendored
+          # mode for the actual package build, which isn't wanted here since
+          # this step needs network access to resolve/vendor crates.
+          echo "/usr/lib/rust-${CARGO_NOBLE_VERSION}/bin" >> "${GITHUB_PATH}"
+
+      - name: Regenerate Cargo.lock and XS-Vendored-Sources-Rust
+        # Rust dependencies are fully determined by Cargo.toml/Cargo.lock,
+        # neither of which a go_modules PR touches, so XS-Vendored-Sources-Rust
+        # cannot have changed either. Skip the (multi-minute) build and vendor
+        # step entirely for those PRs; the Cargo.lock/debian/control checked
+        # out above are uploaded unmodified below.
+        if: env.IS_CARGO_PR == 'true'
+        run: |
+          set -euo pipefail
+
+          cargo --version
+
+          cargo install --locked --root=/usr \
+            cargo-vendor-filterer@"${CARGO_VENDOR_FILTERER_VERSION}"
+
+          cargo generate-lockfile
+
+          # Vendoring here is only a means to compute XS-Vendored-Sources-Rust;
+          # the tree itself is discarded, as `generate-copyright` re-vendors it
+          # from the Cargo.lock produced here, which is equivalent and cheaper
+          # than passing the whole vendored source tree between jobs as an
+          # artifact.
+          rm -rf vendor_rust
+          cargo vendor-filterer vendor_rust
+
+          echo "Running dh-cargo-vendored-sources"
+          export CARGO_VENDOR_DIR=vendor_rust
+          VENDORED_SOURCES=$(/usr/share/cargo/bin/dh-cargo-vendored-sources 2>&1) \
+            || cmd_status=$?
+          echo "${VENDORED_SOURCES}"
+
+          OUTPUT=$(echo "${VENDORED_SOURCES}" | grep ^XS-Vendored-Sources-Rust: || true)
+          if [ -z "${OUTPUT}" ]; then
+            if [ "${cmd_status:-0}" -ne 0 ]; then
+              # dh-cargo-vendored-sources failed for some other reason, so
+              # let us fail with it!
+              echo "dh-cargo-vendored-sources failed unexpectedly (exit code ${cmd_status})"
+              exit "${cmd_status}"
+            fi
+
+            echo "XS-Vendored-Sources-Rust is up to date. No change is needed."
+          else
+            sed -i "s/^XS-Vendored-Sources-Rust:.*/${OUTPUT}/" debian/control
+          fi
+
+          rm -rf vendor_rust
+
+      - name: Upload Cargo.lock and debian/control
+        uses: actions/upload-artifact@v7
+        with:
+          name: cargo-lockfile
+          path: |
+            Cargo.lock
+            debian/control
+          retention-days: 1
+
+  generate-copyright:
+    name: Regenerate debian/copyright
+    needs: generate-cargo
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:devel
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+    defaults:
+      run:
+        # ubuntu:devel doesn't set bash as the default shell for run steps
+        # (unlike ubuntu-latest runners), so `set -o pipefail` below would
+        # otherwise fail under the container's default sh/dash.
+        shell: bash
+
+    steps:
+      # actions/checkout and actions/setup-go both need git, which isn't part
+      # of the ubuntu:devel image, so it has to be installed before checking
+      # out.
+      - name: Install git
+        run: |
+          set -euo pipefail
+          apt-get update -y
+          apt-get install -y --no-install-recommends ca-certificates git
+
+      - name: Checkout the PR branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          # No write-scoped token is available in this job, and none is
+          # needed since this job never pushes anything.
+          persist-credentials: false
+
+      - name: Download Cargo.lock and debian/control
+        uses: actions/download-artifact@v8
+        with:
+          name: cargo-lockfile
+
+      - name: Install Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Vendor the Go dependencies
+        run: |
+          set -euo pipefail
+
+          rm -rf vendor
+          go mod vendor
+
+          # go mod vendor can rewrite go.mod/go.sum (e.g. to add a missing
+          # "// indirect" comment or hash). Neither file is uploaded by this
+          # workflow, so such a change would otherwise be silently dropped
+          # instead of being committed back to the PR. Fail loudly instead,
+          # so the drift gets fixed in go.mod/go.sum by hand instead.
+          if ! git diff --quiet HEAD -- go.mod go.sum; then
+            echo "go mod vendor modified go.mod/go.sum; this workflow only" >&2
+            echo "regenerates Cargo.lock, debian/control and" >&2
+            echo "debian/copyright, so this change would be silently lost." >&2
+            echo "Please update go.mod/go.sum manually (e.g. by running" >&2
+            echo "'go mod tidy') and push the fix to the PR branch." >&2
+            git --no-pager diff HEAD -- go.mod go.sum >&2
+            exit 1
+          fi
+
+      - name: Install cargo and cargo-vendor-filterer
+        run: |
+          set -euo pipefail
+
+          apt-get update -y
+          apt-get install -y --no-install-recommends \
+            build-essential \
+            cargo \
+            libssl-dev \
+            pkg-config
+
+          cargo install --locked --root=/usr \
+            cargo-vendor-filterer@"${CARGO_VENDOR_FILTERER_VERSION}"
+
+      - name: Vendor the Rust dependencies
+        run: |
+          set -euo pipefail
+
+          # cargo (here, ubuntu:devel's, unlike the Noble one used by
+          # `generate-cargo`) rewrites Cargo.lock when it considers it stale,
+          # e.g. to normalize its lock-file format. That would silently
+          # replace the file generated by Noble's cargo with one that no
+          # longer matches what XS-Vendored-Sources-Rust was computed from,
+          # and could break the Noble package build. Back it up and restore
+          # it below so the committed Cargo.lock is always exactly what
+          # `generate-cargo` produced, regardless of what devel's cargo does
+          # to its local copy while vendoring.
+          cp Cargo.lock Cargo.lock.noble
+
+          # Fully determined by the Cargo.lock downloaded above, so this
+          # reproduces the same vendor_rust/ tree `generate-cargo` computed
+          # XS-Vendored-Sources-Rust from, without having to transfer it as an
+          # artifact.
+          rm -rf vendor_rust
+          cargo vendor-filterer vendor_rust
+
+          mv Cargo.lock.noble Cargo.lock
+
+      - name: Install licensecheck and python3-anytree
+        run: |
+          set -euo pipefail
+
+          apt-get update -y
+          apt-get install -y --no-install-recommends \
+            licensecheck \
+            python3-anytree
+
+      - name: Regenerate debian/copyright
+        run: |
+          set -euo pipefail
+
+          # Both vendored trees have to be passed, because the script
+          # rewrites the whole list of Files: stanzas for vendored code from
+          # the directories it is given: passing only one of them would drop
+          # the entries of the other one from debian/copyright. The paths
+          # have to be relative, as they end up verbatim in the Files:
+          # stanzas.
+          scripts/generate-vendored-copyright vendor vendor_rust
+
+      - name: Check whether the packaging files changed
+        id: diff
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- Cargo.lock debian/control debian/copyright; then
+            echo "Nothing to commit."
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Upload regenerated packaging files
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: packaging-files
+          path: |
+            Cargo.lock
+            debian/control
+            debian/copyright
+          retention-days: 1
+
+  commit-and-push:
+    name: Commit and push regenerated packaging files
+    needs: generate-copyright
+    if: needs.generate-copyright.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout the PR branch
+        uses: actions/checkout@v7
+        with:
+          # Check out the exact commit the `generate-copyright` job worked on,
+          # not the branch tip: if Dependabot force-pushed in the meantime, the
+          # regenerated files are stale and the push below fails as
+          # non-fast-forward instead of committing them on top of the new tip.
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Needed to push the commit back with the default token.
+          persist-credentials: true
+
+      # This intentionally only downloads the artifact produced by the
+      # `generate-copyright` job and overwrites the files with it: it never
+      # runs any repo script, cargo or go command, so the write-scoped
+      # GITHUB_TOKEN below is never exposed to code coming from the PR.
+      - name: Download regenerated packaging files
+        uses: actions/download-artifact@v8
+        with:
+          name: packaging-files
+
+      - name: Commit and push changes
+        run: |-
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add Cargo.lock debian/control debian/copyright
+          git commit -F - <<'EOF'
+          Regenerate packaging files
+
+          Automatically regenerated by the update-packaging-on-dependabot-pr
+          workflow:
+
+          - Cargo.lock (with cargo from noble)
+          - debian/control (XS-Vendored-Sources-Rust)
+          - debian/copyright
+          EOF
+          # Fails if the branch moved since the `generate-copyright` job
+          # checked it out, in which case the run is obsolete anyway and the
+          # push of the run triggered by the new head commit supersedes it.
+          git push origin "HEAD:${HEAD_REF}"
+        env:
+          # Passed via env instead of interpolating the expression directly
+          # into the script: this job holds the write-scoped token, and the
+          # ref is attacker-controlled (it's the branch name of the PR being
+          # processed), so it must never be substituted straight into shell
+          # syntax.
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
