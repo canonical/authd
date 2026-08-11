@@ -39,6 +39,8 @@ on:
         required: false
       E2E_MSENTRA_PASSWORD:
         required: false
+      E2E_MSENTRA_PASSWORDLESS_USERNAME:
+        required: false
       E2E_MSENTRA_TOTP_SECRET:
         required: false
       E2E_GOOGLE_CLIENT_ID:
@@ -242,7 +244,10 @@ jobs:
           if [ "${{ inputs.broker }}" = "authd-msentraid" ]; then
             export E2E_USER="${{ secrets.E2E_MSENTRA_USERNAME }}"
             export E2E_PASSWORD="${{ secrets.E2E_MSENTRA_PASSWORD }}"
+            export E2E_PASSWORDLESS_USER="${{ secrets.E2E_MSENTRA_PASSWORDLESS_USERNAME }}"
             export TOTP_SECRET="${{ secrets.E2E_MSENTRA_TOTP_SECRET }}"
+            export AUTHD_MSENTRAID_ISSUER_ID="${{ secrets.E2E_MSENTRA_ISSUER_ID }}"
+            export AUTHD_MSENTRAID_CLIENT_ID="${{ secrets.E2E_MSENTRA_CLIENT_ID }}"
             export AUTHD_MSENTRAID_CLIENT_SECRET="${{ secrets.E2E_MSENTRA_CLIENT_SECRET }}"
           elif [ "${{ inputs.broker }}" = "authd-google" ]; then
             export E2E_USER="${{ secrets.E2E_GOOGLE_USERNAME }}"
