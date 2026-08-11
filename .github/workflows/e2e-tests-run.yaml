@@ -161,6 +161,12 @@ jobs:
             | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
 
           oras pull "${OCI_REPO}:${OCI_TAG}" -o "$(dirname "$IMAGE_PATH")"
+          if [ ! -f "$IMAGE_PATH" ]; then
+            echo "Error: Expected image not found at $IMAGE_PATH after pull"
+            echo "Downloaded files:"
+            find "$(dirname "$IMAGE_PATH")" -type f -print
+            exit 1
+          fi
           echo "image-path=${IMAGE_PATH}" >> $GITHUB_OUTPUT
 
       - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main

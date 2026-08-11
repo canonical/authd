@@ -136,8 +136,13 @@ jobs:
           # chunks are ever reused - we just paid for dozens of extra
           # API requests per push, which was tripping ghcr.io's
           # secondary rate limit.
-          oras push "${OCI_REPO}:${OCI_TAG}" "$IMAGE_PATH" \
-            --artifact-type application/vnd.qemu.qcow2
+          image_dir="$(dirname "$IMAGE_PATH")"
+          image_name="$(basename "$IMAGE_PATH")"
+          (
+            cd "$image_dir"
+            oras push "${OCI_REPO}:${OCI_TAG}" "$image_name" \
+              --artifact-type application/vnd.qemu.qcow2
+          )
 
   build-deb:
     uses: ./.github/workflows/debian-build.yaml
