@@ -9,6 +9,7 @@ Resource            kvm.resource
 Resource            resources/utils.resource
 Resource            resources/authd.resource
 Library             ./Browser.py    AS    Browser
+Library             ./EntraTAP.py    AS    EntraTAP
 Library             ./TOTP.py    AS    TOTP
 Library             Hid.py    AS    Hid
 Library             OperatingSystem
@@ -467,3 +468,26 @@ Log In With Remote User Through CLI: Entra Auth
 
     # Wait for the authenticated shell prompt.
     Match Text    ${username}@ubuntu:~$    120
+
+
+Log In With Remote User Through CLI: Entra Passwordless TAP
+    [Arguments]    ${username}    ${local_password}    ${tap_code}
+    Try machinectl login Prompt
+    Hid.Type String    ${username}
+    Hid.Keys Combo    Return
+
+    # Broker selection: the local broker is always offered next to the remote
+    # one. Disabling the device code flow only collapses the broker's auth-mode
+    # menu (auto-selecting entra_auth), not this broker menu.
+    Match Text    Select your provider:    15
+    Match Text    2. ${PROVIDER_DISPLAY_NAME}
+    Hid.Type String    2
+
+    # Passwordless probe: entra_auth auto-selects and Entra returns a TAP
+    # code-entry challenge instead of a password prompt.
+    Match Text    Enter your MFA code:    120    similarity=88
+    Hid.Type String    ${tap_code}
+    Hid.Keys Combo    Return
+
+    # No cached Entra password: chain into newpassword to set a local one.
+    Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
