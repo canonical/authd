@@ -486,7 +486,9 @@ Log In With Remote User Through CLI: Entra Passwordless TAP
     # Passwordless probe: entra_auth auto-selects and Entra returns a TAP
     # code-entry challenge instead of a password prompt.
     Match Text    Enter your MFA code:    120    similarity=88
-    Hid.Type String    ${tap_code}
+    # ${tap_code} is a robot.api.types.Secret; unwrapping at the call site logs
+    # the expression instead of the value (see EntraTAP.Create TAP For User).
+    Hid.Type String    ${tap_code.value}
     Hid.Keys Combo    Return
 
     # No cached Entra password: chain into newpassword to set a local one.

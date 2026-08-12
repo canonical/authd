@@ -19,6 +19,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 from robot.api.deco import keyword, library
+from robot.api.types import Secret
 
 
 @library
@@ -127,8 +128,19 @@ class EntraTAP:
         lifetime_in_minutes: int = 60,
         is_usable_once: bool = True,
         stale_after_minutes: int = 10,
-    ) -> tuple[str, str]:
+    ) -> tuple[Secret, str]:
         """Create a Temporary Access Pass for *user_upn* and return its passcode and id.
+
+        The passcode is returned as a ``robot.api.types.Secret`` so Robot
+        Framework masks it in output.xml/log.html, which are published as CI
+        artifacts. Keywords that need the plain value unwrap it via
+        ``${tap_code.value}``; that logs the expression rather than the value
+        at the ``--loglevel DEBUG`` the suite runs at, but not at TRACE.
+
+        This does not cover the VNC recording: the broker's MFA code prompt
+        is an unmasked ``chars`` entry, so the passcode is echoed on the VM
+        console while it is typed. The caller deletes the TAP in its teardown,
+        which is what actually bounds the exposure.
 
         Entra allows only one TAP per user. An existing TAP younger than
         ``stale_after_minutes`` is left alone and raises instead of being
@@ -188,7 +200,7 @@ class EntraTAP:
                 pass
             raise
 
-        return tap, tap_id
+        return Secret(tap), tap_id
 
     def _wait_until_tap_usable(
         self, token: str, tap_path: str, tap_id: str, timeout_s: int = 30
