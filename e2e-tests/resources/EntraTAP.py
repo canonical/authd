@@ -66,7 +66,7 @@ class EntraTAP:
         req = urllib.request.Request(token_url, data=payload, method="POST")
         req.add_header("Content-Type", "application/x-www-form-urlencoded")
         try:
-            with urllib.request.urlopen(req) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:
                 result = json.load(resp)
         except urllib.error.HTTPError as exc:
             body = exc.read().decode(errors="replace")
@@ -74,10 +74,6 @@ class EntraTAP:
                 f"Token request failed ({exc.code}): {body}"
             ) from exc
 
-        if "error" in result:
-            raise RuntimeError(
-                f"Token error {result['error']!r}: {result.get('error_description')}"
-            )
         return result["access_token"]
 
     def _graph(self, token: str, method: str, path: str, body=None):
@@ -93,7 +89,7 @@ class EntraTAP:
         if data is not None:
             req.add_header("Content-Type", "application/json")
         try:
-            with urllib.request.urlopen(req) as resp:
+            with urllib.request.urlopen(req, timeout=30) as resp:
                 if resp.status == 204:
                     return None
                 return json.load(resp)
@@ -103,6 +99,27 @@ class EntraTAP:
                 f"Graph {method} {path} failed ({exc.code}): {body}"
             ) from exc
 
+    def _tap_client(self, user_upn: str) -> tuple:
+        """Acquire a Graph token and return ``(token, tap_path)`` for *user_upn*.
+
+        Requires ``AUTHD_MSENTRAID_ISSUER_ID``, ``AUTHD_MSENTRAID_CLIENT_ID``,
+        and ``AUTHD_MSENTRAID_CLIENT_SECRET`` to be set.
+        """
+        try:
+            issuer = os.environ["AUTHD_MSENTRAID_ISSUER_ID"]
+            client_id = os.environ["AUTHD_MSENTRAID_CLIENT_ID"]
+            client_secret = os.environ["AUTHD_MSENTRAID_CLIENT_SECRET"]
+        except KeyError as exc:
+            raise RuntimeError(
+                f"{exc.args[0]} is not set; EntraTAP requires "
+                "AUTHD_MSENTRAID_ISSUER_ID, AUTHD_MSENTRAID_CLIENT_ID, "
+                "and AUTHD_MSENTRAID_CLIENT_SECRET"
+            ) from exc
+        tenant_id = self._tenant_id_from_issuer(issuer)
+        token = self._acquire_token(tenant_id, client_id, client_secret)
+        tap_path = f"/users/{user_upn}/authentication/temporaryAccessPassMethods"
+        return token, tap_path
+
     @keyword
     def create_tap_for_user(
         self,
@@ -110,7 +127,7 @@ class EntraTAP:
         lifetime_in_minutes: int = 60,
         is_usable_once: bool = True,
         stale_after_minutes: int = 10,
-    ) -> tuple:
+    ) -> tuple[str, str]:
         """Create a Temporary Access Pass for *user_upn* and return its passcode and id.
 
         Entra allows only one TAP per user. An existing TAP younger than
@@ -124,18 +141,9 @@ class EntraTAP:
         password entry), so a legitimately still-running test isn't mistaken
         for stale.
         ``lifetime_in_minutes`` defaults to 60 to satisfy tenants that enforce
-        that as their policy minimum. Requires ``AUTHD_MSENTRAID_ISSUER_ID``,
-        ``AUTHD_MSENTRAID_CLIENT_ID``, and ``AUTHD_MSENTRAID_CLIENT_SECRET``
-        to be set.
+        that as their policy minimum.
         """
-        issuer = os.environ["AUTHD_MSENTRAID_ISSUER_ID"]
-        client_id = os.environ["AUTHD_MSENTRAID_CLIENT_ID"]
-        client_secret = os.environ["AUTHD_MSENTRAID_CLIENT_SECRET"]
-        tenant_id = self._tenant_id_from_issuer(issuer)
-
-        token = self._acquire_token(tenant_id, client_id, client_secret)
-
-        tap_path = f"/users/{user_upn}/authentication/temporaryAccessPassMethods"
+        token, tap_path = self._tap_client(user_upn)
 
         # Keep a fresh TAP intact for its owning test. A TAP can temporarily
         # report isUsable=false while it is being activated.
@@ -188,16 +196,12 @@ class EntraTAP:
         """Poll Graph until the TAP reports ``isUsable``, up to ``timeout_s`` seconds.
 
         Some tenants omit ``isUsable`` from the response; they are treated as
-        usable. A missing TAP or one that does not become usable before the
-        timeout is rejected so the caller can retry with a fresh TAP.
+        usable. A TAP that does not become usable before the timeout is
+        rejected so the caller can retry with a fresh TAP.
         """
         deadline = time.monotonic() + timeout_s
         while True:
             method = self._graph(token, "GET", f"{tap_path}/{tap_id}")
-            if method is None:
-                raise RuntimeError(
-                    f"TAP {tap_id!r} disappeared before it became usable."
-                )
             if "isUsable" not in method or method.get("isUsable"):
                 return
             if time.monotonic() >= deadline:
@@ -212,20 +216,12 @@ class EntraTAP:
 
         Use it in a test's own teardown with the id returned by
         ``create_tap_for_user``, so cleanup cannot accidentally remove a
-        concurrently running test's TAP. Requires
-        ``AUTHD_MSENTRAID_ISSUER_ID``, ``AUTHD_MSENTRAID_CLIENT_ID``, and
-        ``AUTHD_MSENTRAID_CLIENT_SECRET`` to be set.
+        concurrently running test's TAP.
         """
         if not tap_id:
             raise ValueError("tap_id must not be empty")
 
-        issuer = os.environ["AUTHD_MSENTRAID_ISSUER_ID"]
-        client_id = os.environ["AUTHD_MSENTRAID_CLIENT_ID"]
-        client_secret = os.environ["AUTHD_MSENTRAID_CLIENT_SECRET"]
-        tenant_id = self._tenant_id_from_issuer(issuer)
-
-        token = self._acquire_token(tenant_id, client_id, client_secret)
-        tap_path = f"/users/{user_upn}/authentication/temporaryAccessPassMethods"
+        token, tap_path = self._tap_client(user_upn)
         self._graph(token, "DELETE", f"{tap_path}/{tap_id}")
 
     def _older_than(self, method: dict, min_age_minutes: int) -> bool:
