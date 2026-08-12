@@ -9,8 +9,8 @@ Resource            kvm.resource
 Resource            resources/utils.resource
 Resource            resources/authd.resource
 Library             ./Browser.py    AS    Browser
-Library             ./EntraTAP.py    AS    EntraTAP
 Library             ./TOTP.py    AS    TOTP
+Library             ./EntraTAP.py    AS    EntraTAP
 Library             Hid.py    AS    Hid
 Library             OperatingSystem
 Library             String
@@ -23,16 +23,32 @@ Enable Edge Broker
 
 
 Disable Entra Auth Via Drop In
-    [Documentation]    Writes a drop-in that sets entra_auth = false.
+    [Documentation]    Disables the Entra direct-auth flow via a drop-in, for the
+    ...                migration tests: the edge broker refuses to start when the
+    ...                flow is enabled without register_device or a client_secret,
+    ...                which the migration setup doesn't configure.
     ...
-    ...                More robust than Change Broker Configuration for this key,
-    ...                because stable snapshots provisioned before the [flows]
-    ...                section was added may not contain an entra_auth line
-    ...                at all, causing a silent sed no-op.
-    # TODO(stable-release): Can be removed once the stable broker has been
-    #                       updated to include the [flows] section.
+    ...                Must run AFTER Enable Edge Broker. The flow key was renamed
+    ...                (entra_password -> entra_auth) and the broker fails on
+    ...                unknown config keys, so the drop-in must use whichever key
+    ...                the refreshed snap understands, detected from its shipped
+    ...                config template. That template only exists after the refresh;
+    ...                writing the drop-in before it would have to guess the key.
+    ...                No-op for brokers without Entra flows.
+    # TODO(stable-release): Remove this migration-only compatibility override
+    #                       once the renamed entra_auth key is available in
+    #                       Edge and stable, so the snapshots no longer bridge
+    #                       the entra_password -> entra_auth schema transition.
+    IF    '%{BROKER}' != 'authd-msentraid'    RETURN
+    ${key} =    Run Keyword And Ignore Error    SSH.Execute
+    ...    grep -m1 -oE '^#?[[:space:]]*entra_(auth|password)[[:space:]]*=' /snap/${BROKER_SNAP_NAME}/current/conf/broker.conf.orig | grep -oE 'entra_[a-z]+'
+    Should Be Equal    ${key}[0]    PASS
+    ...    msg=No entra_auth/entra_password key found in the refreshed snap's config template
     SSH.Execute    mkdir -p ${BROKER_CFG_DIR}
-    SSH.Execute    printf '[flows]\nentra_auth = false\n' > ${BROKER_CFG_DIR}/99-disable-entra-auth.conf
+    SSH.Execute    install -m 0600 /dev/null ${BROKER_CFG_DIR}/99-disable-entra-auth.conf
+    SSH.Execute    printf '[flows]\n%s = false\n' '${key}[1]' > ${BROKER_CFG_DIR}/99-disable-entra-auth.conf
+    # The refresh happened before the drop-in existed, so restart explicitly
+    # to make the broker re-read its configuration.
     SSH.Execute    snap restart ${BROKER_SNAP_NAME}
 
 
