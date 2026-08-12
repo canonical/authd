@@ -259,7 +259,10 @@ func (dc *DummyClient) GetBroker(ctx context.Context, in *authd.GBRequest, opts 
 		return nil, errors.New("no username provided")
 	}
 	brokerID := dc.brokerForUser[in.Username]
-	return &authd.GBResponse{Broker: brokerID}, nil
+	if brokerID != "" {
+		return &authd.GBResponse{Broker: brokerID}, nil
+	}
+	return &authd.GBResponse{}, nil
 }
 
 // SelectBroker simulates SelectBroker using the provided parameters.
