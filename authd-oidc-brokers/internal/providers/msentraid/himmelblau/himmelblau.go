@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 
@@ -365,12 +366,16 @@ func InitiateMFAFlow(ctx context.Context, clientID, tenantID string, data *Devic
 	// dedicated auth modes and never wants the silent DAG fallback.
 	opts := append([]AuthOption{AuthOptionNoDAGFallback}, authOpts...)
 	// An empty password means there is no secret to validate, so this is a
-	// passwordless login: ask libhimmelblau to attempt passwordless factors.
-	// The option is the intent switch; the NULL password alone does not select
-	// passwordless.
+	// passwordless login. Ask libhimmelblau to negotiate passwordless factors
+	// and, when a local FIDO client is available, to select the physical-key
+	// transport explicitly. The NULL password alone does not select a flow.
 	if password == "" {
 		opts = append(opts, AuthOptionPasswordless)
+		if slices.Contains(authOpts, AuthOptionFido) {
+			opts = append(opts, AuthOptionPasswordlessSecurityKey)
+		}
 	}
+
 	var flow *MFAFlowState
 	if withDeviceScope {
 		flow, err = initiateMFAFlowForEnrollment(brokerClientApp, username, password, opts)

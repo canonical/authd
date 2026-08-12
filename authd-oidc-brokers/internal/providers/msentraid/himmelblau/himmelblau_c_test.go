@@ -81,6 +81,9 @@ func TestCAuthOptionsMapping(t *testing.T) {
 	require.Equal(t, []uint32{cAuthOptionPasswordless},
 		cAuthOptions([]AuthOption{AuthOptionPasswordless}),
 		"AuthOptionPasswordless must map to the C Passwordless option")
+	require.Equal(t, []uint32{cAuthOptionPasswordless, cAuthOptionPasswordlessSecurityKey},
+		cAuthOptions([]AuthOption{AuthOptionPasswordless, AuthOptionPasswordlessSecurityKey}),
+		"AuthOptionPasswordlessSecurityKey must map to the C PasswordlessSecurityKey option")
 	require.Equal(t, []uint32{cAuthOptionNoDAGFallback, cAuthOptionFido},
 		cAuthOptions([]AuthOption{AuthOptionNoDAGFallback, AuthOptionFido, AuthOption(-1)}),
 		"unknown options must be ignored")
@@ -91,7 +94,13 @@ func TestCAuthOptionsMapping(t *testing.T) {
 	// uint32(C.PasswordlessFido)) would go undetected without these pins. A
 	// failure here means the compiled C enum shifted, so the mapping must be
 	// re-verified.
+	//
+	// ForceMFA and RemoteSession appear in the header but are compiled out
+	// (generate.sh does not enable the optional_mfa feature). They are declared
+	// last, so the values below are unaffected; a new variant inserted before
+	// them would shift these and fail here.
 	require.Equal(t, uint32(0), cAuthOptionFido, "Fido is expected to be 0")
 	require.Equal(t, uint32(1), cAuthOptionPasswordless, "Passwordless is expected to be 1")
+	require.Equal(t, uint32(3), cAuthOptionPasswordlessSecurityKey, "PasswordlessSecurityKey is expected to be 3")
 	require.Equal(t, uint32(5), cAuthOptionNoDAGFallback, "NoDAGFallback is expected to be 5")
 }

@@ -443,9 +443,10 @@ func refreshTokenFromUserToken(userToken *C.UserToken) (refreshToken string, err
 // enum values to the matching Go type; they are variables only so that tests
 // can reference them without importing "C".
 var (
-	cAuthOptionNoDAGFallback = uint32(C.NoDAGFallback)
-	cAuthOptionFido          = uint32(C.Fido)
-	cAuthOptionPasswordless  = uint32(C.Passwordless)
+	cAuthOptionNoDAGFallback           = uint32(C.NoDAGFallback)
+	cAuthOptionFido                    = uint32(C.Fido)
+	cAuthOptionPasswordless            = uint32(C.Passwordless)
+	cAuthOptionPasswordlessSecurityKey = uint32(C.PasswordlessSecurityKey)
 )
 
 // cAuthOptions translates portable AuthOption values to the C AuthOption enum.
@@ -460,6 +461,8 @@ func cAuthOptions(authOpts []AuthOption) []uint32 {
 			options = append(options, cAuthOptionFido)
 		case AuthOptionPasswordless:
 			options = append(options, cAuthOptionPasswordless)
+		case AuthOptionPasswordlessSecurityKey:
+			options = append(options, cAuthOptionPasswordlessSecurityKey)
 		}
 	}
 	return options
@@ -469,10 +472,9 @@ func initiateMFAFlow(broker *brokerClientApplication, username, password string,
 	cUsername := C.CString(username)
 	defer C.free(unsafe.Pointer(cUsername))
 
-	// An empty password is passed as a NULL pointer: there is simply no secret
-	// to submit. Passwordless method negotiation is driven by
-	// AuthOptionPasswordless in authOpts (added by InitiateMFAFlow), not by the
-	// NULL password itself.
+	// An empty password is passed as NULL: there is simply no secret to submit.
+	// An empty string is not equivalent, it would be posted to Entra ID as a
+	// real credential.
 	var cPassword *C.char
 	if password != "" {
 		cPassword = C.CString(password)
