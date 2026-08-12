@@ -131,11 +131,16 @@ const (
 	// flow cannot be completed locally.
 	AuthOptionFido
 
-	// AuthOptionPasswordless asks libhimmelblau to attempt passwordless factors
-	// (Authenticator number-matching, TAP, FIDO/security key, ...) as primary
-	// authentication. It is the intent switch, orthogonal to the password
-	// argument: InitiateMFAFlow sets it whenever no password is supplied.
+	// AuthOptionPasswordless advertises support for Remote NGC passwordless
+	// authentication. FIDO transports are independent and must be selected with
+	// their specific options. InitiateMFAFlow adds it when no password is supplied
+	// so Entra returns the Remote NGC parameters.
 	AuthOptionPasswordless
+
+	// AuthOptionPasswordlessSecurityKey lets libhimmelblau offer a local
+	// security-key ceremony as the primary factor. It is independent of Remote
+	// NGC and is selected when the caller can perform a local FIDO assertion.
+	AuthOptionPasswordlessSecurityKey
 )
 
 // MFAChallengeInfo describes the MFA challenge that must be presented to the user.
