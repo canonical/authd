@@ -2406,6 +2406,69 @@ func TestEntraAuthProbePromptsForPasswordWhenRequired(t *testing.T) {
 		"the offline password must not be cached until MFA succeeds")
 }
 
+// TestEntraAuthAccessPassDoesNotCacheUnverifiedPassword covers an account that
+// holds a Temporary Access Pass. libhimmelblau offers the TAP before it submits
+// the password, so a successful login says nothing about the password the user
+// typed and it must not become their offline credential.
+func TestEntraAuthAccessPassDoesNotCacheUnverifiedPassword(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := &mockPasswordRequiredThenSuccessProvider{
+		mockEntraAuthProvider: &mockEntraAuthProvider{
+			MockProvider: &testutils.MockProvider{},
+			flowState:    &himmelblau.MFAFlowState{},
+			challengeInfo: &himmelblau.MFAChallengeInfo{
+				Message:         "Enter Temporary Access Pass: ",
+				Method:          "AccessPass",
+				MaxPollAttempts: 1,
+			},
+			mfaTokenResult: newMFATokenResult(mfaAuthInfo.Token),
+		},
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraAuth))
+	_, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraAuth)
+	require.NoError(t, err)
+
+	// The probe reports that a password is required, so the user submits one.
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuth)
+	require.NoError(t, err)
+
+	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
+	access, _, err = b.IsAuthenticated(sessionID, passwordAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraMFACode}, b.GetNextAuthModes(sessionID),
+		"a TAP challenge should route to code entry")
+
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFACode))
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFACode)
+	require.NoError(t, err)
+
+	codeAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "123456", key))
+	access, _, err = b.IsAuthenticated(sessionID, codeAuthData)
+	require.NoError(t, err)
+	require.NotEqual(t, broker.AuthDenied, access,
+		"a Temporary Access Pass is a valid credential, so the login itself must succeed")
+	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID),
+		"the TAP answered the login, so the submitted password was never verified and must not be cached")
+}
+
 // TestEntraAuthProbeKeepsDeviceAuthOutWhenFlowDisabled verifies that the probe
 // does not offer the device code flow as a way back when it is disabled.
 func TestEntraAuthProbeKeepsDeviceAuthOutWhenFlowDisabled(t *testing.T) {
