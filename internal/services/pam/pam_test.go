@@ -563,6 +563,111 @@ func TestIsAuthenticated(t *testing.T) {
 	}
 }
 
+func TestConfigWarnOnUnknownServices(t *testing.T) {
+	pamDDir := t.TempDir()
+	pamDDirAlt := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(pamDDirAlt, "sshd"), []byte{}, 0600),
+		"Setup: could not create PAM service file")
+
+	cfg := pam.Config{
+		BruteForceMitigationConfig: pam.DefaultConfig.BruteForceMitigationConfig,
+		Services: map[string]pam.BruteForceOverride{
+			"sshd":        {},
+			"no-such-app": {},
+		},
+	}
+
+	var warnings []string
+	log.SetLevelHandler(log.WarnLevel, func(_ context.Context, _ log.Level, format string, args ...interface{}) {
+		warnings = append(warnings, fmt.Sprintf(format, args...))
+	})
+	t.Cleanup(func() { log.SetLevelHandler(log.WarnLevel, nil) })
+
+	cfg.WarnOnUnknownServices(context.Background(), []string{pamDDir, pamDDirAlt})
+
+	require.Len(t, warnings, 1, "Expected exactly one warning for the missing service")
+	require.Contains(t, warnings[0], `"no-such-app"`, "Warning should mention the missing service name")
+}
+
+func TestIsAuthenticated_FailDelay_PerService(t *testing.T) {
+	t.Parallel()
+
+	overrideDelay := 200 * time.Millisecond
+	cfg := pam.Config{
+		BruteForceMitigationConfig: pam.BruteForceMitigationConfig{
+			AuthFailDelayThreshold: 0,
+			AuthFailDelay:          0,
+			AuthFailResetWindow:    15 * time.Minute,
+		},
+		Services: map[string]pam.BruteForceOverride{
+			"sshd": {
+				AuthFailDelayThreshold: new(int),
+				AuthFailDelay:          &overrideDelay,
+			},
+		},
+	}
+	client := newPamClientWithConfig(t, nil, globalBrokerManager, cfg)
+
+	sessionID := startSessionWithService(t, client, "ia_denied@example.com", "sshd")
+	iaReq := &authd.IARequest{
+		SessionId:          sessionID,
+		AuthenticationData: &authd.IARequest_AuthenticationData{},
+	}
+
+	start := time.Now()
+	_, err := client.IsAuthenticated(context.Background(), iaReq)
+	require.NoError(t, err, "IsAuthenticated should not return an error")
+	require.GreaterOrEqual(t, time.Since(start), overrideDelay,
+		"attempt should use the service-specific fail delay")
+}
+
+func TestIsAuthenticated_FailDelay_PerService_ResetWindow(t *testing.T) {
+	t.Parallel()
+
+	resetWindow := 100 * time.Millisecond
+	delay := 200 * time.Millisecond
+	cfg := pam.Config{
+		BruteForceMitigationConfig: pam.BruteForceMitigationConfig{
+			AuthFailDelayThreshold: 1,
+			AuthFailDelay:          delay,
+			AuthFailResetWindow:    time.Hour, // effectively never resets during the test
+		},
+		Services: map[string]pam.BruteForceOverride{
+			"sshd": {
+				AuthFailResetWindow: &resetWindow,
+			},
+		},
+	}
+	client := newPamClientWithConfig(t, nil, globalBrokerManager, cfg)
+
+	makeAttempt := func() time.Duration {
+		t.Helper()
+		sessionID := startSessionWithService(t, client, "ia_denied@example.com", "sshd")
+		start := time.Now()
+		_, err := client.IsAuthenticated(context.Background(), &authd.IARequest{
+			SessionId:          sessionID,
+			AuthenticationData: &authd.IARequest_AuthenticationData{},
+		})
+		require.NoError(t, err, "IsAuthenticated should not return an error")
+		return time.Since(start)
+	}
+
+	// threshold=1: first failure (count=1) is not delayed; second (count=2) is.
+	require.Less(t, makeAttempt(), delay,
+		"first failure should not trigger the fail delay")
+	require.GreaterOrEqual(t, makeAttempt(), delay,
+		"second consecutive failure should be delayed")
+
+	// Wait past the per-service reset window so the failure counter clears.
+	time.Sleep(2 * resetWindow)
+
+	// After reset, count drops back to 1 — not delayed again.
+	// If the global reset window (1 hour) were honoured instead, the count
+	// would remain at 3 and this attempt would still be delayed.
+	require.Less(t, makeAttempt(), delay,
+		"failure after per-service reset window should not be delayed")
+}
+
 func TestIsAuthenticated_FailDelay(t *testing.T) {
 	t.Parallel()
 
@@ -779,6 +884,11 @@ func initBrokers() (brokerConfigPath string, cleanup func(), err error) {
 // If the one passed is nil, this function will create the database and close it upon test teardown.
 func newPamClient(t *testing.T, m *users.Manager, brokerManager *brokers.Manager) (client authd.PAMClient) {
 	t.Helper()
+	return newPamClientWithConfig(t, m, brokerManager, pam.DefaultConfig)
+}
+
+func newPamClientWithConfig(t *testing.T, m *users.Manager, brokerManager *brokers.Manager, cfg pam.Config) (client authd.PAMClient) {
+	t.Helper()
 
 	// socket path is limited in length.
 	tmpDir, err := os.MkdirTemp("", "authd-socket-dir")
@@ -795,7 +905,7 @@ func newPamClient(t *testing.T, m *users.Manager, brokerManager *brokers.Manager
 		t.Cleanup(func() { _ = m.Stop() })
 	}
 
-	service := pam.NewService(context.Background(), m, brokerManager, pam.DefaultConfig)
+	service := pam.NewService(context.Background(), m, brokerManager, cfg)
 
 	grpcServer := grpc.NewServer(permissions.WithUnixPeerCreds(), grpc.ChainUnaryInterceptor(errmessages.RedactErrorInterceptor))
 	authd.RegisterPAMServer(grpcServer, service)
@@ -831,6 +941,11 @@ func getMockBrokerGeneratedID(brokerManager *brokers.Manager) (string, error) {
 // startSession is a helper that starts a session on the mock broker.
 func startSession(t *testing.T, client authd.PAMClient, username string) string {
 	t.Helper()
+	return startSessionWithService(t, client, username, "")
+}
+
+func startSessionWithService(t *testing.T, client authd.PAMClient, username, serviceName string) string {
+	t.Helper()
 
 	if username == "" {
 		username = "user@example.com"
@@ -840,9 +955,10 @@ func startSession(t *testing.T, client authd.PAMClient, username string) string 
 	username = t.Name() + testutils.IDSeparator + username
 
 	sbResp, err := client.SelectBroker(context.Background(), &authd.SBRequest{
-		BrokerId: mockBrokerGeneratedID,
-		Username: username,
-		Mode:     authd.SessionMode_LOGIN,
+		BrokerId:    mockBrokerGeneratedID,
+		Username:    username,
+		Mode:        authd.SessionMode_LOGIN,
+		ServiceName: serviceName,
 	})
 	require.NoError(t, err, "Setup: failed to create session for tests")
 	return sbResp.GetSessionId()
