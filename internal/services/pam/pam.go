@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
 	"os/user"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -27,12 +29,12 @@ import (
 
 var _ authd.PAMServer = Service{}
 
-// authFailMaxTracked is the maximum number of distinct usernames tracked simultaneously
-// to bound memory usage.
+// authFailMaxTracked is the maximum number of distinct (service, username) pairs tracked
+// simultaneously to bound memory usage.
 var authFailMaxTracked = 10000
 
-// Config holds the configurable parameters for the PAM service.
-type Config struct {
+// BruteForceMitigationConfig holds brute-force mitigation parameters for one PAM service context.
+type BruteForceMitigationConfig struct {
 	// AuthFailDelayThreshold is the number of consecutive authentication failures before
 	// a delay is imposed on subsequent attempts, to mitigate brute-force attacks.
 	AuthFailDelayThreshold int `mapstructure:"auth_fail_delay_threshold" yaml:"auth_fail_delay_threshold"`
@@ -43,12 +45,80 @@ type Config struct {
 	AuthFailResetWindow time.Duration `mapstructure:"auth_fail_reset_window" yaml:"auth_fail_reset_window"`
 }
 
+// BruteForceOverride holds optional per-service overrides for BruteForceMitigationConfig.
+// A nil pointer means "not set" and falls back to the default value.
+type BruteForceOverride struct {
+	AuthFailDelayThreshold *int           `mapstructure:"auth_fail_delay_threshold" yaml:"auth_fail_delay_threshold,omitempty"`
+	AuthFailDelay          *time.Duration `mapstructure:"auth_fail_delay" yaml:"auth_fail_delay,omitempty"`
+	AuthFailResetWindow    *time.Duration `mapstructure:"auth_fail_reset_window" yaml:"auth_fail_reset_window,omitempty"`
+}
+
+// Config holds the configurable parameters for the PAM service.
+// The BruteForceMitigationConfig fields are the defaults applied to all PAM services;
+// per-service overrides can be specified in the Services map.
+type Config struct {
+	BruteForceMitigationConfig `mapstructure:",squash" yaml:",inline"`
+	Services                   map[string]BruteForceOverride `mapstructure:"services" yaml:"services,omitempty"`
+}
+
 // DefaultConfig is the default configuration for the PAM service.
 var DefaultConfig = Config{
-	AuthFailDelayThreshold: 3,
-	AuthFailDelay:          2 * time.Second,
-	AuthFailResetWindow:    15 * time.Minute,
+	BruteForceMitigationConfig: BruteForceMitigationConfig{
+		AuthFailDelayThreshold: 3,
+		AuthFailDelay:          2 * time.Second,
+		AuthFailResetWindow:    15 * time.Minute,
+	},
+	Services: map[string]BruteForceOverride{
+		// SSH is a common brute-force target; use a longer delay by default.
+		"sshd": {AuthFailDelay: durPtr(5 * time.Second)},
+	},
 }
+
+// ForService returns the BruteForceMitigationConfig for the given PAM service name,
+// merging the default config with any service-specific override.
+func (c Config) ForService(name string) BruteForceMitigationConfig {
+	override, ok := c.Services[name]
+	if !ok {
+		return c.BruteForceMitigationConfig
+	}
+
+	result := c.BruteForceMitigationConfig
+	if override.AuthFailDelayThreshold != nil {
+		result.AuthFailDelayThreshold = *override.AuthFailDelayThreshold
+	}
+	if override.AuthFailDelay != nil {
+		result.AuthFailDelay = *override.AuthFailDelay
+	}
+	if override.AuthFailResetWindow != nil {
+		result.AuthFailResetWindow = *override.AuthFailResetWindow
+	}
+	return result
+}
+
+// WarnOnUnknownServices logs a warning for each service name in cfg.Services that
+// does not have a corresponding PAM configuration file in pamDDirs.
+// We don't treat this as an error to avoid authd failing to start when a PAM service
+// is removed from the system but still present in the config file.
+func (c Config) WarnOnUnknownServices(ctx context.Context, pamDDirs []string) {
+	for name := range c.Services {
+		found := false
+		for _, pamDDir := range pamDDirs {
+			if _, err := os.Stat(filepath.Join(pamDDir, name)); err == nil {
+				found = true
+				break
+			} else if !os.IsNotExist(err) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			log.Warningf(ctx, "PAM service %q configured in authd but not found in %s", name, strings.Join(pamDDirs, " or "))
+		}
+	}
+}
+
+// durPtr returns a pointer to the given duration value.
+func durPtr(d time.Duration) *time.Duration { return &d }
 
 // authFailEntry holds the failure count and the time of the most recent failure for one user.
 type authFailEntry struct {
@@ -56,31 +126,38 @@ type authFailEntry struct {
 	lastFail time.Time
 }
 
+// authFailKey is the composite key used to track failures per (service, user) pair
+// so that each service's brute-force policy is enforced independently.
+type authFailKey struct {
+	serviceName string
+	username    string
+}
+
 // authFailTracker counts consecutive per-user authentication failures and imposes
 // a delay once the threshold is reached.
 type authFailTracker struct {
-	mu          sync.Mutex
-	entries     map[string]*authFailEntry
-	resetWindow time.Duration
+	mu      sync.Mutex
+	entries map[authFailKey]*authFailEntry
 }
 
-func newAuthFailTracker(cfg Config) *authFailTracker {
+func newAuthFailTracker() *authFailTracker {
 	return &authFailTracker{
-		entries:     make(map[string]*authFailEntry),
-		resetWindow: cfg.AuthFailResetWindow,
+		entries: make(map[authFailKey]*authFailEntry),
 	}
 }
 
-// recordFailure increments the failure count for username and returns the new count.
+// recordFailure increments the failure count for the (serviceName, username) pair
+// and returns the new count.
 // If the previous failure is older than resetWindow the counter is reset first.
 // A resetWindow of 0 keeps failures accumulated indefinitely (no inactivity reset).
-// When the tracker is at capacity the username is not stored, but math.MaxInt is
+// When the tracker is at capacity the entry is not stored, but math.MaxInt is
 // returned so that the delay is still applied (fail-secure).
-func (t *authFailTracker) recordFailure(username string) int {
+func (t *authFailTracker) recordFailure(serviceName, username string, resetWindow time.Duration) int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	e, ok := t.entries[username]
-	if ok && t.resetWindow > 0 && time.Since(e.lastFail) >= t.resetWindow {
+	key := authFailKey{serviceName: serviceName, username: username}
+	e, ok := t.entries[key]
+	if ok && resetWindow > 0 && time.Since(e.lastFail) >= resetWindow {
 		// Stale entry: treat as fresh start.
 		ok = false
 	}
@@ -93,18 +170,18 @@ func (t *authFailTracker) recordFailure(username string) int {
 			return math.MaxInt
 		}
 		e = &authFailEntry{}
-		t.entries[username] = e
+		t.entries[key] = e
 	}
 	e.count++
 	e.lastFail = time.Now()
 	return e.count
 }
 
-// recordSuccess resets the failure count for username.
-func (t *authFailTracker) recordSuccess(username string) {
+// recordSuccess resets the failure count for the (serviceName, username) pair.
+func (t *authFailTracker) recordSuccess(serviceName, username string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	delete(t.entries, username)
+	delete(t.entries, authFailKey{serviceName: serviceName, username: username})
 }
 
 // Service is the implementation of the PAM module service.
@@ -124,7 +201,7 @@ func NewService(ctx context.Context, userManager *users.Manager, brokerManager *
 	return Service{
 		userManager:    userManager,
 		brokerManager:  brokerManager,
-		failedAuths:    newAuthFailTracker(cfg),
+		failedAuths:    newAuthFailTracker(),
 		authFailConfig: cfg,
 	}
 }
@@ -259,7 +336,7 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 	}
 
 	// Create a session and Memorize selected broker for it.
-	sessionID, encryptionKey, err := s.brokerManager.NewSession(brokerID, username, lang, mode, userProviderID)
+	sessionID, encryptionKey, err := s.brokerManager.NewSession(brokerID, username, lang, mode, userProviderID, req.GetServiceName())
 	if err != nil {
 		log.Errorf(ctx, "SelectBroker: Could not create session for user %q with broker %q: %v", username, brokerID, err)
 		return nil, err
@@ -378,12 +455,14 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 	log.Debugf(ctx, "%s: Authentication result: %s", sessionID, access)
 
 	username := s.brokerManager.UsernameFromSessionID(sessionID)
+	serviceName := s.brokerManager.ServiceNameFromSessionID(sessionID)
+	bfCfg := s.authFailConfig.ForService(serviceName)
 
 	if access != auth.Granted {
 		if access == auth.Denied || access == auth.DeniedMaxTries || access == auth.Retry {
-			if count := s.failedAuths.recordFailure(username); count > s.authFailConfig.AuthFailDelayThreshold {
+			if count := s.failedAuths.recordFailure(serviceName, username, bfCfg.AuthFailResetWindow); count > bfCfg.AuthFailDelayThreshold {
 				log.Debugf(ctx, "%s: Delaying response after %d consecutive authentication failures for %q", sessionID, count, username)
-				timer := time.NewTimer(s.authFailConfig.AuthFailDelay)
+				timer := time.NewTimer(bfCfg.AuthFailDelay)
 				select {
 				case <-timer.C:
 				case <-ctx.Done():
@@ -468,7 +547,7 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		}
 	}
 
-	s.failedAuths.recordSuccess(username)
+	s.failedAuths.recordSuccess(serviceName, username)
 
 	return &authd.IAResponse{
 		Access: access,

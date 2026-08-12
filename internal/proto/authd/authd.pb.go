@@ -288,6 +288,7 @@ type SBRequest struct {
 	Username      string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
 	Lang          string                 `protobuf:"bytes,3,opt,name=lang,proto3" json:"lang,omitempty"`
 	Mode          SessionMode            `protobuf:"varint,4,opt,name=mode,proto3,enum=authd.SessionMode" json:"mode,omitempty"`
+	ServiceName   string                 `protobuf:"bytes,5,opt,name=service_name,json=serviceName,proto3" json:"service_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -348,6 +349,13 @@ func (x *SBRequest) GetMode() SessionMode {
 		return x.Mode
 	}
 	return SessionMode_UNDEFINED
+}
+
+func (x *SBRequest) GetServiceName() string {
+	if x != nil {
+		return x.ServiceName
+	}
+	return ""
 }
 
 type SBResponse struct {
@@ -2200,12 +2208,13 @@ const file_authd_proto_rawDesc = "" +
 	"brand_icon\x18\x03 \x01(\tH\x00R\tbrandIcon\x88\x01\x01B\r\n" +
 	"\v_brand_icon\"\"\n" +
 	"\x0eStringResponse\x12\x10\n" +
-	"\x03msg\x18\x01 \x01(\tR\x03msg\"\x80\x01\n" +
+	"\x03msg\x18\x01 \x01(\tR\x03msg\"\xa3\x01\n" +
 	"\tSBRequest\x12\x1b\n" +
 	"\tbroker_id\x18\x01 \x01(\tR\bbrokerId\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\x12\n" +
 	"\x04lang\x18\x03 \x01(\tR\x04lang\x12&\n" +
-	"\x04mode\x18\x04 \x01(\x0e2\x12.authd.SessionModeR\x04mode\"R\n" +
+	"\x04mode\x18\x04 \x01(\x0e2\x12.authd.SessionModeR\x04mode\x12!\n" +
+	"\fservice_name\x18\x05 \x01(\tR\vserviceName\"R\n" +
 	"\n" +
 	"SBResponse\x12\x1d\n" +
 	"\n" +
