@@ -68,6 +68,7 @@ type uiModel struct {
 	client authd.PAMClient
 
 	sessionStartingForBroker string
+	userIsBoundToBroker      bool
 	currentSession           *sessionInfo
 
 	healthCheckCancel      func()
@@ -287,8 +288,20 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		m.userIsBoundToBroker = false
 		// Got user and brokers? Time to auto or manually select.
 		return m, AutoSelectForUser(m.client, m.username())
+
+	case brokerBoundToUser:
+		safeMessageDebug(msg)
+		m.userIsBoundToBroker = true
+		// Propagate to sub-models (brokerSelectionModel needs to emit BrokerSelected).
+		var cmd tea.Cmd
+		var cmds tea.BatchMsg
+		m.brokerSelectionModel, cmd = m.brokerSelectionModel.Update(msg)
+		cmds = append(cmds, cmd)
+		cmds = append(cmds, m.updateClientModel(msg))
+		return m, tea.Batch(cmds...)
 
 	case BrokerSelected:
 		safeMessageDebug(msg)
@@ -334,6 +347,11 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ChangeStage:
 		safeMessageDebug(msg)
+		// If the user is bound to a broker, skip broker selection when navigating
+		// back (e.g. GDM sends StageChanged{brokerSelection} on back-navigation).
+		if msg.Stage == proto.Stage_brokerSelection && m.userIsBoundToBroker {
+			msg.Stage = proto.Stage_userSelection
+		}
 		return m, m.changeStage(msg.Stage)
 
 	case StageChanged:
@@ -554,7 +572,7 @@ func (m uiModel) previousStage() proto.Stage {
 	if currentStage > proto.Stage_authModeSelection && len(m.availableAuthModes()) > 1 {
 		return proto.Stage_authModeSelection
 	}
-	if currentStage > proto.Stage_brokerSelection && len(m.availableBrokers()) > 1 {
+	if !m.userIsBoundToBroker && currentStage > proto.Stage_brokerSelection && len(m.availableBrokers()) > 1 {
 		return proto.Stage_brokerSelection
 	}
 	return proto.Stage_userSelection

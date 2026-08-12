@@ -35,6 +35,14 @@ type brokerSelected struct {
 // brokerSelectionRequired is the internal event that a broker needs to be selected.
 type brokerSelectionRequired struct{}
 
+// brokerBoundToUser is the internal event that the user is already bound to a
+// specific broker (i.e. they have a persistent broker binding in the database).
+// This prevents the UI from offering to "go back" to broker selection because
+// switching to a different broker would be rejected by authd.
+type brokerBoundToUser struct {
+	brokerID string
+}
+
 // selectBroker selects a given broker.
 func selectBroker(brokerID string) tea.Cmd {
 	return func() tea.Msg {
@@ -99,25 +107,13 @@ func (m brokerSelectionModel) Update(msg tea.Msg) (brokerSelectionModel, tea.Cmd
 		broker := convertTo[brokerItem](msg.item)
 		return m, selectBroker(broker.id)
 
+	case brokerBoundToUser:
+		safeMessageDebug(msg)
+		return m.handleBrokerSelected(msg.brokerID)
+
 	case brokerSelected:
 		safeMessageDebug(msg)
-		broker := brokerFromID(msg.brokerID, m.availableBrokers)
-		if broker == nil {
-			log.Infof(context.TODO(), "broker %q is not part of current active brokers", msg.brokerID)
-			return m, nil
-		}
-		// Select correct line to ensure model is synchronised
-		for i, b := range m.Items() {
-			b := convertTo[brokerItem](b)
-			if b.id != broker.Id {
-				continue
-			}
-			m.Select(i)
-		}
-
-		return m, sendEvent(BrokerSelected{
-			BrokerID: broker.Id,
-		})
+		return m.handleBrokerSelected(msg.brokerID)
 	}
 
 	var cmd tea.Cmd
@@ -125,7 +121,28 @@ func (m brokerSelectionModel) Update(msg tea.Msg) (brokerSelectionModel, tea.Cmd
 	return m, cmd
 }
 
-// AutoSelectForUser requests if any  broker was used by this user to automatically selects it.
+// handleBrokerSelected finds the broker by ID and emits BrokerSelected.
+func (m brokerSelectionModel) handleBrokerSelected(brokerID string) (brokerSelectionModel, tea.Cmd) {
+	broker := brokerFromID(brokerID, m.availableBrokers)
+	if broker == nil {
+		log.Infof(context.TODO(), "broker %q is not part of current active brokers", brokerID)
+		return m, nil
+	}
+	// Select correct line to ensure model is synchronised
+	for i, b := range m.Items() {
+		b := convertTo[brokerItem](b)
+		if b.id != broker.Id {
+			continue
+		}
+		m.Select(i)
+	}
+
+	return m, sendEvent(BrokerSelected{
+		BrokerID: broker.Id,
+	})
+}
+
+// AutoSelectForUser requests if any broker was used by this user to automatically select it.
 func AutoSelectForUser(client authd.PAMClient, username string) tea.Cmd {
 	return func() tea.Msg {
 		r, err := client.GetBroker(context.TODO(),
@@ -134,12 +151,18 @@ func AutoSelectForUser(client authd.PAMClient, username string) tea.Cmd {
 			})
 		// We keep a chance to manually select the broker, not a blocker issue.
 		if err != nil {
-			log.Infof(context.TODO(), "can't get  broker for %q", username)
+			log.Infof(context.TODO(), "can't get broker for %q", username)
 			return brokerSelectionRequired{}
 		}
 		brokerID := r.GetBroker()
 		if brokerID == "" {
 			return brokerSelectionRequired{}
+		}
+
+		if brokerID != brokers.LocalBrokerName {
+			// Any non-local broker from GetBroker comes from a DB binding — the
+			// user is bound and must not be offered re-selection.
+			return brokerBoundToUser{brokerID: brokerID}
 		}
 
 		return selectBroker(brokerID)()

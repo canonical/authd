@@ -36,6 +36,7 @@ type nativeModel struct {
 	currentStage         proto.Stage
 	busy                 bool
 	userSelectionAllowed bool
+	userIsBoundToBroker  bool
 }
 
 const (
@@ -200,6 +201,7 @@ func (m nativeModel) Update(msg tea.Msg) (nativeModel, tea.Cmd) {
 			return m, cmd
 		}
 
+		m.userIsBoundToBroker = false
 		return m.startAsyncOp(m.userSelection)
 
 	case brokersListReceived:
@@ -217,6 +219,9 @@ func (m nativeModel) Update(msg tea.Msg) (nativeModel, tea.Cmd) {
 
 	case authModesReceived:
 		m.authModes = msg.authModes
+
+	case brokerBoundToUser:
+		m.userIsBoundToBroker = true
 
 	case brokerSelectionRequired:
 		if m.busy {
@@ -895,7 +900,7 @@ func (m nativeModel) previousStage() proto.Stage {
 	if m.currentStage > proto.Stage_authModeSelection && len(m.authModes) > 1 {
 		return proto.Stage_authModeSelection
 	}
-	if m.currentStage > proto.Stage_brokerSelection && len(m.availableBrokers) > 1 {
+	if !m.userIsBoundToBroker && m.currentStage > proto.Stage_brokerSelection && len(m.availableBrokers) > 1 {
 		return proto.Stage_brokerSelection
 	}
 	return proto.Stage_userSelection
