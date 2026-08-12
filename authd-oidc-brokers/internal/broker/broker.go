@@ -1619,7 +1619,9 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 	session.entraAuthPasswordRequired = false
 	session.entraAuthPasswordHash = ""
 
-	if passwordSubmitted {
+	if passwordSubmitted && bypassesPasswordMethod(challengeInfo.Method) {
+		log.Noticef(context.Background(), "Entra ID answered the password for user %q with a %s challenge, so the password was never verified; not caching it", session.username, challengeInfo.Method)
+	} else if passwordSubmitted {
 		// Hash the password immediately to narrow the plaintext memory window.
 		// The hash is written to disk in finishEntraAuth after MFA succeeds.
 		passwordHash, hashErr := password.HashPassword(userPassword)
@@ -2380,6 +2382,19 @@ func isPollMethod(method string) bool {
 		return true
 	}
 	return false
+}
+
+// bypassesPasswordMethod reports whether a negotiated method replaced the
+// submitted password rather than acting as a second factor for it.
+//
+// libhimmelblau offers a Temporary Access Pass whenever the account has one,
+// without regard for the options the caller passed, and returns that challenge
+// before the password is ever sent to Entra ID. The password is then unverified
+// even though the login succeeds, so it must not be cached for offline use. TAP
+// is the only such method reachable here: the other primary factors need an
+// AuthOption that the password path does not set.
+func bypassesPasswordMethod(method string) bool {
+	return method == "AccessPass"
 }
 
 func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (string, isAuthenticatedDataResponse) {
