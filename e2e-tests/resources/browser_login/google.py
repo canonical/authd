@@ -39,9 +39,19 @@ _EMAIL_NOT_FOUND = "Couldn['’]t find your Google Account"
 _EMAIL_INVALID = "Enter a valid email or phone number"
 _PATTERN_WRONG_EMAIL = f"{_EMAIL_NOT_FOUND}|{_EMAIL_INVALID}"
 _WRONG_PASSWORD = "Wrong password"
+_TOO_MANY_FAILED_ATTEMPTS = "Too many failed attempts"
 
 
 class WrongTOTPCodeError(Exception):
+    pass
+
+
+class TooManyFailedAttemptsError(Exception):
+    """Raised when Google shows the "too many failed attempts" lockout page.
+
+    This page indicates the test account is temporarily locked out (usually
+    for a few hours), so retrying immediately would just fail again.
+    """
     pass
 
 
@@ -70,6 +80,7 @@ class GoogleLoginFlow:
         _PATTERN_WRONG_TOTP,
         _PATTERN_WRONG_EMAIL,
         _WRONG_PASSWORD,
+        _TOO_MANY_FAILED_ATTEMPTS,
     ])
 
     def __init__(self, browser, username: str, password: str, device_code: str,
@@ -144,6 +155,12 @@ class GoogleLoginFlow:
 
         # We check the error cases first, because the patterns of the other
         # pages also match in the error cases.
+        if _matches_phrase(matches, _TOO_MANY_FAILED_ATTEMPTS):
+            self._handle_too_many_failed_attempts_page()
+            raise TooManyFailedAttemptsError(
+                "Google blocked this login attempt with a "
+                "\"too many failed attempts\" lockout page. The test "
+                "account is likely locked out for a few hours.")
         if _matches_phrase(matches, _WRONG_TOTP, _WRONG_NUMBER_OF_DIGITS):
             raise WrongTOTPCodeError("TOTP code was rejected")
         if _matches_phrase(matches, "find your google account", _EMAIL_INVALID):
@@ -217,6 +234,14 @@ class GoogleLoginFlow:
         self._clear_input_field(self._username)
         self._browser.send_key_taps(
             ascii_string_to_key_events(self._username) + [Gdk.KEY_Return])
+
+    def _handle_too_many_failed_attempts_page(self) -> None:
+        self._browser.capture_snapshot(
+            self._screenshot_dir, "device-login-too-many-failed-attempts")
+        logger.error(
+            "Google blocked this login with a \"too many failed attempts\" "
+            "lockout page; the test account is likely locked out for a few "
+            "hours")
 
     def _handle_wrong_password(self) -> None:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-wrong-password")
