@@ -5,6 +5,7 @@ import logging
 import os
 import subprocess
 import tempfile
+import time
 import traceback
 import sys
 
@@ -306,6 +307,99 @@ class BrowserWindow(Gtk.Window):
 
         logger.info(f"Found strings matching pattern: {found!r}")
         return found
+
+    def run_javascript_sync(self, js: str, timeout_ms: int = 5000) -> str:
+        """Run `js` in the page and return its result as a string.
+
+        Blocks the caller by running a nested main loop until the script
+        finishes or `timeout_ms` elapses.
+        """
+        loop = GLib.MainLoop()
+        cancellable = Gio.Cancellable()
+        result = ""
+        error = None
+        timed_out = False
+
+        def on_timeout():
+            nonlocal timed_out
+
+            timed_out = True
+            cancellable.cancel()
+            loop.quit()
+            return False
+
+        def on_js_finished(web_view, task):
+            nonlocal result, error
+
+            try:
+                result = web_view.run_javascript_finish(task).get_js_value().to_string()
+            except GLib.Error as e:
+                if e.matches(Gio.io_error_quark(), Gio.IOErrorEnum.CANCELLED):
+                    return
+                error = e
+            except Exception as e:
+                error = e
+
+            loop.quit()
+
+        timeout_id = GLib.timeout_add(timeout_ms, on_timeout)
+        self.web_view.run_javascript(js, cancellable, on_js_finished)
+        loop.run()
+
+        if timed_out:
+            raise TimeoutError(f"Timed out after {timeout_ms}ms running JavaScript")
+
+        GLib.source_remove(timeout_id)
+
+        if error is not None:
+            raise error
+
+        return result
+
+    def get_focused_input_value(self, timeout_ms: int = 5000) -> str | None:
+        """Return the text of the currently focused input element.
+
+        Returns None if no input element is focused, which is different from
+        an empty string, meaning a focused but empty input element.
+        """
+        js = """(function() {
+                    var el = document.activeElement;
+                    if (!el || typeof el.value !== 'string') {
+                        return JSON.stringify({focused: false, value: ''});
+                    }
+                    return JSON.stringify({focused: true, value: el.value});
+                })()"""
+
+        state = json.loads(self.run_javascript_sync(js, timeout_ms=timeout_ms))
+        return state["value"] if state["focused"] else None
+
+    def wait_for_focused_input_value(self, expected: str, timeout_ms: int = 5000,
+                                     poll_interval_ms: int = 50) -> str | None:
+        """Wait for the focused input element to contain `expected`.
+
+        Key events are handed to the web content asynchronously, so the typed
+        text only appears in the DOM some time after send_key_taps returned.
+
+        Returns the value of the field, which differs from `expected` if it
+        did not appear before the timeout.
+        """
+        deadline = time.monotonic() + timeout_ms / 1000
+        while True:
+            value = self.get_focused_input_value()
+            if value == expected or time.monotonic() >= deadline:
+                return value
+            self.wait_ms(poll_interval_ms)
+
+    def wait_ms(self, timeout_ms: int) -> None:
+        """Keep the main loop running for `timeout_ms` milliseconds."""
+        loop = GLib.MainLoop()
+
+        def on_timeout():
+            loop.quit()
+            return False
+
+        GLib.timeout_add(timeout_ms, on_timeout)
+        loop.run()
 
     def send_key(self, event_type, key, silent=False):
         if not silent:
