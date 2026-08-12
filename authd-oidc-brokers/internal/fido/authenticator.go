@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/canonical/authd/log"
 	libfido2 "github.com/keys-pub/go-libfido2"
@@ -42,6 +43,11 @@ const (
 // relyingPartyID is the WebAuthn relying party ID that Entra ID registers
 // credentials under.
 const relyingPartyID = "login.microsoft.com"
+
+// cancelRetryInterval is how often Assert re-issues fido_dev_cancel while
+// waiting for a canceled ceremony to return. See the ctx.Done() branch in
+// Assert for why a single Cancel is not reliable.
+const cancelRetryInterval = 100 * time.Millisecond
 
 // Authenticator performs WebAuthn Get ceremonies with the first connected
 // FIDO2 device via libfido2. The zero value is ready to use.
@@ -101,6 +107,11 @@ func (Authenticator) DeviceRequiresPIN() (bool, error) {
 // DeviceRequiresPIN). Failures that the broker can act on are reported as the
 // package's sentinel errors (ErrPINRequired, ErrPINInvalid, ...).
 func (Authenticator) Assert(ctx context.Context, challenge string, allowList []string, pin string) (string, error) {
+	// A ceremony canceled before it started must not touch the device at all.
+	if ctx.Err() != nil {
+		return "", ErrCanceled
+	}
+
 	device, err := firstDevice()
 	if err != nil {
 		return "", err
@@ -141,12 +152,30 @@ func (Authenticator) Assert(ctx context.Context, challenge string, allowList []s
 		// Interrupt the ceremony so the device stops blinking, then wait for
 		// the in-flight call to return: the Device must not be garbage
 		// collected while libfido2 still uses it.
-		if err := device.Cancel(); err != nil {
-			result = <-resultCh
-			return "", errors.Join(ErrCanceled, fmt.Errorf("failed to cancel FIDO assertion: %v", err))
+		//
+		// go-libfido2 v1.5.3 publishes its internal device pointer in open()
+		// without synchronization, so a Cancel landing before the ceremony
+		// goroutine opened the device is a silent no-op that would leave the
+		// wait below blocking until the untouched ceremony times out on its
+		// own. Re-issue Cancel until the ceremony actually returns: once the
+		// device is open, fido_dev_cancel makes the blocking
+		// fido_dev_get_assert return FIDO_ERR_KEEPALIVE_CANCEL.
+		var cancelErr error
+		retry := time.NewTicker(cancelRetryInterval)
+		defer retry.Stop()
+		for {
+			if err := device.Cancel(); err != nil && cancelErr == nil {
+				cancelErr = err
+			}
+			select {
+			case <-resultCh:
+				if cancelErr != nil {
+					return "", errors.Join(ErrCanceled, fmt.Errorf("failed to cancel FIDO assertion: %v", cancelErr))
+				}
+				return "", ErrCanceled
+			case <-retry.C:
+			}
 		}
-		<-resultCh
-		return "", ErrCanceled
 	}
 	if result.err != nil {
 		// The raw error carries the CTAP code that mapAssertionError collapses
