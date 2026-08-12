@@ -518,7 +518,10 @@ func (m uiModel) currentStage() proto.Stage {
 	if m.authModeSelectionModel.Focused() {
 		return proto.Stage_authModeSelection
 	}
-	if m.authenticationModel.Focused() {
+	// InProgress stays true while the input is locked (i.e. the submitted
+	// value is hidden until a retry starts), even though the underlying
+	// model is deliberately blurred in that state.
+	if m.authenticationModel.Focused() || m.authenticationModel.InProgress() {
 		return proto.Stage_challenge
 	}
 	return proto.Stage_userSelection
