@@ -111,6 +111,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --)
             shift
+            for t in "$@"; do
+                TESTS_TO_RUN+=("${TESTS_DIR}/$(basename "${t}")")
+            done
+            shift "$#"
             break
             ;;
         -*)
