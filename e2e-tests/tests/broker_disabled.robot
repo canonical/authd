@@ -16,7 +16,9 @@ ${username}    %{E2E_USER}
 
 *** Test Cases ***
 Test that disabling broker prevents remote logins
-    [Documentation]    This test verifies that when the broker is disabled, remote users cannot log in, while local users can still access the system.
+    [Documentation]    This test verifies that when the broker is disabled,
+    ...    remote users cannot log in, while local users can still access
+    ...    the system.
 
     # Disable broker
     Disable Broker And Purge Config

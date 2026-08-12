@@ -17,7 +17,9 @@ ${username}    %{E2E_USER}
 
 *** Test Cases ***
 Test that changing owner prevents remote logins
-    [Documentation]    This test verifies that when the broker owner is changed to a different user, the original remote user cannot log in, while local users can still access the system.
+    [Documentation]    This test verifies that when the broker owner is changed
+    ...    to a different user, the original remote user cannot log in,
+    ...    while local users can still access the system.
 
     # Log in with local user
     Log In
