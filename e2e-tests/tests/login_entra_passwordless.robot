@@ -103,7 +103,10 @@ Test login with CLI using Entra passwordless auth and TAP
     Log Out From Terminal Session
     Close Focused Window
 
-    # Verify that subsequent logins use the cached local password (offline path).
+    # Verify the cached password through the offline path. With network access
+    # enabled, authd refreshes the TAP-issued token before checking the local
+    # password, which is outside this assertion.
+    Block Network Access To Identity Provider
     Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
     Log Out From su Session
