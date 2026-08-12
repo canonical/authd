@@ -2812,6 +2812,92 @@ func TestIsAuthenticatedPasswordEntraTokenFallsBackToCachedGroupsOnGroupFetchErr
 	require.Equal(t, cachedGroups, payload.UserInfo.Groups, "cached groups must be used when the group fetch fails")
 }
 
+// TestFinishEntraAuthClearsStaleDeviceRegistrationDataOnRetryWithDeviceAuthError
+// verifies that when the Entra password/MFA flow's group fetch (in
+// finishEntraAuth) fails with a RetryWithDeviceAuthError (e.g. AADSTS7000218 due
+// to stale device registration data), the broker clears the cached
+// DeviceRegistrationData before persisting the token via finishAuth. Without
+// this, the stale data would be carried over via oldAuthInfo on every
+// subsequent login, creating a persistence loop where the device is never
+// re-registered and getGroups keeps failing (canonical/authd#1680).
+func TestFinishEntraAuthClearsStaleDeviceRegistrationDataOnRetryWithDeviceAuthError(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	cachedGroups := []info.Group{{Name: "cached-group", UGID: "cached-id"}}
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := &mockEntraPasswordProvider{
+		MockProvider: &testutils.MockProvider{
+			GetGroupsFunc: func() ([]info.Group, error) {
+				return nil, &providerErrors.RetryWithDeviceAuthError{Err: errors.New("AADSTS7000218: stale device registration data")}
+			},
+		},
+		flowState: &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{
+			Message:           "Please type in the code displayed on your authenticator app from your device:",
+			Method:            "PhoneAppOTP",
+			PollingIntervalMs: 5000,
+			MaxPollAttempts:   10,
+		},
+		mfaTokenResult: newMFATokenResult(mfaAuthInfo.Token),
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	// isForDeviceRegistration seeds a non-empty (stale) DeviceRegistrationData;
+	// this is the cached token loaded as oldAuthInfo by entraPasswordAuth.
+	generateAndStoreCachedInfo(t, tokenOptions{
+		username:                     username,
+		issuer:                       defaultIssuerURL,
+		obtainedViaEntraPasswordAuth: true,
+		isForDeviceRegistration:      true,
+		groups:                       cachedGroups,
+	}, b.TokenPathForSession(sessionID))
+	require.NoError(t, password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID)))
+
+	// Step 1: submit the password, which starts the MFA flow.
+	updateAuthModes(t, b, sessionID, authmodes.EntraPassword)
+	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
+	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraMFACode}, b.GetNextAuthModes(sessionID))
+
+	// Step 2: submit the MFA code, completing the flow via finishEntraAuth,
+	// where getGroups fails with RetryWithDeviceAuthError.
+	err = b.SetAvailableMode(sessionID, authmodes.EntraMFACode)
+	require.NoError(t, err, "Setup: SetAvailableMode should not have returned an error")
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFACode)
+	require.NoError(t, err, "Setup: SelectAuthenticationMode should not have returned an error")
+
+	otpAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "123456", key))
+	access, data, err := b.IsAuthenticated(sessionID, otpAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access,
+		"a returning Entra login must fall back to cached groups when the group fetch fails with a retryable device-auth error")
+
+	var payload struct {
+		UserInfo struct {
+			Groups []info.Group `json:"groups"`
+		} `json:"userinfo"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(data), &payload))
+	require.Equal(t, cachedGroups, payload.UserInfo.Groups, "cached groups must still be used while the device is re-registered")
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.Empty(t, cached.DeviceRegistrationData,
+		"stale DeviceRegistrationData must be cleared so the next login re-registers the device "+
+			"instead of repeatedly failing getGroups with the same stale data")
+}
+
 // TestIsAuthenticatedPasswordEntraTokenRefreshDetectsDisabledUser verifies that on a
 // returning login the Entra password token refresh (refreshEntraPasswordToken) is the
 // live disabled-user check: an AADSTS50057-class rejection is classified exactly like
