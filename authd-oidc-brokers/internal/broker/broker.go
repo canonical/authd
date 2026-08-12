@@ -1843,7 +1843,16 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	groups, err := b.getGroups(ctx, session, authInfo)
 	if err != nil {
 		if oldAuthInfo != nil {
-			log.Warningf(context.Background(), "Could not get groups: %v. Using cached groups.", err)
+			var retryWithDeviceAuthErr *providerErrors.RetryWithDeviceAuthError
+			if errors.As(err, &retryWithDeviceAuthErr) {
+				// The cached device registration data is stale. Clear it so that
+				// the next login triggers a fresh device registration instead of
+				// repeatedly failing with the same error.
+				log.Warningf(context.Background(), "Could not get groups: %v. Clearing stale device registration data and using cached groups.", err)
+				authInfo.DeviceRegistrationData = nil
+			} else {
+				log.Warningf(context.Background(), "Could not get groups: %v. Using cached groups.", err)
+			}
 			authInfo.UserInfo.Groups = oldAuthInfo.UserInfo.Groups
 		} else {
 			log.Errorf(context.Background(), "failed to get groups: %s", err)
