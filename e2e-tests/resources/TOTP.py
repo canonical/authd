@@ -15,9 +15,8 @@ class TOTP:
     def generate_totp_code(self) -> str:
         """Return the current TOTP code derived from the TOTP_SECRET environment variable.
 
-        Waits until there are at least 5 seconds left in the current time window
-        before generating the code (see generate_totp.py) so the code remains
-        valid long enough to be typed in.
+        Waits until the code is valid for long enough to be typed in (see
+        MIN_VALIDITY_S in generate_totp.py) before generating it.
         """
         secret = os.environ.get("TOTP_SECRET", "")
         if not secret:
