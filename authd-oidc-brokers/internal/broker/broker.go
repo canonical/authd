@@ -2248,6 +2248,12 @@ func (b *Broker) routeMFAInitError(mfaErr *himmelblau.MFAError, session *session
 		log.Debugf(context.Background(), "Passwordless Entra authentication for user %q requires password entry", session.username)
 		session.entraAuthPasswordRequired = true
 		session.nextAuthModes = []string{authmodes.EntraAuth}
+		if b.cfg.flows.DeviceAuth {
+			// The probe narrowed the mode list before the user submitted
+			// anything, which the password form on its own never did, so keep
+			// the device code flow reachable from it.
+			session.nextAuthModes = append(session.nextAuthModes, authmodes.Device, authmodes.DeviceQr)
+		}
 		// Do not send an intermediate AuthNext message here: GDM shows any
 		// auth.Next message as a transient challenge state before it requests
 		// the next layout, which creates a redundant spinner-only screen with

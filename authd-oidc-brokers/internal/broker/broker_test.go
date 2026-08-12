@@ -2378,7 +2378,8 @@ func TestEntraAuthProbePromptsForPasswordWhenRequired(t *testing.T) {
 	access, data, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
-	require.Equal(t, []string{authmodes.EntraAuth}, b.GetNextAuthModes(sessionID))
+	require.Equal(t, []string{authmodes.EntraAuth, authmodes.Device, authmodes.DeviceQr}, b.GetNextAuthModes(sessionID),
+		"the probe narrows the modes before any credential is submitted, so the device code flow must stay reachable")
 	require.Equal(t, []string{""}, provider.recordedInitPasswords,
 		"the first call should be a passwordless probe")
 	require.Equal(t, []bool{false}, provider.recordedInitDevScopes,
@@ -2403,6 +2404,40 @@ func TestEntraAuthProbePromptsForPasswordWhenRequired(t *testing.T) {
 		"device-scoped auth should be used only after a password was submitted")
 	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID),
 		"the offline password must not be cached until MFA succeeds")
+}
+
+// TestEntraAuthProbeKeepsDeviceAuthOutWhenFlowDisabled verifies that the probe
+// does not offer the device code flow as a way back when it is disabled.
+func TestEntraAuthProbeKeepsDeviceAuthOutWhenFlowDisabled(t *testing.T) {
+	t.Parallel()
+
+	provider := &mockPasswordRequiredThenSuccessProvider{
+		mockEntraAuthProvider: &mockEntraAuthProvider{
+			MockProvider:  &testutils.MockProvider{},
+			flowState:     &himmelblau.MFAFlowState{},
+			challengeInfo: &himmelblau.MFAChallengeInfo{},
+		},
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                 broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:           true,
+		firstUserBecomesOwner:  true,
+		provider:               provider,
+		issuerURL:              defaultIssuerURL,
+		registerDevice:         true,
+		deviceAuthFlowDisabled: true,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraAuth))
+	_, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraAuth)
+	require.NoError(t, err)
+
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraAuth}, b.GetNextAuthModes(sessionID))
 }
 
 func TestEntraAuthPasswordlessSuccessDoesNotCacheOfflinePassword(t *testing.T) {
