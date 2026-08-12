@@ -46,6 +46,21 @@ cargo build                              # NSS (debug mode)
 - **Test helpers with underscores**: Functions prefixed `Z_ForTests_` are test-only exports (e.g., `Z_ForTests_CreateDBFromYAML`)
 - **Environment variables**:
   - `AUTHD_SKIP_ROOT_TESTS=1`: Skip tests that fail when run as root
+- **Broker provider build tags**: An untagged broker test run does not compile
+  the provider-specific wiring. When changing broker code, run tests for every
+  provider configuration:
+  ```bash
+  go -C authd-oidc-brokers test ./...
+  go -C authd-oidc-brokers test -tags withgoogle ./...
+  go -C authd-oidc-brokers generate --tags withmsentraid ./internal/providers/msentraid/...
+  go -C authd-oidc-brokers test -tags withmsentraid ./...
+  ```
+  The `withmsentraid` generation step requires the recursive
+  `libhimmelblau` submodule and generates the `himmelblau.h` and library
+  artifacts.
+- **Broker linting**: Pass provider tags explicitly, for example:
+  `scripts/golangci-lint -C authd-oidc-brokers run --build-tags withmsentraid`.
+  Use `--build-tags withgoogle` for Google-specific changes.
 
 ### Code Generation
 Critical: Run `go generate` before building PAM or when modifying protobuf files:
