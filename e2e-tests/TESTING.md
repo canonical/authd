@@ -63,6 +63,20 @@ When running the tests in GitHub CI, add `e2e-ppa: authd-dev` to the pull reques
 description to install the authd package and its dependencies from the
 `ubuntu-enterprise-desktop/authd-dev` PPA instead of `authd-edge`.
 
+To run only selected end-to-end test suites in GitHub CI, add an `e2e-tests:`
+line to the pull request description, followed by a space-separated list of
+suite filenames:
+
+```text
+e2e-tests: login_gdm.robot login.robot
+```
+
+Without this marker, GitHub CI runs the complete end-to-end test suite.
+Editing the pull request description does not automatically re-run the
+workflow, so if you change the `e2e-tests:` line after the workflow has
+already run, re-run it manually (e.g. "Re-run all jobs" in the GitHub
+Actions UI, or `gh run rerun <run-id>`) to pick up the new suite selection.
+
 ### 4. Set up YARF
 
 ```bash

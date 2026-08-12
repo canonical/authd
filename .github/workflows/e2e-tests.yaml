@@ -53,7 +53,6 @@ on:
       - synchronize
       - reopened
       - labeled
-      - edited
   workflow_dispatch:
     inputs:
       broker-snap-channel:
@@ -120,5 +119,12 @@ jobs:
             'e2e-ppa: authd-dev'
           ) &&
           'ubuntu-enterprise-desktop/authd-dev' || ''
+        }}
+      # PRs can limit the suites by adding, for example,
+      # "e2e-tests: login_gdm.robot login.robot" to their description.
+      e2e-tests-description: >-
+        ${{
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.body || ''
         }}
     secrets: inherit
