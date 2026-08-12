@@ -23,19 +23,27 @@
 #GID_MIN: 10000
 #GID_MAX: 60000
 
-## Brute-force mitigation settings for authentication failures.
-## To disable brute-force mitigation entirely, set auth_fail_delay to 0.
+## PAM service settings.
 ##
-## auth_fail_delay_threshold: number of consecutive failures for a single user
-## before a delay is imposed on subsequent attempts.
-#auth_fail_delay_threshold: 3
+## Brute-force mitigation settings applied to all PAM services by default.
+## To disable entirely, set auth_fail_delay to 0.
 ##
-## auth_fail_delay: duration of the delay imposed once the threshold is reached.
-## Accepts durations like "2s", "500ms", "1m".
-#auth_fail_delay: 2s
+##   auth_fail_delay_threshold: number of consecutive failures for a single
+##     user before a delay is imposed on subsequent attempts.
+##   auth_fail_delay: duration of the delay imposed once the threshold is
+##     reached. Accepts durations like "2s", "500ms", "1m".
+##   auth_fail_reset_window: duration of inactivity after the last failure
+##     before the failure count is automatically reset. Accepts durations
+##     like "15m", "1h", "30s". Set to 0 to keep failures accumulated
+##     indefinitely (no inactivity reset).
 ##
-## auth_fail_reset_window: duration of inactivity after the last failure before
-## the failure count is automatically reset.
-## Accepts durations like "15m", "1h", "30s". Set to 0 to keep failures
-## accumulated indefinitely (no inactivity reset).
-#auth_fail_reset_window: 15m
+## Per-service overrides can be specified under the "services:" key, using
+## the PAM service name (e.g. "sshd", "gdm-authd") as the sub-key.
+## Only the fields that differ from the default need to be specified.
+#pam:
+#  auth_fail_delay_threshold: 3
+#  auth_fail_delay: 2s
+#  auth_fail_reset_window: 15m
+#  services:
+#    sshd:
+#      auth_fail_delay: 5s
