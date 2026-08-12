@@ -264,7 +264,7 @@ func enrollDevice(broker *brokerClientApplication, refreshToken string, attrs *C
 	}
 	defer C.loadable_ms_oapxbc_rsa_key_free(cTransportKey)
 	defer C.loadable_ms_device_enrollment_key_free(cCertKey)
-	defer C.free(unsafe.Pointer(cDeviceID))
+	defer C.string_free(cDeviceID)
 
 	deviceID := C.GoString(cDeviceID)
 
@@ -421,7 +421,7 @@ func accessTokenFromUserToken(userToken *C.UserToken) (accessToken string, err e
 	if msalErr != nil {
 		return "", fmt.Errorf("failed to get access token: %v", msalErrorMsg(msalErr))
 	}
-	defer C.free(unsafe.Pointer(cAccessToken))
+	defer C.string_free(cAccessToken)
 
 	return C.GoString(cAccessToken), nil
 }
@@ -432,7 +432,7 @@ func refreshTokenFromUserToken(userToken *C.UserToken) (refreshToken string, err
 	if msalErr != nil {
 		return "", fmt.Errorf("failed to get refresh token: %v", msalErrorMsg(msalErr))
 	}
-	defer C.free(unsafe.Pointer(cRefreshToken))
+	defer C.string_free(cRefreshToken)
 
 	return C.GoString(cRefreshToken), nil
 }
@@ -621,7 +621,7 @@ func mfaFlowMessage(flow *MFAFlowState) (string, error) {
 	if msalErr != nil {
 		return "", fmt.Errorf("failed to get MFA continue message: %v", msalErrorMsg(msalErr))
 	}
-	defer C.free(unsafe.Pointer(cMsg))
+	defer C.string_free(cMsg)
 	return C.GoString(cMsg), nil
 }
 
@@ -640,7 +640,7 @@ func mfaFlowMethod(flow *MFAFlowState) (string, error) {
 	if msalErr != nil {
 		return "", fmt.Errorf("failed to get MFA method: %v", msalErrorMsg(msalErr))
 	}
-	defer C.free(unsafe.Pointer(cMethod))
+	defer C.string_free(cMethod)
 	return C.GoString(cMethod), nil
 }
 
@@ -691,9 +691,6 @@ func mfaFlowFidoChallenge(flow *MFAFlowState) (string, error) {
 	if cChallenge == nil {
 		return "", nil
 	}
-	// The header documents that a non-NULL result of
-	// mfa_auth_continue_fido_challenge must be freed with string_free (the
-	// string is allocated by the Rust side, not by C malloc).
 	defer C.string_free(cChallenge)
 	return C.GoString(cChallenge), nil
 }
