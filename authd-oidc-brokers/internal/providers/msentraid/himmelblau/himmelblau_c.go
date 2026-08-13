@@ -543,8 +543,17 @@ func initiateMFAFlowForEnrollment(broker *brokerClientApplication, username, pas
 	cUsername := C.CString(username)
 	defer C.free(unsafe.Pointer(cUsername))
 
-	cPassword := C.CString(password)
-	defer C.free(unsafe.Pointer(cPassword))
+	// An empty password is passed as NULL: there is simply no secret to submit.
+	// An empty string is not equivalent, it would be posted to Entra ID as a
+	// real credential. The device certificate and transport key are generated
+	// locally via the TPM (see enroll_device()), not derived from the
+	// password, so passwordless enrollment is supported the same way
+	// passwordless MFA is.
+	var cPassword *C.char
+	if password != "" {
+		cPassword = C.CString(password)
+		defer C.free(unsafe.Pointer(cPassword))
+	}
 
 	options := cAuthOptions(authOpts)
 	var flow *C.MFAAuthContinue

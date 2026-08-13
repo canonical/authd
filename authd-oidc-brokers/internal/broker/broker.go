@@ -1565,10 +1565,15 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 	// Existing device registration data for the Entra auth flow (from the cached info).
 	deviceRegistrationData := b.cachedDeviceRegistrationData(session)
 
-	// Use device-scoped MFA only after a real password has been submitted.
-	// Passwordless probing passes a NULL password to libhimmelblau, and the
-	// native device/enrollment flow cannot operate without password-derived
-	// material.
+	// Only request device-scoped MFA once a real password has been submitted.
+	// This is a preference, not a hard requirement: device registration does
+	// not need password-derived material (enroll_device() generates its keys
+	// via the TPM, and re-acquires an enrollment-scoped token later via
+	// refresh_token exchange regardless of what resource this initial call
+	// used - see initiate_acquire_token_by_mfa_flow_for_device_enrollment).
+	// Scoping this initial call to the Intune resource only matters to avoid
+	// Conditional Access checks tied to enrollment.manage.microsoft.com, so
+	// there is no benefit in requesting it before a password is submitted.
 	withDeviceScope := passwordSubmitted && (b.cfg.registerDevice || himmelblau.ValidDeviceRegistrationDataJSON(deviceRegistrationData))
 
 	// Advertise FIDO assertion capability whenever this build can perform a
