@@ -349,13 +349,14 @@ func AcquireAccessTokenForGraphAPI(
 //
 // An empty password selects passwordless authentication: libhimmelblau then
 // negotiates a passwordless method (Authenticator number-matching, TAP,
-// security key, ...) from the user's credential type. Passwordless
-// authentication cannot enroll a device (there is no password to derive the
-// enrollment from), so callers must pass withDeviceScope=false in that case.
+// security key, ...) from the user's credential type. This is independent of
+// withDeviceScope: the device certificate and transport key device enrollment
+// produces are generated locally via the TPM, not derived from the password,
+// so passwordless device enrollment is supported by this function the same
+// way passwordless MFA is (callers may still choose not to combine the two,
+// e.g. to avoid Conditional Access checks on the enrollment resource before a
+// password is submitted).
 func InitiateMFAFlow(ctx context.Context, clientID, tenantID string, data *DeviceRegistrationData, username, password string, withDeviceScope bool, authOpts ...AuthOption) (*MFAFlowState, *MFAChallengeInfo, error) {
-	if password == "" && withDeviceScope {
-		return nil, nil, fmt.Errorf("passwordless authentication cannot be used for device enrollment")
-	}
 	brokerClientApp, err := brokerClientAppFor(clientID, tenantID, data)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to initialize broker client application: %v", err)
