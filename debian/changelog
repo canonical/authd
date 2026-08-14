@@ -1,8 +1,8 @@
-authd (0.6.4+git260814+933+8619e077) resolute; urgency=medium
+authd (0.6.4+git260814+935+07ba624a) resolute; urgency=medium
 
-  * Github build. Run id: 31779147138. Run number: 933.
+  * Github build. Run id: 31811134763. Run number: 935.
 
- -- Noor <nooreldeen.mansour@canonical.com>  Fri, 14 Aug 2026 07:15:16 +0000
+ -- dependabot <49699333+dependabot@users.noreply.github.com>  Fri, 14 Aug 2026 14:47:01 +0000
 
 authd (0.6.4) resolute; urgency=medium
 
