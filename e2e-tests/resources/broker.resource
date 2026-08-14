@@ -389,10 +389,6 @@ Check That Login Is Handled By PAM Unix
     Match Text    Password:
 
 
-Check That SSH Connection Is Closed
-    Match Text    Connection closed
-
-
 Check If User Was Added Properly
     [Arguments]    ${username}
     Wait Until Keyword Succeeds    30s    1s    Check User Information    ${username}
