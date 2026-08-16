@@ -27,9 +27,30 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
+#include <strings.h>
 #include <limits.h>
 
 #include <security/pam_appl.h>
+
+#if (defined(__GLIBC__) && defined(__GLIBC_MINOR__) && \
+    (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 25)) && \
+    (defined(_GNU_SOURCE) || defined(_DEFAULT_SOURCE))) || \
+    defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__) || defined(__APPLE__)
+
+#define gdm_pam_extension_zero_buffer(s, n) do { \
+    explicit_bzero((s), (n)); \
+} while(0)
+
+#else
+
+#define gdm_pam_extension_zero_buffer(s, n) do { \
+    memset((s), 0, (n)); \
+    /* Memory barrier to prevent the compiler from erasing the memset */ \
+    __asm__ __volatile__ ("" : : "r"(s) : "memory"); \
+} while(0)
+
+#endif
 
 typedef struct {
         uint32_t length;
