@@ -897,6 +897,12 @@ func cliChangePasswordWithRetry(t *testing.T, c *ptytest.Console, firstNew, firs
 	c.WaitFor(t, `Confirm password`)
 	cliSendPassword(t, c, firstConfirm)
 	c.WaitFor(t, errMsg)
+	// The snapshot at this point is flaky: depending on redraw timing, it may
+	// still carry leftover "*********"/"Confirm password:" content from the
+	// prior screen before settling into a clean "New password" + error view.
+	// Discard it; the next snapshot (after typing secondNew, with the same
+	// error still shown) is a stable superset of the same information.
+	c.DiscardLastSnapshot()
 	cliSendPassword(t, c, secondNew)
 	c.WaitFor(t, `Confirm password`)
 	cliSendPassword(t, c, secondNew)
