@@ -64,7 +64,9 @@ jobs:
             e2e-runner-vm-${{ inputs.ubuntu-version }}-${{ hashFiles(
               'e2e-tests/vm/**',
               '.github/actions/e2e-tests/set-up-ssh-keys/**',
-              '.github/workflows/e2e-tests-provision-and-run.yaml'
+              '.github/workflows/e2e-tests-provision-and-run.yaml',
+              'debian/control',
+              'debian/rules'
             ) }}
           fail-on-cache-miss: false
 
@@ -115,7 +117,9 @@ jobs:
             e2e-runner-vm-${{ inputs.ubuntu-version }}-${{ hashFiles(
               'e2e-tests/vm/**',
               '.github/actions/e2e-tests/set-up-ssh-keys/**',
-              '.github/workflows/e2e-tests-provision-and-run.yaml'
+              '.github/workflows/e2e-tests-provision-and-run.yaml',
+              'debian/control',
+              'debian/rules'
             ) }}
 
       - uses: ./.github/actions/setup-oras
