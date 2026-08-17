@@ -120,4 +120,6 @@ runs:
         artifacts_dir=$(mktemp -d --tmpdir authd-test-artifacts-XXXXXX)
         echo AUTHD_TESTS_ARTIFACTS_PATH="${artifacts_dir}" >> $GITHUB_ENV
 
-        echo ASAN_OPTIONS="log_path=${artifacts_dir}/asan.log:print_stats=true" >> $GITHUB_ENV
+        # Include the executable name in each sanitizer log filename so crashes
+        # in forked PAM clients can be attributed without relying on PIDs alone.
+        echo ASAN_OPTIONS="log_path=${artifacts_dir}/asan.log:log_exe_name=true:print_stats=true" >> $GITHUB_ENV
