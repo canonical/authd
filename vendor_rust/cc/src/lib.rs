@@ -74,7 +74,7 @@
 //!   wrapper via `sccache cc`. This compiler must understand the `-c` flag. For
 //!   certain `TARGET`s, it also is assumed to know about other flags (most
 //!   common is `-fPIC`).
-//!   ccache, distcc, sccache, icecc, cachepot and buildcache are supported,
+//!   ccache, distcc, sccache, icecc, cachepot, buildcache and kache are supported,
 //!   for sccache, simply set `CC` to `sccache cc`.
 //!   For other custom `CC` wrapper, just set `CC_KNOWN_WRAPPER_CUSTOM`
 //!   to the custom wrapper used in `CC`.
@@ -101,8 +101,9 @@
 //! * `RUSTC_WRAPPER` - If set, the specified command will be prefixed to the compiler
 //!   command. This is useful for projects that want to use
 //!   [sccache](https://github.com/mozilla/sccache),
-//!   [buildcache](https://gitlab.com/bits-n-bites/buildcache), or
-//!   [cachepot](https://github.com/paritytech/cachepot).
+//!   [buildcache](https://gitlab.com/bits-n-bites/buildcache),
+//!   [cachepot](https://github.com/paritytech/cachepot), or
+//!   [kache](https://github.com/kunobi-ninja/kache).
 //!
 //! Furthermore, projects using this crate may specify custom environment variables
 //! to be inspected, for example via the `Build::try_flags_from_environment`
@@ -359,6 +360,11 @@ struct CompilerFlag {
     flag: Box<OsStr>,
 }
 
+enum PrefixMapFlag {
+    Macro,
+    Debug,
+}
+
 #[derive(Debug, Default)]
 struct BuildCache {
     apple_sdk_root_cache: RwLock<HashMap<Box<str>, Arc<OsStr>>>,
@@ -419,6 +425,7 @@ pub struct Build {
     shell_escaped_flags: Option<bool>,
     build_cache: Arc<BuildCache>,
     inherit_rustflags: bool,
+    inherit_trim_paths: bool,
     prefer_clang_cl_over_msvc: bool,
 }
 
@@ -548,6 +555,7 @@ impl Build {
             shell_escaped_flags: None,
             build_cache: Arc::default(),
             inherit_rustflags: true,
+            inherit_trim_paths: true,
             prefer_clang_cl_over_msvc: false,
         }
     }
@@ -1379,6 +1387,29 @@ impl Build {
         self
     }
 
+    /// Configure whether cc should automatically inherit path remap rules
+    /// from cargo's [`trim-paths`] profile setting,
+    /// and translate them into `-fmacro-prefix-map`/ `-fdebug-prefix-map` flags.
+    ///
+    /// This option defaults to `true`.
+    ///
+    /// This option doesn't support Windows MSVC cl.exe yet.
+    /// Only clang and GCC are supported.
+    ///
+    /// <div class="warning">
+    ///
+    /// [`trim-paths`] is currently an unstable cargo feature,
+    /// only available on nightly with `-Ztrim-paths`.
+    /// The contract around this option may change as the cargo feature evolves.
+    ///
+    /// </div>
+    ///
+    /// [`trim-paths`]: https://doc.rust-lang.org/nightly/cargo/reference/unstable.html#profile-trim-paths-option
+    pub fn inherit_trim_paths(&mut self, inherit_trim_paths: bool) -> &mut Build {
+        self.inherit_trim_paths = inherit_trim_paths;
+        self
+    }
+
     /// Prefer to use clang-cl over msvc.
     ///
     /// This option defaults to `false`.
@@ -1494,6 +1525,7 @@ impl Build {
                 .cpp(self.cpp)
                 .cuda(self.cuda)
                 .inherit_rustflags(false)
+                .inherit_trim_paths(false)
                 .emit_rerun_if_env_changed(self.emit_rerun_if_env_changed);
             if let Some(target) = &self.target {
                 cfg.target(target);
@@ -1598,6 +1630,12 @@ impl Build {
         self.assemble(lib_name, &dst.join(gnu_lib_name), &objects)?;
 
         let target = self.get_target()?;
+        if target.abi == "pauthtest" {
+            self.cargo_output.print_warning(
+                &"cc-rs should not be used with `pauthtest` target: it only builds \
+                static libraries, while `pauthtest` requires shared objects.",
+            );
+        }
         if target.env == "msvc" {
             let compiler = self.get_base_compiler()?;
             let atlmfc_lib = compiler
@@ -1667,6 +1705,14 @@ impl Build {
                         Path::new(&musl_sysroot).display(),
                     ));
                 }
+            }
+            // Pauthtest needs LLVM's libc++, libc++abi provided by the sysroot.
+            if target.abi == "pauthtest" {
+                let pauthtest_sysroot = self.pauthtest_sysroot()?;
+                self.cargo_output.print_metadata(&format_args!(
+                    "cargo:rustc-flags=-L {}/lib -lc++ -lc++abi",
+                    Path::new(&pauthtest_sysroot).display(),
+                ));
             }
         }
 
@@ -2040,6 +2086,11 @@ impl Build {
             self.add_inherited_rustflags(&mut cmd, &target)?;
         }
 
+        // Add path remap flags inherited from cargo's `-Ztrim-paths`.
+        if self.inherit_trim_paths {
+            self.add_trim_paths_flags(&mut cmd, &target)?;
+        }
+
         // Set flags configured in the builder (do this second-to-last, to allow these to override
         // everything above).
         for flag in self.flags.iter() {
@@ -2176,10 +2227,10 @@ impl Build {
                     }
                 }
 
-                if target.os == "nto" {
+                if target.os == "nto" || target.os == "qnx" {
                     // Select the target with `-V`, see qcc documentation:
-                    // QNX 7.1: https://www.qnx.com/developers/docs/7.1/index.html#com.qnx.doc.neutrino.utilities/topic/q/qcc.html
-                    // QNX 8.0: https://www.qnx.com/developers/docs/8.0/com.qnx.doc.neutrino.utilities/topic/q/qcc.html
+                    // QNX SDP 7.1: https://www.qnx.com/developers/docs/7.1/index.html#com.qnx.doc.neutrino.utilities/topic/q/qcc.html
+                    // QNX SDP 8.0: https://www.qnx.com/developers/docs/8.0/com.qnx.doc.neutrino.utilities/topic/q/qcc.html
                     // This assumes qcc/q++ as compiler, which is currently the only supported compiler for QNX.
                     // See for details: https://github.com/rust-lang/cc-rs/pull/1319
                     let arg = match target.full_arch {
@@ -2213,7 +2264,16 @@ impl Build {
 
         if self.get_force_frame_pointer() {
             let family = cmd.family;
-            family.add_force_frame_pointer(cmd);
+            if let ToolFamily::Gnu | ToolFamily::Clang { .. } = family {
+                cmd.push_cc_arg("-fno-omit-frame-pointer".into());
+                let flag = OsString::from("-mno-omit-leaf-frame-pointer");
+                if self
+                    .is_flag_supported_inner(&flag, cmd, target)
+                    .unwrap_or(false)
+                {
+                    cmd.push_cc_arg(flag);
+                }
+            }
         }
 
         if !cmd.is_like_msvc() {
@@ -2279,6 +2339,34 @@ impl Build {
                             format!("--sysroot={}", Path::new(&musl_sysroot).display()).into(),
                         );
                         cmd.push_cc_arg("-pthread".into());
+                    } else if target.abi == "pauthtest" {
+                        let pauthtest_sysroot = self.pauthtest_sysroot()?;
+                        let pauthtest_resource_dir = self.pauthtest_resource_dir()?;
+                        cmd.push_cc_arg(
+                            format!("--sysroot={}", Path::new(&pauthtest_sysroot).display()).into(),
+                        );
+                        cmd.push_cc_arg(
+                            format!(
+                                "-resource-dir={}",
+                                Path::new(&pauthtest_resource_dir).display()
+                            )
+                            .into(),
+                        );
+                        cmd.push_cc_arg("-march=armv8.3-a+pauth".into());
+                        if self.cpp && self.cpp_set_stdlib.is_none() {
+                            cmd.push_cc_arg("-stdlib=libc++".into());
+                            cmd.push_cc_arg(
+                                format!(
+                                    "-I{}/include/c++/v1",
+                                    Path::new(&pauthtest_sysroot).display()
+                                )
+                                .into(),
+                            );
+
+                            cmd.push_cc_arg(
+                                format!("-L{}/lib", Path::new(&pauthtest_sysroot).display()).into(),
+                            );
+                        }
                     }
                     // Pass `--target` with the LLVM target to configure Clang for cross-compiling.
                     //
@@ -2399,7 +2487,7 @@ impl Build {
                 }
 
                 if target.full_arch.contains("neon") {
-                    cmd.args.push("-mfpu=neon-vfpv4".into());
+                    cmd.args.push("-mfpu=neon".into());
                 }
 
                 if target.full_arch == "armv4t" && target.os == "linux" {
@@ -2444,68 +2532,98 @@ impl Build {
                     cmd.args.push("-Wl,-melf_i386".into());
                 }
 
+                //
+                // Arm Target Details
+                //
+
+                // Set Float ABI for all Arm bare-metal targets using EABIHF
                 if target.arch == "arm" && target.os == "none" && target.abi == "eabihf" {
                     cmd.args.push("-mfloat-abi=hard".into())
                 }
+                // Set -mthumb for all Thumb targets
                 if target.full_arch.starts_with("thumb") {
                     cmd.args.push("-mthumb".into());
                 }
+                // Armv6-M targets (no FPU available)
                 if target.full_arch.starts_with("thumbv6m") {
+                    // ARMv6S-M is an old name for "ARMv6-M with SVC support"
+                    // before SVC support became mandatory. Some versions of GAS care
+                    // about the difference.
                     cmd.args.push("-march=armv6s-m".into());
                 }
+                // Armv7-M targets (no FPU available)
+                if target.full_arch.starts_with("thumbv7m") {
+                    cmd.args.push("-march=armv7-m".into());
+                }
+                // Armv7E-M targets
                 if target.full_arch.starts_with("thumbv7em") {
                     cmd.args.push("-march=armv7e-m".into());
-
                     if target.abi == "eabihf" {
                         cmd.args.push("-mfpu=fpv4-sp-d16".into())
                     }
                 }
-                if target.full_arch.starts_with("thumbv7m") {
-                    cmd.args.push("-march=armv7-m".into());
-                }
+                // Armv8-M Baseline (no FPU available)
                 if target.full_arch.starts_with("thumbv8m.base") {
                     cmd.args.push("-march=armv8-m.base".into());
                 }
+                // Armv8-M Mainline targets
                 if target.full_arch.starts_with("thumbv8m.main") {
                     cmd.args.push("-march=armv8-m.main".into());
-
                     if target.abi == "eabihf" {
                         cmd.args.push("-mfpu=fpv5-sp-d16".into())
                     }
                 }
-                if target.full_arch.starts_with("armebv7r") | target.full_arch.starts_with("armv7r")
+                // ARMv6 targets
+                if target.full_arch.starts_with("armv6")
+                    || (target.full_arch.starts_with("thumbv6")
+                        && !target.full_arch.starts_with("thumbv6m"))
+                {
+                    cmd.args.push("-march=armv6".into());
+                    if target.abi == "eabihf" {
+                        // lowest common denominator FPU
+                        cmd.args.push("-mfpu=vfpv2".into());
+                    }
+                }
+                // ARMv7-R targets
+                if target.full_arch.starts_with("armebv7r")
+                    || target.full_arch.starts_with("armv7r")
+                    || target.full_arch.starts_with("thumbv7r")
                 {
                     if target.full_arch.starts_with("armeb") {
                         cmd.args.push("-mbig-endian".into());
-                    } else {
-                        cmd.args.push("-mlittle-endian".into());
                     }
-
-                    // ARM mode
-                    cmd.args.push("-marm".into());
-
-                    // R Profile
                     cmd.args.push("-march=armv7-r".into());
-
                     if target.abi == "eabihf" {
                         // lowest common denominator FPU
                         // (see Cortex-R4 technical reference manual)
                         cmd.args.push("-mfpu=vfpv3-d16".into())
                     }
                 }
-                if target.full_arch.starts_with("armv7a") {
+                // Armv7-A targets
+                if target.full_arch.starts_with("armv7a")
+                    || target.full_arch.starts_with("thumbv7a")
+                {
                     cmd.args.push("-march=armv7-a".into());
-
                     if target.abi == "eabihf" {
                         // lowest common denominator FPU
                         cmd.args.push("-mfpu=vfpv3-d16".into());
                     }
                 }
+                // Armv8-R targets
+                if target.full_arch.starts_with("armv8r")
+                    || target.full_arch.starts_with("thumbv8r")
+                {
+                    cmd.args.push("-march=armv8-r".into());
+                    if target.abi == "eabihf" {
+                        cmd.args.push("-mfpu=fp-armv8".into())
+                    }
+                }
+
                 if target.arch == "riscv32" || target.arch == "riscv64" {
                     // get the 32i/32imac/32imc/64gc/64imac/... part
                     let arch = &target.full_arch[5..];
                     if arch.starts_with("64") {
-                        if matches!(target.os, "linux" | "freebsd" | "netbsd") {
+                        if matches!(target.os, "linux" | "freebsd" | "netbsd" | "managarm") {
                             cmd.args.push(("-march=rv64gc").into());
                             cmd.args.push("-mabi=lp64d".into());
                         } else {
@@ -2593,6 +2711,136 @@ impl Build {
         let codegen_flags = RustcCodegenFlags::parse(&env)?;
         codegen_flags.cc_flags(self, cmd, target);
         Ok(())
+    }
+
+    /// Translate cargo's `-Ztrim-paths` remap rules into compiler flags.
+    ///
+    /// [`trim-paths`]: https://doc.rust-lang.org/nightly/cargo/reference/unstable.html#profile-trim-paths-option
+    fn add_trim_paths_flags(&self, cmd: &mut Tool, target: &TargetInfo<'_>) -> Result<(), Error> {
+        // Native MSVC has no documented equivalent of the `-f*-prefix-map` flag family.
+        // clang-cl parses Clang driver options when wrapped in `/clang:`.
+        if cmd.is_like_msvc() && !cmd.is_like_clang_cl() {
+            return Ok(());
+        }
+        let scope = match cargo_env_var_os("CARGO_TRIM_PATHS_SCOPE") {
+            Some(scope) => scope,
+            None => return Ok(()),
+        };
+        let remap = match cargo_env_var_os("CARGO_TRIM_PATHS_REMAP") {
+            Some(remap) => remap,
+            None => return Ok(()),
+        };
+
+        // * `macro` scope -> `-fmacro-prefix-map`
+        // * `object` scope -> `-fmacro-prefix-map` + `-fdebug-prefix-map`
+        // * `all` scope -> both
+        // * `diagnostics` and `none` scopes have no C equivalent
+        let mut macro_scope = false;
+        let mut object_scope = false;
+        for scope in scope.to_string_lossy().split(',') {
+            match scope {
+                "all" => {
+                    macro_scope = true;
+                    object_scope = true;
+                    break;
+                }
+                // `__FILE__` and friends
+                "macro" => macro_scope = true,
+                // Everything embedded in object files.
+                // rustc defines this scope as macro + debuginfo.
+                // Both `__FILE__` strings and debug info end up in the object,
+                // so the C analogue must remap both as well.
+                "object" => {
+                    macro_scope = true;
+                    object_scope = true;
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        let macro_scope =
+            macro_scope && self.probe_prefix_map_flag(PrefixMapFlag::Macro, cmd, target);
+        let object_scope =
+            object_scope && self.probe_prefix_map_flag(PrefixMapFlag::Debug, cmd, target);
+
+        if !macro_scope && !object_scope {
+            return Ok(());
+        }
+
+        // clang-cl parses Clang driver options when wrapped in `/clang:`.
+        // <https://clang.llvm.org/docs/UsersManual.html#the-clang-option>
+        let clang_driver = if cmd.is_like_clang_cl() {
+            "/clang:"
+        } else {
+            ""
+        };
+
+        for pair in env::split_paths(&remap) {
+            let pair = pair.as_os_str();
+            if pair.is_empty() {
+                continue;
+            }
+            if macro_scope {
+                let mut flag = OsString::from(clang_driver);
+                flag.push("-fmacro-prefix-map=");
+                flag.push(pair);
+                cmd.push_cc_arg(flag);
+            }
+            if object_scope {
+                let mut flag = OsString::from(clang_driver);
+                flag.push("-fdebug-prefix-map=");
+                flag.push(pair);
+                cmd.push_cc_arg(flag);
+            }
+        }
+        Ok(())
+    }
+
+    /// Check if `-f*-prefix-map` flag is supported.
+    ///
+    /// * `-fdebug-prefix-map`: supported since GCC 4.3 (2008-03), Clang 3.8 (2016-03):
+    ///   * <https://gcc.gnu.org/onlinedocs/gcc-4.3.0/gcc/Debugging-Options.html>
+    ///   * <https://github.com/llvm/llvm-project/commit/436256a71316a1e6ad68ebee8439c88d75>
+    /// * `-fmacro-prefix-map`: supported since GCC 8.1 (2018-05), Clang 10.0 (2020-03)
+    ///   * <https://gcc.gnu.org/onlinedocs/gcc-8.1.0/gcc/Option-Summary.html>
+    ///   * <https://releases.llvm.org/10.0.0/tools/clang/docs/ReleaseNotes.html>
+    fn probe_prefix_map_flag(
+        &self,
+        flag: PrefixMapFlag,
+        cmd: &Tool,
+        target: &TargetInfo<'_>,
+    ) -> bool {
+        let (flag, unsupported_warning) = match flag {
+            PrefixMapFlag::Macro => (
+                "-fmacro-prefix-map",
+                "paths embedded by macros will not be remapped",
+            ),
+            PrefixMapFlag::Debug => (
+                "-fdebug-prefix-map",
+                "paths embedded in debug info will not be remapped",
+            ),
+        };
+        // clang-cl parses Clang driver options when wrapped in `/clang:`.
+        // <https://clang.llvm.org/docs/UsersManual.html#the-clang-option>
+        let flag = if cmd.is_like_clang_cl() {
+            format!("/clang:{flag}")
+        } else {
+            flag.to_owned()
+        };
+        let probe = format!("{flag}=/probe=/probe");
+        let supported = self
+            .is_flag_supported_inner(OsStr::new(&probe), cmd, target)
+            .unwrap_or(false);
+
+        if !supported {
+            self.cargo_output.print_warning(&format_args!(
+                "{flag} is not supported by {:?}, {unsupported_warning}",
+                cmd.path()
+            ));
+        }
+
+        supported
     }
 
     fn msvc_macro_assembler(&self) -> Result<Command, Error> {
@@ -2956,7 +3204,7 @@ impl Build {
             // and many modern illumos distributions today ship GCC as "gcc" without
             // also making it available as "cc".
             Cow::Borrowed(Path::new(gnu))
-        } else if self.prefer_clang() {
+        } else if self.prefer_clang() || target.abi == "pauthtest" {
             self.which(Path::new(clang), None)
                 .map(Cow::Owned)
                 .unwrap_or(fallback)
@@ -3050,7 +3298,7 @@ impl Build {
                     format!("arm-kmc-eabi-{gnu}").into()
                 } else if target.arch == "aarch64" && target.vendor == "kmc" {
                     format!("aarch64-kmc-elf-{gnu}").into()
-                } else if target.os == "nto" {
+                } else if target.os == "nto" || target.os == "qnx" {
                     // See for details: https://github.com/rust-lang/cc-rs/pull/1319
                     if self.cpp { "q++" } else { "qcc" }.into()
                 } else if self.get_is_cross_compile()? {
@@ -3187,6 +3435,23 @@ impl Build {
                 .print_warning(&"GNU compiler is not supported for this target");
         }
 
+        if target.abi == "pauthtest" {
+            match tool.family {
+                ToolFamily::Clang { .. } => {}
+                _ => {
+                    return Err(Error::new(
+                        ErrorKind::ToolNotFound,
+                        format!(
+                            "target '{}' requires a Clang-based toolchain, but found {:?} ({})",
+                            raw_target,
+                            tool.family,
+                            tool.path.display()
+                        ),
+                    ));
+                }
+            }
+        }
+
         Ok(tool)
     }
 
@@ -3195,7 +3460,7 @@ impl Build {
         // No explicit CC wrapper was detected, but check if RUSTC_WRAPPER
         // is defined and is a build accelerator that is compatible with
         // C/C++ compilers (e.g. sccache)
-        const VALID_WRAPPERS: &[&str] = &["sccache", "cachepot", "buildcache"];
+        const VALID_WRAPPERS: &[&str] = &["sccache", "cachepot", "buildcache", "kache"];
 
         let rustc_wrapper = cargo_env_var_os("RUSTC_WRAPPER")?;
         let wrapper_path = Path::new(&rustc_wrapper);
@@ -3252,6 +3517,7 @@ impl Build {
             "icecc",
             "cachepot",
             "buildcache",
+            "kache",
         ];
         let custom_wrapper = self.get_env("CC_KNOWN_WRAPPER_CUSTOM");
         if custom_wrapper.is_some() {
@@ -3304,6 +3570,7 @@ impl Build {
                         || target.os == "aix"
                         || (target.os == "linux" && target.env == "ohos")
                         || target.os == "wasi"
+                        || target.abi == "pauthtest"
                     {
                         Ok(Some(Cow::Borrowed(Path::new("c++"))))
                     } else if target.os == "android" {
@@ -3520,10 +3787,10 @@ impl Build {
                 } else if target.os == "vxworks" {
                     name = format!("wr-{tool}").into();
                     self.cmd(&name)
-                } else if target.os == "nto" {
+                } else if target.os == "nto" || target.os == "qnx" {
                     // Ref: https://www.qnx.com/developers/docs/8.0/com.qnx.doc.neutrino.utilities/topic/a/ar.html
                     name = match target.full_arch {
-                        "i586" => format!("ntox86-{tool}").into(),
+                        "i686" | "i586" => format!("ntox86-{tool}").into(),
                         "x86" | "aarch64" | "x86_64" => {
                             format!("nto{}-{}", target.arch, tool).into()
                         }
@@ -3601,6 +3868,7 @@ impl Build {
                     "aarch64-uwp-windows-gnu" => Some("aarch64-w64-mingw32"),
                     "aarch64-unknown-helenos" => Some("aarch64-helenos"),
                     "aarch64-unknown-linux-gnu" => Some("aarch64-linux-gnu"),
+                    "aarch64_be-unknown-linux-gnu" => Some("aarch64_be-linux-gnu"),
                     "aarch64-unknown-linux-musl" => Some("aarch64-linux-musl"),
                     "aarch64-unknown-linux-relibc" => Some("aarch64-linux-relibc"),
                     "aarch64-unknown-netbsd" => Some("aarch64--netbsd"),
@@ -3708,6 +3976,10 @@ impl Build {
                     "sparc64-unknown-linux-gnu" => Some("sparc64-linux-gnu"),
                     "sparc64-unknown-netbsd" => Some("sparc64--netbsd"),
                     "sparcv9-sun-solaris" => Some("sparcv9-sun-solaris"),
+                    "armv4t-none-eabi" => Some("arm-none-eabi"),
+                    "armv5te-none-eabi" => Some("arm-none-eabi"),
+                    "armv6-none-eabi" => Some("arm-none-eabi"),
+                    "armv6-none-eabihf" => Some("arm-none-eabi"),
                     "armv7a-none-eabi" => Some("arm-none-eabi"),
                     "armv7a-none-eabihf" => Some("arm-none-eabi"),
                     "armebv7r-none-eabi" => Some("arm-none-eabi"),
@@ -3715,6 +3987,14 @@ impl Build {
                     "armv7r-none-eabi" => Some("arm-none-eabi"),
                     "armv7r-none-eabihf" => Some("arm-none-eabi"),
                     "armv8r-none-eabihf" => Some("arm-none-eabi"),
+                    "thumbv4t-none-eabi" => Some("arm-none-eabi"),
+                    "thumbv5te-none-eabi" => Some("arm-none-eabi"),
+                    "thumbv6-none-eabi" => Some("arm-none-eabi"),
+                    "thumbv7a-none-eabi" => Some("arm-none-eabi"),
+                    "thumbv7a-none-eabihf" => Some("arm-none-eabi"),
+                    "thumbv7r-none-eabi" => Some("arm-none-eabi"),
+                    "thumbv7r-none-eabihf" => Some("arm-none-eabi"),
+                    "thumbv8r-none-eabihf" => Some("arm-none-eabi"),
                     "thumbv6m-none-eabi" => Some("arm-none-eabi"),
                     "thumbv7em-none-eabi" => Some("arm-none-eabi"),
                     "thumbv7em-none-eabihf" => Some("arm-none-eabi"),
@@ -4322,6 +4602,36 @@ impl Build {
         }
 
         clang.into()
+    }
+
+    fn pauthtest_sysroot(&self) -> Result<OsString, Error> {
+        if let Some(pauthtest_sysroot) = self.get_env("PAUTHTEST_SYSROOT") {
+            Ok(pauthtest_sysroot)
+        } else {
+            let target = self.get_raw_target()?;
+            Err(Error::new(
+                ErrorKind::EnvVarNotFound,
+                format!(
+                    "Environment variable PAUTHTEST_SYSROOT not defined for the {} target. Please consult target's platform support document for instructions on how to obtain the sysroot and then setup the environment variable PAUTHTEST_SYSROOT.",
+                    target
+                ),
+            ))
+        }
+    }
+
+    fn pauthtest_resource_dir(&self) -> Result<OsString, Error> {
+        if let Some(pauthtest_resource_dir) = self.get_env("PAUTHTEST_RESOURCE_DIR") {
+            Ok(pauthtest_resource_dir)
+        } else {
+            let target = self.get_raw_target()?;
+            Err(Error::new(
+                ErrorKind::EnvVarNotFound,
+                format!(
+                    "Environment variable PAUTHTEST_RESOURCE_DIR not defined for the {} target. Please consult target's platform support document for instructions on how to obtain the sysroot and then setup the environment variable PAUTHTEST_RESOURCE_DIR.",
+                    target
+                ),
+            ))
+        }
     }
 }
 

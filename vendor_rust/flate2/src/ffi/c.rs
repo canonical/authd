@@ -1,7 +1,7 @@
 //! Implementation for C backends.
-use std::cmp;
 use std::fmt;
 use std::marker;
+use std::mem::MaybeUninit;
 use std::os::raw::{c_int, c_uint};
 use std::ptr;
 
@@ -9,7 +9,7 @@ use super::*;
 use crate::mem;
 
 #[derive(Clone, Default)]
-pub struct ErrorMessage(Option<&'static str>);
+pub struct ErrorMessage(pub(crate) Option<&'static str>);
 
 impl ErrorMessage {
     pub fn get(&self) -> Option<&str> {
@@ -55,34 +55,27 @@ impl Default for StreamWrapper {
                     // zlib-ng
                     feature = "zlib-ng",
                     // libz-sys
-                    all(not(feature = "cloudflare_zlib"), not(feature = "zlib-ng"), not(feature = "zlib-rs"))
+                    all(not(feature = "cloudflare_zlib"), not(feature = "zlib-ng"))
                 ))]
                 zalloc: allocator::zalloc,
                 #[cfg(any(
                     // zlib-ng
                     feature = "zlib-ng",
                     // libz-sys
-                    all(not(feature = "cloudflare_zlib"), not(feature = "zlib-ng"), not(feature = "zlib-rs"))
+                    all(not(feature = "cloudflare_zlib"), not(feature = "zlib-ng"))
                 ))]
                 zfree: allocator::zfree,
 
                 #[cfg(
                     // cloudflare-zlib
-                    all(feature = "cloudflare_zlib", not(feature = "zlib-rs"), not(feature = "zlib-ng")),
+                    all(feature = "cloudflare_zlib", not(feature = "zlib-ng")),
                 )]
                 zalloc: Some(allocator::zalloc),
                 #[cfg(
                     // cloudflare-zlib
-                    all(feature = "cloudflare_zlib", not(feature = "zlib-rs"), not(feature = "zlib-ng")),
+                    all(feature = "cloudflare_zlib", not(feature = "zlib-ng")),
                 )]
                 zfree: Some(allocator::zfree),
-
-                // for zlib-rs, it is most efficient to have it provide the allocator.
-                // The libz-rs-sys dependency is configured to use the rust system allocator
-                #[cfg(all(feature = "zlib-rs", not(feature = "zlib-ng")))]
-                zalloc: None,
-                #[cfg(all(feature = "zlib-rs", not(feature = "zlib-ng")))]
-                zfree: None,
             })),
         }
     }
@@ -102,9 +95,9 @@ impl Drop for StreamWrapper {
     // zlib-ng
     feature = "zlib-ng",
     // cloudflare-zlib
-    all(feature = "cloudflare_zlib", not(feature = "zlib-rs"), not(feature = "zlib-ng")),
+    all(feature = "cloudflare_zlib", not(feature = "zlib-ng")),
     // libz-sys
-    all(not(feature = "cloudflare_zlib"), not(feature = "zlib-ng"), not(feature = "zlib-rs")),
+    all(not(feature = "cloudflare_zlib"), not(feature = "zlib-ng")),
 ))]
 mod allocator {
     use super::*;
@@ -226,6 +219,52 @@ pub struct Inflate {
     pub inner: Stream<DirDecompress>,
 }
 
+impl Inflate {
+    unsafe fn decompress_inner(
+        &mut self,
+        input: &[u8],
+        output_ptr: *mut u8,
+        output_len: usize,
+        flush: FlushDecompress,
+    ) -> Result<Status, DecompressError> {
+        let raw = self.inner.stream_wrapper.inner;
+        // SAFETY: The field `inner` must always be accessed as a raw pointer,
+        // since it points to a cyclic structure. No copies of `inner` can be
+        // retained for longer than the lifetime of `self`.
+        unsafe {
+            (*raw).msg = ptr::null_mut();
+            (*raw).next_in = input.as_ptr() as *mut u8;
+            (*raw).avail_in = input.len().min(c_uint::MAX as usize) as c_uint;
+            (*raw).next_out = output_ptr;
+            (*raw).avail_out = output_len.min(c_uint::MAX as usize) as c_uint;
+
+            let rc = mz_inflate(raw, flush as c_int);
+
+            // Unfortunately the total counters provided by zlib might be only
+            // 32 bits wide and overflow while processing large amounts of data.
+            self.inner.total_in += ((*raw).next_in as usize - input.as_ptr() as usize) as u64;
+            self.inner.total_out += ((*raw).next_out as usize - output_ptr as usize) as u64;
+
+            // reset these pointers so we don't accidentally read them later
+            (*raw).next_in = ptr::null_mut();
+            (*raw).avail_in = 0;
+            (*raw).next_out = ptr::null_mut();
+            (*raw).avail_out = 0;
+
+            match rc {
+                MZ_DATA_ERROR | MZ_STREAM_ERROR | MZ_MEM_ERROR => {
+                    mem::decompress_failed(self.inner.msg())
+                }
+                MZ_OK => Ok(Status::Ok),
+                MZ_BUF_ERROR => Ok(Status::BufError),
+                MZ_STREAM_END => Ok(Status::StreamEnd),
+                #[allow(clippy::unnecessary_cast)]
+                MZ_NEED_DICT => mem::decompress_need_dict((*raw).adler as u32),
+                c => panic!("unknown return code: {}", c),
+            }
+        }
+    }
+}
 impl InflateBackend for Inflate {
     fn make(zlib_header: bool, window_bits: u8) -> Self {
         unsafe {
@@ -256,42 +295,15 @@ impl InflateBackend for Inflate {
         output: &mut [u8],
         flush: FlushDecompress,
     ) -> Result<Status, DecompressError> {
-        let raw = self.inner.stream_wrapper.inner;
-        // SAFETY: The field `inner` must always be accessed as a raw pointer,
-        // since it points to a cyclic structure. No copies of `inner` can be
-        // retained for longer than the lifetime of `self`.
-        unsafe {
-            (*raw).msg = ptr::null_mut();
-            (*raw).next_in = input.as_ptr() as *mut u8;
-            (*raw).avail_in = cmp::min(input.len(), c_uint::MAX as usize) as c_uint;
-            (*raw).next_out = output.as_mut_ptr();
-            (*raw).avail_out = cmp::min(output.len(), c_uint::MAX as usize) as c_uint;
-
-            let rc = mz_inflate(raw, flush as c_int);
-
-            // Unfortunately the total counters provided by zlib might be only
-            // 32 bits wide and overflow while processing large amounts of data.
-            self.inner.total_in += ((*raw).next_in as usize - input.as_ptr() as usize) as u64;
-            self.inner.total_out += ((*raw).next_out as usize - output.as_ptr() as usize) as u64;
-
-            // reset these pointers so we don't accidentally read them later
-            (*raw).next_in = ptr::null_mut();
-            (*raw).avail_in = 0;
-            (*raw).next_out = ptr::null_mut();
-            (*raw).avail_out = 0;
-
-            match rc {
-                MZ_DATA_ERROR | MZ_STREAM_ERROR | MZ_MEM_ERROR => {
-                    mem::decompress_failed(self.inner.msg())
-                }
-                MZ_OK => Ok(Status::Ok),
-                MZ_BUF_ERROR => Ok(Status::BufError),
-                MZ_STREAM_END => Ok(Status::StreamEnd),
-                #[allow(clippy::unnecessary_cast)]
-                MZ_NEED_DICT => mem::decompress_need_dict((*raw).adler as u32),
-                c => panic!("unknown return code: {}", c),
-            }
-        }
+        unsafe { self.decompress_inner(input, output.as_mut_ptr(), output.len(), flush) }
+    }
+    fn decompress_uninit(
+        &mut self,
+        input: &[u8],
+        output: &mut [MaybeUninit<u8>],
+        flush: FlushDecompress,
+    ) -> Result<Status, DecompressError> {
+        unsafe { self.decompress_inner(input, output.as_mut_ptr() as *mut _, output.len(), flush) }
     }
 
     fn reset(&mut self, zlib_header: bool) {
@@ -323,6 +335,49 @@ impl Backend for Inflate {
 #[derive(Debug)]
 pub struct Deflate {
     pub inner: Stream<DirCompress>,
+}
+
+impl Deflate {
+    unsafe fn compress_inner(
+        &mut self,
+        input: &[u8],
+        output_ptr: *mut u8,
+        output_len: usize,
+        flush: FlushCompress,
+    ) -> Result<Status, CompressError> {
+        let raw = self.inner.stream_wrapper.inner;
+        // SAFETY: The field `inner` must always be accessed as a raw pointer,
+        // since it points to a cyclic structure. No copies of `inner` can be
+        // retained for longer than the lifetime of `self`.
+        unsafe {
+            (*raw).msg = ptr::null_mut();
+            (*raw).next_in = input.as_ptr() as *mut _;
+            (*raw).avail_in = input.len().min(c_uint::MAX as usize) as c_uint;
+            (*raw).next_out = output_ptr;
+            (*raw).avail_out = output_len.min(c_uint::MAX as usize) as c_uint;
+
+            let rc = mz_deflate(raw, flush as c_int);
+
+            // Unfortunately the total counters provided by zlib might be only
+            // 32 bits wide and overflow while processing large amounts of data.
+
+            self.inner.total_in += ((*raw).next_in as usize - input.as_ptr() as usize) as u64;
+            self.inner.total_out += ((*raw).next_out as usize - output_ptr as usize) as u64;
+            // reset these pointers so we don't accidentally read them later
+            (*raw).next_in = ptr::null_mut();
+            (*raw).avail_in = 0;
+            (*raw).next_out = ptr::null_mut();
+            (*raw).avail_out = 0;
+
+            match rc {
+                MZ_OK => Ok(Status::Ok),
+                MZ_BUF_ERROR => Ok(Status::BufError),
+                MZ_STREAM_END => Ok(Status::StreamEnd),
+                MZ_STREAM_ERROR => mem::compress_failed(self.inner.msg()),
+                c => panic!("unknown return code: {}", c),
+            }
+        }
+    }
 }
 
 impl DeflateBackend for Deflate {
@@ -358,40 +413,16 @@ impl DeflateBackend for Deflate {
         output: &mut [u8],
         flush: FlushCompress,
     ) -> Result<Status, CompressError> {
-        let raw = self.inner.stream_wrapper.inner;
-        // SAFETY: The field `inner` must always be accessed as a raw pointer,
-        // since it points to a cyclic structure. No copies of `inner` can be
-        // retained for longer than the lifetime of `self`.
-        unsafe {
-            (*raw).msg = ptr::null_mut();
-            (*raw).next_in = input.as_ptr() as *mut _;
-            (*raw).avail_in = cmp::min(input.len(), c_uint::MAX as usize) as c_uint;
-            (*raw).next_out = output.as_mut_ptr();
-            (*raw).avail_out = cmp::min(output.len(), c_uint::MAX as usize) as c_uint;
-
-            let rc = mz_deflate(raw, flush as c_int);
-
-            // Unfortunately the total counters provided by zlib might be only
-            // 32 bits wide and overflow while processing large amounts of data.
-
-            self.inner.total_in += ((*raw).next_in as usize - input.as_ptr() as usize) as u64;
-            self.inner.total_out += ((*raw).next_out as usize - output.as_ptr() as usize) as u64;
-            // reset these pointers so we don't accidentally read them later
-            (*raw).next_in = ptr::null_mut();
-            (*raw).avail_in = 0;
-            (*raw).next_out = ptr::null_mut();
-            (*raw).avail_out = 0;
-
-            match rc {
-                MZ_OK => Ok(Status::Ok),
-                MZ_BUF_ERROR => Ok(Status::BufError),
-                MZ_STREAM_END => Ok(Status::StreamEnd),
-                MZ_STREAM_ERROR => mem::compress_failed(self.inner.msg()),
-                c => panic!("unknown return code: {}", c),
-            }
-        }
+        unsafe { self.compress_inner(input, output.as_mut_ptr(), output.len(), flush) }
     }
-
+    fn compress_uninit(
+        &mut self,
+        input: &[u8],
+        output: &mut [MaybeUninit<u8>],
+        flush: FlushCompress,
+    ) -> Result<Status, CompressError> {
+        unsafe { self.compress_inner(input, output.as_mut_ptr() as *mut _, output.len(), flush) }
+    }
     fn reset(&mut self) {
         self.inner.total_in = 0;
         self.inner.total_out = 0;
@@ -424,18 +455,15 @@ mod c_backend {
     #[cfg(feature = "zlib-ng")]
     use libz_ng_sys as libz;
 
-    #[cfg(all(feature = "zlib-rs", not(feature = "zlib-ng")))]
-    use libz_rs_sys as libz;
-
     #[cfg(
         // cloudflare-zlib
-        all(feature = "cloudflare_zlib", not(feature = "zlib-rs"), not(feature = "zlib-ng")),
+        all(feature = "cloudflare_zlib", not(feature = "zlib-ng")),
     )]
     use cloudflare_zlib_sys as libz;
 
     #[cfg(
         // libz-sys
-        all(not(feature = "cloudflare_zlib"), not(feature = "zlib-ng"), not(feature = "zlib-rs")),
+        all(not(feature = "cloudflare_zlib"), not(feature = "zlib-ng")),
     )]
     use libz_sys as libz;
 
@@ -465,13 +493,6 @@ mod c_backend {
 
     pub const MZ_DEFAULT_WINDOW_BITS: c_int = 15;
 
-    #[cfg(feature = "zlib-ng")]
-    const ZLIB_VERSION: &str = "2.1.0.devel\0";
-    #[cfg(all(not(feature = "zlib-ng"), feature = "zlib-rs"))]
-    const ZLIB_VERSION: &str = "1.3.0-zlib-rs-0.5.1\0";
-    #[cfg(not(any(feature = "zlib-ng", feature = "zlib-rs")))]
-    const ZLIB_VERSION: &str = "1.2.8\0";
-
     pub unsafe extern "C" fn mz_deflateInit2(
         stream: *mut mz_stream,
         level: c_int,
@@ -487,7 +508,7 @@ mod c_backend {
             window_bits,
             mem_level,
             strategy,
-            ZLIB_VERSION.as_ptr() as *const c_char,
+            zlibVersion(),
             mem::size_of::<mz_stream>() as c_int,
         )
     }
@@ -495,7 +516,7 @@ mod c_backend {
         libz::inflateInit2_(
             stream,
             window_bits,
-            ZLIB_VERSION.as_ptr() as *const c_char,
+            zlibVersion(),
             mem::size_of::<mz_stream>() as c_int,
         )
     }

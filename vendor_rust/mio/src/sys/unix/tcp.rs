@@ -1,4 +1,3 @@
-use std::convert::TryInto;
 use std::io;
 use std::mem::{size_of, MaybeUninit};
 use std::net::{self, SocketAddr};
@@ -38,8 +37,7 @@ pub(crate) fn connect(socket: &net::TcpStream, addr: SocketAddr) -> io::Result<(
     }
 }
 
-pub(crate) fn listen(socket: &net::TcpListener, backlog: u32) -> io::Result<()> {
-    let backlog = backlog.try_into().unwrap_or(i32::MAX);
+pub(crate) fn listen(socket: &net::TcpListener, backlog: i32) -> io::Result<()> {
     syscall!(listen(socket.as_raw_fd(), backlog))?;
     Ok(())
 }
@@ -75,6 +73,8 @@ pub(crate) fn accept(listener: &net::TcpListener) -> io::Result<(net::TcpStream,
         target_os = "netbsd",
         target_os = "openbsd",
         target_os = "solaris",
+        target_os = "cygwin",
+        target_os = "nuttx",
     ))]
     let stream = {
         syscall!(accept4(
@@ -102,6 +102,8 @@ pub(crate) fn accept(listener: &net::TcpListener) -> io::Result<(net::TcpStream,
         target_os = "vita",
         target_os = "hermit",
         target_os = "nto",
+        target_os = "wasi",
+        target_os = "horizon",
         all(target_arch = "x86", target_os = "android"),
     ))]
     let stream = {
@@ -112,7 +114,7 @@ pub(crate) fn accept(listener: &net::TcpListener) -> io::Result<(net::TcpStream,
         ))
         .map(|socket| unsafe { net::TcpStream::from_raw_fd(socket) })
         .and_then(|s| {
-            #[cfg(not(any(target_os = "espidf", target_os = "vita")))]
+            #[cfg(not(any(target_os = "espidf", target_os = "vita", target_os = "wasi")))]
             syscall!(fcntl(s.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC))?;
 
             // See https://github.com/tokio-rs/mio/issues/1450
@@ -125,6 +127,12 @@ pub(crate) fn accept(listener: &net::TcpListener) -> io::Result<(net::TcpStream,
                 target_os = "nto",
             ))]
             syscall!(fcntl(s.as_raw_fd(), libc::F_SETFL, libc::O_NONBLOCK))?;
+
+            // Once https://github.com/WebAssembly/wasi-libc/pull/742 lands and
+            // makes it into Rust std, we can remove this and switch to using
+            // `fcntl` above.
+            #[cfg(target_os = "wasi")]
+            syscall!(ioctl(s.as_raw_fd(), libc::FIONBIO, &mut 1))?;
 
             Ok(s)
         })

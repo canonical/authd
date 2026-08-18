@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+# 0.5.6
+
+Improve error messages with `#[diagnostic::do_not_recommend]`.
+
+# 0.5.5
+
+Released without changes to fix docs.rs build.
+
+# 0.5.4
+
+- **fixed:** Removed unused `rustversion` dependency ([#3502])
+
+[#3502]: https://github.com/tokio-rs/axum/pull/3502
+
+# 0.5.3
+
+- **added:** `DefaultBodyLimit::apply` for changing the `DefaultBodyLimit` inside extractors.
+  ([#3368])
+- **changed:** Update minimum rust version to 1.78 ([#3412])
+
+[#3368]: https://github.com/tokio-rs/axum/pull/3366
+
 # 0.5.2
 
 - **added:** Implement `Stream::size_hint` for `BodyDataStream` ([#3195])

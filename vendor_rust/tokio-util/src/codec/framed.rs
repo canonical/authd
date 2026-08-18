@@ -41,10 +41,7 @@ pin_project! {
     }
 }
 
-impl<T, U> Framed<T, U>
-where
-    T: AsyncRead + AsyncWrite,
-{
+impl<T, U> Framed<T, U> {
     /// Provides a [`Stream`] and [`Sink`] interface for reading and writing to this
     /// I/O object, using [`Decoder`] and [`Encoder`] to read and write the raw data.
     ///
@@ -127,9 +124,7 @@ where
             },
         }
     }
-}
 
-impl<T, U> Framed<T, U> {
     /// Provides a [`Stream`] and [`Sink`] interface for reading and writing to this
     /// I/O object, using [`Decoder`] and [`Encoder`] to read and write the raw data.
     ///
@@ -377,7 +372,7 @@ pub struct FramedParts<T, U> {
 
     /// This private field allows us to add additional fields in the future in a
     /// backwards compatible way.
-    _priv: (),
+    pub(crate) _priv: (),
 }
 
 impl<T, U> FramedParts<T, U> {

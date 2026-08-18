@@ -189,6 +189,7 @@ use alloc::vec::Vec;
 /// [`DateTime`]: crate::DateTime
 /// [`format::parse()`]: crate::format::parse()
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct StrftimeItems<'a> {
     /// Remaining portion of the string.
     remainder: &'a str,
@@ -253,8 +254,7 @@ impl<'a> StrftimeItems<'a> {
     /// const ITEMS: &[Item<'static>] = &[
     ///     Item::Numeric(Numeric::Year, Pad::Zero),
     ///     Item::Literal("-"),
-    ///     Item::Literal("%"),
-    ///     Item::Literal("Q"),
+    ///     Item::Literal("%Q"),
     /// ];
     /// println!("{:?}", strftime_parser.clone().collect::<Vec<_>>());
     /// assert!(strftime_parser.eq(ITEMS.iter().cloned()));
@@ -425,9 +425,247 @@ impl<'a> StrftimeItems<'a> {
             })
             .collect()
     }
-}
 
-const HAVE_ALTERNATES: &str = "z";
+    fn parse_next_item(&mut self, mut remainder: &'a str) -> Option<(&'a str, Item<'a>)> {
+        use InternalInternal::*;
+        use Item::{Literal, Space};
+        use Numeric::*;
+
+        let (original, mut remainder) = match remainder.chars().next()? {
+            // the next item is a specifier
+            '%' => (remainder, &remainder[1..]),
+
+            // the next item is space
+            c if c.is_whitespace() => {
+                // `%` is not a whitespace, so `c != '%'` is redundant
+                let nextspec =
+                    remainder.find(|c: char| !c.is_whitespace()).unwrap_or(remainder.len());
+                assert!(nextspec > 0);
+                let item = Space(&remainder[..nextspec]);
+                remainder = &remainder[nextspec..];
+                return Some((remainder, item));
+            }
+
+            // the next item is literal
+            _ => {
+                let nextspec = remainder
+                    .find(|c: char| c.is_whitespace() || c == '%')
+                    .unwrap_or(remainder.len());
+                assert!(nextspec > 0);
+                let item = Literal(&remainder[..nextspec]);
+                remainder = &remainder[nextspec..];
+                return Some((remainder, item));
+            }
+        };
+
+        macro_rules! next {
+            () => {
+                match remainder.chars().next() {
+                    Some(x) => {
+                        remainder = &remainder[x.len_utf8()..];
+                        x
+                    }
+                    None => return Some((remainder, self.error(original, remainder))), // premature end of string
+                }
+            };
+        }
+
+        let spec = next!();
+        let pad_override = match spec {
+            '-' => Some(Pad::None),
+            '0' => Some(Pad::Zero),
+            '_' => Some(Pad::Space),
+            _ => None,
+        };
+
+        let is_alternate = spec == '#';
+        let spec = if pad_override.is_some() || is_alternate { next!() } else { spec };
+        if is_alternate && !HAVE_ALTERNATES.contains(spec) {
+            return Some((remainder, self.error(original, remainder)));
+        }
+
+        macro_rules! queue {
+            [$head:expr, $($tail:expr),+ $(,)*] => ({
+                const QUEUE: &'static [Item<'static>] = &[$($tail),+];
+                self.queue = QUEUE;
+                $head
+            })
+        }
+
+        #[cfg(not(feature = "unstable-locales"))]
+        macro_rules! queue_from_slice {
+            ($slice:expr) => {{
+                self.queue = &$slice[1..];
+                $slice[0].clone()
+            }};
+        }
+
+        let item = match spec {
+            'A' => fixed(Fixed::LongWeekdayName),
+            'B' => fixed(Fixed::LongMonthName),
+            'C' => num0(YearDiv100),
+            'D' => {
+                queue![num0(Month), Literal("/"), num0(Day), Literal("/"), num0(YearMod100)]
+            }
+            'F' => queue![num0(Year), Literal("-"), num0(Month), Literal("-"), num0(Day)],
+            'G' => num0(IsoYear),
+            'H' => num0(Hour),
+            'I' => num0(Hour12),
+            'M' => num0(Minute),
+            'P' => fixed(Fixed::LowerAmPm),
+            'R' => queue![num0(Hour), Literal(":"), num0(Minute)],
+            'S' => num0(Second),
+            'T' => {
+                queue![num0(Hour), Literal(":"), num0(Minute), Literal(":"), num0(Second)]
+            }
+            'U' => num0(WeekFromSun),
+            'V' => num0(IsoWeek),
+            'W' => num0(WeekFromMon),
+            #[cfg(not(feature = "unstable-locales"))]
+            'X' => queue_from_slice!(T_FMT),
+            #[cfg(feature = "unstable-locales")]
+            'X' => self.switch_to_locale_str(locales::t_fmt, T_FMT),
+            'Y' => num0(Year),
+            'Z' => fixed(Fixed::TimezoneName),
+            'a' => fixed(Fixed::ShortWeekdayName),
+            'b' | 'h' => fixed(Fixed::ShortMonthName),
+            #[cfg(not(feature = "unstable-locales"))]
+            'c' => queue_from_slice!(D_T_FMT),
+            #[cfg(feature = "unstable-locales")]
+            'c' => self.switch_to_locale_str(locales::d_t_fmt, D_T_FMT),
+            'd' => num0(Day),
+            'e' => nums(Day),
+            'f' => num0(Nanosecond),
+            'g' => num0(IsoYearMod100),
+            'j' => num0(Ordinal),
+            'k' => nums(Hour),
+            'l' => nums(Hour12),
+            'm' => num0(Month),
+            'n' => Space("\n"),
+            'p' => fixed(Fixed::UpperAmPm),
+            'q' => num(Quarter),
+            #[cfg(not(feature = "unstable-locales"))]
+            'r' => queue_from_slice!(T_FMT_AMPM),
+            #[cfg(feature = "unstable-locales")]
+            'r' => {
+                if self.locale.is_some() && locales::t_fmt_ampm(self.locale.unwrap()).is_empty() {
+                    // 12-hour clock not supported by this locale. Switch to 24-hour format.
+                    self.switch_to_locale_str(locales::t_fmt, T_FMT)
+                } else {
+                    self.switch_to_locale_str(locales::t_fmt_ampm, T_FMT_AMPM)
+                }
+            }
+            's' => num(Timestamp),
+            't' => Space("\t"),
+            'u' => num(WeekdayFromMon),
+            'v' => {
+                queue![
+                    nums(Day),
+                    Literal("-"),
+                    fixed(Fixed::ShortMonthName),
+                    Literal("-"),
+                    num0(Year)
+                ]
+            }
+            'w' => num(NumDaysFromSun),
+            #[cfg(not(feature = "unstable-locales"))]
+            'x' => queue_from_slice!(D_FMT),
+            #[cfg(feature = "unstable-locales")]
+            'x' => self.switch_to_locale_str(locales::d_fmt, D_FMT),
+            'y' => num0(YearMod100),
+            'z' => {
+                if is_alternate {
+                    internal_fixed(TimezoneOffsetPermissive)
+                } else {
+                    fixed(Fixed::TimezoneOffset)
+                }
+            }
+            '+' => fixed(Fixed::RFC3339),
+            ':' => {
+                if remainder.starts_with("::z") {
+                    remainder = &remainder[3..];
+                    fixed(Fixed::TimezoneOffsetTripleColon)
+                } else if remainder.starts_with(":z") {
+                    remainder = &remainder[2..];
+                    fixed(Fixed::TimezoneOffsetDoubleColon)
+                } else if remainder.starts_with('z') {
+                    remainder = &remainder[1..];
+                    fixed(Fixed::TimezoneOffsetColon)
+                } else {
+                    self.error(original, remainder)
+                }
+            }
+            '.' => match next!() {
+                '3' => match next!() {
+                    'f' => fixed(Fixed::Nanosecond3),
+                    _ => self.error(original, remainder),
+                },
+                '6' => match next!() {
+                    'f' => fixed(Fixed::Nanosecond6),
+                    _ => self.error(original, remainder),
+                },
+                '9' => match next!() {
+                    'f' => fixed(Fixed::Nanosecond9),
+                    _ => self.error(original, remainder),
+                },
+                'f' => fixed(Fixed::Nanosecond),
+                _ => self.error(original, remainder),
+            },
+            '3' => match next!() {
+                'f' => internal_fixed(Nanosecond3NoDot),
+                _ => self.error(original, remainder),
+            },
+            '6' => match next!() {
+                'f' => internal_fixed(Nanosecond6NoDot),
+                _ => self.error(original, remainder),
+            },
+            '9' => match next!() {
+                'f' => internal_fixed(Nanosecond9NoDot),
+                _ => self.error(original, remainder),
+            },
+            '%' => Literal("%"),
+            _ => self.error(original, remainder),
+        };
+
+        // Adjust `item` if we have any padding modifier.
+        // Not allowed on non-numeric items or on specifiers composed out of multiple
+        // formatting items.
+        if let Some(new_pad) = pad_override {
+            match item {
+                Item::Numeric(ref kind, _pad) if self.queue.is_empty() => {
+                    Some((remainder, Item::Numeric(kind.clone(), new_pad)))
+                }
+                _ => Some((remainder, self.error(original, remainder))),
+            }
+        } else {
+            Some((remainder, item))
+        }
+    }
+
+    fn error<'b>(&mut self, original: &'b str, remainder: &'b str) -> Item<'b> {
+        match self.lenient {
+            false => Item::Error,
+            true => Item::Literal(&original[..original.len() - remainder.len()]),
+        }
+    }
+
+    #[cfg(feature = "unstable-locales")]
+    fn switch_to_locale_str(
+        &mut self,
+        localized_fmt_str: impl Fn(Locale) -> &'static str,
+        fallback: &'static [Item<'static>],
+    ) -> Item<'a> {
+        if let Some(locale) = self.locale {
+            assert!(self.locale_str.is_empty());
+            let (fmt_str, item) = self.parse_next_item(localized_fmt_str(locale)).unwrap();
+            self.locale_str = fmt_str;
+            item
+        } else {
+            self.queue = &fallback[1..];
+            fallback[0].clone()
+        }
+    }
+}
 
 impl<'a> Iterator for StrftimeItems<'a> {
     type Item = Item<'a>;
@@ -454,330 +692,46 @@ impl<'a> Iterator for StrftimeItems<'a> {
     }
 }
 
-impl<'a> StrftimeItems<'a> {
-    fn error<'b>(
-        &mut self,
-        original: &'b str,
-        error_len: &mut usize,
-        ch: Option<char>,
-    ) -> (&'b str, Item<'b>) {
-        if !self.lenient {
-            return (&original[*error_len..], Item::Error);
-        }
+static D_FMT: &[Item<'static>] = &[
+    num0(Numeric::Month),
+    Item::Literal("/"),
+    num0(Numeric::Day),
+    Item::Literal("/"),
+    num0(Numeric::YearMod100),
+];
+static D_T_FMT: &[Item<'static>] = &[
+    fixed(Fixed::ShortWeekdayName),
+    Item::Space(" "),
+    fixed(Fixed::ShortMonthName),
+    Item::Space(" "),
+    nums(Numeric::Day),
+    Item::Space(" "),
+    num0(Numeric::Hour),
+    Item::Literal(":"),
+    num0(Numeric::Minute),
+    Item::Literal(":"),
+    num0(Numeric::Second),
+    Item::Space(" "),
+    num0(Numeric::Year),
+];
+static T_FMT: &[Item<'static>] = &[
+    num0(Numeric::Hour),
+    Item::Literal(":"),
+    num0(Numeric::Minute),
+    Item::Literal(":"),
+    num0(Numeric::Second),
+];
+static T_FMT_AMPM: &[Item<'static>] = &[
+    num0(Numeric::Hour12),
+    Item::Literal(":"),
+    num0(Numeric::Minute),
+    Item::Literal(":"),
+    num0(Numeric::Second),
+    Item::Space(" "),
+    fixed(Fixed::UpperAmPm),
+];
 
-        if let Some(c) = ch {
-            *error_len -= c.len_utf8();
-        }
-        (&original[*error_len..], Item::Literal(&original[..*error_len]))
-    }
-
-    fn parse_next_item(&mut self, mut remainder: &'a str) -> Option<(&'a str, Item<'a>)> {
-        use InternalInternal::*;
-        use Item::{Literal, Space};
-        use Numeric::*;
-
-        static D_FMT: &[Item<'static>] =
-            &[num0(Month), Literal("/"), num0(Day), Literal("/"), num0(YearMod100)];
-        static D_T_FMT: &[Item<'static>] = &[
-            fixed(Fixed::ShortWeekdayName),
-            Space(" "),
-            fixed(Fixed::ShortMonthName),
-            Space(" "),
-            nums(Day),
-            Space(" "),
-            num0(Hour),
-            Literal(":"),
-            num0(Minute),
-            Literal(":"),
-            num0(Second),
-            Space(" "),
-            num0(Year),
-        ];
-        static T_FMT: &[Item<'static>] =
-            &[num0(Hour), Literal(":"), num0(Minute), Literal(":"), num0(Second)];
-        static T_FMT_AMPM: &[Item<'static>] = &[
-            num0(Hour12),
-            Literal(":"),
-            num0(Minute),
-            Literal(":"),
-            num0(Second),
-            Space(" "),
-            fixed(Fixed::UpperAmPm),
-        ];
-
-        match remainder.chars().next() {
-            // we are done
-            None => None,
-
-            // the next item is a specifier
-            Some('%') => {
-                let original = remainder;
-                remainder = &remainder[1..];
-                let mut error_len = 0;
-                if self.lenient {
-                    error_len += 1;
-                }
-
-                macro_rules! next {
-                    () => {
-                        match remainder.chars().next() {
-                            Some(x) => {
-                                remainder = &remainder[x.len_utf8()..];
-                                if self.lenient {
-                                    error_len += x.len_utf8();
-                                }
-                                x
-                            }
-                            None => return Some(self.error(original, &mut error_len, None)), // premature end of string
-                        }
-                    };
-                }
-
-                let spec = next!();
-                let pad_override = match spec {
-                    '-' => Some(Pad::None),
-                    '0' => Some(Pad::Zero),
-                    '_' => Some(Pad::Space),
-                    _ => None,
-                };
-                let is_alternate = spec == '#';
-                let spec = if pad_override.is_some() || is_alternate { next!() } else { spec };
-                if is_alternate && !HAVE_ALTERNATES.contains(spec) {
-                    return Some(self.error(original, &mut error_len, Some(spec)));
-                }
-
-                macro_rules! queue {
-                    [$head:expr, $($tail:expr),+ $(,)*] => ({
-                        const QUEUE: &'static [Item<'static>] = &[$($tail),+];
-                        self.queue = QUEUE;
-                        $head
-                    })
-                }
-                #[cfg(not(feature = "unstable-locales"))]
-                macro_rules! queue_from_slice {
-                    ($slice:expr) => {{
-                        self.queue = &$slice[1..];
-                        $slice[0].clone()
-                    }};
-                }
-
-                let item = match spec {
-                    'A' => fixed(Fixed::LongWeekdayName),
-                    'B' => fixed(Fixed::LongMonthName),
-                    'C' => num0(YearDiv100),
-                    'D' => {
-                        queue![num0(Month), Literal("/"), num0(Day), Literal("/"), num0(YearMod100)]
-                    }
-                    'F' => queue![num0(Year), Literal("-"), num0(Month), Literal("-"), num0(Day)],
-                    'G' => num0(IsoYear),
-                    'H' => num0(Hour),
-                    'I' => num0(Hour12),
-                    'M' => num0(Minute),
-                    'P' => fixed(Fixed::LowerAmPm),
-                    'R' => queue![num0(Hour), Literal(":"), num0(Minute)],
-                    'S' => num0(Second),
-                    'T' => {
-                        queue![num0(Hour), Literal(":"), num0(Minute), Literal(":"), num0(Second)]
-                    }
-                    'U' => num0(WeekFromSun),
-                    'V' => num0(IsoWeek),
-                    'W' => num0(WeekFromMon),
-                    #[cfg(not(feature = "unstable-locales"))]
-                    'X' => queue_from_slice!(T_FMT),
-                    #[cfg(feature = "unstable-locales")]
-                    'X' => self.switch_to_locale_str(locales::t_fmt, T_FMT),
-                    'Y' => num0(Year),
-                    'Z' => fixed(Fixed::TimezoneName),
-                    'a' => fixed(Fixed::ShortWeekdayName),
-                    'b' | 'h' => fixed(Fixed::ShortMonthName),
-                    #[cfg(not(feature = "unstable-locales"))]
-                    'c' => queue_from_slice!(D_T_FMT),
-                    #[cfg(feature = "unstable-locales")]
-                    'c' => self.switch_to_locale_str(locales::d_t_fmt, D_T_FMT),
-                    'd' => num0(Day),
-                    'e' => nums(Day),
-                    'f' => num0(Nanosecond),
-                    'g' => num0(IsoYearMod100),
-                    'j' => num0(Ordinal),
-                    'k' => nums(Hour),
-                    'l' => nums(Hour12),
-                    'm' => num0(Month),
-                    'n' => Space("\n"),
-                    'p' => fixed(Fixed::UpperAmPm),
-                    'q' => num(Quarter),
-                    #[cfg(not(feature = "unstable-locales"))]
-                    'r' => queue_from_slice!(T_FMT_AMPM),
-                    #[cfg(feature = "unstable-locales")]
-                    'r' => {
-                        if self.locale.is_some()
-                            && locales::t_fmt_ampm(self.locale.unwrap()).is_empty()
-                        {
-                            // 12-hour clock not supported by this locale. Switch to 24-hour format.
-                            self.switch_to_locale_str(locales::t_fmt, T_FMT)
-                        } else {
-                            self.switch_to_locale_str(locales::t_fmt_ampm, T_FMT_AMPM)
-                        }
-                    }
-                    's' => num(Timestamp),
-                    't' => Space("\t"),
-                    'u' => num(WeekdayFromMon),
-                    'v' => {
-                        queue![
-                            nums(Day),
-                            Literal("-"),
-                            fixed(Fixed::ShortMonthName),
-                            Literal("-"),
-                            num0(Year)
-                        ]
-                    }
-                    'w' => num(NumDaysFromSun),
-                    #[cfg(not(feature = "unstable-locales"))]
-                    'x' => queue_from_slice!(D_FMT),
-                    #[cfg(feature = "unstable-locales")]
-                    'x' => self.switch_to_locale_str(locales::d_fmt, D_FMT),
-                    'y' => num0(YearMod100),
-                    'z' => {
-                        if is_alternate {
-                            internal_fixed(TimezoneOffsetPermissive)
-                        } else {
-                            fixed(Fixed::TimezoneOffset)
-                        }
-                    }
-                    '+' => fixed(Fixed::RFC3339),
-                    ':' => {
-                        if remainder.starts_with("::z") {
-                            remainder = &remainder[3..];
-                            fixed(Fixed::TimezoneOffsetTripleColon)
-                        } else if remainder.starts_with(":z") {
-                            remainder = &remainder[2..];
-                            fixed(Fixed::TimezoneOffsetDoubleColon)
-                        } else if remainder.starts_with('z') {
-                            remainder = &remainder[1..];
-                            fixed(Fixed::TimezoneOffsetColon)
-                        } else {
-                            self.error(original, &mut error_len, None).1
-                        }
-                    }
-                    '.' => match next!() {
-                        '3' => match next!() {
-                            'f' => fixed(Fixed::Nanosecond3),
-                            c => {
-                                let res = self.error(original, &mut error_len, Some(c));
-                                remainder = res.0;
-                                res.1
-                            }
-                        },
-                        '6' => match next!() {
-                            'f' => fixed(Fixed::Nanosecond6),
-                            c => {
-                                let res = self.error(original, &mut error_len, Some(c));
-                                remainder = res.0;
-                                res.1
-                            }
-                        },
-                        '9' => match next!() {
-                            'f' => fixed(Fixed::Nanosecond9),
-                            c => {
-                                let res = self.error(original, &mut error_len, Some(c));
-                                remainder = res.0;
-                                res.1
-                            }
-                        },
-                        'f' => fixed(Fixed::Nanosecond),
-                        c => {
-                            let res = self.error(original, &mut error_len, Some(c));
-                            remainder = res.0;
-                            res.1
-                        }
-                    },
-                    '3' => match next!() {
-                        'f' => internal_fixed(Nanosecond3NoDot),
-                        c => {
-                            let res = self.error(original, &mut error_len, Some(c));
-                            remainder = res.0;
-                            res.1
-                        }
-                    },
-                    '6' => match next!() {
-                        'f' => internal_fixed(Nanosecond6NoDot),
-                        c => {
-                            let res = self.error(original, &mut error_len, Some(c));
-                            remainder = res.0;
-                            res.1
-                        }
-                    },
-                    '9' => match next!() {
-                        'f' => internal_fixed(Nanosecond9NoDot),
-                        c => {
-                            let res = self.error(original, &mut error_len, Some(c));
-                            remainder = res.0;
-                            res.1
-                        }
-                    },
-                    '%' => Literal("%"),
-                    c => {
-                        let res = self.error(original, &mut error_len, Some(c));
-                        remainder = res.0;
-                        res.1
-                    }
-                };
-
-                // Adjust `item` if we have any padding modifier.
-                // Not allowed on non-numeric items or on specifiers composed out of multiple
-                // formatting items.
-                if let Some(new_pad) = pad_override {
-                    match item {
-                        Item::Numeric(ref kind, _pad) if self.queue.is_empty() => {
-                            Some((remainder, Item::Numeric(kind.clone(), new_pad)))
-                        }
-                        _ => Some(self.error(original, &mut error_len, None)),
-                    }
-                } else {
-                    Some((remainder, item))
-                }
-            }
-
-            // the next item is space
-            Some(c) if c.is_whitespace() => {
-                // `%` is not a whitespace, so `c != '%'` is redundant
-                let nextspec =
-                    remainder.find(|c: char| !c.is_whitespace()).unwrap_or(remainder.len());
-                assert!(nextspec > 0);
-                let item = Space(&remainder[..nextspec]);
-                remainder = &remainder[nextspec..];
-                Some((remainder, item))
-            }
-
-            // the next item is literal
-            _ => {
-                let nextspec = remainder
-                    .find(|c: char| c.is_whitespace() || c == '%')
-                    .unwrap_or(remainder.len());
-                assert!(nextspec > 0);
-                let item = Literal(&remainder[..nextspec]);
-                remainder = &remainder[nextspec..];
-                Some((remainder, item))
-            }
-        }
-    }
-
-    #[cfg(feature = "unstable-locales")]
-    fn switch_to_locale_str(
-        &mut self,
-        localized_fmt_str: impl Fn(Locale) -> &'static str,
-        fallback: &'static [Item<'static>],
-    ) -> Item<'a> {
-        if let Some(locale) = self.locale {
-            assert!(self.locale_str.is_empty());
-            let (fmt_str, item) = self.parse_next_item(localized_fmt_str(locale)).unwrap();
-            self.locale_str = fmt_str;
-            item
-        } else {
-            self.queue = &fallback[1..];
-            fallback[0].clone()
-        }
-    }
-}
+const HAVE_ALTERNATES: &str = "z";
 
 #[cfg(test)]
 mod tests {
@@ -794,7 +748,7 @@ mod tests {
     fn test_strftime_items() {
         fn parse_and_collect(s: &str) -> Vec<Item<'_>> {
             // map any error into `[Item::Error]`. useful for easy testing.
-            eprintln!("test_strftime_items: parse_and_collect({:?})", s);
+            eprintln!("test_strftime_items: parse_and_collect({s:?})");
             let items = StrftimeItems::new(s);
             let items = items.map(|spec| if spec == Item::Error { None } else { Some(spec) });
             items.collect::<Option<Vec<_>>>().unwrap_or_else(|| vec![Item::Error])
@@ -1245,5 +1199,19 @@ mod tests {
             &dt.format_with_items(fmt_items.iter()).to_string(),
             "2014-05-07T12:34:56+0000%Q%.2f%%"
         );
+    }
+
+    /// Regression test for https://github.com/chronotope/chrono/issues/1725
+    #[test]
+    #[cfg(any(feature = "alloc", feature = "std"))]
+    fn test_finite() {
+        let mut i = 0;
+        for item in StrftimeItems::new("%2f") {
+            println!("{:?}", item);
+            i += 1;
+            if i > 10 {
+                panic!("infinite loop");
+            }
+        }
     }
 }

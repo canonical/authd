@@ -13,7 +13,7 @@
 edition = "2018"
 rust-version = "1.65.0"
 name = "tracing-core"
-version = "0.1.34"
+version = "0.1.36"
 authors = ["Tokio Contributors <team@tokio.rs>"]
 build = false
 autolib = false
@@ -42,13 +42,13 @@ resolver = "2"
 
 [package.metadata.docs.rs]
 all-features = true
-rustc-args = [
-    "--cfg",
-    "tracing_unstable",
-]
 rustdoc-args = [
     "--cfg",
     "docsrs",
+    "--cfg",
+    "tracing_unstable",
+]
+rustc-args = [
     "--cfg",
     "tracing_unstable",
 ]

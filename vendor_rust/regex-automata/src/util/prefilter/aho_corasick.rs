@@ -70,7 +70,7 @@ impl AhoCorasick {
             let ac = match result {
                 Ok(ac) => ac,
                 Err(_err) => {
-                    debug!("aho-corasick prefilter failed to build: {}", _err);
+                    debug!("aho-corasick prefilter failed to build: {_err}");
                     return None;
                 }
             };
@@ -80,6 +80,10 @@ impl AhoCorasick {
 }
 
 impl PrefilterI for AhoCorasick {
+    fn name(&self) -> &'static str {
+        "aho-corasick"
+    }
+
     fn find(&self, haystack: &[u8], span: Span) -> Option<Span> {
         #[cfg(not(feature = "perf-literal-multisubstring"))]
         {

@@ -13,7 +13,7 @@
 edition = "2021"
 rust-version = "1.74"
 name = "hostname"
-version = "0.4.1"
+version = "0.4.2"
 build = false
 autolib = false
 autobins = false
@@ -32,7 +32,7 @@ categories = [
     "os",
 ]
 license = "MIT"
-repository = "https://github.com/svartalf/hostname"
+repository = "https://github.com/djc/hostname"
 
 [package.metadata.docs.rs]
 features = ["set"]
@@ -64,17 +64,17 @@ path = "tests/version.rs"
 [dependencies.cfg-if]
 version = "1"
 
+[dev-dependencies.similar-asserts]
+version = "1.6.1"
+
 [dev-dependencies.version-sync]
 version = "0.9"
+
+[dev-dependencies.windows-bindgen]
+version = "0.65"
 
 [target.'cfg(any(unix, target_os = "redox"))'.dependencies.libc]
 version = "0.2"
 
 [target.'cfg(target_os = "windows")'.dependencies.windows-link]
-version = "0.1.1"
-
-[target.'cfg(target_os = "windows")'.dev-dependencies.similar-asserts]
-version = "1.6.1"
-
-[target.'cfg(target_os = "windows")'.dev-dependencies.windows-bindgen]
-version = "0.61"
+version = "0.2"

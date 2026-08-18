@@ -11,9 +11,9 @@
 
 [package]
 edition = "2021"
-rust-version = "1.61"
+rust-version = "1.71"
 name = "syn"
-version = "2.0.106"
+version = "3.0.3"
 authors = ["David Tolnay <dtolnay@gmail.com>"]
 build = false
 include = [
@@ -49,6 +49,7 @@ all-features = true
 targets = ["x86_64-unknown-linux-gnu"]
 rustdoc-args = [
     "--generate-link-to-definition",
+    "--generate-macro-expansion",
     "--extend-css=src/gen/token.css",
     "--extern-html-root-url=core=https://doc.rust-lang.org",
     "--extern-html-root-url=alloc=https://doc.rust-lang.org",
@@ -97,10 +98,6 @@ name = "regression"
 path = "tests/regression.rs"
 
 [[test]]
-name = "test_asyncness"
-path = "tests/test_asyncness.rs"
-
-[[test]]
 name = "test_attribute"
 path = "tests/test_attribute.rs"
 
@@ -127,10 +124,6 @@ path = "tests/test_ident.rs"
 [[test]]
 name = "test_item"
 path = "tests/test_item.rs"
-
-[[test]]
-name = "test_iterators"
-path = "tests/test_iterators.rs"
 
 [[test]]
 name = "test_lit"
@@ -163,6 +156,10 @@ path = "tests/test_path.rs"
 [[test]]
 name = "test_precedence"
 path = "tests/test_precedence.rs"
+
+[[test]]
+name = "test_punctuated"
+path = "tests/test_punctuated.rs"
 
 [[test]]
 name = "test_receiver"
@@ -261,7 +258,7 @@ version = "1"
 version = "1"
 
 [target."cfg(not(miri))".dev-dependencies.reqwest]
-version = "0.12"
+version = "0.13"
 features = ["blocking"]
 
 [target."cfg(not(miri))".dev-dependencies.tar]

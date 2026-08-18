@@ -13,7 +13,7 @@
 edition = "2021"
 rust-version = "1.62.0"
 name = "iana-time-zone"
-version = "0.1.63"
+version = "0.1.65"
 authors = [
     "Andrew Straw <strawman@astraw.com>",
     "René Kijewski <rene.kijewski@fu-berlin.de>",
@@ -87,7 +87,7 @@ version = "0.1.5"
 version = "0.1.1"
 
 [target.'cfg(target_os = "windows")'.dependencies.windows-core]
-version = ">=0.56, <=0.61"
+version = ">=0.56, <=0.62"
 
 [target.'cfg(target_vendor = "apple")'.dependencies.core-foundation-sys]
 version = "0.8.6"

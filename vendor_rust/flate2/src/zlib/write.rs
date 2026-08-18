@@ -129,7 +129,7 @@ impl<W: Write> ZlibEncoder<W> {
     ///
     /// This will flush the underlying data stream and then return the contained
     /// writer if the flush succeeded.
-    /// The compressed stream will not closed but only flushed. This
+    /// The compressed stream will not be closed but only flushed. This
     /// means that obtained byte array can by extended by another deflated
     /// stream. To close the stream add the two bytes 0x3 and 0x0.
     ///
@@ -360,7 +360,7 @@ mod tests {
     fn decode_extra_data() {
         let compressed = {
             let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
-            e.write(STR.as_ref()).unwrap();
+            e.write_all(STR.as_ref()).unwrap();
             let mut b = e.finish().unwrap();
             b.push(b'x');
             b

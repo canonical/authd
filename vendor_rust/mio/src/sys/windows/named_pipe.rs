@@ -7,8 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::{fmt, mem, slice};
 
 use windows_sys::Win32::Foundation::{
-    ERROR_BROKEN_PIPE, ERROR_IO_INCOMPLETE, ERROR_IO_PENDING, ERROR_NO_DATA, ERROR_PIPE_CONNECTED,
-    ERROR_PIPE_LISTENING, HANDLE, INVALID_HANDLE_VALUE,
+    ERROR_BROKEN_PIPE, ERROR_IO_INCOMPLETE, ERROR_IO_PENDING, ERROR_MORE_DATA, ERROR_NO_DATA,
+    ERROR_PIPE_CONNECTED, ERROR_PIPE_LISTENING, HANDLE, INVALID_HANDLE_VALUE,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     ReadFile, WriteFile, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OVERLAPPED, PIPE_ACCESS_DUPLEX,
@@ -423,6 +423,12 @@ impl NamedPipe {
             return Err(would_block());
         }
 
+        // If `connect_overlapped` does not complete immediately then we need
+        // to pass a reference to `self.inner` to the completion handler.
+        // We need to increase the reference count here because `connect_done`
+        // could be called as soon as we call `connect_overlapped`.
+        let inner_for_completion = self.inner.clone();
+
         // Now that we've flagged ourselves in the connecting state, issue the
         // connection attempt. Afterwards interpret the return value and set
         // internal state accordingly.
@@ -448,7 +454,7 @@ impl NamedPipe {
             // `connect_done` function will "reify" this forgotten pointer to
             // drop the refcount on the other side.
             Ok(false) => {
-                mem::forget(self.inner.clone());
+                mem::forget(inner_for_completion);
                 Err(would_block())
             }
 
@@ -602,7 +608,7 @@ impl<'a> Write for &'a NamedPipe {
         match Inner::maybe_schedule_write(&self.inner, owned_buf, 0, &mut io)? {
             // Some bytes are written immediately
             Some(n) => Ok(n),
-            // Write operation is anqueued for whole buffer
+            // Write operation is enqueued for whole buffer
             None => Ok(buf.len()),
         }
     }
@@ -705,10 +711,13 @@ impl Inner {
     /// Schedules a read to happen in the background, executing an overlapped
     /// operation.
     ///
-    /// This function returns `true` if a normal error happens or if the read
-    /// is scheduled in the background. If the pipe is no longer connected
-    /// (ERROR_PIPE_LISTENING) then `false` is returned and no read is
-    /// scheduled.
+    /// This function returns `true` if either of the following conditions are met:
+    /// * A normal error happens
+    /// * The read is scheduled in the background
+    /// * Data is already available to be read (ERROR_MORE_DATA)
+    ///
+    /// If the pipe is no longer connected (ERROR_PIPE_LISTENING) then `false` is
+    /// returned and no read is scheduled.
     fn schedule_read(me: &Arc<Inner>, io: &mut Io, events: Option<&mut Vec<Event>>) -> bool {
         // Check to see if a read is already scheduled/completed
         match io.read {
@@ -735,6 +744,20 @@ impl Inner {
             // If ERROR_PIPE_LISTENING happens then it's not a real read error,
             // we just need to wait for a connect.
             Err(ref e) if e.raw_os_error() == Some(ERROR_PIPE_LISTENING as i32) => false,
+
+            // If ERROR_MORE_DATA is returned, it means the slice of unused capacity of the
+            // buffer provided is less than the amount of data available to be read. So
+            // prioritize draining the buffer before scheduling a new read.
+            //
+            // Return `true` to indicate that an overlapped read was scheduled "successfully",
+            // without actually scheduling it. Instead, update `io.read` to `State::Ok(buf, 0)`
+            // to ensure that the next `std::io::Read::read` call is presented still with the
+            // unread data to read from.
+            Err(ref e) if e.raw_os_error() == Some(ERROR_MORE_DATA as i32) => {
+                io.read = State::Ok(buf, 0);
+                mem::forget(me.clone());
+                true
+            }
 
             // If some other error happened, though, we're now readable to give
             // out the error.
@@ -872,16 +895,36 @@ fn read_done(status: &OVERLAPPED_ENTRY, events: Option<&mut Vec<Event>>) {
     // `schedule_read` above.
     let me = unsafe { Arc::from_raw(Inner::ptr_from_read_overlapped(status.overlapped())) };
 
-    // Move from the `Pending` to `Ok` state.
     let mut io = me.io.lock().unwrap();
     let mut buf = match mem::replace(&mut io.read, State::None) {
+        State::Ok(buf, pos) => {
+            io.read = State::Ok(buf, pos);
+
+            // Flag readiness that we have undelivered data to be read.
+            io.notify_readable(&me, events);
+            return;
+        }
         State::Pending(buf, _) => buf,
-        _ => unreachable!(),
+        State::Err(e) => {
+            io.read = State::Err(e);
+
+            // Flag readiness that the error needs to be delivered.
+            io.notify_readable(&me, events);
+            return;
+        }
+        State::None => unreachable!(),
     };
     unsafe {
         match me.result(status.overlapped()) {
             Ok(n) => {
                 debug_assert_eq!(status.bytes_transferred() as usize, n);
+                buf.set_len(status.bytes_transferred() as usize);
+                io.read = State::Ok(buf, 0);
+            }
+            // This is non-fatal. The buffer was simply too small for the entire message.
+            // Deliver the bytes we got, and if the caller wants to read the rest of the
+            // message, they can initiate another read.
+            Err(e) if e.raw_os_error() == Some(ERROR_MORE_DATA as i32) => {
                 buf.set_len(status.bytes_transferred() as usize);
                 io.read = State::Ok(buf, 0);
             }
@@ -909,13 +952,21 @@ fn write_done(status: &OVERLAPPED_ENTRY, events: Option<&mut Vec<Event>>) {
     let mut io = me.io.lock().unwrap();
     let (buf, pos) = match mem::replace(&mut io.write, State::None) {
         // `Ok` here means, that the operation was completed immediately
-        // `bytes_transferred` is already reported to a client
+        // `bytes_transferred` is already reported to a client.
+        // Hence, we don't reset the state to `Ok` but leave it in `None`.
         State::Ok(..) => {
             io.notify_writable(&me, events);
             return;
         }
         State::Pending(buf, pos) => (buf, pos),
-        _ => unreachable!(),
+        State::Err(e) => {
+            io.write = State::Err(e);
+
+            // Flag readiness that the error needs to be delivered.
+            io.notify_writable(&me, events);
+            return;
+        }
+        State::None => unreachable!(),
     };
 
     unsafe {

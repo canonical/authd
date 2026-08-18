@@ -172,8 +172,7 @@ impl fmt::Display for TimestampError {
             TimestampError::OutOfSystemRange(timestamp) => {
                 write!(
                     f,
-                    "{} is not representable as a `SystemTime` because it is out of range",
-                    timestamp
+                    "{timestamp} is not representable as a `SystemTime` because it is out of range",
                 )
             }
             TimestampError::ParseFailure => {
@@ -186,8 +185,7 @@ impl fmt::Display for TimestampError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for TimestampError {}
+impl core::error::Error for TimestampError {}
 
 #[cfg(feature = "std")]
 impl TryFrom<Timestamp> for std::time::SystemTime {
@@ -275,7 +273,7 @@ mod tests {
         // Representative tests for the case of timestamps before the UTC Epoch time:
         // validate the expected behaviour that "negative second values with fractions
         // must still have non-negative nanos values that count forward in time"
-        // https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#google.protobuf.Timestamp
+        // https://protobuf.dev/reference/protobuf/google.protobuf/#timestamp
         //
         // To ensure cross-platform compatibility, all nanosecond values in these
         // tests are in minimum 100 ns increments.  This does not affect the general

@@ -59,9 +59,8 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.74
           targets: ${{ matrix.target }}
           components: rustfmt
       - uses: taiki-e/install-action@v2
@@ -119,9 +118,8 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.74
           targets: ${{ matrix.target }}
       - uses: taiki-e/install-action@v2
         with:
@@ -147,9 +145,8 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.74
           targets: ${{ matrix.target }}
       - uses: taiki-e/install-action@v2
         with:
@@ -205,14 +202,6 @@ jobs:
           - os: ubuntu-latest
             target: i686-unknown-linux-musl
           - os: ubuntu-latest
-            target: mips-unknown-linux-musl
-          - os: ubuntu-latest
-            target: mips64-unknown-linux-muslabi64
-          - os: ubuntu-latest
-            target: mips64el-unknown-linux-muslabi64
-          - os: ubuntu-latest
-            target: mipsel-unknown-linux-musl
-          - os: ubuntu-latest
             target: sparc64-unknown-linux-gnu
           - os: ubuntu-latest
             target: sparcv9-sun-solaris
@@ -229,9 +218,8 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.74
           targets: ${{ matrix.target }}
       - uses: taiki-e/install-action@v2
         with:
@@ -259,9 +247,8 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.74
           targets: ${{ matrix.target }}
       - uses: taiki-e/install-action@v2
         with:
@@ -270,6 +257,21 @@ jobs:
         run: |
           cross build --locked --target=${{ matrix.target }}
 
-# TODO: Tier 3
-# - x86_64-unknown-dragonfly
-# And other targets that have `std` compiled
+  msrv:
+    name: MSRV
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+          - os: macos-latest
+          - os: windows-latest
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v1
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.74
+      - name: Check MSRV
+        run: cargo check --locked --lib --all-features

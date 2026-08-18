@@ -299,8 +299,7 @@ impl DFA<Vec<u8>> {
             );
             assert!(
                 transition_len <= 257,
-                "expected transition length {} to be <= 257",
-                transition_len,
+                "expected transition length {transition_len} to be <= 257",
             );
 
             // Fill in the transition length.
@@ -394,6 +393,8 @@ impl DFA<Vec<u8>> {
                 new_state.set_next_at(i, next);
             }
         }
+        new.tt.sparse.shrink_to_fit();
+        new.st.table.shrink_to_fit();
         debug!(
             "created sparse DFA, memory usage: {} (dense memory usage: {})",
             new.memory_usage(),
@@ -1859,6 +1860,12 @@ impl StartTable<Vec<u8>> {
             let new_start_id = remap[dfa.to_index(old_start_id)];
             sl.set_start(anchored, sty, new_start_id);
         }
+        if let Some(ref mut id) = sl.universal_start_anchored {
+            *id = remap[dfa.to_index(*id)];
+        }
+        if let Some(ref mut id) = sl.universal_start_unanchored {
+            *id = remap[dfa.to_index(*id)];
+        }
         Ok(sl)
     }
 }
@@ -2035,7 +2042,7 @@ impl<T: AsRef<[u8]>> StartTable<T> {
         for (id, _, _) in self.iter() {
             if !seen.contains(&id) {
                 return Err(DeserializeError::generic(
-                    "found invalid start state ID",
+                    "found invalid starting state ID",
                 ));
             }
             if sp.is_match_state(id) {
@@ -2158,7 +2165,7 @@ impl<T: AsMut<[u8]>> StartTable<T> {
                 let len = self
                     .pattern_len
                     .expect("start states for each pattern enabled");
-                assert!(pid < len, "invalid pattern ID {:?}", pid);
+                assert!(pid < len, "invalid pattern ID {pid:?}");
                 self.stride
                     .checked_mul(pid)
                     .unwrap()
@@ -2644,5 +2651,23 @@ mod tests {
         let expected = MatchError::quit(0xCE, 3);
         let got = dfa.try_search_rev(&input);
         assert_eq!(Err(expected), got);
+    }
+
+    // A starting state can never be a match state, since all matches are
+    // delayed by one byte. The sparse DFA already rejects a serialized DFA
+    // whose start table points at a match state, but only the dense check
+    // had a regression test. See the test of the same name in
+    // src/dfa/dense.rs.
+    #[test]
+    fn regression_start_state_not_match() {
+        use crate::util::primitives::StateID;
+
+        let mut dfa = DFA::new("abc").unwrap().to_sparse().unwrap();
+        let min_match = dfa.special.min_match.as_u32().to_ne_bytes();
+        for entry in dfa.st.table.chunks_mut(StateID::SIZE) {
+            entry.copy_from_slice(&min_match);
+        }
+        let buf = dfa.to_bytes_native_endian();
+        crate::dfa::sparse::DFA::from_bytes(&buf).unwrap_err();
     }
 }

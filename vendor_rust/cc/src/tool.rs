@@ -361,7 +361,7 @@ impl Tool {
     /// Don't push optimization arg if it conflicts with existing args.
     pub(crate) fn push_opt_unless_duplicate(&mut self, flag: OsString) {
         if self.is_duplicate_opt_arg(&flag) {
-            eprintln!("Info: Ignoring duplicate arg {:?}", &flag);
+            eprintln!("Info: Ignoring duplicate arg {:?}", flag);
         } else {
             self.push_cc_arg(flag);
         }
@@ -545,16 +545,6 @@ impl ToolFamily {
                     cmd.push_cc_arg(format!("-gdwarf-{v}").into());
                 }
             }
-        }
-    }
-
-    /// What the flag to force frame pointers.
-    pub(crate) fn add_force_frame_pointer(&self, cmd: &mut Tool) {
-        match *self {
-            ToolFamily::Gnu | ToolFamily::Clang { .. } => {
-                cmd.push_cc_arg("-fno-omit-frame-pointer".into());
-            }
-            _ => (),
         }
     }
 

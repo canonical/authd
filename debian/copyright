@@ -134,6 +134,11 @@ Files: vendor/github.com/mattn/go-sqlite3/sqlite3_func_crypt.go
 Copyright: 2018 G.J.R. Timmer <gjr.timmer@gmail.com>
 License: Expat
 
+Files: vendor/github.com/mattn/go-sqlite3/sqlite3_opt_dbstat.go
+Copyright: 2025 Jakob Borg <jakob@kastelo.net>
+           2025 Yasuhiro Matsumoto <mattn.jp@gmail.com>
+License: Expat
+
 Files: vendor/github.com/mattn/go-sqlite3/sqlite3_opt_preupdate.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_opt_preupdate_hook.go
        vendor/github.com/mattn/go-sqlite3/sqlite3_opt_preupdate_omit.go
@@ -377,7 +382,7 @@ Copyright: 2019 axum Contributors
 License: Expat
 
 Files: vendor_rust/axum-core/*
-Copyright: 2021 axum Contributors
+Copyright: 2019-2025 axum Contributors
 License: Expat
 
 Files: vendor_rust/base64/*
@@ -476,7 +481,7 @@ Files: vendor_rust/fixedbitset/README.md
 License: Apache-2.0
 
 Files: vendor_rust/flate2/*
-Copyright: 2014-2025 Alex Crichton
+Copyright: 2014-2026 Alex Crichton
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/flate2/src/*
@@ -486,6 +491,10 @@ License: Apache-2.0 or Expat
 Files: vendor_rust/fnv/*
 Copyright: 2017 Contributors
 License: Apache-2.0 or Expat
+
+Files: vendor_rust/foldhash/*
+Copyright: 2024 Orson Peters
+License: Zlib
 
 Files: vendor_rust/futures-channel/*
 Copyright: 2016 Alex Crichton
@@ -518,7 +527,7 @@ License: Apache-2.0 or Expat
 
 Files: vendor_rust/getrandom/*
 Copyright: 2014 The Rust Project Developers
-           2018-2025 The rust-random Project Developers
+           2018-2026 The rust-random Project Developers
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/h2/*
@@ -526,6 +535,10 @@ Copyright: 2017 h2 authors
 License: Expat
 
 Files: vendor_rust/hashbrown/*
+Copyright: 2016 Amanieu d'Antras
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/hashbrown-0.15.5/*
 Copyright: 2016 Amanieu d'Antras
 License: Apache-2.0 or Expat
 
@@ -548,11 +561,11 @@ Copyright: 2017 http-rs authors
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/http-body/*
-Copyright: 2019-2024 Sean McArthur & Hyper Contributors
+Copyright: 2019-2026 Sean McArthur & Hyper Contributors
 License: Expat
 
 Files: vendor_rust/http-body-util/*
-Copyright: 2019-2025 Sean McArthur & Hyper Contributors
+Copyright: 2019-2026 Sean McArthur & Hyper Contributors
 License: Expat
 
 Files: vendor_rust/http/src/*
@@ -673,6 +686,9 @@ License: Apache-2.0 or Expat
 Files: vendor_rust/petgraph/*
 License: Apache-2.0 or Expat
 
+Files: vendor_rust/petgraph/README.md
+License: Apache-2.0
+
 Files: vendor_rust/pin-project/*
 License: Apache-2.0 or Expat
 
@@ -680,10 +696,6 @@ Files: vendor_rust/pin-project-internal/*
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/pin-project-lite/*
-License: Apache-2.0 or Expat
-
-Files: vendor_rust/pin-utils/*
-Copyright: 2018 The pin-utils authors
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/powerfmt/*
@@ -761,18 +773,16 @@ Files: vendor_rust/rustix-0.38.44/*
 Copyright: violation or misattribution of any kind.
 License: Apache-2.0 or Expat
 
-Files: vendor_rust/rustversion/*
-License: Apache-2.0 or Expat
-
-Files: vendor_rust/serde/*
-License: Apache-2.0 or Expat
-
 Files: vendor_rust/serde_core/*
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/shlex/*
 Copyright: 2015 Nicholas Allegra (comex).
 License: Apache-2.0 or Expat
+
+Files: vendor_rust/simd-adler32/*
+Copyright: 2021 [] [Marvin Countryman]
+License: Expat
 
 Files: vendor_rust/simple_logger/*
 Copyright: 2015-2021 Sam Clements
@@ -797,6 +807,9 @@ License: Apache-2.0 or Expat
 Files: vendor_rust/syn/*
 License: Apache-2.0 or Expat
 
+Files: vendor_rust/syn-2.0.119/*
+License: Apache-2.0 or Expat
+
 Files: vendor_rust/sync_wrapper/*
 Copyright: 2020 Actyx AG
 License: Apache-2.0
@@ -810,7 +823,7 @@ Copyright: 2015 Steven Allen
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/tempfile/src/dir/mod.rs
-Copyright: 2015 The Rust Project Developers
+Copyright: 2015 The Rust Project Developers.
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/time/*
@@ -896,7 +909,7 @@ Copyright: 2016 Alex Crichton
 License: Expat
 
 Files: vendor_rust/unicase/*
-Copyright: 2014-2017 Sean McArthur
+Copyright: 2014-2026 Sean McArthur
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/unicode-ident/*

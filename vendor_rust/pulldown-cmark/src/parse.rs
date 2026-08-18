@@ -941,7 +941,7 @@ impl<'input, F: BrokenLinkCallback<'input>> Parser<'input, F> {
                 }
                 self.tree[tos.node].child = Some(body_node);
                 self.tree[tos.node].next = self.tree[next_ix].next;
-                self.tree[tos.node].item.end = end_ix + 1;
+                self.tree[tos.node].item.end = end_ix + 2;
                 self.disable_all_links();
                 return Some(tos.node);
             }
@@ -2361,26 +2361,31 @@ impl<'a, F: BrokenLinkCallback<'a>> Iterator for Parser<'a, F> {
                 Some(Event::End(tag_end))
             }
             Some(cur_ix) => {
-                let cur_ix = if matches!(self.tree[cur_ix].item.body, ItemBody::TightParagraph) {
-                    // tight paragraphs emit nothing
-                    self.tree.push();
-                    self.tree.cur().unwrap()
-                } else {
-                    cur_ix
-                };
-                if self.tree[cur_ix].item.body.is_maybe_inline() {
-                    self.handle_inline();
-                }
+                let maybe_cur_ix =
+                    if matches!(self.tree[cur_ix].item.body, ItemBody::TightParagraph) {
+                        // tight paragraphs emit nothing
+                        self.tree.push();
+                        self.tree.cur()
+                    } else {
+                        Some(cur_ix)
+                    };
+                if let Some(cur_ix) = maybe_cur_ix {
+                    if self.tree[cur_ix].item.body.is_maybe_inline() {
+                        self.handle_inline();
+                    }
 
-                let node = self.tree[cur_ix];
-                let item = node.item;
-                let event = item_to_event(item, self.text, &mut self.allocs);
-                if let Event::Start(ref _tag) = event {
-                    self.tree.push();
+                    let node = self.tree[cur_ix];
+                    let item = node.item;
+                    let event = item_to_event(item, self.text, &mut self.allocs);
+                    if let Event::Start(ref _tag) = event {
+                        self.tree.push();
+                    } else {
+                        self.tree.next_sibling(cur_ix);
+                    }
+                    Some(event)
                 } else {
-                    self.tree.next_sibling(cur_ix);
+                    None
                 }
-                Some(event)
             }
         }
     }
@@ -2438,6 +2443,36 @@ mod test {
         // dont crash
         Parser::new("\\\\\r\r").count();
         Parser::new("\\\r\r\\.\\\\\r\r\\.\\").count();
+    }
+
+    #[test]
+    fn issue_1095() {
+        let s = "- [n]:Z\r\n\t\t";
+        let parser = Parser::new_ext(s, Options::all());
+        for _ in parser {}
+    }
+
+    #[test]
+    fn issue_1030() {
+        let mut opts = Options::empty();
+        opts.insert(Options::ENABLE_WIKILINKS);
+
+        let parser = Parser::new_ext("For a new ferrari, [[Wikientry|click here]]!", opts);
+
+        let offsets = parser
+            .into_offset_iter()
+            .map(|(_ev, range)| range)
+            .collect::<Vec<_>>();
+        let expected_offsets = vec![
+            (0..44),  // Paragraph START
+            (0..19),  // `For a new ferrari, `
+            (19..43), // Wikilink START
+            (31..41), // `click here`
+            (19..43), // Wikilink END
+            (43..44), // `!`
+            (0..44),  // Paragraph END
+        ];
+        assert_eq!(offsets, expected_offsets);
     }
 
     #[test]

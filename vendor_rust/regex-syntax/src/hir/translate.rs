@@ -254,7 +254,7 @@ impl HirFrame {
         match self {
             HirFrame::Expr(expr) => expr,
             HirFrame::Literal(lit) => Hir::literal(lit),
-            _ => panic!("tried to unwrap expr from HirFrame, got: {:?}", self),
+            _ => panic!("tried to unwrap expr from HirFrame, got: {self:?}"),
         }
     }
 
@@ -291,8 +291,7 @@ impl HirFrame {
             HirFrame::Repetition => {}
             _ => {
                 panic!(
-                    "tried to unwrap repetition from HirFrame, got: {:?}",
-                    self
+                    "tried to unwrap repetition from HirFrame, got: {self:?}"
                 )
             }
         }
@@ -305,7 +304,7 @@ impl HirFrame {
         match self {
             HirFrame::Group { old_flags } => old_flags,
             _ => {
-                panic!("tried to unwrap group from HirFrame, got: {:?}", self)
+                panic!("tried to unwrap group from HirFrame, got: {self:?}")
             }
         }
     }
@@ -316,10 +315,7 @@ impl HirFrame {
         match self {
             HirFrame::AlternationBranch => {}
             _ => {
-                panic!(
-                    "tried to unwrap alt pipe from HirFrame, got: {:?}",
-                    self
-                )
+                panic!("tried to unwrap alt pipe from HirFrame, got: {self:?}")
             }
         }
     }
@@ -1051,7 +1047,7 @@ impl<'t, 'p> TranslatorI<'t, 'p> {
         if let Ok(ref mut class) = result {
             self.unicode_fold_and_negate(
                 &ast_class.span,
-                ast_class.negated,
+                ast_class.is_negated(),
                 class,
             )?;
         }
@@ -2475,6 +2471,10 @@ mod tests {
             hir_uclass_query(ClassQuery::Binary("Z"))
         );
         assert_eq!(
+            t(r"\p{gc!=Separator}"),
+            hir_negate(hir_uclass_query(ClassQuery::Binary("Z")))
+        );
+        assert_eq!(
             t(r"\p{Other}"),
             hir_uclass_query(ClassQuery::Binary("Other"))
         );
@@ -2490,7 +2490,7 @@ mod tests {
         );
         assert_eq!(
             t(r"\P{gc!=separator}"),
-            hir_negate(hir_uclass_query(ClassQuery::Binary("Z")))
+            hir_uclass_query(ClassQuery::Binary("Z"))
         );
 
         assert_eq!(t(r"\p{any}"), hir_uclass_query(ClassQuery::Binary("Any")));

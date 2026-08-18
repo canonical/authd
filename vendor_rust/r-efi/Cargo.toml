@@ -4,8 +4,6 @@ package = "rustc-std-workspace-core"
 version = "1.0.0"
 
 [features]
-efiapi = []
-examples = ["native"]
 native = []
 rustc-dep-of-std = ["core"]
 
@@ -29,4 +27,4 @@ name = "r-efi"
 readme = "README.md"
 repository = "https://github.com/r-efi/r-efi"
 rust-version = "1.68"
-version = "5.3.0"
+version = "6.0.0"
