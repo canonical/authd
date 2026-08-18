@@ -62,8 +62,18 @@ on:
         required: false
         default: ''
         type: string
-      e2e-tests-description:
-        description: 'Optional e2e-brokers, e2e-tests, and e2e-ppa settings'
+      e2e-brokers:
+        description: 'Optional comma- or space-separated broker list; empty runs both brokers'
+        required: false
+        default: ''
+        type: string
+      e2e-tests:
+        description: 'Optional comma- or space-separated test suite list; empty runs the full suite'
+        required: false
+        default: ''
+        type: string
+      e2e-ppa:
+        description: 'Optional PPA name, such as authd-dev; empty uses authd-edge'
         required: false
         default: ''
         type: string
@@ -91,6 +101,9 @@ jobs:
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       files-hash: ${{ steps.hash.outputs.hash }}
       brokers: ${{ steps.parse_e2e_options.outputs.brokers }}
@@ -106,13 +119,29 @@ jobs:
       - name: Parse E2E options
         id: parse_e2e_options
         env:
-          E2E_TESTS_DESCRIPTION: >-
-            ${{
-              github.event_name == 'pull_request' &&
-              github.event.pull_request.body ||
-              inputs.e2e-tests-description || ''
-            }}
-        run: bash .github/scripts/parse-e2e-options.sh
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          E2E_BROKERS: ${{ inputs.e2e-brokers || '' }}
+          E2E_TESTS: ${{ inputs.e2e-tests || '' }}
+          E2E_PPA: ${{ inputs.e2e-ppa || '' }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == 'pull_request' ]]; then
+            E2E_TESTS_DESCRIPTION=$(
+              gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}" \
+                --jq '.body // ""'
+            )
+          else
+            E2E_TESTS_DESCRIPTION=$(
+              printf 'e2e-brokers: %s\ne2e-tests: %s\ne2e-ppa: %s\n' \
+                "${E2E_BROKERS}" "${E2E_TESTS}" "${E2E_PPA}"
+            )
+          fi
+
+          export E2E_TESTS_DESCRIPTION
+          bash .github/scripts/parse-e2e-options.sh
 
   provision-and-run:
     needs: prepare-e2e
