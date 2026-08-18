@@ -94,6 +94,8 @@ pin_project! {
     }
 }
 
+//#[expect(clippy::large_enum_variant, reason = "the whole future is boxed")]
+#[allow(clippy::large_enum_variant)]
 enum State<T, B>
 where
     B: Body,
@@ -471,7 +473,10 @@ where
 
                     let (head, body) = res.into_parts();
                     let mut res = ::http::Response::from_parts(head, ());
-                    super::strip_connection_headers(res.headers_mut(), false);
+                    super::strip_connection_headers(
+                        res.headers_mut(),
+                        super::MessageKind::Response,
+                    );
 
                     // set Date header if it isn't already set if instructed
                     if *me.date_header {

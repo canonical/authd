@@ -5,6 +5,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+# 0.8.9
+
+- **added:** `WebSocketUpgrade::{requested_protocols, set_selected_protocol}` for more
+  flexible subprotocol selection ([#3597])
+- **changed:** Update minimum rust version to 1.80 ([#3620])
+- **fixed:** Set connect endpoint on correct field in MethodRouter ([#3656])
+- **fixed:** Return specific error message when multipart body limit is exceeded ([#3611])
+
+[#3597]: https://github.com/tokio-rs/axum/pull/3597
+[#3620]: https://github.com/tokio-rs/axum/pull/3620
+[#3656]: https://github.com/tokio-rs/axum/pull/3656
+[#3611]: https://github.com/tokio-rs/axum/pull/3611
+
+# 0.8.8
+
+- Clarify documentation for `Router::route_layer` ([#3567])
+
+[#3567]: https://github.com/tokio-rs/axum/pull/3567
+
+# 0.8.7
+
+- Relax implicit `Send` / `Sync` bounds on `RouterAsService`, `RouterIntoService` ([#3555])
+- Make it easier to visually scan for default features ([#3550])
+- Fix some documentation typos
+
+[#3550]: https://github.com/tokio-rs/axum/pull/3550
+[#3555]: https://github.com/tokio-rs/axum/pull/3555
+
+# 0.8.6
+
+Released without changes to fix docs.rs build.
+
+# 0.8.5
+
+- **fixed:** Reject JSON request bodies with trailing characters after the JSON document ([#3453])
+- **added:** Implement `OptionalFromRequest` for `Multipart` ([#3220])
+- **added:** Getter methods `Location::{status_code, location}`
+- **added:** Support for writing arbitrary binary data into server-sent events ([#3425])]
+- **added:** `middleware::ResponseAxumBodyLayer` for mapping response body to `axum::body::Body` ([#3469])
+- **added:** `impl FusedStream for WebSocket` ([#3443])
+- **changed:** The `sse` module and `Sse` type no longer depend on the `tokio` feature ([#3154])
+- **changed:** If the location given to one of `Redirect`s constructors is not a valid
+  header value, instead of panicking on construction, the `IntoResponse` impl now returns
+  an HTTP 500, just like `Json` does when serialization fails ([#3377])
+- **changed:** Update minimum rust version to 1.78 ([#3412])
+
+[#3154]: https://github.com/tokio-rs/axum/pull/3154
+[#3220]: https://github.com/tokio-rs/axum/pull/3220
+[#3377]: https://github.com/tokio-rs/axum/pull/3377
+[#3412]: https://github.com/tokio-rs/axum/pull/3412
+[#3425]: https://github.com/tokio-rs/axum/pull/3425
+[#3443]: https://github.com/tokio-rs/axum/pull/3443
+[#3453]: https://github.com/tokio-rs/axum/pull/3453
+[#3469]: https://github.com/tokio-rs/axum/pull/3469
+
 # 0.8.4
 
 - **added:** `Router::reset_fallback` ([#3320])

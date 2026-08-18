@@ -160,6 +160,12 @@ word boundaries before reaching 72 characters. Do **not** use
 - Use `go fmt` and `gofmt -s`
 - Rust: Standard cargo fmt conventions
 
+## Prose Style
+
+Write all prose in plain, simple English. This includes code comments,
+commit messages, and documentation. Use short sentences and everyday words.
+Do not omit technical details.
+
 ## Linting
 
 After making changes to Go files, run `scripts/golangci-lint` to check for lint errors:

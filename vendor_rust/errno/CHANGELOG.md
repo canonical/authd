@@ -1,5 +1,10 @@
 # [Unreleased]
 
+# [0.3.14] - 2025-09-08
+
+- Update windows-sys requirement from >=0.52, <=0.59 to >=0.52, <0.62
+  [#117](https://github.com/lambda-fairy/rust-errno/pull/117)
+
 # [0.3.13] - 2025-06-19
 
 - Update windows-sys requirement from >=0.52, <=0.59 to >=0.52, <=0.60

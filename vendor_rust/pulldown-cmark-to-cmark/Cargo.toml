@@ -13,7 +13,7 @@
 edition = "2018"
 rust-version = "1.71.1"
 name = "pulldown-cmark-to-cmark"
-version = "21.0.0"
+version = "22.0.0"
 authors = [
     "Sebastian Thiel <byronimo@gmail.com>",
     "Dylan Owen <dyltotheo@gmail.com>",
@@ -59,3 +59,6 @@ version = "2.0.5"
 
 [dev-dependencies.pretty_assertions]
 version = "1.4.0"
+
+[dev-dependencies.yansi]
+version = "1.0.1"

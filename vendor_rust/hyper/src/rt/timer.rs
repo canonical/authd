@@ -107,7 +107,7 @@ impl dyn Sleep {
     where
         T: Sleep + 'static,
     {
-        self.__type_id(private::Sealed {}) == TypeId::of::<T>()
+        self.__type_id(private::Sealed) == TypeId::of::<T>()
     }
 
     /// Downcast a pinned `&mut Sleep` object to its original type.
@@ -116,10 +116,19 @@ impl dyn Sleep {
         T: Sleep + 'static,
     {
         if self.is::<T>() {
+            // SAFETY:
+            // 1. `self.is::<T>()` guarantees that the underlying object is indeed of type `T`.
+            // 2. We use `Pin::into_inner_unchecked` to gain mutable access to the underlying
+            //    value because we are maintaining the pinning contract.
+            // 3. We convert the reference to `dyn Sleep` to a reference to `T` via raw pointers.
+            //    Since we've verified the type, this is a sound downcast.
+            // 4. `Pin::new_unchecked` is safe here because the original object was already pinned,
+            //    and by pinning the downcasted reference, we continue to uphold the pinning guarantee
+            //    that the object will not be moved.
             unsafe {
                 let inner = Pin::into_inner_unchecked(self);
                 Some(Pin::new_unchecked(
-                    &mut *(&mut *inner as *mut dyn Sleep as *mut T),
+                    &mut *(&mut *inner as *mut dyn Sleep).cast(),
                 ))
             }
         } else {
@@ -130,5 +139,5 @@ impl dyn Sleep {
 
 mod private {
     #![allow(missing_debug_implementations)]
-    pub struct Sealed {}
+    pub struct Sealed;
 }

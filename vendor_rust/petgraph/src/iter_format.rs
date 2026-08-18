@@ -1,7 +1,6 @@
 //! Formatting utils
 
-use std::cell::RefCell;
-use std::fmt;
+use core::{cell::RefCell, fmt};
 
 /// Format the iterator like a map
 pub struct DebugMap<F>(pub F);
@@ -45,7 +44,7 @@ pub struct Format<'a, I> {
 }
 
 pub trait IterFormatExt: Iterator {
-    fn format(self, separator: &str) -> Format<Self>
+    fn format(self, separator: &str) -> Format<'_, Self>
     where
         Self: Sized,
     {

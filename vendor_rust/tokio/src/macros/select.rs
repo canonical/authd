@@ -95,6 +95,11 @@ macro_rules! doc {
         /// describes whether they are cancel safe.  The lists in this section are not
         /// exhaustive.
         ///
+        /// Cancellation safety describes what happens when a future is dropped
+        /// before it completes. Whether something is cancellation safe depends on
+        /// the behavior of the future passed to `select!`, which may come from an
+        /// async method, an async expression, or another future-producing operation.
+        ///
         /// The following methods are cancellation safe:
         ///
         ///  * [`tokio::sync::mpsc::Receiver::recv`](crate::sync::mpsc::Receiver::recv)
@@ -659,7 +664,7 @@ doc! {macro_rules! select {
             $crate::macros::support::poll_fn(|cx| {
                 // Return `Pending` when the task budget is depleted since budget-aware futures
                 // are going to yield anyway and other futures will not cooperate.
-                ::std::task::ready!($crate::macros::support::poll_budget_available(cx));
+                $crate::macros::support::ready!($crate::macros::support::poll_budget_available(cx));
 
                 // Track if any branch returns pending. If no branch completes
                 // **or** returns pending, this implies that all branches are
@@ -699,7 +704,7 @@ doc! {macro_rules! select {
 
                                 // Safety: future is stored on the stack above
                                 // and never moved.
-                                let mut fut = unsafe { Pin::new_unchecked(fut) };
+                                let mut fut = unsafe { $crate::macros::support::Pin::new_unchecked(fut) };
 
                                 // Try polling it
                                 let out = match $crate::macros::support::Future::poll(fut, cx) {

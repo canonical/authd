@@ -11,7 +11,7 @@ version = "1.0.35"
 [dependencies.syn]
 default-features = false
 features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"]
-version = "2.0.81"
+version = "3"
 
 [dev-dependencies.serde]
 version = "1"
@@ -43,8 +43,8 @@ license = "MIT OR Apache-2.0"
 name = "serde_derive"
 readme = "crates-io.md"
 repository = "https://github.com/serde-rs/serde"
-rust-version = "1.61"
-version = "1.0.228"
+rust-version = "1.71"
+version = "1.0.229"
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--generate-link-to-definition", "--generate-macro-expansion", "--extern-html-root-url=core=https://doc.rust-lang.org", "--extern-html-root-url=alloc=https://doc.rust-lang.org", "--extern-html-root-url=std=https://doc.rust-lang.org", "--extern-html-root-url=proc_macro=https://doc.rust-lang.org"]

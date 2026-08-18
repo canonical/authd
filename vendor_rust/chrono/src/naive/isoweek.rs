@@ -152,10 +152,25 @@ impl fmt::Debug for IsoWeek {
         let year = self.year();
         let week = self.week();
         if (0..=9999).contains(&year) {
-            write!(f, "{:04}-W{:02}", year, week)
+            write!(f, "{year:04}-W{week:02}")
         } else {
             // ISO 8601 requires the explicit sign for out-of-range years
-            write!(f, "{:+05}-W{:02}", year, week)
+            write!(f, "{year:+05}-W{week:02}")
+        }
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for IsoWeek {
+    fn format(&self, fmt: defmt::Formatter) {
+        let year = self.year();
+        let week = self.week();
+        if (0..=9999).contains(&year) {
+            defmt::write!(fmt, "{:04}-W{:02}", year, week)
+        } else {
+            // ISO 8601 requires the explicit sign for out-of-range years
+            let sign = ['+', '-'][(year < 0) as usize];
+            defmt::write!(fmt, "{}{:05}-W{:02}", sign, year.abs(), week)
         }
     }
 }
@@ -176,13 +191,13 @@ mod tests {
         assert_eq!(minweek.week(), 1);
         assert_eq!(minweek.week0(), 0);
         #[cfg(feature = "alloc")]
-        assert_eq!(format!("{:?}", minweek), NaiveDate::MIN.format("%G-W%V").to_string());
+        assert_eq!(format!("{minweek:?}"), NaiveDate::MIN.format("%G-W%V").to_string());
 
         assert_eq!(maxweek.year(), date::MAX_YEAR + 1);
         assert_eq!(maxweek.week(), 1);
         assert_eq!(maxweek.week0(), 0);
         #[cfg(feature = "alloc")]
-        assert_eq!(format!("{:?}", maxweek), NaiveDate::MAX.format("%G-W%V").to_string());
+        assert_eq!(format!("{maxweek:?}"), NaiveDate::MAX.format("%G-W%V").to_string());
     }
 
     #[test]

@@ -204,7 +204,7 @@ where
     }
 
     #[doc = include_str!("../docs/routing/nest.md")]
-    #[doc(alias = "scope")] // Some web frameworks like actix-web use this term
+    #[doc(alias = "scope")] // Some other libs like actix-web use this term
     #[track_caller]
     pub fn nest(self, path: &str, router: Router<S>) -> Self {
         if path.is_empty() || path == "/" {
@@ -335,6 +335,7 @@ where
     }
 
     /// True if the router currently has at least one route added.
+    #[must_use]
     pub fn has_routes(&self) -> bool {
         self.inner.path_router.has_routes()
     }
@@ -495,6 +496,7 @@ where
     ///
     /// This is the same as [`Router::as_service`] instead it returns an owned [`Service`]. See
     /// that method for more details.
+    #[must_use]
     pub fn into_service<B>(self) -> RouterIntoService<B, S> {
         RouterIntoService {
             router: self,
@@ -522,6 +524,7 @@ impl Router {
     /// ```
     ///
     /// [`MakeService`]: tower::make::MakeService
+    #[must_use]
     pub fn into_make_service(self) -> IntoMakeService<Self> {
         // call `Router::with_state` such that everything is turned into `Route` eagerly
         // rather than doing that per request
@@ -530,6 +533,7 @@ impl Router {
 
     #[doc = include_str!("../docs/routing/into_make_service_with_connect_info.md")]
     #[cfg(feature = "tokio")]
+    #[must_use]
     pub fn into_make_service_with_connect_info<C>(self) -> IntoMakeServiceWithConnectInfo<Self, C> {
         // call `Router::with_state` such that everything is turned into `Route` eagerly
         // rather than doing that per request
@@ -588,7 +592,7 @@ where
 /// See [`Router::as_service`] for more details.
 pub struct RouterAsService<'a, B, S = ()> {
     router: &'a mut Router<S>,
-    _marker: PhantomData<B>,
+    _marker: PhantomData<fn(B)>,
 }
 
 impl<B> Service<Request<B>> for RouterAsService<'_, B, ()>
@@ -627,7 +631,7 @@ where
 /// See [`Router::into_service`] for more details.
 pub struct RouterIntoService<B, S = ()> {
     router: Router<S>,
-    _marker: PhantomData<B>,
+    _marker: PhantomData<fn(B)>,
 }
 
 impl<B, S> Clone for RouterIntoService<B, S>
@@ -796,4 +800,8 @@ fn traits() {
     use crate::test_helpers::*;
     assert_send::<Router<()>>();
     assert_sync::<Router<()>>();
+    assert_send::<RouterAsService<'static, Body, ()>>();
+    assert_sync::<RouterAsService<'static, Body, ()>>();
+    assert_send::<RouterIntoService<Body, ()>>();
+    assert_sync::<RouterIntoService<Body, ()>>();
 }

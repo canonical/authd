@@ -380,7 +380,7 @@
 //! use chrono::{DateTime, Utc};
 //!
 //! // Construct a datetime from epoch:
-//! let dt: DateTime<Utc> = DateTime::from_timestamp(1_500_000_000, 0).unwrap();
+//! let dt: DateTime<Utc> = DateTime::from_timestamp_secs(1_500_000_000).unwrap();
 //! assert_eq!(dt.to_rfc2822(), "Fri, 14 Jul 2017 02:40:00 +0000");
 //!
 //! // Get epoch value from a datetime:
@@ -501,19 +501,17 @@
 //! [chrono#1095]: https://github.com/chronotope/chrono/pull/1095
 
 #![doc(html_root_url = "https://docs.rs/chrono/latest/", test(attr(deny(warnings))))]
-#![deny(missing_docs)]
-#![deny(missing_debug_implementations)]
 #![warn(unreachable_pub)]
-#![deny(clippy::tests_outside_test_module)]
+#![warn(clippy::tests_outside_test_module)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
 mod time_delta;
-#[cfg(feature = "std")]
 #[doc(no_inline)]
+#[cfg(any(feature = "std", feature = "core-error"))]
 pub use time_delta::OutOfRangeError;
 pub use time_delta::TimeDelta;
 
@@ -634,7 +632,7 @@ pub mod serde {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             match self {
                 SerdeError::InvalidTimestamp(ts) => {
-                    write!(f, "value is not a legal timestamp: {}", ts)
+                    write!(f, "value is not a legal timestamp: {ts}")
                 }
             }
         }
@@ -687,8 +685,18 @@ impl fmt::Debug for OutOfRange {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for OutOfRange {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(fmt, "out of range");
+    }
+}
+
 #[cfg(feature = "std")]
 impl std::error::Error for OutOfRange {}
+
+#[cfg(all(not(feature = "std"), feature = "core-error"))]
+impl core::error::Error for OutOfRange {}
 
 /// Workaround because `?` is not (yet) available in const context.
 #[macro_export]

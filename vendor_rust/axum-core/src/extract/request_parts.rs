@@ -65,6 +65,7 @@ where
     }
 }
 
+#[diagnostic::do_not_recommend] // pretty niche impl
 impl<S> FromRequest<S> for BytesMut
 where
     S: Send + Sync,
@@ -73,6 +74,7 @@ where
 
     async fn from_request(req: Request, _: &S) -> Result<Self, Self::Rejection> {
         let mut body = req.into_limited_body();
+        #[allow(clippy::use_self)]
         let mut bytes = BytesMut::new();
         body_to_bytes_mut(&mut body, &mut bytes).await?;
         Ok(bytes)
@@ -128,12 +130,14 @@ where
                 }
             })?;
 
+        #[allow(clippy::use_self)]
         let string = String::from_utf8(bytes.into()).map_err(InvalidUtf8::from_err)?;
 
         Ok(string)
     }
 }
 
+#[diagnostic::do_not_recommend] // pretty niche impl
 impl<S> FromRequestParts<S> for Parts
 where
     S: Send + Sync,
@@ -145,6 +149,7 @@ where
     }
 }
 
+#[diagnostic::do_not_recommend] // pretty niche impl
 impl<S> FromRequestParts<S> for Extensions
 where
     S: Send + Sync,

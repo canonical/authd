@@ -11,9 +11,9 @@
 
 [package]
 edition = "2021"
-rust-version = "1.71.1"
+rust-version = "1.85"
 name = "prost-build"
-version = "0.14.1"
+version = "0.14.4"
 authors = [
     "Dan Burkert <dan@danburkert.com>",
     "Lucio Franco <luciofranco14@gmail.com>",
@@ -61,11 +61,9 @@ version = "0.4.4"
 version = ">=0.8, <=0.10"
 default-features = false
 
-[dependencies.once_cell]
-version = "1.17.1"
-
 [dependencies.petgraph]
-version = ">=0.6, <=0.7"
+version = "0.8"
+features = ["std"]
 default-features = false
 
 [dependencies.prettyplease]
@@ -73,11 +71,11 @@ version = "0.2"
 optional = true
 
 [dependencies.prost]
-version = "0.14.1"
+version = "0.14.4"
 default-features = false
 
 [dependencies.prost-types]
-version = "0.14.1"
+version = "0.14.4"
 default-features = false
 
 [dependencies.pulldown-cmark]
@@ -86,7 +84,7 @@ optional = true
 default-features = false
 
 [dependencies.pulldown-cmark-to-cmark]
-version = "21"
+version = "22"
 optional = true
 
 [dependencies.regex]
@@ -104,7 +102,12 @@ optional = true
 
 [dependencies.tempfile]
 version = "3"
+default-features = false
 
 [dev-dependencies.env_logger]
 version = "0.11"
 default-features = false
+
+[lints.clippy]
+collapsible_if = "allow"
+io_other_error = "allow"

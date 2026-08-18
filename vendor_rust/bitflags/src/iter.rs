@@ -143,3 +143,72 @@ impl<B: Flags> Iterator for IterNames<B> {
         None
     }
 }
+
+/**
+An iterator over all defined named flags.
+
+This iterator will yield flags values for all defined named flags, regardless of
+whether they are contained in a particular flags value.
+*/
+pub struct IterDefinedNames<B: 'static> {
+    flags: &'static [Flag<B>],
+    idx: usize,
+}
+
+impl<B: Flags> IterDefinedNames<B> {
+    pub(crate) fn new() -> Self {
+        IterDefinedNames {
+            flags: B::FLAGS,
+            idx: 0,
+        }
+    }
+}
+
+impl<B: Flags> Iterator for IterDefinedNames<B> {
+    type Item = (&'static str, B);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(flag) = self.flags.get(self.idx) {
+            self.idx += 1;
+
+            // Only yield named flags
+            if flag.is_named() {
+                return Some((flag.name(), B::from_bits_retain(flag.value().bits())));
+            }
+        }
+
+        None
+    }
+}
+
+/**
+An iterator over all defined names for a specific flags value.
+*/
+pub struct IterEqualNames<T: Flags> {
+    inner: IterDefinedNames<T>,
+    bits: T::Bits,
+}
+
+impl<T: Flags> IterEqualNames<T> {
+    #[inline]
+    pub(crate) fn new(value: &T) -> Self {
+        Self {
+            inner: <T as Flags>::iter_defined_names(),
+            bits: value.bits(),
+        }
+    }
+}
+
+impl<T: Flags> Iterator for IterEqualNames<T> {
+    type Item = &'static str;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        for (n, f) in self.inner.by_ref() {
+            if f.bits() == self.bits {
+                return Some(n);
+            }
+        }
+        None
+    }
+}

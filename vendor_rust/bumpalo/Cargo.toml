@@ -8,16 +8,22 @@ optional = true
 version = "1.0.171"
 
 [dev-dependencies.blink-alloc]
-version = "=0.3.1"
+version = "=0.4.0"
 
 [dev-dependencies.criterion]
 version = "0.3.6"
 
 [dev-dependencies.quickcheck]
-version = "1.0.3"
+version = "=1.0.3"
 
 [dev-dependencies.rand]
 version = "0.8.5"
+
+[dev-dependencies.rayon]
+version = "=1.10.0"
+
+[dev-dependencies.rayon-core]
+version = "=1.12.1"
 
 [dev-dependencies.serde]
 features = ["derive"]
@@ -52,12 +58,13 @@ description = "A fast bump allocation arena for Rust."
 documentation = "https://docs.rs/bumpalo"
 edition = "2021"
 exclude = ["/.github/*", "/benches", "/tests", "valgrind.supp", "bumpalo.png"]
+keywords = ["arena", "bump", "allocator"]
 license = "MIT OR Apache-2.0"
 name = "bumpalo"
 readme = "README.md"
 repository = "https://github.com/fitzgen/bumpalo"
 rust-version = "1.71.1"
-version = "3.19.0"
+version = "3.20.3"
 
 [package.metadata.docs.rs]
 all-features = true

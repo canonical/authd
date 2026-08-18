@@ -12,6 +12,7 @@ use crate::rt::{Read, Write};
 use crate::upgrade::Upgraded;
 use bytes::Bytes;
 use futures_core::ready;
+use httparse::ParserConfig;
 
 use crate::body::{Body, Incoming as IncomingBody};
 use crate::proto;
@@ -69,7 +70,7 @@ pin_project_lite::pin_project! {
 /// to bind the built connection to a service.
 #[derive(Clone, Debug)]
 pub struct Builder {
-    h1_parser_config: httparse::ParserConfig,
+    h1_parser_config: ParserConfig,
     timer: Time,
     h1_half_close: bool,
     h1_keep_alive: bool,
@@ -225,7 +226,7 @@ where
                         // error letting them know about that.
                         pending.manual();
                     }
-                };
+                }
                 Poll::Ready(Ok(()))
             }
             Err(e) => Poll::Ready(Err(e)),
@@ -239,7 +240,7 @@ impl Builder {
     /// Create a new connection builder.
     pub fn new() -> Self {
         Self {
-            h1_parser_config: Default::default(),
+            h1_parser_config: ParserConfig::default(),
             timer: Time::Empty,
             h1_half_close: false,
             h1_keep_alive: true,
@@ -479,7 +480,7 @@ impl Builder {
             .check(self.h1_header_read_timeout, "header_read_timeout")
         {
             conn.set_http1_header_read_timeout(dur);
-        };
+        }
         if let Some(writev) = self.h1_writev {
             if writev {
                 conn.set_write_strategy_queue();
@@ -526,7 +527,7 @@ where
         // Connection (`inner`) is `None` if it was upgraded (and `poll` is `Ready`).
         // In that case, we don't need to call `graceful_shutdown`.
         if let Some(conn) = self.inner.as_mut() {
-            Pin::new(conn).graceful_shutdown()
+            Pin::new(conn).graceful_shutdown();
         }
     }
 

@@ -166,7 +166,7 @@ pub struct DeflateDecoder<R> {
 }
 
 pub fn reset_decoder_data<R>(zlib: &mut DeflateDecoder<R>) {
-    zlib.data = Decompress::new(false);
+    zlib.data.reset(false);
 }
 
 impl<R: BufRead> DeflateDecoder<R> {
@@ -264,7 +264,7 @@ mod test {
 
         let compressed = {
             let mut e = write::DeflateEncoder::new(Vec::new(), Compression::default());
-            e.write(expected.as_ref()).unwrap();
+            e.write_all(expected.as_ref()).unwrap();
             let mut b = e.finish().unwrap();
             b.push(b'x');
             b

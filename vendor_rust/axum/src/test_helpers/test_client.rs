@@ -83,11 +83,13 @@ impl TestClient {
     }
 
     #[allow(dead_code)]
+    #[must_use]
     pub fn server_port(&self) -> u16 {
         self.addr.port()
     }
 }
 
+#[must_use]
 pub struct RequestBuilder {
     builder: reqwest::RequestBuilder,
 }
@@ -100,7 +102,7 @@ impl RequestBuilder {
 
     pub fn json<T>(mut self, json: &T) -> Self
     where
-        T: serde::Serialize,
+        T: serde_core::Serialize,
     {
         self.builder = self.builder.json(json);
         self
@@ -163,7 +165,7 @@ impl TestResponse {
     #[allow(dead_code)]
     pub async fn json<T>(self) -> T
     where
-        T: serde::de::DeserializeOwned,
+        T: serde_core::de::DeserializeOwned,
     {
         self.response.json().await.unwrap()
     }

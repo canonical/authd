@@ -26,6 +26,7 @@ pub trait FutureExt: Future {
         /// assert!(res.is_err());
         /// # }
         /// ```
+        #[track_caller]
         fn timeout(self, timeout: std::time::Duration) -> tokio::time::Timeout<Self>
         where
             Self: Sized,
@@ -59,14 +60,13 @@ pub trait FutureExt: Future {
     }
 
     /// Similar to [`CancellationToken::run_until_cancelled`],
-    /// but with the advantage that it is easier to write fluent call chains,
-    /// and biased towards waiting for [`CancellationToken`] to complete.
+    /// but with the advantage that it is easier to write fluent call chains.
     ///
     /// # Fairness
     ///
     /// Calling this on an already-cancelled token directly returns `None`.
     /// For all subsequent polls, in case of concurrent completion and
-    /// cancellation, this is biased towards the future completion.
+    /// cancellation, this is biased towards the `self` future completion.
     ///
     /// # Examples
     ///
@@ -97,14 +97,13 @@ pub trait FutureExt: Future {
     }
 
     /// Similar to [`CancellationToken::run_until_cancelled_owned`],
-    /// but with the advantage that it is easier to write fluent call chains,
-    /// and biased towards waiting for [`CancellationToken`] to complete.
+    /// but with the advantage that it is easier to write fluent call chains.
     ///
     /// # Fairness
     ///
     /// Calling this on an already-cancelled token directly returns `None`.
     /// For all subsequent polls, in case of concurrent completion and
-    /// cancellation, this is biased towards the future completion.
+    /// cancellation, this is biased towards the `self` future completion.
     ///
     /// # Examples
     ///

@@ -122,7 +122,7 @@ impl fmt::Display for Duration {
         } else if nanos % 1_000 == 0 {
             write!(f, ".{:06}s", nanos / 1_000)
         } else {
-            write!(f, ".{:09}s", nanos)
+            write!(f, ".{nanos:09}s")
         }
     }
 }
@@ -135,7 +135,7 @@ pub enum DurationError {
     ///
     /// The [`Duration`] string format is specified in the [Protobuf JSON mapping specification][1].
     ///
-    /// [1]: https://developers.google.com/protocol-buffers/docs/proto3#json
+    /// [1]: https://protobuf.dev/programming-guides/proto3/#json
     ParseFailure,
 
     /// Indicates failure to convert a `prost_types::Duration` to a `std::time::Duration` because
@@ -155,7 +155,7 @@ impl fmt::Display for DurationError {
         match self {
             DurationError::ParseFailure => write!(f, "failed to parse duration"),
             DurationError::NegativeDuration(duration) => {
-                write!(f, "failed to convert negative duration: {:?}", duration)
+                write!(f, "failed to convert negative duration: {duration:?}")
             }
             DurationError::OutOfRange => {
                 write!(f, "failed to convert duration out of range")
@@ -164,8 +164,7 @@ impl fmt::Display for DurationError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for DurationError {}
+impl core::error::Error for DurationError {}
 
 impl FromStr for Duration {
     type Err = DurationError;

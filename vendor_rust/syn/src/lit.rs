@@ -1,16 +1,24 @@
 #[cfg(feature = "parsing")]
+use crate::ext::TokenStreamExt as _;
+#[cfg(feature = "parsing")]
 use crate::lookahead;
 #[cfg(feature = "parsing")]
 use crate::parse::{Parse, Parser};
 use crate::{Error, Result};
+use alloc::boxed::Box;
+use alloc::ffi::CString;
+#[cfg(feature = "parsing")]
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use core::ffi::CStr;
+use core::fmt::{self, Display};
+#[cfg(feature = "extra-traits")]
+use core::hash::{Hash, Hasher};
+use core::str::{self, FromStr};
 use proc_macro2::{Ident, Literal, Span};
 #[cfg(feature = "parsing")]
 use proc_macro2::{TokenStream, TokenTree};
-use std::ffi::{CStr, CString};
-use std::fmt::{self, Display};
-#[cfg(feature = "extra-traits")]
-use std::hash::{Hash, Hasher};
-use std::str::{self, FromStr};
 
 ast_enum_of_structs! {
     /// A Rust literal such as a string or integer or boolean.
@@ -143,7 +151,7 @@ impl LitStr {
 
     pub fn value(&self) -> String {
         let repr = self.repr.token.to_string();
-        let (value, _suffix) = value::parse_lit_str(&repr);
+        let (value, _suffix) = value::parse_lit_str(&repr).unwrap();
         String::from(value)
     }
 
@@ -215,10 +223,11 @@ impl LitStr {
 
         // Token stream with every span replaced by the given one.
         fn respan_token_stream(stream: TokenStream, span: Span) -> TokenStream {
-            stream
-                .into_iter()
-                .map(|token| respan_token_tree(token, span))
-                .collect()
+            let mut tokens = TokenStream::new();
+            for token in stream {
+                tokens.append(respan_token_tree(token, span));
+            }
+            tokens
         }
 
         // Token tree with every span replaced by the given one.
@@ -284,7 +293,7 @@ impl LitByteStr {
 
     pub fn value(&self) -> Vec<u8> {
         let repr = self.repr.token.to_string();
-        let (value, _suffix) = value::parse_lit_byte_str(&repr);
+        let (value, _suffix) = value::parse_lit_byte_str(&repr).unwrap();
         value
     }
 
@@ -319,7 +328,7 @@ impl LitCStr {
 
     pub fn value(&self) -> CString {
         let repr = self.repr.token.to_string();
-        let (value, _suffix) = value::parse_lit_c_str(&repr);
+        let (value, _suffix) = value::parse_lit_c_str(&repr).unwrap();
         value
     }
 
@@ -342,7 +351,7 @@ impl LitCStr {
 
 impl LitByte {
     pub fn new(value: u8, span: Span) -> Self {
-        let mut token = Literal::u8_suffixed(value);
+        let mut token = Literal::byte_character(value);
         token.set_span(span);
         LitByte {
             repr: Box::new(LitRepr {
@@ -354,7 +363,7 @@ impl LitByte {
 
     pub fn value(&self) -> u8 {
         let repr = self.repr.token.to_string();
-        let (value, _suffix) = value::parse_lit_byte(&repr);
+        let (value, _suffix) = value::parse_lit_byte(&repr).unwrap();
         value
     }
 
@@ -389,7 +398,7 @@ impl LitChar {
 
     pub fn value(&self) -> char {
         let repr = self.repr.token.to_string();
-        let (value, _suffix) = value::parse_lit_char(&repr);
+        let (value, _suffix) = value::parse_lit_char(&repr).unwrap();
         value
     }
 
@@ -411,6 +420,7 @@ impl LitChar {
 }
 
 impl LitInt {
+    #[track_caller]
     pub fn new(repr: &str, span: Span) -> Self {
         let (digits, suffix) = match value::parse_lit_int(repr) {
             Some(parse) => parse,
@@ -481,23 +491,6 @@ impl LitInt {
     }
 }
 
-impl From<Literal> for LitInt {
-    fn from(token: Literal) -> Self {
-        let repr = token.to_string();
-        if let Some((digits, suffix)) = value::parse_lit_int(&repr) {
-            LitInt {
-                repr: Box::new(LitIntRepr {
-                    token,
-                    digits,
-                    suffix,
-                }),
-            }
-        } else {
-            panic!("not an integer literal: `{}`", repr);
-        }
-    }
-}
-
 impl Display for LitInt {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         self.repr.token.fmt(formatter)
@@ -505,6 +498,7 @@ impl Display for LitInt {
 }
 
 impl LitFloat {
+    #[track_caller]
     pub fn new(repr: &str, span: Span) -> Self {
         let (digits, suffix) = match value::parse_lit_float(repr) {
             Some(parse) => parse,
@@ -553,23 +547,6 @@ impl LitFloat {
     }
 }
 
-impl From<Literal> for LitFloat {
-    fn from(token: Literal) -> Self {
-        let repr = token.to_string();
-        if let Some((digits, suffix)) = value::parse_lit_float(&repr) {
-            LitFloat {
-                repr: Box::new(LitFloatRepr {
-                    token,
-                    digits,
-                    suffix,
-                }),
-            }
-        } else {
-            panic!("not a float literal: `{}`", repr);
-        }
-    }
-}
-
 impl Display for LitFloat {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         self.repr.token.fmt(formatter)
@@ -602,7 +579,7 @@ impl LitBool {
 #[cfg(feature = "extra-traits")]
 mod debug_impls {
     use crate::lit::{LitBool, LitByte, LitByteStr, LitCStr, LitChar, LitFloat, LitInt, LitStr};
-    use std::fmt::{self, Debug};
+    use core::fmt::{self, Debug};
 
     #[cfg_attr(docsrs, doc(cfg(feature = "extra-traits")))]
     impl Debug for LitStr {
@@ -827,18 +804,6 @@ pub_if_not_doc! {
     }
 }
 
-/// The style of a string literal, either plain quoted or a raw string like
-/// `r##"data"##`.
-#[doc(hidden)] // https://github.com/dtolnay/syn/issues/1566
-pub enum StrStyle {
-    /// An ordinary string like `"data"`.
-    Cooked,
-    /// A raw string like `r##"data"##`.
-    ///
-    /// The unsigned integer is the number of `#` symbols used.
-    Raw(usize),
-}
-
 #[cfg(feature = "parsing")]
 pub_if_not_doc! {
     #[doc(hidden)]
@@ -858,9 +823,11 @@ pub(crate) mod parsing {
     };
     use crate::parse::{Parse, ParseStream, Unexpected};
     use crate::token::{self, Token};
+    use alloc::boxed::Box;
+    use alloc::rc::Rc;
+    use alloc::string::ToString;
+    use core::cell::Cell;
     use proc_macro2::{Literal, Punct, Span};
-    use std::cell::Cell;
-    use std::rc::Rc;
 
     #[cfg_attr(docsrs, doc(cfg(feature = "parsing")))]
     impl Parse for Lit {
@@ -1062,7 +1029,7 @@ pub(crate) mod parsing {
 mod printing {
     use crate::lit::{LitBool, LitByte, LitByteStr, LitCStr, LitChar, LitFloat, LitInt, LitStr};
     use proc_macro2::TokenStream;
-    use quote::{ToTokens, TokenStreamExt};
+    use quote::{ToTokens, TokenStreamExt as _};
 
     #[cfg_attr(docsrs, doc(cfg(feature = "printing")))]
     impl ToTokens for LitStr {
@@ -1127,59 +1094,80 @@ mod value {
         Lit, LitBool, LitByte, LitByteStr, LitCStr, LitChar, LitFloat, LitFloatRepr, LitInt,
         LitIntRepr, LitRepr, LitStr,
     };
+    use alloc::borrow::ToOwned;
+    use alloc::boxed::Box;
+    use alloc::ffi::CString;
+    use alloc::string::{String, ToString};
+    use alloc::vec::Vec;
+    use core::char;
+    use core::ops::{Index, RangeFrom};
     use proc_macro2::{Literal, Span};
-    use std::ascii;
-    use std::char;
-    use std::ffi::CString;
-    use std::ops::{Index, RangeFrom};
 
     impl Lit {
         /// Interpret a Syn literal from a proc-macro2 literal.
         pub fn new(token: Literal) -> Self {
             let repr = token.to_string();
+            Lit::from_str(token, &repr)
+        }
 
-            match byte(&repr, 0) {
+        #[cfg(fuzzing)]
+        #[doc(hidden)]
+        pub fn from_str_for_fuzzing(repr: &str) -> Self {
+            let token = Literal::u8_unsuffixed(0);
+            Lit::from_str(token, repr)
+        }
+
+        fn from_str(token: Literal, repr: &str) -> Self {
+            match byte(repr, 0) {
                 // "...", r"...", r#"..."#
                 b'"' | b'r' => {
-                    let (_, suffix) = parse_lit_str(&repr);
-                    return Lit::Str(LitStr {
-                        repr: Box::new(LitRepr { token, suffix }),
-                    });
-                }
-                b'b' => match byte(&repr, 1) {
-                    // b"...", br"...", br#"...#"
-                    b'"' | b'r' => {
-                        let (_, suffix) = parse_lit_byte_str(&repr);
-                        return Lit::ByteStr(LitByteStr {
+                    if let Some((_, suffix)) = parse_lit_str(repr) {
+                        return Lit::Str(LitStr {
                             repr: Box::new(LitRepr { token, suffix }),
                         });
+                    }
+                }
+                b'b' => match byte(repr, 1) {
+                    // b"...", br"...", br#"...#"
+                    b'"' | b'r' => {
+                        if let Some((_, suffix)) = parse_lit_byte_str(repr) {
+                            return Lit::ByteStr(LitByteStr {
+                                repr: Box::new(LitRepr { token, suffix }),
+                            });
+                        }
                     }
                     // b'...'
                     b'\'' => {
-                        let (_, suffix) = parse_lit_byte(&repr);
-                        return Lit::Byte(LitByte {
-                            repr: Box::new(LitRepr { token, suffix }),
-                        });
+                        if let Some((_, suffix)) = parse_lit_byte(repr) {
+                            return Lit::Byte(LitByte {
+                                repr: Box::new(LitRepr { token, suffix }),
+                            });
+                        }
                     }
                     _ => {}
                 },
-                // c"...", cr"...", cr#"..."#
-                b'c' => {
-                    let (_, suffix) = parse_lit_c_str(&repr);
-                    return Lit::CStr(LitCStr {
-                        repr: Box::new(LitRepr { token, suffix }),
-                    });
-                }
+                b'c' => match byte(repr, 1) {
+                    // c"...", cr"...", cr#"..."#
+                    b'"' | b'r' => {
+                        if let Some((_, suffix)) = parse_lit_c_str(repr) {
+                            return Lit::CStr(LitCStr {
+                                repr: Box::new(LitRepr { token, suffix }),
+                            });
+                        }
+                    }
+                    _ => {}
+                },
                 // '...'
                 b'\'' => {
-                    let (_, suffix) = parse_lit_char(&repr);
-                    return Lit::Char(LitChar {
-                        repr: Box::new(LitRepr { token, suffix }),
-                    });
+                    if let Some((_, suffix)) = parse_lit_char(repr) {
+                        return Lit::Char(LitChar {
+                            repr: Box::new(LitRepr { token, suffix }),
+                        });
+                    }
                 }
                 b'0'..=b'9' | b'-' => {
                     // 0, 123, 0xFF, 0o77, 0b11
-                    if let Some((digits, suffix)) = parse_lit_int(&repr) {
+                    if let Some((digits, suffix)) = parse_lit_int(repr) {
                         return Lit::Int(LitInt {
                             repr: Box::new(LitIntRepr {
                                 token,
@@ -1189,7 +1177,7 @@ mod value {
                         });
                     }
                     // 1.0, 1e-1, 1e+1
-                    if let Some((digits, suffix)) = parse_lit_float(&repr) {
+                    if let Some((digits, suffix)) = parse_lit_float(repr) {
                         return Lit::Float(LitFloat {
                             repr: Box::new(LitFloatRepr {
                                 token,
@@ -1200,19 +1188,17 @@ mod value {
                     }
                 }
                 // true, false
-                b't' | b'f' => {
-                    if repr == "true" || repr == "false" {
-                        return Lit::Bool(LitBool {
-                            value: repr == "true",
-                            span: token.span(),
-                        });
-                    }
+                b't' | b'f' if repr == "true" || repr == "false" => {
+                    return Lit::Bool(LitBool {
+                        value: repr == "true",
+                        span: token.span(),
+                    });
                 }
                 b'(' if repr == "(/*ERROR*/)" => return Lit::Verbatim(token),
                 _ => {}
             }
 
-            panic!("unrecognized literal: `{}`", repr);
+            Lit::Verbatim(token)
         }
 
         pub fn suffix(&self) -> &str {
@@ -1273,7 +1259,7 @@ mod value {
     }
 
     // Returns (content, suffix).
-    pub(crate) fn parse_lit_str(s: &str) -> (Box<str>, Box<str>) {
+    pub(crate) fn parse_lit_str(s: &str) -> Option<(Box<str>, Box<str>)> {
         match byte(s, 0) {
             b'"' => parse_lit_str_cooked(s),
             b'r' => parse_lit_str_raw(s),
@@ -1281,7 +1267,7 @@ mod value {
         }
     }
 
-    fn parse_lit_str_cooked(mut s: &str) -> (Box<str>, Box<str>) {
+    fn parse_lit_str_cooked(mut s: &str) -> Option<(Box<str>, Box<str>)> {
         assert_eq!(byte(s, 0), b'"');
         s = &s[1..];
 
@@ -1291,16 +1277,19 @@ mod value {
                 b'"' => break,
                 b'\\' => {
                     let b = byte(s, 1);
-                    s = &s[2..];
+                    s = s.get(2..)?;
                     match b {
                         b'x' => {
-                            let (byte, rest) = backslash_x(s);
+                            let (byte, rest) = backslash_x(s)?;
                             s = rest;
-                            assert!(byte <= 0x7F, "invalid \\x byte in string literal");
-                            char::from_u32(u32::from(byte)).unwrap()
+                            if byte > 0x7F {
+                                // invalid \x byte in string literal
+                                return None;
+                            }
+                            char::from(byte)
                         }
                         b'u' => {
-                            let (ch, rest) = backslash_u(s);
+                            let (ch, rest) = backslash_u(s)?;
                             s = rest;
                             ch
                         }
@@ -1318,20 +1307,23 @@ mod value {
                                 _ => continue 'outer,
                             }
                         },
-                        b => panic!(
-                            "unexpected byte '{}' after \\ character in string literal",
-                            ascii::escape_default(b),
-                        ),
+                        _ => {
+                            // unexpected byte after backslash
+                            return None;
+                        }
                     }
                 }
                 b'\r' => {
-                    assert_eq!(byte(s, 1), b'\n', "bare CR not allowed in string");
+                    if byte(s, 1) != b'\n' {
+                        // bare carriage return not allowed in string
+                        return None;
+                    }
                     s = &s[2..];
                     '\n'
                 }
                 _ => {
                     let ch = next_chr(s);
-                    s = &s[ch.len_utf8()..];
+                    s = s.get(ch.len_utf8()..)?;
                     ch
                 }
             };
@@ -1341,30 +1333,35 @@ mod value {
         assert!(s.starts_with('"'));
         let content = content.into_boxed_str();
         let suffix = s[1..].to_owned().into_boxed_str();
-        (content, suffix)
+        Some((content, suffix))
     }
 
-    fn parse_lit_str_raw(mut s: &str) -> (Box<str>, Box<str>) {
+    fn parse_lit_str_raw(mut s: &str) -> Option<(Box<str>, Box<str>)> {
         assert_eq!(byte(s, 0), b'r');
         s = &s[1..];
 
         let mut pounds = 0;
-        while byte(s, pounds) == b'#' {
-            pounds += 1;
+        loop {
+            match byte(s, pounds) {
+                b'#' => pounds += 1,
+                b'"' => break,
+                _ => return None,
+            }
         }
-        assert_eq!(byte(s, pounds), b'"');
         let close = s.rfind('"').unwrap();
-        for end in s[close + 1..close + 1 + pounds].bytes() {
-            assert_eq!(end, b'#');
+        for end in s.get(close + 1..close + 1 + pounds)?.bytes() {
+            if end != b'#' {
+                return None;
+            }
         }
 
-        let content = s[pounds + 1..close].to_owned().into_boxed_str();
+        let content = s.get(pounds + 1..close)?.to_owned().into_boxed_str();
         let suffix = s[close + 1 + pounds..].to_owned().into_boxed_str();
-        (content, suffix)
+        Some((content, suffix))
     }
 
     // Returns (content, suffix).
-    pub(crate) fn parse_lit_byte_str(s: &str) -> (Vec<u8>, Box<str>) {
+    pub(crate) fn parse_lit_byte_str(s: &str) -> Option<(Vec<u8>, Box<str>)> {
         assert_eq!(byte(s, 0), b'b');
         match byte(s, 1) {
             b'"' => parse_lit_byte_str_cooked(s),
@@ -1373,7 +1370,7 @@ mod value {
         }
     }
 
-    fn parse_lit_byte_str_cooked(mut s: &str) -> (Vec<u8>, Box<str>) {
+    fn parse_lit_byte_str_cooked(mut s: &str) -> Option<(Vec<u8>, Box<str>)> {
         assert_eq!(byte(s, 0), b'b');
         assert_eq!(byte(s, 1), b'"');
         s = &s[2..];
@@ -1387,10 +1384,10 @@ mod value {
                 b'"' => break,
                 b'\\' => {
                     let b = byte(v, 1);
-                    v = &v[2..];
+                    v = v.get(2..)?;
                     match b {
                         b'x' => {
-                            let (b, rest) = backslash_x(v);
+                            let (b, rest) = backslash_x(v)?;
                             v = rest;
                             b
                         }
@@ -1409,19 +1406,22 @@ mod value {
                                 continue 'outer;
                             }
                         },
-                        b => panic!(
-                            "unexpected byte '{}' after \\ character in byte-string literal",
-                            ascii::escape_default(b),
-                        ),
+                        _ => {
+                            // unexpected byte after backslash
+                            return None;
+                        }
                     }
                 }
                 b'\r' => {
-                    assert_eq!(byte(v, 1), b'\n', "bare CR not allowed in string");
+                    if byte(v, 1) != b'\n' {
+                        // bare carriage return not allowed in string
+                        return None;
+                    }
                     v = &v[2..];
                     b'\n'
                 }
                 b => {
-                    v = &v[1..];
+                    v = v.get(1..)?;
                     b
                 }
             };
@@ -1430,17 +1430,17 @@ mod value {
 
         assert_eq!(byte(v, 0), b'"');
         let suffix = s[s.len() - v.len() + 1..].to_owned().into_boxed_str();
-        (out, suffix)
+        Some((out, suffix))
     }
 
-    fn parse_lit_byte_str_raw(s: &str) -> (Vec<u8>, Box<str>) {
+    fn parse_lit_byte_str_raw(s: &str) -> Option<(Vec<u8>, Box<str>)> {
         assert_eq!(byte(s, 0), b'b');
-        let (value, suffix) = parse_lit_str_raw(&s[1..]);
-        (String::from(value).into_bytes(), suffix)
+        let (value, suffix) = parse_lit_str_raw(&s[1..])?;
+        Some((String::from(value).into_bytes(), suffix))
     }
 
     // Returns (content, suffix).
-    pub(crate) fn parse_lit_c_str(s: &str) -> (CString, Box<str>) {
+    pub(crate) fn parse_lit_c_str(s: &str) -> Option<(CString, Box<str>)> {
         assert_eq!(byte(s, 0), b'c');
         match byte(s, 1) {
             b'"' => parse_lit_c_str_cooked(s),
@@ -1449,7 +1449,7 @@ mod value {
         }
     }
 
-    fn parse_lit_c_str_cooked(mut s: &str) -> (CString, Box<str>) {
+    fn parse_lit_c_str_cooked(mut s: &str) -> Option<(CString, Box<str>)> {
         assert_eq!(byte(s, 0), b'c');
         assert_eq!(byte(s, 1), b'"');
         s = &s[2..];
@@ -1463,17 +1463,23 @@ mod value {
                 b'"' => break,
                 b'\\' => {
                     let b = byte(v, 1);
-                    v = &v[2..];
+                    v = v.get(2..)?;
                     match b {
                         b'x' => {
-                            let (b, rest) = backslash_x(v);
-                            assert!(b != 0, "\\x00 is not allowed in C-string literal");
+                            let (b, rest) = backslash_x(v)?;
+                            if b == 0 {
+                                // \x00 is not allowed in C-string literal
+                                return None;
+                            }
                             v = rest;
                             b
                         }
                         b'u' => {
-                            let (ch, rest) = backslash_u(v);
-                            assert!(ch != '\0', "\\u{{0}} is not allowed in C-string literal");
+                            let (ch, rest) = backslash_u(v)?;
+                            if ch == '\0' {
+                                // \u{0} is not allowed in C-string literal
+                                return None;
+                            }
                             v = rest;
                             out.extend_from_slice(ch.encode_utf8(&mut [0u8; 4]).as_bytes());
                             continue 'outer;
@@ -1492,19 +1498,22 @@ mod value {
                                 continue 'outer;
                             }
                         },
-                        b => panic!(
-                            "unexpected byte '{}' after \\ character in byte literal",
-                            ascii::escape_default(b),
-                        ),
+                        _ => {
+                            // unexpected byte after backslash
+                            return None;
+                        }
                     }
                 }
                 b'\r' => {
-                    assert_eq!(byte(v, 1), b'\n', "bare CR not allowed in string");
+                    if byte(v, 1) != b'\n' {
+                        // bare carriage return not allowed in string
+                        return None;
+                    }
                     v = &v[2..];
                     b'\n'
                 }
                 b => {
-                    v = &v[1..];
+                    v = v.get(1..)?;
                     b
                 }
             };
@@ -1513,17 +1522,19 @@ mod value {
 
         assert_eq!(byte(v, 0), b'"');
         let suffix = s[s.len() - v.len() + 1..].to_owned().into_boxed_str();
-        (CString::new(out).unwrap(), suffix)
+        let cstring = CString::new(out).ok()?;
+        Some((cstring, suffix))
     }
 
-    fn parse_lit_c_str_raw(s: &str) -> (CString, Box<str>) {
+    fn parse_lit_c_str_raw(s: &str) -> Option<(CString, Box<str>)> {
         assert_eq!(byte(s, 0), b'c');
-        let (value, suffix) = parse_lit_str_raw(&s[1..]);
-        (CString::new(String::from(value)).unwrap(), suffix)
+        let (value, suffix) = parse_lit_str_raw(&s[1..])?;
+        let cstring = CString::new(String::from(value)).ok()?;
+        Some((cstring, suffix))
     }
 
     // Returns (value, suffix).
-    pub(crate) fn parse_lit_byte(s: &str) -> (u8, Box<str>) {
+    pub(crate) fn parse_lit_byte(s: &str) -> Option<(u8, Box<str>)> {
         assert_eq!(byte(s, 0), b'b');
         assert_eq!(byte(s, 1), b'\'');
 
@@ -1533,10 +1544,10 @@ mod value {
         let b = match byte(v, 0) {
             b'\\' => {
                 let b = byte(v, 1);
-                v = &v[2..];
+                v = v.get(2..)?;
                 match b {
                     b'x' => {
-                        let (b, rest) = backslash_x(v);
+                        let (b, rest) = backslash_x(v)?;
                         v = rest;
                         b
                     }
@@ -1547,41 +1558,47 @@ mod value {
                     b'0' => b'\0',
                     b'\'' => b'\'',
                     b'"' => b'"',
-                    b => panic!(
-                        "unexpected byte '{}' after \\ character in byte literal",
-                        ascii::escape_default(b),
-                    ),
+                    _ => {
+                        // unexpected byte after backslash
+                        return None;
+                    }
                 }
             }
             b => {
-                v = &v[1..];
+                v = v.get(1..)?;
                 b
             }
         };
 
-        assert_eq!(byte(v, 0), b'\'');
+        if byte(v, 0) != b'\'' {
+            return None;
+        }
+
         let suffix = s[s.len() - v.len() + 1..].to_owned().into_boxed_str();
-        (b, suffix)
+        Some((b, suffix))
     }
 
     // Returns (value, suffix).
-    pub(crate) fn parse_lit_char(mut s: &str) -> (char, Box<str>) {
+    pub(crate) fn parse_lit_char(mut s: &str) -> Option<(char, Box<str>)> {
         assert_eq!(byte(s, 0), b'\'');
         s = &s[1..];
 
         let ch = match byte(s, 0) {
             b'\\' => {
                 let b = byte(s, 1);
-                s = &s[2..];
+                s = s.get(2..)?;
                 match b {
                     b'x' => {
-                        let (byte, rest) = backslash_x(s);
+                        let (byte, rest) = backslash_x(s)?;
                         s = rest;
-                        assert!(byte <= 0x7F, "invalid \\x byte in character literal");
-                        char::from_u32(u32::from(byte)).unwrap()
+                        if byte > 0x7F {
+                            // invalid \x byte in character literal
+                            return None;
+                        }
+                        char::from(byte)
                     }
                     b'u' => {
-                        let (ch, rest) = backslash_u(s);
+                        let (ch, rest) = backslash_u(s)?;
                         s = rest;
                         ch
                     }
@@ -1592,24 +1609,28 @@ mod value {
                     b'0' => '\0',
                     b'\'' => '\'',
                     b'"' => '"',
-                    b => panic!(
-                        "unexpected byte '{}' after \\ character in character literal",
-                        ascii::escape_default(b),
-                    ),
+                    _ => {
+                        // unexpected byte after backslash
+                        return None;
+                    }
                 }
             }
             _ => {
                 let ch = next_chr(s);
-                s = &s[ch.len_utf8()..];
+                s = s.get(ch.len_utf8()..)?;
                 ch
             }
         };
-        assert_eq!(byte(s, 0), b'\'');
+
+        if byte(s, 0) != b'\'' {
+            return None;
+        }
+
         let suffix = s[1..].to_owned().into_boxed_str();
-        (ch, suffix)
+        Some((ch, suffix))
     }
 
-    fn backslash_x<S>(s: &S) -> (u8, &S)
+    fn backslash_x<S>(s: &S) -> Option<(u8, &S)>
     where
         S: Index<RangeFrom<usize>, Output = S> + AsRef<[u8]> + ?Sized,
     {
@@ -1621,23 +1642,23 @@ mod value {
                 b'0'..=b'9' => b0 - b'0',
                 b'a'..=b'f' => 10 + (b0 - b'a'),
                 b'A'..=b'F' => 10 + (b0 - b'A'),
-                _ => panic!("unexpected non-hex character after \\x"),
+                _ => return None,
             };
         ch += match b1 {
             b'0'..=b'9' => b1 - b'0',
             b'a'..=b'f' => 10 + (b1 - b'a'),
             b'A'..=b'F' => 10 + (b1 - b'A'),
-            _ => panic!("unexpected non-hex character after \\x"),
+            _ => return None,
         };
-        (ch, &s[2..])
+        Some((ch, &s[2..]))
     }
 
-    fn backslash_u<S>(mut s: &S) -> (char, &S)
+    fn backslash_u<S>(mut s: &S) -> Option<(char, &S)>
     where
         S: Index<RangeFrom<usize>, Output = S> + AsRef<[u8]> + ?Sized,
     {
         if byte(s, 0) != b'{' {
-            panic!("{}", "expected { after \\u");
+            return None;
         }
         s = &s[1..];
 
@@ -1653,26 +1674,25 @@ mod value {
                     s = &s[1..];
                     continue;
                 }
-                b'}' if digits == 0 => panic!("invalid empty unicode escape"),
+                b'}' if digits == 0 => return None,
                 b'}' => break,
-                _ => panic!("unexpected non-hex character after \\u"),
+                _ => return None,
             };
             if digits == 6 {
-                panic!("overlong unicode escape (must have at most 6 hex digits)");
+                return None;
             }
             ch *= 0x10;
             ch += u32::from(digit);
             digits += 1;
             s = &s[1..];
         }
-        assert!(byte(s, 0) == b'}');
+        if byte(s, 0) != b'}' {
+            return None;
+        }
         s = &s[1..];
 
-        if let Some(ch) = char::from_u32(ch) {
-            (ch, s)
-        } else {
-            panic!("character code {:x} is not a valid unicode character", ch);
-        }
+        let ch = char::from_u32(ch)?;
+        Some((ch, s))
     }
 
     // Returns base 10 digits and suffix.
