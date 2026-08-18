@@ -73,11 +73,11 @@ Regenerate QR Code
 
 
 Continue Log In With Remote User: Authenticate In External Browser
-    # Wait until the verification URL and login code are displayed
+    # Wait until the verification URL is displayed.
     Match Text    ${DEVICE_URL}
-    # Read the user code.
-    ${text} =    Read Text
-    ${user_code} =    StringUtils.First Match    ${DEVICE_URL_REGEX}    ${text}
+    # The code can be rendered separately from its label, so wait until the
+    # actual code is available before starting the browser login.
+    ${user_code} =    Wait Until Keyword Succeeds    30s    1s    Extract Device Code
     # The OCR sometimes reads spaces in the user code, even though there are none,
     # so remove any spaces.
     ${user_code} =    Remove String    ${user_code}    ${SPACE}
@@ -86,6 +86,12 @@ Continue Log In With Remote User: Authenticate In External Browser
     ${user_code} =    String.Convert To Upper Case    ${user_code}
 
     Browser.Login    ${user_code}    ${SUITE_OUTPUT_DIR}
+
+
+Extract Device Code
+    ${text} =    Read Text
+    ${user_code} =    StringUtils.First Match    ${DEVICE_URL_REGEX}    ${text}
+    RETURN    ${user_code}
 
 
 Continue Log In With Remote User Through CLI: Define Local Password
