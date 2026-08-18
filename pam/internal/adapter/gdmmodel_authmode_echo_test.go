@@ -122,25 +122,38 @@ func TestGdmModelActsOnSameAuthModeReselection(t *testing.T) {
 		"a genuine re-selection of the same auth mode must be honored")
 }
 
-func TestGdmModelStageChangeClearsPendingEcho(t *testing.T) {
+func TestGdmModelStageChangeHandlesPendingEcho(t *testing.T) {
 	t.Parallel()
 
-	// A genuine re-selection always follows a stage change back into
-	// authModeSelection. The stage change must drop any echo we were still
-	// expecting, so that the re-selection is acted on instead of being
-	// mistaken for the (never-delivered) echo of the previous selection.
+	// The normal transition to challenge must preserve a pending echo because
+	// the asynchronous GDM poll may deliver it after the stage change.
 	m := gdmModel{}
 	m, _ = m.Update(AuthModeSelected{ID: "device_auth_qr"})
 	require.Equal(t, "device_auth_qr", m.pendingEchoAuthModeID)
 
 	m, _ = m.Update(StageChanged{Stage: proto.Stage_challenge})
+	require.Equal(t, "device_auth_qr", m.pendingEchoAuthModeID,
+		"entering challenge must preserve a pending GDM echo")
+
+	echo := []*gdm.EventData{gdm_test.AuthModeSelectedEvent("device_auth_qr")}
+	var cmd tea.Cmd
+	m, cmd = m.handlePollResponse(echo)
+	msgs := collectMessages(cmd)
+	require.False(t, containsAuthModeSelected(msgs, "device_auth_qr"),
+		"a delayed echo after entering challenge must still be suppressed")
+	require.Empty(t, m.pendingEchoAuthModeID,
+		"consuming the delayed echo should clear the expected echo")
+
+	// Entering authModeSelection permits a genuine same-mode re-selection, so
+	// discard an echo that was not delivered before navigating back.
+	m, _ = m.Update(AuthModeSelected{ID: "device_auth_qr"})
 	m, _ = m.Update(StageChanged{Stage: proto.Stage_authModeSelection})
 	require.Empty(t, m.pendingEchoAuthModeID,
-		"a stage change must drop a still-pending echo")
+		"entering auth mode selection must clear a pending echo")
 
 	reselect := []*gdm.EventData{gdm_test.AuthModeSelectedEvent("device_auth_qr")}
-	_, cmd := m.handlePollResponse(reselect)
-	msgs := collectMessages(cmd)
+	_, cmd = m.handlePollResponse(reselect)
+	msgs = collectMessages(cmd)
 	require.True(t, containsAuthModeSelected(msgs, "device_auth_qr"),
 		"re-selecting the same auth mode after a stage change must be honored")
 }

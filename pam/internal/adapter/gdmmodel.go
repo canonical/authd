@@ -242,10 +242,11 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 			m.pollGdm())
 
 	case StageChanged:
-		// A genuine (re-)selection always follows a stage change into the
-		// authModeSelection stage, so any echo we were still expecting from a
-		// previous selection is no longer relevant once the stage changes.
-		m.pendingEchoAuthModeID = ""
+		// Entering auth mode selection permits a genuine re-selection, so an
+		// echo pending from the previous selection is no longer relevant.
+		if msg.Stage == proto.Stage_authModeSelection {
+			m.pendingEchoAuthModeID = ""
+		}
 		return m, m.changeStage(msg.Stage)
 
 	case userSelected:
