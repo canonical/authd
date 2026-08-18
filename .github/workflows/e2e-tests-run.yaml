@@ -234,6 +234,14 @@ jobs:
           RELEASE: ${{ inputs.ubuntu-version }}
           BROKER: ${{ inputs.broker }}
           E2E_TESTS_DESCRIPTION: ${{ inputs.e2e-tests-description }}
+          # Browser.Login uses this short-lived lock; the rest of the e2e
+          # tests remain parallel across Ubuntu releases. This is an
+          # experiment for an observed correlation, not a guaranteed fix.
+          E2E_BROWSER_LOGIN_LOCK_BUCKET: authd-e2e-test-logs
+          E2E_BROWSER_LOGIN_LOCK_KEY: e2e-tests/browser-login/${{ inputs.broker }}
+          E2E_BROWSER_LOGIN_LOCK_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           set -eux
           export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
