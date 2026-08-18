@@ -7,6 +7,7 @@ users:
       shell: /bin/bash
       broker_id: broker-id
       provider_id: ""
+      full_username: user1
     - name: user2
       uid: 2222
       gid: 22222
@@ -15,6 +16,7 @@ users:
       shell: /bin/bash
       broker_id: broker-id
       provider_id: ""
+      full_username: user2
 groups:
     - name: group1
       gid: 11111
@@ -27,4 +29,4 @@ users_to_groups:
       gid: 11111
     - uid: 2222
       gid: 22222
-schema_version: 3
+schema_version: 4
