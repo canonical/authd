@@ -165,7 +165,7 @@ jobs:
         if: inputs.broker-snap-channel == ''
         env:
           OCI_REPO: ghcr.io/${{ env.OCI_REPOSITORY }}/${{ inputs.broker }}-snap
-          OCI_TAG: ${{ github.sha }}
+          OCI_TAG: ${{ needs.build-broker-snap.outputs.files-hash }}
         run: |
           set -euo pipefail
 
