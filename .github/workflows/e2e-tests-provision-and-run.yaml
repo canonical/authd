@@ -134,6 +134,14 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
 
+          if [ "${{ steps.restore-cache.outputs.cache-hit }}" = "true" ]; then
+            if oras manifest fetch --descriptor "${OCI_REPO}:${OCI_TAG}" >/dev/null; then
+              echo "VM image already exists in the OCI registry; skipping upload."
+              exit 0
+            fi
+            echo "VM image is not in the OCI registry; uploading the cached image."
+          fi
+
           # Push the qcow2 as a single layer. It used to be split into
           # many small chunks hoping unchanged chunks would be deduped
           # and skipped, but in practice each provisioning run bakes in
