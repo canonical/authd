@@ -8,6 +8,7 @@ users:
       dir: /home/pam_unix_non_existent
       shell: /bin/bash
       broker_id: broker-id
+      full_username: pam_unix_non_existent
 groups:
     - name: group1
       gid: 11111

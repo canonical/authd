@@ -8,6 +8,7 @@ users:
       dir: /home/userwithbroker@example.com
       shell: /bin/bash
       broker_id: MOCKBROKERID
+      full_username: userwithbroker@example.com
     - name: userwithinactivebroker@example.com
       uid: 2222
       gid: 22222
@@ -15,12 +16,14 @@ users:
       dir: /home/userwithinactivebroker@example.com
       shell: /bin/dash
       broker_id: inactive-broker-id
+      full_username: userwithinactivebroker@example.com
     - name: userwithoutbroker@example.com
       uid: 3333
       gid: 33333
       gecos: userwithoutbroker
       dir: /home/userwithoutbroker@example.com
       shell: /bin/zsh
+      full_username: userwithoutbroker@example.com
 groups:
     - name: group1
       gid: 11111
