@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       files-hash:
-        description: 'Hash of build-relevant files, used as cache key and concurrency group'
+        description: 'Hash of build-relevant files, used as OCI artifact tag, cache key and concurrency group'
         type: string
         required: true
       ubuntu-version:
@@ -177,14 +177,18 @@ jobs:
           echo "PKG_TARBALL=${PKG_TARBALL}" >> ${GITHUB_ENV}
 
       - name: Upload deb and sources as OCI artifacts
-        # Skip if the PR is from a fork, as we don't have the permission to
-        # upload to the OCI registry.
+        # Skip if the artifact was restored from the cache or if the PR is
+        # from a fork, as we don't have permission to upload to the OCI
+        # registry.
         if: >-
-          (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
-          github.event_name == 'push' ||
-          github.event_name == 'release' ||
-          github.event_name == 'schedule' ||
-          github.event_name == 'workflow_dispatch'
+          steps.restore-cache.outputs.cache-hit != 'true' &&
+          (
+            (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+            github.event_name == 'push' ||
+            github.event_name == 'release' ||
+            github.event_name == 'schedule' ||
+            github.event_name == 'workflow_dispatch'
+          )
         run: |
           set -euo pipefail
           set -x
@@ -199,7 +203,6 @@ jobs:
             --annotation "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
             --annotation "org.opencontainers.image.revision=${{ github.sha }}" \
             --annotation "org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          oras tag "${OCI_REPO}:${OCI_TAG}" "${{ github.sha }}"
           rm "${{ env.PKG_DEB }}"
 
           OCI_REPO=ghcr.io/${OCI_REPOSITORY}/authd-deb-sources-${{ inputs.ubuntu-version }}
@@ -213,7 +216,6 @@ jobs:
             --annotation "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
             --annotation "org.opencontainers.image.revision=${{ github.sha }}" \
             --annotation "org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          oras tag "${OCI_REPO}:${OCI_TAG}" "${{ github.sha }}"
           rm "${{ env.PKG_DSC }}" \
              "${{ env.PKG_SOURCE_CHANGES }}" \
              "${{ env.PKG_TARBALL }}"

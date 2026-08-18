@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       files-hash:
-        description: 'Hash of build-relevant files, used as cache key and concurrency group'
+        description: 'Hash of build-relevant files, used as OCI artifact tag and cache key'
         type: string
         required: true
       ubuntu-release:
@@ -289,6 +289,7 @@ jobs:
     with:
       ubuntu-release: ${{ inputs.ubuntu-release }}
       broker: ${{ matrix.broker }}
+      files-hash: ${{ inputs.files-hash }}
       broker-snap-channel: ${{ inputs.broker-snap-channel }}
       apt-sources: ${{ needs.resolve_release.outputs.apt_sources }}
       authd-apt-sources: ${{ needs.resolve_release.outputs.authd_apt_sources }}
