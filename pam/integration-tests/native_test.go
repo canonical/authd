@@ -154,7 +154,7 @@ func TestNativeAuthenticate(t *testing.T) {
 			},
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
-				c.WaitFor(t, `Gimme your password:`)
+				c.WaitFor(t, `Gimme your password`)
 				c.SendLine(t, "goodpass")
 				nativeWaitForResult(t, c)
 			},
@@ -231,7 +231,7 @@ func TestNativeAuthenticate(t *testing.T) {
 			clientOptions: clientOptions{PamServiceName: "polkit-1"},
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
-				c.WaitFor(t, `Gimme your password:`)
+				c.WaitFor(t, `Gimme your password`)
 				c.SendLine(t, "r")
 				c.WaitFor(t, `Choose your authentication flow:`)
 				sendEchoedLine(t, c, "7")
@@ -239,7 +239,7 @@ func TestNativeAuthenticate(t *testing.T) {
 				sendEchoedLine(t, c, "2")
 				c.WaitFor(t, `Choose action:`)
 				sendEchoedLine(t, c, "1")
-				c.WaitFor(t, `Enter your one time credential:`)
+				c.WaitFor(t, `Enter your one time credential`)
 				sendEchoedLine(t, c, "temporary pass00")
 				nativeWaitForResult(t, c)
 			},
@@ -326,7 +326,7 @@ func TestNativeAuthenticate(t *testing.T) {
 				for _, username := range []string{upper, mixed} {
 					ctx.run(t, nativePtySessionSpec{action: pam_test.RunnerActionLogin, username: username}, func(t *testing.T, c *ptytest.Console) {
 						t.Helper()
-						nativeWaitForLoginPasswordPrompt(t, c)
+						nativeWaitForLoginPasswordPrompt(t, c, `Gimme your password:`)
 						c.SendLine(t, "authd2404")
 						nativeWaitForResult(t, c)
 					})
@@ -871,7 +871,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 			expectedUser: testUserNameFull(t, examplebroker.UserIntegrationAuthModesPrefix, "password,mandatoryreset-integration-polkit"),
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
-				c.WaitFor(t, `Gimme your password:`)
+				c.WaitFor(t, `Gimme your password`)
 				c.SendLine(t, "goodpass")
 				nativeChangePassword(t, c, "authd2404", "authd2404")
 				nativeWaitForChangeAuthTokResult(t, c)
@@ -880,7 +880,7 @@ func TestNativeChangeAuthTok(t *testing.T) {
 				t.Helper()
 				ctx.run(t, nativePtySessionSpec{action: pam_test.RunnerActionLogin, clientOptions: ctx.baseSpec.clientOptions}, func(t *testing.T, c *ptytest.Console) {
 					t.Helper()
-					nativeWaitForLoginPasswordPrompt(t, c)
+					nativeWaitForLoginPasswordPrompt(t, c, `Gimme your password`)
 					c.SendLine(t, "authd2404")
 					nativeWaitForResult(t, c)
 				})
@@ -1090,7 +1090,7 @@ func nativeReloginAfterPasswordChange(t *testing.T, ctx *nativePtyTestContext) {
 	t.Helper()
 	ctx.run(t, nativePtySessionSpec{action: pam_test.RunnerActionLogin, username: ctx.baseSpec.username}, func(t *testing.T, c *ptytest.Console) {
 		t.Helper()
-		nativeWaitForLoginPasswordPrompt(t, c)
+		nativeWaitForLoginPasswordPrompt(t, c, `Gimme your password:`)
 		c.SendLine(t, "authd2404")
 		nativeWaitForResult(t, c)
 	})
@@ -1151,13 +1151,16 @@ func nativeChangePassword(t *testing.T, c *ptytest.Console, newPassword string, 
 	c.SendLine(t, confirm)
 }
 
-func nativeWaitForLoginPasswordPrompt(t *testing.T, c *ptytest.Console) {
+// nativeWaitForLoginPasswordPrompt waits for the login password prompt.
+// Pass a colon-less pattern for the polkit service's blanked-out prompt
+// (see nativemodel.go's polkitServiceName handling).
+func nativeWaitForLoginPasswordPrompt(t *testing.T, c *ptytest.Console, passwordPrompt string) {
 	t.Helper()
 
-	matched := c.WaitFor(t, `Choose your provider:|Gimme your password:`)
+	matched := c.WaitFor(t, `Choose your provider:|`+passwordPrompt)
 	if strings.Contains(matched, `Choose your provider:`) {
 		sendEchoedLine(t, c, "2")
-		c.WaitFor(t, `Gimme your password:`)
+		c.WaitFor(t, passwordPrompt)
 	}
 }
 
