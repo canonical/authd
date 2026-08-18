@@ -36,6 +36,34 @@ func TestAuthenticationModelLocksTerminalInputWhileAuthenticating(t *testing.T) 
 	require.True(t, updated.Focused())
 }
 
+func TestAuthenticationModelIgnoresStaleStopAuthentication(t *testing.T) {
+	t.Parallel()
+
+	model := newAuthenticationModel(nil, InteractiveTerminal, authd.SessionMode_LOGIN)
+	model.currentModel = newFormModel("", entries.CharsPassword, "", false)
+	model.currentModel.Focus()
+
+	model, _ = model.Update(startAuthentication{})
+	require.True(t, model.inProgress)
+	require.Equal(t, uint64(1), model.authGen)
+
+	stopPreviousChallenge := model.Reset()
+
+	model.currentModel = newFormModel("", entries.CharsPassword, "", false)
+	model.currentModel.Focus()
+	model, _ = model.Update(startAuthentication{})
+	require.True(t, model.inProgress)
+	require.Equal(t, uint64(2), model.authGen)
+
+	updated, _ := model.Update(stopPreviousChallenge())
+	require.True(t, updated.inProgress,
+		"a stop from a previous challenge must not stop the current one")
+
+	updated, _ = updated.Update(updated.cancelIsAuthenticated()())
+	require.False(t, updated.inProgress,
+		"a stop from the current challenge must still stop authentication")
+}
+
 func TestAuthenticationModelKeepsWaitLayoutVisibleWhileAuthenticating(t *testing.T) {
 	t.Parallel()
 
