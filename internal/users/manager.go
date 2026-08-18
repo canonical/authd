@@ -371,7 +371,7 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		}
 	}
 
-	userRow := db.NewUserRow(u.Name, u.UID, *userPrivateGroup.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.ProviderID)
+	userRow := db.NewUserRow(u.Name, u.UID, *userPrivateGroup.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.ProviderID, u.Name)
 
 	if err = m.db.UpdateUserEntry(userRow, groupRows, localGroups); err != nil {
 		return err

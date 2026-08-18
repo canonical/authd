@@ -195,6 +195,7 @@ func startAuthdWithUserHome(t *testing.T, home string) (socketPath string) {
       dir: %s
       shell: /bin/bash
       broker_id: broker-id
+      full_username: user1@example.com
 groups:
     - name: group1
       gid: 11111
