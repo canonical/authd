@@ -191,6 +191,21 @@ func (p *mockMFATimeoutProvider) AcquireTokenByMFAFlow(_ context.Context, _, _ s
 	return nil, &himmelblau.MFAError{Category: himmelblau.MFAErrorPollContinue, Message: "MFA poll continue"}
 }
 
+// mockMFACancelProvider waits for the authentication request to be cancelled,
+// simulating a poll that is in progress when the user abandons the MFA prompt.
+type mockMFACancelProvider struct {
+	*mockEntraPasswordProvider
+	started  chan struct{}
+	finished chan struct{}
+}
+
+func (p *mockMFACancelProvider) AcquireTokenByMFAFlow(ctx context.Context, _, _ string, _ string, _ *himmelblau.MFAFlowState, _ string, _ int, _ []byte) (*oauth2.Token, error) {
+	close(p.started)
+	<-ctx.Done()
+	close(p.finished)
+	return nil, ctx.Err()
+}
+
 // mockMFAWrongCodeThenSuccessProvider simulates an incorrect or expired
 // one-time code on the first code submission followed by a correct code on the
 // second. libhimmelblau reports a wrong code as an MFAInvalidCode error (which
@@ -3534,6 +3549,86 @@ func TestIsAuthenticatedEntraMFAWaitTimeoutReturnsAuthNext(t *testing.T) {
 	require.Contains(t, payload.Message, "timed out")
 }
 
+func TestEntraPasswordAfterCancelledMFAHandlesDuplicateRequest(t *testing.T) {
+	t.Parallel()
+
+	provider := &mockMFACancelProvider{
+		mockEntraPasswordProvider: &mockEntraPasswordProvider{
+			MockProvider: &testutils.MockProvider{},
+			flowState:    &himmelblau.MFAFlowState{},
+			challengeInfo: &himmelblau.MFAChallengeInfo{
+				Message:           "Approve the sign-in request in Microsoft Authenticator",
+				Method:            "PhoneAppNotification",
+				PollingIntervalMs: 1,
+				MaxPollAttempts:   10,
+			},
+		},
+		started:  make(chan struct{}),
+		finished: make(chan struct{}),
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	updateAuthModes(t, b, sessionID, authmodes.EntraPassword)
+	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
+
+	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+
+	updateAuthModes(t, b, sessionID, authmodes.EntraMFAWait)
+	authDone := make(chan struct{})
+	var cancelledAccess, cancelledData string
+	var cancelledErr error
+	go func() {
+		cancelledAccess, cancelledData, cancelledErr = b.IsAuthenticated(sessionID, `{}`)
+		close(authDone)
+	}()
+
+	select {
+	case <-provider.started:
+	case <-time.After(time.Second):
+		t.Fatal("MFA continuation did not start")
+	}
+
+	b.CancelIsAuthenticated(sessionID)
+
+	select {
+	case <-authDone:
+	case <-time.After(time.Second):
+		t.Fatal("cancelled authentication did not return")
+	}
+	require.Equal(t, broker.AuthCancelled, cancelledAccess)
+	require.Contains(t, cancelledData, "Authentication request cancelled")
+	require.ErrorIs(t, cancelledErr, context.Canceled)
+
+	select {
+	case <-provider.finished:
+	case <-time.After(time.Second):
+		t.Fatal("cancelled MFA continuation did not finish")
+	}
+
+	provider.initErr = &himmelblau.MFAError{
+		AADSTS:  500121,
+		Message: "AADSTS500121: UserAuthFailedDuplicateRequest",
+	}
+	updateAuthModes(t, b, sessionID, authmodes.EntraPassword)
+
+	access, data, err := b.IsAuthenticated(sessionID, passwordAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthRetry, access)
+	require.Contains(t, data, "The previous MFA prompt was not completed")
+	require.NotContains(t, data, "AADSTS500121")
+	require.NotContains(t, data, "unexpected error")
+}
+
 // TestEntraPasswordRoutesAADSTSErrors verifies that an AADSTS error raised while
 // initiating the password+MFA flow is mapped to the right broker outcome.
 func TestEntraPasswordRoutesAADSTSErrors(t *testing.T) {
@@ -3551,6 +3646,7 @@ func TestEntraPasswordRoutesAADSTSErrors(t *testing.T) {
 		"Account_locked":                               {aadsts: 50053, wantAccess: broker.AuthDenied, wantMsg: "locked"},
 		"Password_expired":                             {aadsts: 50055, wantAccess: broker.AuthDenied, wantMsg: "expired"},
 		"Invalid_credentials_retry":                    {aadsts: 50126, wantAccess: broker.AuthRetry, wantMsg: "Incorrect password"},
+		"Previous_MFA_request_not_completed":           {aadsts: 500121, wantAccess: broker.AuthRetry, wantMsg: "previous MFA prompt was not completed"},
 		"Conditional_access_blocked":                   {aadsts: 53003, wantAccess: broker.AuthDenied, wantMsg: "Conditional Access"},
 		"Interactive_auth_to_device":                   {aadsts: 16000, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
 		"Interactive_auth_denied_when_device_disabled": {aadsts: 16000, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled"},
