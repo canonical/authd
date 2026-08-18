@@ -58,6 +58,14 @@ func TestGetUserByName(t *testing.T) {
 		"Return_existing_user":                {username: "user1@example.com"},
 		"Return_existing_user_with_uppercase": {username: "user1@example.com"},
 
+		// A user stored under a shortened name must resolve through both names, so that the rest of
+		// the system keeps working whichever form it knows the user by. This is deliberately not
+		// gated on the short usernames configuration: users shortened by an earlier configuration
+		// must stay resolvable once it is turned off again. Both golden files are therefore
+		// expected to hold the very same entry, named after the shortened form.
+		"Return_user_stored_under_a_short_name_by_its_short_name": {username: "user1", dbFile: "short-user.db.yaml"},
+		"Return_user_stored_under_a_short_name_by_its_full_name":  {username: "user1@example.com", dbFile: "short-user.db.yaml"},
+
 		"Precheck_user_if_not_in_db": {username: "user-pre-check@example.com", shouldPreCheck: true},
 		"Prechecked_user_with_upper_cases_in_username_has_same_id_as_lower_case": {username: "User-Pre-Check@Example.com", shouldPreCheck: true},
 

@@ -132,6 +132,12 @@ func TestGetBroker(t *testing.T) {
 		"For_unmanaged_user_and_only_one_broker,_get_local_broker": {user: "nonexistent@example.com", onlyLocalBroker: true, wantBroker: brokers.LocalBrokerName},
 		"Username_is_case_insensitive":                             {user: "UserWithBroker@example.com", wantBroker: mockBrokerGeneratedID},
 
+		// A user stored under a short name must be found through either name: the fully qualified
+		// one also resolves through NSS, which would otherwise look like the user being provided by
+		// another NSS source and send them to the local broker.
+		"Success_getting_broker_of_a_short_user_by_its_short_name": {user: "shortuserwithbroker", wantBroker: mockBrokerGeneratedID},
+		"Success_getting_broker_of_a_short_user_by_its_full_name":  {user: "shortuserwithbroker@example.com", wantBroker: mockBrokerGeneratedID},
+
 		"Returns_empty_when_user_does_not_exist":         {user: "nonexistent@example.com", wantBroker: ""},
 		"Returns_empty_when_user_does_not_have_a_broker": {user: "userwithoutbroker@example.com", wantBroker: ""},
 		"Returns_empty_when_broker_is_not_available":     {user: "userwithinactivebroker@example.com", wantBroker: ""},
@@ -186,10 +192,18 @@ func TestSelectBroker(t *testing.T) {
 		sessionMode string
 		existingDB  string
 
+		useShortUsernames bool
+
 		wantErr bool
 	}{
 		"Successfully_select_a_broker_and_creates_auth_session":   {username: "success@example.com", sessionMode: auth.SessionModeLogin},
 		"Successfully_select_a_broker_and_creates_passwd_session": {username: "success@example.com", sessionMode: auth.SessionModeChangePassword},
+		"Successfully_select_a_broker_with_short_username":        {username: "success", useShortUsernames: true, existingDB: "one-user-one-group.db"},
+		// The user is stored under a short name but logs in with the fully qualified one.
+		"Successfully_select_a_broker_with_full_username_for_short_user": {username: "success@example.com", useShortUsernames: true, existingDB: "one-short-user-one-group.db"},
+		// Users shortened by an earlier configuration must keep working once the feature is turned
+		// off again, so that they can log in and be renamed back to their fully qualified name.
+		"Successfully_select_a_broker_with_full_username_after_disabling_short_usernames": {username: "success@example.com", existingDB: "one-short-user-one-group-feature-disabled.db"},
 
 		"Error_when_username_is_empty":                               {wantErr: true},
 		"Error_when_mode_is_empty":                                   {sessionMode: "-", wantErr: true},
@@ -200,6 +214,8 @@ func TestSelectBroker(t *testing.T) {
 		"Error_when_starting_the_session":                            {username: "ns_error@example.com", wantErr: true},
 		"Error_when_user_is_bound_to_a_different_broker":             {username: "bound@example.com", existingDB: "bound-to-other-broker.db", wantErr: true},
 		"Error_when_user_is_bound_to_non-local_broker_selects_local": {username: "bound@example.com", brokerID: brokers.LocalBrokerName, existingDB: "bound-to-other-broker.db", wantErr: true},
+
+		"Error_when_selecting_a_broker_with_short_username_allowed_but_user_does_not_exist_in_db": {username: "shortusername", useShortUsernames: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -211,7 +227,10 @@ func TestSelectBroker(t *testing.T) {
 				require.NoError(t, err, "Setup: could not create database from testdata")
 			}
 
-			m, err := users.NewManager(users.DefaultConfig, cacheDir)
+			managerCfg := users.DefaultConfig
+			managerCfg.UseShortUsernames = tc.useShortUsernames
+
+			m, err := users.NewManager(managerCfg, cacheDir)
 			require.NoError(t, err, "Setup: could not create user manager")
 			t.Cleanup(func() { _ = m.Stop() })
 
@@ -405,10 +424,11 @@ func TestIsAuthenticated(t *testing.T) {
 		existingDB string
 		dbReadOnly bool
 
-		username        string
-		secondCall      bool
-		cancelFirstCall bool
-		localGroupsFile string
+		username          string
+		secondCall        bool
+		cancelFirstCall   bool
+		localGroupsFile   string
+		useShortUsernames bool
 
 		// There is no wantErr as it's stored in the golden file.
 	}{
@@ -421,6 +441,7 @@ func TestIsAuthenticated(t *testing.T) {
 		"Update_local_groups":                                  {username: "success_with_local_groups@example.com", localGroupsFile: "valid.group"},
 		"Successfully_authenticate_user_with_uppercase":        {username: "SUCCESS@example.com"},
 		"Successfully_authenticate_with_groups_with_uppercase": {username: "success_with_uppercase_groups@example.com"},
+		"Successfully_authenticate_with_short_usernames":       {username: "success@example.com", useShortUsernames: true},
 
 		// DB write failure: UpdateBrokerForUser fails (read-only filesystem) but auth still succeeds.
 		// UpdateUser is a no-op because the DB already has up-to-date user info; the first actual
@@ -429,9 +450,10 @@ func TestIsAuthenticated(t *testing.T) {
 		"Successfully_authenticate_even_if_db_write_fails": {username: "success@example.com", existingDB: "cache-with-uptodate-user.db", dbReadOnly: true},
 
 		// service errors
-		"Error_when_sessionID_is_empty": {sessionID: "-"},
-		"Error_when_there_is_no_broker": {sessionID: "invalid-session"},
-		"Error_when_user_is_locked":     {username: "locked@example.com", existingDB: "cache-with-locked-user.db"},
+		"Error_when_sessionID_is_empty":            {sessionID: "-"},
+		"Error_when_there_is_no_broker":            {sessionID: "invalid-session"},
+		"Error_when_user_is_locked":                {username: "locked@example.com", existingDB: "cache-with-locked-user.db"},
+		"Error_when_short_username_user_is_locked": {username: "locked@example.com", existingDB: "cache-with-locked-short-username-user.db", useShortUsernames: true},
 
 		// broker errors
 		"Error_when_authenticating":                                              {username: "ia_error@example.com"},
@@ -469,7 +491,10 @@ func TestIsAuthenticated(t *testing.T) {
 				}),
 			}
 
-			m, err := users.NewManager(users.DefaultConfig, dbDir, managerOpts...)
+			managerCfg := users.DefaultConfig
+			managerCfg.UseShortUsernames = tc.useShortUsernames
+
+			m, err := users.NewManager(managerCfg, dbDir, managerOpts...)
 			require.NoError(t, err, "Setup: could not create user manager")
 			t.Cleanup(func() { _ = m.Stop() })
 

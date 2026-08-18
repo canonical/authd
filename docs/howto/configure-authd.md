@@ -541,6 +541,55 @@ The authd service is configured in `/etc/authd/authd.yaml`.
 
 This provides configuration options for logging verbosity and UID/GID ranges.
 
+(ref::config-short-usernames)=
+## Allow logging in with a shortened username
+
+Identity providers report fully qualified usernames, such as
+`user@example.com`. By default, this is also the name authd creates the user
+with, so it is the name used for the home directory, the user private group and
+any local group membership.
+
+To let users log in with just `user`, set `use_short_usernames` in
+`/etc/authd/authd.yaml`:
+
+```{code-block} yaml
+:caption: /etc/authd/authd.yaml
+use_short_usernames: true
+```
+
+Then restart the service:
+
+```shell
+sudo systemctl restart authd
+```
+
+With this enabled, users can log in with either form, because authd adds the
+domain back before contacting the broker. The fully qualified username is still
+required the first time a user logs in, since authd cannot resolve the domain
+before it knows the user.
+
+Both forms also resolve through NSS, so commands such as `getent passwd
+user@example.com` and `getent passwd user` return the same entry. That entry is
+named after the shortened form, which is therefore the name used by the session,
+the home directory and the user private group.
+
+```{note}
+A shortened name must be unique. Two users whose usernames only differ by their
+domain, such as `user@example.com` and `user@other.com`, cannot both be created:
+the second one is rejected. A single user whose domain changes at the identity
+provider keeps their shortened name, because the provider identifies them by a
+stable ID rather than by their username.
+```
+
+Enabling this option on an existing installation renames the users that authd
+already knows about to their shortened name, keeping their UID and GID. They
+also keep their existing home directory, which still carries the fully qualified
+name. Disabling the option again renames the users back.
+
+Each user is renamed the next time they successfully authenticate, not when the
+option changes. Until then, they keep the name they were stored under, so an
+existing user can only log in with their fully qualified name.
+
 (ref::config-pwquality)=
 ## Configure password quality
 

@@ -45,7 +45,7 @@ type UserRow struct {
 }
 
 // NewUserRow creates a new UserRow.
-func NewUserRow(name string, uid, gid uint32, gecos, dir, shell, brokerID, providerID string) UserRow {
+func NewUserRow(name string, uid, gid uint32, gecos, dir, shell, brokerID, providerID, fullUsername string) UserRow {
 	return UserRow{
 		Name:         name,
 		UID:          uid,
@@ -55,7 +55,7 @@ func NewUserRow(name string, uid, gid uint32, gecos, dir, shell, brokerID, provi
 		Shell:        shell,
 		BrokerID:     brokerID,
 		ProviderID:   providerID,
-		FullUsername: name,
+		FullUsername: fullUsername,
 	}
 }
 
