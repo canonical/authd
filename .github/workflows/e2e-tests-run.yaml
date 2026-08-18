@@ -9,6 +9,10 @@ on:
       broker:
         required: true
         type: string
+      files-hash:
+        description: 'Hash of build-relevant files used to find the Debian artifact'
+        required: true
+        type: string
       broker-snap-channel:
         description: 'If set, download the broker snap from this Snap Store channel instead of building it from source'
         required: false
@@ -131,7 +135,7 @@ jobs:
         id: download-authd-deb
         env:
           OCI_REPO: ghcr.io/${{ github.repository }}/authd-deb-${{ inputs.ubuntu-version }}
-          OCI_TAG: ${{ github.sha }}
+          OCI_TAG: ${{ inputs.files-hash }}
         run: |
           set -euo pipefail
 
