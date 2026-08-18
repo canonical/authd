@@ -19,8 +19,14 @@ from base import (
     logger,
     run_browser_login,
 )
+from generate_totp import TOTP_CODE_LENGTH, TOTPCode, generate_totp_details
 
 TOTP_CODE_MAX_TRIES = 5
+
+# How long to wait for a typed TOTP code to show up in the input field. Kept
+# short because a mismatch costs this twice, before the code is submitted, and
+# the code is only valid for MIN_VALIDITY_S seconds after it was generated.
+TOTP_FIELD_TIMEOUT_MS = 2000
 
 # Patterns that identify each page, used in wait_for_pattern calls.
 _ENTER_CODE = "Enter the code displayed on your device"
@@ -92,6 +98,8 @@ class GoogleLoginFlow:
         self._totp_secret = totp_secret
         self._screenshot_dir = screenshot_dir
         self._last_totp_code: str | None = None
+        self._submitted_totp: TOTPCode | None = None
+        self._totp_submitted_at: float | None = None
 
     def run(self) -> None:
         """Execute the full login flow, retrying on TOTP failures."""
@@ -162,6 +170,7 @@ class GoogleLoginFlow:
                 "\"too many failed attempts\" lockout page. The test "
                 "account is likely locked out for a few hours.")
         if _matches_phrase(matches, _WRONG_TOTP, _WRONG_NUMBER_OF_DIGITS):
+            self._log_rejected_totp_code()
             raise WrongTOTPCodeError("TOTP code was rejected")
         if _matches_phrase(matches, "find your google account", _EMAIL_INVALID):
             self._handle_wrong_email()
@@ -195,7 +204,7 @@ class GoogleLoginFlow:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-enter-username")
         # Clear any text that may have accumulated in the field from previous
         # attempts (due to the page-load race described in _handle_wrong_email).
-        self._clear_input_field(self._username)
+        self._clear_input_field(len(self._username))
         self._browser.send_key_taps(
             ascii_string_to_key_events(self._username) + [Gdk.KEY_Return])
 
@@ -206,9 +215,62 @@ class GoogleLoginFlow:
 
     def _handle_totp_page(self) -> None:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-enter-totp-code")
-        self._last_totp_code = generate_totp(self._totp_secret)
-        self._browser.send_key_taps(
-            ascii_string_to_key_events(self._last_totp_code) + [Gdk.KEY_Return])
+
+        # Clear the field before typing: this handler can be entered again
+        # while the previous submission is still being validated, because the
+        # page still shows the 2-Step Verification text until Google answers.
+        # Leftover digits would be silently truncated to the field's maximum
+        # length, which turns into a wrong code rather than into an obvious
+        # error about the number of digits.
+        self._clear_input_field(TOTP_CODE_LENGTH)
+
+        totp = generate_totp_details(self._totp_secret)
+        self._last_totp_code = totp.code
+        self._browser.send_key_taps(ascii_string_to_key_events(totp.code))
+
+        self._verify_totp_field(totp.code)
+
+        self._submitted_totp = totp
+        self._totp_submitted_at = time.monotonic()
+        logger.info(f"Submitting TOTP code {totp.code} (time step {totp.time_step}), "
+                    f"generated {totp.age():.1f}s ago, "
+                    f"valid for another {totp.seconds_left():.1f}s")
+        self._browser.send_key_taps([Gdk.KEY_Return])
+
+    def _verify_totp_field(self, expected_code: str) -> None:
+        """Check that the typed code actually made it into the input field.
+
+        Key events can get lost or land in the wrong element, and the code that
+        is submitted then is rejected as wrong, which is indistinguishable from
+        a code generated from a wrong clock. Reading the field back tells the
+        two apart. It also makes sure the code is complete before it is
+        submitted, since key events reach the web content asynchronously.
+
+        Retypes the code once, since a dropped key event is transient.
+        """
+        for attempt in range(2):
+            try:
+                value = self._browser.wait_for_focused_input_value(
+                    expected_code, timeout_ms=TOTP_FIELD_TIMEOUT_MS)
+            except TimeoutError as e:
+                logger.warning(f"Could not read back the TOTP input field: {e}")
+                return
+
+            if value == expected_code:
+                return
+
+            logger.warning(f"TOTP input field contains {value!r} instead of "
+                           f"{expected_code!r}")
+            if attempt > 0:
+                break
+
+            logger.info("Clearing the field and typing the code again")
+            self._clear_input_field(max(len(value or ""), TOTP_CODE_LENGTH))
+            self._browser.send_key_taps(ascii_string_to_key_events(expected_code))
+
+        raise RuntimeError(
+            f"Failed to type the TOTP code into the input field: it contains "
+            f"{value!r} instead of {expected_code!r}")
 
     def _handle_choose_account_page(self) -> None:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-choose-account")
@@ -231,7 +293,7 @@ class GoogleLoginFlow:
         # next wait_for_pattern would still see it and re-enter this handler.
         # Clear the field and retype the email immediately so the form is
         # resubmitted and the error is dismissed within this single dispatch.
-        self._clear_input_field(self._username)
+        self._clear_input_field(len(self._username))
         self._browser.send_key_taps(
             ascii_string_to_key_events(self._username) + [Gdk.KEY_Return])
 
@@ -245,16 +307,29 @@ class GoogleLoginFlow:
 
     def _handle_wrong_password(self) -> None:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-wrong-password")
-        self._clear_input_field(self._password)
+        self._clear_input_field(len(self._password))
 
-    def _clear_input_field(self, field_value: str) -> None:
+    def _log_rejected_totp_code(self) -> None:
+        """Log the timing of a rejected code, to tell a stale code apart from
+        one that was wrong the moment it was submitted."""
+        if self._submitted_totp is None or self._totp_submitted_at is None:
+            logger.warning("A TOTP code was rejected, but none was submitted")
+            return
+
+        totp = self._submitted_totp
+        logger.info(f"TOTP code {totp.code} (time step {totp.time_step}) was rejected "
+                    f"{time.monotonic() - self._totp_submitted_at:.1f}s after it was "
+                    f"submitted; it was still valid for {totp.seconds_left():.1f}s "
+                    "at that point")
+
+    def _clear_input_field(self, content_length: int) -> None:
         """Delete all text from the focused input field.
 
-        Sends twice as many BackSpace events as the length of field_value to
-        account for text that may have accumulated from multiple typing attempts.
-        Extra BackSpaces beyond the actual content are harmless.
+        Sends twice as many BackSpace events as `content_length` to account for
+        text that may have accumulated from multiple typing attempts. Extra
+        BackSpaces beyond the actual content are harmless.
         """
-        self._browser.send_key_taps(2 * len(field_value) * [Gdk.KEY_BackSpace])
+        self._browser.send_key_taps(2 * content_length * [Gdk.KEY_BackSpace])
 
 def login(browser, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):
     GoogleLoginFlow(browser, username, password, device_code, totp_secret, screenshot_dir).run()

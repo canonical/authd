@@ -3,10 +3,13 @@ import subprocess
 import sys
 import threading
 
-from robot.api.deco import keyword, library  # type: ignore
 from robot.api import logger
+from robot.api.deco import keyword, library  # type: ignore
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, SCRIPT_DIR)
+from browser_login_lock import get_browser_login_lock
+
 BROWSER_LOGIN_DIR = os.path.join(SCRIPT_DIR, "browser_login")
 
 # Map broker names to their broker-specific browser login scripts.
@@ -57,18 +60,19 @@ class Browser:
             command = ["/usr/bin/env", "GDK_BACKEND=x11", "xvfb-run", "-a", "--"] + command
 
         lines = []
-        process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
-        stdout_thread = threading.Thread(
-            target=_stream_to_stderr, args=(process.stdout, lines), daemon=True
-        )
-        stdout_thread.start()
-        process.wait()
-        stdout_thread.join()
+        with get_browser_login_lock():
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            stdout_thread = threading.Thread(
+                target=_stream_to_stderr, args=(process.stdout, lines), daemon=True
+            )
+            stdout_thread.start()
+            process.wait()
+            stdout_thread.join()
 
         for line in lines:
             logger.info(line)
