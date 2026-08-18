@@ -1,15 +1,31 @@
+//! Convert `pulldown-cmark` `Event`s back to the string they were parsed from.
+//!
+//! This crate provides functions to serialize markdown events back into markdown text format.
+//!
+//! # Examples
+//!
+//! ```rust
+//! use pulldown_cmark::Parser;
+//! use pulldown_cmark_to_cmark::cmark;
+//!
+//! let input_markdown = "# Hello\n\nWorld!";
+//! let events = Parser::new(input_markdown);
+//! let mut output_markdown = String::new();
+//! cmark(events, &mut output_markdown).unwrap();
+//! assert_eq!(output_markdown, input_markdown);
+//! ```
+
 #![deny(rust_2018_idioms)]
+#![deny(missing_docs)]
 
 use std::{
     borrow::{Borrow, Cow},
     collections::HashSet,
-    fmt::{self, Write},
+    fmt,
     ops::Range,
 };
 
-use pulldown_cmark::{
-    Alignment as TableAlignment, BlockQuoteKind, Event, HeadingLevel, LinkType, MetadataBlockKind, Tag, TagEnd,
-};
+use pulldown_cmark::{Alignment as TableAlignment, BlockQuoteKind, Event, LinkType, MetadataBlockKind, Tag, TagEnd};
 
 mod source_range;
 mod text_modifications;
@@ -24,9 +40,13 @@ use text_modifications::*;
 /// traits for comparison to allow testing.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Alignment {
+    /// No alignment specified
     None,
+    /// Left-aligned
     Left,
+    /// Center-aligned
     Center,
+    /// Right-aligned
     Right,
 }
 
@@ -41,9 +61,12 @@ impl<'a> From<&'a TableAlignment> for Alignment {
     }
 }
 
+/// The kind of code block being serialized.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CodeBlockKind {
+    /// An indented code block (4 spaces or 1 tab)
     Indented,
+    /// A fenced code block (delimited by backticks or tildes)
     Fenced,
 }
 
@@ -94,59 +117,86 @@ pub struct State<'a> {
     pub last_event_end_index: usize,
 }
 
-impl State<'_> {
-    pub fn is_in_code_block(&self) -> bool {
-        self.code_block.is_some()
-    }
-}
-
+/// The category of link being serialized.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum LinkCategory<'a> {
+    /// An autolink (e.g., `<http://example.com>`)
     AngleBracketed,
+    /// A reference link with an explicit label (e.g., `[text][label]`)
     Reference {
+        /// The destination URI
         uri: Cow<'a, str>,
+        /// The link title
         title: Cow<'a, str>,
+        /// The reference identifier
         id: Cow<'a, str>,
     },
+    /// A collapsed reference link (e.g., `[text][]`)
     Collapsed {
+        /// The destination URI
         uri: Cow<'a, str>,
+        /// The link title
         title: Cow<'a, str>,
     },
+    /// A shortcut reference link (e.g., `[text]`)
     Shortcut {
+        /// The destination URI
         uri: Cow<'a, str>,
+        /// The link title
         title: Cow<'a, str>,
     },
+    /// An inline link or other link type
     Other {
+        /// The destination URI
         uri: Cow<'a, str>,
+        /// The link title
         title: Cow<'a, str>,
     },
 }
 
+/// The category of image link being serialized.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ImageLink<'a> {
+    /// A reference image with an explicit label (e.g., `![alt][label]`)
     Reference {
+        /// The destination URI
         uri: Cow<'a, str>,
+        /// The image title
         title: Cow<'a, str>,
+        /// The reference identifier
         id: Cow<'a, str>,
     },
+    /// A collapsed reference image (e.g., `![alt][]`)
     Collapsed {
+        /// The destination URI
         uri: Cow<'a, str>,
+        /// The image title
         title: Cow<'a, str>,
     },
+    /// A shortcut reference image (e.g., `![alt]`)
     Shortcut {
+        /// The destination URI
         uri: Cow<'a, str>,
+        /// The image title
         title: Cow<'a, str>,
     },
+    /// An inline image or other image type
     Other {
+        /// The destination URI
         uri: Cow<'a, str>,
+        /// The image title
         title: Cow<'a, str>,
     },
 }
 
+/// Information about a heading's attributes (id, classes, and other attributes).
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Heading<'a> {
+    /// The heading's id attribute, or `None` if no id is specified
     id: Option<Cow<'a, str>>,
+    /// The heading's CSS class attributes; empty if no classes are specified
     classes: Vec<Cow<'a, str>>,
+    /// Other attributes as key-value pairs in the form (attribute_name, optional_value)
     attributes: Vec<(Cow<'a, str>, Option<Cow<'a, str>>)>,
 }
 
@@ -161,14 +211,23 @@ pub const DEFAULT_CODE_BLOCK_TOKEN_COUNT: usize = 3;
 /// It's best used with its `Options::default()` implementation.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Options<'a> {
+    /// The number of newlines to insert after a headline
     pub newlines_after_headline: usize,
+    /// The number of newlines to insert after a paragraph
     pub newlines_after_paragraph: usize,
+    /// The number of newlines to insert after a code block
     pub newlines_after_codeblock: usize,
+    /// The number of newlines to insert after an HTML block
     pub newlines_after_htmlblock: usize,
+    /// The number of newlines to insert after a table
     pub newlines_after_table: usize,
+    /// The number of newlines to insert after a horizontal rule
     pub newlines_after_rule: usize,
+    /// The number of newlines to insert after a list
     pub newlines_after_list: usize,
+    /// The number of newlines to insert after a block quote
     pub newlines_after_blockquote: usize,
+    /// The number of newlines to insert after other elements
     pub newlines_after_rest: usize,
     /// The amount of newlines placed after TOML or YAML metadata blocks at the beginning of a document.
     pub newlines_after_metadata: usize,
@@ -177,12 +236,26 @@ pub struct Options<'a> {
     /// Note that the default value is `4` which allows for one level of nested code-blocks,
     /// which is typically a safe value for common kinds of markdown documents.
     pub code_block_token_count: usize,
+    /// The character to use for code block fences (backtick or tilde)
     pub code_block_token: char,
+    /// The character to use for unordered list items
     pub list_token: char,
+    /// The character to use after ordered list numbers (e.g., '.' for `1.`)
     pub ordered_list_token: char,
+    /// Whether to increment the number for each ordered list item
     pub increment_ordered_list_bullets: bool,
+    /// The character to use for emphasis (italic)
     pub emphasis_token: char,
+    /// The string to use for strong emphasis (bold)
     pub strong_token: &'a str,
+    /// If `true` (default) then use HTML tags `<sup>` and `<sub>`.
+    /// If `false`, use the Markdown symbols `^` and `~` instead.
+    ///
+    /// If you use [`ENABLE_SUPERSCRIPT`](pulldown_cmark::Options::ENABLE_SUPERSCRIPT) and
+    /// [`ENABLE_SUBSCRIPT`](pulldown_cmark::Options::ENABLE_SUBSCRIPT) when parsing, then
+    /// you might need this in order to round-trip Markdown byte-for-byte, with knowledge
+    /// of whether the parsed documents use `<sub>`/`<sup>` or `^`/`~` instead.
+    pub use_html_for_super_sub_script: bool,
 }
 
 const DEFAULT_OPTIONS: Options<'_> = Options {
@@ -203,6 +276,7 @@ const DEFAULT_OPTIONS: Options<'_> = Options {
     increment_ordered_list_bullets: false,
     emphasis_token: '*',
     strong_token: "**",
+    use_html_for_super_sub_script: true,
 };
 
 impl Default for Options<'_> {
@@ -212,6 +286,7 @@ impl Default for Options<'_> {
 }
 
 impl Options<'_> {
+    /// Returns the set of special characters that need escaping based on the current options.
     pub fn special_characters(&self) -> Cow<'static, str> {
         // These always need to be escaped, even if reconfigured.
         const BASE: &str = "#\\_*<>`|[]";
@@ -230,6 +305,64 @@ impl Options<'_> {
             s.into()
         }
     }
+}
+
+/// The error returned by [`cmark_resume_with_options()`] and
+/// [`cmark_resume_with_source_range_and_options()`].
+#[derive(Debug)]
+pub enum Error {
+    /// Formatting to the output writer failed
+    FormatFailed(fmt::Error),
+    /// An event was encountered that cannot be produced by valid markdown
+    UnexpectedEvent,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::FormatFailed(e) => e.fmt(f),
+            Self::UnexpectedEvent => f.write_str("Unexpected event while reconstructing Markdown"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+impl From<fmt::Error> for Error {
+    fn from(e: fmt::Error) -> Self {
+        Self::FormatFailed(e)
+    }
+}
+
+/// As [`cmark_with_options()`], but with default [`Options`].
+pub fn cmark<'a, I, E, F>(events: I, mut formatter: F) -> Result<State<'a>, Error>
+where
+    I: Iterator<Item = E>,
+    E: Borrow<Event<'a>>,
+    F: fmt::Write,
+{
+    cmark_with_options(events, &mut formatter, Default::default())
+}
+
+/// As [`cmark_resume_with_options()`], but with default [`Options`].
+pub fn cmark_resume<'a, I, E, F>(events: I, formatter: F, state: Option<State<'a>>) -> Result<State<'a>, Error>
+where
+    I: Iterator<Item = E>,
+    E: Borrow<Event<'a>>,
+    F: fmt::Write,
+{
+    cmark_resume_with_options(events, formatter, state, Options::default())
+}
+
+/// As [`cmark_resume_with_options()`], but with the [`State`] finalized.
+pub fn cmark_with_options<'a, I, E, F>(events: I, mut formatter: F, options: Options<'_>) -> Result<State<'a>, Error>
+where
+    I: Iterator<Item = E>,
+    E: Borrow<Event<'a>>,
+    F: fmt::Write,
+{
+    let state = cmark_resume_with_options(events, &mut formatter, Default::default(), options)?;
+    state.finalize(formatter)
 }
 
 /// Serialize a stream of [pulldown-cmark-Events][Event] into a string-backed buffer.
@@ -276,31 +409,6 @@ where
     Ok(state)
 }
 
-/// The error returned by [`cmark_resume_one_event`] and
-/// [`cmark_resume_with_source_range_and_options`].
-#[derive(Debug)]
-pub enum Error {
-    FormatFailed(fmt::Error),
-    UnexpectedEvent,
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::FormatFailed(e) => e.fmt(f),
-            Self::UnexpectedEvent => f.write_str("Unexpected event while reconstructing Markdown"),
-        }
-    }
-}
-
-impl std::error::Error for Error {}
-
-impl From<fmt::Error> for Error {
-    fn from(e: fmt::Error) -> Self {
-        Self::FormatFailed(e)
-    }
-}
-
 fn cmark_resume_one_event<'a, E, F>(
     event: E,
     formatter: &mut F,
@@ -317,12 +425,11 @@ where
     state.last_was_text_without_trailing_newline = false;
     let last_was_paragraph_start = state.last_was_paragraph_start;
     state.last_was_paragraph_start = false;
+
     let res = match event.borrow() {
         Rule => {
             consume_newlines(formatter, state)?;
-            if state.newlines_before_start < options.newlines_after_rule {
-                state.newlines_before_start = options.newlines_after_rule;
-            }
+            state.set_minimum_newlines_before_start(options.newlines_after_rule);
             formatter.write_str("---")
         }
         Code(text) => {
@@ -358,7 +465,7 @@ where
             } else {
                 // More backticks are needed to delimit the inline code than the maximum number of
                 // backticks in a consecutive run.
-                let backticks = "`".repeat(max_consecutive_chars(&text, '`') + 1);
+                let backticks = Repeated('`', max_consecutive_chars(&text, '`') + 1);
                 let space = match text.as_bytes() {
                     &[b'`', ..] | &[.., b'`'] => " ", // Space needed to separate backtick.
                     &[b' ', .., b' '] => " ",         // Space needed to escape inner space.
@@ -370,8 +477,8 @@ where
         Start(tag) => {
             if let List(list_type) = tag {
                 state.list_stack.push(*list_type);
-                if state.list_stack.len() > 1 && state.newlines_before_start < options.newlines_after_rest {
-                    state.newlines_before_start = options.newlines_after_rest;
+                if state.list_stack.len() > 1 {
+                    state.set_minimum_newlines_before_start(options.newlines_after_rest);
                 }
             }
             let consumed_newlines = state.newlines_before_start != 0;
@@ -382,7 +489,7 @@ where
                     state.last_was_paragraph_start = true;
                     match state.list_stack.last_mut() {
                         Some(inner) => {
-                            state.padding.push(padding_of(*inner));
+                            state.padding.push(list_item_padding_of(*inner));
                             match inner {
                                 Some(n) => {
                                     let bullet_number = *n;
@@ -513,15 +620,8 @@ where
                             .map(|(k, v)| (k.clone().into(), v.as_ref().map(|val| val.clone().into())))
                             .collect(),
                     });
-                    match level {
-                        HeadingLevel::H1 => formatter.write_str("#"),
-                        HeadingLevel::H2 => formatter.write_str("##"),
-                        HeadingLevel::H3 => formatter.write_str("###"),
-                        HeadingLevel::H4 => formatter.write_str("####"),
-                        HeadingLevel::H5 => formatter.write_str("#####"),
-                        HeadingLevel::H6 => formatter.write_str("######"),
-                    }?;
-                    formatter.write_char(' ')
+                    // Write '#', '##', '###', etc. based on the heading level.
+                    write!(formatter, "{} ", Repeated('#', *level as usize))
                 }
                 BlockQuote(kind) => {
                     let every_line_padding = " > ";
@@ -557,19 +657,12 @@ where
                 }
                 CodeBlock(pulldown_cmark::CodeBlockKind::Fenced(info)) => {
                     state.code_block = Some(CodeBlockKind::Fenced);
-                    let s = if consumed_newlines {
-                        Ok(())
-                    } else {
-                        write_padded_newline(formatter, &state)
-                    };
+                    if !consumed_newlines {
+                        write_padded_newline(formatter, &state)?;
+                    }
 
-                    s.and_then(|()| {
-                        for _ in 0..options.code_block_token_count {
-                            formatter.write_char(options.code_block_token)?;
-                        }
-                        Ok(())
-                    })
-                    .and_then(|()| formatter.write_str(info))?;
+                    let fence = Repeated(options.code_block_token, options.code_block_token_count);
+                    write!(formatter, "{fence}{info}")?;
                     write_padded_newline(formatter, &state)
                 }
                 HtmlBlock => Ok(()),
@@ -579,9 +672,7 @@ where
                 Strikethrough => formatter.write_str("~~"),
                 DefinitionList => Ok(()),
                 DefinitionListTitle => {
-                    if state.newlines_before_start < options.newlines_after_rest {
-                        state.newlines_before_start = options.newlines_after_rest;
-                    }
+                    state.set_minimum_newlines_before_start(options.newlines_after_rest);
                     Ok(())
                 }
                 DefinitionListDefinition => {
@@ -592,8 +683,16 @@ where
                     state.padding.push(every_line_padding.into());
                     Ok(())
                 }
-                Superscript => formatter.write_str("<sup>"),
-                Subscript => formatter.write_str("<sub>"),
+                Superscript => formatter.write_str(if options.use_html_for_super_sub_script {
+                    "<sup>"
+                } else {
+                    "^"
+                }),
+                Subscript => formatter.write_str(if options.use_html_for_super_sub_script {
+                    "<sub>"
+                } else {
+                    "~"
+                }),
             }
         }
         End(tag) => match tag {
@@ -699,29 +798,22 @@ where
                     formatter.write_char(' ')?;
                     formatter.write_char('}')?;
                 }
-                if state.newlines_before_start < options.newlines_after_headline {
-                    state.newlines_before_start = options.newlines_after_headline;
-                }
+                state.set_minimum_newlines_before_start(options.newlines_after_headline);
                 Ok(())
             }
             TagEnd::Paragraph => {
-                if state.newlines_before_start < options.newlines_after_paragraph {
-                    state.newlines_before_start = options.newlines_after_paragraph;
-                }
+                state.set_minimum_newlines_before_start(options.newlines_after_paragraph);
                 Ok(())
             }
             TagEnd::CodeBlock => {
-                if state.newlines_before_start < options.newlines_after_codeblock {
-                    state.newlines_before_start = options.newlines_after_codeblock;
-                }
+                state.set_minimum_newlines_before_start(options.newlines_after_codeblock);
                 if last_was_text_without_trailing_newline {
                     write_padded_newline(formatter, &state)?;
                 }
                 match state.code_block {
                     Some(CodeBlockKind::Fenced) => {
-                        for _ in 0..options.code_block_token_count {
-                            formatter.write_char(options.code_block_token)?;
-                        }
+                        let fence = Repeated(options.code_block_token, options.code_block_token_count);
+                        write!(formatter, "{fence}")?;
                     }
                     Some(CodeBlockKind::Indented) => {
                         state.padding.pop();
@@ -732,27 +824,19 @@ where
                 Ok(())
             }
             TagEnd::HtmlBlock => {
-                if state.newlines_before_start < options.newlines_after_htmlblock {
-                    state.newlines_before_start = options.newlines_after_htmlblock;
-                }
+                state.set_minimum_newlines_before_start(options.newlines_after_htmlblock);
                 Ok(())
             }
             TagEnd::MetadataBlock(MetadataBlockKind::PlusesStyle) => {
-                if state.newlines_before_start < options.newlines_after_metadata {
-                    state.newlines_before_start = options.newlines_after_metadata;
-                }
+                state.set_minimum_newlines_before_start(options.newlines_after_metadata);
                 formatter.write_str("+++\n")
             }
             TagEnd::MetadataBlock(MetadataBlockKind::YamlStyle) => {
-                if state.newlines_before_start < options.newlines_after_metadata {
-                    state.newlines_before_start = options.newlines_after_metadata;
-                }
+                state.set_minimum_newlines_before_start(options.newlines_after_metadata);
                 formatter.write_str("---\n")
             }
             TagEnd::Table => {
-                if state.newlines_before_start < options.newlines_after_table {
-                    state.newlines_before_start = options.newlines_after_table;
-                }
+                state.set_minimum_newlines_before_start(options.newlines_after_table);
                 state.table_alignments.clear();
                 state.table_headers.clear();
                 Ok(())
@@ -765,9 +849,7 @@ where
                 Ok(())
             }
             t @ (TagEnd::TableRow | TagEnd::TableHead) => {
-                if state.newlines_before_start < options.newlines_after_rest {
-                    state.newlines_before_start = options.newlines_after_rest;
-                }
+                state.set_minimum_newlines_before_start(options.newlines_after_rest);
                 formatter.write_char('|')?;
 
                 if let TagEnd::TableHead = t {
@@ -807,24 +889,20 @@ where
             }
             TagEnd::Item => {
                 state.padding.pop();
-                if state.newlines_before_start < options.newlines_after_rest {
-                    state.newlines_before_start = options.newlines_after_rest;
-                }
+                state.set_minimum_newlines_before_start(options.newlines_after_rest);
                 Ok(())
             }
             TagEnd::List(_) => {
                 state.list_stack.pop();
-                if state.list_stack.is_empty() && state.newlines_before_start < options.newlines_after_list {
-                    state.newlines_before_start = options.newlines_after_list;
+                if state.list_stack.is_empty() {
+                    state.set_minimum_newlines_before_start(options.newlines_after_list);
                 }
                 Ok(())
             }
             TagEnd::BlockQuote(_) => {
                 state.padding.pop();
 
-                if state.newlines_before_start < options.newlines_after_blockquote {
-                    state.newlines_before_start = options.newlines_after_blockquote;
-                }
+                state.set_minimum_newlines_before_start(options.newlines_after_blockquote);
 
                 Ok(())
             }
@@ -834,9 +912,7 @@ where
             }
             TagEnd::Strikethrough => formatter.write_str("~~"),
             TagEnd::DefinitionList => {
-                if state.newlines_before_start < options.newlines_after_list {
-                    state.newlines_before_start = options.newlines_after_list;
-                }
+                state.set_minimum_newlines_before_start(options.newlines_after_list);
                 Ok(())
             }
             TagEnd::DefinitionListTitle => formatter.write_char('\n'),
@@ -844,8 +920,16 @@ where
                 state.padding.pop();
                 write_padded_newline(formatter, &state)
             }
-            TagEnd::Superscript => formatter.write_str("</sup>"),
-            TagEnd::Subscript => formatter.write_str("</sub>"),
+            TagEnd::Superscript => formatter.write_str(if options.use_html_for_super_sub_script {
+                "</sup>"
+            } else {
+                "^"
+            }),
+            TagEnd::Subscript => formatter.write_str(if options.use_html_for_super_sub_script {
+                "</sub>"
+            } else {
+                "~"
+            }),
         },
         HardBreak => formatter.write_str("  ").and(write_padded_newline(formatter, &state)),
         SoftBreak => write_padded_newline(formatter, &state),
@@ -868,15 +952,12 @@ where
                 }
             }
             state.last_was_text_without_trailing_newline = !text.ends_with('\n');
-            print_text_without_trailing_newline(
-                &escape_special_characters(text, state, options),
-                formatter,
-                &state.padding,
-            )
+            let escaped_text = escape_special_characters(text, state, options);
+            print_text_without_trailing_newline(&escaped_text, formatter, &state)
         }
         InlineHtml(text) => {
             consume_newlines(formatter, state)?;
-            print_text_without_trailing_newline(text, formatter, &state.padding)
+            print_text_without_trailing_newline(text, formatter, &state)
         }
         Html(text) => {
             let mut lines = text.split('\n');
@@ -901,77 +982,11 @@ where
     Ok(res?)
 }
 
-/// As [`cmark_resume_with_options()`], but with default [`Options`].
-pub fn cmark_resume<'a, I, E, F>(events: I, formatter: F, state: Option<State<'a>>) -> Result<State<'a>, Error>
-where
-    I: Iterator<Item = E>,
-    E: Borrow<Event<'a>>,
-    F: fmt::Write,
-{
-    cmark_resume_with_options(events, formatter, state, Options::default())
-}
-
-fn close_link<F>(uri: &str, title: &str, f: &mut F, link_type: LinkType) -> fmt::Result
-where
-    F: fmt::Write,
-{
-    let needs_brackets = {
-        let mut depth = 0;
-        for b in uri.bytes() {
-            match b {
-                b'(' => depth += 1,
-                b')' => depth -= 1,
-                b' ' => {
-                    depth += 1;
-                    break;
-                }
-                _ => {}
-            }
-            if depth > 3 {
-                break;
-            }
-        }
-        depth != 0
-    };
-    let separator = match link_type {
-        LinkType::Shortcut => ": ",
-        _ => "(",
-    };
-
-    if needs_brackets {
-        write!(f, "]{separator}<{uri}>")?;
-    } else {
-        write!(f, "]{separator}{uri}")?;
-    }
-    if !title.is_empty() {
-        write!(f, " \"{title}\"", title = EscapeLinkTitle(title))?;
-    }
-    if link_type != LinkType::Shortcut {
-        f.write_char(')')?;
-    }
-
-    Ok(())
-}
-
-struct EscapeLinkTitle<'a>(&'a str);
-
-/// Writes a link title with double quotes escaped.
-/// See https://spec.commonmark.org/0.30/#link-title for the rules around
-/// link titles and the characters they may contain.
-impl fmt::Display for EscapeLinkTitle<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for c in self.0.chars() {
-            match c {
-                '"' => f.write_str(r#"\""#)?,
-                '\\' => f.write_str(r"\\")?,
-                c => f.write_char(c)?,
-            }
-        }
-        Ok(())
-    }
-}
-
 impl State<'_> {
+    /// Finalize the serialization state by writing any remaining shortcuts.
+    ///
+    /// This should be called after all events have been processed to ensure
+    /// reference-style links are written at the end of the document.
     pub fn finalize<F>(mut self, mut formatter: F) -> Result<Self, Error>
     where
         F: fmt::Write,
@@ -992,27 +1007,19 @@ impl State<'_> {
         }
         Ok(self)
     }
-}
 
-/// As [`cmark_resume_with_options()`], but with the [`State`] finalized.
-pub fn cmark_with_options<'a, I, E, F>(events: I, mut formatter: F, options: Options<'_>) -> Result<State<'a>, Error>
-where
-    I: Iterator<Item = E>,
-    E: Borrow<Event<'a>>,
-    F: fmt::Write,
-{
-    let state = cmark_resume_with_options(events, &mut formatter, Default::default(), options)?;
-    state.finalize(formatter)
-}
+    /// Returns `true` if currently serializing content inside a code block.
+    pub fn is_in_code_block(&self) -> bool {
+        self.code_block.is_some()
+    }
 
-/// As [`cmark_with_options()`], but with default [`Options`].
-pub fn cmark<'a, I, E, F>(events: I, mut formatter: F) -> Result<State<'a>, Error>
-where
-    I: Iterator<Item = E>,
-    E: Borrow<Event<'a>>,
-    F: fmt::Write,
-{
-    cmark_with_options(events, &mut formatter, Default::default())
+    /// Ensure that [`State::newlines_before_start`] is at least as large as
+    /// the provided option value.
+    fn set_minimum_newlines_before_start(&mut self, option_value: usize) {
+        if self.newlines_before_start < option_value {
+            self.newlines_before_start = option_value
+        }
+    }
 }
 
 /// Return the `<seen amount of consecutive fenced code-block tokens> + 1` that occur *within* a
@@ -1079,41 +1086,4 @@ where
 
     max_token_count = max_token_count.max(token_count);
     (max_token_count >= 3).then_some(max_token_count + 1)
-}
-
-fn max_consecutive_chars(text: &str, search: char) -> usize {
-    let mut in_search_chars = false;
-    let mut max_count = 0;
-    let mut cur_count = 0;
-
-    for ch in text.chars() {
-        if ch == search {
-            cur_count += 1;
-            in_search_chars = true;
-        } else if in_search_chars {
-            max_count = max_count.max(cur_count);
-            cur_count = 0;
-            in_search_chars = false;
-        }
-    }
-    max_count.max(cur_count)
-}
-
-#[cfg(test)]
-mod max_consecutive_chars {
-    use super::max_consecutive_chars;
-
-    #[test]
-    fn happens_in_the_entire_string() {
-        assert_eq!(
-            max_consecutive_chars("``a```b``", '`'),
-            3,
-            "the highest seen consecutive segment of backticks counts"
-        );
-        assert_eq!(
-            max_consecutive_chars("```a``b`", '`'),
-            3,
-            "it can't be downgraded later"
-        );
-    }
 }

@@ -1,3 +1,6 @@
+[dependencies.bumpalo]
+version = "3.0.0"
+
 [dependencies.proc-macro2]
 version = "1.0"
 
@@ -5,14 +8,11 @@ version = "1.0"
 version = "1.0"
 
 [dependencies.syn]
-features = ["visit", "visit-mut", "full"]
+features = ["visit", "visit-mut", "full", "extra-traits"]
 version = "2.0"
 
-[dependencies.wasm-bindgen-backend]
-version = "=0.2.100"
-
 [dependencies.wasm-bindgen-shared]
-version = "=0.2.100"
+version = "=0.2.127"
 
 [features]
 extra-traits = ["syn/extra-traits"]
@@ -28,6 +28,15 @@ new_without_default = "allow"
 overly_complex_bool_expr = "allow"
 too_many_arguments = "allow"
 type_complexity = "allow"
+uninlined_format_args = "warn"
+
+[lints.rust]
+unused_lifetimes = "warn"
+
+[lints.rust.unexpected_cfgs]
+check-cfg = ["cfg(wasm_bindgen_unstable_test_coverage)", "cfg(wasm_bindgen_use_js_sys)", "cfg(xxx_debug_only_print_generated_code)", "cfg(legacy_eh)"]
+level = "warn"
+priority = 0
 
 [package]
 authors = ["The wasm-bindgen Developers"]
@@ -36,16 +45,14 @@ autobins = false
 autoexamples = false
 autolib = false
 autotests = false
-description = """
-The part of the implementation of the `#[wasm_bindgen]` attribute that is not in the shared backend crate
-"""
+description = "Implementation APIs for the `#[wasm_bindgen]` attribute"
 documentation = "https://docs.rs/wasm-bindgen"
 edition = "2021"
-homepage = "https://rustwasm.github.io/wasm-bindgen/"
+homepage = "https://wasm-bindgen.github.io/wasm-bindgen/"
 include = ["/LICENSE-*", "/src"]
 license = "MIT OR Apache-2.0"
 name = "wasm-bindgen-macro-support"
 readme = false
-repository = "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/macro-support"
-rust-version = "1.57"
-version = "0.2.100"
+repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro-support"
+rust-version = "1.77"
+version = "0.2.127"

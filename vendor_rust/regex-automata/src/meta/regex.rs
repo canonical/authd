@@ -16,10 +16,11 @@ use crate::{
         strategy::{self, Strategy},
         wrappers,
     },
-    nfa::thompson::WhichCaptures,
+    nfa::thompson::{self, WhichCaptures},
     util::{
         captures::{Captures, GroupInfo},
         iter,
+        look::LookMatcher,
         pool::{Pool, PoolGuard},
         prefilter::Prefilter,
         primitives::{NonMaxUsize, PatternID},
@@ -917,7 +918,9 @@ impl Regex {
     /// ```
     #[inline]
     pub fn search(&self, input: &Input<'_>) -> Option<Match> {
-        if self.imp.info.is_impossible(input) {
+        if self.imp.info.captures_disabled()
+            || self.imp.info.is_impossible(input)
+        {
             return None;
         }
         let mut guard = self.pool.get();
@@ -973,7 +976,9 @@ impl Regex {
     /// ```
     #[inline]
     pub fn search_half(&self, input: &Input<'_>) -> Option<HalfMatch> {
-        if self.imp.info.is_impossible(input) {
+        if self.imp.info.captures_disabled()
+            || self.imp.info.is_impossible(input)
+        {
             return None;
         }
         let mut guard = self.pool.get();
@@ -1128,7 +1133,9 @@ impl Regex {
         input: &Input<'_>,
         slots: &mut [Option<NonMaxUsize>],
     ) -> Option<PatternID> {
-        if self.imp.info.is_impossible(input) {
+        if self.imp.info.captures_disabled()
+            || self.imp.info.is_impossible(input)
+        {
             return None;
         }
         let mut guard = self.pool.get();
@@ -1242,7 +1249,9 @@ impl Regex {
         cache: &mut Cache,
         input: &Input<'_>,
     ) -> Option<Match> {
-        if self.imp.info.is_impossible(input) {
+        if self.imp.info.captures_disabled()
+            || self.imp.info.is_impossible(input)
+        {
             return None;
         }
         self.imp.strat.search(cache, input)
@@ -1284,7 +1293,9 @@ impl Regex {
         cache: &mut Cache,
         input: &Input<'_>,
     ) -> Option<HalfMatch> {
-        if self.imp.info.is_impossible(input) {
+        if self.imp.info.captures_disabled()
+            || self.imp.info.is_impossible(input)
+        {
             return None;
         }
         self.imp.strat.search_half(cache, input)
@@ -1437,7 +1448,9 @@ impl Regex {
         input: &Input<'_>,
         slots: &mut [Option<NonMaxUsize>],
     ) -> Option<PatternID> {
-        if self.imp.info.is_impossible(input) {
+        if self.imp.info.captures_disabled()
+            || self.imp.info.is_impossible(input)
+        {
             return None;
         }
         self.imp.strat.search_slots(cache, input, slots)
@@ -1694,6 +1707,8 @@ impl Regex {
     /// available and a few cases where it is not.
     ///
     /// ```
+    /// # if cfg!(miri) { return Ok(()); } // miri takes too long
+    ///
     /// use regex_automata::meta::Regex;
     ///
     /// let len = |pattern| {
@@ -1719,6 +1734,8 @@ impl Regex {
     /// every pattern must have the same static number.
     ///
     /// ```
+    /// # if cfg!(miri) { return Ok(()); } // miri takes too long
+    ///
     /// use regex_automata::meta::Regex;
     ///
     /// let len = |patterns| {
@@ -1902,7 +1919,10 @@ impl Clone for Regex {
         let pool = {
             let strat = Arc::clone(&imp.strat);
             let create: CachePoolFn = Box::new(move || strat.create_cache());
-            Pool::new(create)
+            Pool::with_capacity(
+                self.imp.info.config().get_pool_capacity(),
+                create,
+            )
         };
         Regex { imp, pool }
     }
@@ -1919,7 +1939,11 @@ struct RegexInfoI {
 }
 
 impl RegexInfo {
-    fn new(config: Config, hirs: &[&Hir]) -> RegexInfo {
+    /// Creates a new `RegexInfo` from the configuration and HIRs that make up
+    /// a meta regex.
+    ///
+    /// This is exported for use in some tests.
+    pub(super) fn new(config: Config, hirs: &[&Hir]) -> RegexInfo {
         // Collect all of the properties from each of the HIRs, and also
         // union them into one big set of properties representing all HIRs
         // as if they were in one big alternation.
@@ -1980,6 +2004,19 @@ impl RegexInfo {
     pub(crate) fn is_always_anchored_end(&self) -> bool {
         use regex_syntax::hir::Look;
         self.props_union().look_set_suffix().contains(Look::End)
+    }
+
+    /// Returns true when the regex's NFA lacks capture states.
+    ///
+    /// In this case, some regex engines (like the PikeVM) are unable to report
+    /// match offsets, while some (like the lazy DFA can). To avoid whether a
+    /// match or not is reported based on engine selection, routines that
+    /// return match offsets will _always_ report `None` when this is true.
+    ///
+    /// Yes, this is a weird case and it's a little fucked up. But
+    /// `WhichCaptures::None` comes with an appropriate warning.
+    fn captures_disabled(&self) -> bool {
+        matches!(self.config().get_which_captures(), WhichCaptures::None)
     }
 
     /// Returns true if and only if it is known that a match is impossible
@@ -2449,6 +2486,7 @@ pub struct Config {
     backtrack: Option<bool>,
     byte_classes: Option<bool>,
     line_terminator: Option<u8>,
+    pool_capacity: Option<usize>,
 }
 
 impl Config {
@@ -2645,7 +2683,12 @@ impl Config {
     /// Setting this to `WhichCaptures::None` is usually not the right thing to
     /// do. When no capture states are compiled, some regex engines (such as
     /// the `PikeVM`) won't be able to report match offsets. This will manifest
-    /// as no match being found.
+    /// as no match being found. Indeed, in order to enforce consistent
+    /// behavior, the meta regex engine will always report `None` for routines
+    /// that return match offsets even if one of its regex engines could
+    /// service the request. This avoids "match or not" behavior from being
+    /// influenced by user input (since user input can influence the selection
+    /// of the regex engine).
     ///
     /// # Example
     ///
@@ -2691,6 +2734,33 @@ impl Config {
     /// re.captures(hay, &mut caps);
     /// assert_eq!(Some(Span::from(0..9)), caps.get_group(0));
     /// assert_eq!(None, caps.get_group(1));
+    ///
+    /// Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Example: strange `Regex::find` behavior
+    ///
+    /// As noted above, when using [`WhichCaptures::None`], this means that
+    /// `Regex::is_match` could return `true` while `Regex::find` returns
+    /// `None`:
+    ///
+    /// ```
+    /// use regex_automata::{
+    ///     meta::Regex,
+    ///     nfa::thompson::WhichCaptures,
+    ///     Input,
+    ///     Match,
+    ///     Span,
+    /// };
+    ///
+    /// let re = Regex::builder()
+    ///     .configure(Regex::config().which_captures(WhichCaptures::None))
+    ///     .build(r"foo([0-9]+)bar")?;
+    /// let hay = "foo123bar";
+    ///
+    /// assert!(re.is_match(hay));
+    /// assert_eq!(re.find(hay), None);
+    /// assert_eq!(re.search_half(&Input::new(hay)), None);
     ///
     /// Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -2973,6 +3043,17 @@ impl Config {
         Config { line_terminator: Some(byte), ..self }
     }
 
+    /// Sets the capacity used to manage a pool of [`Cache`] values in the
+    /// higher level convenience APIs.
+    ///
+    /// When not configured explicitly, a reasonable default is selected. It
+    /// is rarely expected that a number large than the number of logical CPUs
+    /// makes sense as a value. A smaller number could result in slowdowns if
+    /// many regex queries are run under contention.
+    pub fn pool_capacity(self, capacity: usize) -> Config {
+        Config { pool_capacity: Some(capacity), ..self }
+    }
+
     /// Toggle whether the hybrid NFA/DFA (also known as the "lazy DFA") should
     /// be available for use by the meta regex engine.
     ///
@@ -3144,6 +3225,35 @@ impl Config {
         self.line_terminator.unwrap_or(b'\n')
     }
 
+    /// Returns the configured pool capacity, as set by
+    /// [`Config::pool_capacity`].
+    ///
+    /// If it was not explicitly set, then a default value is returned.
+    pub fn get_pool_capacity(&self) -> usize {
+        // The default is an empirically chosen value that balances memory
+        // usage with runtime performance. In practice, with `std` enabled,
+        // we choose a value that matches the total number of CPUs.
+        const DEFAULT_POOL_CAPACITY: usize = 8;
+
+        self.pool_capacity.unwrap_or_else(|| {
+            #[cfg(feature = "std")]
+            {
+                use crate::util::lazy::Lazy;
+
+                static AVAILABLE_PARALLELISM: Lazy<usize> = Lazy::new(|| {
+                    std::thread::available_parallelism()
+                        .map(|n| n.get())
+                        .unwrap_or(DEFAULT_POOL_CAPACITY)
+                });
+                *Lazy::get(&AVAILABLE_PARALLELISM)
+            }
+            #[cfg(not(feature = "std"))]
+            {
+                DEFAULT_POOL_CAPACITY
+            }
+        })
+    }
+
     /// Returns whether the hybrid NFA/DFA regex engine may be used, as set by
     /// [`Config::hybrid`].
     ///
@@ -3204,6 +3314,27 @@ impl Config {
         }
     }
 
+    /// Returns a "baseline" Thompson configuration for constructing NFAs based
+    /// on this configuration.
+    ///
+    /// This is just a convenience routine to avoid repeating configuration
+    /// construction.
+    ///
+    /// Callers may still need to set other things, like whether the NFA should
+    /// be compiled in reverse. Callers may also override settings, like
+    /// forcing no capture states to be included.
+    pub(crate) fn to_thompson_config(&self) -> thompson::Config {
+        let mut lookm = LookMatcher::new();
+        lookm.set_line_terminator(self.get_line_terminator());
+        thompson::Config::new()
+            .utf8(self.get_utf8_empty())
+            .reverse(false)
+            .nfa_size_limit(self.get_nfa_size_limit())
+            .shrink(false)
+            .which_captures(self.get_which_captures())
+            .look_matcher(lookm)
+    }
+
     /// Overwrite the default configuration such that the options in `o` are
     /// always used. If an option in `o` is not set, then the corresponding
     /// option in `self` is used. If it's not set in `self` either, then it
@@ -3230,6 +3361,7 @@ impl Config {
             backtrack: o.backtrack.or(self.backtrack),
             byte_classes: o.byte_classes.or(self.byte_classes),
             line_terminator: o.line_terminator.or(self.line_terminator),
+            pool_capacity: o.pool_capacity.or(self.pool_capacity),
         }
     }
 }
@@ -3413,9 +3545,9 @@ impl Builder {
                     .last()
                     .unwrap_or(0);
                 if maxoff < p.len() {
-                    debug!("{:?}: {}[... snip ...]", pid, &p[..maxoff]);
+                    debug!("{pid:?}: {}[... snip ...]", &p[..maxoff]);
                 } else {
-                    debug!("{:?}: {}", pid, p);
+                    debug!("{pid:?}: {p}");
                 }
             }
         }
@@ -3554,7 +3686,7 @@ impl Builder {
         let pool = {
             let strat = Arc::clone(&strat);
             let create: CachePoolFn = Box::new(move || strat.create_cache());
-            Pool::new(create)
+            Pool::with_capacity(self.config.get_pool_capacity(), create)
         };
         Ok(Regex { imp: Arc::new(RegexI { strat, info }), pool })
     }

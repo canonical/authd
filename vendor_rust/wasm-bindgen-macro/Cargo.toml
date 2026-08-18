@@ -2,14 +2,13 @@
 version = "1.0"
 
 [dependencies.wasm-bindgen-macro-support]
-version = "=0.2.100"
+version = "=0.2.127"
 
 [dev-dependencies.trybuild]
 version = "1.0"
 
 [features]
 strict-macro = ["wasm-bindgen-macro-support/strict-macro"]
-xxx_debug_only_print_generated_code = []
 
 [lib]
 name = "wasm_bindgen_macro"
@@ -22,6 +21,15 @@ new_without_default = "allow"
 overly_complex_bool_expr = "allow"
 too_many_arguments = "allow"
 type_complexity = "allow"
+uninlined_format_args = "warn"
+
+[lints.rust]
+unused_lifetimes = "warn"
+
+[lints.rust.unexpected_cfgs]
+check-cfg = ["cfg(wasm_bindgen_unstable_test_coverage)", "cfg(wasm_bindgen_use_js_sys)", "cfg(xxx_debug_only_print_generated_code)", "cfg(legacy_eh)"]
+level = "warn"
+priority = 0
 
 [package]
 authors = ["The wasm-bindgen Developers"]
@@ -35,11 +43,11 @@ Definition of the `#[wasm_bindgen]` attribute, an internal dependency
 """
 documentation = "https://docs.rs/wasm-bindgen"
 edition = "2021"
-homepage = "https://rustwasm.github.io/wasm-bindgen/"
+homepage = "https://wasm-bindgen.github.io/wasm-bindgen/"
 include = ["/LICENSE-*", "/src"]
 license = "MIT OR Apache-2.0"
 name = "wasm-bindgen-macro"
 readme = "README.md"
-repository = "https://github.com/rustwasm/wasm-bindgen/tree/master/crates/macro"
-rust-version = "1.57"
-version = "0.2.100"
+repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro"
+rust-version = "1.77"
+version = "0.2.127"

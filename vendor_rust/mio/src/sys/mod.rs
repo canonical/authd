@@ -50,7 +50,11 @@ cfg_os_poll! {
     }
 }
 
-#[cfg(any(unix, target_os = "hermit"))]
+#[cfg(any(
+    unix,
+    target_os = "hermit",
+    all(target_os = "wasi", not(target_env = "p1"))
+))]
 cfg_os_poll! {
     mod unix;
     #[allow(unused_imports)]
@@ -63,10 +67,10 @@ cfg_os_poll! {
     pub use self::windows::*;
 }
 
-#[cfg(target_os = "wasi")]
+#[cfg(all(target_os = "wasi", target_env = "p1"))]
 cfg_os_poll! {
-    mod wasi;
-    pub(crate) use self::wasi::*;
+    mod wasip1;
+    pub(crate) use self::wasip1::*;
 }
 
 cfg_not_os_poll! {

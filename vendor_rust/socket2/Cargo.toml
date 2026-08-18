@@ -13,7 +13,7 @@
 edition = "2021"
 rust-version = "1.70"
 name = "socket2"
-version = "0.6.0"
+version = "0.6.5"
 authors = [
     "Alex Crichton <alex@alexcrichton.com>",
     "Thomas de Zeeuw <thomasdezeeuw@gmail.com>",
@@ -50,16 +50,6 @@ categories = [
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/rust-lang/socket2"
 
-[package.metadata.cargo_check_external_types]
-allowed_external_types = [
-    "libc::socklen_t",
-    "libc::*::socklen_t",
-    "libc::sa_family_t",
-    "libc::*::sa_family_t",
-    "windows_sys::Win32::Networking::WinSock::socklen_t",
-    "windows_sys::Win32::Networking::WinSock::ADDRESS_FAMILY",
-]
-
 [package.metadata.docs.rs]
 all-features = true
 default-target = "x86_64-unknown-linux-gnu"
@@ -83,6 +73,16 @@ targets = [
 [package.metadata.playground]
 features = ["all"]
 
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+    "libc::socklen_t",
+    "libc::*::socklen_t",
+    "libc::sa_family_t",
+    "libc::*::sa_family_t",
+    "windows_sys::Win32::Networking::WinSock::socklen_t",
+    "windows_sys::Win32::Networking::WinSock::ADDRESS_FAMILY",
+]
+
 [features]
 all = []
 
@@ -90,11 +90,11 @@ all = []
 name = "socket2"
 path = "src/lib.rs"
 
-[target."cfg(unix)".dependencies.libc]
+[target.'cfg(any(unix, target_os = "wasi"))'.dependencies.libc]
 version = "0.2.172"
 
 [target."cfg(windows)".dependencies.windows-sys]
-version = "0.59"
+version = ">=0.60, <0.62"
 features = [
     "Win32_Foundation",
     "Win32_Networking_WinSock",

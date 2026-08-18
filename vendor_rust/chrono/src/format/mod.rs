@@ -33,6 +33,8 @@
 
 #[cfg(all(feature = "alloc", not(feature = "std"), not(test)))]
 use alloc::boxed::Box;
+#[cfg(all(feature = "core-error", not(feature = "std")))]
+use core::error::Error;
 use core::fmt;
 use core::str::FromStr;
 #[cfg(feature = "std")]
@@ -76,6 +78,7 @@ enum Void {}
 
 /// Padding characters for numeric items.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Pad {
     /// No padding.
     None,
@@ -100,6 +103,7 @@ pub enum Pad {
 /// parsed with the same formatting items.
 #[non_exhaustive]
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Numeric {
     /// Full Gregorian year (FW=4, PW=∞).
     /// May accept years before 1 BCE or after 9999 CE, given an initial sign (+/-).
@@ -168,12 +172,20 @@ impl fmt::Debug for InternalNumeric {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for InternalNumeric {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "<InternalNumeric>")
+    }
+}
+
 /// Fixed-format item types.
 ///
 /// They have their own rules of formatting and parsing.
 /// Otherwise noted, they print in the specified cases but parse case-insensitively.
 #[non_exhaustive]
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Fixed {
     /// Abbreviated month names.
     ///
@@ -258,11 +270,13 @@ pub enum Fixed {
 
 /// An opaque type representing fixed-format item types for internal uses only.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct InternalFixed {
     val: InternalInternal,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum InternalInternal {
     /// Same as [`TimezoneOffsetColonZ`](#variant.TimezoneOffsetColonZ), but
     /// allows missing minutes (per [ISO 8601][iso8601]).
@@ -283,6 +297,7 @@ enum InternalInternal {
 
 /// Type for specifying the format of UTC offsets.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct OffsetFormat {
     /// See `OffsetPrecision`.
     pub precision: OffsetPrecision,
@@ -296,6 +311,7 @@ pub struct OffsetFormat {
 
 /// The precision of an offset from UTC formatting item.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum OffsetPrecision {
     /// Format offset from UTC as only hours. Not recommended, it is not uncommon for timezones to
     /// have an offset of 30 minutes, 15 minutes, etc.
@@ -317,6 +333,7 @@ pub enum OffsetPrecision {
 
 /// The separator between hours and minutes in an offset.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Colons {
     /// No separator
     None,
@@ -346,6 +363,23 @@ pub enum Item<'a> {
     Fixed(Fixed),
     /// Issues a formatting error. Used to signal an invalid format string.
     Error,
+}
+
+#[cfg(feature = "defmt")]
+impl<'a> defmt::Format for Item<'a> {
+    fn format(&self, f: defmt::Formatter) {
+        match self {
+            Item::Literal(v) => defmt::write!(f, "Literal {{ {} }}", v),
+            #[cfg(feature = "alloc")]
+            Item::OwnedLiteral(_) => {}
+            Item::Space(v) => defmt::write!(f, "Space {{ {}  }}", v),
+            #[cfg(feature = "alloc")]
+            Item::OwnedSpace(_) => {}
+            Item::Numeric(u, v) => defmt::write!(f, "Numeric {{ {}, {} }}", u, v),
+            Item::Fixed(v) => defmt::write!(f, "Fixed {{ {}  }}", v),
+            Item::Error => defmt::write!(f, "Error"),
+        }
+    }
 }
 
 const fn num(numeric: Numeric) -> Item<'static> {
@@ -386,6 +420,7 @@ impl Item<'_> {
 
 /// An error from the `parse` function.
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ParseError(ParseErrorKind);
 
 impl ParseError {
@@ -398,6 +433,7 @@ impl ParseError {
 /// The category of parse error
 #[allow(clippy::manual_non_exhaustive)]
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ParseErrorKind {
     /// Given field is out of permitted range.
     OutOfRange,
@@ -450,7 +486,7 @@ impl fmt::Display for ParseError {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "core-error", feature = "std"))]
 impl Error for ParseError {
     #[allow(deprecated)]
     fn description(&self) -> &str {

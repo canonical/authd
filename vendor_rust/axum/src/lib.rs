@@ -1,4 +1,4 @@
-//! axum is a web application framework that focuses on ergonomics and modularity.
+//! axum is an HTTP routing and request-handling library that focuses on ergonomics and modularity.
 //!
 //! # High-level features
 //!
@@ -9,7 +9,7 @@
 //! - Take full advantage of the [`tower`] and [`tower-http`] ecosystem of
 //!   middleware, services, and utilities.
 //!
-//! In particular, the last point is what sets `axum` apart from other frameworks.
+//! In particular, the last point is what sets `axum` apart from other libraries / frameworks.
 //! `axum` doesn't have its own middleware system but instead uses
 //! [`tower::Service`]. This means `axum` gets timeouts, tracing, compression,
 //! authorization, and more, for free. It also enables you to share middleware with
@@ -134,13 +134,13 @@
 //! it is simple to convert errors into responses and you are guaranteed that
 //! all errors are handled.
 //!
-//! See [`error_handling`](crate::error_handling) for more details on axum's
+//! See [`error_handling`] for more details on axum's
 //! error handling model and how to handle errors gracefully.
 //!
 //! # Middleware
 //!
 //! There are several different ways to write middleware for axum. See
-//! [`middleware`](crate::middleware) for more details.
+//! [`middleware`] for more details.
 //!
 //! # Sharing state with handlers
 //!
@@ -183,6 +183,51 @@
 //! # let _: Router = app;
 //! ```
 //!
+//! State is cloned for every request. Wrapping your state in `Arc` makes those
+//! clones cheap. If all fields are already cheap to clone (for example, each field
+//! is itself an `Arc` or a copy type), you can `#[derive(Clone)]` directly on the
+//! struct instead.
+//!
+//! ### Substates with `FromRef`
+//!
+//! When a handler only needs part of the application state, use [`FromRef`] to extract
+//! a substate. Implement the trait manually, or derive it with `#[derive(FromRef)]`
+//! (requires the `macros` feature):
+//!
+//! ```rust
+//! use axum::{Router, routing::get, extract::{State, FromRef}};
+//!
+//! #[derive(Clone)]
+//! struct AppState {
+//!     api_state: ApiState,
+//! }
+//!
+//! #[derive(Clone)]
+//! struct ApiState {}
+//!
+//! // Teach axum how to produce an `ApiState` from a reference to `AppState`.
+//! impl FromRef<AppState> for ApiState {
+//!     fn from_ref(app_state: &AppState) -> ApiState {
+//!         app_state.api_state.clone()
+//!     }
+//! }
+//!
+//! let app = Router::new()
+//!     .route("/", get(handler))
+//!     .with_state(AppState { api_state: ApiState {} });
+//!
+//! // This handler receives only the `ApiState` slice; it never sees `AppState`.
+//! async fn handler(State(api_state): State<ApiState>) {}
+//! # let _: Router = app;
+//! ```
+//!
+//! ### The `Router<S>` type parameter
+//!
+//! `Router<S>` when `S` is not `()` means a router that is _missing_ a state of type `S`. Calling
+//! [`.with_state(s)`][Router::with_state] provides that state and typically produces a
+//! `Router<()>`, which is the only form that can be passed to [`serve()`]. See
+//! [`Router::with_state`] for a full explanation.
+//!
 //! You should prefer using [`State`] if possible since it's more type safe. The downside is that
 //! it's less dynamic than task-local variables and request extensions.
 //!
@@ -190,7 +235,7 @@
 //!
 //! ## Using request extensions
 //!
-//! Another way to share state with handlers is using [`Extension`](crate::extract::Extension) as
+//! Another way to share state with handlers is using [`Extension`] as
 //! layer and extractor:
 //!
 //! ```rust,no_run
@@ -275,7 +320,7 @@
 //! # let _: Router = app;
 //! ```
 //!
-//! The downside to this approach is that it's a the most verbose approach.
+//! The downside to this approach is that it's the most verbose approach.
 //!
 //! ## Using task-local variables
 //!
@@ -381,19 +426,19 @@
 //!
 //! Name | Description | Default?
 //! ---|---|---
-//! `http1` | Enables hyper's `http1` feature | Yes
-//! `http2` | Enables hyper's `http2` feature | No
-//! `json` | Enables the [`Json`] type and some similar convenience functionality | Yes
-//! `macros` | Enables optional utility macros | No
-//! `matched-path` | Enables capturing of every request's router path and the [`MatchedPath`] extractor | Yes
-//! `multipart` | Enables parsing `multipart/form-data` requests with [`Multipart`] | No
-//! `original-uri` | Enables capturing of every request's original URI and the [`OriginalUri`] extractor | Yes
-//! `tokio` | Enables `tokio` as a dependency and `axum::serve`, `SSE` and `extract::connect_info` types. | Yes
-//! `tower-log` | Enables `tower`'s `log` feature | Yes
-//! `tracing` | Log rejections from built-in extractors | Yes
-//! `ws` | Enables WebSockets support via [`extract::ws`] | No
-//! `form` | Enables the `Form` extractor | Yes
-//! `query` | Enables the `Query` extractor | Yes
+//! `http1` | Enables hyper's `http1` feature | <span role="img" aria-label="Default feature">✔</span>
+//! `http2` | Enables hyper's `http2` feature |
+//! `json` | Enables the [`Json`] type and some similar convenience functionality | <span role="img" aria-label="Default feature">✔</span>
+//! `macros` | Enables optional utility macros |
+//! `matched-path` | Enables capturing of every request's router path and the [`MatchedPath`] extractor | <span role="img" aria-label="Default feature">✔</span>
+//! `multipart` | Enables parsing `multipart/form-data` requests with [`Multipart`] |
+//! `original-uri` | Enables capturing of every request's original URI and the [`OriginalUri`] extractor | <span role="img" aria-label="Default feature">✔</span>
+//! `tokio` | Enables `tokio` as a dependency and `axum::serve`, `SSE` and `extract::connect_info` types. | <span role="img" aria-label="Default feature">✔</span>
+//! `tower-log` | Enables `tower`'s `log` feature | <span role="img" aria-label="Default feature">✔</span>
+//! `tracing` | Log rejections from built-in extractors | <span role="img" aria-label="Default feature">✔</span>
+//! `ws` | Enables WebSockets support via [`extract::ws`] |
+//! `form` | Enables the `Form` extractor | <span role="img" aria-label="Default feature">✔</span>
+//! `query` | Enables the `Query` extractor | <span role="img" aria-label="Default feature">✔</span>
 //!
 //! [`MatchedPath`]: crate::extract::MatchedPath
 //! [`Multipart`]: crate::extract::Multipart
@@ -426,8 +471,10 @@
 //! [load shed]: tower::load_shed
 //! [`axum-core`]: http://crates.io/crates/axum-core
 //! [`State`]: crate::extract::State
+//! [`FromRef`]: crate::extract::FromRef
+//! [`Router::with_state`]: crate::routing::Router::with_state
 
-#![cfg_attr(docsrs, feature(doc_auto_cfg, doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(test, allow(clippy::float_cmp))]
 #![cfg_attr(not(test), warn(clippy::print_stdout, clippy::dbg_macro))]
 

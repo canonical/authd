@@ -10,10 +10,10 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2018"
-rust-version = "1.63"
+edition = "2021"
+rust-version = "1.64.0"
 name = "find-msvc-tools"
-version = "0.1.9"
+version = "0.1.10"
 build = false
 autolib = false
 autobins = false
@@ -31,8 +31,6 @@ repository = "https://github.com/rust-lang/cc-rs"
 [lib]
 name = "find_msvc_tools"
 path = "src/lib.rs"
-
-[dependencies]
 
 [lints.rust.unexpected_cfgs]
 level = "allow"

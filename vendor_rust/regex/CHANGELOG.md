@@ -1,3 +1,130 @@
+1.13.1 (2026-07-15)
+===================
+This is a release that fixes a bug where incorrect regex match offsets could be
+reported. Note that this doesn't impact whether a match occurs or not, just
+where it occurs. The match offsets are still valid for slicing, they just may
+not refer to the correct leftmost-first match. See
+[#1364](https://github.com/rust-lang/regex/pull/1364) for (many) more details.
+
+Bug fixes:
+
+* [#1354](https://github.com/rust-lang/regex/issues/1354):
+Fixes previously unsound reverse suffix and inner optimizations.
+
+
+1.13.0 (2026-07-09)
+===================
+This release includes a new API, a `regex!` macro, for lazy compilation of
+a regex from a string literal. If you use regexes a lot, it's likely you've
+already written one exactly like it. The new macro can be used like this:
+
+```rust
+use regex::regex;
+
+fn is_match(line: &str) -> bool {
+    // The regex will be compiled approximately once and reused automatically.
+    // This avoids the footgun of using `Regex::new` here, which would
+    // guarantee that it would be compiled every time this routine is called.
+    // This would likely make this routine much slower than it needs to be.
+    regex!(r"bar|baz").is_match(line)
+}
+
+let hay = "\
+path/to/foo:54:Blue Harvest
+path/to/bar:90:Something, Something, Something, Dark Side
+path/to/baz:3:It's a Trap!
+";
+
+let matches = hay.lines().filter(|line| is_match(line)).count();
+assert_eq!(matches, 2);
+```
+
+Improvements:
+
+* [#709](https://github.com/rust-lang/regex/issues/709):
+Add a new `regex!` macro for efficient and automatic reuse of a compiled regex.
+
+
+1.12.4 (2026-06-09)
+===================
+This release includes a performance optimization for compilation of regexes
+with very large character classes.
+
+Improvements:
+
+* [#1308](https://github.com/rust-lang/regex/pull/1308):
+Avoid re-canonicalizing the entire interval set when pushing new class ranges.
+
+
+1.12.3 (2026-02-03)
+===================
+This release excludes some unnecessary things from the archive published to
+crates.io. Specifically, fuzzing data and various shell scripts are now
+excluded. If you run into problems, please file an issue.
+
+Improvements:
+
+* [#1319](https://github.com/rust-lang/regex/pull/1319):
+Switch from a Cargo `exclude` list to an `include` list, and exclude some
+unnecessary stuff.
+
+
+1.12.2 (2025-10-13)
+===================
+This release fixes a `cargo doc` breakage on nightly when `--cfg docsrs` is
+enabled. This caused documentation to fail to build on docs.rs.
+
+Bug fixes:
+
+* [BUG #1305](https://github.com/rust-lang/regex/issues/1305):
+Switches the `doc_auto_cfg` feature to `doc_cfg` on nightly for docs.rs builds.
+
+
+1.12.1 (2025-10-10)
+===================
+This release makes a bug fix in the new `regex::Captures::get_match` API
+introduced in `1.12.0`. There was an oversight with the lifetime parameter
+for the `Match` returned. This is technically a breaking change, but given
+that it was caught almost immediately and I've yanked the `1.12.0` release,
+I think this is fine.
+
+
+1.12.0 (2025-10-10)
+===================
+This release contains a smattering of bug fixes, a fix for excessive memory
+consumption in some cases and a new `regex::Captures::get_match` API.
+
+Improvements:
+
+* [FEATURE #1146](https://github.com/rust-lang/regex/issues/1146):
+Add `Capture::get_match` for returning the overall match without `unwrap()`.
+
+Bug fixes:
+
+* [BUG #1083](https://github.com/rust-lang/regex/issues/1083):
+Fixes a panic in the lazy DFA (can only occur for especially large regexes).
+* [BUG #1116](https://github.com/rust-lang/regex/issues/1116):
+Fixes a memory usage regression for large regexes (introduced in `regex 1.9`).
+* [BUG #1195](https://github.com/rust-lang/regex/issues/1195):
+Fix universal start states in sparse DFA.
+* [BUG #1295](https://github.com/rust-lang/regex/pull/1295):
+Fixes a panic when deserializing a corrupted dense DFA.
+* [BUG 8f5d9479](https://github.com/rust-lang/regex/commit/8f5d9479d0f1da5726488a530d7fd66a73d05b80):
+Make `regex_automata::meta::Regex::find` consistently return `None` when
+`WhichCaptures::None` is used.
+
+
+1.11.3 (2025-09-25)
+===================
+This is a small patch release with an improvement in memory usage in some
+cases.
+
+Improvements:
+
+* [BUG #1297](https://github.com/rust-lang/regex/issues/1297):
+Improve memory usage by trimming excess memory capacity in some spots.
+
+
 1.11.2 (2025-08-24)
 ===================
 This is a new patch release of `regex` with some minor fixes. A larger number

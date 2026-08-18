@@ -722,6 +722,8 @@ impl<'a> InternalBuilder<'a> {
             }
         }
         self.shuffle_states();
+        self.dfa.starts.shrink_to_fit();
+        self.dfa.table.shrink_to_fit();
         Ok(self.dfa)
     }
 
@@ -2091,9 +2093,20 @@ impl DFA {
         // be bad. In theory, we could avoid all this slot clearing if we knew
         // that every slot was always activated for every match. Then we would
         // know they would always be overwritten when a match is found.
+        //
+        // NOTE: We have to be careful here to avoid setting a length that
+        // exceeds the number of slots in our cache. Otherwise copying into
+        // the cache later will fail. This can happen when the number of
+        // caller provided slots is bigger than the number of slots in the
+        // compiled regex. (It's a bit of a weird case, but for simplicity and
+        // flexibility reasons, it is an API guarantee that the caller can
+        // provide any number of slots that they want.)
         let explicit_slots_len = core::cmp::min(
             Slots::LIMIT,
-            slots.len().saturating_sub(self.explicit_slot_start),
+            core::cmp::min(
+                slots.len().saturating_sub(self.explicit_slot_start),
+                cache.explicit_slots.len(),
+            ),
         );
         cache.setup_search(explicit_slots_len);
         for slot in cache.explicit_slots() {
@@ -2214,10 +2227,15 @@ impl DFA {
         // the path to the match state.
         if self.explicit_slot_start < slots.len() {
             // NOTE: The 'cache.explicit_slots()' slice is setup at the
-            // beginning of every search such that it is guaranteed to return a
-            // slice of length equivalent to 'slots[explicit_slot_start..]'.
-            slots[self.explicit_slot_start..]
-                .copy_from_slice(cache.explicit_slots());
+            // beginning of every search such that it is guaranteed
+            // to return a slice that is at most equal in length to
+            // 'slots[explicit_slot_start..]'. It may be smaller in
+            // cases where the caller provided more slots than there
+            // are in the compiled regex. In which case, we limit the
+            // length of `slots` to what we actually have.
+            let cache_slots = cache.explicit_slots();
+            slots[self.explicit_slot_start..][..cache_slots.len()]
+                .copy_from_slice(cache_slots);
             epsilons.slots().apply(at, &mut slots[self.explicit_slot_start..]);
         }
         *matched_pid = Some(pid);
@@ -2408,7 +2426,7 @@ impl core::fmt::Debug for DFA {
             }
             write!(f, "{:06?}", sid.as_usize())?;
             if !pateps.is_empty() {
-                write!(f, " ({:?})", pateps)?;
+                write!(f, " ({pateps:?})")?;
             }
             write!(f, ": ")?;
             debug_state_transitions(f, self, sid)?;
@@ -2939,7 +2957,7 @@ impl core::fmt::Debug for Slots {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "S")?;
         for slot in self.iter() {
-            write!(f, "-{:?}", slot)?;
+            write!(f, "-{slot:?}")?;
         }
         Ok(())
     }
@@ -3050,23 +3068,21 @@ impl core::fmt::Display for BuildError {
             Word(_) => write!(f, "NFA contains Unicode word boundary"),
             TooManyStates { limit } => write!(
                 f,
-                "one-pass DFA exceeded a limit of {:?} for number of states",
-                limit,
+                "one-pass DFA exceeded a limit of {limit:?} \
+                 for number of states",
             ),
             TooManyPatterns { limit } => write!(
                 f,
-                "one-pass DFA exceeded a limit of {:?} for number of patterns",
-                limit,
+                "one-pass DFA exceeded a limit of {limit:?} \
+                 for number of patterns",
             ),
             UnsupportedLook { look } => write!(
                 f,
-                "one-pass DFA does not support the {:?} assertion",
-                look,
+                "one-pass DFA does not support the {look:?} assertion",
             ),
             ExceededSizeLimit { limit } => write!(
                 f,
-                "one-pass DFA exceeded size limit of {:?} during building",
-                limit,
+                "one-pass DFA exceeded size limit of {limit:?} during building",
             ),
             NotOnePass { msg } => write!(
                 f,
@@ -3089,7 +3105,7 @@ mod tests {
         let predicate = |err: &str| err.contains("conflicting transition");
 
         let err = DFA::new(r"a*[ab]").unwrap_err().to_string();
-        assert!(predicate(&err), "{}", err);
+        assert!(predicate(&err), "{err}");
     }
 
     #[test]
@@ -3099,7 +3115,7 @@ mod tests {
         };
 
         let err = DFA::new(r"(^|$)a").unwrap_err().to_string();
-        assert!(predicate(&err), "{}", err);
+        assert!(predicate(&err), "{err}");
     }
 
     #[test]
@@ -3109,7 +3125,7 @@ mod tests {
         };
 
         let err = DFA::new_many(&[r"^", r"$"]).unwrap_err().to_string();
-        assert!(predicate(&err), "{}", err);
+        assert!(predicate(&err), "{err}");
     }
 
     // This test is meant to build a one-pass regex with the maximum number of

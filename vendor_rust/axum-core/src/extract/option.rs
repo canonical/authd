@@ -35,6 +35,9 @@ pub trait OptionalFromRequest<S, M = private::ViaRequest>: Sized {
     ) -> impl Future<Output = Result<Option<Self>, Self::Rejection>> + Send;
 }
 
+// Compiler hint just says that there is an impl for Option<T>, not mentioning
+// the bounds, which is not very helpful.
+#[diagnostic::do_not_recommend]
 impl<S, T> FromRequestParts<S> for Option<T>
 where
     T: OptionalFromRequestParts<S>,
@@ -42,6 +45,7 @@ where
 {
     type Rejection = T::Rejection;
 
+    #[allow(clippy::use_self)]
     fn from_request_parts(
         parts: &mut Parts,
         state: &S,
@@ -50,6 +54,7 @@ where
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl<S, T> FromRequest<S> for Option<T>
 where
     T: OptionalFromRequest<S>,
@@ -57,6 +62,7 @@ where
 {
     type Rejection = T::Rejection;
 
+    #[allow(clippy::use_self)]
     async fn from_request(req: Request, state: &S) -> Result<Option<T>, Self::Rejection> {
         T::from_request(req, state).await
     }

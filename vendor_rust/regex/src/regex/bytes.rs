@@ -4,6 +4,59 @@ use regex_automata::{meta, util::captures, Input, PatternID};
 
 use crate::{bytes::RegexBuilder, error::Error};
 
+/// A convenient way to construct regex patterns from string literals.
+///
+/// This macro can be used to construct reusable instances of [`Regex`] with
+/// reduced boilerplate. The constructed `Regex` is stored in a static so the
+/// pattern is compiled approximately once, even when called multiple times.
+///
+/// There is *no compile-time checking of patterns* with `regex!`. Instead,
+/// invalid patterns will panic the first time the regex is used. Invalid
+/// patterns should still not be used with `regex!`; if compile-time checking
+/// becomes feasible in the future, it may be added within a non-semver-breaking
+/// release. In the meantime, consider enabling [`clippy::invalid_regex`].
+///
+/// # Examples
+///
+/// ```
+/// use regex::bytes::{Regex, regex};
+///
+/// assert!(regex!("[a-z]").is_match(b"a"));
+/// assert!(regex!("(inconceivable!|classic blunder)").is_match(b"inconceivable!"));
+///
+/// let re: &Regex = regex!(r"(\d{3})-(\d{4})");
+/// assert_eq!(&re.captures(b"867-5309").unwrap()[1], b"867");
+/// ```
+///
+/// An invalid pattern will panic when it is first used:
+///
+/// ```should_panic
+/// use regex::bytes::regex;
+///
+/// let re = regex!("invalid -> ("); // no panic here
+/// re.is_match(b"invalid -> (");    // panic!
+/// ```
+///
+/// [`clippy::invalid_regex`]: https://rust-lang.github.io/rust-clippy/master/#invalid_regex
+// `macro_export` always makes the macro available at crate root. We hide
+// from documentation there and instead re-export it in `crate::bytes` to get
+// the desired behavior.
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __bytes_regex {
+    ($re:literal) => {{
+        static REGEX: $crate::__private::Lazy<$crate::bytes::Regex> =
+            $crate::__private::Lazy::new(|| {
+                $crate::bytes::Regex::new($re).expect("invalid regex pattern")
+            });
+
+        // Coerce returned type from `&Lazy<Regex>` to `&Regex` to avoid making the
+        // inner type public.
+        let re: &$crate::bytes::Regex = &REGEX;
+        re
+    }};
+}
+
 /// A compiled regular expression for searching Unicode haystacks.
 ///
 /// A `Regex` can be used to search haystacks, split haystacks into substrings
@@ -1665,6 +1718,26 @@ impl<'h> Captures<'h> {
             .map(|sp| Match::new(self.haystack, sp.start, sp.end))
     }
 
+    /// Return the overall match for the capture.
+    ///
+    /// This returns the match for index `0`. That is it is equivalent to
+    /// `m.get(0).unwrap()`
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use regex::bytes::Regex;
+    ///
+    /// let re = Regex::new(r"[a-z]+([0-9]+)").unwrap();
+    /// let caps = re.captures(b"   abc123-def").unwrap();
+    ///
+    /// assert_eq!(caps.get_match().as_bytes(), b"abc123");
+    /// ```
+    #[inline]
+    pub fn get_match(&self) -> Match<'h> {
+        self.get(0).unwrap()
+    }
+
     /// Returns the `Match` associated with the capture group named `name`. If
     /// `name` isn't a valid capture group or it refers to a group that didn't
     /// match, then `None` is returned.
@@ -1992,7 +2065,7 @@ impl<'h> core::ops::Index<usize> for Captures<'h> {
     fn index<'a>(&'a self, i: usize) -> &'a [u8] {
         self.get(i)
             .map(|m| m.as_bytes())
-            .unwrap_or_else(|| panic!("no group at index '{}'", i))
+            .unwrap_or_else(|| panic!("no group at index '{i}'"))
     }
 }
 
@@ -2018,7 +2091,7 @@ impl<'h, 'n> core::ops::Index<&'n str> for Captures<'h> {
     fn index<'a>(&'a self, name: &'n str) -> &'a [u8] {
         self.name(name)
             .map(|m| m.as_bytes())
-            .unwrap_or_else(|| panic!("no group named '{}'", name))
+            .unwrap_or_else(|| panic!("no group named '{name}'"))
     }
 }
 

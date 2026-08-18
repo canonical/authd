@@ -1,13 +1,13 @@
+[build-dependencies.rustversion-compat]
+package = "rustversion"
+version = "1.0.6"
+
 [dependencies.cfg-if]
 version = "1.0.0"
 
 [dependencies.once_cell]
 default-features = false
 version = "1.12"
-
-[dependencies.rustversion]
-optional = true
-version = "1.0"
 
 [dependencies.serde]
 optional = true
@@ -18,21 +18,25 @@ optional = true
 version = "1.0"
 
 [dependencies.wasm-bindgen-macro]
-version = "=0.2.100"
+version = "=0.2.127"
+
+[dependencies.wasm-bindgen-shared]
+version = "=0.2.127"
 
 [dev-dependencies.once_cell]
 version = "1"
 
 [features]
-default = ["std", "msrv"]
+default = ["std"]
 enable-interning = ["std"]
 gg-alloc = []
-msrv = ["rustversion"]
+msrv = []
+rustversion = []
 serde-serialize = ["serde", "serde_json", "std"]
 spans = []
 std = []
 strict-macro = ["wasm-bindgen-macro/strict-macro"]
-xxx_debug_only_print_generated_code = ["wasm-bindgen-macro/xxx_debug_only_print_generated_code"]
+xxx_debug_only_print_generated_code = []
 
 [lib]
 name = "wasm_bindgen"
@@ -45,9 +49,13 @@ new_without_default = "allow"
 overly_complex_bool_expr = "allow"
 too_many_arguments = "allow"
 type_complexity = "allow"
+uninlined_format_args = "warn"
+
+[lints.rust]
+unused_lifetimes = "warn"
 
 [lints.rust.unexpected_cfgs]
-check-cfg = ["cfg(wasm_bindgen_unstable_test_coverage)"]
+check-cfg = ["cfg(wasm_bindgen_unstable_test_coverage)", "cfg(wasm_bindgen_use_js_sys)", "cfg(xxx_debug_only_print_generated_code)", "cfg(legacy_eh)"]
 level = "warn"
 priority = 0
 
@@ -64,14 +72,14 @@ Easy support for interacting between JS and Rust.
 """
 documentation = "https://docs.rs/wasm-bindgen"
 edition = "2021"
-homepage = "https://rustwasm.github.io/"
+homepage = "https://wasm-bindgen.github.io/wasm-bindgen"
 include = ["/build.rs", "/LICENSE-*", "/src"]
 license = "MIT OR Apache-2.0"
 name = "wasm-bindgen"
 readme = "README.md"
-repository = "https://github.com/rustwasm/wasm-bindgen"
-rust-version = "1.57"
-version = "0.2.100"
+repository = "https://github.com/wasm-bindgen/wasm-bindgen"
+rust-version = "1.77"
+version = "0.2.127"
 
 [package.metadata.docs.rs]
 features = ["serde-serialize"]
@@ -80,4 +88,10 @@ features = ["serde-serialize"]
 version = "1"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies.serde_derive]
+version = "1.0"
+
+[target.'cfg(target_arch = "wasm64")'.dev-dependencies.paste]
+version = "1"
+
+[target.'cfg(target_arch = "wasm64")'.dev-dependencies.serde_derive]
 version = "1.0"

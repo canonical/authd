@@ -32,7 +32,6 @@ println!("{:?}", name);
 ```
 "#
 )]
-#![doc(html_root_url = "https://docs.rs/hostname/0.4.1")]
 #![deny(
     unused,
     unused_imports,
@@ -65,7 +64,7 @@ cfg_if! {
         mod windows;
         use crate::windows as sys;
     } else {
-        compile_error!("Unsupported target OS! Create an issue: https://github.com/svartalf/hostname/issues/new");
+        compile_error!("Unsupported target OS! Create an issue: https://github.com/djc/hostname/issues/new");
     }
 }
 
@@ -118,7 +117,7 @@ hostname::set("potato")?;
 ///
 /// ## Compatibility
 ///
-/// * Will fail with a linkage error for Android API < 23 (see [#9](https://github.com/svartalf/hostname/issues/9#issuecomment-563991112))
+/// * Will fail with a linkage error for Android API < 23 (see [#9](https://github.com/djc/hostname/issues/9#issuecomment-563991112))
 #[cfg(feature = "set")]
 #[cfg_attr(docsrs, doc(cfg(feature = "set")))]
 pub fn set<T>(hostname: T) -> io::Result<()>

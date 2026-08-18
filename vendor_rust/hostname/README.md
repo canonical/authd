@@ -2,10 +2,10 @@
 
 [![Latest Version](https://img.shields.io/crates/v/hostname.svg)](https://crates.io/crates/hostname)
 [![Latest Version](https://docs.rs/hostname/badge.svg)](https://docs.rs/hostname)
-[![Build Status](https://github.com/svartalf/hostname/actions/workflows/ci.yml/badge.svg)](https://github.com/svartalf/hostname/actions)
-![Minimum rustc version](https://img.shields.io/badge/rustc-1.71+-green.svg)
-![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)
-![Crates.io](https://img.shields.io/crates/d/hostname)
+[![Build Status](https://github.com/djc/hostname/actions/workflows/ci.yml/badge.svg)](https://github.com/djc/hostname/actions)
+![Minimum rustc Version](https://img.shields.io/badge/rustc-1.74+-green.svg)
+![MIT Licensed](https://img.shields.io/badge/license-MIT-blue.svg)
+![crates.io](https://img.shields.io/crates/d/hostname)
 
 > Cross-platform system's host name functions in Rust
 
@@ -53,4 +53,4 @@ fn main() -> io::Result<()> {
 ## License
 
 hostname is primarily distributed under the terms of the MIT license
-([LICENSE](LICENSE) or http://opensource.org/licenses/MIT).
+([LICENSE](LICENSE) or https://opensource.org/license/mit).

@@ -27,16 +27,19 @@ use crate::error::Result;
 use crate::parse::{Parse, ParseStream};
 #[cfg(feature = "parsing")]
 use crate::token::Token;
+use alloc::boxed::Box;
+#[cfg(all(feature = "fold", any(feature = "full", feature = "derive")))]
+use alloc::collections::VecDeque;
+use alloc::vec::{self, Vec};
 #[cfg(feature = "extra-traits")]
-use std::fmt::{self, Debug};
+use core::fmt::{self, Debug};
 #[cfg(feature = "extra-traits")]
-use std::hash::{Hash, Hasher};
+use core::hash::{Hash, Hasher};
 #[cfg(any(feature = "full", feature = "derive"))]
-use std::iter;
-use std::ops::{Index, IndexMut};
-use std::option;
-use std::slice;
-use std::vec;
+use core::iter;
+use core::ops::{Index, IndexMut};
+use core::option;
+use core::slice;
 
 /// **A punctuated sequence of syntax tree nodes of type `T` separated by
 /// punctuation of type `P`.**
@@ -201,13 +204,13 @@ impl<T, P> Punctuated<T, P> {
         self.inner.push((*last, punctuation));
     }
 
-    /// Removes the last punctuated pair from this sequence, or `None` if the
-    /// sequence is empty.
-    pub fn pop(&mut self) -> Option<Pair<T, P>> {
+    /// Removes the last element from this sequence, discarding the trailing
+    /// punctuation if any.
+    pub fn pop(&mut self) -> Option<T> {
         if self.last.is_some() {
-            self.last.take().map(|t| Pair::End(*t))
+            self.last.take().map(|t| *t)
         } else {
-            self.inner.pop().map(|(t, p)| Pair::Punctuated(t, p))
+            self.inner.pop().map(|(t, _p)| t)
         }
     }
 
@@ -220,6 +223,16 @@ impl<T, P> Punctuated<T, P> {
             let (t, p) = self.inner.pop()?;
             self.last = Some(Box::new(t));
             Some(p)
+        }
+    }
+
+    /// Removes the last punctuated pair from this sequence, or `None` if the
+    /// sequence is empty.
+    pub fn pop_pair(&mut self) -> Option<Pair<T, P>> {
+        if self.last.is_some() {
+            self.last.take().map(|t| Pair::End(*t))
+        } else {
+            self.inner.pop().map(|(t, p)| Pair::Punctuated(t, p))
         }
     }
 
@@ -519,8 +532,13 @@ impl<T, P> IntoIterator for Punctuated<T, P> {
 
     fn into_iter(self) -> Self::IntoIter {
         let mut elements = Vec::with_capacity(self.len());
-        elements.extend(self.inner.into_iter().map(|pair| pair.0));
-        elements.extend(self.last.map(|t| *t));
+
+        for (t, _) in self.inner {
+            elements.push(t);
+        }
+        if let Some(t) = self.last {
+            elements.push(*t);
+        }
 
         IntoIter {
             inner: elements.into_iter(),
@@ -1072,7 +1090,7 @@ impl<T, P> Index<usize> for Punctuated<T, P> {
     type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output {
-        if index == self.len() - 1 {
+        if index.checked_add(1) == Some(self.len()) {
             match &self.last {
                 Some(t) => t,
                 None => &self.inner[index].0,
@@ -1085,7 +1103,7 @@ impl<T, P> Index<usize> for Punctuated<T, P> {
 
 impl<T, P> IndexMut<usize> for Punctuated<T, P> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        if index == self.len() - 1 {
+        if index.checked_add(1) == Some(self.len()) {
             match &mut self.last {
                 Some(t) => t,
                 None => &mut self.inner[index].0,
@@ -1106,13 +1124,20 @@ where
     V: ?Sized,
     F: FnMut(&mut V, T) -> T,
 {
+    let Punctuated { inner, last } = punctuated;
+
+    // Convert into VecDeque to prevent needing to allocate a new Vec<(T, P)>
+    // for the folded elements.
+    let mut inner = VecDeque::from(inner);
+    for _ in 0..inner.len() {
+        if let Some((t, p)) = inner.pop_front() {
+            inner.push_back((f(fold, t), p));
+        }
+    }
+
     Punctuated {
-        inner: punctuated
-            .inner
-            .into_iter()
-            .map(|(t, p)| (f(fold, t), p))
-            .collect(),
-        last: match punctuated.last {
+        inner: Vec::from(inner),
+        last: match last {
             Some(t) => Some(Box::new(f(fold, *t))),
             None => None,
         },
@@ -1123,7 +1148,7 @@ where
 mod printing {
     use crate::punctuated::{Pair, Punctuated};
     use proc_macro2::TokenStream;
-    use quote::{ToTokens, TokenStreamExt};
+    use quote::{ToTokens, TokenStreamExt as _};
 
     #[cfg_attr(docsrs, doc(cfg(feature = "printing")))]
     impl<T, P> ToTokens for Punctuated<T, P>

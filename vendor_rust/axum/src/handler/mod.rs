@@ -125,11 +125,25 @@ pub use self::service::HandlerService;
 ///     )));
 /// # let _: Router = app;
 /// ```
-#[rustversion::attr(
-    since(1.78),
-    diagnostic::on_unimplemented(
-        note = "Consider using `#[axum::debug_handler]` to improve the error message"
-    )
+///
+/// # About type parameter `T`
+///
+/// **Generally you shouldn't need to worry about `T`**; when calling methods such as
+/// [`post`](crate::routing::method_routing::post) it will be automatically inferred and this is
+/// the intended way for this parameter to be provided in application code.
+///
+/// If you are implementing your own methods that accept implementations of `Handler` as
+/// arguments, then the following may be useful:
+///
+/// The type parameter `T` is a workaround for trait coherence rules, allowing us to
+/// write blanket implementations of `Handler` over many types of handler functions
+/// with different numbers of arguments, without the compiler forbidding us from doing
+/// so because one type `F` can in theory implement both `Fn(A) -> X` and `Fn(A, B) -> Y`.
+/// `T` is a placeholder taking on a representation of the parameters of the handler function,
+/// as well as other similar 'coherence rule workaround' discriminators,
+/// allowing us to select one function signature to use as a `Handler`.
+#[diagnostic::on_unimplemented(
+    note = "Consider using `#[axum::debug_handler]` to improve the error message"
 )]
 pub trait Handler<T, S>: Clone + Send + Sync + Sized + 'static {
     /// The type of future calling this handler returns.
@@ -190,6 +204,7 @@ pub trait Handler<T, S>: Clone + Send + Sync + Sized + 'static {
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl<F, Fut, Res, S> Handler<((),), S> for F
 where
     F: FnOnce() -> Fut + Clone + Send + Sync + 'static,
@@ -207,6 +222,7 @@ macro_rules! impl_handler {
     (
         [$($ty:ident),*], $last:ident
     ) => {
+        #[diagnostic::do_not_recommend]
         #[allow(non_snake_case, unused_mut)]
         impl<F, Fut, S, Res, M, $($ty,)* $last> Handler<(M, $($ty,)* $last,), S> for F
         where
@@ -251,6 +267,7 @@ mod private {
     pub enum IntoResponseHandler {}
 }
 
+#[diagnostic::do_not_recommend]
 impl<T, S> Handler<private::IntoResponseHandler, S> for T
 where
     T: IntoResponse + Clone + Send + Sync + 'static,
@@ -296,6 +313,7 @@ where
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl<H, S, T, L> Handler<T, S> for Layered<L, H, T, S>
 where
     L: Layer<HandlerService<H, T, S>> + Clone + Send + Sync + 'static,
@@ -413,7 +431,10 @@ mod tests {
         let svc = handle
             .layer((
                 RequestBodyLimitLayer::new(1024),
-                TimeoutLayer::new(Duration::from_secs(10)),
+                TimeoutLayer::with_status_code(
+                    StatusCode::REQUEST_TIMEOUT,
+                    Duration::from_secs(10),
+                ),
                 MapResponseBodyLayer::new(Body::new),
             ))
             .layer(MapRequestBodyLayer::new(Body::new))

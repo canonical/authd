@@ -13,7 +13,7 @@
 edition = "2018"
 rust-version = "1.67.0"
 name = "flate2"
-version = "1.1.2"
+version = "1.1.9"
 authors = [
     "Alex Crichton <alex@alexcrichton.com>",
     "Josh Triplett <josh@joshtriplett.org>",
@@ -55,37 +55,48 @@ rustdoc-args = [
 ]
 
 [features]
+any_c_zlib = ["any_zlib"]
 any_impl = []
 any_zlib = ["any_impl"]
 cloudflare_zlib = [
-    "any_zlib",
+    "any_c_zlib",
     "cloudflare-zlib-sys",
+    "dep:crc32fast",
 ]
 default = ["rust_backend"]
 miniz-sys = ["rust_backend"]
+miniz_oxide = [
+    "any_impl",
+    "dep:miniz_oxide",
+    "dep:crc32fast",
+]
 rust_backend = [
     "miniz_oxide",
     "any_impl",
 ]
 zlib = [
-    "any_zlib",
+    "any_c_zlib",
     "libz-sys",
+    "dep:crc32fast",
 ]
 zlib-default = [
-    "any_zlib",
+    "any_c_zlib",
     "libz-sys/default",
+    "dep:crc32fast",
 ]
 zlib-ng = [
-    "any_zlib",
+    "any_c_zlib",
     "libz-ng-sys",
+    "dep:crc32fast",
 ]
 zlib-ng-compat = [
     "zlib",
     "libz-sys/zlib-ng",
+    "dep:crc32fast",
 ]
 zlib-rs = [
     "any_zlib",
-    "libz-rs-sys",
+    "dep:zlib-rs",
 ]
 
 [lib]
@@ -185,6 +196,10 @@ name = "zlibencoder-write"
 path = "examples/zlibencoder-write.rs"
 
 [[test]]
+name = "capabilities"
+path = "tests/capabilities.rs"
+
+[[test]]
 name = "early-flush"
 path = "tests/early-flush.rs"
 
@@ -201,24 +216,20 @@ name = "zero-write"
 path = "tests/zero-write.rs"
 
 [dependencies.cloudflare-zlib-sys]
-version = "0.3.5"
+version = "0.3.6"
 optional = true
 
 [dependencies.crc32fast]
 version = "1.2.0"
+optional = true
+
+[dependencies.document-features]
+version = "0.2"
+optional = true
 
 [dependencies.libz-ng-sys]
 version = "1.1.16"
 optional = true
-
-[dependencies.libz-rs-sys]
-version = "0.5.1"
-features = [
-    "std",
-    "rust-allocator",
-]
-optional = true
-default-features = false
 
 [dependencies.libz-sys]
 version = "1.1.20"
@@ -227,8 +238,24 @@ default-features = false
 
 [dependencies.miniz_oxide]
 version = "0.8.5"
-features = ["with-alloc"]
+features = [
+    "with-alloc",
+    "simd",
+]
 optional = true
+default-features = false
+
+[dependencies.zlib-rs]
+version = "0.6.0"
+features = [
+    "std",
+    "rust-allocator",
+]
+optional = true
+default-features = false
+
+[dev-dependencies.futures]
+version = "0.3"
 default-features = false
 
 [dev-dependencies.quickcheck]
@@ -240,5 +267,8 @@ version = "0.9"
 
 [target.'cfg(all(target_arch = "wasm32", not(target_os = "emscripten")))'.dependencies.miniz_oxide]
 version = "0.8.5"
-features = ["with-alloc"]
+features = [
+    "with-alloc",
+    "simd",
+]
 default-features = false

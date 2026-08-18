@@ -38,6 +38,7 @@ use crate::OutOfRange;
 )]
 #[cfg_attr(feature = "rkyv-validation", archive(check_bytes))]
 #[cfg_attr(all(feature = "arbitrary", feature = "std"), derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Weekday {
     /// Monday.
     Mon = 0,
@@ -238,18 +239,28 @@ pub struct ParseWeekdayError {
     pub(crate) _dummy: (),
 }
 
+#[cfg(all(not(feature = "std"), feature = "core-error"))]
+impl core::error::Error for ParseWeekdayError {}
+
 #[cfg(feature = "std")]
 impl std::error::Error for ParseWeekdayError {}
 
 impl fmt::Display for ParseWeekdayError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_fmt(format_args!("{:?}", self))
+        f.write_fmt(format_args!("{self:?}"))
     }
 }
 
 impl fmt::Debug for ParseWeekdayError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "ParseWeekdayError {{ .. }}")
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for ParseWeekdayError {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(fmt, "ParseWeekdayError {{ .. }}")
     }
 }
 

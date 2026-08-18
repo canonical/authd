@@ -10,16 +10,15 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2018"
-rust-version = "1.63"
+edition = "2021"
+rust-version = "1.64.0"
 name = "cc"
-version = "1.2.63"
-authors = ["Alex Crichton <alex@alexcrichton.com>"]
+version = "1.4.2"
 build = false
 exclude = [
     "/.github",
-    "tests",
     "src/bin",
+    "tests",
 ]
 autolib = false
 autobins = false
@@ -42,8 +41,8 @@ repository = "https://github.com/rust-lang/cc-rs"
 [features]
 jobserver = []
 parallel = [
-    "dep:libc",
     "dep:jobserver",
+    "dep:libc",
 ]
 
 [lib]
@@ -51,7 +50,7 @@ name = "cc"
 path = "src/lib.rs"
 
 [dependencies.find-msvc-tools]
-version = "0.1.9"
+version = "0.1.10"
 
 [dependencies.jobserver]
 version = "0.1.30"
@@ -65,7 +64,7 @@ version = "2.0.1"
 version = "3"
 
 [target."cfg(unix)".dependencies.libc]
-version = "0.2.62"
+version = "0.2.168"
 optional = true
 default-features = false
 

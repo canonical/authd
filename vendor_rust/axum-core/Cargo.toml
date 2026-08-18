@@ -11,9 +11,9 @@
 
 [package]
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.78"
 name = "axum-core"
-version = "0.5.2"
+version = "0.5.6"
 build = false
 autolib = false
 autobins = false
@@ -36,17 +36,17 @@ categories = [
 license = "MIT"
 repository = "https://github.com/tokio-rs/axum"
 
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+    "futures_core::*",
+    "tower_layer::*",
+    "bytes::*",
+    "http::*",
+    "http_body::*",
+]
+
 [package.metadata.cargo-machete]
 ignored = ["tower-http"]
-
-[package.metadata.cargo-public-api-crates]
-allowed = [
-    "futures_core",
-    "tower_layer",
-    "bytes",
-    "http",
-    "http_body",
-]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -79,9 +79,6 @@ version = "0.3.16"
 
 [dependencies.pin-project-lite]
 version = "0.2.7"
-
-[dependencies.rustversion]
-version = "1.0.9"
 
 [dependencies.sync_wrapper]
 version = "1.0.0"
@@ -118,29 +115,41 @@ await_holding_lock = "warn"
 dbg_macro = "warn"
 empty_enum = "warn"
 enum_glob_use = "warn"
+equatable_if_let = "warn"
 exit = "warn"
 filter_map_next = "warn"
 fn_params_excessive_bools = "warn"
 if_let_mutex = "warn"
+implicit_clone = "warn"
 imprecise_flops = "warn"
 inefficient_to_string = "warn"
 linkedlist = "warn"
 lossy_float_literal = "warn"
 macro_use_imports = "warn"
-match_on_vec_items = "warn"
+manual_let_else = "warn"
+match_same_arms = "warn"
 match_wildcard_for_single_variants = "warn"
 mem_forget = "warn"
+must_use_candidate = "warn"
 needless_borrow = "warn"
 needless_continue = "warn"
+needless_pass_by_ref_mut = "warn"
+needless_pass_by_value = "warn"
 option_option = "warn"
+redundant_clone = "warn"
+ref_option = "warn"
 rest_pat_in_fully_bound_structs = "warn"
+return_self_not_must_use = "warn"
+single_match_else = "warn"
 str_to_string = "warn"
 suboptimal_flops = "warn"
 todo = "warn"
+trivially_copy_pass_by_ref = "warn"
 type_complexity = "allow"
 uninlined_format_args = "warn"
 unnested_or_patterns = "warn"
 unused_self = "warn"
+use_self = "warn"
 verbose_file_reads = "warn"
 
 [lints.rust]

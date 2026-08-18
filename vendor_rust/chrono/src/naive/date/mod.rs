@@ -27,6 +27,8 @@ use rkyv::{Archive, Deserialize, Serialize};
 #[cfg(all(feature = "unstable-locales", feature = "alloc"))]
 use pure_rust_locales::Locale;
 
+use super::internals::{Mdf, YearFlags};
+use crate::datetime::UNIX_EPOCH_DAY;
 #[cfg(feature = "alloc")]
 use crate::format::DelayedFormat;
 use crate::format::{
@@ -37,8 +39,6 @@ use crate::month::Months;
 use crate::naive::{Days, IsoWeek, NaiveDateTime, NaiveTime, NaiveWeek};
 use crate::{Datelike, TimeDelta, Weekday};
 use crate::{expect, try_opt};
-
-use super::internals::{Mdf, YearFlags};
 
 #[cfg(test)]
 mod tests;
@@ -382,6 +382,35 @@ impl NaiveDate {
         let (year_mod_400, ordinal) = cycle_to_yo(cycle as u32);
         let flags = YearFlags::from_year_mod_400(year_mod_400 as i32);
         NaiveDate::from_ordinal_and_flags(year_div_400 * 400 + year_mod_400 as i32, ordinal, flags)
+    }
+
+    /// Makes a new `NaiveDate` from a day's number in the proleptic Gregorian calendar, with
+    /// January 1, 1970 being day 0.
+    ///
+    /// # Errors
+    ///
+    /// Returns `None` if the date is out of range.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chrono::NaiveDate;
+    ///
+    /// let from_ndays_opt = NaiveDate::from_epoch_days;
+    /// let from_ymd = |y, m, d| NaiveDate::from_ymd_opt(y, m, d).unwrap();
+    ///
+    /// assert_eq!(from_ndays_opt(-719_162), Some(from_ymd(1, 1, 1)));
+    /// assert_eq!(from_ndays_opt(1), Some(from_ymd(1970, 1, 2)));
+    /// assert_eq!(from_ndays_opt(0), Some(from_ymd(1970, 1, 1)));
+    /// assert_eq!(from_ndays_opt(-1), Some(from_ymd(1969, 12, 31)));
+    /// assert_eq!(from_ndays_opt(13036), Some(from_ymd(2005, 9, 10)));
+    /// assert_eq!(from_ndays_opt(100_000_000), None);
+    /// assert_eq!(from_ndays_opt(-100_000_000), None);
+    /// ```
+    #[must_use]
+    pub const fn from_epoch_days(days: i32) -> Option<NaiveDate> {
+        let ce_days = try_opt!(days.checked_add(UNIX_EPOCH_DAY as i32));
+        NaiveDate::from_num_days_from_ce_opt(ce_days)
     }
 
     /// Makes a new `NaiveDate` by counting the number of occurrences of a particular day-of-week
@@ -755,7 +784,7 @@ impl NaiveDate {
 
     /// Makes a new `NaiveDateTime` from the current date, hour, minute, second and millisecond.
     ///
-    /// The millisecond part is allowed to exceed 1,000,000,000 in order to represent a [leap second](
+    /// The millisecond part is allowed to exceed 1,000 in order to represent a [leap second](
     /// ./struct.NaiveTime.html#leap-second-handling), but only when `sec == 59`.
     ///
     /// # Panics
@@ -770,7 +799,7 @@ impl NaiveDate {
 
     /// Makes a new `NaiveDateTime` from the current date, hour, minute, second and millisecond.
     ///
-    /// The millisecond part is allowed to exceed 1,000,000,000 in order to represent a [leap second](
+    /// The millisecond part is allowed to exceed 1,000 in order to represent a [leap second](
     /// ./struct.NaiveTime.html#leap-second-handling), but only when `sec == 59`.
     ///
     /// # Errors
@@ -805,7 +834,7 @@ impl NaiveDate {
 
     /// Makes a new `NaiveDateTime` from the current date, hour, minute, second and microsecond.
     ///
-    /// The microsecond part is allowed to exceed 1,000,000,000 in order to represent a [leap second](
+    /// The microsecond part is allowed to exceed 1,000,000 in order to represent a [leap second](
     /// ./struct.NaiveTime.html#leap-second-handling), but only when `sec == 59`.
     ///
     /// # Panics
@@ -1119,7 +1148,7 @@ impl NaiveDate {
     /// );
     /// ```
     #[must_use]
-    pub const fn signed_duration_since(self, rhs: NaiveDate) -> TimeDelta {
+    pub const fn signed_duration_since(self, rhs: Self) -> TimeDelta {
         let year1 = self.year();
         let year2 = rhs.year();
         let (year1_div_400, year1_mod_400) = div_mod_floor(year1, 400);
@@ -1132,11 +1161,40 @@ impl NaiveDate {
         expect(TimeDelta::try_days(days), "always in range")
     }
 
+    /// Returns the absolute difference between two `NaiveDate`s measured as the number of days.
+    ///
+    /// This is always an integer, non-negative number, similar to `abs_diff` in `std`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use chrono::{Days, NaiveDate};
+    /// #
+    /// let date1: NaiveDate = "2020-01-01".parse().unwrap();
+    /// let date2: NaiveDate = "2020-01-31".parse().unwrap();
+    /// assert_eq!(date2.abs_diff(date1), Days::new(30));
+    /// assert_eq!(date1.abs_diff(date2), Days::new(30));
+    /// ```
+    pub const fn abs_diff(self, rhs: Self) -> Days {
+        Days::new(i32::abs_diff(self.num_days_from_ce(), rhs.num_days_from_ce()) as u64)
+    }
+
     /// Returns the number of whole years from the given `base` until `self`.
     ///
     /// # Errors
     ///
     /// Returns `None` if `base > self`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use chrono::{NaiveDate};
+    /// #
+    /// let base: NaiveDate = "2025-01-01".parse().unwrap();
+    /// let date: NaiveDate = "2030-01-01".parse().unwrap();
+    ///
+    /// assert_eq!(date.years_since(base), Some(5))
+    /// ```
     #[must_use]
     pub const fn years_since(&self, base: Self) -> Option<u32> {
         let mut years = self.year() - base.year();
@@ -1405,6 +1463,23 @@ impl NaiveDate {
         let div_100 = year / 100;
         ndays += ((year * 1461) >> 2) - div_100 + (div_100 >> 2);
         ndays + self.ordinal() as i32
+    }
+
+    /// Counts the days in the proleptic Gregorian calendar, with January 1, Year 1970 as day 0.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use chrono::NaiveDate;
+    ///
+    /// let from_ymd = |y, m, d| NaiveDate::from_ymd_opt(y, m, d).unwrap();
+    ///
+    /// assert_eq!(from_ymd(1, 1, 1).to_epoch_days(), -719162);
+    /// assert_eq!(from_ymd(1970, 1, 1).to_epoch_days(), 0);
+    /// assert_eq!(from_ymd(2005, 9, 10).to_epoch_days(), 13036);
+    /// ```
+    pub const fn to_epoch_days(&self) -> i32 {
+        self.num_days_from_ce() - UNIX_EPOCH_DAY as i32
     }
 
     /// Create a new `NaiveDate` from a raw year-ordinal-flags `i32`.
@@ -1907,6 +1982,7 @@ impl Add<TimeDelta> for NaiveDate {
     type Output = NaiveDate;
 
     #[inline]
+    #[track_caller]
     fn add(self, rhs: TimeDelta) -> NaiveDate {
         self.checked_add_signed(rhs).expect("`NaiveDate + TimeDelta` overflowed")
     }
@@ -1923,6 +1999,7 @@ impl Add<TimeDelta> for NaiveDate {
 /// Consider using [`NaiveDate::checked_add_signed`] to get an `Option` instead.
 impl AddAssign<TimeDelta> for NaiveDate {
     #[inline]
+    #[track_caller]
     fn add_assign(&mut self, rhs: TimeDelta) {
         *self = self.add(rhs);
     }
@@ -1955,6 +2032,7 @@ impl AddAssign<TimeDelta> for NaiveDate {
 impl Add<Months> for NaiveDate {
     type Output = NaiveDate;
 
+    #[track_caller]
     fn add(self, months: Months) -> Self::Output {
         self.checked_add_months(months).expect("`NaiveDate + Months` out of range")
     }
@@ -1984,6 +2062,7 @@ impl Add<Months> for NaiveDate {
 impl Sub<Months> for NaiveDate {
     type Output = NaiveDate;
 
+    #[track_caller]
     fn sub(self, months: Months) -> Self::Output {
         self.checked_sub_months(months).expect("`NaiveDate - Months` out of range")
     }
@@ -1998,6 +2077,7 @@ impl Sub<Months> for NaiveDate {
 impl Add<Days> for NaiveDate {
     type Output = NaiveDate;
 
+    #[track_caller]
     fn add(self, days: Days) -> Self::Output {
         self.checked_add_days(days).expect("`NaiveDate + Days` out of range")
     }
@@ -2012,6 +2092,7 @@ impl Add<Days> for NaiveDate {
 impl Sub<Days> for NaiveDate {
     type Output = NaiveDate;
 
+    #[track_caller]
     fn sub(self, days: Days) -> Self::Output {
         self.checked_sub_days(days).expect("`NaiveDate - Days` out of range")
     }
@@ -2059,6 +2140,7 @@ impl Sub<TimeDelta> for NaiveDate {
     type Output = NaiveDate;
 
     #[inline]
+    #[track_caller]
     fn sub(self, rhs: TimeDelta) -> NaiveDate {
         self.checked_sub_signed(rhs).expect("`NaiveDate - TimeDelta` overflowed")
     }
@@ -2076,6 +2158,7 @@ impl Sub<TimeDelta> for NaiveDate {
 /// Consider using [`NaiveDate::checked_sub_signed`] to get an `Option` instead.
 impl SubAssign<TimeDelta> for NaiveDate {
     #[inline]
+    #[track_caller]
     fn sub_assign(&mut self, rhs: TimeDelta) {
         *self = self.sub(rhs);
     }
@@ -2228,13 +2311,30 @@ impl fmt::Debug for NaiveDate {
             write_hundreds(f, (year % 100) as u8)?;
         } else {
             // ISO 8601 requires the explicit sign for out-of-range years
-            write!(f, "{:+05}", year)?;
+            write!(f, "{year:+05}")?;
         }
 
         f.write_char('-')?;
         write_hundreds(f, mdf.month() as u8)?;
         f.write_char('-')?;
         write_hundreds(f, mdf.day() as u8)
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for NaiveDate {
+    fn format(&self, fmt: defmt::Formatter) {
+        let year = self.year();
+        let mdf = self.mdf();
+        if (0..=9999).contains(&year) {
+            defmt::write!(fmt, "{:02}{:02}", year / 100, year % 100);
+        } else {
+            // ISO 8601 requires the explicit sign for out-of-range years
+            let sign = ['+', '-'][(year < 0) as usize];
+            defmt::write!(fmt, "{}{:05}", sign, year.abs());
+        }
+
+        defmt::write!(fmt, "-{:02}-{:02}", mdf.month(), mdf.day());
     }
 }
 

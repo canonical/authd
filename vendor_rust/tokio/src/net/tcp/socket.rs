@@ -4,8 +4,8 @@ use std::fmt;
 use std::io;
 use std::net::SocketAddr;
 
-#[cfg(unix)]
-use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, RawFd};
+#[cfg(not(windows))]
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, RawFd};
 use std::time::Duration;
 
 cfg_windows! {
@@ -170,7 +170,8 @@ impl TcpSocket {
             target_os = "illumos",
             target_os = "linux",
             target_os = "netbsd",
-            target_os = "openbsd"
+            target_os = "openbsd",
+            target_os = "wasi",
         ))]
         let ty = ty.nonblocking();
         let inner = socket2::Socket::new(domain, ty, Some(socket2::Protocol::TCP))?;
@@ -182,7 +183,8 @@ impl TcpSocket {
             target_os = "illumos",
             target_os = "linux",
             target_os = "netbsd",
-            target_os = "openbsd"
+            target_os = "openbsd",
+            target_os = "wasi",
         )))]
         inner.set_nonblocking(true)?;
         Ok(TcpSocket { inner })
@@ -284,6 +286,7 @@ impl TcpSocket {
         not(target_os = "solaris"),
         not(target_os = "illumos"),
         not(target_os = "cygwin"),
+        not(target_os = "nuttx"),
     ))]
     #[cfg_attr(
         docsrs,
@@ -292,6 +295,7 @@ impl TcpSocket {
             not(target_os = "solaris"),
             not(target_os = "illumos"),
             not(target_os = "cygwin"),
+            not(target_os = "nuttx"),
         )))
     )]
     pub fn set_reuseport(&self, reuseport: bool) -> io::Result<()> {
@@ -329,6 +333,7 @@ impl TcpSocket {
         not(target_os = "solaris"),
         not(target_os = "illumos"),
         not(target_os = "cygwin"),
+        not(target_os = "nuttx"),
     ))]
     #[cfg_attr(
         docsrs,
@@ -337,6 +342,7 @@ impl TcpSocket {
             not(target_os = "solaris"),
             not(target_os = "illumos"),
             not(target_os = "cygwin"),
+            not(target_os = "nuttx"),
         )))
     )]
     pub fn reuseport(&self) -> io::Result<bool> {
@@ -597,7 +603,8 @@ impl TcpSocket {
         target_os = "redox",
         target_os = "solaris",
         target_os = "illumos",
-        target_os = "haiku"
+        target_os = "haiku",
+        target_os = "wasi",
     )))]
     #[cfg_attr(
         docsrs,
@@ -606,7 +613,8 @@ impl TcpSocket {
             target_os = "redox",
             target_os = "solaris",
             target_os = "illumos",
-            target_os = "haiku"
+            target_os = "haiku",
+            target_os = "wasi",
         ))))
     )]
     pub fn tos_v4(&self) -> io::Result<u32> {
@@ -625,7 +633,8 @@ impl TcpSocket {
         target_os = "redox",
         target_os = "solaris",
         target_os = "illumos",
-        target_os = "haiku"
+        target_os = "haiku",
+        target_os = "wasi",
     )))]
     #[cfg_attr(
         docsrs,
@@ -634,7 +643,8 @@ impl TcpSocket {
             target_os = "redox",
             target_os = "solaris",
             target_os = "illumos",
-            target_os = "haiku"
+            target_os = "haiku",
+            target_os = "wasi",
         ))))
     )]
     pub fn tos(&self) -> io::Result<u32> {
@@ -657,7 +667,8 @@ impl TcpSocket {
         target_os = "redox",
         target_os = "solaris",
         target_os = "illumos",
-        target_os = "haiku"
+        target_os = "haiku",
+        target_os = "wasi",
     )))]
     #[cfg_attr(
         docsrs,
@@ -666,7 +677,8 @@ impl TcpSocket {
             target_os = "redox",
             target_os = "solaris",
             target_os = "illumos",
-            target_os = "haiku"
+            target_os = "haiku",
+            target_os = "wasi",
         ))))
     )]
     pub fn set_tos_v4(&self, tos: u32) -> io::Result<()> {
@@ -685,7 +697,8 @@ impl TcpSocket {
         target_os = "redox",
         target_os = "solaris",
         target_os = "illumos",
-        target_os = "haiku"
+        target_os = "haiku",
+        target_os = "wasi",
     )))]
     #[cfg_attr(
         docsrs,
@@ -694,7 +707,8 @@ impl TcpSocket {
             target_os = "redox",
             target_os = "solaris",
             target_os = "illumos",
-            target_os = "haiku"
+            target_os = "haiku",
+            target_os = "wasi",
         ))))
     )]
     pub fn set_tos(&self, tos: u32) -> io::Result<()> {
@@ -826,7 +840,7 @@ impl TcpSocket {
     /// ```
     pub async fn connect(self, addr: SocketAddr) -> io::Result<TcpStream> {
         if let Err(err) = self.inner.connect(&addr.into()) {
-            #[cfg(unix)]
+            #[cfg(not(windows))]
             if err.raw_os_error() != Some(libc::EINPROGRESS) {
                 return Err(err);
             }
@@ -835,9 +849,9 @@ impl TcpSocket {
                 return Err(err);
             }
         }
-        #[cfg(unix)]
+        #[cfg(not(windows))]
         let mio = {
-            use std::os::unix::io::{FromRawFd, IntoRawFd};
+            use std::os::fd::{FromRawFd, IntoRawFd};
 
             let raw_fd = self.inner.into_raw_fd();
             unsafe { mio::net::TcpStream::from_raw_fd(raw_fd) }
@@ -891,9 +905,9 @@ impl TcpSocket {
     /// ```
     pub fn listen(self, backlog: u32) -> io::Result<TcpListener> {
         self.inner.listen(backlog as i32)?;
-        #[cfg(unix)]
+        #[cfg(not(windows))]
         let mio = {
-            use std::os::unix::io::{FromRawFd, IntoRawFd};
+            use std::os::fd::{FromRawFd, IntoRawFd};
 
             let raw_fd = self.inner.into_raw_fd();
             unsafe { mio::net::TcpListener::from_raw_fd(raw_fd) }
@@ -935,7 +949,6 @@ impl TcpSocket {
     ///
     /// #[tokio::main]
     /// async fn main() -> std::io::Result<()> {
-    /// #   if cfg!(miri) { return Ok(()); } // No `socket` in miri.
     ///     let socket2_socket = Socket::new(Domain::IPV4, Type::STREAM, None)?;
     ///     socket2_socket.set_nonblocking(true)?;
     ///
@@ -945,9 +958,9 @@ impl TcpSocket {
     /// }
     /// ```
     pub fn from_std_stream(std_stream: std::net::TcpStream) -> TcpSocket {
-        #[cfg(unix)]
+        #[cfg(not(windows))]
         {
-            use std::os::unix::io::{FromRawFd, IntoRawFd};
+            use std::os::fd::{FromRawFd, IntoRawFd};
 
             let raw_fd = std_stream.into_raw_fd();
             unsafe { TcpSocket::from_raw_fd(raw_fd) }
@@ -981,8 +994,8 @@ impl fmt::Debug for TcpSocket {
 
 // These trait implementations can't be build on Windows, so we completely
 // ignore them, even when building documentation.
-#[cfg(unix)]
-cfg_unix! {
+#[cfg(any(unix, target_os = "wasi"))]
+cfg_unix_or_wasi! {
     impl AsRawFd for TcpSocket {
         fn as_raw_fd(&self) -> RawFd {
             self.inner.as_raw_fd()

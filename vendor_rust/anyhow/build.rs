@@ -1,3 +1,5 @@
+#![allow(clippy::uninlined_format_args)]
+
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -7,16 +9,11 @@ use std::path::Path;
 use std::process::{self, Command, Stdio};
 use std::str;
 
-#[cfg(all(feature = "backtrace", not(feature = "std")))]
-compile_error! {
-    "`backtrace` feature without `std` feature is not supported"
-}
-
 fn main() {
-    let mut error_generic_member_access = false;
     if cfg!(feature = "std") {
         println!("cargo:rerun-if-changed=src/nightly.rs");
 
+        let error_generic_member_access;
         let consider_rustc_bootstrap;
         if compile_probe(false) {
             // This is a nightly or dev compiler, so it supports unstable
@@ -53,7 +50,6 @@ fn main() {
         }
 
         if error_generic_member_access {
-            println!("cargo:rustc-cfg=std_backtrace");
             println!("cargo:rustc-cfg=error_generic_member_access");
         }
 
@@ -62,55 +58,28 @@ fn main() {
         }
     }
 
-    let rustc = match rustc_minor_version() {
-        Some(rustc) => rustc,
-        None => return,
+    let Some(rustc) = rustc_minor_version() else {
+        return;
     };
 
     if rustc >= 80 {
         println!("cargo:rustc-check-cfg=cfg(anyhow_build_probe)");
         println!("cargo:rustc-check-cfg=cfg(anyhow_nightly_testing)");
+        println!("cargo:rustc-check-cfg=cfg(anyhow_no_clippy_format_args)");
         println!("cargo:rustc-check-cfg=cfg(anyhow_no_core_error)");
-        println!("cargo:rustc-check-cfg=cfg(anyhow_no_core_unwind_safe)");
-        println!("cargo:rustc-check-cfg=cfg(anyhow_no_fmt_arguments_as_str)");
-        println!("cargo:rustc-check-cfg=cfg(anyhow_no_ptr_addr_of)");
-        println!("cargo:rustc-check-cfg=cfg(anyhow_no_unsafe_op_in_unsafe_fn_lint)");
         println!("cargo:rustc-check-cfg=cfg(error_generic_member_access)");
-        println!("cargo:rustc-check-cfg=cfg(std_backtrace)");
-    }
-
-    if rustc < 51 {
-        // core::ptr::addr_of
-        // https://blog.rust-lang.org/2021/03/25/Rust-1.51.0.html#stabilized-apis
-        println!("cargo:rustc-cfg=anyhow_no_ptr_addr_of");
-    }
-
-    if rustc < 52 {
-        // core::fmt::Arguments::as_str
-        // https://blog.rust-lang.org/2021/05/06/Rust-1.52.0.html#stabilized-apis
-        println!("cargo:rustc-cfg=anyhow_no_fmt_arguments_as_str");
-
-        // #![deny(unsafe_op_in_unsafe_fn)]
-        // https://github.com/rust-lang/rust/issues/71668
-        println!("cargo:rustc-cfg=anyhow_no_unsafe_op_in_unsafe_fn_lint");
-    }
-
-    if rustc < 56 {
-        // core::panic::{UnwindSafe, RefUnwindSafe}
-        // https://blog.rust-lang.org/2021/10/21/Rust-1.56.0.html#stabilized-apis
-        println!("cargo:rustc-cfg=anyhow_no_core_unwind_safe");
-    }
-
-    if !error_generic_member_access && cfg!(feature = "std") && rustc >= 65 {
-        // std::backtrace::Backtrace
-        // https://blog.rust-lang.org/2022/11/03/Rust-1.65.0.html#stabilized-apis
-        println!("cargo:rustc-cfg=std_backtrace");
     }
 
     if rustc < 81 {
         // core::error::Error
         // https://blog.rust-lang.org/2024/09/05/Rust-1.81.0.html#coreerrorerror
         println!("cargo:rustc-cfg=anyhow_no_core_error");
+    }
+
+    if rustc < 85 {
+        // #[clippy::format_args]
+        // https://doc.rust-lang.org/1.85.1/clippy/attribs.html#clippyformat_args
+        println!("cargo:rustc-cfg=anyhow_no_clippy_format_args");
     }
 }
 
@@ -157,8 +126,8 @@ fn compile_probe(rustc_bootstrap: bool) -> bool {
         .arg("--edition=2018")
         .arg("--crate-name=anyhow")
         .arg("--crate-type=lib")
-        .arg("--emit=dep-info,metadata")
         .arg("--cap-lints=allow")
+        .arg("--emit=dep-info,metadata")
         .arg("--out-dir")
         .arg(&out_subdir)
         .arg(probefile);
