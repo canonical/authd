@@ -17,6 +17,7 @@ import (
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/internal/testutils/ptytest"
 	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	"github.com/canonical/authd/pam/internal/adapter"
 	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/msteinert/pam/v2"
 	"github.com/stretchr/testify/require"
@@ -785,6 +786,10 @@ func TestCLIAuthenticate(t *testing.T) {
 			if tc.testRun != nil {
 				consoleOutput = tc.testRun(t, socketPath)
 			} else {
+				if tc.clientOptions.ClientType == nil {
+					tc.clientOptions.ClientType = ptrValue(adapter.InteractiveTerminal)
+				}
+
 				c := startCLIPAMRunner(t, clientPath, socketPath,
 					pam_test.RunnerActionLogin, cliEnv, tc.clientOptions, tc.extraArgs...)
 
@@ -819,6 +824,74 @@ func TestCLIAuthenticate(t *testing.T) {
 			if !tc.skipRunnerCheck {
 				requireRunnerResultForUser(t, authd.SessionMode_LOGIN, tc.clientOptions.PamUser, consoleOutput)
 			}
+		})
+	}
+}
+
+// TestCLIAuthenticateRedirectedIO reproduces the cases in which the I/O streams
+// of the PAM client are redirected or closed, ensuring that the CLI still
+// prompts on the terminal (PAM_TTY) and the authentication flow works end-to-end.
+func TestCLIAuthenticateRedirectedIO(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	tests := map[string]struct {
+		redirections string
+		detach       bool
+	}{
+		// `sudo ls > /dev/null` and the sshuttle stdout-to-socket path: stdout
+		// is not the terminal, the prompt must still appear on the TTY.
+		"Redirected_stdout": {redirections: ">/dev/null"},
+
+		// stdout fully closed (>&-): the CLI must use the TTY for output.
+		"Closed_stdout": {redirections: ">&-"},
+
+		// stdin is /dev/null, input comes from the TTY.
+		"Stdin_from_devnull": {redirections: "</dev/null"},
+
+		// stdin is closed, input comes from the TTY.
+		"Closed_stdin": {redirections: "<&-"},
+
+		// stderr is closed, input comes from the stdin.
+		"Closed_stderr": {redirections: "2>&-"},
+
+		// Both stdin and stdout detached, only the TTY remains usable.
+		"Closed_stdin_and_redirected_stdout": {redirections: "</dev/null >/dev/null"},
+
+		// Stdin is closed and stdout *and* stderr are redirected to a non-terminal.
+		// None of fd 0/1/2 is a terminal anymore.
+		"All_streams_detached": {redirections: "<&- 1>/dev/null 2>/dev/null"},
+
+		// No controlling terminal (setsid) and stdin detached: /dev/tty
+		// input fallback is unavailable, so input must come from the
+		// explicit PAM_TTY. This mirrors PAM clients without a controlling
+		// terminal that still get a PAM_TTY.
+		"Detached_session_input_from_pam_tty": {redirections: "</dev/null", detach: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			user := testUserName(t, "cli-redirected-io")
+
+			runner := newRedirectedIORunner(t)
+			c := runner.startRedirectedIORunner(t,
+				redirectedIOScenario{
+					ioRedirections:       tc.redirections,
+					detachControllingTTY: tc.detach,
+				},
+				clientOptions{PamUser: user})
+
+			cliSimpleAuth(t, c)
+			c.RequireSuccessfulExit(t)
+
+			consoleOutput := ptySanitizeSnapshots(t, c)
+			golden.CheckOrUpdate(t, consoleOutput)
+			runner.requireSuccess(t, authd.SessionMode_LOGIN, user)
 		})
 	}
 }
