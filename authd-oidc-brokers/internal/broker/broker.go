@@ -1917,6 +1917,9 @@ func (b *Broker) routeMFAInitError(mfaErr *himmelblau.MFAError, session *session
 	case 50126:
 		log.Noticef(context.Background(), "Invalid credentials for user %q", session.username)
 		return AuthRetry, errorMessage{Message: "Incorrect password, please try again."}
+	case 500121:
+		log.Noticef(context.Background(), "Previous MFA request was not completed for user %q (AADSTS500121)", session.username)
+		return AuthRetry, errorMessage{Message: "The previous MFA prompt was not completed. Please wait a moment and try again."}
 	case 50173:
 		log.Noticef(context.Background(), "Password changed remotely for user %q, invalidating cached credentials", session.username)
 		b.invalidateCachedCredentials(session)
