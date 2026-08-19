@@ -43,7 +43,7 @@ reference](reference::group-management) for details.
 ## authd provides an NSS module to get user information
 
 Linux systems can resolve user and group information through NSS.
-This enables administrators to specify which files to query for information,
+This enables administrators to specify which sources to query for information,
 such as user account details.
 
 authd's NSS module gets information from its local cache of the identity
