@@ -46,7 +46,7 @@ Linux systems can resolve user and group information through NSS.
 This enables administrators to specify which sources to query for information,
 such as user account details.
 
-authd's NSS module gets information from its local cache of the identity
+authd's NSS module gets information from its local database of the identity
 provider's users and groups. This is discussed in the [overview of authd's
 architecture](explanation::authd-architecture).
 
