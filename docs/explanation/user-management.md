@@ -40,7 +40,7 @@ user. See the [group and privilege management
 reference](reference::group-management) for details.
 ```
 
-## authd uses an NSS module to get user information
+## authd provides an NSS module to get user information
 
 Linux systems can resolve user and group information through NSS.
 This enables administrators to specify which files to query for information,
