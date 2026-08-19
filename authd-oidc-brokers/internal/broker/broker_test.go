@@ -4563,6 +4563,19 @@ func TestEnsureProviderIDCacheDir(t *testing.T) {
 		// directory existence check fails.
 		noExecIssuerDir        bool
 		providerIDTokenContent string
+		// providerIDTokenIsNewer makes the provider ID token file's mtime newer than the
+		// username token file's mtime (by default the username file is the newest).
+		providerIDTokenIsNewer bool
+		// usernameExtraFile is written into the username dir as a cache entry consolidation
+		// does not recognize.
+		usernameExtraFile string
+		// usernameExtraFileIsNewest pins usernameExtraFile's mtime to be the newest entry
+		// overall, making the username dir win consolidation regardless of the token mtimes.
+		// By default the extra file is pinned to be the oldest entry overall instead.
+		usernameExtraFileIsNewest bool
+		// createStaleStagingDir leaves behind the staging directory name used by
+		// the previous consolidation implementation.
+		createStaleStagingDir bool
 
 		wantProviderIDSet          bool
 		wantDataDirIsProviderIDDir bool
@@ -4648,18 +4661,93 @@ func TestEnsureProviderIDCacheDir(t *testing.T) {
 				"user@example.com":           "symlink -> provider-id-123",
 			},
 		},
-		"Does_not_consolidate_when_existing_provider_ID_cache_differs": {
+		"Consolidates_by_keeping_newest_file_when_existing_provider_ID_cache_differs_and_username_dir_is_newer": {
 			createProviderIDDir:        true,
 			providerIDTokenContent:     "different-token-marker",
 			createUsernameDir:          true,
+			wantProviderIDSet:          true,
+			wantDataDirIsProviderIDDir: true,
+			wantSymlinkAtUsername:      true,
 			wantProviderIDDirExists:    true,
-			wantUsernameDirExists:      true,
+			// The username token file is the newest one and therefore wins.
+			wantProviderIDTokenContent: "cached-token-marker",
+			wantIssuerTree: map[string]string{
+				"provider-id-123":            "dir",
+				"provider-id-123/token.json": "file",
+				"user@example.com":           "symlink -> provider-id-123",
+			},
+		},
+		"Consolidates_when_an_abandoned_staging_directory_exists": {
+			createProviderIDDir:        true,
+			providerIDTokenContent:     "different-token-marker",
+			createUsernameDir:          true,
+			createStaleStagingDir:      true,
+			wantProviderIDSet:          true,
+			wantDataDirIsProviderIDDir: true,
+			wantSymlinkAtUsername:      true,
+			wantProviderIDDirExists:    true,
+			wantProviderIDTokenContent: "cached-token-marker",
+			wantIssuerTree: map[string]string{
+				"provider-id-123":                    "dir",
+				"provider-id-123/token.json":         "file",
+				"provider-id-123.staging":            "dir",
+				"provider-id-123.staging/token.json": "file",
+				"user@example.com":                   "symlink -> provider-id-123",
+			},
+		},
+		"Consolidates_by_keeping_newest_file_when_existing_provider_ID_cache_differs_and_provider_ID_dir_is_newer": {
+			createProviderIDDir:        true,
+			providerIDTokenContent:     "different-token-marker",
+			createUsernameDir:          true,
+			providerIDTokenIsNewer:     true,
+			wantProviderIDSet:          true,
+			wantDataDirIsProviderIDDir: true,
+			wantSymlinkAtUsername:      true,
+			wantProviderIDDirExists:    true,
 			wantProviderIDTokenContent: "different-token-marker",
 			wantIssuerTree: map[string]string{
-				"provider-id-123":             "dir",
-				"provider-id-123/token.json":  "file",
-				"user@example.com":            "dir",
-				"user@example.com/token.json": "file",
+				"provider-id-123":            "dir",
+				"provider-id-123/token.json": "file",
+				"user@example.com":           "symlink -> provider-id-123",
+			},
+		},
+		"Consolidates_by_moving_the_whole_username_directory_when_its_unexpected_entry_is_newest": {
+			createProviderIDDir:        true,
+			providerIDTokenContent:     "different-token-marker",
+			createUsernameDir:          true,
+			usernameExtraFile:          "unexpected-entry",
+			usernameExtraFileIsNewest:  true,
+			wantProviderIDSet:          true,
+			wantDataDirIsProviderIDDir: true,
+			wantSymlinkAtUsername:      true,
+			wantProviderIDDirExists:    true,
+			// The username directory is newest overall (because of its unexpected entry) and
+			// therefore wins wholesale, including the token file and the unexpected entry.
+			wantProviderIDTokenContent: "cached-token-marker",
+			wantIssuerTree: map[string]string{
+				"provider-id-123":                  "dir",
+				"provider-id-123/token.json":       "file",
+				"provider-id-123/unexpected-entry": "file",
+				"user@example.com":                 "symlink -> provider-id-123",
+			},
+		},
+		"Consolidates_by_discarding_the_whole_username_directory_including_its_unexpected_entry": {
+			createProviderIDDir:        true,
+			providerIDTokenContent:     "different-token-marker",
+			createUsernameDir:          true,
+			providerIDTokenIsNewer:     true,
+			usernameExtraFile:          "unexpected-entry",
+			wantProviderIDSet:          true,
+			wantDataDirIsProviderIDDir: true,
+			wantSymlinkAtUsername:      true,
+			wantProviderIDDirExists:    true,
+			// The provider ID directory is newest overall, so the whole username directory,
+			// including its unexpected entry, is discarded rather than merged.
+			wantProviderIDTokenContent: "different-token-marker",
+			wantIssuerTree: map[string]string{
+				"provider-id-123":            "dir",
+				"provider-id-123/token.json": "file",
+				"user@example.com":           "symlink -> provider-id-123",
 			},
 		},
 		"Redirects_to_existing_provider_ID_directory_even_when_symlink_cannot_be_created": {
@@ -4745,6 +4833,42 @@ func TestEnsureProviderIDCacheDir(t *testing.T) {
 				require.NoError(t, os.MkdirAll(usernameDir, 0700), "Setup: creating the username dir")
 				require.NoError(t, os.WriteFile(filepath.Join(usernameDir, "token.json"), []byte(tokenContent), 0600),
 					"Setup: writing the username token file")
+			}
+			if tc.usernameExtraFile != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(usernameDir, tc.usernameExtraFile), []byte("extra"), 0600),
+					"Setup: writing the unexpected username cache file")
+			}
+			// Pin the token file mtimes instead of relying on the order in which they were
+			// written above, which filesystems with a coarse timestamp granularity do not
+			// necessarily preserve. By default the username token is the newest, simulating a
+			// login through the username directory after the provider ID directory was last
+			// written to; providerIDTokenIsNewer simulates the opposite.
+			older, newer := time.Now().Add(-time.Hour), time.Now()
+			usernameModTime, providerIDModTime := newer, older
+			if tc.providerIDTokenIsNewer {
+				usernameModTime, providerIDModTime = older, newer
+			}
+			if tc.createProviderIDDir {
+				require.NoError(t, os.Chtimes(filepath.Join(providerIDDir, "token.json"), providerIDModTime, providerIDModTime),
+					"Setup: setting the provider ID token file mtime")
+			}
+			if tc.createUsernameDir {
+				require.NoError(t, os.Chtimes(filepath.Join(usernameDir, "token.json"), usernameModTime, usernameModTime),
+					"Setup: setting the username token file mtime")
+			}
+			if tc.usernameExtraFile != "" {
+				extraModTime := older.Add(-time.Hour)
+				if tc.usernameExtraFileIsNewest {
+					extraModTime = newer.Add(time.Hour)
+				}
+				require.NoError(t, os.Chtimes(filepath.Join(usernameDir, tc.usernameExtraFile), extraModTime, extraModTime),
+					"Setup: setting the unexpected cache file mtime")
+			}
+			if tc.createStaleStagingDir {
+				stagingDir := providerIDDir + ".staging"
+				require.NoError(t, os.MkdirAll(stagingDir, 0700), "Setup: creating the abandoned staging dir")
+				require.NoError(t, os.WriteFile(filepath.Join(stagingDir, "token.json"), []byte("stale"), 0600),
+					"Setup: writing the abandoned staging token")
 			}
 			if tc.usernameIsSymlink {
 				require.NoError(t, os.Symlink(providerIDDir, usernameDir), "Setup: creating the compatibility symlink")
