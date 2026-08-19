@@ -24,7 +24,7 @@ func SetFIDODeviceWaitTimeout(d time.Duration) (restore func()) {
 
 func (cfg *Config) Init() {
 	cfg.ownerMutex = &sync.RWMutex{}
-	cfg.flows = defaultFlowsConfig()
+	cfg.flows = defaultFlowsConfig(false)
 }
 
 func (cfg *Config) SetClientID(clientID string) {
@@ -93,9 +93,10 @@ func (cfg *Config) SetAllowedSSHSuffixes(allowedSSHSuffixes []string) {
 }
 
 func (cfg *Config) SetFlows(deviceAuth, entraAuth bool) {
-	cfg.flows = defaultFlowsConfig()
-	cfg.flows.DeviceAuth = deviceAuth
-	cfg.flows.EntraAuth = entraAuth
+	cfg.flows = flowsConfig{
+		DeviceAuth: deviceAuth,
+		EntraAuth:  entraAuth,
+	}
 }
 
 func (cfg *Config) SetProvider(provider provider) {

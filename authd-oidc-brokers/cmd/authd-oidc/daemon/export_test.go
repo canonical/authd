@@ -75,9 +75,7 @@ issuer = %s
 client_id = client_id
 
 [flows]
-# These tests don't exercise the entra_auth flow, and the default
-# (enabled) would fail startup validation under the withmsentraid tag
-# because no client_secret or register_device is configured here.
+# These tests don't exercise the entra_auth flow.
 entra_auth = false
 `, providerURL)
 	err = os.WriteFile(p, []byte(brokerCfg), 0600)
