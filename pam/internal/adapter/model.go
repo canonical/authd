@@ -438,6 +438,13 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sessionStartingForBroker = ""
 		m.currentSession = nil
 		return m, nil
+
+	case stopAuthentication:
+		if msg.gen != m.authenticationModel.authGen {
+			safeMessageDebug(msg, "ignoring stale stop, current gen %d",
+				m.authenticationModel.authGen)
+			return m, nil
+		}
 	}
 
 	var cmd tea.Cmd

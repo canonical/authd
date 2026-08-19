@@ -64,6 +64,48 @@ func TestAuthenticationModelIgnoresStaleStopAuthentication(t *testing.T) {
 		"a stop from the current challenge must still stop authentication")
 }
 
+func TestUIModelDoesNotForwardStaleStopAuthenticationToGDM(t *testing.T) {
+	t.Parallel()
+
+	authenticationModel := newAuthenticationModel(nil, Gdm, authd.SessionMode_LOGIN)
+	currentModel := &focusTrackerModel{}
+	currentModel.Focus()
+	authenticationModel.currentModel = currentModel
+
+	model := uiModel{
+		clientType:          Gdm,
+		authenticationModel: authenticationModel,
+	}
+
+	updated, _ := model.Update(startAuthentication{})
+	model = convertTo[uiModel](updated)
+	require.True(t, model.authenticationModel.inProgress)
+	require.True(t, model.gdmModel.waitingAuth)
+
+	stopPreviousChallenge := model.authenticationModel.Reset()
+
+	currentModel = &focusTrackerModel{}
+	currentModel.Focus()
+	model.authenticationModel.currentModel = currentModel
+	updated, _ = model.Update(startAuthentication{})
+	model = convertTo[uiModel](updated)
+	require.True(t, model.authenticationModel.inProgress)
+	require.True(t, model.gdmModel.waitingAuth)
+
+	updated, _ = model.Update(stopPreviousChallenge())
+	model = convertTo[uiModel](updated)
+	require.True(t, model.authenticationModel.inProgress,
+		"a stale stop must not stop the current authentication")
+	require.True(t, model.gdmModel.waitingAuth,
+		"a stale stop must not stop GDM from accepting the current request")
+
+	updated, _ = model.Update(model.authenticationModel.cancelIsAuthenticated()())
+	model = convertTo[uiModel](updated)
+	require.False(t, model.authenticationModel.inProgress)
+	require.False(t, model.gdmModel.waitingAuth,
+		"a stop from the current challenge must stop GDM authentication")
+}
+
 func TestAuthenticationModelKeepsWaitLayoutVisibleWhileAuthenticating(t *testing.T) {
 	t.Parallel()
 
