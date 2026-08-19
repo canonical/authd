@@ -278,6 +278,60 @@ func TestParseConfig(t *testing.T) {
 	}
 }
 
+func TestParseFlowsConfigDefaults(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		registerDevice bool
+		omitFlows      bool
+		flows          string
+		want           flowsConfig
+	}{
+		"Entra_auth_follows_register_device_when_section_is_omitted": {
+			registerDevice: true,
+			omitFlows:      true,
+			want:           flowsConfig{DeviceAuth: true, EntraAuth: true},
+		},
+		"Entra_auth_is_disabled_when_register_device_is_disabled": {
+			omitFlows: true,
+			want:      flowsConfig{DeviceAuth: true, EntraAuth: false},
+		},
+		"Explicit_false_overrides_register_device": {
+			registerDevice: true,
+			flows:          "entra_auth = false",
+			want:           flowsConfig{DeviceAuth: true, EntraAuth: false},
+		},
+		"Explicit_true_overrides_register_device": {
+			flows: "entra_auth = true",
+			want:  flowsConfig{DeviceAuth: true, EntraAuth: true},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			flowsSection := fmt.Sprintf("\n[flows]\n%s", tc.flows)
+			if tc.omitFlows {
+				flowsSection = ""
+			}
+			config := fmt.Sprintf(`
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[msentraid]
+register_device = %t
+
+%s
+`, tc.registerDevice, flowsSection)
+			cfg, err := parseConfig(configFile{content: []byte(config)}, nil, &testutils.MockProvider{})
+			require.NoError(t, err)
+			require.Equal(t, tc.want, cfg.flows)
+		})
+	}
+}
+
 var testParseUserConfigTypes = map[string]string{
 	"All_are_allowed": `
 [oidc]
@@ -610,16 +664,28 @@ func TestBrokerConfFilesHaveNoUnknownSettings(t *testing.T) {
 	t.Parallel()
 	p := &testutils.MockProvider{}
 
-	confFiles := map[string]string{
-		"google":    "../../conf/variants/google/broker.conf",
-		"msentraid": "../../conf/variants/msentraid/broker.conf",
-		"oidc":      "../../conf/variants/oidc/broker.conf",
+	confFiles := map[string]struct {
+		path      string
+		wantFlows flowsConfig
+	}{
+		"google": {
+			path:      "../../conf/variants/google/broker.conf",
+			wantFlows: defaultFlowsConfig(false),
+		},
+		"msentraid": {
+			path:      "../../conf/variants/msentraid/broker.conf",
+			wantFlows: defaultFlowsConfig(false),
+		},
+		"oidc": {
+			path:      "../../conf/variants/oidc/broker.conf",
+			wantFlows: defaultFlowsConfig(false),
+		},
 	}
 
-	for name, confFile := range confFiles {
+	for name, tc := range confFiles {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			content, err := os.ReadFile(confFile)
+			content, err := os.ReadFile(tc.path)
 			require.NoError(t, err, "Setup: Failed to read broker.conf")
 
 			// Replace template placeholders with valid dummy values so that
@@ -635,8 +701,9 @@ func TestBrokerConfFilesHaveNoUnknownSettings(t *testing.T) {
 			err = os.WriteFile(confPath, []byte(replaced), 0600)
 			require.NoError(t, err, "Setup: Failed to write config file")
 
-			_, err = parseConfigFromPath(confPath, p)
+			cfg, err := parseConfigFromPath(confPath, p)
 			require.NoError(t, err, "The %s broker.conf should not have unknown settings", name)
+			require.Equal(t, tc.wantFlows, cfg.flows, "The %s broker.conf should use the expected flow defaults", name)
 		})
 	}
 }
