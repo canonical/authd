@@ -8,9 +8,10 @@ myst:
 (explanation::user-management)=
 # User management with authd
 
-authd is packaged with a Name Service Switch (NSS) module, which it uses
-internally for querying authd-managed users and groups. For administrators
-managing users and groups, authd provides the `authctl` tool.
+authd is packaged with a Name Service Switch (NSS) module that allows
+applications on the system to query authd-managed users and groups through
+standard Linux user and group lookup interfaces. For administrators managing
+users and groups, authd provides the `authctl` tool.
 
 Other tools for managing Linux users, which rely on local files, may be
 incompatible with authd. This page provides a brief explanation of how user
