@@ -19,11 +19,11 @@ on:
         required: false
         type: string
         default: ''
-      e2e-tests-description:
-        description: 'PR description containing an optional e2e-tests: suite list'
+      e2e-tests:
+        description: 'JSON array of test suite filenames; an empty array runs the full suite'
         required: false
         type: string
-        default: ''
+        default: '[]'
     secrets:
       E2E_VM_SSH_PRIV_KEY:
         required: true
@@ -233,7 +233,7 @@ jobs:
         env:
           RELEASE: ${{ inputs.ubuntu-version }}
           BROKER: ${{ inputs.broker }}
-          E2E_TESTS_DESCRIPTION: ${{ inputs.e2e-tests-description }}
+          E2E_TESTS: ${{ inputs.e2e-tests }}
         run: |
           set -eux
           export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
@@ -250,15 +250,12 @@ jobs:
             export TOTP_SECRET="${{ secrets.E2E_GOOGLE_TOTP_SECRET }}"
           fi
 
-          e2e_tests=()
-          while IFS= read -r test; do
-            e2e_tests+=("$test")
-          done < <(
-            tr -d '\r' <<< "${E2E_TESTS_DESCRIPTION}" \
-              | sed -nE \
-                  's/^[[:space:]]*e2e-tests:[[:space:]]*(.+)[[:space:]]*$/\1/p' \
-              | tr -s ' \t' '\n'
-          )
+          if ! jq -e 'type == "array" and all(.[]; type == "string")' \
+              <<< "${E2E_TESTS}" >/dev/null; then
+            echo "Invalid e2e-tests JSON input" >&2
+            exit 1
+          fi
+          mapfile -t e2e_tests < <(jq -r '.[]' <<< "${E2E_TESTS}")
 
           ${{ env.E2E_TESTS_DIR }}/run-tests.sh \
             --output-dir "${{ env.OUTPUT_DIR }}" \

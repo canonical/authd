@@ -12,6 +12,7 @@ on:
       - '.github/workflows/e2e-tests-provision-and-run.yaml'
       - '.github/workflows/e2e-tests-run.yaml'
       - '.github/workflows/debian-build.yaml'
+      - '.github/scripts/parse-e2e-options.sh'
       - '!.gitignore'
       - '!.gitmodules'
       - '!.golangci.yaml'
@@ -36,6 +37,7 @@ on:
       - '.github/workflows/e2e-tests-provision-and-run.yaml'
       - '.github/workflows/e2e-tests-run.yaml'
       - '.github/workflows/debian-build.yaml'
+      - '.github/scripts/parse-e2e-options.sh'
       - '!.gitignore'
       - '!.gitmodules'
       - '!.golangci.yaml'
@@ -60,6 +62,21 @@ on:
         required: false
         default: ''
         type: string
+      e2e-brokers:
+        description: 'Optional comma- or space-separated broker list; empty runs both brokers'
+        required: false
+        default: ''
+        type: string
+      e2e-tests:
+        description: 'Optional comma- or space-separated test suite list; empty runs the full suite'
+        required: false
+        default: ''
+        type: string
+      e2e-ppa:
+        description: 'Optional PPA name, such as authd-dev; empty uses authd-edge'
+        required: false
+        default: ''
+        type: string
   schedule:
     - cron: '0 0 * * 1' # Runs every Monday at midnight
 
@@ -68,8 +85,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  compute-hash:
-    name: Compute hash of build-relevant files
+  prepare-e2e:
+    name: Prepare E2E inputs
     # Skip this job (and the provision-and-run job which depends on it) if the
     # PR is from a fork, as we don't have the permission to upload the Debian
     # package to the OCI registry in the provision-and-run workflow.
@@ -84,8 +101,14 @@ jobs:
       github.event_name == 'schedule' ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       files-hash: ${{ steps.hash.outputs.hash }}
+      brokers: ${{ steps.parse_e2e_options.outputs.brokers }}
+      tests: ${{ steps.parse_e2e_options.outputs.tests }}
+      authd_ppa: ${{ steps.parse_e2e_options.outputs.authd_ppa }}
     steps:
       - uses: actions/checkout@v7
       - name: Compute hash of build-relevant files
@@ -93,9 +116,35 @@ jobs:
         run: |
           hash=$(bash .github/scripts/compute-deb-build-hash.sh)
           echo "hash=${hash}" >> "${GITHUB_OUTPUT}"
+      - name: Parse E2E options
+        id: parse_e2e_options
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          E2E_BROKERS: ${{ inputs.e2e-brokers || '' }}
+          E2E_TESTS: ${{ inputs.e2e-tests || '' }}
+          E2E_PPA: ${{ inputs.e2e-ppa || '' }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == 'pull_request' ]]; then
+            E2E_TESTS_DESCRIPTION=$(
+              gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}" \
+                --jq '.body // ""'
+            )
+          else
+            E2E_TESTS_DESCRIPTION=$(
+              printf 'e2e-brokers: %s\ne2e-tests: %s\ne2e-ppa: %s\n' \
+                "${E2E_BROKERS}" "${E2E_TESTS}" "${E2E_PPA}"
+            )
+          fi
+
+          export E2E_TESTS_DESCRIPTION
+          bash .github/scripts/parse-e2e-options.sh
 
   provision-and-run:
-    needs: compute-hash
+    needs: prepare-e2e
     permissions:
       contents: read
       packages: write
@@ -107,24 +156,11 @@ jobs:
     uses: ./.github/workflows/e2e-tests-provision-and-run.yaml
     with:
       ubuntu-version: ${{ matrix.ubuntu-version }}
-      files-hash: ${{ needs.compute-hash.outputs.files-hash }}
+      files-hash: ${{ needs.prepare-e2e.outputs.files-hash }}
       force-fresh-image: ${{ github.event_name == 'schedule' }}
       broker-snap-channel: ${{ inputs.broker-snap-channel || '' }}
       # PRs opt in by adding "e2e-ppa: authd-dev" to their description.
-      authd-ppa: >-
-        ${{
-          github.event_name == 'pull_request' &&
-          contains(
-            github.event.pull_request.body,
-            'e2e-ppa: authd-dev'
-          ) &&
-          'ubuntu-enterprise-desktop/authd-dev' || ''
-        }}
-      # PRs can limit the suites by adding, for example,
-      # "e2e-tests: login_gdm.robot login.robot" to their description.
-      e2e-tests-description: >-
-        ${{
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.body || ''
-        }}
+      authd-ppa: ${{ needs.prepare-e2e.outputs.authd_ppa }}
+      brokers: ${{ needs.prepare-e2e.outputs.brokers }}
+      e2e-tests: ${{ needs.prepare-e2e.outputs.tests }}
     secrets: inherit
