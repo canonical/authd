@@ -50,6 +50,9 @@ Disable Entra Auth Via Drop In
     # The refresh happened before the drop-in existed, so restart explicitly
     # to make the broker re-read its configuration.
     SSH.Execute    snap restart ${BROKER_SNAP_NAME}
+    # authd may have skipped the broker while its first post-refresh startup
+    # failed, so reload its broker manager after the override is active.
+    SSH.Execute    systemctl restart authd.service
 
 
 Disable Broker And Purge Config
