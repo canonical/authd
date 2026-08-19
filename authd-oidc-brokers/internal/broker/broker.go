@@ -889,7 +889,12 @@ func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 
 		isTokenForDeviceRegistration := dr.IsTokenForDeviceRegistration(authInfo)
 
-		if b.cfg.registerDevice && !isTokenForDeviceRegistration {
+		// A previous authenticated session invalidated its registration data
+		// after the token had already been verified. Keep local password
+		// available so passwordAuth can re-register the device online.
+		if b.cfg.registerDevice && !isTokenForDeviceRegistration &&
+			!authInfo.DeviceRegistrationDataInvalidated &&
+			!authInfo.DeviceRegistrationDataValidationPending {
 			// TODO: We might want to display a message to the user in this case
 			log.Noticef(context.Background(), "Token exists for user %q, but it cannot be used for device registration, so local password authentication is not available", session.username)
 			return false
@@ -1289,6 +1294,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	if cachedInfo, err := token.LoadAuthInfo(session.tokenPath); err == nil {
 		oldAuthInfo = cachedInfo
 		deviceRegistrationData = cachedInfo.DeviceRegistrationData
+		authInfo.DeviceRegistrationDataInvalidated = oldAuthInfo.DeviceRegistrationDataInvalidated
 		authInfo.DeviceRegistrationDataValidationPending = oldAuthInfo.DeviceRegistrationDataValidationPending
 	}
 	if authInfo.UserInfo.ProviderID != "" && session.providerID == "" {
@@ -1300,7 +1306,8 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	if access != "" {
 		return access, data
 	}
-	deviceRegistrationRetryPending := authInfo.DeviceRegistrationDataValidationPending
+	deviceRegistrationRetryPending := authInfo.DeviceRegistrationDataInvalidated ||
+		authInfo.DeviceRegistrationDataValidationPending
 	reusedDeviceRegistration := len(deviceRegistrationData) > 0 &&
 		bytes.Equal(deviceRegistrationData, authInfo.DeviceRegistrationData)
 
@@ -1339,7 +1346,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 		if retryingDeviceRegistration && reusedDeviceRegistration &&
 			!authInfo.DeviceRegistrationDataValidationPending {
 			log.Errorf(context.Background(), "Token acquisition failed: %s. Clearing stale device registration data and retrying authentication.", err)
-			authInfo.DeviceRegistrationData = nil
+			invalidateDeviceRegistrationData(authInfo)
 			if err = token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
 				log.Errorf(context.Background(), "Failed to store token: %s", err)
 				return AuthDenied, unexpectedErrMsg("failed to store token")
@@ -1349,9 +1356,11 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 			return AuthNext, errorMessage{Message: "Authentication failed due to a token issue. Please try again."}
 		}
 
-		// This was an interactive login for a returning user. A group-fetch
-		// failure is not enough to deny the login when cached groups are available.
-		log.Warningf(context.Background(), "Could not get groups: %v. Using cached groups.", err)
+		if retryingDeviceRegistration && authInfo.DeviceRegistrationDataValidationPending {
+			log.Warningf(context.Background(), "Could not get groups after retrying device registration: %v. Using cached groups while device registration validation is pending.", err)
+		} else {
+			log.Warningf(context.Background(), "Could not get groups: %v. Using cached groups.", err)
+		}
 	} else {
 		authInfo.UserInfo.Groups = groups
 		wasDeviceRegistrationValidationPending := authInfo.DeviceRegistrationDataValidationPending
@@ -1397,7 +1406,8 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		session.nextAuthModes = []string{authmodes.NewPassword}
 		return AuthNext, nil
 	}
-	deviceRegistrationRetryPending := authInfo.DeviceRegistrationDataValidationPending
+	deviceRegistrationRetryPending := authInfo.DeviceRegistrationDataInvalidated ||
+		authInfo.DeviceRegistrationDataValidationPending
 
 	// Refresh the token on every online login (even if it has not expired) to
 	// re-verify the account with the provider. This refresh is also the live
@@ -1483,7 +1493,8 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		if access != "" {
 			return access, data
 		}
-		deviceRegistrationRetryPending = authInfo.DeviceRegistrationDataValidationPending
+		deviceRegistrationRetryPending = authInfo.DeviceRegistrationDataInvalidated ||
+			authInfo.DeviceRegistrationDataValidationPending
 	}
 
 	// Try to refresh the groups
@@ -1509,7 +1520,15 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 	var retryWithDeviceAuthError *providerErrors.RetryWithDeviceAuthError
 	if errors.As(err, &retryWithDeviceAuthError) {
 		if deviceRegistrationRetryPending {
-			log.Warningf(context.Background(), "Could not get groups after registering the device: %v. Using cached groups while registration validation is pending.", err)
+			// Registration was retried or completed during this login, but the
+			// provider still rejected the device data. Keep the local login
+			// usable with cached groups and retain fresh registration data for
+			// validation on a later retry instead of re-enrolling on every
+			// unlock.
+			// The refresh above has already performed the online liveness and
+			// revocation check, so this relaxes only the device-registration
+			// gate.
+			log.Warningf(context.Background(), "Could not get groups after retrying device registration: %v. Using cached groups and keeping device registration pending.", err)
 			markDeviceRegistrationValidationPending(authInfo)
 			return b.finishAuth(session, authInfo)
 		}
@@ -1523,8 +1542,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		// to get a new token and register the device again, allowing the user
 		// to log in.
 		// We delete the device registration data to cause device code flow to re-register the device.
-		authInfo.DeviceRegistrationData = nil
-		clearDeviceRegistrationValidationPending(authInfo)
+		invalidateDeviceRegistrationData(authInfo)
 		if err = token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
 			log.Errorf(context.Background(), "Failed to store token: %s", err)
 			return AuthDenied, unexpectedErrMsg("failed to store token")
@@ -1548,10 +1566,20 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 	return b.finishAuth(session, authInfo)
 }
 
+func invalidateDeviceRegistrationData(authInfo *token.AuthCachedInfo) {
+	authInfo.DeviceRegistrationData = nil
+	authInfo.DeviceRegistrationDataInvalidated = true
+	authInfo.DeviceRegistrationDataValidationPending = false
+}
+
 func markDeviceRegistrationValidationPending(authInfo *token.AuthCachedInfo) {
-	if len(authInfo.DeviceRegistrationData) > 0 {
-		authInfo.DeviceRegistrationDataValidationPending = true
+	if len(authInfo.DeviceRegistrationData) == 0 {
+		invalidateDeviceRegistrationData(authInfo)
+		return
 	}
+
+	authInfo.DeviceRegistrationDataInvalidated = false
+	authInfo.DeviceRegistrationDataValidationPending = true
 }
 
 func clearDeviceRegistrationValidationPending(authInfo *token.AuthCachedInfo) {
@@ -1908,6 +1936,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	// first-time login (no cached token) it keeps its zero value, which is correct.
 	if oldAuthInfo != nil {
 		authInfo.DeviceRegistrationData = oldAuthInfo.DeviceRegistrationData
+		authInfo.DeviceRegistrationDataInvalidated = oldAuthInfo.DeviceRegistrationDataInvalidated
 		authInfo.DeviceRegistrationDataValidationPending = oldAuthInfo.DeviceRegistrationDataValidationPending
 	}
 
@@ -1920,7 +1949,8 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	if access != "" {
 		return access, data
 	}
-	deviceRegistrationRetryPending := authInfo.DeviceRegistrationDataValidationPending
+	deviceRegistrationRetryPending := authInfo.DeviceRegistrationDataInvalidated ||
+		authInfo.DeviceRegistrationDataValidationPending
 	reusedDeviceRegistration := len(deviceRegistrationData) > 0 &&
 		bytes.Equal(deviceRegistrationData, authInfo.DeviceRegistrationData)
 
@@ -1940,15 +1970,11 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 		}
 
 		if oldAuthInfo != nil {
-			if errors.As(err, &retryWithDeviceAuthErr) &&
-				authInfo.DeviceRegistrationDataValidationPending {
+			if retryingDeviceRegistration && authInfo.DeviceRegistrationDataValidationPending {
 				log.Warningf(context.Background(), "Could not get groups: %v. Using cached groups while device registration validation is pending.", err)
-			} else if errors.As(err, &retryWithDeviceAuthErr) && reusedDeviceRegistration {
-				// The cached device registration data is stale. Clear it so that
-				// the next login triggers a fresh device registration instead of
-				// repeatedly failing with the same error.
+			} else if retryingDeviceRegistration && reusedDeviceRegistration {
 				log.Warningf(context.Background(), "Could not get groups: %v. Clearing stale device registration data and using cached groups.", err)
-				authInfo.DeviceRegistrationData = nil
+				invalidateDeviceRegistrationData(authInfo)
 			} else {
 				log.Warningf(context.Background(), "Could not get groups: %v. Using cached groups.", err)
 			}
@@ -2490,6 +2516,7 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 	t := token.NewAuthCachedInfo(oauthToken, rawIDToken, extraFields)
 	t.ProviderMetadata = oldToken.ProviderMetadata
 	t.DeviceRegistrationData = oldToken.DeviceRegistrationData
+	t.DeviceRegistrationDataInvalidated = oldToken.DeviceRegistrationDataInvalidated
 	t.DeviceRegistrationDataValidationPending = oldToken.DeviceRegistrationDataValidationPending
 
 	t.UserInfo, err = b.getUserInfo(ctx, session, oauthToken, rawIDToken, true)
@@ -2603,7 +2630,15 @@ func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, auth
 		return cleanup, "", nil
 	}
 
+	registrationWasInvalidated := authInfo.DeviceRegistrationDataInvalidated &&
+		!authInfo.DeviceRegistrationDataValidationPending
 	deviceRegistrationDataBeforeRegistration := append([]byte(nil), existingData...)
+	if registrationWasInvalidated {
+		// An invalidated cache has no usable registration data and must be
+		// re-enrolled. Validation-pending data was freshly registered and
+		// should be retained for a later group lookup retry.
+		existingData = nil
+	}
 	var err error
 	authInfo.DeviceRegistrationData, cleanup, err = dr.MaybeRegisterDevice(ctx, regToken,
 		session.username,
@@ -2614,8 +2649,11 @@ func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, auth
 		log.Errorf(context.Background(), "error registering device: %s", err)
 		return func() {}, AuthDenied, errorMessage{Message: "Error registering device"}
 	}
-	if len(authInfo.DeviceRegistrationData) > 0 &&
-		!slices.Equal(authInfo.DeviceRegistrationData, deviceRegistrationDataBeforeRegistration) {
+	if len(authInfo.DeviceRegistrationData) > 0 {
+		authInfo.DeviceRegistrationDataInvalidated = false
+	}
+	if registrationWasInvalidated || (len(authInfo.DeviceRegistrationData) > 0 &&
+		!slices.Equal(authInfo.DeviceRegistrationData, deviceRegistrationDataBeforeRegistration)) {
 		markDeviceRegistrationValidationPending(authInfo)
 	}
 
