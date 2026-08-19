@@ -280,7 +280,7 @@ else
     # transient failures in the tests.
     cmd="add-apt-repository -y ppa:${PPA}"
     retry --times 5 --delay 3 -- "$SSH" -- "$cmd"
-    $SSH "apt-get install -y authd"
+    $SSH "apt-get install -y --allow-downgrades authd"
     force_create_snapshot "${AUTHD_STABLE_SNAPSHOT}"
 fi
 
@@ -317,9 +317,9 @@ EOF
 # Install the version of authd to test
 if [ -n "${AUTHD_DEB:-}" ]; then
     scp_to_vm "${AUTHD_DEB}" "/home/ubuntu/$(basename "${AUTHD_DEB}")"
-    $SSH apt-get install -y "/home/ubuntu/$(basename "${AUTHD_DEB}")"
+    $SSH apt-get install -y --allow-downgrades "/home/ubuntu/$(basename "${AUTHD_DEB}")"
 else
-    $SSH "apt-get install -y authd"
+    $SSH "apt-get install -y --allow-downgrades authd"
 fi
 
 # Configure the PAM module to be verbose as well

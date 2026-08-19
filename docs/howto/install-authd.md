@@ -62,6 +62,12 @@ sudo add-apt-repository ppa:ubuntu-enterprise-desktop/authd-edge
 ```
 ::::
 
+On Ubuntu Desktop, authd requires the exact gnome-shell version that contains
+its integration patch. When installing authd from a PPA, add that PPA first so
+that APT can install the matching version, including replacing a newer archive
+version if needed. gnome-shell remains optional when authd is installed on
+Ubuntu Server.
+
 Install authd and any additional Debian packages needed for your system of
 choice:
 
