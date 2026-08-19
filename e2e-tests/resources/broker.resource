@@ -343,6 +343,29 @@ Continue Log In With Remote User Through GDM: Define Local Password
     Wait Until Desktop Ready
 
 
+Log In With Remote User Through GDM: Entra Password
+    [Arguments]    ${username}
+    Start Log In With Remote User Through GDM: QR Code    ${username}
+    Select Broker Through GDM
+    Continue Log In With Remote User Through GDM: Entra Password
+
+
+Continue Log In With Remote User Through GDM: Entra Password
+    # With the device code flow disabled there is only one flow; the PAM module
+    # auto-selects it and goes directly to the Entra ID password prompt.
+    Match Text    Enter your Entra ID password:    30    similarity=90
+    Hid.Type String    %{E2E_PASSWORD}
+    Hid.Keys Combo    Return
+
+    # Wait for the MFA code prompt and enter a fresh TOTP code.
+    Match Text    Enter your MFA code:    120    similarity=88
+    ${totp_code} =    TOTP.Generate Totp Code
+    Hid.Type String    ${totp_code}
+    Hid.Keys Combo    Return
+
+    Wait Until Desktop Ready
+
+
 Log In With Remote User Through GDM: Local Password
     [Arguments]    ${username}    ${local_password}
     Wait Until GDM Login Screen Ready
