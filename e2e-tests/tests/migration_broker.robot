@@ -38,14 +38,7 @@ Test login with broker on edge channel
 
     # Switch to edge channel for the broker snap
     Enable Edge Broker
-
-    # TODO(stable-release): Remove this temporary compatibility step together
-    #                       with the Disable Entra Auth Via Drop In keyword
-    #                       once Edge and stable use the same entra_auth key.
-    # Disable the Entra direct-auth flow on the edge broker: it refuses to
-    # start with the flow enabled but without register_device or a
-    # client_secret, which are both not configured. Must run after the
-    # refresh; see the keyword's documentation.
+    # The released edge broker still enables its legacy direct-auth flow.
     Disable Entra Auth Via Drop In
 
     # Log in with remote user with local password after upgrading
