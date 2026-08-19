@@ -57,6 +57,6 @@ scope, so the groups are resolved in one of two ways:
   the app registration to hold the `GroupMember.Read.All` **Application**
   permission with tenant admin consent.
 
-If neither device registration nor a client secret is available, the
-**Entra authentication** flow is disabled at startup, because group membership
-could not be resolved.
+If neither device registration nor a client secret is available while the
+**Entra authentication** flow is enabled, the broker fails to start because
+group membership cannot be resolved.
