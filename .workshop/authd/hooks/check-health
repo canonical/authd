@@ -1,0 +1,28 @@
+#!/bin/bash
+# check-health — report whether the installed authd stack is usable.
+#
+# Runs after the setup hooks (and on demand via `workshop refresh`). Workshop
+# executes this hook as root, so checks that care about the developer's login
+# environment explicitly drop to the `workshop` user. A clean run reports okay;
+# otherwise the concise Workshop status points to the full validate action.
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source /project/.workshop/authd/lib/health-checks.sh
+
+authd_collect_health_problems
+
+if [ "${#AUTHD_HEALTH_PROBLEMS[@]}" -eq 0 ]; then
+    workshopctl set-health okay
+else
+    printf 'authd health check failures:\n' >&2
+    printf '  - %s\n' "${AUTHD_HEALTH_PROBLEMS[@]}" >&2
+
+    # workshopctl enforces a 7–70 character message limit. Keep this short;
+    # the hook output is available through `workshop tasks` on the host.
+    workshopctl set-health --code=authd-stack-unhealthy error \
+        "${#AUTHD_HEALTH_PROBLEMS[@]} check(s) failed; inspect latest workshop tasks"
+fi
+
+# The exit code reports whether the hook itself ran. Stack health is communicated
+# exclusively through workshopctl.
