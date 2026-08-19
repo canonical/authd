@@ -222,7 +222,8 @@ function install_broker() {
 			-e "s|<ISSUER_ID>|${issuer_id}|g" \
 			-e "s|<CLIENT_ID>|${client_id}|g" \
 			-e "s|<CLIENT_SECRET>|${client_secret}|g" \
-			-e "s/^#\(entra_auth\|entra_password\) = .*/\1 = false/" \
+			-e "s/^#*device_code = .*/device_code = true/" \
+			-e "s/^#*entra_auth = .*/entra_auth = false/" \
 			/var/snap/${broker}/current/broker.conf
 		echo 'verbosity: 2' > /var/snap/${broker}/current/${broker}.yaml
 		systemctl restart authd.service
