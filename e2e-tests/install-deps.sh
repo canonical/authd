@@ -12,7 +12,7 @@ sudo apt-get update && sudo apt-get -y install \
     libvirt-clients-qemu \
     libvirt-daemon-system \
     libxkbcommon-dev \
-    qemu-kvm \
+    qemu-system-x86 \
     python3-cairo \
     python3-gi \
     python3-tk \
