@@ -1294,6 +1294,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	if cachedInfo, err := token.LoadAuthInfo(session.tokenPath); err == nil {
 		oldAuthInfo = cachedInfo
 		deviceRegistrationData = cachedInfo.DeviceRegistrationData
+		authInfo.UserInfo.Groups = slices.Clone(oldAuthInfo.UserInfo.Groups)
 		authInfo.DeviceRegistrationDataInvalidated = oldAuthInfo.DeviceRegistrationDataInvalidated
 		authInfo.DeviceRegistrationDataValidationPending = oldAuthInfo.DeviceRegistrationDataValidationPending
 	}
@@ -1935,6 +1936,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	// value and silently discard a device that was registered earlier. For a
 	// first-time login (no cached token) it keeps its zero value, which is correct.
 	if oldAuthInfo != nil {
+		authInfo.UserInfo.Groups = slices.Clone(oldAuthInfo.UserInfo.Groups)
 		authInfo.DeviceRegistrationData = oldAuthInfo.DeviceRegistrationData
 		authInfo.DeviceRegistrationDataInvalidated = oldAuthInfo.DeviceRegistrationDataInvalidated
 		authInfo.DeviceRegistrationDataValidationPending = oldAuthInfo.DeviceRegistrationDataValidationPending

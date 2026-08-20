@@ -3132,9 +3132,20 @@ func TestFinishEntraAuthClearsStaleDeviceRegistrationDataOnRetryWithDeviceAuthEr
 	cachedGroups := []info.Group{{Name: "cached-group", UGID: "cached-id"}}
 	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
 	groupFetches := 0
+	var (
+		tokenPath             string
+		cachedGroupsAtLookup  []info.Group
+		cachedGroupsLookupErr error
+	)
 	provider := &mockEntraPasswordProvider{
 		MockProvider: &testutils.MockProvider{
 			GetGroupsFunc: func() ([]info.Group, error) {
+				cached, cacheErr := token.LoadAuthInfo(tokenPath)
+				if cacheErr != nil {
+					cachedGroupsLookupErr = cacheErr
+				} else {
+					cachedGroupsAtLookup = cached.UserInfo.Groups
+				}
 				groupFetches++
 				if groupFetches == 1 {
 					return nil, &providerErrors.RetryWithDeviceAuthError{Err: errors.New("AADSTS50155: device authentication failed")}
@@ -3162,6 +3173,7 @@ func TestFinishEntraAuthClearsStaleDeviceRegistrationDataOnRetryWithDeviceAuthEr
 	})
 
 	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	tokenPath = b.TokenPathForSession(sessionID)
 	// isForDeviceRegistration seeds a non-empty (stale) DeviceRegistrationData;
 	// this is the cached token loaded as oldAuthInfo by entraPasswordAuth.
 	generateAndStoreCachedInfo(t, tokenOptions{
@@ -3201,6 +3213,9 @@ func TestFinishEntraAuthClearsStaleDeviceRegistrationDataOnRetryWithDeviceAuthEr
 	}
 	require.NoError(t, json.Unmarshal([]byte(data), &payload))
 	require.Equal(t, cachedGroups, payload.UserInfo.Groups, "cached groups must still be used while the device is re-registered")
+	require.NoError(t, cachedGroupsLookupErr)
+	require.Equal(t, cachedGroups, cachedGroupsAtLookup,
+		"cached groups must be present when registration is persisted before group validation")
 
 	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
 	require.NoError(t, err)
@@ -3937,6 +3952,11 @@ func TestDeviceAuthFallsBackToCachedGroupsOnGroupFetchError(t *testing.T) {
 	require.Equal(t, broker.AuthNext, access)
 	require.Equal(t, []string{authmodes.NewPassword}, b.GetNextAuthModes(sessionID))
 
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.Equal(t, cachedGroups, cached.UserInfo.Groups,
+		"cached groups must survive the registration cache write before group validation")
+
 	updateAuthModes(t, b, sessionID, authmodes.NewPassword)
 	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "new-password", key))
 	access, data, err := b.IsAuthenticated(sessionID, authData)
@@ -3951,7 +3971,7 @@ func TestDeviceAuthFallsBackToCachedGroupsOnGroupFetchError(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(data), &payload))
 	require.Equal(t, cachedGroups, payload.UserInfo.Groups)
 
-	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	cached, err = token.LoadAuthInfo(b.TokenPathForSession(sessionID))
 	require.NoError(t, err)
 	require.NotEmpty(t, cached.DeviceRegistrationData,
 		"a non-device group error must preserve the existing registration")
