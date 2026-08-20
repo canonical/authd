@@ -45,21 +45,25 @@ func newTrackedMFAFlowState(release func()) *himmelblau.MFAFlowState {
 
 type mockEntraPasswordProvider struct {
 	*testutils.MockProvider
-	flowState             *himmelblau.MFAFlowState
-	challengeInfo         *himmelblau.MFAChallengeInfo
-	mfaTokenResult        *oauth2.Token
-	initErr               error
-	recordedPollAttempts  []int
-	recordedChallengeData []string
-	refreshResult         *oauth2.Token // returned by RefreshEntraPasswordToken (defaults to a rotated token)
-	refreshErr            error         // when set, RefreshEntraPasswordToken returns it (e.g. AADSTS50057)
-	refreshDelay          time.Duration
-	refreshCtxDeadline    time.Time
-	verifyCtxDeadline     time.Time
-	userDisabledErrorCode string     // when set, IsUserDisabledError matches an *oauth2.RetrieveError with this code
-	verifyAccessTokenErr  error      // when set, VerifyAccessToken returns it (signature verification failure)
-	accessTokenUserInfo   *info.User // when set, UserInfoFromAccessToken returns this user info
-	userInfoFromTokenErr  error      // when set, UserInfoFromAccessToken returns this error
+	flowState                     *himmelblau.MFAFlowState
+	challengeInfo                 *himmelblau.MFAChallengeInfo
+	mfaTokenResult                *oauth2.Token
+	initErr                       error
+	recordedPollAttempts          []int
+	recordedChallengeData         []string
+	refreshResult                 *oauth2.Token // returned by RefreshEntraPasswordToken (defaults to a rotated token)
+	refreshErr                    error         // when set, RefreshEntraPasswordToken returns it (e.g. AADSTS50057)
+	refreshDelay                  time.Duration
+	refreshCtxDeadline            time.Time
+	verifyCtxDeadline             time.Time
+	userDisabledErrorCode         string     // when set, IsUserDisabledError matches an *oauth2.RetrieveError with this code
+	verifyAccessTokenErr          error      // when set, VerifyAccessToken returns it (signature verification failure)
+	accessTokenUserInfo           *info.User // when set, UserInfoFromAccessToken returns this user info
+	userInfoFromTokenErr          error      // when set, UserInfoFromAccessToken returns this error
+	registrationAttempts          int
+	registrationEnrollments       int
+	registrationExistingData      []byte
+	registrationExistingDataCalls [][]byte
 }
 
 func (p *mockEntraPasswordProvider) VerifyAccessToken(ctx context.Context, _, _ string) error {
@@ -150,9 +154,14 @@ func (p *mockEntraPasswordProvider) IsTokenForDeviceRegistration(authInfo *token
 }
 
 func (p *mockEntraPasswordProvider) MaybeRegisterDevice(_ context.Context, _ *oauth2.Token, _ string, _ string, oldData []byte) ([]byte, func(), error) {
+	p.registrationAttempts++
+	oldDataCopy := append([]byte(nil), oldData...)
+	p.registrationExistingData = oldDataCopy
+	p.registrationExistingDataCalls = append(p.registrationExistingDataCalls, oldDataCopy)
 	if len(oldData) > 0 {
 		return oldData, func() {}, nil
 	}
+	p.registrationEnrollments++
 	return mockDeviceRegistrationData, func() {}, nil
 }
 
@@ -2827,10 +2836,72 @@ func TestIsAuthenticatedPasswordEntraTokenFallsBackToCachedGroupsOnGroupFetchErr
 	require.Equal(t, cachedGroups, payload.UserInfo.Groups, "cached groups must be used when the group fetch fails")
 }
 
+// TestIsAuthenticatedPasswordKeepsDeviceRegistrationOnMissingClientCredentials
+// verifies the #1721 regression boundary. AADSTS7000218 is an Entra application
+// configuration error, so a returning user's cached registration must survive it.
+// Otherwise, the next login sees no registration data and enrolls the same machine
+// again as a distinct Entra device.
+func TestIsAuthenticatedPasswordKeepsDeviceRegistrationOnMissingClientCredentials(t *testing.T) {
+	t.Parallel()
+
+	const (
+		correctPassword        = "password"
+		username               = "test-user@email.com"
+		deviceRegistrationData = "device-registration-data"
+	)
+	cachedGroups := []info.Group{{Name: "cached-group", UGID: "cached-id"}}
+	provider := &mockEntraPasswordProvider{
+		MockProvider: &testutils.MockProvider{
+			GetGroupsFunc: func() ([]info.Group, error) {
+				return nil, fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", himmelblau.ErrMissingClientCredentials)
+			},
+		},
+	}
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                       broker.Config{DataDir: t.TempDir()},
+		provider:                     provider,
+		ownerAllowed:                 true,
+		firstUserBecomesOwner:        true,
+		issuerURL:                    defaultIssuerURL,
+		registerDevice:               true,
+		forceAccessCheckWithProvider: true,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, username, sessionmode.Login)
+	generateAndStoreCachedInfo(t, tokenOptions{
+		username:                     username,
+		issuer:                       defaultIssuerURL,
+		obtainedViaEntraPasswordAuth: true,
+		isForDeviceRegistration:      true,
+		groups:                       cachedGroups,
+	}, b.TokenPathForSession(sessionID))
+	require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+	authenticate := func() {
+		sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+		updateAuthModes(t, b, sessionID, authmodes.Password)
+		authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+
+		access, _, err := b.IsAuthenticated(sessionID, authData)
+		require.NoError(t, err)
+		require.Equal(t, broker.AuthGranted, access)
+	}
+
+	authenticate()
+	authenticate()
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.Equal(t, []byte(deviceRegistrationData), cached.DeviceRegistrationData,
+		"AADSTS7000218 must not discard the existing Entra device registration")
+	require.Zero(t, provider.registrationEnrollments,
+		"returning logins after AADSTS7000218 must reuse the existing registration instead of enrolling another device")
+}
+
 // TestFinishEntraAuthClearsStaleDeviceRegistrationDataOnRetryWithDeviceAuthError
 // verifies that when the Entra password/MFA flow's group fetch (in
-// finishEntraAuth) fails with a RetryWithDeviceAuthError (e.g. AADSTS7000218 due
-// to stale device registration data), the broker clears the cached
+// finishEntraAuth) fails with a RetryWithDeviceAuthError caused by stale device
+// registration data, the broker clears the cached
 // DeviceRegistrationData before persisting the token via finishAuth. Without
 // this, the stale data would be carried over via oldAuthInfo on every
 // subsequent login, creating a persistence loop where the device is never
@@ -2844,7 +2915,7 @@ func TestFinishEntraAuthClearsStaleDeviceRegistrationDataOnRetryWithDeviceAuthEr
 	provider := &mockEntraPasswordProvider{
 		MockProvider: &testutils.MockProvider{
 			GetGroupsFunc: func() ([]info.Group, error) {
-				return nil, &providerErrors.RetryWithDeviceAuthError{Err: errors.New("AADSTS7000218: stale device registration data")}
+				return nil, &providerErrors.RetryWithDeviceAuthError{Err: errors.New("device registration data is stale")}
 			},
 		},
 		flowState: &himmelblau.MFAFlowState{},
@@ -2911,6 +2982,163 @@ func TestFinishEntraAuthClearsStaleDeviceRegistrationDataOnRetryWithDeviceAuthEr
 	require.Empty(t, cached.DeviceRegistrationData,
 		"stale DeviceRegistrationData must be cleared so the next login re-registers the device "+
 			"instead of repeatedly failing getGroups with the same stale data")
+}
+
+// TestFinishEntraAuthPreservesFreshDeviceRegistrationOnRetryWithDeviceAuthError
+// verifies that a possible replication failure immediately after a new
+// registration does not discard the new registration on a returning login.
+func TestFinishEntraAuthPreservesFreshDeviceRegistrationOnRetryWithDeviceAuthError(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	cachedGroups := []info.Group{{Name: "cached-group", UGID: "cached-id"}}
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := &mockEntraPasswordProvider{
+		MockProvider: &testutils.MockProvider{
+			GetGroupsFunc: func() ([]info.Group, error) {
+				return nil, &providerErrors.RetryWithDeviceAuthError{Err: errors.New("device registration is not replicated yet")}
+			},
+		},
+		flowState: &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{
+			Message:           "Please type in the code displayed on your authenticator app from your device:",
+			Method:            "PhoneAppOTP",
+			PollingIntervalMs: 5000,
+			MaxPollAttempts:   10,
+		},
+		mfaTokenResult: newMFATokenResult(mfaAuthInfo.Token),
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+		registerDevice:        true,
+	})
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	// The cached token exists but has no registration data: this login creates
+	// the fresh registration that must survive a possible replication failure.
+	generateAndStoreCachedInfo(t, tokenOptions{
+		username:                     username,
+		issuer:                       defaultIssuerURL,
+		obtainedViaEntraPasswordAuth: true,
+		groups:                       cachedGroups,
+	}, b.TokenPathForSession(sessionID))
+	require.NoError(t, password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID)))
+
+	updateAuthModes(t, b, sessionID, authmodes.EntraPassword)
+	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
+	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraMFACode}, b.GetNextAuthModes(sessionID))
+
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFACode))
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFACode)
+	require.NoError(t, err)
+
+	otpAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "123456", key))
+	access, data, err := b.IsAuthenticated(sessionID, otpAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access,
+		"a returning Entra login must preserve a fresh registration during a possible replication failure")
+
+	var payload struct {
+		UserInfo struct {
+			Groups []info.Group `json:"groups"`
+		} `json:"userinfo"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(data), &payload))
+	require.Equal(t, cachedGroups, payload.UserInfo.Groups)
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.NotEmpty(t, cached.DeviceRegistrationData,
+		"fresh DeviceRegistrationData must survive a possible post-enrollment replication failure")
+	require.True(t, cached.DeviceRegistrationDataValidationPending,
+		"fresh registration must remain pending until Graph group lookup succeeds")
+
+	retrySessionID, retryKey := newSessionForTests(t, b, username, sessionmode.Login)
+	updateAuthModes(t, b, retrySessionID, authmodes.Password)
+	retryAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", retryKey))
+	access, _, err = b.IsAuthenticated(retrySessionID, retryAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access,
+		"a later local-password login must retain the fresh device registration")
+	require.Equal(t, 1, provider.registrationEnrollments,
+		"a pending registration must be reused instead of enrolling another device")
+}
+
+func TestFinishEntraAuthFirstLoginPersistsFreshRegistrationPendingValidation(t *testing.T) {
+	t.Parallel()
+
+	const username = "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := &mockEntraPasswordProvider{
+		MockProvider: &testutils.MockProvider{
+			GetGroupsFunc: func() ([]info.Group, error) {
+				return nil, &providerErrors.RetryWithDeviceAuthError{Err: errors.New("device registration is not replicated yet")}
+			},
+		},
+		flowState: &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{
+			Message:           "Please type in the code displayed on your authenticator app from your device:",
+			Method:            "PhoneAppOTP",
+			PollingIntervalMs: 5000,
+			MaxPollAttempts:   10,
+		},
+		mfaTokenResult: newMFATokenResult(mfaAuthInfo.Token),
+	}
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+		registerDevice:        true,
+	})
+
+	authenticate := func() (string, string) {
+		sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+		updateAuthModes(t, b, sessionID, authmodes.EntraPassword)
+		passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
+		access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
+		require.NoError(t, err)
+		require.Equal(t, broker.AuthNext, access)
+
+		require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFACode))
+		_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFACode)
+		require.NoError(t, err)
+
+		otpAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "123456", key))
+		access, _, err = b.IsAuthenticated(sessionID, otpAuthData)
+		require.NoError(t, err)
+		return sessionID, access
+	}
+
+	firstSessionID, access := authenticate()
+	require.Equal(t, broker.AuthDenied, access,
+		"a first login without cached groups must still be denied")
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(firstSessionID))
+	require.NoError(t, err)
+	require.NotEmpty(t, cached.DeviceRegistrationData)
+	require.True(t, cached.DeviceRegistrationDataValidationPending,
+		"the fresh registration must be marked pending before the first login is denied")
+
+	secondSessionID, access := authenticate()
+	require.Equal(t, broker.AuthGranted, access,
+		"the next interactive login must reuse the pending registration")
+	require.Equal(t, 1, provider.registrationEnrollments,
+		"retrying after the first denial must not enroll another device")
+
+	cached, err = token.LoadAuthInfo(b.TokenPathForSession(secondSessionID))
+	require.NoError(t, err)
+	require.NotEmpty(t, cached.DeviceRegistrationData)
+	require.True(t, cached.DeviceRegistrationDataValidationPending)
 }
 
 // TestIsAuthenticatedPasswordEntraTokenRefreshDetectsDisabledUser verifies that on a
@@ -3312,6 +3540,212 @@ func TestDeviceAuthClearsDeviceRegistrationDataWhenRegistrationDisabled(t *testi
 	require.Empty(t, cached.DeviceRegistrationData,
 		"re-authenticating via device-code with register_device=false must store a token "+
 			"without DeviceRegistrationData so subsequent group lookups don't attempt PRT exchange")
+}
+
+// TestDeviceAuthClearsStaleDeviceRegistrationDataOnRetryWithDeviceAuthError
+// verifies that a returning device-code login clears a cached registration
+// when the provider positively reports that the device authentication failed.
+func TestDeviceAuthClearsStaleDeviceRegistrationDataOnRetryWithDeviceAuthError(t *testing.T) {
+	t.Parallel()
+
+	provider := &mockEntraPasswordProvider{
+		MockProvider: &testutils.MockProvider{
+			GetGroupsFunc: func() ([]info.Group, error) {
+				return nil, &providerErrors.RetryWithDeviceAuthError{Err: errors.New("device registration data is stale")}
+			},
+		},
+	}
+	cachedGroups := []info.Group{{Name: "cached-group", UGID: "cached-id"}}
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		registerDevice:        true,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{
+				{"aud": consts.MicrosoftBrokerAppID},
+				{"aud": consts.MicrosoftBrokerAppID},
+			},
+		},
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	generateAndStoreCachedInfo(t, tokenOptions{
+		isForDeviceRegistration: true,
+		groups:                  cachedGroups,
+	}, b.TokenPathForSession(sessionID))
+
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraPassword, authmodes.Device, authmodes.DeviceQr}, b.GetNextAuthModes(sessionID))
+	require.Contains(t, data, "token issue")
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.Empty(t, cached.DeviceRegistrationData,
+		"stale device registration data must be cleared before device-code reauthentication")
+	require.Equal(t, cachedGroups, cached.UserInfo.Groups,
+		"clearing stale registration must preserve cached groups")
+}
+
+// TestDeviceAuthFallsBackToCachedGroupsOnGroupFetchError verifies that a
+// returning device-code login preserves access and registration state when a
+// group lookup fails for a reason that does not prove device invalidation.
+func TestDeviceAuthFallsBackToCachedGroupsOnGroupFetchError(t *testing.T) {
+	t.Parallel()
+
+	cachedGroups := []info.Group{{Name: "cached-group", UGID: "cached-id"}}
+	provider := &mockEntraPasswordProvider{
+		MockProvider: &testutils.MockProvider{
+			GetGroupsFunc: func() ([]info.Group, error) {
+				return nil, errors.New("temporary group lookup failure")
+			},
+		},
+	}
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		registerDevice:        true,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{{"aud": consts.MicrosoftBrokerAppID}},
+		},
+	})
+
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	generateAndStoreCachedInfo(t, tokenOptions{
+		isForDeviceRegistration: true,
+		groups:                  cachedGroups,
+	}, b.TokenPathForSession(sessionID))
+
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.NewPassword}, b.GetNextAuthModes(sessionID))
+
+	updateAuthModes(t, b, sessionID, authmodes.NewPassword)
+	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "new-password", key))
+	access, data, err := b.IsAuthenticated(sessionID, authData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access)
+
+	var payload struct {
+		UserInfo struct {
+			Groups []info.Group `json:"groups"`
+		} `json:"userinfo"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(data), &payload))
+	require.Equal(t, cachedGroups, payload.UserInfo.Groups)
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.NotEmpty(t, cached.DeviceRegistrationData,
+		"a non-device group error must preserve the existing registration")
+}
+
+// TestDeviceAuthPreservesFreshRegistrationOnRetryWithDeviceAuthError verifies
+// that a 50155-like failure immediately after a new enrollment does not clear
+// the fresh registration, allowing a later retry to survive a replication race.
+func TestDeviceAuthPreservesFreshRegistrationOnRetryWithDeviceAuthError(t *testing.T) {
+	t.Parallel()
+
+	provider := &mockEntraPasswordProvider{
+		MockProvider: &testutils.MockProvider{
+			GetGroupsFunc: func() ([]info.Group, error) {
+				return nil, &providerErrors.RetryWithDeviceAuthError{Err: errors.New("device registration is not replicated yet")}
+			},
+		},
+	}
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		registerDevice:        true,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{
+				{"aud": consts.MicrosoftBrokerAppID},
+				{"aud": consts.MicrosoftBrokerAppID},
+			},
+		},
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthDenied, access,
+		"a fresh registration failure should deny this first login without discarding the new registration")
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.NotEmpty(t, cached.DeviceRegistrationData,
+		"a fresh registration must survive a possible post-enrollment replication failure")
+	require.True(t, cached.DeviceRegistrationDataValidationPending,
+		"the fresh registration must be marked pending before the first login is denied")
+}
+
+func TestDeviceAuthPersistsClearedValidationPendingAfterGroupSuccess(t *testing.T) {
+	t.Parallel()
+
+	cachedGroups := []info.Group{{Name: "cached-group", UGID: "cached-id"}}
+	groupFetches := 0
+	provider := &mockEntraPasswordProvider{
+		MockProvider: &testutils.MockProvider{
+			GetGroupsFunc: func() ([]info.Group, error) {
+				groupFetches++
+				if groupFetches == 1 {
+					return cachedGroups, nil
+				}
+				return nil, &providerErrors.RetryWithDeviceAuthError{Err: errors.New("device registration data is stale")}
+			},
+		},
+	}
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		registerDevice:        true,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{
+				{"aud": consts.MicrosoftBrokerAppID},
+				{"aud": consts.MicrosoftBrokerAppID},
+			},
+		},
+	})
+
+	firstSessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	updateAuthModes(t, b, firstSessionID, authmodes.DeviceQr)
+	access, _, err := b.IsAuthenticated(firstSessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.NewPassword}, b.GetNextAuthModes(firstSessionID))
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(firstSessionID))
+	require.NoError(t, err)
+	require.NotEmpty(t, cached.DeviceRegistrationData)
+	require.False(t, cached.DeviceRegistrationDataValidationPending,
+		"successful group lookup must persist that registration validation completed")
+
+	retrySessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	updateAuthModes(t, b, retrySessionID, authmodes.DeviceQr)
+	access, _, err = b.IsAuthenticated(retrySessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraPassword, authmodes.Device, authmodes.DeviceQr}, b.GetNextAuthModes(retrySessionID))
+	require.Equal(t, 1, provider.registrationEnrollments,
+		"a later device-auth failure must invalidate the existing registration instead of enrolling during this flow")
+
+	cached, err = token.LoadAuthInfo(b.TokenPathForSession(retrySessionID))
+	require.NoError(t, err)
+	require.Empty(t, cached.DeviceRegistrationData)
+	require.False(t, cached.DeviceRegistrationDataValidationPending)
 }
 
 // TestIsAuthenticatedPhoneAppOTPRoutesToMFACode verifies that PhoneAppOTP
