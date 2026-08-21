@@ -5156,6 +5156,104 @@ func TestEntraMFACodeAuthNoActiveMFAFlow(t *testing.T) {
 	require.Equal(t, broker.AuthDenied, access, "entra_mfa_code with no active MFA flow must deny")
 }
 
+// TestIsAuthenticatedEntraMFAWaitStaleRequestReplaysTerminalSuccess verifies that
+// a stale/duplicate entra_mfa_wait call after successful authentication replays
+// AuthGranted idempotently, does not re-invoke AcquireTokenByMFAFlow, and does not
+// trigger an unexpected error (canonical/authd#1810).
+func TestIsAuthenticatedEntraMFAWaitStaleRequestReplaysTerminalSuccess(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := &mockEntraPasswordProvider{
+		MockProvider: &testutils.MockProvider{},
+		flowState:    &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{
+			Message:           "Approve the sign-in request in Microsoft Authenticator",
+			PollingIntervalMs: 1,
+			MaxPollAttempts:   1,
+		},
+		mfaTokenResult: newMFATokenResult(mfaAuthInfo.Token),
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	advanceToEntraMFAWait(t, b, sessionID, key)
+
+	// Initial authentication completes successfully.
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access)
+	require.Equal(t, 1, len(provider.recordedPollAttempts))
+
+	// Late/stale entra_mfa_wait call must replay AuthGranted quietly.
+	staleAccess, staleData, staleErr := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, staleErr)
+	require.Equal(t, broker.AuthGranted, staleAccess, "stale entra_mfa_wait call must return AuthGranted")
+	require.Equal(t, data, staleData, "stale entra_mfa_wait call must replay the original terminal response")
+	require.Equal(t, 1, len(provider.recordedPollAttempts), "AcquireTokenByMFAFlow must not be called again on stale request")
+}
+
+// TestIsAuthenticatedEntraMFACodeStaleRequestReplaysTerminalSuccess verifies that
+// a stale/duplicate entra_mfa_code call after successful authentication replays
+// AuthGranted idempotently, does not re-invoke AcquireTokenByMFAFlow, and does not
+// trigger an unexpected error (canonical/authd#1810).
+func TestIsAuthenticatedEntraMFACodeStaleRequestReplaysTerminalSuccess(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := &mockEntraPasswordProvider{
+		MockProvider: &testutils.MockProvider{},
+		flowState:    &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{
+			Message: "Enter your MFA code",
+			Method:  "PhoneAppOTP",
+		},
+		mfaTokenResult: newMFATokenResult(mfaAuthInfo.Token),
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+
+	updateAuthModes(t, b, sessionID, authmodes.EntraPassword)
+	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
+	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+
+	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFACode))
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFACode)
+	require.NoError(t, err)
+
+	codeAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "123456", key))
+	access, data, err := b.IsAuthenticated(sessionID, codeAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access)
+	require.Equal(t, 1, len(provider.recordedChallengeData))
+
+	// Late/stale entra_mfa_code call must replay AuthGranted quietly.
+	staleAccess, staleData, staleErr := b.IsAuthenticated(sessionID, codeAuthData)
+	require.NoError(t, staleErr)
+	require.Equal(t, broker.AuthGranted, staleAccess, "stale entra_mfa_code call must return AuthGranted")
+	require.Equal(t, data, staleData, "stale entra_mfa_code call must replay the original terminal response")
+	require.Equal(t, 1, len(provider.recordedChallengeData), "AcquireTokenByMFAFlow must not be called again on stale code request")
+}
+
 // TestIsAuthenticatedEntraMFAUsesVerifiedAccessTokenIdentity verifies that
 // first-login identity comes from UserInfoFromAccessToken after VerifyAccessToken,
 // not from OAuth token extras that may have been sourced from an unverified
@@ -5360,6 +5458,49 @@ func TestIsAuthenticatedEntraMFACodeMaxAttemptsLockout(t *testing.T) {
 	require.Len(t, provider.recordedChallengeData, broker.MaxAuthAttempts,
 		"each wrong code submission must reuse the same MFA flow")
 	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID), "a max-tries lockout must not cache an offline password")
+}
+
+// TestIsAuthenticatedEntraMFAModeMismatchDoesNotReplay verifies that a completed
+// entra_mfa_wait flow does not replay AuthGranted if a subsequent request arrives
+// for a different mode like entra_mfa_code.
+func TestIsAuthenticatedEntraMFAModeMismatchDoesNotReplay(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := &mockEntraPasswordProvider{
+		MockProvider: &testutils.MockProvider{},
+		flowState:    &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{
+			Message:           "Approve the sign-in request in Microsoft Authenticator",
+			PollingIntervalMs: 1,
+			MaxPollAttempts:   1,
+		},
+		mfaTokenResult: newMFATokenResult(mfaAuthInfo.Token),
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	advanceToEntraMFAWait(t, b, sessionID, key)
+
+	// Complete initial entra_mfa_wait authentication
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access)
+
+	// Attempting entra_mfa_code on a session completed under entra_mfa_wait must deny
+	updateAuthModes(t, b, sessionID, authmodes.EntraMFACode)
+	mismatchedAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "123456", key))
+	staleAccess, _, staleErr := b.IsAuthenticated(sessionID, mismatchedAuthData)
+	require.NoError(t, staleErr)
+	require.Equal(t, broker.AuthDenied, staleAccess, "mismatched MFA mode must return AuthDenied")
 }
 
 func TestMain(m *testing.M) {
