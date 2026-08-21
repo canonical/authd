@@ -43,6 +43,10 @@ const (
 	nativeCancelKey = "r"
 
 	polkitServiceName = "polkit-1"
+	// prompt that will appear in polkit agents when the user is expected to enter a password.
+	// This is a workaround for polkit agents that keep the previous input hint visible even when not expecting user input, which can be confusing.
+	// By using a blank prompt, we avoid showing any misleading hints.
+	polkitBlankPrompt = " "
 )
 
 type inputPromptStyle int
@@ -654,6 +658,23 @@ func (m nativeModel) handleFormChallenge(hasWait bool) tea.Cmd {
 		})
 	}
 
+	// For wait-only forms (no entry field), display the message and wait for authentication
+	// without prompting for user input. Input text box still present but not interactable (cannot be removed due to GNOME shell limitation)
+	// This is used for MFA challenges like MS Entra
+	// authenticator number matching where the user approves in their authenticator app.
+	if m.serviceName == polkitServiceName && hasWait && m.uiLayout.GetEntry() == "" {
+		var info string
+		if m.canGoBack() {
+			info = m.formatInfo(authMode, fmt.Sprintf("%s\n\nEnter '%s' to %s", prompt, nativeCancelKey, m.goBackActionLabel()))
+		} else {
+			info = m.formatInfo(authMode, prompt)
+		}
+		if cmd := maybeSendPamError(m.sendInfo(info)); cmd != nil {
+			return cmd
+		}
+		return sendAuthWaitCommand()
+	}
+
 	var instructions string
 	if m.canGoBack() {
 		instructions = "Enter '%[1]s' to cancel the request and %[2]s"
@@ -674,6 +695,19 @@ func (m nativeModel) handleFormChallenge(hasWait bool) tea.Cmd {
 	if goBackLabel := m.goBackActionLabel(); goBackLabel != "" {
 		instructions = fmt.Sprintf(instructions, nativeCancelKey, m.goBackActionLabel())
 	}
+
+	if m.serviceName == polkitServiceName {
+		// Polkit agents keep the previous input hint visible while showing
+		// information messages. Keep that hint blank and show the form label
+		// as information instead.
+		if instructions == "" {
+			instructions = prompt
+		} else {
+			instructions = fmt.Sprintf("%s\n\n%s", prompt, instructions)
+		}
+		prompt = polkitBlankPrompt
+	}
+
 	info := m.formatInfo(authMode, instructions)
 	if cmd := maybeSendPamError(m.sendInfo(info)); cmd != nil {
 		return cmd
