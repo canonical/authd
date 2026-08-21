@@ -33,6 +33,17 @@ that affect the security of authd.
 authd security overview <security>
 ```
 
+## User management
+
+Learn how authd manages users and groups, and how this differs from
+traditional local Linux accounts.
+
+```{toctree}
+:titlesonly:
+
+User management <user-management>
+```
+
 ## Documentation
 
 Information about the authd documentation itself.
