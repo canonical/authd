@@ -25,6 +25,7 @@
 [![Reference documentation][reference-documentation-image]][reference-documentation-url]
 
 [![Documentation Status][docs-image]][docs-url-stable]
+[![AI Ready](https://img.shields.io/badge/AI--Ready-yes-brightgreen?style=flat)](https://github.com/johnpapa/ai-ready)
 
 authd is an authentication daemon for cloud-based identity providers. It helps
 ensure the secure management of identity and access for Ubuntu machines anywhere

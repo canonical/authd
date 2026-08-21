@@ -1,0 +1,64 @@
+name: Copilot setup steps
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+            authd-oidc-brokers/go.sum
+            authd-oidc-brokers/tools/go.sum
+
+      - name: Install build and test dependencies
+        run: |
+          set -eu
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bubblewrap \
+            cracklib-runtime \
+            git-delta \
+            libglib2.0-dev \
+            libpam0g-dev \
+            libpwquality-dev \
+            openssh-client \
+            openssh-server \
+            pkgconf \
+            protobuf-compiler
+
+      - name: Update Rust
+        run: rustup update stable
+
+      - name: Download module dependencies
+        run: |
+          set -eu
+          go mod download
+          go -C tools mod download
+          go -C authd-oidc-brokers mod download
+          go -C authd-oidc-brokers/tools mod download
+          cargo fetch
+
+      - name: Build core components
+        run: |-
+          set -eu
+          go build ./cmd/authd
+          cargo build
