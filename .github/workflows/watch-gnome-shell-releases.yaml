@@ -1,0 +1,23 @@
+name: Watch gnome-shell releases
+
+on:
+  # Remove this workflow after the authd patches land in the Ubuntu branches.
+  schedule:
+    - cron: '13 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    name: Check Ubuntu gnome-shell releases
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Notify about new releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./.github/scripts/watch-gnome-shell-releases.sh
