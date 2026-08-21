@@ -305,20 +305,21 @@ Log In With Remote User Through SSH: Local Password
 
 Log In With Remote User Through GDM: QR Code
     [Arguments]    ${username}    ${local_password}
-    Start Log In With Remote User Through GDM: QR Code    ${username}
+    Start Log In With Remote User Through GDM    ${username}
     Select Broker Through GDM
     Continue Log In With Remote User: Authenticate In External Browser
     Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
 
 
-Start Log In With Remote User Through GDM: QR Code
+Start Log In With Remote User Through GDM
     [Arguments]    ${username}
     Wait Until GDM Login Screen Ready
     Move Pointer To Not listed
     Left Button Click
 
-    # Enter the username
-    Match Text    Username
+    # Enter the username. The field's placeholder text is lighter than normal
+    # text, so it often OCRs below the suite's global confidence threshold.
+    Match Text    Username    30    confidence=90
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
 
@@ -343,13 +344,37 @@ Continue Log In With Remote User Through GDM: Define Local Password
     Wait Until Desktop Ready
 
 
+Log In With Remote User Through GDM: Entra Password
+    [Arguments]    ${username}
+    Start Log In With Remote User Through GDM    ${username}
+    Select Broker Through GDM
+    Continue Log In With Remote User Through GDM: Entra Password
+
+
+Continue Log In With Remote User Through GDM: Entra Password
+    # With the device code flow disabled there is only one flow; the PAM module
+    # auto-selects it and goes directly to the Entra ID password prompt.
+    Match Text    Enter your Entra ID password:    30    similarity=90
+    Hid.Type String    %{E2E_PASSWORD}
+    Hid.Keys Combo    Return
+
+    # Wait for the MFA code prompt and enter a fresh TOTP code.
+    Match Text    Enter your MFA code:    120    similarity=88
+    ${totp_code} =    TOTP.Generate Totp Code
+    Hid.Type String    ${totp_code}
+    Hid.Keys Combo    Return
+
+    Wait Until Desktop Ready
+
+
 Log In With Remote User Through GDM: Local Password
     [Arguments]    ${username}    ${local_password}
     Wait Until GDM Login Screen Ready
     Move Pointer To Not listed
     Left Button Click
-    # Enter the username
-    Match Text    Username
+    # Enter the username. The field's placeholder text is lighter than normal
+    # text, so it often OCRs below the suite's global confidence threshold.
+    Match Text    Username    30    confidence=90
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
 
