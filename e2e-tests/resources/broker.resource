@@ -23,22 +23,18 @@ Enable Edge Broker
 
 
 Disable Entra Auth Via Drop In
-    [Documentation]    Disables the Entra direct-auth flow via a drop-in, for the
-    ...                migration tests: the edge broker refuses to start when the
-    ...                flow is enabled without register_device or a client_secret,
-    ...                which the migration setup doesn't configure.
+    [Documentation]    Disables the Entra direct-auth flow after an edge broker
+    ...                refresh. The released edge broker still uses
+    ...                entra_password, while the target stable broker uses
+    ...                entra_auth, and the edge default is not usable without
+    ...                register_device or a client_secret.
     ...
-    ...                Must run AFTER Enable Edge Broker. The flow key was renamed
-    ...                (entra_password -> entra_auth) and the broker fails on
-    ...                unknown config keys, so the drop-in must use whichever key
-    ...                the refreshed snap understands, detected from its shipped
-    ...                config template. That template only exists after the refresh;
-    ...                writing the drop-in before it would have to guess the key.
-    ...                No-op for brokers without Entra flows.
-    # TODO(stable-release): Remove this migration-only compatibility override
-    #                       once the renamed entra_auth key is available in
-    #                       Edge and stable, so the snapshots no longer bridge
-    #                       the entra_password -> entra_auth schema transition.
+    ...                Detect the key from the refreshed broker template because
+    ...                the broker rejects unknown keys. The drop-in must be
+    ...                written after the refresh and the broker must be
+    ...                restarted so it reads the override.
+    # TODO(stable-release): Remove this migration-only override once the edge
+    # broker uses entra_auth and the released edge default is safe.
     IF    '%{BROKER}' != 'authd-msentraid'    RETURN
     ${key} =    Run Keyword And Ignore Error    SSH.Execute
     ...    grep -m1 -oE '^#?[[:space:]]*entra_(auth|password)[[:space:]]*=' /snap/${BROKER_SNAP_NAME}/current/conf/broker.conf.orig | grep -oE 'entra_[a-z]+'
@@ -47,8 +43,6 @@ Disable Entra Auth Via Drop In
     SSH.Execute    mkdir -p ${BROKER_CFG_DIR}
     SSH.Execute    install -m 0600 /dev/null ${BROKER_CFG_DIR}/99-disable-entra-auth.conf
     SSH.Execute    printf '[flows]\n%s = false\n' '${key}[1]' > ${BROKER_CFG_DIR}/99-disable-entra-auth.conf
-    # The refresh happened before the drop-in existed, so restart explicitly
-    # to make the broker re-read its configuration.
     SSH.Execute    snap restart ${BROKER_SNAP_NAME}
     # authd may have skipped the broker while its first post-refresh startup
     # failed, so reload its broker manager after the override is active.

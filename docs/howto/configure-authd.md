@@ -505,17 +505,19 @@ and enters a code to complete authentication.
 :sync: msentraid
 
 The `[flows]` section of the broker configuration file controls which
-authentication flows are offered to the user at login. By default, both
-Entra authentication and device code flow
-(browser-based) are enabled.
+authentication flows are offered to the user at login. The `device_code` flow
+is enabled by default. If `entra_auth` is omitted, it follows the
+`register_device` setting: it is enabled when device registration is enabled
+and disabled otherwise. This keeps existing configurations working while
+avoiding an unusable default for configurations without a group lookup source.
+
+New Entra configurations explicitly disable `entra_auth`, so enable it only
+after configuring device registration or a client secret:
 
 ```ini
 [flows]
-## Enable Entra authentication (default: true)
-#entra_auth = true
-
-## Enable browser-based device code flow (default: true)
-#device_code = true
+device_code = true
+entra_auth = true
 ```
 
 ### Entra authentication flow
@@ -541,6 +543,9 @@ instead.
 When `device_code` is enabled, the user is presented with a device code and
 a URL to visit in a browser to complete authentication. This is the standard
 OAuth 2.0 Device Authorization Grant flow.
+
+At least one online flow must be enabled. A configuration that explicitly
+disables both flows is invalid.
 ::::
 
 ::::{tab-item} Keycloak

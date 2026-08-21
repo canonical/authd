@@ -218,11 +218,18 @@ function install_broker() {
     # Configure broker and restart services
     $SSH bash -euo pipefail -s <<-EOF
 		cp /snap/${broker}/current/conf/authd/${broker_config} /etc/authd/brokers.d/
+		# The released edge broker still ships the legacy `entra_password` key,
+		# while the target stable broker uses entra_auth. Set both keys during
+		# the transition so provisioning supports both broker templates.
+		# TODO(stable-release): Remove the entra_password substitution once
+		# the edge broker uses entra_auth.
 		sed -i \
 			-e "s|<ISSUER_ID>|${issuer_id}|g" \
 			-e "s|<CLIENT_ID>|${client_id}|g" \
 			-e "s|<CLIENT_SECRET>|${client_secret}|g" \
-			-e "s/^#\(entra_auth\|entra_password\) = .*/\1 = false/" \
+			-e "s/^#*device_code = .*/device_code = true/" \
+			-e "s/^#*entra_auth = .*/entra_auth = false/" \
+			-e "s/^#*entra_password = .*/entra_password = false/" \
 			/var/snap/${broker}/current/broker.conf
 		echo 'verbosity: 2' > /var/snap/${broker}/current/${broker}.yaml
 		systemctl restart authd.service

@@ -151,11 +151,14 @@ type flowsConfig struct {
 	EntraAuth  bool
 }
 
-// defaultFlowsConfig returns the default flows configuration (all modes enabled).
-func defaultFlowsConfig() flowsConfig {
+// defaultFlowsConfig returns the defaults for flow settings omitted from the
+// configuration. Device-code authentication stays enabled for compatibility.
+// Entra authentication follows register_device so existing configurations keep
+// using it when device registration was enabled.
+func defaultFlowsConfig(registerDevice bool) flowsConfig {
 	return flowsConfig{
 		DeviceAuth: true,
-		EntraAuth:  true,
+		EntraAuth:  registerDevice,
 	}
 }
 
@@ -390,7 +393,7 @@ func parseConfig(cfg configFile, dropInCfgs []configFile, p provider) (userConfi
 		uc.registerDevice, _ = entraID.Key(registerDeviceKey).Bool()
 	}
 
-	uc.flows, err = parseFlowsConfig(iniCfg.Section(flowsSection))
+	uc.flows, err = parseFlowsConfig(iniCfg.Section(flowsSection), uc.registerDevice)
 	if err != nil {
 		return userConfig{}, err
 	}
@@ -481,9 +484,10 @@ func (uc *userConfig) registerOwner(cfgPath, userName string) error {
 	return nil
 }
 
-// parseFlowsConfig parses the [flows] section and returns a flowsConfig with defaults for missing keys.
-func parseFlowsConfig(section *ini.Section) (flowsConfig, error) {
-	fc := defaultFlowsConfig()
+// parseFlowsConfig parses the [flows] section and returns a flowsConfig with
+// defaults for missing keys.
+func parseFlowsConfig(section *ini.Section, registerDevice bool) (flowsConfig, error) {
+	fc := defaultFlowsConfig(registerDevice)
 
 	if section == nil {
 		return fc, nil
@@ -492,7 +496,7 @@ func parseFlowsConfig(section *ini.Section) (flowsConfig, error) {
 	if section.HasKey(flowsDeviceAuthKey) {
 		val, err := section.Key(flowsDeviceAuthKey).Bool()
 		if err != nil {
-			log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (true)", flowsDeviceAuthKey, flowsSection)
+			log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (%t)", flowsDeviceAuthKey, flowsSection, fc.DeviceAuth)
 		} else {
 			fc.DeviceAuth = val
 		}
@@ -501,7 +505,7 @@ func parseFlowsConfig(section *ini.Section) (flowsConfig, error) {
 	if section.HasKey(flowsEntraAuthKey) {
 		val, err := section.Key(flowsEntraAuthKey).Bool()
 		if err != nil {
-			log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (true)", flowsEntraAuthKey, flowsSection)
+			log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (%t)", flowsEntraAuthKey, flowsSection, fc.EntraAuth)
 		} else {
 			fc.EntraAuth = val
 		}

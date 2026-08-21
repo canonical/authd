@@ -24,9 +24,15 @@ Microsoft Entra ID supports the following authentication flows:
   challenge if required. On success, authd caches the credentials locally for
   subsequent logins.
 
-Both flows are enabled by default and can be individually configured using the
-`[flows]` section of the broker configuration file. See
-[Configure authentication flows](ref::config-auth-flows) for details.
+The device code flow is enabled by default. If `entra_auth` is omitted, its
+default follows `register_device`: it is enabled when device registration is
+enabled and disabled otherwise. New Entra broker configurations explicitly set
+`entra_auth = false`; enable it only after configuring device registration or
+a client secret. Both flows can be individually configured using the `[flows]`
+section of the broker configuration file. See [Configure authentication
+flows](ref::config-auth-flows) for details.
+
+At least one authentication flow must remain enabled.
 
 The **Entra authentication** flow has additional requirements for resolving group
 membership, depending on whether device registration is enabled. See
