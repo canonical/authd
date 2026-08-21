@@ -33,20 +33,20 @@ which brokers are available on the system:
 :::::{tab-set}
 :sync-group: broker
 
-::::{tab-item} Google IAM
-:sync: google
-
-```shell
-sudo cp /snap/authd-google/current/conf/authd/google.conf /etc/authd/brokers.d/
-```
-
-::::
-
 ::::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
 ```shell
 sudo cp /snap/authd-msentraid/current/conf/authd/msentraid.conf /etc/authd/brokers.d/
+```
+
+::::
+
+::::{tab-item} Google IAM
+:sync: google
+
+```shell
+sudo cp /snap/authd-google/current/conf/authd/google.conf /etc/authd/brokers.d/
 ```
 
 ::::
@@ -72,32 +72,6 @@ broker can then use to authenticate users.
 
 :::::{tab-set}
 :sync-group: broker
-
-::::{tab-item} Google IAM
-:sync: google
-
-To register a new application in Google IAM, go to the [Credentials page](https://console.cloud.google.com/apis/credentials).
-
-Click {menuselection}`Create credentials --> OAuth client ID`.
-
-![Menu showing selection of Create credentials > OAuth client ID.](../assets/google-app-registration.png)
-
-Select the {guilabel}`TVs and Limited Input devices` application type.
-
-![Menu showing app type.](../assets/google-choose-app-type.png)
-
-Name your OAuth 2.0 client and click {guilabel}`Create`.
-
-Your app's `Client ID` and `Client secret` will be shown on the page, store them
-somewhere as you will need them in the next step.
-
-![Screen showing app credentials.](../assets/google-app-credentials.png)
-
-For more detailed information please refer to the [OAuth 2.0 for TV and
-Limited-Input Device Applications documentation](https://developers.google.com/identity/protocols/oauth2/limited-input-device).
-
-
-::::
 
 ::::{tab-item} Microsoft Entra ID
 :sync: msentraid
@@ -154,6 +128,32 @@ https://login.microsoftonline.com/common/oauth2/nativeclient
 
 ::::
 
+::::{tab-item} Google IAM
+:sync: google
+
+To register a new application in Google IAM, go to the [Credentials page](https://console.cloud.google.com/apis/credentials).
+
+Click {menuselection}`Create credentials --> OAuth client ID`.
+
+![Menu showing selection of Create credentials > OAuth client ID.](../assets/google-app-registration.png)
+
+Select the {guilabel}`TVs and Limited Input devices` application type.
+
+![Menu showing app type.](../assets/google-choose-app-type.png)
+
+Name your OAuth 2.0 client and click {guilabel}`Create`.
+
+Your app's `Client ID` and `Client secret` will be shown on the page, store them
+somewhere as you will need them in the next step.
+
+![Screen showing app credentials.](../assets/google-app-credentials.png)
+
+For more detailed information please refer to the [OAuth 2.0 for TV and
+Limited-Input Device Applications documentation](https://developers.google.com/identity/protocols/oauth2/limited-input-device).
+
+
+::::
+
 ::::{tab-item} Keycloak
 :sync: keycloak
 
@@ -199,6 +199,18 @@ different configuration data.
 :::::{tab-set}
 :sync-group: broker
 
+::::{tab-item} Microsoft Entra ID
+:sync: msentraid
+
+To configure Entra ID, edit  `/var/snap/authd-msentraid/current/broker.conf`:
+
+```ini
+[oidc]
+issuer = https://login.microsoftonline.com/<ISSUER_ID>/v2.0
+client_id = <CLIENT_ID>
+```
+::::
+
 ::::{tab-item} Google IAM
 :sync: google
 
@@ -209,18 +221,6 @@ To configure Google IAM, edit  `/var/snap/authd-google/current/broker.conf`:
 issuer = https://accounts.google.com
 client_id = <CLIENT_ID>
 client_secret = <CLIENT_SECRET>
-```
-::::
-
-::::{tab-item} Microsoft Entra ID
-:sync: msentraid
-
-To configure Entra ID, edit  `/var/snap/authd-msentraid/current/broker.conf`:
-
-```ini
-[oidc]
-issuer = https://login.microsoftonline.com/<ISSUER_ID>/v2.0
-client_id = <CLIENT_ID>
 ```
 ::::
 
@@ -346,19 +346,19 @@ they can ensure that the next user to log in becomes the owner by removing the
 ::::{tab-set}
 :sync-group: broker
 
-:::{tab-item} Google IAM
-:sync: google
-
-```shell
-sudo rm /var/snap/authd-google/current/broker.conf.d/20-owner-autoregistration.conf
-```
-:::
-
 :::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
 ```shell
 sudo rm /var/snap/authd-msentraid/current/broker.conf.d/20-owner-autoregistration.conf
+```
+:::
+
+:::{tab-item} Google IAM
+:sync: google
+
+```shell
+sudo rm /var/snap/authd-google/current/broker.conf.d/20-owner-autoregistration.conf
 ```
 :::
 
@@ -439,12 +439,6 @@ is added:
 :::::{tab-set}
 :sync-group: broker
 
-::::{tab-item} Google IAM
-:sync: google
-
-The Google IAM broker does not support device registration.
-::::
-
 ::::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
@@ -478,6 +472,12 @@ authentication on the next login.
 Make sure that the application in the Microsoft Entra admin center has a
 redirect URI configured as described in [Redirect URI](#redirect-uri).
 ```
+::::
+
+::::{tab-item} Google IAM
+:sync: google
+
+The Google IAM broker does not support device registration.
 ::::
 
 ::::{tab-item} Keycloak
@@ -570,20 +570,20 @@ broker:
 :::::{tab-set}
 :sync-group: broker
 
-::::{tab-item} Google IAM
-:sync: google
-
-```shell
-sudo snap restart authd-google
-```
-
-::::
-
 ::::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
 ```shell
 sudo snap restart authd-msentraid
+```
+
+::::
+
+::::{tab-item} Google IAM
+:sync: google
+
+```shell
+sudo snap restart authd-google
 ```
 
 ::::
