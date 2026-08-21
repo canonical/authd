@@ -15,7 +15,8 @@ func (m *Manager) RealIDGenerator() *IDGenerator {
 }
 
 func (m *Manager) GetOldUserInfoFromDB(name string) (oldUserInfo *types.UserInfo, err error) {
-	return m.getOldUserInfoFromDB(name)
+	oldUserInfo, _, err = m.getOldUserInfoFromDB(name)
+	return oldUserInfo, err
 }
 
 func CompareNewUserInfoWithUserInfoFromDB(newUserInfo, dbUserInfo types.UserInfo) bool {

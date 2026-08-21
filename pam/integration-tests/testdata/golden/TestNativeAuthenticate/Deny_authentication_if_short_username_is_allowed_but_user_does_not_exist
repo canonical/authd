@@ -1,0 +1,10 @@
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
+> 2
+PAM Error Message: error InvalidArgument from server: first authentication must use the full username
+PAM Authenticate()
+  User: "user-integration-shortusername"
+  Result: error: PAM exit code: 4
+    System error

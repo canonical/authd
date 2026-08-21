@@ -96,6 +96,8 @@ func TestNativeAuthenticate(t *testing.T) {
 		username string
 
 		clientOptions      clientOptions
+		existingDB         string
+		useShortUsernames  bool
 		wantLocalGroups    bool
 		wantSeparateDaemon bool
 		skipRunnerCheck    bool
@@ -511,6 +513,40 @@ func TestNativeAuthenticate(t *testing.T) {
 			test:         nativeSimpleAuth,
 			expectedUser: testUserName(t, "native"),
 		},
+		"Authenticate_user_with_short_username": {
+			clientOptions: clientOptions{
+				PamUser: testUserName(t, "short-username"),
+			},
+			useShortUsernames: true,
+			test:              nativeSimpleAuth,
+			// authd never changes PAM_USER, so the first login reports the full
+			// username. The user is stored with the short one though, so a
+			// subsequent login using it must be accepted.
+			after: func(t *testing.T, ctx *nativePtyTestContext) {
+				t.Helper()
+				spec := ctx.baseSpec
+				spec.clientOptions.PamUser = strings.Split(ctx.baseSpec.clientOptions.PamUser, "@")[0]
+				ctx.run(t, spec, func(t *testing.T, c *ptytest.Console) {
+					t.Helper()
+					// The broker and mode used by the first login are remembered,
+					// so the password prompt is shown right away.
+					c.WaitFor(t, `Gimme your password:`)
+					c.SendLine(t, "goodpass")
+					nativeWaitForResult(t, c)
+				})
+			},
+			expectedUser: strings.Split(testUserName(t, "short-username"), "@")[0],
+		},
+		"Authenticate_existing_user_with_short_username": {
+			clientOptions: clientOptions{
+				PamUser: examplebroker.UserIntegrationPrefix + "shortusername",
+			},
+			useShortUsernames: true,
+			existingDB:        "db_with_short_username",
+			test:              nativeSimpleAuth,
+			expectedUser:      examplebroker.UserIntegrationPrefix + "shortusername",
+		},
+
 		"Remember_last_successful_broker_and_mode": {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
@@ -610,6 +646,15 @@ func TestNativeAuthenticate(t *testing.T) {
 			},
 			expectedUser: testUserNameFull(t, examplebroker.UserIntegrationNeedsResetPrefix, "bad-password-native"),
 		},
+		"Deny_authentication_if_short_username_is_allowed_but_user_does_not_exist": {
+			clientOptions: clientOptions{
+				PamUser: examplebroker.UserIntegrationPrefix + "shortusername",
+			},
+			useShortUsernames: true,
+			test:              nativeShortUsernameRejected,
+			expectedUser:      examplebroker.UserIntegrationPrefix + "shortusername",
+		},
+
 		"Prevent_preset_user_from_switching_username": {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
@@ -761,6 +806,21 @@ func TestNativeAuthenticate(t *testing.T) {
 					testutils.WithGroupFile(groupFile),
 					testutils.WithGroupFileOutput(groupFileOutput),
 				)
+			case tc.existingDB != "" || tc.useShortUsernames:
+				var groupFile string
+				groupFileOutput, groupFile = prepareGroupFiles(t)
+				args := []testutils.DaemonOption{
+					testutils.WithCurrentUserAsRoot,
+					testutils.WithGroupFile(groupFile),
+					testutils.WithGroupFileOutput(groupFileOutput),
+				}
+				if tc.existingDB != "" {
+					args = append(args, testutils.WithDBPath(prepareExistingDB(t, tc.existingDB)))
+				}
+				if tc.useShortUsernames {
+					args = append(args, testutils.WithShortUsernames())
+				}
+				socketPath = runAuthd(t, args...)
 			default:
 				socketPath, groupFileOutput = sharedAuthd(t)
 			}
@@ -1101,6 +1161,14 @@ func nativeSelectBroker(t *testing.T, c *ptytest.Console) {
 	t.Helper()
 	c.WaitFor(t, `(?s)== Provider selection ==.*2\. ExampleBroker.*Choose your provider`)
 	sendEchoedLine(t, c, "2")
+}
+
+// nativeShortUsernameRejected selects the broker and expects authd to refuse the session before
+// any authentication mode is offered, because the short username cannot be resolved to a full one.
+func nativeShortUsernameRejected(t *testing.T, c *ptytest.Console) {
+	t.Helper()
+	nativeSelectBroker(t, c)
+	nativeWaitForResult(t, c)
 }
 
 // nativeSimpleAuth performs basic native authentication: select broker, enter password.

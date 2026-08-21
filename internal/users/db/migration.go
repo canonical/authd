@@ -136,6 +136,46 @@ var schemaMigrations = []schemaMigration{
 			return nil
 		},
 	},
+	{
+		description: "Add column 'full_username' to users table",
+		migrate: func(m *Manager) (err error) {
+			tx, err := m.db.Begin()
+			if err != nil {
+				return fmt.Errorf("failed to start transaction: %w", err)
+			}
+
+			// Ensure the transaction is committed or rolled back
+			defer func() {
+				err = commitOrRollBackTransaction(err, tx)
+			}()
+
+			var exists bool
+			err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM pragma_table_info('users') WHERE name = 'full_username')").Scan(&exists)
+			if err != nil {
+				return fmt.Errorf("failed to check if 'full_username' column exists: %w", err)
+			}
+			if !exists {
+				if _, err = tx.Exec(`ALTER TABLE users ADD COLUMN full_username TEXT DEFAULT ''`); err != nil {
+					return fmt.Errorf("failed to add 'full_username' column to users table: %w", err)
+				}
+			}
+
+			// Until now users could only authenticate with their fully qualified username, so the
+			// stored name is also their full username.
+			if _, err = tx.Exec(`UPDATE users SET full_username = name WHERE full_username IS NULL OR full_username = ''`); err != nil {
+				return fmt.Errorf("failed to populate 'full_username' column: %w", err)
+			}
+
+			// Looking a user up by full username is the fallback of every name lookup that misses,
+			// which includes the frequent NSS requests for users authd does not know about. Index
+			// the column so those misses do not scan the whole table.
+			if _, err = tx.Exec(`CREATE INDEX IF NOT EXISTS "idx_user_full_username" ON users ("full_username")`); err != nil {
+				return fmt.Errorf("failed to create full username index: %w", err)
+			}
+
+			return nil
+		},
+	},
 }
 
 func (m *Manager) maybeApplyMigrations() error {

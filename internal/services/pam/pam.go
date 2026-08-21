@@ -227,6 +227,18 @@ func (s Service) GetBroker(ctx context.Context, req *authd.GBRequest) (*authd.GB
 	// authd usernames are lowercase
 	username := strings.ToLower(req.GetUsername())
 
+	// authd may store the user under a shortened name while the user still logs in with the fully
+	// qualified one, which also resolves through NSS. Map the login name onto the stored one before
+	// anything else: otherwise the lookups below miss, and the NSS resolution of the fully
+	// qualified name is mistaken for the user being provided by another NSS source, which would
+	// send a returning authd user to the local broker.
+	if storedName, _, err := s.userManager.NamesForLogin(username); err == nil {
+		username = storedName
+	} else if !errors.Is(err, users.NoDataFoundError{}) {
+		log.Infof(ctx, "GetBroker: Could not resolve the stored name of user %q: %v", username, err)
+		return &authd.GBResponse{}, nil
+	}
+
 	// Use in memory cache first
 	if b := s.brokerManager.BrokerForUser(username); b != nil {
 		return &authd.GBResponse{Broker: b.ID}, nil
@@ -317,17 +329,41 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 		return nil, status.Error(codes.InvalidArgument, "invalid session mode")
 	}
 
+	// The short username format is an authd-internal detail: the database keys users by it, but
+	// brokers always work with the fully qualified name. Resolve both forms up front so that the
+	// user can log in with either one. This is driven by what is stored rather than by the current
+	// configuration, so that users shortened by an earlier configuration keep working — and get
+	// renamed back — once short usernames are disabled again. The local broker is excluded because
+	// it authenticates system users, which are never renamed by authd.
+	storedUsername, fullUsername := username, username
+	if brokerID != brokers.LocalBrokerName {
+		stored, full, err := s.userManager.NamesForLogin(username)
+		switch {
+		case err == nil:
+			storedUsername, fullUsername = stored, full
+		case errors.Is(err, users.NoDataFoundError{}):
+			// The user is unknown, so there is nothing to map the short name back to.
+			if s.userManager.ShortUsernameAllowed() && !strings.Contains(username, "@") {
+				log.Errorf(ctx, "SelectBroker: User %q not found in database. First authentication must use the full username", username)
+				return nil, status.Error(codes.InvalidArgument, "first authentication must use the full username")
+			}
+		default:
+			log.Errorf(ctx, "SelectBroker: Could not resolve names for user %q: %v", username, err)
+			return nil, status.Error(codes.InvalidArgument, "invalid user name")
+		}
+	}
+
 	// Look up the user's stored broker and stable provider identifier. If the
 	// user is already bound to a different broker, reject early before opening
 	// a session that would inevitably fail after authentication completes.
-	storedBrokerID, userProviderID, err := s.userManager.BrokerAndProviderIDForUser(username)
+	storedBrokerID, userProviderID, err := s.userManager.BrokerAndProviderIDForUser(storedUsername)
 	if err != nil && !errors.Is(err, users.NoDataFoundError{}) {
-		log.Errorf(ctx, "SelectBroker: Could not look up broker and provider ID for user %q: %v", username, err)
-		return nil, fmt.Errorf("could not look up broker for user %q: %w", username, err)
+		log.Errorf(ctx, "SelectBroker: Could not look up broker and provider ID for user %q: %v", storedUsername, err)
+		return nil, fmt.Errorf("could not look up broker for user %q: %w", storedUsername, err)
 	}
 	if storedBrokerID != "" && storedBrokerID != brokerID {
-		log.Errorf(ctx, "SelectBroker: User %q is bound to broker %q and cannot authenticate with broker %q", username, storedBrokerID, brokerID)
-		return nil, status.Errorf(codes.PermissionDenied, "user %q is already bound to broker %q and cannot authenticate with broker %q", username, storedBrokerID, brokerID)
+		log.Errorf(ctx, "SelectBroker: User %q is bound to broker %q and cannot authenticate with broker %q", storedUsername, storedBrokerID, brokerID)
+		return nil, status.Errorf(codes.PermissionDenied, "user %q is already bound to broker %q and cannot authenticate with broker %q", storedUsername, storedBrokerID, brokerID)
 	}
 	// If the requested broker doesn't match the stored one, the provider ID
 	// from the stored broker is not applicable.
@@ -336,9 +372,9 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 	}
 
 	// Create a session and Memorize selected broker for it.
-	sessionID, encryptionKey, err := s.brokerManager.NewSession(brokerID, username, lang, mode, userProviderID, req.GetServiceName())
+	sessionID, encryptionKey, err := s.brokerManager.NewSession(brokerID, fullUsername, lang, mode, userProviderID, req.GetServiceName())
 	if err != nil {
-		log.Errorf(ctx, "SelectBroker: Could not create session for user %q with broker %q: %v", username, brokerID, err)
+		log.Errorf(ctx, "SelectBroker: Could not create session for user %q with broker %q: %v", fullUsername, brokerID, err)
 		return nil, err
 	}
 
@@ -500,8 +536,18 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		log.Errorf(ctx, "IsAuthenticated: Could not check if user %q is locked: %v", uInfo.Name, err)
 		return nil, fmt.Errorf("could not check if user %q is locked: %w", uInfo.Name, err)
 	}
+	// The broker always reports the fully qualified username, but authd may store the user under a
+	// shortened name, which the name-based lookup above misses. Resolve the row by its full username
+	// and honor its locked state too.
+	if errors.Is(err, users.NoDataFoundError{}) {
+		userIsLocked, err = s.userManager.IsUserLockedByFullUsername(uInfo.Name)
+		if err != nil && !errors.Is(err, users.NoDataFoundError{}) {
+			log.Errorf(ctx, "IsAuthenticated: Could not check if user %q is locked: %v", uInfo.Name, err)
+			return nil, fmt.Errorf("could not check if user %q is locked: %w", uInfo.Name, err)
+		}
+	}
 	// The username may have changed at the IdP, in which case the locked row is still stored under the
-	// previous name and the name-based lookup above misses it. Resolve the stable identity by the
+	// previous name and the name-based lookups above miss it. Resolve the stable identity by the
 	// broker-scoped provider ID and honor its locked state too.
 	if errors.Is(err, users.NoDataFoundError{}) && uInfo.BrokerID != "" && uInfo.ProviderID != "" {
 		userIsLocked, err = s.userManager.IsUserLockedByProviderID(uInfo.BrokerID, uInfo.ProviderID)
@@ -520,6 +566,7 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		log.Errorf(ctx, "IsAuthenticated: Could not update user %q in database: %v", uInfo.Name, err)
 		return nil, err
 	}
+
 	// IAResponse.Msg carries a JSON {"message": ...} envelope (or an empty
 	// string when there is no message), matching the format expected by the
 	// PAM client's dataToMsg parser.
@@ -536,14 +583,22 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 	// Set the broker as the default for the user on each successful authentication,
 	// unless it's the local broker (which is selected based on NSS resolution, not stored).
 	if broker.ID != brokers.LocalBrokerName {
-		if err = s.brokerManager.SetBroker(broker.ID, uInfo.Name); err != nil {
-			log.Errorf(ctx, "IsAuthenticated: Could not set default broker %q for user %q: %v", broker.ID, uInfo.Name, err)
+		// The broker reports the fully qualified username, but authd may store the user under a
+		// shortened name. Key the broker binding on the stored name, so that it is found again
+		// whichever of the two names the user logs in with.
+		storedUser, err := s.userManager.UserByFullUsername(uInfo.Name)
+		if err != nil {
+			log.Errorf(ctx, "IsAuthenticated: Could not get user %q from database after update: %v", uInfo.Name, err)
+			return nil, fmt.Errorf("could not get user %q from database after update: %w", uInfo.Name, err)
+		}
+		if err = s.brokerManager.SetBroker(broker.ID, storedUser.Name); err != nil {
+			log.Errorf(ctx, "IsAuthenticated: Could not set default broker %q for user %q: %v", broker.ID, storedUser.Name, err)
 			return nil, err
 		}
-		if err = s.userManager.UpdateBrokerForUser(uInfo.Name, broker.ID); err != nil {
+		if err = s.userManager.UpdateBrokerForUser(storedUser.Name, broker.ID); err != nil {
 			// A write failure (e.g. read-only filesystem) must not prevent a
 			// successfully authenticated user from logging in.
-			log.Errorf(ctx, "IsAuthenticated: Could not update broker for user %q in database: %v", uInfo.Name, err)
+			log.Errorf(ctx, "IsAuthenticated: Could not update broker for user %q in database: %v", storedUser.Name, err)
 		}
 	}
 

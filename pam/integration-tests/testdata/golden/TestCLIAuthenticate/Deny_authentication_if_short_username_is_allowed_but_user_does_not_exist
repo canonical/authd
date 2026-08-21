@@ -1,0 +1,22 @@
+Username: user name
+────────────────────────────────────────────────────────────────────────────────
+Username: user-integration-shortusername
+────────────────────────────────────────────────────────────────────────────────
+  Select your provider:
+
+> 1. local
+  2. ExampleBroker
+
+  Press escape key to go back to user selection
+────────────────────────────────────────────────────────────────────────────────
+  Select your provider:
+
+  1. local
+> 2. ExampleBroker
+
+PAM Error Message: error InvalidArgument from server: first authentication must use the full username
+PAM Authenticate()
+  User: "user-integration-shortusername"
+  Result: error: PAM exit code: 4
+    System error
+────────────────────────────────────────────────────────────────────────────────

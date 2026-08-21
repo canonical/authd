@@ -7,6 +7,7 @@ users:
       shell: /bin/sh/ia_second_call@example.com
       broker_id: "1902181170"
       provider_id: providerid-ia_second_call@example.com
+      full_username: ia_second_call@example.com
 groups:
     - name: ia_second_call@example.com
       gid: 1111
@@ -19,4 +20,4 @@ users_to_groups:
       gid: 1111
     - uid: 1111
       gid: 22222
-schema_version: 3
+schema_version: 4

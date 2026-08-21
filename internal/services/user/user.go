@@ -52,6 +52,24 @@ func (s Service) GetUserByName(ctx context.Context, req *authd.GetUserByNameRequ
 		return userToProtobuf(user), nil
 	}
 
+	if errors.Is(err, users.NoDataFoundError{}) {
+		// Users may be stored under a shortened name while the rest of the system, and the user
+		// themselves, still refer to them by the fully qualified one. Resolve both forms to the
+		// same entry, whose Name is the shortened one. This is not gated on the configuration, so
+		// that users shortened by an earlier configuration remain resolvable — and can therefore
+		// log in and be renamed back — once short usernames are disabled again.
+		userByFullUsername, fullUsernameErr := s.userManager.UserByFullUsername(name)
+		if fullUsernameErr == nil {
+			return userToProtobuf(userByFullUsername), nil
+		}
+		if !errors.Is(fullUsernameErr, users.NoDataFoundError{}) {
+			// The user may well exist: reporting them as unknown would let the caller fall back to
+			// a pre-check and register a temporary entry for an already known user.
+			log.Errorf(ctx, "GetUserByName: %v", fullUsernameErr)
+			return nil, grpcError(fullUsernameErr)
+		}
+	}
+
 	if !errors.Is(err, users.NoDataFoundError{}) {
 		log.Errorf(context.Background(), "GetUserByName: %v", err)
 		return nil, grpcError(err)
@@ -447,6 +465,14 @@ func (s Service) userPreCheck(ctx context.Context, username string) (types.UserE
 	var u types.UserEntry
 	if err := json.Unmarshal([]byte(userinfo), &u); err != nil {
 		return types.UserEntry{}, fmt.Errorf("user data from broker invalid: %v", err)
+	}
+
+	// Brokers always report the fully qualified username, but the rest of the system must see the
+	// user under the name authd will store them as, otherwise the pre-authentication entry and the
+	// entry created after a successful login would disagree on the name and home directory.
+	if shortened := s.userManager.ShortenUsername(u.Name); shortened != u.Name {
+		u.Dir = strings.ReplaceAll(u.Dir, u.Name, shortened)
+		u.Name = shortened
 	}
 
 	// Register a temporary user with a unique UID. If the user authenticates successfully, the user will be added to

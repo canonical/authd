@@ -22,6 +22,7 @@ import (
 	"github.com/canonical/authd/internal/services/errmessages"
 	"github.com/canonical/authd/internal/testlog"
 	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/users/db"
 	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -604,4 +605,21 @@ func findPAMExecChildPID(t *testing.T, parentPID int) int {
 	require.FailNow(t, "PAM exec child not found",
 		"PAM runner pid %d has no %q child", parentPID, pamExecChildName)
 	return 0
+}
+
+// prepareExistingDB creates a temporary database directory pre-populated from the
+// given YAML fixture in testdata/db and returns its path.
+func prepareExistingDB(t *testing.T, existingDB string) string {
+	t.Helper()
+
+	dbDir, err := os.MkdirTemp(t.TempDir(), "existing-db-path")
+	require.NoError(t, err, "Setup: Could not create temp dir for database")
+
+	err = os.Chmod(dbDir, 0o700) //nolint:gosec // the daemon needs to traverse this test-only directory
+	require.NoError(t, err, "Setup: Could not set required permissions for database directory")
+
+	err = db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", existingDB+".db.yaml"), dbDir)
+	require.NoError(t, err, "Setup: creating existing database")
+
+	return dbDir
 }

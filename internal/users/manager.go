@@ -31,6 +31,8 @@ type Config struct {
 	UIDMax uint32 `mapstructure:"uid_max" yaml:"uid_max"`
 	GIDMin uint32 `mapstructure:"gid_min" yaml:"gid_min"`
 	GIDMax uint32 `mapstructure:"gid_max" yaml:"gid_max"`
+
+	UseShortUsernames bool `mapstructure:"use_short_usernames" yaml:"use_short_usernames"`
 }
 
 // DefaultConfig is the default configuration for the user manager.
@@ -39,6 +41,8 @@ var DefaultConfig = Config{
 	UIDMax: 60000,
 	GIDMin: 10000,
 	GIDMax: 60000,
+
+	UseShortUsernames: false,
 }
 
 // Manager is the manager for any user related operation.
@@ -154,31 +158,63 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		return fmt.Errorf("provider ID for user %q is not scoped by a broker ID", u.Name)
 	}
 
-	// Try to resolve the user's stable identity via broker-scoped provider ID (sub/oid). If found under
-	// a different name, this is an email change at the IdP: use the old DB name as
-	// the lookup key for the "existing user" checks, then let the update rename it.
-	lookupName := u.Name
-	if u.BrokerID != "" && u.ProviderID != "" {
-		providerIDMatch, providerIDErr := m.db.UserByProviderID(u.BrokerID, u.ProviderID)
-		if providerIDErr != nil && !errors.Is(providerIDErr, db.NoDataFoundError{}) {
-			return fmt.Errorf("failed to look up user by provider ID: %w", providerIDErr)
-		}
-		if providerIDErr == nil && providerIDMatch.Name != u.Name {
-			log.Noticef(context.TODO(), "User identified by broker ID %q and provider ID %q: username changed from %q to %q",
-				u.BrokerID, u.ProviderID, providerIDMatch.Name, u.Name)
-			lookupName = providerIDMatch.Name
-		}
+	// Brokers always report the fully qualified username. Shorten it before any database lookup, so that
+	// every subsequent comparison is done against the name the user is actually stored under.
+	fullUsername := u.Name
+	if m.config.UseShortUsernames {
+		u, fullUsername = shortenUserInfo(u)
 	}
 
-	// Prepend the user private group
-	u.Groups = append([]types.GroupInfo{{Name: u.Name, UGID: u.Name}}, u.Groups...)
+	// Prepend the user private group. Its UGID is the fully qualified username, so that the group
+	// keeps its identity — and therefore its GID — even when authd stores the user under a
+	// shortened name.
+	u.Groups = append([]types.GroupInfo{{Name: u.Name, UGID: fullUsername}}, u.Groups...)
 	userPrivateGroup := &u.Groups[0]
 
 	var oldUserInfo *types.UserInfo
+	var oldUserRow db.UserRow
 	var pendingDiffs []string
+	var lookupName string
 	checkUserNeedsUpdate := func() (needsUpdate bool, err error) {
+		// Try to resolve the user's stable identity via broker-scoped provider ID (sub/oid). If found
+		// under a different name, this is an email change at the IdP: use the old DB name as
+		// the lookup key for the "existing user" checks, then let the update rename it.
+		lookupName = u.Name
+		providerIDMatchName := ""
+		if u.BrokerID != "" && u.ProviderID != "" {
+			providerIDMatch, providerIDErr := m.db.UserByProviderID(u.BrokerID, u.ProviderID)
+			if providerIDErr != nil && !errors.Is(providerIDErr, db.NoDataFoundError{}) {
+				return false, fmt.Errorf("failed to look up user by provider ID: %w", providerIDErr)
+			}
+			if providerIDErr == nil {
+				providerIDMatchName = providerIDMatch.Name
+				if providerIDMatch.Name != u.Name {
+					log.Noticef(context.TODO(), "User identified by broker ID %q and provider ID %q: username changed from %q to %q",
+						u.BrokerID, u.ProviderID, providerIDMatch.Name, u.Name)
+					lookupName = providerIDMatch.Name
+				}
+			}
+		}
+
+		// Distinct fully qualified usernames can shorten to the same name. Refuse the update if the
+		// name is already taken by another identity, so that a user is never silently replaced.
+		// The provider ID lookup above already recognized the row belonging to this very user, so
+		// only a different row is a collision: a user whose domain changed at the IdP keeps their
+		// short name, while another user claiming it is rejected.
+		if m.config.UseShortUsernames && providerIDMatchName != u.Name {
+			existing, err := m.db.UserByName(u.Name)
+			if err != nil && !errors.Is(err, NoDataFoundError{}) {
+				return false, err
+			}
+			if err == nil && existing.FullUsername != "" && existing.FullUsername != fullUsername {
+				log.Errorf(context.Background(), "Username %q is already used by %q, so %q can not be stored under it",
+					u.Name, existing.FullUsername, fullUsername)
+				return false, fmt.Errorf("username %q is already used by %q", u.Name, existing.FullUsername)
+			}
+		}
+
 		// Check if the user already exists in the database.
-		oldUserInfo, err = m.getOldUserInfoFromDB(lookupName)
+		oldUserInfo, oldUserRow, err = m.getOldUserInfoFromDB(lookupName)
 		if err != nil {
 			return false, err
 		}
@@ -214,6 +250,12 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		}
 		if lookupName != u.Name {
 			// Username changed (provider-ID matched rename): always trigger an update.
+			return true, nil
+		}
+		if oldUserRow.FullUsername != fullUsername {
+			// Only the domain of the fully qualified username changed, so the stored name stays
+			// the same and the diff below would not notice. The stored full username is what maps
+			// the user back to the name the brokers know them by, so it has to be refreshed.
 			return true, nil
 		}
 		pendingDiffs = diffNormalizedUserInfo(u, *oldUserInfo)
@@ -305,8 +347,15 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 
 		// It's not a local group, so before storing it in the database, check if a group with the same name already
 		// exists.
-		if err := m.checkGroupNameConflict(g.Name, g.UGID); err != nil {
-			return err
+		//
+		// The user private group is exempt when the user is already stored under this very name:
+		// the group found under it is then their own. Its UGID is the fully qualified username,
+		// which changes when only the domain changes at the IdP, and that has to re-identify the
+		// existing group rather than be reported as a conflicting one.
+		if g != userPrivateGroup || oldUserInfo == nil || oldUserInfo.Name != u.Name {
+			if err := m.checkGroupNameConflict(g.Name, g.UGID); err != nil {
+				return err
+			}
 		}
 
 		// Check if the group already exists in the database
@@ -371,7 +420,7 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		}
 	}
 
-	userRow := db.NewUserRow(u.Name, u.UID, *userPrivateGroup.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.ProviderID)
+	userRow := db.NewUserRow(u.Name, u.UID, *userPrivateGroup.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.ProviderID, fullUsername)
 
 	if err = m.db.UpdateUserEntry(userRow, groupRows, localGroups); err != nil {
 		return err
@@ -398,17 +447,17 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 	return nil
 }
 
-func (m *Manager) getOldUserInfoFromDB(name string) (oldUserInfo *types.UserInfo, err error) {
+func (m *Manager) getOldUserInfoFromDB(name string) (oldUserInfo *types.UserInfo, oldUserRow db.UserRow, err error) {
 	oldUser, oldGroups, oldLocalGroups, err := m.db.UserWithGroups(name)
 	if err != nil && !errors.Is(err, db.NoDataFoundError{}) {
 		// Unexpected error
-		return nil, err
+		return nil, db.UserRow{}, err
 	}
 	if errors.Is(err, db.NoDataFoundError{}) {
-		return nil, nil
+		return nil, db.UserRow{}, nil
 	}
 
-	return userInfoFromUserAndGroupRows(oldUser, oldGroups, oldLocalGroups), nil
+	return userInfoFromUserAndGroupRows(oldUser, oldGroups, oldLocalGroups), oldUser, nil
 }
 
 // diffNormalizedUserInfo normalizes newUserInfo for comparison against dbUserInfo
@@ -1007,6 +1056,18 @@ func (m *Manager) IsUserLocked(username string) (bool, error) {
 	return u.Locked, nil
 }
 
+// IsUserLockedByFullUsername returns true if the user stored under the given full username is locked.
+// It resolves the user by the fully qualified name the broker reports, which differs from the user name
+// when authd is configured to use short usernames. Returns a NoDataFoundError if no user matches.
+func (m *Manager) IsUserLockedByFullUsername(fullUsername string) (bool, error) {
+	u, err := m.db.UserByFullUsername(fullUsername)
+	if err != nil {
+		return false, err
+	}
+
+	return u.Locked, nil
+}
+
 // IsUserLockedByProviderID returns true if the user identified by the given broker-scoped provider ID
 // is locked. It resolves the user by their stable identity rather than their name, so a lock set before
 // an IdP-side username change is still honored. Returns a NoDataFoundError if no user matches.
@@ -1231,4 +1292,82 @@ func (m *Manager) RegisterUserPreAuth(name string) (uid uint32, err error) {
 
 	log.Debugf(context.Background(), "Using new UID %d for temporary user %q", uid, name)
 	return uid, nil
+}
+
+// ShortUsernameAllowed returns true if short usernames are allowed by the configuration, false otherwise.
+func (m *Manager) ShortUsernameAllowed() bool {
+	return m.config.UseShortUsernames
+}
+
+// ShortenUsername returns the name authd stores the given fully qualified username under. It
+// returns the name unchanged when short usernames are disabled or when it carries no domain.
+func (m *Manager) ShortenUsername(username string) string {
+	if !m.config.UseShortUsernames {
+		return username
+	}
+
+	shortened, _, found := strings.Cut(username, "@")
+	if !found {
+		return username
+	}
+
+	return shortened
+}
+
+// NamesForLogin resolves the name authd stores the user under, together with the fully qualified
+// name the brokers expect, from the name the user is logging in with. Both forms are accepted, so
+// they are both looked up. Returns a NoDataFoundError if the user is not known yet.
+func (m *Manager) NamesForLogin(loginName string) (storedName, fullUsername string, err error) {
+	userRow, err := m.db.UserByName(loginName)
+	if errors.Is(err, db.NoDataFoundError{}) {
+		userRow, err = m.db.UserByFullUsername(loginName)
+	}
+	if err != nil {
+		return "", "", err
+	}
+
+	fullUsername = userRow.FullUsername
+	if fullUsername == "" {
+		// Rows created before the full_username column existed (or by brokers which never provided
+		// one) store the full username as the name.
+		fullUsername = userRow.Name
+	}
+
+	return userRow.Name, fullUsername, nil
+}
+
+// UserByFullUsername returns the user information for the user stored under the given full username.
+func (m *Manager) UserByFullUsername(fullUsername string) (types.UserEntry, error) {
+	userRow, err := m.db.UserByFullUsername(fullUsername)
+	if err != nil {
+		return types.UserEntry{}, err
+	}
+	return userEntryFromUserRow(userRow), nil
+}
+
+// shortenUserInfo strips the domain suffix from the user name, returning the updated user info
+// together with the original, fully qualified username.
+//
+// The user name is the key authd stores the user under, so every name-derived field must be
+// shortened along with it. Group UGIDs are left untouched: they are stable identities, not names.
+func shortenUserInfo(u types.UserInfo) (types.UserInfo, string) {
+	shortenedName, _, found := strings.Cut(u.Name, "@")
+	if !found {
+		// The name is already short, so it is its own full username.
+		return u, u.Name
+	}
+	fullUsername := u.Name
+
+	// The broker may report a self-named group, which has to follow the user name.
+	for i := range u.Groups {
+		if u.Groups[i].Name != u.Name {
+			continue
+		}
+		u.Groups[i].Name = shortenedName
+		break
+	}
+	u.Dir = strings.ReplaceAll(u.Dir, u.Name, shortenedName)
+	u.Name = shortenedName
+
+	return u, fullUsername
 }

@@ -176,6 +176,17 @@ func createDBFromYAMLReader(r io.Reader, destDir string) (err error) {
 		}
 
 		for _, record := range records {
+			if table == "users" {
+				// authd always stores a full username, and the schema migration backfills it for
+				// pre-existing rows. Uphold that invariant here, so that fixtures which predate the
+				// column still describe a database authd could have produced.
+				if name, ok := record["name"]; ok {
+					if fullUsername, ok := record["full_username"]; !ok || fullUsername == "" {
+						record["full_username"] = name
+					}
+				}
+			}
+
 			columns := ""
 			values := ""
 			var vals []any

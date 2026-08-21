@@ -31,7 +31,7 @@ func (m *Manager) UpdateUserEntry(user UserRow, authdGroups []GroupRow, localGro
 	}
 
 	/* 2. Handle groups update */
-	if err := handleGroupsUpdate(tx, authdGroups); err != nil {
+	if err := handleGroupsUpdate(tx, authdGroups, user.FullUsername); err != nil {
 		return err
 	}
 
@@ -102,8 +102,9 @@ func handleUserUpdate(db queryable, u UserRow) error {
 	return insertOrUpdateUserByID(db, u)
 }
 
-// updateGroupByID updates the group records in the database.
-func handleGroupsUpdate(db queryable, groups []GroupRow) error {
+// updateGroupByID updates the group records in the database. userFullUsername is the fully
+// qualified username of the user being updated, which is also the UGID of their private group.
+func handleGroupsUpdate(db queryable, groups []GroupRow, userFullUsername string) error {
 	for _, group := range groups {
 		existingGroup, err := groupByID(db, group.GID)
 		if err != nil && !errors.Is(err, NoDataFoundError{}) {
@@ -114,10 +115,14 @@ func handleGroupsUpdate(db queryable, groups []GroupRow) error {
 		// If a group with the same GID exists, we need to ensure that it's the same group or fail the update otherwise.
 		// Ignore the case that the UGID of the existing group is empty, which means that the group was stored without a
 		// UGID, which was the case before https://github.com/canonical/authd/pull/647.
-		// Also allow a UGID rename when the existing group is a private-group-style record (UGID == Name):
-		// those are keyed by username, so an IdP-side username change legitimately changes both.
+		// Also allow a UGID rename for the private group of the user being updated: it is keyed by
+		// their fully qualified username, so a username change at the IdP legitimately changes it.
+		// Records written before the full username was tracked are recognized by a UGID matching
+		// their name, which is how private groups were keyed back then.
 		if groupExists && existingGroup.UGID != "" && existingGroup.UGID != group.UGID {
-			if existingGroup.UGID == existingGroup.Name {
+			isUserPrivateGroup := (userFullUsername != "" && group.UGID == userFullUsername) ||
+				existingGroup.UGID == existingGroup.Name
+			if isUserPrivateGroup {
 				log.Infof(context.TODO(), "Renaming private group %q: UGID changing from %q to %q", existingGroup.Name, existingGroup.UGID, group.UGID)
 			} else {
 				log.Errorf(context.TODO(), "GID %d for group with UGID %q already in use by a group with UGID %q", group.GID, group.UGID, existingGroup.UGID)
@@ -356,7 +361,7 @@ func (m *Manager) SetGroupID(groupName string, newGID uint32) ([]UserRow, error)
 	oldGID := oldGroup.GID
 
 	// Get the list of users whose primary group is the old GID
-	query := `SELECT name, uid, gid, gecos, dir, shell, broker_id, locked, provider_id FROM users WHERE gid = ?`
+	query := `SELECT name, uid, gid, gecos, dir, shell, broker_id, locked, provider_id, full_username FROM users WHERE gid = ?`
 	rows, err := tx.Query(query, oldGID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get users with old group as primary group: %w", err)
@@ -366,7 +371,7 @@ func (m *Manager) SetGroupID(groupName string, newGID uint32) ([]UserRow, error)
 	var users []UserRow
 	for rows.Next() {
 		var u UserRow
-		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
+		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID, &u.FullUsername)
 		if err != nil {
 			return nil, fmt.Errorf("scan error: %w", err)
 		}
