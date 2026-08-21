@@ -10,6 +10,7 @@ Resource            resources/utils.resource
 Resource            resources/authd.resource
 Library             ./Browser.py    AS    Browser
 Library             ./TOTP.py    AS    TOTP
+Library             ./EntraTAP.py    AS    EntraTAP
 Library             Hid.py    AS    Hid
 Library             OperatingSystem
 Library             String
@@ -21,18 +22,37 @@ Enable Edge Broker
     SSH.Execute    snap refresh ${BROKER_SNAP_NAME} --edge
 
 
-Disable Entra Password Via Drop In
-    [Documentation]    Writes a drop-in that sets entra_password = false.
+Disable Entra Auth Via Drop In
+    [Documentation]    Disables the Entra direct-auth flow via a drop-in, for the
+    ...                migration tests: the edge broker refuses to start when the
+    ...                flow is enabled without register_device or a client_secret,
+    ...                which the migration setup doesn't configure.
     ...
-    ...                More robust than Change Broker Configuration for this key,
-    ...                because stable snapshots provisioned before the [flows]
-    ...                section was added may not contain an entra_password line
-    ...                at all, causing a silent sed no-op.
-    # TODO(stable-release): Can be removed once the stable broker has been
-    #                       updated to include the [flows] section.
+    ...                Must run AFTER Enable Edge Broker. The flow key was renamed
+    ...                (entra_password -> entra_auth) and the broker fails on
+    ...                unknown config keys, so the drop-in must use whichever key
+    ...                the refreshed snap understands, detected from its shipped
+    ...                config template. That template only exists after the refresh;
+    ...                writing the drop-in before it would have to guess the key.
+    ...                No-op for brokers without Entra flows.
+    # TODO(stable-release): Remove this migration-only compatibility override
+    #                       once the renamed entra_auth key is available in
+    #                       Edge and stable, so the snapshots no longer bridge
+    #                       the entra_password -> entra_auth schema transition.
+    IF    '%{BROKER}' != 'authd-msentraid'    RETURN
+    ${key} =    Run Keyword And Ignore Error    SSH.Execute
+    ...    grep -m1 -oE '^#?[[:space:]]*entra_(auth|password)[[:space:]]*=' /snap/${BROKER_SNAP_NAME}/current/conf/broker.conf.orig | grep -oE 'entra_[a-z]+'
+    Should Be Equal    ${key}[0]    PASS
+    ...    msg=No entra_auth/entra_password key found in the refreshed snap's config template
     SSH.Execute    mkdir -p ${BROKER_CFG_DIR}
-    SSH.Execute    printf '[flows]\nentra_password = false\n' > ${BROKER_CFG_DIR}/99-disable-entra-password.conf
+    SSH.Execute    install -m 0600 /dev/null ${BROKER_CFG_DIR}/99-disable-entra-auth.conf
+    SSH.Execute    printf '[flows]\n%s = false\n' '${key}[1]' > ${BROKER_CFG_DIR}/99-disable-entra-auth.conf
+    # The refresh happened before the drop-in existed, so restart explicitly
+    # to make the broker re-read its configuration.
     SSH.Execute    snap restart ${BROKER_SNAP_NAME}
+    # authd may have skipped the broker while its first post-refresh startup
+    # failed, so reload its broker manager after the override is active.
+    SSH.Execute    systemctl restart authd.service
 
 
 Disable Broker And Purge Config
@@ -443,7 +463,7 @@ Check That Device Was Registered
     ...    msg=token.json has no DeviceRegistrationData; the device was not registered.
 
 
-Log In With Remote User Through CLI: Entra Password
+Log In With Remote User Through CLI: Entra Auth
     [Arguments]    ${username}
     Try machinectl login Prompt
     Hid.Type String    ${username}
@@ -467,3 +487,28 @@ Log In With Remote User Through CLI: Entra Password
 
     # Wait for the authenticated shell prompt.
     Match Text    ${username}@ubuntu:~$    120
+
+
+Log In With Remote User Through CLI: Entra Passwordless TAP
+    [Arguments]    ${username}    ${local_password}    ${tap_code}
+    Try machinectl login Prompt
+    Hid.Type String    ${username}
+    Hid.Keys Combo    Return
+
+    # Broker selection: the local broker is always offered next to the remote
+    # one. Disabling the device code flow only collapses the broker's auth-mode
+    # menu (auto-selecting entra_auth), not this broker menu.
+    Match Text    Select your provider:    15
+    Match Text    2. ${PROVIDER_DISPLAY_NAME}
+    Hid.Type String    2
+
+    # Passwordless probe: entra_auth auto-selects and Entra returns a TAP
+    # code-entry challenge instead of a password prompt.
+    Match Text    Enter your MFA code:    120    similarity=88
+    # ${tap_code} is a robot.api.types.Secret; unwrapping at the call site logs
+    # the expression instead of the value (see EntraTAP.Create TAP For User).
+    Hid.Type String    ${tap_code.value}
+    Hid.Keys Combo    Return
+
+    # No cached Entra password: chain into newpassword to set a local one.
+    Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}

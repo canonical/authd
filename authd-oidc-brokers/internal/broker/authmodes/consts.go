@@ -16,26 +16,35 @@ const (
 	// NewPassword is the ID of the new password configuration method.
 	NewPassword = "newpassword"
 
-	// EntraPassword is the ID of the Entra ID password + MFA authentication flow.
-	EntraPassword = "entra_password"
+	// EntraAuth is the ID of the Entra ID password/passwordless authentication method.
+	EntraAuth = "entra_auth"
 
 	// EntraMFAWait is the ID of the poll-based MFA follow-up mode.
 	EntraMFAWait = "entra_mfa_wait"
 
 	// EntraMFACode is the ID of the code-entry MFA follow-up mode.
 	EntraMFACode = "entra_mfa_code"
+
+	// EntraAuthFido is the ID of the security-key MFA follow-up mode, which
+	// performs the WebAuthn assertion with a locally connected FIDO2 device.
+	EntraAuthFido = "entra_auth_fido"
+
+	// EntraAuthFidoPin is the ID of the security-key PIN entry mode, chained
+	// before EntraAuthFido when the connected device requires a client PIN.
+	EntraAuthFidoPin = "entra_auth_fido_pin"
 )
 
 var (
 	// Label is a map of auth mode IDs to their display labels.
-	//nolint:gosec // G101: These are auth mode display labels, not credentials.
 	Label = map[string]string{
-		Password:      "Local password",
-		Device:        "Device code flow",
-		DeviceQr:      "Device code flow",
-		NewPassword:   "Define your local password",
-		EntraPassword: "Entra ID password + MFA",
-		EntraMFAWait:  "Waiting for MFA approval",
-		EntraMFACode:  "Enter your MFA code",
+		Password:         "Local password",
+		Device:           "Device code flow",
+		DeviceQr:         "Device code flow",
+		NewPassword:      "Define your local password",
+		EntraAuth:        "Entra ID authentication",
+		EntraMFAWait:     "Waiting for MFA approval",
+		EntraMFACode:     "Enter your MFA code",
+		EntraAuthFido:    "Use your security key",
+		EntraAuthFidoPin: "Enter your security key PIN",
 	}
 )

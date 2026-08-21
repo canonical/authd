@@ -2,6 +2,7 @@ package broker
 
 import (
 	"sync"
+	"time"
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 )
@@ -11,6 +12,15 @@ var (
 	IsFIDOMethod   = isFIDOMethod
 	IsPromptMethod = isPromptMethod
 )
+
+// SetFIDODeviceWaitTimeout overrides how long entraAuthFidoAuth waits for a
+// security key before falling back to the device code flow, so tests need not
+// wait the production timeout. It returns a func that restores the default.
+func SetFIDODeviceWaitTimeout(d time.Duration) (restore func()) {
+	prev := fidoDeviceWaitTimeout
+	fidoDeviceWaitTimeout = d
+	return func() { fidoDeviceWaitTimeout = prev }
+}
 
 func (cfg *Config) Init() {
 	cfg.ownerMutex = &sync.RWMutex{}
@@ -82,10 +92,10 @@ func (cfg *Config) SetAllowedSSHSuffixes(allowedSSHSuffixes []string) {
 	cfg.allowedSSHSuffixes = allowedSSHSuffixes
 }
 
-func (cfg *Config) SetFlows(deviceAuth, entraPassword bool) {
+func (cfg *Config) SetFlows(deviceAuth, entraAuth bool) {
 	cfg.flows = defaultFlowsConfig()
 	cfg.flows.DeviceAuth = deviceAuth
-	cfg.flows.EntraPassword = entraPassword
+	cfg.flows.EntraAuth = entraAuth
 }
 
 func (cfg *Config) SetProvider(provider provider) {
@@ -246,7 +256,7 @@ const MaxAuthAttempts = maxAuthAttempts
 const CachedPasswordMessage = cachedPasswordMessage
 
 // SetSessionMFAFlowActive lets tests set mfaFlowActive on a session without
-// going through entraPasswordAuth. The challenge info is left nil so that
+// going through entraAuth. The challenge info is left nil so that
 // tests can exercise the "flow active but no challenge metadata" guard in
 // entraMFAWaitAuth.
 func (b *Broker) SetSessionMFAFlowActive(sessionID string, flow *himmelblau.MFAFlowState) error {
