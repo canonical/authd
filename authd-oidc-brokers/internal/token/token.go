@@ -19,8 +19,12 @@ type AuthCachedInfo struct {
 	ProviderMetadata       map[string]interface{}
 	UserInfo               info.User
 	DeviceRegistrationData []byte
-	DeviceIsDisabled       bool
-	UserIsDisabled         bool
+	// DeviceRegistrationDataValidationPending is set when fresh registration
+	// data was obtained but Graph group lookup still requires device
+	// authentication. The data is retained and reused until lookup succeeds.
+	DeviceRegistrationDataValidationPending bool `json:",omitempty"`
+	DeviceIsDisabled                        bool
+	UserIsDisabled                          bool
 	// ObtainedViaEntraPasswordAuth is set when the token was obtained through the
 	// entra_password MFA flow. On a returning login it selects the refresh path:
 	// these tokens are refreshed as the Microsoft Broker App (public client, no

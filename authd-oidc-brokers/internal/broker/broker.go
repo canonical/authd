@@ -2,6 +2,7 @@
 package broker
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -1280,10 +1281,15 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 		return access, data
 	}
 
-	// Load existing device registration data if there is any, to avoid re-registering the device.
+	// Load existing auth info and device registration data if present. Keep the
+	// old info so returning device-code logins can use cached groups when the
+	// live group lookup is unavailable.
+	var oldAuthInfo *token.AuthCachedInfo
 	var deviceRegistrationData []byte
-	if oldAuthInfo, err := token.LoadAuthInfo(session.tokenPath); err == nil {
-		deviceRegistrationData = oldAuthInfo.DeviceRegistrationData
+	if cachedInfo, err := token.LoadAuthInfo(session.tokenPath); err == nil {
+		oldAuthInfo = cachedInfo
+		deviceRegistrationData = cachedInfo.DeviceRegistrationData
+		authInfo.DeviceRegistrationDataValidationPending = oldAuthInfo.DeviceRegistrationDataValidationPending
 	}
 	if authInfo.UserInfo.ProviderID != "" && session.providerID == "" {
 		b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID)
@@ -1294,13 +1300,67 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	if access != "" {
 		return access, data
 	}
+	deviceRegistrationRetryPending := authInfo.DeviceRegistrationDataValidationPending
+	reusedDeviceRegistration := len(deviceRegistrationData) > 0 &&
+		bytes.Equal(deviceRegistrationData, authInfo.DeviceRegistrationData)
 
 	// We can only fetch the groups after registering the device, because the token acquired for device registration
 	// cannot be used with the Microsoft Graph API and a new token must be acquired for the Graph API.
-	authInfo.UserInfo.Groups, err = b.getGroups(ctx, session, authInfo)
+	groups, err := b.getGroups(ctx, session, authInfo)
 	if err != nil {
-		log.Errorf(context.Background(), "failed to get groups: %s", err)
-		return AuthDenied, errorMessageForDisplay(err, "Failed to retrieve groups from Microsoft Graph API")
+		if errors.Is(err, providerErrors.ErrDeviceDisabled) {
+			log.Errorf(context.Background(), "Login denied: device is disabled in %s for user %q", b.provider.DisplayName(), session.username)
+			return AuthDenied, errorMessage{Message: fmt.Sprintf("This device is disabled in %s, please contact your administrator.", b.provider.DisplayName())}
+		}
+		if errors.Is(err, providerErrors.ErrInvalidRedirectURI) {
+			log.Errorf(context.Background(), "Login denied: %s", err)
+			return AuthDenied, errorMessageForDisplay(err, "Invalid redirect URI")
+		}
+
+		var retryWithDeviceAuthErr *providerErrors.RetryWithDeviceAuthError
+		retryingDeviceRegistration := errors.As(err, &retryWithDeviceAuthErr)
+		// Preserve fresh registration data while the provider catches up with it.
+		if retryingDeviceRegistration && deviceRegistrationRetryPending {
+			markDeviceRegistrationValidationPending(authInfo)
+			if cacheErr := token.CacheAuthInfo(session.tokenPath, authInfo); cacheErr != nil {
+				log.Errorf(context.Background(), "Failed to store token: %s", cacheErr)
+				return AuthDenied, unexpectedErrMsg("failed to store token")
+			}
+		}
+
+		// Without cached groups, there is no safe fallback for a group lookup failure.
+		if oldAuthInfo == nil {
+			log.Errorf(context.Background(), "failed to get groups: %s", err)
+			return AuthDenied, errorMessageForDisplay(err, "Failed to retrieve groups from Microsoft Graph API")
+		}
+		authInfo.UserInfo.Groups = oldAuthInfo.UserInfo.Groups
+
+		// Reusing registration data that the provider rejected proves that it is stale.
+		if retryingDeviceRegistration && reusedDeviceRegistration &&
+			!authInfo.DeviceRegistrationDataValidationPending {
+			log.Errorf(context.Background(), "Token acquisition failed: %s. Clearing stale device registration data and retrying authentication.", err)
+			authInfo.DeviceRegistrationData = nil
+			if err = token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
+				log.Errorf(context.Background(), "Failed to store token: %s", err)
+				return AuthDenied, unexpectedErrMsg("failed to store token")
+			}
+
+			session.nextAuthModes = reauthModes
+			return AuthNext, errorMessage{Message: "Authentication failed due to a token issue. Please try again."}
+		}
+
+		// This was an interactive login for a returning user. A group-fetch
+		// failure is not enough to deny the login when cached groups are available.
+		log.Warningf(context.Background(), "Could not get groups: %v. Using cached groups.", err)
+	} else {
+		authInfo.UserInfo.Groups = groups
+		wasDeviceRegistrationValidationPending := authInfo.DeviceRegistrationDataValidationPending
+		clearDeviceRegistrationValidationPending(authInfo)
+		if wasDeviceRegistrationValidationPending {
+			if cacheErr := token.CacheAuthInfo(session.tokenPath, authInfo); cacheErr != nil {
+				log.Errorf(context.Background(), "Failed to store token: %s", cacheErr)
+			}
+		}
 	}
 
 	// Store the auth info in the session so that we can use it when handling the
@@ -1337,6 +1397,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		session.nextAuthModes = []string{authmodes.NewPassword}
 		return AuthNext, nil
 	}
+	deviceRegistrationRetryPending := authInfo.DeviceRegistrationDataValidationPending
 
 	// Refresh the token on every online login (even if it has not expired) to
 	// re-verify the account with the provider. This refresh is also the live
@@ -1422,6 +1483,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		if access != "" {
 			return access, data
 		}
+		deviceRegistrationRetryPending = authInfo.DeviceRegistrationDataValidationPending
 	}
 
 	// Try to refresh the groups
@@ -1446,13 +1508,23 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 	}
 	var retryWithDeviceAuthError *providerErrors.RetryWithDeviceAuthError
 	if errors.As(err, &retryWithDeviceAuthError) {
+		if deviceRegistrationRetryPending {
+			log.Warningf(context.Background(), "Could not get groups after registering the device: %v. Using cached groups while registration validation is pending.", err)
+			markDeviceRegistrationValidationPending(authInfo)
+			return b.finishAuth(session, authInfo)
+		}
+
 		log.Errorf(context.Background(), "Token acquisition failed: %s. Try again using the device code flow.", err)
-		// The token acquisition failed unexpectedly.
-		// One possible reason is that the device was deleted by an administrator in Entra ID.
-		// In this case, the user can perform device code flow again to get a new token
-		// and register the device again, allowing the user to log in.
+		// This error is only returned for a specific, known signal that the
+		// device's own registration/authentication is invalid in Entra ID
+		// (e.g. an administrator deleted the device object) -- see
+		// himmelblau.ErrDeviceAuthenticationFailed for caveats on that
+		// signal. In this case, the user can perform device code flow again
+		// to get a new token and register the device again, allowing the user
+		// to log in.
 		// We delete the device registration data to cause device code flow to re-register the device.
 		authInfo.DeviceRegistrationData = nil
+		clearDeviceRegistrationValidationPending(authInfo)
 		if err = token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
 			log.Errorf(context.Background(), "Failed to store token: %s", err)
 			return AuthDenied, unexpectedErrMsg("failed to store token")
@@ -1470,9 +1542,20 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		log.Warningf(context.Background(), "Could not get groups: %v. Using cached groups.", err)
 	} else {
 		authInfo.UserInfo.Groups = groups
+		clearDeviceRegistrationValidationPending(authInfo)
 	}
 
 	return b.finishAuth(session, authInfo)
+}
+
+func markDeviceRegistrationValidationPending(authInfo *token.AuthCachedInfo) {
+	if len(authInfo.DeviceRegistrationData) > 0 {
+		authInfo.DeviceRegistrationDataValidationPending = true
+	}
+}
+
+func clearDeviceRegistrationValidationPending(authInfo *token.AuthCachedInfo) {
+	authInfo.DeviceRegistrationDataValidationPending = false
 }
 
 func (b *Broker) entraPasswordAuth(ctx context.Context, session *session, userPassword string) (string, isAuthenticatedDataResponse) {
@@ -1825,6 +1908,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	// first-time login (no cached token) it keeps its zero value, which is correct.
 	if oldAuthInfo != nil {
 		authInfo.DeviceRegistrationData = oldAuthInfo.DeviceRegistrationData
+		authInfo.DeviceRegistrationDataValidationPending = oldAuthInfo.DeviceRegistrationDataValidationPending
 	}
 
 	var deviceRegistrationData []byte
@@ -1836,15 +1920,30 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	if access != "" {
 		return access, data
 	}
+	deviceRegistrationRetryPending := authInfo.DeviceRegistrationDataValidationPending
+	reusedDeviceRegistration := len(deviceRegistrationData) > 0 &&
+		bytes.Equal(deviceRegistrationData, authInfo.DeviceRegistrationData)
 
 	// Fetch groups. The MFA flow just performed a live provider verification, so a
 	// group-fetch failure here is not a liveness signal: fall back to cached groups
 	// on a returning auth, and only deny first-time logins that have no cached groups.
 	groups, err := b.getGroups(ctx, session, authInfo)
 	if err != nil {
+		var retryWithDeviceAuthErr *providerErrors.RetryWithDeviceAuthError
+		retryingDeviceRegistration := errors.As(err, &retryWithDeviceAuthErr)
+		if retryingDeviceRegistration && deviceRegistrationRetryPending {
+			markDeviceRegistrationValidationPending(authInfo)
+			if cacheErr := token.CacheAuthInfo(session.tokenPath, authInfo); cacheErr != nil {
+				log.Errorf(context.Background(), "Failed to store token: %s", cacheErr)
+				return AuthDenied, unexpectedErrMsg("failed to store token")
+			}
+		}
+
 		if oldAuthInfo != nil {
-			var retryWithDeviceAuthErr *providerErrors.RetryWithDeviceAuthError
-			if errors.As(err, &retryWithDeviceAuthErr) {
+			if errors.As(err, &retryWithDeviceAuthErr) &&
+				authInfo.DeviceRegistrationDataValidationPending {
+				log.Warningf(context.Background(), "Could not get groups: %v. Using cached groups while device registration validation is pending.", err)
+			} else if errors.As(err, &retryWithDeviceAuthErr) && reusedDeviceRegistration {
 				// The cached device registration data is stale. Clear it so that
 				// the next login triggers a fresh device registration instead of
 				// repeatedly failing with the same error.
@@ -1860,6 +1959,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 		}
 	} else {
 		authInfo.UserInfo.Groups = groups
+		clearDeviceRegistrationValidationPending(authInfo)
 	}
 
 	access, data = b.finishAuth(session, authInfo)
@@ -2390,6 +2490,7 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 	t := token.NewAuthCachedInfo(oauthToken, rawIDToken, extraFields)
 	t.ProviderMetadata = oldToken.ProviderMetadata
 	t.DeviceRegistrationData = oldToken.DeviceRegistrationData
+	t.DeviceRegistrationDataValidationPending = oldToken.DeviceRegistrationDataValidationPending
 
 	t.UserInfo, err = b.getUserInfo(ctx, session, oauthToken, rawIDToken, true)
 	if err != nil {
@@ -2502,6 +2603,7 @@ func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, auth
 		return cleanup, "", nil
 	}
 
+	deviceRegistrationDataBeforeRegistration := append([]byte(nil), existingData...)
 	var err error
 	authInfo.DeviceRegistrationData, cleanup, err = dr.MaybeRegisterDevice(ctx, regToken,
 		session.username,
@@ -2512,8 +2614,13 @@ func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, auth
 		log.Errorf(context.Background(), "error registering device: %s", err)
 		return func() {}, AuthDenied, errorMessage{Message: "Error registering device"}
 	}
+	if len(authInfo.DeviceRegistrationData) > 0 &&
+		!slices.Equal(authInfo.DeviceRegistrationData, deviceRegistrationDataBeforeRegistration) {
+		markDeviceRegistrationValidationPending(authInfo)
+	}
 
-	// Store the auth info, so that the device registration data is not lost if the login fails after this point.
+	// Store the auth info before group lookup, so fresh registration data remains
+	// pending if the login stops before validation succeeds.
 	if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
 		log.Errorf(context.Background(), "Failed to store token: %s", err)
 		return cleanup, AuthDenied, unexpectedErrMsg("failed to store token")
