@@ -1,3 +1,4 @@
+(reference::cli)=
 # authctl reference
 
 The `authctl` command line tool is used to manage authd users and groups.

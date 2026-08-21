@@ -5,6 +5,7 @@ myst:
       "authd has a modular architecture, consisting of an authentication daemon and an identity broker."
 ---
 
+(explanation::authd-architecture)=
 # authd architecture
 
 authd can help organizations ensure secure identity and access management by enabling seamless cloud-based authentication of Ubuntu machines.
