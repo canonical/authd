@@ -101,6 +101,13 @@ type session struct {
 	mfaChallengeInfo   *himmelblau.MFAChallengeInfo
 	entraPasswordHash  string // pre-computed hash (not plaintext) for offline use
 
+	// completedMFAMode and completedMFAResponse record a terminal Entra MFA
+	// result after all finalization steps succeed. They let a late follow-up
+	// request for the same MFA mode replay the result without invoking the
+	// single-use MFA flow again.
+	completedMFAMode     string
+	completedMFAResponse isAuthenticatedDataResponse
+
 	isAuthenticating *isAuthenticatedCtx
 }
 
@@ -701,7 +708,7 @@ func (b *Broker) NewSession(username, lang, mode, providerID string) (sessionID,
 
 		// Attempt to migrate a legacy username-based cache directory to the provider ID-based layout.
 		// If the entry at the username path is already a compatibility symlink from a prior
-		// migration, resolve it and update paths.  If it is a real directory whose cached
+		// migration, resolve it and update paths. If it is a real directory whose cached
 		// token contains a provider ID, rename the directory and leave the symlink behind.
 		if linkInfo, lstatErr := os.Lstat(s.userDataDir); lstatErr == nil {
 			switch {
@@ -1595,6 +1602,20 @@ func clearEntraMFAState(session *session) {
 	himmelblau.FreeMFAFlowState(session.mfaFlowActive)
 	session.mfaFlowActive = nil
 	session.mfaChallengeInfo = nil
+	session.completedMFAMode = ""
+	session.completedMFAResponse = nil
+}
+
+// replayCompletedMFA returns the cached terminal result for mode if an Entra
+// MFA flow for that exact mode has already completed successfully. It is a
+// fallback for stale or duplicate client requests that arrive after the
+// single-use MFA flow state has been released.
+func replayCompletedMFA(session *session, mode string) (string, isAuthenticatedDataResponse, bool) {
+	if session.completedMFAMode != mode || session.completedMFAResponse == nil {
+		return "", nil, false
+	}
+	log.Debugf(context.Background(), "Stale %s request after successful authentication for user %q, replaying terminal result", mode, session.username)
+	return AuthGranted, session.completedMFAResponse, true
 }
 
 // cachedDeviceRegistrationData returns the device registration data from the
@@ -1615,6 +1636,9 @@ func (b *Broker) entraMFAWaitAuth(ctx context.Context, session *session) (string
 	}
 
 	if session.mfaFlowActive == nil {
+		if access, data, ok := replayCompletedMFA(session, authmodes.EntraMFAWait); ok {
+			return access, data
+		}
 		log.Error(context.Background(), "MFA wait mode selected but no active MFA flow")
 		return AuthDenied, unexpectedErrMsg("no active MFA flow")
 	}
@@ -1719,6 +1743,9 @@ func (b *Broker) entraMFACodeAuth(ctx context.Context, session *session, code st
 	}
 
 	if session.mfaFlowActive == nil {
+		if access, data, ok := replayCompletedMFA(session, authmodes.EntraMFACode); ok {
+			return access, data
+		}
 		log.Error(context.Background(), "MFA code mode selected but no active MFA flow")
 		return AuthDenied, unexpectedErrMsg("no active MFA flow")
 	}
@@ -1884,6 +1911,9 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 		}
 	}
 
+	session.completedMFAMode = session.selectedMode
+	session.completedMFAResponse = data
+	session.nextAuthModes = nil
 	return access, data
 }
 
