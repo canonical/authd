@@ -27,6 +27,7 @@ import (
 	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/tokenverify"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/canonical/authd/log"
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -1387,6 +1388,10 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		}
 		if err != nil {
 			log.Errorf(context.Background(), "Failed to refresh token: %s", err)
+
+			if errors.Is(err, tokenverify.ErrTokenExpired) {
+				return AuthDenied, errorMessage{Message: "Failed to refresh token. Please check your system time and try again."}
+			}
 
 			// Fall back to offline mode for transient network failures (e.g. timeout, DNS,
 			// connection refused). Unless provider authentication is forced.

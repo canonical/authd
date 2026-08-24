@@ -24,6 +24,7 @@ import (
 	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/tokenverify"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/canonical/authd/internal/testutils/golden"
@@ -3107,7 +3108,7 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshUpdatesUserInfo(t *testing.T) {
 		"groups must be preserved from the cached token, not overwritten by the refresh")
 }
 
-func runReturningEntraPasswordLogin(t *testing.T, provider *mockEntraPasswordProvider) (*broker.Broker, string, string) {
+func runReturningEntraPasswordLogin(t *testing.T, provider *mockEntraPasswordProvider) (*broker.Broker, string, string, string) {
 	t.Helper()
 
 	const correctPassword = "password"
@@ -3125,10 +3126,10 @@ func runReturningEntraPasswordLogin(t *testing.T, provider *mockEntraPasswordPro
 
 	updateAuthModes(t, b, sessionID, authmodes.Password)
 	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
-	access, _, err := b.IsAuthenticated(sessionID, authData)
+	access, data, err := b.IsAuthenticated(sessionID, authData)
 	require.NoError(t, err)
 
-	return b, sessionID, access
+	return b, sessionID, access, data
 }
 
 // TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnVerificationFailure verifies
@@ -3146,7 +3147,7 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnVerificationFailure(t *
 		verifyAccessTokenErr: errors.New("token signature verification failed"),
 	}
 
-	b, sessionID, access := runReturningEntraPasswordLogin(t, provider)
+	b, sessionID, access, _ := runReturningEntraPasswordLogin(t, provider)
 	require.Equal(t, broker.AuthDenied, access,
 		"a refreshed token that fails signature verification must deny the returning login")
 
@@ -3154,6 +3155,34 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnVerificationFailure(t *
 	require.NoError(t, err)
 	require.Equal(t, "new-refresh-token", cached.Token.RefreshToken,
 		"a local verification failure must not discard an already-rotated refresh token")
+}
+
+// TestIsAuthenticatedPasswordEntraTokenRefreshReportsClockSkew verifies that an
+// expired refreshed access token produces a useful lockscreen message instead
+// of the generic token-refresh failure.
+func TestIsAuthenticatedPasswordEntraTokenRefreshReportsClockSkew(t *testing.T) {
+	t.Parallel()
+
+	provider := &mockEntraPasswordProvider{
+		MockProvider: &testutils.MockProvider{},
+		refreshResult: &oauth2.Token{
+			AccessToken:  "new-access-token",
+			RefreshToken: "new-refresh-token",
+		},
+		verifyAccessTokenErr: fmt.Errorf("verification failed: %w", tokenverify.ErrTokenExpired),
+	}
+
+	_, _, access, data := runReturningEntraPasswordLogin(t, provider)
+	require.Equal(t, broker.AuthDenied, access)
+
+	var payload struct {
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(data), &payload))
+	require.Equal(t,
+		"Failed to refresh token. Please check your system time and try again.",
+		payload.Message,
+	)
 }
 
 // TestIsAuthenticatedPasswordEntraTokenRefreshVerificationHasOwnTimeout verifies
@@ -3212,7 +3241,7 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshPreservesRotationOnUserInfoErro
 		userInfoFromTokenErr: errors.New("missing preferred_username claim"),
 	}
 
-	b, sessionID, access := runReturningEntraPasswordLogin(t, provider)
+	b, sessionID, access, _ := runReturningEntraPasswordLogin(t, provider)
 	require.Equal(t, broker.AuthDenied, access,
 		"a refreshed token whose user info cannot be extracted must deny the returning login")
 
