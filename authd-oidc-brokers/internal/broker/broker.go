@@ -2383,7 +2383,8 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 	// Update the raw ID token. Treat an absent, null, or empty id_token the same:
 	// keep the cached one rather than storing an empty value.
 	rawIDToken, _ := oauthToken.Extra("id_token").(string)
-	if rawIDToken == "" {
+	freshIDToken := rawIDToken != ""
+	if !freshIDToken {
 		log.Debug(context.Background(), "refreshed token does not contain an ID token, keeping the old one")
 		rawIDToken = oldToken.RawIDToken
 	}
@@ -2402,6 +2403,10 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 		// refresh token even if a later local validation step fails, otherwise the
 		// cache can be stranded with a refresh token the provider already invalidated.
 		cacheRotatedToken("user info refresh failure")
+		if !freshIDToken && isExpiredTokenError(err) {
+			// The cached ID token expired normally; don't hint at clock skew.
+			return oldToken, fmt.Errorf("cached ID token expired: %s", err)
+		}
 		return oldToken, err
 	}
 	if t.UserInfo.Gecos == "" {
