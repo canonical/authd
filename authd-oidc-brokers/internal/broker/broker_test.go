@@ -3017,6 +3017,52 @@ func TestIsAuthenticatedPasswordRefreshPreservesRotationOnUserInfoError(t *testi
 		"a failed local validation must not replace the cached raw ID token")
 }
 
+// TestIsAuthenticatedPasswordRefreshReportsClockSkewForOIDCToken verifies that
+// the standard OIDC verifier's expiry error produces a useful lockscreen
+// message instead of the generic token-refresh failure.
+func TestIsAuthenticatedPasswordRefreshReportsClockSkewForOIDCToken(t *testing.T) {
+	t.Parallel()
+
+	const correctPassword = "password"
+	provider := &testutils.MockProvider{
+		GetGroupsFunc: func() ([]info.Group, error) {
+			return []info.Group{{Name: "remote-group"}}, nil
+		},
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{{
+				"exp": time.Now().Add(-time.Hour).Unix(),
+			}},
+		},
+	})
+
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	generateAndStoreCachedInfo(t, tokenOptions{}, b.TokenPathForSession(sessionID))
+	require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+
+	access, data, err := b.IsAuthenticated(sessionID, authData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthDenied, access)
+
+	var payload struct {
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(data), &payload))
+	require.Equal(t,
+		"Failed to refresh token. Please check your system time and try again.",
+		payload.Message,
+	)
+}
+
 // TestIsAuthenticatedPasswordEntraTokenRefreshRotatesRefreshToken verifies that a
 // successful Entra password token refresh on a returning login rotates the cached
 // refresh token (kept fresh on each login, like the device-auth flow) and that the

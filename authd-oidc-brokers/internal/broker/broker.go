@@ -1389,7 +1389,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		if err != nil {
 			log.Errorf(context.Background(), "Failed to refresh token: %s", err)
 
-			if errors.Is(err, tokenverify.ErrTokenExpired) {
+			if isExpiredTokenError(err) {
 				return AuthDenied, errorMessage{Message: "Failed to refresh token. Please check your system time and try again."}
 			}
 
@@ -2557,4 +2557,13 @@ func errorMessageForDisplay(err error, fallback string) errorMessage {
 		return errorMessage{Message: forDisplayErr.Error()}
 	}
 	return errorMessage{Message: fallback}
+}
+
+func isExpiredTokenError(err error) bool {
+	if errors.Is(err, tokenverify.ErrTokenExpired) {
+		return true
+	}
+
+	var oidcExpiredErr *oidc.TokenExpiredError
+	return errors.As(err, &oidcExpiredErr)
 }
