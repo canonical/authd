@@ -27,6 +27,7 @@ import (
 	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/tokenverify"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/canonical/authd/log"
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -1388,6 +1389,10 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		if err != nil {
 			log.Errorf(context.Background(), "Failed to refresh token: %s", err)
 
+			if isExpiredTokenError(err) {
+				return AuthDenied, errorMessage{Message: "Failed to refresh token. Please check your system time and try again."}
+			}
+
 			// Fall back to offline mode for transient network failures (e.g. timeout, DNS,
 			// connection refused). Unless provider authentication is forced.
 			var netErr net.Error
@@ -2378,7 +2383,8 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 	// Update the raw ID token. Treat an absent, null, or empty id_token the same:
 	// keep the cached one rather than storing an empty value.
 	rawIDToken, _ := oauthToken.Extra("id_token").(string)
-	if rawIDToken == "" {
+	freshIDToken := rawIDToken != ""
+	if !freshIDToken {
 		log.Debug(context.Background(), "refreshed token does not contain an ID token, keeping the old one")
 		rawIDToken = oldToken.RawIDToken
 	}
@@ -2397,6 +2403,10 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 		// refresh token even if a later local validation step fails, otherwise the
 		// cache can be stranded with a refresh token the provider already invalidated.
 		cacheRotatedToken("user info refresh failure")
+		if !freshIDToken && isExpiredTokenError(err) {
+			// The cached ID token expired normally; don't hint at clock skew.
+			return oldToken, fmt.Errorf("cached ID token expired: %s", err)
+		}
 		return oldToken, err
 	}
 	if t.UserInfo.Gecos == "" {
@@ -2552,4 +2562,13 @@ func errorMessageForDisplay(err error, fallback string) errorMessage {
 		return errorMessage{Message: forDisplayErr.Error()}
 	}
 	return errorMessage{Message: fallback}
+}
+
+func isExpiredTokenError(err error) bool {
+	if errors.Is(err, tokenverify.ErrTokenExpired) {
+		return true
+	}
+
+	var oidcExpiredErr *oidc.TokenExpiredError
+	return errors.As(err, &oidcExpiredErr)
 }

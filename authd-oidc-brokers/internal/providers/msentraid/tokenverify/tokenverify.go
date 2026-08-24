@@ -27,6 +27,9 @@ import (
 // error if it cannot be resolved.
 type KeyForKID func(kid string) (*rsa.PublicKey, error)
 
+// ErrTokenExpired identifies an access token whose expiry time has passed.
+var ErrTokenExpired = errors.New("token expired")
+
 // replaceNonceValue rewrites the value of the "nonce" field in headerJSON with
 // replacement, byte-for-byte, leaving every other byte untouched. Unlike a plain
 // substring replace, it anchors to the "nonce" key itself, so it cannot match a
@@ -213,9 +216,10 @@ func Verify(rawToken, expectedTenantID string, keyForKID KeyForKID) error {
 	if err != nil || exp == 0 {
 		return errors.New("token payload missing valid exp claim")
 	}
-	now := time.Now().Unix()
-	if now-60 > exp {
-		return fmt.Errorf("token expired at %d (now: %d)", exp, now)
+	now := time.Now()
+	if now.Unix()-60 > exp {
+		return fmt.Errorf("%w at %s (now: %s)", ErrTokenExpired,
+			time.Unix(exp, 0).Format(time.RFC3339), now.Format(time.RFC3339))
 	}
 	if claims.Tid != expectedTenantID {
 		return fmt.Errorf("token tenant %q does not match expected tenant %q", claims.Tid, expectedTenantID)

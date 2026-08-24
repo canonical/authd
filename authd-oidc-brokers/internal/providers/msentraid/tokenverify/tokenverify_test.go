@@ -135,10 +135,15 @@ func TestVerify(t *testing.T) {
 		t.Parallel()
 		hdr, err := json.Marshal(map[string]any{"alg": "RS256", "kid": testKID})
 		require.NoError(t, err)
-		expiredPayload, err := json.Marshal(map[string]any{"tid": testTenant, "exp": time.Now().Unix() - 61})
+		exp := time.Now().Unix() - 2*60
+		expiredPayload, err := json.Marshal(map[string]any{"tid": testTenant, "exp": exp})
 		require.NoError(t, err)
 		tok := signToken(t, key, hdr, hdr, expiredPayload)
-		require.Error(t, tokenverify.Verify(tok, testTenant, resolver))
+		err = tokenverify.Verify(tok, testTenant, resolver)
+		require.ErrorIs(t, err, tokenverify.ErrTokenExpired)
+		require.Contains(t, err.Error(), time.Unix(exp, 0).Format(time.RFC3339))
+		require.NotContains(t, err.Error(), fmt.Sprintf("%d (now:", exp),
+			"expiry and current time should no longer be logged as Unix timestamps")
 	})
 
 	t.Run("Missing exp fails", func(t *testing.T) {
