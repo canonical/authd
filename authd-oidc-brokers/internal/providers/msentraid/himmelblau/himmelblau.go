@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 
@@ -338,48 +339,95 @@ func AcquireAccessTokenForGraphAPI(
 	return accessToken, nil
 }
 
-// InitiateMFAFlowWithPassword starts the password+MFA flow for a user.
+// InitiateMFAFlow starts the password/passwordless + MFA flow for a user.
 // It submits the user's credentials to Entra ID and returns an MFAFlowState
 // that can be used to complete the MFA challenge.
 // When withDeviceScope is true, the MFA flow requests scopes required for device
 // enrollment. When false, it uses standard scopes without enrollment resources.
-func InitiateMFAFlowWithPassword(ctx context.Context, clientID, tenantID string, data *DeviceRegistrationData, username, password string, withDeviceScope bool) (*MFAFlowState, *MFAChallengeInfo, error) {
+// authOpts toggles optional flow behaviors (e.g. AuthOptionFido to let Entra ID
+// negotiate a FIDO/security-key challenge).
+//
+// An empty password selects passwordless authentication: libhimmelblau then
+// negotiates a passwordless method (Authenticator number-matching, TAP,
+// security key, ...) from the user's credential type. This is independent of
+// withDeviceScope: the device certificate and transport key device enrollment
+// produces are generated locally via the TPM, not derived from the password,
+// so passwordless device enrollment is supported by this function the same
+// way passwordless MFA is (callers may still choose not to combine the two,
+// e.g. to avoid Conditional Access checks on the enrollment resource before a
+// password is submitted).
+func InitiateMFAFlow(ctx context.Context, clientID, tenantID string, data *DeviceRegistrationData, username, password string, withDeviceScope bool, authOpts ...AuthOption) (*MFAFlowState, *MFAChallengeInfo, error) {
 	brokerClientApp, err := brokerClientAppFor(clientID, tenantID, data)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to initialize broker client application: %v", err)
 	}
 
 	log.Debugf(ctx, "Initiating MFA flow for user %q (withDeviceScope=%v)", username, withDeviceScope)
+	// Always request NoDAGFallback: the broker surfaces MFA challenges through
+	// dedicated auth modes and never wants the silent DAG fallback.
+	opts := append([]AuthOption{AuthOptionNoDAGFallback}, authOpts...)
+	// An empty password means there is no secret to validate, so this is a
+	// passwordless login. Ask libhimmelblau to negotiate passwordless factors
+	// and, when a local FIDO client is available, to select the physical-key
+	// transport explicitly. The NULL password alone does not select a flow.
+	if password == "" {
+		opts = append(opts, AuthOptionPasswordless)
+		if slices.Contains(authOpts, AuthOptionFido) {
+			opts = append(opts, AuthOptionPasswordlessSecurityKey)
+		}
+	}
+
 	var flow *MFAFlowState
 	if withDeviceScope {
-		flow, err = initiateMFAFlowForEnrollment(brokerClientApp, username, password)
+		flow, err = initiateMFAFlowForEnrollment(brokerClientApp, username, password, opts)
 	} else {
-		flow, err = initiateMFAFlow(brokerClientApp, username, password)
+		flow, err = initiateMFAFlow(brokerClientApp, username, password, opts)
 	}
 	if err != nil {
 		return nil, nil, err
 	}
 
-	msg, err := mfaFlowMessage(flow)
+	challengeInfo, err := mfaChallengeInfoFromFlow(flow)
 	if err != nil {
 		FreeMFAFlowState(flow)
 		return nil, nil, err
+	}
+
+	return flow, challengeInfo, nil
+}
+
+// mfaChallengeInfoFromFlow reads the challenge metadata from the native flow
+// state. On error the caller still owns the flow and must release it.
+func mfaChallengeInfoFromFlow(flow *MFAFlowState) (*MFAChallengeInfo, error) {
+	msg, err := mfaFlowMessage(flow)
+	if err != nil {
+		return nil, err
 	}
 
 	method, err := mfaFlowMethod(flow)
 	if err != nil {
-		FreeMFAFlowState(flow)
-		return nil, nil, err
+		return nil, err
 	}
 
-	challengeInfo := &MFAChallengeInfo{
+	fidoChallenge, err := mfaFlowFidoChallenge(flow)
+	if err != nil {
+		return nil, err
+	}
+
+	fidoAllowList, err := mfaFlowFidoAllowList(flow)
+	if err != nil {
+		return nil, err
+	}
+
+	return &MFAChallengeInfo{
 		Message:           msg,
 		Method:            method,
 		PollingIntervalMs: mfaFlowPollingInterval(flow),
 		MaxPollAttempts:   mfaFlowMaxPollAttempts(flow),
-	}
 
-	return flow, challengeInfo, nil
+		FidoChallenge: fidoChallenge,
+		FidoAllowList: fidoAllowList,
+	}, nil
 }
 
 // AcquireTokenByMFAFlow completes the MFA challenge (poll or code submission).

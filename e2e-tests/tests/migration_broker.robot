@@ -36,13 +36,17 @@ Test login with broker on edge channel
     Log Out From su Session
     Close Focused Window
 
-    # Disable entra_password before upgrading: the edge broker refuses to start
-    # if this flow is enabled without register_device or a client_secret, which
-    # are both not configured.
-    Disable Entra Password Via Drop In
-
     # Switch to edge channel for the broker snap
     Enable Edge Broker
+
+    # TODO(stable-release): Remove this temporary compatibility step together
+    #                       with the Disable Entra Auth Via Drop In keyword
+    #                       once Edge and stable use the same entra_auth key.
+    # Disable the Entra direct-auth flow on the edge broker: it refuses to
+    # start with the flow enabled but without register_device or a
+    # client_secret, which are both not configured. Must run after the
+    # refresh; see the keyword's documentation.
+    Disable Entra Auth Via Drop In
 
     # Log in with remote user with local password after upgrading
     Open Terminal

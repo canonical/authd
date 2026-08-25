@@ -33,7 +33,9 @@ Required environment variables (or use the corresponding command-line options):
   RELEASE            The Ubuntu release of the VM (e.g., noble, resolute)
 
 Optional:
-  E2E_USER, E2E_PASSWORD, TOTP_SECRET   Forwarded to the console so keywords
+  E2E_USER, E2E_PASSWORD, E2E_PASSWORDLESS_USER, TOTP_SECRET,
+  AUTHD_MSENTRAID_ISSUER_ID, AUTHD_MSENTRAID_CLIENT_ID, AUTHD_MSENTRAID_CLIENT_SECRET
+                                        Forwarded to the console so keywords
                                         that reference them work as in a run.
 
 Options:
@@ -170,7 +172,11 @@ env \
     RELEASE="$RELEASE" \
     E2E_USER="${E2E_USER:-}" \
     E2E_PASSWORD="${E2E_PASSWORD:-}" \
+    E2E_PASSWORDLESS_USER="${E2E_PASSWORDLESS_USER:-}" \
     TOTP_SECRET="${TOTP_SECRET:-}" \
+    AUTHD_MSENTRAID_ISSUER_ID="${AUTHD_MSENTRAID_ISSUER_ID:-}" \
+    AUTHD_MSENTRAID_CLIENT_ID="${AUTHD_MSENTRAID_CLIENT_ID:-}" \
+    AUTHD_MSENTRAID_CLIENT_SECRET="${AUTHD_MSENTRAID_CLIENT_SECRET:-}" \
     VNC_PORT="$VNC_PORT" \
     SYSTEMD_SUPPORTS_VSOCK="${SYSTEMD_SUPPORTS_VSOCK:-}" \
     YARF_LOG_LEVEL="${YARF_LOG_LEVEL:-DEBUG}" \
