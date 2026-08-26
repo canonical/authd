@@ -484,7 +484,12 @@ func consolidateCacheDirs(sourceDir, targetDir string) error {
 		}
 		return errors.Join(err, os.RemoveAll(stagingDir))
 	}
-	return os.RemoveAll(stagingDir)
+	if err := os.RemoveAll(stagingDir); err != nil {
+		// The directory swap has already committed, so cleanup failure must not
+		// leave the session pointed at the removed source directory.
+		log.Warningf(context.Background(), "Could not remove staging cache directory %q: %v", stagingDir, err)
+	}
+	return nil
 }
 
 // newestCacheEntryModTime returns the most recent modification time among entries, which must all
