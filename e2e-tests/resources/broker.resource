@@ -337,8 +337,9 @@ Start Log In With Remote User Through GDM: QR Code
     Move Pointer To Not listed
     Left Button Click
 
-    # Enter the username
-    Match Text    Username
+    # Enter the username. The field's placeholder text is lighter than normal
+    # text, so it often OCRs below the suite's global confidence threshold.
+    Match Text    Username    30    confidence=91
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
 
@@ -368,8 +369,9 @@ Log In With Remote User Through GDM: Local Password
     Wait Until GDM Login Screen Ready
     Move Pointer To Not listed
     Left Button Click
-    # Enter the username
-    Match Text    Username
+    # Enter the username. The field's placeholder text is lighter than normal
+    # text, so it often OCRs below the suite's global confidence threshold.
+    Match Text    Username    30    confidence=91
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
 
