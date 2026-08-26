@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/canonical/authd/internal/services/errmessages"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 	"github.com/stretchr/testify/require"
@@ -217,7 +218,19 @@ func TestDbusBrokerCallTranslatesErrors(t *testing.T) {
 			}
 			if tc.wantUnavailable {
 				require.Contains(t, err.Error(), "mybroker", "message should name the broker")
-				require.Contains(t, err.Error(), "Please contact your administrator.",
+				require.Contains(t, err.Error(), "Is it running?",
+					"message should help the administrator diagnose the failure")
+
+				_, displayErr := errmessages.RedactErrorInterceptor(
+					context.Background(),
+					nil,
+					nil,
+					func(context.Context, any) (any, error) {
+						return nil, err
+					},
+				)
+				require.Error(t, displayErr)
+				require.Contains(t, displayErr.Error(), "Please contact your administrator.",
 					"message should tell the user to contact their administrator")
 				return
 			}

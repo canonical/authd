@@ -30,6 +30,21 @@ type dbusInterface struct {
 	version uint
 }
 
+// brokerUnavailableMessageError keeps the administrator-focused message in
+// logs while exposing the user-focused message through the gRPC error redactor.
+type brokerUnavailableMessageError struct {
+	logError     error
+	displayError error
+}
+
+func (e brokerUnavailableMessageError) Error() string {
+	return e.logError.Error()
+}
+
+func (e brokerUnavailableMessageError) Unwrap() error {
+	return e.displayError
+}
+
 // brokerUnavailableDBusErrors are the D-Bus error names that all indicate the
 // broker isn't running or failed to start. See call() for details.
 var brokerUnavailableDBusErrors = map[string]bool{
@@ -47,8 +62,11 @@ var brokerUnavailableDBusErrors = map[string]bool{
 }
 
 func brokerUnavailableError(name string) error {
-	return errmessages.NewToDisplayError(
-		fmt.Errorf("Couldn't connect to broker %q. Please contact your administrator.", name)) //nolint:staticcheck,revive // ST1005 This error is displayed as is to the user.
+	return brokerUnavailableMessageError{
+		logError: fmt.Errorf("Couldn't connect to broker %q. Is it running?", name), //nolint:staticcheck // ST1005 This error is logged as is.
+		displayError: errmessages.NewToDisplayError(
+			fmt.Errorf("Couldn't connect to broker %q. Please contact your administrator.", name)), //nolint:staticcheck,revive // ST1005 This error is displayed as is to the user.
+	}
 }
 
 type dbusBroker struct {
