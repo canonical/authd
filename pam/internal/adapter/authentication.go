@@ -133,6 +133,13 @@ type authenticationModel struct {
 	currentSecret    string
 	currentLayout    string
 
+	// authGen identifies the current challenge. It is bumped every time a
+	// challenge starts (startAuthentication), so that a stopAuthentication
+	// scheduled by a previous challenge's cancellation can be recognised as
+	// stale and ignored once a new challenge has started. See the
+	// startAuthentication and stopAuthentication handling.
+	authGen uint64
+
 	authTracker *authTracker
 
 	encryptionKey *rsa.PublicKey
@@ -158,8 +165,13 @@ type authTracker struct {
 // wait:true authentication and reset fields.
 type startAuthentication struct{}
 
-// startAuthentication signals that the authentication has been stopped.
-type stopAuthentication struct{}
+// stopAuthentication signals that the authentication has been stopped.
+//
+// gen is the challenge generation that was current when the stop was
+// scheduled. A stop whose gen no longer matches the model belongs to a
+// superseded challenge and is ignored, so that cancelling a previous
+// challenge cannot tear down a challenge that has started in the meantime.
+type stopAuthentication struct{ gen uint64 }
 
 // errMsgToDisplay signals from an authentication form to display an error message.
 type errMsgToDisplay struct {
@@ -196,9 +208,10 @@ func (m authenticationModel) Init() tea.Cmd {
 
 func (m *authenticationModel) cancelIsAuthenticated() tea.Cmd {
 	authTracker := m.authTracker
+	gen := m.authGen
 	return func() tea.Msg {
 		authTracker.cancelAndWait()
-		return stopAuthentication{}
+		return stopAuthentication{gen: gen}
 	}
 }
 
@@ -224,6 +237,13 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 		if !m.Focused() && !m.inputLocked {
 			return m, nil
 		}
+		// A challenge is starting: any stopAuthentication scheduled before this
+		// point (e.g. by the cancellation of the previous challenge when
+		// switching auth modes after device auth returns "next") now belongs to
+		// a superseded challenge and must be ignored, otherwise it would tear
+		// this one down. The stop captured the generation current when it was
+		// scheduled, which is now older than this one.
+		m.authGen++
 		m.inProgress = true
 		if m.inputLocked {
 			m.inputLocked = false
@@ -231,8 +251,14 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 		}
 
 	case stopAuthentication:
-		safeMessageDebug(msg, "current model %v, focused %v",
-			m.currentModel, m.Focused())
+		safeMessageDebug(msg, "current model %v, focused %v, gen %d (current %d)",
+			m.currentModel, m.Focused(), msg.gen, m.authGen)
+		// Ignore a stop scheduled by a challenge that has since been superseded
+		// by a newly started one, otherwise it would wrongly tear down the
+		// current challenge (e.g. the local password entry after device auth).
+		if msg.gen != m.authGen {
+			return m, nil
+		}
 		m.inProgress = false
 
 	case reselectAuthMode:
