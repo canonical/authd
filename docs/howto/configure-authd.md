@@ -519,21 +519,23 @@ Entra authentication and device code flow
 
 ### Entra authentication flow
 
-When `entra_auth` is enabled, the user can enter their Entra ID password
-directly. After password verification, Microsoft Entra ID requires a second
-factor (MFA). The broker automatically handles the MFA challenge:
+When `entra_auth` is enabled, users can sign in with their Entra ID password
+followed by an MFA challenge, such as a number-matching prompt or a one-time
+code, or use a passwordless method instead, such as a FIDO2 security key or
+passwordless sign-in in the Microsoft Authenticator app.
 
-- **Push notification or number matching**: The user approves a notification on
-  their registered authenticator app.
-- **TOTP code**: The user enters a time-based one-time password from their
-  authenticator app.
+If a security key challenge is expected but no key is connected, login falls
+back to the device code flow when it is enabled.
 
-```{admonition} FIDO2/WebAuthn security key support
+```{admonition} Local password after a passwordless login
 :class: note
-FIDO2/WebAuthn security keys are currently not supported for the Entra authentication flow.
-If only FIDO methods are registered, the user is prompted to switch to the device code flow
-instead.
+Users who log in without entering their Entra ID password are asked to create a
+local password at the end of their first login. Only a salted hash of
+this password is stored for subsequent offline logins.
 ```
+
+> See [Authentication flows](/reference/authentication-flows) for a full
+> description of the sign-in steps and their requirements.
 
 (ref::config-device-code-flow)=
 
