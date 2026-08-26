@@ -441,71 +441,96 @@ func (b *Broker) ensureCompatibilitySymlink(linkPath, target string) error {
 	return os.Symlink(relTarget, linkPath)
 }
 
-func consolidateKnownCacheFiles(sourceDir, targetDir string) error {
-	entries, err := os.ReadDir(sourceDir)
+// consolidateCacheDirs retains the contents of the newer cache directory and
+// removes the other directory.
+//
+// The "password" and "token.json" files are rewritten on every successful
+// login (password with a fresh random salt, token.json with refreshed
+// tokens, see internal/password and internal/token), so it is normal for a
+// file to exist in both directories with different content whenever both
+// have been used to authenticate. In that case there is no way to tell
+// which copy is "correct": we keep the copies from whichever directory was
+// written most recently and discard the others, since that reflects the
+// most recent successful authentication. The decision is made once for the
+// whole directory rather than per file, so that the password hash and the
+// token are never taken from different logins. If both directories were
+// written at the exact same time, targetDir wins.
+//
+// Nothing is modified until every entry has been validated, so that a
+// rejected entry leaves the cache untouched: callers fall back to
+// sourceDir when this returns an error, so a partial move would strip the
+// session of the very credentials it falls back to.
+func consolidateCacheDirs(sourceDir, targetDir string) error {
+	sourceEntries, err := os.ReadDir(sourceDir)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
+	targetEntries, err := os.ReadDir(targetDir)
+	if err != nil {
+		return err
+	}
 
-	knownCacheFiles := map[string]struct{}{"token.json": {}, "password": {}}
-	for _, entry := range entries {
-		if _, ok := knownCacheFiles[entry.Name()]; !ok {
-			return fmt.Errorf("unexpected cache entry %q", entry.Name())
+	sourceNewest, err := newestCacheEntryModTime(sourceEntries)
+	if err != nil {
+		return err
+	}
+	targetNewest, err := newestCacheEntryModTime(targetEntries)
+	if err != nil {
+		return err
+	}
+
+	if !sourceNewest.After(targetNewest) {
+		// targetDir is at least as recent as sourceDir: discard sourceDir entirely.
+		return os.RemoveAll(sourceDir)
+	}
+
+	// sourceDir is more recent: replace targetDir wholesale so that no
+	// target-only files from a previous login survive. Use a unique staging
+	// directory so an abandoned staging directory from an interrupted
+	// consolidation cannot block future attempts.
+	stagingDir, err := os.MkdirTemp(filepath.Dir(targetDir), filepath.Base(targetDir)+".staging-*")
+	if err != nil {
+		return err
+	}
+	stagedTargetDir := filepath.Join(stagingDir, filepath.Base(targetDir))
+	if err := os.Rename(targetDir, stagedTargetDir); err != nil {
+		return errors.Join(err, os.RemoveAll(stagingDir))
+	}
+	if err := os.Rename(sourceDir, targetDir); err != nil {
+		// Roll back: restore targetDir from the staging copy.
+		if rollbackErr := os.Rename(stagedTargetDir, targetDir); rollbackErr != nil {
+			return errors.Join(err, fmt.Errorf("could not roll back target cache directory: %w", rollbackErr))
 		}
+		return errors.Join(err, os.RemoveAll(stagingDir))
+	}
+	if err := os.RemoveAll(stagingDir); err != nil {
+		// The directory swap has already committed, so cleanup failure must not
+		// leave the session pointed at the removed source directory.
+		log.Warningf(context.Background(), "Could not remove staging cache directory %q: %v", stagingDir, err)
+	}
+	return nil
+}
+
+// newestCacheEntryModTime returns the most recent modification time among entries, which must all
+// be regular files (cache directories are never expected to contain subdirectories or symlinks).
+func newestCacheEntryModTime(entries []os.DirEntry) (time.Time, error) {
+	var newest time.Time
+	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {
-			return err
+			return time.Time{}, err
 		}
 		if !info.Mode().IsRegular() {
-			return fmt.Errorf("unexpected non-regular cache entry %q", entry.Name())
+			return time.Time{}, fmt.Errorf("unexpected non-regular cache entry %q", entry.Name())
 		}
-
-		targetPath := filepath.Join(targetDir, entry.Name())
-		targetInfo, err := os.Lstat(targetPath)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		if !targetInfo.Mode().IsRegular() {
-			return fmt.Errorf("target cache entry %q already exists and is not regular", entry.Name())
-		}
-
-		sourceContent, err := os.ReadFile(filepath.Join(sourceDir, entry.Name()))
-		if err != nil {
-			return err
-		}
-		targetContent, err := os.ReadFile(targetPath)
-		if err != nil {
-			return err
-		}
-		if !slices.Equal(sourceContent, targetContent) {
-			return fmt.Errorf("target cache entry %q already exists with different content", entry.Name())
+		if info.ModTime().After(newest) {
+			newest = info.ModTime()
 		}
 	}
-
-	for _, entry := range entries {
-		sourcePath := filepath.Join(sourceDir, entry.Name())
-		targetPath := filepath.Join(targetDir, entry.Name())
-		if _, err := os.Lstat(targetPath); errors.Is(err, os.ErrNotExist) {
-			if err := os.Rename(sourcePath, targetPath); err != nil {
-				return err
-			}
-			continue
-		} else if err != nil {
-			return err
-		}
-
-		if err := os.Remove(sourcePath); err != nil {
-			return err
-		}
-	}
-
-	return os.Remove(sourceDir)
+	return newest, nil
 }
 
 func (b *Broker) ensureUsernameCompatibilityPath(username, providerIDDir string) error {
@@ -528,7 +553,7 @@ func (b *Broker) ensureUsernameCompatibilityPath(username, providerIDDir string)
 	if !info.IsDir() {
 		return fmt.Errorf("path already exists and is not a directory or symlink")
 	}
-	if err := consolidateKnownCacheFiles(usernameDir, providerIDDir); err != nil {
+	if err := consolidateCacheDirs(usernameDir, providerIDDir); err != nil {
 		return err
 	}
 
@@ -590,7 +615,7 @@ func (b *Broker) redirectToExistingProviderIDDir(s *session, providerID, provide
 	log.Infof(context.Background(), "Redirecting cache for user %q to existing provider ID-based directory %q", s.username, providerIDDir)
 
 	if info, lstatErr := os.Lstat(s.userDataDir); lstatErr == nil && info.IsDir() {
-		if moveErr := consolidateKnownCacheFiles(s.userDataDir, providerIDDir); moveErr != nil {
+		if moveErr := consolidateCacheDirs(s.userDataDir, providerIDDir); moveErr != nil {
 			log.Warningf(context.Background(), "Could not consolidate cache directory %q into %q: %v", s.userDataDir, providerIDDir, moveErr)
 			return
 		}
