@@ -220,6 +220,10 @@ func TestDbusBrokerCallTranslatesErrors(t *testing.T) {
 				require.Contains(t, err.Error(), "mybroker", "message should name the broker")
 				require.Contains(t, err.Error(), "Is it running?",
 					"message should help the administrator diagnose the failure")
+				require.Contains(t, err.Error(), brokerStatusCommand,
+					"message should show how to check the broker status")
+				require.NotContains(t, err.Error(), fmt.Sprintf("%q", brokerStatusCommand),
+					"message should not quote the complete command")
 
 				_, displayErr := errmessages.RedactErrorInterceptor(
 					context.Background(),
@@ -232,6 +236,8 @@ func TestDbusBrokerCallTranslatesErrors(t *testing.T) {
 				require.Error(t, displayErr)
 				require.Contains(t, displayErr.Error(), "Please contact your administrator.",
 					"message should tell the user to contact their administrator")
+				require.NotContains(t, displayErr.Error(), brokerStatusCommand,
+					"status guidance should remain in the administrator log")
 				return
 			}
 			require.Contains(t, err.Error(), tc.wantPassthrough,

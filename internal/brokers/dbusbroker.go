@@ -61,9 +61,12 @@ var brokerUnavailableDBusErrors = map[string]bool{
 	"org.freedesktop.DBus.Error.Spawn.Failed":        true,
 }
 
+const brokerStatusCommand = "sudo systemctl status 'snap.authd-*.service'"
+
 func brokerUnavailableError(name string) error {
 	return brokerUnavailableMessageError{
-		logError: fmt.Errorf("Couldn't connect to broker %q. Is it running?", name), //nolint:staticcheck // ST1005 This error is logged as is.
+		logError: fmt.Errorf("Couldn't connect to broker %q. Is it running? Check broker service status with: %s.", //nolint:staticcheck,revive // ST1005 This error is logged as is.
+			name, brokerStatusCommand),
 		displayError: errmessages.NewToDisplayError(
 			fmt.Errorf("Couldn't connect to broker %q. Please contact your administrator.", name)), //nolint:staticcheck,revive // ST1005 This error is displayed as is to the user.
 	}
