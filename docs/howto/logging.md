@@ -111,62 +111,28 @@ Then you need to restart the service with `sudo systemctl restart gdm`
 
 ### authd broker service
 
-To increase the verbosity of the broker service, edit the service file:
-
 ::::{tab-set}
 :sync-group: broker
 
-
 :::{tab-item} Microsoft Entra ID
 :sync: msentraid
+
+To increase the verbosity of the broker service, edit the service file:
 
 ```shell
 sudo systemctl edit snap.authd-msentraid.authd-msentraid.service
 ```
-:::
-:::{tab-item} Google IAM
-:sync: google
-
-```shell
-sudo systemctl edit snap.authd-google.authd-google.service
-```
-:::
-::::
 
 Add the following lines to the override file and make sure to add `-vv` to the
 exec command:
-
-::::{tab-set}
-:sync-group: broker
-
-
-:::{tab-item} Microsoft Entra ID
-:sync: msentraid
 
 ```ini
 [Service]
 ExecStart=
 ExecStart=/usr/bin/snap run authd-msentraid -vv
 ```
-:::
-:::{tab-item} Google IAM
-:sync: google
-
-```ini
-[Service]
-ExecStart=
-ExecStart=/usr/bin/snap run authd-google -vv
-```
-:::
-::::
 
 You will then need to restart the service, as follows.
-
-::::{tab-set}
-:sync-group: broker
-
-:::{tab-item} Microsoft Entra ID
-:sync: msentraid
 
 On Ubuntu 26.04 or later, you can restart the broker and print its logs with:
 
@@ -182,8 +148,26 @@ sudo systemctl status snap.authd-msentraid.authd-msentraid.service
 ```
 
 :::
+
 :::{tab-item} Google IAM
 :sync: google
+
+To increase the verbosity of the broker service, edit the service file:
+
+```shell
+sudo systemctl edit snap.authd-google.authd-google.service
+```
+
+Add the following lines to the override file and make sure to add `-vv` to the
+exec command:
+
+```ini
+[Service]
+ExecStart=
+ExecStart=/usr/bin/snap run authd-google -vv
+```
+
+You will then need to restart the service, as follows.
 
 On Ubuntu 26.04 or later, you can restart the broker and print its logs with:
 
