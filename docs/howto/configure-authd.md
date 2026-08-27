@@ -571,8 +571,17 @@ broker:
 ::::{tab-item} Google IAM
 :sync: google
 
+On Ubuntu 26.04 or later, you can restart the broker and print its logs with:
+
 ```shell
-sudo snap restart authd-google
+sudo systemctl restart -v snap.authd-google.authd-google.service
+```
+
+On earlier Ubuntu versions, use:
+
+```shell
+sudo systemctl restart snap.authd-google.authd-google.service
+sudo systemctl status snap.authd-google.authd-google.service
 ```
 
 ::::
@@ -580,8 +589,17 @@ sudo snap restart authd-google
 ::::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
+On Ubuntu 26.04 or later, you can restart the broker and print its logs with:
+
 ```shell
-sudo snap restart authd-msentraid
+sudo systemctl restart -v snap.authd-msentraid.authd-msentraid.service
+```
+
+On earlier Ubuntu versions, use:
+
+```shell
+sudo systemctl restart snap.authd-msentraid.authd-msentraid.service
+sudo systemctl status snap.authd-msentraid.authd-msentraid.service
 ```
 
 ::::
@@ -589,8 +607,17 @@ sudo snap restart authd-msentraid
 ::::{tab-item} Keycloak
 :sync: keycloak
 
+On Ubuntu 26.04 or later, you can restart the broker and print its logs with:
+
 ```shell
-sudo snap restart authd-oidc
+sudo systemctl restart -v snap.authd-oidc.authd-oidc.service
+```
+
+On earlier Ubuntu versions, use:
+
+```shell
+sudo systemctl restart snap.authd-oidc.authd-oidc.service
+sudo systemctl status snap.authd-oidc.authd-oidc.service
 ```
 
 ::::

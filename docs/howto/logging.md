@@ -54,7 +54,7 @@ For the GDM integration:
 sudo journalctl /usr/bin/gnome-shell
 ```
 
-For anything else or more broader investigation, use `sudo journalctl`.
+For anything else or more broader investigation, use `sudo journalctl`
 
 ## Configure logging verbosity
 
@@ -93,7 +93,7 @@ ExecStart=
 ExecStart=/usr/libexec/authd -vv
 ```
 
-Then you need to restart the service with `sudo systemctl restart authd`.
+Then you need to restart the service with `sudo systemctl restart authd`
 
 ### GDM
 
@@ -107,7 +107,7 @@ Ensure the lines in `/etc/gdm3/custom.conf` are not commented:
 Enable=true
 ```
 
-Then you need to restart the service with `sudo systemctl restart gdm`.
+Then you need to restart the service with `sudo systemctl restart gdm`
 
 ### authd broker service
 
@@ -159,7 +159,7 @@ ExecStart=/usr/bin/snap run authd-msentraid -vv
 ```
 ::::
 
-You will then need to restart the service with:
+You will then need to restart the service, as follows.
 
 ::::{tab-set}
 :sync-group: broker
@@ -167,12 +167,35 @@ You will then need to restart the service with:
 :::{tab-item} Google IAM
 :sync: google
 
-`sudo snap restart authd-google`.
+On Ubuntu 26.04 or later, you can restart the broker and print its logs with:
+
+```
+sudo systemctl restart -v snap.authd-google.authd-google.service
+```
+
+On earlier Ubuntu versions, use:
+
+```
+sudo systemctl restart snap.authd-google.authd-google.service
+sudo systemctl status snap.authd-google.authd-google.service
+```
 :::
 
 :::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
-`sudo snap restart authd-msentraid`.
+On Ubuntu 26.04 or later, you can restart the broker and print its logs with:
+
+```
+sudo systemctl restart -v snap.authd-msentraid.authd-msentraid.service
+```
+
+On earlier Ubuntu versions, use:
+
+```
+sudo systemctl restart snap.authd-msentraid.authd-msentraid.service
+sudo systemctl status snap.authd-msentraid.authd-msentraid.service
+```
+
 :::
 ::::
