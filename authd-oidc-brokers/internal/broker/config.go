@@ -8,11 +8,13 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"text/template"
 	"unicode"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/canonical/authd/log"
 	"gopkg.in/ini.v1"
 )
@@ -108,6 +110,7 @@ var (
 
 type provider interface {
 	NormalizeUsername(username string) string
+	SupportedOnlineAuthModes() []string
 }
 
 // configFile holds the path and content of a configuration file.
@@ -393,7 +396,7 @@ func parseConfig(cfg configFile, dropInCfgs []configFile, p provider) (userConfi
 		uc.registerDevice, _ = entraID.Key(registerDeviceKey).Bool()
 	}
 
-	uc.flows, err = parseFlowsConfig(iniCfg.Section(flowsSection), uc.registerDevice)
+	uc.flows, err = parseFlowsConfig(iniCfg.Section(flowsSection), uc.registerDevice, p)
 	if err != nil {
 		return userConfig{}, err
 	}
@@ -486,35 +489,63 @@ func (uc *userConfig) registerOwner(cfgPath, userName string) error {
 
 // parseFlowsConfig parses the [flows] section and returns a flowsConfig with
 // defaults for missing keys.
-func parseFlowsConfig(section *ini.Section, registerDevice bool) (flowsConfig, error) {
+func parseFlowsConfig(section *ini.Section, registerDevice bool, p provider) (flowsConfig, error) {
 	fc := defaultFlowsConfig(registerDevice)
 
-	if section == nil {
-		return fc, nil
-	}
+	if section != nil {
+		if section.HasKey(flowsDeviceAuthKey) {
+			val, err := section.Key(flowsDeviceAuthKey).Bool()
+			if err != nil {
+				log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (%t)", flowsDeviceAuthKey, flowsSection, fc.DeviceAuth)
+			} else {
+				fc.DeviceAuth = val
+			}
+		}
 
-	if section.HasKey(flowsDeviceAuthKey) {
-		val, err := section.Key(flowsDeviceAuthKey).Bool()
-		if err != nil {
-			log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (%t)", flowsDeviceAuthKey, flowsSection, fc.DeviceAuth)
-		} else {
-			fc.DeviceAuth = val
+		if section.HasKey(flowsEntraAuthKey) {
+			val, err := section.Key(flowsEntraAuthKey).Bool()
+			if err != nil {
+				log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (%t)", flowsEntraAuthKey, flowsSection, fc.EntraAuth)
+			} else {
+				fc.EntraAuth = val
+			}
 		}
 	}
 
-	if section.HasKey(flowsEntraAuthKey) {
-		val, err := section.Key(flowsEntraAuthKey).Bool()
-		if err != nil {
-			log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (%t)", flowsEntraAuthKey, flowsSection, fc.EntraAuth)
-		} else {
-			fc.EntraAuth = val
-		}
-	}
-
-	if !fc.DeviceAuth && !fc.EntraAuth {
-		return flowsConfig{}, fmt.Errorf("invalid [%s] configuration: all authentication flows are disabled; at least one of the %q or %q flows must be enabled",
-			flowsSection, flowsDeviceAuthKey, flowsEntraAuthKey)
+	supportedModes := p.SupportedOnlineAuthModes()
+	if !hasEnabledSupportedFlow(fc, supportedModes) {
+		return flowsConfig{}, invalidFlowsConfigError(supportedModes)
 	}
 
 	return fc, nil
+}
+
+func hasEnabledSupportedFlow(fc flowsConfig, supportedModes []string) bool {
+	deviceAuthSupported := slices.Contains(supportedModes, authmodes.Device) || slices.Contains(supportedModes, authmodes.DeviceQr)
+	entraAuthSupported := slices.Contains(supportedModes, authmodes.EntraAuth)
+
+	return (fc.DeviceAuth && deviceAuthSupported) || (fc.EntraAuth && entraAuthSupported)
+}
+
+// Keep the error provider-specific so it only suggests flows the broker can
+// actually offer, such as not mentioning Entra authentication for Google.
+func invalidFlowsConfigError(supportedModes []string) error {
+	var flowKeys []string
+	if slices.Contains(supportedModes, authmodes.Device) || slices.Contains(supportedModes, authmodes.DeviceQr) {
+		flowKeys = append(flowKeys, flowsDeviceAuthKey)
+	}
+	if slices.Contains(supportedModes, authmodes.EntraAuth) {
+		flowKeys = append(flowKeys, flowsEntraAuthKey)
+	}
+
+	switch len(flowKeys) {
+	case 0:
+		return fmt.Errorf("invalid [%s] configuration: all supported authentication flows are disabled", flowsSection)
+	case 1:
+		return fmt.Errorf("invalid [%s] configuration: no supported authentication flows are enabled; the %q flow must be enabled",
+			flowsSection, flowKeys[0])
+	default:
+		return fmt.Errorf("invalid [%s] configuration: no supported authentication flows are enabled; at least one of the %q or %q flows must be enabled",
+			flowsSection, flowKeys[0], flowKeys[1])
+	}
 }
