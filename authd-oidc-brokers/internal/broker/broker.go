@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1448,7 +1449,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 				session.nextAuthModes = reauthModes
 				return AuthNext, errorMessage{Message: "Your password was changed remotely. Please re-authenticate."}
 			}
-			if b.provider.IsTokenExpiredError(retrieveErr) {
+			if b.provider.IsTokenExpiredError(retrieveErr) && b.cfg.forceAccessCheckWithProvider {
 				log.Noticef(context.Background(), "Refresh token expired for user %q, re-authentication required", session.username)
 				session.nextAuthModes = reauthModes
 				return AuthNext, errorMessage{Message: "Refresh token expired, please authenticate again."}
@@ -1468,17 +1469,37 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 			}
 		}
 		if err != nil {
-			log.Errorf(context.Background(), "Failed to refresh token: %s", err)
-
-			// Fall back to offline mode for transient network failures (e.g. timeout, DNS,
-			// connection refused). Unless provider authentication is forced.
+			var authoritativeErr *providerErrors.AuthoritativeError
+			var nonAuthoritativeErr *providerErrors.NonAuthoritativeError
 			var netErr net.Error
-			if errors.As(err, &netErr) && !b.cfg.forceAccessCheckWithProvider {
-				log.Warningf(context.Background(), "Network error during token refresh for user %q, skipping token refresh", session.username)
+			switch {
+			case errors.As(err, &authoritativeErr):
+				// Preserve a displayable authoritative error and deny instead of
+				// falling back to cached credentials.
+				return AuthDenied, errorMessageForDisplay(err, "Failed to refresh token")
+			case isConfigurationRetrieveError(retrieveErr):
+				return AuthDenied, errorMessageForDisplay(err, "Failed to refresh token")
+			case isTransientRetrieveError(retrieveErr):
+				log.Warningf(context.Background(), "Transient token endpoint error during token refresh for user %q: %s", session.username, err)
+			case retrieveErr != nil && b.provider.IsTokenExpiredError(retrieveErr):
+				log.Warningf(context.Background(), "Expired refresh token during token refresh for user %q; using cached credentials when provider access checks are optional", session.username)
+			case errors.As(err, &netErr):
+				log.Warningf(context.Background(), "Network error during token refresh for user %q: %s", session.username, err)
+			case errors.As(err, &nonAuthoritativeErr):
+				log.Warningf(context.Background(), "Non-authoritative error during token refresh for user %q: %s", session.username, err)
+			default:
+				log.Warningf(context.Background(), "Unclassified error during token refresh for user %q: %s", session.username, err)
+			}
+
+			// Fall back to offline mode only for failures known not to establish
+			// that cached access is invalid. Unless provider authentication is
+			// forced, local password authentication remains sufficient.
+			if !b.cfg.forceAccessCheckWithProvider {
+				log.Warningf(context.Background(), "Token refresh failed for user %q, skipping token refresh", session.username)
 				authInfo = oldAuthInfo
 				session.isOffline = true
 			} else {
-				return AuthDenied, errorMessage{Message: "Failed to refresh token"}
+				return AuthDenied, errorMessageForDisplay(err, "Failed to refresh token")
 			}
 		}
 	}
@@ -2368,6 +2389,25 @@ func isAADSTSGrantRevokedError(err *oauth2.RetrieveError) bool {
 	return strings.HasPrefix(err.ErrorDescription, "AADSTS50173:")
 }
 
+func isConfigurationRetrieveError(err *oauth2.RetrieveError) bool {
+	return err != nil && err.ErrorCode == "invalid_client"
+}
+
+func isTransientRetrieveError(err *oauth2.RetrieveError) bool {
+	if err == nil {
+		return false
+	}
+
+	switch err.ErrorCode {
+	case "server_error", "temporarily_unavailable":
+		return true
+	case "":
+		return err.Response != nil && err.Response.StatusCode >= http.StatusInternalServerError && err.Response.StatusCode < 600
+	default:
+		return false
+	}
+}
+
 // isFIDOMethod returns true if the MFA method is a FIDO/security key method.
 func isFIDOMethod(method string) bool {
 	method = strings.ToLower(method)
@@ -2716,9 +2756,9 @@ func (b *Broker) updateSession(sessionID string, session session) error {
 // liveness/revocation check on a returning login. The provider performs a public
 // refresh (no client_secret) as the Microsoft Broker App; on success the rotated
 // refresh token replaces the cached one (kept fresh on each login, like the
-// device-auth refresh). Errors are returned unwrapped so the caller classifies them
-// with the same checks it uses for device-auth (IsUserDisabledError → AADSTS50057,
-// IsTokenExpiredError → AADSTS50173, isAADSTSGrantRevokedError, net.Error → offline).
+// device-auth refresh). Explicit disabled, expired, and revoked errors are
+// handled before network and explicitly non-authoritative failures fall back to
+// offline mode when provider access checks are optional.
 func (b *Broker) refreshEntraToken(ctx context.Context, session *session, oldToken *token.AuthCachedInfo) (*token.AuthCachedInfo, error) {
 	ep, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](b.provider)
 	if !ok {
@@ -2727,7 +2767,7 @@ func (b *Broker) refreshEntraToken(ctx context.Context, session *session, oldTok
 		// deployment is misconfigured: fail the login rather than skipping the
 		// liveness/revocation check, which would let a deleted/disabled user keep
 		// logging in with the cached token.
-		return nil, fmt.Errorf("provider does not implement EntraAuthProvider; cannot refresh entra_auth token for user %q", oldToken.UserInfo.Name)
+		return nil, &providerErrors.AuthoritativeError{Err: fmt.Errorf("provider does not implement EntraAuthProvider; cannot refresh entra_auth token for user %q", oldToken.UserInfo.Name)}
 	}
 	refreshCtx, cancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer cancel()
@@ -2758,12 +2798,12 @@ func (b *Broker) refreshEntraToken(ctx context.Context, session *session, oldTok
 		// rotated token even though this login is denied, otherwise a local issue
 		// such as clock skew can strand the cache with a dead refresh token.
 		cacheRotatedToken("verification failure")
-		return oldToken, fmt.Errorf("access token verification failed: %w", err)
+		return oldToken, &providerErrors.NonAuthoritativeError{Err: fmt.Errorf("access token verification failed: %w", err)}
 	}
 	userInfo, err := ep.UserInfoFromAccessToken(newTok.AccessToken)
 	if err != nil {
 		cacheRotatedToken("user info extraction failure")
-		return oldToken, fmt.Errorf("could not refresh user info from the refreshed Entra token: %w", err)
+		return oldToken, &providerErrors.NonAuthoritativeError{Err: fmt.Errorf("could not refresh user info from the refreshed Entra token: %w", err)}
 	}
 	// getUserInfo (the device-auth refresh path) re-checks this on every refresh,
 	// not just on first login; do the same here so a refreshed Entra token can't
@@ -2831,7 +2871,7 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 		// refresh token even if a later local validation step fails, otherwise the
 		// cache can be stranded with a refresh token the provider already invalidated.
 		cacheRotatedToken("user info refresh failure")
-		return oldToken, err
+		return oldToken, &providerErrors.NonAuthoritativeError{Err: err}
 	}
 	if t.UserInfo.Gecos == "" {
 		t.UserInfo.Gecos = oldToken.UserInfo.Gecos
@@ -2891,7 +2931,7 @@ func (b *Broker) getUserInfo(ctx context.Context, session *session, token *oauth
 			return info.User{}, fmt.Errorf("could not decode UserInfo endpoint claims: %w", err)
 		}
 		if subClaimCheck.Sub != "" && subClaimCheck.Sub != idToken.Subject {
-			return info.User{}, fmt.Errorf("userinfo sub %q does not match ID token sub %q: rejecting potential identity substitution", subClaimCheck.Sub, idToken.Subject)
+			return info.User{}, &providerErrors.AuthoritativeError{Err: fmt.Errorf("userinfo sub %q does not match ID token sub %q: rejecting potential identity substitution", subClaimCheck.Sub, idToken.Subject)}
 		}
 
 		// Merge ID token claims with UserInfo claims.

@@ -52,3 +52,63 @@ func TestRetryWithDeviceAuthError(t *testing.T) {
 		require.Equal(t, original, target)
 	})
 }
+
+func TestAuthoritativeError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Error_returns_wrapped_error_message_when_error_is_set", func(t *testing.T) {
+		t.Parallel()
+
+		inner := errors.New("inner error")
+		err := &providerErrors.AuthoritativeError{Err: inner}
+		require.Equal(t, "inner error", err.Error())
+	})
+
+	t.Run("Error_returns_default_message_when_error_is_nil", func(t *testing.T) {
+		t.Parallel()
+
+		err := &providerErrors.AuthoritativeError{}
+		require.Equal(t, "authoritative provider error", err.Error())
+	})
+
+	t.Run("Unwrap_returns_wrapped_error", func(t *testing.T) {
+		t.Parallel()
+
+		inner := errors.New("inner error")
+		err := &providerErrors.AuthoritativeError{Err: inner}
+		require.Equal(t, inner, err.Unwrap())
+		require.ErrorIs(t, err, inner)
+	})
+
+	t.Run("Unwrap_returns_nil_when_no_wrapped_error", func(t *testing.T) {
+		t.Parallel()
+
+		err := &providerErrors.AuthoritativeError{}
+		require.Nil(t, err.Unwrap())
+	})
+
+	t.Run("errors_As_matches_AuthoritativeError", func(t *testing.T) {
+		t.Parallel()
+
+		inner := errors.New("cause")
+		original := &providerErrors.AuthoritativeError{Err: inner}
+		var target *providerErrors.AuthoritativeError
+		require.ErrorAs(t, original, &target)
+		require.Equal(t, original, target)
+	})
+}
+
+func TestNonAuthoritativeError(t *testing.T) {
+	t.Parallel()
+
+	inner := errors.New("inner error")
+	err := &providerErrors.NonAuthoritativeError{Err: inner}
+	require.Equal(t, "inner error", err.Error())
+	require.ErrorIs(t, err, inner)
+
+	var target *providerErrors.NonAuthoritativeError
+	require.ErrorAs(t, err, &target)
+	require.Equal(t, err, target)
+	require.Nil(t, (&providerErrors.NonAuthoritativeError{}).Unwrap())
+	require.Equal(t, "non-authoritative provider error", (&providerErrors.NonAuthoritativeError{}).Error())
+}
