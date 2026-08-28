@@ -101,6 +101,9 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	}
 	if cfg.deviceAuthFlowDisabled || cfg.entraAuthFlowDisabled {
 		cfg.SetFlows(!cfg.deviceAuthFlowDisabled, !cfg.entraAuthFlowDisabled)
+	} else {
+		// Most broker tests exercise the authentication flows explicitly.
+		cfg.SetFlows(true, true)
 	}
 	if cfg.homeBaseDir != "" {
 		cfg.SetHomeBaseDir(cfg.homeBaseDir)

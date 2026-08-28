@@ -25,9 +25,16 @@ Microsoft Entra ID supports the following authentication flows:
   For offline login, it stores only a salted hash of the Entra ID or local
   password. See [Stored secrets](/explanation/security.md#stored-secrets).
 
-Both flows are enabled by default and can be individually configured using the
-`[flows]` section of the broker configuration file. See
+The device code flow is enabled by default. If `entra_auth` is omitted, its
+default follows `register_device`: it is enabled when device registration is
+enabled and disabled otherwise. New Entra broker configurations explicitly set
+`entra_auth = false`; enable it only after enabling device registration or
+configuring a client secret. Both flows can be individually configured using
+the `[flows]` section of the broker configuration file. See
 [Configure authentication flows](ref::config-auth-flows) for details.
+
+At least one authentication flow must be enabled. A configuration that
+explicitly disables both flows is invalid, and the broker fails to start.
 
 The **Entra authentication** flow has additional requirements for resolving group
 membership, depending on whether device registration is enabled. Enabling it
