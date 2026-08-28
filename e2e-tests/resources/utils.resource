@@ -20,6 +20,7 @@ ${SUITE_OUTPUT_DIR}    ${OUTPUT_DIR}/${SUITE_NAME.rsplit('.')[-1]}
 ${YARF_IMAGE_DIR}    ${SUITE_OUTPUT_DIR}/screenshots
 ${OCR_CONFIDENCE_THRESHOLD}    94
 ${OCR_SIMILARITY_THRESHOLD}    92
+${guest_clock_changed}    ${False}
 
 
 *** Keywords ***
@@ -255,6 +256,27 @@ Sync System Time
 Wait Until System Time Synced
     Wait Until Keyword Succeeds    1 min    1 sec
     ...    Sync System Time
+
+
+Set Guest Clock In Future
+    [Documentation]    Stops guest time synchronization and moves the guest clock one day ahead.
+    Set Test Variable    ${guest_clock_changed}    ${True}
+    ${change_guest_clock_command}=    Catenate    SEPARATOR=&&
+    ...    timedatectl set-ntp false
+    ...    systemctl stop systemd-timesyncd.service
+    ...    timedatectl set-time "$(date -d '+1 day' '+%Y-%m-%d %H:%M:%S')"
+    ...    date --iso-8601=seconds
+    ${clock}=    SSH.Execute    ${change_guest_clock_command}
+    Log    Guest clock is ${clock}
+
+
+Restore Guest Clock
+    [Documentation]    Re-enables guest time synchronization and waits for it to catch up.
+    ${restore_guest_clock_command}=    Catenate    SEPARATOR=&&
+    ...    timedatectl set-ntp true
+    ...    systemctl restart systemd-timesyncd.service
+    SSH.Execute    ${restore_guest_clock_command}
+    Wait Until System Time Synced
 
 
 Try machinectl login Prompt
