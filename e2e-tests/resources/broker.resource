@@ -301,13 +301,13 @@ Log In With Remote User Through SSH: Local Password
 
 Log In With Remote User Through GDM: QR Code
     [Arguments]    ${username}    ${local_password}
-    Start Log In With Remote User Through GDM: QR Code    ${username}
+    Start Log In With Remote User Through GDM    ${username}
     Select Broker Through GDM
     Continue Log In With Remote User: Authenticate In External Browser
     Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
 
 
-Start Log In With Remote User Through GDM: QR Code
+Start Log In With Remote User Through GDM
     [Arguments]    ${username}
     Wait Until GDM Login Screen Ready
     Move Pointer To Not listed
@@ -342,7 +342,7 @@ Continue Log In With Remote User Through GDM: Define Local Password
 
 Log In With Remote User Through GDM: Entra Password
     [Arguments]    ${username}
-    Start Log In With Remote User Through GDM: QR Code    ${username}
+    Start Log In With Remote User Through GDM    ${username}
     Select Broker Through GDM
     Continue Log In With Remote User Through GDM: Entra Password
 
