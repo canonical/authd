@@ -340,6 +340,29 @@ Continue Log In With Remote User Through GDM: Define Local Password
     Wait Until Desktop Ready
 
 
+Log In With Remote User Through GDM: Entra Password
+    [Arguments]    ${username}
+    Start Log In With Remote User Through GDM: QR Code    ${username}
+    Select Broker Through GDM
+    Continue Log In With Remote User Through GDM: Entra Password
+
+
+Continue Log In With Remote User Through GDM: Entra Password
+    # With the device code flow disabled there is only one flow; the PAM module
+    # auto-selects it and goes directly to the Entra ID password prompt.
+    Match Text    Enter your Entra ID password:    30    similarity=90
+    Hid.Type String    %{E2E_PASSWORD}
+    Hid.Keys Combo    Return
+
+    # Wait for the MFA code prompt and enter a fresh TOTP code.
+    Match Text    Enter your MFA code:    120    similarity=88
+    ${totp_code} =    TOTP.Generate Totp Code
+    Hid.Type String    ${totp_code}
+    Hid.Keys Combo    Return
+
+    Wait Until Desktop Ready
+
+
 Log In With Remote User Through GDM: Local Password
     [Arguments]    ${username}    ${local_password}
     Wait Until GDM Login Screen Ready
@@ -490,3 +513,28 @@ Log In With Remote User Through CLI: Entra Passwordless TAP
 
     # No cached Entra password: chain into newpassword to set a local one.
     Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
+
+Log In With Remote User Through Polkit: Entra Password
+    [Arguments]    ${username}
+
+    # Polkit auto-selects authentication via local password.
+    # Cancel it ('r') to go back to the authentication-flow menu and choose the
+    # Entra ID password + MFA flow instead.
+    Match Text    Enter your password    30
+    Hid.Type String    r
+    Hid.Keys Combo    Return
+
+    Match Text    Choose your authentication flow    30
+    Match Text    2. Entra ID authentication    15
+    Hid.Type String    2
+    Hid.Keys Combo    Return
+
+    Match Text    Enter your Entra ID password:    30    similarity=90
+    Hid.Type String    %{E2E_PASSWORD}
+    Hid.Keys Combo    Return
+
+    Match Text    Enter your MFA code:    30    similarity=88
+    ${totp_code} =    TOTP.Generate Totp Code
+    Hid.Type String    ${totp_code}
+    Hid.Keys Combo    Return
+    Match Text    @ubuntu:~$    10
