@@ -247,9 +247,10 @@ client_secret = <CLIENT_SECRET>
 (ref::config-force-provider-auth)=
 ## Force remote access check with the identity provider
 
-By default, remote authentication with the identity provider only happens if
-there is a working internet connection and the provider is reachable during
-login.
+By default, the provider access check during remote login is best effort. A
+valid local password is sufficient when the check cannot be completed for a
+reason that does not indicate revoked access, such as a network or token
+verification error.
 
 To ensure that user access permissions are always checked with the identity
 provider during login, even when the provider is unreachable, enable the check
