@@ -71,12 +71,15 @@ authd uses libpwquality to enforce password complexity requirements. See the
 
 If the identity provider is reachable during login, authd verifies that the user
 is still allowed to authenticate with the identity provider. If the user's
-account has been disabled or removed, login is denied.
+account has been disabled or removed, login is denied. If the check fails for a
+non-authoritative reason, such as a network or token verification error, authd
+continues with the local password by default. Authoritative identity or
+configuration failures still deny login. When forced provider authentication is
+enabled, non-authoritative failures also deny login.
 
-By default, if the identity provider cannot be reached (for example, due to
-network issues), users can still log in with their local password. This is to
-prevent accidental lockouts, but it also allows users whose access has been
-revoked at the identity provider to log in while the provider is unreachable.
+By default, this prevents accidental lockouts, but it also allows users whose
+access has been revoked at the identity provider to log in while the provider
+cannot confirm that revocation.
 
 To enforce verification with the identity provider even when it is unreachable,
 enable the [force_access_check_with_provider](ref::config-force-provider-auth)
