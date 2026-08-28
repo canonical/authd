@@ -58,13 +58,17 @@ func (p GenericProvider) GetUserInfo(claimer info.Claimer, _ bool) (info.User, e
 	if !present {
 		return info.User{}, &providerErrors.ForDisplayError{
 			Message: "Authentication failure: email not verified",
-			Err:     providerErrors.NewMissingClaimError("email_verified"),
+			Err: &providerErrors.AuthoritativeError{
+				Err: providerErrors.NewMissingClaimError("email_verified"),
+			},
 		}
 	}
 	if verified, ok := rawEmailVerified.(bool); !ok || !verified {
 		return info.User{}, &providerErrors.ForDisplayError{
 			Message: "Authentication failure: email not verified",
-			Err:     errors.New("email_verified claim value is false or malformed"),
+			Err: &providerErrors.AuthoritativeError{
+				Err: errors.New("email_verified claim value is false or malformed"),
+			},
 		}
 	}
 
@@ -92,7 +96,10 @@ func (p GenericProvider) NormalizeUsername(username string) string {
 func (p GenericProvider) VerifyUsername(requestedUsername, username string) error {
 	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(username) {
 		msg := fmt.Sprintf("Authentication failure: requested username %q does not match the authenticated user %q", requestedUsername, username)
-		return &providerErrors.ForDisplayError{Message: msg}
+		return &providerErrors.ForDisplayError{
+			Message: msg,
+			Err:     &providerErrors.AuthoritativeError{},
+		}
 	}
 	return nil
 }
