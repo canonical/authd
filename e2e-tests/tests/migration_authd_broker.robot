@@ -41,8 +41,6 @@ Test login after upgrading authd and broker
     Log Out From su Session
     Close Focused Window
 
-    # Add the edge PPA to provide dependencies for the authd package under test.
-    Enable Edge Repository For Authd
     Update Broker
     Update Authd
 

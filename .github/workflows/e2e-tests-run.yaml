@@ -237,6 +237,7 @@ jobs:
           BROKER: ${{ inputs.broker }}
           E2E_TESTS: ${{ inputs.e2e-tests }}
           AUTHD_DEB: ${{ steps.download-authd-deb.outputs.deb }}
+          AUTHD_PPA: ${{ inputs.authd-ppa }}
           BROKER_SNAP: ${{ steps.download-broker-snap-from-store.outputs.snap || steps.download-broker-snap-from-oci.outputs.snap }}
         run: |
           set -eux

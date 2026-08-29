@@ -231,6 +231,11 @@ Cancel Operation
 
 
 Update Authd
+    ${authd_ppa}=    Get Environment Variable    AUTHD_PPA    ${EMPTY}
+    IF    $authd_ppa == ''
+        ${authd_ppa}=    Set Variable    ubuntu-enterprise-desktop/authd-edge
+    END
+    SSH.Execute    add-apt-repository ppa:${authd_ppa} -y    timeout=300
     ${authd_deb}=    Get Environment Variable    AUTHD_DEB    ${EMPTY}
     IF    $authd_deb != ''
         SSH.Copy To VM    ${authd_deb}    /home/ubuntu/authd-under-test.deb

@@ -85,11 +85,12 @@ including `--rerunfailed` and `--output-dir`.
 By default, GitHub CI runs the end-to-end tests against both `authd-google` and
 `authd-msentraid`, using the complete test suite and the authd package and
 broker snap built from the current branch. The authd package dependencies
-(gnome-shell) are resolved from the [authd-edge PPA][authd-edge-ppa].
-Migration suites start with the last stable authd and broker releases before
-installing the branch-built package or snap.
+(gnome-shell) are resolved from the [authd-edge PPA][authd-edge-ppa], or from
+the PPA selected with `AUTHD_PPA`. Migration suites start with the last stable
+authd and broker releases before installing the branch-built package or snap.
 To use locally built packages in those suites, set `AUTHD_DEB` and
-`BROKER_SNAP` to their host paths when running `run-tests.sh`.
+`BROKER_SNAP` to their host paths when running `run-tests.sh`. Set `AUTHD_PPA`
+as well when the authd package dependencies should come from a different PPA.
 
 The E2E workflow runs for a pull request only when it has the `e2e-tests` label.
 The pull request template contains commented examples for selecting brokers,

@@ -26,6 +26,7 @@ Prerequisites:
 
 Optional environment variables:
   AUTHD_DEB           Host path to the authd package for migration tests
+  AUTHD_PPA           PPA to use for authd dependencies in migration tests
   BROKER_SNAP         Host path to the broker snap for migration tests
 
 Options:
@@ -218,6 +219,7 @@ env \
     RELEASE="$RELEASE" \
     VM_NAME="$VM_NAME" \
     AUTHD_DEB="${AUTHD_DEB:-}" \
+    AUTHD_PPA="${AUTHD_PPA:-}" \
     BROKER_SNAP="${BROKER_SNAP:-}" \
     VNC_PORT="$VNC_PORT" \
     SYSTEMD_SUPPORTS_VSOCK="${SYSTEMD_SUPPORTS_VSOCK:-}" \

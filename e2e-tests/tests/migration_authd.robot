@@ -37,8 +37,6 @@ Test login after updating authd to the version under test
     Log Out From su Session
     Close Focused Window
 
-    # Add the edge PPA to provide dependencies for the authd package under test.
-    Enable Edge Repository For Authd
     Update Authd
 
     # Log in with remote user with local password after upgrading
