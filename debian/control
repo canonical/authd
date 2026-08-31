@@ -48,7 +48,7 @@ Depends: ${shlibs:Depends},
          ${misc:Depends},
 Recommends: ${misc:Recommends},
             libpam-modules,
-Breaks: gnome-shell (<< 46.3.1-1ubuntu1~24.04.1authd6~)
+Breaks: ${authd:gnome-shell-breaks}
 Description: ${source:Synopsis}
  ${source:Extended-Description}
  .
