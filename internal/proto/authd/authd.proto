@@ -14,6 +14,7 @@ service PAM {
   rpc GetAuthenticationModes(GAMRequest) returns (GAMResponse);
   rpc SelectAuthenticationMode(SAMRequest) returns (SAMResponse);
   rpc IsAuthenticated(IARequest) returns (IAResponse);
+  rpc ReleaseUserAlias(RUARequest) returns (Empty);
   rpc EndSession(ESRequest) returns (Empty);
 
 }
@@ -118,8 +119,12 @@ message IARequest {
 message IAResponse {
   string access = 1;
   string msg = 2;
+  string user_alias_lease_id = 3;
 }
 
+message RUARequest {
+  string lease_id = 1;
+}
 
 message ESRequest {
   string session_id = 1;

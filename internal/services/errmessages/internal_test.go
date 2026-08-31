@@ -60,6 +60,11 @@ func TestFormatErrorMessage(t *testing.T) {
 			inputError:  status.Error(codes.Canceled, "Canceled error"),
 			wantMessage: "rpc error: code = Canceled desc = Canceled error",
 		},
+		// The caller maps this onto a PAM result of its own, so it needs the code, not a message.
+		"Code_NotFound_is_left_untouched": {
+			inputError:  status.Error(codes.NotFound, "NotFound error"),
+			wantMessage: "rpc error: code = NotFound desc = NotFound error",
+		},
 
 		"Parse_code_Unavailable": {
 			inputError:  status.Error(codes.Unavailable, "Unavailable error"),

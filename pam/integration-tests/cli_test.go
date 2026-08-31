@@ -43,6 +43,8 @@ func TestCLIAuthenticate(t *testing.T) {
 		socketPath         string // override socket path
 		useCancelableAuthd bool
 		skipRunnerCheck    bool // skip the final runner-result assertion (use for tests that kill the runner)
+		existingDB         string
+		useShortUsernames  bool
 
 		// flaky marks tests that are known to fail intermittently in certain
 		// environments (e.g. ASAN + Go thread-registry corruption). They are
@@ -477,6 +479,23 @@ func TestCLIAuthenticate(t *testing.T) {
 			extraArgs: []string{"invalid_flag=foo", "bar"},
 			test:      cliSimpleAuth,
 		},
+		"Authenticate_user_with_short_username": {
+			username:          testUserName(t, "short-username"),
+			useShortUsernames: true,
+			test:              cliSimpleAuth,
+		},
+		"Authenticate_existing_user_with_short_username": {
+			username:          examplebroker.UserIntegrationPrefix + "shortusername",
+			useShortUsernames: true,
+			existingDB:        "db_with_short_username",
+			test:              cliSimpleAuth,
+		},
+		"Deny_authentication_if_short_username_is_allowed_but_user_does_not_exist": {
+			username:          examplebroker.UserIntegrationPrefix + "shortusername",
+			useShortUsernames: true,
+			test:              cliShortUsernameRejected,
+		},
+
 		"Remember_last_successful_broker_and_mode": {
 			testRun: func(t *testing.T, socketPath string) string {
 				t.Helper()
@@ -754,7 +773,7 @@ func TestCLIAuthenticate(t *testing.T) {
 
 			var socketPath, groupFileOutput string
 			var cancelAuthd func()
-			if tc.wantLocalGroups || tc.useCancelableAuthd {
+			if tc.wantLocalGroups || tc.useCancelableAuthd || tc.existingDB != "" || tc.useShortUsernames {
 				var groupFile string
 				groupFileOutput, groupFile = prepareGroupFiles(t)
 
@@ -766,6 +785,13 @@ func TestCLIAuthenticate(t *testing.T) {
 					testutils.WithGroupFile(groupFile),
 					testutils.WithGroupFileOutput(groupFileOutput),
 					testutils.WithCurrentUserAsRoot,
+				}
+				if tc.existingDB != "" {
+					existingDBDir := prepareExistingDB(t, tc.existingDB)
+					args = append(args, testutils.WithDBPath(existingDBDir))
+				}
+				if tc.useShortUsernames {
+					args = append(args, testutils.WithShortUsernames())
 				}
 
 				if tc.useCancelableAuthd {
@@ -906,6 +932,15 @@ func cliChangePasswordWithRetry(t *testing.T, c *ptytest.Console, firstNew, firs
 	cliSendPassword(t, c, secondNew)
 	c.WaitFor(t, `Confirm password`)
 	cliSendPassword(t, c, secondNew)
+}
+
+// cliShortUsernameRejected selects the broker and expects authd to refuse the session before any
+// authentication mode is offered, because the short username cannot be resolved to a full one.
+func cliShortUsernameRejected(t *testing.T, c *ptytest.Console) {
+	t.Helper()
+
+	cliSelectBroker(t, c)
+	cliWaitForResult(t, c)
 }
 
 // cliWaitForResult waits for the complete PAM Authenticate() result block.

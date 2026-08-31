@@ -15,6 +15,9 @@ authd.PAM:
         - name: IsAuthenticated
           isclientstream: false
           isserverstream: false
+        - name: ReleaseUserAlias
+          isclientstream: false
+          isserverstream: false
         - name: SelectAuthenticationMode
           isclientstream: false
           isserverstream: false

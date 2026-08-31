@@ -23,6 +23,31 @@
 #GID_MIN: 10000
 #GID_MAX: 60000
 
+## Whether users can log in with a shortened username.
+##
+## Identity providers report usernames that include a domain (e.g. "user@example.com").
+## By default, that is also the name authd creates the user with, so it is the
+## name used for the home directory, the user private group and any local group
+## membership.
+##
+## When this is enabled, authd strips the domain suffix and stores the user as
+## "user" instead, which lets them log in with either form: the domain is added
+## back before contacting the broker. The full username is still
+## required the first time a user logs in, because authd has no way to resolve
+## the domain before it knows the user.
+##
+## Note: a shortened name must be unique. When two users' usernames only differ
+## by their domain (e.g. "user@example.com" and "user@other.com"), the first one
+## to log in gets the shortened name and the other keeps their full username.
+## Both can still log in.
+##
+## Enabling this on an existing installation renames the already known users to
+## their shortened name, keeping their UID, GID and home directory. Disabling it
+## again renames them back. Each user is renamed the next time they successfully
+## authenticate, not when this option changes, so until then they keep the name
+## they were stored under.
+#use_short_usernames: false
+
 ## PAM service settings.
 ##
 ## Brute-force mitigation settings applied to all PAM services by default.

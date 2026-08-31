@@ -489,6 +489,18 @@ func (dc *DummyClient) handleChallenge(secret string, msg string) (*authd.IAResp
 	}, nil
 }
 
+// ReleaseUserAlias simulates ReleaseUserAlias using the provided parameters.
+func (dc *DummyClient) ReleaseUserAlias(ctx context.Context, in *authd.RUARequest, opts ...grpc.CallOption) (*authd.Empty, error) {
+	log.Debugf(ctx, "ReleaseUserAlias Called: %#v", in)
+	if in == nil {
+		return nil, errors.New("no input values provided")
+	}
+	if in.LeaseId == "" {
+		return nil, errors.New("no lease ID provided")
+	}
+	return &authd.Empty{}, nil
+}
+
 // EndSession simulates EndSession using the provided parameters.
 func (dc *DummyClient) EndSession(ctx context.Context, in *authd.ESRequest, opts ...grpc.CallOption) (*authd.Empty, error) {
 	log.Debugf(ctx, "EndSession Called: %#v", in)

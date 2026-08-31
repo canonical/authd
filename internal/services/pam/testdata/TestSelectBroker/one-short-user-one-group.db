@@ -1,0 +1,15 @@
+users:
+    - name: testselectbroker/successfully_select_a_broker_with_full_username_for_short_user_separator_success
+      uid: 77777
+      gid: 88888
+      gecos: gecos for testselectbroker/successfully_select_a_broker_with_full_username_for_short_user_separator_success@example.com
+      dir: /home/testselectbroker/successfully_select_a_broker_with_full_username_for_short_user_separator_success
+      shell: /bin/sh
+      full_username: testselectbroker/successfully_select_a_broker_with_full_username_for_short_user_separator_success@example.com
+groups:
+    - name: group-testselectbroker/successfully_select_a_broker_with_full_username_for_short_user_separator_success
+      gid: 88888
+      ugid: ugid-testselectbroker/successfully_select_a_broker_with_full_username_for_short_user_separator_success
+users_to_groups:
+    - uid: 77777
+      gid: 88888

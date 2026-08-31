@@ -1,0 +1,8 @@
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+(user-integration-pre-check-shortusername@localhost) Choose your provider:
+> 2
+unknown user "user-integration-pre-check-shortusername": the first login has to use the fully qualified username, including the domain
+Received disconnect from ${SSH_HOST} port ${SSH_PORT} Too many authentication failures
+Disconnected from ${SSH_HOST} port ${SSH_PORT}
