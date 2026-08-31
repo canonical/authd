@@ -1,0 +1,35 @@
+# Users stored under a shortened name, to check that the user RPCs accept both the stored name and
+# the fully qualified one, and that the broker is told about the deletion under the fully qualified
+# name it knows the user by.
+#
+# The mock broker fails DeleteUser for any username containing "delete_error", which is here part of
+# the domain only: the call fails if and only if the fully qualified name reaches the broker.
+users:
+    - name: shortuser
+      full_username: shortuser@example.com
+      uid: 1111
+      gid: 11111
+      gecos: ShortUser
+      dir: /home/shortuser
+      shell: /bin/bash
+      broker_id: "1902181170"
+    - name: shortuser2
+      full_username: shortuser2@delete_error.com
+      uid: 2222
+      gid: 22222
+      gecos: ShortUser2
+      dir: /home/shortuser2
+      shell: /bin/bash
+      broker_id: "1902181170"
+groups:
+    - name: shortuser
+      gid: 11111
+      ugid: shortuser@example.com
+    - name: shortuser2
+      gid: 22222
+      ugid: shortuser2@delete_error.com
+users_to_groups:
+    - uid: 1111
+      gid: 11111
+    - uid: 2222
+      gid: 22222

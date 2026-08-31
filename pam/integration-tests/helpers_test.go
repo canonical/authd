@@ -23,6 +23,7 @@ import (
 	"github.com/canonical/authd/internal/testlog"
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/canonical/authd/internal/testutils/ptytest"
+	"github.com/canonical/authd/internal/users/db"
 	"github.com/canonical/authd/pam/internal/adapter"
 	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/stretchr/testify/assert"
@@ -817,4 +818,23 @@ func requireFileContentEventually(t *testing.T, path string, contentOK func(stri
 		assert.True(c, contentOK(out), "%s:\n%s", msg, out)
 	}, testutils.MultipliedSleepDuration(30*time.Second),
 		testutils.MultipliedSleepDuration(tick))
+}
+
+// prepareExistingDB creates a temporary database directory pre-populated from the
+// given YAML fixture in testdata/db and returns its path.
+func prepareExistingDB(t *testing.T, existingDB string) string {
+	t.Helper()
+
+	dbDir := t.TempDir()
+
+	err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", existingDB+".db.yaml"), dbDir)
+	require.NoError(t, err, "Setup: creating existing database")
+
+	return dbDir
+}
+
+// shortUsername returns the name authd stores a user under when short usernames are enabled.
+func shortUsername(username string) string {
+	short, _, _ := strings.Cut(username, "@")
+	return short
 }
