@@ -170,6 +170,7 @@ func TestDbusBrokerCallTranslatesErrors(t *testing.T) {
 
 		wantCanceled    bool
 		wantUnavailable bool
+		wantLogDetail   string
 		// wantPassthrough asserts the original error message is preserved
 		// (i.e. not replaced by the broker unavailable message).
 		wantPassthrough string
@@ -180,6 +181,11 @@ func TestDbusBrokerCallTranslatesErrors(t *testing.T) {
 		"Unknown_interface_is_reported_as_broker_unavailable": {
 			callErr:         dbus.Error{Name: "org.freedesktop.DBus.Error.UnknownInterface"},
 			wantUnavailable: true,
+		},
+		"Initialization_failure_is_reported_as_broker_unavailable": {
+			callErr:         dbus.Error{Name: "com.ubuntu.authd.BrokerUnavailable", Body: []interface{}{"invalid broker configuration"}},
+			wantUnavailable: true,
+			wantLogDetail:   "invalid broker configuration",
 		},
 		"Unknown_service_is_reported_as_broker_unavailable": {
 			callErr:         dbus.Error{Name: "org.freedesktop.DBus.Error.ServiceUnknown"},
@@ -224,6 +230,10 @@ func TestDbusBrokerCallTranslatesErrors(t *testing.T) {
 					"message should show how to check the broker status")
 				require.NotContains(t, err.Error(), fmt.Sprintf("%q", brokerStatusCommand),
 					"message should not quote the complete command")
+				if tc.wantLogDetail != "" {
+					require.Contains(t, err.Error(), tc.wantLogDetail,
+						"message should include the broker's diagnostic")
+				}
 
 				_, displayErr := errmessages.RedactErrorInterceptor(
 					context.Background(),
@@ -238,6 +248,10 @@ func TestDbusBrokerCallTranslatesErrors(t *testing.T) {
 					"message should tell the user to contact their administrator")
 				require.NotContains(t, displayErr.Error(), brokerStatusCommand,
 					"status guidance should remain in the administrator log")
+				if tc.wantLogDetail != "" {
+					require.NotContains(t, displayErr.Error(), tc.wantLogDetail,
+						"broker diagnostic should not be shown to the user")
+				}
 				return
 			}
 			require.Contains(t, err.Error(), tc.wantPassthrough,

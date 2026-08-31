@@ -48,6 +48,7 @@ func (e brokerUnavailableMessageError) Unwrap() error {
 // brokerUnavailableDBusErrors are the D-Bus error names that all indicate the
 // broker isn't running or failed to start. See call() for details.
 var brokerUnavailableDBusErrors = map[string]bool{
+	"com.ubuntu.authd.BrokerUnavailable":             true,
 	"org.freedesktop.DBus.Error.ServiceUnknown":      true,
 	"org.freedesktop.DBus.Error.TimedOut":            true,
 	"org.freedesktop.DBus.Error.NoReply":             true,
@@ -63,10 +64,15 @@ var brokerUnavailableDBusErrors = map[string]bool{
 
 const brokerStatusCommand = "sudo systemctl status 'snap.authd-*.service'"
 
-func brokerUnavailableError(name string) error {
+func brokerUnavailableError(name string, cause error) error {
+	logMessage := fmt.Sprintf("Couldn't connect to broker %q. Is it running? Check broker service status with: %s.",
+		name, brokerStatusCommand)
+	if cause != nil {
+		logMessage += fmt.Sprintf(" Broker error: %v.", cause)
+	}
+
 	return brokerUnavailableMessageError{
-		logError: fmt.Errorf("Couldn't connect to broker %q. Is it running? Check broker service status with: %s.", //nolint:staticcheck,revive // ST1005 This error is logged as is.
-			name, brokerStatusCommand),
+		logError: errors.New(logMessage),
 		displayError: errmessages.NewToDisplayError(
 			fmt.Errorf("Couldn't connect to broker %q. Please contact your administrator.", name)), //nolint:staticcheck,revive // ST1005 This error is displayed as is to the user.
 	}
@@ -196,7 +202,7 @@ func interfaceVersion(iface string) (int, error) {
 func (b *dbusBroker) NewSession(ctx context.Context, username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
 	iface, err := b.resolveInterface()
 	if err != nil {
-		return "", "", brokerUnavailableError(b.name)
+		return "", "", brokerUnavailableError(b.name, err)
 	}
 
 	var call *dbus.Call
@@ -291,7 +297,7 @@ func (b *dbusBroker) UserPreCheck(ctx context.Context, username string) (userinf
 func (b *dbusBroker) DeleteUser(ctx context.Context, username, providerID string) error {
 	iface, err := b.resolveInterface()
 	if err != nil {
-		return brokerUnavailableError(b.name)
+		return brokerUnavailableError(b.name, err)
 	}
 
 	if iface.version < 3 {
@@ -331,7 +337,7 @@ func (b *dbusBroker) resolveInterface() (dbusInterface, error) {
 func (b *dbusBroker) call(ctx context.Context, method string, args ...interface{}) (*dbus.Call, error) {
 	iface, err := b.resolveInterface()
 	if err != nil {
-		return nil, brokerUnavailableError(b.name)
+		return nil, brokerUnavailableError(b.name, err)
 	}
 
 	dbusMethod := iface.name + "." + method
@@ -350,7 +356,7 @@ func (b *dbusBroker) call(ctx context.Context, method string, args ...interface{
 		// of those raw errors are user-friendly, so replace them all with a
 		// message that points at the actual problem.
 		if errors.As(err, &dbusError) && brokerUnavailableDBusErrors[dbusError.Name] {
-			return nil, brokerUnavailableError(b.name)
+			return nil, brokerUnavailableError(b.name, dbusError)
 		}
 		return nil, errmessages.NewToDisplayError(err)
 	}

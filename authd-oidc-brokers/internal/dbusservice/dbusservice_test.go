@@ -1,21 +1,23 @@
 package dbusservice
 
 import (
+	"errors"
 	"testing"
 	"time"
 
-	"github.com/godbus/dbus/v5"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/broker"
 	"github.com/stretchr/testify/require"
 )
 
-func TestGateIncomingCallsWaitsForInitialization(t *testing.T) {
+func TestBrokerForCallWaitsForInitialization(t *testing.T) {
 	service := &Service{initializing: make(chan struct{})}
+	iface := &Interface{service: service}
 	entered := make(chan struct{})
 	finished := make(chan struct{})
 
 	go func() {
 		close(entered)
-		service.gateIncomingCalls(&dbus.Message{Type: dbus.TypeMethodCall})
+		_, _ = iface.brokerForCall()
 		close(finished)
 	}()
 
@@ -26,6 +28,7 @@ func TestGateIncomingCallsWaitsForInitialization(t *testing.T) {
 	default:
 	}
 
+	iface.broker = &broker.Broker{}
 	service.initializationDone()
 
 	select {
@@ -35,10 +38,30 @@ func TestGateIncomingCallsWaitsForInitialization(t *testing.T) {
 	}
 }
 
-func TestGateIncomingCallsDoesNotBlockReplies(t *testing.T) {
+func TestBrokerForCallReturnsInitializationError(t *testing.T) {
 	service := &Service{initializing: make(chan struct{})}
+	iface := &Interface{service: service}
+	wantErr := errors.New("initialization failed")
 
-	require.NotPanics(t, func() {
-		service.gateIncomingCalls(&dbus.Message{Type: dbus.TypeMethodReply})
-	})
+	service.initializationFailed(wantErr)
+
+	b, err := iface.brokerForCall()
+	require.Nil(t, b)
+	require.ErrorIs(t, err, wantErr)
+
+	var unavailableErr *brokerUnavailableError
+	require.ErrorAs(t, err, &unavailableErr)
+}
+
+func TestNewSessionReturnsBrokerUnavailableErrorAfterInitializationFailure(t *testing.T) {
+	service := &Service{initializing: make(chan struct{})}
+	iface := &Interface{service: service}
+	wantErr := errors.New("initialization failed")
+
+	service.initializationFailed(wantErr)
+
+	_, _, dbusErr := iface.NewSession("user@example.com", "en", "login", "provider-id")
+	require.NotNil(t, dbusErr)
+	require.Equal(t, brokerUnavailableDBusErrorName, dbusErr.Name)
+	require.Equal(t, []any{wantErr.Error()}, dbusErr.Body)
 }

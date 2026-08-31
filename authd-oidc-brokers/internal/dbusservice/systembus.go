@@ -8,7 +8,7 @@ import (
 
 // getBus returns the system bus and attach a disconnect handler.
 func (s *Service) getBus() (*dbus.Conn, error) {
-	conn, err := dbus.ConnectSystemBus(dbus.WithIncomingInterceptor(s.gateIncomingCalls))
+	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
 		return nil, err
 	}

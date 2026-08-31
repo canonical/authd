@@ -22,6 +22,7 @@ var systemBusMockCfg = `<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bu
   <type>system</type>
   <keep_umask/>
   <listen>unix:path=%s</listen>
+%s
   <policy context="default">
     <allow user="*"/>
     <allow send_destination="*" eavesdrop="true"/>
@@ -36,22 +37,61 @@ var systemBusMockCfg = `<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bu
 // This function uses os.Setenv to set the DBUS_SYSTEM_BUS_ADDRESS environment, so it shouldn't be used in parallel tests
 // that rely on the mentioned variable.
 func StartSystemBusMock() (func(), error) {
-	if isRunning() {
-		return nil, errors.New("system bus mock is already running")
-	}
-
-	tmp, err := os.MkdirTemp(os.TempDir(), "authd-system-bus-mock")
+	tmp, busAddress, busCancel, err := startBusMock("")
 	if err != nil {
 		return nil, err
+	}
+
+	prev, set := os.LookupEnv("DBUS_SYSTEM_BUS_ADDRESS")
+	os.Setenv("DBUS_SYSTEM_BUS_ADDRESS", busAddress)
+
+	return func() {
+		busCancel()
+		_ = os.RemoveAll(tmp)
+
+		if !set {
+			_ = os.Unsetenv("DBUS_SYSTEM_BUS_ADDRESS")
+		} else {
+			_ = os.Setenv("DBUS_SYSTEM_BUS_ADDRESS", prev)
+		}
+	}, nil
+}
+
+// StartBusMockWithServiceDir starts a mock D-Bus daemon with an additional
+// directory of service activation files.
+func StartBusMockWithServiceDir(serviceDir string) (string, func(), error) {
+	tmp, busAddress, busCancel, err := startBusMock(serviceDir)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return busAddress, func() {
+		busCancel()
+		_ = os.RemoveAll(tmp)
+	}, nil
+}
+
+func startBusMock(serviceDir string) (tmp, busAddress string, cleanup func(), err error) {
+	if isRunning() {
+		return "", "", nil, errors.New("system bus mock is already running")
+	}
+
+	tmp, err = os.MkdirTemp(os.TempDir(), "authd-system-bus-mock")
+	if err != nil {
+		return "", "", nil, err
 	}
 
 	cfgPath := filepath.Join(tmp, "bus.conf")
 	listenPath := filepath.Join(tmp, "bus.sock")
+	serviceDirConfig := ""
+	if serviceDir != "" {
+		serviceDirConfig = fmt.Sprintf("  <servicedir>%s</servicedir>", serviceDir)
+	}
 
-	err = os.WriteFile(cfgPath, []byte(fmt.Sprintf(systemBusMockCfg, listenPath)), 0600)
+	err = os.WriteFile(cfgPath, []byte(fmt.Sprintf(systemBusMockCfg, listenPath, serviceDirConfig)), 0600)
 	if err != nil {
 		err = errors.Join(err, os.RemoveAll(tmp))
-		return nil, err
+		return "", "", nil, err
 	}
 
 	busCtx, busCancel := context.WithCancel(context.Background())
@@ -60,24 +100,14 @@ func StartSystemBusMock() (func(), error) {
 	if err := cmd.Start(); err != nil {
 		busCancel()
 		err = errors.Join(err, os.RemoveAll(tmp))
-		return nil, err
+		return "", "", nil, err
 	}
 	// Give some time for the daemon to start.
 	time.Sleep(500 * time.Millisecond)
 
-	prev, set := os.LookupEnv("DBUS_SYSTEM_BUS_ADDRESS")
-	os.Setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path="+listenPath)
-
-	return func() {
+	return tmp, "unix:path=" + listenPath, func() {
 		busCancel()
 		_ = cmd.Wait()
-		_ = os.RemoveAll(tmp)
-
-		if !set {
-			_ = os.Unsetenv("DBUS_SYSTEM_BUS_ADDRESS")
-		} else {
-			_ = os.Setenv("DBUS_SYSTEM_BUS_ADDRESS", prev)
-		}
 	}, nil
 }
 
