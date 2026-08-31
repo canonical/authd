@@ -231,7 +231,18 @@ Cancel Operation
 
 
 Update Authd
-    SSH.Execute    apt-get install -y authd    timeout=120
+    ${authd_ppa}=    Get Environment Variable    AUTHD_PPA    ${EMPTY}
+    IF    $authd_ppa == ''
+        ${authd_ppa}=    Set Variable    ubuntu-enterprise-desktop/authd-edge
+    END
+    SSH.Execute    add-apt-repository ppa:${authd_ppa} -y    timeout=300
+    ${authd_deb}=    Get Environment Variable    AUTHD_DEB    ${EMPTY}
+    IF    $authd_deb != ''
+        SSH.Copy To VM    ${authd_deb}    /home/ubuntu/authd-under-test.deb
+        SSH.Execute    apt-get install -y /home/ubuntu/authd-under-test.deb    timeout=120
+    ELSE
+        SSH.Execute    apt-get install -y authd    timeout=120
+    END
 
 
 Sync System Time

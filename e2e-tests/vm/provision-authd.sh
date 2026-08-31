@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 LIB_DIR="${SCRIPT_DIR}/lib"
 SSH="${SCRIPT_DIR}/ssh.sh"
+SCP="${SCRIPT_DIR}/scp.sh"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/authd-e2e-tests"
 
 usage(){
@@ -208,7 +209,7 @@ function install_broker() {
         # Copy the local snap to the VM and install it
         local remote_snap
         remote_snap="/home/ubuntu/$(basename "${snap_file}")"
-        scp_to_vm "${snap_file}" "${remote_snap}"
+        "${SCP}" "${snap_file}" "${remote_snap}"
         $SSH snap install --dangerous "${remote_snap}"
     else
         # Install the snap from the specified channel
@@ -233,20 +234,6 @@ function install_broker() {
     # Reboot VM and wait until it's back
     virsh reboot "${VM_NAME}"
     wait_for_system_running
-}
-
-function scp_to_vm() {
-    local local_path="$1"
-    local remote_path="$2"
-    local cid
-    cid=$(virsh dumpxml "${VM_NAME}" | \
-          xmllint --xpath 'string(//vsock/cid/@address)' -)
-    scp \
-      -o ProxyCommand="socat - VSOCK-CONNECT:${cid}:22" \
-      -o UserKnownHostsFile=/dev/null \
-      -o StrictHostKeyChecking=no \
-      -o LogLevel=ERROR \
-      "${local_path}" "root@localhost:${remote_path}"
 }
 
 # Print executed commands to ease debugging
@@ -317,7 +304,7 @@ EOF
 
 # Install the version of authd to test
 if [ -n "${AUTHD_DEB:-}" ]; then
-    scp_to_vm "${AUTHD_DEB}" "/home/ubuntu/$(basename "${AUTHD_DEB}")"
+    "${SCP}" "${AUTHD_DEB}" "/home/ubuntu/$(basename "${AUTHD_DEB}")"
     $SSH apt-get install -y "/home/ubuntu/$(basename "${AUTHD_DEB}")"
 else
     $SSH "apt-get install -y authd"

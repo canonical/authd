@@ -16,8 +16,13 @@ ${local_password}    qwer1234
 
 
 *** Test Cases ***
-Test login after upgrading authd and broker to edge channel
-    [Documentation]    This test verifies that after upgrading both authd and the broker to the edge channel, remote users can still log in using device code flow and local password, and their accounts are properly set up on the system.
+Test login after upgrading authd and broker
+    [Documentation]    This test verifies that after upgrading authd to the
+    ...                version under test and the broker to the version under
+    ...                test,
+    ...                remote users can still log in using device code flow and
+    ...                local password, and their accounts are properly set up
+    ...                on the system.
 
     # Log in with local user
     Log In
@@ -36,9 +41,7 @@ Test login after upgrading authd and broker to edge channel
     Log Out From su Session
     Close Focused Window
 
-    # Switch to the edge channel for the broker snap and the edge PPA for authd
-    Enable Edge Repository For Authd
-    Enable Edge Broker
+    Update Broker
     Update Authd
 
     # Log in with remote user with local password after upgrading

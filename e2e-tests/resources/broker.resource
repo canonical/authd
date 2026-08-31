@@ -18,8 +18,17 @@ Variables           ./broker_vars.py
 
 
 *** Keywords ***
-Enable Edge Broker
-    SSH.Execute    snap refresh ${BROKER_SNAP_NAME} --edge
+Update Broker
+    [Documentation]    Install the broker snap built from the current branch
+    ...                when one was provided for the test run. Otherwise
+    ...                refresh the broker from the edge channel.
+    ${broker_snap}=    Get Environment Variable    BROKER_SNAP    ${EMPTY}
+    IF    $broker_snap != ''
+        SSH.Copy To VM    ${broker_snap}    /home/ubuntu/broker-under-test.snap
+        SSH.Execute    snap install --dangerous /home/ubuntu/broker-under-test.snap
+    ELSE
+        SSH.Execute    snap refresh ${BROKER_SNAP_NAME} --edge
+    END
 
 
 Disable Broker And Purge Config
@@ -125,7 +134,7 @@ Wait For Shell Prompt After Login
     # The shell prompt did not appear. Only attribute the failure to #1642 if we are
     # running one of the migration tests (where the stable, unfixed authd is active)
     # and the journal shows login failing with a PAM "System error".
-    IF    '${TEST NAME}' == 'Test login after updating authd to edge version' or '${TEST NAME}' == 'Test login after upgrading authd and broker to edge channel'
+    IF    '${TEST NAME}' == 'Test login after updating authd to the version under test' or '${TEST NAME}' == 'Test login after upgrading authd and broker'
         ${system_error} =    SSH.Execute
         ...    sudo journalctl --no-pager --since "10 minutes ago" | grep "FAILED LOGIN" | grep "System error" || true
         IF    $system_error != ''
