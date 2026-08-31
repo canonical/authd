@@ -110,7 +110,8 @@ type GetAuthenticationModesRequested struct{}
 
 // AuthModeSelected is triggered when the authentication mode has been chosen.
 type AuthModeSelected struct {
-	ID string
+	ID      string
+	fromGDM bool
 }
 
 // UILayoutReceived means that we got the ui layout to display by the broker.
@@ -321,6 +322,9 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SessionStarted:
 		safeMessageDebug(msg)
 		m.sessionStartingForBroker = ""
+		if m.clientType == Gdm {
+			m.gdmModel.pendingEchoAuthModeID = ""
+		}
 		pubASN1, err := base64.StdEncoding.DecodeString(msg.encryptionKey)
 		if err != nil {
 			return m, sendEvent(pamError{
@@ -437,6 +441,9 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		safeMessageDebug(msg)
 		m.sessionStartingForBroker = ""
 		m.currentSession = nil
+		if m.clientType == Gdm {
+			m.gdmModel.pendingEchoAuthModeID = ""
+		}
 		return m, nil
 
 	case stopAuthentication:
