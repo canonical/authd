@@ -7,6 +7,7 @@ import ExecUtils
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 SSH_SCRIPT = os.path.abspath(os.path.join(SCRIPT_DIR, "ssh.sh"))
+SCP_SCRIPT = os.path.abspath(os.path.join(SCRIPT_DIR, "../vm/scp.sh"))
 
 @library
 class SSH:
@@ -44,6 +45,22 @@ class SSH:
             logger.debug(f"stderr: {stderr}")
 
         return stdout
+
+    @keyword
+    async def copy_to_vm(self, local_path: str, remote_path: str) -> None:
+        """
+        Copy a local file to the VM over its VSOCK SSH connection.
+
+        Args:
+            local_path: Path to the local file.
+            remote_path: Destination path in the VM.
+        """
+        ExecUtils.run(
+            [SCP_SCRIPT, local_path, remote_path],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
 
     @keyword
     async def execute_as_user(self, user:str, command: str, timeout: int|None = 30) -> str:
