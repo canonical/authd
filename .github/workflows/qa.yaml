@@ -82,6 +82,7 @@ jobs:
         uses: canonical/desktop-engineering/gh-actions/go/code-sanity@v2
         with:
           golangci-lint-configfile: ".golangci.yaml"
+          go-version-file: "tools/go.mod"
           tools-directory: "tools"
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build cmd/authd with withexamplebroker tag
