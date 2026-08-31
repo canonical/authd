@@ -62,6 +62,7 @@ jobs:
         with:
           golangci-lint-configfile: ".golangci.yaml"
           working-directory: "./authd-oidc-brokers"
+          go-version-file: "./authd-oidc-brokers/tools/go.mod"
           tools-directory: "./authd-oidc-brokers/tools"
           go-tags: "withmsentraid"
 
