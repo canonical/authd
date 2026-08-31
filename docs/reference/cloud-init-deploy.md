@@ -62,17 +62,6 @@ Install the broker as a snap:
 :::::{tab-set}
 :sync-group: broker
 
-::::{tab-item} Google IAM
-:sync: google
-
-```yaml
-snap:
- commands:
-   - ['install', 'authd-google']
-```
-
-::::
-
 ::::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
@@ -83,9 +72,17 @@ snap:
 ```
 
 ::::
+
+::::{tab-item} Google IAM
+:sync: google
+
+```yaml
+snap:
+ commands:
+   - ['install', 'authd-google']
+```
+
 :::::
-
-
 ```{tip}
 For more information on installing authd and its brokers, read the
 [installation guide](howto::install).
@@ -106,29 +103,6 @@ Edit the allowed suffixes as appropriate.
 
 :::::{tab-set}
 :sync-group: broker
-
-::::{tab-item} Google IAM
-:sync: google
-
-```yaml
-write_files:
-  - path: /etc/ssh/sshd_config.d/authd.conf
-    content: |
-      UsePAM yes
-      Match User *@example.com
-          KbdInteractiveAuthentication yes
-
-runcmd:
-  - apt-get upgrade -y
-  - sed -i 's|<CLIENT_ID>|{{ CLIENT_ID }}|g; s|<ISSUER_ID>|{{ ISSUER_ID }}|g' /var/snap/authd-google/current/broker.conf
-  - echo 'ssh_allowed_suffixes_first_auth = @example.com' >> /var/snap/authd-google/current/broker.conf
-  - sed -i 's/^\(LOGIN_TIMEOUT\t\t\)[0-9]\+/\1360/' /etc/login.defs
-  - cp /snap/authd-google/current/conf/authd/google.conf /etc/authd/brokers.d/
-  - snap restart authd-google
-  - systemctl restart authd ssh
-```
-
-::::
 
 ::::{tab-item} Microsoft Entra ID
 :sync: msentraid
@@ -155,9 +129,29 @@ runcmd:
 
 ::::
 
+::::{tab-item} Google IAM
+:sync: google
+
+```yaml
+write_files:
+  - path: /etc/ssh/sshd_config.d/authd.conf
+    content: |
+      UsePAM yes
+      Match User *@example.com
+          KbdInteractiveAuthentication yes
+
+runcmd:
+  - apt-get upgrade -y
+  - sed -i 's|<CLIENT_ID>|{{ CLIENT_ID }}|g; s|<ISSUER_ID>|{{ ISSUER_ID }}|g' /var/snap/authd-google/current/broker.conf
+  - echo 'ssh_allowed_suffixes_first_auth = @example.com' >> /var/snap/authd-google/current/broker.conf
+  - sed -i 's/^\(LOGIN_TIMEOUT\t\t\)[0-9]\+/\1360/' /etc/login.defs
+  - mkdir -p /etc/authd/brokers.d/
+  - cp /snap/authd-google/current/conf/authd/google.conf /etc/authd/brokers.d/
+  - snap restart authd-google
+  - systemctl restart authd ssh
+```
+
 :::::
-
-
 ```{tip}
 For more information on configuring authd, read the [configuration
 guide](ref::config).

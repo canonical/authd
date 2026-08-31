@@ -31,19 +31,19 @@ For specific broker entries run the command for your chosen broker:
 ::::{tab-set}
 :sync-group: broker
 
-:::{tab-item} Google IAM
-:sync: google
-
-```shell
-sudo journalctl -u snap.authd-google.authd-google.service
-```
-:::
 
 :::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
 ```shell
 sudo journalctl -u snap.authd-msentraid.authd-msentraid.service
+```
+:::
+:::{tab-item} Google IAM
+:sync: google
+
+```shell
+sudo journalctl -u snap.authd-google.authd-google.service
 ```
 :::
 ::::
@@ -116,19 +116,19 @@ To increase the verbosity of the broker service, edit the service file:
 ::::{tab-set}
 :sync-group: broker
 
-:::{tab-item} Google IAM
-:sync: google
-
-```shell
-sudo systemctl edit snap.authd-google.authd-google.service
-```
-:::
 
 :::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
 ```shell
 sudo systemctl edit snap.authd-msentraid.authd-msentraid.service
+```
+:::
+:::{tab-item} Google IAM
+:sync: google
+
+```shell
+sudo systemctl edit snap.authd-google.authd-google.service
 ```
 :::
 ::::
@@ -139,15 +139,6 @@ exec command:
 ::::{tab-set}
 :sync-group: broker
 
-:::{tab-item} Google IAM
-:sync: google
-
-```ini
-[Service]
-ExecStart=
-ExecStart=/usr/bin/snap run authd-google -vv
-```
-:::
 
 :::{tab-item} Microsoft Entra ID
 :sync: msentraid
@@ -157,29 +148,22 @@ ExecStart=/usr/bin/snap run authd-google -vv
 ExecStart=
 ExecStart=/usr/bin/snap run authd-msentraid -vv
 ```
+:::
+:::{tab-item} Google IAM
+:sync: google
+
+```ini
+[Service]
+ExecStart=
+ExecStart=/usr/bin/snap run authd-google -vv
+```
+:::
 ::::
 
 You will then need to restart the service, as follows.
 
 ::::{tab-set}
 :sync-group: broker
-
-:::{tab-item} Google IAM
-:sync: google
-
-On Ubuntu 26.04 or later, you can restart the broker and print its logs with:
-
-```
-sudo systemctl restart -v snap.authd-google.authd-google.service
-```
-
-On earlier Ubuntu versions, use:
-
-```
-sudo systemctl restart snap.authd-google.authd-google.service
-sudo systemctl status snap.authd-google.authd-google.service
-```
-:::
 
 :::{tab-item} Microsoft Entra ID
 :sync: msentraid
@@ -195,6 +179,23 @@ On earlier Ubuntu versions, use:
 ```
 sudo systemctl restart snap.authd-msentraid.authd-msentraid.service
 sudo systemctl status snap.authd-msentraid.authd-msentraid.service
+```
+
+:::
+:::{tab-item} Google IAM
+:sync: google
+
+On Ubuntu 26.04 or later, you can restart the broker and print its logs with:
+
+```
+sudo systemctl restart -v snap.authd-google.authd-google.service
+```
+
+On earlier Ubuntu versions, use:
+
+```
+sudo systemctl restart snap.authd-google.authd-google.service
+sudo systemctl status snap.authd-google.authd-google.service
 ```
 
 :::

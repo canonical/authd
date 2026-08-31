@@ -52,21 +52,21 @@ You can also switch to the edge channel of the broker snap:
 ::::{tab-set}
 :sync-group: broker
 
-:::{tab-item} Google IAM
-:sync: google
-
-```shell
-sudo snap switch authd-google --edge
-sudo snap refresh authd-google
-```
-:::
-
 :::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
 ```shell
 sudo snap switch authd-msentraid --edge
 sudo snap refresh authd-msentraid
+```
+:::
+
+:::{tab-item} Google IAM
+:sync: google
+
+```shell
+sudo snap switch authd-google --edge
+sudo snap refresh authd-google
 ```
 :::
 ::::
@@ -78,21 +78,21 @@ To switch back to stable after trying the edge channel:
 ::::{tab-set}
 :sync-group: broker
 
-:::{tab-item} Google IAM
-:sync: google
-
-```shell
-sudo snap switch authd-google --stable
-sudo snap refresh authd-google
-```
-:::
-
 :::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
 ```shell
 sudo snap switch authd-msentraid --stable
 sudo snap refresh authd-msentraid
+```
+:::
+
+:::{tab-item} Google IAM
+:sync: google
+
+```shell
+sudo snap switch authd-google --stable
+sudo snap refresh authd-google
 ```
 :::
 ::::
