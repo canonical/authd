@@ -17,5 +17,6 @@ e2e-tests: allowed_users.robot login_gdm.robot
 e2e-ppa: authd-dev
 
 The `e2e-ppa: authd-dev` marker sets the workflow's `authd-ppa` input to
-`ubuntu-enterprise-desktop/authd-dev` instead of `authd-edge`.
+`ubuntu-enterprise-desktop/authd-dev` instead of `authd-edge` for resolving
+authd package dependencies.
 -->

@@ -236,6 +236,8 @@ jobs:
           RELEASE: ${{ inputs.ubuntu-version }}
           BROKER: ${{ inputs.broker }}
           E2E_TESTS: ${{ inputs.e2e-tests }}
+          AUTHD_DEB: ${{ steps.download-authd-deb.outputs.deb }}
+          BROKER_SNAP: ${{ steps.download-broker-snap-from-store.outputs.snap || steps.download-broker-snap-from-oci.outputs.snap }}
         run: |
           set -eux
           export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"

@@ -16,8 +16,9 @@ ${local_password}    qwer1234
 
 
 *** Test Cases ***
-Test login after updating authd to edge version
-    [Documentation]    Test login via CLI with device code flow and local password after switching to the edge PPA for authd.
+Test login after updating authd to the version under test
+    [Documentation]    Test login via CLI with device code flow and local password
+    ...                after updating authd to the version under test.
 
     # Log in with local user
     Log In
@@ -36,7 +37,7 @@ Test login after updating authd to edge version
     Log Out From su Session
     Close Focused Window
 
-    # Switch to the edge PPA for authd
+    # Add the edge PPA to provide dependencies for the authd package under test.
     Enable Edge Repository For Authd
     Update Authd
 

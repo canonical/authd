@@ -231,7 +231,13 @@ Cancel Operation
 
 
 Update Authd
-    SSH.Execute    apt-get install -y authd    timeout=120
+    ${authd_deb}=    Get Environment Variable    AUTHD_DEB    ${EMPTY}
+    IF    $authd_deb != ''
+        SSH.Copy To VM    ${authd_deb}    /home/ubuntu/authd-under-test.deb
+        SSH.Execute    apt-get install -y /home/ubuntu/authd-under-test.deb    timeout=120
+    ELSE
+        SSH.Execute    apt-get install -y authd    timeout=120
+    END
 
 
 Sync System Time

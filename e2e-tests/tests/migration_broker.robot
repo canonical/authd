@@ -16,8 +16,10 @@ ${local_password}    qwer1234
 
 
 *** Test Cases ***
-Test login with broker on edge channel
-    [Documentation]    Test login with broker on edge channel with device code flow and local password, before and after upgrading authd and broker to edge channel.
+Test login with broker version under test
+    [Documentation]    Test login with the broker version under test with
+    ...                device code flow and local password, before and after
+    ...                upgrading the broker.
 
     # Log in with local user
     Log In
@@ -36,8 +38,8 @@ Test login with broker on edge channel
     Log Out From su Session
     Close Focused Window
 
-    # Switch to edge channel for the broker snap
-    Enable Edge Broker
+    # Install the broker version under test.
+    Update Broker
 
     # Log in with remote user with local password after upgrading
     Open Terminal

@@ -24,6 +24,10 @@ Prerequisites:
 
   - YARF must be installed via the setup_yarf.sh script
 
+Optional environment variables:
+  AUTHD_DEB           Host path to the authd package for migration tests
+  BROKER_SNAP         Host path to the broker snap for migration tests
+
 Options:
   -u, --user <name>            Username for the tests (can also be set via E2E_USER environment variable)
   -p, --password <password>    Password for the tests (can also be set via E2E_PASSWORD environment variable)
@@ -212,6 +216,9 @@ env \
     TOTP_SECRET="$TOTP_SECRET" \
     BROKER="$BROKER" \
     RELEASE="$RELEASE" \
+    VM_NAME="$VM_NAME" \
+    AUTHD_DEB="${AUTHD_DEB:-}" \
+    BROKER_SNAP="${BROKER_SNAP:-}" \
     VNC_PORT="$VNC_PORT" \
     SYSTEMD_SUPPORTS_VSOCK="${SYSTEMD_SUPPORTS_VSOCK:-}" \
     YARF_LOG_VIDEO="${YARF_LOG_VIDEO}" \
