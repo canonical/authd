@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -257,6 +258,29 @@ func saveLocalGroups(dbLocked *UserDBLocked, groups []types.GroupEntry) (err err
 
 	if err := fileutils.Lrename(tempPath, groupPath); err != nil {
 		return fmt.Errorf("error renaming %s to %s: %w", tempPath, groupPath, err)
+	}
+	syncedGroupPath, err := filepath.EvalSymlinks(groupPath)
+	if err != nil {
+		return fmt.Errorf("error resolving %s after rename: %w", groupPath, err)
+	}
+	groupFile, err := os.Open(syncedGroupPath)
+	if err != nil {
+		return fmt.Errorf("error opening %s after rename: %w", syncedGroupPath, err)
+	}
+	if err := groupFile.Sync(); err != nil {
+		_ = groupFile.Close()
+		return fmt.Errorf("error syncing %s after rename: %w", syncedGroupPath, err)
+	}
+	if err := groupFile.Close(); err != nil {
+		return fmt.Errorf("error closing %s after sync: %w", syncedGroupPath, err)
+	}
+	groupDir, err := os.Open(filepath.Dir(syncedGroupPath))
+	if err != nil {
+		return fmt.Errorf("error opening parent directory of %s: %w", groupPath, err)
+	}
+	defer groupDir.Close()
+	if err := groupDir.Sync(); err != nil {
+		return fmt.Errorf("error syncing parent directory of %s: %w", groupPath, err)
 	}
 
 	lockedEntries.updateLocalGroupEntriesCache(groups)

@@ -28,6 +28,7 @@ import (
 	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
 	userslocking "github.com/canonical/authd/internal/users/locking"
 	userstestutils "github.com/canonical/authd/internal/users/testutils"
+	"github.com/canonical/authd/internal/users/types"
 	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -123,6 +124,8 @@ func TestGetBroker(t *testing.T) {
 		user string
 
 		onlyLocalBroker bool
+		closeDB         bool
+		cacheBroker     bool
 
 		wantBroker string
 		wantErr    bool
@@ -132,9 +135,16 @@ func TestGetBroker(t *testing.T) {
 		"For_unmanaged_user_and_only_one_broker,_get_local_broker": {user: "nonexistent@example.com", onlyLocalBroker: true, wantBroker: brokers.LocalBrokerName},
 		"Username_is_case_insensitive":                             {user: "UserWithBroker@example.com", wantBroker: mockBrokerGeneratedID},
 
+		// A user stored under a short name must be found through either name: the fully qualified
+		// one also resolves through NSS, which would otherwise look like the user being provided by
+		// another NSS source and send them to the local broker.
+		"Success_getting_broker_of_a_short_user_by_its_short_name": {user: "shortuserwithbroker", wantBroker: mockBrokerGeneratedID},
+		"Success_getting_broker_of_a_short_user_by_its_full_name":  {user: "shortuserwithbroker@example.com", wantBroker: mockBrokerGeneratedID},
+
 		"Returns_empty_when_user_does_not_exist":         {user: "nonexistent@example.com", wantBroker: ""},
 		"Returns_empty_when_user_does_not_have_a_broker": {user: "userwithoutbroker@example.com", wantBroker: ""},
 		"Returns_empty_when_broker_is_not_available":     {user: "userwithinactivebroker@example.com", wantBroker: ""},
+		"Returns_empty_on_database_error":                {user: "database-error@example.com", closeDB: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -161,7 +171,16 @@ func TestGetBroker(t *testing.T) {
 				brokerManager, err = brokers.NewManager(context.Background(), "", nil)
 				require.NoError(t, err, "Setup: could not create broker manager with only local broker")
 			}
+			if tc.cacheBroker {
+				err := brokerManager.SetBroker(mockBrokerGeneratedID, tc.user)
+				require.NoError(t, err, "Setup: could not cache broker")
+			}
 			client := newPamClient(t, m, brokerManager)
+
+			if tc.closeDB {
+				err := userstestutils.DBManager(m).Close()
+				require.NoError(t, err, "Setup: failed to close database")
+			}
 
 			// Get existing entry
 			gotResp, err := client.GetBroker(context.Background(), &authd.GBRequest{Username: tc.user})
@@ -186,10 +205,19 @@ func TestSelectBroker(t *testing.T) {
 		sessionMode string
 		existingDB  string
 
+		useShortUsernames bool
+		closeDB           bool
+
 		wantErr bool
 	}{
 		"Successfully_select_a_broker_and_creates_auth_session":   {username: "success@example.com", sessionMode: auth.SessionModeLogin},
 		"Successfully_select_a_broker_and_creates_passwd_session": {username: "success@example.com", sessionMode: auth.SessionModeChangePassword},
+		"Successfully_select_a_broker_with_short_username":        {username: "success", useShortUsernames: true, existingDB: "one-user-one-group.db"},
+		// The user is stored under a short name but logs in with the fully qualified one.
+		"Successfully_select_a_broker_with_full_username_for_short_user": {username: "success@example.com", useShortUsernames: true, existingDB: "one-short-user-one-group.db"},
+		// Users shortened by an earlier configuration must keep working once the feature is turned
+		// off again, so that they can log in and be renamed back to their fully qualified name.
+		"Successfully_select_a_broker_with_full_username_after_disabling_short_usernames": {username: "success@example.com", existingDB: "one-short-user-one-group-feature-disabled.db"},
 
 		"Error_when_username_is_empty":                               {wantErr: true},
 		"Error_when_mode_is_empty":                                   {sessionMode: "-", wantErr: true},
@@ -198,8 +226,15 @@ func TestSelectBroker(t *testing.T) {
 		"Error_when_broker_does_not_exist":                           {username: "no broker@example.com", brokerID: "does not exist", wantErr: true},
 		"Error_when_broker_does_not_provide_a_session_ID":            {username: "ns_no_id@example.com", wantErr: true},
 		"Error_when_starting_the_session":                            {username: "ns_error@example.com", wantErr: true},
+		"Error_when_resolving_username_from_database":                {username: "success@example.com", closeDB: true, wantErr: true},
 		"Error_when_user_is_bound_to_a_different_broker":             {username: "bound@example.com", existingDB: "bound-to-other-broker.db", wantErr: true},
 		"Error_when_user_is_bound_to_non-local_broker_selects_local": {username: "bound@example.com", brokerID: brokers.LocalBrokerName, existingDB: "bound-to-other-broker.db", wantErr: true},
+		// The user is stored under a short name, so the broker binding is only found once the fully
+		// qualified name they log in with is resolved. Skipping that for the local broker would let
+		// a cloud user switch to it just by typing their full name.
+		"Error_when_a_short_user_selects_the_local_broker_with_their_full_name": {username: "bound@example.com", brokerID: brokers.LocalBrokerName, existingDB: "short-user-bound-to-other-broker.db", wantErr: true},
+
+		"Error_when_selecting_a_broker_with_short_username_allowed_but_user_does_not_exist_in_db": {username: "shortusername", useShortUsernames: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -211,11 +246,19 @@ func TestSelectBroker(t *testing.T) {
 				require.NoError(t, err, "Setup: could not create database from testdata")
 			}
 
-			m, err := users.NewManager(users.DefaultConfig, cacheDir)
+			managerCfg := users.DefaultConfig
+			managerCfg.UseShortUsernames = tc.useShortUsernames
+
+			m, err := users.NewManager(managerCfg, cacheDir)
 			require.NoError(t, err, "Setup: could not create user manager")
 			t.Cleanup(func() { _ = m.Stop() })
 
 			client := newPamClient(t, m, globalBrokerManager)
+
+			if tc.closeDB {
+				err := userstestutils.DBManager(m).Close()
+				require.NoError(t, err, "Setup: failed to close database")
+			}
 
 			switch tc.brokerID {
 			case "":
@@ -246,6 +289,9 @@ func TestSelectBroker(t *testing.T) {
 			sbResp, err := client.SelectBroker(context.Background(), sbRequest)
 			if tc.wantErr {
 				require.Error(t, err, "SelectBroker should return an error, but did not")
+				if tc.closeDB {
+					require.ErrorContains(t, err, "invalid user name")
+				}
 				return
 			}
 			require.NoError(t, err, "SelectBroker should not return an error, but did")
@@ -405,10 +451,12 @@ func TestIsAuthenticated(t *testing.T) {
 		existingDB string
 		dbReadOnly bool
 
-		username        string
-		secondCall      bool
-		cancelFirstCall bool
-		localGroupsFile string
+		username          string
+		secondCall        bool
+		cancelFirstCall   bool
+		localGroupsFile   string
+		useShortUsernames bool
+		releaseUserAlias  bool
 
 		// There is no wantErr as it's stored in the golden file.
 	}{
@@ -421,6 +469,12 @@ func TestIsAuthenticated(t *testing.T) {
 		"Update_local_groups":                                  {username: "success_with_local_groups@example.com", localGroupsFile: "valid.group"},
 		"Successfully_authenticate_user_with_uppercase":        {username: "SUCCESS@example.com"},
 		"Successfully_authenticate_with_groups_with_uppercase": {username: "success_with_uppercase_groups@example.com"},
+		"Successfully_authenticate_with_short_usernames":       {username: "success@example.com", useShortUsernames: true},
+		"Successfully_authenticate_after_disabling_short_usernames": {
+			username:         "success@example.com",
+			existingDB:       "cache-with-short-username-user.db",
+			releaseUserAlias: true,
+		},
 
 		// DB write failure: UpdateBrokerForUser fails (read-only filesystem) but auth still succeeds.
 		// UpdateUser is a no-op because the DB already has up-to-date user info; the first actual
@@ -429,9 +483,10 @@ func TestIsAuthenticated(t *testing.T) {
 		"Successfully_authenticate_even_if_db_write_fails": {username: "success@example.com", existingDB: "cache-with-uptodate-user.db", dbReadOnly: true},
 
 		// service errors
-		"Error_when_sessionID_is_empty": {sessionID: "-"},
-		"Error_when_there_is_no_broker": {sessionID: "invalid-session"},
-		"Error_when_user_is_locked":     {username: "locked@example.com", existingDB: "cache-with-locked-user.db"},
+		"Error_when_sessionID_is_empty":            {sessionID: "-"},
+		"Error_when_there_is_no_broker":            {sessionID: "invalid-session"},
+		"Error_when_user_is_locked":                {username: "locked@example.com", existingDB: "cache-with-locked-user.db"},
+		"Error_when_short_username_user_is_locked": {username: "locked@example.com", existingDB: "cache-with-locked-short-username-user.db", useShortUsernames: true},
 
 		// broker errors
 		"Error_when_authenticating":                                              {username: "ia_error@example.com"},
@@ -469,7 +524,10 @@ func TestIsAuthenticated(t *testing.T) {
 				}),
 			}
 
-			m, err := users.NewManager(users.DefaultConfig, dbDir, managerOpts...)
+			managerCfg := users.DefaultConfig
+			managerCfg.UseShortUsernames = tc.useShortUsernames
+
+			m, err := users.NewManager(managerCfg, dbDir, managerOpts...)
 			require.NoError(t, err, "Setup: could not create user manager")
 			t.Cleanup(func() { _ = m.Stop() })
 
@@ -495,7 +553,7 @@ func TestIsAuthenticated(t *testing.T) {
 				}
 			}
 
-			var firstCall, secondCall string
+			var firstCall, secondCall, userAliasLeaseID string
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
@@ -512,6 +570,7 @@ func TestIsAuthenticated(t *testing.T) {
 					iaResp.GetMsg(),
 					err,
 				)
+				userAliasLeaseID = iaResp.GetUserAliasLeaseId()
 			}()
 			// Give some time for the first call to block
 			time.Sleep(time.Second)
@@ -534,6 +593,23 @@ func TestIsAuthenticated(t *testing.T) {
 				)
 			}
 			<-done
+
+			if tc.releaseUserAlias {
+				require.NotEmpty(t, userAliasLeaseID, "a name-changing update should create an alias lease")
+				alias, err := m.UserByName("success")
+				require.NoError(t, err, "the old name should remain resolvable before account checks")
+				require.Equal(t, "success", alias.Name)
+				require.Equal(t, uint32(1111), alias.UID)
+				group, err := m.GroupByID(alias.GID)
+				require.NoError(t, err, "the current private group should remain resolvable")
+				require.Contains(t, group.Users, "success",
+					"group authorization should accept the temporary user alias")
+
+				_, err = client.ReleaseUserAlias(context.Background(), &authd.RUARequest{LeaseId: userAliasLeaseID})
+				require.NoError(t, err, "releasing the temporary user alias should succeed")
+				_, err = m.UserByName("success")
+				require.NoError(t, err, "the old name should remain during the post-account grace period")
+			}
 
 			got := firstCall + secondCall
 			got = permissions.Z_ForTests_IdempotentPermissionError(got)
@@ -561,6 +637,91 @@ func TestIsAuthenticated(t *testing.T) {
 			localgroupstestutils.RequireGroupFile(t, destGroupFile, golden.Path(t))
 		})
 	}
+}
+
+func TestRenameRetainsAliasesForActiveSessions(t *testing.T) {
+	dbDir := t.TempDir()
+	err := db.Z_ForTests_CreateDBFromYAML(
+		filepath.Join("testdata", "TestIsAuthenticated", "cache-with-short-username-user.db"), dbDir)
+	require.NoError(t, err)
+
+	m, err := users.NewManager(users.DefaultConfig, dbDir)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Stop() })
+	service := pam.NewService(context.Background(), m, globalBrokerManager, pam.DefaultConfig)
+
+	// Start a session for the user stored under their short name.
+	sbResp, err := service.SelectBroker(context.Background(), &authd.SBRequest{
+		BrokerId: mockBrokerGeneratedID,
+		Username: "success",
+		Mode:     authd.SessionMode_LOGIN,
+	})
+	require.NoError(t, err)
+	firstSessionID := sbResp.GetSessionId()
+	t.Cleanup(func() {
+		_, _ = service.EndSession(context.Background(), &authd.ESRequest{SessionId: firstSessionID})
+	})
+
+	// A second PAM transaction for the same user starts before the rename. The broker mock derives
+	// session IDs from the username, so a second SelectBroker would return the same session ID;
+	// register the second transaction directly so that it holds its own alias lease.
+	pam.Z_ForTests_AddSessionLogin(&service, "second-session", "success", "second-lease")
+
+	resp, err := service.IsAuthenticated(context.Background(), &authd.IARequest{
+		SessionId:          firstSessionID,
+		AuthenticationData: &authd.IARequest_AuthenticationData{},
+	})
+	require.NoError(t, err)
+	firstLeaseID := resp.GetUserAliasLeaseId()
+	require.NotEmpty(t, firstLeaseID)
+	require.True(t, m.HasUserAlias("second-lease"),
+		"a session that started before the rename should retain its own alias lease")
+
+	_, err = service.ReleaseUserAlias(context.Background(), &authd.RUARequest{LeaseId: firstLeaseID})
+	require.NoError(t, err)
+	time.Sleep(11 * time.Second) // The completed lease has a 10-second startup grace period.
+	_, err = m.UserByName("success")
+	require.NoError(t, err, "the second session should keep the alias alive")
+
+	_, err = service.ReleaseUserAlias(context.Background(), &authd.RUARequest{LeaseId: "second-lease"})
+	require.NoError(t, err)
+}
+
+func TestReleaseUserAlias(t *testing.T) {
+	t.Parallel()
+
+	m, err := users.NewManager(users.DefaultConfig, t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Stop() })
+
+	service := pam.NewService(context.Background(), m, globalBrokerManager, pam.DefaultConfig)
+
+	t.Run("Error_when_leaseID_is_empty", func(t *testing.T) {
+		t.Parallel()
+		_, err := service.ReleaseUserAlias(context.Background(), &authd.RUARequest{LeaseId: ""})
+		require.Error(t, err)
+	})
+
+	t.Run("Error_when_leaseID_not_found", func(t *testing.T) {
+		t.Parallel()
+		_, err := service.ReleaseUserAlias(context.Background(), &authd.RUARequest{LeaseId: "nonexistent"})
+		require.Error(t, err)
+	})
+
+	t.Run("Success_when_leaseID_exists", func(t *testing.T) {
+		t.Parallel()
+		userRow := db.NewUserRow("user", 1111, 1111, "", "/home/user", "/bin/bash", "broker-id", "prov-id", "user@example.com")
+		require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow, nil, nil))
+		_, err := m.PrepareUserAliases("lease-test", types.UserInfo{
+			Name:       "user@example.com",
+			BrokerID:   "broker-id",
+			ProviderID: "prov-id",
+		})
+		require.NoError(t, err)
+
+		_, err = service.ReleaseUserAlias(context.Background(), &authd.RUARequest{LeaseId: "lease-test"})
+		require.NoError(t, err)
+	})
 }
 
 func TestConfigWarnOnUnknownServices(t *testing.T) {

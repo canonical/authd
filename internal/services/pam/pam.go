@@ -22,6 +22,7 @@ import (
 	"github.com/canonical/authd/internal/users"
 	"github.com/canonical/authd/internal/users/types"
 	"github.com/canonical/authd/log"
+	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -190,8 +191,14 @@ type Service struct {
 	brokerManager  *brokers.Manager
 	failedAuths    *authFailTracker
 	authFailConfig Config
+	sessionLogins  *sync.Map
 
 	authd.UnimplementedPAMServer
+}
+
+type sessionLogin struct {
+	name         string
+	aliasLeaseID string
 }
 
 // NewService returns a new PAM GRPC service.
@@ -203,6 +210,7 @@ func NewService(ctx context.Context, userManager *users.Manager, brokerManager *
 		brokerManager:  brokerManager,
 		failedAuths:    newAuthFailTracker(),
 		authFailConfig: cfg,
+		sessionLogins:  &sync.Map{},
 	}
 }
 
@@ -226,6 +234,18 @@ func (s Service) AvailableBrokers(ctx context.Context, _ *authd.Empty) (*authd.A
 func (s Service) GetBroker(ctx context.Context, req *authd.GBRequest) (*authd.GBResponse, error) {
 	// authd usernames are lowercase
 	username := strings.ToLower(req.GetUsername())
+
+	// authd may store the user under a shortened name while the user still logs in with the fully
+	// qualified one, which also resolves through NSS. Map the login name onto the stored one before
+	// anything else: otherwise the lookups below miss, and the NSS resolution of the fully
+	// qualified name is mistaken for the user being provided by another NSS source, which would
+	// send a returning authd user to the local broker.
+	if storedName, _, err := s.userManager.NamesForLogin(username); err == nil {
+		username = storedName
+	} else if !errors.Is(err, users.NoDataFoundError{}) {
+		log.Warningf(ctx, "GetBroker: Could not resolve the stored name of user %q: %v", username, err)
+		return &authd.GBResponse{}, nil
+	}
 
 	// Use in memory cache first
 	if b := s.brokerManager.BrokerForUser(username); b != nil {
@@ -317,17 +337,55 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 		return nil, status.Error(codes.InvalidArgument, "invalid session mode")
 	}
 
+	// The short username format is an authd-internal detail: the database keys users by it, but
+	// brokers always work with the fully qualified name. Resolve both forms up front so that the
+	// user can log in with either one. This is driven by what is stored rather than by the current
+	// configuration, so that users shortened by an earlier configuration keep working — and get
+	// renamed back — once short usernames are disabled again.
+	aliasLeaseID := uuid.NewString()
+	aliasLeaseRetained := false
+	defer func() {
+		if err != nil && aliasLeaseRetained {
+			s.userManager.CancelUserAlias(aliasLeaseID)
+		}
+	}()
+	storedUsername, fullUsername := username, username
+	switch stored, full, retained, resolveErr := s.userManager.NamesForLoginAndRetainAlias(username, aliasLeaseID); {
+	case resolveErr == nil:
+		storedUsername, fullUsername = stored, full
+		aliasLeaseRetained = retained
+	case errors.Is(resolveErr, users.NoDataFoundError{}):
+		// The user is unknown, so there is nothing to map the short name back to. The local broker
+		// authenticates system users, which authd never renames, so a miss is expected there and
+		// the short name is a legitimate name of its own.
+		if brokerID != brokers.LocalBrokerName && s.userManager.ShortUsernameAllowed() && !strings.Contains(username, "@") {
+			log.Noticef(ctx, "SelectBroker: User %q not found in database. First authentication must use the full username", username)
+			return nil, status.Errorf(codes.NotFound,
+				"unknown user %q: the first login has to use the fully qualified username, including the domain", username)
+		}
+	default:
+		log.Errorf(ctx, "SelectBroker: Could not resolve names for user %q: %v", username, resolveErr)
+		return nil, status.Error(codes.InvalidArgument, "invalid user name")
+	}
+
+	// The local broker authenticates the system user under the name it is known by on the system,
+	// so it must not be handed the fully qualified form authd only keeps for the remote brokers.
+	sessionUsername := fullUsername
+	if brokerID == brokers.LocalBrokerName {
+		sessionUsername = username
+	}
+
 	// Look up the user's stored broker and stable provider identifier. If the
 	// user is already bound to a different broker, reject early before opening
 	// a session that would inevitably fail after authentication completes.
-	storedBrokerID, userProviderID, err := s.userManager.BrokerAndProviderIDForUser(username)
+	storedBrokerID, userProviderID, err := s.userManager.BrokerAndProviderIDForUser(storedUsername)
 	if err != nil && !errors.Is(err, users.NoDataFoundError{}) {
-		log.Errorf(ctx, "SelectBroker: Could not look up broker and provider ID for user %q: %v", username, err)
-		return nil, fmt.Errorf("could not look up broker for user %q: %w", username, err)
+		log.Errorf(ctx, "SelectBroker: Could not look up broker and provider ID for user %q: %v", storedUsername, err)
+		return nil, fmt.Errorf("could not look up broker for user %q: %w", storedUsername, err)
 	}
 	if storedBrokerID != "" && storedBrokerID != brokerID {
-		log.Errorf(ctx, "SelectBroker: User %q is bound to broker %q and cannot authenticate with broker %q", username, storedBrokerID, brokerID)
-		return nil, status.Errorf(codes.PermissionDenied, "user %q is already bound to broker %q and cannot authenticate with broker %q", username, storedBrokerID, brokerID)
+		log.Errorf(ctx, "SelectBroker: User %q is bound to broker %q and cannot authenticate with broker %q", storedUsername, storedBrokerID, brokerID)
+		return nil, status.Errorf(codes.PermissionDenied, "user %q is already bound to broker %q and cannot authenticate with broker %q", storedUsername, storedBrokerID, brokerID)
 	}
 	// If the requested broker doesn't match the stored one, the provider ID
 	// from the stored broker is not applicable.
@@ -336,11 +394,30 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 	}
 
 	// Create a session and Memorize selected broker for it.
-	sessionID, encryptionKey, err := s.brokerManager.NewSession(brokerID, username, lang, mode, userProviderID, req.GetServiceName())
+	sessionID, encryptionKey, err := s.brokerManager.NewSession(brokerID, sessionUsername, lang, mode, userProviderID, req.GetServiceName())
 	if err != nil {
-		log.Errorf(ctx, "SelectBroker: Could not create session for user %q with broker %q: %v", username, brokerID, err)
+		log.Errorf(ctx, "SelectBroker: Could not create session for user %q with broker %q: %v", sessionUsername, brokerID, err)
 		return nil, err
 	}
+	// Re-resolve the user now that the session exists: a concurrent rename between the first
+	// resolution and the session creation must not leave the session bound to a stale identity.
+	// The lease is retained again atomically, so the alias cannot expire in between either.
+	_, resolvedFullUsername, retained, resolveErr :=
+		s.userManager.NamesForLoginAndRetainAlias(username, aliasLeaseID)
+	if resolveErr != nil && !errors.Is(resolveErr, users.NoDataFoundError{}) {
+		if endErr := s.brokerManager.EndSession(sessionID); endErr != nil {
+			log.Warningf(ctx, "SelectBroker: Could not end session %q after user resolution changed: %v", sessionID, endErr)
+		}
+		return nil, fmt.Errorf("user %q changed while creating the broker session: %w", username, resolveErr)
+	}
+	if resolveErr == nil && resolvedFullUsername != fullUsername {
+		if endErr := s.brokerManager.EndSession(sessionID); endErr != nil {
+			log.Warningf(ctx, "SelectBroker: Could not end session %q after user resolution changed: %v", sessionID, endErr)
+		}
+		return nil, status.Errorf(codes.Aborted, "user %q changed while creating the broker session", username)
+	}
+	aliasLeaseRetained = aliasLeaseRetained || retained
+	s.sessionLogins.Store(sessionID, sessionLogin{name: username, aliasLeaseID: aliasLeaseID})
 
 	return &authd.SBResponse{
 		SessionId:     sessionID,
@@ -433,6 +510,20 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		log.Errorf(ctx, "IsAuthenticated: No session ID provided")
 		return nil, status.Error(codes.InvalidArgument, "no session ID provided")
 	}
+	login := sessionLogin{aliasLeaseID: sessionID}
+	if value, ok := s.sessionLogins.Load(sessionID); ok {
+		var valid bool
+		login, valid = value.(sessionLogin)
+		if !valid {
+			return nil, status.Error(codes.Internal, "invalid session login")
+		}
+	}
+	preserveUserAlias := false
+	defer func() {
+		if !preserveUserAlias {
+			s.userManager.CancelUserAlias(login.aliasLeaseID)
+		}
+	}()
 
 	broker, err := s.brokerManager.BrokerFromSessionID(sessionID)
 	if err != nil {
@@ -459,6 +550,7 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 	bfCfg := s.authFailConfig.ForService(serviceName)
 
 	if access != auth.Granted {
+		preserveUserAlias = access == auth.Next || access == auth.Retry
 		if access == auth.Denied || access == auth.DeniedMaxTries || access == auth.Retry {
 			if count := s.failedAuths.recordFailure(serviceName, username, bfCfg.AuthFailResetWindow); count > bfCfg.AuthFailDelayThreshold {
 				log.Debugf(ctx, "%s: Delaying response after %d consecutive authentication failures for %q", sessionID, count, username)
@@ -495,31 +587,46 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 	// leaking whether a user exists or not to unauthenticated users.
 	// TODO: We might want to let the broker know whether the user is locked or not, so that it can avoid storing any
 	//       updated tokens or user info on disk.
-	userIsLocked, err := s.userManager.IsUserLocked(uInfo.Name)
-	if err != nil && !errors.Is(err, users.NoDataFoundError{}) {
+	userIsLocked, err := s.userManager.IsAuthenticatedUserLocked(uInfo.Name, uInfo.BrokerID, uInfo.ProviderID)
+	if err != nil {
 		log.Errorf(ctx, "IsAuthenticated: Could not check if user %q is locked: %v", uInfo.Name, err)
 		return nil, fmt.Errorf("could not check if user %q is locked: %w", uInfo.Name, err)
-	}
-	// The username may have changed at the IdP, in which case the locked row is still stored under the
-	// previous name and the name-based lookup above misses it. Resolve the stable identity by the
-	// broker-scoped provider ID and honor its locked state too.
-	if errors.Is(err, users.NoDataFoundError{}) && uInfo.BrokerID != "" && uInfo.ProviderID != "" {
-		userIsLocked, err = s.userManager.IsUserLockedByProviderID(uInfo.BrokerID, uInfo.ProviderID)
-		if err != nil && !errors.Is(err, users.NoDataFoundError{}) {
-			log.Errorf(ctx, "IsAuthenticated: Could not check if user %q is locked: %v", uInfo.Name, err)
-			return nil, fmt.Errorf("could not check if user %q is locked: %w", uInfo.Name, err)
-		}
 	}
 	// Throw an error if the user trying to authenticate already exists in the database and is locked.
 	if userIsLocked {
 		log.Noticef(ctx, "Authentication failure: user %q is locked", uInfo.Name)
 		return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("user %s is locked", uInfo.Name))
 	}
-	// Update database and local groups on granted auth.
+	if login.name != "" {
+		if _, err := s.userManager.RetainUserAlias(login.aliasLeaseID, login.name); err != nil {
+			log.Errorf(ctx, "IsAuthenticated: Could not retain user alias for %q: %v", login.name, err)
+			return nil, status.Error(codes.ResourceExhausted, err.Error())
+		}
+	}
+	// A granted authentication can rename the user (shortening the stored name, or renaming back
+	// when the option is disabled again). PAM keeps referring to the old name until the account
+	// stage is over: pam_unix re-resolves PAM_USER through NSS during pam_acct_mgmt, and a name
+	// that stopped resolving fails the login with PAM_USER_UNKNOWN although access was granted.
+	// Keep the old name available as a temporary alias until the account hook releases it. The
+	// update itself remains synchronous so that authorization checks see current group
+	// memberships.
+	aliasNames, err := s.userManager.PrepareUserAliases(login.aliasLeaseID, uInfo)
+	if err != nil {
+		log.Errorf(ctx, "IsAuthenticated: Could not prepare user %q update: %v", uInfo.Name, err)
+		return nil, err
+	}
+	for _, aliasName := range aliasNames {
+		if err := s.retainUserAliasForActiveSessions(aliasName); err != nil {
+			log.Errorf(ctx, "IsAuthenticated: Could not retain user alias %q for active sessions: %v", aliasName, err)
+			return nil, status.Error(codes.ResourceExhausted, err.Error())
+		}
+	}
 	if err := s.userManager.UpdateUser(uInfo); err != nil {
 		log.Errorf(ctx, "IsAuthenticated: Could not update user %q in database: %v", uInfo.Name, err)
 		return nil, err
 	}
+	userAliasPending := s.userManager.HasUserAlias(login.aliasLeaseID)
+
 	// IAResponse.Msg carries a JSON {"message": ...} envelope (or an empty
 	// string when there is no message), matching the format expected by the
 	// PAM client's dataToMsg parser.
@@ -536,23 +643,75 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 	// Set the broker as the default for the user on each successful authentication,
 	// unless it's the local broker (which is selected based on NSS resolution, not stored).
 	if broker.ID != brokers.LocalBrokerName {
-		if err = s.brokerManager.SetBroker(broker.ID, uInfo.Name); err != nil {
-			log.Errorf(ctx, "IsAuthenticated: Could not set default broker %q for user %q: %v", broker.ID, uInfo.Name, err)
+		// The broker reports the fully qualified username, but authd may store the user under a
+		// shortened name. Key the broker binding on the stored name, so that it is found again
+		// whichever of the two names the user logs in with. The user has already authenticated by
+		// now, so a lookup that fails must not deny them the login: fall back to the name the
+		// broker knows them by, which is what the binding used before short usernames existed.
+		storedName := uInfo.Name
+		if name, _, err := s.userManager.NamesForLogin(uInfo.Name); err != nil {
+			log.Warningf(ctx, "IsAuthenticated: Could not resolve the stored name of user %q, binding the broker to that name: %v", uInfo.Name, err)
+		} else {
+			storedName = name
+		}
+
+		if err = s.brokerManager.SetBroker(broker.ID, storedName); err != nil {
+			log.Errorf(ctx, "IsAuthenticated: Could not set default broker %q for user %q: %v", broker.ID, storedName, err)
 			return nil, err
 		}
-		if err = s.userManager.UpdateBrokerForUser(uInfo.Name, broker.ID); err != nil {
+		if err = s.userManager.UpdateBrokerForUser(storedName, broker.ID); err != nil {
 			// A write failure (e.g. read-only filesystem) must not prevent a
 			// successfully authenticated user from logging in.
-			log.Errorf(ctx, "IsAuthenticated: Could not update broker for user %q in database: %v", uInfo.Name, err)
+			log.Errorf(ctx, "IsAuthenticated: Could not update broker for user %q in database: %v", storedName, err)
 		}
 	}
 
 	s.failedAuths.recordSuccess(serviceName, username)
+	preserveUserAlias = userAliasPending
+	userAliasLeaseID := ""
+	if userAliasPending {
+		userAliasLeaseID = login.aliasLeaseID
+	}
 
 	return &authd.IAResponse{
-		Access: access,
-		Msg:    msg,
+		Access:           access,
+		Msg:              msg,
+		UserAliasLeaseId: userAliasLeaseID,
 	}, nil
+}
+
+// ReleaseUserAlias starts the expiry grace period for a temporary alias after PAM account checks
+// have finished resolving the old user name.
+func (s Service) ReleaseUserAlias(ctx context.Context, req *authd.RUARequest) (*authd.Empty, error) {
+	leaseID := req.GetLeaseId()
+	if leaseID == "" {
+		log.Errorf(ctx, "ReleaseUserAlias: No lease ID given")
+		return nil, status.Error(codes.InvalidArgument, "no lease id given")
+	}
+
+	if !s.userManager.ReleaseUserAlias(leaseID) {
+		log.Errorf(ctx, "ReleaseUserAlias: Alias lease %q not found", leaseID)
+		return nil, status.Error(codes.NotFound, "temporary user alias not found")
+	}
+
+	return &authd.Empty{}, nil
+}
+
+func (s Service) retainUserAliasForActiveSessions(aliasName string) error {
+	var retainErr error
+	s.sessionLogins.Range(func(_, value any) bool {
+		login, ok := value.(sessionLogin)
+		if !ok {
+			retainErr = errors.New("invalid session login entry")
+			return false
+		}
+		if login.name != aliasName {
+			return true
+		}
+		_, retainErr = s.userManager.RetainUserAlias(login.aliasLeaseID, login.name)
+		return retainErr == nil
+	})
+	return retainErr
 }
 
 // EndSession asks the broker associated with the sessionID to end the session.
@@ -564,6 +723,7 @@ func (s Service) EndSession(ctx context.Context, req *authd.ESRequest) (empty *a
 		log.Errorf(ctx, "EndSession: No session ID given")
 		return nil, status.Error(codes.InvalidArgument, "no session id given")
 	}
+	s.sessionLogins.Delete(sessionID)
 
 	return &authd.Empty{}, s.brokerManager.EndSession(sessionID)
 }

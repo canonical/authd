@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"os/user"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -31,6 +32,8 @@ type Config struct {
 	UIDMax uint32 `mapstructure:"uid_max" yaml:"uid_max"`
 	GIDMin uint32 `mapstructure:"gid_min" yaml:"gid_min"`
 	GIDMax uint32 `mapstructure:"gid_max" yaml:"gid_max"`
+
+	UseShortUsernames bool `mapstructure:"use_short_usernames" yaml:"use_short_usernames"`
 }
 
 // DefaultConfig is the default configuration for the user manager.
@@ -48,10 +51,12 @@ type Manager struct {
 	// not falsify the checks we are performing (such as the users existence).
 	userManagementMu sync.Mutex
 
-	db             *db.Manager
-	config         Config
-	preAuthRecords *tempentries.PreAuthUserRecords
-	idGenerator    IDGeneratorIface
+	db               *db.Manager
+	config           Config
+	preAuthRecords   *tempentries.PreAuthUserRecords
+	temporaryAliases *temporaryUserAliases
+	aliasJournal     *temporaryAliasJournal
+	idGenerator      IDGeneratorIface
 }
 
 type options struct {
@@ -127,9 +132,18 @@ func NewManager(config Config, dbDir string, args ...Option) (m *Manager, err er
 		preAuthRecords: tempentries.NewPreAuthUserRecords(),
 		idGenerator:    opts.idGenerator,
 	}
-
 	m.db, err = db.New(dbDir)
 	if err != nil {
+		return nil, err
+	}
+	m.aliasJournal, err = newTemporaryAliasJournal(dbDir)
+	if err != nil {
+		_ = m.db.Close()
+		return nil, err
+	}
+	m.temporaryAliases = newTemporaryUserAliases(m.removeTemporaryAliasFromLocalGroups)
+	if err := m.reconcileTemporaryAliasCleanups(); err != nil {
+		_ = m.db.Close()
 		return nil, err
 	}
 
@@ -138,47 +152,71 @@ func NewManager(config Config, dbDir string, args ...Option) (m *Manager, err er
 
 // Stop closes the underlying db.
 func (m *Manager) Stop() error {
+	m.temporaryAliases.stop()
 	return m.db.Close()
 }
 
 // UpdateUser updates the user information in the db.
-func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
-	defer decorate.OnError(&err, "failed to update user %q", u.Name)
+func (m *Manager) UpdateUser(brokerUserInfo types.UserInfo) (err error) {
+	defer decorate.OnError(&err, "failed to update user %q", brokerUserInfo.Name)
 
-	log.Debugf(context.TODO(), "Updating user %q", u.Name)
+	log.Debugf(context.TODO(), "Updating user %q", brokerUserInfo.Name)
 
-	if u.Name == "" {
+	if brokerUserInfo.Name == "" {
 		return errors.New("empty username")
 	}
-	if u.ProviderID != "" && u.BrokerID == "" {
-		return fmt.Errorf("provider ID for user %q is not scoped by a broker ID", u.Name)
+	if brokerUserInfo.ProviderID != "" && brokerUserInfo.BrokerID == "" {
+		return fmt.Errorf("provider ID for user %q is not scoped by a broker ID", brokerUserInfo.Name)
 	}
 
-	// Try to resolve the user's stable identity via broker-scoped provider ID (sub/oid). If found under
-	// a different name, this is an email change at the IdP: use the old DB name as
-	// the lookup key for the "existing user" checks, then let the update rename it.
-	lookupName := u.Name
-	if u.BrokerID != "" && u.ProviderID != "" {
-		providerIDMatch, providerIDErr := m.db.UserByProviderID(u.BrokerID, u.ProviderID)
-		if providerIDErr != nil && !errors.Is(providerIDErr, db.NoDataFoundError{}) {
-			return fmt.Errorf("failed to look up user by provider ID: %w", providerIDErr)
-		}
-		if providerIDErr == nil && providerIDMatch.Name != u.Name {
-			log.Noticef(context.TODO(), "User identified by broker ID %q and provider ID %q: username changed from %q to %q",
-				u.BrokerID, u.ProviderID, providerIDMatch.Name, u.Name)
-			lookupName = providerIDMatch.Name
-		}
-	}
+	// Brokers always report the fully qualified username, which is the identity everything below is
+	// resolved against. The name authd stores the user under is derived from it, and is decided
+	// again on every check pass because it depends on what the database holds at that moment.
+	fullUsername := brokerUserInfo.Name
 
-	// Prepend the user private group
-	u.Groups = append([]types.GroupInfo{{Name: u.Name, UGID: u.Name}}, u.Groups...)
-	userPrivateGroup := &u.Groups[0]
-
+	var u types.UserInfo
+	var userPrivateGroup *types.GroupInfo
 	var oldUserInfo *types.UserInfo
+	var oldUserRow db.UserRow
 	var pendingDiffs []string
-	checkUserNeedsUpdate := func() (needsUpdate bool, err error) {
+	var lookupName string
+	checkUserNeedsUpdate := func(lockedEntries *localentries.UserDBLocked) (needsUpdate bool, err error) {
+		// Resolve the row this user is already stored as, whatever name it currently carries, then
+		// decide the name to store them under and rewrite the broker-provided info to match.
+		matchedRow, matched, err := m.resolveStoredUser(fullUsername, brokerUserInfo.BrokerID, brokerUserInfo.ProviderID)
+		if err != nil {
+			return false, err
+		}
+
+		storedName, err := m.nameToStoreUserUnder(fullUsername, matchedRow, matched, lockedEntries)
+		if err != nil {
+			return false, err
+		}
+		if alias, exists := m.temporaryAliases.lookup(storedName); exists &&
+			(!matched || !temporaryAliasMatchesUser(alias, matchedRow)) {
+			return false, fmt.Errorf("username %q is temporarily reserved by another user", storedName)
+		}
+		if cleanup, exists := m.aliasJournal.get(storedName); exists &&
+			(!matched || cleanup.UID != matchedRow.UID) {
+			return false, fmt.Errorf("username %q is pending cleanup for another user", storedName)
+		}
+
+		u = userInfoStoredAs(brokerUserInfo, storedName)
+		// Prepend the user private group. Its UGID is the fully qualified username, so that the
+		// group keeps its identity — and therefore its GID — even when authd stores the user under
+		// a shortened name.
+		u.Groups = append([]types.GroupInfo{{Name: storedName, UGID: fullUsername}}, u.Groups...)
+		userPrivateGroup = &u.Groups[0]
+
+		// The matched row is this very user, so it is the row to compare against and to rename,
+		// whatever name it is currently stored under.
+		lookupName = storedName
+		if matched {
+			lookupName = matchedRow.Name
+		}
+
 		// Check if the user already exists in the database.
-		oldUserInfo, err = m.getOldUserInfoFromDB(lookupName)
+		oldUserInfo, oldUserRow, err = m.getOldUserInfoFromDB(lookupName)
 		if err != nil {
 			return false, err
 		}
@@ -216,6 +254,12 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 			// Username changed (provider-ID matched rename): always trigger an update.
 			return true, nil
 		}
+		if oldUserRow.FullUsername != fullUsername {
+			// Only the domain of the fully qualified username changed, so the stored name stays
+			// the same and the diff below would not notice. The stored full username is what maps
+			// the user back to the name the brokers know them by, so it has to be refreshed.
+			return true, nil
+		}
 		pendingDiffs = diffNormalizedUserInfo(u, *oldUserInfo)
 		if len(pendingDiffs) == 0 {
 			log.Debugf(context.TODO(), "User %q in database is up to date with current user info", u.Name)
@@ -228,20 +272,30 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 	// Do a first check before locking, so that if the user is already there and
 	// matches the DB entry, we can avoid any kind of locking (and so being
 	// blocked by other pre-auth users that may try to login meanwhile).
-	needsUpdate, err := checkUserNeedsUpdate()
-	if !needsUpdate || err != nil {
-		// The user is up to date, or an error occurred.
+	needsUpdate, err := checkUserNeedsUpdate(nil)
+	if err != nil {
 		return err
+	}
+	if !needsUpdate {
+		return m.retireCanonicalAlias(oldUserRow.UID, u.Name)
 	}
 
 	m.userManagementMu.Lock()
 	defer m.userManagementMu.Unlock()
 
-	// Now that we're locked, check again if meanwhile some other request
-	// created the same user, if not we can do all the kinds of locking since
-	// we're sure that the user needs to be added or updated in the database.
-	if needsUpdate, err := checkUserNeedsUpdate(); !needsUpdate || err != nil {
+	lockedEntries, unlockEntries, err := localentries.WithUserDBLock()
+	if err != nil {
 		return err
+	}
+	defer func() { err = errors.Join(err, unlockEntries()) }()
+
+	// Now that we're locked, check again if meanwhile some other request
+	// created the same user. The system account lock also makes the final short-name decision
+	// atomic with the user and group uniqueness checks below.
+	if needsUpdate, err := checkUserNeedsUpdate(lockedEntries); err != nil {
+		return err
+	} else if !needsUpdate {
+		return m.retireCanonicalAlias(oldUserRow.UID, u.Name)
 	}
 
 	if oldUserInfo == nil {
@@ -249,12 +303,6 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 	} else {
 		log.Debugf(context.TODO(), "User %q needs update: %s", u.Name, strings.Join(pendingDiffs, ", "))
 	}
-
-	lockedEntries, unlockEntries, err := localentries.WithUserDBLock()
-	if err != nil {
-		return err
-	}
-	defer func() { err = errors.Join(err, unlockEntries()) }()
 
 	if oldUserInfo != nil {
 		// The user already exists in the database, use the existing UID to avoid permission issues.
@@ -305,8 +353,15 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 
 		// It's not a local group, so before storing it in the database, check if a group with the same name already
 		// exists.
-		if err := m.checkGroupNameConflict(g.Name, g.UGID); err != nil {
-			return err
+		//
+		// The user private group is exempt when the user is already stored under this very name:
+		// the group found under it is then their own. Its UGID is the fully qualified username,
+		// which changes when only the domain changes at the IdP, and that has to re-identify the
+		// existing group rather than be reported as a conflicting one.
+		if g != userPrivateGroup || oldUserInfo == nil || oldUserInfo.Name != u.Name {
+			if err := m.checkGroupNameConflict(g.Name, g.UGID); err != nil {
+				return err
+			}
 		}
 
 		// Check if the group already exists in the database
@@ -371,8 +426,42 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		}
 	}
 
-	userRow := db.NewUserRow(u.Name, u.UID, *userPrivateGroup.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.ProviderID, u.Name)
+	userRow := db.NewUserRow(u.Name, u.UID, *userPrivateGroup.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.ProviderID, fullUsername)
 
+	if err := m.temporaryAliases.protectNameForUID(u.UID, u.Name); err != nil {
+		return err
+	}
+	aliases := m.temporaryAliases.forUID(u.UID)
+	cleanupGroups := slices.Clone(oldLocalGroups)
+	for _, group := range localGroups {
+		if !slices.Contains(cleanupGroups, group) {
+			cleanupGroups = append(cleanupGroups, group)
+		}
+	}
+	for _, alias := range aliases {
+		if len(cleanupGroups) == 0 {
+			continue
+		}
+		// Journal the cleanup before the database update, so that a crash or a failed cleanup
+		// can be reconciled at startup. The record carries the exact pre- and post-update
+		// identities, and recovery only replays the cleanup when the committed row matches one
+		// of them, so an uncommitted update is never applied.
+		if err := m.aliasJournal.add(temporaryAliasCleanup{
+			Name:            alias.name,
+			UID:             u.UID,
+			NewName:         u.Name,
+			OldBrokerID:     oldUserRow.BrokerID,
+			OldProviderID:   oldUserRow.ProviderID,
+			OldFullUsername: oldUserRow.FullUsername,
+			NewBrokerID:     alias.brokerID,
+			NewProviderID:   alias.providerID,
+			NewFullUsername: alias.fullUsername,
+			LocalGroups:     cleanupGroups,
+			CurrentGroups:   slices.Clone(localGroups),
+		}); err != nil {
+			return err
+		}
+	}
 	if err = m.db.UpdateUserEntry(userRow, groupRows, localGroups); err != nil {
 		return err
 	}
@@ -382,13 +471,27 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		return err
 	}
 
-	// If the username changed (provider-ID matched rename), remove the old username from its local
-	// groups. This runs only after the database update has succeeded, so a failed rename (e.g. the
-	// new name collides with another user) cannot strip the still-existing old user from its groups.
-	if oldUserInfo != nil && lookupName != u.Name && len(oldLocalGroups) > 0 {
+	// Temporary aliases must carry the user's current local memberships while PAM still refers to
+	// the old name. They never keep groups removed by the broker.
+	for _, alias := range aliases {
+		if alias.name == u.Name {
+			continue
+		}
+		if err := localentries.UpdateGroups(lockedEntries, alias.name, localGroups, oldLocalGroups); err != nil {
+			return fmt.Errorf("failed to update temporary alias %q in local groups: %w", alias.name, err)
+		}
+	}
+
+	// Direct callers do not prepare a temporary alias. Keep their rename behavior unchanged.
+	if oldUserInfo != nil && lookupName != u.Name &&
+		!slices.ContainsFunc(aliases, func(alias temporaryUserAlias) bool { return alias.name == lookupName }) &&
+		len(oldLocalGroups) > 0 {
 		if err := localentries.UpdateGroups(lockedEntries, lookupName, nil, oldLocalGroups); err != nil {
 			return fmt.Errorf("failed to remove old username %q from local groups: %w", lookupName, err)
 		}
+	}
+	if err := m.retireCanonicalAlias(u.UID, u.Name); err != nil {
+		return err
 	}
 
 	if err = checkHomeDirOwner(userRow.Dir, userRow.UID, userRow.GID); err != nil {
@@ -398,17 +501,17 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 	return nil
 }
 
-func (m *Manager) getOldUserInfoFromDB(name string) (oldUserInfo *types.UserInfo, err error) {
+func (m *Manager) getOldUserInfoFromDB(name string) (oldUserInfo *types.UserInfo, oldUserRow db.UserRow, err error) {
 	oldUser, oldGroups, oldLocalGroups, err := m.db.UserWithGroups(name)
 	if err != nil && !errors.Is(err, db.NoDataFoundError{}) {
 		// Unexpected error
-		return nil, err
+		return nil, db.UserRow{}, err
 	}
 	if errors.Is(err, db.NoDataFoundError{}) {
-		return nil, nil
+		return nil, db.UserRow{}, nil
 	}
 
-	return userInfoFromUserAndGroupRows(oldUser, oldGroups, oldLocalGroups), nil
+	return userInfoFromUserAndGroupRows(oldUser, oldGroups, oldLocalGroups), oldUser, nil
 }
 
 // diffNormalizedUserInfo normalizes newUserInfo for comparison against dbUserInfo
@@ -1007,25 +1110,39 @@ func (m *Manager) IsUserLocked(username string) (bool, error) {
 	return u.Locked, nil
 }
 
-// IsUserLockedByProviderID returns true if the user identified by the given broker-scoped provider ID
-// is locked. It resolves the user by their stable identity rather than their name, so a lock set before
-// an IdP-side username change is still honored. Returns a NoDataFoundError if no user matches.
-func (m *Manager) IsUserLockedByProviderID(brokerID, providerID string) (bool, error) {
-	u, err := m.db.UserByProviderID(brokerID, providerID)
-	if err != nil {
+// IsAuthenticatedUserLocked reports whether the user a broker has just authenticated is locked.
+//
+// It resolves the user the same way an update would, so that the lock is honored whatever name the
+// row currently carries: a user renamed at the IdP, or stored under a shortened name, is still the
+// same person and must stay locked out. An unknown user is not locked, since there is no record
+// saying otherwise.
+func (m *Manager) IsAuthenticatedUserLocked(fullUsername, brokerID, providerID string) (bool, error) {
+	row, matched, err := m.resolveStoredUser(fullUsername, brokerID, providerID)
+	if err != nil || !matched {
 		return false, err
 	}
 
-	return u.Locked, nil
+	return row.Locked, nil
 }
 
 // UserByName returns the user information for the given user name.
 func (m *Manager) UserByName(username string) (types.UserEntry, error) {
 	usr, err := m.db.UserByName(username)
+	if errors.Is(err, db.NoDataFoundError{}) {
+		if aliasUser, ok, aliasErr := m.userByTemporaryAlias(username); aliasErr != nil {
+			return types.UserEntry{}, aliasErr
+		} else if ok {
+			usr, err = aliasUser, nil
+		}
+	}
 	if err != nil {
 		return types.UserEntry{}, err
 	}
-	return userEntryFromUserRow(usr), nil
+	entry := userEntryFromUserRow(usr)
+	if entry.Name != username {
+		entry.Name = username
+	}
+	return entry, nil
 }
 
 // UserByID returns the user information for the given user ID.
@@ -1087,7 +1204,56 @@ func (m *Manager) GroupByName(groupname string) (types.GroupEntry, error) {
 	if err != nil {
 		return types.GroupEntry{}, err
 	}
-	return groupEntryFromGroupWithMembers(grp), nil
+	aliases, err := m.temporaryAliasNamesByUser()
+	if err != nil {
+		return types.GroupEntry{}, err
+	}
+	return groupEntryWithTemporaryAliases(grp, aliases), nil
+}
+
+// StoredGroupName resolves the name authd stores a group under from the name a caller knows it by.
+//
+// A user private group is named after its owner, so it is renamed along with them when authd stores
+// them under a shortened name, and must stay reachable by both names just like the user is. Every
+// other group is named by the identity provider and has a single name. A name matching no group is
+// returned unchanged, so that the caller still reports it as not found.
+func (m *Manager) StoredGroupName(groupname string) (string, error) {
+	_, err := m.db.GroupByName(groupname)
+	if err == nil {
+		return groupname, nil
+	}
+	if !errors.Is(err, db.NoDataFoundError{}) {
+		return "", err
+	}
+
+	if owner, ok, err := m.userByTemporaryAlias(groupname); err != nil {
+		return "", err
+	} else if ok {
+		privateGroup, err := m.db.GroupByID(owner.GID)
+		if err != nil {
+			return "", err
+		}
+		return privateGroup.Name, nil
+	}
+
+	owner, err := m.db.UserByFullUsername(groupname)
+	if errors.Is(err, db.NoDataFoundError{}) {
+		return groupname, nil
+	}
+	if err != nil {
+		return "", err
+	}
+
+	// The private group is the owner's primary group, so their GID names it.
+	privateGroup, err := m.db.GroupByID(owner.GID)
+	if errors.Is(err, db.NoDataFoundError{}) {
+		return groupname, nil
+	}
+	if err != nil {
+		return "", err
+	}
+
+	return privateGroup.Name, nil
 }
 
 // GroupByID returns the group information for the given group ID.
@@ -1100,7 +1266,11 @@ func (m *Manager) GroupByID(gid uint32) (types.GroupEntry, error) {
 	if err != nil {
 		return types.GroupEntry{}, err
 	}
-	return groupEntryFromGroupWithMembers(grp), nil
+	aliases, err := m.temporaryAliasNamesByUser()
+	if err != nil {
+		return types.GroupEntry{}, err
+	}
+	return groupEntryWithTemporaryAliases(grp, aliases), nil
 }
 
 // AllGroups returns all groups.
@@ -1111,11 +1281,44 @@ func (m *Manager) AllGroups() ([]types.GroupEntry, error) {
 		return nil, err
 	}
 
+	aliases, err := m.temporaryAliasNamesByUser()
+	if err != nil {
+		return nil, err
+	}
 	var grpEntries []types.GroupEntry
 	for _, grp := range grps {
-		grpEntries = append(grpEntries, groupEntryFromGroupWithMembers(grp))
+		grpEntries = append(grpEntries, groupEntryWithTemporaryAliases(grp, aliases))
 	}
 	return grpEntries, nil
+}
+
+func (m *Manager) temporaryAliasNamesByUser() (map[string][]string, error) {
+	aliasesByUser := make(map[string][]string)
+	for _, alias := range m.temporaryAliases.all() {
+		user, ok, err := m.userByTemporaryAlias(alias.name)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		if !slices.Contains(aliasesByUser[user.Name], alias.name) {
+			aliasesByUser[user.Name] = append(aliasesByUser[user.Name], alias.name)
+		}
+	}
+	return aliasesByUser, nil
+}
+
+func groupEntryWithTemporaryAliases(group db.GroupWithMembers, aliasesByUser map[string][]string) types.GroupEntry {
+	entry := groupEntryFromGroupWithMembers(group)
+	for _, user := range slices.Clone(entry.Users) {
+		for _, alias := range aliasesByUser[user] {
+			if !slices.Contains(entry.Users, alias) {
+				entry.Users = append(entry.Users, alias)
+			}
+		}
+	}
+	return entry
 }
 
 // UsedGIDs returns all group IDs, including the GIDs of temporary pre-auth users.
@@ -1153,10 +1356,19 @@ func (m *Manager) UsedGIDs() ([]uint32, error) {
 // ShadowByName returns the shadow information for the given user name.
 func (m *Manager) ShadowByName(username string) (types.ShadowEntry, error) {
 	usr, err := m.db.UserByName(username)
+	if errors.Is(err, db.NoDataFoundError{}) {
+		if aliasUser, ok, aliasErr := m.userByTemporaryAlias(username); aliasErr != nil {
+			return types.ShadowEntry{}, aliasErr
+		} else if ok {
+			usr, err = aliasUser, nil
+		}
+	}
 	if err != nil {
 		return types.ShadowEntry{}, err
 	}
-	return shadowEntryFromUserRow(usr), nil
+	entry := shadowEntryFromUserRow(usr)
+	entry.Name = username
+	return entry, nil
 }
 
 // AllShadows returns all shadow entries.
@@ -1231,4 +1443,422 @@ func (m *Manager) RegisterUserPreAuth(name string) (uid uint32, err error) {
 
 	log.Debugf(context.Background(), "Using new UID %d for temporary user %q", uid, name)
 	return uid, nil
+}
+
+// ShortUsernameAllowed returns true if short usernames are allowed by the configuration, false otherwise.
+func (m *Manager) ShortUsernameAllowed() bool {
+	return m.config.UseShortUsernames
+}
+
+// PrepareUserAliases keeps names that an update may invalidate resolvable until PAM has finished
+// its account checks: pam_unix re-resolves PAM_USER through NSS during pam_acct_mgmt, after the
+// update was already applied. See the temporaryaliases.go file header for the full rationale. It
+// returns the aliases that were prepared.
+func (m *Manager) PrepareUserAliases(leaseID string, brokerUserInfo types.UserInfo) ([]string, error) {
+	if brokerUserInfo.Name == "" {
+		return nil, errors.New("empty username")
+	}
+	if brokerUserInfo.ProviderID != "" && brokerUserInfo.BrokerID == "" {
+		return nil, fmt.Errorf("provider ID for user %q is not scoped by a broker ID", brokerUserInfo.Name)
+	}
+
+	matchedRow, matched, err := m.resolveStoredUser(
+		brokerUserInfo.Name, brokerUserInfo.BrokerID, brokerUserInfo.ProviderID)
+	if err != nil || !matched {
+		return nil, err
+	}
+
+	nameToStore := brokerUserInfo.Name
+	if m.config.UseShortUsernames {
+		if shortName, _, found := strings.Cut(brokerUserInfo.Name, "@"); found {
+			nameToStore = shortName
+		}
+	}
+
+	var aliases []string
+	if matchedRow.Name != nameToStore {
+		aliases = append(aliases, matchedRow.Name)
+	}
+	if matchedRow.FullUsername != "" && matchedRow.FullUsername != brokerUserInfo.Name &&
+		!slices.Contains(aliases, matchedRow.FullUsername) {
+		aliases = append(aliases, matchedRow.FullUsername)
+	}
+	for _, alias := range aliases {
+		aliasBrokerID := matchedRow.BrokerID
+		if aliasBrokerID == "" {
+			aliasBrokerID = brokerUserInfo.BrokerID
+		}
+		aliasProviderID := matchedRow.ProviderID
+		if aliasProviderID == "" {
+			aliasProviderID = brokerUserInfo.ProviderID
+		}
+		if err := m.temporaryAliases.add(leaseID, alias, matchedRow.UID,
+			aliasBrokerID, aliasProviderID, brokerUserInfo.Name); err != nil {
+			m.temporaryAliases.remove(leaseID)
+			return nil, err
+		}
+	}
+	return aliases, nil
+}
+
+// RetainUserAlias keeps an alias used to start another PAM transaction alive for that transaction.
+func (m *Manager) RetainUserAlias(updateID, name string) (bool, error) {
+	return m.temporaryAliases.retain(updateID, name)
+}
+
+// HasUserAlias reports whether a PAM transaction owns a temporary user alias.
+func (m *Manager) HasUserAlias(leaseID string) bool {
+	return m.temporaryAliases.has(leaseID)
+}
+
+// CancelUserAlias removes the temporary alias owned by a failed user update.
+func (m *Manager) CancelUserAlias(leaseID string) {
+	m.temporaryAliases.remove(leaseID)
+}
+
+// ReleaseUserAlias lets the temporary alias expire shortly after PAM account checks finish.
+func (m *Manager) ReleaseUserAlias(leaseID string) bool {
+	return m.temporaryAliases.complete(leaseID)
+}
+
+// UserEntryStoredAs rewrites a broker-provided entry for a user authd does not know yet to the name
+// it would store them under. The pre-authentication path needs it so that the entry it hands out
+// agrees with the one created after a successful login, down to the home directory.
+func (m *Manager) UserEntryStoredAs(entry types.UserEntry) (result types.UserEntry, err error) {
+	lockedEntries, unlockEntries, err := localentries.WithUserDBLock()
+	if err != nil {
+		return types.UserEntry{}, err
+	}
+	defer func() { err = errors.Join(err, unlockEntries()) }()
+
+	storedName, err := m.nameToStoreUserUnder(entry.Name, db.UserRow{}, false, lockedEntries)
+	if err != nil {
+		return types.UserEntry{}, err
+	}
+	if storedName == entry.Name {
+		return entry, nil
+	}
+
+	entry.Dir = renameHomeDir(entry.Dir, entry.Name, storedName)
+	entry.Name = storedName
+
+	return entry, nil
+}
+
+// NamesForLogin resolves the name authd stores the user under, together with the fully qualified
+// name the brokers expect, from the name the user is logging in with. Both forms are accepted, so
+// they are both looked up. Returns a NoDataFoundError if the user is not known yet.
+func (m *Manager) NamesForLogin(loginName string) (storedName, fullUsername string, err error) {
+	storedName, fullUsername, _, err = m.namesForLogin(loginName, "")
+	return storedName, fullUsername, err
+}
+
+// NamesForLoginAndRetainAlias resolves loginName and atomically retains it when it is a temporary
+// alias. This prevents the alias from expiring while a broker session is being created.
+func (m *Manager) NamesForLoginAndRetainAlias(loginName, leaseID string) (storedName, fullUsername string, aliasRetained bool, err error) {
+	return m.namesForLogin(loginName, leaseID)
+}
+
+func (m *Manager) namesForLogin(loginName, leaseID string) (storedName, fullUsername string, aliasRetained bool, err error) {
+	userRow, err := m.db.UserByName(loginName)
+	if errors.Is(err, db.NoDataFoundError{}) {
+		if leaseID == "" {
+			if aliasUser, ok, aliasErr := m.userByTemporaryAlias(loginName); aliasErr != nil {
+				return "", "", false, aliasErr
+			} else if ok {
+				userRow, err = aliasUser, nil
+			}
+		} else if _, retained, retainErr := m.temporaryAliases.lookupAndRetain(leaseID, loginName); retainErr != nil {
+			return "", "", false, retainErr
+		} else if retained {
+			aliasRetained = true
+			if aliasUser, ok, aliasErr := m.userByTemporaryAlias(loginName); aliasErr != nil {
+				m.temporaryAliases.remove(leaseID)
+				return "", "", false, aliasErr
+			} else if ok {
+				userRow, err = aliasUser, nil
+			} else {
+				m.temporaryAliases.remove(leaseID)
+				aliasRetained = false
+			}
+		}
+	}
+	if errors.Is(err, db.NoDataFoundError{}) {
+		userRow, err = m.db.UserByFullUsername(loginName)
+	}
+	if err != nil {
+		return "", "", false, err
+	}
+
+	fullUsername = userRow.FullUsername
+	if fullUsername == "" {
+		// Rows created before the full_username column existed (or by brokers which never provided
+		// one) store the full username as the name.
+		fullUsername = userRow.Name
+	}
+
+	return userRow.Name, fullUsername, aliasRetained, nil
+}
+
+func (m *Manager) userByTemporaryAlias(name string) (db.UserRow, bool, error) {
+	alias, ok := m.temporaryAliases.lookup(name)
+	if !ok {
+		return db.UserRow{}, false, nil
+	}
+
+	current, err := m.db.UserByName(name)
+	if err == nil {
+		if !temporaryAliasMatchesUser(alias, current) {
+			return db.UserRow{}, false, nil
+		}
+		return current, true, nil
+	}
+	if !errors.Is(err, db.NoDataFoundError{}) {
+		return db.UserRow{}, false, err
+	}
+
+	user, err := m.db.UserByID(alias.uid)
+	if errors.Is(err, db.NoDataFoundError{}) {
+		return db.UserRow{}, false, nil
+	}
+	if err != nil {
+		return db.UserRow{}, false, err
+	}
+	if !temporaryAliasMatchesUser(alias, user) {
+		return db.UserRow{}, false, nil
+	}
+
+	return user, true, nil
+}
+
+func temporaryAliasMatchesUser(alias temporaryUserAlias, user db.UserRow) bool {
+	if alias.providerID != "" {
+		return user.BrokerID == alias.brokerID && user.ProviderID == alias.providerID
+	}
+	return user.FullUsername == alias.fullUsername
+}
+
+func (m *Manager) retireCanonicalAlias(uid uint32, name string) error {
+	if err := m.aliasJournal.remove(name); err != nil {
+		return err
+	}
+	m.temporaryAliases.discardNameForUID(uid, name)
+	return nil
+}
+
+func (m *Manager) removeTemporaryAliasFromLocalGroups(alias temporaryUserAlias) bool {
+	if err := m.cleanupTemporaryAlias(alias.name); err != nil {
+		log.Errorf(context.Background(), "Could not clean up temporary user alias %q: %v", alias.name, err)
+		return false
+	}
+	return true
+}
+
+func (m *Manager) reconcileTemporaryAliasCleanups() error {
+	for _, cleanup := range m.aliasJournal.all() {
+		if err := m.cleanupTemporaryAlias(cleanup.Name); err != nil {
+			return fmt.Errorf("could not recover temporary user alias %q: %w", cleanup.Name, err)
+		}
+	}
+	return nil
+}
+
+func (m *Manager) cleanupTemporaryAlias(name string) error {
+	m.userManagementMu.Lock()
+	defer m.userManagementMu.Unlock()
+
+	cleanup, ok := m.aliasJournal.get(name)
+	if !ok {
+		return nil
+	}
+	current, currentErr := m.db.UserByID(cleanup.UID)
+	if currentErr == nil && current.Name == cleanup.Name &&
+		userRowMatchesIdentity(current, cleanup.OldBrokerID, cleanup.OldProviderID, cleanup.OldFullUsername) {
+		return m.aliasJournal.remove(cleanup.Name)
+	}
+	if currentErr != nil && !errors.Is(currentErr, db.NoDataFoundError{}) {
+		return currentErr
+	}
+
+	lockedEntries, unlockEntries, err := localentries.WithUserDBLock()
+	if err != nil {
+		return err
+	}
+
+	var updateErr error
+	if currentErr == nil && current.Name == cleanup.NewName &&
+		userRowMatchesIdentity(current, cleanup.NewBrokerID, cleanup.NewProviderID, cleanup.NewFullUsername) {
+		updateErr = localentries.UpdateGroups(
+			lockedEntries, current.Name, cleanup.CurrentGroups, cleanup.LocalGroups)
+	}
+	if err := localentries.UpdateGroups(lockedEntries, cleanup.Name, nil, cleanup.LocalGroups); err != nil {
+		updateErr = errors.Join(updateErr, err)
+	}
+	unlockErr := unlockEntries()
+	if err := errors.Join(updateErr, unlockErr); err != nil {
+		return err
+	}
+	return m.aliasJournal.remove(cleanup.Name)
+}
+
+func userRowMatchesIdentity(user db.UserRow, brokerID, providerID, fullUsername string) bool {
+	return user.BrokerID == brokerID && user.ProviderID == providerID && user.FullUsername == fullUsername
+}
+
+// UserByFullUsername returns the user information for the user stored under the given full username.
+func (m *Manager) UserByFullUsername(fullUsername string) (types.UserEntry, error) {
+	userRow, err := m.db.UserByFullUsername(fullUsername)
+	if err != nil {
+		return types.UserEntry{}, err
+	}
+	return userEntryFromUserRow(userRow), nil
+}
+
+// resolveStoredUser finds the row a user is already stored as, whatever name it currently carries.
+// It is the single place that decides what "the same user" means, so that every caller agrees.
+//
+// Two things identify a user across a rename. The broker-scoped provider ID (sub/oid) is the stable
+// identity and takes precedence: it survives a username change at the IdP. The fully qualified
+// username is the fallback, and the only proof available for rows written before the brokers
+// reported a provider ID or by v2 brokers, which never report one.
+func (m *Manager) resolveStoredUser(fullUsername, brokerID, providerID string) (row db.UserRow, matched bool, err error) {
+	if brokerID != "" && providerID != "" {
+		providerIDMatch, err := m.db.UserByProviderID(brokerID, providerID)
+		if err != nil && !errors.Is(err, db.NoDataFoundError{}) {
+			return db.UserRow{}, false, fmt.Errorf("failed to look up user by provider ID: %w", err)
+		}
+		if err == nil {
+			if providerIDMatch.FullUsername != fullUsername {
+				log.Noticef(context.TODO(), "User identified by broker ID %q and provider ID %q: username changed from %q to %q",
+					brokerID, providerID, providerIDMatch.FullUsername, fullUsername)
+			}
+			return providerIDMatch, true, nil
+		}
+	}
+
+	fullUsernameMatch, err := m.db.UserByFullUsername(fullUsername)
+	if err != nil && !errors.Is(err, db.NoDataFoundError{}) {
+		return db.UserRow{}, false, fmt.Errorf("failed to look up user by full username: %w", err)
+	}
+	if err == nil {
+		return fullUsernameMatch, true, nil
+	}
+
+	// An older authd version can add a row after the full_username migration has already run. Such
+	// a row keeps the fully qualified username in name and leaves full_username empty. Accept only
+	// that exact legacy form: a non-empty, different full_username means the stored name is merely
+	// a local alias and must not identify the broker user.
+	nameMatch, err := m.db.UserByName(fullUsername)
+	if err != nil && !errors.Is(err, db.NoDataFoundError{}) {
+		return db.UserRow{}, false, fmt.Errorf("failed to look up user by stored name: %w", err)
+	}
+	if err == nil && nameMatch.FullUsername == "" {
+		return nameMatch, true, nil
+	}
+
+	return db.UserRow{}, false, nil
+}
+
+// nameToStoreUserUnder returns the name authd should store the given user under, which is the
+// shortened form of their fully qualified username when the configuration asks for it.
+//
+// Distinct fully qualified usernames can shorten to the same name. The first user to claim it keeps
+// it, and any other user falls back to their fully qualified name: they are both still able to log
+// in, under different-looking names. Refusing the second user instead would make an account
+// unusable for good, and which of the two lost would depend on who happened to log in first.
+func (m *Manager) nameToStoreUserUnder(fullUsername string, matchedRow db.UserRow, matched bool, lockedEntries *localentries.UserDBLocked) (string, error) {
+	if !m.config.UseShortUsernames {
+		return fullUsername, nil
+	}
+
+	shortName, _, found := strings.Cut(fullUsername, "@")
+	if !found {
+		// The name carries no domain, so it is already as short as it gets.
+		return fullUsername, nil
+	}
+
+	if matched && matchedRow.Name == shortName {
+		// The user already holds the short name, so there is nothing to check.
+		return shortName, nil
+	}
+
+	holder, err := m.db.UserByName(shortName)
+	if err != nil && !errors.Is(err, db.NoDataFoundError{}) {
+		return "", err
+	}
+	if err == nil {
+		holderName := holder.FullUsername
+		if holderName == "" {
+			holderName = holder.Name
+		}
+		log.Warningf(context.TODO(), "Username %q is already used by %q, so %q keeps their fully qualified name",
+			shortName, holderName, fullUsername)
+		return fullUsername, nil
+	}
+
+	// The first, unlocked check only decides whether an update may be needed. The final check runs
+	// with the system account database locked, so a local user or private group cannot claim the
+	// short name between this decision and the database update.
+	if lockedEntries == nil {
+		return shortName, nil
+	}
+
+	unique, err := lockedEntries.IsUniqueUserName(shortName)
+	if err != nil {
+		return "", err
+	}
+	if !unique {
+		log.Warningf(context.TODO(), "Username %q is already used by a system user, so %q keeps their fully qualified name",
+			shortName, fullUsername)
+		return fullUsername, nil
+	}
+
+	unique, err = lockedEntries.IsUniqueGroupName(shortName)
+	if err != nil {
+		return "", err
+	}
+	if !unique {
+		log.Warningf(context.TODO(), "Group name %q is already used by a system group, so %q keeps their fully qualified name",
+			shortName, fullUsername)
+		return fullUsername, nil
+	}
+
+	return shortName, nil
+}
+
+// userInfoStoredAs returns the broker-provided user information rewritten to be stored under the
+// given name. The name is the key authd stores the user under, so every name-derived field has to
+// follow it. Group UGIDs are left untouched: they are stable identities, not names.
+//
+// The result never shares memory with the input, because the caller owns the information the broker
+// reported and must keep seeing it unchanged.
+func userInfoStoredAs(brokerUserInfo types.UserInfo, storedName string) types.UserInfo {
+	u := brokerUserInfo
+	u.Groups = slices.Clone(brokerUserInfo.Groups)
+
+	if storedName == brokerUserInfo.Name {
+		return u
+	}
+
+	// The broker may report a self-named group, which has to follow the user name.
+	for i := range u.Groups {
+		if u.Groups[i].Name == brokerUserInfo.Name {
+			u.Groups[i].Name = storedName
+		}
+	}
+	u.Dir = renameHomeDir(u.Dir, brokerUserInfo.Name, storedName)
+	u.Name = storedName
+
+	return u
+}
+
+// renameHomeDir returns dir with a trailing oldName element replaced by newName. Only the last
+// element is considered: the username is what the home directory is named after, and it may well
+// appear in the path of the directory holding it, which is not ours to rewrite.
+func renameHomeDir(dir, oldName, newName string) string {
+	if dir == "" || filepath.Base(dir) != oldName {
+		return dir
+	}
+
+	return filepath.Join(filepath.Dir(dir), newName)
 }

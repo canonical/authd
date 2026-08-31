@@ -52,6 +52,24 @@ func (s Service) GetUserByName(ctx context.Context, req *authd.GetUserByNameRequ
 		return userToProtobuf(user), nil
 	}
 
+	if errors.Is(err, users.NoDataFoundError{}) {
+		// Users may be stored under a shortened name while the rest of the system, and the user
+		// themselves, still refer to them by the fully qualified one. Resolve both forms to the
+		// same entry, whose Name is the shortened one. This is not gated on the configuration, so
+		// that users shortened by an earlier configuration remain resolvable — and can therefore
+		// log in and be renamed back — once short usernames are disabled again.
+		userByFullUsername, fullUsernameErr := s.userManager.UserByFullUsername(name)
+		if fullUsernameErr == nil {
+			return userToProtobuf(userByFullUsername), nil
+		}
+		if !errors.Is(fullUsernameErr, users.NoDataFoundError{}) {
+			// The user may well exist: reporting them as unknown would let the caller fall back to
+			// a pre-check and register a temporary entry for an already known user.
+			log.Errorf(ctx, "GetUserByName: %v", fullUsernameErr)
+			return nil, grpcError(fullUsernameErr)
+		}
+	}
+
 	if !errors.Is(err, users.NoDataFoundError{}) {
 		log.Errorf(context.Background(), "GetUserByName: %v", err)
 		return nil, grpcError(err)
@@ -130,6 +148,12 @@ func (s Service) LockUser(ctx context.Context, req *authd.LockUserRequest) (*aut
 		return nil, status.Error(codes.InvalidArgument, "no user name provided")
 	}
 
+	name, _, err := s.userNames(name)
+	if err != nil {
+		log.Errorf(ctx, "LockUser: %v", err)
+		return nil, grpcError(err)
+	}
+
 	if err := s.userManager.LockUser(name); err != nil {
 		return nil, grpcError(err)
 	}
@@ -150,6 +174,12 @@ func (s Service) UnlockUser(ctx context.Context, req *authd.UnlockUserRequest) (
 		return nil, status.Error(codes.InvalidArgument, "no user name provided")
 	}
 
+	name, _, err := s.userNames(name)
+	if err != nil {
+		log.Errorf(ctx, "UnlockUser: %v", err)
+		return nil, grpcError(err)
+	}
+
 	if err := s.userManager.UnlockUser(name); err != nil {
 		return nil, grpcError(err)
 	}
@@ -165,6 +195,12 @@ func (s Service) GetGroupByName(ctx context.Context, req *authd.GetGroupByNameRe
 	if name == "" {
 		log.Warningf(ctx, "GetGroupByName: no group name provided")
 		return nil, status.Error(codes.InvalidArgument, "no group name provided")
+	}
+
+	name, err := s.userManager.StoredGroupName(name)
+	if err != nil {
+		log.Errorf(ctx, "GetGroupByName: %v", err)
+		return nil, grpcError(err)
 	}
 
 	g, err := s.userManager.GroupByName(name)
@@ -219,6 +255,8 @@ func (s Service) ListGroups(ctx context.Context, req *authd.Empty) (*authd.Group
 }
 
 // SetUserID sets the UID of a user.
+//
+//nolint:dupl // SetHomeDir shares the same shape but sets a different attribute.
 func (s Service) SetUserID(ctx context.Context, req *authd.SetUserIDRequest) (*authd.SetUserIDResponse, error) {
 	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
 		return nil, status.Error(codes.PermissionDenied, err.Error())
@@ -229,6 +267,12 @@ func (s Service) SetUserID(ctx context.Context, req *authd.SetUserIDRequest) (*a
 
 	if name == "" {
 		return nil, status.Error(codes.InvalidArgument, "no user name provided")
+	}
+
+	name, _, err := s.userNames(name)
+	if err != nil {
+		log.Errorf(ctx, "SetUserID: %v", err)
+		return nil, grpcError(err)
 	}
 
 	resp, err := s.userManager.SetUserID(name, req.GetId())
@@ -257,6 +301,12 @@ func (s Service) SetGroupID(ctx context.Context, req *authd.SetGroupIDRequest) (
 		return nil, status.Error(codes.InvalidArgument, "no group name provided")
 	}
 
+	name, err := s.userManager.StoredGroupName(name)
+	if err != nil {
+		log.Errorf(ctx, "SetGroupID: %v", err)
+		return nil, grpcError(err)
+	}
+
 	resp, err := s.userManager.SetGroupID(name, req.GetId())
 	if err != nil {
 		log.Errorf(ctx, "SetGroupID: %v", err)
@@ -279,6 +329,12 @@ func (s Service) SetShell(ctx context.Context, req *authd.SetShellRequest) (*aut
 		return nil, status.Error(codes.PermissionDenied, err.Error())
 	}
 
+	name, _, err := s.userNames(name)
+	if err != nil {
+		log.Errorf(ctx, "SetShell: %v", err)
+		return nil, grpcError(err)
+	}
+
 	warnings, err := s.userManager.SetShell(name, req.GetShell())
 	if err != nil {
 		log.Errorf(ctx, "SetShell: %v", err)
@@ -291,6 +347,8 @@ func (s Service) SetShell(ctx context.Context, req *authd.SetShellRequest) (*aut
 }
 
 // SetHomeDir sets the home directory of a user.
+//
+//nolint:dupl // SetUserID shares the same shape but sets a different attribute.
 func (s Service) SetHomeDir(ctx context.Context, req *authd.SetHomeDirRequest) (*authd.SetHomeDirResponse, error) {
 	if err := s.permissionManager.CheckRequestIsFromRoot(ctx); err != nil {
 		return nil, status.Error(codes.PermissionDenied, err.Error())
@@ -301,6 +359,12 @@ func (s Service) SetHomeDir(ctx context.Context, req *authd.SetHomeDirRequest) (
 
 	if name == "" {
 		return nil, status.Error(codes.InvalidArgument, "no user name provided")
+	}
+
+	name, _, err := s.userNames(name)
+	if err != nil {
+		log.Errorf(ctx, "SetHomeDir: %v", err)
+		return nil, grpcError(err)
 	}
 
 	resp, err := s.userManager.SetHomeDir(name, req.GetHome())
@@ -326,6 +390,15 @@ func (s Service) DeleteUser(ctx context.Context, req *authd.DeleteUserRequest) (
 	name := strings.ToLower(req.GetName())
 	if name == "" {
 		return nil, status.Error(codes.InvalidArgument, "no user name provided")
+	}
+
+	// The user may be stored under a shortened name while the caller refers to them by the fully
+	// qualified one, or the other way around. Resolve both: the database is keyed by the stored
+	// name, while the broker only ever knew the user by their fully qualified name.
+	name, fullUsername, err := s.userNames(name)
+	if err != nil {
+		log.Errorf(ctx, "DeleteUser: %v", err)
+		return nil, grpcError(err)
 	}
 
 	// Look up which broker owns this user and the user's stable provider ID before removing them
@@ -354,9 +427,9 @@ func (s Service) DeleteUser(ctx context.Context, req *authd.DeleteUserRequest) (
 		if err != nil {
 			brokerCleanupFailedOrSkipped = true
 			log.Errorf(context.Background(), "failed to get broker %q for user %q: %v", brokerID, name, err)
-		} else if err := broker.DeleteUser(ctx, name, providerID); err != nil {
+		} else if err := broker.DeleteUser(ctx, fullUsername, providerID); err != nil {
 			brokerCleanupFailedOrSkipped = true
-			log.Errorf(context.Background(), "failed to delete user %q from broker %q: %v", name, brokerID, err)
+			log.Errorf(context.Background(), "failed to delete user %q from broker %q: %v", fullUsername, brokerID, err)
 		}
 	}
 
@@ -379,12 +452,35 @@ func (s Service) DeleteGroup(ctx context.Context, req *authd.DeleteGroupRequest)
 		return nil, status.Error(codes.InvalidArgument, "no group name provided")
 	}
 
+	name, err := s.userManager.StoredGroupName(name)
+	if err != nil {
+		log.Errorf(ctx, "DeleteGroup: %v", err)
+		return nil, grpcError(err)
+	}
+
 	if err := s.userManager.DeleteGroup(name); err != nil {
 		log.Errorf(ctx, "DeleteGroup: %v", err)
 		return nil, grpcError(err)
 	}
 
 	return &authd.Empty{}, nil
+}
+
+// userNames maps the name a caller refers to a user by onto the name authd stores them under,
+// together with the fully qualified name the brokers know them by. Users can be stored under a
+// shortened name while the rest of the system still refers to them by the fully qualified one, so
+// every RPC has to keep accepting both forms. A name matching no user is returned unchanged, so
+// that the caller still reports it as not found rather than failing differently.
+func (s Service) userNames(name string) (storedName, fullUsername string, err error) {
+	storedName, fullUsername, err = s.userManager.NamesForLogin(name)
+	if errors.Is(err, users.NoDataFoundError{}) {
+		return name, name, nil
+	}
+	if err != nil {
+		return "", "", err
+	}
+
+	return storedName, fullUsername, nil
 }
 
 // userToProtobuf converts a types.UserEntry to authd.User.
@@ -447,6 +543,14 @@ func (s Service) userPreCheck(ctx context.Context, username string) (types.UserE
 	var u types.UserEntry
 	if err := json.Unmarshal([]byte(userinfo), &u); err != nil {
 		return types.UserEntry{}, fmt.Errorf("user data from broker invalid: %v", err)
+	}
+
+	// Brokers always report the fully qualified username, but the rest of the system must see the
+	// user under the name authd will store them as, otherwise the pre-authentication entry and the
+	// entry created after a successful login would disagree on the name and home directory.
+	u, err = s.userManager.UserEntryStoredAs(u)
+	if err != nil {
+		return types.UserEntry{}, fmt.Errorf("could not resolve the name to store user %q under: %w", username, err)
 	}
 
 	// Register a temporary user with a unique UID. If the user authenticates successfully, the user will be added to
