@@ -36,7 +36,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ${{ env.build_dependencies }}
 
-          go install honnef.co/go/tools/cmd/staticcheck@latest
+          # We need to pin staticcheck to v0.7.0 while we are in Go 1.25 since newer versions require Go 1.26 or later.
+          go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
 
       - name: Update Rust version
         run: |
