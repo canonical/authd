@@ -2,7 +2,6 @@
 version = "1.0.5"
 
 [lib]
-name = "wasm_bindgen_shared"
 path = "src/lib.rs"
 
 [lints.clippy]

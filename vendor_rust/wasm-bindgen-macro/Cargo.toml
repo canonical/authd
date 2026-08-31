@@ -11,9 +11,7 @@ version = "1.0"
 strict-macro = ["wasm-bindgen-macro-support/strict-macro"]
 
 [lib]
-name = "wasm_bindgen_macro"
 path = "src/lib.rs"
-proc-macro = true
 
 [lints.clippy]
 large_enum_variant = "allow"

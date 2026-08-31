@@ -19,7 +19,6 @@ extra-traits = ["syn/extra-traits"]
 strict-macro = []
 
 [lib]
-name = "wasm_bindgen_macro_support"
 path = "src/lib.rs"
 
 [lints.clippy]

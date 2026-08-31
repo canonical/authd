@@ -8,7 +8,6 @@ native = []
 rustc-dep-of-std = ["core"]
 
 [lib]
-name = "r_efi"
 path = "src/lib.rs"
 
 [package]

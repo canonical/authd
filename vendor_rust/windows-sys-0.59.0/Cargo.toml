@@ -246,10 +246,7 @@ default = []
 docs = []
 
 [lib]
-doctest = false
-name = "windows_sys"
 path = "src/lib.rs"
-test = false
 
 [lints.rust]
 missing_docs = "warn"

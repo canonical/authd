@@ -7,7 +7,6 @@ mac_os_10_7_support = []
 mac_os_10_8_features = []
 
 [lib]
-name = "core_foundation_sys"
 path = "src/lib.rs"
 
 [package]

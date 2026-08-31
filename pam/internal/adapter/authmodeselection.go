@@ -37,7 +37,8 @@ type authModesReceived struct {
 
 // authModeSelected is the internal event signalling that the an authentication mode has been selected.
 type authModeSelected struct {
-	id string
+	id      string
+	fromGDM bool
 }
 
 // selectAuthMode selects current authentication mode.
@@ -45,6 +46,15 @@ func selectAuthMode(id string) tea.Cmd {
 	return func() tea.Msg {
 		return authModeSelected{
 			id: id,
+		}
+	}
+}
+
+func selectGdmAuthMode(id string) tea.Cmd {
+	return func() tea.Msg {
+		return authModeSelected{
+			id:      id,
+			fromGDM: true,
 		}
 	}
 }
@@ -209,7 +219,8 @@ func (m authModeSelectionModel) Update(msg tea.Msg) (authModeSelectionModel, tea
 		}
 
 		return m, sendEvent(AuthModeSelected{
-			ID: msg.id,
+			ID:      msg.id,
+			fromGDM: msg.fromGDM,
 		})
 	}
 

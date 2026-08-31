@@ -23,10 +23,7 @@ std = ["wasm-bindgen/std", "dep:futures-util"]
 unsafe-eval = []
 
 [lib]
-doctest = false
-name = "js_sys"
 path = "src/lib.rs"
-test = false
 
 [lints.clippy]
 large_enum_variant = "allow"

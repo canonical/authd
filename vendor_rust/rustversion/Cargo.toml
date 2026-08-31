@@ -3,9 +3,7 @@ features = ["diff"]
 version = "1.0.49"
 
 [lib]
-name = "rustversion"
 path = "src/lib.rs"
-proc-macro = true
 
 [package]
 authors = ["David Tolnay <dtolnay@gmail.com>"]

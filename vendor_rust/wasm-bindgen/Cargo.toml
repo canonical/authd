@@ -39,9 +39,7 @@ strict-macro = ["wasm-bindgen-macro/strict-macro"]
 xxx_debug_only_print_generated_code = []
 
 [lib]
-name = "wasm_bindgen"
 path = "src/lib.rs"
-test = false
 
 [lints.clippy]
 large_enum_variant = "allow"

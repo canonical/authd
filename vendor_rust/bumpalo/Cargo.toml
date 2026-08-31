@@ -42,8 +42,6 @@ serde = ["dep:serde"]
 std = []
 
 [lib]
-bench = false
-name = "bumpalo"
 path = "src/lib.rs"
 
 [package]

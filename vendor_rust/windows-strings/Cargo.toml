@@ -7,7 +7,6 @@ default = ["std"]
 std = []
 
 [lib]
-name = "windows_strings"
 path = "src/lib.rs"
 
 [lints.rust]

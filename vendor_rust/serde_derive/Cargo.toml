@@ -21,9 +21,7 @@ default = []
 deserialize_in_place = []
 
 [lib]
-name = "serde_derive"
 path = "src/lib.rs"
-proc-macro = true
 
 [package]
 authors = ["Erick Tryzelaar <erick.tryzelaar@gmail.com>", "David Tolnay <dtolnay@gmail.com>"]

@@ -16,7 +16,6 @@ rustc-dep-of-std = ["core", "rustc-std-workspace-alloc"]
 std = []
 
 [lib]
-name = "wasi"
 path = "src/lib.rs"
 
 [package]

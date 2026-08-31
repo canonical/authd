@@ -2,7 +2,6 @@
 version = "0.2.126"
 
 [lib]
-name = "android_system_properties"
 path = "src/lib.rs"
 
 [package]

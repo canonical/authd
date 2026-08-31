@@ -23,7 +23,6 @@ default = ["std"]
 std = ["windows-result/std", "windows-strings/std"]
 
 [lib]
-name = "windows_core"
 path = "src/lib.rs"
 
 [lints.rust]
