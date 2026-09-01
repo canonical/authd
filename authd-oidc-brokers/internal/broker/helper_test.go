@@ -313,6 +313,9 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 		DeviceIsDisabled:     options.deviceIsDisabled,
 		UserIsDisabled:       options.userIsDisabled,
 		ObtainedViaEntraAuth: options.obtainedViaEntraAuth,
+		// A seeded cache simulates a previously successful login, so its
+		// groups count as resolved.
+		GroupsResolved: true,
 	}
 
 	if options.expired {
