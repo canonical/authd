@@ -288,8 +288,7 @@ func (p *Provider) GetGroups(
 			msg := "Token acquisition failed: The app is misconfigured in Microsoft Entra (the redirect URI is missing or invalid). Please contact your administrator."
 			return nil, &providerErrors.ForDisplayError{Message: msg, Err: fmt.Errorf("%w: %w", providerErrors.ErrInvalidRedirectURI, err)}
 		}
-		var tokenAcquisitionError himmelblau.TokenAcquisitionError
-		if errors.As(err, &tokenAcquisitionError) {
+		if errors.Is(err, himmelblau.ErrDeviceAuthenticationFailed) {
 			return nil, &providerErrors.RetryWithDeviceAuthError{Err: fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", err)}
 		}
 		if err != nil {
