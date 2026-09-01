@@ -19,8 +19,13 @@ type AuthCachedInfo struct {
 	ProviderMetadata       map[string]interface{}
 	UserInfo               info.User
 	DeviceRegistrationData []byte
-	DeviceIsDisabled       bool
-	UserIsDisabled         bool
+	// DeviceRegistrationDataObtainedAt stores the Unix timestamp of the fresh
+	// device registration data. Entra can need time to replicate a new device,
+	// so a confirmed device-authentication failure inside the replication window
+	// keeps the data instead of discarding it.
+	DeviceRegistrationDataObtainedAt int64 `json:",omitempty"`
+	DeviceIsDisabled                 bool
+	UserIsDisabled                   bool
 	// ObtainedViaEntraAuth is set when the token was obtained through the
 	// entra_auth flow. On a returning login it selects the refresh path:
 	// these tokens are refreshed as the Microsoft Broker App (public client, no

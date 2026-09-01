@@ -54,6 +54,11 @@ type DeviceRegisterer interface {
 	// entra_auth flow) are not device-registration tokens unless a device
 	// was actually registered.
 	IsTokenForDeviceRegistration(authInfo *token.AuthCachedInfo) bool
+	// MaybeRegisterDevice returns the device registration data to cache: it
+	// returns deviceRegistrationData unchanged when the device is already
+	// registered, and new data when it registered the device. It must not modify
+	// the slice it is given, because the caller compares the returned data with
+	// the input to detect a fresh registration.
 	MaybeRegisterDevice(
 		ctx context.Context,
 		token *oauth2.Token,

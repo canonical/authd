@@ -2398,6 +2398,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	// first-time login (no cached token) it keeps its zero value, which is correct.
 	if oldAuthInfo != nil {
 		authInfo.DeviceRegistrationData = oldAuthInfo.DeviceRegistrationData
+		authInfo.DeviceRegistrationDataObtainedAt = oldAuthInfo.DeviceRegistrationDataObtainedAt
 	}
 
 	var deviceRegistrationData []byte
@@ -3025,6 +3026,7 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 	t := token.NewAuthCachedInfo(oauthToken, rawIDToken, extraFields)
 	t.ProviderMetadata = oldToken.ProviderMetadata
 	t.DeviceRegistrationData = oldToken.DeviceRegistrationData
+	t.DeviceRegistrationDataObtainedAt = oldToken.DeviceRegistrationDataObtainedAt
 
 	t.UserInfo, err = b.getUserInfo(ctx, session, oauthToken, rawIDToken, true)
 	if err != nil {
@@ -3137,6 +3139,9 @@ func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, auth
 		return cleanup, "", nil
 	}
 
+	// The provider must not modify existingData (see providers.DeviceRegisterer),
+	// so comparing the returned data against it detects a fresh registration.
+	deviceRegistrationDataBeforeRegistration := existingData
 	var err error
 	authInfo.DeviceRegistrationData, cleanup, err = dr.MaybeRegisterDevice(ctx, regToken,
 		session.username,
@@ -3147,8 +3152,15 @@ func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, auth
 		log.Errorf(context.Background(), "error registering device: %s", err)
 		return func() {}, AuthDenied, errorMessage{Message: "Error registering device"}
 	}
+	if len(authInfo.DeviceRegistrationData) > 0 &&
+		!slices.Equal(authInfo.DeviceRegistrationData, deviceRegistrationDataBeforeRegistration) {
+		// Fresh registration data: record when it was obtained so a confirmed
+		// device-authentication failure inside the replication window keeps it.
+		authInfo.DeviceRegistrationDataObtainedAt = time.Now().Unix()
+	}
 
-	// Store the auth info, so that the device registration data is not lost if the login fails after this point.
+	// Store the auth info before group lookup, so fresh registration data is not
+	// lost if the login fails after this point.
 	if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
 		log.Errorf(context.Background(), "Failed to store token: %s", err)
 		return cleanup, AuthDenied, unexpectedErrMsg("failed to store token")
