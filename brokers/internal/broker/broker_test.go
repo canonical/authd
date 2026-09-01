@@ -5015,6 +5015,286 @@ func TestDeviceAuthClearsStaleRegistrationAfterGroupSuccess(t *testing.T) {
 	require.Zero(t, cached.DeviceRegistrationDataObtainedAt)
 }
 
+// failFirstEnrollmentsProvider fails the first enrollments of a new device, like
+// a tenant that cannot enroll the device yet.
+type failFirstEnrollmentsProvider struct {
+	*mockEntraAuthProvider
+	failures int
+}
+
+func (p *failFirstEnrollmentsProvider) MaybeRegisterDevice(ctx context.Context, tok *oauth2.Token, username, issuerURL string, oldData []byte) ([]byte, func(), error) {
+	if len(oldData) == 0 && p.failures > 0 {
+		p.failures--
+		return nil, func() {}, errors.New("failed to enroll device")
+	}
+	return p.mockEntraAuthProvider.MaybeRegisterDevice(ctx, tok, username, issuerURL, oldData)
+}
+
+// cacheWriteFailureOnEnrollmentProvider enrolls a device, then makes the
+// broker's cache write fail.
+type cacheWriteFailureOnEnrollmentProvider struct {
+	*mockEntraAuthProvider
+	tokenPath string
+}
+
+func (p *cacheWriteFailureOnEnrollmentProvider) MaybeRegisterDevice(ctx context.Context, tok *oauth2.Token, username, issuerURL string, oldData []byte) ([]byte, func(), error) {
+	data, cleanup, err := p.mockEntraAuthProvider.MaybeRegisterDevice(ctx, tok, username, issuerURL, oldData)
+	if err != nil || len(oldData) > 0 {
+		return data, cleanup, err
+	}
+	if err := os.Remove(p.tokenPath); err != nil {
+		return nil, func() {}, err
+	}
+	if err := os.Mkdir(p.tokenPath, 0700); err != nil {
+		return nil, func() {}, err
+	}
+	return data, cleanup, nil
+}
+
+func TestPasswordAuthKeepsCacheWriteFailureDeniedDuringReenrollment(t *testing.T) {
+	t.Parallel()
+
+	provider := &cacheWriteFailureOnEnrollmentProvider{mockEntraAuthProvider: newDeviceAuthProviderForTests(nil)}
+	b, sessionID, key := newDeviceRecoveryBrokerForTests(t, provider)
+	provider.tokenPath = b.TokenPathForSession(sessionID)
+	storeInvalidatedCacheForTests(t, b, sessionID, true)
+
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+	access, data, err := b.IsAuthenticated(sessionID, passwordAuthData(t, key))
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthDenied, access)
+	require.Contains(t, data, "failed to store token")
+	require.Equal(t, 1, provider.registrationEnrollments)
+}
+
+// staleOnceGroups fails the first group lookup with a confirmed
+// device-authentication failure, as after an administrator deleted the device
+// in Entra, and returns groups afterwards.
+func staleOnceGroups(groups []info.Group) func() ([]info.Group, error) {
+	calls := 0
+	return func() ([]info.Group, error) {
+		calls++
+		if calls == 1 {
+			return nil, &providerErrors.RetryWithDeviceAuthError{Err: himmelblau.ErrDeviceAuthenticationFailed}
+		}
+		return groups, nil
+	}
+}
+
+func passwordAuthData(t *testing.T, key string) string {
+	t.Helper()
+	return fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
+}
+
+// TestPasswordAuthEnrollsDeletedDeviceAgain verifies that a returning
+// local-password login recovers from a deleted device on its own: it enrolls a
+// replacement with the cached refresh token and looks up the groups again.
+func TestPasswordAuthEnrollsDeletedDeviceAgain(t *testing.T) {
+	t.Parallel()
+
+	for name, viaEntraAuth := range map[string]bool{"device_code": false, "entra_auth": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			newGroups := []info.Group{{Name: "new-group", UGID: "new-id"}}
+			provider := &mockEntraAuthProvider{MockProvider: &testutils.MockProvider{GetGroupsFunc: staleOnceGroups(newGroups)}}
+			b, sessionID, key := newDeviceRecoveryBrokerForTests(t, provider)
+			generateAndStoreCachedInfo(t, tokenOptions{
+				obtainedViaEntraAuth:    viaEntraAuth,
+				isForDeviceRegistration: true,
+				groups:                  []info.Group{{Name: "cached-group", UGID: "cached-id"}},
+			}, b.TokenPathForSession(sessionID))
+
+			requireAuthModes(t, b, sessionID, authmodes.Password, authmodes.DeviceQr)
+			_, err := b.SelectAuthenticationMode(sessionID, authmodes.Password)
+			require.NoError(t, err)
+			access, data, err := b.IsAuthenticated(sessionID, passwordAuthData(t, key))
+			require.NoError(t, err)
+			require.Equal(t, broker.AuthGranted, access, "the login must finish without another authentication method")
+			require.Contains(t, data, "new-group")
+			require.Equal(t, 1, provider.registrationEnrollments)
+			require.Len(t, provider.registrationExistingDataCalls, 2)
+			require.Equal(t, []byte("device-registration-data"), provider.registrationExistingDataCalls[0])
+			require.Empty(t, provider.registrationExistingDataCalls[1], "the replacement must not reuse the stale registration")
+
+			cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+			require.NoError(t, err)
+			require.NotEmpty(t, cached.DeviceRegistrationData)
+			require.False(t, cached.DeviceRegistrationDataInvalidated)
+			require.Zero(t, cached.DeviceRegistrationDataObtainedAt)
+		})
+	}
+}
+
+// TestPasswordAuthEnrollsInvalidatedDeviceAgain verifies that a cache whose
+// registration was invalidated still offers local password login, and that this
+// login enrolls the device again.
+func TestPasswordAuthEnrollsInvalidatedDeviceAgain(t *testing.T) {
+	t.Parallel()
+
+	provider := newDeviceAuthProviderForTests(nil)
+	b, sessionID, key := newDeviceRecoveryBrokerForTests(t, provider)
+	storeInvalidatedCacheForTests(t, b, sessionID, true)
+
+	modes, err := b.GetAuthenticationModes(sessionID, []map[string]string{supportedUILayouts["form"]})
+	require.NoError(t, err)
+	require.Contains(t, modes, map[string]string{"id": authmodes.Password, "label": authmodes.Label[authmodes.Password]})
+
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData(t, key))
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access)
+	require.Equal(t, 1, provider.registrationEnrollments)
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.NotEmpty(t, cached.DeviceRegistrationData)
+	require.False(t, cached.DeviceRegistrationDataInvalidated)
+}
+
+// TestPasswordAuthDeviceCodeRefreshOffersReauthOnEnrollmentFailure checks that
+// OIDC refresh preserves the invalidation marker needed for interactive recovery.
+func TestPasswordAuthDeviceCodeRefreshOffersReauthOnEnrollmentFailure(t *testing.T) {
+	t.Parallel()
+
+	provider := &failFirstEnrollmentsProvider{
+		mockEntraAuthProvider: newDeviceAuthProviderForTests(nil),
+		failures:              1,
+	}
+	b, sessionID, key := newDeviceRecoveryBrokerForTests(t, provider)
+	storeInvalidatedCacheForTests(t, b, sessionID, false)
+
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+	access, data, err := b.IsAuthenticated(sessionID, passwordAuthData(t, key))
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Contains(t, data, "Error registering device")
+	require.Equal(t, []string{authmodes.EntraAuth, authmodes.Device, authmodes.DeviceQr}, b.GetNextAuthModes(sessionID))
+}
+
+// TestPasswordAuthOffersDeviceAuthWhenEnrollingAgainFails verifies that a
+// failed replacement enrollment keeps the invalidated state and sends the user
+// to the interactive flows instead of denying the login.
+func TestPasswordAuthOffersDeviceAuthWhenEnrollingAgainFails(t *testing.T) {
+	t.Parallel()
+
+	for name, cachedInvalidated := range map[string]bool{
+		"stale_registration_found_by_group_lookup": false,
+		"registration_already_invalidated":         true,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			newGroups := []info.Group{{Name: "new-group", UGID: "new-id"}}
+			groupsFunc := func() ([]info.Group, error) { return newGroups, nil }
+			if !cachedInvalidated {
+				// Only the stale registration makes the first group lookup fail.
+				groupsFunc = staleOnceGroups(newGroups)
+			}
+			provider := &failFirstEnrollmentsProvider{
+				mockEntraAuthProvider: &mockEntraAuthProvider{MockProvider: &testutils.MockProvider{GetGroupsFunc: groupsFunc}},
+				failures:              1,
+			}
+			b, sessionID, key := newDeviceRecoveryBrokerForTests(t, provider)
+			if cachedInvalidated {
+				storeInvalidatedCacheForTests(t, b, sessionID, true)
+			} else {
+				generateAndStoreCachedInfo(t, tokenOptions{
+					obtainedViaEntraAuth:    true,
+					isForDeviceRegistration: true,
+					groups:                  []info.Group{{Name: "cached-group", UGID: "cached-id"}},
+				}, b.TokenPathForSession(sessionID))
+			}
+
+			requireAuthModes(t, b, sessionID, authmodes.Password, authmodes.DeviceQr)
+			_, err := b.SelectAuthenticationMode(sessionID, authmodes.Password)
+			require.NoError(t, err)
+			access, data, err := b.IsAuthenticated(sessionID, passwordAuthData(t, key))
+			require.NoError(t, err)
+			require.Equal(t, broker.AuthNext, access)
+			require.Contains(t, data, "Error registering device")
+			requireAuthModes(t, b, sessionID, authmodes.EntraAuth, authmodes.DeviceQr)
+
+			cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+			require.NoError(t, err)
+			require.Empty(t, cached.DeviceRegistrationData)
+			require.True(t, cached.DeviceRegistrationDataInvalidated,
+				"the invalidated state must keep local password login available for the next attempt")
+
+			_, err = b.SelectAuthenticationMode(sessionID, authmodes.DeviceQr)
+			require.NoError(t, err)
+			access, _, err = b.IsAuthenticated(sessionID, "{}")
+			require.NoError(t, err)
+			require.Equal(t, broker.AuthNext, access)
+			requireAuthModes(t, b, sessionID, authmodes.NewPassword)
+
+			cached, err = token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+			require.NoError(t, err)
+			require.NotEmpty(t, cached.DeviceRegistrationData)
+			require.False(t, cached.DeviceRegistrationDataInvalidated)
+		})
+	}
+}
+
+func TestDeviceAuthRestoresLocalLoginForLegacyCache(t *testing.T) {
+	t.Parallel()
+
+	b, sessionID, key := newDeviceRecoveryBrokerForTests(t, newDeviceAuthProviderForTests(nil))
+	generateAndStoreCachedInfo(t, tokenOptions{}, b.TokenPathForSession(sessionID))
+	requireAuthModes(t, b, sessionID, authmodes.DeviceQr)
+	_, err := b.SelectAuthenticationMode(sessionID, authmodes.DeviceQr)
+	require.NoError(t, err)
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	requireAuthModes(t, b, sessionID, authmodes.NewPassword)
+
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.NewPassword)
+	require.NoError(t, err)
+	reset := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "replacement-password", key))
+	access, _, err = b.IsAuthenticated(sessionID, reset)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access)
+	matches, err := password.CheckPassword("replacement-password", b.PasswordFilepathForSession(sessionID))
+	require.NoError(t, err)
+	require.True(t, matches)
+
+	sessionID, _ = newSessionForTests(t, b, "", "")
+	requireAuthModes(t, b, sessionID, authmodes.Password, authmodes.DeviceQr)
+}
+
+func TestPasswordAuthReusesReplacementAfterCancelledReenrollment(t *testing.T) {
+	t.Parallel()
+
+	provider := newDeviceAuthProviderForTests(nil)
+	b, sessionID, key := newDeviceRecoveryBrokerForTests(t, provider)
+	storeInvalidatedCacheForTests(t, b, sessionID, true)
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	provider.GetGroupsFunc = func() ([]info.Group, error) {
+		// Enrollment has already been saved when group lookup starts.
+		cancel()
+		return []info.Group{{Name: "new-group", UGID: "new-id"}}, nil
+	}
+	access, _ := b.HandleIsAuthenticated(ctx, sessionID, map[string]string{
+		broker.AuthDataSecret: encryptSecret(t, "password", key),
+	})
+	require.Equal(t, broker.AuthCancelled, access)
+	require.Equal(t, 1, provider.registrationEnrollments)
+
+	sessionID, key = newSessionForTests(t, b, "", "")
+	requireAuthModes(t, b, sessionID, authmodes.Password, authmodes.DeviceQr)
+	_, err := b.SelectAuthenticationMode(sessionID, authmodes.Password)
+	require.NoError(t, err)
+	access, data, err := b.IsAuthenticated(sessionID, passwordAuthData(t, key))
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access)
+	require.Contains(t, data, "new-group")
+	require.Equal(t, 1, provider.registrationEnrollments)
+}
+
 // TestIsAuthenticatedPhoneAppOTPRoutesToMFACode verifies that PhoneAppOTP
 // (Authenticator TOTP) is routed to entra_mfa_code even when pollingInterval > 0,
 // and that AcquireTokenByMFAFlow is called with poll_attempt=0 and the user's code.
