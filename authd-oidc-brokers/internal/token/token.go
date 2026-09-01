@@ -19,10 +19,15 @@ type AuthCachedInfo struct {
 	ProviderMetadata       map[string]interface{}
 	UserInfo               info.User
 	DeviceRegistrationData []byte
+	// GroupsResolved records that UserInfo.Groups was successfully fetched
+	// from the provider at least once. A group-fetch failure may only fall
+	// back to cached groups when this is set.
+	GroupsResolved bool
 	// DeviceRegistrationDataObtainedAt stores the Unix timestamp of the fresh
-	// device registration data. Entra can need time to replicate a new device,
-	// so a confirmed device-authentication failure inside the replication window
-	// keeps the data instead of discarding it.
+	// device registration data, and is cleared once a group lookup succeeds with
+	// it. Entra can need time to replicate a new device, so a confirmed
+	// device-authentication failure inside the replication window keeps the data
+	// instead of discarding it.
 	DeviceRegistrationDataObtainedAt int64 `json:",omitempty"`
 	DeviceIsDisabled                 bool
 	UserIsDisabled                   bool

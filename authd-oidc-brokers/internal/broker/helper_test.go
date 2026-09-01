@@ -13,6 +13,7 @@ import (
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/sessionmode"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
@@ -212,6 +213,86 @@ func newSessionForTests(t *testing.T, b *broker.Broker, username, mode string) (
 	return id, key
 }
 
+// newDeviceAuthBrokerForTests returns a broker that enrolls devices and whose
+// group lookup is provided by provider, plus a login session for it. The mock
+// token endpoint gives the first two token acquisitions the broker app
+// audience, which the device-auth flows need when they acquire a token again
+// after registering a device.
+func newDeviceAuthBrokerForTests(t *testing.T, provider *mockEntraAuthProvider) (b *broker.Broker, sessionID, key string) {
+	t.Helper()
+
+	b = newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		registerDevice:        true,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{
+				{"aud": consts.MicrosoftBrokerAppID},
+				{"aud": consts.MicrosoftBrokerAppID},
+			},
+		},
+	})
+
+	sessionID, key = newSessionForTests(t, b, "", "")
+	return b, sessionID, key
+}
+
+// newEntraMFABrokerForTests returns a broker whose group lookup is provided by
+// provider, plus a login session for it. withDeviceRegistration enables device
+// registration for the flows that register a device during the login.
+func newEntraMFABrokerForTests(t *testing.T, provider *mockEntraAuthProvider, withDeviceRegistration bool) (b *broker.Broker, sessionID, key string) {
+	t.Helper()
+
+	b = newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+		registerDevice:        withDeviceRegistration,
+	})
+
+	sessionID, key = newSessionForTests(t, b, "", "")
+	return b, sessionID, key
+}
+
+// newDeviceAuthProviderForTests returns a mock Entra provider whose group
+// lookup fails with groupErr, or returns a single remote group when groupErr is
+// nil.
+func newDeviceAuthProviderForTests(groupErr error) *mockEntraAuthProvider {
+	return &mockEntraAuthProvider{
+		MockProvider: &testutils.MockProvider{
+			GetGroupsFunc: func() ([]info.Group, error) {
+				if groupErr != nil {
+					return nil, groupErr
+				}
+				return []info.Group{{Name: "remote-group"}}, nil
+			},
+		},
+	}
+}
+
+// newEntraMFAProviderForTests returns a mock Entra provider whose group lookup
+// fails with groupErr and whose MFA flow answers the code step.
+func newEntraMFAProviderForTests(t *testing.T, groupErr error) *mockEntraAuthProvider {
+	t.Helper()
+
+	provider := newDeviceAuthProviderForTests(groupErr)
+	provider.flowState = &himmelblau.MFAFlowState{}
+	provider.challengeInfo = &himmelblau.MFAChallengeInfo{
+		Message:           "Please type in the code displayed on your authenticator app from your device:",
+		Method:            "PhoneAppOTP",
+		PollingIntervalMs: 5000,
+		MaxPollAttempts:   10,
+	}
+	provider.mfaTokenResult = newMFATokenResult(generateCachedInfo(t, tokenOptions{
+		username: "test-user@email.com",
+		issuer:   defaultIssuerURL,
+	}).Token)
+	return provider
+}
 func encryptSecret(t *testing.T, secret, strKey string) string {
 	t.Helper()
 
@@ -329,6 +410,9 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 		DeviceIsDisabled:     options.deviceIsDisabled,
 		UserIsDisabled:       options.userIsDisabled,
 		ObtainedViaEntraAuth: options.obtainedViaEntraAuth,
+		// A seeded cache simulates a previously successful login, so its
+		// groups count as resolved.
+		GroupsResolved: true,
 	}
 
 	if options.expired {

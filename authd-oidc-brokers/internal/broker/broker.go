@@ -44,6 +44,18 @@ const (
 	maxAuthAttempts    = 3
 	maxRequestDuration = 5 * time.Second
 
+	// deviceRegistrationReplicationWindow is how long fresh device registration
+	// data is kept when Entra reports a device-authentication failure
+	// (AADSTS50155). A newly registered device can need a while to become
+	// usable, so a failure inside this window is treated as replication lag
+	// rather than proof that the registration is stale. It is deliberately much
+	// longer than the ten second Graph token retry window: it covers the time
+	// between two login attempts, not retries within one attempt. While the
+	// window is open, a login whose group lookup keeps failing is denied unless
+	// the cache has groups to fall back on, so the registration is only
+	// discarded, and device recovery only offered, once the window has passed.
+	deviceRegistrationReplicationWindow = 5 * time.Minute
+
 	// maxMFAPollDuration caps the total wall-clock time spent polling for MFA
 	// approval, to prevent infinite polling.
 	maxMFAPollDuration = 5 * time.Minute
@@ -1439,10 +1451,17 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 		return access, data
 	}
 
-	// Load existing device registration data if there is any, to avoid re-registering the device.
+	// Load existing auth info and device registration data if present. Keep the
+	// old info so returning device-code logins can use cached groups when the
+	// live group lookup is unavailable.
+	var oldAuthInfo *token.AuthCachedInfo
 	var deviceRegistrationData []byte
-	if oldAuthInfo, err := token.LoadAuthInfo(session.tokenPath); err == nil {
-		deviceRegistrationData = oldAuthInfo.DeviceRegistrationData
+	if cachedInfo, err := token.LoadAuthInfo(session.tokenPath); err == nil {
+		oldAuthInfo = cachedInfo
+		deviceRegistrationData = cachedInfo.DeviceRegistrationData
+		authInfo.UserInfo.Groups = slices.Clone(oldAuthInfo.UserInfo.Groups)
+		authInfo.GroupsResolved = oldAuthInfo.GroupsResolved
+		authInfo.DeviceRegistrationDataObtainedAt = oldAuthInfo.DeviceRegistrationDataObtainedAt
 	}
 	if authInfo.UserInfo.ProviderID != "" && session.providerID == "" {
 		b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID)
@@ -1456,10 +1475,9 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 
 	// We can only fetch the groups after registering the device, because the token acquired for device registration
 	// cannot be used with the Microsoft Graph API and a new token must be acquired for the Graph API.
-	authInfo.UserInfo.Groups, err = b.getGroups(ctx, session, authInfo)
-	if err != nil {
-		log.Errorf(context.Background(), "failed to get groups: %s", err)
-		return AuthDenied, errorMessageForDisplay(err, "Failed to retrieve groups from Microsoft Graph API")
+	groups, err := b.getGroups(ctx, session, authInfo)
+	if access, data := b.handleGroupFetch(session, authInfo, oldAuthInfo, groups, err); access != "" {
+		return access, data
 	}
 
 	// Store the auth info in the session so that we can use it when handling the
@@ -1585,50 +1603,8 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 
 	// Try to refresh the groups
 	groups, err := b.getGroups(ctx, session, authInfo)
-	if errors.Is(err, providerErrors.ErrDeviceDisabled) {
-		// The device is disabled, deny login
-		log.Errorf(context.Background(), "Login denied: device is disabled in %s for user %q", b.provider.DisplayName(), session.username)
-
-		// Store the information that the device is disabled, so that we can deny login on subsequent offline attempts.
-		authInfo.DeviceIsDisabled = true
-		if err = token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
-			log.Errorf(context.Background(), "Failed to store token: %s", err)
-			return AuthDenied, unexpectedErrMsg("failed to store token")
-		}
-
-		return AuthDenied, errorMessage{Message: fmt.Sprintf("This device is disabled in %s, please contact your administrator.", b.provider.DisplayName())}
-	}
-	if errors.Is(err, providerErrors.ErrInvalidRedirectURI) {
-		// Deny login if the redirect URI is invalid, so that users and administrators are aware of the issue.
-		log.Errorf(context.Background(), "Login denied: %s", err)
-		return AuthDenied, errorMessageForDisplay(err, "Invalid redirect URI")
-	}
-	var retryWithDeviceAuthError *providerErrors.RetryWithDeviceAuthError
-	if errors.As(err, &retryWithDeviceAuthError) {
-		log.Errorf(context.Background(), "Token acquisition failed: %s. Try again using the device code flow.", err)
-		// The token acquisition failed unexpectedly.
-		// One possible reason is that the device was deleted by an administrator in Entra ID.
-		// In this case, the user can perform device code flow again to get a new token
-		// and register the device again, allowing the user to log in.
-		// We delete the device registration data to cause device code flow to re-register the device.
-		authInfo.DeviceRegistrationData = nil
-		if err = token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
-			log.Errorf(context.Background(), "Failed to store token: %s", err)
-			return AuthDenied, unexpectedErrMsg("failed to store token")
-		}
-
-		session.nextAuthModes = reauthModes
-		msg := "Authentication failed due to a token issue. Please try again."
-		return AuthNext, errorMessage{Message: msg}
-	}
-	if err != nil {
-		// We couldn't fetch the groups, but we have valid cached ones. The live
-		// provider check (and force_access_check_with_provider enforcement) happens
-		// at the token refresh above, the same as the device-auth flow, so a
-		// group-fetch failure here falls back to cached groups for both flows.
-		log.Warningf(context.Background(), "Could not get groups: %v. Using cached groups.", err)
-	} else {
-		authInfo.UserInfo.Groups = groups
+	if access, data := b.handleGroupFetch(session, authInfo, authInfo, groups, err); access != "" {
+		return access, data
 	}
 
 	return b.finishAuth(session, authInfo)
@@ -2397,6 +2373,8 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	// value and silently discard a device that was registered earlier. For a
 	// first-time login (no cached token) it keeps its zero value, which is correct.
 	if oldAuthInfo != nil {
+		authInfo.UserInfo.Groups = slices.Clone(oldAuthInfo.UserInfo.Groups)
+		authInfo.GroupsResolved = oldAuthInfo.GroupsResolved
 		authInfo.DeviceRegistrationData = oldAuthInfo.DeviceRegistrationData
 		authInfo.DeviceRegistrationDataObtainedAt = oldAuthInfo.DeviceRegistrationDataObtainedAt
 	}
@@ -2431,16 +2409,8 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	// group-fetch failure here is not a liveness signal: fall back to cached groups
 	// on a returning auth, and only deny first-time logins that have no cached groups.
 	groups, err := b.getGroups(ctx, session, authInfo)
-	if err != nil {
-		if oldAuthInfo != nil {
-			log.Warningf(context.Background(), "Could not get groups: %v. Using cached groups.", err)
-			authInfo.UserInfo.Groups = oldAuthInfo.UserInfo.Groups
-		} else {
-			log.Errorf(context.Background(), "failed to get groups: %s", err)
-			return AuthDenied, errorMessageForDisplay(err, "Failed to retrieve groups from Microsoft Graph API")
-		}
-	} else {
-		authInfo.UserInfo.Groups = groups
+	if access, data := b.handleGroupFetch(session, authInfo, oldAuthInfo, groups, err); access != "" {
+		return access, data
 	}
 
 	// A passwordless login has no Entra password to cache for offline
@@ -3027,6 +2997,7 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 	t.ProviderMetadata = oldToken.ProviderMetadata
 	t.DeviceRegistrationData = oldToken.DeviceRegistrationData
 	t.DeviceRegistrationDataObtainedAt = oldToken.DeviceRegistrationDataObtainedAt
+	t.GroupsResolved = oldToken.GroupsResolved
 
 	t.UserInfo, err = b.getUserInfo(ctx, session, oauthToken, rawIDToken, true)
 	if err != nil {
@@ -3189,6 +3160,90 @@ func (b *Broker) getGroups(ctx context.Context, session *session, t *token.AuthC
 		t.DeviceRegistrationData,
 		len(t.DeviceRegistrationData) > 0,
 	)
+}
+
+// handleGroupFetch processes the result of the group lookup of a live
+// authentication. Callers must return the response to the client when the
+// returned access mode is not empty, and continue with their own flow when it
+// is.
+func (b *Broker) handleGroupFetch(session *session, authInfo, cachedInfo *token.AuthCachedInfo, groups []info.Group, err error) (access string, data isAuthenticatedDataResponse) {
+	if err == nil {
+		// A successful lookup verifies the registration, so it is no longer
+		// fresh, and it resolves the groups. Persist the result unless the
+		// cached state already recorded it: a login that learns nothing new
+		// skips the cache write, and finishAuth stores the auth info for the
+		// flows that reach it.
+		stateChanged := authInfo.DeviceRegistrationDataObtainedAt != 0 ||
+			(cachedInfo != nil && !cachedInfo.GroupsResolved)
+		authInfo.UserInfo.Groups = groups
+		authInfo.GroupsResolved = true
+		authInfo.DeviceRegistrationDataObtainedAt = 0
+		if stateChanged {
+			// Persist the change now: the caller can return to the client
+			// before finishAuth stores the auth info.
+			if cacheErr := token.CacheAuthInfo(session.tokenPath, authInfo); cacheErr != nil {
+				log.Errorf(context.Background(), "Failed to store token: %s", cacheErr)
+			}
+		}
+		return "", nil
+	}
+
+	if errors.Is(err, providerErrors.ErrDeviceDisabled) {
+		log.Errorf(context.Background(), "Login denied: device is disabled in %s for user %q", b.provider.DisplayName(), session.username)
+
+		// Cache the disabled device state so that later offline logins are
+		// denied too.
+		authInfo.DeviceIsDisabled = true
+		if cacheErr := token.CacheAuthInfo(session.tokenPath, authInfo); cacheErr != nil {
+			log.Errorf(context.Background(), "Failed to store token: %s", cacheErr)
+			return AuthDenied, unexpectedErrMsg("failed to store token")
+		}
+		return AuthDenied, errorMessage{Message: fmt.Sprintf("This device is disabled in %s, please contact your administrator.", b.provider.DisplayName())}
+	}
+	if errors.Is(err, providerErrors.ErrInvalidRedirectURI) {
+		// Deny login if the redirect URI is invalid, so that users and administrators are aware of the issue.
+		log.Errorf(context.Background(), "Login denied: %s", err)
+		return AuthDenied, errorMessageForDisplay(err, "Invalid redirect URI")
+	}
+
+	var retryWithDeviceAuthErr *providerErrors.RetryWithDeviceAuthError
+	// A confirmed device-authentication failure is only proof that the
+	// registration is stale once the replication window has passed: within the
+	// window it may be Entra catching up with a newly enrolled device.
+	registrationStale := authInfo.DeviceRegistrationDataObtainedAt == 0 ||
+		time.Since(time.Unix(authInfo.DeviceRegistrationDataObtainedAt, 0)) >= deviceRegistrationReplicationWindow
+	if errors.As(err, &retryWithDeviceAuthErr) && registrationStale {
+		// The provider confirmed that the device registration itself is invalid
+		// (exact AADSTS50155, see himmelblau.ErrDeviceAuthenticationFailed), and
+		// the data is older than the replication window, so it is stale: discard
+		// it and let the user register the device again.
+		log.Errorf(context.Background(), "Token acquisition failed: %s. Clearing stale device registration data and retrying authentication.", err)
+		authInfo.DeviceRegistrationData = nil
+		authInfo.DeviceRegistrationDataObtainedAt = 0
+		if cacheErr := token.CacheAuthInfo(session.tokenPath, authInfo); cacheErr != nil {
+			log.Errorf(context.Background(), "Failed to store token: %s", cacheErr)
+			return AuthDenied, unexpectedErrMsg("failed to store token")
+		}
+
+		session.nextAuthModes = reauthModes
+		return AuthNext, errorMessage{Message: "Authentication failed due to a token issue. Please try again."}
+	}
+
+	if cachedInfo == nil || !cachedInfo.GroupsResolved {
+		// Without cached groups there is no safe fallback for a group lookup
+		// failure. Fresh registration data is already persisted, so a later
+		// login can retry it without enrolling another device.
+		log.Errorf(context.Background(), "failed to get groups: %s", err)
+		return AuthDenied, errorMessageForDisplay(err, "Failed to retrieve groups from Microsoft Graph API")
+	}
+
+	// A group-fetch failure is not enough to deny a returning login when cached
+	// groups are available, and fresh registration data is kept so that a later
+	// attempt can use it once Entra has replicated it.
+	log.Warningf(context.Background(), "Could not get groups: %v. Using cached groups.", err)
+	authInfo.UserInfo.Groups = cachedInfo.UserInfo.Groups
+
+	return "", nil
 }
 
 // Checks if the provided error is of type ForDisplayError. If it is, it returns the error message. Else, it returns

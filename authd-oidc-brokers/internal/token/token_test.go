@@ -144,4 +144,6 @@ func TestLoadAuthInfoLegacyTokenHasNoRegistrationTimestamp(t *testing.T) {
 	require.Equal(t, []byte("legacy-device-data"), got.DeviceRegistrationData)
 	require.Zero(t, got.DeviceRegistrationDataObtainedAt,
 		"legacy caches without the field must load without a registration timestamp")
+	require.False(t, got.GroupsResolved,
+		"legacy caches without the field must not be treated as groups-resolved")
 }
