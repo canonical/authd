@@ -1552,9 +1552,20 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		log.Warningf(context.Background(), "Could not get groups: %v. Using cached groups.", err)
 	} else {
 		authInfo.UserInfo.Groups = groups
+		clearDeviceRegistrationValidationPending(authInfo)
 	}
 
 	return b.finishAuth(session, authInfo)
+}
+
+func markDeviceRegistrationValidationPending(authInfo *token.AuthCachedInfo) {
+	if len(authInfo.DeviceRegistrationData) > 0 {
+		authInfo.DeviceRegistrationDataValidationPending = true
+	}
+}
+
+func clearDeviceRegistrationValidationPending(authInfo *token.AuthCachedInfo) {
+	authInfo.DeviceRegistrationDataValidationPending = false
 }
 
 func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword string) (string, isAuthenticatedDataResponse) {
@@ -2193,6 +2204,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	// first-time login (no cached token) it keeps its zero value, which is correct.
 	if oldAuthInfo != nil {
 		authInfo.DeviceRegistrationData = oldAuthInfo.DeviceRegistrationData
+		authInfo.DeviceRegistrationDataValidationPending = oldAuthInfo.DeviceRegistrationDataValidationPending
 	}
 
 	var deviceRegistrationData []byte
@@ -2235,6 +2247,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 		}
 	} else {
 		authInfo.UserInfo.Groups = groups
+		clearDeviceRegistrationValidationPending(authInfo)
 	}
 
 	// A passwordless login has no Entra password to cache for offline
@@ -2824,6 +2837,7 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 	t := token.NewAuthCachedInfo(oauthToken, rawIDToken, extraFields)
 	t.ProviderMetadata = oldToken.ProviderMetadata
 	t.DeviceRegistrationData = oldToken.DeviceRegistrationData
+	t.DeviceRegistrationDataValidationPending = oldToken.DeviceRegistrationDataValidationPending
 
 	t.UserInfo, err = b.getUserInfo(ctx, session, oauthToken, rawIDToken, true)
 	if err != nil {
@@ -2936,6 +2950,7 @@ func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, auth
 		return cleanup, "", nil
 	}
 
+	deviceRegistrationDataBeforeRegistration := append([]byte(nil), existingData...)
 	var err error
 	authInfo.DeviceRegistrationData, cleanup, err = dr.MaybeRegisterDevice(ctx, regToken,
 		session.username,
@@ -2946,8 +2961,13 @@ func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, auth
 		log.Errorf(context.Background(), "error registering device: %s", err)
 		return func() {}, AuthDenied, errorMessage{Message: "Error registering device"}
 	}
+	if len(authInfo.DeviceRegistrationData) > 0 &&
+		!slices.Equal(authInfo.DeviceRegistrationData, deviceRegistrationDataBeforeRegistration) {
+		markDeviceRegistrationValidationPending(authInfo)
+	}
 
-	// Store the auth info, so that the device registration data is not lost if the login fails after this point.
+	// Store the auth info before group lookup, so fresh registration data remains
+	// pending if the login stops before validation succeeds.
 	if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
 		log.Errorf(context.Background(), "Failed to store token: %s", err)
 		return cleanup, AuthDenied, unexpectedErrMsg("failed to store token")
