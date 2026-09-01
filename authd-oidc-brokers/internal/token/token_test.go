@@ -144,4 +144,6 @@ func TestLoadAuthInfoLegacyTokenDefaultsValidationPendingToFalse(t *testing.T) {
 	require.Equal(t, []byte("legacy-device-data"), got.DeviceRegistrationData)
 	require.False(t, got.DeviceRegistrationDataValidationPending,
 		"legacy caches without the field must load as not pending")
+	require.False(t, got.GroupsResolved,
+		"legacy caches without the field must not be treated as groups-resolved")
 }
