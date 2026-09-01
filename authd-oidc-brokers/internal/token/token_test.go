@@ -125,3 +125,23 @@ func TestLoadAuthInfo(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadAuthInfoLegacyTokenDefaultsValidationPendingToFalse(t *testing.T) {
+	t.Parallel()
+
+	tokenPath := filepath.Join(t.TempDir(), "parent", "token.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(tokenPath), 0700))
+	require.NoError(t, os.WriteFile(tokenPath, []byte(`{
+		"Token": {
+			"access_token": "accesstoken",
+			"refresh_token": "refreshtoken"
+		},
+		"DeviceRegistrationData": "bGVnYWN5LWRldmljZS1kYXRh"
+	}`), 0600))
+
+	got, err := token.LoadAuthInfo(tokenPath)
+	require.NoError(t, err)
+	require.Equal(t, []byte("legacy-device-data"), got.DeviceRegistrationData)
+	require.False(t, got.DeviceRegistrationDataValidationPending,
+		"legacy caches without the field must load as not pending")
+}
