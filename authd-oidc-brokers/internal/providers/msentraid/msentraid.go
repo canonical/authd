@@ -47,9 +47,20 @@ const (
 	msgraphAPIVersion  = "v1.0"
 )
 
+type graphAccessTokenAcquirer func(
+	ctx context.Context,
+	clientID string,
+	tenantID string,
+	token *oauth2.Token,
+	data himmelblau.DeviceRegistrationData,
+) (string, error)
+
 // Provider is the Microsoft Entra ID provider implementation.
 type Provider struct {
 	expectedScopes []string
+
+	// Used in tests to replace the cgo-backed Graph token exchange.
+	graphAccessTokenAcquirerForTests graphAccessTokenAcquirer
 
 	// graphClientSecret, when non-empty, enables the app-only (client credentials)
 	// path for group lookups. The secret belongs to the same client_id configured
@@ -73,6 +84,14 @@ type Provider struct {
 func (p *Provider) SetGraphClientSecret(secret string) {
 	p.graphClientSecret = secret
 }
+
+const (
+	// graphTokenAcquisitionRetryInterval is how often to retry AADSTS50155.
+	graphTokenAcquisitionRetryInterval = time.Second
+	// graphTokenAcquisitionRetryTimeout bounds retries while Entra replicates a
+	// freshly registered device (see himmelblau-idm/himmelblau#113).
+	graphTokenAcquisitionRetryTimeout = 10 * time.Second
+)
 
 // New returns a new MSEntraID provider.
 func New() *Provider {
@@ -280,20 +299,11 @@ func (p *Provider) GetGroups(
 		}
 
 		tenantID := tenantID(issuerURL)
-		accessTokenStr, err = himmelblau.AcquireAccessTokenForGraphAPI(ctx, clientID, tenantID, token, data)
-		if errors.Is(err, himmelblau.ErrDeviceDisabled) {
-			return nil, fmt.Errorf("%w: %w", providerErrors.ErrDeviceDisabled, err)
-		}
-		if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
-			msg := "Token acquisition failed: The app is misconfigured in Microsoft Entra (the redirect URI is missing or invalid). Please contact your administrator."
-			return nil, &providerErrors.ForDisplayError{Message: msg, Err: fmt.Errorf("%w: %w", providerErrors.ErrInvalidRedirectURI, err)}
-		}
-		var tokenAcquisitionError himmelblau.TokenAcquisitionError
-		if errors.As(err, &tokenAcquisitionError) {
-			return nil, &providerErrors.RetryWithDeviceAuthError{Err: fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", err)}
-		}
+		accessTokenStr, err = acquireGraphAccessTokenWithRetry(ctx, func() (string, error) {
+			return p.acquireGraphAccessToken(ctx, clientID, tenantID, token, data)
+		}, graphTokenAcquisitionRetryInterval, graphTokenAcquisitionRetryTimeout)
 		if err != nil {
-			return nil, fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", err)
+			return nil, classifyGraphTokenAcquisitionError(err)
 		}
 
 		// Re-parse the newly acquired token.
@@ -308,6 +318,122 @@ func (p *Provider) GetGroups(
 	msgraphHost := resolveMSGraphHost(providerMetadata)
 
 	return p.fetchUserGroups(accessToken, msgraphHost)
+}
+
+func (p *Provider) acquireGraphAccessToken(
+	ctx context.Context,
+	clientID string,
+	tenantID string,
+	token *oauth2.Token,
+	data himmelblau.DeviceRegistrationData,
+) (string, error) {
+	if p.graphAccessTokenAcquirerForTests != nil {
+		return p.graphAccessTokenAcquirerForTests(ctx, clientID, tenantID, token, data)
+	}
+	return himmelblau.AcquireAccessTokenForGraphAPI(ctx, clientID, tenantID, token, data)
+}
+
+// acquireGraphAccessTokenWithRetry retries AADSTS50155 until the retry timeout
+// expires so a single device-authentication failure does not immediately
+// trigger re-enrollment. Retries are delayed to allow replication and are
+// cancelled with the request.
+func acquireGraphAccessTokenWithRetry(
+	ctx context.Context,
+	acquire func() (string, error),
+	retryInterval time.Duration,
+	retryTimeout time.Duration,
+) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
+	accessToken, err := acquire()
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return "", ctxErr
+	}
+	if err == nil || !errors.Is(err, himmelblau.ErrDeviceAuthenticationFailed) {
+		return accessToken, err
+	}
+
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
+	retryTimer := time.NewTimer(retryInterval)
+	defer retryTimer.Stop()
+	timeoutTimer := time.NewTimer(retryTimeout)
+	defer timeoutTimer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-timeoutTimer.C:
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return "", ctxErr
+			}
+			return accessToken, err
+		case <-retryTimer.C:
+			// Prefer the timeout over a retry that becomes ready at the same
+			// time, and avoid starting an acquisition after cancellation.
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-timeoutTimer.C:
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return "", ctxErr
+				}
+				return accessToken, err
+			default:
+			}
+
+			accessToken, err = acquire()
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return "", ctxErr
+			}
+			if err == nil || !errors.Is(err, himmelblau.ErrDeviceAuthenticationFailed) {
+				return accessToken, err
+			}
+
+			retryTimer.Reset(retryInterval)
+		}
+	}
+}
+
+// classifyGraphTokenAcquisitionError maps a himmelblau Graph-token acquisition
+// error (from AcquireAccessTokenForGraphAPI) to the error the broker should
+// see.
+//
+// Only ErrDeviceAuthenticationFailed (AADSTS50155) is treated as evidence
+// that the device's own registration/authentication is invalid in Entra ID
+// (e.g. an administrator deleted the device object). See the caveats
+// documented on that error: this is not a universal mapping for every tenant
+// or authentication operation. This is the sole case mapped to
+// RetryWithDeviceAuthError, which makes the broker clear the cached device
+// registration data and force the user through device re-enrollment.
+//
+// Every other error -- ErrMissingClientCredentials (AADSTS7000218, an Entra
+// app-configuration error), and any unclassified himmelblau error (an
+// unrecognized AADSTS code, or any other acquisition failure, e.g. a transient
+// one) -- is returned as a plain error instead. A plain error makes
+// the broker preserve the cached registration data and fall back to cached
+// groups rather than assuming the registration is stale. Treating unknown
+// errors as "assume stale" was the root cause of #1721: any Graph-token
+// failure we didn't specifically recognize was clearing the device
+// registration and forcing re-enrollment on every retry, which could
+// register the same machine as a new Entra device object repeatedly.
+func classifyGraphTokenAcquisitionError(err error) error {
+	if errors.Is(err, himmelblau.ErrDeviceDisabled) {
+		return fmt.Errorf("%w: %w", providerErrors.ErrDeviceDisabled, err)
+	}
+	if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
+		msg := "Token acquisition failed: The app is misconfigured in Microsoft Entra (the redirect URI is missing or invalid). Please contact your administrator."
+		return &providerErrors.ForDisplayError{Message: msg, Err: fmt.Errorf("%w: %w", providerErrors.ErrInvalidRedirectURI, err)}
+	}
+	if errors.Is(err, himmelblau.ErrDeviceAuthenticationFailed) {
+		return &providerErrors.RetryWithDeviceAuthError{Err: fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", err)}
+	}
+	return fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", err)
 }
 
 // resolveMSGraphHost resolves the Microsoft Graph API host URL from provider metadata,
