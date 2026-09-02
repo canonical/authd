@@ -147,3 +147,27 @@ func TestLoadAuthInfoLegacyTokenDefaultsValidationPendingToFalse(t *testing.T) {
 	require.False(t, got.GroupsResolved,
 		"legacy caches without the field must not be treated as groups-resolved")
 }
+
+func TestLoadAuthInfoLegacyTokenInfersGroupsResolved(t *testing.T) {
+	t.Parallel()
+
+	tokenPath := filepath.Join(t.TempDir(), "parent", "token.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(tokenPath), 0700))
+	require.NoError(t, os.WriteFile(tokenPath, []byte(`{
+		"Token": {
+			"access_token": "accesstoken",
+			"refresh_token": "refreshtoken"
+		},
+		"UserInfo": {
+			"name": "legacy-user",
+			"provider_id": "legacy-user-id",
+			"groups": [{"name": "legacy-group", "ugid": "legacy-group-id"}]
+		}
+	}`), 0600))
+
+	got, err := token.LoadAuthInfo(tokenPath)
+	require.NoError(t, err)
+	require.True(t, got.GroupsResolved,
+		"legacy caches with authenticated user information must preserve cached-group fallback")
+	require.Equal(t, []info.Group{{Name: "legacy-group", UGID: "legacy-group-id"}}, got.UserInfo.Groups)
+}
