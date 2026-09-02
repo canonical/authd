@@ -301,13 +301,13 @@ Log In With Remote User Through SSH: Local Password
 
 Log In With Remote User Through GDM: QR Code
     [Arguments]    ${username}    ${local_password}
-    Start Log In With Remote User Through GDM: QR Code    ${username}
+    Start Log In With Remote User Through GDM    ${username}
     Select Broker Through GDM
     Continue Log In With Remote User: Authenticate In External Browser
     Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
 
 
-Start Log In With Remote User Through GDM: QR Code
+Start Log In With Remote User Through GDM
     [Arguments]    ${username}
     Wait Until GDM Login Screen Ready
     Move Pointer To Not listed
@@ -326,6 +326,18 @@ Select Broker Through GDM
     Left Button Click
     Builtin.Sleep    1
 
+Enter Entra ID Password And MFA
+    # With the device code flow disabled there is only one flow; the PAM module
+    # auto-selects it and goes directly to the Entra ID password prompt.
+    Match Text    Enter your Entra ID password    30    similarity=90
+    Hid.Type String    %{E2E_PASSWORD}
+    Hid.Keys Combo    Return
+
+    # Wait for the MFA code prompt and enter a fresh TOTP code.
+    Match Text    Enter your MFA code    30    similarity=88
+    ${totp_code} =    TOTP.Generate Totp Code
+    Hid.Type String    ${totp_code}
+    Hid.Keys Combo    Return
 
 Continue Log In With Remote User Through GDM: Define Local Password
     [Arguments]    ${local_password}
@@ -336,6 +348,19 @@ Continue Log In With Remote User Through GDM: Define Local Password
     Match Text   Please, type the new passphrase again    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
+
+    Wait Until Desktop Ready
+
+
+Log In With Remote User Through GDM: Entra Password
+    [Arguments]    ${username}
+    Start Log In With Remote User Through GDM    ${username}
+    Select Broker Through GDM
+    Continue Log In With Remote User Through GDM: Entra Password
+
+
+Continue Log In With Remote User Through GDM: Entra Password
+    Enter Entra ID Password And MFA
 
     Wait Until Desktop Ready
 
@@ -394,11 +419,11 @@ Check That Login Is Handled By PAM Unix
 
 
 Check If User Was Added Properly
-    [Arguments]    ${username}
+    [Arguments]    ${username}    ${password}=${local_password}
     Wait Until Keyword Succeeds    30s    1s    Check User Information    ${username}
     IF    '${BROKER_SNAP_NAME}' == 'authd-msentraid'
         Wait Until Keyword Succeeds    120s    1s    Check User Groups    ${username}    ${remote_group}
-        Check That Remote User Can Run Sudo Commands    ${local_password}
+        Check That Remote User Can Run Sudo Commands    ${password}
     END
 
 Check User Groups
@@ -451,20 +476,10 @@ Log In With Remote User Through CLI: Entra Auth
     Match Text    2. ${PROVIDER_DISPLAY_NAME}
     Hid.Type String    2
 
-    # With the device code flow disabled there is only one flow; the PAM module
-    # auto-selects it and goes directly to the Entra ID password prompt.
-    Match Text    Enter your Entra ID password:    30    similarity=90
-    Hid.Type String    %{E2E_PASSWORD}
-    Hid.Keys Combo    Return
-
-    # Wait for the MFA code prompt and enter a fresh TOTP code.
-    Match Text    Enter your MFA code:    120    similarity=88
-    ${totp_code} =    TOTP.Generate Totp Code
-    Hid.Type String    ${totp_code}
-    Hid.Keys Combo    Return
+    Enter Entra ID Password And MFA
 
     # Wait for the authenticated shell prompt.
-    Match Text    ${username}@ubuntu:~$    120
+    Match Text    ${username}@ubuntu:~$    30
 
 
 Log In With Remote User Through CLI: Entra Passwordless TAP
@@ -490,3 +505,21 @@ Log In With Remote User Through CLI: Entra Passwordless TAP
 
     # No cached Entra password: chain into newpassword to set a local one.
     Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
+
+Log In With Remote User Through Polkit: Entra Password
+    [Arguments]    ${username}
+
+    # Polkit auto-selects authentication via local password.
+    # Cancel it ('r') to go back to the authentication-flow menu and choose the
+    # Entra ID password + MFA flow instead.
+    Match Text    Enter your password    30
+    Hid.Type String    r
+    Hid.Keys Combo    Return
+
+    Match Text    Choose your authentication flow    30
+    Match Text    2. Entra ID authentication    15
+    Hid.Type String    2
+    Hid.Keys Combo    Return
+
+    Enter Entra ID Password And MFA
+    Match Text    @ubuntu:~$    10

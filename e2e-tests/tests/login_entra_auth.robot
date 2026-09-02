@@ -53,3 +53,12 @@ Test login with CLI using Entra auth and MFA
     # Verify the user was provisioned in the system.  NSS may be briefly
     # unavailable while authd commits the new user record, so retry.
     Wait Until Keyword Succeeds    30s    3s    Check Home Directory    ${username}
+
+Test GDM login with Entra ID password and MFA
+    [Documentation]    Verify that a user can log in via GDM using the direct
+    ...    Entra ID password + MFA flow
+
+    Log In With Remote User Through GDM: Entra Password    ${username}
+    Check If User Was Added Properly    ${username}
+
+    Wait Until Keyword Succeeds    30s    3s    Check Home Directory    ${username}
