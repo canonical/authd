@@ -408,7 +408,7 @@ func provisionLXDContainer(t *testing.T, containerName string) {
 
 	lxcExec(t, containerName, "apt-get", "update", "-y")
 
-	// Enable the Go backports PPA so Build-Depends can resolve golang-go >= 1.25.
+	// Enable the Go backports PPA so Build-Depends can resolve golang-go >= 1.26.
 	lxcExec(t, containerName, "apt-get", "install", "-y", "--no-install-recommends",
 		"software-properties-common")
 	lxcExec(t, containerName, "add-apt-repository", "-y",

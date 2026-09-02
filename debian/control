@@ -16,7 +16,7 @@ Build-Depends: debhelper-compat (= 13),
 # so workaround it, making it kind of optional, and requiring it only on versions after
 # noble (controlled via base-files version that matches the one in noble).
                cargo-vendor-filterer | base-files (<< 13.5),
-               golang-go (>= 2:1.25~) | golang-1.25-go,
+               golang-go (>= 2:1.26~) | golang-1.26-go,
                libc6-dev (>= 2.35),
                libglib2.0-dev,
                libpam0g-dev,
