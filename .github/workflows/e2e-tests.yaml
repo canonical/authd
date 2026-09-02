@@ -58,22 +58,22 @@ on:
   workflow_dispatch:
     inputs:
       broker-snap-channel:
-        description: 'Download broker snaps from this Snap Store channel instead of building from source (e.g. "candidate")'
+        description: 'broker-snap-channel: Download broker snaps from this Snap Store channel instead of building from source (e.g. "candidate")'
         required: false
         default: ''
         type: string
       e2e-brokers:
-        description: 'Optional comma- or space-separated broker list; empty runs both brokers'
+        description: 'e2e-brokers: Optional comma- or space-separated broker list; empty runs both brokers'
         required: false
         default: ''
         type: string
       e2e-tests:
-        description: 'Optional comma- or space-separated test suite list; empty runs the full suite'
+        description: 'e2e-tests: Optional comma- or space-separated test suite list; empty runs the full suite'
         required: false
         default: ''
         type: string
       e2e-ppa:
-        description: 'Optional PPA name, such as authd-dev; empty uses authd-edge'
+        description: 'e2e-ppa: Optional PPA name, such as authd-dev; empty uses authd-edge'
         required: false
         default: ''
         type: string
