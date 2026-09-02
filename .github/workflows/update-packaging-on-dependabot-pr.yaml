@@ -39,8 +39,11 @@ permissions:
   contents: read
 
 env:
-  # Keep this aligned with debian-build.yaml.
-  CARGO_VENDOR_FILTERER_VERSION: 0.5.16
+  # Keep these aligned with debian-build.yaml.
+  # Noble's Rust 1.75 supports cargo-vendor-filterer only up to 0.5.16.
+  CARGO_VENDOR_FILTERER_NOBLE_VERSION: 0.5.16
+  # The ubuntu:devel image provides OpenSSL 4, which requires 0.5.18.
+  CARGO_VENDOR_FILTERER_DEVEL_VERSION: 0.5.18
 
 defaults:
   run:
@@ -119,7 +122,7 @@ jobs:
           cargo --version
 
           cargo install --locked --root=/usr \
-            cargo-vendor-filterer@"${CARGO_VENDOR_FILTERER_VERSION}"
+            cargo-vendor-filterer@"${CARGO_VENDOR_FILTERER_NOBLE_VERSION}"
 
           cargo generate-lockfile
 
@@ -175,6 +178,7 @@ jobs:
         run: |
           apt-get update -y
           apt-get install -y --no-install-recommends ca-certificates git
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
 
       - name: Checkout the PR branch
         uses: actions/checkout@v7
@@ -200,13 +204,15 @@ jobs:
 
           # go mod vendor may change go.mod/go.sum. This workflow does not
           # upload those files, so fail instead of dropping the changes.
-          if ! git diff --quiet HEAD -- go.mod go.sum; then
+          # Compare the worktree with the index directly. This avoids Git
+          # interpreting a revision and pathspec as a no-index comparison.
+          if ! git diff-files --quiet -- go.mod go.sum; then
             echo "go mod vendor modified go.mod/go.sum; this workflow only" >&2
             echo "regenerates Cargo.lock, debian/control and" >&2
             echo "debian/copyright, so this change would be silently lost." >&2
             echo "Please update go.mod/go.sum manually (e.g. by running" >&2
             echo "'go mod tidy') and push the fix to the PR branch." >&2
-            git --no-pager diff HEAD -- go.mod go.sum >&2
+            git --no-pager diff-files -- go.mod go.sum >&2
             exit 1
           fi
 
@@ -220,7 +226,7 @@ jobs:
             pkg-config
 
           cargo install --locked --root=/usr \
-            cargo-vendor-filterer@"${CARGO_VENDOR_FILTERER_VERSION}"
+            cargo-vendor-filterer@"${CARGO_VENDOR_FILTERER_DEVEL_VERSION}"
 
       - name: Vendor the Rust dependencies
         run: |
