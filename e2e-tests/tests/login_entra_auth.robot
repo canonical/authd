@@ -59,5 +59,6 @@ Test GDM login with Entra ID password and MFA
     ...    Entra ID password + MFA flow
 
     Log In With Remote User Through GDM: Entra Password    ${username}
+    Check If User Was Added Properly    ${username}
 
     Wait Until Keyword Succeeds    30s    3s    Check Home Directory    ${username}

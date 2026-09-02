@@ -417,11 +417,11 @@ Check That Login Is Handled By PAM Unix
 
 
 Check If User Was Added Properly
-    [Arguments]    ${username}
+    [Arguments]    ${username}    ${password}=${local_password}
     Wait Until Keyword Succeeds    30s    1s    Check User Information    ${username}
     IF    '${BROKER_SNAP_NAME}' == 'authd-msentraid'
         Wait Until Keyword Succeeds    120s    1s    Check User Groups    ${username}    ${remote_group}
-        Check That Remote User Can Run Sudo Commands    ${local_password}
+        Check That Remote User Can Run Sudo Commands    ${password}
     END
 
 Check User Groups

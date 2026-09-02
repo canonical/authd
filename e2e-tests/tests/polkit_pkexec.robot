@@ -75,6 +75,7 @@ Test polkit authentication as authd user via pkexec using Entra ID password and 
     ...    (ubuntu) user.
 
     Log In With Remote User Through GDM: Entra Password    ${username}
+    Check If User Was Added Properly    ${username}    %{E2E_PASSWORD}
 
     SSH.Execute    rm -f /tmp/polkit-authd-test-entra
 
