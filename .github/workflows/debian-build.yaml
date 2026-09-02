@@ -24,7 +24,7 @@ on:
 
 env:
   # Keep this aligned with update-packaging-on-dependabot-pr.yaml.
-  CARGO_VENDOR_FILTERER_VERSION: 0.5.16
+  CARGO_VENDOR_FILTERER_VERSION: 0.5.18
 
 jobs:
   build-deb:
