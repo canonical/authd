@@ -1291,7 +1291,7 @@ func TestIsAuthenticated(t *testing.T) {
 		},
 		"Authenticating_with_password_keeps_old_groups_if_fetching_groups_fails": {
 			firstMode:      authmodes.Password,
-			token:          &tokenOptions{groups: []info.Group{{Name: "old-group"}}},
+			token:          &tokenOptions{groups: []info.Group{{Name: "old-group"}}, providerID: "test-user-id"},
 			getGroupsFails: true,
 			wantGroups:     []info.Group{{Name: "old-group"}},
 		},
@@ -3765,6 +3765,37 @@ func TestFinishEntraAuthFirstLoginPersistsFreshRegistrationTimestamp(t *testing.
 	require.NotZero(t, cached.DeviceRegistrationDataObtainedAt)
 }
 
+// TestFinishEntraAuthDoesNotReuseCachedStateForAnotherIdentity verifies that an
+// Entra MFA login does not reuse the cached groups and device registration of a
+// cached authorization that belongs to another identity. Reuse for a matching
+// identity is covered by
+// TestFinishEntraAuthPreservesFreshDeviceRegistrationOnRetryWithDeviceAuthError.
+func TestFinishEntraAuthDoesNotReuseCachedStateForAnotherIdentity(t *testing.T) {
+	t.Parallel()
+
+	const username = "test-user@email.com"
+	groupErr := &providerErrors.RetryWithDeviceAuthError{Err: himmelblau.ErrDeviceAuthenticationFailed}
+	provider := newEntraMFAProviderForTests(t, groupErr)
+	b, sessionID, key := newEntraMFABrokerForTests(t, provider, true)
+
+	generateAndStoreCachedInfo(t, tokenOptions{
+		username:                username,
+		issuer:                  defaultIssuerURL,
+		providerID:              "other-user-id",
+		obtainedViaEntraAuth:    true,
+		isForDeviceRegistration: true,
+		registrationAge:         time.Minute,
+		groups:                  []info.Group{{Name: "cached-group", UGID: "cached-group-id"}},
+	}, b.TokenPathForSession(sessionID))
+
+	advanceToEntraMFACode(t, b, sessionID, key)
+	access, _ := submitEntraMFACode(t, b, sessionID, key)
+	require.Equal(t, broker.AuthDenied, access,
+		"a cache of another identity must not provide a cached-group fallback")
+	require.Empty(t, provider.registrationExistingData,
+		"a cache of another identity must not supply device registration data")
+}
+
 // TestFinishEntraAuthRejectsTerminalGroupErrors verifies that terminal
 // provider errors are not converted into cached-group fallbacks.
 func TestFinishEntraAuthRejectsTerminalGroupErrors(t *testing.T) {
@@ -3908,6 +3939,202 @@ func TestIsAuthenticatedPasswordRefreshPreservesRotationOnUserInfoError(t *testi
 		"a local user-info failure must not discard an already-rotated refresh token")
 	require.Equal(t, seeded.RawIDToken, cached.RawIDToken,
 		"a failed local validation must not replace the cached raw ID token")
+}
+
+// TestIsAuthenticatedPasswordRefreshKeepsDisabledDeviceFlagUntilGroupSuccess
+// verifies that a successful refresh does not wipe a persisted disabled-device
+// flag: a refresh verifies the user, not the device, so the flag survives and
+// only a successful group lookup — positive evidence that the device is valid
+// again — clears it.
+func TestIsAuthenticatedPasswordRefreshKeepsDisabledDeviceFlagUntilGroupSuccess(t *testing.T) {
+	t.Parallel()
+
+	const correctPassword = "password"
+
+	for name, tc := range disabledDeviceFlagCases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := &testutils.MockProvider{GetGroupsFunc: groupsOrError(tc.groupsErr)}
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config:                broker.Config{DataDir: t.TempDir()},
+				ownerAllowed:          true,
+				firstUserBecomesOwner: true,
+				provider:              provider,
+				tokenHandlerOptions: &testutils.TokenHandlerOptions{
+					// An empty claims map keeps the mock token endpoint's
+					// default OIDC audience while the test helper injects
+					// the "sub" that matches the seeded cache identity.
+					IDTokenClaims: []map[string]interface{}{
+						{},
+					},
+				},
+			})
+
+			sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+			generateAndStoreCachedInfo(t, tokenOptions{
+				deviceIsDisabled: true,
+				groups:           []info.Group{{Name: "cached-group", UGID: "cached-id"}},
+			}, b.TokenPathForSession(sessionID))
+			require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+			updateAuthModes(t, b, sessionID, authmodes.Password)
+			authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+
+			access, _, err := b.IsAuthenticated(sessionID, authData)
+			require.NoError(t, err)
+			require.Equal(t, broker.AuthGranted, access,
+				"a returning login with resolved cached groups must complete regardless of the persisted device state")
+
+			assertDisabledDeviceFlag(t, b, sessionID, tc.wantDisabled)
+		})
+	}
+}
+
+// TestDeviceAuthKeepsDisabledDeviceFlagUntilGroupSuccess verifies that a
+// returning device-code login preserves a persisted disabled-device flag:
+// a group-fetch failure is not evidence that the device is valid again, so
+// the flag survives the fallback, and only a successful group lookup clears
+// it.
+func TestDeviceAuthKeepsDisabledDeviceFlagUntilGroupSuccess(t *testing.T) {
+	t.Parallel()
+
+	cachedGroups := []info.Group{{Name: "cached-group", UGID: "cached-id"}}
+	for name, tc := range disabledDeviceFlagCases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			b, sessionID, key := newDeviceAuthBrokerForTests(t, newDeviceAuthProviderForTests(tc.groupsErr))
+			generateAndStoreCachedInfo(t, tokenOptions{
+				isForDeviceRegistration: true,
+				deviceIsDisabled:        true,
+				groups:                  cachedGroups,
+			}, b.TokenPathForSession(sessionID))
+
+			updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+			access, _, err := b.IsAuthenticated(sessionID, "{}")
+			require.NoError(t, err)
+			require.Equal(t, broker.AuthNext, access)
+			require.Equal(t, []string{authmodes.NewPassword}, b.GetNextAuthModes(sessionID))
+
+			updateAuthModes(t, b, sessionID, authmodes.NewPassword)
+			authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "new-password", key))
+			access, _, err = b.IsAuthenticated(sessionID, authData)
+			require.NoError(t, err)
+			require.Equal(t, broker.AuthGranted, access)
+
+			assertDisabledDeviceFlag(t, b, sessionID, tc.wantDisabled)
+		})
+	}
+}
+
+// TestDeviceAuthPersistsClearedDisabledDeviceFlagBeforeAuthNext verifies that a
+// successful group lookup persists the cleared disabled-device flag before the
+// login asks for the next auth mode. A login that stops there must not leave a
+// flag the successful lookup already disproved: a later offline login would be
+// denied by it.
+func TestDeviceAuthPersistsClearedDisabledDeviceFlagBeforeAuthNext(t *testing.T) {
+	t.Parallel()
+
+	b, sessionID, _ := newDeviceAuthBrokerForTests(t, newDeviceAuthProviderForTests(nil))
+	generateAndStoreCachedInfo(t, tokenOptions{
+		isForDeviceRegistration: true,
+		deviceIsDisabled:        true,
+		groups:                  []info.Group{{Name: "cached-group", UGID: "cached-id"}},
+	}, b.TokenPathForSession(sessionID))
+
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+
+	assertDisabledDeviceFlag(t, b, sessionID, false)
+}
+
+// TestDeviceAuthPersistsResolvedGroupsBeforeAuthNext verifies that a successful
+// group lookup persists the resolved marker before the login asks for the next
+// auth mode: a legacy zero-group cache must not stay unresolved, because the
+// next login would otherwise deny the cached-group fallback it is entitled to.
+func TestDeviceAuthPersistsResolvedGroupsBeforeAuthNext(t *testing.T) {
+	t.Parallel()
+
+	const username = "test-user@email.com"
+	b, sessionID, _ := newDeviceAuthBrokerForTests(t, newDeviceAuthProviderForTests(nil))
+	writeLegacyCacheWithoutProviderID(t, b.TokenPathForSession(sessionID), username, nil, mockDeviceRegistrationData)
+
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.True(t, cached.GroupsResolved,
+		"a successful group lookup must be recorded before the login asks for the next auth mode")
+	require.Equal(t, []info.Group{{Name: "remote-group"}}, cached.UserInfo.Groups)
+}
+
+// TestDeviceAuthPersistsChangedGroupsBeforeAuthNext verifies a returning
+// device-code login caches fresh groups before asking for the next auth mode.
+func TestDeviceAuthPersistsChangedGroupsBeforeAuthNext(t *testing.T) {
+	t.Parallel()
+
+	oldGroups := []info.Group{{Name: "old-group", UGID: "old-id"}}
+	newGroups := []info.Group{{Name: "new-group", UGID: "new-id"}}
+	provider := newDeviceAuthProviderForTests(nil)
+	provider.GetGroupsFunc = func() ([]info.Group, error) {
+		return newGroups, nil
+	}
+	b, sessionID, _ := newDeviceAuthBrokerForTests(t, provider)
+	generateAndStoreCachedInfo(t, tokenOptions{
+		isForDeviceRegistration: true,
+		groups:                  oldGroups,
+	}, b.TokenPathForSession(sessionID))
+
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.Equal(t, newGroups, cached.UserInfo.Groups,
+		"the resolved group change must be cached before the client continues")
+}
+
+// TestEntraAuthKeepsDisabledDeviceFlagUntilGroupSuccess verifies the same
+// preserved-flag contract on the Entra MFA flow: a live MFA assertion
+// verifies the user, not the device object, so a cached disabled-device flag
+// survives a group-fetch failure and only a successful group lookup clears
+// it.
+func TestEntraAuthKeepsDisabledDeviceFlagUntilGroupSuccess(t *testing.T) {
+	t.Parallel()
+
+	const username = "test-user@email.com"
+	cachedGroups := []info.Group{{Name: "cached-group", UGID: "cached-id"}}
+	for name, tc := range disabledDeviceFlagCases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			b, sessionID, key := newEntraMFABrokerForTests(t, newEntraMFAProviderForTests(t, tc.groupsErr), true)
+			generateAndStoreCachedInfo(t, tokenOptions{
+				username:                username,
+				issuer:                  defaultIssuerURL,
+				obtainedViaEntraAuth:    true,
+				isForDeviceRegistration: true,
+				deviceIsDisabled:        true,
+				groups:                  cachedGroups,
+			}, b.TokenPathForSession(sessionID))
+			require.NoError(t, password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID)))
+
+			advanceToEntraMFACode(t, b, sessionID, key)
+			access, _ := submitEntraMFACode(t, b, sessionID, key)
+			require.Equal(t, broker.AuthGranted, access,
+				"a returning Entra login must fall back to cached groups when the group fetch fails without proving device invalidation")
+
+			assertDisabledDeviceFlag(t, b, sessionID, tc.wantDisabled)
+		})
+	}
 }
 
 // TestIsAuthenticatedPasswordEntraTokenRefreshRotatesRefreshToken verifies that a
@@ -4158,6 +4385,41 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch(t *tes
 		"a local username verification failure must not discard an already-rotated refresh token")
 }
 
+func TestIsAuthenticatedPasswordEntraTokenRefreshDoesNotReuseGroupsForDifferentIdentity(t *testing.T) {
+	t.Parallel()
+
+	const correctPassword = "password"
+	provider := &mockEntraAuthProvider{
+		MockProvider: &testutils.MockProvider{GetGroupsFunc: func() ([]info.Group, error) {
+			return nil, errors.New("temporary group lookup failure")
+		}},
+		refreshResult:       &oauth2.Token{AccessToken: "new-access-token", RefreshToken: "new-refresh-token"},
+		accessTokenUserInfo: &info.User{Name: "test-user@email.com", ProviderID: "replacement-user-id"},
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	generateAndStoreCachedInfo(t, tokenOptions{
+		obtainedViaEntraAuth: true,
+		groups:               []info.Group{{Name: "sudo", UGID: "privileged-group-id"}},
+	}, b.TokenPathForSession(sessionID))
+	require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+	access, _, err := b.IsAuthenticated(sessionID, authData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthDenied, access,
+		"a replacement identity must not inherit cached authorization groups when Graph lookup fails")
+}
+
 // TestDeviceAuthClearsDeviceRegistrationDataWhenRegistrationDisabled verifies that
 // when register_device is changed from true to false and the user re-authenticates
 // via device-code (which they are forced into because the stale device-registration
@@ -4182,7 +4444,10 @@ func TestDeviceAuthClearsDeviceRegistrationDataWhenRegistrationDisabled(t *testi
 	// Seed a token from when register_device=true: it carries DeviceRegistrationData.
 	// authModeIsAvailable will block the password mode (register_device=false but
 	// token isForDeviceRegistration=true), forcing the user to re-authenticate via DAG.
-	generateAndStoreCachedInfo(t, tokenOptions{isForDeviceRegistration: true}, b.TokenPathForSession(sessionID))
+	// The cached provider ID must match the one the mock token endpoint issues
+	// (test-user-id), otherwise the broker rejects the cache as another identity's
+	// and the reuse this test covers never happens.
+	generateAndStoreCachedInfo(t, tokenOptions{isForDeviceRegistration: true, providerID: "test-user-id"}, b.TokenPathForSession(sessionID))
 	require.NoError(t, password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID)))
 
 	// Step 1: device-code auth.
@@ -4317,6 +4582,47 @@ func TestDeviceAuthPreservesFreshRegistrationOnRetryWithDeviceAuthError(t *testi
 		"the fresh registration must be timestamped before the first login is denied")
 }
 
+// TestDeviceAuthReenrollsAfterReplicationWindow verifies that a registration
+// older than the replication window is discarded on a confirmed
+// device-authentication failure, so the user can register the device again.
+func TestDeviceAuthReenrollsAfterReplicationWindow(t *testing.T) {
+	t.Parallel()
+
+	cachedGroups := []info.Group{{Name: "cached-group", UGID: "cached-id"}}
+	groupErr := &providerErrors.RetryWithDeviceAuthError{Err: himmelblau.ErrDeviceAuthenticationFailed}
+	provider := newDeviceAuthProviderForTests(groupErr)
+	b, sessionID, _ := newDeviceAuthBrokerForTests(t, provider)
+	cachedInfo := generateCachedInfo(t, tokenOptions{
+		isForDeviceRegistration: true,
+		groups:                  cachedGroups,
+		registrationAge:         time.Hour,
+	})
+	require.NoError(t, token.CacheAuthInfo(b.TokenPathForSession(sessionID), cachedInfo))
+	cachedInfo, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.NotZero(t, cachedInfo.DeviceRegistrationDataObtainedAt)
+
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraAuth, authmodes.Device, authmodes.DeviceQr}, b.GetNextAuthModes(sessionID))
+	require.Zero(t, provider.registrationEnrollments,
+		"a stale registration must be invalidated before a replacement is enrolled")
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.Empty(t, cached.DeviceRegistrationData)
+	require.Zero(t, cached.DeviceRegistrationDataObtainedAt)
+
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+	access, _, err = b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, 1, provider.registrationEnrollments,
+		"the next authentication must enroll a replacement after the stale registration is discarded")
+}
+
 // TestDeviceAuthPreservesFreshRegistrationOnRecoverableGraphFailure verifies
 // that a non-device Graph error, such as AADSTS7000218, also preserves fresh
 // registration data across device-auth requests.
@@ -4351,6 +4657,10 @@ func TestDeviceAuthPreservesFreshRegistrationOnRecoverableGraphFailure(t *testin
 	require.Len(t, provider.registrationExistingDataCalls, 2)
 	require.Equal(t, mockDeviceRegistrationData, provider.registrationExistingDataCalls[1],
 		"the second device-auth request must receive the cached registration data")
+	cached, err = token.LoadAuthInfo(b.TokenPathForSession(secondSessionID))
+	require.NoError(t, err)
+	require.NotZero(t, cached.DeviceRegistrationDataObtainedAt,
+		"non-device Graph errors must not clear the fresh registration")
 }
 
 func TestDeviceAuthClearsStaleRegistrationAfterGroupSuccess(t *testing.T) {

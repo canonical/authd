@@ -1451,23 +1451,29 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 		return access, data
 	}
 
-	// Load existing auth info and device registration data if present. Keep the
-	// old info so returning device-code logins can use cached groups when the
-	// live group lookup is unavailable.
+	// Load existing auth info if present, so a returning device-code login can
+	// reuse its registration data and cached groups when the live group lookup
+	// is unavailable.
 	var oldAuthInfo *token.AuthCachedInfo
-	var deviceRegistrationData []byte
-	if cachedInfo, err := token.LoadAuthInfo(session.tokenPath); err == nil {
+	if cachedInfo, err := token.LoadAuthInfo(session.tokenPath); err == nil &&
+		cachedAuthInfoMatchesIdentity(session, authInfo, cachedInfo) {
 		oldAuthInfo = cachedInfo
-		deviceRegistrationData = cachedInfo.DeviceRegistrationData
-		authInfo.UserInfo.Groups = slices.Clone(oldAuthInfo.UserInfo.Groups)
-		authInfo.GroupsResolved = oldAuthInfo.GroupsResolved
-		authInfo.DeviceRegistrationDataObtainedAt = oldAuthInfo.DeviceRegistrationDataObtainedAt
+		carryCachedState(authInfo, cachedInfo)
+		_, canRegisterDevice := providers.ProviderAs[providers.DeviceRegisterer](b.provider)
+		if !canRegisterDevice || !b.cfg.registerDevice {
+			// The cached registration cannot be renewed, so a token that
+			// carries it is not usable for local password authentication (see
+			// authModeIsAvailable): drop it so the next login can authenticate
+			// with a password again.
+			authInfo.DeviceRegistrationData = nil
+			authInfo.DeviceRegistrationDataObtainedAt = 0
+		}
 	}
 	if authInfo.UserInfo.ProviderID != "" && session.providerID == "" {
 		b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID)
 	}
 
-	cleanup, access, data := b.maybeRegisterDevice(ctx, session, authInfo, t, deviceRegistrationData)
+	cleanup, access, data := b.maybeRegisterDevice(ctx, session, authInfo, t, authInfo.DeviceRegistrationData)
 	defer cleanup()
 	if access != "" {
 		return access, data
@@ -1504,6 +1510,8 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		log.Error(context.Background(), err.Error())
 		return AuthDenied, unexpectedErrMsg("could not load stored token")
 	}
+	// The cache as loaded, before any refresh replaced it.
+	cachedAuthInfo := authInfo
 
 	// If the session is for changing the password, we don't need to refresh the token and user info (and we don't
 	// want the method call to return an error if refreshing the token or user info fails).
@@ -1522,7 +1530,6 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 	// via the provider; all other tokens use the OIDC app refresh. Both paths feed
 	// the same error classification below.
 	if b.cfg.forceAccessCheckWithProvider || !session.isOffline {
-		oldAuthInfo := authInfo
 		// Both refresh paths use the cached refresh token; without one we can't
 		// perform the liveness check, so require re-authentication.
 		if authInfo.Token.RefreshToken == "" {
@@ -1553,8 +1560,8 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 				log.Errorf(context.Background(), "Login denied: user %q is disabled in %s", session.username, b.provider.DisplayName())
 
 				// Store the information that the user is disabled, so that we can deny login on subsequent offline attempts.
-				oldAuthInfo.UserIsDisabled = true
-				if err = token.CacheAuthInfo(session.tokenPath, oldAuthInfo); err != nil {
+				cachedAuthInfo.UserIsDisabled = true
+				if err = token.CacheAuthInfo(session.tokenPath, cachedAuthInfo); err != nil {
 					log.Errorf(context.Background(), "Failed to store token: %s", err)
 					return AuthDenied, unexpectedErrMsg("failed to store token")
 				}
@@ -1570,12 +1577,22 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 			var netErr net.Error
 			if errors.As(err, &netErr) && !b.cfg.forceAccessCheckWithProvider {
 				log.Warningf(context.Background(), "Network error during token refresh for user %q, skipping token refresh", session.username)
-				authInfo = oldAuthInfo
+				authInfo = cachedAuthInfo
 				session.isOffline = true
 			} else {
 				return AuthDenied, errorMessage{Message: "Failed to refresh token"}
 			}
 		}
+	}
+	if !cachedAuthInfoMatchesIdentity(session, authInfo, cachedAuthInfo) {
+		// The cached authorization belongs to another identity: do not reuse its
+		// groups, device registration or device state.
+		authInfo.UserInfo.Groups = nil
+		authInfo.GroupsResolved = false
+		authInfo.DeviceRegistrationData = nil
+		authInfo.DeviceRegistrationDataObtainedAt = 0
+		authInfo.DeviceIsDisabled = false
+		cachedAuthInfo = nil
 	}
 
 	// Check disabled status. We have to do this after trying to refresh the token,
@@ -1603,7 +1620,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 
 	// Try to refresh the groups
 	groups, err := b.getGroups(ctx, session, authInfo)
-	if access, data := b.handleGroupFetch(session, authInfo, authInfo, groups, err); access != "" {
+	if access, data := b.handleGroupFetch(session, authInfo, cachedAuthInfo, groups, err); access != "" {
 		return access, data
 	}
 
@@ -2360,6 +2377,12 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	if authInfo == nil {
 		return access, data
 	}
+	if oldAuthInfo != nil && !cachedAuthInfoMatchesIdentity(session, authInfo, oldAuthInfo) {
+		// The cached authorization belongs to another identity: do not reuse its
+		// raw ID token or device state.
+		oldAuthInfo = nil
+		authInfo.RawIDToken = ""
+	}
 
 	// Mark this token as having been obtained via the entra_auth flow so
 	// that returning logins refresh it through the Microsoft Broker App public
@@ -2367,22 +2390,20 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	// refresh.
 	authInfo.ObtainedViaEntraAuth = true
 
-	// Carry over device registration data from a previous login when we are not
-	// (re-)registering the device in this one. authInfo is built fresh from the
-	// MFA token, so without this the subsequent finishAuth would persist an empty
-	// value and silently discard a device that was registered earlier. For a
-	// first-time login (no cached token) it keeps its zero value, which is correct.
+	// A live MFA login verifies the user, not the device or its cached groups, so
+	// carry the persisted device and authorization state over. authInfo is built
+	// fresh from the MFA token, so without this the subsequent finishAuth would
+	// persist empty values and silently discard a device that was registered
+	// earlier. For a first-time login (no cached token) the state keeps its zero
+	// value, which is correct.
 	if oldAuthInfo != nil {
-		authInfo.UserInfo.Groups = slices.Clone(oldAuthInfo.UserInfo.Groups)
-		authInfo.GroupsResolved = oldAuthInfo.GroupsResolved
-		authInfo.DeviceRegistrationData = oldAuthInfo.DeviceRegistrationData
-		authInfo.DeviceRegistrationDataObtainedAt = oldAuthInfo.DeviceRegistrationDataObtainedAt
+		carryCachedState(authInfo, oldAuthInfo)
 	}
 
-	var deviceRegistrationData []byte
-	if oldAuthInfo != nil {
-		deviceRegistrationData = oldAuthInfo.DeviceRegistrationData
-	}
+	// The device data cached before this login, if any: a passwordless Entra
+	// login that cannot fall back to the app-only Graph path continues only when
+	// no device was registered earlier.
+	deviceRegistrationData := authInfo.DeviceRegistrationData
 	// A successful passwordless MFA flow can still yield a token that is valid
 	// for first-time device registration, so do not gate registration on an
 	// entered Entra password here.
@@ -2995,9 +3016,6 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 	}
 	t := token.NewAuthCachedInfo(oauthToken, rawIDToken, extraFields)
 	t.ProviderMetadata = oldToken.ProviderMetadata
-	t.DeviceRegistrationData = oldToken.DeviceRegistrationData
-	t.DeviceRegistrationDataObtainedAt = oldToken.DeviceRegistrationDataObtainedAt
-	t.GroupsResolved = oldToken.GroupsResolved
 
 	t.UserInfo, err = b.getUserInfo(ctx, session, oauthToken, rawIDToken, true)
 	if err != nil {
@@ -3011,7 +3029,9 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 		t.UserInfo.Gecos = oldToken.UserInfo.Gecos
 	}
 
-	t.UserInfo.Groups = oldToken.UserInfo.Groups
+	// A successful refresh verifies the user, not the device or its cached
+	// groups, so carry the persisted device and authorization state over.
+	carryCachedState(t, oldToken)
 
 	return t, nil
 }
@@ -3162,6 +3182,46 @@ func (b *Broker) getGroups(ctx context.Context, session *session, t *token.AuthC
 	)
 }
 
+// carryCachedState copies the persisted device and authorization state from a
+// cached authentication to a fresh one. A live authentication verifies the
+// user, not the device or its cached groups, so this state must survive the
+// login until a group lookup or the provider proves otherwise.
+func carryCachedState(dst, src *token.AuthCachedInfo) {
+	dst.UserInfo.Groups = slices.Clone(src.UserInfo.Groups)
+	dst.GroupsResolved = src.GroupsResolved
+	dst.DeviceRegistrationData = src.DeviceRegistrationData
+	dst.DeviceRegistrationDataObtainedAt = src.DeviceRegistrationDataObtainedAt
+	dst.DeviceIsDisabled = src.DeviceIsDisabled
+}
+
+// cachedAuthInfoMatchesIdentity reports whether the cached authentication
+// belongs to the identity that just authenticated. Both sides can lack a
+// provider ID in caches written before the field existed, and an offline
+// session has no fresh provider ID to compare, so those cases fall back to the
+// provider ID that authd stored for the session.
+func cachedAuthInfoMatchesIdentity(session *session, authInfo, cachedInfo *token.AuthCachedInfo) bool {
+	if authInfo == nil || cachedInfo == nil {
+		return false
+	}
+
+	authenticatedProviderID := authInfo.UserInfo.ProviderID
+	if authenticatedProviderID == "" {
+		if !session.isOffline {
+			return false
+		}
+		authenticatedProviderID = session.providerID
+	}
+	cachedProviderID := cachedInfo.UserInfo.ProviderID
+	if cachedProviderID == "" {
+		cachedProviderID = session.providerID
+	}
+	if authenticatedProviderID == "" || cachedProviderID == "" ||
+		authenticatedProviderID != cachedProviderID {
+		return false
+	}
+	return session.providerID == "" || session.providerID == authenticatedProviderID
+}
+
 // handleGroupFetch processes the result of the group lookup of a live
 // authentication. Callers must return the response to the client when the
 // returned access mode is not empty, and continue with their own flow when it
@@ -3169,15 +3229,20 @@ func (b *Broker) getGroups(ctx context.Context, session *session, t *token.AuthC
 func (b *Broker) handleGroupFetch(session *session, authInfo, cachedInfo *token.AuthCachedInfo, groups []info.Group, err error) (access string, data isAuthenticatedDataResponse) {
 	if err == nil {
 		// A successful lookup verifies the registration, so it is no longer
-		// fresh, and it resolves the groups. Persist the result unless the
-		// cached state already recorded it: a login that learns nothing new
-		// skips the cache write, and finishAuth stores the auth info for the
-		// flows that reach it.
-		stateChanged := authInfo.DeviceRegistrationDataObtainedAt != 0 ||
-			(cachedInfo != nil && !cachedInfo.GroupsResolved)
+		// fresh, it resolves the groups and it clears the disabled-device flag.
+		// Persist the result unless the cached state already recorded all of it:
+		// a login that learns nothing new skips the cache write, and finishAuth
+		// stores the auth info for the flows that reach it.
+		stateChanged := authInfo.DeviceIsDisabled ||
+			authInfo.DeviceRegistrationDataObtainedAt != 0 ||
+			(cachedInfo != nil && (!cachedInfo.GroupsResolved ||
+				!slices.Equal(authInfo.UserInfo.Groups, groups)))
 		authInfo.UserInfo.Groups = groups
 		authInfo.GroupsResolved = true
 		authInfo.DeviceRegistrationDataObtainedAt = 0
+		// A successful lookup is positive evidence that the device is valid
+		// again, so a persisted disabled-device flag can be dropped.
+		authInfo.DeviceIsDisabled = false
 		if stateChanged {
 			// Persist the change now: the caller can return to the client
 			// before finishAuth stores the auth info.
