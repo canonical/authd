@@ -39,8 +39,11 @@ permissions:
   contents: read
 
 env:
-  # Keep this aligned with debian-build.yaml.
-  CARGO_VENDOR_FILTERER_VERSION: 0.5.16
+  # Keep these aligned with debian-build.yaml.
+  # Noble's Rust 1.75 supports cargo-vendor-filterer only up to 0.5.16.
+  CARGO_VENDOR_FILTERER_NOBLE_VERSION: 0.5.16
+  # The ubuntu:devel image provides OpenSSL 4, which requires 0.5.18.
+  CARGO_VENDOR_FILTERER_DEVEL_VERSION: 0.5.18
 
 defaults:
   run:
@@ -119,7 +122,7 @@ jobs:
           cargo --version
 
           cargo install --locked --root=/usr \
-            cargo-vendor-filterer@"${CARGO_VENDOR_FILTERER_VERSION}"
+            cargo-vendor-filterer@"${CARGO_VENDOR_FILTERER_NOBLE_VERSION}"
 
           cargo generate-lockfile
 
@@ -220,7 +223,7 @@ jobs:
             pkg-config
 
           cargo install --locked --root=/usr \
-            cargo-vendor-filterer@"${CARGO_VENDOR_FILTERER_VERSION}"
+            cargo-vendor-filterer@"${CARGO_VENDOR_FILTERER_DEVEL_VERSION}"
 
       - name: Vendor the Rust dependencies
         run: |

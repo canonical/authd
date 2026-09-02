@@ -24,7 +24,8 @@ on:
 
 env:
   # Keep this aligned with update-packaging-on-dependabot-pr.yaml.
-  CARGO_VENDOR_FILTERER_VERSION: 0.5.16
+  # Noble's Rust 1.75 supports cargo-vendor-filterer only up to 0.5.16.
+  CARGO_VENDOR_FILTERER_NOBLE_VERSION: 0.5.16
 
 jobs:
   build-deb:
@@ -190,7 +191,7 @@ jobs:
           extra-source-build-script: |
             if [ "${{ inputs.ubuntu-version }}" == noble ]; then
               cargo install --locked --root=/usr \
-                cargo-vendor-filterer@${{ env.CARGO_VENDOR_FILTERER_VERSION }}
+                cargo-vendor-filterer@${{ env.CARGO_VENDOR_FILTERER_NOBLE_VERSION }}
               command -v cargo-vendor-filterer
             fi
           allow-sudo: true
