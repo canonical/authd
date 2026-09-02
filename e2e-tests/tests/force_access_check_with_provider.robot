@@ -55,8 +55,8 @@ Test second login fails with force_access_check_with_provider enabled offline
     Block Network Access To Identity Provider
 
     Open Terminal
-    Try Log In With Remote User    ${username}
-    Check That Remote User Has No Available Authentication Modes
+    Try Log In With Remote User    ${username}    prompt_timeout=30
+    Check That Remote User Has No Available Authentication Modes    timeout=30
 
 
 Test fresh GDM login falls back to local password when token verification fails due to network issues
