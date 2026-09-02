@@ -608,11 +608,9 @@ func TestCLIAuthenticate(t *testing.T) {
 				cliWaitForResult(t, c)
 			},
 		},
-		// This test is flaky under ASAN: authd-pam's Go runtime occasionally
-		// crashes with an ASAN-internal CHECK failure (ThreadRegistry::StartThread
-		// receives a corrupt thread index) caused by ASAN's thread registry being
-		// corrupted by Go's memory management when many ASAN-instrumented processes
-		// run in parallel. The test itself is correct and passes in non-ASAN runs.
+		// This test is flaky under ASAN: the PAM process occasionally hits an
+		// ASAN-internal ThreadRegistry::StartThread check. The test itself is
+		// correct and passes in non-ASAN runs.
 		"Deny_authentication_if_newpassword_does_not_match_required_criteria": {
 			username: "user-needs-reset@example.com",
 			flaky:    true,
