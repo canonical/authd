@@ -88,6 +88,51 @@ fn init_logger() {
     logs::init_logger();
 }
 
+#[cfg(test)]
+mod tests {
+    use super::passwd::AuthdPasswdHooks;
+    use libnss::passwd::PasswdHooks;
+    use std::panic::AssertUnwindSafe;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static LOOKUP_COMPLETED: AtomicBool = AtomicBool::new(false);
+
+    struct RunDuringThreadTeardown;
+
+    impl Drop for RunDuringThreadTeardown {
+        fn drop(&mut self) {
+            let lookup_completed = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                <AuthdPasswdHooks as PasswdHooks>::get_entry_by_name("late-lookup".to_owned());
+            }))
+            .is_ok();
+            LOOKUP_COMPLETED.store(lookup_completed, Ordering::SeqCst);
+        }
+    }
+
+    thread_local! {
+        static RUN_DURING_THREAD_TEARDOWN: RunDuringThreadTeardown = RunDuringThreadTeardown;
+    }
+
+    #[test]
+    fn nss_lookup_during_thread_teardown_does_not_panic() {
+        LOOKUP_COMPLETED.store(false, Ordering::SeqCst);
+
+        std::thread::spawn(|| {
+            RUN_DURING_THREAD_TEARDOWN.with(|_| {});
+
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("runtime should be available");
+            rt.block_on(async {});
+        })
+        .join()
+        .expect("test thread should exit cleanly");
+
+        assert!(LOOKUP_COMPLETED.load(Ordering::SeqCst));
+    }
+}
+
 #[cfg(feature = "integration_tests")]
 #[ctor::ctor]
 /// register_local_aad_nss_service_for_tests executes the C API to override the NSS lookup.
