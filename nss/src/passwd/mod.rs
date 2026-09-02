@@ -3,7 +3,6 @@ use libc::uid_t;
 use libnss::interop::Response;
 use libnss::passwd::{Passwd, PasswdHooks};
 use std::path::PathBuf;
-use tokio::runtime::Builder;
 use tonic::Request;
 
 use crate::client::{self, authd};
@@ -29,10 +28,9 @@ impl PasswdHooks for AuthdPasswdHooks {
 
 /// get_all_entries connects to the grpc server and asks for all passwd entries.
 fn get_all_entries() -> Response<Vec<Passwd>> {
-    let rt = match Builder::new_current_thread().enable_all().build() {
-        Ok(rt) => rt,
-        Err(e) => {
-            info!("could not create runtime for NSS: {}", e);
+    let rt = match super::build_runtime() {
+        Some(rt) => rt,
+        None => {
             return Response::Unavail;
         }
     };
@@ -60,10 +58,9 @@ fn get_all_entries() -> Response<Vec<Passwd>> {
 
 /// get_entry_by_uid connects to the grpc server and asks for the passwd entry with the given uid.
 fn get_entry_by_uid(uid: uid_t) -> Response<Passwd> {
-    let rt = match Builder::new_current_thread().enable_all().build() {
-        Ok(rt) => rt,
-        Err(e) => {
-            info!("could not create runtime for NSS: {}", e);
+    let rt = match super::build_runtime() {
+        Some(rt) => rt,
+        None => {
             return Response::Unavail;
         }
     };
@@ -91,10 +88,9 @@ fn get_entry_by_uid(uid: uid_t) -> Response<Passwd> {
 
 /// get_entry_by_name connects to the grpc server and asks for the passwd entry with the given name.
 fn get_entry_by_name(name: String) -> Response<Passwd> {
-    let rt = match Builder::new_current_thread().enable_all().build() {
-        Ok(rt) => rt,
-        Err(e) => {
-            info!("could not create runtime for NSS: {}", e);
+    let rt = match super::build_runtime() {
+        Some(rt) => rt,
+        None => {
             return Response::Unavail;
         }
     };

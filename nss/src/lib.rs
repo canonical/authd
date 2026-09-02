@@ -2,6 +2,7 @@ use std::time::Duration;
 
 // used by libnss_*_hooks macros
 use libnss::{interop::Response, libnss_group_hooks, libnss_passwd_hooks, libnss_shadow_hooks};
+use tokio::runtime::{Builder, Handle, Runtime};
 
 mod passwd;
 use passwd::AuthdPasswdHooks;
@@ -31,6 +32,29 @@ const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 const DEFAULT_SOCKET_PATH: &str = "/run/authd.sock";
+
+/// build_runtime creates a current-thread runtime unless the calling process is already
+/// destroying its thread-local state.
+fn build_runtime() -> Option<Runtime> {
+    // glibc runs TLS destructors before atexit callbacks. NSS can therefore be called after
+    // Tokio's context has been destroyed.
+    if let Err(err) = Handle::try_current() {
+        if err.is_thread_local_destroyed() {
+            info!(
+                "could not create runtime for NSS: Tokio context thread-local has been destroyed"
+            );
+            return None;
+        }
+    }
+
+    match Builder::new_current_thread().enable_all().build() {
+        Ok(rt) => Some(rt),
+        Err(err) => {
+            info!("could not create runtime for NSS: {}", err);
+            None
+        }
+    }
+}
 
 /// socket_path returns the socket path to connect to the gRPC server.
 ///
