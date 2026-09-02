@@ -119,6 +119,9 @@ gdm_pam_extension_look_up_type (const char    *name,
         const char *p;
         size_t index = 0;
 
+        if (extension_type)
+                *extension_type = 0;
+
         env = getenv ("GDM_SUPPORTED_PAM_EXTENSIONS");
         if (env == NULL)
                 return false;
