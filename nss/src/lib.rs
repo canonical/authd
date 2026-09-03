@@ -2,6 +2,7 @@ use std::time::Duration;
 
 // used by libnss_*_hooks macros
 use libnss::{interop::Response, libnss_group_hooks, libnss_passwd_hooks, libnss_shadow_hooks};
+use tokio::runtime::{Builder, Handle, Runtime};
 
 mod passwd;
 use passwd::AuthdPasswdHooks;
@@ -31,6 +32,29 @@ const CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 const DEFAULT_SOCKET_PATH: &str = "/run/authd.sock";
+
+/// build_runtime creates a current-thread runtime unless the calling process is already
+/// destroying its thread-local state.
+fn build_runtime() -> Option<Runtime> {
+    // glibc runs TLS destructors before atexit callbacks. NSS can therefore be called after
+    // Tokio's context has been destroyed.
+    if let Err(err) = Handle::try_current() {
+        if err.is_thread_local_destroyed() {
+            info!(
+                "could not create runtime for NSS: Tokio context thread-local has been destroyed"
+            );
+            return None;
+        }
+    }
+
+    match Builder::new_current_thread().enable_all().build() {
+        Ok(rt) => Some(rt),
+        Err(err) => {
+            info!("could not create runtime for NSS: {}", err);
+            None
+        }
+    }
+}
 
 /// socket_path returns the socket path to connect to the gRPC server.
 ///
@@ -62,6 +86,51 @@ fn grpc_status_to_nss_response<T>(status: Status) -> Response<T> {
 /// library invocation in order to avoid races to the log file.
 fn init_logger() {
     logs::init_logger();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::passwd::AuthdPasswdHooks;
+    use libnss::passwd::PasswdHooks;
+    use std::panic::AssertUnwindSafe;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static LOOKUP_COMPLETED: AtomicBool = AtomicBool::new(false);
+
+    struct RunDuringThreadTeardown;
+
+    impl Drop for RunDuringThreadTeardown {
+        fn drop(&mut self) {
+            let lookup_completed = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                <AuthdPasswdHooks as PasswdHooks>::get_entry_by_name("late-lookup".to_owned());
+            }))
+            .is_ok();
+            LOOKUP_COMPLETED.store(lookup_completed, Ordering::SeqCst);
+        }
+    }
+
+    thread_local! {
+        static RUN_DURING_THREAD_TEARDOWN: RunDuringThreadTeardown = RunDuringThreadTeardown;
+    }
+
+    #[test]
+    fn nss_lookup_during_thread_teardown_does_not_panic() {
+        LOOKUP_COMPLETED.store(false, Ordering::SeqCst);
+
+        std::thread::spawn(|| {
+            RUN_DURING_THREAD_TEARDOWN.with(|_| {});
+
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("runtime should be available");
+            rt.block_on(async {});
+        })
+        .join()
+        .expect("test thread should exit cleanly");
+
+        assert!(LOOKUP_COMPLETED.load(Ordering::SeqCst));
+    }
 }
 
 #[cfg(feature = "integration_tests")]
