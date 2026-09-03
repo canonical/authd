@@ -121,29 +121,86 @@ func TestLoadAuthInfo(t *testing.T) {
 				return
 			}
 			require.NoError(t, err, "LoadAuthInfo should not return an error")
-			require.Equal(t, tc.expectedRet, got, "LoadAuthInfo should return the expected value")
+			// The marker is only stored when set: a cache with groups but no
+			// marker is indistinguishable from one written before the marker
+			// existed, so the decoder records it as resolved.
+			expected := *tc.expectedRet
+			expected.GroupsResolved = true
+			require.Equal(t, &expected, got, "LoadAuthInfo should return the expected value")
 		})
 	}
 }
 
-func TestLoadAuthInfoLegacyTokenHasNoRegistrationTimestamp(t *testing.T) {
+// TestLoadAuthInfoLegacyToken verifies how caches written before the
+// GroupsResolved and registration-timestamp fields existed are loaded: only a
+// cache that recorded authenticated user information counts as groups-resolved,
+// and none of them carries a registration timestamp.
+func TestLoadAuthInfoLegacyToken(t *testing.T) {
 	t.Parallel()
 
-	tokenPath := filepath.Join(t.TempDir(), "parent", "token.json")
-	require.NoError(t, os.MkdirAll(filepath.Dir(tokenPath), 0700))
-	require.NoError(t, os.WriteFile(tokenPath, []byte(`{
-		"Token": {
-			"access_token": "accesstoken",
-			"refresh_token": "refreshtoken"
+	tests := map[string]struct {
+		content            string
+		wantData           []byte
+		wantGroupsResolved bool
+		wantGroups         []info.Group
+	}{
+		"Cache_without_authenticated_user_is_not_groups_resolved": {
+			content: `{
+	"Token": {
+		"access_token": "accesstoken",
+		"refresh_token": "refreshtoken"
+	},
+	"DeviceRegistrationData": "bGVnYWN5LWRldmljZS1kYXRh"
+}`,
+			wantData: []byte("legacy-device-data"),
 		},
-		"DeviceRegistrationData": "bGVnYWN5LWRldmljZS1kYXRh"
-	}`), 0600))
+		"Provider_ID_without_groups_is_not_groups_resolved": {
+			content: `{
+	"Token": {
+		"access_token": "accesstoken",
+		"refresh_token": "refreshtoken"
+	},
+	"UserInfo": {
+		"name": "legacy-user",
+		"provider_id": "legacy-user-id"
+	},
+	"DeviceRegistrationData": "bGVnYWN5LWRldmljZS1kYXRh"
+}`,
+			wantData: []byte("legacy-device-data"),
+		},
+		"Authenticated_user_with_groups_is_groups_resolved": {
+			content: `{
+	"Token": {
+		"access_token": "accesstoken",
+		"refresh_token": "refreshtoken"
+	},
+	"UserInfo": {
+		"name": "legacy-user",
+		"provider_id": "legacy-user-id",
+		"groups": [{"name": "legacy-group", "ugid": "legacy-group-id"}]
+	}
+}`,
+			wantGroupsResolved: true,
+			wantGroups:         []info.Group{{Name: "legacy-group", UGID: "legacy-group-id"}},
+		},
+	}
 
-	got, err := token.LoadAuthInfo(tokenPath)
-	require.NoError(t, err)
-	require.Equal(t, []byte("legacy-device-data"), got.DeviceRegistrationData)
-	require.Zero(t, got.DeviceRegistrationDataObtainedAt,
-		"legacy caches without the field must load without a registration timestamp")
-	require.False(t, got.GroupsResolved,
-		"legacy caches without the field must not be treated as groups-resolved")
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			tokenPath := filepath.Join(t.TempDir(), "parent", "token.json")
+			require.NoError(t, os.MkdirAll(filepath.Dir(tokenPath), 0700))
+			require.NoError(t, os.WriteFile(tokenPath, []byte(tc.content), 0600))
+
+			got, err := token.LoadAuthInfo(tokenPath)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantData, got.DeviceRegistrationData)
+			require.Equal(t, tc.wantGroupsResolved, got.GroupsResolved,
+				"a legacy cache must only count as groups-resolved when it recorded authenticated user information")
+			require.Equal(t, tc.wantGroups, got.UserInfo.Groups)
+			require.Zero(t, got.DeviceRegistrationDataObtainedAt,
+				"legacy caches without the registration timestamp must load without one")
+		})
+	}
 }

@@ -1456,7 +1456,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	// is unavailable.
 	var oldAuthInfo *token.AuthCachedInfo
 	if cachedInfo, err := token.LoadAuthInfo(session.tokenPath); err == nil &&
-		cachedAuthInfoMatchesIdentity(session, authInfo, cachedInfo) {
+		b.cachedAuthInfoMatchesIdentity(session, authInfo, cachedInfo) {
 		oldAuthInfo = cachedInfo
 		carryCachedState(authInfo, cachedInfo)
 		_, canRegisterDevice := providers.ProviderAs[providers.DeviceRegisterer](b.provider)
@@ -1584,7 +1584,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 			}
 		}
 	}
-	if !cachedAuthInfoMatchesIdentity(session, authInfo, cachedAuthInfo) {
+	if !b.cachedAuthInfoMatchesIdentity(session, authInfo, cachedAuthInfo) {
 		// The cached authorization belongs to another identity: do not reuse its
 		// groups, device registration or device state.
 		authInfo.UserInfo.Groups = nil
@@ -2377,7 +2377,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	if authInfo == nil {
 		return access, data
 	}
-	if oldAuthInfo != nil && !cachedAuthInfoMatchesIdentity(session, authInfo, oldAuthInfo) {
+	if oldAuthInfo != nil && !b.cachedAuthInfoMatchesIdentity(session, authInfo, oldAuthInfo) {
 		// The cached authorization belongs to another identity: do not reuse its
 		// raw ID token or device state.
 		oldAuthInfo = nil
@@ -3196,30 +3196,56 @@ func carryCachedState(dst, src *token.AuthCachedInfo) {
 
 // cachedAuthInfoMatchesIdentity reports whether the cached authentication
 // belongs to the identity that just authenticated. Both sides can lack a
-// provider ID in caches written before the field existed, and an offline
-// session has no fresh provider ID to compare, so those cases fall back to the
-// provider ID that authd stored for the session.
-func cachedAuthInfoMatchesIdentity(session *session, authInfo, cachedInfo *token.AuthCachedInfo) bool {
-	if authInfo == nil || cachedInfo == nil {
+// provider ID in caches written before the field existed, so those caches are
+// matched by the username that the current authentication path verified.
+func (b *Broker) cachedAuthInfoMatchesIdentity(session *session, authInfo, cachedInfo *token.AuthCachedInfo) bool {
+	if b.provider == nil || session == nil || authInfo == nil || cachedInfo == nil {
 		return false
 	}
 
 	authenticatedProviderID := authInfo.UserInfo.ProviderID
-	if authenticatedProviderID == "" {
-		if !session.isOffline {
+	cachedProviderID := cachedInfo.UserInfo.ProviderID
+	if session.providerID != "" {
+		if authenticatedProviderID != "" && session.providerID != authenticatedProviderID {
 			return false
 		}
-		authenticatedProviderID = session.providerID
+		if cachedProviderID != "" && session.providerID != cachedProviderID {
+			return false
+		}
+
+		// The session provider ID is supplied by authd from the user database,
+		// so it can identify a legacy cache even when the cache predates the
+		// ProviderID field (including after a username change).
+		return authInfo.UserInfo.Name != "" && cachedInfo.UserInfo.Name != ""
 	}
-	cachedProviderID := cachedInfo.UserInfo.ProviderID
-	if cachedProviderID == "" {
-		cachedProviderID = session.providerID
+
+	if authenticatedProviderID != "" && cachedProviderID != "" {
+		return authenticatedProviderID == cachedProviderID
 	}
-	if authenticatedProviderID == "" || cachedProviderID == "" ||
-		authenticatedProviderID != cachedProviderID {
+
+	// A cache from before ProviderID was added can only be matched by the
+	// username that the current authentication path verified. This preserves
+	// legacy caches without allowing a known provider-ID mismatch through.
+	if authInfo.UserInfo.Name == "" || cachedInfo.UserInfo.Name == "" {
 		return false
 	}
-	return session.providerID == "" || session.providerID == authenticatedProviderID
+	if err := b.provider.VerifyUsername(session.username, authInfo.UserInfo.Name); err != nil {
+		return false
+	}
+	return b.provider.VerifyUsername(session.username, cachedInfo.UserInfo.Name) == nil
+}
+
+// cachedGroupsFallbackAllowed reports whether a failed group lookup may fall
+// back to cached groups. The marker is only stored when set, so a cache
+// without resolved groups records nothing about whether a login ever
+// completed. Such a cache is allowed when a local password file proves that a
+// login completed for the user. The password file is written when the new
+// password is stored, which can happen before the login completes, so it is
+// the weakest evidence this code accepts.
+func cachedGroupsFallbackAllowed(session *session, cachedInfo *token.AuthCachedInfo) bool {
+	return cachedInfo != nil && (cachedInfo.GroupsResolved ||
+		cachedInfo.Token != nil && cachedInfo.UserInfo.Name != "" &&
+			cachedInfo.UserInfo.Groups == nil && passwordFileExists(*session))
 }
 
 // handleGroupFetch processes the result of the group lookup of a live
@@ -3294,7 +3320,7 @@ func (b *Broker) handleGroupFetch(session *session, authInfo, cachedInfo *token.
 		return AuthNext, errorMessage{Message: "Authentication failed due to a token issue. Please try again."}
 	}
 
-	if cachedInfo == nil || !cachedInfo.GroupsResolved {
+	if !cachedGroupsFallbackAllowed(session, cachedInfo) {
 		// Without cached groups there is no safe fallback for a group lookup
 		// failure. Fresh registration data is already persisted, so a later
 		// login can retry it without enrolling another device.
@@ -3307,6 +3333,11 @@ func (b *Broker) handleGroupFetch(session *session, authInfo, cachedInfo *token.
 	// attempt can use it once Entra has replicated it.
 	log.Warningf(context.Background(), "Could not get groups: %v. Using cached groups.", err)
 	authInfo.UserInfo.Groups = cachedInfo.UserInfo.Groups
+	// The fallback only runs for a cache whose groups are the state of record,
+	// so record that they were resolved. Otherwise the next login stores the
+	// marker as false while the groups are non-nil, and a later failure can no
+	// longer fall back.
+	authInfo.GroupsResolved = true
 
 	return "", nil
 }

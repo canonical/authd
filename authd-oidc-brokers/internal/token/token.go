@@ -21,8 +21,11 @@ type AuthCachedInfo struct {
 	DeviceRegistrationData []byte
 	// GroupsResolved records that UserInfo.Groups was successfully fetched
 	// from the provider at least once. A group-fetch failure may only fall
-	// back to cached groups when this is set.
-	GroupsResolved bool
+	// back to cached groups when this is set, or when a local password file
+	// proves that a prior login completed. The marker is only stored when
+	// set: an explicit false on disk would strip caches that were rewritten
+	// before their groups resolve of that fallback.
+	GroupsResolved bool `json:",omitempty"`
 	// DeviceRegistrationDataObtainedAt stores the Unix timestamp of the fresh
 	// device registration data, and is cleared once a group lookup succeeds with
 	// it. Entra can need time to replicate a new device, so a confirmed
@@ -37,6 +40,38 @@ type AuthCachedInfo struct {
 	// client_secret) for the liveness/revocation check, rather than via the OIDC
 	// app refresh used by device-auth tokens.
 	ObtainedViaEntraAuth bool
+}
+
+// UnmarshalJSON keeps caches written before GroupsResolved was added usable.
+// Such caches with cached groups retain the previous cached-group fallback
+// behavior. A provider ID alone is not enough because device registration can
+// be cached before group lookup succeeds. A successful zero-group lookup
+// stores "groups": null, so it stays unresolved here; the broker allows the
+// fallback for it via cachedGroupsFallbackAllowed when a local password file
+// proves a prior login completed.
+func (a *AuthCachedInfo) UnmarshalJSON(data []byte) error {
+	type authCachedInfo AuthCachedInfo
+
+	var decoded authCachedInfo
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+
+	// CacheAuthInfo always marshals the exact Go field name, so key
+	// presence is a plain lookup.
+	_, groupsResolvedPresent := fields["GroupsResolved"]
+	if !groupsResolvedPresent && decoded.Token != nil && decoded.UserInfo.Name != "" &&
+		decoded.UserInfo.Groups != nil {
+		decoded.GroupsResolved = true
+	}
+
+	*a = AuthCachedInfo(decoded)
+	return nil
 }
 
 // NewAuthCachedInfo creates a new AuthCachedInfo. It sets the provided token and rawIDToken and the provider-specific

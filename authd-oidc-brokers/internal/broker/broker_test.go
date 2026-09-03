@@ -5884,6 +5884,349 @@ func TestDeviceAuthRedirectsToExistingProviderIDDir(t *testing.T) {
 	})
 }
 
+func writeLegacyCacheWithoutProviderID(t *testing.T, path, username string, groups []info.Group, deviceData []byte) {
+	t.Helper()
+
+	legacyCache := map[string]any{
+		"Token": map[string]string{
+			"access_token":  "cached-access-token",
+			"refresh_token": "cached-refresh-token",
+		},
+		"UserInfo": map[string]any{
+			"name":   username,
+			"groups": groups,
+		},
+		"DeviceRegistrationData": deviceData,
+	}
+	data, err := json.Marshal(legacyCache)
+	require.NoError(t, err, "Setup: marshaling the legacy cache should not fail")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0700), "Setup: creating the legacy cache directory should not fail")
+	require.NoError(t, os.WriteFile(path, data, 0600), "Setup: writing the legacy cache should not fail")
+}
+
+// TestDeviceAuthLegacyCacheWithoutProviderID verifies the username-keyed
+// fallback for caches written before the provider ID was stored: only a cache
+// whose stored username the session verifies may supply cached groups or
+// registration data.
+func TestDeviceAuthLegacyCacheWithoutProviderID(t *testing.T) {
+	t.Parallel()
+
+	const sessionUsername = "test-user@email.com"
+	tests := map[string]struct {
+		cacheUsername    string
+		groupLookupFails bool
+		wantAccess       string
+		wantExistingData []byte
+		wantEnrollments  int
+	}{
+		"Cache_of_the_session_user_is_reused": {
+			cacheUsername:    sessionUsername,
+			wantAccess:       broker.AuthNext,
+			wantExistingData: mockDeviceRegistrationData,
+		},
+		"Cache_for_another_username_is_not_reused": {
+			// A foreign cache must supply neither groups nor registration
+			// data.
+			cacheUsername:    "other-user@email.com",
+			groupLookupFails: true,
+			wantAccess:       broker.AuthDenied,
+			wantEnrollments:  1,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			mockProvider := &testutils.MockProvider{}
+			if tc.groupLookupFails {
+				mockProvider.GetGroupsFunc = func() ([]info.Group, error) {
+					return nil, errors.New("temporary group lookup failure")
+				}
+			}
+			provider := &mockEntraAuthProvider{MockProvider: mockProvider}
+			cfg := &brokerForTestConfig{
+				Config:                broker.Config{DataDir: t.TempDir()},
+				ownerAllowed:          true,
+				firstUserBecomesOwner: true,
+				provider:              provider,
+				registerDevice:        true,
+				tokenHandlerOptions: &testutils.TokenHandlerOptions{
+					IDTokenClaims: []map[string]interface{}{
+						{"aud": consts.MicrosoftBrokerAppID},
+					},
+				},
+			}
+			b := newBrokerForTests(t, cfg)
+
+			sessionID, _ := newSessionForTests(t, b, sessionUsername, sessionmode.Login)
+			writeLegacyCacheWithoutProviderID(
+				t,
+				b.TokenPathForSession(sessionID),
+				tc.cacheUsername,
+				[]info.Group{{Name: "cached-group", UGID: "cached-group-id"}},
+				mockDeviceRegistrationData,
+			)
+
+			updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+			access, _, err := b.IsAuthenticated(sessionID, "{}")
+			require.NoError(t, err)
+			require.Equal(t, tc.wantAccess, access)
+			require.Equal(t, tc.wantExistingData, provider.registrationExistingData,
+				"only a legacy cache whose username the session verifies may supply registration data")
+			require.Equal(t, tc.wantEnrollments, provider.registrationEnrollments,
+				"a legacy cache must be reused when its username matches and re-enrolled when it does not")
+		})
+	}
+}
+
+func TestPasswordAuthReusesLegacyCacheWithoutProviderID(t *testing.T) {
+	t.Parallel()
+
+	const (
+		username        = "test-user@email.com"
+		correctPassword = "password"
+	)
+	provider := &mockEntraAuthProvider{MockProvider: &testutils.MockProvider{}}
+	cfg := &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		registerDevice:        true,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{
+				{"aud": consts.MicrosoftBrokerAppID},
+			},
+		},
+	}
+	b := newBrokerForTests(t, cfg)
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	writeLegacyCacheWithoutProviderID(
+		t,
+		b.TokenPathForSession(sessionID),
+		username,
+		[]info.Group{{Name: "cached-group", UGID: "cached-group-id"}},
+		mockDeviceRegistrationData,
+	)
+	require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+	access, _, err := b.IsAuthenticated(sessionID, authData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access)
+	require.Equal(t, mockDeviceRegistrationData, provider.registrationExistingData,
+		"password auth should reuse registration data from a legacy username-keyed cache")
+	require.Zero(t, provider.registrationEnrollments,
+		"reusing a legacy cache must not enroll the device again")
+}
+
+// TestPasswordAuthAllowsLegacyZeroGroupCacheFallback pins the legacy migration
+// for users who resolved to zero Entra groups: their caches carry "groups":
+// null and no GroupsResolved field, so only the local password file proves a
+// prior login completed and keeps the cached-group fallback available.
+//
+// The configured extra group makes the stored groups non-nil on the login that
+// follows, so the fallback must record that the groups were resolved instead of
+// leaving the marker false forever.
+func TestPasswordAuthAllowsLegacyZeroGroupCacheFallback(t *testing.T) {
+	t.Parallel()
+
+	const (
+		username        = "test-user@email.com"
+		correctPassword = "password"
+	)
+	provider := &mockEntraAuthProvider{
+		MockProvider: &testutils.MockProvider{
+			GetGroupsFunc: func() ([]info.Group, error) {
+				return nil, errors.New("Microsoft Graph API is unavailable")
+			},
+		},
+	}
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		extraGroups:           []string{"extra-group"},
+		provider:              provider,
+		registerDevice:        true,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{
+				{"aud": consts.MicrosoftBrokerAppID},
+				{"aud": consts.MicrosoftBrokerAppID},
+			},
+		},
+	})
+
+	login := func(seedLegacyCache bool) (string, []info.Group) {
+		sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+		if seedLegacyCache {
+			writeLegacyCacheWithoutProviderID(t, b.TokenPathForSession(sessionID), username, nil, mockDeviceRegistrationData)
+			require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+		}
+		updateAuthModes(t, b, sessionID, authmodes.Password)
+		authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+		access, data, err := b.IsAuthenticated(sessionID, authData)
+		require.NoError(t, err)
+
+		var payload struct {
+			UserInfo struct {
+				Groups []info.Group `json:"groups"`
+			} `json:"userinfo"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(data), &payload))
+		return access, payload.UserInfo.Groups
+	}
+
+	access, groups := login(true)
+	require.Equal(t, broker.AuthGranted, access,
+		"a completed legacy zero-group login must keep the cached-group fallback")
+	require.Equal(t, []info.Group{{Name: "extra-group"}}, groups,
+		"the legacy cache resolved to zero groups, so only the configured extra group may be reported")
+
+	access, _ = login(false)
+	require.Equal(t, broker.AuthGranted, access,
+		"the cached-group fallback must survive the cache write of the previous login")
+}
+
+// TestPasswordAuthFallsBackForUnresolvedGroupsAfterCacheRewrite verifies that
+// a cache rewritten before its groups resolve keeps the password-file
+// fallback: the marker is only stored when set, so rewriting such a cache must
+// not strip the fallback that caches written before the marker existed have.
+func TestPasswordAuthFallsBackForUnresolvedGroupsAfterCacheRewrite(t *testing.T) {
+	t.Parallel()
+
+	const (
+		username        = "test-user@email.com"
+		correctPassword = "password"
+	)
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		extraGroups:           []string{"extra-group"},
+		provider:              newDeviceAuthProviderForTests(errors.New("Microsoft Graph API is unavailable")),
+		registerDevice:        true,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{
+				{"aud": consts.MicrosoftBrokerAppID},
+			},
+		},
+	})
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	unresolved := generateCachedInfo(t, tokenOptions{
+		username:                username,
+		isForDeviceRegistration: true,
+	})
+	unresolved.GroupsResolved = false
+	unresolved.UserInfo.Groups = nil
+	require.NoError(t, token.CacheAuthInfo(b.TokenPathForSession(sessionID), unresolved))
+	require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+	access, data, err := b.IsAuthenticated(sessionID, authData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access,
+		"rewriting a cache before its groups resolve must not strip the password-file fallback")
+
+	var payload struct {
+		UserInfo struct {
+			Groups []info.Group `json:"groups"`
+		} `json:"userinfo"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(data), &payload))
+	require.Equal(t, []info.Group{{Name: "extra-group"}}, payload.UserInfo.Groups,
+		"the cache has no resolved groups, so only the configured extra group may be reported")
+}
+
+// TestPasswordAuthMatchesLegacyCacheBySessionProviderID verifies the
+// provider-ID path of the cache identity check: authd supplies the provider ID
+// it stored for the user, the cache predates the ProviderID field, and the
+// username changed at the identity provider, so only the session provider ID
+// can tie the cache to the login.
+func TestPasswordAuthMatchesLegacyCacheBySessionProviderID(t *testing.T) {
+	t.Parallel()
+
+	const (
+		username = "test-user@email.com"
+		// The cache predates the rename at the identity provider, so the
+		// username stored in it no longer matches the authenticated one.
+		cachedUsername  = "renamed-user@email.com"
+		providerID      = "test-user-id"
+		correctPassword = "password"
+	)
+	cachedGroups := []info.Group{{Name: "cached-group", UGID: "cached-group-id"}}
+
+	tests := map[string]struct {
+		cachedProviderID string
+		wantAccess       string
+	}{
+		"Legacy_cache_without_provider_id_is_reused": {
+			wantAccess: broker.AuthGranted,
+		},
+		"Cache_of_another_provider_id_is_not_reused": {
+			cachedProviderID: "other-user-id",
+			wantAccess:       broker.AuthDenied,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := &mockEntraAuthProvider{
+				MockProvider: &testutils.MockProvider{
+					GetGroupsFunc: func() ([]info.Group, error) {
+						return nil, errors.New("temporary group lookup failure")
+					},
+				},
+			}
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config:                broker.Config{DataDir: t.TempDir()},
+				ownerAllowed:          true,
+				firstUserBecomesOwner: true,
+				provider:              provider,
+				registerDevice:        true,
+				tokenHandlerOptions: &testutils.TokenHandlerOptions{
+					IDTokenClaims: []map[string]interface{}{
+						{"aud": consts.MicrosoftBrokerAppID, "sub": providerID},
+						{"aud": consts.MicrosoftBrokerAppID, "sub": providerID},
+					},
+				},
+			})
+
+			providerIDDir, err := b.UserDataDir(providerID)
+			require.NoError(t, err, "Setup: deriving the provider ID cache dir should not fail")
+			tokenPath := filepath.Join(providerIDDir, "token.json")
+			if tc.cachedProviderID == "" {
+				writeLegacyCacheWithoutProviderID(t, tokenPath, cachedUsername, cachedGroups, mockDeviceRegistrationData)
+			} else {
+				generateAndStoreCachedInfo(t, tokenOptions{
+					username:                cachedUsername,
+					providerID:              tc.cachedProviderID,
+					groups:                  cachedGroups,
+					isForDeviceRegistration: true,
+				}, tokenPath)
+			}
+
+			sessionID, key, err := b.NewSession(username, "lang", sessionmode.Login, providerID)
+			require.NoError(t, err, "Setup: creating the session should not fail")
+			require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+			updateAuthModes(t, b, sessionID, authmodes.Password)
+			authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+			access, _, err := b.IsAuthenticated(sessionID, authData)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantAccess, access,
+				"only a cache whose provider ID matches the session provider ID may be reused")
+		})
+	}
+}
+
 // TestOfflineLoginCacheDirectoryResolution covers how the cache directory is resolved
 // when the first login after the broker update happens while offline. The provider ID
 // can only be learned online (from a token refresh), so:
