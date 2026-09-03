@@ -171,6 +171,9 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ubuntu:devel
+    env:
+      # Keep licensecheck's output in the same UTF-8 locale as the host.
+      LC_ALL: C.UTF-8
     outputs:
       changed: ${{ steps.diff.outputs.changed }}
 
@@ -248,8 +251,11 @@ jobs:
       - name: Install licensecheck and python3-anytree
         run: |
           apt-get update -y
+          # Without RE2, licensecheck double-encodes UTF-8 copyright holders
+          # when it parses raw file contents in this container.
           apt-get install -y --no-install-recommends \
             licensecheck \
+            libre-engine-re2-perl \
             python3-anytree
 
       - name: Regenerate debian/copyright
