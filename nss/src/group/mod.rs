@@ -2,7 +2,6 @@ use crate::{info, REQUEST_TIMEOUT};
 use libc::gid_t;
 use libnss::group::{Group, GroupHooks};
 use libnss::interop::Response;
-use tokio::runtime::Builder;
 use tonic::Request;
 
 use crate::client::{self, authd};
@@ -28,10 +27,9 @@ impl GroupHooks for AuthdGroupHooks {
 
 /// get_all_entries connects to the grpc server and asks for all group entries.
 fn get_all_entries() -> Response<Vec<Group>> {
-    let rt = match Builder::new_current_thread().enable_all().build() {
-        Ok(rt) => rt,
-        Err(e) => {
-            info!("could not create runtime for NSS: {}", e);
+    let rt = match super::build_runtime() {
+        Some(rt) => rt,
+        None => {
             return Response::Unavail;
         }
     };
@@ -59,10 +57,9 @@ fn get_all_entries() -> Response<Vec<Group>> {
 
 /// get_entry_by_gid connects to the grpc server and asks for the group entry with the given gid.
 fn get_entry_by_gid(gid: gid_t) -> Response<Group> {
-    let rt = match Builder::new_current_thread().enable_all().build() {
-        Ok(rt) => rt,
-        Err(e) => {
-            info!("could not create runtime for NSS: {}", e);
+    let rt = match super::build_runtime() {
+        Some(rt) => rt,
+        None => {
             return Response::Unavail;
         }
     };
@@ -90,10 +87,9 @@ fn get_entry_by_gid(gid: gid_t) -> Response<Group> {
 
 /// get_entry_by_name connects to the grpc server and asks for the group entry with the given name.
 fn get_entry_by_name(name: String) -> Response<Group> {
-    let rt = match Builder::new_current_thread().enable_all().build() {
-        Ok(rt) => rt,
-        Err(e) => {
-            info!("could not create runtime for NSS: {}", e);
+    let rt = match super::build_runtime() {
+        Some(rt) => rt,
+        None => {
             return Response::Unavail;
         }
     };
