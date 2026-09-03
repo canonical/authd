@@ -2149,6 +2149,88 @@ func TestCancelIsAuthenticated(t *testing.T) {
 	<-stopped
 }
 
+func TestCancelledPasswordAuthDoesNotFinishCachedGroupFallback(t *testing.T) {
+	t.Parallel()
+
+	const (
+		username        = "test-user@email.com"
+		correctPassword = "password"
+	)
+	groupsStarted := make(chan struct{})
+	releaseGroups := make(chan struct{})
+	groupsDone := make(chan struct{})
+	provider := &testutils.MockProvider{
+		GetGroupsFunc: func() ([]info.Group, error) {
+			close(groupsStarted)
+			<-releaseGroups
+			close(groupsDone)
+			return nil, errors.New("temporary group lookup failure")
+		},
+	}
+	configFile := filepath.Join(t.TempDir(), "authd.conf")
+	require.NoError(t, os.WriteFile(configFile, []byte(fmt.Sprintf(
+		"[oidc]\nissuer = %s\nclient_id = test-client-id\n",
+		defaultIssuerURL,
+	)), 0600))
+	cfg := &brokerForTestConfig{
+		Config:                broker.Config{ConfigFile: configFile, DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	}
+	b := newBrokerForTests(t, cfg)
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	generateAndStoreCachedInfo(t, tokenOptions{
+		username:   username,
+		issuer:     defaultIssuerURL,
+		providerID: "test-user-id",
+		gecos:      "cached-gecos",
+		groups:     []info.Group{{Name: "cached-group", UGID: "cached-group-id"}},
+	}, b.TokenPathForSession(sessionID))
+	require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+	authDone := make(chan struct{})
+	var access, data string
+	var authErr error
+	go func() {
+		access, data, authErr = b.IsAuthenticated(sessionID, authData)
+		close(authDone)
+	}()
+
+	select {
+	case <-groupsStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("group lookup did not start")
+	}
+
+	b.CancelIsAuthenticated(sessionID)
+	select {
+	case <-authDone:
+	case <-time.After(time.Second):
+		t.Fatal("cancelled authentication did not return")
+	}
+	require.Equal(t, broker.AuthCancelled, access)
+	require.Contains(t, data, "Authentication request cancelled")
+	require.ErrorIs(t, authErr, context.Canceled)
+
+	close(releaseGroups)
+	select {
+	case <-groupsDone:
+	case <-time.After(time.Second):
+		t.Fatal("group lookup did not finish")
+	}
+
+	require.Never(t, func() bool {
+		_, err := os.Stat(broker.GetDropInDir(configFile))
+		return err == nil
+	}, time.Second, 10*time.Millisecond,
+		"cancelled authentication must not finish the cached-group fallback")
+}
+
 func TestIsAuthenticatedMaxAttempts(t *testing.T) {
 	t.Parallel()
 

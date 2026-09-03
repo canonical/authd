@@ -1246,6 +1246,14 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 
 	select {
 	case <-authDone:
+		if ctx.Err() != nil {
+			// The handler may return AuthCancelled after observing the
+			// cancelled context. Keep the response consistent with the
+			// cancellation branch below and avoid updating the session with
+			// the handler's stale session copy.
+			msg, _ := json.Marshal(errorMessage{Message: "Authentication request cancelled"})
+			return AuthCancelled, string(msg), ctx.Err()
+		}
 	case <-ctx.Done():
 		// We can ignore the error here since the message is constant.
 		msg, _ := json.Marshal(errorMessage{Message: "Authentication request cancelled"})
@@ -1398,6 +1406,10 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	// We can only fetch the groups after registering the device, because the token acquired for device registration
 	// cannot be used with the Microsoft Graph API and a new token must be acquired for the Graph API.
 	groups, err := b.getGroups(ctx, session, authInfo)
+	if ctx.Err() != nil {
+		log.Noticef(context.Background(), "Authentication request cancelled for user %q", session.username)
+		return AuthCancelled, nil
+	}
 	if err != nil {
 		if errors.Is(err, providerErrors.ErrDeviceDisabled) {
 			return b.denyDisabledDevice(session, authInfo)
@@ -1593,6 +1605,10 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 
 	// Try to refresh the groups
 	groups, err := b.getGroups(ctx, session, authInfo)
+	if ctx.Err() != nil {
+		log.Noticef(context.Background(), "Authentication request cancelled for user %q", session.username)
+		return AuthCancelled, nil
+	}
 	if errors.Is(err, providerErrors.ErrDeviceDisabled) {
 		return b.denyDisabledDevice(session, authInfo)
 	}
@@ -2432,6 +2448,10 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	// group-fetch failure here is not a liveness signal: fall back to cached groups
 	// on a returning auth, and only deny first-time logins that have no cached groups.
 	groups, err := b.getGroups(ctx, session, authInfo)
+	if ctx.Err() != nil {
+		log.Noticef(context.Background(), "Authentication request cancelled for user %q", session.username)
+		return AuthCancelled, nil
+	}
 	if err != nil {
 		if errors.Is(err, providerErrors.ErrDeviceDisabled) {
 			return b.denyDisabledDevice(session, authInfo)
