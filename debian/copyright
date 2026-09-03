@@ -184,7 +184,7 @@ Copyright: 2011 Russ Ross <russ@russross.com>
 License: BSD-2-clause
 
 Files: vendor/github.com/sagikazarmark/*
-Copyright: 2023 Márk Sági-Kazár <mark.sagikazar@gmail.com>
+Copyright: 2023 MÃ¡rk SÃ¡gi-KazÃ¡r <mark.sagikazar@gmail.com>
 License: Expat
 
 Files: vendor/github.com/sahilm/*
@@ -297,7 +297,7 @@ Copyright: 2009-2026 The Go Authors.
 License: BSD-3-clause
 
 Files: vendor/google.golang.org/genproto/*
-Copyright: 2025 Google LLC
+Copyright: 2026 Google LLC
 License: Apache-2.0
 
 Files: vendor/google.golang.org/grpc/*
@@ -347,7 +347,7 @@ Copyright: 2011-2019 Canonical Ltd
 License: Apache-2.0
 
 Files: vendor/gorbe.io/*
-Copyright: 2021 Dániel Görbe
+Copyright: 2021 DÃ¡niel GÃ¶rbe
 License: Expat
 
 Files: vendor_rust/adler2/*
@@ -919,6 +919,14 @@ License: Apache-2.0 or Expat or Unicode-DFS-2016
 Files: vendor_rust/want/*
 Copyright: 2018-2019 Sean McArthur
 License: Expat
+
+Files: vendor_rust/zlib-rs/*
+Copyright: 2024 Trifecta Tech Foundation
+License: Zlib
+
+Files: vendor_rust/zlib-rs/src/*
+Copyright: Tª¯¯
+License: Zlib
 
 # License texts
 
