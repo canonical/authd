@@ -725,3 +725,72 @@ After publishing a new release, the `stable-docs` branch should contain the same
 Since authd is also in the Ubuntu archive now, we also need to upload new releases there, targeting at least the next Ubuntu release, and maybe also existing ones, although that will require SRUs.
 
 We don’t have anyone with uploads rights in our squad currently, so for now we have to ask Didier to sponsor the upload.
+
+## Release the GNOME Shell authd integration
+
+The GNOME Shell source package is maintained separately from authd. This
+section records the authd-side checklist for releasing a new Ubuntu Desktop
+package with the authd GDM integration.
+
+Since Ubuntu 26.04 (Resolute), the authd patches are included in the GNOME Shell
+version in the Ubuntu archive. For earlier Ubuntu versions, the only remaining
+supported one being Ubuntu 24.04 (Noble), patched GNOME Shell versions are
+published in the authd PPA.
+
+GNOME Shell is maintained in the [GNOME Shell packaging repository on Salsa](https://salsa.debian.org/gnome-team/gnome-shell).
+New authd-specific patches to GNOME Shell should be added to:
+
+* The `ubuntu/latest` branch when targeting the next Ubuntu release.
+* The `ubuntu/$RELEASE-authd` branch when the new release should be published in
+  the authd PPA (e.g., `ubuntu/noble-authd` for Ubuntu 24.04).
+* The `ubuntu/$RELEASE` branch when the new release should be published in the 
+  Ubuntu archive (e.g., `ubuntu/resolute` for Ubuntu 26.04).
+
+The steps below describe how to prepare a new release of the patched
+GNOME Shell package for Ubuntu 24.04 (Noble) in the authd PPA.
+
+### Prepare the GNOME Shell package
+
+Before following the steps below, make sure you're familiar with the
+[Ubuntu Desktop software maintenance workflow](https://ubuntu.com/project/docs/maintainers/niche-package-maintenance/desktop/maintain-ubuntu-desktop-software/).
+
+1. Update the `ubuntu/noble-authd` branch with the required changes to the
+   `ubuntu-authd` patches. If a change affects an existing patch, update that
+   patch file under `debian/patches/ubuntu-authd/` instead of adding another
+   patch for the same change. Add a new patch only when the change is not
+   covered by an existing patch.
+2. Add a Debian changelog entry describing the authd patch changes and any
+   package adjustments.
+3. Create the merge request(s) for the patch changes and the corresponding
+   changelog entry.
+
+### Test before merging
+
+1. Use a versioned `~wip` suffix (for example, `~wip1`) in the Debian package
+   version for the test build, then build the binary package in a clean Noble
+   build environment and check it with lintian. Increment the suffix for
+   subsequent test builds.
+2. Publish the test package to the
+   [authd-dev PPA](https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-dev)
+   and wait for the Noble builds and package publication to complete.
+3. Run the `e2e-tests` workflow manually with `workflow_dispatch`, setting its
+   `e2e-ppa` input to `authd-dev`. Set the `e2e-tests` input to `login_gdm.robot`
+   to run the GDM test (or leave it empty to run the full suite).
+4. Wait for the e2e-tests workflow to complete and verify that it passes the
+   authd GDM login flow.
+5. Remove the `~wip` suffix from the Debian package version and commit the
+   finalized changelog entry before merging.
+
+### Release after merging
+
+1. After the merge request(s) have been merged, build the merged version and
+   publish it to the
+   [authd-edge PPA](https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge).
+2. Wait for the Noble build and package publication to complete, then repeat
+   the installation and GDM validation using the authd-edge PPA.
+3. Once the edge package has been validated, copy it to the
+   [authd stable PPA](https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd)
+   and select **Rebuild the copied sources** so that Launchpad builds every
+   architecture enabled in the stable PPA.
+4. Wait for every enabled-architecture build and package publication to
+   complete successfully in the stable PPA.
