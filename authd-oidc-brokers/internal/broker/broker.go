@@ -1372,7 +1372,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	var oldAuthInfo *token.AuthCachedInfo
 	var deviceRegistrationData []byte
 	if cachedInfo, err := token.LoadAuthInfo(session.tokenPath); err == nil &&
-		cachedAuthInfoMatchesIdentity(session, authInfo, cachedInfo) {
+		b.cachedAuthInfoMatchesIdentity(session, authInfo, cachedInfo) {
 		oldAuthInfo = cachedInfo
 		deviceRegistrationData = cachedInfo.DeviceRegistrationData
 		authInfo.UserInfo.Groups = slices.Clone(oldAuthInfo.UserInfo.Groups)
@@ -1561,7 +1561,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 			}
 		}
 	}
-	if !cachedAuthInfoMatchesIdentity(session, authInfo, cachedAuthInfo) {
+	if !b.cachedAuthInfoMatchesIdentity(session, authInfo, cachedAuthInfo) {
 		authInfo.UserInfo.Groups = nil
 		authInfo.GroupsResolved = false
 		authInfo.DeviceRegistrationData = nil
@@ -1704,27 +1704,41 @@ func deviceRegistrationValidationFailureExpired(authInfo *token.AuthCachedInfo) 
 	return time.Since(time.Unix(authInfo.DeviceRegistrationDataValidationFailureSince, 0)) >= deviceRegistrationValidationGracePeriod
 }
 
-func cachedAuthInfoMatchesIdentity(session *session, authInfo, cachedInfo *token.AuthCachedInfo) bool {
-	if authInfo == nil || cachedInfo == nil {
+func (b *Broker) cachedAuthInfoMatchesIdentity(session *session, authInfo, cachedInfo *token.AuthCachedInfo) bool {
+	if b.provider == nil || session == nil || authInfo == nil || cachedInfo == nil {
 		return false
 	}
 
 	authenticatedProviderID := authInfo.UserInfo.ProviderID
-	if authenticatedProviderID == "" {
-		if !session.isOffline {
+	cachedProviderID := cachedInfo.UserInfo.ProviderID
+	if session.providerID != "" {
+		if authenticatedProviderID != "" && session.providerID != authenticatedProviderID {
 			return false
 		}
-		authenticatedProviderID = session.providerID
+		if cachedProviderID != "" && session.providerID != cachedProviderID {
+			return false
+		}
+
+		// The session provider ID is supplied by authd from the user database,
+		// so it can identify a legacy cache even when the cache predates the
+		// ProviderID field (including after a username change).
+		return authInfo.UserInfo.Name != "" && cachedInfo.UserInfo.Name != ""
 	}
-	cachedProviderID := cachedInfo.UserInfo.ProviderID
-	if cachedProviderID == "" {
-		cachedProviderID = session.providerID
+
+	if authenticatedProviderID != "" && cachedProviderID != "" {
+		return authenticatedProviderID == cachedProviderID
 	}
-	if authenticatedProviderID == "" || cachedProviderID == "" ||
-		authenticatedProviderID != cachedProviderID {
+
+	// A cache from before ProviderID was added can only be matched by the
+	// username that the current authentication path verified. This preserves
+	// legacy caches without allowing a known provider-ID mismatch through.
+	if authInfo.UserInfo.Name == "" || cachedInfo.UserInfo.Name == "" {
 		return false
 	}
-	return session.providerID == "" || session.providerID == authenticatedProviderID
+	if err := b.provider.VerifyUsername(session.username, authInfo.UserInfo.Name); err != nil {
+		return false
+	}
+	return b.provider.VerifyUsername(session.username, cachedInfo.UserInfo.Name) == nil
 }
 
 func (b *Broker) denyDisabledDevice(session *session, authInfo *token.AuthCachedInfo) (string, isAuthenticatedDataResponse) {
@@ -2361,7 +2375,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	if authInfo == nil {
 		return access, data
 	}
-	if oldAuthInfo != nil && !cachedAuthInfoMatchesIdentity(session, authInfo, oldAuthInfo) {
+	if oldAuthInfo != nil && !b.cachedAuthInfoMatchesIdentity(session, authInfo, oldAuthInfo) {
 		oldAuthInfo = nil
 		authInfo.RawIDToken = ""
 	}

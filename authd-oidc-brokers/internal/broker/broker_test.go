@@ -5937,6 +5937,107 @@ func TestDeviceAuthRedirectsToExistingProviderIDDir(t *testing.T) {
 	})
 }
 
+func writeLegacyCacheWithoutProviderID(t *testing.T, path, username string, groups []info.Group, deviceData []byte) {
+	t.Helper()
+
+	legacyCache := map[string]any{
+		"Token": map[string]string{
+			"access_token":  "cached-access-token",
+			"refresh_token": "cached-refresh-token",
+		},
+		"UserInfo": map[string]any{
+			"name":   username,
+			"groups": groups,
+		},
+		"DeviceRegistrationData": deviceData,
+	}
+	data, err := json.Marshal(legacyCache)
+	require.NoError(t, err, "Setup: marshaling the legacy cache should not fail")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0700), "Setup: creating the legacy cache directory should not fail")
+	require.NoError(t, os.WriteFile(path, data, 0600), "Setup: writing the legacy cache should not fail")
+}
+
+func TestDeviceAuthReusesLegacyCacheWithoutProviderID(t *testing.T) {
+	t.Parallel()
+
+	const username = "test-user@email.com"
+	provider := &mockEntraAuthProvider{MockProvider: &testutils.MockProvider{}}
+	cfg := &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		registerDevice:        true,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{
+				{"aud": consts.MicrosoftBrokerAppID},
+			},
+		},
+	}
+	b := newBrokerForTests(t, cfg)
+
+	sessionID, _ := newSessionForTests(t, b, username, sessionmode.Login)
+	writeLegacyCacheWithoutProviderID(
+		t,
+		b.TokenPathForSession(sessionID),
+		username,
+		[]info.Group{{Name: "cached-group", UGID: "cached-group-id"}},
+		mockDeviceRegistrationData,
+	)
+
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, mockDeviceRegistrationData, provider.registrationExistingData,
+		"device auth should reuse registration data from a legacy username-keyed cache")
+	require.Zero(t, provider.registrationEnrollments,
+		"reusing a legacy cache must not enroll the device again")
+}
+
+func TestPasswordAuthReusesLegacyCacheWithoutProviderID(t *testing.T) {
+	t.Parallel()
+
+	const (
+		username        = "test-user@email.com"
+		correctPassword = "password"
+	)
+	provider := &mockEntraAuthProvider{MockProvider: &testutils.MockProvider{}}
+	cfg := &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		registerDevice:        true,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{
+				{"aud": consts.MicrosoftBrokerAppID},
+			},
+		},
+	}
+	b := newBrokerForTests(t, cfg)
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	writeLegacyCacheWithoutProviderID(
+		t,
+		b.TokenPathForSession(sessionID),
+		username,
+		[]info.Group{{Name: "cached-group", UGID: "cached-group-id"}},
+		mockDeviceRegistrationData,
+	)
+	require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+	access, _, err := b.IsAuthenticated(sessionID, authData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access)
+	require.Equal(t, mockDeviceRegistrationData, provider.registrationExistingData,
+		"password auth should reuse registration data from a legacy username-keyed cache")
+	require.Zero(t, provider.registrationEnrollments,
+		"reusing a legacy cache must not enroll the device again")
+}
+
 // TestOfflineLoginCacheDirectoryResolution covers how the cache directory is resolved
 // when the first login after the broker update happens while offline. The provider ID
 // can only be learned online (from a token refresh), so:
