@@ -2816,5 +2816,8 @@ func TestMain(m *testing.M) {
 	}
 	defer pam_test.MaybeDoLeakCheck()
 
+	gdm.AdvertisePamExtensions([]string{gdm.PamExtensionCustomJSON})
+	defer gdm.AdvertisePamExtensions(nil)
+
 	m.Run()
 }

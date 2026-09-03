@@ -52,7 +52,7 @@ func TestGdmExtensionSupport(t *testing.T) {
 			t.Cleanup(pam_test.MaybeDoLeakCheck)
 
 			AdvertisePamExtensions(tc.advertisedExtensions)
-			t.Cleanup(func() { AdvertisePamExtensions(nil) })
+			t.Cleanup(func() { AdvertisePamExtensions(defaultExtensions) })
 
 			for _, ext := range tc.checkExtensions {
 				shouldSupport := slices.Contains(tc.supportedExtensions, ext)

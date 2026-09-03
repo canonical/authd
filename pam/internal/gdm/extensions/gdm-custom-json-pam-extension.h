@@ -26,6 +26,8 @@
 
 #pragma once
 
+#include <assert.h>
+
 #include "gdm-pam-extensions-common.h"
 
 typedef struct {
@@ -44,9 +46,15 @@ init_json_protocol_base (GdmPamExtensionJSONProtocol *protocol,
                          const char                  *proto_name,
                          unsigned int                 proto_version)
 {
-        size_t proto_len = strnlen (proto_name, sizeof (protocol->protocol_name) - 1);
+        bool type_found;
+        size_t proto_len;
 
-        gdm_pam_extension_look_up_type (GDM_PAM_EXTENSION_CUSTOM_JSON, &protocol->header.type);
+        type_found = gdm_pam_extension_look_up_type (GDM_PAM_EXTENSION_CUSTOM_JSON,
+                                                     &protocol->header.type);
+        assert (type_found);
+
+        proto_len = strnlen (proto_name, sizeof (protocol->protocol_name) - 1);
+
         protocol->header.length = htobe32 (GDM_PAM_EXTENSION_CUSTOM_JSON_SIZE);
         memcpy ((char *) protocol->protocol_name, proto_name, proto_len);
         ((char *) protocol->protocol_name)[proto_len] = '\0';
