@@ -148,6 +148,29 @@ func TestLoadAuthInfoLegacyTokenDefaultsValidationPendingToFalse(t *testing.T) {
 		"legacy caches without the field must not be treated as groups-resolved")
 }
 
+func TestLoadAuthInfoLegacyTokenWithProviderIDButWithoutGroupsDoesNotInferGroupsResolved(t *testing.T) {
+	t.Parallel()
+
+	tokenPath := filepath.Join(t.TempDir(), "parent", "token.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(tokenPath), 0700))
+	require.NoError(t, os.WriteFile(tokenPath, []byte(`{
+		"Token": {
+			"access_token": "accesstoken",
+			"refresh_token": "refreshtoken"
+		},
+		"UserInfo": {
+			"name": "legacy-user",
+			"provider_id": "legacy-user-id"
+		},
+		"DeviceRegistrationData": "bGVnYWN5LWRldmljZS1kYXRh"
+	}`), 0600))
+
+	got, err := token.LoadAuthInfo(tokenPath)
+	require.NoError(t, err)
+	require.False(t, got.GroupsResolved,
+		"a provider ID without cached groups must not imply that group lookup succeeded")
+}
+
 func TestLoadAuthInfoLegacyTokenInfersGroupsResolved(t *testing.T) {
 	t.Parallel()
 

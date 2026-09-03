@@ -41,8 +41,9 @@ type AuthCachedInfo struct {
 }
 
 // UnmarshalJSON keeps legacy caches usable after GroupsResolved was added.
-// Legacy caches with an identified user or cached groups retain the previous
-// cached-group fallback behavior.
+// Legacy caches with cached groups retain the previous cached-group fallback
+// behavior. A provider ID alone is not enough because device registration can
+// be cached before group lookup succeeds.
 func (a *AuthCachedInfo) UnmarshalJSON(data []byte) error {
 	type authCachedInfo AuthCachedInfo
 
@@ -60,7 +61,7 @@ func (a *AuthCachedInfo) UnmarshalJSON(data []byte) error {
 	// presence is a plain lookup.
 	_, groupsResolvedPresent := fields["GroupsResolved"]
 	if !groupsResolvedPresent && decoded.Token != nil && decoded.UserInfo.Name != "" &&
-		(decoded.UserInfo.ProviderID != "" || decoded.UserInfo.Groups != nil) {
+		decoded.UserInfo.Groups != nil {
 		decoded.GroupsResolved = true
 	}
 
