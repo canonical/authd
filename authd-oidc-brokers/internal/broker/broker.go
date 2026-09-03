@@ -1318,6 +1318,7 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 
 	select {
 	case <-authDone:
+		// Cancelled after authDone still needs cleanup below.
 	case <-ctx.Done():
 		// We can ignore the error here since the message is constant.
 		msg, _ := json.Marshal(errorMessage{Message: "Authentication request cancelled"})
@@ -1482,7 +1483,7 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	// We can only fetch the groups after registering the device, because the token acquired for device registration
 	// cannot be used with the Microsoft Graph API and a new token must be acquired for the Graph API.
 	groups, err := b.getGroups(ctx, session, authInfo)
-	if access, data := b.handleGroupFetch(session, authInfo, oldAuthInfo, groups, err); access != "" {
+	if access, data := b.handleGroupFetch(ctx, session, authInfo, oldAuthInfo, groups, err); access != "" {
 		return access, data
 	}
 
@@ -1620,7 +1621,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 
 	// Try to refresh the groups
 	groups, err := b.getGroups(ctx, session, authInfo)
-	if access, data := b.handleGroupFetch(session, authInfo, cachedAuthInfo, groups, err); access != "" {
+	if access, data := b.handleGroupFetch(ctx, session, authInfo, cachedAuthInfo, groups, err); access != "" {
 		return access, data
 	}
 
@@ -2430,7 +2431,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	// group-fetch failure here is not a liveness signal: fall back to cached groups
 	// on a returning auth, and only deny first-time logins that have no cached groups.
 	groups, err := b.getGroups(ctx, session, authInfo)
-	if access, data := b.handleGroupFetch(session, authInfo, oldAuthInfo, groups, err); access != "" {
+	if access, data := b.handleGroupFetch(ctx, session, authInfo, oldAuthInfo, groups, err); access != "" {
 		return access, data
 	}
 
@@ -3130,19 +3131,26 @@ func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, auth
 		return cleanup, "", nil
 	}
 
+	if err := ctx.Err(); err != nil {
+		return cleanup, AuthCancelled, nil
+	}
+
 	// The provider must not modify existingData (see providers.DeviceRegisterer),
 	// so comparing the returned data against it detects a fresh registration.
 	deviceRegistrationDataBeforeRegistration := existingData
-	var err error
-	authInfo.DeviceRegistrationData, cleanup, err = dr.MaybeRegisterDevice(ctx, regToken,
+	deviceRegistrationData, cleanup, err := dr.MaybeRegisterDevice(ctx, regToken,
 		session.username,
 		b.cfg.issuerURL,
 		existingData,
 	)
+	if ctx.Err() != nil {
+		return cleanup, AuthCancelled, nil
+	}
 	if err != nil {
 		log.Errorf(context.Background(), "error registering device: %s", err)
 		return func() {}, AuthDenied, errorMessage{Message: "Error registering device"}
 	}
+	authInfo.DeviceRegistrationData = deviceRegistrationData
 	if len(authInfo.DeviceRegistrationData) > 0 &&
 		!slices.Equal(authInfo.DeviceRegistrationData, deviceRegistrationDataBeforeRegistration) {
 		// Fresh registration data: record when it was obtained so a confirmed
@@ -3252,7 +3260,15 @@ func cachedGroupsFallbackAllowed(session *session, cachedInfo *token.AuthCachedI
 // authentication. Callers must return the response to the client when the
 // returned access mode is not empty, and continue with their own flow when it
 // is.
-func (b *Broker) handleGroupFetch(session *session, authInfo, cachedInfo *token.AuthCachedInfo, groups []info.Group, err error) (access string, data isAuthenticatedDataResponse) {
+func (b *Broker) handleGroupFetch(ctx context.Context, session *session, authInfo, cachedInfo *token.AuthCachedInfo, groups []info.Group, err error) (access string, data isAuthenticatedDataResponse) {
+	// A cancelled request must not continue into a cached-group fallback: the
+	// client already received AuthCancelled and no side effect of this login
+	// may still run.
+	if ctx.Err() != nil {
+		log.Noticef(context.Background(), "Authentication request cancelled for user %q", session.username)
+		return AuthCancelled, nil
+	}
+
 	if err == nil {
 		// A successful lookup verifies the registration, so it is no longer
 		// fresh, it resolves the groups and it clears the disabled-device flag.

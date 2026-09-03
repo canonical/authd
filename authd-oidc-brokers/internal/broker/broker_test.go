@@ -2200,6 +2200,261 @@ func TestCancelIsAuthenticated(t *testing.T) {
 	<-stopped
 }
 
+func TestCancelledPasswordAuthDoesNotFinishCachedGroupFallback(t *testing.T) {
+	t.Parallel()
+
+	const (
+		username        = "test-user@email.com"
+		correctPassword = "password"
+	)
+	groupsStarted := make(chan struct{})
+	releaseGroups := make(chan struct{})
+	groupsDone := make(chan struct{})
+	provider := &testutils.MockProvider{
+		GetGroupsFunc: func() ([]info.Group, error) {
+			close(groupsStarted)
+			<-releaseGroups
+			close(groupsDone)
+			return nil, errors.New("temporary group lookup failure")
+		},
+	}
+	configFile := filepath.Join(t.TempDir(), "authd.conf")
+	require.NoError(t, os.WriteFile(configFile, []byte(fmt.Sprintf(
+		"[oidc]\nissuer = %s\nclient_id = test-client-id\n",
+		defaultIssuerURL,
+	)), 0600))
+	cfg := &brokerForTestConfig{
+		Config:                broker.Config{ConfigFile: configFile, DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	}
+	b := newBrokerForTests(t, cfg)
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	generateAndStoreCachedInfo(t, tokenOptions{
+		username:   username,
+		issuer:     defaultIssuerURL,
+		providerID: "test-user-id",
+		gecos:      "cached-gecos",
+		groups:     []info.Group{{Name: "cached-group", UGID: "cached-group-id"}},
+	}, b.TokenPathForSession(sessionID))
+	require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+
+	cancelWhileGroupLookupRuns(t, b, sessionID, authData, groupsStarted, releaseGroups, groupsDone)
+
+	require.Never(t, func() bool {
+		_, err := os.Stat(broker.GetDropInDir(configFile))
+		return err == nil
+	}, time.Second, 10*time.Millisecond,
+		"cancelled authentication must not finish the cached-group fallback")
+}
+
+// TestCancelledDeviceAuthDoesNotFinishCachedGroupFallback verifies that a
+// device-code request cancelled while the group lookup runs stops before the
+// cached-group fallback, so an abandoned login cannot still discard the cached
+// device registration.
+func TestCancelledDeviceAuthDoesNotFinishCachedGroupFallback(t *testing.T) {
+	t.Parallel()
+
+	groupsStarted := make(chan struct{})
+	releaseGroups := make(chan struct{})
+	groupsDone := make(chan struct{})
+	provider := &mockEntraAuthProvider{
+		MockProvider: &testutils.MockProvider{
+			GetGroupsFunc: func() ([]info.Group, error) {
+				close(groupsStarted)
+				<-releaseGroups
+				close(groupsDone)
+				return nil, &providerErrors.RetryWithDeviceAuthError{Err: himmelblau.ErrDeviceAuthenticationFailed}
+			},
+		},
+	}
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		registerDevice:        true,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{
+				{"aud": consts.MicrosoftBrokerAppID},
+				{"aud": consts.MicrosoftBrokerAppID},
+			},
+		},
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	// The registration is older than the replication window: if the flow
+	// continued after the cancellation, it would discard it.
+	generateAndStoreCachedInfo(t, tokenOptions{
+		isForDeviceRegistration: true,
+		registrationAge:         time.Hour,
+		groups:                  []info.Group{{Name: "cached-group", UGID: "cached-group-id"}},
+	}, b.TokenPathForSession(sessionID))
+
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+	cancelWhileGroupLookupRuns(t, b, sessionID, "{}", groupsStarted, releaseGroups, groupsDone)
+
+	// The cancelled handler keeps running in its own goroutine, so watch the
+	// cache for a moment instead of reading it once and racing the continuation
+	// that would discard the registration.
+	require.Never(t, func() bool {
+		cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+		return err == nil && len(cached.DeviceRegistrationData) == 0
+	}, time.Second, 10*time.Millisecond,
+		"a cancelled authentication must not discard the cached device registration")
+}
+
+// TestCancelledEntraAuthDoesNotFinishCachedGroupFallback verifies that an Entra
+// MFA request cancelled while the group lookup runs stops before persisting the
+// side effects of the login, such as the cached offline password.
+func TestCancelledEntraAuthDoesNotFinishCachedGroupFallback(t *testing.T) {
+	t.Parallel()
+
+	const username = "test-user@email.com"
+	groupsStarted := make(chan struct{})
+	releaseGroups := make(chan struct{})
+	groupsDone := make(chan struct{})
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := &mockEntraAuthProvider{
+		MockProvider: &testutils.MockProvider{
+			GetGroupsFunc: func() ([]info.Group, error) {
+				close(groupsStarted)
+				<-releaseGroups
+				close(groupsDone)
+				return nil, &providerErrors.RetryWithDeviceAuthError{Err: himmelblau.ErrDeviceAuthenticationFailed}
+			},
+		},
+		flowState: &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{
+			Message:           "Please type in the code displayed on your authenticator app from your device:",
+			Method:            "PhoneAppOTP",
+			PollingIntervalMs: 5000,
+			MaxPollAttempts:   10,
+		},
+		mfaTokenResult: newMFATokenResult(mfaAuthInfo.Token),
+	}
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	generateAndStoreCachedInfo(t, tokenOptions{
+		username:                username,
+		issuer:                  defaultIssuerURL,
+		obtainedViaEntraAuth:    true,
+		isForDeviceRegistration: true,
+		registrationAge:         time.Hour,
+		groups:                  []info.Group{{Name: "cached-group", UGID: "cached-group-id"}},
+	}, b.TokenPathForSession(sessionID))
+
+	advanceToEntraMFACode(t, b, sessionID, key)
+	otpAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "123456", key))
+
+	cancelWhileGroupLookupRuns(t, b, sessionID, otpAuthData, groupsStarted, releaseGroups, groupsDone)
+
+	// Poll for the whole window: the continuation of the cancelled lookup may
+	// still be running when this test resumes, so a single read could miss a
+	// late write.
+	require.Never(t, func() bool {
+		cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+		return err != nil || len(cached.DeviceRegistrationData) == 0
+	}, time.Second, 10*time.Millisecond,
+		"a cancelled authentication must not discard the cached device registration")
+	require.Never(t, func() bool {
+		_, err := os.Stat(b.PasswordFilepathForSession(sessionID))
+		return err == nil
+	}, time.Second, 10*time.Millisecond,
+		"a cancelled authentication must not cache the offline password")
+}
+
+// blockingRegisterProvider holds MaybeRegisterDevice until the test releases
+// it, like a device enrollment that runs on after the request was cancelled.
+type blockingRegisterProvider struct {
+	*mockEntraAuthProvider
+	started chan struct{}
+	unblock chan struct{}
+}
+
+func (p *blockingRegisterProvider) MaybeRegisterDevice(ctx context.Context, tok *oauth2.Token, username, issuerURL string, existingData []byte) ([]byte, func(), error) {
+	close(p.started)
+	<-p.unblock
+	return p.mockEntraAuthProvider.MaybeRegisterDevice(ctx, tok, username, issuerURL, existingData)
+}
+
+// TestCancelledDeviceAuthDoesNotCacheRegistration verifies a non-preemptible
+// enrollment cannot write its token after the client receives AuthCancelled.
+func TestCancelledDeviceAuthDoesNotCacheRegistration(t *testing.T) {
+	t.Parallel()
+
+	provider := &blockingRegisterProvider{
+		mockEntraAuthProvider: &mockEntraAuthProvider{
+			MockProvider: &testutils.MockProvider{
+				GetGroupsFunc: func() ([]info.Group, error) {
+					return nil, errors.New("group lookup failed")
+				},
+			},
+		},
+		started: make(chan struct{}),
+		unblock: make(chan struct{}),
+	}
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		registerDevice:        true,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{
+				{"aud": consts.MicrosoftBrokerAppID},
+				{"aud": consts.MicrosoftBrokerAppID},
+			},
+		},
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+
+	authDone := make(chan struct{})
+	var access string
+	go func() {
+		access, _, _ = b.IsAuthenticated(sessionID, "{}")
+		close(authDone)
+	}()
+
+	select {
+	case <-provider.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("device registration did not start")
+	}
+
+	b.CancelIsAuthenticated(sessionID)
+	select {
+	case <-authDone:
+	case <-time.After(time.Second):
+		t.Fatal("cancelled authentication did not return while the enrollment was running")
+	}
+	require.Equal(t, broker.AuthCancelled, access)
+
+	// Let the non-preemptible enrollment finish. Its result belongs to the
+	// cancelled request and must not overwrite the cache.
+	close(provider.unblock)
+	require.Never(t, func() bool {
+		_, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+		return err == nil
+	}, time.Second, 10*time.Millisecond,
+		"a cancelled request must not cache its enrollment result")
+}
+
 func TestIsAuthenticatedMaxAttempts(t *testing.T) {
 	t.Parallel()
 
