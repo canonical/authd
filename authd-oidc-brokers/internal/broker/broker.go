@@ -112,13 +112,15 @@ type session struct {
 	tokenPath               string
 
 	// Data to pass from one request to another.
-	deviceAuthResponse        *oauth2.DeviceAuthResponse
-	authInfo                  *token.AuthCachedInfo
-	mfaFlowActive             *himmelblau.MFAFlowState
-	mfaChallengeInfo          *himmelblau.MFAChallengeInfo
-	entraAuthPasswordHash     string // pre-computed hash (not plaintext) for offline use
-	entraAuthPasswordRequired bool
-	fidoPIN                   string // security key PIN, kept in memory only while the FIDO exchange runs
+	deviceAuthResponse                 *oauth2.DeviceAuthResponse
+	authInfo                           *token.AuthCachedInfo
+	mfaFlowActive                      *himmelblau.MFAFlowState
+	mfaChallengeInfo                   *himmelblau.MFAChallengeInfo
+	entraAuthPasswordHash              string // pre-computed hash (not plaintext) for offline use
+	entraAuthPasswordMatchesLocal      bool
+	entraAuthPasswordNeedsConfirmation bool
+	entraAuthPasswordRequired          bool
+	fidoPIN                            string // security key PIN, kept in memory only while the FIDO exchange runs
 
 	isAuthenticating *isAuthenticatedCtx
 }
@@ -994,6 +996,8 @@ func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 	case authmodes.EntraMFAWait, authmodes.EntraMFACode, authmodes.EntraAuthFido, authmodes.EntraAuthFidoPin:
 		// MFA follow-up modes are always available when offered via AuthNext.
 		return true
+	case authmodes.EntraAuthPasswordConfirmation:
+		return session.entraAuthPasswordNeedsConfirmation && session.entraAuthPasswordHash != ""
 	}
 	return false
 }
@@ -1039,6 +1043,7 @@ func (b *Broker) supportedAuthModesFromLayout(layout map[string]string) []string
 		supportsWait := strings.Contains(layout["wait"], "true")
 		if slices.Contains(supportedEntries, "chars_password") {
 			modes = append(modes, authmodes.Password, authmodes.EntraAuthFidoPin)
+			modes = append(modes, authmodes.EntraAuthPasswordConfirmation)
 			// The entra_auth mode needs both entry capabilities: its initial
 			// passwordless-probe layout is a wait-only form, and its password
 			// layout is a chars_password form. Offering it to a client that
@@ -1194,6 +1199,13 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 			"label": "Enter your security key PIN",
 		}
 
+	case authmodes.EntraAuthPasswordConfirmation:
+		uiLayout = map[string]string{
+			"type":  "form",
+			"entry": "chars_password",
+			"label": "Enter your current local password to replace it with your Entra password, or leave this blank to keep it",
+		}
+
 	case authmodes.NewPassword:
 		label := "Create a local password"
 		if session.mode == sessionmode.ChangePassword || session.mode == sessionmode.ChangePasswordOld {
@@ -1258,12 +1270,15 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 			iadResponse = errorMessage{Message: "Maximum number of authentication attempts reached"}
 			// Free any in-progress MFA flow immediately rather than waiting for
 			// EndSession — consistent with all other terminal paths.
-			session.entraAuthPasswordHash = ""
+			clearEntraAuthPasswordState(&session)
 			clearEntraAuthState(&session)
+			session.nextAuthModes = nil
 		}
 	}
 
 	if err = b.updateSession(sessionID, session); err != nil {
+		clearEntraAuthPasswordState(&session)
+		clearEntraAuthState(&session)
 		return AuthDenied, "{}", err
 	}
 
@@ -1313,6 +1328,8 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, session *session, au
 		return b.entraAuthFidoAuth(ctx, session)
 	case authmodes.EntraAuthFidoPin:
 		return b.entraAuthFidoPinAuth(session, secret)
+	case authmodes.EntraAuthPasswordConfirmation:
+		return b.confirmEntraAuthPassword(session, secret)
 	default:
 		log.Errorf(context.Background(), "unknown authentication mode %q", session.selectedMode)
 		return AuthDenied, unexpectedErrMsg("unknown authentication mode")
@@ -1567,11 +1584,22 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 	if session.entraAuthPasswordRequired && !passwordSubmitted {
 		return AuthRetry, errorMessage{Message: "Please enter your Entra ID password."}
 	}
+	var err error
 
 	// A prior MFA flow may still be active if the password step is restarted
 	// (e.g. the user navigates back to re-enter the password). Release it before
 	// starting a new one so the libhimmelblau continuation it owns is not leaked.
 	clearEntraAuthState(session)
+	clearEntraAuthPasswordState(session)
+
+	var localPasswordExists, localPasswordMatches bool
+	if passwordSubmitted {
+		localPasswordExists, localPasswordMatches, err = checkLocalPassword(userPassword, session.passwordPath)
+		if err != nil {
+			log.Errorf(context.Background(), "Could not verify the existing local password: %v", err)
+			return AuthDenied, unexpectedErrMsg("could not check local password")
+		}
+	}
 
 	// Load the cached auth info once at the start of the flow and stash it on the
 	// session, so the second step (entra_mfa_wait/entra_mfa_code → finishEntraAuth)
@@ -1654,16 +1682,26 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 	} else if passwordSubmitted {
 		// Hash the password immediately to narrow the plaintext memory window.
 		// The hash is written to disk in finishEntraAuth after MFA succeeds.
-		passwordHash, hashErr := password.HashPassword(userPassword)
-		if hashErr != nil {
-			log.Errorf(context.Background(), "Failed to hash password: %v", hashErr)
-			clearEntraAuthState(session)
-			return AuthDenied, unexpectedErrMsg("failed to process password")
+		if localPasswordMatches {
+			session.entraAuthPasswordMatchesLocal = true
+		} else {
+			passwordHash, hashErr := password.HashPassword(userPassword)
+			if hashErr != nil {
+				log.Errorf(context.Background(), "Failed to hash password: %v", hashErr)
+				clearEntraAuthState(session)
+				clearEntraAuthPasswordState(session)
+				return AuthDenied, unexpectedErrMsg("failed to process password")
+			}
+			session.entraAuthPasswordHash = passwordHash
+			session.entraAuthPasswordNeedsConfirmation = localPasswordExists
 		}
-		session.entraAuthPasswordHash = passwordHash
 	}
 
-	return b.routeMFAChallenge(session, challengeInfo)
+	access, data := b.routeMFAChallenge(session, challengeInfo)
+	if passwordSubmitted && bypassesPasswordMethod(challengeInfo.Method) && access == AuthNext {
+		return access, authNextMessage{EntraPasswordUnverified: true}
+	}
+	return access, data
 }
 
 // routeMFAChallenge inspects the MFA challenge negotiated by the password
@@ -1707,13 +1745,19 @@ func clearEntraAuthState(session *session) {
 	session.fidoPIN = ""
 }
 
+func clearEntraAuthPasswordState(session *session) {
+	session.entraAuthPasswordHash = ""
+	session.entraAuthPasswordMatchesLocal = false
+	session.entraAuthPasswordNeedsConfirmation = false
+}
+
 // restartFromEntraAuth handles a terminal MFA-step failure: it clears the
 // now-dead MFA state (including the cached password hash) and directs the
 // client back to entra_auth so it can restart the flow rather than
 // re-entering a dead follow-up mode, showing msg to the user.
 func restartFromEntraAuth(session *session, msg string) (string, isAuthenticatedDataResponse) {
 	needsPassword := session.entraAuthPasswordRequired || session.entraAuthPasswordHash != ""
-	session.entraAuthPasswordHash = ""
+	clearEntraAuthPasswordState(session)
 	session.entraAuthPasswordRequired = needsPassword
 	clearEntraAuthState(session)
 	session.nextAuthModes = []string{authmodes.EntraAuth}
@@ -1743,7 +1787,7 @@ func replayCompletedMFA(session *session, mode string) (string, isAuthenticatedD
 // denies with data. Terminal FIDO/MFA failures use it; success paths keep the
 // hash for offline caching, so clearEntraAuthState alone must not wipe it.
 func denyAndClearMFA(session *session, data isAuthenticatedDataResponse) (string, isAuthenticatedDataResponse) {
-	session.entraAuthPasswordHash = ""
+	clearEntraAuthPasswordState(session)
 	clearEntraAuthState(session)
 	return AuthDenied, data
 }
@@ -1939,7 +1983,7 @@ func (b *Broker) routeFIDOChallenge(session *session, challengeInfo *himmelblau.
 // the device code flow (or denies when that flow is disabled). It is the
 // fallback for FIDO challenges that cannot be completed on this machine.
 func (b *Broker) redirectFIDOToDeviceAuth(session *session) (string, isAuthenticatedDataResponse) {
-	session.entraAuthPasswordHash = ""
+	clearEntraAuthPasswordState(session)
 	clearEntraAuthState(session)
 	if b.cfg.flows.DeviceAuth {
 		session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
@@ -2131,8 +2175,12 @@ func (b *Broker) routeFIDOAssertionError(ctx context.Context, session *session, 
 }
 
 func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken *oauth2.Token) (string, isAuthenticatedDataResponse) {
-	// Ensure any cached password hash is cleared from memory on all exit paths.
-	defer func() { session.entraAuthPasswordHash = "" }()
+	keepPasswordPending := false
+	defer func() {
+		if !keepPasswordPending {
+			clearEntraAuthPasswordState(session)
+		}
+	}()
 
 	// AcquireTokenByMFAFlow returns (nil, nil) only on a provider contract
 	// violation, but this is the trust boundary into the generic broker: guard
@@ -2237,14 +2285,30 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 		authInfo.UserInfo.Groups = groups
 	}
 
+	var localPasswordExists bool
+	if session.entraAuthPasswordHash == "" || session.entraAuthPasswordNeedsConfirmation {
+		localPasswordExists, err = fileutils.FileExists(session.passwordPath)
+		if err != nil {
+			log.Errorf(context.Background(), "Could not check if local password exists: %v", err)
+			return AuthDenied, unexpectedErrMsg("could not check local password")
+		}
+	}
+
 	// A passwordless login has no Entra password to cache for offline
 	// authentication. When the user has no local password yet, chain into the
 	// newpassword step (like the device-auth flow does) so offline logins
 	// keep working; an existing local password stays valid, so returning
 	// users are not asked to redefine one on every login.
-	if session.entraAuthPasswordHash == "" && !passwordFileExists(*session) {
+	if session.entraAuthPasswordHash == "" && !localPasswordExists {
 		session.authInfo = authInfo
 		session.nextAuthModes = []string{authmodes.NewPassword}
+		return AuthNext, nil
+	}
+
+	if session.entraAuthPasswordNeedsConfirmation && localPasswordExists {
+		session.authInfo = authInfo
+		session.nextAuthModes = []string{authmodes.EntraAuthPasswordConfirmation}
+		keepPasswordPending = true
 		return AuthNext, nil
 	}
 
@@ -2262,15 +2326,76 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 			log.Errorf(context.Background(), "Failed to store password hash: %v", hashErr)
 			return AuthDenied, unexpectedErrMsg("failed to store password")
 		}
-		session.entraAuthPasswordHash = ""
 
-		if msg, ok := data.(userInfoMessage); ok {
-			msg.Message = cachedPasswordMessage
-			data = msg
-		}
+		data = withUserInfoMessage(data, cachedPasswordMessage)
+	} else if session.entraAuthPasswordMatchesLocal {
+		data = withUserInfoMessage(data, entraPasswordMatchesMessage)
 	}
 
 	return access, data
+}
+
+func (b *Broker) confirmEntraAuthPassword(session *session, currentPassword string) (string, isAuthenticatedDataResponse) {
+	if session.authInfo == nil || session.entraAuthPasswordHash == "" {
+		log.Error(context.Background(), "local password replacement confirmation is missing authentication state")
+		clearEntraAuthPasswordState(session)
+		return AuthDenied, unexpectedErrMsg("local password replacement state is not set")
+	}
+
+	if currentPassword == "" {
+		access, data := b.finishAuth(session, session.authInfo)
+		if access != AuthGranted {
+			clearEntraAuthPasswordState(session)
+			return access, data
+		}
+
+		data = withUserInfoMessage(data, entraPasswordKeptMessage)
+		clearEntraAuthPasswordState(session)
+		return access, data
+	}
+
+	_, matches, err := checkLocalPassword(currentPassword, session.passwordPath)
+	if err != nil {
+		log.Errorf(context.Background(), "Could not verify the existing local password: %v", err)
+		clearEntraAuthPasswordState(session)
+		return AuthDenied, unexpectedErrMsg("could not check local password")
+	}
+	if !matches {
+		log.Noticef(context.Background(), "Authentication failure: incorrect local password for user %q", session.username)
+		return AuthRetry, errorMessage{Message: "Incorrect local password, please try again."}
+	}
+
+	access, data := b.finishAuth(session, session.authInfo)
+	if access != AuthGranted {
+		clearEntraAuthPasswordState(session)
+		return access, data
+	}
+
+	if err := password.StoreHashedPassword(session.entraAuthPasswordHash, session.passwordPath); err != nil {
+		log.Errorf(context.Background(), "Failed to store password hash: %v", err)
+		clearEntraAuthPasswordState(session)
+		return AuthDenied, unexpectedErrMsg("failed to store password")
+	}
+
+	data = withUserInfoMessage(data, entraPasswordUpdatedMessage)
+	clearEntraAuthPasswordState(session)
+	return access, data
+}
+
+func withUserInfoMessage(data isAuthenticatedDataResponse, message string) isAuthenticatedDataResponse {
+	if msg, ok := data.(userInfoMessage); ok {
+		msg.Message = message
+		return msg
+	}
+	return data
+}
+
+func checkLocalPassword(candidate, path string) (bool, bool, error) {
+	matches, err := password.CheckPassword(candidate, path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, false, nil
+	}
+	return err == nil, matches, err
 }
 
 // routeMFAInitError routes the AADSTS errors returned by InitiateEntraAuth
@@ -2580,6 +2705,7 @@ func (b *Broker) EndSession(sessionID string) error {
 	} else {
 		himmelblau.FreeMFAFlowState(session.mfaFlowActive)
 	}
+	clearEntraAuthPasswordState(&session)
 
 	b.currentSessionsMu.Lock()
 	defer b.currentSessionsMu.Unlock()

@@ -29,6 +29,14 @@ const (
 	// delivered to the brokers, but also it's used to compute the time we should
 	// wait for the fully cancellation to have completed once delivered.
 	cancellationWait = time.Millisecond * 10
+
+	entraAuthModeID        = "entra_auth"
+	entraMFAWaitModeID     = "entra_mfa_wait"
+	entraMFACodeModeID     = "entra_mfa_code"
+	entraAuthFidoModeID    = "entra_auth_fido"
+	entraAuthFidoPinModeID = "entra_auth_fido_pin"
+	//nolint:gosec // G101: this is an authentication mode identifier, not a credential.
+	entraAuthPasswordConfirmationModeID = "entra_auth_password_confirmation"
 )
 
 var (
@@ -125,13 +133,15 @@ type authenticationModel struct {
 	clientType PamClientType
 	mode       authd.SessionMode
 
-	inProgress       bool
-	inputLocked      bool
-	currentModel     authenticationComponent
-	currentSessionID string
-	currentBrokerID  string
-	currentSecret    string
-	currentLayout    string
+	inProgress        bool
+	inputLocked       bool
+	currentModel      authenticationComponent
+	currentSessionID  string
+	currentBrokerID   string
+	currentSecret     string
+	currentLayout     string
+	currentAuthModeID string
+	entraAuthSecret   string
 
 	// authGen identifies the current challenge. It is bumped every time a
 	// challenge starts (startAuthentication), so that a stopAuthentication
@@ -199,6 +209,41 @@ func newAuthenticationModel(client authd.PAMClient, clientType PamClientType, mo
 		mode:        mode,
 		authTracker: &authTracker{},
 	}
+}
+
+func isEntraAuthContinuationMode(mode string) bool {
+	switch mode {
+	case entraMFAWaitModeID, entraMFACodeModeID, entraAuthFidoModeID,
+		entraAuthFidoPinModeID, entraAuthPasswordConfirmationModeID:
+		return true
+	}
+	return false
+}
+
+func (m *authenticationModel) setAuthMode(mode string) {
+	previousMode := m.currentAuthModeID
+	leavingEntraFlow := previousMode == entraAuthModeID ||
+		isEntraAuthContinuationMode(previousMode)
+
+	if mode == entraAuthModeID || (!isEntraAuthContinuationMode(mode) && leavingEntraFlow) {
+		m.clearSecrets()
+	} else if !isEntraAuthContinuationMode(mode) {
+		m.clearEntraSecret()
+	}
+	m.currentAuthModeID = mode
+}
+
+func (m *authenticationModel) clearEntraSecret() {
+	if m.entraAuthSecret != "" && m.currentSecret == m.entraAuthSecret {
+		m.currentSecret = ""
+	}
+	m.entraAuthSecret = ""
+}
+
+func (m *authenticationModel) clearSecrets() {
+	m.currentSecret = ""
+	m.entraAuthSecret = ""
+	m.currentAuthModeID = ""
 }
 
 // Init initializes authenticationModel.
@@ -376,13 +421,24 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 	case isAuthenticatedResultReceived:
 		safeMessageDebug(msg)
 
+		unverifiedEntraPassword := msg.access == auth.Next &&
+			m.currentAuthModeID == entraAuthModeID &&
+			msg.secret != nil &&
+			responseMarksUnverifiedEntraPassword(msg.msg)
+
 		// Resets password if the authentication wasn't successful.
 		defer func() {
 			// the returned authModel is a copy of function-level's `m` at this point!
 			m := &authModel
 			if msg.secret != nil &&
 				(msg.access == auth.Granted || msg.access == auth.Next) {
-				m.currentSecret = *msg.secret
+				if !unverifiedEntraPassword {
+					m.currentSecret = *msg.secret
+				}
+				if msg.access == auth.Next && m.currentAuthModeID == entraAuthModeID &&
+					*msg.secret != "" && !unverifiedEntraPassword {
+					m.entraAuthSecret = *msg.secret
+				}
 			}
 
 			if msg.access != auth.Next && msg.access != auth.Retry {
@@ -403,13 +459,21 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 		switch msg.access {
 		case auth.Granted:
 			var secret string
-			// TODO: This will not select the correct secret in case the last authentication step uses a secret
-			// which is not the local password (e.g. OTP).
-			if msg.secret != nil {
+			var oldSecret string
+
+			switch {
+			case m.currentAuthModeID == entraAuthPasswordConfirmationModeID:
+				if msg.secret != nil && *msg.secret != "" {
+					secret = m.entraAuthSecret
+					oldSecret = *msg.secret
+				}
+			case isEntraAuthContinuationMode(m.currentAuthModeID) && m.entraAuthSecret != "":
+				secret = m.entraAuthSecret
+			case msg.secret != nil:
 				secret = *msg.secret
-			} else if m.currentSecret != "" {
+			case m.currentSecret != "":
 				secret = m.currentSecret
-			} else {
+			default:
 				log.Warningf(context.Background(), "authentication granted, but no secret is available, cannot set PAM_AUTHTOK")
 			}
 
@@ -420,17 +484,18 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 			// old password. We only do this when the old and new secrets differ and
 			// the new one came from this step (msg.secret), to avoid setting a
 			// spurious PAM_OLDAUTHTOK during plain authentication.
-			var oldSecret string
 			if m.mode == authd.SessionMode_CHANGE_PASSWORD && msg.secret != nil &&
 				m.currentSecret != "" && m.currentSecret != secret {
 				oldSecret = m.currentSecret
 			}
-			return m, sendEvent(PamSuccess{
+			success := PamSuccess{
 				BrokerID:   m.currentBrokerID,
 				AuthTok:    secret,
 				OldAuthTok: oldSecret,
 				msg:        authMsg,
-			})
+			}
+			m.clearSecrets()
+			return m, sendEvent(success)
 
 		case auth.Retry:
 			m.errorMsg = authMsg
@@ -440,12 +505,14 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 			if authMsg == "" {
 				authMsg = "Access denied"
 			}
+			m.clearSecrets()
 			return m, sendEvent(pamError{status: pam.ErrAuth, msg: authMsg})
 
 		case auth.DeniedMaxTries:
 			if authMsg == "" {
 				authMsg = "Maximum number of tries exceeded"
 			}
+			m.clearSecrets()
 			return m, sendEvent(pamError{status: pam.ErrMaxtries, msg: authMsg})
 
 		case auth.Next:
@@ -618,20 +685,30 @@ func dataToMsg(data string) (string, error) {
 	if data == "" {
 		return "", nil
 	}
-
-	v := make(map[string]string)
+	var v struct {
+		Message *string `json:"message"`
+	}
 	if err := json.Unmarshal([]byte(data), &v); err != nil {
 		return "", fmt.Errorf("invalid json data from provider: %v", err)
 	}
-	if len(v) == 0 {
-		return "", nil
+	if v.Message == nil {
+		return "", fmt.Errorf("no message entry in json data from provider: %s", data)
+	}
+	return *v.Message, nil
+}
+
+func responseMarksUnverifiedEntraPassword(data string) bool {
+	if data == "" {
+		return false
 	}
 
-	r, ok := v["message"]
-	if !ok {
-		return "", fmt.Errorf("no message entry in json data from provider: %v", v)
+	var response struct {
+		Unverified bool `json:"entra_password_unverified"`
 	}
-	return r, nil
+	if err := json.Unmarshal([]byte(data), &response); err != nil {
+		return true
+	}
+	return response.Unverified
 }
 
 // grantedTolerantMsg parses data via dataToMsg, treating a malformed or

@@ -4,6 +4,7 @@ package password
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -59,6 +60,9 @@ func CheckPassword(password, path string) (bool, error) {
 	decoded, err := base64.StdEncoding.DecodeString(string(data))
 	if err != nil {
 		return false, fmt.Errorf("could not decode password: %w", err)
+	}
+	if len(decoded) < 16 {
+		return false, errors.New("could not decode password: invalid password hash")
 	}
 
 	salt, hash := decoded[:16], decoded[16:]

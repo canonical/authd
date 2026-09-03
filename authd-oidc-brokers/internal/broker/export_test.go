@@ -247,6 +247,16 @@ func (b *Broker) SetAttemptsPerMode(sessionID, mode string, attempts int) error 
 	return b.updateSession(sessionID, s)
 }
 
+// HasPendingEntraPassword returns whether the session retains a pending Entra
+// password candidate for a later confirmation step.
+func (b *Broker) HasPendingEntraPassword(sessionID string) bool {
+	s, err := b.getSession(sessionID)
+	if err != nil {
+		return false
+	}
+	return s.entraAuthPasswordHash != ""
+}
+
 // MaxRequestDuration exposes the broker's maxRequestDuration for tests.
 const MaxRequestDuration = maxRequestDuration
 
@@ -255,6 +265,15 @@ const MaxAuthAttempts = maxAuthAttempts
 
 // CachedPasswordMessage exposes the broker's cachedPasswordMessage for tests.
 const CachedPasswordMessage = cachedPasswordMessage
+
+// EntraPasswordMatchesMessage exposes the matching-password message for tests.
+const EntraPasswordMatchesMessage = entraPasswordMatchesMessage
+
+// EntraPasswordUpdatedMessage exposes the password-replacement message for tests.
+const EntraPasswordUpdatedMessage = entraPasswordUpdatedMessage
+
+// EntraPasswordKeptMessage exposes the keep-password message for tests.
+const EntraPasswordKeptMessage = entraPasswordKeptMessage
 
 // SetSessionMFAFlowActive lets tests set mfaFlowActive on a session without
 // going through entraAuth. The challenge info is left nil so that
