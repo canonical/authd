@@ -14,7 +14,6 @@ from gi.repository import Gdk  # type: ignore  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from base import (
-    ascii_string_to_key_events,
     generate_totp,
     logger,
     run_browser_login,
@@ -188,27 +187,27 @@ class GoogleLoginFlow:
     def _handle_enter_device_code_page(self) -> None:
         self._browser.wait_for_pattern(_ENTER_CODE)
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-enter-code")
-        self._browser.send_key_taps(
-            ascii_string_to_key_events(self._device_code) + [Gdk.KEY_Return])
+        self._browser.send_text(self._device_code)
+        self._browser.send_key_taps([Gdk.KEY_Return])
 
     def _handle_sign_in_page(self) -> None:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-enter-username")
         # Clear any text that may have accumulated in the field from previous
         # attempts (due to the page-load race described in _handle_wrong_email).
         self._clear_input_field(self._username)
-        self._browser.send_key_taps(
-            ascii_string_to_key_events(self._username) + [Gdk.KEY_Return])
+        self._browser.send_text(self._username)
+        self._browser.send_key_taps([Gdk.KEY_Return])
 
     def _handle_enter_password_page(self) -> None:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-enter-password")
-        self._browser.send_key_taps(
-            ascii_string_to_key_events(self._password) + [Gdk.KEY_Return])
+        self._browser.send_text(self._password)
+        self._browser.send_key_taps([Gdk.KEY_Return])
 
     def _handle_totp_page(self) -> None:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-enter-totp-code")
         self._last_totp_code = generate_totp(self._totp_secret)
-        self._browser.send_key_taps(
-            ascii_string_to_key_events(self._last_totp_code) + [Gdk.KEY_Return])
+        self._browser.send_text(self._last_totp_code)
+        self._browser.send_key_taps([Gdk.KEY_Return])
 
     def _handle_choose_account_page(self) -> None:
         self._browser.capture_snapshot(self._screenshot_dir, "device-login-choose-account")
@@ -232,8 +231,8 @@ class GoogleLoginFlow:
         # Clear the field and retype the email immediately so the form is
         # resubmitted and the error is dismissed within this single dispatch.
         self._clear_input_field(self._username)
-        self._browser.send_key_taps(
-            ascii_string_to_key_events(self._username) + [Gdk.KEY_Return])
+        self._browser.send_text(self._username)
+        self._browser.send_key_taps([Gdk.KEY_Return])
 
     def _handle_too_many_failed_attempts_page(self) -> None:
         self._browser.capture_snapshot(
