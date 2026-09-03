@@ -53,7 +53,12 @@ class Journal:
         if self.socat_process:
             logger.info("Terminating socat")
             self.socat_process.terminate()
-            self.socat_process.wait()
+            try:
+                self.socat_process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                logger.error("socat did not exit after termination, killing it")
+                self.socat_process.kill()
+                self.socat_process.wait()
             socat_stderr = self.socat_process.stderr.read().decode()
             socat_stderr_filtered = _filter_socat_stderr(socat_stderr)
             logger.info("socat stderr:\n" + socat_stderr_filtered)
