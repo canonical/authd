@@ -442,7 +442,7 @@ Set Guest Clock In Future
     Set Test Variable    ${guest_clock_changed}    ${True}
     ${change_guest_clock_command}=    Catenate    SEPARATOR=&&
     ...    timedatectl set-ntp false
-    ...    systemctl stop systemd-timesyncd.service
+    ...    (systemctl stop systemd-timesyncd.service 2>/dev/null || true)
     ...    timedatectl set-time "$(date -d '+1 day' '+%Y-%m-%d %H:%M:%S')"
     ...    date --iso-8601=seconds
     ${clock}=    SSH.Execute    ${change_guest_clock_command}
@@ -452,8 +452,8 @@ Set Guest Clock In Future
 Restore Guest Clock
     [Documentation]    Re-enables guest time synchronization and waits for it to catch up.
     ${restore_guest_clock_command}=    Catenate    SEPARATOR=&&
+    ...    (systemctl reset-failed systemd-timesyncd.service 2>/dev/null || true)
     ...    timedatectl set-ntp true
-    ...    systemctl restart systemd-timesyncd.service
     SSH.Execute    ${restore_guest_clock_command}
     Wait Until System Time Synced
 
