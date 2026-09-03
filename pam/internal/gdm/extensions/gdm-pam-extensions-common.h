@@ -167,12 +167,18 @@ gdm_pam_extension_advertise_supported_extensions (char               *environmen
         size_t offset;
         size_t index;
 
-        if (block_size < key_len + 2)
+        if (environment_block == NULL || block_size < key_len + 2)
                 return;
 
         memcpy (environment_block, key, key_len);
         environment_block[key_len] = '=';
         offset = key_len + 1;
+
+        if (supported_extensions == NULL || supported_extensions[0] == NULL) {
+                environment_block[offset] = '\0';
+                putenv (environment_block);
+                return;
+        }
 
         for (index = 0; supported_extensions[index] != NULL && index < UCHAR_MAX; index++) {
                 size_t ext_len = strlen (supported_extensions[index]);
@@ -188,8 +194,6 @@ gdm_pam_extension_advertise_supported_extensions (char               *environmen
                 offset += ext_len;
         }
 
-        if (index > 0) {
-                environment_block[offset] = '\0';
-                putenv (environment_block);
-        }
+        environment_block[offset] = '\0';
+        putenv (environment_block);
 }

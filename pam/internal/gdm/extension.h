@@ -22,16 +22,17 @@ gdm_extensions_advertise_supported (const char *extensions[],
         free (supported_extensions[i]);
 
       free (supported_extensions);
+      supported_extensions = NULL;
     }
 
-  supported_extensions = malloc ((n_extensions + 1) * sizeof (char *));
+  if (n_extensions > 0)
+    {
+      supported_extensions = malloc ((n_extensions + 1) * sizeof (char *));
 
-  for (size_t i = 0; i < n_extensions; ++i)
-    supported_extensions[i] = strdup (extensions[i]);
-  supported_extensions[n_extensions] = NULL;
-
-  if (n_extensions == 0)
-    unsetenv ("GDM_SUPPORTED_PAM_EXTENSIONS");
+      for (size_t i = 0; i < n_extensions; ++i)
+        supported_extensions[i] = strdup (extensions[i]);
+      supported_extensions[n_extensions] = NULL;
+    }
 
   gdm_pam_extension_advertise_supported_extensions (
     pam_extension_environment_block, sizeof (pam_extension_environment_block),
