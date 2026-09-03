@@ -259,7 +259,9 @@ jobs:
       - name: Check whether the packaging files changed
         id: diff
         run: |
-          if git diff --quiet -- Cargo.lock debian/control debian/copyright; then
+          # Compare the worktree with the index directly. This avoids Git
+          # interpreting the paths as a no-index comparison.
+          if git diff-files --quiet -- Cargo.lock debian/control debian/copyright; then
             echo "Nothing to commit."
             echo "changed=false" >> "${GITHUB_OUTPUT}"
           else
