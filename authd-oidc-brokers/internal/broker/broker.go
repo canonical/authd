@@ -1011,7 +1011,7 @@ func tokenExists(session session) bool {
 }
 
 func passwordFileExists(session session) bool {
-	exists, err := fileutils.FileExists(session.passwordPath)
+	exists, err := passwordFileStatus(session.passwordPath)
 	if err != nil {
 		log.Warningf(context.Background(), "Could not check if local password file exists: %v", err)
 	}
@@ -1595,6 +1595,12 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 	var localPasswordExists, localPasswordMatches bool
 	if passwordSubmitted {
 		localPasswordExists, localPasswordMatches, err = checkLocalPassword(userPassword, session.passwordPath)
+		if errors.Is(err, password.ErrInvalidHash) {
+			log.Warningf(context.Background(), "Local password file for user %q is invalid; treating it as unavailable", session.username)
+			localPasswordExists = false
+			localPasswordMatches = false
+			err = nil
+		}
 		if err != nil {
 			log.Errorf(context.Background(), "Could not verify the existing local password: %v", err)
 			return AuthDenied, unexpectedErrMsg("could not check local password")
@@ -2287,7 +2293,12 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 
 	var localPasswordExists bool
 	if session.entraAuthPasswordHash == "" || session.entraAuthPasswordNeedsConfirmation {
-		localPasswordExists, err = fileutils.FileExists(session.passwordPath)
+		localPasswordExists, err = passwordFileStatus(session.passwordPath)
+		if errors.Is(err, password.ErrInvalidHash) {
+			log.Warningf(context.Background(), "Local password file for user %q is invalid; treating it as unavailable", session.username)
+			localPasswordExists = false
+			err = nil
+		}
 		if err != nil {
 			log.Errorf(context.Background(), "Could not check if local password exists: %v", err)
 			return AuthDenied, unexpectedErrMsg("could not check local password")
@@ -2396,6 +2407,14 @@ func checkLocalPassword(candidate, path string) (bool, bool, error) {
 		return false, false, nil
 	}
 	return err == nil, matches, err
+}
+
+func passwordFileStatus(path string) (bool, error) {
+	err := password.ValidateHash(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 // routeMFAInitError routes the AADSTS errors returned by InitiateEntraAuth

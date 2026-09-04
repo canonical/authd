@@ -2437,6 +2437,7 @@ func TestEntraAuthAccessPassDoesNotCacheUnverifiedPassword(t *testing.T) {
 	})
 
 	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	require.NoError(t, password.StoreHashedPassword("malformed", b.PasswordFilepathForSession(sessionID)))
 	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraAuth))
 	_, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraAuth)
 	require.NoError(t, err)
@@ -2465,10 +2466,10 @@ func TestEntraAuthAccessPassDoesNotCacheUnverifiedPassword(t *testing.T) {
 	codeAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "123456", key))
 	access, _, err = b.IsAuthenticated(sessionID, codeAuthData)
 	require.NoError(t, err)
-	require.NotEqual(t, broker.AuthDenied, access,
-		"a Temporary Access Pass is a valid credential, so the login itself must succeed")
-	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID),
-		"the TAP answered the login, so the submitted password was never verified and must not be cached")
+	require.Equal(t, broker.AuthNext, access,
+		"a Temporary Access Pass is a valid credential, so the login should continue to local password setup")
+	require.Equal(t, []string{authmodes.NewPassword}, b.GetNextAuthModes(sessionID))
+	require.ErrorIs(t, password.ValidateHash(b.PasswordFilepathForSession(sessionID)), password.ErrInvalidHash)
 }
 
 // TestEntraAuthProbeKeepsDeviceAuthOutWhenFlowDisabled verifies that the probe
@@ -2532,6 +2533,7 @@ func TestEntraAuthPasswordlessSuccessDoesNotCacheOfflinePassword(t *testing.T) {
 	})
 
 	sessionID, _ := newSessionForTests(t, b, username, sessionmode.Login)
+	require.NoError(t, password.StoreHashedPassword("malformed", b.PasswordFilepathForSession(sessionID)))
 	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraAuth))
 	_, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraAuth)
 	require.NoError(t, err)
@@ -2554,10 +2556,9 @@ func TestEntraAuthPasswordlessSuccessDoesNotCacheOfflinePassword(t *testing.T) {
 	require.Equal(t, broker.AuthNext, access,
 		"first-time passwordless logins should chain to local password creation")
 	require.Equal(t, []string{authmodes.NewPassword}, b.GetNextAuthModes(sessionID))
+	require.ErrorIs(t, password.ValidateHash(b.PasswordFilepathForSession(sessionID)), password.ErrInvalidHash)
 	_, err = os.Stat(b.TokenPathForSession(sessionID))
 	require.NoError(t, err, "passwordless auth should cache the token once device registration succeeds")
-	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID),
-		"passwordless auth has no verified Entra password to cache for offline login")
 	require.Equal(t, 1, provider.registerDeviceCalls,
 		"passwordless auth should attempt first-time device registration after MFA succeeds")
 }
@@ -2742,6 +2743,23 @@ func TestEntraAuthKeepsExistingPasswordUntilConfirmed(t *testing.T) {
 	require.Contains(t, data, broker.EntraPasswordKeptMessage)
 	require.True(t, passwordMatches(t, "local-password", b.PasswordFilepathForSession(sessionID)))
 	require.False(t, passwordMatches(t, "entra-password", b.PasswordFilepathForSession(sessionID)))
+}
+
+func TestEntraAuthRecoversFromMalformedLocalPassword(t *testing.T) {
+	t.Parallel()
+
+	b := newEntraMFAWaitTestBroker(t)
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	passwordPath := b.PasswordFilepathForSession(sessionID)
+	require.NoError(t, password.StoreHashedPassword("malformed", passwordPath))
+
+	advanceToEntraMFAWaitWithPassword(t, b, sessionID, key, "entra-password")
+
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access)
+	require.Contains(t, data, broker.CachedPasswordMessage)
+	require.True(t, passwordMatches(t, "entra-password", b.PasswordFilepathForSession(sessionID)))
 }
 
 func TestEntraAuthReplacesExistingPasswordAfterConfirmation(t *testing.T) {

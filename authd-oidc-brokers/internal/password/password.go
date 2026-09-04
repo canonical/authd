@@ -13,6 +13,9 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
+// ErrInvalidHash indicates that a password file does not contain a valid hash.
+var ErrInvalidHash = errors.New("invalid password hash")
+
 // HashAndStorePassword hashes the password and stores it in the data directory.
 func HashAndStorePassword(password, path string) error {
 	encoded, err := HashPassword(password)
@@ -50,19 +53,17 @@ func StoreHashedPassword(encoded, path string) error {
 	return nil
 }
 
+// ValidateHash checks that the password file contains a valid encoded hash.
+func ValidateHash(path string) error {
+	_, err := loadHash(path)
+	return err
+}
+
 // CheckPassword checks if the provided password matches the hash stored in the password file.
 func CheckPassword(password, path string) (bool, error) {
-	data, err := os.ReadFile(path)
+	decoded, err := loadHash(path)
 	if err != nil {
-		return false, fmt.Errorf("could not read password file: %w", err)
-	}
-
-	decoded, err := base64.StdEncoding.DecodeString(string(data))
-	if err != nil {
-		return false, fmt.Errorf("could not decode password: %w", err)
-	}
-	if len(decoded) < 16 {
-		return false, errors.New("could not decode password: invalid password hash")
+		return false, err
 	}
 
 	salt, hash := decoded[:16], decoded[16:]
@@ -71,6 +72,22 @@ func CheckPassword(password, path string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func loadHash(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("could not read password file: %w", err)
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("could not decode password: %w: %w", ErrInvalidHash, err)
+	}
+	if len(decoded) != 16+32 {
+		return nil, fmt.Errorf("could not decode password: %w", ErrInvalidHash)
+	}
+	return decoded, nil
 }
 
 func hashPassword(password string, salt []byte) []byte {
