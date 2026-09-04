@@ -13,7 +13,6 @@ from gi.repository import Gdk  # type: ignore  # noqa: E402
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from base import (
-    ascii_string_to_key_events,
     generate_totp,
     logger,
     run_browser_login,
@@ -30,27 +29,27 @@ def login(browser, username: str, password: str, device_code: str, totp_secret: 
     browser.wait_for_pattern("Enter code to allow access")
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-enter-code")
-    browser.send_key_taps(
-        ascii_string_to_key_events(device_code) + [Gdk.KEY_Return])
+    browser.send_text(device_code)
+    browser.send_key_taps([Gdk.KEY_Return])
 
     browser.wait_for_pattern("Sign in", timeout_ms=30000)
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-enter-username")
-    browser.send_key_taps(
-        ascii_string_to_key_events(username) + [Gdk.KEY_Return])
+    browser.send_text(username)
+    browser.send_key_taps([Gdk.KEY_Return])
 
     browser.wait_for_pattern("Enter password")
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-enter-password")
-    browser.send_key_taps(
-        ascii_string_to_key_events(password) + [Gdk.KEY_Return])
+    browser.send_text(password)
+    browser.send_key_taps([Gdk.KEY_Return])
 
     matches = browser.wait_for_pattern(r"(Enter code|Are you trying to sign in)")
     browser.wait_for_stable_page()
     if "Enter code" in matches:
         browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
-        browser.send_key_taps(
-            ascii_string_to_key_events(generate_totp(totp_secret)) + [Gdk.KEY_Return])
+        browser.send_text(generate_totp(totp_secret))
+        browser.send_key_taps([Gdk.KEY_Return])
         browser.wait_for_pattern("Are you trying to sign in")
         browser.wait_for_stable_page()
 

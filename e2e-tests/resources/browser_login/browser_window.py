@@ -5,6 +5,7 @@ import logging
 import os
 import subprocess
 import tempfile
+import time
 import traceback
 import sys
 
@@ -306,6 +307,137 @@ class BrowserWindow(Gtk.Window):
 
         logger.info(f"Found strings matching pattern: {found!r}")
         return found
+
+    def run_javascript_sync(self, javascript: str, timeout_ms: int = 5000) -> str:
+        """Run JavaScript in the page and return its result as a string."""
+        loop = GLib.MainLoop()
+        cancellable = Gio.Cancellable()
+        result = None
+        error = None
+        timed_out = False
+        timeout_active = True
+
+        def on_timeout():
+            nonlocal timed_out, timeout_active
+
+            timed_out = True
+            timeout_active = False
+            cancellable.cancel()
+            loop.quit()
+            return False
+
+        def on_javascript_finished(web_view, task):
+            nonlocal result, error
+
+            try:
+                result = web_view.run_javascript_finish(task).get_js_value().to_string()
+            except GLib.Error as e:
+                if e.matches(Gio.io_error_quark(), Gio.IOErrorEnum.CANCELLED):
+                    return
+                error = e
+            except Exception as e:
+                error = e
+            loop.quit()
+
+        timeout_id = GLib.timeout_add(timeout_ms, on_timeout)
+        self.web_view.run_javascript(javascript, cancellable, on_javascript_finished)
+        loop.run()
+
+        if timeout_active:
+            GLib.source_remove(timeout_id)
+
+        if timed_out:
+            raise TimeoutError(f"Timed out after {timeout_ms}ms running JavaScript")
+        if error is not None:
+            raise error
+        if result is None:
+            raise RuntimeError("JavaScript did not return a result")
+        return result
+
+    def get_focused_input_value(self, timeout_ms: int = 5000) -> str | None:
+        """Return the value of the currently focused input, if any."""
+        javascript = """(function() {
+            var el = document.activeElement;
+            if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) {
+                return JSON.stringify({focused: false});
+            }
+            return JSON.stringify({focused: true, value: el.value});
+        })()"""
+
+        state = json.loads(self.run_javascript_sync(javascript, timeout_ms=timeout_ms))
+        if not isinstance(state, dict) or not isinstance(state.get("focused"), bool):
+            raise RuntimeError("JavaScript returned an invalid focused-input state")
+        if not state["focused"]:
+            return None
+
+        value = state.get("value")
+        if not isinstance(value, str):
+            raise RuntimeError("JavaScript returned an invalid focused-input value")
+        return value
+
+    def wait_for_focused_input(self, timeout_ms: int = 5000,
+                               poll_interval_ms: int = 50) -> str:
+        """Wait until an input element is focused and return its value."""
+        deadline = time.monotonic() + timeout_ms / 1000
+        while True:
+            remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
+            value = self.get_focused_input_value(timeout_ms=remaining_ms)
+            if value is not None:
+                return value
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"Timed out after {timeout_ms}ms waiting for a focused input")
+            self.wait_ms(min(poll_interval_ms, remaining_ms))
+
+    def wait_for_focused_input_value(self, expected: str, timeout_ms: int = 5000,
+                                     poll_interval_ms: int = 50) -> str | None:
+        """Wait for the focused input to contain `expected`.
+
+        Key events are delivered to the web page asynchronously, so the value
+        can change after ``send_key_taps`` returns.
+        """
+        deadline = time.monotonic() + timeout_ms / 1000
+        value = None
+        while True:
+            remaining_ms = max(1, int((deadline - time.monotonic()) * 1000))
+            value = self.get_focused_input_value(timeout_ms=remaining_ms)
+            if value == expected or time.monotonic() >= deadline:
+                return value
+            self.wait_ms(min(poll_interval_ms, remaining_ms))
+
+    def wait_ms(self, timeout_ms: int) -> None:
+        """Keep the GTK main loop running for ``timeout_ms`` milliseconds."""
+        loop = GLib.MainLoop()
+
+        def on_timeout():
+            loop.quit()
+            return False
+
+        GLib.timeout_add(timeout_ms, on_timeout)
+        loop.run()
+
+    def send_text(self, text: str, retries: int = 2, timeout_ms: int = 5000) -> None:
+        """Type text and verify that it reached the focused input field."""
+        if retries < 0:
+            raise ValueError("retries must not be negative")
+
+        key_taps = ascii_string_to_key_events(text)
+        self.wait_for_focused_input(timeout_ms=timeout_ms)
+
+        for attempt in range(retries + 1):
+            self.send_key_taps(key_taps)
+            value = self.wait_for_focused_input_value(text, timeout_ms=timeout_ms)
+            if value == text:
+                return
+            if attempt == retries:
+                break
+
+            logger.warning("Typed text did not reach the focused input; retrying")
+            clear_count = 2 * max(len(text), len(value or ""))
+            self.send_key_taps([Gdk.KEY_BackSpace] * clear_count)
+            self.wait_for_focused_input_value("", timeout_ms=timeout_ms)
+
+        raise RuntimeError("Failed to type text into the focused input field")
 
     def send_key(self, event_type, key, silent=False):
         if not silent:
