@@ -212,6 +212,10 @@ class LicenseInfo:
         if not cleaned or (cleaned.strip().isdigit() and len(cleaned.strip()) == 4):
             return
 
+        # Ignore emoji descriptions that licensecheck mistakes for holders.
+        if re.fullmatch(r'\W*copyright', cleaned, flags=re.IGNORECASE):
+            return
+
         years = CopyrightHolder.extract_years(cleaned)
         holder_name, email = CopyrightHolder.extract_name_and_email(cleaned)
         if not holder_name:
