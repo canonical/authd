@@ -348,7 +348,6 @@ class VendorLicenseScanner:
                     'licensecheck',
                     '--machine',
                     '--copyright',
-                    '--encoding=utf-8',
                     '--shortname-scheme=debian,spdx',
                     '--recursive',
                     dir_path
