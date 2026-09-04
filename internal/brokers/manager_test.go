@@ -37,7 +37,7 @@ func TestNewManager(t *testing.T) {
 
 		"Ignores_broker_configuration_file_not_ending_with_.conf": {brokerConfigDir: "some_ignored_brokers"},
 		"Ignores_any_unknown_sections_and_fields":                 {brokerConfigDir: "extra_fields"},
-		"Ignores_brokers_not_available_on_dbus":                   {brokerConfigDir: "not_on_bus"},
+		"Keeps_brokers_not_yet_available_on_dbus":                 {brokerConfigDir: "not_on_bus"},
 
 		"Error_when_can't_connect_to_system_bus": {brokerConfigDir: "valid_brokers", noBus: true, wantErr: true},
 		"Error_when_broker_config_dir_is_a_file": {brokerConfigDir: "file_config_dir", wantErr: true},
