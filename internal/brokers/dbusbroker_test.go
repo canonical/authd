@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/canonical/authd/internal/services/errmessages"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 	"github.com/stretchr/testify/require"
@@ -157,6 +158,104 @@ func TestDbusBrokerCallUsesInterface(t *testing.T) {
 			_, err := b.call(context.Background(), "TestMethod")
 			require.NoError(t, err, "call should not return a D-Bus error")
 			require.Equal(t, tc.wantMethodCalled, mock.lastCalledMethod)
+		})
+	}
+}
+
+func TestDbusBrokerCallTranslatesErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		callErr error
+
+		wantCanceled    bool
+		wantUnavailable bool
+		wantLogDetail   string
+		// wantPassthrough asserts the original error message is preserved
+		// (i.e. not replaced by the broker unavailable message).
+		wantPassthrough string
+	}{
+		// A broker that exits before exporting its objects (e.g. it failed to
+		// start) has already claimed its bus name, so D-Bus reports the call
+		// as hitting an unknown interface rather than an unknown service.
+		"Unknown_interface_is_reported_as_broker_unavailable": {
+			callErr:         dbus.Error{Name: "org.freedesktop.DBus.Error.UnknownInterface"},
+			wantUnavailable: true,
+		},
+		"Initialization_failure_is_reported_as_broker_unavailable": {
+			callErr:         dbus.Error{Name: "com.ubuntu.authd.BrokerUnavailable", Body: []interface{}{"invalid broker configuration"}},
+			wantUnavailable: true,
+			wantLogDetail:   "invalid broker configuration",
+		},
+		"Unknown_service_is_reported_as_broker_unavailable": {
+			callErr:         dbus.Error{Name: "org.freedesktop.DBus.Error.ServiceUnknown"},
+			wantUnavailable: true,
+		},
+		"Activation_timeout_is_reported_as_broker_unavailable": {
+			callErr:         dbus.Error{Name: "org.freedesktop.DBus.Error.TimedOut"},
+			wantUnavailable: true,
+		},
+		"Canceled_is_translated_to_context_canceled": {
+			callErr:      dbus.Error{Name: "com.ubuntu.authd.Canceled"},
+			wantCanceled: true,
+		},
+		"Unrelated_error_is_passed_through": {
+			callErr:         dbus.Error{Name: "com.ubuntu.authd.SomeBrokerError", Body: []interface{}{"boom"}},
+			wantPassthrough: "boom",
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			mock := &mockBusObject{callErr: tc.callErr}
+			b := dbusBroker{
+				name:       "mybroker",
+				iface:      dbusInterface{name: "com.ubuntu.authd.Broker2", version: 2},
+				dbusObject: mock,
+			}
+
+			_, err := b.call(context.Background(), "TestMethod")
+			require.Error(t, err, "call should return an error")
+
+			if tc.wantCanceled {
+				require.ErrorIs(t, err, context.Canceled, "Canceled should map to context.Canceled")
+				return
+			}
+			if tc.wantUnavailable {
+				require.Contains(t, err.Error(), "mybroker", "message should name the broker")
+				require.Contains(t, err.Error(), "Is it running?",
+					"message should help the administrator diagnose the failure")
+				require.Contains(t, err.Error(), brokerStatusCommand,
+					"message should show how to check the broker status")
+				require.NotContains(t, err.Error(), fmt.Sprintf("%q", brokerStatusCommand),
+					"message should not quote the complete command")
+				if tc.wantLogDetail != "" {
+					require.Contains(t, err.Error(), tc.wantLogDetail,
+						"message should include the broker's diagnostic")
+				}
+
+				_, displayErr := errmessages.RedactErrorInterceptor(
+					context.Background(),
+					nil,
+					nil,
+					func(context.Context, any) (any, error) {
+						return nil, err
+					},
+				)
+				require.Error(t, displayErr)
+				require.Contains(t, displayErr.Error(), "Please contact your administrator.",
+					"message should tell the user to contact their administrator")
+				require.NotContains(t, displayErr.Error(), brokerStatusCommand,
+					"status guidance should remain in the administrator log")
+				if tc.wantLogDetail != "" {
+					require.NotContains(t, displayErr.Error(), tc.wantLogDetail,
+						"broker diagnostic should not be shown to the user")
+				}
+				return
+			}
+			require.Contains(t, err.Error(), tc.wantPassthrough,
+				"unrelated errors should be passed through unchanged")
 		})
 	}
 }
