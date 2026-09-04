@@ -2276,6 +2276,11 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 // routeMFAInitError routes the AADSTS errors returned by InitiateEntraAuth
 // (the MFA init step) to appropriate broker responses.
 func (b *Broker) routeMFAInitError(mfaErr *himmelblau.MFAError, session *session) (string, isAuthenticatedDataResponse) {
+	if mfaErr.IsMFAUserNotFound() {
+		log.Noticef(context.Background(), "Login denied: user %q does not exist in %s", session.username, b.provider.DisplayName())
+		return AuthDenied, errorMessage{Message: "An account with that name does not exist."}
+	}
+
 	if mfaErr.IsMFAPasswordRequired() {
 		log.Debugf(context.Background(), "Passwordless Entra authentication for user %q requires password entry", session.username)
 		session.entraAuthPasswordRequired = true

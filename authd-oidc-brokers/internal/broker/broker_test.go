@@ -4150,6 +4150,7 @@ func TestEntraAuthRoutesAADSTSErrors(t *testing.T) {
 		wantAccess    string
 		wantNextModes []string
 		wantMsg       string
+		wantReport    bool
 	}{
 		"Account_locked":                               {aadsts: 50053, wantAccess: broker.AuthDenied, wantMsg: "locked"},
 		"Password_expired":                             {aadsts: 50055, wantAccess: broker.AuthDenied, wantMsg: "expired"},
@@ -4162,9 +4163,10 @@ func TestEntraAuthRoutesAADSTSErrors(t *testing.T) {
 		"MFA_enrollment_alt_to_device":                 {aadsts: 50079, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
 		"Authenticator_registration_to_device":         {aadsts: 50203, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA registration required"},
 		"MFA_enrollment_denied_when_device_disabled":   {aadsts: 50072, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled"},
+		"User_not_found_by_aadsts_code":                {aadsts: 50034, wantAccess: broker.AuthDenied, wantMsg: "does not exist"},
 		"MFA_required_to_device":                       {category: himmelblau.MFAErrorRequired, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "MFA is required"},
 		"MFA_required_denied_when_device_disabled":     {category: himmelblau.MFAErrorRequired, deviceAuthDisabled: true, wantAccess: broker.AuthDenied, wantMsg: "disabled"},
-		"Unhandled_AADSTS_denied":                      {aadsts: 99999, wantAccess: broker.AuthDenied, wantMsg: "AADSTS99999: simulated error. Please report this error"},
+		"Unhandled_AADSTS_denied":                      {aadsts: 99999, wantAccess: broker.AuthDenied, wantMsg: "AADSTS99999: simulated error. Please report this error", wantReport: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -4209,6 +4211,11 @@ func TestEntraAuthRoutesAADSTSErrors(t *testing.T) {
 			}
 			require.NoError(t, json.Unmarshal([]byte(data), &payload))
 			require.Contains(t, payload.Message, tc.wantMsg)
+			if tc.wantReport {
+				require.Contains(t, payload.Message, "Please report this error")
+			} else {
+				require.NotContains(t, payload.Message, "Please report this error")
+			}
 		})
 	}
 }

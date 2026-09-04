@@ -162,6 +162,11 @@ type MFAChallengeInfo struct {
 // it without depending on libhimmelblau-specific numeric codes.
 type MFAErrorCategory int
 
+// userNotFoundErrorCode is the standard Entra error code for an account
+// that is not present in the tenant. It must stay in this untagged file
+// because IsMFAUserNotFound is used by untagged builds.
+const userNotFoundErrorCode = 50034
+
 const (
 	// MFAErrorOther is the default category and means the error has no
 	// specific routing semantics.
@@ -231,4 +236,10 @@ func (e *MFAError) IsMFARetryableCode() bool {
 // authentication needs the password flow instead.
 func (e *MFAError) IsMFAPasswordRequired() bool {
 	return e.Category == MFAErrorPasswordRequired
+}
+
+// IsMFAUserNotFound returns true if the requested account does not exist in
+// the Entra tenant.
+func (e *MFAError) IsMFAUserNotFound() bool {
+	return e.AADSTS == userNotFoundErrorCode
 }
