@@ -25,6 +25,27 @@ func TestMFAError_Error(t *testing.T) {
 	}
 }
 
+func TestMFAError_IsMFATransient(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		err  *MFAError
+		want bool
+	}{
+		"External_server_retryable": {err: &MFAError{AADSTS: externalServerRetryableErrorCode}, want: true},
+		"Tenant_throttling":         {err: &MFAError{AADSTS: tenantThrottlingErrorCode}, want: true},
+		"Other_AADSTS":              {err: &MFAError{AADSTS: 50126}, want: false},
+		"Without_AADSTS":            {err: &MFAError{}, want: false},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, tc.err.IsMFATransient())
+		})
+	}
+}
+
 func TestMFAError_IsMFAPollContinue(t *testing.T) {
 	t.Parallel()
 

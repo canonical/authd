@@ -4154,6 +4154,8 @@ func TestEntraAuthRoutesAADSTSErrors(t *testing.T) {
 	}{
 		"Account_locked":                               {aadsts: 50053, wantAccess: broker.AuthDenied, wantMsg: "locked"},
 		"Password_expired":                             {aadsts: 50055, wantAccess: broker.AuthDenied, wantMsg: "expired"},
+		"External_server_retryable":                    {aadsts: 90006, wantAccess: broker.AuthRetry, wantMsg: "temporary error"},
+		"Tenant_throttling":                            {aadsts: 90055, wantAccess: broker.AuthRetry, wantMsg: "temporary error"},
 		"Invalid_credentials_retry":                    {aadsts: 50126, wantAccess: broker.AuthRetry, wantMsg: "Incorrect password"},
 		"Previous_MFA_request_not_completed":           {aadsts: 500121, wantAccess: broker.AuthRetry, wantMsg: "previous MFA prompt was not completed"},
 		"Conditional_access_blocked":                   {aadsts: 53003, wantAccess: broker.AuthNext, wantNextModes: []string{authmodes.Device, authmodes.DeviceQr}, wantMsg: "Conditional Access"},
