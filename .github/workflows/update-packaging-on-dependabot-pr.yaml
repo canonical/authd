@@ -251,8 +251,8 @@ jobs:
       - name: Install licensecheck and python3-anytree
         run: |
           apt-get update -y
-          # Without RE2, licensecheck double-encodes UTF-8 copyright holders
-          # when it parses raw file contents in this container.
+          # RE2 speeds up licensecheck's regular-expression matching on the
+          # vendored trees.
           apt-get install -y --no-install-recommends \
             licensecheck \
             libre-engine-re2-perl \
