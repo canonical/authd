@@ -53,15 +53,18 @@ full transition to the cloud.
 
 ## In this documentation
 
-* **Setup**: [Installing authd](/howto/install-authd/) • [Configuring authd](/howto/configure-authd/) • [Changing authd versions](/howto/changing-versions/)
-* **User login**: [Logging in with GDM](/howto/login-gdm/) • [Logging in with SSH](/howto/login-ssh/)
-* **Authentication**: [Authentication flows](/reference/authentication-flows)
-* **Groups and privileges (sudo, docker)**: [Configure user groups](ref::config-user-groups) • [Group management reference](/reference/group-management)
-* **Deployment**: [Deploying with Landscape](/reference/landscape-deploy/) • [Deploying with cloud-init](/reference/cloud-init-deploy/)
-* **Network file systems**: [Using with NFS](/howto/use-with-nfs/) • [Using with Samba](/howto/use-with-samba/)
-* **authd design**: [Architecture](/explanation/authd-architecture/) • [Security overview](/explanation/security/)
-* **Troubleshooting**: [Accessing logs](/howto/logging/) • [Entering recovery mode on failed login](/howto/enter-recovery-mode/)
-* **Documentation**: [How this documentation is structured](/explanation/structure-of-authd-documentation)
+|                                          |                                                                     |
+|------------------------------------------|---------------------------------------------------------------------|
+|**Setup** | [Installing authd](/howto/install-authd/) • [Configuring authd](/howto/configure-authd/) • [Changing authd versions](/howto/changing-versions/) |
+|**User login** | [Logging in with GDM](/howto/login-gdm/) • [Logging in with SSH](/howto/login-ssh/) • [Authentication flows](/reference/authentication-flows) |
+|**Groups (sudo, docker)** | [Configure user groups](ref::config-user-groups) • [Group management reference](/reference/group-management) |
+|**User management** | [authctl CLI tool](/reference/cli/authctl) • [User management explained](/explanation/user-management) |
+|**Deployment** | [Deploying with Landscape](/reference/landscape-deploy/) • [Deploying with cloud-init](/reference/cloud-init-deploy/) |
+|**Network file systems** | [Using with NFS](/howto/use-with-nfs/) • [Using with Samba](/howto/use-with-samba/) |
+|**authd design** | [Architecture](/explanation/authd-architecture/) • [Security overview](/explanation/security/) |
+|**Troubleshooting** | [Accessing logs](/howto/logging/) • [Entering recovery mode on failed login](/howto/enter-recovery-mode/) |
+|**Documentation** | [How this documentation is structured](/explanation/structure-of-authd-documentation) |
+
 
 ## Project and community
 
