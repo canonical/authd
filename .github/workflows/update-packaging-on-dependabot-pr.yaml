@@ -164,6 +164,8 @@ jobs:
 
   generate-copyright:
     name: Regenerate debian/copyright
+    # This job consumes the Cargo.lock and debian/control artifact from
+    # generate-cargo to recreate the Rust vendor tree consistently.
     needs: generate-cargo
     runs-on: ubuntu-latest
     container:
