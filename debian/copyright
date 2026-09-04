@@ -68,10 +68,6 @@ Files: vendor/github.com/cpuguy83/*
 Copyright: 2014 Brian Goff
 License: Expat
 
-Files: vendor/github.com/davecgh/*
-Copyright: 2012-2016 Dave Collins <dave@davec.name>
-License: ISC
-
 Files: vendor/github.com/erikgeiser/*
 Copyright: 2021 Erik G.
 License: Expat
@@ -252,6 +248,14 @@ Files: vendor/github.com/stretchr/*
 Copyright: 2012-2020 Mat Ryer, Tyler Bunnell and contributors.
 License: Expat
 
+Files: vendor/github.com/stretchr/testify/internal/difflib/*
+Copyright: 2013 Patrick Mezard
+License: BSD-3-clause
+
+Files: vendor/github.com/stretchr/testify/internal/spew/*
+Copyright: 2012-2016 Dave Collins <dave@davec.name>
+License: ISC
+
 Files: vendor/github.com/subosito/*
 Copyright: 2013 Alif Rachmawadi
 License: Expat
@@ -297,7 +301,7 @@ Copyright: 2009-2026 The Go Authors.
 License: BSD-3-clause
 
 Files: vendor/google.golang.org/genproto/*
-Copyright: 2025 Google LLC
+Copyright: 2026 Google LLC
 License: Apache-2.0
 
 Files: vendor/google.golang.org/grpc/*
