@@ -19,7 +19,10 @@ Remote information is cached when authenticating with authd, which improves perf
 
 The diagram below illustrates the components of authd and their communication methods:
 
-![Isometric architecture diagram for authd.](../assets/authd-architecture.svg)
+:::{image} ../assets/authd-architecture.png
+:width: 100%
+:alt: Architecture diagram for authd.
+:::
 
 The architecture of authd consists of the following components:
 
