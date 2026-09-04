@@ -175,12 +175,17 @@ Files: vendor/github.com/rivo/*
 Copyright: 2019 Oliver Kuederle
 License: Expat
 
+Files: vendor/github.com/rivo/uniseg/graphemeproperties.go
+       vendor/github.com/rivo/uniseg/wordproperties.go
+Copyright: ️) copyright
+License: Expat
+
 Files: vendor/github.com/russross/*
 Copyright: 2011 Russ Ross <russ@russross.com>
 License: BSD-2-clause
 
 Files: vendor/github.com/sagikazarmark/*
-Copyright: 2023 MÃ¡rk SÃ¡gi-KazÃ¡r <mark.sagikazar@gmail.com>
+Copyright: 2023 Márk Sági-Kazár <mark.sagikazar@gmail.com>
 License: Expat
 
 Files: vendor/github.com/sahilm/*
@@ -351,7 +356,7 @@ Copyright: 2011-2019 Canonical Ltd
 License: Apache-2.0
 
 Files: vendor/gorbe.io/*
-Copyright: 2021 DÃ¡niel GÃ¶rbe
+Copyright: 2021 Dániel Görbe
 License: Expat
 
 Files: vendor_rust/adler2/*
