@@ -84,6 +84,7 @@ setting.
 
 ### Login via SSH
 
+(ref::ssh-public-key-authentication)=
 #### SSH public key authentication
 
 If SSH public key authentication is enabled, users whose access has been revoked
