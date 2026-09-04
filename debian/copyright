@@ -175,11 +175,6 @@ Files: vendor/github.com/rivo/*
 Copyright: 2019 Oliver Kuederle
 License: Expat
 
-Files: vendor/github.com/rivo/uniseg/graphemeproperties.go
-       vendor/github.com/rivo/uniseg/wordproperties.go
-Copyright: ️) copyright
-License: Expat
-
 Files: vendor/github.com/russross/*
 Copyright: 2011 Russ Ross <russ@russross.com>
 License: BSD-2-clause
