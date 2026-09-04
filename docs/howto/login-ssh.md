@@ -63,4 +63,4 @@ For instance, here is an example using Microsoft Entra ID as a provider:
 ssh user@domain.tld@remote.host
 ```
 
-![Terminal interface showing option to authentice by login code when user tries to ssh into server](../assets/ssh-login.png)
+![Terminal interface showing option to authenticate by login code when user tries to ssh into server](../assets/ssh-login.png)
