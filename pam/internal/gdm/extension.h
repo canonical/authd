@@ -12,12 +12,6 @@
 static char pam_extension_environment_block[_POSIX_ARG_MAX];
 static char **supported_extensions = NULL;
 
-static inline bool
-is_gdm_pam_extension_supported (const char *extension)
-{
-  return GDM_PAM_EXTENSION_SUPPORTED (extension);
-}
-
 static inline void
 gdm_extensions_advertise_supported (const char *extensions[],
                                     size_t      n_extensions)
@@ -28,33 +22,28 @@ gdm_extensions_advertise_supported (const char *extensions[],
         free (supported_extensions[i]);
 
       free (supported_extensions);
+      supported_extensions = NULL;
     }
 
-  supported_extensions = malloc ((n_extensions + 1) * sizeof (char *));
+  if (n_extensions > 0)
+    {
+      supported_extensions = malloc ((n_extensions + 1) * sizeof (char *));
 
-  for (size_t i = 0; i < n_extensions; ++i)
-    supported_extensions[i] = strdup (extensions[i]);
-  supported_extensions[n_extensions] = NULL;
+      for (size_t i = 0; i < n_extensions; ++i)
+        supported_extensions[i] = strdup (extensions[i]);
+      supported_extensions[n_extensions] = NULL;
+    }
 
-  GDM_PAM_EXTENSION_ADVERTISE_SUPPORTED_EXTENSIONS (
-    pam_extension_environment_block, supported_extensions);
-}
-
-static inline void
-gdm_custom_json_request_init (GdmPamExtensionJSONProtocol *request,
-                              const char                  *proto_name,
-                              unsigned int                 proto_version,
-                              const char                  *json)
-{
-  GDM_PAM_EXTENSION_CUSTOM_JSON_REQUEST_INIT (request, proto_name,
-                                              proto_version, json);
+  gdm_pam_extension_advertise_supported_extensions (
+    pam_extension_environment_block, sizeof (pam_extension_environment_block),
+    (const char * const *) supported_extensions);
 }
 
 static inline void
 gdm_custom_json_request_init_authd (GdmPamExtensionJSONProtocol *request,
                                     const char                  *json)
 {
-  GDM_PAM_EXTENSION_CUSTOM_JSON_REQUEST_INIT (request, JSON_PROTO_NAME,
+  gdm_pam_extension_custom_json_request_init (request, JSON_PROTO_NAME,
                                               JSON_PROTO_VERSION, json);
 }
 
