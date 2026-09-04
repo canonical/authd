@@ -167,6 +167,13 @@ type MFAErrorCategory int
 // because IsMFAUserNotFound is used by untagged builds.
 const userNotFoundErrorCode = 50034
 
+// These errors mean that Entra could not complete the request because its
+// backend was temporarily unavailable or was throttling the tenant.
+const (
+	externalServerRetryableErrorCode = 90006
+	tenantThrottlingErrorCode        = 90055
+)
+
 const (
 	// MFAErrorOther is the default category and means the error has no
 	// specific routing semantics.
@@ -242,4 +249,15 @@ func (e *MFAError) IsMFAPasswordRequired() bool {
 // the Entra tenant.
 func (e *MFAError) IsMFAUserNotFound() bool {
 	return e.AADSTS == userNotFoundErrorCode
+}
+
+// IsMFATransient returns true when Entra reports a temporary service or
+// throttling failure while starting the MFA flow.
+//
+// Keep these checks based on AADSTS: the libhimmelblau revision supported by
+// authd reports every AADSTS error as MSAL_ERROR_CODE::AADSTS_ERROR while
+// preserving the actual code in MFAError.AADSTS.
+func (e *MFAError) IsMFATransient() bool {
+	return e.AADSTS == externalServerRetryableErrorCode ||
+		e.AADSTS == tenantThrottlingErrorCode
 }
