@@ -221,7 +221,7 @@ jobs:
       - name: Checkout YARF repo
         uses: actions/checkout@v7
         with:
-          repository: adombeck/yarf
+          repository: OrazioLucioTerranova/yarf
           path: ${{ env.E2E_TESTS_DIR }}/.yarf
 
       - name: Install APT dependencies for running the E2E tests
