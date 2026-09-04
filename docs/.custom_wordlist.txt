@@ -43,8 +43,11 @@ msentraid
 NFS
 nss
 OAuth
+offboard
+offboarding
 OIDC
 Okta
+onboarding
 OpenID
 ppa
 PR
