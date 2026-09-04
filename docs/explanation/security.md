@@ -153,12 +153,10 @@ To avoid this risk:
 
 * Do not remove the authd database.
 * Remove all files and directories owned by any users that you delete,
-  especially if they contain sensitive data.
-
-```{important}
-A tool for removing authd users along with their home directories will be
-provided in the future.
-```
+  especially if they contain sensitive data. The
+  [`authctl user delete`](../reference/cli/authctl_user_delete.md) command can
+  also remove the user's home directory with the `--remove` option, but files
+  outside the home directory must be handled separately.
 
 ## How authd is designed for security
 
