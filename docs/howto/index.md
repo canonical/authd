@@ -2,14 +2,15 @@
 myst:
   html_meta:
     "description lang=en":
-      "authd how-to guides covering installation, configuration, user login, network file systems, and contributing."
+      "authd how-to guides covering installation, configuration, user management, login, network file systems, and contributing."
 ---
 
 (howtos)=
 
 # How-to guides
 
-These guides walk you through key operations you can perform with authd.
+These guides walk you through common operations for installing, configuring,
+and administering authd, including managing users and groups.
 
 ## Installation and configuration
 
@@ -34,6 +35,19 @@ authd supporting both GDM and SSH:
 
 Logging in with GDM <login-gdm>
 Logging in with SSH <login-ssh>
+```
+
+## User management
+
+Manage authd users and login access:
+
+```{toctree}
+:titlesonly:
+
+Onboard an authd user <onboard-authd-user>
+Change or reset a local authd password <reset-authd-user-password>
+Lock an authd user <lock-authd-user>
+Offboard an authd user <offboard-authd-user>
 ```
 
 ## Network file systems
