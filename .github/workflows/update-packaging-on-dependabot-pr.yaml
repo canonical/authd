@@ -71,6 +71,7 @@ jobs:
       IS_CARGO_PR: ${{ startsWith(github.event.pull_request.head.ref, 'dependabot/cargo/') }}
 
     steps:
+      - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
       # The container image does not include git, which checkout needs.
       - name: Install git
         run: |
@@ -164,14 +165,20 @@ jobs:
 
   generate-copyright:
     name: Regenerate debian/copyright
+    # This job consumes the Cargo.lock and debian/control artifact from
+    # generate-cargo to recreate the Rust vendor tree consistently.
     needs: generate-cargo
     runs-on: ubuntu-latest
     container:
       image: ubuntu:devel
+    env:
+      # Keep licensecheck's output in the same UTF-8 locale as the host.
+      LC_ALL: C.UTF-8
     outputs:
       changed: ${{ steps.diff.outputs.changed }}
 
     steps:
+      - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
       # The container image does not include git, which checkout and setup-go
       # need.
       - name: Install git
@@ -218,7 +225,6 @@ jobs:
 
       - name: Install cargo and cargo-vendor-filterer
         run: |
-          apt-get update -y
           apt-get install -y --no-install-recommends \
             build-essential \
             cargo \
@@ -245,8 +251,11 @@ jobs:
       - name: Install licensecheck and python3-anytree
         run: |
           apt-get update -y
+          # RE2 speeds up licensecheck's regular-expression matching on the
+          # vendored trees.
           apt-get install -y --no-install-recommends \
             licensecheck \
+            libre-engine-re2-perl \
             python3-anytree
 
       - name: Regenerate debian/copyright
