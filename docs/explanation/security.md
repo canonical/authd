@@ -87,12 +87,14 @@ setting.
 #### SSH public key authentication
 
 If SSH public key authentication is enabled, users whose access has been revoked
-at the identity provider can still log in using their SSH keys. This is because
-SSH key authentication does not involve authd.
+at the identity provider or whose authd account has been locked can still log in
+using their SSH keys. This is because SSH key authentication does not involve
+authd.
 
-To prevent users with revoked access from logging in with SSH, disable public
-key authentication for users managed by authd, by adding the following to
-`/etc/ssh/sshd_config.d/authd.conf` or directly to `/etc/ssh/sshd_config`:
+To prevent users with revoked access or locked accounts from logging in with
+SSH, disable public key authentication for users managed by authd, by adding
+the following to `/etc/ssh/sshd_config.d/authd.conf` or directly to
+`/etc/ssh/sshd_config`:
 
 ```text
 Match User *@example.com
