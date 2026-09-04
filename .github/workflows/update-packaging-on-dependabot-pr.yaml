@@ -218,7 +218,6 @@ jobs:
 
       - name: Install cargo and cargo-vendor-filterer
         run: |
-          apt-get update -y
           apt-get install -y --no-install-recommends \
             build-essential \
             cargo \
