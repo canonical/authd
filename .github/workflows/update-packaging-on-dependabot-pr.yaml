@@ -71,6 +71,7 @@ jobs:
       IS_CARGO_PR: ${{ startsWith(github.event.pull_request.head.ref, 'dependabot/cargo/') }}
 
     steps:
+      - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
       # The container image does not include git, which checkout needs.
       - name: Install git
         run: |
@@ -174,6 +175,7 @@ jobs:
       changed: ${{ steps.diff.outputs.changed }}
 
     steps:
+      - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
       # The container image does not include git, which checkout and setup-go
       # need.
       - name: Install git
