@@ -8,6 +8,7 @@ users:
       dir: /home/userwithbroker@example.com
       shell: /bin/bash
       broker_id: MOCKBROKERID
+      full_username: userwithbroker@example.com
     - name: userwithinactivebroker@example.com
       uid: 2222
       gid: 22222
@@ -15,12 +16,22 @@ users:
       dir: /home/userwithinactivebroker@example.com
       shell: /bin/dash
       broker_id: inactive-broker-id
+      full_username: userwithinactivebroker@example.com
     - name: userwithoutbroker@example.com
       uid: 3333
       gid: 33333
       gecos: userwithoutbroker
       dir: /home/userwithoutbroker@example.com
       shell: /bin/zsh
+      full_username: userwithoutbroker@example.com
+    - name: shortuserwithbroker
+      uid: 4444
+      gid: 44444
+      gecos: shortuserwithbroker
+      dir: /home/shortuserwithbroker
+      shell: /bin/bash
+      broker_id: MOCKBROKERID
+      full_username: shortuserwithbroker@example.com
 groups:
     - name: group1
       gid: 11111
@@ -31,6 +42,9 @@ groups:
     - name: group3
       gid: 33333
       ugid: group3
+    - name: shortuserwithbroker
+      gid: 44444
+      ugid: shortuserwithbroker@example.com
     - name: commongroup
       gid: 99999
       ugid: commongroup
@@ -45,3 +59,5 @@ users_to_groups:
       gid: 33333
     - uid: 3333
       gid: 99999
+    - uid: 4444
+      gid: 44444

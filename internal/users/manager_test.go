@@ -31,17 +31,18 @@ import (
 
 func TestNewManager(t *testing.T) {
 	tests := map[string]struct {
-		dbFile          string
-		corruptedDbFile bool
-		uidMin          uint32
-		uidMax          uint32
-		gidMin          uint32
-		gidMax          uint32
+		dbFile            string
+		corruptedDbFile   bool
+		uidMin            uint32
+		uidMax            uint32
+		gidMin            uint32
+		gidMax            uint32
+		useShortUsernames bool
 
 		wantErr bool
 	}{
 		"Successfully_create_manager_with_default_config":                           {},
-		"Successfully_create_manager_with_custom_config":                            {uidMin: 10000, uidMax: 20000, gidMin: 10000, gidMax: 20000},
+		"Successfully_create_manager_with_custom_config":                            {uidMin: 10000, uidMax: 20000, gidMin: 10000, gidMax: 20000, useShortUsernames: true},
 		"Successfully_create_manager_with_UID_range_next_to_systemd_dynamic_users":  {uidMin: users.SystemdDynamicUIDMax + 1, uidMax: users.SystemdDynamicUIDMax + 10000},
 		"Successfully_create_manager_with_GID_range_next_to_systemd_dynamic_groups": {gidMin: users.SystemdDynamicUIDMin - 1000, gidMax: users.SystemdDynamicUIDMin - 1},
 
@@ -95,6 +96,7 @@ func TestNewManager(t *testing.T) {
 			if tc.gidMax != 0 {
 				config.GIDMax = tc.gidMax
 			}
+			config.UseShortUsernames = tc.useShortUsernames
 
 			m, err := users.NewManager(config, dbDir)
 			if tc.wantErr {
@@ -186,22 +188,28 @@ func TestUpdateUser(t *testing.T) {
 		userCase   string
 		groupsCase string
 
-		dbFile          string
-		localGroupsFile string
+		dbFile            string
+		localGroupsFile   string
+		useShortUsernames bool
 
 		wantErr     bool
 		noOutput    bool
 		wantSameUID bool
 	}{
-		"Successfully_update_user":                                          {groupsCase: "authd-group"},
-		"Successfully_update_user_updating_local_groups":                    {groupsCase: "mixed-groups-authd-first", localGroupsFile: "users_in_groups.group"},
-		"Successfully_update_user_updating_local_groups_with_changes":       {groupsCase: "mixed-groups-authd-first", localGroupsFile: "user_mismatching_groups.group"},
-		"UID_does_not_change_if_user_already_exists":                        {userCase: "same-name-different-uid", dbFile: "one_user_and_group", wantSameUID: true},
-		"GID_does_not_change_if_group_with_same_UGID_exists":                {groupsCase: "different-name-same-ugid", dbFile: "one_user_and_group"},
-		"GID_does_not_change_if_group_with_same_name_and_empty_UGID_exists": {groupsCase: "authd-group", dbFile: "group-with-empty-UGID"},
-		"Removing_last_user_from_a_group_keeps_the_group_record":            {groupsCase: "no-groups", dbFile: "one_user_and_group"},
-		"Allow_login_with_existing_group_on_system":                         {groupsCase: "group-exists-on-system"},
-		"User_private_group_GID_preserved_across_logins":                    {dbFile: "user_with_primary_group_gid_changed"},
+		"Successfully_update_user":                                    {groupsCase: "authd-group"},
+		"Successfully_update_user_updating_local_groups":              {groupsCase: "mixed-groups-authd-first", localGroupsFile: "users_in_groups.group"},
+		"Successfully_update_user_updating_local_groups_with_changes": {groupsCase: "mixed-groups-authd-first", localGroupsFile: "user_mismatching_groups.group"},
+		"Successfully_update_user_using_shortened_username":           {userCase: "user1", useShortUsernames: true, groupsCase: "authd-group"},
+		// Users stored before short usernames were enabled carry no provider ID, so they can only
+		// be identified by their fully qualified username. They must be renamed in place, keeping
+		// their UID, rather than be taken for a brand new user.
+		"Successfully_rename_existing_user_without_provider_ID_to_its_short_name": {userCase: "user1", useShortUsernames: true, dbFile: "one_user_and_group"},
+		"UID_does_not_change_if_user_already_exists":                              {userCase: "same-name-different-uid", dbFile: "one_user_and_group", wantSameUID: true},
+		"GID_does_not_change_if_group_with_same_UGID_exists":                      {groupsCase: "different-name-same-ugid", dbFile: "one_user_and_group"},
+		"GID_does_not_change_if_group_with_same_name_and_empty_UGID_exists":       {groupsCase: "authd-group", dbFile: "group-with-empty-UGID"},
+		"Removing_last_user_from_a_group_keeps_the_group_record":                  {groupsCase: "no-groups", dbFile: "one_user_and_group"},
+		"Allow_login_with_existing_group_on_system":                               {groupsCase: "group-exists-on-system"},
+		"User_private_group_GID_preserved_across_logins":                          {dbFile: "user_with_primary_group_gid_changed"},
 
 		"Error_if_user_has_no_username":                           {userCase: "nameless", wantErr: true, noOutput: true},
 		"Error_if_group_has_no_name":                              {groupsCase: "nameless-group", wantErr: true, noOutput: true},
@@ -252,7 +260,10 @@ func TestUpdateUser(t *testing.T) {
 					GIDsToGenerate: gids,
 				}),
 			}
-			m := newManagerForTests(t, dbDir, managerOpts...)
+
+			managerCfg := users.DefaultConfig
+			managerCfg.UseShortUsernames = tc.useShortUsernames
+			m := newManagerForTestsWithConfig(t, managerCfg, dbDir, managerOpts...)
 
 			var oldUID uint32
 			if tc.wantSameUID {
@@ -538,6 +549,1050 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 	})
 }
 
+func TestUserInfoStoredAs(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		name       string
+		dir        string
+		groups     []types.GroupInfo
+		storedName string
+
+		wantDir    string
+		wantGroups []types.GroupInfo
+	}{
+		"Rewrites_the_name_derived_fields": {
+			name: "user1@example.com", dir: "/home/user1@example.com", storedName: "user1",
+			groups:     []types.GroupInfo{{Name: "user1@example.com", UGID: "ugid1"}, {Name: "group1", UGID: "ugid2"}},
+			wantDir:    "/home/user1",
+			wantGroups: []types.GroupInfo{{Name: "user1", UGID: "ugid1"}, {Name: "group1", UGID: "ugid2"}},
+		},
+		"Replaces_only_the_last_home_directory_element": {
+			// The username names the home directory, but it may also appear in the path of the
+			// directory holding it, which is not ours to rewrite.
+			name: "user1@example.com", dir: "/srv/user1@example.com/homes/user1@example.com", storedName: "user1",
+			wantDir: "/srv/user1@example.com/homes/user1",
+		},
+		"Leaves_a_home_directory_not_named_after_the_user_alone": {
+			name: "user1@example.com", dir: "/home/shared", storedName: "user1",
+			wantDir: "/home/shared",
+		},
+		"Leaves_an_empty_home_directory_alone": {
+			name: "user1@example.com", storedName: "user1",
+			wantDir: "",
+		},
+		"Is_a_no_op_when_the_name_does_not_change": {
+			name: "user1@example.com", dir: "/home/user1@example.com", storedName: "user1@example.com",
+			groups:     []types.GroupInfo{{Name: "user1@example.com", UGID: "ugid1"}},
+			wantDir:    "/home/user1@example.com",
+			wantGroups: []types.GroupInfo{{Name: "user1@example.com", UGID: "ugid1"}},
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			reported := types.UserInfo{Name: tc.name, Dir: tc.dir, Groups: slices.Clone(tc.groups)}
+			got := users.UserInfoStoredAs(reported, tc.storedName)
+
+			require.Equal(t, tc.storedName, got.Name, "Unexpected stored name")
+			require.Equal(t, tc.wantDir, got.Dir, "Unexpected home directory")
+			require.Equal(t, tc.wantGroups, got.Groups, "Unexpected groups")
+
+			// The caller owns the information it handed over: the group slice shares its backing
+			// array with it, so rewriting a name in place would reach back into the caller.
+			require.Equal(t, tc.name, reported.Name, "The reported name must not have been rewritten")
+			require.Equal(t, tc.dir, reported.Dir, "The reported home directory must not have been rewritten")
+			require.Equal(t, tc.groups, reported.Groups, "The reported groups must not have been rewritten")
+		})
+	}
+}
+
+func TestUpdateUserShortUsernameErrors(t *testing.T) {
+	shortUsernamesConfig := users.DefaultConfig
+	shortUsernamesConfig.UseShortUsernames = true
+
+	newUser := func(name string, groups ...types.GroupInfo) types.UserInfo {
+		return types.UserInfo{
+			Name:       name,
+			Dir:        "/home/" + name,
+			Shell:      "/bin/bash",
+			BrokerID:   "broker-id",
+			ProviderID: "provider-id",
+			Groups:     groups,
+		}
+	}
+
+	t.Run("Error_when_resolving_the_existing_user_fails", func(t *testing.T) {
+		m := newManagerForTestsWithConfig(t, shortUsernamesConfig, t.TempDir())
+		require.NoError(t, m.Stop(), "Setup: could not close database")
+
+		err := m.UpdateUser(newUser("user@example.com"))
+		require.ErrorContains(t, err, "failed to look up user by provider ID")
+	})
+
+	t.Run("Error_when_checking_the_short_name_fails", func(t *testing.T) {
+		m := newManagerForTestsWithConfig(t, shortUsernamesConfig, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+
+		holder := db.NewUserRow("user", 1111, 1111, "", "/home/user", "/bin/bash",
+			"broker-id", "other-provider-id", "other@example.com")
+		require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(holder, nil, nil),
+			"Setup: could not add the short-name holder")
+		require.NoError(t, db.Z_ForTests_Exec(userstestutils.DBManager(m),
+			`UPDATE users SET gid = 'invalid' WHERE name = 'user'`),
+			"Setup: could not corrupt the short-name holder")
+
+		err := m.UpdateUser(newUser("user@example.com"))
+		require.ErrorContains(t, err, "query error")
+	})
+
+	t.Run("Error_when_loading_the_existing_user_fails", func(t *testing.T) {
+		m := newManagerForTests(t, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+
+		userRow := db.NewUserRow("user@example.com", 1111, 1111, "", "/home/user@example.com",
+			"/bin/bash", "broker-id", "provider-id", "user@example.com")
+		privateGroup := db.NewGroupRow("user@example.com", 1111, "user@example.com")
+		require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow,
+			[]db.GroupRow{privateGroup}, nil), "Setup: could not add existing user")
+		require.NoError(t, db.Z_ForTests_Exec(userstestutils.DBManager(m), "DROP TABLE users_to_groups"),
+			"Setup: could not remove the user-group relation table")
+
+		err := m.UpdateUser(newUser("user@example.com"))
+		require.ErrorContains(t, err, "users_to_groups")
+	})
+
+	t.Run("Error_when_an_identity_provider_group_conflicts", func(t *testing.T) {
+		dbDir := t.TempDir()
+		err := db.Z_ForTests_CreateDBFromYAML(
+			filepath.Join("testdata", "db", "one_user_and_group.db.yaml"), dbDir)
+		require.NoError(t, err, "Setup: could not create database from testdata")
+
+		m := newManagerForTests(t, dbDir,
+			users.WithIDGenerator(&users.IDGeneratorMock{UIDsToGenerate: []uint32{2222}}))
+		t.Cleanup(func() { _ = m.Stop() })
+
+		err = m.UpdateUser(newUser("user2@example.com",
+			types.GroupInfo{Name: "group1@example.com", UGID: "different-group"}))
+		require.ErrorContains(t, err, "different group with the same name")
+	})
+}
+
+func TestUserEntryStoredAsErrors(t *testing.T) {
+	shortUsernamesConfig := users.DefaultConfig
+	shortUsernamesConfig.UseShortUsernames = true
+
+	t.Run("Error_when_the_user_database_is_locked", func(t *testing.T) {
+		m := newManagerForTestsWithConfig(t, shortUsernamesConfig, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+
+		require.NoError(t, userslocking.WriteLock(), "Setup: could not lock the user database")
+		t.Cleanup(func() { _ = userslocking.WriteUnlock() })
+
+		_, err := m.UserEntryStoredAs(types.UserEntry{Name: "user@example.com"})
+		require.ErrorIs(t, err, userslocking.ErrLock)
+	})
+
+	t.Run("Error_when_checking_the_short_name_fails", func(t *testing.T) {
+		m := newManagerForTestsWithConfig(t, shortUsernamesConfig, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+
+		holder := db.NewUserRow("user", 1111, 1111, "", "/home/user", "/bin/bash",
+			"broker-id", "provider-id", "holder@example.com")
+		require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(holder, nil, nil),
+			"Setup: could not add the short-name holder")
+		require.NoError(t, db.Z_ForTests_Exec(userstestutils.DBManager(m),
+			`UPDATE users SET gid = 'invalid' WHERE name = 'user'`),
+			"Setup: could not corrupt the short-name holder")
+
+		_, err := m.UserEntryStoredAs(types.UserEntry{Name: "user@example.com"})
+		require.ErrorContains(t, err, "query error")
+	})
+}
+
+func TestShortUsernameLookupCompatibility(t *testing.T) {
+	t.Run("NamesForLogin_falls_back_to_a_legacy_stored_name", func(t *testing.T) {
+		m := newManagerForTests(t, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+
+		userRow := db.NewUserRow("legacy@example.com", 1111, 1111, "", "/home/legacy@example.com",
+			"/bin/bash", "broker-id", "", "")
+		require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow, nil, nil),
+			"Setup: could not add legacy user")
+
+		storedName, fullUsername, err := m.NamesForLogin("legacy@example.com")
+		require.NoError(t, err)
+		require.Equal(t, "legacy@example.com", storedName)
+		require.Equal(t, storedName, fullUsername)
+	})
+
+	t.Run("UserEntryStoredAs_keeps_a_name_held_by_a_legacy_user", func(t *testing.T) {
+		config := users.DefaultConfig
+		config.UseShortUsernames = true
+		m := newManagerForTestsWithConfig(t, config, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+
+		holder := db.NewUserRow("user", 1111, 1111, "", "/home/user", "/bin/bash",
+			"broker-id", "", "")
+		require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(holder, nil, nil),
+			"Setup: could not add legacy short-name holder")
+
+		got, err := m.UserEntryStoredAs(types.UserEntry{
+			Name: "user@example.com",
+			Dir:  "/home/user@example.com",
+		})
+		require.NoError(t, err)
+		require.Equal(t, "user@example.com", got.Name,
+			"a short name held by another user must not be reused")
+		require.Equal(t, "/home/user@example.com", got.Dir)
+	})
+}
+
+func TestIsAuthenticatedUserLockedLookupErrors(t *testing.T) {
+	t.Run("Error_when_the_full_username_lookup_fails", func(t *testing.T) {
+		m := newManagerForTests(t, t.TempDir())
+		require.NoError(t, m.Stop(), "Setup: could not close database")
+
+		_, err := m.IsAuthenticatedUserLocked("user@example.com", "", "")
+		require.ErrorContains(t, err, "failed to look up user by full username")
+	})
+
+	t.Run("Error_when_the_legacy_stored_name_lookup_fails", func(t *testing.T) {
+		m := newManagerForTests(t, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+
+		userRow := db.NewUserRow("legacy@example.com", 1111, 1111, "", "/home/legacy@example.com",
+			"/bin/bash", "broker-id", "", "alias@example.com")
+		require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow, nil, nil),
+			"Setup: could not add legacy user")
+		require.NoError(t, db.Z_ForTests_Exec(userstestutils.DBManager(m),
+			`UPDATE users SET gid = 'invalid' WHERE name = 'legacy@example.com'`),
+			"Setup: could not corrupt legacy user")
+
+		_, err := m.IsAuthenticatedUserLocked("legacy@example.com", "", "")
+		require.ErrorContains(t, err, "failed to look up user by stored name")
+	})
+}
+
+func TestStoredGroupNameFallbacks(t *testing.T) {
+	t.Run("Keep_the_requested_name_when_the_private_group_is_missing", func(t *testing.T) {
+		m := newManagerForTests(t, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+
+		userRow := db.NewUserRow("user", 1111, 1111, "", "/home/user", "/bin/bash",
+			"broker-id", "provider-id", "user@example.com")
+		require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow, nil, nil),
+			"Setup: could not add user without a private group")
+
+		got, err := m.StoredGroupName("user@example.com")
+		require.NoError(t, err)
+		require.Equal(t, "user@example.com", got,
+			"a missing private group should leave the requested name unchanged")
+	})
+
+	t.Run("Error_when_the_private_group_owner_lookup_fails", func(t *testing.T) {
+		m := newManagerForTests(t, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+
+		userRow := db.NewUserRow("user", 1111, 1111, "", "/home/user", "/bin/bash",
+			"broker-id", "provider-id", "user@example.com")
+		require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow, nil, nil),
+			"Setup: could not add user without a private group")
+		require.NoError(t, db.Z_ForTests_Exec(userstestutils.DBManager(m),
+			`UPDATE users SET gid = 'invalid' WHERE name = 'user'`),
+			"Setup: could not corrupt private group owner")
+
+		_, err := m.StoredGroupName("user@example.com")
+		require.ErrorContains(t, err, "query error")
+	})
+
+	t.Run("Error_when_the_private_group_lookup_fails", func(t *testing.T) {
+		m := newManagerForTests(t, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+
+		userRow := db.NewUserRow("user", 1111, 1111, "", "/home/user", "/bin/bash",
+			"broker-id", "provider-id", "user@example.com")
+		require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow, nil, nil),
+			"Setup: could not add user without a private group")
+		require.NoError(t, db.Z_ForTests_Exec(userstestutils.DBManager(m), "PRAGMA foreign_keys = OFF"),
+			"Setup: could not disable foreign keys")
+		require.NoError(t, db.Z_ForTests_Exec(userstestutils.DBManager(m), "DROP TABLE groups"),
+			"Setup: could not replace groups table")
+		require.NoError(t, db.Z_ForTests_Exec(userstestutils.DBManager(m),
+			"CREATE TABLE groups (name TEXT, gid INT PRIMARY KEY, ugid TEXT)"),
+			"Setup: could not create malformed groups table")
+		require.NoError(t, db.Z_ForTests_Exec(userstestutils.DBManager(m),
+			"INSERT INTO groups (name, gid, ugid) VALUES (NULL, 1111, 'user@example.com')"),
+			"Setup: could not add malformed private group")
+
+		_, err := m.StoredGroupName("user@example.com")
+		require.ErrorContains(t, err, "query error")
+	})
+}
+
+func TestShortUsernameAllowed(t *testing.T) {
+	t.Parallel()
+
+	defaultMgr := newManagerForTests(t, t.TempDir())
+	t.Cleanup(func() { _ = defaultMgr.Stop() })
+	require.False(t, defaultMgr.ShortUsernameAllowed())
+
+	cfg := users.DefaultConfig
+	cfg.UseShortUsernames = true
+	shortMgr := newManagerForTestsWithConfig(t, cfg, t.TempDir())
+	t.Cleanup(func() { _ = shortMgr.Stop() })
+	require.True(t, shortMgr.ShortUsernameAllowed())
+}
+
+func TestBrokerAndProviderIDForUser(t *testing.T) {
+	t.Parallel()
+
+	m := newManagerForTests(t, t.TempDir())
+	t.Cleanup(func() { _ = m.Stop() })
+
+	userRow := db.NewUserRow("user1@example.com", 1111, 1111, "", "/home/user1", "/bin/bash", "broker-id", "provider-123", "user1@example.com")
+	require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow, nil, nil))
+
+	brokerID, providerID, err := m.BrokerAndProviderIDForUser("user1@example.com")
+	require.NoError(t, err)
+	require.Equal(t, "broker-id", brokerID)
+	require.Equal(t, "provider-123", providerID)
+
+	_, _, err = m.BrokerAndProviderIDForUser("nonexistent@example.com")
+	require.ErrorIs(t, err, db.NoDataFoundError{})
+}
+
+func TestPrepareUserAliases(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Validation_errors", func(t *testing.T) {
+		t.Parallel()
+		m := newManagerForTests(t, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+
+		_, err := m.PrepareUserAliases("lease1", types.UserInfo{Name: ""})
+		require.ErrorContains(t, err, "empty username")
+
+		_, err = m.PrepareUserAliases("lease1", types.UserInfo{
+			Name:       "user@example.com",
+			ProviderID: "prov-id",
+			BrokerID:   "",
+		})
+		require.ErrorContains(t, err, "not scoped by a broker ID")
+	})
+
+	t.Run("Unknown_user_returns_no_aliases", func(t *testing.T) {
+		t.Parallel()
+		m := newManagerForTests(t, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+
+		aliases, err := m.PrepareUserAliases("lease1", types.UserInfo{Name: "unknown@example.com"})
+		require.NoError(t, err)
+		require.Nil(t, aliases)
+	})
+
+	t.Run("User_alias_prepared_when_short_usernames_enabled", func(t *testing.T) {
+		t.Parallel()
+		cfg := users.DefaultConfig
+		cfg.UseShortUsernames = true
+		m := newManagerForTestsWithConfig(t, cfg, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+
+		userRow := db.NewUserRow("user@example.com", 1111, 1111, "", "/home/user@example.com", "/bin/bash", "broker-id", "prov-id", "user@example.com")
+		require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow, nil, nil))
+
+		aliases, err := m.PrepareUserAliases("lease1", types.UserInfo{
+			Name:       "user@example.com",
+			BrokerID:   "broker-id",
+			ProviderID: "prov-id",
+		})
+		require.NoError(t, err)
+		require.Equal(t, []string{"user@example.com"}, aliases)
+		require.True(t, m.HasUserAlias("lease1"))
+
+		retained, err := m.RetainUserAlias("lease2", "user@example.com")
+		require.NoError(t, err)
+		require.True(t, retained)
+
+		require.True(t, m.ReleaseUserAlias("lease1"))
+		m.CancelUserAlias("lease1")
+	})
+
+	t.Run("Error_when_manager_is_stopped", func(t *testing.T) {
+		t.Parallel()
+		m := newManagerForTests(t, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+		userRow := db.NewUserRow("user", 1111, 1111, "", "/home/user", "/bin/bash", "broker-id", "prov-id", "user@example.com")
+		require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow, nil, nil))
+		m.Z_ForTests_StopTemporaryAliases()
+
+		_, err := m.PrepareUserAliases("lease1", types.UserInfo{
+			Name:       "user@example.com",
+			BrokerID:   "broker-id",
+			ProviderID: "prov-id",
+		})
+		require.ErrorContains(t, err, "temporary user aliases have stopped")
+	})
+}
+
+func TestUserEntryStoredAsSuccess(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Unchanged_when_short_usernames_disabled", func(t *testing.T) {
+		t.Parallel()
+		m := newManagerForTests(t, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+
+		entry := types.UserEntry{
+			Name: "user@example.com",
+			Dir:  "/home/user@example.com",
+		}
+		got, err := m.UserEntryStoredAs(entry)
+		require.NoError(t, err)
+		require.Equal(t, entry, got)
+	})
+
+	t.Run("Renamed_when_short_usernames_enabled", func(t *testing.T) {
+		t.Parallel()
+		cfg := users.DefaultConfig
+		cfg.UseShortUsernames = true
+		m := newManagerForTestsWithConfig(t, cfg, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+
+		entry := types.UserEntry{
+			Name: "user@example.com",
+			Dir:  "/home/user@example.com",
+		}
+		got, err := m.UserEntryStoredAs(entry)
+		require.NoError(t, err)
+		require.Equal(t, "user", got.Name)
+		require.Equal(t, "/home/user", got.Dir)
+	})
+}
+
+func TestNamesForLoginAndRetainAlias(t *testing.T) {
+	t.Parallel()
+
+	cfg := users.DefaultConfig
+	cfg.UseShortUsernames = true
+	m := newManagerForTestsWithConfig(t, cfg, t.TempDir())
+	t.Cleanup(func() { _ = m.Stop() })
+
+	userRow := db.NewUserRow("user", 1111, 1111, "", "/home/user", "/bin/bash", "broker-id", "prov-id", "user@example.com")
+	require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow, nil, nil))
+
+	// By short name
+	stored, full, retained, err := m.NamesForLoginAndRetainAlias("user", "lease1")
+	require.NoError(t, err)
+	require.Equal(t, "user", stored)
+	require.Equal(t, "user@example.com", full)
+	require.False(t, retained)
+
+	// By full username
+	stored, full, retained, err = m.NamesForLoginAndRetainAlias("user@example.com", "lease2")
+	require.NoError(t, err)
+	require.Equal(t, "user", stored)
+	require.Equal(t, "user@example.com", full)
+	require.False(t, retained)
+
+	// By temporary alias
+	require.NoError(t, m.Z_ForTests_AddTemporaryAlias("lease3", "tempalias", 1111, "broker-id", "prov-id", "user@example.com"))
+
+	stored, full, retained, err = m.NamesForLoginAndRetainAlias("tempalias", "lease4")
+	require.NoError(t, err)
+	require.Equal(t, "user", stored)
+	require.Equal(t, "user@example.com", full)
+	require.True(t, retained)
+
+	// By temporary alias with empty leaseID (via NamesForLogin)
+	stored, full, err = m.NamesForLogin("tempalias")
+	require.NoError(t, err)
+	require.Equal(t, "user", stored)
+	require.Equal(t, "user@example.com", full)
+
+	// Non-existent
+	_, _, _, err = m.NamesForLoginAndRetainAlias("nonexistent@example.com", "lease5")
+	require.ErrorIs(t, err, db.NoDataFoundError{})
+
+	// Temporary alias pointing to a deleted user
+	require.NoError(t, m.Z_ForTests_AddTemporaryAlias("lease6", "orphanalias", 9999, "broker-id", "prov-id", "orphan@example.com"))
+	_, _, retained, err = m.NamesForLoginAndRetainAlias("orphanalias", "lease7")
+	require.ErrorIs(t, err, db.NoDataFoundError{})
+	require.False(t, retained)
+
+	// User with empty FullUsername in DB
+	userNoFull := db.NewUserRow("nofull", 2222, 2222, "", "/home/nofull", "/bin/bash", "broker-id", "prov-2", "")
+	require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userNoFull, nil, nil))
+	stored, full, err = m.NamesForLogin("nofull")
+	require.NoError(t, err)
+	require.Equal(t, "nofull", stored)
+	require.Equal(t, "nofull", full)
+}
+
+func TestUserByTemporaryAliasEdgeCases(t *testing.T) {
+	t.Parallel()
+
+	m := newManagerForTests(t, t.TempDir())
+	t.Cleanup(func() { _ = m.Stop() })
+
+	userRow := db.NewUserRow("currentname", 1111, 1111, "", "/home/currentname", "/bin/bash", "broker-id", "prov-id-1", "user@example.com")
+	require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow, nil, nil))
+
+	// Alias matches current name but provider ID differs
+	require.NoError(t, m.Z_ForTests_AddTemporaryAlias("lease1", "currentname", 1111, "broker-id", "mismatched-prov-id", "user@example.com"))
+	stored, full, err := m.NamesForLogin("currentname")
+	require.NoError(t, err)
+	require.Equal(t, "currentname", stored)
+	require.Equal(t, "user@example.com", full)
+
+	// Alias matches UID but user in DB has different identity
+	require.NoError(t, m.Z_ForTests_AddTemporaryAlias("lease2", "differentname", 1111, "broker-id", "mismatched-prov-id", "other@example.com"))
+	_, _, _, err = m.NamesForLoginAndRetainAlias("differentname", "lease3")
+	require.ErrorIs(t, err, db.NoDataFoundError{})
+}
+
+func TestStoredGroupNameWithTemporaryAlias(t *testing.T) {
+	t.Parallel()
+
+	m := newManagerForTests(t, t.TempDir())
+	t.Cleanup(func() { _ = m.Stop() })
+
+	userRow := db.NewUserRow("user", 1111, 2222, "", "/home/user", "/bin/bash", "broker-id", "prov-id", "user@example.com")
+	groupRow := db.NewGroupRow("user-pg", 2222, "user@example.com")
+	require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow, []db.GroupRow{groupRow}, nil))
+
+	// Direct group match
+	got, err := m.StoredGroupName("user-pg")
+	require.NoError(t, err)
+	require.Equal(t, "user-pg", got)
+
+	// By full username
+	got, err = m.StoredGroupName("user@example.com")
+	require.NoError(t, err)
+	require.Equal(t, "user-pg", got)
+
+	// By temporary alias
+	require.NoError(t, m.Z_ForTests_AddTemporaryAlias("lease1", "aliasuser", 1111, "broker-id", "prov-id", "user@example.com"))
+	got, err = m.StoredGroupName("aliasuser")
+	require.NoError(t, err)
+	require.Equal(t, "user-pg", got)
+
+	// Non-existent
+	got, err = m.StoredGroupName("nonexistentgroup")
+	require.NoError(t, err)
+	require.Equal(t, "nonexistentgroup", got)
+}
+
+func TestTemporaryAliasInGroupMembership(t *testing.T) {
+	t.Parallel()
+
+	m := newManagerForTests(t, t.TempDir())
+	t.Cleanup(func() { _ = m.Stop() })
+
+	userRow := db.NewUserRow("user1", 1111, 2222, "", "/home/user1", "/bin/bash", "broker-id", "prov-id", "user1@example.com")
+	groupRow := db.NewGroupRow("sharedgroup", 2222, "sharedgroup-ugid")
+	require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow, []db.GroupRow{groupRow}, []string{"user1"}))
+
+	require.NoError(t, m.Z_ForTests_AddTemporaryAlias("lease1", "user1-alias", 1111, "broker-id", "prov-id", "user1@example.com"))
+
+	grpByName, err := m.GroupByName("sharedgroup")
+	require.NoError(t, err)
+	require.Contains(t, grpByName.Users, "user1")
+	require.Contains(t, grpByName.Users, "user1-alias")
+
+	grpByID, err := m.GroupByID(2222)
+	require.NoError(t, err)
+	require.Contains(t, grpByID.Users, "user1")
+	require.Contains(t, grpByID.Users, "user1-alias")
+
+	allGroups, err := m.AllGroups()
+	require.NoError(t, err)
+	var found *types.GroupEntry
+	for _, g := range allGroups {
+		if g.Name == "sharedgroup" {
+			found = &g
+			break
+		}
+	}
+	require.NotNil(t, found)
+	require.Contains(t, found.Users, "user1")
+	require.Contains(t, found.Users, "user1-alias")
+
+	usedGIDs, err := m.UsedGIDs()
+	require.NoError(t, err)
+	require.Contains(t, usedGIDs, uint32(2222))
+}
+
+func TestCleanupTemporaryAlias(t *testing.T) {
+	t.Run("Reconcile_cleanups_and_remove_from_local_groups", func(t *testing.T) {
+		m := newManagerForTests(t, t.TempDir())
+		t.Cleanup(func() { _ = m.Stop() })
+
+		// Non-existent alias cleanup is a no-op
+		require.NoError(t, m.Z_ForTests_CleanupTemporaryAlias("nonexistent"))
+
+		// User that stayed at old name (cleanup removed without group changes)
+		userRow := db.NewUserRow("olduser", 1111, 1111, "", "/home/olduser", "/bin/bash", "broker", "prov", "olduser@example.com")
+		require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow, nil, nil))
+
+		cleanupRecord := users.TemporaryAliasCleanupForTests{
+			Name:            "olduser",
+			UID:             1111,
+			NewName:         "newuser",
+			OldBrokerID:     "broker",
+			OldProviderID:   "prov",
+			OldFullUsername: "olduser@example.com",
+			NewBrokerID:     "broker",
+			NewProviderID:   "prov",
+			NewFullUsername: "olduser@example.com",
+		}
+		require.NoError(t, m.Z_ForTests_AddJournalCleanup(cleanupRecord))
+		require.NoError(t, m.Z_ForTests_CleanupTemporaryAlias("olduser"))
+
+		// User renamed to newname: reconcile cleans up local groups
+		userRow2 := db.NewUserRow("newuser", 1111, 1111, "", "/home/newuser", "/bin/bash", "broker", "prov", "olduser@example.com")
+		require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow2, nil, nil))
+
+		cleanupRecord2 := users.TemporaryAliasCleanupForTests{
+			Name:            "olduser",
+			UID:             1111,
+			NewName:         "newuser",
+			OldBrokerID:     "broker",
+			OldProviderID:   "prov",
+			OldFullUsername: "olduser@example.com",
+			NewBrokerID:     "broker",
+			NewProviderID:   "prov",
+			NewFullUsername: "olduser@example.com",
+		}
+		require.NoError(t, m.Z_ForTests_AddJournalCleanup(cleanupRecord2))
+		require.NoError(t, m.Z_ForTests_ReconcileTemporaryAliasCleanups())
+
+		// Remove temporary alias from local groups
+		require.True(t, m.Z_ForTests_RemoveTemporaryAliasFromLocalGroups("olduser"))
+	})
+}
+
+func TestUserByFullUsername(t *testing.T) {
+	t.Parallel()
+
+	m := newManagerForTests(t, t.TempDir())
+	t.Cleanup(func() { _ = m.Stop() })
+
+	userRow := db.NewUserRow("user", 1111, 1111, "", "/home/user", "/bin/bash", "broker", "prov", "user@example.com")
+	require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow, nil, nil))
+
+	entry, err := m.UserByFullUsername("user@example.com")
+	require.NoError(t, err)
+	require.Equal(t, "user", entry.Name)
+	require.Equal(t, uint32(1111), entry.UID)
+
+	_, err = m.UserByFullUsername("nonexistent@example.com")
+	require.ErrorIs(t, err, db.NoDataFoundError{})
+}
+
+func TestRenameHomeDir(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "", users.Z_ForTests_RenameHomeDir("", "old", "new"))
+	require.Equal(t, "/home/other", users.Z_ForTests_RenameHomeDir("/home/other", "old", "new"))
+	require.Equal(t, "/home/new", users.Z_ForTests_RenameHomeDir("/home/old", "old", "new"))
+	require.Equal(t, "/custom/path/new", users.Z_ForTests_RenameHomeDir("/custom/path/old", "old", "new"))
+}
+
+func TestUpdateUserShortUsernames(t *testing.T) {
+	// This test and its subtests are intentionally not parallel: they mutate the process-global
+	// localentries options through the user manager, as TestUpdateUserProviderIDHandling does.
+
+	newUser := func(name, providerID string, groups ...types.GroupInfo) types.UserInfo {
+		return types.UserInfo{
+			Name:       name,
+			Gecos:      "gecos for " + name,
+			Dir:        "/home/" + name,
+			Shell:      "/bin/bash",
+			BrokerID:   "broker-id",
+			ProviderID: providerID,
+			Groups:     groups,
+		}
+	}
+
+	shortUsernamesConfig := users.DefaultConfig
+	shortUsernamesConfig.UseShortUsernames = true
+
+	systemCollisionCases := map[string]struct {
+		existingUser bool
+		systemUsers  []types.UserEntry
+		systemGroups []types.GroupEntry
+	}{
+		"Keep_the_fully_qualified_name_when_a_system_user_has_the_short_name": {
+			systemUsers: []types.UserEntry{{Name: "authd-name-collision"}},
+		},
+		"Keep_an_existing_fully_qualified_name_when_a_system_group_has_the_short_name": {
+			existingUser: true,
+			systemGroups: []types.GroupEntry{{Name: "authd-name-collision"}},
+		},
+	}
+	for name, tc := range systemCollisionCases {
+		t.Run(name, func(t *testing.T) {
+			const (
+				shortName    = "authd-name-collision"
+				fullUsername = shortName + "@example.com"
+				uid          = 1111
+			)
+
+			dbDir := t.TempDir()
+			managerOpts := []users.Option{
+				users.WithIDGenerator(&users.IDGeneratorMock{UIDsToGenerate: []uint32{uid}}),
+			}
+			m := newManagerForTestsWithConfig(t, shortUsernamesConfig, dbDir, managerOpts...)
+
+			if tc.existingUser {
+				userRow := db.NewUserRow(fullUsername, uid, uid, "gecos for "+fullUsername,
+					"/home/"+fullUsername, "/bin/bash", "broker-id", "providerid-user", fullUsername)
+				privateGroup := db.NewGroupRow(fullUsername, uid, fullUsername)
+				require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow,
+					[]db.GroupRow{privateGroup}, nil), "Setup: could not create existing user")
+			}
+
+			t.Cleanup(localentries.Z_ForTests_RestoreDefaultOptions)
+			localentries.Z_ForTests_SetUserDBEntries(tc.systemUsers, tc.systemGroups)
+
+			preAuthEntry, err := m.UserEntryStoredAs(types.UserEntry{
+				Name: fullUsername,
+				Dir:  "/home/" + fullUsername,
+			})
+			require.NoError(t, err, "the pre-authentication entry should resolve")
+			require.Equal(t, fullUsername, preAuthEntry.Name,
+				"the pre-authentication entry should keep the fully qualified name")
+			require.Equal(t, "/home/"+fullUsername, preAuthEntry.Dir,
+				"the pre-authentication home should keep the fully qualified name")
+
+			// Unlocking clears the cached system entries, as it does in production. Restore the
+			// collision for the separate lock held during the database update.
+			localentries.Z_ForTests_SetUserDBEntries(tc.systemUsers, tc.systemGroups)
+
+			if tc.existingUser {
+				aliases, err := m.PrepareUserAliases("lease", newUser(fullUsername, "providerid-user"))
+				require.NoError(t, err)
+				require.Equal(t, []string{fullUsername}, aliases)
+			}
+			require.NoError(t, m.UpdateUser(newUser(fullUsername, "providerid-user")),
+				"the system name collision must not prevent authentication")
+			if tc.existingUser {
+				require.False(t, m.HasUserAlias("lease"),
+					"a name that stays canonical must not remain registered as an alias")
+			}
+
+			got, err := userstestutils.DBManager(m).UserByName(fullUsername)
+			require.NoError(t, err, "the user should keep their fully qualified name")
+			require.Equal(t, uint32(uid), got.UID, "the user should keep their UID")
+
+			_, err = userstestutils.DBManager(m).UserByName(shortName)
+			require.Error(t, err, "the colliding short name must not be stored")
+
+			groups, err := m.AllGroups()
+			require.NoError(t, err, "AllGroups should not return an error")
+			require.Len(t, groups, 1, "only the user private group should exist")
+			require.Equal(t, fullUsername, groups[0].Name,
+				"the private group should keep the fully qualified name")
+		})
+	}
+
+	t.Run("Store_new_user_under_its_short_name", func(t *testing.T) {
+		m := newManagerForTestsWithConfig(t, shortUsernamesConfig, t.TempDir(),
+			users.WithIDGenerator(&users.IDGeneratorMock{UIDsToGenerate: []uint32{1111}}))
+
+		require.NoError(t, m.UpdateUser(newUser("user1@example.com", "providerid-user1")),
+			"UpdateUser should not return an error, but did")
+
+		got, err := userstestutils.DBManager(m).UserByName("user1")
+		require.NoError(t, err, "the user should be stored under its short name")
+		require.Equal(t, "user1@example.com", got.FullUsername, "the full username must be persisted")
+		require.Equal(t, "/home/user1", got.Dir, "the home directory must follow the short name")
+
+		_, err = m.UserByName("user1@example.com")
+		require.Error(t, err, "the user must not be reachable through its full username")
+	})
+
+	t.Run("Store_username_verbatim_when_the_feature_is_disabled", func(t *testing.T) {
+		m := newManagerForTestsWithConfig(t, users.DefaultConfig, t.TempDir(),
+			users.WithIDGenerator(&users.IDGeneratorMock{UIDsToGenerate: []uint32{1111}}))
+
+		require.NoError(t, m.UpdateUser(newUser("user1@example.com", "providerid-user1")),
+			"UpdateUser should not return an error, but did")
+
+		got, err := userstestutils.DBManager(m).UserByName("user1@example.com")
+		require.NoError(t, err, "the user should be stored under the name reported by the broker")
+		require.Equal(t, "user1@example.com", got.FullUsername,
+			"the full username must match the stored name when the feature is disabled")
+		require.Equal(t, "/home/user1@example.com", got.Dir, "the home directory must not be rewritten")
+	})
+
+	// Enabling the feature on an existing installation must migrate the user in place: the row is
+	// renamed instead of duplicated, and both the UID and the private group GID are preserved so
+	// that the home directory stays accessible. The identity is confirmed by the provider ID when
+	// there is one, and by the fully qualified username otherwise, which is the only proof
+	// available for users created before the brokers reported a provider ID.
+	renameCases := map[string]struct {
+		dbFile     string
+		providerID string
+	}{
+		"Rename_existing_user_when_the_feature_is_enabled": {
+			dbFile: "one_user_with_private_group_and_providerid.db.yaml", providerID: "providerid-user1",
+		},
+		"Rename_existing_user_without_a_provider_ID": {
+			dbFile: "one_user_with_private_group_no_providerid.db.yaml",
+		},
+	}
+	for name, tc := range renameCases {
+		t.Run(name, func(t *testing.T) {
+			dbDir := t.TempDir()
+			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile), dbDir)
+			require.NoError(t, err, "Setup: could not create database from testdata")
+
+			m := newManagerForTestsWithConfig(t, shortUsernamesConfig, dbDir)
+
+			require.NoError(t, m.UpdateUser(newUser("user1@example.com", tc.providerID)),
+				"UpdateUser should not return an error, but did")
+
+			got, err := userstestutils.DBManager(m).UserByName("user1")
+			require.NoError(t, err, "the user should have been renamed to its short name")
+			require.Equal(t, uint32(1111), got.UID, "the UID must be preserved across the rename")
+			require.Equal(t, uint32(1111), got.GID, "the private group GID must be preserved across the rename")
+			require.Equal(t, "user1@example.com", got.FullUsername, "the full username must be persisted")
+			require.Equal(t, "/home/user1@example.com", got.Dir,
+				"the existing home directory must be kept, so that the user does not lose their data")
+
+			_, err = userstestutils.DBManager(m).UserByName("user1@example.com")
+			require.Error(t, err, "the old row must not be left behind")
+
+			// The private group is identified by the fully qualified username, so it is renamed in
+			// place rather than replaced by a new group with a freshly generated GID.
+			groups, err := m.AllGroups()
+			require.NoError(t, err, "AllGroups should not return an error, but did")
+			require.Len(t, groups, 1, "no extra group should have been created")
+			require.Equal(t, "user1", groups[0].Name, "the private group must follow the user name")
+			require.Equal(t, uint32(1111), groups[0].GID, "the private group must keep its GID")
+		})
+	}
+
+	t.Run("Keep_the_fully_qualified_name_when_the_short_one_is_taken", func(t *testing.T) {
+		// Two fully qualified usernames can shorten to the same name. Both users must stay able to
+		// log in: the first to claim the short name keeps it, and the other is stored under their
+		// fully qualified name. Refusing the second one instead would deny them an account for as
+		// long as the first one exists, and which of the two lost would come down to who happened
+		// to log in first.
+		dbDir := t.TempDir()
+		m := newManagerForTestsWithConfig(t, shortUsernamesConfig, dbDir,
+			users.WithIDGenerator(&users.IDGeneratorMock{UIDsToGenerate: []uint32{1111, 2222}}))
+
+		require.NoError(t, m.UpdateUser(newUser("user1@example.com", "providerid-user1")),
+			"Setup: UpdateUser should not return an error, but did")
+
+		require.NoError(t, m.UpdateUser(newUser("user1@other.com", "providerid-other-user1")),
+			"the second user must be created rather than refused")
+
+		got, err := userstestutils.DBManager(m).UserByName("user1")
+		require.NoError(t, err, "the first user must keep the short name")
+		require.Equal(t, "user1@example.com", got.FullUsername, "the first user must keep the short name")
+		require.Equal(t, uint32(1111), got.UID, "the first user must keep their UID")
+
+		other, err := userstestutils.DBManager(m).UserByName("user1@other.com")
+		require.NoError(t, err, "the second user must be stored under their fully qualified name")
+		require.Equal(t, "user1@other.com", other.FullUsername, "the second user must keep their own identity")
+		require.Equal(t, uint32(2222), other.UID, "the two users must be separate accounts")
+	})
+
+	t.Run("Keep_the_fully_qualified_name_of_a_pre_existing_user", func(t *testing.T) {
+		// The same collision seen from the other side: a user authd already knows must never be
+		// locked out because somebody else claimed their short name in the meantime.
+		dbDir := t.TempDir()
+		err := db.Z_ForTests_CreateDBFromYAML(
+			filepath.Join("testdata", "db", "one_user_with_private_group_no_providerid.db.yaml"), dbDir)
+		require.NoError(t, err, "Setup: could not create database from testdata")
+
+		m := newManagerForTestsWithConfig(t, shortUsernamesConfig, dbDir,
+			users.WithIDGenerator(&users.IDGeneratorMock{UIDsToGenerate: []uint32{2222}}))
+
+		require.NoError(t, m.UpdateUser(newUser("user1@other.com", "providerid-other-user1")),
+			"Setup: UpdateUser should not return an error, but did")
+
+		require.NoError(t, m.UpdateUser(newUser("user1@example.com", "providerid-user1")),
+			"the pre-existing user must still be able to authenticate")
+
+		got, err := userstestutils.DBManager(m).UserByName("user1@example.com")
+		require.NoError(t, err, "the pre-existing user must keep their fully qualified name")
+		require.Equal(t, uint32(1111), got.UID, "the pre-existing user must keep their UID")
+	})
+
+	t.Run("Accept_a_domain_change_of_the_same_user", func(t *testing.T) {
+		// A user whose domain changes at the IdP keeps their short name, so the name they are
+		// stored under looks taken by somebody else. The provider ID says otherwise, and the row
+		// must be updated in place rather than rejected as a collision.
+		dbDir := t.TempDir()
+		m := newManagerForTestsWithConfig(t, shortUsernamesConfig, dbDir,
+			users.WithIDGenerator(&users.IDGeneratorMock{UIDsToGenerate: []uint32{1111}}))
+
+		require.NoError(t, m.UpdateUser(newUser("user1@example.com", "providerid-user1")),
+			"Setup: UpdateUser should not return an error, but did")
+
+		require.NoError(t, m.UpdateUser(newUser("user1@other.com", "providerid-user1")),
+			"UpdateUser should not return an error, but did")
+
+		got, err := userstestutils.DBManager(m).UserByName("user1")
+		require.NoError(t, err, "the user should still be stored under its short name")
+		require.Equal(t, uint32(1111), got.UID, "the UID must be preserved across the domain change")
+		require.Equal(t, uint32(1111), got.GID, "the private group GID must be preserved across the domain change")
+		require.Equal(t, "user1@other.com", got.FullUsername, "the new full username must be persisted")
+
+		_, err = m.UserByFullUsername("user1@example.com")
+		require.Error(t, err, "the previous full username must no longer resolve")
+
+		byNewFullUsername, err := m.UserByFullUsername("user1@other.com")
+		require.NoError(t, err, "the user must be reachable through its new full username")
+		require.Equal(t, "user1", byNewFullUsername.Name, "the entry must stay named after the short name")
+
+		groups, err := m.AllGroups()
+		require.NoError(t, err, "AllGroups should not return an error, but did")
+		require.Len(t, groups, 1, "no extra group should have been created")
+		require.Equal(t, "user1", groups[0].Name, "the private group must keep the user name")
+		require.Equal(t, uint32(1111), groups[0].GID, "the private group must keep its GID")
+	})
+
+	t.Run("Keep_the_previous_full_username_during_a_domain_change", func(t *testing.T) {
+		m := newManagerForTestsWithConfig(t, shortUsernamesConfig, t.TempDir(),
+			users.WithIDGenerator(&users.IDGeneratorMock{UIDsToGenerate: []uint32{1111}}))
+		require.NoError(t, m.UpdateUser(newUser("user1@example.com", "providerid-user1")))
+
+		renamedUser := newUser("user1@other.com", "providerid-user1")
+		aliases, err := m.PrepareUserAliases("lease", renamedUser)
+		require.NoError(t, err)
+		require.Equal(t, []string{"user1@example.com"}, aliases)
+		require.NoError(t, m.UpdateUser(renamedUser))
+
+		previous, err := m.UserByName("user1@example.com")
+		require.NoError(t, err, "the previous full username should remain resolvable during PAM")
+		require.Equal(t, "user1@example.com", previous.Name)
+		require.Equal(t, uint32(1111), previous.UID)
+	})
+
+	t.Run("Keep_the_fully_qualified_name_when_a_rename_target_is_taken", func(t *testing.T) {
+		// The provider ID identifies the user being renamed, but the short form of their new
+		// username belongs to somebody else. The rename still has to go through, under the fully
+		// qualified name, leaving the short one with the user who already holds it.
+		dbDir := t.TempDir()
+		m := newManagerForTestsWithConfig(t, shortUsernamesConfig, dbDir,
+			users.WithIDGenerator(&users.IDGeneratorMock{UIDsToGenerate: []uint32{1111, 2222}}))
+
+		require.NoError(t, m.UpdateUser(newUser("user1@example.com", "providerid-user1")),
+			"Setup: UpdateUser should not return an error, but did")
+		require.NoError(t, m.UpdateUser(newUser("user2@other.com", "providerid-user2")),
+			"Setup: UpdateUser should not return an error, but did")
+
+		require.NoError(t, m.UpdateUser(newUser("user2@example.com", "providerid-user1")),
+			"the renamed user must still be able to authenticate")
+
+		renamed, err := userstestutils.DBManager(m).UserByName("user2@example.com")
+		require.NoError(t, err, "the renamed user must be stored under their fully qualified name")
+		require.Equal(t, uint32(1111), renamed.UID, "the renamed user must keep their UID")
+
+		got, err := userstestutils.DBManager(m).UserByName("user2")
+		require.NoError(t, err, "the other user must still exist")
+		require.Equal(t, "user2@other.com", got.FullUsername, "the other user must keep the short name")
+		require.Equal(t, uint32(2222), got.UID, "the other user must keep their UID")
+	})
+
+	t.Run("Rename_back_when_the_feature_is_disabled_again", func(t *testing.T) {
+		// Turning the feature off must be as reversible as turning it on: the provider ID still
+		// resolves the shortened row, which is renamed back to the fully qualified username without
+		// losing its UID or its private group GID.
+		dbDir := t.TempDir()
+		m := newManagerForTestsWithConfig(t, shortUsernamesConfig, dbDir,
+			users.WithIDGenerator(&users.IDGeneratorMock{UIDsToGenerate: []uint32{1111}}))
+
+		require.NoError(t, m.UpdateUser(newUser("user1@example.com", "providerid-user1")),
+			"Setup: UpdateUser should not return an error, but did")
+		require.NoError(t, m.Stop(), "Setup: the manager should stop cleanly")
+
+		m = newManagerForTests(t, dbDir)
+
+		require.NoError(t, m.UpdateUser(newUser("user1@example.com", "providerid-user1")),
+			"UpdateUser should not return an error, but did")
+
+		got, err := userstestutils.DBManager(m).UserByName("user1@example.com")
+		require.NoError(t, err, "the user should have been renamed back to its full name")
+		require.Equal(t, uint32(1111), got.UID, "the UID must be preserved across the rename")
+		require.Equal(t, uint32(1111), got.GID, "the private group GID must be preserved across the rename")
+
+		_, err = userstestutils.DBManager(m).UserByName("user1")
+		require.Error(t, err, "the shortened row must not be left behind")
+
+		groups, err := m.AllGroups()
+		require.NoError(t, err, "AllGroups should not return an error, but did")
+		require.Len(t, groups, 1, "no extra group should have been created")
+		require.Equal(t, "user1@example.com", groups[0].Name, "the private group must follow the user name")
+		require.Equal(t, uint32(1111), groups[0].GID, "the private group must keep its GID")
+	})
+
+	t.Run("Temporary_alias_tracks_current_local_groups", func(t *testing.T) {
+		destGroupFile := localgroupstestutils.SetupGroupMock(t,
+			filepath.Join("testdata", "groups", "empty_local_group.group"))
+		dbDir := t.TempDir()
+		user := newUser("user1@example.com", "providerid-user1",
+			types.GroupInfo{Name: "localgroup1"})
+
+		m := newManagerForTestsWithConfig(t, shortUsernamesConfig, dbDir,
+			users.WithIDGenerator(&users.IDGeneratorMock{UIDsToGenerate: []uint32{1111}}))
+		require.NoError(t, m.UpdateUser(user))
+		require.NoError(t, m.Stop())
+
+		m = newManagerForTests(t, dbDir)
+		aliases, err := m.PrepareUserAliases("lease", user)
+		require.NoError(t, err)
+		require.Equal(t, []string{"user1"}, aliases)
+		require.NoError(t, m.UpdateUser(user))
+
+		groupData, err := os.ReadFile(destGroupFile)
+		require.NoError(t, err)
+		require.Contains(t, string(groupData), "localgroup1:x:41:user1@example.com,user1",
+			"the old alias should have the user's current local groups")
+		journalPath := filepath.Join(dbDir, "temporary-user-aliases.json")
+		require.FileExists(t, journalPath, "temporary local-group memberships should be journaled")
+		err = m.UpdateUser(newUser("user1", "providerid-other"))
+		require.ErrorContains(t, err, `username "user1" is temporarily reserved by another user`)
+
+		require.NoError(t, os.WriteFile(destGroupFile, []byte("localgroup1:x:41:user1\n"), 0600),
+			"Setup: simulate a crash before the canonical local-group membership was written")
+		localentries.Z_ForTests_SetGroupPath(destGroupFile, destGroupFile)
+		require.NoError(t, m.Z_ForTests_Crash(), "simulated crash should close the database")
+		m = newManagerForTests(t, dbDir)
+		require.NotNil(t, m)
+		groupData, err = os.ReadFile(destGroupFile)
+		require.NoError(t, err)
+		require.Equal(t, "localgroup1:x:41:user1@example.com", strings.TrimSpace(string(groupData)),
+			"startup recovery should clean up the temporary alias")
+		require.NoFileExists(t, journalPath, "startup recovery should remove the alias journal")
+	})
+}
+
+func TestIsAuthenticatedUserLockedWithEmptyFullUsername(t *testing.T) {
+	t.Parallel()
+
+	const username = "legacy@example.com"
+
+	m := newManagerForTests(t, t.TempDir())
+	userRow := db.NewUserRow(username, 1111, 1111, "Legacy user", "/home/"+username,
+		"/bin/bash", "broker-id", "", "")
+	privateGroup := db.NewGroupRow(username, 1111, username)
+	require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(userRow,
+		[]db.GroupRow{privateGroup}, nil), "Setup: could not create the downgraded user")
+	require.NoError(t, m.LockUser(username), "Setup: could not lock the downgraded user")
+
+	locked, err := m.IsAuthenticatedUserLocked(username, "broker-id", "")
+	require.NoError(t, err, "the downgraded user should resolve by their stored name")
+	require.True(t, locked, "the account lock must survive an empty full_username value")
+}
+
 func TestRegisterUserPreauth(t *testing.T) {
 	t.Parallel()
 
@@ -686,7 +1741,7 @@ func TestConcurrentUserUpdate(t *testing.T) {
 
 			idx := idx
 			doPreAuth := idx%3 == 0
-			userName := fmt.Sprintf("authd-test-user%d", idx)
+			userName := fmt.Sprintf("authd-test-user%d@example.com", idx)
 			t.Cleanup(wg.Done)
 
 			var preauthUID atomic.Uint32
@@ -695,7 +1750,7 @@ func TestConcurrentUserUpdate(t *testing.T) {
 				// In the pre-auth case we do even more parallelization, so that
 				// the pre-auth happens without a defined order of the actual
 				// registration.
-				userName = fmt.Sprintf("%s%d", registeredUserPrefix, idx)
+				userName = fmt.Sprintf("%s%d@example.com", registeredUserPrefix, idx)
 
 				//nolint:thelper // This is actually a test function!
 				preAuth := func(t *testing.T) {
@@ -770,7 +1825,7 @@ func TestConcurrentUserUpdate(t *testing.T) {
 		t.Run(fmt.Sprintf("Allow_updating_user_with_group_name_conflict_%s", g.Name), func(t *testing.T) {
 			t.Parallel()
 
-			userName := fmt.Sprintf("%s-with-group-name-conflict%d", registeredUserPrefix, idx)
+			userName := fmt.Sprintf("%s-with-group-name-conflict%d@example.com", registeredUserPrefix, idx)
 			err := m.UpdateUser(types.UserInfo{
 				Name:  userName,
 				Dir:   "/home-prefixes/" + g.Name,
@@ -1782,7 +2837,7 @@ func TestUpdateUserAfterUnlock(t *testing.T) {
 
 	m := newManagerForTests(t, dbDir)
 
-	err = m.UpdateUser(types.UserInfo{UID: 1234, Name: "some-user-test"})
+	err = m.UpdateUser(types.UserInfo{UID: 1234, Name: "some-user-test@example.com"})
 	require.NoError(t, err, "UpdateUser should not fail")
 }
 
@@ -2092,7 +3147,13 @@ func requireErrorAssertions(t *testing.T, gotErr, wantErrType error, wantErr boo
 func newManagerForTests(t *testing.T, dbDir string, opts ...users.Option) *users.Manager {
 	t.Helper()
 
-	m, err := users.NewManager(users.DefaultConfig, dbDir, opts...)
+	return newManagerForTestsWithConfig(t, users.DefaultConfig, dbDir, opts...)
+}
+
+func newManagerForTestsWithConfig(t *testing.T, config users.Config, dbDir string, opts ...users.Option) *users.Manager {
+	t.Helper()
+
+	m, err := users.NewManager(config, dbDir, opts...)
 	require.NoError(t, err, "NewManager should not return an error, but did")
 
 	return m

@@ -52,6 +52,10 @@ func FormatErrorMessage(ctx context.Context, method string, req, reply any, cc *
 	// likely means that IsAuthenticated got cancelled, so we need to keep the error intact
 	case codes.Canceled:
 		break
+	// the daemon does not know this user: the caller needs the code to report it as such rather
+	// than as a failure of the authentication stack, so the status is kept intact.
+	case codes.NotFound:
+		break
 	case codes.PermissionDenied:
 		// permission denied, just format it
 		err = fmt.Errorf("permission denied: %v", st.Message())

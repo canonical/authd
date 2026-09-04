@@ -26,7 +26,9 @@ type PamSuccess struct {
 	// lets PAM_OLDAUTHTOK be set so modules like pam_gnome_keyring can re-key an
 	// existing secret store instead of orphaning it.
 	OldAuthTok string
-	msg        string
+	// UserAliasID identifies a temporary old-name alias to release after account checks.
+	UserAliasID string
+	msg         string
 }
 
 // Message returns the message that should be sent to pam as info message.

@@ -51,12 +51,23 @@ func TestGetUserByName(t *testing.T) {
 		dbFile         string
 		shouldPreCheck bool
 		closeDB        bool
+		corruptUser    bool
+		lockUserDB     bool
 
 		wantErr          bool
 		wantErrNotExists bool
+		wantErrContains  string
 	}{
 		"Return_existing_user":                {username: "user1@example.com"},
 		"Return_existing_user_with_uppercase": {username: "user1@example.com"},
+
+		// A user stored under a shortened name must resolve through both names, so that the rest of
+		// the system keeps working whichever form it knows the user by. This is deliberately not
+		// gated on the short usernames configuration: users shortened by an earlier configuration
+		// must stay resolvable once it is turned off again. Both golden files are therefore
+		// expected to hold the very same entry, named after the shortened form.
+		"Return_user_stored_under_a_short_name_by_its_short_name": {username: "user1", dbFile: "short-user.db.yaml"},
+		"Return_user_stored_under_a_short_name_by_its_full_name":  {username: "user1@example.com", dbFile: "short-user.db.yaml"},
 
 		"Precheck_user_if_not_in_db": {username: "user-pre-check@example.com", shouldPreCheck: true},
 		"Prechecked_user_with_upper_cases_in_username_has_same_id_as_lower_case": {username: "User-Pre-Check@Example.com", shouldPreCheck: true},
@@ -64,10 +75,15 @@ func TestGetUserByName(t *testing.T) {
 		"Error_with_typed_GRPC_notfound_code_on_unexisting_user": {username: "does-not-exist@example.com", wantErr: true, wantErrNotExists: true},
 		"Error_on_missing_name":                                  {wantErr: true},
 		"Error_on_database_error":                                {username: "user1", closeDB: true, wantErr: true},
+		"Error_on_full_username_database_error":                  {username: "user1@example.com", dbFile: "short-user.db.yaml", corruptUser: true, wantErr: true},
 
 		"Error_if_user_not_in_db_and_precheck_is_disabled":             {username: "user-pre-check@example.com", wantErr: true, wantErrNotExists: true},
 		"Error_if_user_not_in_db_and_precheck_fails":                   {username: "does-not-exist@example.com", dbFile: "empty.db.yaml", shouldPreCheck: true, wantErr: true, wantErrNotExists: true},
 		"Error_if_user_not_in_db_and_precheck_fails_for_existing_user": {username: "local-pre-check@example.com", dbFile: "empty.db.yaml", shouldPreCheck: true, wantErr: true, wantErrNotExists: true},
+		"Error_if_prechecked_user_name_cannot_be_resolved": {
+			username: "user-pre-check@example.com", shouldPreCheck: true, lockUserDB: true,
+			wantErr: true, wantErrNotExists: true, wantErrContains: "could not resolve the name to store",
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -77,14 +93,27 @@ func TestGetUserByName(t *testing.T) {
 
 			client, m := newUserServiceClient(t, tc.dbFile)
 
+			if tc.corruptUser {
+				corruptUserByFullUsername(t, m, tc.username)
+			}
+
 			if tc.closeDB {
 				// Close the database to trigger a database error
 				err := userstestutils.DBManager(m).Close()
 				require.NoError(t, err, "Setup: failed to close database")
 			}
 
+			if tc.lockUserDB {
+				err := userslocking.WriteLock()
+				require.NoError(t, err, "Setup: failed to lock the user database")
+				t.Cleanup(func() { _ = userslocking.WriteUnlock() })
+			}
+
 			u, err := client.GetUserByName(context.Background(), &authd.GetUserByNameRequest{Name: tc.username, ShouldPreCheck: tc.shouldPreCheck})
 			requireExpectedResult(t, "GetUserByName", u, err, tc.wantErr, tc.wantErrNotExists)
+			if tc.wantErrContains != "" {
+				require.ErrorContains(t, err, tc.wantErrContains)
+			}
 
 			// Check that the user name is lowercase
 			if u != nil {
@@ -146,6 +175,11 @@ func TestGetGroupByName(t *testing.T) {
 	}{
 		"Return_existing_group":                {groupname: "group1"},
 		"Return_existing_group_with_uppercase": {groupname: "GROUP1"},
+
+		// A user private group is named after its owner, so it follows them when authd stores them
+		// under a shortened name and has to answer to both names, just like the user does.
+		"Return_private_group_of_a_short_user_by_its_short_name": {groupname: "user1", dbFile: "short-user.db.yaml"},
+		"Return_private_group_of_a_short_user_by_its_full_name":  {groupname: "user1@example.com", dbFile: "short-user.db.yaml"},
 
 		"Error_with_typed_GRPC_notfound_code_on_unexisting_user": {groupname: "does-not-exists", wantErr: true, wantErrNotExists: true},
 		"Error_on_missing_name":                                  {wantErr: true},
@@ -280,24 +314,36 @@ func TestLockUser(t *testing.T) {
 		sourceDB string
 
 		username           string
+		corruptUser        bool
 		currentUserNotRoot bool
 
 		wantErr bool
 	}{
 		"Successfully_lock_user":                {username: "user1@example.com"},
 		"Successfully_lock_user_with_uppercase": {username: "user1@example.com"},
+		// A user stored under a shortened name must still be reachable by the fully qualified name
+		// the administrator knows them by.
+		"Successfully_lock_a_short_user_by_its_full_name": {sourceDB: "short-user.db.yaml", username: "user1@example.com"},
 
 		"Error_when_username_is_empty":   {wantErr: true},
 		"Error_when_user_does_not_exist": {username: "doesnotexist@example.com", wantErr: true},
+		"Error_on_database_error":        {sourceDB: "short-user.db.yaml", username: "user1@example.com", corruptUser: true, wantErr: true},
 		"Error_when_not_root":            {username: "notroot@example.com", currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			client, m := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
 
+			if tc.corruptUser {
+				corruptUserByFullUsername(t, m, tc.username)
+			}
+
 			_, err := client.LockUser(context.Background(), &authd.LockUserRequest{Name: tc.username})
 			if tc.wantErr {
 				require.Error(t, err, "LockUser should return an error, but did not")
+				if tc.corruptUser {
+					require.Equal(t, codes.Unknown, status.Code(err))
+				}
 				return
 			}
 			require.NoError(t, err, "LockUser should not return an error, but did")
@@ -314,15 +360,18 @@ func TestUnlockUser(t *testing.T) {
 		sourceDB string
 
 		username           string
+		corruptUser        bool
 		currentUserNotRoot bool
 
 		wantErr bool
 	}{
-		"Successfully_unlock_user":                {username: "user1@example.com"},
-		"Successfully_unlock_user_with_uppercase": {username: "user1@example.com"},
+		"Successfully_unlock_user":                          {username: "user1@example.com"},
+		"Successfully_unlock_user_with_uppercase":           {username: "user1@example.com"},
+		"Successfully_unlock_a_short_user_by_its_full_name": {sourceDB: "locked-short-user.db.yaml", username: "user1@example.com"},
 
 		"Error_when_username_is_empty":   {wantErr: true},
 		"Error_when_user_does_not_exist": {username: "doesnotexist@example.com", wantErr: true},
+		"Error_on_database_error":        {sourceDB: "locked-short-user.db.yaml", username: "user1@example.com", corruptUser: true, wantErr: true},
 		"Error_when_not_root":            {username: "notroot@example.com", currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
@@ -333,9 +382,16 @@ func TestUnlockUser(t *testing.T) {
 
 			client, m := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
 
+			if tc.corruptUser {
+				corruptUserByFullUsername(t, m, tc.username)
+			}
+
 			_, err := client.UnlockUser(context.Background(), &authd.UnlockUserRequest{Name: tc.username})
 			if tc.wantErr {
 				require.Error(t, err, "UnlockUser should return an error, but did not")
+				if tc.corruptUser {
+					require.Equal(t, codes.Unknown, status.Code(err))
+				}
 				return
 			}
 			require.NoError(t, err, "UnlockUser should not return an error, but did")
@@ -347,22 +403,25 @@ func TestUnlockUser(t *testing.T) {
 	}
 }
 
-//nolint:dupl // This is not a duplicate test
+//nolint:dupl // TestSetGroupID has the same shape but covers a different RPC.
 func TestSetUserID(t *testing.T) {
 	tests := map[string]struct {
 		sourceDB string
 
 		username           string
 		newUID             uint32
+		corruptUser        bool
 		currentUserNotRoot bool
 
 		wantErr bool
 	}{
-		"Successfully_set_user_id":                {username: "user1@example.com", newUID: 5555},
-		"Successfully_set_user_id_with_uppercase": {username: "USER1@EXAMPLE.COM", newUID: 5555},
+		"Successfully_set_user_id":                                  {username: "user1@example.com", newUID: 5555},
+		"Successfully_set_user_id_with_uppercase":                   {username: "USER1@EXAMPLE.COM", newUID: 5555},
+		"Successfully_set_user_id_of_a_short_user_by_its_full_name": {sourceDB: "short-user.db.yaml", username: "user1@example.com", newUID: 5555},
 
 		"Error_when_username_is_empty":   {wantErr: true},
 		"Error_when_user_does_not_exist": {username: "doesnotexist@example.com", newUID: 5555, wantErr: true},
+		"Error_on_database_error":        {sourceDB: "short-user.db.yaml", username: "user1@example.com", newUID: 5555, corruptUser: true, wantErr: true},
 		"Error_when_not_root":            {username: "user1@example.com", newUID: 5555, currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
@@ -371,11 +430,18 @@ func TestSetUserID(t *testing.T) {
 				userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
 			}
 
-			client, _ := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
+			client, m := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
+
+			if tc.corruptUser {
+				corruptUserByFullUsername(t, m, tc.username)
+			}
 
 			resp, err := client.SetUserID(context.Background(), &authd.SetUserIDRequest{Name: tc.username, Id: tc.newUID})
 			if tc.wantErr {
 				require.Error(t, err, "SetUserID should return an error, but did not")
+				if tc.corruptUser {
+					require.Equal(t, codes.Unknown, status.Code(err))
+				}
 				return
 			}
 			require.NoError(t, err, "SetUserID should not return an error, but did")
@@ -385,22 +451,27 @@ func TestSetUserID(t *testing.T) {
 	}
 }
 
-//nolint:dupl // This is not a duplicate test
+//nolint:dupl // TestSetUserID has the same shape but covers a different RPC.
 func TestSetGroupID(t *testing.T) {
 	tests := map[string]struct {
 		sourceDB string
 
 		groupname          string
 		newGID             uint32
+		corruptUser        bool
 		currentUserNotRoot bool
 
 		wantErr bool
 	}{
 		"Successfully_set_group_id":                {groupname: "group1", newGID: 6666},
 		"Successfully_set_group_id_with_uppercase": {groupname: "GROUP1", newGID: 6666},
+		// The private group of a user stored under a shortened name must be reachable by the fully
+		// qualified name its owner is also known by.
+		"Successfully_set_group_id_of_a_short_private_group_by_its_full_name": {sourceDB: "short-user.db.yaml", groupname: "user1@example.com", newGID: 6666},
 
 		"Error_when_groupname_is_empty":   {wantErr: true},
 		"Error_when_group_does_not_exist": {groupname: "doesnotexist", newGID: 6666, wantErr: true},
+		"Error_on_database_error":         {sourceDB: "short-user.db.yaml", groupname: "user1@example.com", newGID: 6666, corruptUser: true, wantErr: true},
 		"Error_when_not_root":             {groupname: "group1", newGID: 6666, currentUserNotRoot: true, wantErr: true},
 	}
 	for name, tc := range tests {
@@ -409,11 +480,18 @@ func TestSetGroupID(t *testing.T) {
 				userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
 			}
 
-			client, _ := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
+			client, m := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
+
+			if tc.corruptUser {
+				corruptUserByFullUsername(t, m, tc.groupname)
+			}
 
 			resp, err := client.SetGroupID(context.Background(), &authd.SetGroupIDRequest{Name: tc.groupname, Id: tc.newGID})
 			if tc.wantErr {
 				require.Error(t, err, "SetGroupID should return an error, but did not")
+				if tc.corruptUser {
+					require.Equal(t, codes.Unknown, status.Code(err))
+				}
 				return
 			}
 			require.NoError(t, err, "SetGroupID should not return an error, but did")
@@ -430,15 +508,18 @@ func TestSetShell(t *testing.T) {
 		username           string
 		newShell           string
 		closeDB            bool
+		corruptUser        bool
 		currentUserNotRoot bool
 
 		wantErr bool
 	}{
 		"Successfully_set_shell":                                  {username: "user1@example.com", newShell: "/bin/sh"},
 		"Successfully_set_shell_when_username_has_uppercase_char": {username: "USER1@example.com", newShell: "/bin/sh"},
+		"Successfully_set_shell_of_a_short_user_by_its_full_name": {sourceDB: "short-user.db.yaml", username: "user1@example.com", newShell: "/bin/sh"},
 
 		"Error_when_not_root":                         {username: "user1@example.com", newShell: "/bin/sh", currentUserNotRoot: true, wantErr: true},
 		"Error_when_users_manager_fails_to_set_shell": {username: "doesnotexist", newShell: "/bin/sh", wantErr: true},
+		"Error_on_database_error":                     {sourceDB: "short-user.db.yaml", username: "user1@example.com", newShell: "/bin/sh", corruptUser: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -449,10 +530,16 @@ func TestSetShell(t *testing.T) {
 				err := userstestutils.DBManager(m).Close()
 				require.NoError(t, err, "Setup: failed to close database")
 			}
+			if tc.corruptUser {
+				corruptUserByFullUsername(t, m, tc.username)
+			}
 
 			resp, err := client.SetShell(context.Background(), &authd.SetShellRequest{Name: tc.username, Shell: tc.newShell})
 			if tc.wantErr {
 				require.Error(t, err, "SetShell should return an error, but did not")
+				if tc.corruptUser {
+					require.Equal(t, codes.Unknown, status.Code(err))
+				}
 				return
 			}
 			require.NoError(t, err, "SetShell should not return an error, but did")
@@ -472,17 +559,20 @@ func TestSetHomeDir(t *testing.T) {
 
 		username           string
 		newHome            string
+		corruptUser        bool
 		currentUserNotRoot bool
 
 		wantErr bool
 	}{
 		"Successfully_set_home_dir":                                  {username: "user1@example.com", newHome: "/home/user1-new"},
 		"Successfully_set_home_dir_when_username_has_uppercase_char": {username: "USER1@example.com", newHome: "/home/user1-new"},
+		"Successfully_set_home_dir_of_a_short_user_by_its_full_name": {sourceDB: "short-user.db.yaml", username: "user1@example.com", newHome: "/home/user1-new"},
 
 		"Error_when_not_root":                            {username: "user1@example.com", newHome: "/home/user1-new", currentUserNotRoot: true, wantErr: true},
 		"Error_when_username_is_empty":                   {newHome: "/home/user1-new", wantErr: true},
 		"Error_when_users_manager_fails_to_set_home_dir": {username: "doesnotexist", newHome: "/home/user1-new", wantErr: true},
 		"Error_when_path_is_not_absolute":                {username: "user1@example.com", newHome: "relative/path", wantErr: true},
+		"Error_on_database_error":                        {sourceDB: "short-user.db.yaml", username: "user1@example.com", newHome: "/home/user1-new", corruptUser: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -492,9 +582,16 @@ func TestSetHomeDir(t *testing.T) {
 
 			client, m := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
 
+			if tc.corruptUser {
+				corruptUserByFullUsername(t, m, tc.username)
+			}
+
 			resp, err := client.SetHomeDir(context.Background(), &authd.SetHomeDirRequest{Name: tc.username, Home: tc.newHome})
 			if tc.wantErr {
 				require.Error(t, err, "SetHomeDir should return an error, but did not")
+				if tc.corruptUser {
+					require.Equal(t, codes.Unknown, status.Code(err))
+				}
 				return
 			}
 			require.NoError(t, err, "SetHomeDir should not return an error, but did")
@@ -512,6 +609,7 @@ func TestDeleteUser(t *testing.T) {
 	tests := map[string]struct {
 		sourceDB           string
 		username           string
+		corruptUser        bool
 		currentUserNotRoot bool
 
 		wantErr      bool
@@ -519,13 +617,22 @@ func TestDeleteUser(t *testing.T) {
 	}{
 		"Successfully_delete_user":                {username: "user1@example.com"},
 		"Successfully_delete_user_with_uppercase": {username: "USER1@EXAMPLE.COM"},
+		// A user stored under a shortened name must be deletable by either name.
+		"Successfully_delete_a_short_user_by_its_full_name":  {sourceDB: "delete-short-user.db.yaml", username: "shortuser@example.com"},
+		"Successfully_delete_a_short_user_by_its_short_name": {sourceDB: "delete-short-user.db.yaml", username: "shortuser"},
 
 		"Error_when_username_is_empty":   {wantErr: true},
 		"Error_when_user_does_not_exist": {username: "doesnotexist@example.com", wantErr: true},
+		"Error_on_database_error":        {sourceDB: "delete-short-user.db.yaml", username: "shortuser@example.com", corruptUser: true, wantErr: true},
 		"Error_when_not_root":            {username: "user1@example.com", currentUserNotRoot: true, wantErr: true},
 
 		"Warning_when_broker_fails_to_delete": {username: "delete_error@example.com", wantWarnings: 1},
 		"Warning_when_broker_not_found":       {sourceDB: "default.db.yaml", username: "user1@example.com", wantWarnings: 1},
+		// The broker only ever knew the user by their fully qualified name, so that is the name it
+		// must be told to clean up. The mock broker fails on a username containing "delete_error",
+		// which this fixture only puts in the domain: without the fully qualified name reaching the
+		// broker, the call would silently succeed and leave the broker side data behind.
+		"Warning_when_broker_fails_to_delete_a_short_user_by_its_full_name": {sourceDB: "delete-short-user.db.yaml", username: "shortuser2", wantWarnings: 1},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -540,9 +647,16 @@ func TestDeleteUser(t *testing.T) {
 
 			client, m := newUserServiceClient(t, dbFile, tc.currentUserNotRoot)
 
+			if tc.corruptUser {
+				corruptUserByFullUsername(t, m, tc.username)
+			}
+
 			resp, err := client.DeleteUser(context.Background(), &authd.DeleteUserRequest{Name: tc.username})
 			if tc.wantErr {
 				require.Error(t, err, "DeleteUser should return an error, but did not")
+				if tc.corruptUser {
+					require.Equal(t, codes.Unknown, status.Code(err))
+				}
 				return
 			}
 			require.NoError(t, err, "DeleteUser should not return an error, but did")
@@ -561,6 +675,7 @@ func TestDeleteGroup(t *testing.T) {
 		sourceDB string
 
 		groupname          string
+		corruptUser        bool
 		currentUserNotRoot bool
 
 		wantErr bool
@@ -570,16 +685,23 @@ func TestDeleteGroup(t *testing.T) {
 
 		"Error_when_groupname_is_empty":                         {wantErr: true},
 		"Error_when_group_does_not_exist":                       {groupname: "doesnotexist", wantErr: true},
+		"Error_on_database_error":                               {sourceDB: "short-user.db.yaml", groupname: "user1@example.com", corruptUser: true, wantErr: true},
 		"Error_when_not_root":                                   {groupname: "commongroup", currentUserNotRoot: true, wantErr: true},
 		"Error_when_group_is_primary_group_of_an_existing_user": {groupname: "group1", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			client, m := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
+			if tc.corruptUser {
+				corruptUserByFullUsername(t, m, tc.groupname)
+			}
 
 			_, err := client.DeleteGroup(context.Background(), &authd.DeleteGroupRequest{Name: tc.groupname})
 			if tc.wantErr {
 				require.Error(t, err, "DeleteGroup should return an error, but did not")
+				if tc.corruptUser {
+					require.Equal(t, codes.Unknown, status.Code(err))
+				}
 				return
 			}
 			require.NoError(t, err, "DeleteGroup should not return an error, but did")
@@ -662,6 +784,14 @@ func newUserManagerForTests(t *testing.T, dbFile string) *users.Manager {
 
 	t.Cleanup(func() { _ = m.Stop() })
 	return m
+}
+
+func corruptUserByFullUsername(t *testing.T, m *users.Manager, fullUsername string) {
+	t.Helper()
+
+	err := db.Z_ForTests_Exec(userstestutils.DBManager(m),
+		`UPDATE users SET gid = 'invalid' WHERE full_username = ?`, strings.ToLower(fullUsername))
+	require.NoError(t, err, "Setup: failed to corrupt user")
 }
 
 // newBrokersManagerForTests returns a new broker manager with a broker mock for tests, it's cleaned when the test ends.

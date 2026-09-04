@@ -8,6 +8,7 @@ users:
       dir: /home/user1@example.com
       shell: /bin/bash
       broker_id: broker-id
+      full_username: user1@example.com
     - name: user2@example.com
       uid: 2222
       gid: 22222
@@ -15,6 +16,7 @@ users:
       dir: /home/user2@example.com
       shell: /bin/dash
       broker_id: broker-id
+      full_username: user2@example.com
     - name: user3@example.com
       uid: 3333
       gid: 33333
@@ -22,12 +24,14 @@ users:
       dir: /home/user3@example.com
       shell: /bin/zsh
       broker_id: broker-id
+      full_username: user3@example.com
     - name: userwithoutbroker@example.com
       uid: 4444
       gid: 44444
       gecos: userwithoutbroker
       dir: /home/userwithoutbroker@example.com
       shell: /bin/sh
+      full_username: userwithoutbroker@example.com
 groups:
     - name: group1
       gid: 11111

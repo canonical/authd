@@ -69,14 +69,14 @@ var (
 	prepareSharedSSHDTestsOnce sync.Once
 	sharedSSHDTestsPrepared    atomic.Bool
 
-	execModule, execChild, pamMkHomeDirModule string
-	nssEnv                                    []string
-	nssLibrary                                string
-	sshdPreloadLibraries                      []string
-	sshdPreloaderCFlags                       []string
-	sshdEnv                                   []string
-	sshdHostKeyPath                           string
-	sshdHostPubKey                            []byte
+	execModule, execChild, pamMkHomeDirModule, pamUserLookupModule string
+	nssEnv                                                         []string
+	nssLibrary                                                     string
+	sshdPreloadLibraries                                           []string
+	sshdPreloaderCFlags                                            []string
+	sshdEnv                                                        []string
+	sshdHostKeyPath                                                string
+	sshdHostPubKey                                                 []byte
 )
 
 func TestSSHAuthenticate(t *testing.T) {
@@ -116,7 +116,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 	sshTestsPrepared.Store(false)
 	prepareSharedSSHDTestsOnce = sync.Once{}
 	sharedSSHDTestsPrepared.Store(false)
-	execModule, execChild, pamMkHomeDirModule = "", "", ""
+	execModule, execChild, pamMkHomeDirModule, pamUserLookupModule = "", "", "", ""
 	nssEnv = nil
 	nssLibrary = ""
 	sshdPreloadLibraries = nil
@@ -145,6 +145,10 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			},
 			[]string{"-lpam"},
 			"pam_mkhomedir_test.so", true)
+		pamUserLookupModule = buildSharedModule(t,
+			"Building PAM account user lookup module",
+			[]string{"./pam/integration-tests/pam_user_lookup/pam_user_lookup.c"},
+			nil, nil, []string{"-lpam"}, "pam_user_lookup_test.so", true)
 
 		err = testutils.CanRunRustTests(false)
 		if os.Getenv("AUTHD_TESTS_SSH_USE_DUMMY_NSS") == "" && err == nil {
@@ -198,12 +202,12 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		t.Logf("Preparing SSH pty tests with shared sshd, triggered by %q", subtest.Name())
 		sharedAuthdSocket, sharedAuthdGroupOutput = sharedAuthd(t,
 			testutils.WithHomeBaseDir(sshTestsHomeBase))
-		serviceFile := createSSHDServiceFile(t, execModule, execChild, pamMkHomeDirModule, sharedAuthdSocket)
+		serviceFile := createSSHDServiceFile(t, execModule, execChild, pamMkHomeDirModule, sharedAuthdSocket, false)
 		sshdEnv = append(sshdEnv, nssEnv...)
 		sshdEnv = append(sshdEnv, fmt.Sprintf("AUTHD_NSS_SOCKET=%s", sharedAuthdSocket))
 
 		sharedSSHDPort, sharedSSHDUserHome = startSSHDForTest(t, serviceFile, sshdHostKeyPath,
-			"authd-test-user-sshd-accept-all@example.com", sshdPreloadLibraries, sshdEnv, false)
+			"authd-test-user-sshd-accept-all@example.com", sshdPreloadLibraries, sshdEnv, false, false)
 
 		if !t.Failed() {
 			t.Log("Prepared SSH pty tests with shared sshd")
@@ -216,15 +220,19 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 	t.Cleanup(authctlCleanup)
 
 	tests := map[string]struct {
-		user             string
-		isLocalUser      bool
-		userPrefix       string
-		pamServiceName   string
-		socketPath       string
-		interactiveShell bool
-		ubuntuVersion    string
+		user                   string
+		isLocalUser            bool
+		userPrefix             string
+		pamServiceName         string
+		socketPath             string
+		interactiveShell       bool
+		ubuntuVersion          string
+		existingDB             string
+		useShortUsernames      bool
+		checkAccountUserLookup bool
 
 		wantUserAlreadyExist  bool
+		expectedUserName      string
 		wantUserNotInDatabase bool
 		wantNoHomeDir         bool
 		wantLocalGroups       bool
@@ -328,6 +336,31 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			wantLocalGroups: true,
 			test:            sshPtySimpleAuth,
 		},
+		"Authenticate_user_with_short_username": {
+			user: testUserNameFull(t, examplebroker.UserIntegrationPreCheckPrefix,
+				"short-username"),
+			useShortUsernames: true,
+			test:              sshPtySimpleAuth,
+		},
+		"Authenticate_existing_user_with_short_username": {
+			user:                 examplebroker.UserIntegrationPrefix + "shortusername",
+			useShortUsernames:    true,
+			wantUserAlreadyExist: true,
+			existingDB:           "db_with_short_username",
+			test:                 sshPtySimpleAuth,
+		},
+		// Logging in with short usernames disabled renames the stored user during
+		// authentication. The account stage must still resolve the old name: the
+		// pam_user_lookup module re-resolves PAM_USER like pam_unix does, and the
+		// authd account hook may only release the temporary alias afterwards.
+		"Authenticate_existing_user_after_disabling_short_usernames": {
+			user:                   examplebroker.UserIntegrationPrefix + "shortusername",
+			wantUserAlreadyExist:   true,
+			expectedUserName:       examplebroker.UserIntegrationPrefix + "shortusername@example.com",
+			existingDB:             "db_with_short_username",
+			checkAccountUserLookup: true,
+			test:                   sshPtySimpleAuth,
+		},
 
 		"Remember_last_successful_broker_and_mode": {
 			test: sshPtyRememberBrokerAndMode,
@@ -373,6 +406,13 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		"Deny_authentication_if_newpassword_does_not_match_required_criteria": {
 			userPrefix: examplebroker.UserIntegrationNeedsResetPrefix,
 			test:       sshPtyBadPassword,
+		},
+		"Deny_authentication_if_short_username_is_allowed_but_user_does_not_exist": {
+			user: examplebroker.UserIntegrationPrefix +
+				examplebroker.UserIntegrationPreCheckValue + "-shortusername",
+			useShortUsernames:     true,
+			wantUserNotInDatabase: true,
+			test:                  sshPtyShortUsernameRejected,
 		},
 
 		"Prevent_user_from_switching_username": {
@@ -463,15 +503,30 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 				authdEnv = append(authdEnv, nssTestEnv(t, nssLibrary, authdSocketLink)...)
 			}
 
-			if tc.wantLocalGroups {
-				_, groupOutput = prepareGroupFiles(t)
+			if tc.wantLocalGroups || tc.existingDB != "" || tc.useShortUsernames {
+				groupOutputFile, groupsFile := prepareGroupFiles(t)
 
-				socketPath = runAuthd(t,
+				args := []testutils.DaemonOption{
 					testutils.WithCurrentUserAsRoot,
-					testutils.WithGroupFile(groupOutput),
 					testutils.WithEnvironment(authdEnv...),
 					testutils.WithHomeBaseDir(sshTestsHomeBase),
-				)
+					testutils.WithGroupFile(groupsFile),
+				}
+				if tc.wantLocalGroups {
+					// authd updates the group file in place, so it is the file to check.
+					groupOutput = groupsFile
+				} else {
+					groupOutput = groupOutputFile
+					args = append(args, testutils.WithGroupFileOutput(groupOutputFile))
+				}
+				if tc.existingDB != "" {
+					args = append(args, testutils.WithDBPath(prepareExistingDB(t, tc.existingDB)))
+				}
+				if tc.useShortUsernames {
+					args = append(args, testutils.WithShortUsernames())
+				}
+
+				socketPath = runAuthd(t, args...)
 			} else if !sharedSSHD {
 				socketPath, groupOutput = sharedAuthd(t,
 					testutils.WithGroupFileOutput(sharedAuthdGroupOutput),
@@ -515,7 +570,9 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 
 			sshdPort := sharedSSHDPort
 			userHome := sharedSSHDUserHome
-			if !sharedSSHD || tc.wantLocalGroups || tc.interactiveShell || tc.socketPath != "" {
+			if !sharedSSHD || tc.wantLocalGroups ||
+				tc.existingDB != "" || tc.useShortUsernames ||
+				tc.interactiveShell || tc.socketPath != "" {
 				sshdEnv := sshdEnv
 				if nssLibrary != "" {
 					sshdEnv = slices.Clone(sshdEnv)
@@ -526,9 +583,9 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 					require.NoError(t, err, "Setup: symlinking the authd socket")
 				}
 				serviceFile := createSSHDServiceFile(t, execModule, execChild,
-					pamMkHomeDirModule, socketPath)
+					pamMkHomeDirModule, socketPath, tc.checkAccountUserLookup)
 				sshdPort, userHome = startSSHDForTest(t, serviceFile, sshdHostKeyPath, user,
-					sshdPreloadLibraries, sshdEnv, tc.interactiveShell)
+					sshdPreloadLibraries, sshdEnv, tc.interactiveShell, tc.useShortUsernames)
 			}
 
 			// When golden update is enabled, testSSHAuthenticate is called twice
@@ -563,6 +620,12 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 				}
 			} else {
 				if userClient != nil {
+					if tc.useShortUsernames {
+						user = shortUsername(user)
+					}
+					if tc.expectedUserName != "" {
+						user = tc.expectedUserName
+					}
 					authdUser := requireAuthdUser(t, userClient, user)
 					group := requireAuthdGroup(t, userClient, authdUser.Gid)
 					require.Contains(t, group.Members, authdUser.Name,
@@ -592,7 +655,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 	}
 }
 
-func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socketPath string) string {
+func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socketPath string, checkAccountUserLookup bool) string {
 	t.Helper()
 
 	var pamLog string
@@ -651,7 +714,7 @@ func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socket
 		Action: pam_test.Auth, Control: pam_test.Optional, Module: "pam_echo.so",
 		Args: []string{fmt.Sprintf("%s finished for user '%%u'", pam_test.RunnerResultActionAuthenticate.Message(""))},
 	}
-	serviceFile, err := pam_test.CreateService(outDir, pamServiceName, []pam_test.ServiceLine{
+	serviceLines := []pam_test.ServiceLine{
 		{Action: pam_test.Auth, Control: pam_test.NewControl(authControl), Module: module, Args: moduleArgs},
 		// Success case:
 		notifyState,
@@ -661,7 +724,18 @@ func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socket
 		notifyState,
 		{Action: pam_test.Auth, Control: pam_test.Optional, Module: "pam_echo.so", Args: []string{"SSH PAM user '%u' using local broker"}},
 		{Action: pam_test.Auth, Control: pam_test.Required, Module: "pam_unix.so"},
+	}
 
+	if checkAccountUserLookup {
+		serviceLines = append(serviceLines,
+			pam_test.ServiceLine{
+				Action:  pam_test.Account,
+				Control: pam_test.Required,
+				Module:  pamUserLookupModule,
+				Args:    []string{"socket=" + socketPath},
+			})
+	}
+	serviceLines = append(serviceLines, []pam_test.ServiceLine{
 		{Action: pam_test.Account, Control: pam_test.NewControl(accountControl), Module: module, Args: moduleArgs},
 		// pam_permit provides a fallback PAM_SUCCESS so that account management
 		// succeeds even when the authd module returns PAM_IGNORE (e.g. for local
@@ -670,14 +744,15 @@ func createSSHDServiceFile(t *testing.T, module, execChild, mkHomeModule, socket
 		{Action: pam_test.Account, Control: pam_test.Required, Module: pam_test.Permit.String()},
 		{Action: pam_test.Session, Control: pam_test.Optional, Module: mkHomeModule, Args: []string{"debug", "skel=" + skelDir}},
 		{Action: pam_test.Session, Control: pam_test.Requisite, Module: pam_test.Permit.String()},
-	})
+	}...)
+	serviceFile, err := pam_test.CreateService(outDir, pamServiceName, serviceLines)
 	require.NoError(t, err, "Setup: Creation of service file %s", pamServiceName)
 	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, serviceFile)
 
 	return serviceFile
 }
 
-func startSSHDForTest(t *testing.T, serviceFile, hostKey, user string, preloadLibraries []string, env []string, interactiveShell bool) (string, string) {
+func startSSHDForTest(t *testing.T, serviceFile, hostKey, user string, preloadLibraries []string, env []string, interactiveShell bool, useShortUsernames bool) (string, string) {
 	t.Helper()
 
 	sshdConnectCommand := fmt.Sprintf(
@@ -687,7 +762,13 @@ func startSSHDForTest(t *testing.T, serviceFile, hostKey, user string, preloadLi
 		sshdConnectCommand += "&& /bin/sh"
 	}
 
+	// authd stores the user under a shortened name, but the SSH client still connects with the
+	// fully qualified one, so only the home directory location changes.
 	userHome := filepath.Join(sshTestsHomeBase, user)
+	if useShortUsernames {
+		userHome = filepath.Join(sshTestsHomeBase, shortUsername(user))
+	}
+
 	sshdPort := startSSHD(t, hostKey, sshdConnectCommand, append([]string{
 		fmt.Sprintf("HOME=%s", sshTestsHomeBase),
 		fmt.Sprintf("LD_PRELOAD=%s", strings.Join(preloadLibraries, ":")),
@@ -1770,6 +1851,24 @@ func sshPtyCancelKeyUser(t *testing.T, args sshPtyArgs) {
 
 	// User "r" doesn't exist as a real user, SSH connection is closed.
 	// In some cases sshd may show a Password: prompt from local PAM before closing.
+	c.WaitFor(t, `Connection closed|Disconnected from|Password:`)
+
+	c.Close(t)
+
+	got := sshPtySanitizeOutput(t, c.RawOutput())
+	golden.CheckOrUpdate(t, got)
+}
+
+// sshPtyShortUsernameRejected covers the flow where authd refuses a short username because the
+// user has never authenticated with their fully qualified username before.
+func sshPtyShortUsernameRejected(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+
+	sshPtySelectBroker(t, c)
+
+	// authd rejects the short username before any authentication mode is offered.
 	c.WaitFor(t, `Connection closed|Disconnected from|Password:`)
 
 	c.Close(t)

@@ -43,6 +43,11 @@ const (
 	// loggingInitializedKey indicates logging was already initialized.
 	loggingInitializedKey = "authd.logging-initialized-flag"
 
+	// pendingUserAliasKey stores the lease of the temporary user alias a name-changing
+	// authentication created, so that the account hook can release it once the earlier account
+	// modules resolved PAM_USER.
+	pendingUserAliasKey = "authd.pending-user-alias-id"
+
 	// gdmServiceName is the name of the service that is loaded by GDM.
 	// Keep this in sync with the service file installed by the package.
 	gdmServiceName = "gdm-authd"
@@ -378,6 +383,11 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 		if shouldSendAuthMessage(pamClientType, returnValue.Message(), true) {
 			sendReturnMessageToPam(mTx, returnValue)
 		}
+		if returnValue.UserAliasID != "" {
+			if err := mTx.SetData(pendingUserAliasKey, returnValue.UserAliasID); err != nil {
+				return err
+			}
+		}
 		if returnValue.AuthTok != "" {
 			if err := mTx.SetItem(pam.Authtok, returnValue.AuthTok); err != nil {
 				return err
@@ -406,8 +416,43 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 	}
 }
 
-// AcctMgmt is ignored because broker selection is now handled server-side during IsAuthenticated.
-func (h *pamModule) AcctMgmt(_ pam.ModuleTransaction, _ pam.Flags, _ []string) error {
+// AcctMgmt releases the temporary user alias a name-changing authentication leased to this PAM
+// transaction. Earlier account modules, in particular pam_unix, re-resolve PAM_USER through NSS,
+// so the lease keeps the old name resolvable until they have run: a name that stopped resolving
+// would fail their check with PAM_USER_UNKNOWN although the broker granted access. Releasing here
+// starts a short grace period after which the alias expires. AcctMgmt otherwise remains ignored.
+func (h *pamModule) AcctMgmt(mTx pam.ModuleTransaction, _ pam.Flags, args []string) error {
+	if mTx == nil {
+		return pam.ErrIgnore
+	}
+	parsedArgs, _ := parseArgs(args)
+
+	data, err := mTx.GetData(pendingUserAliasKey)
+	if errors.Is(err, pam.ErrNoModuleData) || data == nil {
+		return pam.ErrIgnore
+	}
+	if err != nil {
+		return err
+	}
+
+	updateID, ok := data.(string)
+	if !ok || updateID == "" {
+		return fmt.Errorf("%w: invalid pending user alias ID", pam.ErrSystem)
+	}
+
+	client, closeConn, err := newClient(parsedArgs)
+	if err != nil {
+		return fmt.Errorf("%w: could not connect to authd: %w", pam.ErrAuthinfoUnavail, err)
+	}
+	defer closeConn()
+
+	if _, err := client.ReleaseUserAlias(context.TODO(), &authd.RUARequest{LeaseId: updateID}); err != nil {
+		return fmt.Errorf("%w: could not release user alias: %w", pam.ErrSystem, err)
+	}
+	if err := mTx.SetData(pendingUserAliasKey, nil); err != nil {
+		return err
+	}
+
 	return pam.ErrIgnore
 }
 
