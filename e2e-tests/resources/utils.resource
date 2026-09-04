@@ -258,9 +258,15 @@ Wait Until System Time Synced
 
 
 Try machinectl login Prompt
+    [Arguments]    ${console_log}=${EMPTY}
     VAR    ${tries}    3
     WHILE    ${tries} > 0
-        Hid.Type String    machinectl login
+        IF    '${console_log}' == ''
+            ${login_command} =    Set Variable    machinectl login
+        ELSE
+            ${login_command} =    Set Variable    script --quiet --flush --return --command 'machinectl login' '${console_log}'
+        END
+        Hid.Type String    ${login_command}
         Hid.Keys Combo    Return
         ${match} =     Run Keyword And Return Status
         ...    Match Text    ubuntu login:    120

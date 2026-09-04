@@ -46,8 +46,8 @@ Log In With Remote User Through CLI: QR Code
 
 
 Start Log In With Remote User Through CLI: QR Code
-    [Arguments]    ${username}
-    Try machinectl login Prompt
+    [Arguments]    ${username}    ${console_log}=${EMPTY}
+    Try machinectl login Prompt    ${console_log}
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
 

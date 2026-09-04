@@ -58,9 +58,35 @@ Check That User Is Redirected To Local Broker
     Match Text    Password:    120
 
 
+Get Journal Cursor
+    ${journal_cursor} =    SSH.Execute
+    ...    sudo journalctl --no-pager -n 1 --show-cursor | sed -n 's/^-- cursor: //p'
+    Should Not Be Empty    ${journal_cursor}
+    RETURN    ${journal_cursor}
+
+
 Check That Authenticated User Does Not Match Requested User
-    [Arguments]    ${requested_user}
-    Match Text    Authentication failure: requested username "${requested_user}" does not match the authenticated username    120
+    [Arguments]    ${requested_user}    ${journal_cursor}    ${console_log}
+    Wait Until Keyword Succeeds    30s    2s
+    ...    Check Journal For Username Mismatch Failure    ${requested_user}    ${journal_cursor}
+    Wait Until Keyword Succeeds    30s    2s
+    ...    Check Console For Username Mismatch Failure    ${requested_user}    ${console_log}
+
+
+Check Journal For Username Mismatch Failure
+    [Arguments]    ${requested_user}    ${journal_cursor}
+    ${log_line} =    SSH.Execute
+    ...    sudo journalctl --no-pager --after-cursor="${journal_cursor}" | grep -E 'Authentication failure: requested username "${requested_user}" does not match the authenticated (user|username) "' || true
+    Should Not Be Empty    ${log_line}
+    ...    No journal entry found for a username-mismatch authentication failure with requested user "${requested_user}"
+
+
+Check Console For Username Mismatch Failure
+    [Arguments]    ${requested_user}    ${console_log}
+    ${console_line} =    SSH.Execute
+    ...    grep -E -- 'Authentication failure: requested username "${requested_user}" does not match the authenticated (user|username) "' "${console_log}" || true
+    Should Not Be Empty    ${console_line}
+    ...    No username-mismatch authentication failure was sent to the terminal console
 
 
 Check That Remote User Can Run Sudo Commands
