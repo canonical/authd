@@ -95,15 +95,18 @@ func GetPamTTY(mTx pam.ModuleTransaction) (tty *os.File, cleanup func()) {
 	var pamTTY string
 	pamTTY, err = mTx.GetItem(pam.Tty)
 	if err != nil {
+		log.Debugf(context.Background(), "Failed to get PAM TTY: %s", err)
 		return nil, nil
 	}
 
+	log.Debugf(context.Background(), "PAM TTY is %q", pamTTY)
 	if pamTTY == "" {
 		return nil, nil
 	}
 
 	tty, err = os.OpenFile(pamTTY, os.O_RDWR, 0600)
 	if err != nil {
+		log.Debugf(context.Background(), "Failed to open PAM TTY: %s", err)
 		return nil, nil
 	}
 	cleanup = func() { tty.Close() }
@@ -122,7 +125,27 @@ func IsTerminalTTY(mTx pam.ModuleTransaction) bool {
 	isTerminalTTYOnce.Do(func() {
 		tty, cleanup := GetPamTTY(mTx)
 		defer cleanup()
-		isTerminalTTYValue = term.IsTerminal(tty.Fd())
+
+		isTerminalTTY := term.IsTerminal(tty.Fd())
+		log.Debugf(context.Background(), "Tty %q (FD: %v) is attached to a terminal: %v",
+			tty.Name(), tty.Fd(), isTerminalTTY)
+
+		if !isTerminalTTY {
+			return
+		}
+
+		oldState, err := term.MakeRaw(tty.Fd())
+		if err != nil {
+			log.Warningf(context.Background(), "Failed to set terminal to raw mode: %s", err)
+			return
+		}
+
+		isTerminalTTYValue = isTerminalTTY
+
+		err = term.Restore(tty.Fd(), oldState)
+		if err != nil {
+			log.Warningf(context.Background(), "Failed to restore terminal state: %s", err)
+		}
 	})
 	return isTerminalTTYValue
 }
