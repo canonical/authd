@@ -113,6 +113,25 @@ func TestMFAError_IsMFARetryableCode(t *testing.T) {
 	}
 }
 
+func TestMFAError_IsMFAUserNotFound(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		err  *MFAError
+		want bool
+	}{
+		"User_not_found_AADSTS": {err: &MFAError{AADSTS: userNotFoundErrorCode}, want: true},
+		"Other":                 {err: &MFAError{Category: MFAErrorOther}, want: false},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, tc.err.IsMFAUserNotFound())
+		})
+	}
+}
+
 func TestFreeMFAFlowState_NilSafe(t *testing.T) {
 	t.Parallel()
 
