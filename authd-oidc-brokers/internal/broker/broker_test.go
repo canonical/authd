@@ -4284,6 +4284,67 @@ func TestIsAuthenticatedPasswordDeviceRegistrationRefreshDoesNotSendClientSecret
 		"the Microsoft Broker App is a public client, so refresh must not send the configured OIDC client secret")
 }
 
+func TestIsAuthenticatedPasswordEntraDeviceCodeRefreshDoesNotSendClientSecret(t *testing.T) {
+	t.Parallel()
+
+	const correctPassword = "password"
+	const listenAddress = "127.0.0.1:31318"
+	const serverURL = "http://" + listenAddress
+
+	var sawRefresh bool
+	var refreshClientSecret string
+	baseTokenHandler := testutils.TokenHandler(serverURL, &testutils.TokenHandlerOptions{
+		IDTokenClaims: []map[string]interface{}{
+			{"aud": "test-client-id"},
+		},
+	})
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                     broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:               true,
+		firstUserBecomesOwner:      true,
+		clientSecret:               "test-client-secret",
+		supportsDeviceRegistration: true,
+		listenAddress:              listenAddress,
+		customHandlers: map[string]testutils.EndpointHandler{
+			"/token": func(w http.ResponseWriter, r *http.Request) {
+				require.NoError(t, r.ParseForm())
+				if r.FormValue("grant_type") == "refresh_token" {
+					sawRefresh = true
+					refreshClientSecret = r.FormValue("client_secret")
+					if refreshClientSecret == "" {
+						if _, password, ok := r.BasicAuth(); ok {
+							refreshClientSecret = password
+						}
+					}
+					if refreshClientSecret != "" {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusBadRequest)
+						_, _ = w.Write([]byte(`{"error":"invalid_client","error_description":"AADSTS700025: Client is public so neither 'client_assertion' nor 'client_secret' should be presented."}`))
+						return
+					}
+				}
+				baseTokenHandler(w, r)
+			},
+		},
+	})
+
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	generateAndStoreCachedInfo(t, tokenOptions{}, b.TokenPathForSession(sessionID))
+	require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+
+	access, _, err := b.IsAuthenticated(sessionID, authData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access,
+		"Entra device-code tokens must refresh as a public client when a Graph fallback secret is configured")
+	require.True(t, sawRefresh, "the returning login must exercise the OIDC refresh path")
+	require.Empty(t, refreshClientSecret,
+		"the configured Graph fallback secret must not be sent to the public OIDC client")
+}
+
 // TestEntraAuthInvalidatesCachedCredentialsOnRemotePasswordChange verifies
 // that an AADSTS50173 (grant revoked by a remote password change) wipes the
 // cached token and password files and offers re-authentication.

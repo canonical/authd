@@ -51,11 +51,12 @@ scope, so the groups are resolved in one of two ways:
 - **With device registration** (`register_device = true`): the device's primary
   refresh token is exchanged for a Graph-scoped access token. No extra
   configuration is required.
-- **Without device registration** (`register_device = false`): a `client_secret`
-  must be configured in the `[oidc]` section. authd then uses the OIDC app's
-  client credentials to obtain an application-level Graph token. This requires
-  the app registration to hold the `GroupMember.Read.All` **Application**
-  permission with tenant admin consent.
+- **Without device registration** (`register_device = false`) for the
+  **Entra authentication** flow: a `client_secret` must be configured in the
+  `[oidc]` section. authd then uses the OIDC app's client credentials to obtain
+  an application-level Graph token. This requires the app registration to hold
+  the `GroupMember.Read.All` **Application** permission with tenant admin
+  consent.
 
 If neither device registration nor a client secret is available while the
 **Entra authentication** flow is enabled, the broker fails to start because
