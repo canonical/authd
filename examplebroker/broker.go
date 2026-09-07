@@ -305,31 +305,41 @@ func (b *Broker) NewSession(ctx context.Context, username, lang, mode, providerI
 		exampleUsers[username] = userInfoBroker{Password: "goodpass"}
 	}
 
-	if _, ok := exampleUsers[username]; !ok && strings.HasPrefix(username, UserIntegrationMfaPrefix) {
-		exampleUsers[username] = userInfoBroker{Password: "goodpass"}
+	if strings.HasPrefix(username, UserIntegrationMfaPrefix) {
+		if _, ok := exampleUsers[username]; !ok {
+			exampleUsers[username] = userInfoBroker{Password: "goodpass"}
+		}
 		info.neededAuthSteps = 3
 	}
 
-	if _, ok := exampleUsers[username]; !ok && strings.HasPrefix(username, UserIntegrationMfaNeedsResetPrefix) {
-		exampleUsers[username] = userInfoBroker{Password: "goodpass"}
+	if strings.HasPrefix(username, UserIntegrationMfaNeedsResetPrefix) {
+		if _, ok := exampleUsers[username]; !ok {
+			exampleUsers[username] = userInfoBroker{Password: "goodpass"}
+		}
 		info.neededAuthSteps = 3
 		info.pwdChange = mustReset
 	}
 
-	if _, ok := exampleUsers[username]; !ok && strings.HasPrefix(username, UserIntegrationMfaWithResetPrefix) {
-		exampleUsers[username] = userInfoBroker{Password: "goodpass"}
+	if strings.HasPrefix(username, UserIntegrationMfaWithResetPrefix) {
+		if _, ok := exampleUsers[username]; !ok {
+			exampleUsers[username] = userInfoBroker{Password: "goodpass"}
+		}
 		info.neededAuthSteps = 3
 		info.pwdChange = canReset
 	}
 
-	if _, ok := exampleUsers[username]; !ok && strings.HasPrefix(username, UserIntegrationNeedsResetPrefix) {
-		exampleUsers[username] = userInfoBroker{Password: "goodpass"}
+	if strings.HasPrefix(username, UserIntegrationNeedsResetPrefix) {
+		if _, ok := exampleUsers[username]; !ok {
+			exampleUsers[username] = userInfoBroker{Password: "goodpass"}
+		}
 		info.neededAuthSteps = 2
 		info.pwdChange = mustReset
 	}
 
-	if _, ok := exampleUsers[username]; !ok && strings.HasPrefix(username, UserIntegrationCanResetPrefix) {
-		exampleUsers[username] = userInfoBroker{Password: "goodpass"}
+	if strings.HasPrefix(username, UserIntegrationCanResetPrefix) {
+		if _, ok := exampleUsers[username]; !ok {
+			exampleUsers[username] = userInfoBroker{Password: "goodpass"}
+		}
 		info.neededAuthSteps = 2
 		info.pwdChange = canReset
 	}
