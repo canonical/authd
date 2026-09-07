@@ -1,0 +1,38 @@
+#!/bin/bash
+
+set -euo pipefail
+
+usage(){
+    cat << EOF
+Usage: $0 [journalctl options]
+
+Show the logs for authd and authd broker snaps. All options are passed to journalctl.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+journalctl \
+    _SYSTEMD_UNIT=authd.service \+ \
+    UNIT=authd.service \+ \
+    _SYSTEMD_UNIT=snap.authd-msentraid.authd-msentraid.service \+ \
+    UNIT=snap.authd-msentraid.authd-msentraid.service \+ \
+    SYSLOG_IDENTIFIER=authd-msentraid \+ \
+    _SYSTEMD_UNIT=snap.authd-google.authd-google.service \+ \
+    UNIT=snap.authd-google.authd-google.service \+ \
+    SYSLOG_IDENTIFIER=authd-google \+ \
+    _SYSTEMD_UNIT=snap.authd-oidc.authd-oidc.service \+ \
+    UNIT=snap.authd-oidc.authd-oidc.service \+ \
+    SYSLOG_IDENTIFIER=authd-oidc \+ \
+    _COMM=authd-pam \
+    "$@"
