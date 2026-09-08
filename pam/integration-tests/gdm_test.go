@@ -1116,6 +1116,51 @@ func TestGdmModule(t *testing.T) {
 	}
 }
 
+func TestGdmModuleLocalUserSkipsAuthd(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	t.Cleanup(pam_test.MaybeDoLeakCheck)
+
+	if !pam.CheckPamHasStartConfdir() {
+		t.Fatal("can't test with this libpam version!")
+	}
+
+	libPath := buildPAMModule(t)
+	localUser := testUserName(t, "local")
+	passwdFile := filepath.Join(t.TempDir(), "passwd")
+	passwdEntry := fmt.Sprintf("%s:x:1000:1000:Local User:/home/%s:/bin/bash\n", localUser, localUser)
+	require.NoError(t, os.WriteFile(passwdFile, []byte(passwdEntry), 0600))
+
+	serviceFile, err := pam_test.CreateService(t.TempDir(), "gdm-authd", []pam_test.ServiceLine{
+		{
+			Action:  pam_test.Auth,
+			Control: pam_test.NewControl("[success=1 default=ignore module_unknown=ignore]"),
+			Module:  "pam_localuser.so",
+			Args:    []string{"file=" + passwdFile},
+		},
+		{
+			Action:  pam_test.Auth,
+			Control: pam_test.NewControl("[success=1 ignore=ignore default=die authinfo_unavail=ignore module_unknown=ignore]"),
+			Module:  libPath,
+			Args: []string{
+				"socket=/some-path/not-existent-socket",
+				"debug=true",
+				"logfile=" + filepath.Join(t.TempDir(), "authd-pam-gdm.log"),
+			},
+		},
+		{Action: pam_test.Auth, Control: pam_test.Required, Module: pam_test.Permit.String()},
+	})
+	require.NoError(t, err, "Setup: Can't create service file")
+
+	gh := newGdmTestModuleHandler(t, serviceFile, localUser)
+	t.Cleanup(func() { require.NoError(t, gh.tx.End(), "PAM: can't end transaction") })
+
+	require.NoError(t, gh.tx.Authenticate(0))
+	require.Empty(t, gh.pamErrorMessages)
+}
+
 func TestGdmModuleAuthenticateWithoutGdmExtension(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping test in short mode.")

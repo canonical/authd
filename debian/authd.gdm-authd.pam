@@ -1,5 +1,8 @@
 #%PAM-1.0
 auth    [success=ok user_unknown=ignore default=bad] pam_succeed_if.so user != root quiet_success
+# Local users bypass authd so an unavailable daemon does not disrupt local
+# authentication.
+auth    [success=1 default=ignore module_unknown=ignore] pam_localuser.so
 auth    [success=1 ignore=ignore default=die authinfo_unavail=ignore module_unknown=ignore] pam_authd.so
 # If authd ignored the request => local broker is selected,
 # then we continue with normal stack
