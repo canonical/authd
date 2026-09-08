@@ -125,9 +125,9 @@ body:
 
         #### authd-msentraid configuration
         \`\`\`
-        $(sudo cat 2>&1 /var/snap/authd-msentraid/current/broker.conf | sed -E 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/<UUID redacted>/g')
+        $(sudo cat 2>&1 /var/snap/authd-msentraid/current/broker.conf | sed -E 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/<UUID redacted>/g' | sed -E 's/client_secret = .*/client_secret = <redacted>/g')
         \`\`\`
-        $(sudo sh -c 'for f in /var/snap/authd-msentraid/current/broker.conf.d/*.conf; do [ -f "$f" ] && echo "##### $f" && echo "\`\`\`" && cat "$f" && echo "\`\`\`"; done' 2>/dev/null | sed -E 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/<UUID redacted>/g')
+        $(sudo sh -c 'for f in /var/snap/authd-msentraid/current/broker.conf.d/*.conf; do [ -f "$f" ] && echo "##### $f" && echo "\`\`\`" && cat "$f" && echo "\`\`\`"; done' 2>/dev/null | sed -E 's/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/<UUID redacted>/g' | sed -E 's/client_secret = .*/client_secret = <redacted>/g')
 
         #### authd-google configuration
         \`\`\`
