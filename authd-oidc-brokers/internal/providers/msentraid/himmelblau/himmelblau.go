@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/canonical/authd/log"
 	"github.com/golang-jwt/jwt/v5"
@@ -377,12 +378,14 @@ func InitiateMFAFlow(ctx context.Context, clientID, tenantID string, data *Devic
 		}
 	}
 
-	var flow *MFAFlowState
-	if withDeviceScope {
-		flow, err = initiateMFAFlowForEnrollment(brokerClientApp, username, password, opts)
-	} else {
-		flow, err = initiateMFAFlow(brokerClientApp, username, password, opts)
-	}
+	// ponytail: fixed backoff without jitter; add jitter like upstream
+	// himmelblau if synchronized retries during tenant-wide throttling bite
+	flow, err := retryTransientInitiate(ctx, []time.Duration{time.Second, 2 * time.Second}, func() (*MFAFlowState, error) {
+		if withDeviceScope {
+			return initiateMFAFlowForEnrollment(brokerClientApp, username, password, opts)
+		}
+		return initiateMFAFlow(brokerClientApp, username, password, opts)
+	})
 	if err != nil {
 		return nil, nil, err
 	}

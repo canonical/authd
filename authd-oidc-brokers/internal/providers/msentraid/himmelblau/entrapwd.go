@@ -2,10 +2,13 @@ package himmelblau
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
+	"github.com/canonical/authd/log"
 	"golang.org/x/oauth2"
 )
 
@@ -260,4 +263,28 @@ func (e *MFAError) IsMFAUserNotFound() bool {
 func (e *MFAError) IsMFATransient() bool {
 	return e.AADSTS == externalServerRetryableErrorCode ||
 		e.AADSTS == tenantThrottlingErrorCode
+}
+
+// retryTransientInitiate runs initiate and, when it fails with a transient
+// Entra error (see IsMFATransient), retries it after each delay so that brief
+// backend unavailability or throttling stays invisible to the user. Waiting
+// for a retry is aborted when the context is done. Once the retry budget is
+// exhausted, the last result is returned unchanged for the regular error
+// routing.
+func retryTransientInitiate(ctx context.Context, delays []time.Duration, initiate func() (*MFAFlowState, error)) (*MFAFlowState, error) {
+	flow, err := initiate()
+	for _, delay := range delays {
+		var mfaErr *MFAError
+		if err == nil || !errors.As(err, &mfaErr) || !mfaErr.IsMFATransient() {
+			return flow, err
+		}
+		log.Warningf(ctx, "Transient Entra error (AADSTS%d) while initiating the MFA flow; retrying in %v", mfaErr.AADSTS, delay)
+		select {
+		case <-ctx.Done():
+			return flow, err
+		case <-time.After(delay):
+		}
+		flow, err = initiate()
+	}
+	return flow, err
 }
