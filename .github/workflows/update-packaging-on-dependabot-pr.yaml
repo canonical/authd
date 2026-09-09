@@ -248,12 +248,17 @@ jobs:
       - name: Install licensecheck and python3-anytree
         run: |
           apt-get update -y
+          # Enable licensecheck's RE2 regex engine. Without it, ubuntu:devel
+          # double-encodes non-ASCII copyright holders.
           apt-get install -y --no-install-recommends \
             licensecheck \
+            libre-engine-re2-perl \
             python3-anytree
 
       - name: Regenerate debian/copyright
         run: |
+          # licensecheck uses the process locale when writing its output.
+          export LC_ALL=C.UTF-8
           # Pass both trees because the script rewrites all vendored Files:
           # stanzas. Use relative paths because they are written verbatim to
           # debian/copyright.
