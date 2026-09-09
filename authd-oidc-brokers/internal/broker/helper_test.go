@@ -197,6 +197,10 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 // newSessionForTests is a helper function to easily create a new session for tests.
 // If kept empty, username and mode will be assigned default values.
 func newSessionForTests(t *testing.T, b *broker.Broker, username, mode string) (id, key string) {
+	return newSessionForServiceTests(t, b, username, mode, "")
+}
+
+func newSessionForServiceTests(t *testing.T, b *broker.Broker, username, mode, serviceName string) (id, key string) {
 	t.Helper()
 
 	if username == "" {
@@ -206,7 +210,7 @@ func newSessionForTests(t *testing.T, b *broker.Broker, username, mode string) (
 		mode = sessionmode.Login
 	}
 
-	id, key, err := b.NewSession(username, "some lang", mode, "")
+	id, key, err := b.NewSession(username, "some lang", mode, "", serviceName)
 	require.NoError(t, err, "Setup: NewSession should not have returned an error")
 
 	return id, key

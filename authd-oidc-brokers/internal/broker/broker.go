@@ -39,7 +39,7 @@ const (
 	// LatestAPIVersion is the latest API version supported by the broker. It should be incremented when a non backward
 	// compatible change is made to the API.
 	// Note: Remember to also bump the LatestAPIVersion in internal/brokers/dbusbroker.go.
-	LatestAPIVersion uint = 3
+	LatestAPIVersion uint = 4
 
 	maxAuthAttempts    = 3
 	maxRequestDuration = 5 * time.Second
@@ -93,10 +93,11 @@ type Broker struct {
 }
 
 type session struct {
-	username   string
-	providerID string // stable provider identifier; empty until learned via auth or cache migration
-	lang       string
-	mode       string
+	username    string
+	providerID  string // stable provider identifier; empty until learned via auth or cache migration
+	serviceName string
+	lang        string
+	mode        string
 
 	selectedMode    string
 	authModes       []string
@@ -703,16 +704,18 @@ func (b *Broker) userDataDir(basePath string) (string, error) {
 // NewSession creates a new session for the user. providerID is the stable provider
 // identifier from authd's database; when non-empty it is used to locate the
 // provider ID-keyed cache directory directly, bypassing the username-based lookup.
-func (b *Broker) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
+// serviceName is the PAM service that started the session.
+func (b *Broker) NewSession(username, lang, mode, providerID, serviceName string) (sessionID, encryptionKey string, err error) {
 	if username == "" {
 		return "", "", errors.New("username is required")
 	}
 
 	sessionID = uuid.New().String()
 	s := session{
-		username: username,
-		lang:     lang,
-		mode:     mode,
+		username:    username,
+		serviceName: serviceName,
+		lang:        lang,
+		mode:        mode,
 
 		attemptsPerMode: make(map[string]int),
 	}

@@ -10,7 +10,7 @@ type localBroker struct {
 }
 
 //nolint:unused // We still need localBroker to implement the brokerer interface, even though this method should never be called on it.
-func (b localBroker) NewSession(ctx context.Context, username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
+func (b localBroker) NewSession(ctx context.Context, username, lang, mode, providerID, serviceName string) (sessionID, encryptionKey string, err error) {
 	return "", "", errors.New("NewSession should never be called on local broker")
 }
 

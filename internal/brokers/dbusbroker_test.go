@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/canonical/authd/internal/services/errmessages"
+	"github.com/canonical/authd/internal/testutils"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 	"github.com/stretchr/testify/require"
@@ -15,15 +17,21 @@ import (
 // mockBusObject implements dbus.BusObject for testing dbusBroker internals.
 type mockBusObject struct {
 	introspectXML string
+	callBody      []interface{}
 	callErr       error
 
 	lastCalledMethod string
+	lastCallArgs     []interface{}
 }
 
 func (m *mockBusObject) Call(method string, flags dbus.Flags, args ...interface{}) *dbus.Call {
 	m.lastCalledMethod = method
+	m.lastCallArgs = append([]interface{}(nil), args...)
 	if m.callErr != nil {
 		return &dbus.Call{Err: m.callErr}
+	}
+	if m.callBody != nil {
+		return &dbus.Call{Body: m.callBody}
 	}
 	return &dbus.Call{Body: []interface{}{m.introspectXML}}
 }
@@ -77,9 +85,9 @@ func TestGetInterface(t *testing.T) {
 			wantInterface: dbusInterface{name: "com.ubuntu.authd.Broker", version: 1},
 		},
 		"Returns_highest_supported_version": {
-			interfaces: []string{"com.ubuntu.authd.Broker1", "com.ubuntu.authd.Broker2", "com.ubuntu.authd.Broker3",
+			interfaces: []string{"com.ubuntu.authd.Broker1", "com.ubuntu.authd.Broker2", "com.ubuntu.authd.Broker3", "com.ubuntu.authd.Broker4",
 				"com.ubuntu.authd.Broker999"}, // This one should be ignored as it's above the latest supported API version.
-			wantInterface: dbusInterface{name: "com.ubuntu.authd.Broker3", version: 3},
+			wantInterface: dbusInterface{name: "com.ubuntu.authd.Broker4", version: 4},
 		},
 		"Versioned_interfaces_with_unversioned": {
 			interfaces:    []string{"com.ubuntu.authd.Broker2", "com.ubuntu.authd.Broker", "com.ubuntu.authd.Broker1"},
@@ -100,7 +108,7 @@ func TestGetInterface(t *testing.T) {
 			wantErr:    true,
 		},
 		"Error_when_all_interfaces_above_latest_version": {
-			interfaces: []string{"com.ubuntu.authd.Broker4", "com.ubuntu.authd.Broker5"},
+			interfaces: []string{"com.ubuntu.authd.Broker5", "com.ubuntu.authd.Broker6"},
 			wantErr:    true,
 		},
 		"Error_when_introspect_fails": {
@@ -126,6 +134,77 @@ func TestGetInterface(t *testing.T) {
 			require.Equal(t, tc.wantInterface, got, "getInterface returned unexpected interface")
 		})
 	}
+}
+
+func TestDbusBrokerNewSessionUsesV3Signature(t *testing.T) {
+	t.Parallel()
+
+	brokerName := strings.ReplaceAll(t.Name(), "/", "_")
+	configPath, cleanup, err := testutils.StartBusBrokerMockWithAPIVersion(t.TempDir(), brokerName, 3)
+	require.NoError(t, err, "Setup: starting the v3 broker mock should not fail")
+	t.Cleanup(cleanup)
+
+	conn, err := testutils.GetSystemBusConnection(t)
+	require.NoError(t, err, "Setup: connecting to the system bus should not fail")
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+	b, _, _, err := newDbusBroker(context.Background(), conn, configPath)
+	require.NoError(t, err, "Setup: creating the D-Bus broker should not fail")
+
+	sessionID, encryptionKey, err := b.NewSession(context.Background(), "user@example.com", "lang", "login", "provider-id", "sshd")
+	require.NoError(t, err, "NewSession should use the v3-compatible argument list")
+	require.NotEmpty(t, sessionID)
+	require.NotEmpty(t, encryptionKey)
+}
+
+func TestDbusBrokerNewSessionUsesV1AndV2Signatures(t *testing.T) {
+	t.Parallel()
+
+	for _, apiVersion := range []uint{1, 2} {
+		t.Run(fmt.Sprintf("v%d", apiVersion), func(t *testing.T) {
+			t.Parallel()
+
+			brokerName := strings.ReplaceAll(t.Name(), "/", "_")
+			configPath, cleanup, err := testutils.StartBusBrokerMockWithAPIVersion(t.TempDir(), brokerName, apiVersion)
+			require.NoError(t, err, "Setup: starting the legacy broker mock should not fail")
+			t.Cleanup(cleanup)
+
+			conn, err := testutils.GetSystemBusConnection(t)
+			require.NoError(t, err, "Setup: connecting to the system bus should not fail")
+			t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+			b, _, _, err := newDbusBroker(context.Background(), conn, configPath)
+			require.NoError(t, err, "Setup: creating the D-Bus broker should not fail")
+
+			sessionID, encryptionKey, err := b.NewSession(
+				context.Background(), "user@example.com", "lang", "login", "provider-id", "sshd",
+			)
+			require.NoError(t, err, "NewSession should use the legacy argument list")
+			require.NotEmpty(t, sessionID)
+			require.NotEmpty(t, encryptionKey)
+		})
+	}
+}
+
+func TestDbusBrokerNewSessionPassesV4ServiceName(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockBusObject{
+		callBody: []interface{}{"session-id", "encryption-key"},
+	}
+	b := dbusBroker{
+		name:       "test",
+		iface:      dbusInterface{name: "com.ubuntu.authd.Broker4", version: 4},
+		dbusObject: mock,
+	}
+
+	sessionID, encryptionKey, err := b.NewSession(
+		context.Background(), "user@example.com", "lang", "login", "provider-id", "sshd",
+	)
+	require.NoError(t, err, "NewSession should not return an error")
+	require.Equal(t, "session-id", sessionID)
+	require.Equal(t, "encryption-key", encryptionKey)
+	require.Equal(t, []interface{}{"user@example.com", "lang", "login", "provider-id", "sshd"}, mock.lastCallArgs)
 }
 
 func TestDbusBrokerCallUsesInterface(t *testing.T) {
