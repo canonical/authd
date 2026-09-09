@@ -260,6 +260,13 @@ Change allowed_users In Broker Configuration
     SSH.Execute    snap restart ${BROKER_SNAP_NAME}
 
 
+Enable Legacy Force Provider Authentication
+    SSH.Execute    sed -i '/^[#[:space:]]*force_access_check_with_provider[[:space:]]*=/d' ${BROKER_CFG}
+    SSH.Execute    sed -i '/^[#[:space:]]*force_provider_authentication[[:space:]]*=/d' ${BROKER_CFG}
+    SSH.Execute    sed -i '/^\[oidc\]/a force_provider_authentication = true' ${BROKER_CFG}
+    SSH.Execute    snap restart ${BROKER_SNAP_NAME}
+
+
 Comment Key In Broker Configuration
     [Arguments]    ${config_key}
     SSH.Execute    sed -i 's/^#*${config_key} =.*/#${config_key} = .*/g' ${BROKER_CFG}

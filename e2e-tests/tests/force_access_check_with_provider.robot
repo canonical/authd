@@ -51,3 +51,28 @@ Test second login fails with force_access_check_with_provider enabled offline
     Open Terminal
     Try Log In With Remote User    ${username}
     Check That Remote User Has No Available Authentication Modes
+
+
+Test second login works with the legacy force_provider_authentication setting
+    [Documentation]    Verify that the legacy broker configuration key still
+    ...    forces provider access checks during a second login.
+
+    Log In
+
+    Open Terminal
+    Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
+    Log Out From Terminal Session
+    Close Focused Window
+
+    Enable Legacy Force Provider Authentication
+
+    Open Terminal
+    Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
+    Log Out From su Session
+    Close Focused Window
+
+    Block Network Access To Identity Provider
+
+    Open Terminal
+    Try Log In With Remote User    ${username}
+    Check That Remote User Has No Available Authentication Modes
