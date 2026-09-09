@@ -539,6 +539,9 @@ authentication. This is the standard OAuth 2.0 Device Authorization Grant flow.
 
 At least one authentication flow must be enabled. A configuration that
 explicitly disables both flows is invalid, and the broker fails to start.
+
+See [Enable a flow only for some services](ref::config-per-service-flows) to
+restrict a flow to specific PAM services.
 ::::
 
 ::::{tab-item} Google IAM
@@ -546,6 +549,9 @@ explicitly disables both flows is invalid, and the broker fails to start.
 
 The Google IAM broker only supports the device code flow, where the user visits a URL
 and enters a code to complete authentication.
+
+See [Enable a flow only for some services](ref::config-per-service-flows) to
+restrict the flow to specific PAM services.
 ::::
 
 ::::{tab-item} Keycloak
@@ -553,8 +559,68 @@ and enters a code to complete authentication.
 
 The authd-oidc broker only supports the device code flow, where the user visits a URL
 and enters a code to complete authentication.
+
+See [Enable a flow only for some services](ref::config-per-service-flows) to
+restrict the flow to specific PAM services.
 ::::
 :::::
+
+(ref::config-per-service-flows)=
+
+### Enable a flow only for some services
+
+Each flow key in `[flows]` accepts either a boolean or a comma-separated list
+of PAM service names. A boolean applies to every service. A list enables the
+flow only for the services it names:
+
+```ini
+[flows]
+device_code = sshd, gdm-authd
+```
+
+With this configuration, the device code flow is offered when logging in
+through SSH or GDM, and is not offered anywhere else.
+
+A service name is the name of a PAM configuration file in `/etc/pam.d` or
+`/usr/lib/pam.d`, such as `sshd`, `gdm-authd`, `login` or `sudo`. The broker
+logs a warning at startup for any name it cannot find on the system.
+
+```{admonition} Any value that is not a boolean is read as a service list
+:class: important
+A mistyped boolean such as `device_code = ture` is read as a list containing a
+single service named `ture`, which disables the flow for every real service.
+Check the broker logs for the warning if a flow stops being offered.
+```
+
+#### Deny specific services
+
+Every flow key has a matching `no_` key that denies services instead of
+allowing them: `no_device_code` for `device_code`, and `no_entra_auth` for
+`entra_auth`. A service is offered a flow only when it is allowed by the flow
+key **and** not denied by the `no_` key.
+
+Use a `no_` key to make an exception to a flow that is otherwise enabled
+everywhere:
+
+```ini
+[flows]
+device_code = true
+no_device_code = sudo, su
+```
+
+The `no_` keys default to `false`, meaning nothing is denied.
+
+```{admonition} Services that are not known to the broker
+:class: note
+Not every PAM application reports its service name to the broker. When the name
+is missing, allow lists are treated as matching and deny lists as not matching,
+so the flow stays available. This keeps a login path from breaking because of a
+rule that cannot be evaluated. The broker logs a warning once per session when
+this happens.
+```
+
+The per-service rules do not change the startup check: at least one flow must
+be enabled for at least one service, otherwise the broker fails to start.
 
 ## Restart the broker
 
