@@ -28,6 +28,9 @@ var (
 	// interfaceV3 extends the base interface with a provider_id argument in NewSession and DeleteUser.
 	//go:embed interfaces/com.ubuntu.authd.BrokerV3.xml
 	interfaceV3 string
+
+	//go:embed interfaces/com.ubuntu.authd.BrokerV4.xml
+	interfaceV4 string
 )
 
 // Service is the object representing the dbus service, which contains the exported interfaces and the necessary
@@ -54,6 +57,7 @@ var interfaceNames = []string{
 	"com.ubuntu.authd.Broker",
 	"com.ubuntu.authd.Broker2",
 	"com.ubuntu.authd.Broker3",
+	"com.ubuntu.authd.Broker4",
 }
 
 type brokerUnavailableError struct {
@@ -94,13 +98,16 @@ func New(_ context.Context, brokerConfig broker.Config) (*Service, error) {
 
 		var objectToExport any
 		// We declare the interfaces in order, so we can use the index to determine which version we are exporting and
-		// adjust the introspection XML accordingly
-		// (v1 and v2 share the same method signatures, while v3 introduces provider_id arguments in some methods).
+		// adjust the introspection XML accordingly.
 		objectToExport = s
-		introspectableInterface := interfaceV3
-		if version < 3 {
+		introspectableInterface := interfaceV4
+		switch {
+		case version < 3:
 			introspectableInterface = interfaceV2
 			objectToExport = &InterfaceV2{Interface: s}
+		case version < 4:
+			introspectableInterface = interfaceV3
+			objectToExport = &InterfaceV3{Interface: s}
 		}
 
 		if err := conn.Export(objectToExport, object, iface); err != nil {
