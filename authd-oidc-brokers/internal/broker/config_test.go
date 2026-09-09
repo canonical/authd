@@ -1,10 +1,12 @@
 package broker
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +16,7 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/google"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
 	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -92,22 +95,22 @@ device_code = false
 entra_auth = true
 `,
 
-	"invalid_device_code_value": `
+	"device_code_service_list": `
 [oidc]
 issuer = https://issuer.url.com
 client_id = client_id
 
 [flows]
-device_code = not-a-bool
+device_code = sshd
 `,
 
-	"invalid_entra_auth_value": `
+	"entra_auth_service_list": `
 [oidc]
 issuer = https://issuer.url.com
 client_id = client_id
 
 [flows]
-entra_auth = not-a-bool
+entra_auth = gdm-authd
 `,
 
 	"invalid_register_device_value": `
@@ -158,13 +161,13 @@ func TestParseConfig(t *testing.T) {
 		wantErrContainsDropInConfigPath bool
 		wantErrContains                 string
 	}{
-		"Successfully_parse_config_file":                           {},
-		"Successfully_parse_config_file_with_optional_values":      {configType: "valid+optional"},
-		"Successfully_parse_config_file_with_register_device":      {configType: "valid+register_device"},
-		"Successfully_parse_config_file_with_flow_values":          {configType: "valid+one_flow_disabled", provider: &configTestProvider{MockProvider: &testutils.MockProvider{}}},
-		"Warns_and_uses_default_for_invalid_device_code_value":     {configType: "invalid_device_code_value"},
-		"Warns_and_uses_default_for_invalid_entra_auth_flow_value": {configType: "invalid_entra_auth_value"},
-		"Successfully_parse_config_with_drop_in_files":             {dropInType: "valid"},
+		"Successfully_parse_config_file":                      {},
+		"Successfully_parse_config_file_with_optional_values": {configType: "valid+optional"},
+		"Successfully_parse_config_file_with_register_device": {configType: "valid+register_device"},
+		"Successfully_parse_config_file_with_flow_values":     {configType: "valid+one_flow_disabled", provider: &configTestProvider{MockProvider: &testutils.MockProvider{}}},
+		"Accepts_device_code_service_list":                    {configType: "device_code_service_list"},
+		"Accepts_entra_auth_service_list":                     {configType: "entra_auth_service_list"},
+		"Successfully_parse_config_with_drop_in_files":        {dropInType: "valid"},
 		"Successfully_parse_config_with_flow_drop_in_files": {
 			configType: "valid+flows_disabled",
 			dropInType: "flows",
@@ -310,20 +313,20 @@ func TestParseFlowsConfigDefaults(t *testing.T) {
 		"Entra_auth_follows_register_device_when_section_is_omitted": {
 			registerDevice: true,
 			omitFlows:      true,
-			want:           flowsConfig{DeviceAuth: true, EntraAuth: true},
+			want:           flowsConfig{DeviceAuth: defaultFlowRule(true), EntraAuth: defaultFlowRule(true)},
 		},
 		"Entra_auth_is_disabled_when_register_device_is_disabled": {
 			omitFlows: true,
-			want:      flowsConfig{DeviceAuth: true, EntraAuth: false},
+			want:      flowsConfig{DeviceAuth: defaultFlowRule(true), EntraAuth: defaultFlowRule(false)},
 		},
 		"Explicit_false_overrides_register_device": {
 			registerDevice: true,
 			flows:          "entra_auth = false",
-			want:           flowsConfig{DeviceAuth: true, EntraAuth: false},
+			want:           flowsConfig{DeviceAuth: defaultFlowRule(true), EntraAuth: defaultFlowRule(false)},
 		},
 		"Explicit_true_overrides_register_device": {
 			flows: "entra_auth = true",
-			want:  flowsConfig{DeviceAuth: true, EntraAuth: true},
+			want:  flowsConfig{DeviceAuth: defaultFlowRule(true), EntraAuth: defaultFlowRule(true)},
 		},
 	}
 
@@ -348,6 +351,289 @@ register_device = %t
 			cfg, err := parseConfig(configFile{content: []byte(config)}, nil, &testutils.MockProvider{})
 			require.NoError(t, err)
 			require.Equal(t, tc.want, cfg.flows)
+		})
+	}
+}
+
+func TestParseFlowsConfigServiceLists(t *testing.T) {
+	t.Parallel()
+
+	config := `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+device_code = sshd, gdm-authd
+no_device_code = gdm-authd
+entra_auth = sshd
+no_entra_auth = console
+`
+	provider := &configTestProvider{MockProvider: &testutils.MockProvider{}}
+	cfg, err := parseConfig(configFile{content: []byte(config)}, nil, provider)
+	require.NoError(t, err)
+	require.Equal(t, flowsConfig{
+		DeviceAuth: flowRule{
+			allow: serviceRule{services: []string{"sshd", "gdm-authd"}},
+			deny:  serviceRule{services: []string{"gdm-authd"}},
+		},
+		EntraAuth: flowRule{
+			allow: serviceRule{services: []string{"sshd"}},
+			deny:  serviceRule{services: []string{"console"}},
+		},
+	}, cfg.flows)
+}
+
+func TestParseFlowsConfigRejectsEmptyServiceNames(t *testing.T) {
+	t.Parallel()
+
+	const configTemplate = `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+%s = sshd,,gdm-authd
+`
+	for _, key := range []string{
+		flowsDeviceAuthKey,
+		flowsEntraAuthKey,
+		flowsNoDeviceAuthKey,
+		flowsNoEntraAuthKey,
+	} {
+		t.Run(key, func(t *testing.T) {
+			t.Parallel()
+
+			config := fmt.Sprintf(configTemplate, key)
+			_, err := parseConfig(configFile{content: []byte(config)}, nil, &testutils.MockProvider{})
+			require.ErrorContains(t, err, `service name 2 is empty`)
+		})
+	}
+}
+
+// TestParseFlowsConfigReadsMistypedBooleanAsServiceList documents the trap that
+// warnOnUnknownServices exists to catch: a mistyped boolean is a valid service
+// name, so parsing accepts it and the flow ends up disabled everywhere.
+func TestParseFlowsConfigReadsMistypedBooleanAsServiceList(t *testing.T) {
+	t.Parallel()
+
+	config := `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+device_code = ture
+`
+	provider := &configTestProvider{MockProvider: &testutils.MockProvider{}}
+	cfg, err := parseConfig(configFile{content: []byte(config)}, nil, provider)
+	require.NoError(t, err)
+	require.Equal(t, serviceRule{services: []string{"ture"}}, cfg.flows.DeviceAuth.allow)
+	require.False(t, cfg.flows.DeviceAuth.enabledFor("sshd"),
+		"A mistyped boolean must not enable the flow for a real service")
+	require.True(t, cfg.flows.DeviceAuth.enabledForAnyService(),
+		"Startup validation cannot catch this, which is why we warn instead")
+}
+
+// Not parallel: the tests install a global log handler.
+func TestWarnOnUnknownServices(t *testing.T) {
+	tests := map[string]struct {
+		config string
+
+		wantWarnings []string
+	}{
+		"No warning when every listed service exists": {
+			config: "device_code = sshd\nno_entra_auth = gdm-authd",
+		},
+		"No warning for boolean values": {
+			config: "device_code = true\nentra_auth = false",
+		},
+		"Warns for an unknown service in an allow list": {
+			config:       "device_code = sshd, no-such-app",
+			wantWarnings: []string{`"no-such-app" listed in "device_code"`},
+		},
+		"Warns for an unknown service in a deny list": {
+			config:       "no_entra_auth = no-such-app",
+			wantWarnings: []string{`"no-such-app" listed in "no_entra_auth"`},
+		},
+		"Warns for a mistyped boolean": {
+			config:       "entra_auth = ture",
+			wantWarnings: []string{`"ture" listed in "entra_auth"`},
+		},
+		"Warns once per unknown service and key": {
+			config: "device_code = no-such-app\nno_device_code = also-missing",
+			wantWarnings: []string{
+				`"no-such-app" listed in "device_code"`,
+				`"also-missing" listed in "no_device_code"`,
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			pamDDir := t.TempDir()
+			pamDDirAlt := t.TempDir()
+			// Split the known services across both directories so we also cover
+			// a service that is only present in the second one.
+			require.NoError(t, os.WriteFile(filepath.Join(pamDDir, "sshd"), nil, 0600),
+				"Setup: could not create PAM service file")
+			require.NoError(t, os.WriteFile(filepath.Join(pamDDirAlt, "gdm-authd"), nil, 0600),
+				"Setup: could not create PAM service file")
+
+			config := fmt.Sprintf(`
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+%s
+`, tc.config)
+			provider := &configTestProvider{MockProvider: &testutils.MockProvider{}}
+			cfg, err := parseConfig(configFile{content: []byte(config)}, nil, provider)
+			require.NoError(t, err)
+
+			var warnings []string
+			log.SetLevelHandler(log.WarnLevel, func(_ context.Context, _ log.Level, format string, args ...interface{}) {
+				warnings = append(warnings, fmt.Sprintf(format, args...))
+			})
+			t.Cleanup(func() { log.SetLevelHandler(log.WarnLevel, nil) })
+
+			cfg.flows.warnOnUnknownServices(context.Background(), []string{pamDDir, pamDDirAlt})
+
+			require.Len(t, warnings, len(tc.wantWarnings), "Unexpected warnings: %v", warnings)
+			for _, want := range tc.wantWarnings {
+				require.True(t, slices.ContainsFunc(warnings, func(w string) bool {
+					return strings.Contains(w, want)
+				}), "Expected a warning containing %q, got %v", want, warnings)
+			}
+		})
+	}
+}
+
+// TestWarnOnUnknownServicesIgnoresUnreadableDirs makes sure a directory we
+// cannot read is treated as if it contained every service, so a locked down
+// system does not get a warning for services that are actually configured.
+func TestWarnOnUnknownServicesIgnoresUnreadableDirs(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("Root bypasses directory permissions, so the error cannot be triggered")
+	}
+
+	pamDDir := filepath.Join(t.TempDir(), "unreadable")
+	require.NoError(t, os.Mkdir(pamDDir, 0000), "Setup: could not create unreadable dir")
+
+	config := `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+device_code = no-such-app
+`
+	provider := &configTestProvider{MockProvider: &testutils.MockProvider{}}
+	cfg, err := parseConfig(configFile{content: []byte(config)}, nil, provider)
+	require.NoError(t, err)
+
+	var warnings []string
+	log.SetLevelHandler(log.WarnLevel, func(_ context.Context, _ log.Level, format string, args ...interface{}) {
+		warnings = append(warnings, fmt.Sprintf(format, args...))
+	})
+	t.Cleanup(func() { log.SetLevelHandler(log.WarnLevel, nil) })
+
+	cfg.flows.warnOnUnknownServices(context.Background(), []string{pamDDir})
+
+	require.Empty(t, warnings, "An unreadable directory must not produce warnings")
+}
+
+func TestFlowRuleEnabledFor(t *testing.T) {
+	t.Parallel()
+	list := func(services ...string) serviceRule {
+		return serviceRule{services: services}
+	}
+	tests := map[string]struct {
+		rule    flowRule
+		service string
+		want    bool
+	}{
+		"Boolean_rules_apply_to_every_service": {
+			rule: flowRule{allow: booleanServiceRule(true), deny: booleanServiceRule(false)},
+			want: true,
+		},
+		"Boolean_false_allow_rule_remains_disabled_for_unknown_service": {
+			rule: flowRule{allow: booleanServiceRule(false), deny: booleanServiceRule(false)},
+			want: false,
+		},
+		"Allowlist_matches_service": {
+			rule:    flowRule{allow: list("sshd"), deny: booleanServiceRule(false)},
+			service: "sshd",
+			want:    true,
+		},
+		"Allowlist_rejects_other_service": {
+			rule:    flowRule{allow: list("sshd"), deny: booleanServiceRule(false)},
+			service: "gdm-authd",
+			want:    false,
+		},
+		"Allowlist_fails_open_for_unknown_service": {
+			rule: flowRule{allow: list("sshd"), deny: booleanServiceRule(false)},
+			want: true,
+		},
+		"Denylist_blocks_matching_service": {
+			rule:    flowRule{allow: booleanServiceRule(true), deny: list("sshd")},
+			service: "sshd",
+			want:    false,
+		},
+		"Denylist_fails_open_for_unknown_service": {
+			rule: flowRule{allow: booleanServiceRule(true), deny: list("sshd")},
+			want: true,
+		},
+		"Both_lists_require_allow_match_and_deny_miss": {
+			rule:    flowRule{allow: list("sshd", "gdm-authd"), deny: list("gdm-authd")},
+			service: "gdm-authd",
+			want:    false,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, tc.rule.enabledFor(tc.service))
+		})
+	}
+}
+
+func TestFlowRuleEnabledForAnyService(t *testing.T) {
+	t.Parallel()
+
+	list := func(services ...string) serviceRule {
+		return serviceRule{services: services}
+	}
+	tests := map[string]struct {
+		rule flowRule
+		want bool
+	}{
+		"Boolean_enabled": {
+			rule: flowRule{allow: booleanServiceRule(true), deny: booleanServiceRule(false)},
+			want: true,
+		},
+		"Boolean_disabled": {
+			rule: flowRule{allow: booleanServiceRule(false), deny: booleanServiceRule(false)},
+			want: false,
+		},
+		"Allowlist_and_denylist_have_an_available_service": {
+			rule: flowRule{allow: list("sshd", "gdm-authd"), deny: list("gdm-authd")},
+			want: true,
+		},
+		"Allowlist_and_denylist_have_no_available_service": {
+			rule: flowRule{allow: list("sshd"), deny: list("sshd")},
+			want: false,
+		},
+		"Boolean_denylist_disables_every_service": {
+			rule: flowRule{allow: list("sshd"), deny: booleanServiceRule(true)},
+			want: false,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, tc.rule.enabledForAnyService())
 		})
 	}
 }
