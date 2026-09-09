@@ -373,6 +373,38 @@ Continue Log In With Remote User Through GDM: Define Local Password
     Wait Until Desktop Ready
 
 
+Continue Log In With Remote User Through GDM: Define Local Password With Quality Checks
+    [Arguments]    ${short_password}    ${dictionary_password}    ${local_password}
+    Match Text    Create a local password    120
+
+    Hid.Type String    ${short_password}
+    Hid.Keys Combo    Return
+    Match Text    The password is shorter than 8 characters    30
+
+    Match Text    Create a local password    30
+    Hid.Type String    ${dictionary_password}
+    Hid.Keys Combo    Return
+    Match Text    The password fails the dictionary check    30
+
+    Match Text    Create a local password    30
+    Hid.Type String    ${local_password}
+    Hid.Keys Combo    Return
+    Match Text    Please, type the new passphrase again    120
+    Hid.Type String    ${local_password}
+    Hid.Keys Combo    Return
+
+    Wait Until Desktop Ready
+
+
+Unlock Screen With Device Code
+    [Arguments]    ${local_password}
+    # Wake the display before waiting for the device-authentication prompt.
+    Hid.Keys Combo    Return
+    Match Text    ${DEVICE_URL}    120
+    Continue Log In With Remote User: Authenticate In External Browser
+    Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
+
+
 Log In With Remote User Through GDM: Entra Password
     [Arguments]    ${username}
     Start Log In With Remote User Through GDM    ${username}
