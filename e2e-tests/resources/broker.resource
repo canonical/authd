@@ -277,10 +277,7 @@ Log In With Remote User Through SSH: QR Code
 
 Start Log In With Remote User Through SSH: QR Code
     [Arguments]    ${username}
-    Hid.Type String    ssh ${username}@localhost
-    Hid.Keys Combo    Return
-    Builtin.Sleep    2
-    Hid.Type String    yes
+    Hid.Type String    ssh -o StrictHostKeyChecking=no ${username}@localhost
     Hid.Keys Combo    Return
 
 
@@ -312,10 +309,46 @@ Continue Log In With Remote User Through SSH: Define Local Password
 
 Log In With Remote User Through SSH: Local Password
     [Arguments]    ${username}    ${local_password}
-    Hid.Type String    ssh ${username}@localhost
+    Hid.Type String    ssh -o StrictHostKeyChecking=no ${username}@localhost
     Hid.Keys Combo    Return
     Match Text    regex:Enter\\s*your\\s*(?:local\\s*)?password:    120
     Hid.Type String    ${local_password}
+    Hid.Keys Combo    Return
+    Match Text    ${username}@ubuntu:~$    120
+
+
+Log In With Remote User Through SSH: QR Code Existing User
+    [Arguments]    ${username}    ${local_password}
+    Hid.Type String    ssh -o StrictHostKeyChecking=no ${username}@localhost
+    Hid.Keys Combo    Return
+    Continue Log In With Remote User: Authenticate In External Browser
+    Continue Log In With Remote User Through SSH: QR Code
+    Continue Log In With Remote User Through SSH: Define Local Password
+    ...    ${username}    ${local_password}
+
+
+Log In With Local User Through SSH: Password
+    Hid.Type String    ssh -o StrictHostKeyChecking=no ubuntu@localhost
+    Hid.Keys Combo    Return
+    Match Text    Password:    120
+    Hid.Type String    ubuntu
+    Hid.Keys Combo    Return
+    Match Text    ubuntu@ubuntu:~$    120
+
+
+Prepare SSH Key For User
+    [Arguments]    ${username}    ${key_name}
+    ${home_dir} =    SSH.Execute    getent passwd ${username} | cut -d: -f6
+    Should Not Be Empty    ${home_dir}
+    SSH.Execute    rm -f /home/ubuntu/.ssh/${key_name} /home/ubuntu/.ssh/${key_name}.pub
+    SSH.Execute As User    ubuntu    ssh-keygen -q -t ed25519 -N '' -f /home/ubuntu/.ssh/${key_name}
+    SSH.Execute    install -d -m 700 -o ${username} -g ${username} ${home_dir}/.ssh
+    SSH.Execute    sh -c 'cat /home/ubuntu/.ssh/${key_name}.pub > ${home_dir}/.ssh/authorized_keys && chown ${username}:${username} ${home_dir}/.ssh/authorized_keys && chmod 600 ${home_dir}/.ssh/authorized_keys'
+
+
+Log In With SSH Key
+    [Arguments]    ${username}    ${key_name}
+    Hid.Type String    ssh -i /home/ubuntu/.ssh/${key_name} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no ${username}@localhost
     Hid.Keys Combo    Return
     Match Text    ${username}@ubuntu:~$    120
 
