@@ -297,7 +297,7 @@ Copyright: 2009-2026 The Go Authors.
 License: BSD-3-clause
 
 Files: vendor/google.golang.org/genproto/*
-Copyright: 2025 Google LLC
+Copyright: 2026 Google LLC
 License: Apache-2.0
 
 Files: vendor/google.golang.org/grpc/*
