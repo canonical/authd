@@ -124,6 +124,28 @@ func TestGdmModelActsOnSameAuthModeReselection(t *testing.T) {
 		"a genuine re-selection of the same auth mode must be honored")
 }
 
+func TestGdmModelIgnoresEchoAfterGdmAuthModeSelection(t *testing.T) {
+	t.Parallel()
+
+	const authModeID = "device_auth_qr"
+
+	// A selection received from GDM is forwarded back after the adapter accepts
+	// it. GDM echoes that confirmation in a later poll, just like an automatic
+	// selection, and the confirmation must not start a second selection.
+	m := gdmModel{}
+	m, _ = m.Update(AuthModeSelected{ID: authModeID, fromGDM: true})
+	require.Equal(t, authModeID, m.pendingEchoAuthModeID,
+		"a forwarded GDM selection should arm echo suppression")
+
+	echo := []*gdm.EventData{gdm_test.AuthModeSelectedEvent(authModeID)}
+	m, cmd := m.handlePollResponse(echo)
+	msgs := collectMessages(cmd)
+	require.False(t, containsAuthModeSelected(msgs, authModeID),
+		"the echo of a GDM-originated selection must not trigger a re-selection")
+	require.Empty(t, m.pendingEchoAuthModeID,
+		"consuming the echo should clear the expected echo")
+}
+
 func TestGdmModelStageChangeHandlesPendingEcho(t *testing.T) {
 	t.Parallel()
 
