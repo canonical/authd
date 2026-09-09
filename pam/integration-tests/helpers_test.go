@@ -616,6 +616,7 @@ func prepareExistingDB(t *testing.T, existingDB string) string {
 
 	err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", existingDB+".db.yaml"), dbDir)
 	require.NoError(t, err, "Setup: creating existing database")
+	require.NoError(t, os.Chmod(dbDir, 0700), "Setup: securing existing database directory") //nolint:gosec // test-only permission change
 
 	return dbDir
 }
