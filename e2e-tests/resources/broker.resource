@@ -17,6 +17,12 @@ Library             String
 Variables           ./broker_vars.py
 
 
+*** Variables ***
+${GDM_LOGIN_OPTIONS_IMAGE}          ${CURDIR}/images/gdm-login-options.png
+${GDM_LOGIN_OPTIONS_NOBLE_IMAGE}   ${CURDIR}/images/gdm-login-options-noble.png
+${GDM_LOGIN_OPTIONS_RESOLUTE_IMAGE}   ${CURDIR}/images/gdm-login-options-resolute.png
+
+
 *** Keywords ***
 Update Broker
     [Documentation]    Install the broker snap built from the current branch
@@ -327,6 +333,22 @@ Select Broker Through GDM
     Move Pointer To ${PROVIDER_DISPLAY_NAME}
     Left Button Click
     Builtin.Sleep    1
+
+Select Authentication Mode Through GDM
+    [Arguments]    ${authentication_mode}
+    # Login Options uses release-specific icons and layouts. Devel is the
+    # default because it is the current standard release.
+    ${image}=    Set Variable    ${GDM_LOGIN_OPTIONS_IMAGE}
+    IF    '%{RELEASE}' == 'noble'
+        ${image}=    Set Variable    ${GDM_LOGIN_OPTIONS_NOBLE_IMAGE}
+    ELSE IF    '%{RELEASE}' == 'resolute'
+        ${image}=    Set Variable    ${GDM_LOGIN_OPTIONS_RESOLUTE_IMAGE}
+    END
+    Move Pointer To ${image}
+    Left Button Click
+    Match Text    ${authentication_mode}    30
+    Move Pointer To ${authentication_mode}
+    Left Button Click
 
 Enter Entra ID Password And MFA
     # With the device code flow disabled there is only one flow; the PAM module
