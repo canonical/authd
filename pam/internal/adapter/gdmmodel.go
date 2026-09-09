@@ -272,13 +272,11 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 		})
 
 	case AuthModeSelected:
-		if !msg.fromGDM {
-			// Only selections sent to GDM are echoed in a later poll. A
-			// selection received from GDM is already that echo (or a genuine
-			// user re-selection), so recording it would suppress the next
-			// selection of the same mode.
-			m.pendingEchoAuthModeID = msg.ID
-		}
+		// GDM echoes every selection sent by the adapter, including a
+		// selection that originally came from GDM. Track it before sending
+		// the confirmation so that the echoed event does not start a second
+		// authentication-mode selection.
+		m.pendingEchoAuthModeID = msg.ID
 		return m, m.emitEvent(&gdm.EventData_AuthModeSelected{
 			AuthModeSelected: &gdm.Events_AuthModeSelected{AuthModeId: msg.ID},
 		})
