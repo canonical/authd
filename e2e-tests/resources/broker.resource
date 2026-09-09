@@ -431,6 +431,33 @@ Check Home Directory
     Should Be Equal    ${ownership}    ${username}:${username}
 
 
+Check User Shell
+    [Arguments]    ${username}
+    ${shell} =    SSH.Execute    getent passwd ${username} | cut -d: -f7
+    Should Match Regexp    ${shell}    ^/(usr/)?bin/bash$
+
+
+Create File In User Home
+    [Arguments]    ${username}    ${filename}=foo
+    ${home_dir} =    SSH.Execute    getent passwd ${username} | cut -d: -f6
+    Should Not Be Empty    ${home_dir}
+    SSH.Execute As User    ${username}    touch '${home_dir}/${filename}'
+    RETURN    ${home_dir}
+
+
+Check User Entry Exists
+    [Arguments]    ${username}
+    ${passwd_entry} =    SSH.Execute    getent passwd ${username} | grep -F '${username}:x:'
+    Should Contain    ${passwd_entry}    ${username}:x:
+
+
+Check File In User Home
+    [Arguments]    ${username}    ${filename}=foo
+    ${home_dir} =    SSH.Execute    getent passwd ${username} | cut -d: -f6
+    ${owner} =    SSH.Execute    stat -c %U '${home_dir}/${filename}'
+    Should Be Equal    ${owner}    ${username}
+
+
 Check That Remote User Is Not Allowed To Log In
     Match Text    authentication failure: user not allowed in broker configuration    120
 
