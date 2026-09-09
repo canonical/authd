@@ -63,8 +63,27 @@ authentication flow.
 
 Strong passwords are critical to prevent unauthorized access.
 
-authd uses libpwquality to enforce password complexity requirements. See the
-[Configure password quality](ref::config-pwquality) section for details.
+authd uses `libpwquality` to enforce password complexity requirements for local
+passwords. See the [Configure password quality](ref::config-pwquality) section
+for details.
+
+(ref::cached-entra-passwords)=
+
+#### Cached Entra ID passwords
+
+After a successful login through the Entra authentication flow using an Entra ID
+password, authd stores a salted hash of the password for offline authentication.
+
+authd does not apply its local `libpwquality` policy to Entra ID passwords
+used in the Entra authentication flow. Changes made to
+`/etc/security/pwquality.conf` do not affect users authenticating with an Entra
+ID password through that flow.
+A weak password accepted by the tenant is cached the same way. Configure the
+tenant password policy to reject weak passwords.
+
+The local policy applies when authd creates or changes a local password,
+including after passwordless or device-code authentication.
+See [Authentication flows](/reference/authentication-flows/) for details.
 
 (ref::force-auth-security)=
 #### Force provider authentication
@@ -164,6 +183,8 @@ To avoid this risk:
 
 This section describes how authd is built to protect stored data and limit
 system exposure.
+
+(ref::stored-secrets)=
 
 ### Stored secrets
 

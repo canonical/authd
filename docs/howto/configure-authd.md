@@ -649,8 +649,15 @@ If your mobile device management (MDM) solution includes a compliance check for
 the passwords of authd users, you may also need to configure authd's password
 policy so that it matches that of the MDM.
 
-authd depends on the libpwquality library, which supports configuring password
+authd depends on the `libpwquality` library, which supports configuring password
 quality.
+
+```{note}
+This policy applies only to local passwords created or changed through authd.
+To reject weak Entra ID passwords, configure the tenant password policy. See
+[Cached Entra ID passwords](ref::cached-entra-passwords) in the security
+overview.
+```
 
 To configure the local password policy for authd, create a drop file in
 `/etc/security/pwquality.conf.d/`.
