@@ -17,6 +17,10 @@ Library             String
 Variables           ./broker_vars.py
 
 
+*** Variables ***
+${GDM_LOGIN_OPTIONS_IMAGE}    ${CURDIR}/images/gdm-login-options.png
+
+
 *** Keywords ***
 Update Broker
     [Documentation]    Install the broker snap built from the current branch
@@ -325,6 +329,16 @@ Select Broker Through GDM
     Move Pointer To ${PROVIDER_DISPLAY_NAME}
     Left Button Click
     Builtin.Sleep    1
+
+Select Authentication Mode Through GDM
+    [Arguments]    ${authentication_mode}
+    # Login Options is an icon-only button whose position differs between
+    # Ubuntu releases, so locate it from the image instead of coordinates.
+    Move Pointer To ${GDM_LOGIN_OPTIONS_IMAGE}
+    Left Button Click
+    Match Text    ${authentication_mode}    30
+    Move Pointer To ${authentication_mode}
+    Left Button Click
 
 Enter Entra ID Password And MFA
     # With the device code flow disabled there is only one flow; the PAM module
