@@ -37,6 +37,27 @@ Disable Broker And Purge Config
     SSH.Execute    systemctl restart authd.service
 
 
+Stop Broker
+    # The broker is D-Bus activated, so stopping its snap service alone does
+    # not prevent authd from starting it again on the next request.
+    SSH.Execute    mkdir -p /etc/systemd/system/snap.${BROKER_SNAP_NAME}.${BROKER_SNAP_NAME}.service.d
+    SSH.Execute    printf '%s\n' '[Unit]' 'ConditionPathExists=/run/authd-e2e-broker-enabled' > /etc/systemd/system/snap.${BROKER_SNAP_NAME}.${BROKER_SNAP_NAME}.service.d/99-authd-e2e-disabled.conf
+    SSH.Execute    systemctl daemon-reload
+    SSH.Execute    snap stop ${BROKER_SNAP_NAME}
+
+
+Restore Broker
+    SSH.Execute    rm -f /etc/systemd/system/snap.${BROKER_SNAP_NAME}.${BROKER_SNAP_NAME}.service.d/99-authd-e2e-disabled.conf
+    SSH.Execute    systemctl unmask --runtime snap.${BROKER_SNAP_NAME}.${BROKER_SNAP_NAME}.service
+    SSH.Execute    systemctl daemon-reload
+    SSH.Execute    snap start ${BROKER_SNAP_NAME}
+
+
+Remove Broker Configuration Key
+    [Arguments]    ${config_key}
+    SSH.Execute    sed -i '/^[#[:space:]]*'${config_key}'[[:space:]]*=/d' ${BROKER_CFG}
+
+
 Log In With Remote User Through CLI: QR Code
     [Arguments]    ${username}    ${local_password}
     Start Log In With Remote User Through CLI: QR Code    ${username}
