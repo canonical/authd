@@ -157,7 +157,7 @@ To avoid this risk:
 * Remove all files and directories owned by any users that you delete,
   especially if they contain sensitive data. The
   [`authctl user delete`](../reference/cli/authctl_user_delete.md) command can
-  also remove the user's home directory with the `--remove` option, but files
+  also remove the user's home directory with the `--remove-home` option, but files
   outside the home directory must be handled separately.
 
 ## How authd is designed for security
