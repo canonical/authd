@@ -19,6 +19,9 @@ import (
 	"gopkg.in/ini.v1"
 )
 
+// defaultPAMDDirs are the directories containing PAM service configuration files.
+var defaultPAMDDirs = []string{"/etc/pam.d", "/usr/lib/pam.d"}
+
 // Configuration sections and keys.
 const (
 	// forceAccessCheckWithProviderKey is the key in the config file for the setting to force verification with the
@@ -69,6 +72,10 @@ const (
 	flowsDeviceAuthKey = "device_code"
 	// flowsEntraAuthKey controls whether entra_auth mode is enabled.
 	flowsEntraAuthKey = "entra_auth"
+	// flowsNoDeviceAuthKey disables the device_auth and device_auth_qr modes.
+	flowsNoDeviceAuthKey = "no_device_code"
+	// flowsNoEntraAuthKey disables the entra_auth mode.
+	flowsNoEntraAuthKey = "no_entra_auth"
 
 	// ownerAutoRegistrationConfigPath is the name of the file that will be auto-generated to register the owner.
 	ownerAutoRegistrationConfigPath     = "20-owner-autoregistration.conf"
@@ -102,8 +109,10 @@ var (
 			ownerExtraGroupsKey: {},
 		},
 		flowsSection: {
-			flowsDeviceAuthKey: {},
-			flowsEntraAuthKey:  {},
+			flowsDeviceAuthKey:   {},
+			flowsEntraAuthKey:    {},
+			flowsNoDeviceAuthKey: {},
+			flowsNoEntraAuthKey:  {},
 		},
 	}
 )
@@ -148,10 +157,155 @@ type userConfig struct {
 	provider provider
 }
 
+// serviceRule is a flow setting that is either uniform across all PAM
+// services or restricted to a specific list of them.
+type serviceRule struct {
+	all      *bool
+	services []string
+}
+
+func (r serviceRule) String() string {
+	if r.all != nil {
+		return fmt.Sprintf("%t", *r.all)
+	}
+	return strings.Join(r.services, ",")
+}
+
+// matches reports whether a known service matches the rule. Empty service
+// names are handled by matchesFor because allow and deny rules have different
+// fail-open defaults.
+func (r serviceRule) matches(service string) bool {
+	if r.all != nil {
+		return *r.all
+	}
+	return slices.Contains(r.services, service)
+}
+
+func (r serviceRule) matchesFor(service string, unknownServiceValue bool) bool {
+	if r.all != nil {
+		return *r.all
+	}
+	if service == "" {
+		return unknownServiceValue
+	}
+	return r.matches(service)
+}
+
+// flowRule pairs the flow allowlist with its denylist.
+type flowRule struct {
+	allow serviceRule
+	deny  serviceRule
+}
+
+func (r flowRule) String() string {
+	if r.deny.all != nil && !*r.deny.all {
+		return fmt.Sprintf("%v", r.allow)
+	}
+	return fmt.Sprintf("{%v %v}", r.allow, r.deny)
+}
+
+func (r flowRule) enabledFor(service string) bool {
+	return r.allow.matchesFor(service, true) && !r.deny.matchesFor(service, false)
+}
+
+func (r flowRule) enabledForAnyService() bool {
+	if r.deny.all != nil && *r.deny.all {
+		return false
+	}
+	if r.allow.all != nil && !*r.allow.all {
+		return false
+	}
+	if r.allow.all == nil && r.deny.all == nil {
+		return slices.ContainsFunc(r.allow.services, func(service string) bool {
+			return !slices.Contains(r.deny.services, service)
+		})
+	}
+	return true
+}
+
+func (r flowRule) hasServiceList() bool {
+	return r.allow.all == nil || r.deny.all == nil
+}
+
 // flowsConfig holds the parsed [flows] section configuration.
 type flowsConfig struct {
-	DeviceAuth bool
-	EntraAuth  bool
+	DeviceAuth flowRule
+	EntraAuth  flowRule
+}
+
+func (fc flowsConfig) String() string {
+	return fmt.Sprintf("{%v %v}", fc.DeviceAuth, fc.EntraAuth)
+}
+
+func (fc flowsConfig) hasServiceLists() bool {
+	return fc.DeviceAuth.hasServiceList() || fc.EntraAuth.hasServiceList()
+}
+
+// flowServiceList pairs a [flows] key with the PAM services it names.
+type flowServiceList struct {
+	key      string
+	services []string
+}
+
+// namedServices returns every PAM service named in the section, paired with the
+// key that named it. Keys that hold a boolean are left out.
+func (fc flowsConfig) namedServices() []flowServiceList {
+	all := []flowServiceList{
+		{flowsDeviceAuthKey, fc.DeviceAuth.allow.services},
+		{flowsNoDeviceAuthKey, fc.DeviceAuth.deny.services},
+		{flowsEntraAuthKey, fc.EntraAuth.allow.services},
+		{flowsNoEntraAuthKey, fc.EntraAuth.deny.services},
+	}
+	return slices.DeleteFunc(all, func(e flowServiceList) bool {
+		return len(e.services) == 0
+	})
+}
+
+// warnOnUnknownServices logs a warning for every PAM service named in the
+// [flows] section that has no configuration file on the system.
+//
+// Any value that is not a boolean is read as a list of service names, so a
+// mistyped boolean such as "ture" turns into an allowlist for a service that
+// does not exist, which disables the flow everywhere. Without this warning that
+// failure is silent: startup validation still passes, because the flow is
+// reachable in principle, and the flow is simply never offered.
+//
+// We warn instead of failing so the broker keeps starting when a PAM service is
+// removed from the system but left in the config file.
+func (fc flowsConfig) warnOnUnknownServices(ctx context.Context, pamDDirs []string) {
+	for _, entry := range fc.namedServices() {
+		for _, service := range entry.services {
+			if pamServiceExists(service, pamDDirs) {
+				continue
+			}
+			log.Warningf(ctx, "PAM service %q listed in %q in the [%s] section was not found in %s. "+
+				"Any value that is not true or false is read as a list of PAM service names, so check for a typo.",
+				service, entry.key, flowsSection, strings.Join(pamDDirs, " or "))
+		}
+	}
+}
+
+// pamServiceExists reports whether a PAM configuration file for the service
+// exists in any of the given directories. A directory we cannot read counts as
+// a match so that an unreadable path does not produce a misleading warning.
+func pamServiceExists(service string, pamDDirs []string) bool {
+	for _, dir := range pamDDirs {
+		if _, err := os.Stat(filepath.Join(dir, service)); err == nil || !os.IsNotExist(err) {
+			return true
+		}
+	}
+	return false
+}
+
+func booleanServiceRule(value bool) serviceRule {
+	return serviceRule{all: &value}
+}
+
+func defaultFlowRule(enabled bool) flowRule {
+	return flowRule{
+		allow: booleanServiceRule(enabled),
+		deny:  booleanServiceRule(false),
+	}
 }
 
 // defaultFlowsConfig returns the defaults for flow settings omitted from the
@@ -160,8 +314,8 @@ type flowsConfig struct {
 // using it when device registration was enabled.
 func defaultFlowsConfig(registerDevice bool) flowsConfig {
 	return flowsConfig{
-		DeviceAuth: true,
-		EntraAuth:  registerDevice,
+		DeviceAuth: defaultFlowRule(true),
+		EntraAuth:  defaultFlowRule(registerDevice),
 	}
 }
 
@@ -493,21 +647,29 @@ func parseFlowsConfig(section *ini.Section, registerDevice bool, p provider) (fl
 	fc := defaultFlowsConfig(registerDevice)
 
 	if section != nil {
+		var err error
 		if section.HasKey(flowsDeviceAuthKey) {
-			val, err := section.Key(flowsDeviceAuthKey).Bool()
+			fc.DeviceAuth.allow, err = parseServiceRule(section, flowsDeviceAuthKey)
 			if err != nil {
-				log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (%t)", flowsDeviceAuthKey, flowsSection, fc.DeviceAuth)
-			} else {
-				fc.DeviceAuth = val
+				return flowsConfig{}, err
 			}
 		}
-
 		if section.HasKey(flowsEntraAuthKey) {
-			val, err := section.Key(flowsEntraAuthKey).Bool()
+			fc.EntraAuth.allow, err = parseServiceRule(section, flowsEntraAuthKey)
 			if err != nil {
-				log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (%t)", flowsEntraAuthKey, flowsSection, fc.EntraAuth)
-			} else {
-				fc.EntraAuth = val
+				return flowsConfig{}, err
+			}
+		}
+		if section.HasKey(flowsNoDeviceAuthKey) {
+			fc.DeviceAuth.deny, err = parseServiceRule(section, flowsNoDeviceAuthKey)
+			if err != nil {
+				return flowsConfig{}, err
+			}
+		}
+		if section.HasKey(flowsNoEntraAuthKey) {
+			fc.EntraAuth.deny, err = parseServiceRule(section, flowsNoEntraAuthKey)
+			if err != nil {
+				return flowsConfig{}, err
 			}
 		}
 	}
@@ -520,11 +682,28 @@ func parseFlowsConfig(section *ini.Section, registerDevice bool, p provider) (fl
 	return fc, nil
 }
 
+func parseServiceRule(section *ini.Section, keyName string) (serviceRule, error) {
+	key := section.Key(keyName)
+	if value, err := key.Bool(); err == nil {
+		return booleanServiceRule(value), nil
+	}
+
+	rawServices := strings.Split(key.String(), ",")
+	services := make([]string, len(rawServices))
+	for i, service := range rawServices {
+		services[i] = strings.TrimSpace(service)
+		if services[i] == "" {
+			return serviceRule{}, fmt.Errorf("invalid value for %q in [%s] section: service name %d is empty", keyName, flowsSection, i+1)
+		}
+	}
+	return serviceRule{services: services}, nil
+}
+
 func hasEnabledSupportedFlow(fc flowsConfig, supportedModes []string) bool {
 	deviceAuthSupported := slices.Contains(supportedModes, authmodes.Device) || slices.Contains(supportedModes, authmodes.DeviceQr)
 	entraAuthSupported := slices.Contains(supportedModes, authmodes.EntraAuth)
 
-	return (fc.DeviceAuth && deviceAuthSupported) || (fc.EntraAuth && entraAuthSupported)
+	return (fc.DeviceAuth.enabledForAnyService() && deviceAuthSupported) || (fc.EntraAuth.enabledForAnyService() && entraAuthSupported)
 }
 
 // Keep the error provider-specific so it only suggests flows the broker can

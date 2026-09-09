@@ -5,6 +5,8 @@ authctl
 authd
 authd's
 biometric
+boolean
+booleans
 cleartext
 Center
 config
