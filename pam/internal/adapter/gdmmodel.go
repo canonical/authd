@@ -40,7 +40,8 @@ type gdmModel struct {
 	// RPC (and, for device auth, mint a second device code that orphans the
 	// in-flight poll). It is consumed (cleared) by the first matching echo, so
 	// a later genuine re-selection of the same mode is still honored.
-	pendingEchoAuthModeID string
+	pendingEchoAuthModeID  string
+	pendingEchoAuthModeIDs []string
 }
 
 type gdmPollResponse struct {
@@ -152,11 +153,10 @@ func (m gdmModel) handlePollResponse(gdmPollResults []*gdm.EventData) (gdmModel,
 			// orphans the in-flight poll). This is a one-shot per selection:
 			// a later genuine re-selection of the same mode (the user picking
 			// it again) is honored because the pending echo has been consumed.
-			if res.AuthModeSelected.AuthModeId == m.pendingEchoAuthModeID {
+			if m.consumePendingAuthModeEcho(res.AuthModeSelected.AuthModeId) {
 				log.Debugf(context.TODO(),
 					"Ignoring GDM auth mode selection echo for %q",
 					res.AuthModeSelected.AuthModeId)
-				m.pendingEchoAuthModeID = ""
 				break
 			}
 			commands = append(commands, selectGdmAuthMode(res.AuthModeSelected.AuthModeId))
@@ -243,6 +243,7 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 		// echo pending from the previous selection is no longer relevant.
 		if msg.Stage == proto.Stage_authModeSelection {
 			m.pendingEchoAuthModeID = ""
+			m.pendingEchoAuthModeIDs = nil
 		}
 		return m, m.changeStage(msg.Stage)
 
@@ -277,6 +278,7 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 		// the confirmation so that the echoed event does not start a second
 		// authentication-mode selection.
 		m.pendingEchoAuthModeID = msg.ID
+		m.pendingEchoAuthModeIDs = append(m.pendingEchoAuthModeIDs, msg.ID)
 		return m, m.emitEvent(&gdm.EventData_AuthModeSelected{
 			AuthModeSelected: &gdm.Events_AuthModeSelected{AuthModeId: msg.ID},
 		})
@@ -342,6 +344,24 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m *gdmModel) consumePendingAuthModeEcho(id string) bool {
+	for i, pendingID := range m.pendingEchoAuthModeIDs {
+		if pendingID != id {
+			continue
+		}
+
+		copy(m.pendingEchoAuthModeIDs[i:], m.pendingEchoAuthModeIDs[i+1:])
+		m.pendingEchoAuthModeIDs = m.pendingEchoAuthModeIDs[:len(m.pendingEchoAuthModeIDs)-1]
+		if len(m.pendingEchoAuthModeIDs) == 0 {
+			m.pendingEchoAuthModeID = ""
+		} else {
+			m.pendingEchoAuthModeID = m.pendingEchoAuthModeIDs[len(m.pendingEchoAuthModeIDs)-1]
+		}
+		return true
+	}
+	return false
 }
 
 func (m gdmModel) changeStage(s proto.Stage) tea.Cmd {
