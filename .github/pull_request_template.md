@@ -13,12 +13,14 @@ to use the defaults:
 - the complete test suite
 - all test cases in the selected suites
 - the `authd-edge` PPA
+- an optional Ubuntu archive suite for the matching release
 
 e2e-brokers: google
 e2e-ubuntu-releases: noble
 e2e-tests: allowed_users.robot login_gdm.robot
 e2e-test-case: Test login with GDM
 e2e-ppa: authd-dev
+e2e-apt-source: resolute-proposed
 
 The `e2e-ubuntu-releases` marker limits the Ubuntu releases tested by the
 workflow. It accepts a space- or comma-separated list of `noble`, `resolute`,
@@ -30,4 +32,8 @@ authd package dependencies.
 
 The `e2e-test-case` marker selects the exact Robot test case name. Repeat the
 marker to select more than one test case.
+
+The `e2e-apt-source` marker installs and updates packages from the named Ubuntu
+archive suite in the matching release matrix job, instead of installing the
+branch-built authd package.
 -->
