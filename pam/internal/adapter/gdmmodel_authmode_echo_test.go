@@ -128,6 +128,30 @@ func TestGdmModelActsOnSameAuthModeReselection(t *testing.T) {
 		"a genuine re-selection of the same auth mode must be honored")
 }
 
+func TestGdmModelIgnoresMultiplePendingAuthModeEchoes(t *testing.T) {
+	t.Parallel()
+
+	m := gdmModel{}
+	m, _ = m.Update(AuthModeSelected{ID: "password"})
+	m, _ = m.Update(AuthModeSelected{ID: "device_auth_qr"})
+
+	echoes := []*gdm.EventData{
+		gdm_test.AuthModeSelectedEvent("password"),
+		gdm_test.AuthModeSelectedEvent("device_auth_qr"),
+	}
+	m, cmd := m.handlePollResponse(echoes)
+	msgs := collectMessages(cmd)
+
+	require.False(t, containsAuthModeSelected(msgs, "password"),
+		"a delayed password echo must not restore the previous password layout")
+	require.False(t, containsAuthModeSelected(msgs, "device_auth_qr"),
+		"the device-code echo must not start a second device-code request")
+	require.Empty(t, m.pendingEchoAuthModeID,
+		"consuming all echoes should clear the compatibility field")
+	require.Empty(t, m.pendingEchoAuthModeIDs,
+		"consuming all echoes should clear the pending echo queue")
+}
+
 func TestGdmModelIgnoresEchoAfterGdmAuthModeSelection(t *testing.T) {
 	t.Parallel()
 
@@ -193,12 +217,15 @@ func TestUIModelClearsPendingEchoAcrossSessions(t *testing.T) {
 
 	m := uiModel{clientType: Gdm}
 	m.gdmModel.pendingEchoAuthModeID = authModeID
+	m.gdmModel.pendingEchoAuthModeIDs = []string{authModeID}
 
 	// A new session must not inherit an echo from an earlier session.
 	updated, _ := m.Update(sessionStartedForTest(t, "first-session"))
 	m = convertTo[uiModel](updated)
 	require.Empty(t, m.gdmModel.pendingEchoAuthModeID,
 		"starting a session must clear a pending echo")
+	require.Empty(t, m.gdmModel.pendingEchoAuthModeIDs,
+		"starting a session must clear pending echo history")
 
 	// The first session arms the echo suppression for its own selection.
 	updated, _ = m.Update(AuthModeSelected{ID: authModeID})
