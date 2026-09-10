@@ -32,15 +32,15 @@ authctl user delete <user> [flags]
   authctl user delete --yes alice
 
   # Delete user "alice" and remove their home directory
-  authctl user delete --remove alice
+  authctl user delete --remove-home alice
 ```
 
 ### Options
 
 ```
-  -h, --help     help for delete
-  -r, --remove   Remove the user's home directory
-  -y, --yes      Skip confirmation prompt
+  -h, --help          help for delete
+  -r, --remove-home   Remove the user's home directory
+  -y, --yes           Skip confirmation prompt
 ```
 
 ### SEE ALSO
