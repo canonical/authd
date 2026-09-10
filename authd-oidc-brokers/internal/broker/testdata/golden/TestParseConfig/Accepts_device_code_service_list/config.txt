@@ -13,4 +13,4 @@ allowedSSHSuffixes=[]
 extraGroups=[]
 ownerExtraGroups=[]
 extraScopes=[]
-flows={true false}
+flows={sshd false}

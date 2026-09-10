@@ -36,6 +36,10 @@ the `[flows]` section of the broker configuration file. See
 At least one authentication flow must be enabled. A configuration that
 explicitly disables both flows is invalid, and the broker fails to start.
 
+Each flow can also be limited to specific PAM services, such as `sshd` or
+`gdm-authd`, instead of being turned on or off everywhere. See
+[Enable a flow only for some services](ref::config-per-service-flows).
+
 The **Entra authentication** flow has additional requirements for resolving group
 membership, depending on whether device registration is enabled. Enabling it
 without enabling device registration or configuring a client secret results in

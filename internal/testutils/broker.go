@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	latestAPIVersion = 3
+	latestAPIVersion = 4
 
 	dbusInterface = "com.ubuntu.authd.Broker"
 	objectPathFmt = "/com/ubuntu/authd/%s"
@@ -58,11 +58,32 @@ type BrokerBusMock struct {
 	name                   string
 	isAuthenticatedCalls   map[string]isAuthenticatedCtx
 	isAuthenticatedCallsMu sync.RWMutex
+	newSessionCalls        []NewSessionCall
+	newSessionCallsMu      sync.Mutex
+}
+
+// NewSessionCall records the arguments from a NewSession D-Bus call.
+type NewSessionCall struct {
+	Username    string
+	Lang        string
+	Mode        string
+	ProviderID  string
+	ServiceName string
 }
 
 // StartBusBrokerMock starts the D-Bus service and exports it on the system bus.
 // It returns the configuration file path for the exported broker.
 func StartBusBrokerMock(cfgDir string, brokerName string) (string, func(), error) {
+	return StartBusBrokerMockWithAPIVersion(cfgDir, brokerName, latestAPIVersion)
+}
+
+// StartBusBrokerMockWithAPIVersion starts the D-Bus service with a specific
+// broker API version. It is useful for testing authd's downgrade paths.
+func StartBusBrokerMockWithAPIVersion(cfgDir string, brokerName string, apiVersion uint) (string, func(), error) {
+	if apiVersion == 0 || apiVersion > latestAPIVersion {
+		return "", nil, fmt.Errorf("unsupported broker API version %d", apiVersion)
+	}
+
 	busObjectPath := fmt.Sprintf(objectPathFmt, brokerName)
 	busName := fmt.Sprintf(nameFmt, brokerName)
 
@@ -77,7 +98,17 @@ func StartBusBrokerMock(cfgDir string, brokerName string) (string, func(), error
 		isAuthenticatedCallsMu: sync.RWMutex{},
 	}
 
-	if err = conn.Export(&bus, dbus.ObjectPath(busObjectPath), fmt.Sprintf("%s%d", dbusInterface, latestAPIVersion)); err != nil {
+	var object any
+	switch apiVersion {
+	case 1, 2:
+		object = &brokerBusMockV2{BrokerBusMock: &bus}
+	case 3:
+		object = &brokerBusMockV3{BrokerBusMock: &bus}
+	default:
+		object = &bus
+	}
+
+	if err = conn.Export(object, dbus.ObjectPath(busObjectPath), fmt.Sprintf("%s%d", dbusInterface, apiVersion)); err != nil {
 		conn.Close()
 		return "", nil, err
 	}
@@ -87,8 +118,8 @@ func StartBusBrokerMock(cfgDir string, brokerName string) (string, func(), error
 		Interfaces: []introspect.Interface{
 			introspect.IntrospectData,
 			{
-				Name:    fmt.Sprintf("%s%d", dbusInterface, latestAPIVersion),
-				Methods: introspect.Methods(&bus),
+				Name:    fmt.Sprintf("%s%d", dbusInterface, apiVersion),
+				Methods: introspect.Methods(object),
 			},
 		},
 	}), dbus.ObjectPath(busObjectPath), introspect.IntrospectData.Name)
@@ -127,8 +158,25 @@ func writeConfig(cfgDir, name string) (string, error) {
 	return cfgPath, nil
 }
 
-// NewSession returns default values to be used in tests or an error if requested.
-func (b *BrokerBusMock) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+// brokerBusMockV2 exposes the v1 and v2 method signatures while reusing the
+// behavior of BrokerBusMock.
+type brokerBusMockV2 struct {
+	*BrokerBusMock
+}
+
+// brokerBusMockV3 exposes the v3 NewSession signature while reusing the
+// behavior of BrokerBusMock.
+type brokerBusMockV3 struct {
+	*BrokerBusMock
+}
+
+func (b *BrokerBusMock) recordNewSession(call NewSessionCall) {
+	b.newSessionCallsMu.Lock()
+	defer b.newSessionCallsMu.Unlock()
+	b.newSessionCalls = append(b.newSessionCalls, call)
+}
+
+func (b *BrokerBusMock) newSession(username string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
 	parsedUsername := parseSessionID(username)
 	if parsedUsername == "ns_error" {
 		return "", "", dbus.MakeFailedError(fmt.Errorf("broker %q: NewSession errored out", b.name))
@@ -137,6 +185,39 @@ func (b *BrokerBusMock) NewSession(username, lang, mode, providerID string) (ses
 		return "", username + "_key", nil
 	}
 	return GenerateSessionID(username), GenerateEncryptionKey(b.name), nil
+}
+
+// NewSession returns default values to be used in tests or an error if requested.
+func (b *BrokerBusMock) NewSession(username, lang, mode, providerID, serviceName string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+	b.recordNewSession(NewSessionCall{
+		Username:    username,
+		Lang:        lang,
+		Mode:        mode,
+		ProviderID:  providerID,
+		ServiceName: serviceName,
+	})
+	return b.newSession(username)
+}
+
+// NewSession implements the v1 and v2 method signature.
+func (b *brokerBusMockV2) NewSession(username, lang, mode string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+	b.recordNewSession(NewSessionCall{
+		Username: username,
+		Lang:     lang,
+		Mode:     mode,
+	})
+	return b.newSession(username)
+}
+
+// NewSession implements the v3 method without a PAM service name.
+func (b *brokerBusMockV3) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+	b.recordNewSession(NewSessionCall{
+		Username:   username,
+		Lang:       lang,
+		Mode:       mode,
+		ProviderID: providerID,
+	})
+	return b.newSession(username)
 }
 
 // GetAuthenticationModes returns default values to be used in tests or an error if requested.
@@ -369,10 +450,19 @@ func (b *BrokerBusMock) UserPreCheck(username string) (userinfo string, dbusErr 
 
 // DeleteUser removes broker side user data or returns an error if requested.
 func (b *BrokerBusMock) DeleteUser(username, providerID string) (dbusErr *dbus.Error) {
+	return b.deleteUser(username)
+}
+
+func (b *BrokerBusMock) deleteUser(username string) (dbusErr *dbus.Error) {
 	if strings.Contains(username, "delete_error") {
 		return dbus.MakeFailedError(fmt.Errorf("broker %q: DeleteUser errored out", b.name))
 	}
 	return nil
+}
+
+// DeleteUser implements the v1 and v2 method signature.
+func (b *brokerBusMockV2) DeleteUser(username string) (dbusErr *dbus.Error) {
+	return b.deleteUser(username)
 }
 
 // parseSessionID is wrapper around the sessionID to remove some values appended during the tests.

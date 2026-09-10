@@ -550,7 +550,7 @@ func TestNewSession(t *testing.T) {
 				username = "test-user"
 			}
 
-			id, _, err := b.NewSession(username, "lang", sessionmode.Login, "")
+			id, _, err := b.NewSession(username, "lang", sessionmode.Login, "", "")
 			t.Logf("NewSession returned id: %q, err: %v", id, err)
 			if tc.wantErr {
 				require.Error(t, err, "NewSession should have returned an error")
@@ -589,7 +589,7 @@ func TestNewSessionRecoversFromDanglingCacheSymlink(t *testing.T) {
 	_, statErr := os.Stat(userDataDir)
 	require.Error(t, statErr, "Setup: the symlink should be dangling")
 
-	sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, "")
+	sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, "", "")
 	require.NoError(t, err, "NewSession should not error on a dangling symlink")
 
 	// The dangling symlink must have been removed so the path can be recreated as a real directory.
@@ -628,7 +628,7 @@ func TestNewSessionWithProviderIDRepairsUsernameCompatibilityPath(t *testing.T) 
 	require.NoError(t, os.WriteFile(filepath.Join(providerIDDir, "token.json"), []byte("cached-token-marker"), 0600),
 		"Setup: writing provider ID token should not fail")
 
-	sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, providerID)
+	sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, providerID, "")
 	require.NoError(t, err, "NewSession should not error when repairing a stale username cache dir")
 	require.Equal(t, providerIDDir, b.UserDataDirForSession(sessionID), "Session should use the provider ID cache dir")
 
@@ -687,7 +687,7 @@ func TestNewSessionRemovesUnsafeCacheSymlink(t *testing.T) {
 			}
 			require.NoError(t, os.Symlink(target, userDataDir), "Setup: create unsafe compat symlink")
 
-			sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, "")
+			sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, "", "")
 			require.NoError(t, err, "NewSession should not error on an unsafe symlink")
 
 			_, lstatErr := os.Lstat(userDataDir)
@@ -3213,6 +3213,105 @@ func TestGetAuthenticationModesFiltersNextAuthModesByFlows(t *testing.T) {
 	}}, modes)
 }
 
+func TestGetAuthenticationModesFiltersFlowsByPAMService(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "broker.conf")
+	require.NoError(t, os.WriteFile(configPath, []byte(`[oidc]
+issuer = `+defaultIssuerURL+`
+client_id = test-client-id
+
+[flows]
+device_code = sshd
+`), 0600))
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:    broker.Config{ConfigFile: configPath, DataDir: t.TempDir()},
+		issuerURL: defaultIssuerURL,
+	})
+
+	sshdSessionID, _ := newSessionForServiceTests(t, b, "", sessionmode.Login, "sshd")
+	modes, err := b.GetAuthenticationModes(sshdSessionID, []map[string]string{supportedUILayouts["qrcode"]})
+	require.NoError(t, err)
+	require.Equal(t, []string{authmodes.DeviceQr}, []string{modes[0]["id"]})
+
+	gdmSessionID, _ := newSessionForServiceTests(t, b, "", sessionmode.Login, "gdm-authd")
+	_, err = b.GetAuthenticationModes(gdmSessionID, []map[string]string{supportedUILayouts["qrcode"]})
+	require.Error(t, err)
+
+	unknownSessionID, _ := newSessionForServiceTests(t, b, "", sessionmode.Login, "")
+	modes, err = b.GetAuthenticationModes(unknownSessionID, []map[string]string{supportedUILayouts["qrcode"]})
+	require.NoError(t, err)
+	require.Equal(t, []string{authmodes.DeviceQr}, []string{modes[0]["id"]})
+}
+
+// TestGetAuthenticationModesFiltersEntraAuthByPAMService covers the entra_auth
+// half of the per-service rules. It needs an EntraAuthProvider, so it cannot be
+// folded into TestGetAuthenticationModesFiltersFlowsByPAMService.
+func TestGetAuthenticationModesFiltersEntraAuthByPAMService(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		serviceName string
+
+		wantEntraAuth bool
+	}{
+		"Offered for an allowed service":      {serviceName: "sshd", wantEntraAuth: true},
+		"Not offered for a denied service":    {serviceName: "gdm-authd", wantEntraAuth: false},
+		"Offered when the service is unknown": {serviceName: "", wantEntraAuth: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			configPath := filepath.Join(t.TempDir(), "broker.conf")
+			require.NoError(t, os.WriteFile(configPath, []byte(`[oidc]
+issuer = `+defaultIssuerURL+`
+client_id = test-client-id
+client_secret = test-client-secret
+
+[flows]
+entra_auth = true
+no_entra_auth = gdm-authd
+`), 0600))
+
+			provider := &mockEntraAuthProvider{
+				MockProvider:  &testutils.MockProvider{},
+				flowState:     &himmelblau.MFAFlowState{},
+				challengeInfo: &himmelblau.MFAChallengeInfo{},
+			}
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config:                broker.Config{ConfigFile: configPath, DataDir: t.TempDir()},
+				provider:              provider,
+				issuerURL:             defaultIssuerURL,
+				ownerAllowed:          true,
+				firstUserBecomesOwner: true,
+			})
+
+			sessionID, _ := newSessionForServiceTests(t, b, "", sessionmode.Login, tc.serviceName)
+			b.SetNextAuthModes(sessionID, []string{authmodes.EntraAuth, authmodes.DeviceQr})
+
+			modes, err := b.GetAuthenticationModes(sessionID, []map[string]string{
+				supportedUILayouts["form"],
+				supportedUILayouts["qrcode"],
+			})
+			require.NoError(t, err)
+
+			var ids []string
+			for _, m := range modes {
+				ids = append(ids, m["id"])
+			}
+			if tc.wantEntraAuth {
+				require.Contains(t, ids, authmodes.EntraAuth)
+			} else {
+				require.NotContains(t, ids, authmodes.EntraAuth)
+			}
+			require.Contains(t, ids, authmodes.DeviceQr, "The device code flow must stay available either way")
+		})
+	}
+}
+
 // TestGetAuthenticationModesEntraAuthRequiresGroupSource verifies that once
 // the broker has started successfully, the entra_auth mode is offered only
 // when a Microsoft Graph group source is available, i.e. device registration or
@@ -4904,7 +5003,7 @@ func TestDeviceAuthRedirectsToExistingProviderIDDir(t *testing.T) {
 
 	// authd has not been updated, so it does not pass a provider ID to NewSession, and
 	// the username path does not resolve to the provider ID dir yet.
-	sessionID, key, err := b.NewSession(username, "some lang", sessionmode.Login, "")
+	sessionID, key, err := b.NewSession(username, "some lang", sessionmode.Login, "", "")
 	require.NoError(t, err, "NewSession should not fail")
 	require.Equal(t, usernameDir, b.UserDataDirForSession(sessionID),
 		"Before device auth the session should still resolve to the username dir")
@@ -5026,7 +5125,7 @@ func TestOfflineLoginCacheDirectoryResolution(t *testing.T) {
 					"Setup: writing the legacy token without a provider ID")
 			}
 
-			sessionID, _, err := b.NewSession(username, "some lang", sessionmode.Login, "")
+			sessionID, _, err := b.NewSession(username, "some lang", sessionmode.Login, "", "")
 			require.NoError(t, err, "NewSession should not fail offline")
 
 			gotOffline, err := b.IsOffline(sessionID)

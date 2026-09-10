@@ -39,7 +39,7 @@ const (
 	// LatestAPIVersion is the latest API version supported by the broker. It should be incremented when a non backward
 	// compatible change is made to the API.
 	// Note: Remember to also bump the LatestAPIVersion in internal/brokers/dbusbroker.go.
-	LatestAPIVersion uint = 3
+	LatestAPIVersion uint = 4
 
 	maxAuthAttempts    = 3
 	maxRequestDuration = 5 * time.Second
@@ -93,10 +93,11 @@ type Broker struct {
 }
 
 type session struct {
-	username   string
-	providerID string // stable provider identifier; empty until learned via auth or cache migration
-	lang       string
-	mode       string
+	username    string
+	providerID  string // stable provider identifier; empty until learned via auth or cache migration
+	serviceName string
+	lang        string
+	mode        string
 
 	selectedMode    string
 	authModes       []string
@@ -230,6 +231,9 @@ func New(cfg Config, apiVersion uint, args ...Option) (b *Broker, err error) {
 		if err != nil {
 			return nil, err
 		}
+		if apiVersion == LatestAPIVersion {
+			cfg.flows.warnOnUnknownServices(context.Background(), defaultPAMDDirs)
+		}
 	}
 
 	opts := option{
@@ -254,7 +258,7 @@ func New(cfg Config, apiVersion uint, args ...Option) (b *Broker, err error) {
 	// in authModeIsAvailable). If neither is configured, the flow is unusable, so
 	// fail at startup rather than silently falling back at login time: a startup
 	// failure is far more visible to the administrator than a per-login denial.
-	if cfg.flows.EntraAuth && !cfg.registerDevice && cfg.clientSecret == "" {
+	if cfg.flows.EntraAuth.enabledForAnyService() && !cfg.registerDevice && cfg.clientSecret == "" {
 		if _, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](opts.provider); ok {
 			err = errors.Join(err, fmt.Errorf(
 				"invalid configuration: the %[1]q flow is enabled in [%[2]s], but it cannot retrieve group memberships from Microsoft Graph without %[3]q enabled or a %[4]q configured; "+
@@ -703,18 +707,23 @@ func (b *Broker) userDataDir(basePath string) (string, error) {
 // NewSession creates a new session for the user. providerID is the stable provider
 // identifier from authd's database; when non-empty it is used to locate the
 // provider ID-keyed cache directory directly, bypassing the username-based lookup.
-func (b *Broker) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
+// serviceName is the PAM service that started the session.
+func (b *Broker) NewSession(username, lang, mode, providerID, serviceName string) (sessionID, encryptionKey string, err error) {
 	if username == "" {
 		return "", "", errors.New("username is required")
 	}
 
 	sessionID = uuid.New().String()
 	s := session{
-		username: username,
-		lang:     lang,
-		mode:     mode,
+		username:    username,
+		serviceName: serviceName,
+		lang:        lang,
+		mode:        mode,
 
 		attemptsPerMode: make(map[string]int),
+	}
+	if serviceName == "" && b.cfg.flows.hasServiceLists() {
+		log.Warning(context.Background(), "per-service flow rules are configured but the PAM service name is unknown; list-based rules are being treated as permissive")
 	}
 
 	pubASN1, err := x509.MarshalPKIXPublicKey(&b.privateKey.PublicKey)
@@ -950,7 +959,7 @@ func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 	case authmodes.NewPassword:
 		return true
 	case authmodes.Device, authmodes.DeviceQr:
-		if !b.cfg.flows.DeviceAuth {
+		if !b.cfg.flows.DeviceAuth.enabledFor(session.serviceName) {
 			log.Debugf(context.Background(), "The device code flow is disabled in the [flows] config, so it is not available")
 			return false
 		}
@@ -971,7 +980,7 @@ func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 		if _, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](b.provider); !ok {
 			return false
 		}
-		if !b.cfg.flows.EntraAuth {
+		if !b.cfg.flows.EntraAuth.enabledFor(session.serviceName) {
 			log.Debugf(context.Background(), "The %q flow is disabled in the [flows] config, so it is not available", authmodes.EntraAuth)
 			return false
 		}
@@ -1941,7 +1950,7 @@ func (b *Broker) routeFIDOChallenge(session *session, challengeInfo *himmelblau.
 func (b *Broker) redirectFIDOToDeviceAuth(session *session) (string, isAuthenticatedDataResponse) {
 	session.entraAuthPasswordHash = ""
 	clearEntraAuthState(session)
-	if b.cfg.flows.DeviceAuth {
+	if b.cfg.flows.DeviceAuth.enabledFor(session.serviceName) {
 		session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
 		return AuthNext, errorMessage{Message: "This account requires FIDO/security key authentication. Please complete authentication using the device code flow."}
 	}
@@ -2285,7 +2294,7 @@ func (b *Broker) routeMFAInitError(mfaErr *himmelblau.MFAError, session *session
 		log.Debugf(context.Background(), "Passwordless Entra authentication for user %q requires password entry", session.username)
 		session.entraAuthPasswordRequired = true
 		session.nextAuthModes = []string{authmodes.EntraAuth}
-		if b.cfg.flows.DeviceAuth {
+		if b.cfg.flows.DeviceAuth.enabledFor(session.serviceName) {
 			// The probe narrowed the mode list before the user submitted
 			// anything, which the password form on its own never did, so keep
 			// the device code flow reachable from it.
@@ -2312,14 +2321,14 @@ func (b *Broker) routeMFAInitError(mfaErr *himmelblau.MFAError, session *session
 		return AuthDenied, errorMessage{Message: fmt.Sprintf("Your user account is disabled in %s, please contact your administrator.", b.provider.DisplayName())}
 	case 50072, 50079, 50203:
 		log.Noticef(context.Background(), "MFA enrollment required for user %q (AADSTS%d)", session.username, mfaErr.AADSTS)
-		if b.cfg.flows.DeviceAuth {
+		if b.cfg.flows.DeviceAuth.enabledFor(session.serviceName) {
 			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
 			return AuthNext, errorMessage{Message: "MFA registration required. Please complete setup using the device code flow."}
 		}
 		return AuthDenied, errorMessage{Message: "MFA registration required, but the device code flow is disabled. Please contact your administrator."}
 	case 16000:
 		log.Noticef(context.Background(), "Interactive authentication required for user %q (AADSTS16000)", session.username)
-		if b.cfg.flows.DeviceAuth {
+		if b.cfg.flows.DeviceAuth.enabledFor(session.serviceName) {
 			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
 			return AuthNext, errorMessage{Message: "MFA registration required. Please complete setup using the device code flow."}
 		}
@@ -2337,7 +2346,7 @@ func (b *Broker) routeMFAInitError(mfaErr *himmelblau.MFAError, session *session
 		return AuthNext, errorMessage{Message: "Your password was changed remotely. Please re-authenticate."}
 	case 53003:
 		log.Noticef(context.Background(), "Conditional Access blocked sign-in for user %q (AADSTS53003)", session.username)
-		if b.cfg.flows.DeviceAuth {
+		if b.cfg.flows.DeviceAuth.enabledFor(session.serviceName) {
 			session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
 			return AuthNext, errorMessage{Message: "Access was blocked by your organization's Conditional Access policies. Please complete authentication using the device code flow."}
 		}
@@ -2347,7 +2356,7 @@ func (b *Broker) routeMFAInitError(mfaErr *himmelblau.MFAError, session *session
 			// The native password MFA flow could not be set up; redirect to Device
 			// Authentication which handles MFA via a separate flow.
 			log.Noticef(context.Background(), "MFA required for user %q; redirecting to the device code flow", session.username)
-			if b.cfg.flows.DeviceAuth {
+			if b.cfg.flows.DeviceAuth.enabledFor(session.serviceName) {
 				session.nextAuthModes = []string{authmodes.Device, authmodes.DeviceQr}
 				return AuthNext, errorMessage{Message: "MFA is required. Please complete authentication using the device code flow."}
 			}

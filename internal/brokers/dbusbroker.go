@@ -22,7 +22,7 @@ const (
 	DbusBaseInterface string = "com.ubuntu.authd.Broker"
 
 	// LatestAPIVersion is the latest API version supported by authd.
-	LatestAPIVersion = 3
+	LatestAPIVersion = 4
 )
 
 type dbusInterface struct {
@@ -198,18 +198,21 @@ func interfaceVersion(iface string) (int, error) {
 
 // NewSession calls the corresponding method on the broker bus and returns the session ID and encryption key.
 // On API v3, the providerID (stable provider identifier) is passed so the broker can locate the
-// provider ID-keyed cache directory directly. v2 brokers receive only username, lang, and mode.
-func (b *dbusBroker) NewSession(ctx context.Context, username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
+// provider ID-keyed cache directory directly. On API v4, the PAM service name is passed as well.
+func (b *dbusBroker) NewSession(ctx context.Context, username, lang, mode, providerID, serviceName string) (sessionID, encryptionKey string, err error) {
 	iface, err := b.resolveInterface()
 	if err != nil {
 		return "", "", brokerUnavailableError(b.name, err)
 	}
 
 	var call *dbus.Call
-	if iface.version < 3 {
+	switch {
+	case iface.version < 3:
 		call, err = b.call(ctx, "NewSession", username, lang, mode)
-	} else {
+	case iface.version < 4:
 		call, err = b.call(ctx, "NewSession", username, lang, mode, providerID)
+	default:
+		call, err = b.call(ctx, "NewSession", username, lang, mode, providerID, serviceName)
 	}
 	if err != nil {
 		return "", "", err

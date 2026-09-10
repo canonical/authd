@@ -19,14 +19,15 @@ func dbusErrorForBrokerCall(err error) *dbus.Error {
 
 // NewSession is the method through which the broker and the daemon will communicate once dbusInterface.NewSession is called.
 //
-// This is the v3+ version that accepts the providerID identifier for cache directory resolution.
-func (s *Interface) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
-	log.Debugf(context.Background(), "Creating new session (v3) (username=%s, lang=%s, mode=%s, provider_id=%s)", username, lang, mode, providerID)
+// This is the v4 version that accepts the providerID identifier for cache directory resolution
+// and the PAM service name.
+func (s *Interface) NewSession(username, lang, mode, providerID, serviceName string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "Creating new session (v4) (username=%s, lang=%s, mode=%s, provider_id=%s, service_name=%s)", username, lang, mode, providerID, serviceName)
 	b, err := s.brokerForCall()
 	if err != nil {
 		return "", "", dbusErrorForBrokerCall(err)
 	}
-	sessionID, encryptionKey, err = b.NewSession(username, lang, mode, providerID)
+	sessionID, encryptionKey, err = b.NewSession(username, lang, mode, providerID, serviceName)
 	if err != nil {
 		return "", "", dbus.MakeFailedError(err)
 	}
@@ -151,7 +152,7 @@ func (s *InterfaceV2) NewSession(username, lang, mode string) (sessionID, encryp
 	if err != nil {
 		return "", "", dbusErrorForBrokerCall(err)
 	}
-	sessionID, encryptionKey, err = b.NewSession(username, lang, mode, "")
+	sessionID, encryptionKey, err = b.NewSession(username, lang, mode, "", "")
 	if err != nil {
 		return "", "", dbus.MakeFailedError(err)
 	}
@@ -170,6 +171,27 @@ func (s *InterfaceV2) DeleteUser(username string) (dbusErr *dbus.Error) {
 		return dbus.MakeFailedError(err)
 	}
 	return nil
+}
+
+// InterfaceV3 wraps Interface and exposes the API v3 NewSession signature
+// without a PAM service name.
+type InterfaceV3 struct {
+	*Interface
+}
+
+// NewSession is the v3 method without a PAM service name.
+func (s *InterfaceV3) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "Creating new session (v3) (username=%s, lang=%s, mode=%s, provider_id=%s)", username, lang, mode, providerID)
+	b, err := s.brokerForCall()
+	if err != nil {
+		return "", "", dbusErrorForBrokerCall(err)
+	}
+	sessionID, encryptionKey, err = b.NewSession(username, lang, mode, providerID, "")
+	if err != nil {
+		return "", "", dbus.MakeFailedError(err)
+	}
+	log.Debugf(context.Background(), "Created new session %s", sessionID)
+	return sessionID, encryptionKey, nil
 }
 
 // makeCanceledError creates a dbus.Error for a canceled operation.
