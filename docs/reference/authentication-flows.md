@@ -23,7 +23,8 @@ Microsoft Entra ID supports the following authentication flows:
   method, or with their Entra ID password followed by an MFA challenge.
   On success, authd caches the access tokens and user information locally.
   For offline login, it stores only a salted hash of the Entra ID or local
-  password. See [Stored secrets](/explanation/security.md#stored-secrets).
+  password. See [Stored secrets](ref::stored-secrets) and
+  [Cached Entra ID passwords](ref::cached-entra-passwords).
 
 The device code flow is enabled by default. If `entra_auth` is omitted, its
 default follows `register_device`: it is enabled when device registration is
