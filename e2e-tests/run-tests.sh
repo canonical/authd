@@ -36,6 +36,7 @@ Options:
   -b, --broker <broker>        Broker to test (can also be set via BROKER environment variable)
   -r, --release <release>      Ubuntu release to test (e.g., 'resolute', can also be set via RELEASE environment variable)
   -o, --output-dir DIR         Directory to store test outputs (default: temporary directory)
+  -t, --test <name>            Run only the named test case (can be repeated)
   -h, --help                   Show this help message and exit
       --rerunfailed            Re-run only the tests that failed in the previous run
 EOF
@@ -78,6 +79,7 @@ unset _scan_broker _scan_args _env_file _git_common_dir
 
 # Parse command line arguments
 TESTS_TO_RUN=()
+TEST_CASES_TO_RUN=()
 while [[ $# -gt 0 ]]; do
     key="$1"
 
@@ -108,6 +110,15 @@ while [[ $# -gt 0 ]]; do
             ;;
         --output-dir|-o)
             OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        --test|-t)
+            if [[ $# -lt 2 ]]; then
+                echo >&2 "Error: $1 requires an argument"
+                usage
+                exit 1
+            fi
+            TEST_CASES_TO_RUN+=("$2")
             shift 2
             ;;
         -h|--help)
@@ -159,6 +170,9 @@ if dpkg --compare-versions "$systemd_ver" "ge" "256" && [ -z "${FORCE_JOURNAL_TC
 fi
 
 ROBOT_ARGS=()
+for test_case in "${TEST_CASES_TO_RUN[@]}"; do
+    ROBOT_ARGS+=(--test "$test_case")
+done
 if [ -n "${RERUNFAILED:-}" ]; then
     echo "Rerunning failed tests from previous run in ${PREVIOUS_TEST_RUN_DIR}"
     ROBOT_ARGS+=(--rerunfailed "${PREVIOUS_TEST_RUN_DIR}/output.xml")

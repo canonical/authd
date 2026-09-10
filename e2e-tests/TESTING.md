@@ -77,8 +77,18 @@ environment.
 
 `run-tests.sh` automatically loads the broker's `.env` file (e.g.
 `e2e-tests-google.env` for `authd-google`). Omit the test file argument to run
-the full suite. Run `./e2e-tests/run-tests.sh --help` for all available options,
-including `--rerunfailed` and `--output-dir`.
+the full suite. To run one test case from a suite, pass its exact name with
+`--test`:
+
+```bash
+./e2e-tests/run-tests.sh \
+    --broker authd-google --release noble \
+    --test "Test second login succeeds with force_access_check_with_provider enabled" \
+    e2e-tests/tests/force_access_check_with_provider.robot
+```
+
+Run `./e2e-tests/run-tests.sh --help` for all available options, including
+`--rerunfailed` and `--output-dir`.
 
 ## Running in GitHub CI
 
