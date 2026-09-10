@@ -10,7 +10,7 @@ DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/authd-e2e-tests"
 
 usage(){
     cat << EOF
-Usage: $0 [--config-file <file>] [--release <release>] [--authd-deb <deb>] [--authd-ppa <ppa>] [--broker-snap <snap>]
+Usage: $0 [--config-file <file>] [--release <release>] [--authd-deb <deb>] [--authd-ppa <ppa>] [--apt-source <source>] [--broker-snap <snap>]
 
 Options:
    --config-file <file>  Path to the configuration file (default: config.env)
@@ -21,6 +21,10 @@ Options:
    --authd-deb <deb>    Path to the authd deb file to install (default: install from the edge PPA)
    --authd-ppa <ppa>    PPA to use instead of authd-edge when installing authd
                         and its dependencies
+   --apt-source <source>
+                        APT source suite to use for package installation and
+                        updates (for example, resolute-updates); adds the
+                        suite if needed and skips the default authd PPA
    --broker-snap <snap> Path to the broker snap file to install (default: install from the edge channel)
   -h, --help             Show this help message and exit
 
@@ -52,6 +56,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --authd-ppa)
             AUTHD_PPA="$2"
+            shift 2
+            ;;
+        --apt-source)
+            APT_SOURCE_ARG="$2"
             shift 2
             ;;
         --broker-snap)
@@ -138,8 +146,20 @@ if [ -n "${BROKER:-}" ]; then
     unset _env_file _git_common_dir
 fi
 
-# CLI --release overrides the config file value
+# CLI options override config file values
 RELEASE="${RELEASE_ARG:-${RELEASE:-}}"
+APT_SOURCE="${APT_SOURCE_ARG:-${APT_SOURCE:-}}"
+
+if [ -n "${APT_SOURCE:-}" ]; then
+    if [[ ! "${APT_SOURCE}" =~ ^[a-z0-9][a-z0-9+.-]*$ ]]; then
+        echo "Invalid APT source suite '${APT_SOURCE}'." >&2
+        exit 1
+    fi
+    if [ -n "${AUTHD_DEB:-}" ]; then
+        echo "--apt-source cannot be used together with --authd-deb." >&2
+        exit 1
+    fi
+fi
 
 VM_NAME_BASE="${VM_NAME_BASE:-e2e-runner}"
 
@@ -286,10 +306,29 @@ fi
 # Revert to the pre-authd setup snapshot before installing the version to test
 restore_snapshot_and_sync_time "$PRE_AUTHD_SNAPSHOT"
 
-# Add the PPA needed to resolve dependencies for the authd package under test.
-# authd-edge remains the default for local and normal CI runs.
-PPA="${AUTHD_PPA:-ubuntu-enterprise-desktop/authd-edge}"
-$SSH "add-apt-repository -y ppa:${PPA}"
+# Add the selected Ubuntu archive suite if it is not already configured.
+if [ -n "${APT_SOURCE:-}" ]; then
+    $SSH bash -euo pipefail -s <<-EOF
+        if ! grep -RqsF -- "${APT_SOURCE}" \
+            /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null; then
+            printf '%s\n' \
+                'deb http://archive.ubuntu.com/ubuntu/ ${APT_SOURCE} main restricted universe multiverse' \
+                > /etc/apt/sources.list.d/e2e-tests-apt-source.list
+        fi
+EOF
+fi
+
+# Add the optional PPA needed to resolve dependencies for the authd package.
+# When an archive suite is selected, do not add authd-edge: the package itself
+# must be selected from that suite.
+if [ -n "${APT_SOURCE:-}" ]; then
+    if [ -n "${AUTHD_PPA:-}" ]; then
+        $SSH "add-apt-repository -y ppa:${AUTHD_PPA}"
+    fi
+else
+    PPA="${AUTHD_PPA:-ubuntu-enterprise-desktop/authd-edge}"
+    $SSH "add-apt-repository -y ppa:${PPA}"
+fi
 
 # Configure authd to be verbose. We do this before installing authd to avoid
 # having to restart the service after installation (just a simple optimization).
@@ -302,8 +341,12 @@ $SSH bash -euo pipefail -s <<-EOF
 	UNIT
 EOF
 
-# Install the version of authd to test
-if [ -n "${AUTHD_DEB:-}" ]; then
+# Install authd and update all packages from the selected archive suite.
+if [ -n "${APT_SOURCE:-}" ]; then
+    $SSH apt-get update
+    $SSH "apt-get install -y -t '${APT_SOURCE}' authd"
+    $SSH "apt-get full-upgrade -y -t '${APT_SOURCE}'"
+elif [ -n "${AUTHD_DEB:-}" ]; then
     "${SCP}" "${AUTHD_DEB}" "/home/ubuntu/$(basename "${AUTHD_DEB}")"
     $SSH apt-get install -y "/home/ubuntu/$(basename "${AUTHD_DEB}")"
 else

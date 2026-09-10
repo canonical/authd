@@ -25,6 +25,11 @@ on:
         type: string
         required: false
         default: ''
+      apt-source:
+        description: 'If set, install and update packages from this Ubuntu archive suite'
+        type: string
+        required: false
+        default: ''
       brokers:
         description: 'JSON array of brokers to test'
         type: string
@@ -184,6 +189,14 @@ jobs:
       broker: ${{ matrix.broker }}
       broker-snap-channel: ${{ inputs.broker-snap-channel }}
       authd-ppa: ${{ inputs.authd-ppa }}
+      apt-source: >-
+        ${{
+          startsWith(
+            inputs.apt-source,
+            format('{0}-', inputs.ubuntu-version)
+          ) &&
+          inputs.apt-source || ''
+        }}
       e2e-tests: ${{ inputs.e2e-tests }}
       e2e-test-cases: ${{ inputs.e2e-test-cases }}
     secrets: inherit
