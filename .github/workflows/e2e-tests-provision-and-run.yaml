@@ -35,6 +35,11 @@ on:
         type: string
         required: false
         default: '[]'
+      e2e-test-cases:
+        description: 'JSON array of exact Robot test case names; an empty array runs all cases in the selected suites'
+        type: string
+        required: false
+        default: '[]'
     secrets:
       E2E_VM_SSH_PRIV_KEY:
         required: true
@@ -180,4 +185,5 @@ jobs:
       broker-snap-channel: ${{ inputs.broker-snap-channel }}
       authd-ppa: ${{ inputs.authd-ppa }}
       e2e-tests: ${{ inputs.e2e-tests }}
+      e2e-test-cases: ${{ inputs.e2e-test-cases }}
     secrets: inherit

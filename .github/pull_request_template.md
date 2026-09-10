@@ -10,13 +10,18 @@ to use the defaults:
 
 - both brokers (`authd-google` and `authd-msentraid`)
 - the complete test suite
+- all test cases in the selected suites
 - the `authd-edge` PPA
 
 e2e-brokers: google
 e2e-tests: allowed_users.robot login_gdm.robot
+e2e-test-case: Test login with GDM
 e2e-ppa: authd-dev
 
 The `e2e-ppa: authd-dev` marker sets the workflow's `authd-ppa` input to
 `ubuntu-enterprise-desktop/authd-dev` instead of `authd-edge` for resolving
 authd package dependencies.
+
+The `e2e-test-case` marker selects the exact Robot test case name. Repeat the
+marker to select more than one test case.
 -->
