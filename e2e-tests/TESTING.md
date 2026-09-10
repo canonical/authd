@@ -111,12 +111,13 @@ to use the default.
 To resolve authd package dependencies from the [authd-dev PPA][authd-dev-ppa]
 instead, add `e2e-ppa: authd-dev` to the pull request description.
 
-To run only selected end-to-end test suites, add an `e2e-tests:` line to the
-pull request description, followed by a space- or comma-separated list of suite
-filenames:
+To run only selected end-to-end test suites, add one or more `e2e-tests:` lines
+to the pull request description. Each line can contain a space- or
+comma-separated list of suite filenames:
 
 ```text
-e2e-tests: login_gdm.robot login.robot
+e2e-tests: login_gdm.robot
+e2e-tests: login.robot
 ```
 
 To run only selected test cases from the selected suites, add one or more
