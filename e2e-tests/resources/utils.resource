@@ -301,7 +301,7 @@ Terminal Password Change Error
     Hid.Keys Combo    Return
     Match Text    ${expected_error}
     Hid.Keys Combo    Control_L    d
-    Match Text    password unchanged     10 
+    Match Text    password unchanged     10
     Match Text    ubuntu@ubuntu:~$    10
     Clear Terminal
 
