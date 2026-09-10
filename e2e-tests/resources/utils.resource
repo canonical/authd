@@ -231,7 +231,19 @@ Cancel Operation
 
 
 Update Authd
+    ${apt_source}=    Get Environment Variable    APT_SOURCE    ${EMPTY}
     ${authd_ppa}=    Get Environment Variable    AUTHD_PPA    ${EMPTY}
+    IF    $apt_source != ''
+        SSH.Execute
+        ...    if ! grep -RqsF -- '${apt_source}' /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null; then printf '%s\n' 'deb http://archive.ubuntu.com/ubuntu/ ${apt_source} main restricted universe multiverse' > /etc/apt/sources.list.d/e2e-tests-apt-source.list; fi
+        IF    $authd_ppa != ''
+            SSH.Execute    add-apt-repository ppa:${authd_ppa} -y    timeout=300
+        END
+        SSH.Execute    apt-get update    timeout=300
+        SSH.Execute    apt-get install -y -t ${apt_source} authd    timeout=120
+        SSH.Execute    apt-get full-upgrade -y -t ${apt_source}    timeout=300
+        RETURN
+    END
     IF    $authd_ppa == ''
         ${authd_ppa}=    Set Variable    ubuntu-enterprise-desktop/authd-edge
     END
