@@ -29,7 +29,7 @@ on:
         description: 'JSON array of brokers to test'
         type: string
         required: false
-        default: '["authd-msentraid","authd-google"]'
+        default: '["authd-msentraid"]'
       e2e-tests:
         description: 'JSON array of test suite filenames; an empty array runs the full suite'
         type: string

@@ -63,7 +63,7 @@ on:
         default: ''
         type: string
       e2e-brokers:
-        description: 'e2e-brokers: Optional comma- or space-separated broker list; empty runs both brokers'
+        description: 'e2e-brokers: Optional comma- or space-separated broker list; empty runs authd-msentraid'
         required: false
         default: ''
         type: string

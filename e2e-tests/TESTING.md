@@ -82,9 +82,9 @@ including `--rerunfailed` and `--output-dir`.
 
 ## Running in GitHub CI
 
-By default, GitHub CI runs the end-to-end tests against both `authd-google` and
-`authd-msentraid`, using the complete test suite and the authd package and
-broker snap built from the current branch. The authd package dependencies
+By default, GitHub CI runs the end-to-end tests against `authd-msentraid`, using
+the complete test suite and the authd package and broker snap built from the
+current branch. The authd package dependencies
 (gnome-shell) are resolved from the [authd-edge PPA][authd-edge-ppa], or from
 the PPA selected with `AUTHD_PPA`. Migration suites start with the last stable
 authd and broker releases before installing the branch-built package or snap.

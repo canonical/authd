@@ -43,7 +43,7 @@ while IFS= read -r selected; do
 done < <(marker_values e2e-brokers)
 
 if ((${#brokers[@]} == 0)); then
-    brokers=(authd-msentraid authd-google)
+    brokers=(authd-msentraid)
 fi
 
 tests=()

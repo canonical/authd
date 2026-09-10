@@ -8,7 +8,7 @@ label. Copy the relevant line(s) below into the visible part of the pull
 request description to override the defaults. Leave these examples commented
 to use the defaults:
 
-- both brokers (`authd-google` and `authd-msentraid`)
+- the `authd-msentraid` broker
 - the complete test suite
 - the `authd-edge` PPA
 
