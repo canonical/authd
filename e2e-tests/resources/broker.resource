@@ -37,6 +37,27 @@ Disable Broker And Purge Config
     SSH.Execute    systemctl restart authd.service
 
 
+Stop Broker
+    # The broker is D-Bus activated, so stopping its snap service alone does
+    # not prevent authd from starting it again on the next request.
+    SSH.Execute    mkdir -p /etc/systemd/system/snap.${BROKER_SNAP_NAME}.${BROKER_SNAP_NAME}.service.d
+    SSH.Execute    printf '%s\n' '[Unit]' 'ConditionPathExists=/run/authd-e2e-broker-enabled' > /etc/systemd/system/snap.${BROKER_SNAP_NAME}.${BROKER_SNAP_NAME}.service.d/99-authd-e2e-disabled.conf
+    SSH.Execute    systemctl daemon-reload
+    SSH.Execute    snap stop ${BROKER_SNAP_NAME}
+
+
+Restore Broker
+    SSH.Execute    rm -f /etc/systemd/system/snap.${BROKER_SNAP_NAME}.${BROKER_SNAP_NAME}.service.d/99-authd-e2e-disabled.conf
+    SSH.Execute    systemctl unmask --runtime snap.${BROKER_SNAP_NAME}.${BROKER_SNAP_NAME}.service
+    SSH.Execute    systemctl daemon-reload
+    SSH.Execute    snap start ${BROKER_SNAP_NAME}
+
+
+Remove Broker Configuration Key
+    [Arguments]    ${config_key}
+    SSH.Execute    sed -i '/^[#[:space:]]*'${config_key}'[[:space:]]*=/d' ${BROKER_CFG}
+
+
 Log In With Remote User Through CLI: QR Code
     [Arguments]    ${username}    ${local_password}
     Start Log In With Remote User Through CLI: QR Code    ${username}
@@ -239,6 +260,13 @@ Change allowed_users In Broker Configuration
     SSH.Execute    snap restart ${BROKER_SNAP_NAME}
 
 
+Enable Legacy Force Provider Authentication
+    SSH.Execute    sed -i '/^[#[:space:]]*force_access_check_with_provider[[:space:]]*=/d' ${BROKER_CFG}
+    SSH.Execute    sed -i '/^[#[:space:]]*force_provider_authentication[[:space:]]*=/d' ${BROKER_CFG}
+    SSH.Execute    sed -i '/^\[oidc\]/a force_provider_authentication = true' ${BROKER_CFG}
+    SSH.Execute    snap restart ${BROKER_SNAP_NAME}
+
+
 Comment Key In Broker Configuration
     [Arguments]    ${config_key}
     SSH.Execute    sed -i 's/^#*${config_key} =.*/#${config_key} = .*/g' ${BROKER_CFG}
@@ -256,10 +284,7 @@ Log In With Remote User Through SSH: QR Code
 
 Start Log In With Remote User Through SSH: QR Code
     [Arguments]    ${username}
-    Hid.Type String    ssh ${username}@localhost
-    Hid.Keys Combo    Return
-    Builtin.Sleep    2
-    Hid.Type String    yes
+    Hid.Type String    ssh -o StrictHostKeyChecking=no ${username}@localhost
     Hid.Keys Combo    Return
 
 
@@ -291,10 +316,46 @@ Continue Log In With Remote User Through SSH: Define Local Password
 
 Log In With Remote User Through SSH: Local Password
     [Arguments]    ${username}    ${local_password}
-    Hid.Type String    ssh ${username}@localhost
+    Hid.Type String    ssh -o StrictHostKeyChecking=no ${username}@localhost
     Hid.Keys Combo    Return
     Match Text    regex:Enter\\s*your\\s*(?:local\\s*)?password:    120
     Hid.Type String    ${local_password}
+    Hid.Keys Combo    Return
+    Match Text    ${username}@ubuntu:~$    120
+
+
+Log In With Remote User Through SSH: QR Code Existing User
+    [Arguments]    ${username}    ${local_password}
+    Hid.Type String    ssh -o StrictHostKeyChecking=no ${username}@localhost
+    Hid.Keys Combo    Return
+    Continue Log In With Remote User: Authenticate In External Browser
+    Continue Log In With Remote User Through SSH: QR Code
+    Continue Log In With Remote User Through SSH: Define Local Password
+    ...    ${username}    ${local_password}
+
+
+Log In With Local User Through SSH: Password
+    Hid.Type String    ssh -o StrictHostKeyChecking=no ubuntu@localhost
+    Hid.Keys Combo    Return
+    Match Text    Password:    120
+    Hid.Type String    ubuntu
+    Hid.Keys Combo    Return
+    Match Text    ubuntu@ubuntu:~$    120
+
+
+Prepare SSH Key For User
+    [Arguments]    ${username}    ${key_name}
+    ${home_dir} =    SSH.Execute    getent passwd ${username} | cut -d: -f6
+    Should Not Be Empty    ${home_dir}
+    SSH.Execute    rm -f /home/ubuntu/.ssh/${key_name} /home/ubuntu/.ssh/${key_name}.pub
+    SSH.Execute As User    ubuntu    ssh-keygen -q -t ed25519 -N '' -f /home/ubuntu/.ssh/${key_name}
+    SSH.Execute    install -d -m 700 -o ${username} -g ${username} ${home_dir}/.ssh
+    SSH.Execute    sh -c 'cat /home/ubuntu/.ssh/${key_name}.pub > ${home_dir}/.ssh/authorized_keys && chown ${username}:${username} ${home_dir}/.ssh/authorized_keys && chmod 600 ${home_dir}/.ssh/authorized_keys'
+
+
+Log In With SSH Key
+    [Arguments]    ${username}    ${key_name}
+    Hid.Type String    ssh -i /home/ubuntu/.ssh/${key_name} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no ${username}@localhost
     Hid.Keys Combo    Return
     Match Text    ${username}@ubuntu:~$    120
 
@@ -350,6 +411,38 @@ Continue Log In With Remote User Through GDM: Define Local Password
     Hid.Keys Combo    Return
 
     Wait Until Desktop Ready
+
+
+Continue Log In With Remote User Through GDM: Define Local Password With Quality Checks
+    [Arguments]    ${short_password}    ${dictionary_password}    ${local_password}
+    Match Text    Create a local password    120
+
+    Hid.Type String    ${short_password}
+    Hid.Keys Combo    Return
+    Match Text    The password is shorter than 8 characters    30
+
+    Match Text    Create a local password    30
+    Hid.Type String    ${dictionary_password}
+    Hid.Keys Combo    Return
+    Match Text    The password fails the dictionary check    30
+
+    Match Text    Create a local password    30
+    Hid.Type String    ${local_password}
+    Hid.Keys Combo    Return
+    Match Text    Please, type the new passphrase again    120
+    Hid.Type String    ${local_password}
+    Hid.Keys Combo    Return
+
+    Wait Until Desktop Ready
+
+
+Unlock Screen With Device Code
+    [Arguments]    ${local_password}
+    # Wake the display before waiting for the device-authentication prompt.
+    Hid.Keys Combo    Return
+    Match Text    ${DEVICE_URL}    120
+    Continue Log In With Remote User: Authenticate In External Browser
+    Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
 
 
 Log In With Remote User Through GDM: Entra Password
@@ -408,6 +501,33 @@ Check Home Directory
     Should Start With    ${home_dir}    ${base_dir}/
     ${ownership} =    SSH.Execute    stat -c %U:%G ${home_dir}
     Should Be Equal    ${ownership}    ${username}:${username}
+
+
+Check User Shell
+    [Arguments]    ${username}
+    ${shell} =    SSH.Execute    getent passwd ${username} | cut -d: -f7
+    Should Match Regexp    ${shell}    ^/(usr/)?bin/bash$
+
+
+Create File In User Home
+    [Arguments]    ${username}    ${filename}=foo
+    ${home_dir} =    SSH.Execute    getent passwd ${username} | cut -d: -f6
+    Should Not Be Empty    ${home_dir}
+    SSH.Execute As User    ${username}    touch '${home_dir}/${filename}'
+    RETURN    ${home_dir}
+
+
+Check User Entry Exists
+    [Arguments]    ${username}
+    ${passwd_entry} =    SSH.Execute    getent passwd ${username} | grep -F '${username}:x:'
+    Should Contain    ${passwd_entry}    ${username}:x:
+
+
+Check File In User Home
+    [Arguments]    ${username}    ${filename}=foo
+    ${home_dir} =    SSH.Execute    getent passwd ${username} | cut -d: -f6
+    ${owner} =    SSH.Execute    stat -c %U '${home_dir}/${filename}'
+    Should Be Equal    ${owner}    ${username}
 
 
 Check That Remote User Is Not Allowed To Log In
