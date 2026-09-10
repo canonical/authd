@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/canonical/authd/internal/services/errmessages"
+	"github.com/canonical/authd/log"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 	"github.com/stretchr/testify/require"
@@ -126,6 +127,26 @@ func TestGetInterface(t *testing.T) {
 			require.Equal(t, tc.wantInterface, got, "getInterface returned unexpected interface")
 		})
 	}
+}
+
+func TestGetInterfaceIgnoresUnrelatedInterfacesWithoutWarning(t *testing.T) {
+	var warnings []string
+	log.SetLevelHandler(log.WarnLevel, func(_ context.Context, _ log.Level, format string, args ...interface{}) {
+		warnings = append(warnings, fmt.Sprintf(format, args...))
+	})
+	t.Cleanup(func() { log.SetLevelHandler(log.WarnLevel, nil) })
+
+	mock := &mockBusObject{
+		introspectXML: introspectionXML(
+			"com.ubuntu.authd.Broker2",
+			"org.freedesktop.DBus.Introspectable",
+		),
+	}
+
+	got, err := getInterface(mock)
+	require.NoError(t, err)
+	require.Equal(t, dbusInterface{name: "com.ubuntu.authd.Broker2", version: 2}, got)
+	require.Empty(t, warnings, "unrelated interfaces should not produce warnings")
 }
 
 func TestDbusBrokerCallUsesInterface(t *testing.T) {
