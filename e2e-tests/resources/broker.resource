@@ -277,10 +277,7 @@ Log In With Remote User Through SSH: QR Code
 
 Start Log In With Remote User Through SSH: QR Code
     [Arguments]    ${username}
-    Hid.Type String    ssh ${username}@localhost
-    Hid.Keys Combo    Return
-    Builtin.Sleep    2
-    Hid.Type String    yes
+    Hid.Type String    ssh -o StrictHostKeyChecking=no ${username}@localhost
     Hid.Keys Combo    Return
 
 
@@ -312,7 +309,7 @@ Continue Log In With Remote User Through SSH: Define Local Password
 
 Log In With Remote User Through SSH: Local Password
     [Arguments]    ${username}    ${local_password}
-    Hid.Type String    ssh ${username}@localhost
+    Hid.Type String    ssh -o StrictHostKeyChecking=no ${username}@localhost
     Hid.Keys Combo    Return
     Match Text    regex:Enter\\s*your\\s*(?:local\\s*)?password:    120
     Hid.Type String    ${local_password}
