@@ -72,19 +72,19 @@ func TestUserDeleteCommand(t *testing.T) {
 			expectedExitCode: 0,
 		},
 
-		"Delete_with_remove_flag_removes_home_dir": {
-			args:               []string{"delete", "--yes", "--remove", "user5@example.com"},
+		"Delete_with_remove_home_flag_removes_home_dir": {
+			args:               []string{"delete", "--yes", "--remove-home", "user5@example.com"},
 			createHomeDir:      true,
 			wantHomeDirRemoved: true,
 			expectedExitCode:   0,
 		},
-		"Delete_without_remove_flag_keeps_home_dir": {
+		"Delete_without_remove_home_flag_keeps_home_dir": {
 			args:             []string{"delete", "--yes", "user6@example.com"},
 			createHomeDir:    true,
 			expectedExitCode: 0,
 		},
-		"Delete_with_remove_flag_succeeds_when_home_dir_does_not_exist": {
-			args:               []string{"delete", "--yes", "--remove", "user7@example.com"},
+		"Delete_with_remove_home_flag_succeeds_when_home_dir_does_not_exist": {
+			args:               []string{"delete", "--yes", "--remove-home", "user7@example.com"},
 			wantHomeDirRemoved: true,
 			expectedExitCode:   0,
 		},
