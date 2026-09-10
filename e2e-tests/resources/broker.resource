@@ -410,6 +410,12 @@ Check Home Directory
     Should Be Equal    ${ownership}    ${username}:${username}
 
 
+Check User Shell
+    [Arguments]    ${username}
+    ${shell} =    SSH.Execute    getent passwd ${username} | cut -d: -f7
+    Should Be Equal    ${shell}    /usr/bin/bash
+
+
 Check That Remote User Is Not Allowed To Log In
     Match Text    authentication failure: user not allowed in broker configuration    120
 
