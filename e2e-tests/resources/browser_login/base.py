@@ -53,6 +53,7 @@ def run_browser_login(login_func: LoginFunc) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("device_code")
     parser.add_argument("--output-dir", required=False, default=os.path.realpath(os.curdir))
+    parser.add_argument("--recording-name", required=False, default="Webview_Recording")
     parser.add_argument("--show-webview", action="store_true")
     args = parser.parse_args()
 
@@ -96,5 +97,7 @@ def run_browser_login(login_func: LoginFunc) -> None:
             if browser.get_mapped():
                 browser.capture_snapshot(screenshot_dir, "failure")
             logger.info("Stopping recording and closing browser")
-            browser.stop_recording(os.path.join(args.output_dir, "Webview_Recording.mp4"))
+            browser.stop_recording(
+                os.path.join(args.output_dir, f"{args.recording_name}.mp4")
+            )
             browser.destroy()
