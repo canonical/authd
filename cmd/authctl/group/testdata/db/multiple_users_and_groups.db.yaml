@@ -8,6 +8,7 @@ users:
       dir: /tmp/authd-delete-cmd-test/home/user1@example.com
       shell: /bin/bash
       broker_id: broker-id
+      full_username: user1@example.com
     - name: user2@example.com
       uid: 2222
       gid: 22222
@@ -15,6 +16,7 @@ users:
       dir: /tmp/authd-delete-cmd-test/home/user2@example.com
       shell: /bin/dash
       broker_id: broker-id
+      full_username: user2@example.com
 groups:
     - name: group1
       gid: 11111

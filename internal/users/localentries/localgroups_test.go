@@ -626,6 +626,41 @@ func TestValidateChangedGroups(t *testing.T) {
 	}
 }
 
+func TestSaveGroupEntriesSymlinkedOutput(t *testing.T) {
+	t.Parallel()
+
+	realDir := t.TempDir()
+	realGroupFile := filepath.Join(realDir, "real-group")
+	err := os.WriteFile(realGroupFile, []byte("localgroup1:x:1001:\n"), 0644) //nolint:gosec // G306 - test file permissions
+	require.NoError(t, err)
+
+	symlinkDir := t.TempDir()
+	symlinkGroupFile := filepath.Join(symlinkDir, "group")
+	require.NoError(t, os.Symlink(realGroupFile, symlinkGroupFile))
+
+	entries, entriesUnlock, err := localentries.WithUserDBLock(
+		localentries.WithGroupInputPath(symlinkGroupFile),
+		localentries.WithGroupOutputPath(symlinkGroupFile),
+		localentries.WithMockUserDBLocking(),
+	)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, entriesUnlock())
+	}()
+
+	groups, err := localentries.GetGroupEntries(entries)
+	require.NoError(t, err)
+	require.Len(t, groups, 1)
+
+	groups = append(groups, types.GroupEntry{Name: "localgroup2", GID: 1002})
+	err = localentries.SaveGroupEntries(entries, groups)
+	require.NoError(t, err)
+
+	updatedGroups, err := localentries.GetGroupEntries(entries)
+	require.NoError(t, err)
+	require.Len(t, updatedGroups, 2)
+}
+
 func TestMain(m *testing.M) {
 	log.SetLevel(log.DebugLevel)
 

@@ -1164,6 +1164,42 @@ func TestEndSession(t *testing.T) {
 	}
 }
 
+func TestReleaseUserAlias(t *testing.T) {
+	t.Parallel()
+
+	testCases := map[string]struct {
+		client    authd.PAMClient
+		args      *authd.RUARequest
+		wantRet   *authd.Empty
+		wantError error
+	}{
+		"Nil_input_returns_error": {
+			client:    NewDummyClient(nil),
+			args:      nil,
+			wantError: errors.New("no input values provided"),
+		},
+		"Empty_lease_id_returns_error": {
+			client:    NewDummyClient(nil),
+			args:      &authd.RUARequest{LeaseId: ""},
+			wantError: errors.New("no lease ID provided"),
+		},
+		"Valid_lease_id_succeeds": {
+			client:  NewDummyClient(nil),
+			args:    &authd.RUARequest{LeaseId: "valid-lease-id"},
+			wantRet: &authd.Empty{},
+		},
+	}
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ret, err := tc.client.ReleaseUserAlias(context.TODO(), tc.args)
+			require.Equal(t, tc.wantError, err)
+			require.Equal(t, tc.wantRet, ret)
+		})
+	}
+}
+
 func TestMain(m *testing.M) {
 	var err error
 	privateKey, err = rsa.GenerateKey(rand.Reader, 2048)
