@@ -301,7 +301,7 @@ Terminal Password Change Error
     Hid.Keys Combo    Return
     Match Text    ${expected_error}
     Hid.Keys Combo    Control_L    d
-    Match Text    password unchanged     10 
+    Match Text    password unchanged     10
     Match Text    ubuntu@ubuntu:~$    10
     Clear Terminal
 
@@ -316,6 +316,28 @@ Escape Back to GDM Login Screen
     Match Text    Not listed    120
 
 
+Log Installed Package Information
+    [Arguments]    ${snapshot}
+    ${broker_version}=    SSH.Execute    snap list %{BROKER} | awk -v broker='%{BROKER}' '$1 == broker {if ($3 ~ /^x[0-9]+$/) printf "%s (local, rev %s)\\n", $2, $3; else printf "%s (%s, rev %s)\\n", $2, $4, $3; exit}'
+    ${authd_dependencies}=    SSH.Execute
+    ...    { printf '%s\\n' authd gnome-shell; apt-cache depends authd | awk '/^[[:space:]|]+(Pre-Depends|Depends|Recommends|Breaks): / {print $2}'; } | sort -u | while read -r package; do if ! dpkg-query --show "$package" 2>/dev/null; then printf '%s (not installed)\\n' "$package"; fi; done
+    ${authd_apt_policy}=    SSH.Execute    apt-cache policy authd
+    ${gnome_shell_apt_policy}=    SSH.Execute    apt-cache policy gnome-shell
+
+    # Keep stable package versions separate so migration setup does not
+    # overwrite the under-test versions stored on the root suite.
+    IF    '${snapshot}' == '%{BROKER}-stable-installed'
+        Set Suite Metadata    authd and Dependencies (Stable)    ${authd_dependencies}    top=True
+        Set Suite Metadata    Broker Version (Stable)    ${broker_version}    top=True
+    ELSE
+        Set Suite Metadata    authd and Dependencies    ${authd_dependencies}    top=True
+        Set Suite Metadata    Broker Version    ${broker_version}    top=True
+    END
+
+    Log    authd apt policy:\n${authd_apt_policy}
+    Log    gnome-shell apt policy:\n${gnome_shell_apt_policy}
+
+
 ### Setup ###
 
 Restore Snapshot
@@ -328,6 +350,7 @@ Test Setup
     Set Suite Metadata    Ubuntu Version   %{RELEASE}    top=True
     Set Suite Metadata    Broker    %{BROKER}    top=True
     Restore Snapshot    ${snapshot}
+    Log Installed Package Information    ${snapshot}
     Journal.Start Receiving Journal
     VNCRecorder.Start Recording
 
