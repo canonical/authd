@@ -2,12 +2,14 @@
 myst:
   html_meta:
     "description lang=en":
-      "authd how-to guides covering installation, configuration, user management, login, network file systems, and contributing."
+      "authd guides on user management for common adminstrator tasks."
 ---
 
 (howto::user-management)=
 
 # User management
+
+Dedicated user management guides for common adminstrator tasks.
 
 ```{toctree}
 :titlesonly:
