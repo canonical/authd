@@ -50,10 +50,10 @@ On each affected host:
    sudo authctl user delete alice@example.com
    ```
 
-   To remove the home directory as well, use `--remove`:
+   To remove the home directory as well, use `--remove-home`:
 
    ```shell
-   sudo authctl user delete --remove alice@example.com
+   sudo authctl user delete --remove-home alice@example.com
    ```
 
 `authctl user delete` releases the user's UID. Handle any files that must be
