@@ -2,10 +2,13 @@ package himmelblau
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
+	"github.com/canonical/authd/log"
 	"golang.org/x/oauth2"
 )
 
@@ -167,6 +170,13 @@ type MFAErrorCategory int
 // because IsMFAUserNotFound is used by untagged builds.
 const userNotFoundErrorCode = 50034
 
+// These errors mean that Entra could not complete the request because its
+// backend was temporarily unavailable or was throttling the tenant.
+const (
+	externalServerRetryableErrorCode = 90006
+	tenantThrottlingErrorCode        = 90055
+)
+
 const (
 	// MFAErrorOther is the default category and means the error has no
 	// specific routing semantics.
@@ -242,4 +252,51 @@ func (e *MFAError) IsMFAPasswordRequired() bool {
 // the Entra tenant.
 func (e *MFAError) IsMFAUserNotFound() bool {
 	return e.AADSTS == userNotFoundErrorCode
+}
+
+// IsMFATransient returns true when Entra reports a temporary service or
+// throttling failure while starting the MFA flow.
+//
+// Keep these checks based on AADSTS: the libhimmelblau revision supported by
+// authd reports every AADSTS error as MSAL_ERROR_CODE::AADSTS_ERROR while
+// preserving the actual code in MFAError.AADSTS.
+func (e *MFAError) IsMFATransient() bool {
+	return e.AADSTS == externalServerRetryableErrorCode ||
+		e.AADSTS == tenantThrottlingErrorCode
+}
+
+func retryTransientInitiate(
+	ctx context.Context,
+	delays []time.Duration,
+	initiate func() (*MFAFlowState, error),
+	wait func(context.Context, time.Duration) error,
+) (*MFAFlowState, error) {
+	flow, err := initiate()
+	for _, delay := range delays {
+		var mfaErr *MFAError
+		if err == nil || !errors.As(err, &mfaErr) || !mfaErr.IsMFATransient() {
+			return flow, err
+		}
+		log.Warningf(ctx, "Transient Entra error (AADSTS%d) while initiating the MFA flow; retrying in %v", mfaErr.AADSTS, delay)
+		if err := wait(ctx, delay); err != nil {
+			return flow, err
+		}
+		if err := ctx.Err(); err != nil {
+			return flow, err
+		}
+		flow, err = initiate()
+	}
+	return flow, err
+}
+
+func waitForRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }

@@ -1615,6 +1615,9 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 
 	flow, challengeInfo, err := entraProvider.InitiateEntraAuth(ctx, b.cfg.clientID, b.cfg.issuerURL, session.username, userPassword, deviceRegistrationData, withDeviceScope, authOpts...)
 	if err != nil {
+		if ctx.Err() != nil {
+			return AuthCancelled, nil
+		}
 		var mfaErr *himmelblau.MFAError
 		if errors.As(err, &mfaErr) {
 			return b.routeMFAInitError(mfaErr, session)
@@ -2274,6 +2277,11 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 // routeMFAInitError routes the AADSTS errors returned by InitiateEntraAuth
 // (the MFA init step) to appropriate broker responses.
 func (b *Broker) routeMFAInitError(mfaErr *himmelblau.MFAError, session *session) (string, isAuthenticatedDataResponse) {
+	if mfaErr.IsMFATransient() {
+		log.Noticef(context.Background(), "Transient Entra authentication error for user %q (AADSTS%d); asking the client to retry", session.username, mfaErr.AADSTS)
+		return AuthRetry, errorMessage{Message: "A temporary error occurred while contacting Entra ID. Please try again."}
+	}
+
 	if mfaErr.IsMFAUserNotFound() {
 		log.Noticef(context.Background(), "Login denied: user %q does not exist in %s", session.username, b.provider.DisplayName())
 		return AuthDenied, errorMessage{Message: "An account with that name does not exist."}

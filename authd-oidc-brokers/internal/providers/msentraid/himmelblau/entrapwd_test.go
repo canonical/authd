@@ -1,7 +1,9 @@
 package himmelblau
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -21,6 +23,110 @@ func TestMFAError_Error(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tc.want, tc.err.Error())
+		})
+	}
+}
+
+func TestMFAError_IsMFATransient(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		err  *MFAError
+		want bool
+	}{
+		"External_server_retryable": {err: &MFAError{AADSTS: externalServerRetryableErrorCode}, want: true},
+		"Tenant_throttling":         {err: &MFAError{AADSTS: tenantThrottlingErrorCode}, want: true},
+		"Other_AADSTS":              {err: &MFAError{AADSTS: 50126}, want: false},
+		"Without_AADSTS":            {err: &MFAError{}, want: false},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, tc.err.IsMFATransient())
+		})
+	}
+}
+
+func TestRetryTransientInitiate(t *testing.T) {
+	t.Parallel()
+
+	transientErr := &MFAError{AADSTS: externalServerRetryableErrorCode}
+	nonTransientErr := &MFAError{AADSTS: 50126}
+	successFlow := &MFAFlowState{}
+
+	tests := map[string]struct {
+		results          []error
+		cancelDuringWait bool
+		wantCalls        int
+		wantWaits        []time.Duration
+		wantFlow         *MFAFlowState
+		wantErr          error
+	}{
+		"Success_without_retry": {
+			results:   []error{nil},
+			wantCalls: 1,
+			wantFlow:  successFlow,
+		},
+		"Transient_then_success": {
+			results:   []error{transientErr, nil},
+			wantCalls: 2,
+			wantWaits: []time.Duration{time.Second},
+			wantFlow:  successFlow,
+		},
+		"Three_transient_failures": {
+			results:   []error{transientErr, transientErr, transientErr},
+			wantCalls: 3,
+			wantWaits: []time.Duration{time.Second, 2 * time.Second},
+			wantErr:   transientErr,
+		},
+		"Non_transient_error_stops_immediately": {
+			results:   []error{nonTransientErr},
+			wantCalls: 1,
+			wantErr:   nonTransientErr,
+		},
+		"Cancellation_during_backoff": {
+			results:          []error{transientErr, nil},
+			cancelDuringWait: true,
+			wantCalls:        1,
+			wantWaits:        []time.Duration{time.Second},
+			wantErr:          context.Canceled,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var calls int
+			var waits []time.Duration
+			flow, err := retryTransientInitiate(ctx, []time.Duration{time.Second, 2 * time.Second}, func() (*MFAFlowState, error) {
+				require.Less(t, calls, len(tc.results))
+				result := tc.results[calls]
+				calls++
+				if result != nil {
+					return nil, result
+				}
+				return successFlow, nil
+			}, func(_ context.Context, delay time.Duration) error {
+				waits = append(waits, delay)
+				if tc.cancelDuringWait {
+					cancel()
+				}
+				return nil
+			})
+
+			require.Equal(t, tc.wantCalls, calls)
+			require.Equal(t, tc.wantWaits, waits)
+			require.Same(t, tc.wantFlow, flow)
+			if tc.wantErr == nil {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, tc.wantErr)
+			}
 		})
 	}
 }
