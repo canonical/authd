@@ -74,6 +74,29 @@ Log Out
     SSH.Execute    loginctl terminate-seat seat0
 
 
+Lock Screen
+    ${session_id} =    SSH.Execute    loginctl show-seat seat0 -p ActiveSession --value
+    Should Not Be Empty    ${session_id}
+    SSH.Execute    loginctl lock-session ${session_id}
+    Wait Until Keyword Succeeds    30s    1s    Check Session Is Locked    ${session_id}
+
+
+Check Session Is Locked
+    [Arguments]    ${session_id}
+    ${locked} =    SSH.Execute    loginctl show-session ${session_id} -p LockedHint --value
+    Should Be Equal    ${locked}    yes
+
+
+Unlock Screen With Password
+    [Arguments]    ${password}
+    # Locking the session can leave the display asleep until it receives input.
+    Hid.Keys Combo    Return
+    Match Text    Password    30
+    Hid.Type String    ${password}
+    Hid.Keys Combo    Return
+    Wait Until Desktop Ready
+
+
 Wait Until GDM Login Screen Ready
     Match Text    Not listed    180
     # Sometimes the "Not listed" is shown for a brief moment before the other
