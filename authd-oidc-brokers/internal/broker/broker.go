@@ -278,16 +278,14 @@ func New(cfg Config, apiVersion uint, args ...Option) (b *Broker, err error) {
 	}
 
 	clientID := cfg.clientID
-	if _, ok := providers.ProviderAs[providers.DeviceRegisterer](opts.provider); ok && cfg.registerDevice {
-		clientID = consts.MicrosoftBrokerAppID
-	}
-
-	// The Microsoft Broker App is a public client and must never send a secret,
-	// even when client_secret is configured (for Graph API fallback). Resolve
-	// this once so that NewSession never needs to re-derive it from the client ID.
 	oidcClientSecret := cfg.clientSecret
-	if clientID == consts.MicrosoftBrokerAppID {
+	if _, ok := providers.ProviderAs[providers.DeviceRegisterer](opts.provider); ok {
+		// Entra device-code authentication uses a public OIDC client. The
+		// secret is reserved for the provider's app-only Graph fallback.
 		oidcClientSecret = ""
+		if cfg.registerDevice {
+			clientID = consts.MicrosoftBrokerAppID
+		}
 	}
 
 	b = &Broker{
