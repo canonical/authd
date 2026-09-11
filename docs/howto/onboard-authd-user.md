@@ -4,6 +4,7 @@ myst:
     "description lang=en": "Give an identity provider user access to an Ubuntu system with authd."
 ---
 
+(howto::onboard-user)=
 # Onboard an authd user
 
 authd creates a local user record the first time a user logs in successfully

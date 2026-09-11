@@ -6,6 +6,7 @@ myst:
       UID, and files."
 ---
 
+(howto::lock-user)=
 # Lock an authd user
 
 Locking a user stops them from logging in through authd, but keeps their local

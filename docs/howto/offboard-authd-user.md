@@ -5,6 +5,7 @@ myst:
       "Permanently remove an authd user's access and local account from an Ubuntu host."
 ---
 
+(howto::offboard-user)=
 # Offboard an authd user
 
 Offboarding a user has an identity provider step and a host step.
