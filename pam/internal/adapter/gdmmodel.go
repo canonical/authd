@@ -329,6 +329,10 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 			)
 		}
 
+		if access == auth.DeniedMaxTries {
+			// PAM handles the terminal result; do not send the same message to GDM again.
+			return m, nil
+		}
 		return m, m.emitEvent(&gdm.EventData_AuthEvent{
 			AuthEvent: &gdm.Events_AuthEvent{Response: &authd.IAResponse{
 				Access: access,

@@ -866,10 +866,6 @@ func TestGdmModule(t *testing.T) {
 					Access: auth.Retry,
 					Msg:    "invalid password 'not yet goodpass', should be 'goodpass'",
 				},
-				{
-					Access: auth.DeniedMaxTries,
-					Msg:    "Maximum number of authentication attempts reached",
-				},
 			},
 			wantPamErrorMessages: []string{
 				"Maximum number of authentication attempts reached",
