@@ -20,6 +20,7 @@ ${SUITE_OUTPUT_DIR}    ${OUTPUT_DIR}/${SUITE_NAME.rsplit('.')[-1]}
 ${YARF_IMAGE_DIR}    ${SUITE_OUTPUT_DIR}/screenshots
 ${OCR_CONFIDENCE_THRESHOLD}    94
 ${OCR_SIMILARITY_THRESHOLD}    92
+${guest_clock_changed}    ${False}
 
 
 *** Keywords ***
@@ -246,7 +247,7 @@ Update Authd
 
 
 Sync System Time
-    ${output} =    SSH.Execute    nm-online -q && systemctl restart systemd-timesyncd
+    ${output} =    SSH.Execute    nm-online -q && (systemctl reset-failed systemd-timesyncd.service 2>/dev/null || true) && timedatectl set-ntp true
     Log    ${output}    level=DEBUG
     ${output} =   SSH.Execute    timedatectl show -p NTPSynchronized | grep -q NTPSynchronized=yes
     Log    ${output}    level=DEBUG
@@ -257,13 +258,35 @@ Wait Until System Time Synced
     ...    Sync System Time
 
 
+Set Guest Clock In Future
+    [Documentation]    Stops guest time synchronization and moves the guest clock one day ahead.
+    Set Test Variable    ${guest_clock_changed}    ${True}
+    ${change_guest_clock_command}=    Catenate    SEPARATOR=&&
+    ...    timedatectl set-ntp false
+    ...    (systemctl stop systemd-timesyncd.service 2>/dev/null || true)
+    ...    timedatectl set-time "$(date -d '+1 day' '+%Y-%m-%d %H:%M:%S')"
+    ...    date --iso-8601=seconds
+    ${clock}=    SSH.Execute    ${change_guest_clock_command}
+    Log    Guest clock is ${clock}
+
+
+Restore Guest Clock
+    [Documentation]    Re-enables guest time synchronization and waits for it to catch up.
+    ${restore_guest_clock_command}=    Catenate    SEPARATOR=&&
+    ...    (systemctl reset-failed systemd-timesyncd.service 2>/dev/null || true)
+    ...    timedatectl set-ntp true
+    SSH.Execute    ${restore_guest_clock_command}
+    Wait Until System Time Synced
+
+
 Try machinectl login Prompt
+    [Arguments]    ${prompt_timeout}=120
     VAR    ${tries}    3
     WHILE    ${tries} > 0
         Hid.Type String    machinectl login
         Hid.Keys Combo    Return
         ${match} =     Run Keyword And Return Status
-        ...    Match Text    ubuntu login:    120
+        ...    Match Text    ubuntu login:    ${prompt_timeout}
         IF   '${match}' == 'True'
             BREAK
         END

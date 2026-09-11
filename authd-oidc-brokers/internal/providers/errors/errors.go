@@ -33,7 +33,8 @@ func (e *RetryWithDeviceCodeFlowError) Unwrap() error {
 	return e.Err
 }
 
-// ForDisplayError is an error type for errors that are meant to be displayed to the user.
+// ForDisplayError wraps an error with a message that is safe to display to the user.
+// It does not indicate whether a caller may fall back to cached data.
 type ForDisplayError struct {
 	Message string
 	Err     error
@@ -44,6 +45,43 @@ func (e *ForDisplayError) Error() string {
 }
 
 func (e *ForDisplayError) Unwrap() error {
+	return e.Err
+}
+
+// AuthoritativeError marks an error as an authoritative provider result, such
+// as an identity or configuration failure. Callers can use errors.As to
+// distinguish it from a transient failure. It may be wrapped by a
+// ForDisplayError when the result should also be shown to the user.
+type AuthoritativeError struct {
+	Err error
+}
+
+func (e *AuthoritativeError) Error() string {
+	if e.Err != nil {
+		return e.Err.Error()
+	}
+	return "authoritative provider error"
+}
+
+func (e *AuthoritativeError) Unwrap() error {
+	return e.Err
+}
+
+// NonAuthoritativeError marks a refresh failure for which cached credentials
+// may be used when provider access checks are optional. It may be wrapped by a
+// ForDisplayError when the failure should also be shown to the user.
+type NonAuthoritativeError struct {
+	Err error
+}
+
+func (e *NonAuthoritativeError) Error() string {
+	if e.Err != nil {
+		return e.Err.Error()
+	}
+	return "non-authoritative provider error"
+}
+
+func (e *NonAuthoritativeError) Unwrap() error {
 	return e.Err
 }
 
