@@ -43,11 +43,9 @@ Manage authd users and login access:
 
 ```{toctree}
 :titlesonly:
+:maxdepth: 1
 
-Onboard an authd user <onboard-authd-user>
-Change or reset a local authd password <reset-authd-user-password>
-Lock an authd user <lock-authd-user>
-Offboard an authd user <offboard-authd-user>
+User management <index-user-management>
 ```
 
 ## Network file systems
