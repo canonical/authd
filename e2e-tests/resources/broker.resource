@@ -409,6 +409,15 @@ Continue Log In With Remote User Through GDM: Define Local Password
     Wait Until Desktop Ready
 
 
+Unlock Screen With Device Code
+    [Arguments]    ${local_password}
+    # Wake the display before waiting for the device-authentication prompt.
+    Hid.Keys Combo    Return
+    Match Text    ${DEVICE_URL}    120
+    Continue Log In With Remote User: Authenticate In External Browser
+    Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
+
+
 Log In With Remote User Through GDM: Entra Password
     [Arguments]    ${username}
     Start Log In With Remote User Through GDM    ${username}
