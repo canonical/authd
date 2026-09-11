@@ -2,7 +2,6 @@ package adapter
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -49,8 +48,6 @@ type gdmPollResponse struct {
 }
 
 type gdmPollDone struct{}
-
-type gdmIsAuthenticatedResultReceived isAuthenticatedResultReceived
 
 type gdmStopConversations struct{}
 
@@ -301,40 +298,45 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 		m.waitingAuth = false
 
 	case isAuthenticatedResultReceived:
-		return m, sendEvent(gdmIsAuthenticatedResultReceived(msg))
-
-	case gdmIsAuthenticatedResultReceived:
 		access := msg.access
 		authMsg, err := grantedTolerantMsg(access, msg.msg)
 		if err != nil {
 			return m, sendEvent(pamError{status: pam.ErrSystem, msg: err.Error()})
 		}
 
+		event := &gdm.EventData_AuthEvent{
+			AuthEvent: &gdm.Events_AuthEvent{Response: &authd.IAResponse{
+				Access: access,
+				Msg:    authMsg,
+			}},
+		}
+
 		switch access {
 		case auth.Granted:
 		case auth.Denied:
 		case auth.DeniedMaxTries:
+			// GNOME Shell does not handle denied-max-tries. Send the supported
+			// denied result so it completes the authentication.
+			event.AuthEvent.Response.Access = auth.Denied
+			if event.AuthEvent.Response.Msg == "" {
+				event.AuthEvent.Response.Msg = "Maximum number of tries exceeded"
+			}
+			return m, sendEvent(m.emitEventSync(event))
 		case auth.Cancelled:
 		case auth.Retry:
 		case auth.Next:
 		default:
 			errMsg := fmt.Sprintf("Access %q is not valid", access)
-			accessJSON, _ := json.Marshal(errMsg)
-			return m, tea.Sequence(
-				sendEvent(gdmIsAuthenticatedResultReceived{
-					access: auth.Denied,
-					msg:    fmt.Sprintf(`{"message": %s}`, accessJSON),
-				}),
-				sendEvent(pamError{status: pam.ErrAuth, msg: errMsg}),
-			)
+			event.AuthEvent.Response.Access = auth.Denied
+			event.AuthEvent.Response.Msg = errMsg
+			return m, sendEvent(m.emitEventSync(event))
 		}
 
-		return m, m.emitEvent(&gdm.EventData_AuthEvent{
-			AuthEvent: &gdm.Events_AuthEvent{Response: &authd.IAResponse{
-				Access: access,
-				Msg:    authMsg,
-			}},
-		})
+		if access == auth.Denied {
+			// Let GDM's normal PAM failure path handle authentication failures.
+			return m, nil
+		}
+		return m, m.emitEvent(event)
 
 	case gdmStopConversations:
 		m.stopConversations()
