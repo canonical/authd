@@ -9,7 +9,7 @@ myst:
 
 # User management
 
-Dedicated user management guides for common adminstrator tasks.
+Dedicated user management guides for common administrator tasks.
 
 ```{toctree}
 :titlesonly:
