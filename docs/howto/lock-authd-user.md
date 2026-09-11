@@ -9,8 +9,15 @@ myst:
 # Lock an authd user
 
 Locking a user stops them from logging in through authd, but keeps their local
-account. Lock a user instead of [deleting](offboard-authd-user.md) them when
-you want to:
+account intact.
+
+Locking and unlocking users can be done using authd's [`authctl`
+tool](../reference/cli/authctl_user.md).
+
+## When to lock a user
+
+Lock a user instead of [deleting](offboard-authd-user.md) them when you want
+to:
 
 * Suspend access temporarily and restore it later.
 * Keep the user's UID and GID reserved, so that authd cannot assign them to
@@ -25,8 +32,8 @@ Run this on each host where the user has logged in:
 sudo authctl user lock alice@example.com
 ```
 
-Locking does not end sessions that are already running. To log the user out of
-the host:
+Locking does not end sessions that are already running.
+To log the user out of the host:
 
 ```shell
 sudo loginctl terminate-user alice@example.com
@@ -35,13 +42,17 @@ sudo loginctl terminate-user alice@example.com
 The lock stays in effect if the user is renamed in the identity provider,
 because authd also matches the record by the provider's user ID.
 
-```{note}
-SSH public-key authentication does not involve authd, so a locked user can
-still log in with an SSH key. See [SSH public key
-authentication](ref::ssh-public-key-authentication).
-```
+:::{admonition} SSH access from locked users
+:class: important
+SSH public-key authentication does not involve authd.
+
+This means that a locked user can still log in with an SSH key. See [SSH public
+key authentication](ref::ssh-public-key-authentication) for more details.
+:::
 
 ## Unlock the account
+
+To unlock a locked user, run:
 
 ```shell
 sudo authctl user unlock alice@example.com
