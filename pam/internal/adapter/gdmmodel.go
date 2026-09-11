@@ -315,8 +315,13 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 		case auth.Granted:
 		case auth.Denied:
 		case auth.DeniedMaxTries:
-			// PAM handles the terminal result; do not send the same message to GDM again.
-			return m, nil
+			// GNOME Shell does not handle denied-max-tries. Send the supported
+			// denied result so it completes the authentication.
+			event.AuthEvent.Response.Access = auth.Denied
+			if event.AuthEvent.Response.Msg == "" {
+				event.AuthEvent.Response.Msg = "Maximum number of tries exceeded"
+			}
+			return m, sendEvent(m.emitEventSync(event))
 		case auth.Cancelled:
 		case auth.Retry:
 		case auth.Next:
@@ -328,9 +333,7 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 		}
 
 		if access == auth.Denied {
-			// Let GDM's normal PAM failure path count this attempt and retry
-			// the selected user. An authd denied event tells the authd Shell
-			// service that retries are exhausted and sends the user to the list.
+			// Let GDM's normal PAM failure path handle authentication failures.
 			return m, nil
 		}
 		return m, m.emitEvent(event)

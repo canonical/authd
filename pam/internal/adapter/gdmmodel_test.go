@@ -2274,10 +2274,14 @@ func TestGdmModel(t *testing.T) {
 				gdm.RequestType_changeStage, // -> authMode Selection
 				gdm.RequestType_changeStage, // -> password
 			},
-			wantNoGdmEvents: []gdm.EventType{gdm.EventType_authEvent},
-			wantStage:       gdmTestIgnoreStage,
+			wantGdmEvents: []gdm.EventType{gdm.EventType_authEvent},
+			wantGdmAuthRes: []*authd.IAResponse{{
+				Access: auth.Denied,
+				Msg:    "Maximum number of authentication attempts reached",
+			}},
+			wantStage: gdmTestIgnoreStage,
 			wantPAMReturnValue: pamError{
-				status: pam.ErrMaxtries,
+				status: pam.ErrAuth,
 				msg:    "Maximum number of authentication attempts reached",
 			},
 		},
@@ -2286,7 +2290,7 @@ func TestGdmModel(t *testing.T) {
 				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
 				pam_test.WithIsAuthenticatedReturn(&authd.IAResponse{
 					Access: auth.DeniedMaxTries,
-					Msg:    `{"message":"Maximum number of authentication attempts reached"}`,
+					Msg:    "",
 				}, nil),
 			),
 			pamUser: "pam-preset-user-and-daemon-selected-broker-with-wrong-pass",
@@ -2308,11 +2312,15 @@ func TestGdmModel(t *testing.T) {
 				gdm.RequestType_changeStage, // -> authMode Selection
 				gdm.RequestType_changeStage, // -> password
 			},
-			wantNoGdmEvents: []gdm.EventType{gdm.EventType_authEvent},
-			wantStage:       gdmTestIgnoreStage,
+			wantGdmEvents: []gdm.EventType{gdm.EventType_authEvent},
+			wantGdmAuthRes: []*authd.IAResponse{{
+				Access: auth.Denied,
+				Msg:    "Maximum number of tries exceeded",
+			}},
+			wantStage: gdmTestIgnoreStage,
 			wantPAMReturnValue: pamError{
-				status: pam.ErrMaxtries,
-				msg:    "Maximum number of authentication attempts reached",
+				status: pam.ErrAuth,
+				msg:    "Access denied",
 			},
 		},
 		"Error_on_authentication_client_because_of_empty_auth_data_access": {

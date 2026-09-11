@@ -866,8 +866,12 @@ func TestGdmModule(t *testing.T) {
 					Access: auth.Retry,
 					Msg:    "invalid password 'not yet goodpass', should be 'goodpass'",
 				},
+				{
+					Access: auth.Denied,
+					Msg:    "Maximum number of authentication attempts reached",
+				},
 			},
-			wantError: pam.ErrMaxtries,
+			wantError: pam.ErrAuth,
 		},
 		"Error_on_authenticating_unknown_user": {
 			pamUser: ptrValue("user-unknown"),
