@@ -7,32 +7,33 @@ myst:
 
 # Offboard an authd user
 
-Offboarding has an identity provider step and a host step.
+Offboarding a user has an identity provider step and a host step.
 
 ## Disable provider access
 
-Disable or delete the user in the identity provider. Revoke active sessions
-according to the provider's normal offboarding process.
+Disable or delete the user in the identity provider. You should also revoke
+active sessions according to the provider's normal offboarding process.
 
 Disabling provider access alone is sufficient to prevent new authd logins if
 [the force provider access check](ref::config-force-provider-auth)
 is enabled. Otherwise, the user may still log in with a cached local password
 while the provider is unreachable, so delete the local authd account on
-each affected host as described below.
+each affected host as described in the remainder of this guide..
 
 ## Remove the local account
 
-Before deleting the local account, review [UID and GID
+If deleting the local account, first review [UID and GID
 conflicts](/explanation/security.md#uid-and-gid-conflicts). Deleting a user or
 group can allow authd to reuse its numeric ID, which may expose files left
-behind under that ID. If you only need to prevent login, [lock the
-account](lock-authd-user.md) instead to preserve its UID and GID and
-avoid reusing those IDs.
+behind under that ID.
+
+If you only need to prevent login, [lock the account](howto::lock-user) instead
+of deleting it, to preserve its UID and GID and avoid reusing those IDs.
 
 On each affected host:
 
 1. If the user is listed explicitly in the broker's `allowed_users` setting,
-   remove the entry and restart the broker. See [Configure allowed
+   remove the entry and restart the broker. See [configure allowed
    users](ref::config-allowed-users).
 2. End any existing sessions:
 
@@ -57,8 +58,8 @@ On each affected host:
 
 `authctl user delete` releases the user's UID. Handle any files that must be
 kept, removed, or reassigned before deleting the record. The command does not
-remove files outside the home directory. See the [`authctl` reference](reference::cli)
-for the command warning and options.
+remove files outside the home directory. See the [`authctl`
+reference](reference::cli) for the command warning and options.
 
 You can verify that the local record has been removed with:
 
@@ -66,6 +67,8 @@ You can verify that the local record has been removed with:
 getent passwd alice@example.com
 ```
 
+:::{note}
 Deleting the local record does not delete the identity provider account. The
 provider step must be completed to prevent the user from being registered
 again on a later login.
+:::
