@@ -169,6 +169,7 @@ jobs:
           )
 
   build-deb:
+    if: ${{ inputs.apt-source == '' }}
     uses: ./.github/workflows/debian-build.yaml
     with:
       files-hash: ${{ inputs.files-hash }}
@@ -179,6 +180,14 @@ jobs:
     needs:
       - provision-vm
       - build-deb
+    # An archive-source E2E run does not need the branch-built authd package.
+    # Keep the test job running when build-deb is skipped for that case.
+    if: >-
+      ${{
+        !cancelled() &&
+        needs.provision-vm.result == 'success' &&
+        (needs.build-deb.result == 'success' || needs.build-deb.result == 'skipped')
+      }}
     strategy:
       matrix:
         broker: ${{ fromJSON(inputs.brokers) }}
