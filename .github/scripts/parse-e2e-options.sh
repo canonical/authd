@@ -9,13 +9,17 @@ body_without_comments=$(
         perl -0pe 's/<!--.*?(?:-->|$)//gs'
 )
 
-marker_values() {
+marker_lines() {
     local marker="$1"
 
     sed -nE \
-        "s/^[[:space:]]*${marker}:[[:space:]]*(.+)[[:space:]]*$/\1/p" \
+        "s/^[[:space:]]*${marker}:[[:space:]]*(.+)$/\1/p" \
         <<<"${body_without_comments}" |
-        tr -s ' \t,' '\n'
+        sed -E 's/[[:space:]]+$//'
+}
+
+marker_values() {
+    marker_lines "$1" | tr -s ' \t,' '\n'
 }
 
 brokers=()
@@ -52,6 +56,12 @@ while IFS= read -r test; do
     tests+=("${test}")
 done < <(marker_values e2e-tests)
 
+test_cases=()
+while IFS= read -r test_case; do
+    [[ -n "${test_case}" ]] || continue
+    test_cases+=("${test_case}")
+done < <(marker_lines e2e-test-case)
+
 authd_ppa=
 while IFS= read -r ppa; do
     case "${ppa}" in
@@ -78,5 +88,6 @@ json_array() {
 {
     printf 'brokers=%s\n' "$(json_array "${brokers[@]}")"
     printf 'tests=%s\n' "$(json_array "${tests[@]}")"
+    printf 'test_cases=%s\n' "$(json_array "${test_cases[@]}")"
     printf 'authd_ppa=%s\n' "${authd_ppa}"
 } >>"${GITHUB_OUTPUT}"

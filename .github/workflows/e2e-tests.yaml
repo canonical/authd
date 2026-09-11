@@ -72,6 +72,11 @@ on:
         required: false
         default: ''
         type: string
+      e2e-test-case:
+        description: 'e2e-test-case: Optional exact Robot test case name'
+        required: false
+        default: ''
+        type: string
       e2e-ppa:
         description: 'e2e-ppa: Optional PPA name, such as authd-dev; empty uses authd-edge'
         required: false
@@ -108,6 +113,7 @@ jobs:
       files-hash: ${{ steps.hash.outputs.hash }}
       brokers: ${{ steps.parse_e2e_options.outputs.brokers }}
       tests: ${{ steps.parse_e2e_options.outputs.tests }}
+      test_cases: ${{ steps.parse_e2e_options.outputs.test_cases }}
       authd_ppa: ${{ steps.parse_e2e_options.outputs.authd_ppa }}
     steps:
       - uses: actions/checkout@v7
@@ -124,6 +130,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           E2E_BROKERS: ${{ inputs.e2e-brokers || '' }}
           E2E_TESTS: ${{ inputs.e2e-tests || '' }}
+          E2E_TEST_CASE: ${{ inputs.e2e-test-case || '' }}
           E2E_PPA: ${{ inputs.e2e-ppa || '' }}
         run: |
           set -euo pipefail
@@ -135,8 +142,8 @@ jobs:
             )
           else
             E2E_TESTS_DESCRIPTION=$(
-              printf 'e2e-brokers: %s\ne2e-tests: %s\ne2e-ppa: %s\n' \
-                "${E2E_BROKERS}" "${E2E_TESTS}" "${E2E_PPA}"
+              printf 'e2e-brokers: %s\ne2e-tests: %s\ne2e-test-case: %s\ne2e-ppa: %s\n' \
+                "${E2E_BROKERS}" "${E2E_TESTS}" "${E2E_TEST_CASE}" "${E2E_PPA}"
             )
           fi
 
@@ -162,5 +169,6 @@ jobs:
       # PRs opt in by adding "e2e-ppa: authd-dev" to their description.
       authd-ppa: ${{ needs.prepare-e2e.outputs.authd_ppa }}
       brokers: ${{ needs.prepare-e2e.outputs.brokers }}
+      e2e-test-cases: ${{ needs.prepare-e2e.outputs.test_cases }}
       e2e-tests: ${{ needs.prepare-e2e.outputs.tests }}
     secrets: inherit

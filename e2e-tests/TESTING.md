@@ -77,8 +77,18 @@ environment.
 
 `run-tests.sh` automatically loads the broker's `.env` file (e.g.
 `e2e-tests-google.env` for `authd-google`). Omit the test file argument to run
-the full suite. Run `./e2e-tests/run-tests.sh --help` for all available options,
-including `--rerunfailed` and `--output-dir`.
+the full suite. To run one test case from a suite, pass its exact name with
+`--test`:
+
+```bash
+./e2e-tests/run-tests.sh \
+    --broker authd-google --release noble \
+    --test "Test second login succeeds with force_access_check_with_provider enabled" \
+    e2e-tests/tests/force_access_check_with_provider.robot
+```
+
+Run `./e2e-tests/run-tests.sh --help` for all available options, including
+`--rerunfailed` and `--output-dir`.
 
 ## Running in GitHub CI
 
@@ -94,19 +104,28 @@ as well when the authd package dependencies should come from a different PPA.
 
 The E2E workflow runs for a pull request only when it has the `e2e-tests` label.
 The pull request template contains commented examples for selecting brokers,
-test suites, and the authd PPA. Copy the relevant line into the visible part of
-the pull request description to enable it; leave it commented to use the
-default.
+test suites, test cases, and the authd PPA. Copy the relevant line into the
+visible part of the pull request description to enable it; leave it commented
+to use the default.
 
 To resolve authd package dependencies from the [authd-dev PPA][authd-dev-ppa]
 instead, add `e2e-ppa: authd-dev` to the pull request description.
 
-To run only selected end-to-end test suites, add an `e2e-tests:` line to the
-pull request description, followed by a space- or comma-separated list of suite
-filenames:
+To run only selected end-to-end test suites, add one or more `e2e-tests:` lines
+to the pull request description. Each line can contain a space- or
+comma-separated list of suite filenames:
 
 ```text
-e2e-tests: login_gdm.robot login.robot
+e2e-tests: login_gdm.robot
+e2e-tests: login.robot
+```
+
+To run only selected test cases from the selected suites, add one or more
+`e2e-test-case:` lines with the exact Robot test case names:
+
+```text
+e2e-tests: force_access_check_with_provider.robot
+e2e-test-case: Test second login succeeds with force_access_check_with_provider enabled
 ```
 
 To run the tests against only selected brokers, add an `e2e-brokers:` line to
@@ -118,11 +137,11 @@ e2e-brokers: google
 ```
 
 Editing the pull request description does not automatically re-run the
-workflow. If you change an `e2e-tests:`, `e2e-brokers:`, or `e2e-ppa:` line
-after the workflow has already run, re-run the workflow. It fetches the current
-pull request description from GitHub. If you start the workflow with
-`workflow_dispatch`, use its separate `e2e-brokers`, `e2e-tests`, and `e2e-ppa`
-inputs instead.
+workflow. If you change an `e2e-tests:`, `e2e-test-case:`, `e2e-brokers:`, or
+`e2e-ppa:` line after the workflow has already run, re-run the workflow. It
+fetches the current pull request description from GitHub. If you start the
+workflow with `workflow_dispatch`, use its separate `e2e-brokers`, `e2e-tests`,
+`e2e-test-case`, and `e2e-ppa` inputs instead.
 
 [yarf]: https://github.com/canonical/yarf
 [authd-edge-ppa]: https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge
