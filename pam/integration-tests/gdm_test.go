@@ -867,9 +867,6 @@ func TestGdmModule(t *testing.T) {
 					Msg:    "invalid password 'not yet goodpass', should be 'goodpass'",
 				},
 			},
-			wantPamErrorMessages: []string{
-				"Maximum number of authentication attempts reached",
-			},
 			wantError: pam.ErrMaxtries,
 		},
 		"Error_on_authenticating_unknown_user": {
@@ -882,16 +879,7 @@ func TestGdmModule(t *testing.T) {
 				},
 			},
 			wantAuthModeIDs: []string{passwordAuthID},
-			wantPamErrorMessages: []string{
-				"user not found",
-			},
-			wantAuthResponses: []*authd.IAResponse{
-				{
-					Access: auth.Denied,
-					Msg:    "user not found",
-				},
-			},
-			wantError: pam.ErrAuth,
+			wantError:       pam.ErrAuth,
 		},
 		"Error_on_invalid_fido_ack": {
 			pamUserPrefix:   examplebroker.UserIntegrationMfaPrefix,
@@ -904,19 +892,12 @@ func TestGdmModule(t *testing.T) {
 					gdm_test.IsAuthenticatedEvent(&authd.IARequest_AuthenticationData_Wait{}),
 				},
 			},
-			wantPamErrorMessages: []string{
-				fido1AuthID + " should have wait set to true",
-			},
 			wantUILayouts: []*authd.UILayout{
 				&testPasswordUILayout,
 				&testFidoDeviceUILayout,
 			},
 			wantAuthResponses: []*authd.IAResponse{
 				{Access: auth.Next},
-				{
-					Access: auth.Denied,
-					Msg:    fido1AuthID + " should have wait set to true",
-				},
 			},
 			wantError: pam.ErrAuth,
 		},

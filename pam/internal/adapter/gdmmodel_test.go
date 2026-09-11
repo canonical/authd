@@ -959,47 +959,7 @@ func TestGdmModel(t *testing.T) {
 			wantStage:          proto.Stage_challenge,
 			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id, AuthTok: "gdm-good-password"},
 		},
-		"Authenticated_after_client_side_user_and_broker_and_authMode_selection": {
-			clientOptions: append(slices.Clone(multiBrokerClientOptions),
-				pam_test.WithIsAuthenticatedWantSecret("gdm-good-password"),
-			),
-			gdmEvents: []*gdm.EventData{
-				gdm_test.SelectUserEvent("gdm-selected-user-broker-and-auth-mode"),
-			},
-			messages: []tea.Msg{
-				gdmTestWaitForStage{
-					stage: proto.Stage_brokerSelection,
-					events: []*gdm.EventData{
-						gdm_test.SelectBrokerEvent(secondBrokerInfo.Id),
-					},
-					commands: []tea.Cmd{
-						sendEvent(gdmTestSendAuthDataWhenReady{&authd.IARequest_AuthenticationData_Secret{
-							Secret: "gdm-good-password",
-						}}),
-					},
-				},
-			},
-			wantUsername:       "gdm-selected-user-broker-and-auth-mode",
-			wantSelectedBroker: secondBrokerInfo.Id,
-			wantGdmRequests: []gdm.RequestType{
-				gdm.RequestType_uiLayoutCapabilities,
-				gdm.RequestType_changeStage, // -> broker Selection
-				gdm.RequestType_changeStage, // -> authMode Selection
-				gdm.RequestType_changeStage, // -> password
-			},
-			wantGdmEvents: []gdm.EventType{
-				gdm.EventType_userSelected,
-				gdm.EventType_brokersReceived,
-				gdm.EventType_brokerSelected,
-				gdm.EventType_authModeSelected,
-				gdm.EventType_uiLayoutReceived,
-				gdm.EventType_startAuthentication,
-				gdm.EventType_authEvent,
-			},
-			wantStage:          proto.Stage_challenge,
-			wantGdmAuthRes:     []*authd.IAResponse{{Access: auth.Granted}},
-			wantPAMReturnValue: PamSuccess{BrokerID: secondBrokerInfo.Id, AuthTok: "gdm-good-password"},
-		},
+
 		"Authenticated_after_client_side_user_and_broker_and_authMode_selection_and_after_various_retries": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
 				pam_test.WithIsAuthenticatedWantSecret("gdm-good-password"),
@@ -1062,6 +1022,47 @@ func TestGdmModel(t *testing.T) {
 			},
 			wantStage:          proto.Stage_challenge,
 			wantPAMReturnValue: PamSuccess{BrokerID: firstBrokerInfo.Id, AuthTok: "gdm-good-password"},
+		},
+		"Authenticated_after_client_side_user_and_broker_and_authMode_selection": {
+			clientOptions: append(slices.Clone(multiBrokerClientOptions),
+				pam_test.WithIsAuthenticatedWantSecret("gdm-good-password"),
+			),
+			gdmEvents: []*gdm.EventData{
+				gdm_test.SelectUserEvent("gdm-selected-user-broker-and-auth-mode"),
+			},
+			messages: []tea.Msg{
+				gdmTestWaitForStage{
+					stage: proto.Stage_brokerSelection,
+					events: []*gdm.EventData{
+						gdm_test.SelectBrokerEvent(secondBrokerInfo.Id),
+					},
+					commands: []tea.Cmd{
+						sendEvent(gdmTestSendAuthDataWhenReady{&authd.IARequest_AuthenticationData_Secret{
+							Secret: "gdm-good-password",
+						}}),
+					},
+				},
+			},
+			wantUsername:       "gdm-selected-user-broker-and-auth-mode",
+			wantSelectedBroker: secondBrokerInfo.Id,
+			wantGdmRequests: []gdm.RequestType{
+				gdm.RequestType_uiLayoutCapabilities,
+				gdm.RequestType_changeStage, // -> broker Selection
+				gdm.RequestType_changeStage, // -> authMode Selection
+				gdm.RequestType_changeStage, // -> password
+			},
+			wantGdmEvents: []gdm.EventType{
+				gdm.EventType_userSelected,
+				gdm.EventType_brokersReceived,
+				gdm.EventType_brokerSelected,
+				gdm.EventType_authModeSelected,
+				gdm.EventType_uiLayoutReceived,
+				gdm.EventType_startAuthentication,
+				gdm.EventType_authEvent,
+			},
+			wantStage:          proto.Stage_challenge,
+			wantGdmAuthRes:     []*authd.IAResponse{{Access: auth.Granted}},
+			wantPAMReturnValue: PamSuccess{BrokerID: secondBrokerInfo.Id, AuthTok: "gdm-good-password"},
 		},
 		"Cancelled_auth_after_client_side_user_and_broker_and_authMode_selection": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
@@ -1225,8 +1226,10 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_brokerSelected,
 				gdm.EventType_authModeSelected,
 			},
+			wantGdmEventsCount: map[gdm.EventType]int{
+				gdm.EventType_startAuthentication: 1,
+			},
 			wantNoGdmEvents: []gdm.EventType{
-				gdm.EventType_startAuthentication,
 				gdm.EventType_authEvent,
 			},
 			wantStage:          proto.Stage_authModeSelection,
@@ -1827,7 +1830,6 @@ func TestGdmModel(t *testing.T) {
 				gdm.RequestType_uiLayoutCapabilities,
 			},
 			wantNoGdmEvents: []gdm.EventType{
-				gdm.EventType_brokersReceived,
 				gdm.EventType_userSelected,
 			},
 			wantPAMReturnValue: pamError{
@@ -2195,13 +2197,9 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_authModesReceived,
 				gdm.EventType_authModeSelected,
 				gdm.EventType_uiLayoutReceived,
-				gdm.EventType_authEvent,
 			},
-			wantStage: gdmTestIgnoreStage,
-			wantGdmAuthRes: []*authd.IAResponse{{
-				Access: auth.Denied,
-				Msg:    "you're not allowed!",
-			}},
+			wantNoGdmEvents: []gdm.EventType{gdm.EventType_authEvent},
+			wantStage:       gdmTestIgnoreStage,
 			wantPAMReturnValue: pamError{
 				status: pam.ErrAuth,
 				msg:    "you're not allowed!",
@@ -2242,38 +2240,30 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_authModesReceived,
 				gdm.EventType_authModeSelected,
 				gdm.EventType_uiLayoutReceived,
-				gdm.EventType_authEvent,
 			},
-			wantStage:      gdmTestIgnoreStage,
-			wantGdmAuthRes: []*authd.IAResponse{{Access: auth.Denied}},
+			wantNoGdmEvents: []gdm.EventType{gdm.EventType_authEvent},
+			wantStage:       gdmTestIgnoreStage,
 			wantPAMReturnValue: pamError{
 				status: pam.ErrAuth,
 				msg:    "Access denied",
 			},
 		},
-		"Error_on_authentication_client_denied_because_of_wrong_password_after_retry": {
+		"Error_on_broker_max_tries_with_password": {
 			clientOptions: append(slices.Clone(singleBrokerClientOptions),
 				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
-				pam_test.WithIsAuthenticatedWantSecret("gdm-good-password"),
-				pam_test.WithIsAuthenticatedMaxRetries(1),
+				pam_test.WithIsAuthenticatedReturn(&authd.IAResponse{
+					Access: auth.DeniedMaxTries,
+					Msg:    `{"message":"Maximum number of authentication attempts reached"}`,
+				}, nil),
 			),
 			pamUser: "pam-preset-user-and-daemon-selected-broker-with-wrong-pass",
 			messages: []tea.Msg{
 				gdmTestWaitForStage{
 					stage: proto.Stage_challenge,
 					commands: []tea.Cmd{
-						sendEvent(gdmTestSendAuthDataWhenReadyFull{
-							authData: &authd.IARequest_AuthenticationData_Secret{
-								Secret: "gdm-wrong-password",
-							},
-							commands: []tea.Cmd{
-								sendEvent(gdmTestSendAuthDataWhenReady{
-									&authd.IARequest_AuthenticationData_Secret{
-										Secret: "gdm-another-wrong-password",
-									},
-								}),
-							},
-						}),
+						sendEvent(gdmTestSendAuthDataWhenReady{&authd.IARequest_AuthenticationData_Secret{
+							Secret: "gdm-good-password",
+						}}),
 					},
 				},
 			},
@@ -2284,24 +2274,45 @@ func TestGdmModel(t *testing.T) {
 				gdm.RequestType_changeStage, // -> authMode Selection
 				gdm.RequestType_changeStage, // -> password
 			},
-			wantGdmEvents: []gdm.EventType{
-				gdm.EventType_userSelected,
-				gdm.EventType_brokersReceived,
-				gdm.EventType_brokerSelected,
-				gdm.EventType_authModesReceived,
-				gdm.EventType_authModeSelected,
-				gdm.EventType_uiLayoutReceived,
-				gdm.EventType_authEvent, // retry
-				gdm.EventType_authEvent, // denied
-			},
-			wantStage: gdmTestIgnoreStage,
-			wantGdmAuthRes: []*authd.IAResponse{
-				{Access: auth.Retry},
-				{Access: auth.Denied},
-			},
+			wantNoGdmEvents: []gdm.EventType{gdm.EventType_authEvent},
+			wantStage:       gdmTestIgnoreStage,
 			wantPAMReturnValue: pamError{
-				status: pam.ErrAuth,
-				msg:    "Access denied",
+				status: pam.ErrMaxtries,
+				msg:    "Maximum number of authentication attempts reached",
+			},
+		},
+		"Error_on_broker_max_tries": {
+			clientOptions: append(slices.Clone(singleBrokerNewPasswordClientOptions),
+				pam_test.WithGetBrokerReturn(firstBrokerInfo.Id, nil),
+				pam_test.WithIsAuthenticatedReturn(&authd.IAResponse{
+					Access: auth.DeniedMaxTries,
+					Msg:    `{"message":"Maximum number of authentication attempts reached"}`,
+				}, nil),
+			),
+			pamUser: "pam-preset-user-and-daemon-selected-broker-with-wrong-pass",
+			messages: []tea.Msg{
+				gdmTestWaitForStage{
+					stage: proto.Stage_challenge,
+					commands: []tea.Cmd{
+						sendEvent(gdmTestSendAuthDataWhenReady{&authd.IARequest_AuthenticationData_Secret{
+							Secret: "gdm-good-password",
+						}}),
+					},
+				},
+			},
+			supportedLayouts:   []*authd.UILayout{pam_test.NewPasswordUILayout()},
+			wantSelectedBroker: firstBrokerInfo.Id,
+			wantGdmRequests: []gdm.RequestType{
+				gdm.RequestType_uiLayoutCapabilities,
+				gdm.RequestType_changeStage, // -> broker Selection
+				gdm.RequestType_changeStage, // -> authMode Selection
+				gdm.RequestType_changeStage, // -> password
+			},
+			wantNoGdmEvents: []gdm.EventType{gdm.EventType_authEvent},
+			wantStage:       gdmTestIgnoreStage,
+			wantPAMReturnValue: pamError{
+				status: pam.ErrMaxtries,
+				msg:    "Maximum number of authentication attempts reached",
 			},
 		},
 		"Error_on_authentication_client_because_of_empty_auth_data_access": {
@@ -2327,20 +2338,12 @@ func TestGdmModel(t *testing.T) {
 				gdm.RequestType_changeStage, // -> authMode Selection
 				gdm.RequestType_changeStage, // -> password
 			},
-			wantGdmEvents: []gdm.EventType{
-				gdm.EventType_userSelected,
-				gdm.EventType_brokersReceived,
-				gdm.EventType_brokerSelected,
-				gdm.EventType_authModesReceived,
-				gdm.EventType_authModeSelected,
-				gdm.EventType_uiLayoutReceived,
-				gdm.EventType_authEvent, // denied
-			},
-			wantStage: gdmTestIgnoreStage,
+			wantGdmEvents: []gdm.EventType{gdm.EventType_authEvent},
 			wantGdmAuthRes: []*authd.IAResponse{{
 				Access: auth.Denied,
 				Msg:    `Access "" is not valid`,
 			}},
+			wantStage: gdmTestIgnoreStage,
 			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    `Unknown authentication access: ""`,
@@ -2372,20 +2375,12 @@ func TestGdmModel(t *testing.T) {
 				gdm.RequestType_changeStage, // -> authMode Selection
 				gdm.RequestType_changeStage, // -> password
 			},
-			wantGdmEvents: []gdm.EventType{
-				gdm.EventType_userSelected,
-				gdm.EventType_brokersReceived,
-				gdm.EventType_brokerSelected,
-				gdm.EventType_authModesReceived,
-				gdm.EventType_authModeSelected,
-				gdm.EventType_uiLayoutReceived,
-				gdm.EventType_authEvent, // denied
-			},
-			wantStage: gdmTestIgnoreStage,
+			wantGdmEvents: []gdm.EventType{gdm.EventType_authEvent},
 			wantGdmAuthRes: []*authd.IAResponse{{
 				Access: auth.Denied,
 				Msg:    `Access "no way you get here!" is not valid`,
 			}},
+			wantStage: gdmTestIgnoreStage,
 			wantPAMReturnValue: pamError{
 				status: pam.ErrSystem,
 				msg:    `Unknown authentication access: "no way you get here!"`,
@@ -2516,9 +2511,6 @@ func TestGdmModel(t *testing.T) {
 				userSelected{"another-selected-user"},
 			},
 			wantNoGdmEvents: []gdm.EventType{
-				gdm.EventType_brokerSelected,
-				gdm.EventType_authModesReceived,
-				gdm.EventType_authModeSelected,
 				gdm.EventType_authEvent,
 			},
 			wantStage: proto.Stage_userSelection,
@@ -2753,6 +2745,12 @@ func TestGdmModel(t *testing.T) {
 			for _, e := range gdmHandler.receivedEvents {
 				receivedEventTypes = append(receivedEventTypes, e.Type)
 			}
+			for _, evType := range tc.wantNoGdmEvents {
+				require.NotContains(t, receivedEventTypes, evType,
+					"GDM received unexpected event %q in %v",
+					evType, stringifySlice(receivedEventTypes))
+			}
+
 			require.True(t, isSupersetOf(receivedEventTypes, tc.wantGdmEvents),
 				"Required events have not been received: %v vs %v",
 				stringifySlice(tc.wantGdmEvents), stringifySlice(receivedEventTypes))
