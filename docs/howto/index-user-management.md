@@ -5,7 +5,7 @@ myst:
       "authd how-to guides covering installation, configuration, user management, login, network file systems, and contributing."
 ---
 
-(howtos-user-management)=
+(howto::user-management)=
 
 # User management
 

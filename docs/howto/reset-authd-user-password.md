@@ -5,6 +5,7 @@ myst:
       "Change or reset the local password for an authd user."
 ---
 
+(howto::reset-password)=
 # Change or reset a local authd password
 
 This guide explains how an authd user's password can be reset.
