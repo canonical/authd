@@ -92,21 +92,22 @@ Run `./e2e-tests/run-tests.sh --help` for all available options, including
 
 ## Running in GitHub CI
 
-By default, GitHub CI runs the end-to-end tests against `authd-msentraid`, using
-the complete test suite and the authd package and broker snap built from the
-current branch. The authd package dependencies
-(gnome-shell) are resolved from the [authd-edge PPA][authd-edge-ppa], or from
-the PPA selected with `AUTHD_PPA`. Migration suites start with the last stable
-authd and broker releases before installing the branch-built package or snap.
-To use locally built packages in those suites, set `AUTHD_DEB` and
-`BROKER_SNAP` to their host paths when running `run-tests.sh`. Set `AUTHD_PPA`
-as well when the authd package dependencies should come from a different PPA.
+By default, GitHub CI runs the end-to-end tests against `authd-msentraid` on all
+supported Ubuntu releases (`noble`, `resolute`, and `devel`), using the complete
+test suite and the authd package and broker snap built from the current branch.
+The authd package dependencies (gnome-shell) are resolved from the [authd-edge
+PPA][authd-edge-ppa], or from the PPA selected with `AUTHD_PPA`. Migration
+suites start with the last stable authd and broker releases before installing
+the branch-built package or snap. To use locally built packages in those suites,
+set `AUTHD_DEB` and `BROKER_SNAP` to their host paths when running
+`run-tests.sh`. Set `AUTHD_PPA` as well when the authd package dependencies
+should come from a different PPA.
 
 The E2E workflow runs for a pull request only when it has the `e2e-tests` label.
-The pull request template contains commented examples for selecting brokers,
-test suites, test cases, and the authd PPA. Copy the relevant line into the
-visible part of the pull request description to enable it; leave it commented
-to use the default.
+The pull request template contains commented examples for selecting Ubuntu
+releases, brokers, test suites, test cases, and the authd PPA. Copy the relevant
+line into the visible part of the pull request description to enable it; leave
+it commented to use the default.
 
 To resolve authd package dependencies from the [authd-dev PPA][authd-dev-ppa]
 instead, add `e2e-ppa: authd-dev` to the pull request description.
@@ -128,6 +129,14 @@ e2e-tests: force_access_check_with_provider.robot
 e2e-test-case: Test second login succeeds with force_access_check_with_provider enabled
 ```
 
+To run the tests against only selected Ubuntu releases, add an
+`e2e-ubuntu-versions:` line to the pull request description. It accepts a
+space- or comma-separated list of supported release names:
+
+```text
+e2e-ubuntu-versions: noble
+```
+
 To run the tests against only selected brokers, add an `e2e-brokers:` line to
 the pull request description, followed by a space- or comma-separated list of
 `google`/`authd-google` and/or `msentraid`/`authd-msentraid`:
@@ -137,10 +146,11 @@ e2e-brokers: google
 ```
 
 Editing the pull request description does not automatically re-run the
-workflow. If you change an `e2e-tests:`, `e2e-test-case:`, `e2e-brokers:`, or
-`e2e-ppa:` line after the workflow has already run, re-run the workflow. It
-fetches the current pull request description from GitHub. If you start the
-workflow with `workflow_dispatch`, use its separate `e2e-brokers`, `e2e-tests`,
+workflow. If you change an `e2e-ubuntu-versions:`, `e2e-tests:`,
+`e2e-test-case:`, `e2e-brokers:`, or `e2e-ppa:` line after the workflow has
+already run, re-run the workflow. It fetches the current pull request
+description from GitHub. If you start the workflow with `workflow_dispatch`,
+use its separate `e2e-ubuntu-versions`, `e2e-brokers`, `e2e-tests`,
 `e2e-test-case`, and `e2e-ppa` inputs instead.
 
 [yarf]: https://github.com/canonical/yarf
