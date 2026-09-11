@@ -77,7 +77,7 @@ Thinking about using authd for your next project? Get in touch!
 
 ```{toctree}
 :hidden:
-:maxdepth: 2
+:titlesonly:
 
 authd <self>
 How-to guides </howto/index>
