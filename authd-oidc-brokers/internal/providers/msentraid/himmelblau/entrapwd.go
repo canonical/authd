@@ -265,13 +265,12 @@ func (e *MFAError) IsMFATransient() bool {
 		e.AADSTS == tenantThrottlingErrorCode
 }
 
-// retryTransientInitiate runs initiate and, when it fails with a transient
-// Entra error (see IsMFATransient), retries it after each delay so that brief
-// backend unavailability or throttling stays invisible to the user. Waiting
-// for a retry is aborted when the context is done. Once the retry budget is
-// exhausted, the last result is returned unchanged for the regular error
-// routing.
-func retryTransientInitiate(ctx context.Context, delays []time.Duration, initiate func() (*MFAFlowState, error)) (*MFAFlowState, error) {
+func retryTransientInitiate(
+	ctx context.Context,
+	delays []time.Duration,
+	initiate func() (*MFAFlowState, error),
+	wait func(context.Context, time.Duration) error,
+) (*MFAFlowState, error) {
 	flow, err := initiate()
 	for _, delay := range delays {
 		var mfaErr *MFAError
@@ -279,12 +278,25 @@ func retryTransientInitiate(ctx context.Context, delays []time.Duration, initiat
 			return flow, err
 		}
 		log.Warningf(ctx, "Transient Entra error (AADSTS%d) while initiating the MFA flow; retrying in %v", mfaErr.AADSTS, delay)
-		select {
-		case <-ctx.Done():
+		if err := wait(ctx, delay); err != nil {
 			return flow, err
-		case <-time.After(delay):
+		}
+		if err := ctx.Err(); err != nil {
+			return flow, err
 		}
 		flow, err = initiate()
 	}
 	return flow, err
+}
+
+func waitForRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }

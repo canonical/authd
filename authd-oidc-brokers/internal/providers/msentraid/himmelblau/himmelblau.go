@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math/rand/v2"
 	"net/url"
 	"os"
 	"slices"
@@ -378,14 +379,22 @@ func InitiateMFAFlow(ctx context.Context, clientID, tenantID string, data *Devic
 		}
 	}
 
-	// ponytail: fixed backoff without jitter; add jitter like upstream
-	// himmelblau if synchronized retries during tenant-wide throttling bite
-	flow, err := retryTransientInitiate(ctx, []time.Duration{time.Second, 2 * time.Second}, func() (*MFAFlowState, error) {
+	initiate := func() (*MFAFlowState, error) {
 		if withDeviceScope {
 			return initiateMFAFlowForEnrollment(brokerClientApp, username, password, opts)
 		}
 		return initiateMFAFlow(brokerClientApp, username, password, opts)
-	})
+	}
+
+	// Use one- and two-second exponential backoff with bounded jitter so
+	// tenant-wide throttling does not synchronize retries.
+	const retryJitterRange = 500 * time.Millisecond
+	delays := make([]time.Duration, 2)
+	for attempt := range delays {
+		baseDelay := time.Second << attempt
+		delays[attempt] = baseDelay + retryJitterRange/2 + rand.N(retryJitterRange) //nolint:gosec // retry jitter is not security-sensitive
+	}
+	flow, err := retryTransientInitiate(ctx, delays, initiate, waitForRetry)
 	if err != nil {
 		return nil, nil, err
 	}

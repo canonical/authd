@@ -1615,6 +1615,9 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 
 	flow, challengeInfo, err := entraProvider.InitiateEntraAuth(ctx, b.cfg.clientID, b.cfg.issuerURL, session.username, userPassword, deviceRegistrationData, withDeviceScope, authOpts...)
 	if err != nil {
+		if ctx.Err() != nil {
+			return AuthCancelled, nil
+		}
 		var mfaErr *himmelblau.MFAError
 		if errors.As(err, &mfaErr) {
 			return b.routeMFAInitError(mfaErr, session)
