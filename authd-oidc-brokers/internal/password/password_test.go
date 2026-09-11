@@ -163,3 +163,14 @@ func TestCheckPassword(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckPasswordRejectsShortHash(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "password")
+	err := os.WriteFile(path, []byte(base64.StdEncoding.EncodeToString([]byte("short"))), 0o600)
+	require.NoError(t, err)
+
+	_, err = password.CheckPassword("test123", path)
+	require.ErrorIs(t, err, password.ErrInvalidHash)
+}

@@ -32,19 +32,25 @@ const (
 	// EntraAuthFidoPin is the ID of the security-key PIN entry mode, chained
 	// before EntraAuthFido when the connected device requires a client PIN.
 	EntraAuthFidoPin = "entra_auth_fido_pin"
+
+	// EntraAuthPasswordConfirmation is the ID of the follow-up mode used to
+	// confirm replacing an existing local password.
+	//nolint:gosec // G101: this is an authentication mode identifier, not a credential.
+	EntraAuthPasswordConfirmation = "entra_auth_password_confirmation"
 )
 
 var (
 	// Label is a map of auth mode IDs to their display labels.
 	Label = map[string]string{
-		Password:         "Local password",
-		Device:           "Device code flow",
-		DeviceQr:         "Device code flow",
-		NewPassword:      "Define your local password",
-		EntraAuth:        "Entra ID authentication",
-		EntraMFAWait:     "Waiting for MFA approval",
-		EntraMFACode:     "Enter your MFA code",
-		EntraAuthFido:    "Use your security key",
-		EntraAuthFidoPin: "Enter your security key PIN",
+		Password:                      "Local password",
+		Device:                        "Device code flow",
+		DeviceQr:                      "Device code flow",
+		NewPassword:                   "Define your local password",
+		EntraAuth:                     "Entra ID authentication",
+		EntraMFAWait:                  "Waiting for MFA approval",
+		EntraMFACode:                  "Enter your MFA code",
+		EntraAuthFido:                 "Use your security key",
+		EntraAuthFidoPin:              "Enter your security key PIN",
+		EntraAuthPasswordConfirmation: "Confirm local password replacement",
 	}
 )
