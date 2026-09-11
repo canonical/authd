@@ -4,6 +4,7 @@ myst:
     "description lang=en": "Use authd for cloud-based login to Ubuntu with GDM."
 ---
 
+(howto::login-gdm)=
 # Log in with GDM
 
 ## Logging in with a remote provider
