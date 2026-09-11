@@ -82,6 +82,11 @@ on:
         required: false
         default: ''
         type: string
+      e2e-apt-source:
+        description: 'e2e-apt-source: Optional Ubuntu archive suite, such as resolute-proposed'
+        required: false
+        default: ''
+        type: string
   schedule:
     - cron: '0 0 * * 1' # Runs every Monday at midnight
 
@@ -115,6 +120,7 @@ jobs:
       tests: ${{ steps.parse_e2e_options.outputs.tests }}
       test_cases: ${{ steps.parse_e2e_options.outputs.test_cases }}
       authd_ppa: ${{ steps.parse_e2e_options.outputs.authd_ppa }}
+      apt_source: ${{ steps.parse_e2e_options.outputs.apt_source }}
     steps:
       - uses: actions/checkout@v7
       - name: Compute hash of build-relevant files
@@ -132,6 +138,7 @@ jobs:
           E2E_TESTS: ${{ inputs.e2e-tests || '' }}
           E2E_TEST_CASE: ${{ inputs.e2e-test-case || '' }}
           E2E_PPA: ${{ inputs.e2e-ppa || '' }}
+          E2E_APT_SOURCE: ${{ inputs.e2e-apt-source || '' }}
         run: |
           set -euo pipefail
 
@@ -142,8 +149,9 @@ jobs:
             )
           else
             E2E_TESTS_DESCRIPTION=$(
-              printf 'e2e-brokers: %s\ne2e-tests: %s\ne2e-test-case: %s\ne2e-ppa: %s\n' \
-                "${E2E_BROKERS}" "${E2E_TESTS}" "${E2E_TEST_CASE}" "${E2E_PPA}"
+              printf 'e2e-brokers: %s\ne2e-tests: %s\ne2e-test-case: %s\ne2e-ppa: %s\ne2e-apt-source: %s\n' \
+                "${E2E_BROKERS}" "${E2E_TESTS}" "${E2E_TEST_CASE}" "${E2E_PPA}" \
+                "${E2E_APT_SOURCE}"
             )
           fi
 
@@ -166,8 +174,10 @@ jobs:
       files-hash: ${{ needs.prepare-e2e.outputs.files-hash }}
       force-fresh-image: ${{ github.event_name == 'schedule' }}
       broker-snap-channel: ${{ inputs.broker-snap-channel || '' }}
-      # PRs opt in by adding "e2e-ppa: authd-dev" to their description.
+      # PRs opt in by adding e2e-ppa or e2e-apt-source to their description.
       authd-ppa: ${{ needs.prepare-e2e.outputs.authd_ppa }}
+      # Apply an archive source only to the matrix job for its matching Ubuntu release.
+      apt-source: ${{ needs.prepare-e2e.outputs.apt_source }}
       brokers: ${{ needs.prepare-e2e.outputs.brokers }}
       e2e-test-cases: ${{ needs.prepare-e2e.outputs.test_cases }}
       e2e-tests: ${{ needs.prepare-e2e.outputs.tests }}

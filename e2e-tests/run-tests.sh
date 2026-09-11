@@ -27,6 +27,7 @@ Prerequisites:
 Optional environment variables:
   AUTHD_DEB           Host path to the authd package for migration tests
   AUTHD_PPA           PPA to use for authd dependencies in migration tests
+  APT_SOURCE          APT source suite to use for package updates in migration tests
   BROKER_SNAP         Host path to the broker snap for migration tests
 
 Options:
@@ -151,6 +152,17 @@ if [ -z "${E2E_USER:-}" ] || [ -z "${E2E_PASSWORD:-}" ] || [ -z "${BROKER:-}" ] 
     exit 1
 fi
 
+if [ -n "${APT_SOURCE:-}" ]; then
+    if [[ ! "${APT_SOURCE}" =~ ^[a-z0-9][a-z0-9+.-]*$ ]]; then
+        echo >&2 "Invalid APT source suite '${APT_SOURCE}'."
+        exit 1
+    fi
+    if [ -n "${AUTHD_DEB:-}" ]; then
+        echo >&2 "APT_SOURCE cannot be used together with AUTHD_DEB."
+        exit 1
+    fi
+fi
+
 VM_NAME=${VM_NAME:-"e2e-runner-${RELEASE}"}
 
 if [ ${#TESTS_TO_RUN[@]} -eq 0 ]; then
@@ -234,6 +246,7 @@ env \
     VM_NAME="$VM_NAME" \
     AUTHD_DEB="${AUTHD_DEB:-}" \
     AUTHD_PPA="${AUTHD_PPA:-}" \
+    APT_SOURCE="${APT_SOURCE:-}" \
     BROKER_SNAP="${BROKER_SNAP:-}" \
     VNC_PORT="$VNC_PORT" \
     SYSTEMD_SUPPORTS_VSOCK="${SYSTEMD_SUPPORTS_VSOCK:-}" \
