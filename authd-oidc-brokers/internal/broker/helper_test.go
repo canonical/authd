@@ -6,6 +6,7 @@ import (
 	"crypto/sha512"
 	"crypto/x509"
 	"encoding/base64"
+	"maps"
 	"os"
 	"path/filepath"
 	"testing"
@@ -165,6 +166,22 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 		for endpoint, handler := range cfg.customHandlers {
 			serverOpts = append(serverOpts, testutils.WithHandler(endpoint, handler))
 		}
+		if cfg.tokenHandlerOptions != nil {
+			// Clone before mutating: tests run in parallel and must not share
+			// option maps. This aligns live-token identity with the cached
+			// identity the broker tests use. A test that needs an absent
+			// "sub" claim can opt out by setting claims["sub"] = "".
+			opts := *cfg.tokenHandlerOptions
+			opts.IDTokenClaims = make([]map[string]interface{}, len(cfg.tokenHandlerOptions.IDTokenClaims))
+			for i, claims := range cfg.tokenHandlerOptions.IDTokenClaims {
+				cloned := maps.Clone(claims)
+				if _, exists := cloned["sub"]; !exists {
+					cloned["sub"] = "saved-user-id"
+				}
+				opts.IDTokenClaims[i] = cloned
+			}
+			cfg.tokenHandlerOptions = &opts
+		}
 		issuerURL, cleanup := testutils.StartMockProviderServer(
 			cfg.listenAddress,
 			cfg.tokenHandlerOptions,
@@ -257,10 +274,11 @@ func generateAndStoreCachedInfo(t *testing.T, options tokenOptions, path string)
 }
 
 type tokenOptions struct {
-	username string
-	issuer   string
-	gecos    string
-	groups   []info.Group
+	username   string
+	issuer     string
+	gecos      string
+	groups     []info.Group
+	providerID string
 
 	expired                     bool
 	noRefreshToken              bool
@@ -290,10 +308,13 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 	if options.username == "-" {
 		options.username = ""
 	}
+	if options.providerID == "" {
+		options.providerID = "saved-user-id"
+	}
 
 	idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
 		"iss":                options.issuer,
-		"sub":                "saved-user-id",
+		"sub":                options.providerID,
 		"aud":                "test-client-id",
 		"exp":                9999999999,
 		"name":               "test-user",
@@ -313,6 +334,9 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 		DeviceIsDisabled:     options.deviceIsDisabled,
 		UserIsDisabled:       options.userIsDisabled,
 		ObtainedViaEntraAuth: options.obtainedViaEntraAuth,
+		// A seeded cache simulates a previously successful login, so its
+		// groups count as resolved.
+		GroupsResolved: true,
 	}
 
 	if options.expired {
@@ -340,7 +364,7 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 		}
 		tok.UserInfo = info.User{
 			Name:       options.username,
-			ProviderID: "saved-user-id",
+			ProviderID: options.providerID,
 			Home:       "/home/" + options.username,
 			Gecos:      options.gecos,
 			Shell:      "/usr/bin/bash",
