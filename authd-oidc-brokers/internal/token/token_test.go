@@ -126,7 +126,7 @@ func TestLoadAuthInfo(t *testing.T) {
 	}
 }
 
-func TestLoadAuthInfoLegacyTokenDefaultsValidationPendingToFalse(t *testing.T) {
+func TestLoadAuthInfoLegacyTokenDefaultsInvalidationMarkerToFalse(t *testing.T) {
 	t.Parallel()
 
 	tokenPath := filepath.Join(t.TempDir(), "parent", "token.json")
@@ -142,6 +142,8 @@ func TestLoadAuthInfoLegacyTokenDefaultsValidationPendingToFalse(t *testing.T) {
 	got, err := token.LoadAuthInfo(tokenPath)
 	require.NoError(t, err)
 	require.Equal(t, []byte("legacy-device-data"), got.DeviceRegistrationData)
+	require.False(t, got.DeviceRegistrationDataInvalidated,
+		"legacy caches without the marker must load as not invalidated")
 	require.False(t, got.DeviceRegistrationDataValidationPending,
 		"legacy caches without the field must load as not pending")
 	require.False(t, got.GroupsResolved,
