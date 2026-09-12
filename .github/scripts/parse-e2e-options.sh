@@ -77,6 +77,23 @@ while IFS= read -r ppa; do
     esac
 done < <(marker_values e2e-ppa)
 
+apt_source=
+while IFS= read -r selected_apt_source; do
+    [[ -n "${selected_apt_source}" ]] || continue
+
+    if [[ ! "${selected_apt_source}" =~ ^[a-z0-9][a-z0-9+.-]*$ ]]; then
+        echo "::warning::Ignoring invalid APT source '${selected_apt_source}' in e2e-apt-source marker"
+        continue
+    fi
+
+    if [[ -n "${apt_source}" ]]; then
+        echo "::warning::Ignoring additional APT source '${selected_apt_source}' in e2e-apt-source marker"
+        continue
+    fi
+
+    apt_source="${selected_apt_source}"
+done < <(marker_values e2e-apt-source)
+
 json_array() {
     if (($# == 0)); then
         printf '[]'
@@ -90,4 +107,5 @@ json_array() {
     printf 'tests=%s\n' "$(json_array "${tests[@]}")"
     printf 'test_cases=%s\n' "$(json_array "${test_cases[@]}")"
     printf 'authd_ppa=%s\n' "${authd_ppa}"
+    printf 'apt_source=%s\n' "${apt_source}"
 } >>"${GITHUB_OUTPUT}"
