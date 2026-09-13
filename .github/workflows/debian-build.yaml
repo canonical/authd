@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       files-hash:
-        description: 'Hash of build-relevant files, used as cache key'
+        description: 'Hash of build-relevant files, used as OCI artifact tag and cache key'
         type: string
         required: true
       ubuntu-version:
@@ -239,14 +239,18 @@ jobs:
           echo "PKG_TARBALL=${PKG_TARBALL}" >> ${GITHUB_ENV}
 
       - name: Upload deb and sources as OCI artifacts
-        # Skip if the PR is from a fork, as we don't have the permission to
-        # upload to the OCI registry.
+        # Skip if the artifact was restored from the cache or if the PR is
+        # from a fork, as we don't have permission to upload to the OCI
+        # registry.
         if: >-
-          (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
-          github.event_name == 'push' ||
-          github.event_name == 'release' ||
-          github.event_name == 'schedule' ||
-          github.event_name == 'workflow_dispatch'
+          steps.restore-cache.outputs.cache-hit != 'true' &&
+          (
+            (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+            github.event_name == 'push' ||
+            github.event_name == 'release' ||
+            github.event_name == 'schedule' ||
+            github.event_name == 'workflow_dispatch'
+          )
         run: |
           set -euo pipefail
           set -x
@@ -258,7 +262,6 @@ jobs:
             --artifact-type=application/vnd.debian.binary-package \
             --annotation "org.opencontainers.image.title=authd debian package" \
             --annotation "org.opencontainers.image.version=${{ env.PKG_VERSION }}"
-          oras tag "${OCI_REPO}:${OCI_TAG}" "${{ github.sha }}"
           rm "${{ env.PKG_DEB }}"
 
           OCI_REPO=ghcr.io/${{ github.repository }}/authd-deb-sources-${{ inputs.ubuntu-version }}
@@ -269,7 +272,6 @@ jobs:
             --artifact-type=application/vnd.debian.source-package \
             --annotation "org.opencontainers.image.title=authd source debian package" \
             --annotation "org.opencontainers.image.version=${{ env.PKG_VERSION }}"
-          oras tag "${OCI_REPO}:${OCI_TAG}" "${{ github.sha }}"
           rm "${{ env.PKG_DSC }}" \
              "${{ env.PKG_SOURCE_CHANGES }}" \
              "${{ env.PKG_TARBALL }}"

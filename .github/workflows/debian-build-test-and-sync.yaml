@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       files-hash:
-        description: 'Hash of build-relevant files, used as cache key and concurrency group'
+        description: 'Hash of build-relevant files, used as OCI artifact tag and cache key'
         type: string
         required: true
       ubuntu-version:
@@ -52,7 +52,7 @@ jobs:
       - name: Download the Debian sources
         env:
           OCI_REPO: ghcr.io/${{ github.repository }}/authd-deb-sources-${{ inputs.ubuntu-version }}
-          OCI_TAG: ${{ github.sha }}
+          OCI_TAG: ${{ inputs.files-hash }}
         run: |
           set -euo pipefail
 
@@ -94,7 +94,7 @@ jobs:
       - name: Download the Debian sources
         env:
           OCI_REPO: ghcr.io/${{ github.repository }}/authd-deb-sources-${{ inputs.ubuntu-version }}
-          OCI_TAG: ${{ github.sha }}
+          OCI_TAG: ${{ inputs.files-hash }}
         run: |
           set -euo pipefail
 

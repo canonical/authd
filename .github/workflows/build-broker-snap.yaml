@@ -7,6 +7,10 @@ on:
         description: 'Name of the broker snap to build'
         required: true
         type: string
+    outputs:
+      files-hash:
+        description: 'Hash of files that affect the broker snap build'
+        value: ${{ jobs.build-broker-snap.outputs.files-hash }}
 
 jobs:
   build-broker-snap:
@@ -17,6 +21,8 @@ jobs:
       contents: read
       # Needed to push/pull OCI artifact to/from ghcr.io
       packages: write
+    outputs:
+      files-hash: ${{ steps.files-hash.outputs.hash }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -82,17 +88,14 @@ jobs:
         run: mv "${{ steps.build-broker-snap.outputs.snap }}" "${{ inputs.broker }}.snap"
 
       - name: Upload snap as OCI artifact
+        if: steps.restore-cache.outputs.cache-hit != 'true'
         run: |-
           set -euo pipefail
 
-          # Upload the snap to the OCI registry with the following tags:
-          # - The current commit hash. This is used by subsequent workflows to
-          #   download the snap for this run.
-          # - The hash of the files that affect the build. This allows us to
-          #   use it as a cache key, avoiding unnecessary rebuilds.
+          # Upload the snap under the hash of the files that affect the build.
+          # Subsequent jobs use this content-addressed tag to download it.
           OCI_REPO=ghcr.io/${{ github.repository }}/${{ inputs.broker }}-snap
           OCI_TAG=${{ steps.files-hash.outputs.hash }}
           oras push "${OCI_REPO}:${OCI_TAG}" \
             "${{ inputs.broker }}.snap" \
             --artifact-type application/vnd.snap
-          oras tag "${OCI_REPO}:${OCI_TAG}" "${{ github.sha }}"
