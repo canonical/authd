@@ -325,7 +325,7 @@ func (gh *gdmTestModuleHandler) RespondPAM(style pam.Style, prompt string) (stri
 		gh.pamInfoMessages = append(gh.pamInfoMessages, prompt)
 	case pam.ErrorMsg:
 		gh.t.Logf("GDM PAM Error Message: %s", prompt)
-		gh.pamErrorMessages = append(gh.pamInfoMessages, prompt)
+		gh.pamErrorMessages = append(gh.pamErrorMessages, prompt)
 	default:
 		return "", fmt.Errorf("PAM style %d not implemented", style)
 	}
