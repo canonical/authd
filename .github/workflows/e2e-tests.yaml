@@ -92,6 +92,11 @@ on:
         required: false
         default: ''
         type: string
+      e2e-apt-source-base:
+        description: 'e2e-apt-source-base: Optional Ubuntu archive suite for the stable migration baseline, such as resolute-updates'
+        required: false
+        default: ''
+        type: string
   schedule:
     - cron: '0 0 * * 1' # Runs every Monday at midnight
 
@@ -128,6 +133,7 @@ jobs:
       test_cases: ${{ steps.parse_e2e_options.outputs.test_cases }}
       authd_ppa: ${{ steps.parse_e2e_options.outputs.authd_ppa }}
       apt_source: ${{ steps.parse_e2e_options.outputs.apt_source }}
+      apt_source_base: ${{ steps.parse_e2e_options.outputs.apt_source_base }}
     steps:
       - uses: actions/checkout@v7
       - name: Compute hash of build-relevant files
@@ -147,6 +153,7 @@ jobs:
           E2E_TEST_CASE: ${{ inputs.e2e-test-case || '' }}
           E2E_PPA: ${{ inputs.e2e-ppa || '' }}
           E2E_APT_SOURCE: ${{ inputs.e2e-apt-source || '' }}
+          E2E_APT_SOURCE_BASE: ${{ inputs.e2e-apt-source-base || '' }}
         run: |
           set -euo pipefail
 
@@ -157,9 +164,10 @@ jobs:
             )
           else
             E2E_TESTS_DESCRIPTION=$(
-              printf 'e2e-brokers: %s\ne2e-ubuntu-releases: %s\ne2e-tests: %s\ne2e-test-case: %s\ne2e-ppa: %s\ne2e-apt-source: %s\n' \
+              printf 'e2e-brokers: %s\ne2e-ubuntu-releases: %s\ne2e-tests: %s\ne2e-test-case: %s\ne2e-ppa: %s\ne2e-apt-source: %s\ne2e-apt-source-base: %s\n' \
                 "${E2E_BROKERS}" "${E2E_UBUNTU_RELEASES}" "${E2E_TESTS}" \
-                "${E2E_TEST_CASE}" "${E2E_PPA}" "${E2E_APT_SOURCE}"
+                "${E2E_TEST_CASE}" "${E2E_PPA}" "${E2E_APT_SOURCE}" \
+                "${E2E_APT_SOURCE_BASE}"
             )
           fi
 
@@ -194,23 +202,41 @@ jobs:
       - name: Validate archive source release
         env:
           APT_SOURCE: ${{ steps.parse_e2e_options.outputs.apt_source }}
+          APT_SOURCE_BASE: ${{ steps.parse_e2e_options.outputs.apt_source_base }}
           UBUNTU_MATRIX: ${{ steps.resolve_ubuntu_releases.outputs.supported_matrix }}
         run: |
           set -euo pipefail
 
-          if [[ -z "${APT_SOURCE}" ]]; then
-            exit 0
-          fi
+          validate_archive_source() {
+            local source="$1"
+            local source_name="$2"
 
-          while IFS= read -r codename; do
-            if [[ "${APT_SOURCE}" == "${codename}-"* ]]; then
-              echo "Archive source '${APT_SOURCE}' matches Ubuntu release '${codename}'."
-              exit 0
+            if [[ -z "${source}" ]]; then
+              return
             fi
-          done < <(jq -r '.include[].codename' <<<"${UBUNTU_MATRIX}")
 
-          echo "::error::Archive source '${APT_SOURCE}' does not match a supported Ubuntu release." >&2
-          exit 1
+            while IFS= read -r codename; do
+              if [[ "${source}" == "${codename}-"* ]]; then
+                echo "Archive ${source_name} '${source}' matches Ubuntu release '${codename}'."
+                return
+              fi
+            done < <(jq -r '.include[].codename' <<<"${UBUNTU_MATRIX}")
+
+            echo "::error::Archive ${source_name} '${source}' does not match a supported Ubuntu release." >&2
+            exit 1
+          }
+
+          validate_archive_source "${APT_SOURCE}" target
+          validate_archive_source "${APT_SOURCE_BASE}" base
+
+          if [[ -n "${APT_SOURCE}" && -n "${APT_SOURCE_BASE}" ]]; then
+            target_release="${APT_SOURCE%%-*}"
+            base_release="${APT_SOURCE_BASE%%-*}"
+            if [[ "${target_release}" != "${base_release}" ]]; then
+              echo "::error::Archive target '${APT_SOURCE}' and base '${APT_SOURCE_BASE}' must belong to the same Ubuntu release." >&2
+              exit 1
+            fi
+          fi
 
   provision-and-run:
     needs: prepare-e2e
@@ -228,10 +254,11 @@ jobs:
       files-hash: ${{ needs.prepare-e2e.outputs.files-hash }}
       force-fresh-image: ${{ github.event_name == 'schedule' }}
       broker-snap-channel: ${{ inputs.broker-snap-channel || '' }}
-      # PRs opt in by adding e2e-ppa or e2e-apt-source to their description.
+      # PRs opt in by adding e2e-ppa or archive-source markers to their description.
       authd-ppa: ${{ needs.prepare-e2e.outputs.authd_ppa }}
       # Apply an archive source only to the matrix job for its matching Ubuntu release.
       apt-source: ${{ needs.prepare-e2e.outputs.apt_source }}
+      apt-source-base: ${{ needs.prepare-e2e.outputs.apt_source_base }}
       brokers: ${{ needs.prepare-e2e.outputs.brokers }}
       e2e-test-cases: ${{ needs.prepare-e2e.outputs.test_cases }}
       e2e-tests: ${{ needs.prepare-e2e.outputs.tests }}

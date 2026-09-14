@@ -102,22 +102,35 @@ while IFS= read -r ppa; do
     esac
 done < <(marker_values e2e-ppa)
 
+parse_apt_source_marker() {
+    local marker="$1"
+    local output_var="$2"
+    local selected_apt_source
+    local parsed_source=
+
+    while IFS= read -r selected_apt_source; do
+        [[ -n "${selected_apt_source}" ]] || continue
+
+        if [[ ! "${selected_apt_source}" =~ ^[a-z0-9][a-z0-9+.-]*$ ]]; then
+            echo "::error::Invalid APT source '${selected_apt_source}' in ${marker} marker"
+            exit 1
+        fi
+
+        if [[ -n "${parsed_source}" ]]; then
+            echo "::warning::Ignoring additional APT source '${selected_apt_source}' in ${marker} marker"
+            continue
+        fi
+
+        parsed_source="${selected_apt_source}"
+    done < <(marker_values "${marker}")
+
+    printf -v "${output_var}" '%s' "${parsed_source}"
+}
+
 apt_source=
-while IFS= read -r selected_apt_source; do
-    [[ -n "${selected_apt_source}" ]] || continue
-
-    if [[ ! "${selected_apt_source}" =~ ^[a-z0-9][a-z0-9+.-]*$ ]]; then
-        echo "::error::Invalid APT source '${selected_apt_source}' in e2e-apt-source marker"
-        exit 1
-    fi
-
-    if [[ -n "${apt_source}" ]]; then
-        echo "::warning::Ignoring additional APT source '${selected_apt_source}' in e2e-apt-source marker"
-        continue
-    fi
-
-    apt_source="${selected_apt_source}"
-done < <(marker_values e2e-apt-source)
+parse_apt_source_marker e2e-apt-source apt_source
+apt_source_base=
+parse_apt_source_marker e2e-apt-source-base apt_source_base
 
 json_array() {
     if (($# == 0)); then
@@ -134,4 +147,5 @@ json_array() {
     printf 'test_cases=%s\n' "$(json_array "${test_cases[@]}")"
     printf 'authd_ppa=%s\n' "${authd_ppa}"
     printf 'apt_source=%s\n' "${apt_source}"
+    printf 'apt_source_base=%s\n' "${apt_source_base}"
 } >>"${GITHUB_OUTPUT}"

@@ -7,7 +7,7 @@ CONFIG_FILE="${SCRIPT_DIR}/config.env"
 
 usage(){
     cat << EOF
-Usage: $0 [--config-file <config file>] [--release <release>] [--broker <broker>] [--authd-deb <deb>] [--authd-ppa <ppa>] [--apt-source <source>] [--broker-snap <snap>] [--force]
+Usage: $0 [--config-file <config file>] [--release <release>] [--broker <broker>] [--authd-deb <deb>] [--authd-ppa <ppa>] [--apt-source-base <source>] [--apt-source <source>] [--broker-snap <snap>] [--force]
 
 Options:
   --config-file <config file>  Path to the configuration file (default: config.env)
@@ -15,7 +15,8 @@ Options:
   --broker <broker>            The broker to install ("authd-google", "authd-msentraid", ...)
   --authd-deb <deb>            Path to the authd deb file to install (default: install from the edge PPA)
   --authd-ppa <ppa>            PPA to use instead of authd-edge when installing authd and its dependencies
-  --apt-source <source>       APT source suite to use for package installation and updates (for example, resolute-updates); adds it if needed
+  --apt-source-base <source>  APT source suite for the stable authd migration baseline (for example, resolute-updates)
+  --apt-source <source>       APT source suite for the authd package under test and package updates (for example, resolute-proposed)
   --broker-snap <snap>         Path to the broker snap file to install (default: install from the edge channel)
   --force                      Force provisioning: remove existing VM and artifacts and create a fresh VM
   -h, --help                   Show this help message and exit
@@ -49,6 +50,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --authd-ppa)
             AUTHD_PPA="$2"
+            shift 2
+            ;;
+        --apt-source-base)
+            APT_SOURCE_BASE="$2"
             shift 2
             ;;
         --apt-source)
@@ -89,6 +94,7 @@ set -x
   ${BROKER:+--broker "${BROKER}"} \
   ${AUTHD_DEB:+--authd-deb "${AUTHD_DEB}"} \
   ${AUTHD_PPA:+--authd-ppa "${AUTHD_PPA}"} \
+  ${APT_SOURCE_BASE:+--apt-source-base "${APT_SOURCE_BASE}"} \
   ${APT_SOURCE:+--apt-source "${APT_SOURCE}"} \
   ${BROKER_SNAP:+--broker-snap "${BROKER_SNAP}"} \
   ${FORCE:+--force}
