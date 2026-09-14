@@ -10,6 +10,10 @@ on:
       ubuntu-release:
         required: true
         type: string
+      ubuntu-codename:
+        description: 'Resolved Ubuntu release codename, used for archive-suite matching'
+        required: true
+        type: string
       force-fresh-image:
         description: 'Force creation of a fresh VM image by ignoring cache'
         type: boolean
@@ -22,6 +26,11 @@ on:
         default: ''
       authd-ppa:
         description: 'If set, use this PPA instead of authd-edge when installing the authd package and its dependencies'
+        type: string
+        required: false
+        default: ''
+      apt-source:
+        description: 'If set, install and update packages from this Ubuntu archive suite'
         type: string
         required: false
         default: ''
@@ -184,6 +193,14 @@ jobs:
       broker: ${{ matrix.broker }}
       broker-snap-channel: ${{ inputs.broker-snap-channel }}
       authd-ppa: ${{ inputs.authd-ppa }}
+      apt-source: >-
+        ${{
+          startsWith(
+            inputs.apt-source,
+            format('{0}-', inputs.ubuntu-codename)
+          ) &&
+          inputs.apt-source || ''
+        }}
       e2e-tests: ${{ inputs.e2e-tests }}
       e2e-test-cases: ${{ inputs.e2e-test-cases }}
     secrets: inherit
