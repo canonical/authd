@@ -3,4 +3,4 @@
 	url = https://gitlab.com/samba-team/libhimmelblau.git
 [submodule "e2e-tests/.yarf"]
 	path = e2e-tests/.yarf
-	url = https://github.com/adombeck/yarf
+	url = https://github.com/OrazioLucioTerranova/yarf
