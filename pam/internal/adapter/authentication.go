@@ -374,6 +374,11 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 		return m, m.cancelIsAuthenticated()
 
 	case isAuthenticatedResultReceived:
+		if m.clientType == Gdm && msg.access == auth.DeniedMaxTries {
+			// GDM treats PAM_MAXTRIES as service unavailable until GNOME Shell
+			// handles the result correctly. Use its normal auth failure path.
+			msg.access = auth.Denied
+		}
 		safeMessageDebug(msg)
 
 		// Resets password if the authentication wasn't successful.
