@@ -33,7 +33,7 @@ Required environment variables (or use the corresponding command-line options):
   RELEASE            The Ubuntu release of the VM (e.g., noble, resolute)
 
 Optional:
-  E2E_USER, E2E_PASSWORD, E2E_PASSWORDLESS_USER, TOTP_SECRET,
+  E2E_USER, E2E_USER_DISPLAY_NAME, E2E_PASSWORD, E2E_PASSWORDLESS_USER, TOTP_SECRET,
   AUTHD_MSENTRAID_ISSUER_ID, AUTHD_MSENTRAID_CLIENT_ID, AUTHD_MSENTRAID_CLIENT_SECRET,
   AUTHD_DEB, APT_SOURCE, AUTHD_APT_SOURCE
                                         Forwarded to the console so keywords
@@ -224,6 +224,7 @@ env \
     BROKER="$BROKER" \
     RELEASE="$RELEASE" \
     E2E_USER="${E2E_USER:-}" \
+    E2E_USER_DISPLAY_NAME="${E2E_USER_DISPLAY_NAME:-}" \
     E2E_PASSWORD="${E2E_PASSWORD:-}" \
     E2E_PASSWORDLESS_USER="${E2E_PASSWORDLESS_USER:-}" \
     TOTP_SECRET="${TOTP_SECRET:-}" \

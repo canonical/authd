@@ -274,6 +274,7 @@ jobs:
           export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
 
           # Export test credentials for the selected broker
+          export E2E_USER_DISPLAY_NAME="User for E2E tests"
           if [ "${{ inputs.broker }}" = "authd-msentraid" ]; then
             export E2E_USER="${{ secrets.E2E_MSENTRA_USERNAME }}"
             export E2E_PASSWORD="${{ secrets.E2E_MSENTRA_PASSWORD }}"

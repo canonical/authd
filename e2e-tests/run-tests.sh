@@ -25,6 +25,8 @@ Prerequisites:
   - YARF must be installed via the setup_yarf.sh script
 
 Optional environment variables:
+  E2E_USER_DISPLAY_NAME
+                      The display name of E2E_USER in the GDM user list
   AUTHD_E2E_TEST_RUNS_DIR
                       Directory for test run artifacts (default: \${XDG_RUNTIME_DIR:-/tmp}/authd-e2e-test-runs)
   AUTHD_DEB           Host path to the authd package for migration tests
@@ -283,6 +285,7 @@ YARF_LOG_LEVEL=DEBUG
 
 env \
     E2E_USER="$E2E_USER" \
+    E2E_USER_DISPLAY_NAME="${E2E_USER_DISPLAY_NAME:-}" \
     E2E_PASSWORD="$E2E_PASSWORD" \
     E2E_PASSWORDLESS_USER="${E2E_PASSWORDLESS_USER:-}" \
     E2E_PASSWORDLESS_PASSKEY_USER="${E2E_PASSWORDLESS_PASSKEY_USER:-}" \
