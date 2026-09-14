@@ -29,3 +29,4 @@ semantic-model = true
 BROKER = "authd-msentraid"
 RELEASE = "resolute"
 E2E_USER = "e2e-test-user"
+E2E_USER_DISPLAY_NAME = "User for E2E tests"
