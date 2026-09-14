@@ -18,7 +18,8 @@ Variables           ./broker_vars.py
 
 
 *** Variables ***
-${GDM_LOGIN_OPTIONS_IMAGE}    ${CURDIR}/images/gdm-login-options.png
+${GDM_LOGIN_OPTIONS_IMAGE}          ${CURDIR}/images/gdm-login-options.png
+${GDM_LOGIN_OPTIONS_NOBLE_IMAGE}   ${CURDIR}/images/gdm-login-options-noble.png
 
 
 *** Keywords ***
@@ -332,9 +333,13 @@ Select Broker Through GDM
 
 Select Authentication Mode Through GDM
     [Arguments]    ${authentication_mode}
-    # Login Options is an icon-only button whose position differs between
-    # Ubuntu releases, so locate it from the image instead of coordinates.
-    Move Pointer To ${GDM_LOGIN_OPTIONS_IMAGE}
+    # Login Options is icon-only, and GDM rasterizes it differently between
+    # Ubuntu releases, so use the release-specific image instead of coordinates.
+    ${image}=    Set Variable    ${GDM_LOGIN_OPTIONS_IMAGE}
+    IF    '%{RELEASE}' == 'noble'
+        ${image}=    Set Variable    ${GDM_LOGIN_OPTIONS_NOBLE_IMAGE}
+    END
+    Move Pointer To ${image}
     Left Button Click
     Match Text    ${authentication_mode}    30
     Move Pointer To ${authentication_mode}
