@@ -637,7 +637,67 @@ It can be modified by changing the value of `LOGIN_TIMEOUT` in `/etc/login.defs`
 
 The authd service is configured in `/etc/authd/authd.yaml`.
 
-This provides configuration options for logging verbosity and UID/GID ranges.
+This file provides configuration options that control authd's behavior.
+
+(ref::config-short-usernames)=
+## Allow logging in with a shortened username
+
+Identity providers report usernames that include a domain, such as
+`user@example.com`. By default, this is also the name authd creates the user
+with, so it is the name used for the home directory, the user private group and
+any local group membership.
+
+To let users log in with just `user`, set `use_short_usernames` in
+`/etc/authd/authd.yaml`:
+
+```{code-block} yaml
+:caption: /etc/authd/authd.yaml
+use_short_usernames: true
+```
+
+Then restart the service:
+
+```shell
+sudo systemctl restart authd
+```
+
+When this option is enabled, a new user must still use their full username for
+the first login. After the first successful authentication, authd remembers the
+full username reported by the identity provider and stores the local account
+under the short username. On later logins, authd accepts either form and maps
+both names to the same account before contacting the broker.
+
+Both forms also resolve through NSS, so commands such as `getent passwd
+user@example.com` and `getent passwd user` return the same entry. That entry is
+named after the shortened form, which is therefore the name used by the session,
+the home directory and the user private group.
+
+```{note}
+A shortened name must be unique. When two users' usernames only differ by their
+domain, such as `user@example.com` and `user@other.com`, the first one to log in
+gets the shortened name and the other keeps their full username. Both can
+still log in. A single user whose domain changes at the identity provider keeps
+their shortened name, because the provider identifies them by a stable ID rather
+than by their username.
+```
+
+Enabling this option on an existing installation renames the users that authd
+already knows about to their shortened name, keeping their UID and GID. They
+also keep their existing home directory, which still carries the name including
+the domain. Disabling the option again renames the users back.
+
+Each user is renamed the next time they successfully authenticate, not when the
+option changes. Until then, they keep the name they were stored under, so an
+existing user can only log in with their full username.
+
+```{warning}
+Do not downgrade authd to a version that does not support this option while
+users are stored under a shortened name. Older versions only know the full
+username, so they would not recognise those users and would create a
+second account, with a different UID and home directory, for each of them.
+Disable the option and let every user log in once, so that they are renamed
+back, before downgrading.
+```
 
 (ref::config-pwquality)=
 ## Configure password quality

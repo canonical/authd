@@ -1,0 +1,18 @@
+users:
+    - name: shortuser2
+      uid: 2222
+      gid: 22222
+      gecos: ShortUser2
+      dir: /home/shortuser2
+      shell: /bin/bash
+      broker_id: "1902181170"
+      provider_id: ""
+      full_username: shortuser2@delete_error.com
+groups:
+    - name: shortuser2
+      gid: 22222
+      ugid: shortuser2@delete_error.com
+users_to_groups:
+    - uid: 2222
+      gid: 22222
+schema_version: 5

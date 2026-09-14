@@ -8,11 +8,13 @@ auth    substack        common-auth
 auth    requisite       pam_nologin.so
 auth    optional        pam_gnome_keyring.so
 
-account [default=ignore success=ok]	pam_authd.so
-# This is potentially loading pam_authd.again but we've checks in AcctMgmt() to
-# prevent this to happen when the gdm-authd service is used without GDM extensions.
-# Plus the model used by the services is different, so there's no risk for this to happen.
 @include common-account
+# GDM authenticates through the native module, while common-account uses the exec module. An
+# authentication that renames the user leases the old name as a temporary alias, because the
+# account modules re-resolve PAM_USER through NSS (pam_unix does, and fails with PAM_USER_UNKNOWN
+# if the name stopped resolving). Keep the native account hook last so the earlier account modules
+# run while the old name still resolves; the hook releases the alias afterwards.
+account [default=ignore success=ok]	pam_authd.so
 
 # SELinux needs to be the first session rule. This ensures that any
 # lingering context has been cleared. Without this it is possible

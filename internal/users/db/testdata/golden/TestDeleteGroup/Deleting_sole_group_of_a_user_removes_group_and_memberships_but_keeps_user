@@ -9,6 +9,7 @@ users:
       shell: /bin/bash
       broker_id: broker-id
       provider_id: ""
+      full_username: user1
 groups: []
 users_to_groups: []
-schema_version: 3
+schema_version: 5

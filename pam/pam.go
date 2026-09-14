@@ -43,6 +43,13 @@ const (
 	// loggingInitializedKey indicates logging was already initialized.
 	loggingInitializedKey = "authd.logging-initialized-flag"
 
+	// pendingUserAliasKey stores the leases of the temporary user aliases the name-changing
+	// authentications of this transaction created, so that the account hook can release them once
+	// the earlier account modules resolved PAM_USER. A transaction can authenticate more than once
+	// (force_reauth, or a stack with several authd entries), and every lease it created has to be
+	// released: an orphaned one keeps its name reserved against other users until its TTL expires.
+	pendingUserAliasKey = "authd.pending-user-alias-ids"
+
 	// gdmServiceName is the name of the service that is loaded by GDM.
 	// Keep this in sync with the service file installed by the package.
 	gdmServiceName = "gdm-authd"
@@ -378,6 +385,11 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 		if shouldSendAuthMessage(pamClientType, returnValue.Message(), true) {
 			sendReturnMessageToPam(mTx, returnValue)
 		}
+		if returnValue.UserAliasID != "" {
+			if err := addPendingUserAliasID(mTx, returnValue.UserAliasID); err != nil {
+				return err
+			}
+		}
 		if returnValue.AuthTok != "" {
 			if err := mTx.SetItem(pam.Authtok, returnValue.AuthTok); err != nil {
 				return err
@@ -406,9 +418,82 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 	}
 }
 
-// AcctMgmt is ignored because broker selection is now handled server-side during IsAuthenticated.
-func (h *pamModule) AcctMgmt(_ pam.ModuleTransaction, _ pam.Flags, _ []string) error {
+// AcctMgmt releases the temporary user aliases the name-changing authentications of this PAM
+// transaction leased. Earlier account modules, in particular pam_unix, re-resolve PAM_USER through
+// NSS, so the leases keep the old name resolvable until they have run: a name that stopped
+// resolving would fail their check with PAM_USER_UNKNOWN although the broker granted access.
+// Releasing here starts a short grace period after which the aliases expire. AcctMgmt otherwise
+// remains ignored.
+func (h *pamModule) AcctMgmt(mTx pam.ModuleTransaction, _ pam.Flags, args []string) error {
+	if mTx == nil {
+		return pam.ErrIgnore
+	}
+	parsedArgs, _ := parseArgs(args)
+
+	leases, err := pendingUserAliasIDs(mTx)
+	if err != nil {
+		return err
+	}
+	if len(leases) == 0 {
+		return pam.ErrIgnore
+	}
+
+	client, closeConn, err := newClient(parsedArgs)
+	if err != nil {
+		return fmt.Errorf("%w: could not connect to authd: %w", pam.ErrAuthinfoUnavail, err)
+	}
+	defer closeConn()
+
+	for _, leaseID := range leases {
+		if _, err := client.ReleaseUserAlias(context.TODO(), &authd.RUARequest{LeaseId: leaseID}); err != nil {
+			return fmt.Errorf("%w: could not release user alias: %w", pam.ErrSystem, err)
+		}
+	}
+	if err := mTx.SetData(pendingUserAliasKey, nil); err != nil {
+		return err
+	}
+
 	return pam.ErrIgnore
+}
+
+// pendingUserAliasIDs returns the temporary user alias leases recorded for this PAM transaction.
+func pendingUserAliasIDs(mTx pam.ModuleTransaction) ([]string, error) {
+	data, err := mTx.GetData(pendingUserAliasKey)
+	if errors.Is(err, pam.ErrNoModuleData) || data == nil {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	leases, ok := data.([]string)
+	if !ok {
+		return nil, fmt.Errorf("%w: invalid pending user alias IDs", pam.ErrSystem)
+	}
+	for _, leaseID := range leases {
+		if leaseID == "" {
+			return nil, fmt.Errorf("%w: empty pending user alias ID", pam.ErrSystem)
+		}
+	}
+
+	return leases, nil
+}
+
+// addPendingUserAliasID records another temporary user alias lease for this PAM transaction. A
+// transaction can authenticate more than once (see the force_reauth argument), and each
+// name-changing authentication hands out its own lease, so the leases accumulate instead of
+// replacing each other. Dropping one would leave the alias pinned until its TTL expires, keeping
+// the name unavailable to everybody else.
+func addPendingUserAliasID(mTx pam.ModuleTransaction, leaseID string) error {
+	leases, err := pendingUserAliasIDs(mTx)
+	if err != nil {
+		return err
+	}
+	if slices.Contains(leases, leaseID) {
+		return nil
+	}
+
+	return mTx.SetData(pendingUserAliasKey, append(leases, leaseID))
 }
 
 func newClientConnection(args map[string]string) (conn *grpc.ClientConn, closeConn func(), err error) {

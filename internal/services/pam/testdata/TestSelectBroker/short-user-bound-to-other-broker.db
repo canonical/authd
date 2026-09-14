@@ -1,0 +1,17 @@
+users:
+    - name: testselectbroker/error_when_a_short_user_selects_the_local_broker_with_their_full_name_separator_bound
+      uid: 3333
+      gid: 33333
+      gecos: bound user
+      dir: /home/bound
+      shell: /bin/bash
+      broker_id: some-other-broker-id
+      provider_id: some-provider-id-3
+      full_username: testselectbroker/error_when_a_short_user_selects_the_local_broker_with_their_full_name_separator_bound@example.com
+groups:
+    - name: testselectbroker/error_when_a_short_user_selects_the_local_broker_with_their_full_name_separator_bound
+      gid: 33333
+      ugid: testselectbroker/error_when_a_short_user_selects_the_local_broker_with_their_full_name_separator_bound@example.com
+users_to_groups:
+    - uid: 3333
+      gid: 33333

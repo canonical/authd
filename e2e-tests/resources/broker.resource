@@ -38,11 +38,15 @@ Disable Broker And Purge Config
 
 
 Log In With Remote User Through CLI: QR Code
-    [Arguments]    ${username}    ${local_password}
+    [Documentation]    Logs in through the device code flow with the given username.
+    ...                ${prompt_username} is the name expected in the shell prompt afterwards, which
+    ...                differs from the name used to log in when authd stores the user under a
+    ...                shortened username.
+    [Arguments]    ${username}    ${local_password}    ${prompt_username}=${username}
     Start Log In With Remote User Through CLI: QR Code    ${username}
     Select Provider
     Continue Log In With Remote User: Authenticate In External Browser
-    Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
+    Continue Log In With Remote User Through CLI: Define Local Password    ${prompt_username}    ${local_password}
 
 
 Start Log In With Remote User Through CLI: QR Code
@@ -145,7 +149,12 @@ Wait For Shell Prompt After Login
 
 
 Log In With Remote User Through CLI: Local Password
-    [Arguments]    ${username}    ${local_password}
+    [Documentation]    Logs in through su with the given username. ${prompt_username} is the name
+    ...                expected in the shell prompt afterwards, which differs from the name used to
+    ...                log in when authd stores the user under a shortened username. An optional
+    ...                alternate prompt name covers a login that renames the user during PAM.
+    [Arguments]    ${username}    ${local_password}    ${prompt_username}=${username}
+    ...    ${alternate_prompt_username}=${EMPTY}
     Hid.Type String    clear
     Hid.Keys Combo    Return
     Hid.Type String    su ${username}
@@ -153,7 +162,17 @@ Log In With Remote User Through CLI: Local Password
     Match Text    regex:Enter\\s*your\\s*(?:local\\s*)?password:    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
-    Wait For Shell Prompt After Login    ${username}@ubuntu:~$
+    # Plain su keeps the caller's working directory, so the prompt ends in the caller's home path
+    # (e.g. /home/ubuntu$) rather than ~$. The OCR match spans the whole screen, so anchor the
+    # prompt with a trailing $ not followed by a word char or slash, and don't pin the path.
+    ${prompt_username} =    Regexp Escape    ${prompt_username}
+    ${prompt_pattern} =    Set Variable    regex:(?:${prompt_username})@ubuntu:\\S*\\$(?![\\w/])
+    IF    $alternate_prompt_username
+        ${alternate_prompt_username} =    Regexp Escape    ${alternate_prompt_username}
+        ${prompt_pattern} =    Set Variable
+        ...    regex:(?:${prompt_username}|${alternate_prompt_username})@ubuntu:\\S*\\$(?![\\w/])
+    END
+    Wait For Shell Prompt After Login    ${prompt_pattern}
 
 
 Check That su To Local User Goes To Local Broker
@@ -246,12 +265,16 @@ Comment Key In Broker Configuration
 
 
 Log In With Remote User Through SSH: QR Code
-    [Arguments]    ${username}    ${local_password}
+    [Documentation]    Logs in over SSH through the device code flow with the given username.
+    ...                ${prompt_username} is the name expected in the shell prompt afterwards, which
+    ...                differs from the name used to log in when authd stores the user under a
+    ...                shortened username.
+    [Arguments]    ${username}    ${local_password}    ${prompt_username}=${username}
     Start Log In With Remote User Through SSH: QR Code    ${username}
     Select Provider through SSH
     Continue Log In With Remote User: Authenticate In External Browser
     Continue Log In With Remote User Through SSH: QR Code
-    Continue Log In With Remote User Through SSH: Define Local Password    ${username}    ${local_password}
+    Continue Log In With Remote User Through SSH: Define Local Password    ${prompt_username}    ${local_password}
 
 
 Start Log In With Remote User Through SSH: QR Code
@@ -290,13 +313,17 @@ Continue Log In With Remote User Through SSH: Define Local Password
 
 
 Log In With Remote User Through SSH: Local Password
-    [Arguments]    ${username}    ${local_password}
+    [Documentation]    Logs in over SSH with the given username. ${prompt_username} is the name
+    ...                expected in the shell prompt afterwards, which differs from the name used to
+    ...                log in when authd stores the user under a shortened username.
+    [Arguments]    ${username}    ${local_password}    ${prompt_username}=${username}
     Hid.Type String    ssh ${username}@localhost
     Hid.Keys Combo    Return
-    Match Text    regex:Enter\\s*your\\s*(?:local\\s*)?password:    120
+    # First logins use authd's prompt. OpenSSH uses its own prompt once NSS knows the short user.
+    Match Text    regex:(?:Enter\\s*your\\s*(?:local\\s*)?|\\S+@localhost's\\s*)password:    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
-    Match Text    ${username}@ubuntu:~$    120
+    Match Text    ${prompt_username}@ubuntu:~$    120
 
 
 Log In With Remote User Through GDM: QR Code

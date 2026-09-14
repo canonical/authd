@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -255,12 +256,40 @@ func saveLocalGroups(dbLocked *UserDBLocked, groups []types.GroupEntry) (err err
 		return fmt.Errorf("error writing %s: %w", tempPath, err)
 	}
 
+	// Force the new content to disk before publishing it. A rename is atomic, but it only orders
+	// the directory entry: without this, a power loss right after the rename could publish a file
+	// whose contents were never written.
+	if err := syncPath(tempPath); err != nil {
+		return fmt.Errorf("error syncing %s before rename: %w", tempPath, err)
+	}
+
 	if err := fileutils.Lrename(tempPath, groupPath); err != nil {
 		return fmt.Errorf("error renaming %s to %s: %w", tempPath, groupPath, err)
+	}
+	syncedGroupPath, err := filepath.EvalSymlinks(groupPath)
+	if err != nil {
+		return fmt.Errorf("error resolving %s after rename: %w", groupPath, err)
+	}
+	if err := syncPath(syncedGroupPath); err != nil {
+		return fmt.Errorf("error syncing %s after rename: %w", syncedGroupPath, err)
+	}
+	if err := syncPath(filepath.Dir(syncedGroupPath)); err != nil {
+		return fmt.Errorf("error syncing parent directory of %s: %w", groupPath, err)
 	}
 
 	lockedEntries.updateLocalGroupEntriesCache(groups)
 	return nil
+}
+
+// syncPath forces the contents of the file or directory at path to stable storage.
+func syncPath(path string) (err error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, file.Close()) }()
+
+	return file.Sync()
 }
 
 func validateChangedGroups(currentGroups, newGroups []types.GroupEntry) error {

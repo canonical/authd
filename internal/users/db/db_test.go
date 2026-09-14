@@ -539,13 +539,14 @@ func TestProviderIDUniquenessEnforcedAfterMigration(t *testing.T) {
 
 	newUser := func(name string, uid uint32, providerID string) db.UserRow {
 		return db.UserRow{
-			Name:       name,
-			UID:        uid,
-			GID:        group.GID,
-			Dir:        "/home/" + name,
-			Shell:      "/bin/bash",
-			BrokerID:   brokerID,
-			ProviderID: providerID,
+			Name:         name,
+			UID:          uid,
+			GID:          group.GID,
+			Dir:          "/home/" + name,
+			Shell:        "/bin/bash",
+			BrokerID:     brokerID,
+			ProviderID:   providerID,
+			FullUsername: name,
 		}
 	}
 
@@ -583,6 +584,111 @@ func TestProviderIDUniquenessEnforcedAfterMigration(t *testing.T) {
 	require.NoError(t, err, "Created database should be valid yaml content")
 
 	golden.CheckOrUpdate(t, got)
+}
+
+// TestFullUsernameUniquenessEnforcedAfterMigration ensures that the unique index created by
+// the full_username migration is active for rows inserted after it: the full username identifies
+// the user, so no two rows may claim the same one.
+func TestFullUsernameUniquenessEnforcedAfterMigration(t *testing.T) {
+	// This dump predates the full_username column, so the migration has to add and backfill it.
+	dbDir := t.TempDir()
+	sqlDump := "TestMigrationAddProviderIDColumnToUsersTable/two_users_without_provider_id_column.sql"
+	err := db.Z_ForTests_CreateDBFromDump(filepath.Join("testdata", sqlDump), dbDir)
+	require.NoError(t, err, "Setup: could not create database from testdata")
+
+	m, err := db.New(dbDir)
+	require.NoError(t, err)
+	defer m.Close()
+
+	group := db.GroupRow{Name: "group3", GID: 33333, UGID: "33333333"}
+	newUser := func(name string, uid uint32, fullUsername string) db.UserRow {
+		return db.UserRow{
+			Name:         name,
+			UID:          uid,
+			GID:          group.GID,
+			Dir:          "/home/" + name,
+			Shell:        "/bin/bash",
+			BrokerID:     "broker-id",
+			FullUsername: fullUsername,
+		}
+	}
+
+	// The backfill gives the pre-migration users their own name as full username, so they are
+	// already distinct and must have survived.
+	user1, err := m.UserByName("user1")
+	require.NoError(t, err, "Pre-migration user1 should still exist after migration")
+	require.Equal(t, "user1", user1.FullUsername, "The migration should backfill the full username")
+
+	err = m.UpdateUserEntry(newUser("user3", 3333, "user3@example.com"), []db.GroupRow{group}, nil)
+	require.NoError(t, err, "Inserting a user with a fresh full username should succeed")
+
+	err = m.UpdateUserEntry(newUser("user4", 4444, "user3@example.com"), []db.GroupRow{group}, nil)
+	require.Error(t, err, "Inserting a different user with a duplicate full username should fail")
+
+	_, err = m.UserByName("user4")
+	require.Error(t, err, "The rejected user should not have been persisted")
+}
+
+func TestFullUsernameMigrationErrors(t *testing.T) {
+	t.Run("Error_when_starting_the_column_migration", func(t *testing.T) {
+		m := initDB(t, "")
+		require.NoError(t, m.Close(), "Setup: could not close database")
+
+		err := db.ApplyFullUsernameMigration(m)
+		require.ErrorContains(t, err, "failed to start transaction")
+	})
+
+	t.Run("Error_when_adding_the_column", func(t *testing.T) {
+		m := initDB(t, "")
+		require.NoError(t, db.Z_ForTests_Exec(m, "DROP TABLE users"),
+			"Setup: could not remove users table")
+
+		err := db.ApplyFullUsernameMigration(m)
+		require.ErrorContains(t, err, "failed to add 'full_username' column")
+	})
+
+	t.Run("Error_when_backfilling_the_column", func(t *testing.T) {
+		m := initDB(t, "one_user_and_group")
+		require.NoError(t, db.Z_ForTests_Exec(m,
+			`UPDATE users SET full_username = '' WHERE name = 'user1'`),
+			"Setup: could not clear full username")
+		require.NoError(t, db.Z_ForTests_Exec(m, `
+			CREATE TRIGGER fail_full_username_backfill
+			BEFORE UPDATE OF full_username ON users
+			BEGIN
+				SELECT RAISE(FAIL, 'forced backfill failure');
+			END`), "Setup: could not create failing trigger")
+
+		err := db.ApplyFullUsernameMigration(m)
+		require.ErrorContains(t, err, "failed to populate 'full_username' column")
+	})
+
+	t.Run("Error_when_empty_full_username_values_remain", func(t *testing.T) {
+		m := initDB(t, "")
+		require.NoError(t, db.Z_ForTests_Exec(m, `DROP INDEX "idx_user_full_username"`),
+			"Setup: could not remove full username index")
+		require.NoError(t, db.Z_ForTests_Exec(m, `
+			INSERT INTO users (name, uid, gid, full_username)
+			VALUES ('', 1111, 1111, '')`),
+			"Setup: could not add user with empty name and empty full username")
+
+		err := db.ApplyFullUsernameMigration(m)
+		require.ErrorContains(t, err, "cannot create unique index: found 1 user(s) with empty 'full_username'")
+	})
+
+	t.Run("Error_when_creating_the_unique_index", func(t *testing.T) {
+		m := initDB(t, "")
+		require.NoError(t, db.Z_ForTests_Exec(m, `DROP INDEX "idx_user_full_username"`),
+			"Setup: could not remove full username index")
+		require.NoError(t, db.Z_ForTests_Exec(m, `
+			INSERT INTO users (name, uid, gid, full_username)
+			VALUES ('user1', 1111, 1111, 'duplicate@example.com'),
+			       ('user2', 2222, 2222, 'duplicate@example.com')`),
+			"Setup: could not add duplicate full usernames")
+
+		err := db.ApplyFullUsernameMigration(m)
+		require.ErrorContains(t, err, "failed to create full username index")
+	})
 }
 
 func TestUpdateUserEntry(t *testing.T) {

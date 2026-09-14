@@ -1,0 +1,22 @@
+Username: user name
+────────────────────────────────────────────────────────────────────────────────
+Username: user-integration-shortusername
+────────────────────────────────────────────────────────────────────────────────
+  Select your provider:
+
+> 1. local
+  2. ExampleBroker
+
+  Press escape key to go back to user selection
+────────────────────────────────────────────────────────────────────────────────
+  Select your provider:
+
+  1. local
+> 2. ExampleBroker
+
+PAM Error Message: unknown user "user-integration-shortusername": the first login has to use the fully qualified username, including the domain
+PAM Authenticate()
+  User: "user-integration-shortusername"
+  Result: error: PAM exit code: 10
+    User not known to the underlying authentication module
+────────────────────────────────────────────────────────────────────────────────

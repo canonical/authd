@@ -7,10 +7,12 @@ CREATE TABLE IF NOT EXISTS users (
     shell     TEXT DEFAULT "/bin/bash",
     broker_id   TEXT DEFAULT "",
     locked      BOOLEAN DEFAULT FALSE,
-    provider_id TEXT DEFAULT ""  -- Stable provider identifier; uniqueness per broker is enforced by the partial index below
+    provider_id TEXT DEFAULT "",  -- Stable provider identifier; uniqueness per broker is enforced by the partial index below
+    full_username TEXT NOT NULL  -- Full username (including domain) as returned by the broker; may differ from name when short usernames are enabled
 );
 CREATE UNIQUE INDEX "idx_user_name" ON users ("name");
 CREATE UNIQUE INDEX "idx_user_broker_provider_id" ON users ("broker_id", "provider_id") WHERE broker_id != "" AND provider_id != "";
+CREATE UNIQUE INDEX "idx_user_full_username" ON users ("full_username");
 
 CREATE TABLE IF NOT EXISTS groups (
     name TEXT NOT NULL,  -- Uniqueness is enforced by the index below
