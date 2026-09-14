@@ -11,9 +11,10 @@ Test Teardown   utils.Test Teardown
 
 
 *** Variables ***
-${snapshot}    %{BROKER}-installed
-${username}    %{E2E_USER}
-${local_password}    qwer1234
+${snapshot}             %{BROKER}-installed
+${username}             %{E2E_USER}
+${user_display_name}    %{E2E_USER_DISPLAY_NAME}
+${local_password}       qwer1234
 
 
 *** Test Cases ***
@@ -45,7 +46,7 @@ Test switching authentication flow in GDM
     # Select the registered user from GDM's login screen. This avoids opening
     # the "Not listed" flow and typing the username again.
     Wait Until GDM Login Screen Ready
-    Move Pointer To    User for E2E tests
+    Move Pointer To ${user_display_name}
     Left Button Click
     Match Text    Password    120
 
