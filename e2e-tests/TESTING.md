@@ -60,22 +60,38 @@ or `--broker-snap` to install a locally built broker snap. Run
 `./e2e-tests/vm/provision.sh --help` for all available options, including
 `--force` to reprovision.
 
-To install authd from an Ubuntu archive suite instead of a PPA, pass the suite
-explicitly. For example, this provisions the package from `resolute-updates`:
+To install authd from an Ubuntu archive suite instead of a PPA, pass the target
+suite explicitly. For example, this provisions the package from
+`resolute-proposed`:
 
 ```bash
 ./e2e-tests/vm/provision.sh \
   --release resolute \
   --broker authd-google \
-  --apt-source resolute-updates \
+  --apt-source resolute-proposed \
   --force
 ```
 
-The archive-suite option is mutually exclusive with `--authd-deb`. It adds the
-suite to the VM's Ubuntu archive sources when needed, installs `authd` from
+The `--apt-source` option is mutually exclusive with `--authd-deb`. It adds
+the suite to the VM's Ubuntu archive sources when needed, installs `authd` from
 that suite, and updates all installed packages to the target suite. It does
 not add the default authd PPA. Use `--authd-ppa` as well only when a specific
 dependency PPA is required.
+
+To test migration from one archive suite to another, pass the stable baseline
+suite with `--apt-source-base` and the target suite with `--apt-source`:
+
+```bash
+./e2e-tests/vm/provision.sh \
+  --release resolute \
+  --broker authd-google \
+  --apt-source-base resolute-updates \
+  --apt-source resolute-proposed \
+  --force
+```
+
+When running the migration tests, set `APT_SOURCE` to the target suite so the
+test can update authd from it.
 
 ### 4. Set up YARF
 
@@ -132,17 +148,28 @@ To resolve authd package dependencies from the [authd-dev PPA][authd-dev-ppa]
 instead, add `e2e-ppa: authd-dev` to the pull request description.
 
 To install and update packages from an Ubuntu archive suite, add an
-`e2e-apt-source:` line with the full suite name. For example:
+`e2e-apt-source:` line with the full target suite name. For example:
 
 ```text
 e2e-apt-source: resolute-proposed
 ```
 
+To test migration from an archive update suite to a proposed suite, also add
+an `e2e-apt-source-base:` line with the stable baseline suite:
+
+```text
+e2e-apt-source-base: resolute-updates
+e2e-apt-source: resolute-proposed
+```
+
+The base source is used to install the stable authd snapshot. The target source
+is used to install the package under test and to update authd during migration
+tests.
+
 The archive source is used only by the matrix job whose Ubuntu release matches
 the suite prefix (the `devel` job is matched using the current Ubuntu codename,
-rather than the literal `devel` label). The matching job installs and updates
-packages from the selected suite; the other release jobs keep using the
-branch-built package.
+rather than the literal `devel` label). The matching job uses the selected
+source(s); the other release jobs keep using the branch-built package.
 
 To run only selected end-to-end test suites, add an `e2e-tests:` line to the
 pull request description, followed by a space- or comma-separated list of suite
@@ -179,11 +206,13 @@ e2e-brokers: google
 
 Editing the pull request description does not automatically re-run the
 workflow. If you change an `e2e-ubuntu-releases:`, `e2e-tests:`,
-`e2e-test-case:`, `e2e-brokers:`, `e2e-ppa:`, or `e2e-apt-source:` line after
+`e2e-test-case:`, `e2e-brokers:`, `e2e-ppa:`, `e2e-apt-source:`, or
+`e2e-apt-source-base:` line after
 the workflow has already run, re-run the workflow. It fetches the current pull
 request description from GitHub. If you start the workflow with
 `workflow_dispatch`, use its separate `e2e-ubuntu-releases`, `e2e-brokers`,
-`e2e-tests`, `e2e-test-case`, `e2e-ppa`, and `e2e-apt-source`
+`e2e-tests`, `e2e-test-case`, `e2e-ppa`, `e2e-apt-source`, and
+`e2e-apt-source-base`
 inputs instead.
 
 [yarf]: https://github.com/canonical/yarf

@@ -10,7 +10,7 @@ DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/authd-e2e-tests"
 
 usage(){
     cat << EOF
-Usage: $0 [--config-file <file>] [--release <release>] [--authd-deb <deb>] [--authd-ppa <ppa>] [--apt-source <source>] [--broker-snap <snap>]
+Usage: $0 [--config-file <file>] [--release <release>] [--authd-deb <deb>] [--authd-ppa <ppa>] [--apt-source-base <source>] [--apt-source <source>] [--broker-snap <snap>]
 
 Options:
    --config-file <file>  Path to the configuration file (default: config.env)
@@ -21,10 +21,13 @@ Options:
    --authd-deb <deb>    Path to the authd deb file to install (default: install from the edge PPA)
    --authd-ppa <ppa>    PPA to use instead of authd-edge when installing authd
                         and its dependencies
+   --apt-source-base <source>
+                        APT source suite from which to install the stable authd
+                        baseline for migration tests
    --apt-source <source>
-                        APT source suite to use for package installation and
-                        updates (for example, resolute-updates); adds the
-                        suite if needed and skips the default authd PPA
+                        APT source suite for the authd package under test and
+                        package updates (for example, resolute-proposed); adds
+                        the suite if needed and skips the default authd PPA
    --broker-snap <snap> Path to the broker snap file to install (default: install from the edge channel)
   -h, --help             Show this help message and exit
 
@@ -56,6 +59,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --authd-ppa)
             AUTHD_PPA="$2"
+            shift 2
+            ;;
+        --apt-source-base)
+            APT_SOURCE_BASE_ARG="$2"
             shift 2
             ;;
         --apt-source)
@@ -148,7 +155,15 @@ fi
 
 # CLI options override config file values
 RELEASE="${RELEASE_ARG:-${RELEASE:-}}"
+APT_SOURCE_BASE="${APT_SOURCE_BASE_ARG:-${APT_SOURCE_BASE:-}}"
 APT_SOURCE="${APT_SOURCE_ARG:-${APT_SOURCE:-}}"
+
+if [ -n "${APT_SOURCE_BASE:-}" ]; then
+    if [[ ! "${APT_SOURCE_BASE}" =~ ^[a-z0-9][a-z0-9+.-]*$ ]]; then
+        echo "Invalid APT source suite '${APT_SOURCE_BASE}'." >&2
+        exit 1
+    fi
+fi
 
 if [ -n "${APT_SOURCE:-}" ]; then
     if [[ ! "${APT_SOURCE}" =~ ^[a-z0-9][a-z0-9+.-]*$ ]]; then
@@ -165,8 +180,18 @@ VM_NAME_BASE="${VM_NAME_BASE:-e2e-runner}"
 
 assert_env_vars RELEASE BROKER
 
-if [ -n "${APT_SOURCE:-}" ]; then
+if [ -n "${APT_SOURCE:-}" ] || [ -n "${APT_SOURCE_BASE:-}" ]; then
     VM_RELEASE=$(resolve_devel_release "${RELEASE}")
+fi
+
+if [ -n "${APT_SOURCE_BASE:-}" ]; then
+    if [[ "${APT_SOURCE_BASE}" != "${VM_RELEASE}" && "${APT_SOURCE_BASE}" != "${VM_RELEASE}-"* ]]; then
+        echo "APT source suite '${APT_SOURCE_BASE}' does not match VM release '${VM_RELEASE}'." >&2
+        exit 1
+    fi
+fi
+
+if [ -n "${APT_SOURCE:-}" ]; then
     if [[ "${APT_SOURCE}" != "${VM_RELEASE}" && "${APT_SOURCE}" != "${VM_RELEASE}-"* ]]; then
         echo "APT source suite '${APT_SOURCE}' does not match VM release '${VM_RELEASE}'." >&2
         exit 1
@@ -264,6 +289,19 @@ function install_broker() {
     wait_for_system_running
 }
 
+function add_apt_source() {
+    local apt_source="$1"
+
+    $SSH bash -euo pipefail -s <<-EOF
+        if ! grep -RqsF -- "${apt_source}" \
+            /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null; then
+            printf '%s\n' \
+                'deb http://archive.ubuntu.com/ubuntu/ ${apt_source} main restricted universe multiverse' \
+                > /etc/apt/sources.list.d/e2e-tests-apt-source.list
+        fi
+EOF
+}
+
 # Print executed commands to ease debugging
 set -x
 
@@ -290,13 +328,20 @@ fi
 if [ -z "${FORCE:-}" ] && has_snapshot "${AUTHD_STABLE_SNAPSHOT}"; then
     restore_snapshot_and_sync_time "${AUTHD_STABLE_SNAPSHOT}"
 else
-    # Install authd stable and create a snapshot
-    PPA="ubuntu-enterprise-desktop/authd"
-    # Launchpad is sometimes slow to respond, so we add retries to avoid
-    # transient failures in the tests.
-    cmd="add-apt-repository -y ppa:${PPA}"
-    retry --times 5 --delay 3 -- "$SSH" -- "$cmd"
-    $SSH "apt-get install -y authd"
+    # Install authd stable from the selected archive suite or the stable PPA.
+    if [ -n "${APT_SOURCE_BASE:-}" ]; then
+        add_apt_source "${APT_SOURCE_BASE}"
+        $SSH apt-get update
+        $SSH "apt-get install -y -t '${APT_SOURCE_BASE}' authd"
+        $SSH "apt-get full-upgrade -y -t '${APT_SOURCE_BASE}'"
+    else
+        PPA="ubuntu-enterprise-desktop/authd"
+        # Launchpad is sometimes slow to respond, so we add retries to avoid
+        # transient failures in the tests.
+        cmd="add-apt-repository -y ppa:${PPA}"
+        retry --times 5 --delay 3 -- "$SSH" -- "$cmd"
+        $SSH "apt-get install -y authd"
+    fi
     force_create_snapshot "${AUTHD_STABLE_SNAPSHOT}"
 fi
 
@@ -316,14 +361,7 @@ restore_snapshot_and_sync_time "$PRE_AUTHD_SNAPSHOT"
 
 # Add the selected Ubuntu archive suite if it is not already configured.
 if [ -n "${APT_SOURCE:-}" ]; then
-    $SSH bash -euo pipefail -s <<-EOF
-        if ! grep -RqsF -- "${APT_SOURCE}" \
-            /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null; then
-            printf '%s\n' \
-                'deb http://archive.ubuntu.com/ubuntu/ ${APT_SOURCE} main restricted universe multiverse' \
-                > /etc/apt/sources.list.d/e2e-tests-apt-source.list
-        fi
-EOF
+    add_apt_source "${APT_SOURCE}"
 fi
 
 # Add the optional PPA needed to resolve dependencies for the authd package.

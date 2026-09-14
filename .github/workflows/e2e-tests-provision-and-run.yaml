@@ -34,6 +34,11 @@ on:
         type: string
         required: false
         default: ''
+      apt-source-base:
+        description: 'If set, install the stable authd baseline from this Ubuntu archive suite'
+        type: string
+        required: false
+        default: ''
       brokers:
         description: 'JSON array of brokers to test'
         type: string
@@ -200,6 +205,14 @@ jobs:
             format('{0}-', inputs.ubuntu-codename)
           ) &&
           inputs.apt-source || ''
+        }}
+      apt-source-base: >-
+        ${{
+          startsWith(
+            inputs.apt-source-base,
+            format('{0}-', inputs.ubuntu-codename)
+          ) &&
+          inputs.apt-source-base || ''
         }}
       e2e-tests: ${{ inputs.e2e-tests }}
       e2e-test-cases: ${{ inputs.e2e-test-cases }}
