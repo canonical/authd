@@ -17,6 +17,11 @@ Library             String
 Variables           ./broker_vars.py
 
 
+*** Variables ***
+${GDM_LOGIN_OPTIONS_IMAGE}          ${CURDIR}/images/gdm-login-options.png
+${GDM_LOGIN_OPTIONS_NOBLE_IMAGE}   ${CURDIR}/images/gdm-login-options-noble.png
+
+
 *** Keywords ***
 Update Broker
     [Documentation]    Install the broker snap built from the current branch
@@ -326,6 +331,20 @@ Select Broker Through GDM
     Left Button Click
     Builtin.Sleep    1
 
+Select Authentication Mode Through GDM
+    [Arguments]    ${authentication_mode}
+    # Login Options is icon-only, and GDM rasterizes it differently between
+    # Ubuntu releases, so use the release-specific image instead of coordinates.
+    ${image}=    Set Variable    ${GDM_LOGIN_OPTIONS_IMAGE}
+    IF    '%{RELEASE}' == 'noble'
+        ${image}=    Set Variable    ${GDM_LOGIN_OPTIONS_NOBLE_IMAGE}
+    END
+    Move Pointer To ${image}
+    Left Button Click
+    Match Text    ${authentication_mode}    30
+    Move Pointer To ${authentication_mode}
+    Left Button Click
+
 Enter Entra ID Password And MFA
     # With the device code flow disabled there is only one flow; the PAM module
     # auto-selects it and goes directly to the Entra ID password prompt.
@@ -350,6 +369,17 @@ Continue Log In With Remote User Through GDM: Define Local Password
     Hid.Keys Combo    Return
 
     Wait Until Desktop Ready
+
+
+Unlock Screen With Device Code
+    [Arguments]    ${local_password}
+    # Wake the display before selecting the alternate authentication flow.
+    Hid.Keys Combo    Return
+    Match Text    Password    30
+    Select Authentication Mode Through GDM    Device code flow
+    Match Text    ${DEVICE_URL}    120
+    Continue Log In With Remote User: Authenticate In External Browser
+    Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
 
 
 Log In With Remote User Through GDM: Entra Password
