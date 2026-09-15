@@ -2437,6 +2437,7 @@ func TestEntraAuthAccessPassDoesNotCacheUnverifiedPassword(t *testing.T) {
 	})
 
 	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	require.NoError(t, password.StoreHashedPassword("malformed", b.PasswordFilepathForSession(sessionID)))
 	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraAuth))
 	_, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraAuth)
 	require.NoError(t, err)
@@ -2450,11 +2451,13 @@ func TestEntraAuthAccessPassDoesNotCacheUnverifiedPassword(t *testing.T) {
 	require.NoError(t, err)
 
 	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
-	access, _, err = b.IsAuthenticated(sessionID, passwordAuthData)
+	access, data, err := b.IsAuthenticated(sessionID, passwordAuthData)
 	require.NoError(t, err)
 	require.Equal(t, broker.AuthNext, access)
 	require.Equal(t, []string{authmodes.EntraMFACode}, b.GetNextAuthModes(sessionID),
 		"a TAP challenge should route to code entry")
+	require.Contains(t, data, "entra_password_unverified",
+		"the PAM adapter must be told not to reuse the unverified password")
 
 	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraMFACode))
 	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraMFACode)
@@ -2463,10 +2466,10 @@ func TestEntraAuthAccessPassDoesNotCacheUnverifiedPassword(t *testing.T) {
 	codeAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "123456", key))
 	access, _, err = b.IsAuthenticated(sessionID, codeAuthData)
 	require.NoError(t, err)
-	require.NotEqual(t, broker.AuthDenied, access,
-		"a Temporary Access Pass is a valid credential, so the login itself must succeed")
-	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID),
-		"the TAP answered the login, so the submitted password was never verified and must not be cached")
+	require.Equal(t, broker.AuthNext, access,
+		"a Temporary Access Pass is a valid credential, so the login should continue to local password setup")
+	require.Equal(t, []string{authmodes.NewPassword}, b.GetNextAuthModes(sessionID))
+	require.ErrorIs(t, password.ValidateHash(b.PasswordFilepathForSession(sessionID)), password.ErrInvalidHash)
 }
 
 // TestEntraAuthProbeKeepsDeviceAuthOutWhenFlowDisabled verifies that the probe
@@ -2530,6 +2533,7 @@ func TestEntraAuthPasswordlessSuccessDoesNotCacheOfflinePassword(t *testing.T) {
 	})
 
 	sessionID, _ := newSessionForTests(t, b, username, sessionmode.Login)
+	require.NoError(t, password.StoreHashedPassword("malformed", b.PasswordFilepathForSession(sessionID)))
 	require.NoError(t, b.SetAvailableMode(sessionID, authmodes.EntraAuth))
 	_, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraAuth)
 	require.NoError(t, err)
@@ -2552,10 +2556,9 @@ func TestEntraAuthPasswordlessSuccessDoesNotCacheOfflinePassword(t *testing.T) {
 	require.Equal(t, broker.AuthNext, access,
 		"first-time passwordless logins should chain to local password creation")
 	require.Equal(t, []string{authmodes.NewPassword}, b.GetNextAuthModes(sessionID))
+	require.ErrorIs(t, password.ValidateHash(b.PasswordFilepathForSession(sessionID)), password.ErrInvalidHash)
 	_, err = os.Stat(b.TokenPathForSession(sessionID))
 	require.NoError(t, err, "passwordless auth should cache the token once device registration succeeds")
-	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID),
-		"passwordless auth has no verified Entra password to cache for offline login")
 	require.Equal(t, 1, provider.registerDeviceCalls,
 		"passwordless auth should attempt first-time device registration after MFA succeeds")
 }
@@ -2677,13 +2680,234 @@ func TestIsAuthenticatedEntraMFAWaitStartsPollingAtOne(t *testing.T) {
 	require.NoError(t, err, "Entra MFA completion should cache the refreshed token")
 }
 
+func newEntraMFAWaitTestBroker(t *testing.T) *broker.Broker {
+	t.Helper()
+
+	username := "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := &mockEntraAuthProvider{
+		MockProvider: &testutils.MockProvider{},
+		flowState:    &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{
+			Message:           "Approve the sign-in request in Microsoft Authenticator",
+			Method:            "PhoneAppNotification",
+			PollingIntervalMs: 1,
+			MaxPollAttempts:   1,
+		},
+		mfaTokenResult: newMFATokenResult(mfaAuthInfo.Token),
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	})
+	return b
+}
+
+func TestEntraAuthKeepsExistingPasswordUntilConfirmed(t *testing.T) {
+	t.Parallel()
+
+	b := newEntraMFAWaitTestBroker(t)
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	require.NoError(t, password.HashAndStorePassword("local-password", b.PasswordFilepathForSession(sessionID)))
+
+	advanceToEntraMFAWaitWithPassword(t, b, sessionID, key, "entra-password")
+
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, "{}", data)
+	require.Equal(t, []string{authmodes.EntraAuthPasswordConfirmation}, b.GetNextAuthModes(sessionID))
+	require.True(t, passwordMatches(t, "local-password", b.PasswordFilepathForSession(sessionID)))
+	require.False(t, passwordMatches(t, "entra-password", b.PasswordFilepathForSession(sessionID)))
+
+	modes, err := b.GetAuthenticationModes(sessionID, []map[string]string{supportedUILayouts["form"]})
+	require.NoError(t, err)
+	require.Equal(t, []map[string]string{{
+		"id":    authmodes.EntraAuthPasswordConfirmation,
+		"label": authmodes.Label[authmodes.EntraAuthPasswordConfirmation],
+	}}, modes)
+
+	updateAuthModes(t, b, sessionID, authmodes.EntraAuthPasswordConfirmation)
+	layout, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthPasswordConfirmation)
+	require.NoError(t, err)
+	require.Equal(t, "chars_password", layout["entry"])
+	require.Contains(t, layout["label"], "leave this blank to keep it")
+
+	access, data, err = b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access)
+	require.Contains(t, data, broker.EntraPasswordKeptMessage)
+	require.True(t, passwordMatches(t, "local-password", b.PasswordFilepathForSession(sessionID)))
+	require.False(t, passwordMatches(t, "entra-password", b.PasswordFilepathForSession(sessionID)))
+}
+
+func TestEntraAuthRecoversFromMalformedLocalPassword(t *testing.T) {
+	t.Parallel()
+
+	b := newEntraMFAWaitTestBroker(t)
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	passwordPath := b.PasswordFilepathForSession(sessionID)
+	require.NoError(t, password.StoreHashedPassword("malformed", passwordPath))
+
+	advanceToEntraMFAWaitWithPassword(t, b, sessionID, key, "entra-password")
+
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access)
+	require.Contains(t, data, broker.CachedPasswordMessage)
+	require.True(t, passwordMatches(t, "entra-password", b.PasswordFilepathForSession(sessionID)))
+}
+
+func TestEntraAuthReplacesExistingPasswordAfterConfirmation(t *testing.T) {
+	t.Parallel()
+
+	b := newEntraMFAWaitTestBroker(t)
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	require.NoError(t, password.HashAndStorePassword("local-password", b.PasswordFilepathForSession(sessionID)))
+
+	advanceToEntraMFAWaitWithPassword(t, b, sessionID, key, "entra-password")
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	updateAuthModes(t, b, sessionID, authmodes.EntraAuthPasswordConfirmation)
+
+	wrongPassword := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "wrong-password", key))
+	access, _, err = b.IsAuthenticated(sessionID, wrongPassword)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthRetry, access)
+	require.True(t, passwordMatches(t, "local-password", b.PasswordFilepathForSession(sessionID)))
+	require.False(t, passwordMatches(t, "entra-password", b.PasswordFilepathForSession(sessionID)))
+
+	localPassword := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "local-password", key))
+	access, data, err := b.IsAuthenticated(sessionID, localPassword)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access)
+	require.Contains(t, data, broker.EntraPasswordUpdatedMessage)
+	require.False(t, passwordMatches(t, "local-password", b.PasswordFilepathForSession(sessionID)))
+	require.True(t, passwordMatches(t, "entra-password", b.PasswordFilepathForSession(sessionID)))
+}
+
+func TestEntraAuthCodeFlowConfirmsExistingPasswordReplacement(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := &mockEntraAuthProvider{
+		MockProvider: &testutils.MockProvider{},
+		flowState:    &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{
+			Message: "Enter the code from your authenticator app",
+			Method:  "PhoneAppOTP",
+		},
+		mfaTokenResult: newMFATokenResult(mfaAuthInfo.Token),
+	}
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	})
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	require.NoError(t, password.HashAndStorePassword("local-password", b.PasswordFilepathForSession(sessionID)))
+
+	updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
+	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "entra-password", key))
+	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraMFACode}, b.GetNextAuthModes(sessionID))
+
+	updateAuthModes(t, b, sessionID, authmodes.EntraMFACode)
+	codeAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "123456", key))
+	access, _, err = b.IsAuthenticated(sessionID, codeAuthData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	require.Equal(t, []string{authmodes.EntraAuthPasswordConfirmation}, b.GetNextAuthModes(sessionID))
+	require.True(t, b.HasPendingEntraPassword(sessionID))
+
+	updateAuthModes(t, b, sessionID, authmodes.EntraAuthPasswordConfirmation)
+	localPassword := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "local-password", key))
+	access, _, err = b.IsAuthenticated(sessionID, localPassword)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access)
+	require.False(t, b.HasPendingEntraPassword(sessionID))
+	require.True(t, passwordMatches(t, "entra-password", b.PasswordFilepathForSession(sessionID)))
+}
+
+func TestEntraAuthConfirmationExhaustsAttemptsWithoutChangingPassword(t *testing.T) {
+	t.Parallel()
+
+	b := newEntraMFAWaitTestBroker(t)
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	require.NoError(t, password.HashAndStorePassword("local-password", b.PasswordFilepathForSession(sessionID)))
+	advanceToEntraMFAWaitWithPassword(t, b, sessionID, key, "entra-password")
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	updateAuthModes(t, b, sessionID, authmodes.EntraAuthPasswordConfirmation)
+
+	wrongPassword := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "wrong-password", key))
+	for attempt := 1; attempt <= broker.MaxAuthAttempts; attempt++ {
+		access, _, err = b.IsAuthenticated(sessionID, wrongPassword)
+		require.NoError(t, err)
+		if attempt < broker.MaxAuthAttempts {
+			require.Equal(t, broker.AuthRetry, access)
+			require.True(t, b.HasPendingEntraPassword(sessionID))
+			continue
+		}
+		require.Equal(t, broker.AuthDeniedMaxTries, access)
+	}
+
+	require.False(t, b.HasPendingEntraPassword(sessionID))
+	require.True(t, passwordMatches(t, "local-password", b.PasswordFilepathForSession(sessionID)))
+	require.False(t, passwordMatches(t, "entra-password", b.PasswordFilepathForSession(sessionID)))
+}
+
+func TestEntraAuthMatchingPasswordIsNotRewritten(t *testing.T) {
+	t.Parallel()
+
+	b := newEntraMFAWaitTestBroker(t)
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	passwordPath := b.PasswordFilepathForSession(sessionID)
+	require.NoError(t, password.HashAndStorePassword("same-password", passwordPath))
+	before, err := os.ReadFile(passwordPath)
+	require.NoError(t, err)
+
+	advanceToEntraMFAWaitWithPassword(t, b, sessionID, key, "same-password")
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access)
+	require.Contains(t, data, broker.EntraPasswordMatchesMessage)
+
+	after, err := os.ReadFile(passwordPath)
+	require.NoError(t, err)
+	require.Equal(t, before, after, "matching Entra passwords must not rewrite the local password hash")
+}
+
+func passwordMatches(t *testing.T, candidate, path string) bool {
+	t.Helper()
+
+	matches, err := password.CheckPassword(candidate, path)
+	require.NoError(t, err)
+	return matches
+}
+
 // advanceToEntraMFAWait submits the Entra password for the session and selects the
 // entra_mfa_wait mode, leaving the session ready for the polling IsAuthenticated("{}").
 func advanceToEntraMFAWait(t *testing.T, b *broker.Broker, sessionID, key string) {
+	advanceToEntraMFAWaitWithPassword(t, b, sessionID, key, "password")
+}
+
+func advanceToEntraMFAWaitWithPassword(t *testing.T, b *broker.Broker, sessionID, key, userPassword string) {
 	t.Helper()
 
 	updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
-	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
+	passwordAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, userPassword, key))
 
 	access, _, err := b.IsAuthenticated(sessionID, passwordAuthData)
 	require.NoError(t, err)

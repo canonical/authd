@@ -8,6 +8,13 @@ import "github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 // localized independently of authd.
 const cachedPasswordMessage = "Your local password has been set to your Entra password"
 
+const (
+	//nolint:gosec // G101: these are user-facing messages, not credentials.
+	entraPasswordMatchesMessage = "Your Entra password already matches your local password. No change was needed."
+	entraPasswordUpdatedMessage = "Your local password has been updated to your Entra password."
+	entraPasswordKeptMessage    = "Your existing local password was kept."
+)
+
 type isAuthenticatedDataResponse interface {
 	isAuthenticatedDataResponse()
 }
@@ -26,3 +33,12 @@ type errorMessage struct {
 }
 
 func (errorMessage) isAuthenticatedDataResponse() {}
+
+// authNextMessage carries internal state to the PAM adapter without displaying
+// an extra prompt to the user.
+type authNextMessage struct {
+	Message                 string `json:"message"`
+	EntraPasswordUnverified bool   `json:"entra_password_unverified,omitempty"`
+}
+
+func (authNextMessage) isAuthenticatedDataResponse() {}

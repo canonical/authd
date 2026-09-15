@@ -272,12 +272,14 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case PamReturnValue:
 		safeMessageDebug(msg)
 		if m.pamReturnValue == nil {
+			m.authenticationModel.clearSecrets()
 			return m, m.quit()
 		}
 		if *m.pamReturnValue != pamNoReturnValue {
 			// Nothing to do, we're already exiting...
 			return m, nil
 		}
+		m.authenticationModel.clearSecrets()
 		*m.pamReturnValue = msg
 		return m, m.quit()
 
@@ -416,6 +418,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				msg:    "reselection of current auth mode without current ID",
 			})
 		}
+		m.authenticationModel.setAuthMode(msg.ID)
 		return m, tea.Sequence(
 			m.updateClientModel(msg),
 			getLayout(m.client, m.currentSession.sessionID, msg.ID),
@@ -441,6 +444,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		safeMessageDebug(msg)
 		m.sessionStartingForBroker = ""
 		m.currentSession = nil
+		m.authenticationModel.clearSecrets()
 		if m.clientType == Gdm {
 			m.gdmModel.pendingEchoAuthModeID = ""
 		}

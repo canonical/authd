@@ -3,6 +3,7 @@ package adapter
 import (
 	"testing"
 
+	"github.com/canonical/authd/internal/brokers/auth"
 	"github.com/canonical/authd/internal/brokers/layouts"
 	"github.com/canonical/authd/internal/brokers/layouts/entries"
 	"github.com/canonical/authd/internal/proto/authd"
@@ -141,4 +142,191 @@ func TestFormModelLocksInputOnSubmission(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, updatedForm.submitting)
 	require.Equal(t, "password", entry.Value())
+}
+
+func TestFormModelSubmitsEmptyConfirmation(t *testing.T) {
+	t.Parallel()
+
+	entry := newTextInputModel(entries.CharsPassword)
+	form := formModel{focusableModels: []authenticationComponent{&entry}}
+	form.Focus()
+
+	updated, cmd := form.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updatedForm, ok := updated.(formModel)
+	require.True(t, ok)
+	require.True(t, updatedForm.submitting)
+
+	request, ok := cmd().(isAuthenticatedRequested)
+	require.True(t, ok)
+	secret, ok := request.item.(*authd.IARequest_AuthenticationData_Secret)
+	require.True(t, ok)
+	require.Empty(t, secret.Secret)
+}
+
+func TestAuthenticationModelPreservesEntraPasswordAcrossMFA(t *testing.T) {
+	t.Parallel()
+
+	model := newAuthenticationModel(nil, InteractiveTerminal, authd.SessionMode_LOGIN)
+	model.currentAuthModeID = entraAuthModeID
+	entraPassword := "entra-password"
+
+	updated, _ := model.Update(isAuthenticatedResultReceived{
+		access: auth.Next,
+		msg:    "{}",
+		secret: &entraPassword,
+	})
+	require.Equal(t, entraPassword, updated.entraAuthSecret)
+
+	updated.currentAuthModeID = entraMFACodeModeID
+	mfaCode := "123456"
+	updated, cmd := updated.Update(isAuthenticatedResultReceived{
+		access: auth.Granted,
+		secret: &mfaCode,
+		msg:    "{}",
+	})
+
+	success, ok := cmd().(PamSuccess)
+	require.True(t, ok)
+	require.Equal(t, entraPassword, success.AuthTok)
+	require.Empty(t, success.OldAuthTok)
+	require.Empty(t, updated.entraAuthSecret)
+}
+
+func TestAuthenticationModelPreservesEntraPasswordAcrossFidoPIN(t *testing.T) {
+	t.Parallel()
+
+	model := newAuthenticationModel(nil, InteractiveTerminal, authd.SessionMode_LOGIN)
+	model.currentAuthModeID = entraAuthModeID
+	entraPassword := "entra-password"
+
+	updated, _ := model.Update(isAuthenticatedResultReceived{
+		access: auth.Next,
+		msg:    "{}",
+		secret: &entraPassword,
+	})
+	updated.currentAuthModeID = entraAuthFidoPinModeID
+	fidoPIN := "123456"
+	updated, _ = updated.Update(isAuthenticatedResultReceived{
+		access: auth.Next,
+		msg:    "{}",
+		secret: &fidoPIN,
+	})
+	require.Equal(t, entraPassword, updated.entraAuthSecret)
+
+	updated.currentAuthModeID = entraAuthFidoModeID
+	updated, cmd := updated.Update(isAuthenticatedResultReceived{
+		access: auth.Granted,
+		msg:    "{}",
+	})
+	success, ok := cmd().(PamSuccess)
+	require.True(t, ok)
+	require.Equal(t, entraPassword, success.AuthTok)
+	require.Empty(t, success.OldAuthTok)
+	require.Empty(t, updated.entraAuthSecret)
+}
+
+func TestAuthenticationModelReturnsOldTokenForEntraPasswordReplacement(t *testing.T) {
+	t.Parallel()
+
+	model := newAuthenticationModel(nil, InteractiveTerminal, authd.SessionMode_LOGIN)
+	model.currentAuthModeID = entraAuthPasswordConfirmationModeID
+	model.entraAuthSecret = "entra-password"
+
+	localPassword := "local-password"
+	updated, cmd := model.Update(isAuthenticatedResultReceived{
+		access: auth.Granted,
+		secret: &localPassword,
+		msg:    "{}",
+	})
+
+	success, ok := cmd().(PamSuccess)
+	require.True(t, ok)
+	require.Equal(t, "entra-password", success.AuthTok)
+	require.Equal(t, localPassword, success.OldAuthTok)
+	require.Empty(t, updated.entraAuthSecret)
+}
+
+func TestAuthenticationModelDoesNotReturnEntraTokenWhenKeepingLocalPassword(t *testing.T) {
+	t.Parallel()
+
+	model := newAuthenticationModel(nil, InteractiveTerminal, authd.SessionMode_LOGIN)
+	model.currentAuthModeID = entraAuthPasswordConfirmationModeID
+	model.entraAuthSecret = "entra-password"
+	emptyPassword := ""
+
+	updated, cmd := model.Update(isAuthenticatedResultReceived{
+		access: auth.Granted,
+		secret: &emptyPassword,
+		msg:    "{}",
+	})
+
+	success, ok := cmd().(PamSuccess)
+	require.True(t, ok)
+	require.Empty(t, success.AuthTok)
+	require.Empty(t, success.OldAuthTok)
+	require.Empty(t, updated.entraAuthSecret)
+}
+
+func TestAuthenticationModelDropsUnverifiedEntraPassword(t *testing.T) {
+	t.Parallel()
+
+	model := newAuthenticationModel(nil, InteractiveTerminal, authd.SessionMode_LOGIN)
+	model.currentAuthModeID = entraAuthModeID
+	entraPassword := "temporary-password"
+
+	updated, _ := model.Update(isAuthenticatedResultReceived{
+		access: auth.Next,
+		msg:    `{"message":"","entra_password_unverified":true}`,
+		secret: &entraPassword,
+	})
+	require.Empty(t, updated.entraAuthSecret)
+	require.Empty(t, updated.currentSecret)
+}
+
+func TestAuthenticationModelDoesNotExposeEntraFactorsAfterFallback(t *testing.T) {
+	t.Parallel()
+
+	model := newAuthenticationModel(nil, InteractiveTerminal, authd.SessionMode_LOGIN)
+	model.currentAuthModeID = entraAuthModeID
+	entraPassword := "entra-password"
+
+	updated, _ := model.Update(isAuthenticatedResultReceived{
+		access: auth.Next,
+		msg:    "{}",
+		secret: &entraPassword,
+	})
+	updated.currentAuthModeID = entraAuthFidoPinModeID
+	fidoPIN := "123456"
+	updated, _ = updated.Update(isAuthenticatedResultReceived{
+		access: auth.Next,
+		msg:    "{}",
+		secret: &fidoPIN,
+	})
+	require.Equal(t, entraPassword, updated.entraAuthSecret)
+
+	updated.setAuthMode("device_auth")
+	require.Empty(t, updated.entraAuthSecret)
+	require.Empty(t, updated.currentSecret)
+}
+
+func TestAuthenticationModelClearsEntraPasswordOnDenial(t *testing.T) {
+	t.Parallel()
+
+	model := newAuthenticationModel(nil, InteractiveTerminal, authd.SessionMode_LOGIN)
+	model.currentAuthModeID = entraAuthModeID
+	entraPassword := "entra-password"
+	model, _ = model.Update(isAuthenticatedResultReceived{
+		access: auth.Next,
+		msg:    "{}",
+		secret: &entraPassword,
+	})
+
+	updated, cmd := model.Update(isAuthenticatedResultReceived{
+		access: auth.Denied,
+		msg:    `{"message":"denied"}`,
+	})
+	_, ok := cmd().(pamError)
+	require.True(t, ok)
+	require.Empty(t, updated.entraAuthSecret)
+	require.Empty(t, updated.currentSecret)
 }
