@@ -45,6 +45,49 @@
         <arg type="s" direction="in" name="username"/>
     </method>
   </interface>
+  <!-- ExampleBroker remains pinned to Broker2 in code. Broker4 is included
+       here as a reference for brokers that support the current API. -->
+  <interface name="com.ubuntu.authd.Broker4">
+    <method name="NewSession">
+      <arg type="s" direction="in" name="username"/>
+      <arg type="s" direction="in" name="lang"/>
+      <arg type="s" direction="in" name="mode"/>
+      <arg type="s" direction="in" name="provider_id"/>
+      <arg type="s" direction="in" name="service_name"/>
+      <arg type="s" direction="out" name="sessionID"/>
+      <arg type="s" direction="out" name="encryptionKey"/>
+    </method>
+    <method name="GetAuthenticationModes">
+      <arg type="s" direction="in" name="sessionID"/>
+      <arg type="aa{ss}" direction="in" name="supportedUILayouts"/>
+      <arg type="aa{ss}" direction="out" name="authenticationModes"/>
+    </method>
+    <method name="SelectAuthenticationMode">
+      <arg type="s" direction="in" name="sessionID"/>
+      <arg type="s" direction="in" name="authenticationModeName"/>
+      <arg type="a{ss}" direction="out" name="uiLayoutInfo"/>
+    </method>
+    <method name="IsAuthenticated">
+      <arg type="s" direction="in" name="sessionID"/>
+      <arg type="s" direction="in" name="authenticationData"/>
+      <arg type="s" direction="out" name="access"/>
+      <arg type="s" direction="out" name="data"/>
+    </method>
+    <method name="EndSession">
+      <arg type="s" direction="in" name="sessionID"/>
+    </method>
+    <method name="CancelIsAuthenticated">
+      <arg type="s" direction="in" name="sessionID"/>
+    </method>
+    <method name="UserPreCheck">
+      <arg type="s" direction="in" name="username"/>
+      <arg type="s" direction="out" name="userInfo"/>
+    </method>
+    <method name="DeleteUser">
+      <arg type="s" direction="in" name="username"/>
+      <arg type="s" direction="in" name="provider_id"/>
+    </method>
+  </interface>
   <interface name="org.freedesktop.DBus.Introspectable">
     <method name="Introspect">
       <arg name="out" direction="out" type="s"/>

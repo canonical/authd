@@ -95,8 +95,8 @@ func (cfg *Config) SetAllowedSSHSuffixes(allowedSSHSuffixes []string) {
 
 func (cfg *Config) SetFlows(deviceAuth, entraAuth bool) {
 	cfg.flows = flowsConfig{
-		DeviceAuth: deviceAuth,
-		EntraAuth:  entraAuth,
+		DeviceAuth: defaultFlowRule(deviceAuth),
+		EntraAuth:  defaultFlowRule(entraAuth),
 	}
 }
 

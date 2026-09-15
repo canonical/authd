@@ -32,7 +32,7 @@ type grantedData struct {
 }
 
 type brokerer interface {
-	NewSession(ctx context.Context, username, lang, mode, providerID string) (sessionID, encryptionKey string, err error)
+	NewSession(ctx context.Context, username, lang, mode, providerID, serviceName string) (sessionID, encryptionKey string, err error)
 	GetAuthenticationModes(ctx context.Context, sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, err error)
 	SelectAuthenticationMode(ctx context.Context, sessionID, authenticationModeName string) (uiLayoutInfo map[string]string, err error)
 	IsAuthenticated(ctx context.Context, sessionID, authenticationData string) (access, data string, err error)
@@ -108,8 +108,8 @@ func newBroker(ctx context.Context, configFile string, bus *dbus.Conn) (b Broker
 }
 
 // newSession calls the broker corresponding method, expanding sessionID with the broker ID prefix.
-func (b Broker) newSession(ctx context.Context, username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
-	sessionID, encryptionKey, err = b.brokerer.NewSession(ctx, username, lang, mode, providerID)
+func (b Broker) newSession(ctx context.Context, username, lang, mode, providerID, serviceName string) (sessionID, encryptionKey string, err error) {
+	sessionID, encryptionKey, err = b.brokerer.NewSession(ctx, username, lang, mode, providerID, serviceName)
 	if err != nil {
 		return "", "", err
 	}
