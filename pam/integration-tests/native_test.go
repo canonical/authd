@@ -15,6 +15,7 @@ import (
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/internal/testutils/ptytest"
 	localgroupstestutils "github.com/canonical/authd/internal/users/localentries/testutils"
+	"github.com/canonical/authd/pam/internal/adapter"
 	"github.com/canonical/authd/pam/internal/pam_test"
 	"github.com/stretchr/testify/require"
 )
@@ -31,10 +32,6 @@ type nativePtySessionSpec struct {
 	username         string
 	extraArgs        []string
 	expectedExitCode int
-	// skipForceNative prevents force_native_client=true from being added to the
-	// PAM args, allowing the module to detect the client type from the environment
-	// (e.g. via TERM=dumb).
-	skipForceNative bool
 }
 
 type nativePtyTestContext struct {
@@ -47,17 +44,16 @@ type nativePtyTestContext struct {
 func (r nativePtySessionRunner) start(t *testing.T, spec nativePtySessionSpec) *ptytest.Console {
 	t.Helper()
 
-	// Native PAM client uses text-based prompts via PAM conversation, so it
-	// needs the pam-runner to support conversations (unlike the CLI client
-	// which handles all interaction via its own bubbletea TUI).
-	cliEnv := append(r.cliEnv,
-		fmt.Sprintf("%s=1", pam_test.RunnerEnvSupportsConversation),
-	)
-	extraArgs := spec.extraArgs
-	if !spec.skipForceNative {
-		extraArgs = append([]string{"force_native_client=true"}, extraArgs...)
+	if spec.clientOptions.ClientType == nil {
+		spec.clientOptions.ClientType = ptrValue(adapter.Native)
 	}
-	c := startPAMRunner(t, r.clientPath, r.socketPath, spec.action, cliEnv, spec.clientOptions, extraArgs...)
+	if *spec.clientOptions.ClientType == AutoClientType {
+		spec.clientOptions.ClientType = nil
+	}
+
+	c := startPAMRunner(t, r.clientPath, r.socketPath, spec.action, r.cliEnv,
+		spec.clientOptions, spec.extraArgs...)
+
 	if spec.username != "" && spec.clientOptions.PamUser == "" {
 		nativeEnterUsername(t, c, spec.username)
 	}
@@ -99,7 +95,6 @@ func TestNativeAuthenticate(t *testing.T) {
 		wantLocalGroups    bool
 		wantSeparateDaemon bool
 		skipRunnerCheck    bool
-		skipForceNative    bool
 		socketPath         string
 		extraArgs          []string
 		expectedUser       string
@@ -117,10 +112,9 @@ func TestNativeAuthenticate(t *testing.T) {
 			// Verify that TERM=dumb causes the module to fall back to native mode
 			// even without force_native_client=true. This covers non-interactive
 			// consumers like Emacs TRAMP, scripted sudo, and Ansible.
-			clientOptions:   clientOptions{Term: "dumb"},
-			skipForceNative: true,
-			test:            nativeSimpleAuthNonInteractive,
-			expectedUser:    testUserName(t, "dumb-terminal"),
+			clientOptions: clientOptions{Term: "dumb", ClientType: ptrValue(AutoClientType)},
+			test:          nativeSimpleAuthNonInteractive,
+			expectedUser:  testUserName(t, "dumb-terminal"),
 		},
 		"Authenticate_user_successfully_with_upper_case": {
 			clientOptions: clientOptions{PamUser: strings.ToUpper(testUserName(t, "upper-case-native"))},
@@ -793,11 +787,10 @@ func TestNativeAuthenticate(t *testing.T) {
 					cliEnv:     cliEnv,
 				},
 				baseSpec: nativePtySessionSpec{
-					action:          pam_test.RunnerActionLogin,
-					clientOptions:   clientOptions,
-					username:        username,
-					extraArgs:       tc.extraArgs,
-					skipForceNative: tc.skipForceNative,
+					action:        pam_test.RunnerActionLogin,
+					clientOptions: clientOptions,
+					username:      username,
+					extraArgs:     tc.extraArgs,
 				},
 				authdCancel: authdCancel,
 			}
@@ -833,6 +826,134 @@ func TestNativeAuthenticate(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestNativeAuthenticateFallbackNoPamTTY is meant to simulate a similar behavior
+// that we may have in PAM applications that are running with a non-interactive
+// terminal, but without PAM_TTY being set.
+// In this scenario the native UI should be chosen automatically by the PAM
+// module, without forcing any options.
+func TestNativeAuthenticateFallbackNoPamTTY(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	runner := newRedirectedIORunner(t)
+	user := testUserName(t, "native-fallback")
+	c := runner.startRedirectedIORunner(t, redirectedIOScenario{
+		// stdout is a non-terminal while stdin stays the controlling terminal.
+		ioRedirections: ">/dev/null",
+		// No PAM_TTY: we simulate that the client does not set any valid PAM_TTY.
+		noPamTTY: true,
+	}, clientOptions{PamUser: user})
+
+	waitForFileContains(t, runner.outputFile, "Choose your provider")
+	c.SendLine(t, "2")
+	waitForFileContains(t, runner.outputFile, "Gimme your password")
+	c.SendLine(t, "goodpass")
+
+	runner.requireSuccessEventually(t, authd.SessionMode_LOGIN, user)
+	c.RequireSuccessfulExit(t)
+
+	out, err := os.ReadFile(runner.outputFile)
+	require.NoError(t, err, "failed to read runner output file")
+	golden.CheckOrUpdate(t, string(out))
+}
+
+// TestNativeAuthenticateRedirectedIO reproduces the cases in which the I/O streams
+// of the PAM client are redirected or closed, ensuring that the CLI still
+// prompts on the terminal (PAM_TTY) and the authentication flow works end-to-end.
+func TestNativeAuthenticateRedirectedIO(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	tests := map[string]struct {
+		redirections string
+		detach       bool
+	}{
+		// `sudo ls > /dev/null` and the sshuttle stdout-to-socket path: stdout
+		// is not the terminal, the prompt must still appear on the TTY.
+		"Redirected_stdout": {redirections: ">/dev/null"},
+
+		// stdout fully closed (>&-): the CLI must use the TTY for output.
+		"Closed_stdout": {redirections: ">&-"},
+
+		// stdin is /dev/null, input comes from the TTY.
+		"Stdin_from_devnull": {redirections: "</dev/null"},
+
+		// stdin is closed, input comes from the TTY.
+		"Closed_stdin": {redirections: "<&-"},
+
+		// stderr is closed, input comes from the stdin.
+		"Closed_stderr": {redirections: "2>&-"},
+
+		// Both stdin and stdout detached, only the TTY remains usable.
+		"Closed_stdin_and_redirected_stdout": {redirections: "</dev/null >/dev/null"},
+
+		// Stdin is closed and stdout *and* stderr are redirected to a non-terminal.
+		// None of fd 0/1/2 is a terminal anymore.
+		"All_streams_detached": {redirections: "<&- 1>/dev/null 2>/dev/null"},
+
+		// No controlling terminal (setsid) and stdin detached: /dev/tty
+		// input fallback is unavailable, so input must come from the
+		// explicit PAM_TTY. This mirrors PAM clients without a controlling
+		// terminal that still get a PAM_TTY.
+		"Detached_session_input_from_pam_tty": {redirections: "</dev/null", detach: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			user := testUserName(t, "native-redirected-io")
+
+			runner := newRedirectedIORunner(t)
+			c := runner.startRedirectedIORunner(t,
+				redirectedIOScenario{
+					ioRedirections:       tc.redirections,
+					detachControllingTTY: tc.detach,
+				},
+				clientOptions{PamUser: user, ClientType: ptrValue(adapter.Native)})
+
+			nativeSimpleAuth(t, c)
+			c.RequireSuccessfulExit(t)
+
+			consoleOutput := ptySanitizeSnapshots(t, c)
+			golden.CheckOrUpdate(t, consoleOutput)
+			runner.requireSuccess(t, authd.SessionMode_LOGIN, user)
+		})
+	}
+}
+
+// TestNativeAuthenticateBackgroundDetachedStdin simulates something similar to
+// `bash -c 'sudo -S <<< "goodpass" id &'`: the runner is started in the
+// background with a controlling terminal that cannot be switched to raw mode,
+// so authd must automatically use the native PAM UI.
+func TestNativeAuthenticateBackgroundDetachedStdin(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	user := testUserName(t, "native-bg-detached")
+
+	runner := newRedirectedIORunner(t)
+	runner.startBackgroundDetachedRunner(t,
+		fmt.Sprintf(`printf '%%s\n' '2'; sleep %d; printf '%%s\n' 'goodpass'`,
+			testutils.MultipliedSleepDuration(1*time.Second)/time.Second),
+		clientOptions{PamUser: user})
+
+	runner.requireSuccessEventually(t, authd.SessionMode_LOGIN, user)
+
+	out, err := os.ReadFile(runner.outputFile)
+	require.NoError(t, err, "failed to read runner output file")
+	golden.CheckOrUpdate(t, string(out))
 }
 
 func TestNativeChangeAuthTok(t *testing.T) {

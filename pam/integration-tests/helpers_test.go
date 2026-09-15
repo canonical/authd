@@ -22,7 +22,10 @@ import (
 	"github.com/canonical/authd/internal/services/errmessages"
 	"github.com/canonical/authd/internal/testlog"
 	"github.com/canonical/authd/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/ptytest"
+	"github.com/canonical/authd/pam/internal/adapter"
 	"github.com/canonical/authd/pam/internal/pam_test"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -38,9 +41,14 @@ type authdInstance struct {
 	cleanup          func()
 }
 
-// pamExecChildName is the file name of the authd-pam helper binary built by
-// [buildPAMExecChild] and forked by the PAM exec module.
-const pamExecChildName = "authd-pam"
+const (
+	// pamExecChildName is the file name of the authd-pam helper binary built by
+	// [buildPAMExecChild] and forked by the PAM exec module.
+	pamExecChildName = "authd-pam"
+
+	// pamRunnerName is the name of the pam-runner binary.
+	pamRunnerName = "pam_authd"
+)
 
 var (
 	sharedAuthdInstance = authdInstance{}
@@ -167,13 +175,14 @@ func buildPAMRunner(execPath string) (cleanup func(), err error) {
 	cmd.Dir = testutils.ProjectRoot()
 	cmd.Args = append(cmd.Args, testutils.GoBuildFlags()...)
 	cmd.Args = append(cmd.Args, "-gcflags=all=-N -l")
-	cmd.Args = append(cmd.Args, "-tags=withpamrunner", "-o", filepath.Join(execPath, "pam_authd"),
+	cmd.Args = append(cmd.Args, "-tags=withpamrunner", "-o",
+		filepath.Join(execPath, pamRunnerName),
 		"./pam/tools/pam-runner")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return func() {}, fmt.Errorf("%v: %s", err, out)
 	}
 
-	return func() { _ = os.Remove(filepath.Join(execPath, "pam_authd")) }, nil
+	return func() { _ = os.Remove(filepath.Join(execPath, pamRunnerName)) }, nil
 }
 
 // pamExecChildGoBuildArgs returns the `go build` arguments (run from
@@ -245,6 +254,7 @@ var (
 
 // clientOptions holds PAM client configuration for test cases.
 type clientOptions struct {
+	ClientType     *adapter.PamClientType
 	PamUser        string
 	PamEnv         []string
 	PamServiceName string
@@ -604,4 +614,182 @@ func findPAMExecChildPID(t *testing.T, parentPID int) int {
 	require.FailNow(t, "PAM exec child not found",
 		"PAM runner pid %d has no %q child", parentPID, pamExecChildName)
 	return 0
+}
+
+// redirectedIOScenario is a struct to configure the tests with a redirect
+// I/O setup, using a shell to perform this.
+type redirectedIOScenario struct {
+	// ioRedirections is the bash redirection suffix appended to the foreground
+	// runner invocation (e.g. ">/dev/null", ">&-", "</dev/null", "<&-").
+	ioRedirections string
+
+	// noPamTTY skips exporting [pam_test.RunnerEnvTty], so the runner does not set
+	// the PAM_TTY item.
+	noPamTTY bool
+
+	// detachControllingTTY runs the client in a new session (via setsid), so it
+	// has no controlling terminal /dev/tty input is not set.
+	detachControllingTTY bool
+}
+
+type redirectedIORunner struct {
+	clientPath string
+	cliEnv     []string
+	socketPath string
+	outputFile string
+}
+
+// newRedirectedIORunner builds the PAM runner binary and starts authd, returning
+// a runner that the start* methods launch under different I/O wirings.
+func newRedirectedIORunner(t *testing.T) redirectedIORunner {
+	t.Helper()
+
+	clientPath := t.TempDir()
+	socketPath, _ := sharedAuthd(t)
+
+	outputFile := filepath.Join(t.TempDir(), "pam-runner-output.log")
+	require.NoError(t, os.WriteFile(outputFile, nil, 0600),
+		"Setup: cannot create runner output file")
+	testutils.MaybeSaveFilesAsArtifactsOnCleanup(t, outputFile)
+
+	return redirectedIORunner{
+		clientPath: clientPath,
+		cliEnv:     preparePamRunnerTest(t, clientPath),
+		socketPath: socketPath,
+		outputFile: outputFile,
+	}
+}
+
+func (r redirectedIORunner) runnerEnv(t *testing.T, opts clientOptions,
+) (env, runnerArgs []string) {
+	t.Helper()
+
+	runnerArgs = append(runnerArgs,
+		filepath.Join(r.clientPath, pamRunnerName))
+	runnerArgs = append(runnerArgs,
+		ptyRunnerArgs(pam_test.RunnerActionLogin, r.socketPath, opts)...)
+
+	env = ptyRunnerEnv(t, r.cliEnv, opts)
+	env = append(env, fmt.Sprintf("%s=%s", pam_test.RunnerEnvOutputFile, r.outputFile))
+
+	return env, runnerArgs
+}
+
+func (r redirectedIORunner) startRedirectedIORunner(t *testing.T, sc redirectedIOScenario, opts clientOptions,
+) *ptytest.Console {
+	t.Helper()
+
+	env, runnerArgs := r.runnerEnv(t, opts)
+
+	// PAM_TTY can only be resolved from inside the spawned shell.
+	// So we compute it at runtime with `tty`. This also mirrors how sudo
+	// derives PAM_TTY from the real controlling terminal.
+	exportTTY := ""
+	if !sc.noPamTTY {
+		exportTTY = fmt.Sprintf("export %s=\"$(tty)\"", pam_test.RunnerEnvTty)
+	}
+
+	// PAM_TTY is captured above while the controlling terminal still exists; the
+	// detached session only affects the exec'd client.
+	execPrefix := "exec"
+	if sc.detachControllingTTY {
+		execPrefix = "exec setsid"
+	}
+
+	script := strings.Join([]string{
+		exportTTY,
+		strings.TrimSpace(fmt.Sprintf(`%s "$@" %s`, execPrefix, sc.ioRedirections)),
+	}, "\n")
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "Setup: bash not found")
+
+	bashArgs := append([]string{"-c", script, "bash"}, runnerArgs...)
+
+	return ptytest.Start(t, bashPath, bashArgs,
+		ptytest.WithEnv(env),
+		ptytest.WithSize(terminalWidth, 50),
+		ptytest.WithTimeout(30*time.Second),
+		ptytest.WithSnapshots(),
+	)
+}
+
+// startBackgroundDetachedRunner launches the PAM runner inside a PTY in an
+// orphaned process group, feeding stdinScript to its piped stdin, and returns
+// the path of the file that will contain the runner result.
+func (r redirectedIORunner) startBackgroundDetachedRunner(t *testing.T, stdinScript string, opts clientOptions,
+) {
+	t.Helper()
+
+	require.NotEmpty(t, stdinScript,
+		"Setup: background scenarios must feed the runner through a pipe")
+
+	env, runnerArgs := r.runnerEnv(t, opts)
+
+	// `set -m` enables job control so the backgrounded pipeline runs in its own
+	// process group. The inner subshell `( ... & )` starts the pipeline and
+	// exits immediately, orphaning that process group.
+	script := strings.Join([]string{
+		fmt.Sprintf("export %s=\"$(tty)\"", pam_test.RunnerEnvTty),
+		"set -m",
+		fmt.Sprintf(`( { %s; } | "$@" >/dev/null 2>&1 & )`, stdinScript),
+		fmt.Sprintf("sleep %d", testutils.MultipliedSleepDuration(60*time.Second)/time.Second),
+	}, "\n")
+
+	bashPath, err := exec.LookPath("bash")
+	require.NoError(t, err, "Setup: bash not found")
+
+	bashArgs := append([]string{"-c", script, "bash"}, runnerArgs...)
+	ptytest.Start(t, bashPath, bashArgs,
+		ptytest.WithEnv(env),
+		ptytest.WithSize(terminalWidth, 50),
+		ptytest.WithTimeout(30*time.Second),
+	)
+}
+
+func (r redirectedIORunner) requireSuccess(t *testing.T, sessionMode authd.SessionMode, user string) {
+	t.Helper()
+
+	content, err := os.ReadFile(r.outputFile)
+	require.NoError(t, err, "reading runner output file %q", r.outputFile)
+	out := string(content)
+
+	require.True(t, runnerOutputCheckSuccess(out, sessionMode, user),
+		"runner output is missing the expected authentication/account-management success:\n%s", out)
+}
+
+func (r redirectedIORunner) requireSuccessEventually(t *testing.T, sessionMode authd.SessionMode, user string) {
+	t.Helper()
+
+	requireFileContentEventually(t, r.outputFile,
+		func(out string) bool { return runnerOutputCheckSuccess(out, sessionMode, user) },
+		100*time.Millisecond, "runner output never reported authentication success")
+}
+
+func runnerOutputCheckSuccess(out string, sessionMode authd.SessionMode, user string) bool {
+	user = strings.ToLower(user)
+	wantAuth := pam_test.RunnerAction(sessionMode).Result().MessageWithError(user, nil)
+	return strings.Contains(out, wantAuth)
+}
+
+func waitForFileContains(t *testing.T, path, substr string) {
+	t.Helper()
+
+	requireFileContentEventually(t, path,
+		func(out string) bool { return strings.Contains(out, substr) },
+		50*time.Millisecond, fmt.Sprintf("output file %q never contained %q", path, substr))
+}
+
+func requireFileContentEventually(t *testing.T, path string, contentOK func(string) bool, tick time.Duration, msg string) {
+	t.Helper()
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		content, err := os.ReadFile(path)
+		if !assert.NoError(c, err, "reading file %q", path) {
+			return
+		}
+		out := string(content)
+		assert.True(c, contentOK(out), "%s:\n%s", msg, out)
+	}, testutils.MultipliedSleepDuration(30*time.Second),
+		testutils.MultipliedSleepDuration(tick))
 }
