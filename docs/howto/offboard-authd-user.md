@@ -17,9 +17,9 @@ active sessions according to the provider's normal offboarding process.
 
 Disabling provider access alone is sufficient to prevent new authd logins if
 [the force provider access check](ref::config-force-provider-auth)
-is enabled. Otherwise, the user may still log in with a cached local password
+is enabled. Otherwise, the user may still log in with a local password
 while the provider is unreachable, so delete the local authd account on
-each affected host as described in the remainder of this guide..
+each affected host as described in the remainder of this guide.
 
 ## Remove the local account
 
@@ -70,6 +70,6 @@ getent passwd alice@example.com
 
 :::{note}
 Deleting the local record does not delete the identity provider account. The
-provider step must be completed to prevent the user from being registered
+provider step must be completed to prevent the user account from being created
 again on a later login.
 :::

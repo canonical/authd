@@ -16,7 +16,7 @@ After the first login, an authd user has a local password. When the user signs
 in with an Entra ID password through the Entra authentication flow, authd uses
 that password as the local password.
 
-Passwordless Entra authentication and other provider flows prompt the user to
+Passwordless Entra authentication and other authentication flows prompt the user to
 create a local password. This local password can be used for subsequent logins.
 It can also be used for offline logins when the broker supports them.
 
@@ -39,7 +39,7 @@ flow and then choose a new local password:
 1. Start a login through [GDM](howto::login-gdm) or [SSH](howto::login-ssh).
 2. Return to the authentication-method selection instead of entering the
    current local password.
-3. Select the device code flow, or another provider flow that can set a local
+3. Select the device code flow, or another authentication flow that can set a local
    password.
 4. Complete the online authentication and enter the new local password when
    prompted.

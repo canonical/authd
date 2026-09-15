@@ -86,9 +86,6 @@ sudo systemctl restart snap.authd-oidc.authd-oidc.service
 If you don't want to grant access to all users, add the user's exact name to
 `allowed_users`:
 
-```ini
-allowed_users = OWNER,alice@example.com
-```
 :::
 
 
