@@ -2,7 +2,7 @@
 myst:
   html_meta:
     "description lang=en":
-      "authd guides on user management for common adminstrator tasks."
+      "authd guides on user management for common administrator tasks."
 ---
 
 (howto::user-management)=
