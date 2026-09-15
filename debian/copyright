@@ -924,6 +924,10 @@ Files: vendor_rust/want/*
 Copyright: 2018-2019 Sean McArthur
 License: Expat
 
+Files: vendor_rust/zlib-rs/*
+Copyright: 2024 Trifecta Tech Foundation
+License: Zlib
+
 # License texts
 
 License: 0BSD
