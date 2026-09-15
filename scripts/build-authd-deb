@@ -1,0 +1,144 @@
+#!/bin/bash
+
+set -euo pipefail
+
+usage(){
+    cat << EOF
+Usage: $0 [options]
+
+Build the authd source and binary deb packages. The build is done in a fresh
+clone of the repository in a separate build directory, so that files that are
+not tracked by git are not included in the package. Uncommitted changes in the
+repository are applied to the build directory
+
+Options:
+  --build-dir <dir>
+      Directory to use for building the package. Defaults to ../build/<repo>.
+      The build artifacts are created in the parent directory of the build
+      directory, so in ../build/ by default.
+
+  --no-lintian
+      Don't run lintian on the source and binary packages. Speeds up the build,
+      but the resulting package won't be checked for issues.
+
+  --only-source
+      Only build the source package, don't build the binary package in sbuild.
+
+  --only-binary
+      Only build the binary package in sbuild, don't build the source package.
+      Requires that the source package is already built and available in the
+      parent directory of the build directory.
+
+  --dist <distribution>
+      The target distribution to build the package for (default: noble).
+EOF
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --build-dir)
+            BUILD_DIR="$2"
+            shift 2
+            ;;
+        --no-lintian)
+            NO_LINTIAN=1
+            shift
+            ;;
+        --only-source)
+            ONLY_SOURCE=1
+            shift
+            ;;
+        --only-binary)
+            ONLY_BINARY=1
+            shift
+            ;;
+        --dist)
+            DIST="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+GIT_ROOT_DIR=$(git rev-parse --show-toplevel)
+BUILD_DIR=${BUILD_DIR:-../build/$(basename "${GIT_ROOT_DIR}")}
+DIST=${DIST:-"noble"}
+
+set -x
+
+if [ -n "${NO_LINTIAN:-}" ]; then
+    SBUILD_ARGS="--no-run-lintian"
+fi
+
+if ! dpkg --status dh-cargo >/dev/null; then
+    echo "dh-cargo is not installed, installing it now..."
+    sudo apt install dh-cargo
+fi
+
+# Create the build directory
+"${SCRIPT_DIR}/create-build-dir" --build-dir "${BUILD_DIR}"
+cd "${BUILD_DIR}"
+
+if [ -z "${ONLY_BINARY:-}" ]; then
+    # Build the source package
+    env \
+      DEB_BUILD_OPTIONS=nocheck \
+      debuild \
+        --no-lintian \
+        -d \
+        --prepend-path="${HOME}/.cargo/bin" \
+        --prepend-path=/usr/local/bin \
+        -S \
+        --unsigned-source \
+        --unsigned-changes
+
+    if [ -z "${NO_LINTIAN:-}" ]; then
+        # shellcheck disable=SC2012 # The .dsc file doesn't contain non-alphanumeric characters
+        DSC_FILE="$(ls -t1 ../*.dsc | head -n1)"
+        lintian --tag-display-limit 0 \
+                --pedantic \
+                --fail-on error,warning,info,pedantic \
+                "$DSC_FILE"
+    fi
+fi
+
+if [ -n "${ONLY_SOURCE:-}" ]; then
+    exit 0
+fi
+
+CHROOT_TARBALL="$HOME/.cache/sbuild/${DIST}-amd64.tar.zst"
+if ! [ -f "$CHROOT_TARBALL" ]; then
+    # Create the sbuild chroot tarball if it doesn't exist
+    # shellcheck disable=SC2016 # We don't want the expression in --customize-hook to be expanded
+    mmdebstrap --variant=buildd --arch=amd64 \
+        --components=main,universe \
+        --include=software-properties-common \
+        --customize-hook='chroot "$1" add-apt-repository -y ppa:ubuntu-enterprise-desktop/golang' \
+        "${DIST}" \
+        "$CHROOT_TARBALL"
+fi
+
+# Build the amd64 binary package in sbuild
+# shellcheck disable=SC2086 # Allow word splitting for SBUILD_ARGS
+# shellcheck disable=SC2012 # The .dsc file doesn't contain non-alphanumeric characters
+env \
+    DEB_BUILD_OPTIONS=nocheck \
+    sbuild ${SBUILD_ARGS:-} -A -v \
+        --build-dir="$(dirname "$(pwd)")" \
+        --build-dep-resolver=aptitude \
+        --dist="${DIST}" \
+        --chroot-mode=unshare \
+        --chroot="source:${CHROOT_TARBALL}" \
+        --enable-network \
+        --lintian-opts="--pedantic --fail-on error,warning,info,pedantic" \
+        "$(ls -t1 ../*.dsc | head -n1)"
