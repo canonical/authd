@@ -1,0 +1,82 @@
+#!/bin/bash
+
+set -euo pipefail
+set -x
+
+zero=$(git hash-object --stdin </dev/null | tr '[0-9a-f]' '0')
+
+go mod vendor
+
+if cargo metadata --no-deps --frozen --quiet >/dev/null 2>&1; then
+    if ! cargo help fmt >/dev/null 2>&1; then
+        set +x
+        echo >&2 "pre-push: Warning: The installed cargo version does not support \`cargo fmt\`"
+        set -x
+    elif ! cargo fmt --check; then
+        set +x
+        echo >&2 "pre-push: Error: cargo fmt failed"
+        FAILED=1
+    fi
+fi
+
+install_golangci_lint() {
+    local version
+    version=$(go mod edit -json "tools/go.mod" | \
+      jq -r '.Require[] | select(.Path | test("golangci-lint")) | .Version')
+    go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@"$version"
+}
+
+if ! golangci-lint run; then
+    set +x
+    echo >&2 "pre-push: Error: golangci-lint failed"
+    FAILED=1
+fi
+
+while read local_ref local_oid remote_ref remote_oid; do
+    if [ "$local_oid" = "$zero" ]; then
+        # Handle delete
+        :
+    else
+        if [ "$remote_oid" = "$zero" ]; then
+            # New branch, examine all commits
+            range="$local_oid"
+        else
+            # Update to existing branch, examine new commits
+            range="$remote_oid..$local_oid"
+        fi
+
+        # Check if the strings "DO-NOT-PUSH" are present in the commits being pushed
+        if git diff "$range" | grep -e DO-NOT-PUSH | grep -v "mktemp"; then
+            set +x
+            echo >&2 "pre-push: Error: Found string DO-NOT-PUSH in $local_ref"
+            FAILED=1
+        fi
+
+        # Check if we can build all the brokers (if there are changes in
+        # authd-oidc-brokers)
+        if [ -d ./authd-oidc-brokers/cmd/authd-oidc ] && \
+          git diff --name-only "$range" | grep -q '^authd-oidc-brokers/'; then
+            go -C authd-oidc-brokers build -v -o /dev/null ./cmd/authd-oidc
+            go -C authd-oidc-brokers build -v -tags=withgoogle -o /dev/null ./cmd/authd-oidc
+            go -C authd-oidc-brokers build -v -tags=withmsentraid -o /dev/null ./cmd/authd-oidc
+        fi
+
+        # Check if the golden files containing the registered gRPC services are
+        # up to date (if there are changes in internal/services)
+        if [ -d internal/services ] && \
+          git diff --name-only "$range" | grep -q '^internal/services/'; then
+            TESTS_UPDATE_GOLDEN=1 go test -C internal/services -run TestRegisterGRPCServices
+            # Check if any files were modified
+            if [ -n "$(git status --porcelain internal/services)" ]; then
+                set +x
+                echo >&2 "pre-push: Error: internal/services: golden files were updated, please commit the changes"
+                FAILED=1
+            fi
+        fi
+    fi
+done
+
+set +x
+if [ -n "${FAILED:-}" ]; then
+    exit 1
+fi
