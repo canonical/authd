@@ -28,6 +28,7 @@ Optional environment variables:
   AUTHD_DEB           Host path to the authd package for migration tests
   AUTHD_PPA           PPA to use for authd dependencies in migration tests
   BROKER_SNAP         Host path to the broker snap for migration tests
+  LOCAL_DEBS          Newline-separated local .deb paths for migration tests
 
 Options:
   -u, --user <name>            Username for the tests (can also be set via E2E_USER environment variable)
@@ -37,6 +38,7 @@ Options:
   -r, --release <release>      Ubuntu release to test (e.g., 'resolute', can also be set via RELEASE environment variable)
   -o, --output-dir DIR         Directory to store test outputs (default: temporary directory)
   -t, --test <name>            Run only the named test case (can be repeated)
+      --local-deb <path>       Local .deb file or directory for migration tests (can be repeated)
   -h, --help                   Show this help message and exit
       --rerunfailed            Re-run only the tests that failed in the previous run
 EOF
@@ -46,6 +48,8 @@ ROOT_DIR=$(dirname "$(readlink -f "$0")")
 TESTS_DIR="${ROOT_DIR}/tests"
 LISTENER_DIR="${ROOT_DIR}/listener"
 TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
+# shellcheck source=vm/lib/libprovision.sh
+source "${ROOT_DIR}/vm/lib/libprovision.sh"
 
 # Load broker-specific credentials from e2e-tests-<broker>.env before argument
 # parsing, so that explicit CLI flags take priority over values from the file.
@@ -80,6 +84,7 @@ unset _scan_broker _scan_args _env_file _git_common_dir
 # Parse command line arguments
 TESTS_TO_RUN=()
 TEST_CASES_TO_RUN=()
+LOCAL_DEB_ARGS=()
 while [[ $# -gt 0 ]]; do
     key="$1"
 
@@ -121,6 +126,15 @@ while [[ $# -gt 0 ]]; do
             TEST_CASES_TO_RUN+=("$2")
             shift 2
             ;;
+        --local-deb)
+            if [[ $# -lt 2 ]]; then
+                echo >&2 "Error: $1 requires an argument"
+                usage
+                exit 1
+            fi
+            LOCAL_DEB_ARGS+=("$2")
+            shift 2
+            ;;
         -h|--help)
             usage
             exit 0
@@ -149,6 +163,21 @@ if [ -z "${E2E_USER:-}" ] || [ -z "${E2E_PASSWORD:-}" ] || [ -z "${BROKER:-}" ] 
     echo >&2  "Error: E2E_USER, E2E_PASSWORD, BROKER, RELEASE, and TOTP_SECRET must be set either as environment variables or via command line arguments."
     usage
     exit 1
+fi
+
+LOCAL_DEB_INPUTS=()
+if [ -n "${LOCAL_DEBS:-}" ]; then
+    while IFS= read -r local_deb; do
+        if [ -n "${local_deb}" ]; then
+            LOCAL_DEB_INPUTS+=("${local_deb}")
+        fi
+    done <<< "${LOCAL_DEBS}"
+fi
+LOCAL_DEB_INPUTS+=("${LOCAL_DEB_ARGS[@]}")
+collect_local_debs "${LOCAL_DEB_INPUTS[@]}"
+LOCAL_DEBS_FOR_ROBOT=""
+if [ "${#LOCAL_DEB_FILES[@]}" -gt 0 ]; then
+    LOCAL_DEBS_FOR_ROBOT="$(printf '%s\n' "${LOCAL_DEB_FILES[@]}")"
 fi
 
 VM_NAME=${VM_NAME:-"e2e-runner-${RELEASE}"}
@@ -235,6 +264,7 @@ env \
     AUTHD_DEB="${AUTHD_DEB:-}" \
     AUTHD_PPA="${AUTHD_PPA:-}" \
     BROKER_SNAP="${BROKER_SNAP:-}" \
+    LOCAL_DEBS="${LOCAL_DEBS_FOR_ROBOT}" \
     VNC_PORT="$VNC_PORT" \
     SYSTEMD_SUPPORTS_VSOCK="${SYSTEMD_SUPPORTS_VSOCK:-}" \
     YARF_LOG_VIDEO="${YARF_LOG_VIDEO}" \

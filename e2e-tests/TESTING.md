@@ -54,11 +54,27 @@ ssh-add /path/to/key
 This sets up a libvirt VM with Ubuntu, installs authd and the broker, and
 creates the snapshots required by the tests. By default, authd is installed
 from the [authd-edge PPA][authd-edge-ppa] and the broker from the edge channel
-snap. Use `--authd-deb` to install a locally built authd package, `--authd-ppa
-<ppa>` to select a different PPA for authd and its dependencies, or
-`--broker-snap` to install a locally built broker snap. Run
+snap. Use `--authd-deb` to install a locally built authd package,
+`--authd-ppa <ppa>` to select a different PPA for authd and its dependencies,
+`--local-deb <path>` to install one or more locally built Debian packages, or
+`--broker-snap` to install a locally built broker snap. `--local-deb` accepts
+either a `.deb` file or a directory containing `.deb` files, and can be
+repeated. Run
 `./e2e-tests/vm/provision.sh --help` for all available options, including
 `--force` to reprovision.
+
+For example, to test authd against packages built from a local gnome-shell
+repository, pass the directory containing its build output:
+
+```bash
+./e2e-tests/vm/provision.sh \
+    --release resolute \
+    --broker authd-msentraid \
+    --local-deb /path/to/gnome-shell/build \
+    --force
+```
+
+The directory form also supports any other local Debian package dependencies.
 
 ### 4. Set up YARF
 
@@ -101,7 +117,9 @@ suites start with the last stable authd and broker releases before installing
 the branch-built package or snap. To use locally built packages in those suites,
 set `AUTHD_DEB` and `BROKER_SNAP` to their host paths when running
 `run-tests.sh`. Set `AUTHD_PPA` as well when the authd package dependencies
-should come from a different PPA.
+should come from a different PPA. When running migration suites with local
+package dependencies, pass the same `--local-deb` options to `run-tests.sh`;
+the packages are installed when the migration updates authd.
 
 The E2E workflow runs for a pull request only when it has the `e2e-tests` label.
 The pull request template contains commented examples for selecting Ubuntu

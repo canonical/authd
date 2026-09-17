@@ -27,6 +27,45 @@ function assert_env_vars() {
     fi
 }
 
+function collect_local_debs() {
+    LOCAL_DEB_FILES=()
+
+    local local_path
+    local local_deb
+    local found
+
+    for local_path in "$@"; do
+        if [ -d "${local_path}" ]; then
+            found=false
+            while IFS= read -r -d '' local_deb; do
+                LOCAL_DEB_FILES+=("${local_deb}")
+                found=true
+            done < <(
+                find -- "${local_path}" \
+                    -mindepth 1 \
+                    -maxdepth 1 \
+                    -type f \
+                    -name '*.deb' \
+                    -print0
+            )
+
+            if [ "${found}" = false ]; then
+                echo "No .deb files found in local package directory '${local_path}'." >&2
+                exit 1
+            fi
+        elif [ -f "${local_path}" ]; then
+            if [[ "${local_path}" != *.deb ]]; then
+                echo "Local package '${local_path}' is not a .deb file." >&2
+                exit 1
+            fi
+            LOCAL_DEB_FILES+=("${local_path}")
+        else
+            echo "Local package path '${local_path}' does not exist." >&2
+            exit 1
+        fi
+    done
+}
+
 function resolve_devel_release() {
     local release="$1"
 

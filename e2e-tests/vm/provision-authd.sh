@@ -10,7 +10,7 @@ DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/authd-e2e-tests"
 
 usage(){
     cat << EOF
-Usage: $0 [--config-file <file>] [--release <release>] [--authd-deb <deb>] [--authd-ppa <ppa>] [--broker-snap <snap>]
+Usage: $0 [--config-file <file>] [--release <release>] [--authd-deb <deb>] [--local-deb <deb-or-dir>] [--authd-ppa <ppa>] [--broker-snap <snap>]
 
 Options:
    --config-file <file>  Path to the configuration file (default: config.env)
@@ -19,6 +19,8 @@ Options:
                         The existing snapshots will be deleted and recreated with the new installation.
    --broker <broker>    The broker to install ("authd-google", "authd-msentraid", ...)
    --authd-deb <deb>    Path to the authd deb file to install (default: install from the edge PPA)
+   --local-deb <path>   Path to a local .deb file or a directory containing
+                        local .deb files; can be repeated
    --authd-ppa <ppa>    PPA to use instead of authd-edge when installing authd
                         and its dependencies
    --broker-snap <snap> Path to the broker snap file to install (default: install from the edge channel)
@@ -27,6 +29,8 @@ Options:
 Provisions authd in the VM for end-to-end tests
 EOF
 }
+
+LOCAL_DEB_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -48,6 +52,15 @@ while [[ $# -gt 0 ]]; do
             ;;
         --authd-deb)
             AUTHD_DEB="$2"
+            shift 2
+            ;;
+        --local-deb)
+            if [ $# -lt 2 ]; then
+                echo >&2 "Error: $1 requires an argument"
+                usage
+                exit 1
+            fi
+            LOCAL_DEB_ARGS+=("$2")
             shift 2
             ;;
         --authd-ppa)
@@ -137,6 +150,8 @@ if [ -n "${BROKER:-}" ]; then
     fi
     unset _env_file _git_common_dir
 fi
+
+collect_local_debs "${LOCAL_DEB_ARGS[@]}"
 
 # CLI --release overrides the config file value
 RELEASE="${RELEASE_ARG:-${RELEASE:-}}"
@@ -236,6 +251,28 @@ function install_broker() {
     wait_for_system_running
 }
 
+function install_local_debs() {
+    if [ "${#LOCAL_DEB_FILES[@]}" -eq 0 ]; then
+        return
+    fi
+
+    local remote_dir="/home/ubuntu/e2e-local-debs"
+    local local_deb
+    local remote_deb
+    local index=0
+
+    "$SSH" rm -rf "${remote_dir}"
+    "$SSH" mkdir -p "${remote_dir}"
+
+    for local_deb in "${LOCAL_DEB_FILES[@]}"; do
+        remote_deb="${remote_dir}/${index}-$(basename "${local_deb}")"
+        "${SCP}" "${local_deb}" "${remote_deb}"
+        index=$((index + 1))
+    done
+
+    "$SSH" "apt-get install -y ${remote_dir}/*.deb"
+}
+
 # Print executed commands to ease debugging
 set -x
 
@@ -301,6 +338,10 @@ $SSH bash -euo pipefail -s <<-EOF
 		ExecStart=/usr/libexec/authd -vv
 	UNIT
 EOF
+
+# Install local package dependencies before authd so its package constraints
+# are resolved against the requested local versions.
+install_local_debs
 
 # Install the version of authd to test
 if [ -n "${AUTHD_DEB:-}" ]; then

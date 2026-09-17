@@ -259,6 +259,20 @@ Update Authd
         ${authd_ppa}=    Set Variable    ubuntu-enterprise-desktop/authd-edge
     END
     SSH.Execute    add-apt-repository ppa:${authd_ppa} -y    timeout=300
+
+    ${local_deb_paths}=    Get Environment Variable    LOCAL_DEBS    ${EMPTY}
+    ${local_debs}=    Evaluate    $local_deb_paths.splitlines()
+    IF    $local_debs
+        SSH.Execute    rm -rf /home/ubuntu/e2e-local-debs && mkdir -p /home/ubuntu/e2e-local-debs
+        ${local_deb_index}=    Set Variable    0
+        FOR    ${local_deb}    IN    @{local_debs}
+            ${local_deb_name}=    Evaluate    os.path.basename($local_deb)    modules=os
+            SSH.Copy To VM    ${local_deb}    /home/ubuntu/e2e-local-debs/${local_deb_index}-${local_deb_name}
+            ${local_deb_index}=    Evaluate    int($local_deb_index) + 1
+        END
+        SSH.Execute    apt-get install -y /home/ubuntu/e2e-local-debs/*.deb    timeout=300
+    END
+
     ${authd_deb}=    Get Environment Variable    AUTHD_DEB    ${EMPTY}
     IF    $authd_deb != ''
         SSH.Copy To VM    ${authd_deb}    /home/ubuntu/authd-under-test.deb
