@@ -14,8 +14,13 @@ on:
         required: false
         type: string
         default: ''
-      authd-ppa:
-        description: 'If set, use this PPA instead of authd-edge when installing the authd package and its dependencies'
+      apt-source:
+        description: 'If set, update all packages except authd from this PPA or Ubuntu archive suite'
+        required: false
+        type: string
+        default: ''
+      authd-apt-source:
+        description: 'If set, install authd from this PPA or Ubuntu archive suite'
         required: false
         type: string
         default: ''
@@ -136,6 +141,7 @@ jobs:
 
       - name: Download the authd deb
         id: download-authd-deb
+        if: inputs.authd-apt-source == ''
         env:
           OCI_REPO: ghcr.io/${{ github.repository }}/authd-deb-${{ inputs.ubuntu-release }}
           OCI_TAG: ${{ github.sha }}
@@ -219,8 +225,9 @@ jobs:
           # Provision the VM (reads RELEASE, BROKER, VM_NAME_BASE, ARTIFACTS_DIR, and
           # broker credentials from the environment)
           ${{ env.E2E_TESTS_DIR }}/vm/provision-authd.sh \
-            --authd-deb "${{ steps.download-authd-deb.outputs.deb }}" \
-            ${{ inputs.authd-ppa && format('--authd-ppa {0}', inputs.authd-ppa) || '' }} \
+            ${{ inputs.authd-apt-source == '' && format('--authd-deb "{0}"', steps.download-authd-deb.outputs.deb) || '' }} \
+            ${{ inputs.apt-source && format('--apt-source {0}', inputs.apt-source) || '' }} \
+            ${{ inputs.authd-apt-source && format('--authd-apt-source {0}', inputs.authd-apt-source) || '' }} \
             --broker-snap "${{ steps.download-broker-snap-from-store.outputs.snap || steps.download-broker-snap-from-oci.outputs.snap }}"
 
       - name: Checkout YARF repo
@@ -243,7 +250,8 @@ jobs:
           E2E_TESTS: ${{ inputs.e2e-tests }}
           E2E_TEST_CASES: ${{ inputs.e2e-test-cases }}
           AUTHD_DEB: ${{ steps.download-authd-deb.outputs.deb }}
-          AUTHD_PPA: ${{ inputs.authd-ppa }}
+          APT_SOURCE: ${{ inputs.apt-source }}
+          AUTHD_APT_SOURCE: ${{ inputs.authd-apt-source }}
           BROKER_SNAP: ${{ steps.download-broker-snap-from-store.outputs.snap || steps.download-broker-snap-from-oci.outputs.snap }}
         run: |
           set -eux

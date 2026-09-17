@@ -13,6 +13,7 @@ on:
       - '.github/workflows/e2e-tests-run.yaml'
       - '.github/workflows/debian-build.yaml'
       - '.github/scripts/parse-e2e-options.sh'
+      - '.github/scripts/resolve-release.sh'
       - '!.gitignore'
       - '!.gitmodules'
       - '!.golangci.yaml'
@@ -38,6 +39,7 @@ on:
       - '.github/workflows/e2e-tests-run.yaml'
       - '.github/workflows/debian-build.yaml'
       - '.github/scripts/parse-e2e-options.sh'
+      - '.github/scripts/resolve-release.sh'
       - '!.gitignore'
       - '!.gitmodules'
       - '!.golangci.yaml'
@@ -82,8 +84,13 @@ on:
         required: false
         default: ''
         type: string
-      e2e-ppa:
-        description: 'e2e-ppa: Optional PPA name, such as authd-dev; empty uses authd-edge'
+      e2e-apt-source:
+        description: 'e2e-apt-source: Optional authd PPA or Ubuntu archive suite for all packages except authd'
+        required: false
+        default: ''
+        type: string
+      e2e-authd-apt-source:
+        description: 'e2e-authd-apt-source: Optional authd PPA or Ubuntu archive suite for authd'
         required: false
         default: ''
         type: string
@@ -120,7 +127,8 @@ jobs:
       ubuntu_releases: ${{ steps.parse_e2e_options.outputs.ubuntu_releases }}
       tests: ${{ steps.parse_e2e_options.outputs.tests }}
       test_cases: ${{ steps.parse_e2e_options.outputs.test_cases }}
-      authd_ppa: ${{ steps.parse_e2e_options.outputs.authd_ppa }}
+      apt_source: ${{ steps.parse_e2e_options.outputs.apt_source }}
+      authd_apt_source: ${{ steps.parse_e2e_options.outputs.authd_apt_source }}
     steps:
       - uses: actions/checkout@v7
       - name: Compute hash of build-relevant files
@@ -138,7 +146,8 @@ jobs:
           E2E_UBUNTU_RELEASES: ${{ inputs.e2e-ubuntu-releases || '' }}
           E2E_TESTS: ${{ inputs.e2e-tests || '' }}
           E2E_TEST_CASE: ${{ inputs.e2e-test-case || '' }}
-          E2E_PPA: ${{ inputs.e2e-ppa || '' }}
+          E2E_APT_SOURCE: ${{ inputs.e2e-apt-source || '' }}
+          E2E_AUTHD_APT_SOURCE: ${{ inputs.e2e-authd-apt-source || '' }}
         run: |
           set -euo pipefail
 
@@ -149,9 +158,10 @@ jobs:
             )
           else
             E2E_TESTS_DESCRIPTION=$(
-              printf 'e2e-brokers: %s\ne2e-ubuntu-releases: %s\ne2e-tests: %s\ne2e-test-case: %s\ne2e-ppa: %s\n' \
+              printf 'e2e-brokers: %s\ne2e-ubuntu-releases: %s\ne2e-tests: %s\ne2e-test-case: %s\ne2e-apt-source: %s\ne2e-authd-apt-source: %s\n' \
                 "${E2E_BROKERS}" "${E2E_UBUNTU_RELEASES}" "${E2E_TESTS}" \
-                "${E2E_TEST_CASE}" "${E2E_PPA}"
+                  "${E2E_TEST_CASE}" "${E2E_APT_SOURCE}" \
+                "${E2E_AUTHD_APT_SOURCE}"
             )
           fi
 
@@ -159,6 +169,7 @@ jobs:
           bash .github/scripts/parse-e2e-options.sh
 
   provision-and-run:
+    name: provision-and-run (${{ matrix.ubuntu-release }})
     needs: prepare-e2e
     permissions:
       contents: read
@@ -171,11 +182,13 @@ jobs:
     uses: ./.github/workflows/e2e-tests-provision-and-run.yaml
     with:
       ubuntu-release: ${{ matrix.ubuntu-release }}
+      ubuntu-releases: ${{ needs.prepare-e2e.outputs.ubuntu_releases }}
       files-hash: ${{ needs.prepare-e2e.outputs.files-hash }}
       force-fresh-image: ${{ github.event_name == 'schedule' }}
       broker-snap-channel: ${{ inputs.broker-snap-channel || '' }}
-      # PRs opt in by adding "e2e-ppa: authd-dev" to their description.
-      authd-ppa: ${{ needs.prepare-e2e.outputs.authd_ppa }}
+      # Apply archive sources only to the matrix job for their matching Ubuntu release.
+      apt-source: ${{ needs.prepare-e2e.outputs.apt_source }}
+      authd-apt-source: ${{ needs.prepare-e2e.outputs.authd_apt_source }}
       brokers: ${{ needs.prepare-e2e.outputs.brokers }}
       e2e-test-cases: ${{ needs.prepare-e2e.outputs.test_cases }}
       e2e-tests: ${{ needs.prepare-e2e.outputs.tests }}
