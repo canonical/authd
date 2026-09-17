@@ -314,8 +314,10 @@ Start Log In With Remote User Through GDM
     Left Button Click
 
     # Enter the username. The field's placeholder text is lighter than normal
-    # text, so it often OCRs below the suite's global confidence threshold.
-    Match Text    Username    30    confidence=91
+    # text, and the blinking text cursor can fuse with it (OCR reads
+    # "IUsername"), so it often OCRs below the suite's global confidence
+    # threshold.
+    Match Text    Username    30    confidence=89
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
 
@@ -371,13 +373,17 @@ Log In With Remote User Through GDM: Local Password
     Move Pointer To Not listed
     Left Button Click
     # Enter the username. The field's placeholder text is lighter than normal
-    # text, so it often OCRs below the suite's global confidence threshold.
-    Match Text    Username    30    confidence=91
+    # text, and the blinking text cursor can fuse with it (OCR reads
+    # "IUsername"), so it often OCRs below the suite's global confidence
+    # threshold.
+    Match Text    Username    30    confidence=89
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
 
-    # Enter the password
-    Match Text    Password
+    # Enter the password. The blinking text cursor can fuse with the
+    # placeholder text (OCR reads "IPassword"), lowering confidence below the
+    # suite's global threshold.
+    Match Text    Password    confidence=89
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
@@ -522,7 +528,7 @@ Log In With Remote User Through Polkit: Entra Password
     Hid.Type String    r
     Hid.Keys Combo    Return
 
-    Match Text    Choose your authentication flow    30
+    Match Text    Choose your authentication flow    30    confidence=89
     Match Text    2. Entra ID authentication    15
     Hid.Type String    2
     Hid.Keys Combo    Return

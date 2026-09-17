@@ -49,11 +49,11 @@ Log In And Set Password
     Hid.Type String    ubuntu
     Hid.Keys Combo    Return
 
-    Match Text    New password    30
+    Match Text    New password    30    confidence=89
     Hid.Type String    ${new_password}
     Hid.Keys Combo    Return
 
-    Match Text    Retype new password    30
+    Match Text    Retype new password    30    confidence=89
     Hid.Type String    ${new_password}
     Hid.Keys Combo    Return
 
@@ -67,7 +67,10 @@ Select User
 
 Try Select User
     Hid.Keys Combo    Return
-    Match Text    Password
+    # The blinking text cursor can fuse with the field's placeholder text,
+    # making OCR read it as e.g. "IPassword", which lowers confidence below
+    # the suite's global threshold.
+    Match Text    Password    confidence=89
 
 
 Log Out
