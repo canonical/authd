@@ -933,7 +933,7 @@ handle_module_options (int          argc,
 
   /* We can now remove the first element that was added */
   argc = g_strv_length (args_strv);
-  args = g_ptr_array_new_full (argc - 1, g_free);
+  args = g_ptr_array_new_null_terminated (argc - 1, g_free, TRUE);
   for (int i = 1; i < argc; ++i)
     {
       g_autofree char *arg = g_steal_pointer (&args_strv[i]);
@@ -1184,7 +1184,8 @@ do_pam_action_thread (pam_handle_t *pamh,
   while (!g_dbus_server_is_active (server))
     g_thread_yield ();
 
-  envp = g_ptr_array_new_full (2, g_free);
+  envp = g_ptr_array_new_null_terminated (1 + (interactive_mode ? 9 : 0),
+                                          g_free, TRUE);
   if (interactive_mode)
     {
       maybe_replicate_env (envp, "COLORTERM");
@@ -1208,16 +1209,13 @@ do_pam_action_thread (pam_handle_t *pamh,
 
   g_ptr_array_add (envp, g_strdup_printf ("AUTHD_PAM_SERVER_ADDRESS=%s",
                                           g_dbus_server_get_client_address (server)));
-  /* FIXME: use g_ptr_array_new_null_terminated when we can use newer GLib. */
-  g_ptr_array_add (envp, NULL);
 
   int idx = 0;
   g_ptr_array_insert (args, idx++, g_strdup (exe));
   g_ptr_array_insert (args, idx++, g_strdup ("-flags"));
   g_ptr_array_insert (args, idx++, g_strdup_printf ("%d", flags));
   g_ptr_array_insert (args, idx++, g_strdup (action_name));
-  /* FIXME: use g_ptr_array_new_null_terminated when we can use newer GLib. */
-  g_ptr_array_add (args, NULL);
+  g_assert (g_ptr_array_is_null_terminated (args));
 
   if (is_debug_logging_enabled ())
     {
