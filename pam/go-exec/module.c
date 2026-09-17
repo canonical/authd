@@ -445,7 +445,7 @@ on_exec_module_removed (pam_handle_t *pamh,
                         int           error_status)
 {
   g_autoptr(GDBusServer) server = NULL;
-  ModuleData *module_data = data;
+  g_autofree ModuleData *module_data = g_steal_pointer (&data);
   ActionData *action_data;
 
   if ((action_data = g_atomic_pointer_get (&module_data->action_data)))
@@ -474,28 +474,24 @@ on_exec_module_removed (pam_handle_t *pamh,
 
   g_clear_object (&module_data->cancellable);
   g_clear_pointer (&module_data->main_context, g_main_context_unref);
-  g_free (module_data);
 }
 
 static ModuleData *
 setup_shared_module_data (pam_handle_t *pamh)
 {
   static const char *module_data_key = "go-exec-module-data";
-  ModuleData *module_data = NULL;
+  g_autofree ModuleData *module_data = NULL;
 
   if (pam_get_data (pamh, module_data_key, (const void **) &module_data) == PAM_SUCCESS)
-    return module_data;
+    return g_steal_pointer (&module_data);
 
   module_data = g_new0 (ModuleData, 1);
   if (pam_set_data (pamh, module_data_key, module_data, on_exec_module_removed) != PAM_SUCCESS)
-    {
-      g_free (module_data);
-      return NULL;
-    }
+    return NULL;
 
   module_data->cancellable = g_cancellable_new ();
 
-  return module_data;
+  return g_steal_pointer (&module_data);
 }
 
 static inline gboolean
