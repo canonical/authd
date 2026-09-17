@@ -61,3 +61,12 @@ func (m moduleWrapper) SimulateClientSignal(sig syscall.Signal, shouldExit bool)
 		<-time.After(24 * time.Hour)
 	}
 }
+
+// SimulateClientSignalAfterDelay sends a signal to the child process after the
+// given amount of milliseconds, without blocking the caller, so that the client
+// can be killed while it's waiting for another call to be completed.
+func (m moduleWrapper) SimulateClientSignalAfterDelay(sig syscall.Signal, delayMs int) {
+	time.AfterFunc(time.Duration(delayMs)*time.Millisecond, func() {
+		m.SimulateClientSignal(sig, false)
+	})
+}

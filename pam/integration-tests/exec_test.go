@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/canonical/authd/pam/internal/pam_test"
@@ -633,6 +634,8 @@ func TestExecModule(t *testing.T) {
 		})
 	}
 
+	clientKillDelay := testutils.MultipliedSleepDuration(500 * time.Millisecond)
+
 	// These tests are checking that string conversations are working as expected.
 	stringConvTests := map[string]struct {
 		prompt                string
@@ -642,6 +645,8 @@ func TestExecModule(t *testing.T) {
 		convError             error
 		convHandler           *pam.ConversationFunc
 		convShouldNotBeCalled bool
+		convDelay             time.Duration
+		preMethodCalls        []cliMethodCall
 
 		want           string
 		stringResponse any
@@ -713,6 +718,17 @@ func TestExecModule(t *testing.T) {
 			},
 			wantExitError: pam_test.ErrInvalidArguments,
 		},
+		"Error_if_client_dying_while_a_conversation_is_in_progress": {
+			prompt:    "Are you still there?",
+			convStyle: pam.PromptEchoOn,
+			want:      "Sorry for the delay!",
+			convDelay: clientKillDelay * 4,
+			preMethodCalls: []cliMethodCall{{
+				m:    "SimulateClientSignalAfterDelay",
+				args: []any{syscall.SIGKILL, int(clientKillDelay.Milliseconds())}},
+			},
+			wantExitError: pam.ErrSystem,
+		},
 	}
 	for name, tc := range stringConvTests {
 		t.Run("StringConv "+name, func(t *testing.T) {
@@ -733,6 +749,9 @@ func TestExecModule(t *testing.T) {
 						convFunCalled = true
 						require.Equal(t, prompt, msg)
 						require.Equal(t, tc.convStyle, style)
+						if tc.convDelay > 0 {
+							<-time.After(tc.convDelay)
+						}
 						switch style {
 						case pam.PromptEchoOff, pam.PromptEchoOn:
 							return tc.want, tc.convError
@@ -742,7 +761,7 @@ func TestExecModule(t *testing.T) {
 					})
 			}()
 
-			var methodCalls []cliMethodCall
+			methodCalls := append([]cliMethodCall{}, tc.preMethodCalls...)
 			wantStringResponse := any(nil)
 			if tc.wantError == nil && tc.stringResponse == nil {
 				wantStringResponse = map[string]dbus.Variant{
