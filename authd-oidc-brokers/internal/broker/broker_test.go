@@ -1168,7 +1168,24 @@ func TestIsAuthenticated(t *testing.T) {
 				DeleteClaims: []string{"must-have-claim"},
 			},
 			customHandlers: map[string]testutils.EndpointHandler{
-				// Provide "must-have-claim" via the userinfo endpoint.
+				// Provide "must-have-claim" via the userinfo endpoint. sub must match
+				// the ID token's sub (OIDC Core §5.3.2).
+				"/userinfo": testutils.UserInfoHandler(map[string]interface{}{
+					"sub":             "test-user-id",
+					"must-have-claim": "present",
+				}),
+			},
+		},
+		// OIDC Core §5.3.2: the UserInfo response MUST include a sub claim that
+		// matches the ID token's. A thin ID token forces the broker to fall back
+		// to /userinfo for "must-have-claim"; if that response omits sub entirely,
+		// the merge must still be rejected, not silently accepted.
+		"Error_when_thin_id_token_and_userinfo_omits_sub": {
+			firstSecret: "-",
+			tokenHandlerOptions: &testutils.TokenHandlerOptions{
+				DeleteClaims: []string{"must-have-claim"},
+			},
+			customHandlers: map[string]testutils.EndpointHandler{
 				"/userinfo": testutils.UserInfoHandler(map[string]interface{}{
 					"must-have-claim": "present",
 				}),
@@ -1190,6 +1207,22 @@ func TestIsAuthenticated(t *testing.T) {
 		"Successfully_authenticate_with_name_claim_provider_when_name_is_only_in_userinfo": {
 			firstSecret:                   "-",
 			wantSecondCall:                true,
+			requireNameClaimOnInitialAuth: true,
+			tokenHandlerOptions: &testutils.TokenHandlerOptions{
+				DeleteClaims: []string{"name"},
+			},
+			customHandlers: map[string]testutils.EndpointHandler{
+				"/userinfo": testutils.UserInfoHandler(map[string]interface{}{
+					"sub":             "test-user-id",
+					"must-have-claim": "present",
+					"name":            "Full Name from UserInfo",
+				}),
+			},
+		},
+		// Same gap as above, but for the name-claim-provider fallback path: the
+		// missing claim is "name" instead of "must-have-claim".
+		"Error_when_name_claim_provider_userinfo_omits_sub": {
+			firstSecret:                   "-",
 			requireNameClaimOnInitialAuth: true,
 			tokenHandlerOptions: &testutils.TokenHandlerOptions{
 				DeleteClaims: []string{"name"},
