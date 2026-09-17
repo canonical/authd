@@ -2894,17 +2894,17 @@ func (b *Broker) getUserInfo(ctx context.Context, session *session, token *oauth
 			return info.User{}, fmt.Errorf("could not get user info from UserInfo endpoint: %w", err)
 		}
 
-		// OIDC Core §5.3.2: if the UserInfo response provides a sub claim, it MUST
-		// equal the sub from the verified ID token. A mismatch means the /userinfo
-		// response is attempting to substitute a different ProviderID and must be
-		// rejected to prevent UID takeover.
+		// OIDC Core §5.3.2: the UserInfo response MUST include a sub claim, and it
+		// MUST equal the sub from the verified ID token. A missing or mismatching
+		// sub means the /userinfo response cannot be trusted to describe the same
+		// end user as the ID token, so it must be rejected to prevent UID takeover.
 		var subClaimCheck struct {
 			Sub string `json:"sub"`
 		}
 		if err = userInfoClaims.Claims(&subClaimCheck); err != nil {
 			return info.User{}, fmt.Errorf("could not decode UserInfo endpoint claims: %w", err)
 		}
-		if subClaimCheck.Sub != "" && subClaimCheck.Sub != idToken.Subject {
+		if subClaimCheck.Sub == "" || subClaimCheck.Sub != idToken.Subject {
 			return info.User{}, fmt.Errorf("userinfo sub %q does not match ID token sub %q: rejecting potential identity substitution", subClaimCheck.Sub, idToken.Subject)
 		}
 
