@@ -642,7 +642,15 @@ func TestConcurrentFinishAuthRegistersOneOwner(t *testing.T) {
 			granted++
 		}
 	}
-	require.Equal(t, 1, granted)
+require.Equal(t, 1, granted)
+
+	b.cfg.ownerMutex.RLock()
+	registeredOwner := b.cfg.owner
+	b.cfg.ownerMutex.RUnlock()
+	require.NoError(t, b.cfg.registerOwner("", "user3@example.com"))
+	b.cfg.ownerMutex.RLock()
+	defer b.cfg.ownerMutex.RUnlock()
+	require.Equal(t, registeredOwner, b.cfg.owner)
 }
 
 func TestRegisterOwnerRejectsInvalidChars(t *testing.T) {
