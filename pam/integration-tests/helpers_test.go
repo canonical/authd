@@ -627,6 +627,11 @@ type redirectedIOScenario struct {
 	// the PAM_TTY item.
 	noPamTTY bool
 
+	// pamTTY, when set, is exported as [pam_test.RunnerEnvTty] instead of the
+	// current controlling terminal, so that an invalid or non-terminal PAM_TTY
+	// can be simulated.
+	pamTTY string
+
 	// detachControllingTTY runs the client in a new session (via setsid), so it
 	// has no controlling terminal /dev/tty input is not set.
 	detachControllingTTY bool
@@ -685,7 +690,11 @@ func (r redirectedIORunner) startRedirectedIORunner(t *testing.T, sc redirectedI
 	// So we compute it at runtime with `tty`. This also mirrors how sudo
 	// derives PAM_TTY from the real controlling terminal.
 	exportTTY := ""
-	if !sc.noPamTTY {
+	switch {
+	case sc.noPamTTY:
+	case sc.pamTTY != "":
+		exportTTY = fmt.Sprintf("export %s=%q", pam_test.RunnerEnvTty, sc.pamTTY)
+	default:
 		exportTTY = fmt.Sprintf("export %s=\"$(tty)\"", pam_test.RunnerEnvTty)
 	}
 
@@ -714,10 +723,12 @@ func (r redirectedIORunner) startRedirectedIORunner(t *testing.T, sc redirectedI
 	)
 }
 
-// startBackgroundDetachedRunner launches the PAM runner inside a PTY in an
-// orphaned process group, feeding stdinScript to its piped stdin, and returns
-// the path of the file that will contain the runner result.
-func (r redirectedIORunner) startBackgroundDetachedRunner(t *testing.T, stdinScript string, opts clientOptions,
+// startBackgroundRunner launches the PAM runner inside a PTY in the background
+// of its own process group, feeding stdinScript to its piped stdin. When orphan
+// is true the process group is orphaned (the subshell starting it exits
+// immediately), otherwise the shell stays alive as its parent.
+func (r redirectedIORunner) startBackgroundRunner(t *testing.T, stdinScript string, opts clientOptions,
+	orphan bool,
 ) {
 	t.Helper()
 
@@ -728,11 +739,16 @@ func (r redirectedIORunner) startBackgroundDetachedRunner(t *testing.T, stdinScr
 
 	// `set -m` enables job control so the backgrounded pipeline runs in its own
 	// process group. The inner subshell `( ... & )` starts the pipeline and
-	// exits immediately, orphaning that process group.
+	// exits immediately, orphaning that process group, while a plain `... &`
+	// keeps the shell alive as its parent.
+	pipeline := fmt.Sprintf(`{ %s; } | "$@" >/dev/null 2>&1 &`, stdinScript)
+	if orphan {
+		pipeline = fmt.Sprintf(`( %s )`, pipeline)
+	}
 	script := strings.Join([]string{
 		fmt.Sprintf("export %s=\"$(tty)\"", pam_test.RunnerEnvTty),
 		"set -m",
-		fmt.Sprintf(`( { %s; } | "$@" >/dev/null 2>&1 & )`, stdinScript),
+		pipeline,
 		fmt.Sprintf("sleep %d", testutils.MultipliedSleepDuration(60*time.Second)/time.Second),
 	}, "\n")
 
@@ -745,6 +761,15 @@ func (r redirectedIORunner) startBackgroundDetachedRunner(t *testing.T, stdinScr
 		ptytest.WithSize(terminalWidth, 50),
 		ptytest.WithTimeout(30*time.Second),
 	)
+}
+
+// startBackgroundDetachedRunner launches the PAM runner in an orphaned process
+// group, feeding stdinScript to its piped stdin.
+func (r redirectedIORunner) startBackgroundDetachedRunner(t *testing.T, stdinScript string, opts clientOptions,
+) {
+	t.Helper()
+
+	r.startBackgroundRunner(t, stdinScript, opts, true)
 }
 
 func (r redirectedIORunner) requireSuccess(t *testing.T, sessionMode authd.SessionMode, user string) {

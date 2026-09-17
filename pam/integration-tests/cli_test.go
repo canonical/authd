@@ -856,6 +856,12 @@ func TestCLIAuthenticateRedirectedIO(t *testing.T) {
 		// stderr is closed, input comes from the stdin.
 		"Closed_stderr": {redirections: "2>&-"},
 
+		// stderr is redirected to a non-terminal instead of being closed.
+		"Redirected_stderr": {redirections: "2>/dev/null"},
+
+		// Both stdout and stderr are redirected to a non-terminal.
+		"Redirected_stdout_and_stderr": {redirections: ">/dev/null 2>/dev/null"},
+
 		// Both stdin and stdout detached, only the TTY remains usable.
 		"Closed_stdin_and_redirected_stdout": {redirections: "</dev/null >/dev/null"},
 

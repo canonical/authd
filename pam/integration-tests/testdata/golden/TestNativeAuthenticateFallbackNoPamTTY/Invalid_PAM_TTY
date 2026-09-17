@@ -5,5 +5,5 @@ Choose your provider== Password authentication ==
 Enter 'r' to cancel the request and go back to select the authentication flow
 Gimme your password
 PAM Authenticate()
-  User: "user-integration-native-fallback-testnativeauthenticatefallbacknopamtty@example.com"
+  User: "user-integration-native-fallback-invalid-pam-tty@example.com"
   Result: success

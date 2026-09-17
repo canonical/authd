@@ -827,10 +827,9 @@ func TestNativeAuthenticate(t *testing.T) {
 	}
 }
 
-// TestNativeAuthenticateFallbackNoPamTTY is meant to simulate a similar behavior
-// that we may have in PAM applications that are running with a non-interactive
-// terminal, but without PAM_TTY being set.
-// In this scenario the native UI should be chosen automatically by the PAM
+// TestNativeAuthenticateFallbackNoPamTTY simulates PAM applications running
+// with a non-interactive terminal, or with a PAM_TTY that cannot be used. In
+// all these cases the native UI should be chosen automatically by the PAM
 // module, without forcing any options.
 func TestNativeAuthenticateFallbackNoPamTTY(t *testing.T) {
 	t.Parallel()
@@ -839,26 +838,53 @@ func TestNativeAuthenticateFallbackNoPamTTY(t *testing.T) {
 		t.Skip("skipping test in short mode.")
 	}
 
-	runner := newRedirectedIORunner(t)
-	user := testUserName(t, "native-fallback")
-	c := runner.startRedirectedIORunner(t, redirectedIOScenario{
-		// stdout is a non-terminal while stdin stays the controlling terminal.
-		ioRedirections: ">/dev/null",
-		// No PAM_TTY: we simulate that the client does not set any valid PAM_TTY.
-		noPamTTY: true,
-	}, clientOptions{PamUser: user})
+	tests := map[string]struct {
+		scenario redirectedIOScenario
+		term     string
+	}{
+		// stdout is a non-terminal while stdin stays the controlling terminal,
+		// and no PAM_TTY is set.
+		"No_PAM_TTY": {
+			scenario: redirectedIOScenario{ioRedirections: ">/dev/null", noPamTTY: true},
+		},
+		// PAM_TTY points to a path that cannot be opened.
+		"Invalid_PAM_TTY": {
+			scenario: redirectedIOScenario{ioRedirections: ">/dev/null", pamTTY: "/non-existent/tty"},
+		},
+		// PAM_TTY points to something that is not a terminal.
+		"Non_terminal_PAM_TTY": {
+			scenario: redirectedIOScenario{ioRedirections: ">/dev/null", pamTTY: os.DevNull},
+		},
+		// A dumb terminal cannot render the interactive interface even when
+		// PAM_TTY is a usable terminal.
+		"Dumb_terminal": {
+			scenario: redirectedIOScenario{ioRedirections: ">/dev/null"},
+			term:     "dumb",
+		},
+	}
 
-	waitForFileContains(t, runner.outputFile, "Choose your provider")
-	c.SendLine(t, "2")
-	waitForFileContains(t, runner.outputFile, "Gimme your password")
-	c.SendLine(t, "goodpass")
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	runner.requireSuccessEventually(t, authd.SessionMode_LOGIN, user)
-	c.RequireSuccessfulExit(t)
+			user := testUserName(t, "native-fallback")
+			runner := newRedirectedIORunner(t)
+			c := runner.startRedirectedIORunner(t, tc.scenario,
+				clientOptions{PamUser: user, Term: tc.term})
 
-	out, err := os.ReadFile(runner.outputFile)
-	require.NoError(t, err, "failed to read runner output file")
-	golden.CheckOrUpdate(t, string(out))
+			waitForFileContains(t, runner.outputFile, "Choose your provider")
+			c.SendLine(t, "2")
+			waitForFileContains(t, runner.outputFile, "Gimme your password")
+			c.SendLine(t, "goodpass")
+
+			runner.requireSuccessEventually(t, authd.SessionMode_LOGIN, user)
+			c.RequireSuccessfulExit(t)
+
+			out, err := os.ReadFile(runner.outputFile)
+			require.NoError(t, err, "failed to read runner output file")
+			golden.CheckOrUpdate(t, string(out))
+		})
+	}
 }
 
 // TestNativeAuthenticateRedirectedIO reproduces the cases in which the I/O streams
@@ -890,6 +916,12 @@ func TestNativeAuthenticateRedirectedIO(t *testing.T) {
 
 		// stderr is closed, input comes from the stdin.
 		"Closed_stderr": {redirections: "2>&-"},
+
+		// stderr is redirected to a non-terminal instead of being closed.
+		"Redirected_stderr": {redirections: "2>/dev/null"},
+
+		// Both stdout and stderr are redirected to a non-terminal.
+		"Redirected_stdout_and_stderr": {redirections: ">/dev/null 2>/dev/null"},
 
 		// Both stdin and stdout detached, only the TTY remains usable.
 		"Closed_stdin_and_redirected_stdout": {redirections: "</dev/null >/dev/null"},
@@ -947,6 +979,32 @@ func TestNativeAuthenticateBackgroundDetachedStdin(t *testing.T) {
 		fmt.Sprintf(`printf '%%s\n' '2'; sleep %d; printf '%%s\n' 'goodpass'`,
 			testutils.MultipliedSleepDuration(1*time.Second)/time.Second),
 		clientOptions{PamUser: user})
+
+	runner.requireSuccessEventually(t, authd.SessionMode_LOGIN, user)
+
+	out, err := os.ReadFile(runner.outputFile)
+	require.NoError(t, err, "failed to read runner output file")
+	golden.CheckOrUpdate(t, string(out))
+}
+
+// TestNativeAuthenticateBackgroundStdin simulates a `sudo -S <<< "goodpass" id
+// &` background job whose process group is not orphaned: the controlling
+// terminal is not in our foreground process group, so authd must automatically
+// use the native PAM UI.
+func TestNativeAuthenticateBackgroundStdin(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping test in short mode.")
+	}
+
+	user := testUserName(t, "native-bg")
+
+	runner := newRedirectedIORunner(t)
+	runner.startBackgroundRunner(t,
+		fmt.Sprintf(`printf '%%s\n' '2'; sleep %d; printf '%%s\n' 'goodpass'`,
+			testutils.MultipliedSleepDuration(1*time.Second)/time.Second),
+		clientOptions{PamUser: user}, false)
 
 	runner.requireSuccessEventually(t, authd.SessionMode_LOGIN, user)
 
