@@ -113,6 +113,11 @@ func GetPamIO(mTx pam.ModuleTransaction) (input, output *os.File, cleanup func()
 // terminals that can be used for the interactive interface.
 func IsTerminalTTY(mTx pam.ModuleTransaction) bool {
 	isTerminalTTYOnce.Do(func() {
+		if isDumbTerminal() {
+			// A dumb terminal can't render the interactive interface.
+			return
+		}
+
 		input, output, cleanup := GetPamIO(mTx)
 		defer cleanup()
 
@@ -183,9 +188,9 @@ func isTTYUsable(tty *os.File) bool {
 	return true
 }
 
-// IsDumbTerminal returns whether the TERM environment variable is set to "dumb".
+// isDumbTerminal returns whether the TERM environment variable is set to "dumb".
 // Dumb terminals do not support escape sequences and cannot render the TUI.
-func IsDumbTerminal() bool {
+func isDumbTerminal() bool {
 	return os.Getenv("TERM") == "dumb"
 }
 
