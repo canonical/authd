@@ -642,7 +642,7 @@ func TestConcurrentFinishAuthRegistersOneOwner(t *testing.T) {
 			granted++
 		}
 	}
-require.Equal(t, 1, granted)
+	require.Equal(t, 1, granted)
 
 	b.cfg.ownerMutex.RLock()
 	registeredOwner := b.cfg.owner
