@@ -350,6 +350,16 @@ Select Authentication Mode Through GDM
     Move Pointer To ${authentication_mode}
     Left Button Click
 
+Select Authentication Mode Through GDM Lock Screen
+    [Arguments]    ${authentication_mode}
+    # The lock screen exposes Login Options as the bottom-left key button.
+    # The bottom-right button switches users.
+    Hid.Move Pointer To Proportional    0.91    0.95
+    Left Button Click
+    Match Text    ${authentication_mode}    30
+    Move Pointer To ${authentication_mode}
+    Left Button Click
+
 Enter Entra ID Password And MFA
     # With the device code flow disabled there is only one flow; the PAM module
     # auto-selects it and goes directly to the Entra ID password prompt.
@@ -381,7 +391,7 @@ Unlock Screen With Device Code
     # Wake the display before selecting the alternate authentication flow.
     Hid.Keys Combo    Return
     Match Text    Password    30
-    Select Authentication Mode Through GDM    Device code flow
+    Select Authentication Mode Through GDM Lock Screen    Device code flow
     Match Text    ${DEVICE_URL}    120
     Continue Log In With Remote User: Authenticate In External Browser
     Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
