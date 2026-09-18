@@ -44,7 +44,7 @@ var (
 		EntraAuth:        "Entra ID authentication",
 		EntraMFAWait:     "Waiting for MFA approval",
 		EntraMFACode:     "Enter your MFA code",
-		EntraAuthFido:    "Use your security key",
+		EntraAuthFido:    "Use a security key on this computer",
 		EntraAuthFidoPin: "Enter your security key PIN",
 	}
 )

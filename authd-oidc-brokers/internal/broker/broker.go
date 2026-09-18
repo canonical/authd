@@ -1185,7 +1185,7 @@ func (b *Broker) generateUILayout(session *session, authModeID string) (map[stri
 	case authmodes.EntraAuthFido:
 		uiLayout = map[string]string{
 			"type":  "form",
-			"label": "Insert your security key and touch it",
+			"label": "Use your security key",
 			"wait":  "true",
 		}
 
