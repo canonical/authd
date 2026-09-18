@@ -569,9 +569,10 @@ restrict the flow to specific PAM services.
 
 ### Enable a flow only for some services
 
-Each flow key in `[flows]` accepts either a boolean or a comma-separated list
-of PAM service names. A boolean applies to every service. A list enables the
-flow only for the services it names:
+The positive flow keys in `[flows]` (`device_code` and `entra_auth`) accept
+either a boolean or a comma-separated list of PAM service names. A boolean
+applies to every service. A list enables the flow only for the services it
+names:
 
 ```ini
 [flows]
@@ -585,7 +586,7 @@ A service name is the name of a PAM configuration file in `/etc/pam.d` or
 `/usr/lib/pam.d`, such as `sshd`, `gdm-authd`, `login` or `sudo`. The broker
 logs a warning at startup for any name it cannot find on the system.
 
-```{admonition} Any value that is not a boolean is read as a service list
+```{admonition} Any value that is not a boolean is read as a service list for positive flow keys
 :class: important
 A mistyped boolean such as `device_code = ture` is read as a list containing a
 single service named `ture`, which disables the flow for every real service.
@@ -599,6 +600,10 @@ allowing them: `no_device_code` for `device_code`, and `no_entra_auth` for
 `entra_auth`. A service is offered a flow only when it is allowed by the flow
 key **and** not denied by the `no_` key.
 
+The `no_` keys accept only comma-separated lists of service names. Omit the
+key to deny no services. Set the positive flow key to `false` to disable a
+flow for every service.
+
 Use a `no_` key to make an exception to a flow that is otherwise enabled
 everywhere:
 
@@ -607,8 +612,6 @@ everywhere:
 device_code = true
 no_device_code = sudo, su
 ```
-
-The `no_` keys default to `false`, meaning nothing is denied.
 
 ```{admonition} Services that are not known to the broker
 :class: note
