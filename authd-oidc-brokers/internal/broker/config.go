@@ -237,8 +237,24 @@ func (fc flowsConfig) String() string {
 	return fmt.Sprintf("{%v %v}", fc.DeviceAuth, fc.EntraAuth)
 }
 
-func (fc flowsConfig) hasServiceLists() bool {
-	return fc.DeviceAuth.hasServiceList() || fc.EntraAuth.hasServiceList()
+// warnOnUnknownService warns for every flow with a per-service rule when the
+// PAM service name is unavailable.
+func (fc flowsConfig) warnOnUnknownService(ctx context.Context) {
+	flows := []struct {
+		key  string
+		rule flowRule
+	}{
+		{flowsDeviceAuthKey, fc.DeviceAuth},
+		{flowsEntraAuthKey, fc.EntraAuth},
+	}
+	for _, flow := range flows {
+		// A denylist cannot match an unknown service. Warn when a service
+		// list is present and the positive rule leaves the flow enabled.
+		if !flow.rule.hasServiceList() || !flow.rule.allow.matchesFor("", true) {
+			continue
+		}
+		log.Warningf(ctx, "PAM service name is unknown; per-service restrictions cannot be applied, so the %q flow is enabled for this session", flow.key)
+	}
 }
 
 // flowServiceList pairs a [flows] key with the PAM services it names.

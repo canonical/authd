@@ -618,8 +618,8 @@ no_device_code = sudo, su
 Not every PAM application reports its service name to the broker. When the name
 is missing, allow lists are treated as matching and deny lists as not matching,
 so the flow stays available. This keeps a login path from breaking because of a
-rule that cannot be evaluated. The broker logs a warning once per session when
-this happens.
+rule that cannot be evaluated. The broker logs a warning for each affected flow
+once per session when this happens.
 ```
 
 The per-service rules do not change the startup check: at least one flow must
