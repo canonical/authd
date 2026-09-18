@@ -98,6 +98,104 @@ func (Authenticator) DeviceRequiresPIN() (bool, error) {
 	return requiresPIN, nil
 }
 
+type deviceInfoResult struct {
+	info *libfido2.DeviceInfo
+	err  error
+}
+
+// deviceInfoWithContext keeps the device alive until the blocking libfido2
+// query returns, while allowing the broker request to stop waiting when its
+// context is cancelled.
+func deviceInfoWithContext(ctx context.Context, device *libfido2.Device) (*libfido2.DeviceInfo, error) {
+	if ctx.Err() != nil {
+		return nil, ErrCanceled
+	}
+
+	resultCh := make(chan deviceInfoResult, 1)
+	go func() {
+		info, err := device.Info()
+		resultCh <- deviceInfoResult{info: info, err: err}
+	}()
+
+	select {
+	case result := <-resultCh:
+		if ctx.Err() != nil {
+			return nil, ErrCanceled
+		}
+		return result.info, result.err
+	case <-ctx.Done():
+		_ = device.Cancel()
+		return nil, ErrCanceled
+	}
+}
+
+// HoldsCredential performs a silent CTAP allow-list pre-flight (`up=false`)
+// before a touch. UV-protected `NO_CREDENTIALS` results are indeterminate,
+// and a timed Assert is not equivalent because matching keys wait for touch.
+func (Authenticator) HoldsCredential(ctx context.Context, challenge string, allowList []string) (bool, error) {
+	if ctx.Err() != nil {
+		return false, ErrCanceled
+	}
+
+	device, err := firstDevice()
+	if err != nil {
+		return false, err
+	}
+
+	credentialIDs, err := decodeAllowList(allowList)
+	if err != nil {
+		return false, err
+	}
+
+	clientDataHash := sha256.Sum256(clientDataJSON(challenge))
+	_, err = assertionWithContext(ctx, device, relyingPartyID, clientDataHash[:], credentialIDs, "", &libfido2.AssertionOpts{UP: libfido2.False})
+	if errors.Is(err, ErrCanceled) {
+		return false, err
+	}
+
+	userVerificationPossible := false
+	if errors.Is(err, libfido2.ErrNoCredentials) {
+		info, infoErr := deviceInfoWithContext(ctx, device)
+		if errors.Is(infoErr, ErrCanceled) {
+			return false, infoErr
+		}
+		if infoErr == nil {
+			for _, option := range info.Options {
+				if (option.Name == "clientPin" || option.Name == "uv") && option.Value == libfido2.True {
+					userVerificationPossible = true
+					break
+				}
+			}
+		} else if !errors.Is(infoErr, libfido2.ErrNotFIDO2) {
+			return false, fmt.Errorf("could not determine whether the security key requires user verification: %w", infoErr)
+		}
+	}
+	if ctx.Err() != nil {
+		return false, ErrCanceled
+	}
+
+	holds, err := classifyCredentialCheck(err, userVerificationPossible)
+	if err != nil {
+		return false, err
+	}
+	log.Debugf(context.Background(), "Connected security key holds one of the %d allowed credential(s): %v", len(credentialIDs), holds)
+	return holds, nil
+}
+
+func classifyCredentialCheck(err error, userVerificationPossible bool) (bool, error) {
+	holds := err == nil || errors.Is(err, libfido2.ErrUserPresenceRequired) || errors.Is(err, libfido2.ErrUPRequired)
+	if holds {
+		return true, nil
+	}
+	if errors.Is(err, libfido2.ErrNoCredentials) {
+		if userVerificationPossible {
+			return false, ErrCredentialCheckIndeterminate
+		}
+		return false, nil
+	}
+	return false, fmt.Errorf("failed to check the security key for an allowed credential: %v", err)
+}
+
 // Assert performs the WebAuthn Get ceremony for the given MFA-flow challenge
 // and allow list, blocking until the user touches the device, the device
 // times out, or ctx is canceled. It returns the assertion JSON that
@@ -135,31 +233,53 @@ func (Authenticator) Assert(ctx context.Context, challenge string, allowList []s
 		}
 	}
 
-	type assertResult struct {
-		assertion *libfido2.Assertion
-		err       error
+	assertion, err := assertionWithContext(ctx, device, relyingPartyID, clientDataHash[:], credentialIDs, pin, opts)
+	if err != nil {
+		if errors.Is(err, ErrCanceled) {
+			return "", err
+		}
+		// The raw error carries the CTAP code that mapAssertionError collapses
+		// into a sentinel; log it with the verification we asked for.
+		log.Debugf(ctx, "FIDO assertion ceremony failed (pinProvided=%v, uvRequested=%v): %v", pin != "", opts.UV == libfido2.True, err)
+		return "", mapAssertionError(err)
 	}
-	resultCh := make(chan assertResult, 1)
+
+	authData, err := rawAuthData(assertion.AuthDataCBOR)
+	if err != nil {
+		return "", err
+	}
+
+	return buildAssertionJSON(
+		assertion.CredentialID,
+		clientData,
+		authData,
+		assertion.Sig,
+		assertion.User.ID,
+	)
+}
+
+type assertionResult struct {
+	assertion *libfido2.Assertion
+	err       error
+}
+
+func assertionWithContext(ctx context.Context, device *libfido2.Device, rpID string, clientDataHash []byte, credentialIDs [][]byte, pin string, opts *libfido2.AssertionOpts) (*libfido2.Assertion, error) {
+	if ctx.Err() != nil {
+		return nil, ErrCanceled
+	}
+
+	resultCh := make(chan assertionResult, 1)
 	go func() {
-		assertion, err := device.Assertion(relyingPartyID, clientDataHash[:], credentialIDs, pin, opts)
-		resultCh <- assertResult{assertion, err}
+		assertion, err := device.Assertion(rpID, clientDataHash, credentialIDs, pin, opts)
+		resultCh <- assertionResult{assertion, err}
 	}()
 
-	var result assertResult
 	select {
-	case result = <-resultCh:
+	case result := <-resultCh:
+		return result.assertion, result.err
 	case <-ctx.Done():
-		// Interrupt the ceremony so the device stops blinking, then wait for
-		// the in-flight call to return: the Device must not be garbage
-		// collected while libfido2 still uses it.
-		//
-		// go-libfido2 v1.5.3 publishes its internal device pointer in open()
-		// without synchronization, so a Cancel landing before the ceremony
-		// goroutine opened the device is a silent no-op that would leave the
-		// wait below blocking until the untouched ceremony times out on its
-		// own. Re-issue Cancel until the ceremony actually returns: once the
-		// device is open, fido_dev_cancel makes the blocking
-		// fido_dev_get_assert return FIDO_ERR_KEEPALIVE_CANCEL.
+		// Interrupt the operation, then wait for it to return: the Device
+		// must not be garbage collected while libfido2 still uses it.
 		var cancelErr error
 		retry := time.NewTicker(cancelRetryInterval)
 		defer retry.Stop()
@@ -170,32 +290,13 @@ func (Authenticator) Assert(ctx context.Context, challenge string, allowList []s
 			select {
 			case <-resultCh:
 				if cancelErr != nil {
-					return "", errors.Join(ErrCanceled, fmt.Errorf("failed to cancel FIDO assertion: %v", cancelErr))
+					return nil, errors.Join(ErrCanceled, fmt.Errorf("failed to cancel FIDO assertion: %v", cancelErr))
 				}
-				return "", ErrCanceled
+				return nil, ErrCanceled
 			case <-retry.C:
 			}
 		}
 	}
-	if result.err != nil {
-		// The raw error carries the CTAP code that mapAssertionError collapses
-		// into a sentinel; log it with the verification we asked for.
-		log.Debugf(ctx, "FIDO assertion ceremony failed (pinProvided=%v, uvRequested=%v): %v", pin != "", opts.UV == libfido2.True, result.err)
-		return "", mapAssertionError(result.err)
-	}
-
-	authData, err := rawAuthData(result.assertion.AuthDataCBOR)
-	if err != nil {
-		return "", err
-	}
-
-	return buildAssertionJSON(
-		result.assertion.CredentialID,
-		clientData,
-		authData,
-		result.assertion.Sig,
-		result.assertion.User.ID,
-	)
 }
 
 // firstDevice returns the first connected FIDO device. Sessions with several

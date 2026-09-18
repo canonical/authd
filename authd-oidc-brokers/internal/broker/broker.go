@@ -71,6 +71,9 @@ type fidoAuthenticator interface {
 	// DeviceRequiresPIN reports whether the device needs a client PIN for
 	// user verification.
 	DeviceRequiresPIN() (bool, error)
+	// HoldsCredential reports whether the connected device holds one of the
+	// credentials the challenge allows.
+	HoldsCredential(ctx context.Context, challenge string, allowList []string) (bool, error)
 	// Assert performs the WebAuthn Get ceremony and returns the assertion
 	// JSON to pass back to the MFA flow as auth data.
 	Assert(ctx context.Context, challenge string, allowList []string, pin string) (string, error)
@@ -1218,6 +1221,7 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	if err != nil {
 		return AuthDenied, "{}", err
 	}
+	previousMFAFlow := session.mfaFlowActive
 
 	var authData map[string]string
 	if authenticationData != "" {
@@ -1249,6 +1253,13 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 		msg, _ := json.Marshal(errorMessage{Message: "Authentication request cancelled"})
 		return AuthCancelled, string(msg), ctx.Err()
 	}
+	if ctx.Err() != nil {
+		if session.mfaFlowActive != previousMFAFlow {
+			himmelblau.FreeMFAFlowState(session.mfaFlowActive)
+		}
+		msg, _ := json.Marshal(errorMessage{Message: "Authentication request cancelled"})
+		return AuthCancelled, string(msg), ctx.Err()
+	}
 
 	if access == AuthRetry {
 		session.attemptsPerMode[session.selectedMode]++
@@ -1266,7 +1277,13 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	}
 
 	if err = b.updateSession(sessionID, session); err != nil {
+		if session.mfaFlowActive != previousMFAFlow {
+			himmelblau.FreeMFAFlowState(session.mfaFlowActive)
+		}
 		return AuthDenied, "{}", err
+	}
+	if session.mfaFlowActive != previousMFAFlow {
+		himmelblau.FreeMFAFlowState(previousMFAFlow)
 	}
 
 	encoded, err := json.Marshal(iadResponse)
@@ -1655,9 +1672,14 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 		return AuthCancelled, nil
 	}
 
-	clearEntraAuthState(session)
+	// Keep the previous flow alive until IsAuthenticated commits this session
+	// replacement. If the request is cancelled during FIDO pre-flight, the
+	// stored session must still point to a usable flow.
+	previousFlow := session.mfaFlowActive
 	session.mfaFlowActive = flow
 	session.mfaChallengeInfo = challengeInfo
+	session.fidoPIN = ""
+
 	session.entraAuthPasswordRequired = false
 	session.entraAuthPasswordHash = ""
 
@@ -1675,7 +1697,14 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 		session.entraAuthPasswordHash = passwordHash
 	}
 
-	return b.routeMFAChallenge(session, challengeInfo)
+	access, data := b.routeMFAChallenge(ctx, session, challengeInfo)
+	if ctx.Err() != nil {
+		if flow != previousFlow {
+			himmelblau.FreeMFAFlowState(flow)
+		}
+		return AuthCancelled, nil
+	}
+	return access, data
 }
 
 // routeMFAChallenge inspects the MFA challenge negotiated by the password
@@ -1683,12 +1712,12 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 // follow-up: the local security-key ceremony (or its Device
 // Authentication fallback) for FIDO methods, code entry for prompt methods,
 // and the out-of-band poll for the rest.
-func (b *Broker) routeMFAChallenge(session *session, challengeInfo *himmelblau.MFAChallengeInfo) (string, isAuthenticatedDataResponse) {
+func (b *Broker) routeMFAChallenge(ctx context.Context, session *session, challengeInfo *himmelblau.MFAChallengeInfo) (string, isAuthenticatedDataResponse) {
 	mfaMethod := challengeInfo.Method
 	pollingInterval := challengeInfo.PollingIntervalMs
 
 	if isFIDOMethod(mfaMethod) {
-		return b.routeFIDOChallenge(session, challengeInfo)
+		return b.routeFIDOChallenge(ctx, session, challengeInfo)
 	}
 
 	switch {
@@ -1915,36 +1944,69 @@ func (b *Broker) entraMFACodeAuth(ctx context.Context, session *session, code st
 	return b.finishEntraAuth(ctx, session, oauthToken)
 }
 
+// keyHoldsCredential asks the connected key whether it can satisfy the
+// challenge, bounded by maxRequestDuration. An inconclusive answer is
+// reported as an error: the caller must keep the key step available rather
+// than treat the key as absent.
+func (b *Broker) keyHoldsCredential(ctx context.Context, session *session, challengeInfo *himmelblau.MFAChallengeInfo) (bool, error) {
+	checkCtx, cancel := context.WithTimeout(ctx, maxRequestDuration)
+	defer cancel()
+
+	holds, err := b.fido.HoldsCredential(checkCtx, challengeInfo.FidoChallenge, challengeInfo.FidoAllowList)
+	if err != nil {
+		log.Noticef(context.Background(), "Could not check the connected security key for user %q: %v", session.username, err)
+		return false, err
+	}
+	if !holds {
+		log.Noticef(context.Background(), "The connected security key holds no credential for user %q; not offering the local ceremony", session.username)
+	}
+	return holds, nil
+}
+
 // routeFIDOChallenge continues a FIDO/security-key challenge with the local
 // ceremony and keeps the Entra ID password reachable beside it. Entra ID
 // sends this challenge whenever the account has any FIDO credential, which
-// includes a passkey synced to a phone or a browser profile. No local key can
-// ever hold such a credential, so the ceremony is not a step the broker may
-// force the user through.
-func (b *Broker) routeFIDOChallenge(session *session, challengeInfo *himmelblau.MFAChallengeInfo) (string, isAuthenticatedDataResponse) {
+// includes a passkey synced to a phone or a browser profile. A connected key
+// is asked whether it holds one of the challenge's credentials before any
+// touch screen is shown.
+func (b *Broker) routeFIDOChallenge(ctx context.Context, session *session, challengeInfo *himmelblau.MFAChallengeInfo) (string, isAuthenticatedDataResponse) {
+	if ctx.Err() != nil {
+		return AuthCancelled, nil
+	}
+
 	if challengeInfo.FidoChallenge == "" || b.fido == nil {
 		log.Noticef(context.Background(), "FIDO MFA method %q for user %q cannot be completed locally", challengeInfo.Method, session.username)
 		return b.redirectFIDOToDeviceAuth(session, "The selected FIDO2 authentication method is not available on this computer.")
 	}
 
-	// With a key connected, collect its PIN before the touch: an assertion
-	// without user verification is rejected by Entra ID. With no key, the
-	// assertion step waits for one and asks for a PIN reactively.
-	mode := authmodes.EntraAuthFido
-	keyConnected := b.fido.DevicePresent()
-	if keyConnected {
-		pinRequired, err := b.fido.DeviceRequiresPIN()
-		if err != nil {
-			log.Warningf(context.Background(), "Could not determine whether the security key requires a PIN: %v", err)
+	// An absent or inconclusive check keeps password first and the key selectable.
+	holdsCredential := false
+	if b.fido.DevicePresent() {
+		var err error
+		holdsCredential, err = b.keyHoldsCredential(ctx, session, challengeInfo)
+		if err != nil && ctx.Err() != nil {
+			return AuthCancelled, nil
 		}
-		if pinRequired && session.fidoPIN == "" {
-			mode = authmodes.EntraAuthFidoPin
+		if err == nil && !holdsCredential {
+			return b.redirectFIDOToDeviceAuth(session, fidoNoCredentialMsg)
 		}
 	}
+	if !holdsCredential {
+		setFIDOAuthModes(session, authmodes.EntraAuthFido, true)
+		return AuthNext, nil
+	}
 
-	// No key connected is either a hardware key not plugged in yet or a
-	// passkey that can never reach this computer, so preselect the password.
-	setFIDOAuthModes(session, mode, !keyConnected)
+	// The key can sign for this account. Collect its PIN first when it needs
+	// one: an assertion without user verification is rejected by Entra ID.
+	mode := authmodes.EntraAuthFido
+	pinRequired, err := b.fido.DeviceRequiresPIN()
+	if err != nil {
+		log.Warningf(context.Background(), "Could not determine whether the security key requires a PIN: %v", err)
+	}
+	if pinRequired && session.fidoPIN == "" {
+		mode = authmodes.EntraAuthFidoPin
+	}
+	setFIDOAuthModes(session, mode, false)
 	return AuthNext, nil
 }
 
@@ -1985,6 +2047,10 @@ func (b *Broker) requestEntraPassword(session *session, reason string) (string, 
 	}
 	return AuthNext, data
 }
+
+// fidoNoCredentialMsg says the connected key was not registered for this
+// account, which covers a passkey that lives on a phone or in a browser.
+const fidoNoCredentialMsg = "The connected security key is not registered for this account."
 
 // redirectFIDOToDeviceAuth offers password recovery before a password was
 // validated, otherwise device authentication or denial. reason states why
@@ -2095,6 +2161,14 @@ func (b *Broker) entraAuthFidoAuth(ctx context.Context, session *session) (strin
 		}
 	}
 
+	// A key that appeared after routing was never asked whether it holds the
+	// account's credential, and the user may have swapped keys since. Ask
+	// before requesting the touch: the check is silent, and a key without the
+	// credential goes to the fallback instead of a touch it cannot satisfy.
+	if holdsCredential, err := b.keyHoldsCredential(ctx, session, session.mfaChallengeInfo); err == nil && !holdsCredential {
+		return b.redirectFIDOToDeviceAuth(session, fidoNoCredentialMsg)
+	}
+
 	assertion, err := b.fido.Assert(ctx, session.mfaChallengeInfo.FidoChallenge, session.mfaChallengeInfo.FidoAllowList, session.fidoPIN)
 	if err != nil {
 		return b.routeFIDOAssertionError(ctx, session, err)
@@ -2177,7 +2251,7 @@ func (b *Broker) routeFIDOAssertionError(ctx context.Context, session *session, 
 		return AuthRetry, errorMessage{Message: "The security key was removed. Please reinsert it and try again."}
 	case errors.Is(err, fido.ErrNoCredentials):
 		log.Noticef(context.Background(), "Connected security key has no matching credential for user %q", session.username)
-		return b.redirectFIDOToDeviceAuth(session, "The connected security key is not registered for this account.")
+		return b.redirectFIDOToDeviceAuth(session, fidoNoCredentialMsg)
 	default:
 		log.Errorf(context.Background(), "FIDO assertion failed for user %q: %v", session.username, err)
 		return b.failFIDOAssertion(session)

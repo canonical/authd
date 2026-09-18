@@ -518,9 +518,11 @@ passwordless sign-in in the Microsoft Authenticator app.
 
 A security key challenge does not always mean a key can complete it: Entra ID
 sends the same challenge for a passkey synced to a phone, a browser profile or
-the Microsoft Authenticator app. The Entra ID password is therefore offered
-beside the security-key step. With no key connected, authd offers the password
-first and keeps the security-key step selectable.
+the Microsoft Authenticator app. Before it asks for a touch, authd checks
+whether the connected security key holds a credential for the account. A key
+that reports no matching credential and does not support user verification is
+not offered. With no key connected, or when the check is indeterminate, authd
+offers the Entra ID password first and keeps the security-key step selectable.
 
 ```{admonition} Local password after a passwordless login
 :class: note

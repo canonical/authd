@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unsafe"
@@ -6185,12 +6186,23 @@ func TestMain(m *testing.M) {
 
 // mockFIDOAuthenticator implements broker.FIDOAuthenticator for tests.
 type mockFIDOAuthenticator struct {
-	devicePresent  bool
-	requiresPIN    bool
-	requiresPINErr error
-	assertion      string
-	assertErrs     []error // consumed one per Assert call; a nil entry means success
-	assertCalls    int
+	devicePresentMu sync.Mutex
+	devicePresent   bool
+	requiresPIN     bool
+	requiresPINErr  error
+	assertion       string
+	assertErrs      []error // consumed one per Assert call; a nil entry means success
+	assertCalls     int
+
+	// noCredential makes the pre-flight report that the connected key holds
+	// none of the challenge's allowed credentials, like a key registered to
+	// another account, or an account whose passkey is synced to a phone.
+	noCredential bool
+	// preflightErr makes the pre-flight fail, like a key that stops answering.
+	preflightErr        error
+	preflightCalls      int
+	preflightChallenges []string
+	preflightAllowLists [][]string
 
 	recordedChallenges []string
 	recordedAllowLists [][]string
@@ -6198,11 +6210,30 @@ type mockFIDOAuthenticator struct {
 }
 
 func (m *mockFIDOAuthenticator) DevicePresent() bool {
+	m.devicePresentMu.Lock()
+	defer m.devicePresentMu.Unlock()
 	return m.devicePresent
+}
+
+// setDevicePresent flips the mock's device presence from another goroutine.
+func (m *mockFIDOAuthenticator) setDevicePresent(present bool) {
+	m.devicePresentMu.Lock()
+	defer m.devicePresentMu.Unlock()
+	m.devicePresent = present
 }
 
 func (m *mockFIDOAuthenticator) DeviceRequiresPIN() (bool, error) {
 	return m.requiresPIN, m.requiresPINErr
+}
+
+func (m *mockFIDOAuthenticator) HoldsCredential(_ context.Context, challenge string, allowList []string) (bool, error) {
+	m.preflightCalls++
+	m.preflightChallenges = append(m.preflightChallenges, challenge)
+	m.preflightAllowLists = append(m.preflightAllowLists, allowList)
+	if m.preflightErr != nil {
+		return false, m.preflightErr
+	}
+	return !m.noCredential, nil
 }
 
 func (m *mockFIDOAuthenticator) Assert(_ context.Context, challenge string, allowList []string, pin string) (string, error) {
@@ -6359,6 +6390,8 @@ func TestIsAuthenticatedEntraAuthFidoSucceeds(t *testing.T) {
 	layout, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthFido)
 	require.NoError(t, err)
 	require.Equal(t, "true", layout["wait"], "the assertion step must be a wait layout")
+	require.Equal(t, "Use your security key", layout["label"],
+		"the assertion label must be valid whether the key was already connected or is inserted later")
 
 	access, data, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
@@ -6485,6 +6518,45 @@ func TestPasswordlessFIDOFailureFallsBackToEntraPassword(t *testing.T) {
 	}
 }
 
+// TestPasswordlessFIDOPreflightSkipsKeyWithoutMatchingCredential verifies that
+// a connected key holding none of the account's credentials is never asked for
+// a touch: the challenge goes straight to the Entra password form instead.
+// This is the synced-passkey account of issue #1915, where the credential
+// lives on a phone and no local key can ever satisfy the challenge.
+func TestPasswordlessFIDOPreflightSkipsKeyWithoutMatchingCredential(t *testing.T) {
+	t.Parallel()
+
+	provider := newFIDOChallengeProvider(nil)
+	fidoMock := &mockFIDOAuthenticator{devicePresent: true, noCredential: true}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                 broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:           true,
+		firstUserBecomesOwner:  true,
+		provider:               provider,
+		fidoAuthenticator:      fidoMock,
+		issuerURL:              defaultIssuerURL,
+		deviceAuthFlowDisabled: true,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
+
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	requireAuthModes(t, b, sessionID, authmodes.EntraAuth)
+	require.Equal(t, 1, fidoMock.preflightCalls, "the connected key must be asked whether it holds the account's credential")
+	require.Equal(t, []string{"fido-challenge"}, fidoMock.preflightChallenges)
+	require.Equal(t, [][]string{{"Y3JlZA=="}}, fidoMock.preflightAllowLists,
+		"the pre-flight must be given the challenge's allow list, or it cannot tell the account's key from any other")
+	require.Zero(t, fidoMock.assertCalls, "a key holding no credential for the account must not be asked for a touch")
+
+	layout, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraAuth)
+	require.NoError(t, err)
+	require.Equal(t, "chars_password", layout["entry"], "the user must be asked for the Entra password instead")
+}
+
 // TestPasswordlessFIDOModeOrdering pins which mode a passwordless FIDO
 // challenge preselects. The client auto-selects the first entry, so the order
 // is what decides whether a user is asked to touch a key they may not have.
@@ -6506,6 +6578,19 @@ func TestPasswordlessFIDOModeOrdering(t *testing.T) {
 		},
 		"No_key_connected_offers_the_password_first": {
 			fido:      &mockFIDOAuthenticator{devicePresent: false},
+			wantModes: []string{authmodes.EntraAuth, authmodes.EntraAuthFido},
+		},
+		"Key_holding_no_credential_keeps_the_device_code_flow_when_enabled": {
+			fido:           &mockFIDOAuthenticator{devicePresent: true, noCredential: true},
+			deviceAuthFlow: true,
+			wantModes:      []string{authmodes.EntraAuth, authmodes.DeviceQr},
+		},
+		"Key_that_does_not_answer_is_not_assumed_to_hold_the_credential": {
+			fido:      &mockFIDOAuthenticator{devicePresent: true, preflightErr: errors.New("device stopped answering")},
+			wantModes: []string{authmodes.EntraAuth, authmodes.EntraAuthFido},
+		},
+		"Key_that_may_hide_a_UV_protected_credential_keeps_the_key_selectable": {
+			fido:      &mockFIDOAuthenticator{devicePresent: true, preflightErr: fido.ErrCredentialCheckIndeterminate},
 			wantModes: []string{authmodes.EntraAuth, authmodes.EntraAuthFido},
 		},
 	}
@@ -6651,6 +6736,59 @@ func TestPasswordlessFIDOPINTransitionsKeepPasswordSelectable(t *testing.T) {
 	require.Equal(t, broker.AuthNext, access)
 	updateAuthModes(t, b, sessionID, authmodes.NewPassword)
 	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID))
+}
+
+// TestFIDOLateInsertedKeyIsCheckedBeforeTouch verifies that a key connected
+// after the security-key step was selected still answers the credential
+// pre-flight: routing skipped it because no key was connected, so the
+// ceremony must not request a touch from a key that cannot sign for the
+// account.
+func TestFIDOLateInsertedKeyIsCheckedBeforeTouch(t *testing.T) {
+	t.Parallel()
+
+	provider := newFIDOChallengeProvider(nil)
+	fidoMock := &mockFIDOAuthenticator{devicePresent: false, noCredential: true}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		fidoAuthenticator:     fidoMock,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	requireAuthModes(t, b, sessionID, authmodes.EntraAuth, authmodes.EntraAuthFido)
+
+	// The user picks the security key while it is still unplugged, and
+	// connects one while the screen is waiting.
+	layout, err := b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthFido)
+	require.NoError(t, err)
+	require.Equal(t, "true", layout["wait"], "the FIDO screen must wait while no key is connected")
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		fidoMock.setDevicePresent(true)
+	}()
+
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	var payload struct {
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(data), &payload))
+	require.Contains(t, payload.Message, "not registered for this account",
+		"the ceremony must explain why the connected key was rejected")
+	requireAuthModes(t, b, sessionID, authmodes.EntraAuth, authmodes.DeviceQr)
+	require.Equal(t, 1, fidoMock.preflightCalls,
+		"routing ran no pre-flight without a key, so the ceremony runs the only one")
+	require.Zero(t, fidoMock.assertCalls,
+		"a key without the credential must not be asked for a touch")
 }
 
 func TestFIDOWaitTimesOutToEntraPassword(t *testing.T) {
