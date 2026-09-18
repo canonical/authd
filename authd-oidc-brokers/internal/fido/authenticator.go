@@ -125,8 +125,19 @@ func deviceInfoWithContext(ctx context.Context, device *libfido2.Device) (*libfi
 		}
 		return result.info, result.err
 	case <-ctx.Done():
-		_ = device.Cancel()
-		return nil, ErrCanceled
+		// Keep owning the device until Info returns. Cancellation can race
+		// Device.open, so a single Cancel may be a no-op; returning here
+		// would let a retry overlap the stale operation on the same key.
+		retry := time.NewTicker(cancelRetryInterval)
+		defer retry.Stop()
+		for {
+			_ = device.Cancel()
+			select {
+			case <-resultCh:
+				return nil, ErrCanceled
+			case <-retry.C:
+			}
+		}
 	}
 }
 
