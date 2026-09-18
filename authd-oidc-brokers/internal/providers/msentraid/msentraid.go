@@ -286,7 +286,12 @@ func (p *Provider) GetGroups(
 		}
 		if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
 			msg := "Token acquisition failed: The app is misconfigured in Microsoft Entra (the redirect URI is missing or invalid). Please contact your administrator."
-			return nil, &providerErrors.ForDisplayError{Message: msg, Err: fmt.Errorf("%w: %w", providerErrors.ErrInvalidRedirectURI, err)}
+			return nil, &providerErrors.ForDisplayError{
+				Message: msg,
+				Err: &providerErrors.AuthoritativeError{
+					Err: fmt.Errorf("%w: %w", providerErrors.ErrInvalidRedirectURI, err),
+				},
+			}
 		}
 		var tokenAcquisitionError himmelblau.TokenAcquisitionError
 		if errors.As(err, &tokenAcquisitionError) {
@@ -528,6 +533,8 @@ func (p *Provider) fetchUserGroups(token *jwt.Token, msgraphHost string) ([]info
 	// Check if the token has the GroupMember.Read.All scope
 	if !slices.Contains(scopes, "GroupMember.Read.All") {
 		msg := "Error: the Microsoft Entra ID app is missing the GroupMember.Read.All permission"
+		// Returning logins may use cached groups when group lookup fails, so this
+		// message is displayable but is not an authoritative authentication result.
 		return nil, &providerErrors.ForDisplayError{Message: msg}
 	}
 
@@ -863,7 +870,10 @@ func (p *Provider) VerifyAccessToken(ctx context.Context, issuerURL, accessToken
 func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername string) error {
 	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(authenticatedUsername) {
 		msg := fmt.Sprintf("Authentication failure: requested username %q does not match the authenticated username %q", requestedUsername, authenticatedUsername)
-		return &providerErrors.ForDisplayError{Message: msg}
+		return &providerErrors.ForDisplayError{
+			Message: msg,
+			Err:     &providerErrors.AuthoritativeError{},
+		}
 	}
 
 	// Check that the usernames only contain the characters allowed by the Microsoft Entra username policy
@@ -873,11 +883,17 @@ func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername strin
 		// If this error occurs, we should investigate and probably relax the username policy, so we ask the user
 		// explicitly to report this error.
 		msg := fmt.Sprintf("Authentication failure: the authenticated username %q contains invalid characters. Please report this error on https://github.com/canonical/authd/issues", authenticatedUsername)
-		return &providerErrors.ForDisplayError{Message: msg}
+		return &providerErrors.ForDisplayError{
+			Message: msg,
+			Err:     &providerErrors.AuthoritativeError{},
+		}
 	}
 	if !usernameRegexp.MatchString(requestedUsername) {
 		msg := fmt.Sprintf("Authentication failure: requested username %q contains invalid characters", requestedUsername)
-		return &providerErrors.ForDisplayError{Message: msg}
+		return &providerErrors.ForDisplayError{
+			Message: msg,
+			Err:     &providerErrors.AuthoritativeError{},
+		}
 	}
 
 	return nil
