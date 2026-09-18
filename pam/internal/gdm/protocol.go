@@ -42,8 +42,7 @@ func NewDataFromJSON(bytes []byte) (*Data, error) {
 }
 
 func checkMembersDebug(d *Data, acceptedMembers []string) error {
-	//nolint:govet //We only redirect the value to figure out its type.
-	val := reflect.ValueOf(*d)
+	val := reflect.ValueOf(d).Elem()
 	typ := val.Type()
 	acceptedMembers = append(acceptedMembers, []string{
 		"Type", "state", "sizeCache", "unknownFields",
