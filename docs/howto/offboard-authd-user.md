@@ -60,7 +60,8 @@ On each affected host:
 `authctl user delete` releases the user's UID. Handle any files that must be
 kept, removed, or reassigned before deleting the record. The command does not
 remove files outside the home directory. See the [`authctl`
-reference](reference::cli) for the command warning and options.
+reference](../reference/cli/authctl_user_delete) for the command warning and
+options.
 
 You can verify that the local record has been removed with:
 
