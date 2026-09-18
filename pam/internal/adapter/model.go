@@ -324,6 +324,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sessionStartingForBroker = ""
 		if m.clientType == Gdm {
 			m.gdmModel.pendingEchoAuthModeID = ""
+			m.gdmModel.pendingEchoAuthModeIDs = nil
 		}
 		pubASN1, err := base64.StdEncoding.DecodeString(msg.encryptionKey)
 		if err != nil {
@@ -416,7 +417,17 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				msg:    "reselection of current auth mode without current ID",
 			})
 		}
+
+		var resetCmd tea.Cmd
+		if m.clientType == Gdm && msg.fromGDM {
+			// Reset PAM's active challenge before composing the new layout.
+			// This cancels the previous authentication and prevents its
+			// completion from stopping the replacement challenge.
+			resetCmd = m.authenticationModel.Reset()
+		}
+
 		return m, tea.Sequence(
+			resetCmd,
 			m.updateClientModel(msg),
 			getLayout(m.client, m.currentSession.sessionID, msg.ID),
 		)
@@ -443,6 +454,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.currentSession = nil
 		if m.clientType == Gdm {
 			m.gdmModel.pendingEchoAuthModeID = ""
+			m.gdmModel.pendingEchoAuthModeIDs = nil
 		}
 		return m, nil
 

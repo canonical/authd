@@ -25,9 +25,10 @@ Prerequisites:
   - YARF must be installed via the setup_yarf.sh script
 
 Optional environment variables:
-  AUTHD_DEB           Host path to the authd package for migration tests
-  AUTHD_PPA           PPA to use for authd dependencies in migration tests
-  BROKER_SNAP         Host path to the broker snap for migration tests
+  E2E_USER_DISPLAY_NAME  The display name of E2E_USER in the GDM user list
+  AUTHD_DEB              Host path to the authd package for migration tests
+  AUTHD_PPA              PPA to use for authd dependencies in migration tests
+  BROKER_SNAP            Host path to the broker snap for migration tests
 
 Options:
   -u, --user <name>            Username for the tests (can also be set via E2E_USER environment variable)
@@ -226,6 +227,7 @@ YARF_LOG_LEVEL=DEBUG
 
 env \
     E2E_USER="$E2E_USER" \
+    E2E_USER_DISPLAY_NAME="${E2E_USER_DISPLAY_NAME:-}" \
     E2E_PASSWORD="$E2E_PASSWORD" \
     E2E_PASSWORDLESS_USER="${E2E_PASSWORDLESS_USER:-}" \
     TOTP_SECRET="$TOTP_SECRET" \

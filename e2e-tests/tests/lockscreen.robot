@@ -22,3 +22,13 @@ Test remote user can unlock the lock screen with a local password
     Unlock Screen With Password    ${local_password}
     Log Out
 
+
+Test remote user can unlock the lock screen with device code flow
+    [Documentation]    Verify that a remote user can unlock a locked desktop
+    ...    session by switching from the local password prompt to the device
+    ...    code flow through GDM's Login Options.
+
+    Log In With Remote User Through GDM: QR Code    ${username}    ${local_password}
+    Lock Screen
+    Unlock Screen With Device Code    ${local_password}
+    Log Out

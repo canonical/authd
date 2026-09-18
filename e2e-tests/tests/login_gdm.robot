@@ -11,9 +11,10 @@ Test Teardown   utils.Test Teardown
 
 
 *** Variables ***
-${snapshot}    %{BROKER}-installed
-${username}    %{E2E_USER}
-${local_password}    qwer1234
+${snapshot}             %{BROKER}-installed
+${username}             %{E2E_USER}
+${user_display_name}    %{E2E_USER_DISPLAY_NAME}
+${local_password}       qwer1234
 
 
 *** Test Cases ***
@@ -33,3 +34,25 @@ Test login with GDM
     # Log in with remote user with local password via GDM
     Log In With Remote User Through GDM: Local Password    ${username}    ${local_password}
     Check that GNOME keyring is unlocked
+
+Test switching authentication flow in GDM
+    [Documentation]    Verify that selecting the device code flow from GDM's
+    ...    Login Options replaces the default local password prompt.
+
+    # Register the user and create the local password used by the default flow.
+    Log In With Remote User Through GDM: QR Code    ${username}    ${local_password}
+    Log Out
+
+    # Select the registered user from GDM's login screen. This avoids opening
+    # the "Not listed" flow and typing the username again.
+    Wait Until GDM Login Screen Ready
+    Move Pointer To ${user_display_name}
+    Left Button Click
+    Match Text    Password    120
+
+    # Select the alternate flow through GDM's Login Options menu. The device
+    # URL proves that the new flow replaced the password prompt.
+    Select Authentication Mode Through GDM    Device code flow
+    Continue Log In With Remote User: Authenticate In External Browser
+    # The device code flow asks for a local password before completing login.
+    Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
