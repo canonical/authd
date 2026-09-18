@@ -18,7 +18,9 @@ that password as the local password.
 
 Passwordless Entra authentication and other authentication flows prompt the user to
 create a local password. This local password can be used for subsequent logins.
+
 It can also be used for offline logins when the broker supports them.
+See [force remote access check with the identity provider](ref::config-force-provider-auth) for more details.
 
 ## Change a known password
 
