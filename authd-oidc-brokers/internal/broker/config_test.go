@@ -572,6 +572,32 @@ device_code = no-such-app
 	require.Empty(t, warnings, "An unreadable directory must not produce warnings")
 }
 
+// Not parallel: the test installs a global log handler.
+func TestWarnOnUnknownService(t *testing.T) {
+	cfg := flowsConfig{
+		DeviceAuth: flowRule{
+			allow: serviceRule{services: []string{"sshd"}},
+			deny:  booleanServiceRule(false),
+		},
+		EntraAuth: flowRule{
+			allow: booleanServiceRule(false),
+			deny:  serviceRule{services: []string{"sudo"}},
+		},
+	}
+
+	var warnings []string
+	log.SetLevelHandler(log.WarnLevel, func(_ context.Context, _ log.Level, format string, args ...interface{}) {
+		warnings = append(warnings, fmt.Sprintf(format, args...))
+	})
+	t.Cleanup(func() { log.SetLevelHandler(log.WarnLevel, nil) })
+
+	cfg.warnOnUnknownService(context.Background())
+
+	require.Len(t, warnings, 1)
+	require.Contains(t, warnings[0], `the "device_code" flow is enabled for this session`)
+	require.Contains(t, warnings[0], "per-service restrictions cannot be applied")
+}
+
 func TestFlowRuleEnabledFor(t *testing.T) {
 	t.Parallel()
 	list := func(services ...string) serviceRule {

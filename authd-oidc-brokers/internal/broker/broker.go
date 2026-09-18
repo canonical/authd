@@ -720,8 +720,8 @@ func (b *Broker) NewSession(username, lang, mode, providerID, serviceName string
 
 		attemptsPerMode: make(map[string]int),
 	}
-	if serviceName == "" && b.cfg.flows.hasServiceLists() {
-		log.Warning(context.Background(), "per-service flow rules are configured but the PAM service name is unknown; list-based rules are being treated as permissive")
+	if serviceName == "" {
+		b.cfg.flows.warnOnUnknownService(context.Background())
 	}
 
 	pubASN1, err := x509.MarshalPKIXPublicKey(&b.privateKey.PublicKey)
