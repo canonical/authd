@@ -76,7 +76,7 @@ broker can then use to authenticate users.
 ::::{tab-item} Microsoft Entra ID
 :sync: msentraid
 
-Register a new application in the Microsoft Entra admin center. To register a 
+Register a new application in the Microsoft Entra admin center. To register a
 new application, select the menu {menuselection}`Entra ID --> App registrations`:
 
 ![Menu showing selection of App registrations under Applications.](../assets/entraid-app-registration.png)
@@ -539,6 +539,51 @@ authentication. This is the standard OAuth 2.0 Device Authorization Grant flow.
 
 At least one authentication flow must be enabled. A configuration that
 explicitly disables both flows is invalid, and the broker fails to start.
+
+See [Enable a flow only for some services](ref::config-per-service-flows) to
+restrict a flow to specific PAM services.
+
+(ref::config-per-service-flows)=
+
+### Enable a flow only for some services
+
+The positive flow keys in `[flows]` (`device_code` and `entra_auth`) accept
+either a boolean or a comma-separated list of PAM service names. A boolean
+applies to every service. A list enables the flow only for the services it
+names:
+
+```ini
+[flows]
+device_code = sshd, gdm-authd
+```
+
+With this configuration, the device code flow is offered when logging in
+through SSH or GDM, and is not offered anywhere else.
+
+A service name is the name of a PAM configuration file in `/etc/pam.d` or
+`/usr/lib/pam.d`, such as `sshd`, `gdm-authd`, `login` or `sudo`. The broker
+logs a warning at startup for any name it cannot find on the system.
+
+#### Deny specific services
+
+Every flow key has a matching `no_` key that denies services instead of
+allowing them: `no_device_code` for `device_code`, and `no_entra_auth` for
+`entra_auth`. A service is offered a flow only when it is allowed by the flow
+key **and** not denied by the `no_` key.
+
+The `no_` keys accept only comma-separated lists of service names. Omit the
+key to deny no services. Set the positive flow key to `false` to disable a
+flow for every service.
+
+Use a `no_` key to make an exception to a flow that is otherwise enabled
+everywhere:
+
+```ini
+[flows]
+device_code = true
+no_device_code = sudo, su
+```
+
 ::::
 
 ::::{tab-item} Google IAM
@@ -546,6 +591,7 @@ explicitly disables both flows is invalid, and the broker fails to start.
 
 The Google IAM broker only supports the device code flow, where the user visits a URL
 and enters a code to complete authentication.
+
 ::::
 
 ::::{tab-item} Keycloak
@@ -553,6 +599,7 @@ and enters a code to complete authentication.
 
 The authd-oidc broker only supports the device code flow, where the user visits a URL
 and enters a code to complete authentication.
+
 ::::
 :::::
 

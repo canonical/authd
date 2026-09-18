@@ -174,7 +174,7 @@ func (m *Manager) NewSession(brokerID, username, lang, mode, providerID, service
 		return "", "", fmt.Errorf("invalid broker: %v", err)
 	}
 
-	sessionID, encryptionKey, err = broker.newSession(context.Background(), username, lang, mode, providerID)
+	sessionID, encryptionKey, err = broker.newSession(context.Background(), username, lang, mode, providerID, serviceName)
 	if err != nil {
 		return "", "", err
 	}
