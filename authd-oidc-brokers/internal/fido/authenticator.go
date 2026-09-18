@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/canonical/authd/log"
@@ -311,6 +312,24 @@ func assertionWithContext(ctx context.Context, device *libfido2.Device, rpID str
 	}
 }
 
+// deviceOption reports whether the device advertises one of the named CTAP
+// options as supported. A device that is not FIDO2 supports none of them.
+func deviceOption(device *libfido2.Device, names ...string) (bool, error) {
+	info, err := device.Info()
+	if errors.Is(err, libfido2.ErrNotFIDO2) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	for _, option := range info.Options {
+		if slices.Contains(names, option.Name) && option.Value == libfido2.True {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // firstDevice returns the first connected FIDO device. Sessions with several
 // connected devices are not supported: the ceremony runs on the first one.
 func firstDevice() (*libfido2.Device, error) {
@@ -336,16 +355,7 @@ func firstDevice() (*libfido2.Device, error) {
 // hasBuiltinUV reports whether the device performs user verification on its
 // own (e.g. a fingerprint reader).
 func hasBuiltinUV(device *libfido2.Device) (bool, error) {
-	info, err := device.Info()
-	if err != nil {
-		return false, err
-	}
-	for _, option := range info.Options {
-		if option.Name == "uv" {
-			return option.Value == libfido2.True, nil
-		}
-	}
-	return false, nil
+	return deviceOption(device, "uv")
 }
 
 // mapAssertionError translates libfido2 errors to the package's sentinel
