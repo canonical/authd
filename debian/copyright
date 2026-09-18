@@ -20,7 +20,7 @@ License: LGPL-2+
 
 Files: pam/internal/gdm/extensions/*
 Copyright: 2023 Canonical Ltd.
-License: GPL-3+
+License: GPL-2+
 
 Files: pam/internal/gdm/extensions/gdm-pam-extensions-common.h
 Copyright: 2017 Red Hat, Inc.
