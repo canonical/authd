@@ -10,7 +10,7 @@ DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/authd-e2e-tests"
 
 usage(){
     cat << EOF
-Usage: $0 [--config-file <file>] [--release <release>] [--authd-deb <deb>] [--authd-ppa <ppa>] [--broker-snap <snap>]
+Usage: $0 [--config-file <file>] [--release <release>] [--authd-deb <deb>] [--apt-source <source>] [--authd-apt-source <source>] [--broker-snap <snap>]
 
 Options:
    --config-file <file>  Path to the configuration file (default: config.env)
@@ -18,9 +18,13 @@ Options:
    --force              Force installation of authd and brokers even if snapshots already exist.
                         The existing snapshots will be deleted and recreated with the new installation.
    --broker <broker>    The broker to install ("authd-google", "authd-msentraid", ...)
-   --authd-deb <deb>    Path to the authd deb file to install (default: install from the edge PPA)
-   --authd-ppa <ppa>    PPA to use instead of authd-edge when installing authd
-                        and its dependencies
+   --authd-deb <deb>    Path to the authd deb file to install
+   --apt-source <source>
+                        PPA or Ubuntu archive suite for all packages except
+                        authd
+   --authd-apt-source <source>
+                        PPA or Ubuntu archive suite from which to install
+                        authd
    --broker-snap <snap> Path to the broker snap file to install (default: install from the edge channel)
   -h, --help             Show this help message and exit
 
@@ -50,8 +54,12 @@ while [[ $# -gt 0 ]]; do
             AUTHD_DEB="$2"
             shift 2
             ;;
-        --authd-ppa)
-            AUTHD_PPA="$2"
+        --apt-source)
+            APT_SOURCE_ARG="$2"
+            shift 2
+            ;;
+        --authd-apt-source)
+            AUTHD_APT_SOURCE_ARG="$2"
             shift 2
             ;;
         --broker-snap)
@@ -138,12 +146,53 @@ if [ -n "${BROKER:-}" ]; then
     unset _env_file _git_common_dir
 fi
 
-# CLI --release overrides the config file value
+# CLI options override config file values
 RELEASE="${RELEASE_ARG:-${RELEASE:-}}"
+requested_apt_source="${APT_SOURCE_ARG:-${APT_SOURCE:-${AUTHD_DEFAULT_APT_SOURCE}}}"
+requested_authd_apt_source="${AUTHD_APT_SOURCE_ARG:-${AUTHD_APT_SOURCE:-}}"
+
+if ! APT_SOURCE="$(normalize_apt_source "${requested_apt_source}")"; then
+    echo "Invalid APT source '${requested_apt_source}'." >&2
+    exit 1
+fi
+
+AUTHD_APT_SOURCE=
+if [ -n "${requested_authd_apt_source}" ]; then
+    if ! AUTHD_APT_SOURCE="$(normalize_apt_source "${requested_authd_apt_source}")"; then
+        echo "Invalid authd APT source '${requested_authd_apt_source}'." >&2
+        exit 1
+    fi
+    if [ -n "${AUTHD_DEB:-}" ]; then
+        echo "--authd-apt-source cannot be used together with --authd-deb." >&2
+        exit 1
+    fi
+fi
+unset requested_apt_source requested_authd_apt_source
 
 VM_NAME_BASE="${VM_NAME_BASE:-e2e-runner}"
 
 assert_env_vars RELEASE BROKER
+
+if ! is_ppa_source "${APT_SOURCE}" || [ -n "${AUTHD_APT_SOURCE:-}" ] && ! is_ppa_source "${AUTHD_APT_SOURCE}"; then
+    VM_RELEASE=$(resolve_devel_release "${RELEASE}")
+fi
+
+validate_archive_source() {
+    local source="$1"
+    local source_name="$2"
+
+    if [ -z "${source}" ] || is_ppa_source "${source}"; then
+        return
+    fi
+
+    if [[ "${source}" != "${VM_RELEASE}" && "${source}" != "${VM_RELEASE}-"* ]]; then
+        echo "${source_name} APT source '${source}' does not match VM release '${VM_RELEASE}'." >&2
+        exit 1
+    fi
+}
+
+validate_archive_source "${APT_SOURCE}" target
+validate_archive_source "${AUTHD_APT_SOURCE:-}" authd
 
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-${DATA_DIR}/${RELEASE}}"
 
@@ -236,6 +285,106 @@ function install_broker() {
     wait_for_system_running
 }
 
+function add_apt_source() {
+    local apt_source="$1"
+
+    if is_ppa_source "${apt_source}"; then
+        local ppa="${apt_source#ppa:}"
+        local cmd="add-apt-repository -y -n ppa:${ppa}"
+        # Launchpad is sometimes slow to respond, so retry PPA additions.
+        retry --times 5 --delay 3 -- "$SSH" -- "$cmd"
+    else
+        $SSH "add-apt-repository -y -n -S 'deb http://archive.ubuntu.com/ubuntu/ ${apt_source} main restricted universe multiverse'"
+    fi
+}
+
+function configure_apt_policy() {
+    local system_source="$1"
+    local authd_source="$2"
+    local system_pin
+    local authd_pin
+    local authd_fallback_policy=
+
+    system_pin="$(source_pin "${system_source}")"
+    authd_pin="$(source_pin "${authd_source}")"
+    if [ "${system_source}" != "${authd_source}" ]; then
+        authd_fallback_policy=$(
+            cat <<-PREFERENCE
+			Package: *
+			Pin: release ${authd_pin}
+			Pin-Priority: 100
+			PREFERENCE
+        )
+    fi
+
+    $SSH bash -euo pipefail -s <<-EOF
+		mkdir -p /etc/apt/preferences.d
+		cat > /etc/apt/preferences.d/99-e2e-system-source <<-PREFERENCE
+		Package: *
+		Pin: release ${system_pin}
+		Pin-Priority: 990
+		PREFERENCE
+		cat > /etc/apt/preferences.d/99-e2e-authd-source <<-PREFERENCE
+		Package: authd
+		Pin: release ${authd_pin}
+		Pin-Priority: 1001
+		PREFERENCE
+		if [ -n '${authd_fallback_policy}' ]; then
+			cat > /etc/apt/preferences.d/98-e2e-authd-source-fallback <<-PREFERENCE
+${authd_fallback_policy}
+			PREFERENCE
+		else
+			rm -f /etc/apt/preferences.d/98-e2e-authd-source-fallback
+		fi
+	EOF
+}
+
+function configure_local_authd_policy() {
+    $SSH bash -euo pipefail -s <<-'EOF'
+		authd_version="$(dpkg-query -W -f='${Version}' authd)"
+		cat > /etc/apt/preferences.d/99-e2e-authd-source <<-PREFERENCE
+		Package: authd
+		Pin: version ${authd_version}
+		Pin-Priority: 1001
+		PREFERENCE
+		apt-mark hold authd
+	EOF
+}
+
+function verify_authd_source() {
+    local expected_source="$1"
+    local expected_reference
+
+    expected_reference="$(source_policy_reference "${expected_source}")"
+
+    $SSH bash -euo pipefail -s <<-EOF
+		apt_policy="\$(apt-cache policy authd)"
+		installed_version="\$(dpkg-query -W -f='\${Version}' authd)"
+		candidate_version="\$(awk '/Candidate:/ { print \$2; exit }' <<<"\${apt_policy}")"
+		if [ -z "\${installed_version}" ] || [ "\${candidate_version}" != "\${installed_version}" ]; then
+			echo "authd candidate \${candidate_version} does not match installed version \${installed_version}" >&2
+			printf '%s\n' "\${apt_policy}" >&2
+			exit 1
+		fi
+		if ! grep -Fq '${expected_reference}' <<<"\${apt_policy}"; then
+			echo "authd APT policy does not contain the selected source '${expected_source}'" >&2
+			printf '%s\n' "\${apt_policy}" >&2
+			exit 1
+		fi
+	EOF
+}
+
+function verify_local_authd() {
+    $SSH bash -euo pipefail -s <<-'EOF'
+		installed_version="$(dpkg-query -W -f='${Version}' authd)"
+		if [ -z "${installed_version}" ] || ! apt-mark showhold | grep -qx authd; then
+			echo "authd is not held at the locally supplied package version" >&2
+			apt-cache policy authd >&2
+			exit 1
+		fi
+	EOF
+}
+
 # Print executed commands to ease debugging
 set -x
 
@@ -286,15 +435,18 @@ fi
 # Revert to the pre-authd setup snapshot before installing the version to test
 restore_snapshot_and_sync_time "$PRE_AUTHD_SNAPSHOT"
 
-# Add the PPA needed to resolve dependencies for the authd package under test.
-# authd-edge remains the default for local and normal CI runs.
-PPA="${AUTHD_PPA:-ubuntu-enterprise-desktop/authd-edge}"
-$SSH "add-apt-repository -y ppa:${PPA}"
+# Add the selected sources. The system source is also the default authd source
+# when no local package or explicit authd source was requested.
+add_apt_source "${APT_SOURCE}"
+if [ -n "${AUTHD_APT_SOURCE:-}" ] && [ "${AUTHD_APT_SOURCE}" != "${APT_SOURCE}" ]; then
+    add_apt_source "${AUTHD_APT_SOURCE}"
+fi
 
-# Request gnome-shell explicitly because installing authd does not upgrade an
-# already-installed dependency when its version still satisfies authd's
-# constraints.
-$SSH "apt-get install -y gnome-shell"
+# Pin the system source for all packages, then override authd with its
+# independently selected source. This keeps authd dependencies on the normal
+# system policy and avoids apt-get -t changing dependency selection globally.
+AUTHD_POLICY_SOURCE="${AUTHD_APT_SOURCE:-${APT_SOURCE}}"
+configure_apt_policy "${APT_SOURCE}" "${AUTHD_POLICY_SOURCE}"
 
 # Configure authd to be verbose. We do this before installing authd to avoid
 # having to restart the service after installation (just a simple optimization).
@@ -307,12 +459,31 @@ $SSH bash -euo pipefail -s <<-EOF
 	UNIT
 EOF
 
-# Install the version of authd to test
+# Refresh metadata and update the whole system from the selected system source.
+$SSH apt-get update
+if [ -n "${AUTHD_DEB:-}" ]; then
+    # Keep a stable authd package out of the system upgrade until the local
+    # package is installed. The package is absent in the normal target image,
+    # so this is only needed by callers that start from an authd snapshot.
+    $SSH bash -euo pipefail -s <<-'EOF'
+		if dpkg-query -W -f='${db:Status-Abbrev}' authd 2>/dev/null | grep -q '^ii '; then
+			apt-mark hold authd
+		fi
+	EOF
+fi
+$SSH apt-get full-upgrade -y
+
 if [ -n "${AUTHD_DEB:-}" ]; then
     "${SCP}" "${AUTHD_DEB}" "/home/ubuntu/$(basename "${AUTHD_DEB}")"
-    $SSH apt-get install -y "/home/ubuntu/$(basename "${AUTHD_DEB}")"
+    $SSH bash -euo pipefail -s <<-EOF
+		apt-mark unhold authd 2>/dev/null || true
+		apt-get install -y --allow-downgrades "/home/ubuntu/$(basename "${AUTHD_DEB}")"
+	EOF
+    configure_local_authd_policy
+    verify_local_authd
 else
-    $SSH "apt-get install -y authd"
+    $SSH apt-get install -y --allow-downgrades authd
+    verify_authd_source "${AUTHD_POLICY_SOURCE}"
 fi
 
 # Configure the PAM module to be verbose as well

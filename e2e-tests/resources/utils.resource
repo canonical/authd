@@ -10,6 +10,7 @@ Library             ./Snapshot.py    AS    Snapshot
 Library             ./SSH.py    AS    SSH
 Library             Process
 Library             OperatingSystem
+Library             String
 
 
 *** Variables ***
@@ -254,21 +255,108 @@ Cancel Operation
 
 
 Update Authd
-    ${authd_ppa}=    Get Environment Variable    AUTHD_PPA    ${EMPTY}
-    IF    $authd_ppa == ''
-        ${authd_ppa}=    Set Variable    ubuntu-enterprise-desktop/authd-edge
-    END
-    SSH.Execute    add-apt-repository ppa:${authd_ppa} -y    timeout=300
+    ${apt_source}=    Get Environment Variable    APT_SOURCE    ${EMPTY}
+    ${authd_apt_source}=    Get Environment Variable    AUTHD_APT_SOURCE    ${EMPTY}
     ${authd_deb}=    Get Environment Variable    AUTHD_DEB    ${EMPTY}
-    IF    $authd_deb != ''
-        SSH.Copy To VM    ${authd_deb}    /home/ubuntu/authd-under-test.deb
-        SSH.Execute    apt-get install -y /home/ubuntu/authd-under-test.deb    timeout=120
-    ELSE
-        SSH.Execute    apt-get install -y authd    timeout=120
+    IF    $apt_source == ''
+        ${apt_source}=    Set Variable    ppa:ubuntu-enterprise-desktop/authd-edge
     END
-    # Installing authd does not upgrade an already-installed gnome-shell when
-    # its version still satisfies authd's constraints.
-    SSH.Execute    apt-get install -y gnome-shell    timeout=120
+
+    Add APT Source    ${apt_source}
+    IF    $authd_apt_source != '' and $authd_apt_source != $apt_source
+        Add APT Source    ${authd_apt_source}
+    END
+
+    ${authd_policy_source}=    Set Variable If    $authd_apt_source != ''    ${authd_apt_source}    ${apt_source}
+    Configure APT Policy    ${apt_source}    ${authd_policy_source}
+
+    IF    $authd_deb != ''
+        SSH.Execute    apt-mark hold authd || true
+    END
+    SSH.Execute    apt-get update    timeout=300
+    SSH.Execute    apt-get full-upgrade -y    timeout=600
+
+    IF    $authd_deb != ''
+        SSH.Execute    apt-mark unhold authd || true
+        SSH.Copy To VM    ${authd_deb}    /home/ubuntu/authd-under-test.deb
+        SSH.Execute    apt-get install -y --allow-downgrades /home/ubuntu/authd-under-test.deb    timeout=120
+        Configure Local Authd Policy
+        Verify Local Authd
+    ELSE
+        SSH.Execute    apt-get install -y --allow-downgrades authd    timeout=120
+        Verify Authd Source    ${authd_policy_source}
+    END
+
+
+Add APT Source
+    [Arguments]    ${source}
+    IF    '${source}'.startswith('ppa:')
+        SSH.Execute    add-apt-repository -y -n ppa:${source[4:]}    timeout=300
+    ELSE
+        SSH.Execute
+        ...    add-apt-repository -y -n -S 'deb http://archive.ubuntu.com/ubuntu/ ${source} main restricted universe multiverse'
+    END
+
+
+Get APT Pin
+    [Arguments]    ${source}
+    IF    '${source}'.startswith('ppa:')
+        ${ppa}=    Get Substring    ${source}    4
+        ${ppa}=    Replace String    ${ppa}    /    -
+        RETURN    o=LP-PPA-${ppa}
+    ELSE
+        RETURN    a=${source}
+    END
+
+
+Get APT Source Reference
+    [Arguments]    ${source}
+    IF    '${source}'.startswith('ppa:')
+        ${ppa}=    Get Substring    ${source}    4
+        RETURN    /${ppa}/ubuntu
+    ELSE
+        RETURN    ${source}/
+    END
+
+
+Configure APT Policy
+    [Arguments]    ${system_source}    ${authd_source}
+    ${system_pin}=    Get APT Pin    ${system_source}
+    ${authd_pin}=    Get APT Pin    ${authd_source}
+    SSH.Execute
+    ...    mkdir -p /etc/apt/preferences.d && printf '%s\n' 'Package: *' 'Pin: release ${system_pin}' 'Pin-Priority: 990' > /etc/apt/preferences.d/99-e2e-system-source
+    SSH.Execute
+    ...    printf '%s\n' 'Package: authd' 'Pin: release ${authd_pin}' 'Pin-Priority: 1001' > /etc/apt/preferences.d/99-e2e-authd-source
+    IF    $system_source != $authd_source
+        SSH.Execute
+        ...    printf '%s\n' 'Package: *' 'Pin: release ${authd_pin}' 'Pin-Priority: 100' > /etc/apt/preferences.d/98-e2e-authd-source-fallback
+    ELSE
+        SSH.Execute    rm -f /etc/apt/preferences.d/98-e2e-authd-source-fallback
+    END
+
+
+Configure Local Authd Policy
+    ${authd_version}=    SSH.Execute    dpkg-query -W -f='${Version}' authd
+    SSH.Execute
+    ...    printf '%s\n' 'Package: authd' 'Pin: version ${authd_version}' 'Pin-Priority: 1001' > /etc/apt/preferences.d/99-e2e-authd-source
+    SSH.Execute    apt-mark hold authd
+
+
+Verify Authd Source
+    [Arguments]    ${source}
+    ${source_reference}=    Get APT Source Reference    ${source}
+    ${installed_version}=    SSH.Execute    dpkg-query -W -f='${Version}' authd
+    ${candidate_version}=    SSH.Execute    apt-cache policy authd | awk '/Candidate:/ { print $2; exit }'
+    Should Be Equal    ${candidate_version}    ${installed_version}
+    ${policy}=    SSH.Execute    apt-cache policy authd
+    Should Contain    ${policy}    ${source_reference}
+
+
+Verify Local Authd
+    ${installed_version}=    SSH.Execute    dpkg-query -W -f='${Version}' authd
+    Should Not Be Empty    ${installed_version}
+    ${held_packages}=    SSH.Execute    apt-mark showhold
+    Should Contain    ${held_packages}    authd
 
 
 Sync System Time

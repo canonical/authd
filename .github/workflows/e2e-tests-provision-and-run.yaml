@@ -10,6 +10,10 @@ on:
       ubuntu-release:
         required: true
         type: string
+      ubuntu-releases:
+        description: 'JSON array of selected Ubuntu releases, used for archive-suite matching'
+        required: true
+        type: string
       force-fresh-image:
         description: 'Force creation of a fresh VM image by ignoring cache'
         type: boolean
@@ -20,8 +24,13 @@ on:
         type: string
         required: false
         default: ''
-      authd-ppa:
-        description: 'If set, use this PPA instead of authd-edge when installing the authd package and its dependencies'
+      apt-source:
+        description: 'If set, update all packages except authd from this PPA or Ubuntu archive suite'
+        type: string
+        required: false
+        default: ''
+      authd-apt-source:
+        description: 'If set, install authd from this PPA or Ubuntu archive suite'
         type: string
         required: false
         default: ''
@@ -53,8 +62,26 @@ env:
   E2E_TESTS_DIR: e2e-tests
 
 jobs:
+  resolve_release:
+    name: Resolve Ubuntu release
+    runs-on: ubuntu-latest
+    outputs:
+      codename: ${{ steps.resolve.outputs.codename }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Resolve Ubuntu release codename
+        id: resolve
+        env:
+          RELEASE: ${{ inputs.ubuntu-release }}
+          SELECTED_RELEASES: ${{ inputs.ubuntu-releases }}
+          APT_SOURCE: ${{ inputs.apt-source }}
+          AUTHD_APT_SOURCE: ${{ inputs.authd-apt-source }}
+        run: bash ./.github/scripts/resolve-release.sh
+
   provision-vm:
     name: Provision VM
+    needs: resolve_release
     runs-on: ubuntu-latest
     permissions:
       # Needed by actions/checkout
@@ -164,6 +191,21 @@ jobs:
           )
 
   build-deb:
+    needs: resolve_release
+    if: >-
+      ${{
+        inputs.authd-apt-source == '' ||
+        (
+          !startsWith(inputs.authd-apt-source, 'ppa:') &&
+          !(
+            startsWith(
+              inputs.authd-apt-source,
+              format('{0}-', needs.resolve_release.outputs.codename)
+            ) ||
+            inputs.authd-apt-source == needs.resolve_release.outputs.codename
+          )
+        )
+      }}
     uses: ./.github/workflows/debian-build.yaml
     with:
       files-hash: ${{ inputs.files-hash }}
@@ -172,8 +214,18 @@ jobs:
 
   e2e-test:
     needs:
+      - resolve_release
       - provision-vm
       - build-deb
+    if: >-
+      ${{
+        !cancelled() &&
+        needs.provision-vm.result == 'success' &&
+        (
+          needs.build-deb.result == 'success' ||
+          needs.build-deb.result == 'skipped'
+        )
+      }}
     strategy:
       matrix:
         broker: ${{ fromJSON(inputs.brokers) }}
@@ -183,7 +235,30 @@ jobs:
       ubuntu-release: ${{ inputs.ubuntu-release }}
       broker: ${{ matrix.broker }}
       broker-snap-channel: ${{ inputs.broker-snap-channel }}
-      authd-ppa: ${{ inputs.authd-ppa }}
+      apt-source: >-
+        ${{
+          (
+            startsWith(inputs.apt-source, 'ppa:') ||
+            startsWith(
+              inputs.apt-source,
+              format('{0}-', needs.resolve_release.outputs.codename)
+            ) ||
+            inputs.apt-source == needs.resolve_release.outputs.codename
+          ) &&
+          inputs.apt-source || ''
+        }}
+      authd-apt-source: >-
+        ${{
+          (
+            startsWith(inputs.authd-apt-source, 'ppa:') ||
+            startsWith(
+              inputs.authd-apt-source,
+              format('{0}-', needs.resolve_release.outputs.codename)
+            ) ||
+            inputs.authd-apt-source == needs.resolve_release.outputs.codename
+          ) &&
+          inputs.authd-apt-source || ''
+        }}
       e2e-tests: ${{ inputs.e2e-tests }}
       e2e-test-cases: ${{ inputs.e2e-test-cases }}
     secrets: inherit

@@ -26,7 +26,8 @@ Prerequisites:
 
 Optional environment variables:
   AUTHD_DEB           Host path to the authd package for migration tests
-  AUTHD_PPA           PPA to use for authd dependencies in migration tests
+  APT_SOURCE          PPA or Ubuntu archive suite for all packages except authd
+  AUTHD_APT_SOURCE    PPA or Ubuntu archive suite for authd installation
   BROKER_SNAP         Host path to the broker snap for migration tests
 
 Options:
@@ -46,6 +47,8 @@ ROOT_DIR=$(dirname "$(readlink -f "$0")")
 TESTS_DIR="${ROOT_DIR}/tests"
 LISTENER_DIR="${ROOT_DIR}/listener"
 TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
+# shellcheck source=vm/lib/libprovision.sh
+source "${ROOT_DIR}/vm/lib/libprovision.sh"
 
 # Load broker-specific credentials from e2e-tests-<broker>.env before argument
 # parsing, so that explicit CLI flags take priority over values from the file.
@@ -151,6 +154,45 @@ if [ -z "${E2E_USER:-}" ] || [ -z "${E2E_PASSWORD:-}" ] || [ -z "${BROKER:-}" ] 
     exit 1
 fi
 
+requested_apt_source="${APT_SOURCE:-${AUTHD_DEFAULT_APT_SOURCE}}"
+requested_authd_apt_source="${AUTHD_APT_SOURCE:-}"
+if ! APT_SOURCE="$(normalize_apt_source "${requested_apt_source}")"; then
+    echo >&2 "Invalid APT source '${requested_apt_source}'."
+    exit 1
+fi
+
+AUTHD_APT_SOURCE=
+if [ -n "${requested_authd_apt_source}" ]; then
+    if ! AUTHD_APT_SOURCE="$(normalize_apt_source "${requested_authd_apt_source}")"; then
+        echo >&2 "Invalid authd APT source '${requested_authd_apt_source}'."
+        exit 1
+    fi
+fi
+unset requested_apt_source requested_authd_apt_source
+
+if [ -n "${AUTHD_APT_SOURCE:-}" ] && [ -n "${AUTHD_DEB:-}" ]; then
+    echo >&2 "AUTHD_APT_SOURCE cannot be used together with AUTHD_DEB."
+    exit 1
+fi
+
+if ! is_ppa_source "${APT_SOURCE}" || [ -n "${AUTHD_APT_SOURCE:-}" ] && ! is_ppa_source "${AUTHD_APT_SOURCE}"; then
+    VM_RELEASE=$(resolve_devel_release "${RELEASE}")
+fi
+
+if ! is_ppa_source "${APT_SOURCE}"; then
+    if [[ "${APT_SOURCE}" != "${VM_RELEASE}" && "${APT_SOURCE}" != "${VM_RELEASE}-"* ]]; then
+        echo >&2 "APT source suite '${APT_SOURCE}' does not match VM release '${VM_RELEASE}'."
+        exit 1
+    fi
+fi
+
+if [ -n "${AUTHD_APT_SOURCE:-}" ] && ! is_ppa_source "${AUTHD_APT_SOURCE}"; then
+    if [[ "${AUTHD_APT_SOURCE}" != "${VM_RELEASE}" && "${AUTHD_APT_SOURCE}" != "${VM_RELEASE}-"* ]]; then
+        echo >&2 "Authd APT source suite '${AUTHD_APT_SOURCE}' does not match VM release '${VM_RELEASE}'."
+        exit 1
+    fi
+fi
+
 VM_NAME=${VM_NAME:-"e2e-runner-${RELEASE}"}
 
 if [ ${#TESTS_TO_RUN[@]} -eq 0 ]; then
@@ -233,7 +275,8 @@ env \
     RELEASE="$RELEASE" \
     VM_NAME="$VM_NAME" \
     AUTHD_DEB="${AUTHD_DEB:-}" \
-    AUTHD_PPA="${AUTHD_PPA:-}" \
+    APT_SOURCE="${APT_SOURCE:-}" \
+    AUTHD_APT_SOURCE="${AUTHD_APT_SOURCE:-}" \
     BROKER_SNAP="${BROKER_SNAP:-}" \
     VNC_PORT="$VNC_PORT" \
     SYSTEMD_SUPPORTS_VSOCK="${SYSTEMD_SUPPORTS_VSOCK:-}" \

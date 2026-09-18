@@ -34,7 +34,8 @@ Required environment variables (or use the corresponding command-line options):
 
 Optional:
   E2E_USER, E2E_PASSWORD, E2E_PASSWORDLESS_USER, TOTP_SECRET,
-  AUTHD_MSENTRAID_ISSUER_ID, AUTHD_MSENTRAID_CLIENT_ID, AUTHD_MSENTRAID_CLIENT_SECRET
+  AUTHD_MSENTRAID_ISSUER_ID, AUTHD_MSENTRAID_CLIENT_ID, AUTHD_MSENTRAID_CLIENT_SECRET,
+  AUTHD_DEB, APT_SOURCE, AUTHD_APT_SOURCE
                                         Forwarded to the console so keywords
                                         that reference them work as in a run.
 
@@ -48,6 +49,8 @@ EOF
 
 ROOT_DIR=$(dirname "$(readlink -f "$0")")
 TEST_RUNS_DIR="${XDG_RUNTIME_DIR}/authd-e2e-test-runs"
+# shellcheck source=vm/lib/libprovision.sh
+source "${ROOT_DIR}/vm/lib/libprovision.sh"
 
 # Load broker-specific credentials from e2e-tests-<broker>.env before argument
 # parsing, so that explicit CLI flags take priority over values from the file.
@@ -126,6 +129,25 @@ if [ -z "${BROKER:-}" ] || [ -z "${RELEASE:-}" ]; then
     exit 1
 fi
 
+requested_apt_source="${APT_SOURCE:-${AUTHD_DEFAULT_APT_SOURCE}}"
+requested_authd_apt_source="${AUTHD_APT_SOURCE:-}"
+if ! APT_SOURCE="$(normalize_apt_source "${requested_apt_source}")"; then
+    echo >&2 "Invalid APT source '${requested_apt_source}'."
+    exit 1
+fi
+AUTHD_APT_SOURCE=
+if [ -n "${requested_authd_apt_source}" ]; then
+    if ! AUTHD_APT_SOURCE="$(normalize_apt_source "${requested_authd_apt_source}")"; then
+        echo >&2 "Invalid authd APT source '${requested_authd_apt_source}'."
+        exit 1
+    fi
+fi
+if [ -n "${AUTHD_APT_SOURCE}" ] && [ -n "${AUTHD_DEB:-}" ]; then
+    echo >&2 "AUTHD_APT_SOURCE cannot be used together with AUTHD_DEB."
+    exit 1
+fi
+unset requested_apt_source requested_authd_apt_source
+
 VM_NAME=${VM_NAME:-"e2e-runner-${RELEASE}"}
 
 # Restore the broker snapshot so the console starts from a known state, mirroring
@@ -177,6 +199,9 @@ env \
     AUTHD_MSENTRAID_ISSUER_ID="${AUTHD_MSENTRAID_ISSUER_ID:-}" \
     AUTHD_MSENTRAID_CLIENT_ID="${AUTHD_MSENTRAID_CLIENT_ID:-}" \
     AUTHD_MSENTRAID_CLIENT_SECRET="${AUTHD_MSENTRAID_CLIENT_SECRET:-}" \
+    AUTHD_DEB="${AUTHD_DEB:-}" \
+    APT_SOURCE="${APT_SOURCE}" \
+    AUTHD_APT_SOURCE="${AUTHD_APT_SOURCE}" \
     VNC_PORT="$VNC_PORT" \
     SYSTEMD_SUPPORTS_VSOCK="${SYSTEMD_SUPPORTS_VSOCK:-}" \
     YARF_LOG_LEVEL="${YARF_LOG_LEVEL:-DEBUG}" \

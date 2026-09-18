@@ -52,13 +52,20 @@ ssh-add /path/to/key
 ```
 
 This sets up a libvirt VM with Ubuntu, installs authd and the broker, and
-creates the snapshots required by the tests. By default, authd is installed
-from the [authd-edge PPA][authd-edge-ppa] and the broker from the edge channel
-snap. Use `--authd-deb` to install a locally built authd package, `--authd-ppa
-<ppa>` to select a different PPA for authd and its dependencies, or
-`--broker-snap` to install a locally built broker snap. Run
-`./e2e-tests/vm/provision.sh --help` for all available options, including
-`--force` to reprovision.
+creates the snapshots required by the tests. By default, packages other than
+authd come from the [authd-edge PPA][authd-edge-ppa], authd comes from the local
+package when `--authd-deb` is supplied, and the broker comes from the edge
+channel snap. Use `--authd-apt-source <source>` to select the source for authd
+or `--apt-source <source>` to select the source for all packages except authd.
+Each source can be `authd`, `authd-edge`, `authd-dev`, or an Ubuntu archive
+suite. Use `--authd-deb` for a local authd package; it cannot be combined with
+`--authd-apt-source`. Use `--broker-snap` to install a locally built broker
+snap. Run `./e2e-tests/vm/provision.sh --help` for all available options,
+including `--force` to reprovision.
+
+APT policy pins authd to its selected source while allowing authd dependencies
+to use the system source and normal archive fallbacks. Provisioning upgrades
+the whole system from the system source, not only authd dependencies.
 
 ### 4. Set up YARF
 
@@ -92,31 +99,48 @@ Run `./e2e-tests/run-tests.sh --help` for all available options, including
 
 ## Running in GitHub CI
 
-By default, GitHub CI runs the end-to-end tests against `authd-msentraid` on
-all supported Ubuntu releases (`noble`, `resolute`, and `devel`), using the
-complete test suite and the authd package and broker snap built from the
-current branch.  The authd package dependencies (gnome-shell) are resolved from
-the [authd-edge PPA][authd-edge-ppa], or from the PPA selected with
-`AUTHD_PPA`. Provisioning also explicitly upgrades the already-installed
-gnome-shell package so that the version from the selected PPA is used.
+By default, GitHub CI runs the end-to-end tests against `authd-msentraid` on all
+supported Ubuntu releases (`noble`, `resolute`, and `devel`), using the complete
+test suite and the authd package and broker snap built from the current branch.
+All other packages are updated from the [authd-edge PPA][authd-edge-ppa].
 Migration suites start with the last stable authd and broker releases before
-installing the branch-built package or snap. To use locally built packages in
+installing the selected authd package or snap. To use locally built packages in
 those suites, set `AUTHD_DEB` and `BROKER_SNAP` to their host paths when
-running `run-tests.sh`.  Set `AUTHD_PPA` as well when the authd package
-dependencies should come from a different PPA.
+running `run-tests.sh`. `APT_SOURCE` selects the source for all packages except
+authd, and `AUTHD_APT_SOURCE` independently selects the authd source. Both
+variables accept the three authd PPA names or an Ubuntu archive suite.
 
-The E2E workflow runs for a pull request only when it has the `e2e-tests`
-label.  The pull request template contains commented examples for selecting
-Ubuntu releases, brokers, test suites, test cases, and the authd PPA. Copy the
-relevant line into the visible part of the pull request description to enable
-it; leave it commented to use the default.
+The E2E workflow runs for a pull request only when it has the `e2e-tests` label.
+The pull request template contains commented examples for selecting Ubuntu
+releases, brokers, test suites, test cases, and the two package sources. Copy
+the relevant line into the visible part of the pull request description to
+enable it; leave it commented to use the default.
 
-To resolve authd package dependencies from the [authd-dev PPA][authd-dev-ppa]
-instead, add `e2e-ppa: authd-dev` to the pull request description.
+To update all packages except authd from an Ubuntu archive suite, add an
+`e2e-apt-source:` line with the full suite name. For example:
 
-To run only selected end-to-end test suites, add one or more `e2e-tests:` lines
-to the pull request description. Each line can contain a space- or
-comma-separated list of suite filenames:
+```text
+e2e-apt-source: resolute-proposed
+```
+
+To install authd from a PPA or archive suite independently, add an
+`e2e-authd-apt-source:` line:
+
+```text
+e2e-authd-apt-source: resolute-updates
+```
+
+Either marker also accepts `authd`, `authd-edge`, or `authd-dev` to select the
+stable, edge, or development PPA. PPA selections apply to every release. An
+archive selection is used only by the matrix job whose Ubuntu release matches
+the suite prefix (the `devel` job is matched using the current Ubuntu codename,
+not the literal `devel` label); other release jobs use their defaults. If
+`e2e-authd-apt-source` is omitted, the branch-built authd package remains the
+package under test.
+
+To run only selected end-to-end test suites, add an `e2e-tests:` line to the
+pull request description, followed by a space- or comma-separated list of suite
+filenames. Repeat the marker to select more than one suite:
 
 ```text
 e2e-tests: login_gdm.robot
@@ -149,12 +173,15 @@ e2e-brokers: google
 
 Editing the pull request description does not automatically re-run the
 workflow. If you change an `e2e-ubuntu-releases:`, `e2e-tests:`,
-`e2e-test-case:`, `e2e-brokers:`, or `e2e-ppa:` line after the workflow has
-already run, re-run the workflow. It fetches the current pull request
-description from GitHub. If you start the workflow with `workflow_dispatch`,
-use its separate `e2e-ubuntu-releases`, `e2e-brokers`, `e2e-tests`,
-`e2e-test-case`, and `e2e-ppa` inputs instead.
+`e2e-test-case:`, `e2e-brokers:`, `e2e-apt-source:`, or
+`e2e-authd-apt-source:` line after the workflow has already run, re-run the
+workflow. It fetches the current pull request description from GitHub. If you
+start the workflow with `workflow_dispatch`, use its separate
+`e2e-ubuntu-releases`, `e2e-brokers`, `e2e-tests`, `e2e-test-case`,
+`e2e-apt-source`, and `e2e-authd-apt-source`
+inputs instead.
 
 [yarf]: https://github.com/canonical/yarf
+[authd-stable-ppa]: https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd
 [authd-edge-ppa]: https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge
 [authd-dev-ppa]: https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-dev
