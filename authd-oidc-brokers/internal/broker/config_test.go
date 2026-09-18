@@ -411,6 +411,34 @@ client_id = client_id
 	}
 }
 
+func TestParseFlowsConfigRejectsBooleanDenyRules(t *testing.T) {
+	t.Parallel()
+
+	const configTemplate = `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+device_code = true
+%s = %s
+`
+	for _, key := range []string{
+		flowsNoDeviceAuthKey,
+		flowsNoEntraAuthKey,
+	} {
+		for _, value := range []string{"true", "false"} {
+			t.Run(key+"_"+value, func(t *testing.T) {
+				t.Parallel()
+
+				config := fmt.Sprintf(configTemplate, key, value)
+				_, err := parseConfig(configFile{content: []byte(config)}, nil, &configTestProvider{MockProvider: &testutils.MockProvider{}})
+				require.ErrorContains(t, err, fmt.Sprintf(`invalid value for %q in [flows] section: boolean values are not supported`, key))
+			})
+		}
+	}
+}
+
 // TestParseFlowsConfigReadsMistypedBooleanAsServiceList documents the trap that
 // warnOnUnknownServices exists to catch: a mistyped boolean is a valid service
 // name, so parsing accepts it and the flow ends up disabled everywhere.

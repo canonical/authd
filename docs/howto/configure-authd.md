@@ -547,9 +547,10 @@ restrict a flow to specific PAM services.
 
 ### Enable a flow only for some services
 
-Each flow key in `[flows]` accepts either a boolean or a comma-separated list
-of PAM service names. A boolean applies to every service. A list enables the
-flow only for the services it names:
+The positive flow keys in `[flows]` (`device_code` and `entra_auth`) accept
+either a boolean or a comma-separated list of PAM service names. A boolean
+applies to every service. A list enables the flow only for the services it
+names:
 
 ```ini
 [flows]
@@ -569,6 +570,10 @@ Every flow key has a matching `no_` key that denies services instead of
 allowing them: `no_device_code` for `device_code`, and `no_entra_auth` for
 `entra_auth`. A service is offered a flow only when it is allowed by the flow
 key **and** not denied by the `no_` key.
+
+The `no_` keys accept only comma-separated lists of service names. Omit the
+key to deny no services. Set the positive flow key to `false` to disable a
+flow for every service.
 
 Use a `no_` key to make an exception to a flow that is otherwise enabled
 everywhere:

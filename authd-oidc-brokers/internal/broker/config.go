@@ -661,13 +661,13 @@ func parseFlowsConfig(section *ini.Section, registerDevice bool, p provider) (fl
 			}
 		}
 		if section.HasKey(flowsNoDeviceAuthKey) {
-			fc.DeviceAuth.deny, err = parseServiceRule(section, flowsNoDeviceAuthKey)
+			fc.DeviceAuth.deny, err = parseServiceListRule(section, flowsNoDeviceAuthKey)
 			if err != nil {
 				return flowsConfig{}, err
 			}
 		}
 		if section.HasKey(flowsNoEntraAuthKey) {
-			fc.EntraAuth.deny, err = parseServiceRule(section, flowsNoEntraAuthKey)
+			fc.EntraAuth.deny, err = parseServiceListRule(section, flowsNoEntraAuthKey)
 			if err != nil {
 				return flowsConfig{}, err
 			}
@@ -683,8 +683,19 @@ func parseFlowsConfig(section *ini.Section, registerDevice bool, p provider) (fl
 }
 
 func parseServiceRule(section *ini.Section, keyName string) (serviceRule, error) {
+	return parseServiceRuleValue(section, keyName, true)
+}
+
+func parseServiceListRule(section *ini.Section, keyName string) (serviceRule, error) {
+	return parseServiceRuleValue(section, keyName, false)
+}
+
+func parseServiceRuleValue(section *ini.Section, keyName string, allowBoolean bool) (serviceRule, error) {
 	key := section.Key(keyName)
 	if value, err := key.Bool(); err == nil {
+		if !allowBoolean {
+			return serviceRule{}, fmt.Errorf("invalid value for %q in [%s] section: boolean values are not supported; use a comma-separated list of PAM service names", keyName, flowsSection)
+		}
 		return booleanServiceRule(value), nil
 	}
 
