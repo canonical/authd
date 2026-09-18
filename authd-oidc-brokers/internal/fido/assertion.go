@@ -54,6 +54,10 @@ var (
 	ErrPINChangeRequired = errors.New("security key PIN must be changed")
 	// ErrTimeout means the user did not touch the device in time.
 	ErrTimeout = errors.New("security key was not touched in time")
+	// ErrCredentialCheckIndeterminate means a pre-flight could not prove that
+	// the device lacks the credential, for example because user verification
+	// may be required before the authenticator exposes it.
+	ErrCredentialCheckIndeterminate = errors.New("security key credential presence is indeterminate")
 	// ErrCanceled means the assertion was canceled (e.g. the session ended).
 	ErrCanceled = errors.New("FIDO assertion canceled")
 )

@@ -244,6 +244,22 @@ func updateAuthModes(t *testing.T, b *broker.Broker, sessionID, selectedMode str
 	require.NoError(t, err, "Setup: SelectAuthenticationMode should not have returned an error")
 }
 
+// requireAuthModes asserts the authentication modes offered to the client, in
+// order. It also primes the session: GetAuthenticationModes replaces the
+// session's valid-mode list, which a later SelectAuthenticationMode validates
+// against.
+func requireAuthModes(t *testing.T, b *broker.Broker, sessionID string, want ...string) {
+	t.Helper()
+
+	modes, err := b.GetAuthenticationModes(sessionID, supportedLayouts)
+	require.NoError(t, err, "GetAuthenticationModes should not have returned an error")
+	got := make([]string, 0, len(modes))
+	for _, mode := range modes {
+		got = append(got, mode["id"])
+	}
+	require.Equal(t, want, got, "the client must be offered these modes, in this order")
+}
+
 func generateAndStoreCachedInfo(t *testing.T, options tokenOptions, path string) {
 	t.Helper()
 

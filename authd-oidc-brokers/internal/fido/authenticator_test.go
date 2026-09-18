@@ -50,3 +50,26 @@ func TestMapAssertionError(t *testing.T) {
 	require.NotErrorIs(t, err, ErrPINRequired)
 	require.ErrorContains(t, err, "tx")
 }
+
+func TestClassifyCredentialCheck(t *testing.T) {
+	t.Parallel()
+
+	holds, err := classifyCredentialCheck(nil, false)
+	require.NoError(t, err)
+	require.True(t, holds)
+
+	holds, err = classifyCredentialCheck(libfido2.ErrUserPresenceRequired, false)
+	require.NoError(t, err)
+	require.True(t, holds)
+	holds, err = classifyCredentialCheck(libfido2.ErrUPRequired, false)
+	require.NoError(t, err)
+	require.True(t, holds)
+
+	holds, err = classifyCredentialCheck(libfido2.ErrNoCredentials, false)
+	require.NoError(t, err)
+	require.False(t, holds)
+
+	holds, err = classifyCredentialCheck(libfido2.ErrNoCredentials, true)
+	require.ErrorIs(t, err, ErrCredentialCheckIndeterminate)
+	require.False(t, holds)
+}
