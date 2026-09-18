@@ -4,6 +4,7 @@ myst:
     "description lang=en": "Use authd for cloud-based login to Ubuntu with SSH."
 ---
 
+(howto::login-ssh)=
 # Log in with SSH
 
 ## Server configuration
