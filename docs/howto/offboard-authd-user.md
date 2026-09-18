@@ -16,10 +16,18 @@ Disable or delete the user in the identity provider. You should also revoke
 active sessions according to the provider's normal offboarding process.
 
 Disabling provider access alone is sufficient to prevent new authd logins if
-[the force provider access check](ref::config-force-provider-auth)
-is enabled. Otherwise, the user may still log in with a local password
-while the provider is unreachable, so delete the local authd account on
-each affected host as described in the remainder of this guide.
+[the force provider access check](ref::config-force-provider-auth) is enabled.
+
+Otherwise, the user may still log in with a local password while the provider
+is unreachable. This is the case when the user disables the network, which they
+can do from the GDM login screen before login.
+
+So delete the local authd account on each affected host as described in the
+remainder of this guide.
+
+:::{warning}
+SSH logins with public keys bypass authd, and a locked user can bypass a disabled provider.
+:::
 
 ## Remove the local account
 
