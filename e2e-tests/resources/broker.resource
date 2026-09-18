@@ -352,9 +352,8 @@ Select Authentication Mode Through GDM
 
 Select Authentication Mode Through GDM Lock Screen
     [Arguments]    ${authentication_mode}
-    # The lock screen exposes Login Options as the bottom-left key button.
-    # The bottom-right button switches users.
-    Hid.Move Pointer To Proportional    0.91    0.95
+    # The lock screen exposes Login Options as the bottom-right button.
+    Hid.Move Pointer To Proportional    0.95    0.92
     Left Button Click
     Match Text    ${authentication_mode}    30
     Move Pointer To ${authentication_mode}
