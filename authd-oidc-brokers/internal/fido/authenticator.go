@@ -49,6 +49,11 @@ const relyingPartyID = "login.microsoft.com"
 // Assert for why a single Cancel is not reliable.
 const cancelRetryInterval = 100 * time.Millisecond
 
+// cancelWaitTimeout bounds how long a canceled libfido2 operation may keep
+// the authentication request waiting. The worker retains the device until
+// libfido2 returns, so returning here does not let it be collected in use.
+const cancelWaitTimeout = time.Second
+
 // Authenticator performs WebAuthn Get ceremonies with the first connected
 // FIDO2 device via libfido2. The zero value is ready to use.
 type Authenticator struct{}
@@ -278,11 +283,13 @@ func assertionWithContext(ctx context.Context, device *libfido2.Device, rpID str
 	case result := <-resultCh:
 		return result.assertion, result.err
 	case <-ctx.Done():
-		// Interrupt the operation, then wait for it to return: the Device
+		// Interrupt the operation, then wait briefly for it to return: the Device
 		// must not be garbage collected while libfido2 still uses it.
 		var cancelErr error
 		retry := time.NewTicker(cancelRetryInterval)
 		defer retry.Stop()
+		deadline := time.NewTimer(cancelWaitTimeout)
+		defer deadline.Stop()
 		for {
 			if err := device.Cancel(); err != nil && cancelErr == nil {
 				cancelErr = err
@@ -294,6 +301,11 @@ func assertionWithContext(ctx context.Context, device *libfido2.Device, rpID str
 				}
 				return nil, ErrCanceled
 			case <-retry.C:
+			case <-deadline.C:
+				if cancelErr != nil {
+					return nil, errors.Join(ErrCanceled, fmt.Errorf("failed to cancel FIDO assertion: %v", cancelErr))
+				}
+				return nil, ErrCanceled
 			}
 		}
 	}
