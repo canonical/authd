@@ -10,8 +10,6 @@ myst:
 authd creates a local user record the first time a user logs in successfully
 through a configured identity broker.
 
-You do not create this record with `authctl`.
-
 ## Prerequisites
 
 Before you start the onboarding process, make sure that authd and a broker are
