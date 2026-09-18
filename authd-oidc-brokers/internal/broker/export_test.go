@@ -15,8 +15,8 @@ var (
 )
 
 // SetFIDODeviceWaitTimeout overrides how long entraAuthFidoAuth waits for a
-// security key before falling back to the device code flow, so tests need not
-// wait the production timeout. It returns a func that restores the default.
+// security key before the local FIDO fallback runs, so tests need not wait the
+// production timeout. It returns a func that restores the default.
 func SetFIDODeviceWaitTimeout(d time.Duration) (restore func()) {
 	prev := fidoDeviceWaitTimeout
 	fidoDeviceWaitTimeout = d
