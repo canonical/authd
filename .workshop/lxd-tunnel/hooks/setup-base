@@ -1,0 +1,9 @@
+#!/bin/bash
+set -eux
+
+# The LXD client itself is installed lazily on first companion-VM use (see
+# ensure_lxd_client in .workshop/authd/scripts/companion-vm-ctl), so a plain
+# `workshop launch`/`refresh` for the primary authd/PAM/NSS workflow never
+# pays for installing snapd and the LXD snap. Only the tunnel's mount point
+# needs to exist ahead of time.
+mkdir -p /var/lib/workshop/run/host-lxd
