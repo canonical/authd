@@ -12,7 +12,9 @@ import (
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/authmodes"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/google"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/stretchr/testify/require"
 )
@@ -598,6 +600,59 @@ func TestRegisterOwner(t *testing.T) {
 	}
 }
 
+func TestConcurrentFinishAuthRegistersOneOwner(t *testing.T) {
+	t.Parallel()
+
+	provider := &testutils.MockProvider{}
+	b := &Broker{
+		cfg: Config{
+			userConfig: userConfig{
+				ownerAllowed:          true,
+				firstUserBecomesOwner: true,
+				ownerMutex:            &sync.RWMutex{},
+				provider:              provider,
+			},
+		},
+		provider: provider,
+	}
+
+	authInfos := []*token.AuthCachedInfo{
+		{UserInfo: info.User{Name: "user1@example.com"}},
+		{UserInfo: info.User{Name: "user2@example.com"}},
+	}
+	start := make(chan struct{})
+	accesses := make(chan string, len(authInfos))
+	var wg sync.WaitGroup
+	for _, authInfo := range authInfos {
+		wg.Add(1)
+		go func(authInfo *token.AuthCachedInfo) {
+			defer wg.Done()
+			<-start
+			access, _ := b.finishAuth(&session{isOffline: true}, authInfo)
+			accesses <- access
+		}(authInfo)
+	}
+	close(start)
+	wg.Wait()
+	close(accesses)
+
+	granted := 0
+	for access := range accesses {
+		if access == AuthGranted {
+			granted++
+		}
+	}
+	require.Equal(t, 1, granted)
+
+	b.cfg.ownerMutex.RLock()
+	registeredOwner := b.cfg.owner
+	b.cfg.ownerMutex.RUnlock()
+	require.NoError(t, b.cfg.registerOwner("", "user3@example.com"))
+	b.cfg.ownerMutex.RLock()
+	defer b.cfg.ownerMutex.RUnlock()
+	require.Equal(t, registeredOwner, b.cfg.owner)
+}
+
 func TestRegisterOwnerRejectsInvalidChars(t *testing.T) {
 	t.Parallel()
 
@@ -608,7 +663,7 @@ func TestRegisterOwnerRejectsInvalidChars(t *testing.T) {
 	require.NoError(t, os.WriteFile(cfgPath,
 		[]byte("[oidc]\nissuer = https://issuer.url.com\nclient_id = client_id\n"), 0600))
 
-	uc := userConfig{provider: p, ownerMutex: &sync.RWMutex{}}
+	uc := userConfig{ownerAllowed: true, firstUserBecomesOwner: true, provider: p, ownerMutex: &sync.RWMutex{}}
 
 	tests := map[string]struct {
 		username string
