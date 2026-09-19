@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unsafe"
@@ -62,6 +63,7 @@ func lockMFAFlowStateForTests(flow *himmelblau.MFAFlowState) func() {
 type mockEntraAuthProvider struct {
 	*testutils.MockProvider
 	flowState             *himmelblau.MFAFlowState
+	newFlowState          func() *himmelblau.MFAFlowState // when set, returns a fresh flow per InitiateEntraAuth call
 	challengeInfo         *himmelblau.MFAChallengeInfo
 	mfaTokenResult        *oauth2.Token
 	initErr               error
@@ -94,6 +96,21 @@ func (p *blockingMFAProvider) AcquireTokenByMFAFlow(_ context.Context, _, _ stri
 	<-p.unblock
 	close(p.finished)
 	return nil, context.Canceled
+}
+
+// cancelingMFAProvider succeeds at the MFA continuation but cancels the
+// request first, simulating a cancel that lands while the non-preemptible
+// AcquireTokenByMFAFlow call is in flight.
+type cancelingMFAProvider struct {
+	*mockEntraAuthProvider
+	cancel func()
+}
+
+func (p *cancelingMFAProvider) AcquireTokenByMFAFlow(ctx context.Context, clientID, issuerURL, username string, flow *himmelblau.MFAFlowState, authData string, pollAttempt int, deviceRegistrationData []byte) (*oauth2.Token, error) {
+	if p.cancel != nil {
+		p.cancel()
+	}
+	return p.mockEntraAuthProvider.AcquireTokenByMFAFlow(ctx, clientID, issuerURL, username, flow, authData, pollAttempt, deviceRegistrationData)
 }
 
 func (p *mockEntraAuthProvider) VerifyAccessToken(ctx context.Context, _, _ string) error {
@@ -137,6 +154,9 @@ func (p *mockEntraAuthProvider) InitiateEntraAuth(_ context.Context, _, _ string
 	p.recordedInitDevScopes = append(p.recordedInitDevScopes, withDeviceScope)
 	if p.initErr != nil {
 		return nil, nil, p.initErr
+	}
+	if p.newFlowState != nil {
+		return p.newFlowState(), p.challengeInfo, nil
 	}
 	return p.flowState, p.challengeInfo, nil
 }
@@ -6203,6 +6223,10 @@ type mockFIDOAuthenticator struct {
 	preflightCalls      int
 	preflightChallenges []string
 	preflightAllowLists [][]string
+	// preflightEntered is closed on the first HoldsCredential call, which then
+	// waits for the request context.
+	preflightEntered  chan struct{}
+	preflightCanceled chan struct{}
 
 	recordedChallenges []string
 	recordedAllowLists [][]string
@@ -6226,10 +6250,18 @@ func (m *mockFIDOAuthenticator) DeviceRequiresPIN() (bool, error) {
 	return m.requiresPIN, m.requiresPINErr
 }
 
-func (m *mockFIDOAuthenticator) HoldsCredential(_ context.Context, challenge string, allowList []string) (bool, error) {
+func (m *mockFIDOAuthenticator) HoldsCredential(ctx context.Context, challenge string, allowList []string) (bool, error) {
 	m.preflightCalls++
 	m.preflightChallenges = append(m.preflightChallenges, challenge)
 	m.preflightAllowLists = append(m.preflightAllowLists, allowList)
+	if m.preflightEntered != nil {
+		close(m.preflightEntered)
+		<-ctx.Done()
+		if m.preflightCanceled != nil {
+			close(m.preflightCanceled)
+		}
+		return false, ctx.Err()
+	}
 	if m.preflightErr != nil {
 		return false, m.preflightErr
 	}
@@ -6621,6 +6653,243 @@ func TestPasswordlessFIDOModeOrdering(t *testing.T) {
 			require.Zero(t, tc.fido.assertCalls, "routing must not run a ceremony before the user selects the key mode")
 		})
 	}
+}
+
+// TestPasswordlessFIDOCancelDuringPreflightFreesFlow is a regression test for
+// a leaked libhimmelblau continuation: routing blocks on the security key, and
+// a cancel landing there makes IsAuthenticated return through its ctx.Done()
+// branch without persisting the session, so the MFA flow created moments
+// earlier is unreachable unless entraAuth frees it.
+func TestPasswordlessFIDOCancelDuringPreflightFreesFlow(t *testing.T) {
+	t.Parallel()
+
+	provider := newFIDOChallengeProvider(nil)
+	released := make(chan struct{})
+	provider.flowState = newTrackedMFAFlowState(func() { close(released) })
+	fidoMock := &mockFIDOAuthenticator{
+		devicePresent:     true,
+		preflightEntered:  make(chan struct{}),
+		preflightCanceled: make(chan struct{}),
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		fidoAuthenticator:     fidoMock,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
+
+	authDone := make(chan string)
+	go func() {
+		access, _, _ := b.IsAuthenticated(sessionID, "{}")
+		authDone <- access
+	}()
+
+	<-fidoMock.preflightEntered
+	b.CancelIsAuthenticated(sessionID)
+	select {
+	case <-fidoMock.preflightCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("preflight did not observe cancellation")
+	}
+	require.Equal(t, broker.AuthCancelled, <-authDone)
+	select {
+	case <-released:
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "the MFA flow must be freed when the request is cancelled during routing")
+	}
+}
+
+// TestPasswordlessFIDOCancelDuringPreflightKeepsAdvertisedFlow is a regression
+// test for the other half of that cancellation: the stored session still
+// points at the flow behind the security key option it already advertised. A
+// cancelled password attempt must not release it, or selecting that option
+// dead-ends on a freed continuation.
+func TestPasswordlessFIDOCancelDuringPreflightKeepsAdvertisedFlow(t *testing.T) {
+	t.Parallel()
+
+	provider := newFIDOChallengeProvider(nil)
+	var releasedCount atomic.Int32
+	provider.newFlowState = func() *himmelblau.MFAFlowState {
+		return newTrackedMFAFlowState(func() { releasedCount.Add(1) })
+	}
+	fidoMock := &mockFIDOAuthenticator{devicePresent: true}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		fidoAuthenticator:     fidoMock,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
+
+	// Passwordless probe: the security key option is advertised, backed by a
+	// flow the session now holds, with the Entra password listed next.
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	requireAuthModes(t, b, sessionID, authmodes.EntraAuthFido, authmodes.EntraAuth)
+	advertisedFlow := b.MFAFlowForSession(sessionID)
+	require.NotNil(t, advertisedFlow)
+
+	// The user tries the password instead, and the request is cancelled while
+	// routing blocks on the key.
+	updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
+	fidoMock.preflightEntered = make(chan struct{})
+	fidoMock.preflightCanceled = make(chan struct{})
+
+	authDone := make(chan string)
+	go func() {
+		access, _, _ := b.IsAuthenticated(sessionID, fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key)))
+		authDone <- access
+	}()
+
+	<-fidoMock.preflightEntered
+	b.CancelIsAuthenticated(sessionID)
+	select {
+	case <-fidoMock.preflightCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("preflight did not observe cancellation")
+	}
+	require.Equal(t, broker.AuthCancelled, <-authDone)
+
+	// That attempt created a second flow and must release only that one. Wait
+	// for it: IsAuthenticated returns on cancellation while the authentication
+	// goroutine is still unwinding.
+	require.Eventually(t, func() bool { return releasedCount.Load() == 1 }, 5*time.Second, 10*time.Millisecond,
+		"the flow the cancelled attempt created must be released")
+
+	// The advertised security key option still resolves to a live flow.
+	require.Eventually(t, func() bool {
+		return b.SetAvailableMode(sessionID, authmodes.EntraAuthFido) == nil
+	}, 5*time.Second, 10*time.Millisecond, "cancelled authentication cleanup did not finish")
+	_, err = b.SelectAuthenticationMode(sessionID, authmodes.EntraAuthFido)
+	require.NoError(t, err)
+	require.Same(t, advertisedFlow, b.MFAFlowForSession(sessionID),
+		"the session must still hold the flow behind the advertised security key option")
+	require.Equal(t, int32(1), releasedCount.Load(),
+		"only the flow this cancelled attempt created may be released")
+}
+
+// TestPasswordlessFlowReleasedWhenKeyLosesCredentialMidSession is a regression
+// test for an orphaned MFA flow: the probe stores a flow behind the advertised
+// security-key option, and a later password attempt whose routing drops the
+// key (the connected key lost the account's credential) commits a cleared
+// copy. The commit must free the stored flow, not just skip it because the
+// incoming copy carries none.
+func TestPasswordlessFlowReleasedWhenKeyLosesCredentialMidSession(t *testing.T) {
+	t.Parallel()
+
+	provider := newFIDOChallengeProvider(nil)
+	var releasedCount atomic.Int32
+	provider.newFlowState = func() *himmelblau.MFAFlowState {
+		return newTrackedMFAFlowState(func() { releasedCount.Add(1) })
+	}
+	fidoMock := &mockFIDOAuthenticator{devicePresent: true}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                 broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:           true,
+		firstUserBecomesOwner:  true,
+		provider:               provider,
+		fidoAuthenticator:      fidoMock,
+		issuerURL:              defaultIssuerURL,
+		deviceAuthFlowDisabled: true,
+	})
+
+	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
+
+	access, _, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	requireAuthModes(t, b, sessionID, authmodes.EntraAuthFido, authmodes.EntraAuth)
+	require.NotNil(t, b.MFAFlowForSession(sessionID), "the probe must store its flow")
+
+	// The connected key stops holding the account's credential (the user
+	// swapped keys), and the user falls back to the password.
+	fidoMock.noCredential = true
+	access, data, err := b.IsAuthenticated(sessionID, fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key)))
+	require.NoError(t, err)
+	// The password was validated in this very call, so the no-credential
+	// redirect has no password left to offer and denies when the device code
+	// flow is disabled.
+	require.Equal(t, broker.AuthDenied, access)
+	var payload struct {
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(data), &payload))
+	require.Contains(t, payload.Message, "not registered for this account")
+	// The attempt's flow was dropped by routing, and the commit must release
+	// the probe's stored one with it.
+	require.Eventually(t, func() bool { return releasedCount.Load() == 2 }, 5*time.Second, 10*time.Millisecond,
+		"both the advertised flow and the attempt's flow must be released")
+}
+
+// TestPasswordlessMFACancelAfterApprovalRestartsConsumedFlow verifies that a
+// successful MFA continuation is not left advertised when cancellation wins
+// after the non-preemptible AcquireTokenByMFAFlow call returns.
+func TestPasswordlessMFACancelAfterApprovalRestartsConsumedFlow(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	var releasedCount atomic.Int32
+	provider := &cancelingMFAProvider{
+		mockEntraAuthProvider: &mockEntraAuthProvider{
+			MockProvider: &testutils.MockProvider{},
+			flowState:    newTrackedMFAFlowState(func() { releasedCount.Add(1) }),
+			challengeInfo: &himmelblau.MFAChallengeInfo{
+				Message:           "Approve the sign-in request in Microsoft Authenticator",
+				Method:            "PhoneAppNotification",
+				PollingIntervalMs: 5000,
+				MaxPollAttempts:   10,
+			},
+			mfaTokenResult: newMFATokenResult(mfaAuthInfo.Token),
+		},
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+	})
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
+
+	// Password probe: the MFA wait mode is advertised behind a stored flow.
+	access, _, err := b.IsAuthenticated(sessionID, fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key)))
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthNext, access)
+	requireAuthModes(t, b, sessionID, authmodes.EntraMFAWait)
+	advertisedFlow := b.MFAFlowForSession(sessionID)
+	require.NotNil(t, advertisedFlow)
+
+	// The wait mode is selected and the continuation succeeds, but the request
+	// is cancelled while that call is in flight.
+	updateAuthModes(t, b, sessionID, authmodes.EntraMFAWait)
+	provider.cancel = func() { b.CancelIsAuthenticated(sessionID) }
+	access, _, err = b.IsAuthenticated(sessionID, "{}")
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, broker.AuthCancelled, access)
+	require.Eventually(t, func() bool {
+		return b.MFAFlowForSession(sessionID) == nil &&
+			slices.Equal(b.GetNextAuthModes(sessionID), []string{authmodes.EntraAuth})
+	}, 5*time.Second, 10*time.Millisecond,
+		"a consumed continuation must be cleared and restart from Entra authentication")
+	require.Equal(t, int32(1), releasedCount.Load(), "the consumed continuation must be released")
 }
 
 func TestPasswordlessFIDOStillWorksAfterRejectedPassword(t *testing.T) {

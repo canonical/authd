@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/canonical/authd/log"
@@ -48,11 +49,6 @@ const relyingPartyID = "login.microsoft.com"
 // waiting for a canceled ceremony to return. See the ctx.Done() branch in
 // Assert for why a single Cancel is not reliable.
 const cancelRetryInterval = 100 * time.Millisecond
-
-// cancelWaitTimeout bounds how long a canceled libfido2 operation may keep
-// the authentication request waiting. The worker retains the device until
-// libfido2 returns, so returning here does not let it be collected in use.
-const cancelWaitTimeout = time.Second
 
 // Authenticator performs WebAuthn Get ceremonies with the first connected
 // FIDO2 device via libfido2. The zero value is ready to use.
@@ -129,8 +125,19 @@ func deviceInfoWithContext(ctx context.Context, device *libfido2.Device) (*libfi
 		}
 		return result.info, result.err
 	case <-ctx.Done():
-		_ = device.Cancel()
-		return nil, ErrCanceled
+		// Keep owning the device until Info returns. Cancellation can race
+		// Device.open, so a single Cancel may be a no-op; returning here
+		// would let a retry overlap the stale operation on the same key.
+		retry := time.NewTicker(cancelRetryInterval)
+		defer retry.Stop()
+		for {
+			_ = device.Cancel()
+			select {
+			case <-resultCh:
+				return nil, ErrCanceled
+			case <-retry.C:
+			}
+		}
 	}
 }
 
@@ -283,13 +290,13 @@ func assertionWithContext(ctx context.Context, device *libfido2.Device, rpID str
 	case result := <-resultCh:
 		return result.assertion, result.err
 	case <-ctx.Done():
-		// Interrupt the operation, then wait briefly for it to return: the Device
-		// must not be garbage collected while libfido2 still uses it.
+		// Keep owning the device until the worker returns. Cancellation can
+		// race Device.open, so a Cancel before the native handle exists is a
+		// no-op; returning on a deadline would let the next assertion overlap
+		// this worker on the same physical authenticator.
 		var cancelErr error
 		retry := time.NewTicker(cancelRetryInterval)
 		defer retry.Stop()
-		deadline := time.NewTimer(cancelWaitTimeout)
-		defer deadline.Stop()
 		for {
 			if err := device.Cancel(); err != nil && cancelErr == nil {
 				cancelErr = err
@@ -301,14 +308,27 @@ func assertionWithContext(ctx context.Context, device *libfido2.Device, rpID str
 				}
 				return nil, ErrCanceled
 			case <-retry.C:
-			case <-deadline.C:
-				if cancelErr != nil {
-					return nil, errors.Join(ErrCanceled, fmt.Errorf("failed to cancel FIDO assertion: %v", cancelErr))
-				}
-				return nil, ErrCanceled
 			}
 		}
 	}
+}
+
+// deviceOption reports whether the device advertises one of the named CTAP
+// options as supported. A device that is not FIDO2 supports none of them.
+func deviceOption(device *libfido2.Device, names ...string) (bool, error) {
+	info, err := device.Info()
+	if errors.Is(err, libfido2.ErrNotFIDO2) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	for _, option := range info.Options {
+		if slices.Contains(names, option.Name) && option.Value == libfido2.True {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // firstDevice returns the first connected FIDO device. Sessions with several
@@ -336,16 +356,7 @@ func firstDevice() (*libfido2.Device, error) {
 // hasBuiltinUV reports whether the device performs user verification on its
 // own (e.g. a fingerprint reader).
 func hasBuiltinUV(device *libfido2.Device) (bool, error) {
-	info, err := device.Info()
-	if err != nil {
-		return false, err
-	}
-	for _, option := range info.Options {
-		if option.Name == "uv" {
-			return option.Value == libfido2.True, nil
-		}
-	}
-	return false, nil
+	return deviceOption(device, "uv")
 }
 
 // mapAssertionError translates libfido2 errors to the package's sentinel

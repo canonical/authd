@@ -117,6 +117,7 @@ type session struct {
 	// Data to pass from one request to another.
 	deviceAuthResponse        *oauth2.DeviceAuthResponse
 	authInfo                  *token.AuthCachedInfo
+	mfaFlowGeneration         uint64 // increments whenever mfaFlowActive changes
 	mfaFlowActive             *himmelblau.MFAFlowState
 	mfaChallengeInfo          *himmelblau.MFAChallengeInfo
 	entraAuthPasswordHash     string // pre-computed hash (not plaintext) for offline use
@@ -131,8 +132,11 @@ type session struct {
 }
 
 type isAuthenticatedCtx struct {
-	ctx        context.Context
-	cancelFunc context.CancelFunc
+	sessionID       string
+	ctx             context.Context
+	cancelFunc      context.CancelFunc
+	cleanupDone     <-chan struct{}
+	mfaFlowConsumed bool
 }
 
 // verifyAndExtractEntraUserInfo verifies the Entra auth access token's RS256
@@ -1221,7 +1225,6 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 	if err != nil {
 		return AuthDenied, "{}", err
 	}
-	previousMFAFlow := session.mfaFlowActive
 
 	var authData map[string]string
 	if authenticationData != "" {
@@ -1230,33 +1233,61 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 		}
 	}
 
-	ctx, err := b.startAuthenticate(sessionID)
+	authDone := make(chan struct{})
+	cleanupDone := make(chan struct{})
+	ctx, authState, err := b.startAuthenticate(sessionID, cleanupDone)
 	if err != nil {
 		return AuthDenied, "{}", err
 	}
 
-	// Cleans up the IsAuthenticated context when the call is done.
-	defer b.CancelIsAuthenticated(sessionID)
+	// startAuthenticate updates the session atomically, so refresh the copy
+	// after it to avoid authenticating against an MFA flow replaced meanwhile.
+	session, err = b.getSession(sessionID)
+	if err != nil {
+		if ctx.Err() != nil {
+			msg, _ := json.Marshal(errorMessage{Message: "Authentication request cancelled"})
+			return AuthCancelled, string(msg), ctx.Err()
+		}
+		return AuthDenied, "{}", err
+	}
+	originalMFAFlow := session.mfaFlowActive
+	cleanupCancelled := func() {
+		b.reconcileCancelledMFAFlow(sessionID, authState, originalMFAFlow)
+		b.discardUncommittedMFAFlow(sessionID, session.mfaFlowActive)
+		b.clearAuthentication(sessionID, authState)
+		close(cleanupDone)
+	}
 
-	authDone := make(chan struct{})
+	// Normal cleanup only clears this request's marker. On cancellation,
+	// cleanup waits for the handler so a replacement cannot reuse its flow.
+	defer func() {
+		if ctx.Err() == nil {
+			b.clearAuthentication(sessionID, authState)
+			close(cleanupDone)
+			return
+		}
+		go func() {
+			<-authDone
+			cleanupCancelled()
+		}()
+	}()
+
 	var access string
 	var iadResponse isAuthenticatedDataResponse
 	go func() {
+		defer close(authDone)
 		access, iadResponse = b.handleIsAuthenticated(ctx, &session, authData)
-		close(authDone)
 	}()
 
 	select {
 	case <-authDone:
+		// A cancel landing while the handler finishes must beat the ready
+		// result: committing the copy would persist a transition the cancel
+		// unwound, e.g. dropping the flow behind a still-advertised MFA mode.
 	case <-ctx.Done():
-		// We can ignore the error here since the message is constant.
-		msg, _ := json.Marshal(errorMessage{Message: "Authentication request cancelled"})
-		return AuthCancelled, string(msg), ctx.Err()
 	}
 	if ctx.Err() != nil {
-		if session.mfaFlowActive != previousMFAFlow {
-			himmelblau.FreeMFAFlowState(session.mfaFlowActive)
-		}
+		// We can ignore the error here since the message is constant.
 		msg, _ := json.Marshal(errorMessage{Message: "Authentication request cancelled"})
 		return AuthCancelled, string(msg), ctx.Err()
 	}
@@ -1276,14 +1307,12 @@ func (b *Broker) IsAuthenticated(sessionID, authenticationData string) (string, 
 		}
 	}
 
-	if err = b.updateSession(sessionID, session); err != nil {
-		if session.mfaFlowActive != previousMFAFlow {
-			himmelblau.FreeMFAFlowState(session.mfaFlowActive)
+	if err = b.updateSessionWithAuthContext(sessionID, session, authState); err != nil {
+		if ctx.Err() != nil {
+			msg, _ := json.Marshal(errorMessage{Message: "Authentication request cancelled"})
+			return AuthCancelled, string(msg), ctx.Err()
 		}
 		return AuthDenied, "{}", err
-	}
-	if session.mfaFlowActive != previousMFAFlow {
-		himmelblau.FreeMFAFlowState(previousMFAFlow)
 	}
 
 	encoded, err := json.Marshal(iadResponse)
@@ -1672,16 +1701,25 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 		return AuthCancelled, nil
 	}
 
-	// Keep the previous flow alive until IsAuthenticated commits this session
-	// replacement. If the request is cancelled during FIDO pre-flight, the
-	// stored session must still point to a usable flow.
-	previousFlow := session.mfaFlowActive
+	// Swapping in the new flow orphans the stored one; updateSession frees it
+	// once this copy is committed.
 	session.mfaFlowActive = flow
 	session.mfaChallengeInfo = challengeInfo
 	session.fidoPIN = ""
-
 	session.entraAuthPasswordRequired = false
 	session.entraAuthPasswordHash = ""
+
+	// Only the commit that follows this call stores the flow. Until then this
+	// call owns it, so every return that leaves it off the session (a hash
+	// failure below, or a cancel or redirect while routing) must release it:
+	// no commit will. A return that keeps it on the copy hands it to the
+	// commit, which releases the flow it replaced and owns the new one from
+	// then on.
+	defer func() {
+		if session.mfaFlowActive != flow {
+			himmelblau.FreeMFAFlowState(flow)
+		}
+	}()
 
 	if passwordSubmitted && bypassesPasswordMethod(challengeInfo.Method) {
 		log.Noticef(context.Background(), "Entra ID answered the password for user %q with a %s challenge, so the password was never verified; not caching it", session.username, challengeInfo.Method)
@@ -1699,9 +1737,15 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 
 	access, data := b.routeMFAChallenge(ctx, session, challengeInfo)
 	if ctx.Err() != nil {
-		if flow != previousFlow {
-			himmelblau.FreeMFAFlowState(flow)
-		}
+		// Routing asks the security key whether it is connected, whether it
+		// holds the account's credential, and whether it needs a PIN. Each is
+		// a blocking USB call. A cancel landing in one makes IsAuthenticated
+		// return through its ctx.Done() branch and skip updateSession, so the
+		// flow created above would never be stored: clearing it here hands it
+		// to the deferred release, and the stored session keeps the flow it
+		// had before, which its commit or EndSession frees.
+		log.Noticef(context.Background(), "Entra authentication cancelled while routing the MFA challenge for user %q; discarding MFA flow", session.username)
+		clearEntraAuthState(session)
 		return AuthCancelled, nil
 	}
 	return access, data
@@ -1741,11 +1785,30 @@ func (b *Broker) routeMFAChallenge(ctx context.Context, session *session, challe
 	return AuthNext, nil
 }
 
+// clearEntraAuthState drops the session's MFA state. It deliberately does not
+// free the flow: the copy it runs on may never be committed (a cancel makes
+// IsAuthenticated skip updateSession), and the stored session still points at
+// that flow. The commit is what releases it (see updateSession). A flow that
+// was created but never stored has no commit to release it, so the call that
+// created it frees it directly.
 func clearEntraAuthState(session *session) {
-	himmelblau.FreeMFAFlowState(session.mfaFlowActive)
 	session.mfaFlowActive = nil
 	session.mfaChallengeInfo = nil
 	session.fidoPIN = ""
+}
+
+// markMFAFlowConsumed records that the request successfully used its MFA
+// continuation. If cancellation already won, remove the consumed flow from
+// the stored session before a replacement can use it.
+func (b *Broker) markMFAFlowConsumed(session *session) {
+	if session.isAuthenticating == nil {
+		return
+	}
+	authState := session.isAuthenticating
+	authState.mfaFlowConsumed = true
+	if authState.ctx.Err() != nil {
+		b.reconcileCancelledMFAFlow(authState.sessionID, authState, session.mfaFlowActive)
+	}
 }
 
 // restartFromEntraAuth handles a terminal MFA-step failure: it clears the
@@ -1780,9 +1843,10 @@ func replayCompletedMFA(session *session, mode string) (string, isAuthenticatedD
 	return AuthDenied, unexpectedErrMsg("no active MFA flow")
 }
 
-// denyAndClearMFA frees the MFA flow and wipes the cached password hash, then
-// denies with data. Terminal FIDO/MFA failures use it; success paths keep the
-// hash for offline caching, so clearEntraAuthState alone must not wipe it.
+// denyAndClearMFA drops the session's MFA state and wipes the cached password
+// hash, then denies with data; the commit releases the flow. Terminal
+// FIDO/MFA failures use it; success paths keep the hash for offline caching,
+// so clearEntraAuthState alone must not wipe it.
 func denyAndClearMFA(session *session, data isAuthenticatedDataResponse) (string, isAuthenticatedDataResponse) {
 	session.entraAuthPasswordHash = ""
 	clearEntraAuthState(session)
@@ -1869,6 +1933,7 @@ func (b *Broker) entraMFAWaitAuth(ctx context.Context, session *session) (string
 		}
 
 		// MFA approved — finish auth.
+		b.markMFAFlowConsumed(session)
 		clearEntraAuthState(session)
 		return b.finishEntraAuth(ctx, session, oauthToken)
 	}
@@ -1940,6 +2005,7 @@ func (b *Broker) entraMFACodeAuth(ctx context.Context, session *session, code st
 		return restartFromEntraAuth(session, "MFA authentication failed. Please try again.")
 	}
 
+	b.markMFAFlowConsumed(session)
 	clearEntraAuthState(session)
 	return b.finishEntraAuth(ctx, session, oauthToken)
 }
@@ -2029,7 +2095,8 @@ func setFIDOAuthModes(session *session, mode string, passwordFirst bool) {
 // requestEntraPassword sends the user to the Entra ID password form, leaving
 // the device code flow available when it is enabled. It drops the MFA flow: a
 // FIDO challenge that cannot be completed locally is dead once the user is
-// sent back to the password.
+// sent back to the password, and the commit that stores this state releases
+// the flow.
 func (b *Broker) requestEntraPassword(session *session, reason string) (string, isAuthenticatedDataResponse) {
 	session.entraAuthPasswordRequired = true
 	clearEntraAuthState(session)
@@ -2191,6 +2258,7 @@ func (b *Broker) entraAuthFidoAuth(ctx context.Context, session *session) (strin
 		return b.failFIDOAssertion(session)
 	}
 
+	b.markMFAFlowConsumed(session)
 	clearEntraAuthState(session)
 	return b.finishEntraAuth(ctx, session, oauthToken)
 }
@@ -2644,52 +2712,72 @@ func (b *Broker) userNotAllowedLogMsg(userName string) string {
 	return logMsg
 }
 
-func (b *Broker) startAuthenticate(sessionID string) (context.Context, error) {
-	session, err := b.getSession(sessionID)
-	if err != nil {
-		return nil, err
+func waitForAuthenticationCleanup(authState *isAuthenticatedCtx) bool {
+	if authState == nil || authState.ctx.Err() == nil || authState.cleanupDone == nil {
+		return false
 	}
+	<-authState.cleanupDone
+	return true
+}
 
-	if session.isAuthenticating != nil {
-		log.Errorf(context.Background(), "Authentication already running for session %q", sessionID)
-		return nil, errors.New("authentication already running for this user session")
+func (b *Broker) startAuthenticate(sessionID string, cleanupDone <-chan struct{}) (context.Context, *isAuthenticatedCtx, error) {
+	for {
+		b.currentSessionsMu.Lock()
+		session, active := b.currentSessions[sessionID]
+		if !active {
+			b.currentSessionsMu.Unlock()
+			return nil, nil, fmt.Errorf("%s is not a current transaction", sessionID)
+		}
+		if session.isAuthenticating != nil {
+			current := session.isAuthenticating
+			b.currentSessionsMu.Unlock()
+			if waitForAuthenticationCleanup(current) {
+				continue
+			}
+			log.Errorf(context.Background(), "Authentication already running for session %q", sessionID)
+			return nil, nil, errors.New("authentication already running for this user session")
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		authState := &isAuthenticatedCtx{sessionID: sessionID, ctx: ctx, cancelFunc: cancel, cleanupDone: cleanupDone}
+		session.isAuthenticating = authState
+		b.currentSessions[sessionID] = session
+		b.currentSessionsMu.Unlock()
+		return ctx, authState, nil
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	session.isAuthenticating = &isAuthenticatedCtx{ctx: ctx, cancelFunc: cancel}
-
-	if err := b.updateSession(sessionID, session); err != nil {
-		cancel()
-		return nil, err
-	}
-
-	return ctx, nil
 }
 
 // EndSession ends the session for the user.
 func (b *Broker) EndSession(sessionID string) error {
-	session, err := b.getSession(sessionID)
-	if err != nil {
-		return err
+	// Remove the session atomically: a read-modify-write through
+	// getSession/updateSession here could resurrect a session a concurrent
+	// commit just replaced, or clobber a freshly stored MFA flow with a stale
+	// copy and free the wrong one.
+	b.currentSessionsMu.Lock()
+	session, active := b.currentSessions[sessionID]
+	if active {
+		delete(b.currentSessions, sessionID)
+	}
+	b.currentSessionsMu.Unlock()
+	if !active {
+		return fmt.Errorf("%s is not a current transaction", sessionID)
 	}
 
-	// Checks if there is a isAuthenticated call running for this session and cancels it before ending the session.
-	// Cancelling asks any in-flight goroutine to unwind; we then free the MFA
-	// flow ourselves rather than relying on that goroutine to do it. Some
+	// Cancel any running IsAuthenticated call before freeing the MFA flow:
+	// cancelling asks the in-flight goroutine to unwind, and this free is what
+	// guarantees the flow is not leaked on a genuinely terminal cancel. Some
 	// cancellation paths intentionally leave the flow intact (e.g. the FIDO
 	// assertion, whose cancel is usually a transient re-select and must not
-	// strand the resumed session with a released flow), so freeing here is what
-	// guarantees the flow is not leaked on a genuinely terminal cancel.
+	// strand a resumed session with a released flow).
 	//
 	// Freeing is safe even when a goroutine is mid-flight: FreeMFAFlowState
 	// takes MFAFlowState.mu and nils its release callback, so it waits for any
 	// concurrent AcquireTokenByMFAFlow to finish, runs the underlying C free
 	// exactly once, and is a no-op if that goroutine also frees the flow on its
-	// own terminal path. Sessions are stored by value, so there is no shared
-	// write to mfaFlowActive itself (confirmed race-clean under `go test -race`).
+	// own terminal path.
 	//
 	if session.isAuthenticating != nil {
-		b.CancelIsAuthenticated(sessionID)
+		session.isAuthenticating.cancelFunc()
 		// Free on a separate goroutine: waiting on MFAFlowState.mu can block
 		// for the remainder of an in-flight cgo network call (cancellation is
 		// only observed between poll iterations), and EndSession answers a
@@ -2699,30 +2787,34 @@ func (b *Broker) EndSession(sessionID string) error {
 	} else {
 		himmelblau.FreeMFAFlowState(session.mfaFlowActive)
 	}
-
-	b.currentSessionsMu.Lock()
-	defer b.currentSessionsMu.Unlock()
-	delete(b.currentSessions, sessionID)
 	return nil
 }
 
-// CancelIsAuthenticated cancels the IsAuthenticated call for the user.
-func (b *Broker) CancelIsAuthenticated(sessionID string) {
-	session, err := b.getSession(sessionID)
-	if err != nil {
+// clearAuthentication cancels and clears the active authentication marker.
+// expected identifies the request whose normal cleanup is running.
+func (b *Broker) clearAuthentication(sessionID string, expected *isAuthenticatedCtx) {
+	b.currentSessionsMu.Lock()
+	session, active := b.currentSessions[sessionID]
+	if !active || session.isAuthenticating != expected {
+		b.currentSessionsMu.Unlock()
 		return
 	}
-
-	if session.isAuthenticating == nil {
-		return
-	}
-
 	session.isAuthenticating.cancelFunc()
 	session.isAuthenticating = nil
+	b.currentSessions[sessionID] = session
+	b.currentSessionsMu.Unlock()
+}
 
-	if err := b.updateSession(sessionID, session); err != nil {
-		log.Errorf(context.Background(), "Error when cancelling IsAuthenticated: %v", err)
+// CancelIsAuthenticated cancels the IsAuthenticated call for the user. It
+// keeps the marker until handler cleanup finishes so a replacement cannot
+// reuse the MFA continuation while the canceled call is still unwinding.
+func (b *Broker) CancelIsAuthenticated(sessionID string) {
+	b.currentSessionsMu.Lock()
+	session, active := b.currentSessions[sessionID]
+	if active && session.isAuthenticating != nil {
+		session.isAuthenticating.cancelFunc()
 	}
+	b.currentSessionsMu.Unlock()
 }
 
 // DeleteUser removes all broker side data stored for the given user
@@ -2814,6 +2906,12 @@ func (b *Broker) UserPreCheck(username string) (string, error) {
 }
 
 // getSession returns the session information for the specified session ID or an error if the session is not active.
+//
+// It never waits for a cancelled request to unwind. IsAuthenticated calls it
+// right after startAuthenticate, with a cleanupDone channel that only its own
+// later deferred cleanup closes, so waiting here would park that call on a
+// channel nothing can close. Serialising behind an unwinding request is
+// startAuthenticate's job, and it is the only caller that needs it.
 func (b *Broker) getSession(sessionID string) (session, error) {
 	b.currentSessionsMu.RLock()
 	defer b.currentSessionsMu.RUnlock()
@@ -2824,15 +2922,110 @@ func (b *Broker) getSession(sessionID string) (session, error) {
 	return s, nil
 }
 
+// reconcileCancelledMFAFlow removes a continuation consumed by a cancelled
+// MFA request and routes the session back through Entra authentication. The
+// current session flow must still be the consumed flow; a replacement flow is
+// never modified.
+func (b *Broker) reconcileCancelledMFAFlow(sessionID string, authState *isAuthenticatedCtx, flow *himmelblau.MFAFlowState) {
+	if !authState.mfaFlowConsumed || flow == nil {
+		return
+	}
+
+	b.currentSessionsMu.Lock()
+	session, active := b.currentSessions[sessionID]
+	if !active || session.mfaFlowActive != flow {
+		b.currentSessionsMu.Unlock()
+		return
+	}
+
+	needsPassword := session.entraAuthPasswordRequired || session.entraAuthPasswordHash != ""
+	session.entraAuthPasswordHash = ""
+	session.entraAuthPasswordRequired = needsPassword
+	clearEntraAuthState(&session)
+	session.nextAuthModes = []string{authmodes.EntraAuth}
+	session.mfaFlowGeneration++
+	b.currentSessions[sessionID] = session
+	b.currentSessionsMu.Unlock()
+
+	himmelblau.FreeMFAFlowState(flow)
+}
+
+func (b *Broker) discardUncommittedMFAFlow(sessionID string, flow *himmelblau.MFAFlowState) {
+	if flow == nil {
+		return
+	}
+
+	b.currentSessionsMu.RLock()
+	stored, active := b.currentSessions[sessionID]
+	keep := active && stored.mfaFlowActive == flow
+	b.currentSessionsMu.RUnlock()
+	if !keep {
+		himmelblau.FreeMFAFlowState(flow)
+	}
+}
+
 // updateSession checks if the session is still active and updates the session info.
 func (b *Broker) updateSession(sessionID string, session session) error {
-	// Checks if the session was ended in the meantime, otherwise we would just accidentally recreate it.
-	if _, err := b.getSession(sessionID); err != nil {
-		return err
-	}
+	return b.updateSessionWithAuthContext(sessionID, session, nil)
+}
+
+func (b *Broker) updateSessionWithAuthContext(sessionID string, session session, authState *isAuthenticatedCtx) error {
 	b.currentSessionsMu.Lock()
-	defer b.currentSessionsMu.Unlock()
+	stored, active := b.currentSessions[sessionID]
+	if !active {
+		b.currentSessionsMu.Unlock()
+		himmelblau.FreeMFAFlowState(session.mfaFlowActive)
+		return fmt.Errorf("%s is not a current transaction", sessionID)
+	}
+
+	if authState != nil && (stored.isAuthenticating != authState || authState.ctx.Err() != nil) {
+		incomingFlow := session.mfaFlowActive
+		if incomingFlow == stored.mfaFlowActive {
+			incomingFlow = nil
+		}
+		b.currentSessionsMu.Unlock()
+		himmelblau.FreeMFAFlowState(incomingFlow)
+		return errors.New("authentication request was cancelled before session commit")
+	}
+	if authState == nil && stored.isAuthenticating != session.isAuthenticating {
+		incomingFlow := session.mfaFlowActive
+		if incomingFlow == stored.mfaFlowActive {
+			incomingFlow = nil
+		}
+		b.currentSessionsMu.Unlock()
+		himmelblau.FreeMFAFlowState(incomingFlow)
+		return errors.New("session changed while authentication was in progress")
+	}
+
+	if stored.mfaFlowGeneration != session.mfaFlowGeneration {
+		incomingFlow := session.mfaFlowActive
+		if incomingFlow == stored.mfaFlowActive {
+			incomingFlow = nil
+		}
+		b.currentSessionsMu.Unlock()
+		himmelblau.FreeMFAFlowState(incomingFlow)
+		return errors.New("MFA flow changed while the request was in progress")
+	}
+
+	// Committing a flow different from the stored one orphans it, and only
+	// this commit knows the swap, so free the stored flow here: handlers drop
+	// the reference without freeing, because the copy they mutate is discarded
+	// when a cancel skips this commit. A nil incoming flow must not skip the
+	// free: the copy may have cleared a flow it swapped in earlier, while the
+	// stored one is still live.
+	replacedFlow := stored.mfaFlowActive
+	if replacedFlow == session.mfaFlowActive {
+		replacedFlow = nil
+	}
+	if session.mfaFlowActive != stored.mfaFlowActive {
+		session.mfaFlowGeneration++
+	}
 	b.currentSessions[sessionID] = session
+	b.currentSessionsMu.Unlock()
+
+	if replacedFlow != nil {
+		himmelblau.FreeMFAFlowState(replacedFlow)
+	}
 	return nil
 }
 
