@@ -231,9 +231,10 @@ function install_broker() {
 		snap restart "${broker}"
 	EOF
 
-    # Reboot VM and wait until it's back
-    virsh reboot "${VM_NAME}"
-    wait_for_system_running
+    # A guest reboot can leave the domain unavailable while libvirt is still
+    # waiting for the guest to transition. Shut it down and start it
+    # explicitly so we wait for both state changes.
+    reboot_system
 }
 
 # Print executed commands to ease debugging
