@@ -29,9 +29,11 @@ remainder of this guide.
 By default, deleting an authd user does not remove the user's
 `~/.ssh/authorized_keys` file. If `ssh_allowed_suffixes_first_auth` allows
 first-time SSH access and public-key authentication is enabled, a key in that
-file may still work. Use `--remove-home` to remove the home directory, or
-remove the key separately. See [SSH public key authentication](ref::ssh-public-key-authentication)
-to disable public key access for authd users.
+file may still work. Use [`authctl user
+delete`](../reference/cli/authctl_user_delete) with the `--remove-home` flag to
+remove the home directory, or remove the key separately. See [SSH public key
+authentication](ref::ssh-public-key-authentication) for steps to disable public
+key access for authd users.
 :::
 
 ## Remove the local account
