@@ -26,7 +26,14 @@ So delete the local authd account on each affected host as described in the
 remainder of this guide.
 
 :::{warning}
-SSH logins with public keys bypass authd, and a locked user can bypass a disabled provider.
+By default, deleting an authd user does not remove the user's
+`~/.ssh/authorized_keys` file. If `ssh_allowed_suffixes_first_auth` allows
+first-time SSH access and public-key authentication is enabled, a key in that
+file may still work. Use [`authctl user
+delete`](../reference/cli/authctl_user_delete) with the `--remove-home` flag to
+remove the home directory, or remove the key separately. See [SSH public key
+authentication](ref::ssh-public-key-authentication) for steps to disable public
+key access for authd users.
 :::
 
 ## Remove the local account
