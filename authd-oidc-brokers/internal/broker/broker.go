@@ -121,11 +121,11 @@ type session struct {
 	mfaChallengeInfo          *himmelblau.MFAChallengeInfo
 	entraAuthPasswordHash     string // pre-computed hash (not plaintext) for offline use
 	entraAuthPasswordRequired bool
-	// entraAuthFidoFallback records that a failed FIDO challenge already sent
+	// entraAuthFidoPasswordFallbackAttempted records that a failed FIDO challenge already sent
 	// this session to the Entra password once, so the same failure must not
 	// send it there again.
-	entraAuthFidoFallback bool
-	fidoPIN               string // security key PIN, kept in memory only while the FIDO exchange runs
+	entraAuthFidoPasswordFallbackAttempted bool
+	fidoPIN                                string // security key PIN, kept in memory only while the FIDO exchange runs
 
 	isAuthenticating *isAuthenticatedCtx
 }
@@ -2057,7 +2057,7 @@ const fidoNoCredentialMsg = "The connected security key is not registered for th
 // local FIDO ended.
 func (b *Broker) redirectFIDOToDeviceAuth(session *session, reason string) (string, isAuthenticatedDataResponse) {
 	if session.entraAuthPasswordHash == "" {
-		session.entraAuthFidoFallback = true
+		session.entraAuthFidoPasswordFallbackAttempted = true
 		return b.requestEntraPassword(session, reason)
 	}
 	session.entraAuthPasswordHash = ""
@@ -2072,10 +2072,10 @@ func (b *Broker) redirectFIDOToDeviceAuth(session *session, reason string) (stri
 // failFIDOAssertion allows password recovery once, but never repeats it after
 // the password was accepted and its FIDO second factor also failed.
 func (b *Broker) failFIDOAssertion(session *session) (string, isAuthenticatedDataResponse) {
-	if session.entraAuthPasswordHash == "" || session.entraAuthFidoFallback {
+	if session.entraAuthPasswordHash == "" || session.entraAuthFidoPasswordFallbackAttempted {
 		return b.redirectFIDOToDeviceAuth(session, "Security key authentication failed.")
 	}
-	session.entraAuthFidoFallback = true
+	session.entraAuthFidoPasswordFallbackAttempted = true
 	return restartFromEntraAuth(session, "Security key authentication failed. Please try again.")
 }
 
