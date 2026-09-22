@@ -18,10 +18,10 @@ fi
 
 # Set up YARF in a virtual environment using uv
 cd "$YARF_DIR"
-uv sync
-uv pip install '.[develop]'
+uv sync --locked --group dev
 # We need pygobject in the Python environment for some tests
 uv pip install pygobject
 # We need ansi2html to log colored journalctl output as HTML
 uv pip install ansi2html
 uv pip install "$YARF_DIR"
+printf '%s\n' "$(git rev-parse HEAD)" > "${YARF_DIR}/.venv/.authd-yarf-revision"
