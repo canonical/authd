@@ -511,6 +511,58 @@ Log In With Remote User Through CLI: Entra Passwordless TAP
 
     # No cached Entra password: chain into newpassword to set a local one.
     Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
+Log In With Remote User Through GDM: Entra Passwordless TAP
+    [Arguments]    ${username}    ${local_password}    ${tap_code}
+    Start Log In With Remote User Through GDM    ${username}
+    Select Broker Through GDM
+    Match Text    Enter your MFA code    120    similarity=88
+    Hid.Type String    ${tap_code.value}
+    Hid.Keys Combo    Return
+    Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
+Retry Passwordless Login
+    [Arguments]    ${login_keyword}    ${reset_keyword}    ${login_transport}
+    FOR    ${attempt}    IN RANGE    3
+        ${status}    ${message} =    Run Keyword And Ignore Error
+        ...    ${login_keyword}    ${login_transport}
+        IF    '${status}' == 'PASS'    BREAK
+        IF    ${attempt} < 2
+            Run Keyword    ${reset_keyword}
+        END
+    END
+    Should Be Equal    ${status}    PASS    msg=${message}
+Prepare Passwordless Test
+    [Arguments]    ${environment_variable}    ${skip_message}
+    ${passwordless_user}=    Get Environment Variable    ${environment_variable}    ${EMPTY}
+    Set Suite Variable    ${username}    ${passwordless_user}
+    utils.Test Setup    snapshot=%{BROKER}-installed
+    IF    not $username
+        Skip    ${skip_message}
+    END
+    Configure Passwordless Broker
+
+Configure Passwordless Broker
+    Change Broker Configuration    register_device    true
+    Change Broker Configuration    entra_auth    true
+    Change Broker Configuration    device_code    false
+
+Reset Passwordless Test State
+    utils.Restore Snapshot    %{BROKER}-installed
+    Configure Passwordless Broker
+
+Run Passwordless Login Attempt
+    [Arguments]    ${login_keyword}
+    VAR    ${tap_id}    ${None}
+    TRY
+        ${tap_code}    ${tap_id} =    Wait Until Keyword Succeeds    12x    60s
+        ...    EntraTAP.Create TAP For User    ${username}
+
+        Run Keyword    ${login_keyword}    ${username}    ${local_password}    ${tap_code}
+    FINALLY
+        IF    $tap_id is not None
+            Run Keyword And Warn On Failure    Wait Until Keyword Succeeds    3x    2s
+            ...    EntraTAP.Delete Tap By Id    ${username}    ${tap_id}
+        END
+    END
 
 Log In With Remote User Through Polkit: Entra Password
     [Arguments]    ${username}
