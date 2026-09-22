@@ -774,8 +774,9 @@ Before following the steps below, make sure you're familiar with the
    [authd-dev PPA](https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-dev)
    and wait for the Noble builds and package publication to complete.
 3. Run the `e2e-tests` workflow manually with `workflow_dispatch`, setting its
-   `e2e-ppa` input to `authd-dev`. Set the `e2e-tests` input to `login_gdm.robot`
-   to run the GDM test (or leave it empty to run the full suite).
+   `e2e-apt-source` input to `authd-dev`. Set the `e2e-tests` input to
+   `login_gdm.robot` to run the GDM test (or leave it empty to run the full
+   suite).
 4. Wait for the e2e-tests workflow to complete and verify that it passes the
    authd GDM login flow.
 5. Remove the `~wip` suffix from the Debian package version and commit the
