@@ -1,7 +1,6 @@
 [submodule "authd-oidc-brokers/third_party/libhimmelblau"]
 	path = authd-oidc-brokers/third_party/libhimmelblau
-	url = https://gitlab.com/nooreldeensalah/libhimmelblau.git
-	branch = fix/1915-password-capability-capi
+	url = https://gitlab.com/samba-team/libhimmelblau.git
 [submodule "e2e-tests/.yarf"]
 	path = e2e-tests/.yarf
 	url = https://github.com/adombeck/yarf
