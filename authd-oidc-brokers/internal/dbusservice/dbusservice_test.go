@@ -60,7 +60,7 @@ func TestNewSessionReturnsBrokerUnavailableErrorAfterInitializationFailure(t *te
 
 	service.initializationFailed(wantErr)
 
-	_, _, dbusErr := iface.NewSession("user@example.com", "en", "login", "provider-id")
+	_, _, dbusErr := iface.NewSession("user@example.com", "en", "login", "provider-id", "sshd")
 	require.NotNil(t, dbusErr)
 	require.Equal(t, brokerUnavailableDBusErrorName, dbusErr.Name)
 	require.Equal(t, []any{wantErr.Error()}, dbusErr.Body)
