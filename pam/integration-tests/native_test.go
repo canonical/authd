@@ -164,31 +164,30 @@ func TestNativeAuthenticate(t *testing.T) {
 			clientOptions: clientOptions{PamUser: testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "auth-native")},
 			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(username string)) {
 				t.Helper()
-				username := testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "auth-native")
-				nativeSelectBroker(t, c)
-				c.WaitFor(t, `Gimme your password:`)
-				c.SendLine(t, "r")
-				c.WaitFor(t, `Choose your authentication flow:`)
-				c.SendLine(t, "1")
-				c.WaitFor(t, `Gimme your password:`)
-				c.SendLine(t, "goodpass")
-				c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
-				sendEchoedLine(t, c, "r")
-				c.WaitFor(t, `Choose your authentication flow:`)
-				c.SendLine(t, "1")
-				c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
-				sendEchoedLine(t, c, "r")
-				c.WaitFor(t, `Choose your authentication flow:`)
-				c.SendLine(t, "2")
-				c.WaitFor(t, regexp.QuoteMeta(`Unlock your phone +33... or accept request on web interface:`))
-				signalFn(username)
-				c.SendLine(t, "")
-				c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
-				signalFn(username)
-				c.SendLine(t, "")
-				nativeWaitForResult(t, c)
+				nativeMfaAuth(t, c, func() { signalFn("") })
 			},
 			expectedUser: testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "auth-native"),
+		},
+		"Authenticate_twice_with_mfa_user": {
+			clientOptions: clientOptions{PamUser: testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "mfa-twice-native")},
+			testWithSignals: func(t *testing.T, c *ptytest.Console, signalFn func(username string)) {
+				t.Helper()
+				nativeMfaAuth(t, c, func() { signalFn("") })
+			},
+			after: func(t *testing.T, ctx *nativePtyTestContext) {
+				t.Helper()
+				signalFn := func() {
+					testutils.CreateBrokerCompletionSignal(t, ctx.runner.socketPath, ctx.baseSpec.clientOptions.PamUser)
+				}
+				ctx.run(t, nativePtySessionSpec{
+					action:        pam_test.RunnerActionLogin,
+					clientOptions: ctx.baseSpec.clientOptions,
+				}, func(t *testing.T, c *ptytest.Console) {
+					t.Helper()
+					nativeMfaAuth(t, c, signalFn)
+				})
+			},
+			expectedUser: testUserNameFull(t, examplebroker.UserIntegrationMfaPrefix, "mfa-twice-native"),
 		},
 		"Authenticate_user_with_form_mode_with_button": {
 			test: func(t *testing.T, c *ptytest.Console) {
@@ -1109,6 +1108,35 @@ func nativeSimpleAuth(t *testing.T, c *ptytest.Console) {
 	nativeSelectBroker(t, c)
 	c.WaitFor(t, `Gimme your password:`)
 	c.SendLine(t, "goodpass")
+	nativeWaitForResult(t, c)
+}
+
+// nativeMfaAuth performs a full multi-factor authentication flow. signalFn is
+// called for the steps that wait for an out-of-band confirmation.
+func nativeMfaAuth(t *testing.T, c *ptytest.Console, signalFn func()) {
+	t.Helper()
+	// The broker selection is only shown the first time a user logs in. On
+	// later sessions authd auto-selects the broker used before.
+	nativeWaitForLoginPasswordPrompt(t, c, `Gimme your password:`)
+	c.SendLine(t, "r")
+	c.WaitFor(t, `Choose your authentication flow:`)
+	c.SendLine(t, "1")
+	c.WaitFor(t, `Gimme your password:`)
+	c.SendLine(t, "goodpass")
+	c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
+	sendEchoedLine(t, c, "r")
+	c.WaitFor(t, `Choose your authentication flow:`)
+	c.SendLine(t, "1")
+	c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
+	sendEchoedLine(t, c, "r")
+	c.WaitFor(t, `Choose your authentication flow:`)
+	c.SendLine(t, "2")
+	c.WaitFor(t, regexp.QuoteMeta(`Unlock your phone +33... or accept request on web interface:`))
+	signalFn()
+	c.SendLine(t, "")
+	c.WaitFor(t, regexp.QuoteMeta(`Plug your fido device and press with your thumb:`))
+	signalFn()
+	c.SendLine(t, "")
 	nativeWaitForResult(t, c)
 }
 
