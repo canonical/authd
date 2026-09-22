@@ -220,7 +220,7 @@ TBD
     ```shell
     # Ensure your DEBEMAIL is set, for example:
     export DEBEMAIL="user@example.com"
-    gbp dch --multimaint-merge --local "~pre" HEAD
+    gbp dch --multimaint-merge --local "~pre"
     ```
 
    - This will generate a very verbose changelog with all the commits since last version, so clean it up so that only relevant changes are included.
