@@ -237,6 +237,7 @@ TBD
 
      Search for "Merge: " to go through the merge commits.
 
+   - Only consider changes that affect the Debian package (authd, authctl, PAM, NSS, or files in `debian/`).
    - Also add the updated Go and Rust dependencies. You can use the [updated-go-dependencies](https://github.com/adombeck/authd-scripts/blob/main/updated-go-dependencies) and [updated-rust-dependencies](https://github.com/adombeck/authd-scripts/blob/main/updated-rust-dependencies) scripts for that.
 
    - Based on the changes, decide which version to use for the next release (increase of major, minor or patch version) and set it in the changelog entry. Keep the `~preX` suffix.
