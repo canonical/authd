@@ -40,6 +40,9 @@ cargo build                              # NSS (debug mode)
 
 ### Testing Conventions
 - **Run tests**: `go test ./...` (add `-race` for race detection)
+- Use Go's `testing/synctest` for tests that exercise timers, deadlines, sleeps,
+  or other time-based concurrency when applicable. Prefer fake time over
+  real-time waits.
 - **Golden files**: Use `internal/testutils/golden` package
   - Update with `TESTS_UPDATE_GOLDEN=1 go test ./...`
   - Compare/update: `golden.CheckOrUpdate(t, got)` or `golden.CheckOrUpdateYAML(t, got)`

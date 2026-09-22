@@ -7,7 +7,7 @@ include /usr/share/rustc/architecture.mk
 ifeq ($(DEB_DISTRIBUTION),noble)
 GNOME_SHELL_PATCHED_VERSION := 46.3.1-1ubuntu1~24.04.1authd11
 else ifeq ($(DEB_DISTRIBUTION),resolute)
-GNOME_SHELL_PATCHED_VERSION := 50.1-0ubuntu1.2+authd1~26.04.1
+GNOME_SHELL_PATCHED_VERSION := 50.1-0ubuntu1.3
 else ifeq ($(DEB_DISTRIBUTION),stonking)
 GNOME_SHELL_PATCHED_VERSION := 51~beta-0ubuntu1
 else
@@ -15,17 +15,16 @@ $(error Unsupported distribution "$(DEB_DISTRIBUTION)" for gnome-shell dependenc
 endif
 
 # Keep gnome-shell optional for server installations. Newer versions are
-# accepted on stonking because the patch that fixes
-# https://bugs.launchpad.net/ubuntu/+source/gnome-shell/+bug/2160622 landed
-# upstream there.
-ifeq ($(DEB_DISTRIBUTION),stonking)
-GNOME_SHELL_BREAKS := gnome-shell (<< $(GNOME_SHELL_PATCHED_VERSION))
-else
-# On older releases, reject versions other than the patched one from the authd PPA,
+# accepted on Resolute and Stonking because the patch that fixes
+# https://bugs.launchpad.net/ubuntu/+source/gnome-shell/+bug/2160622 already
+# landed in the archive for those releases.
+ifeq ($(DEB_DISTRIBUTION),noble)
+# On Noble, reject versions other than the patched one from the authd PPA,
 # because they would cause https://github.com/canonical/authd/issues/1424 to
 # occur almost every time.
-# TODO: Accept newer versions for resolute once the fix was SRUed there.
 GNOME_SHELL_BREAKS := gnome-shell (<< $(GNOME_SHELL_PATCHED_VERSION)), gnome-shell (>> $(GNOME_SHELL_PATCHED_VERSION))
+else
+GNOME_SHELL_BREAKS := gnome-shell (<< $(GNOME_SHELL_PATCHED_VERSION))
 endif
 
 # The package name for authd, used only locally to avoid repetitions
