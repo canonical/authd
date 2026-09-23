@@ -12,6 +12,7 @@
 //! 1. On Windows host, probe the Windows Registry if needed;
 //! 2. On non-Windows host, check specified environment variables.
 
+#![allow(missing_docs)]
 #![allow(clippy::upper_case_acronyms)]
 
 use std::{
@@ -133,7 +134,7 @@ impl EnvGetter for StdEnvGetter {
 /// as found in the current `PATH`. If that fails, it will attempt to locate
 /// the newest MSVC toolset in the newest installed version of Visual Studio.
 /// To limit the search to a specific version of the MSVC toolset, set the
-/// VCToolsVersion environment variable to the desired version (e.g. "14.44.35207").
+/// `VCToolsVersion` environment variable to the desired version (e.g. "14.44.35207").
 ///
 /// Note that this function always returns `None` for non-MSVC targets (if a
 /// full target name was specified).
@@ -356,7 +357,7 @@ mod impl_ {
 
     impl LibraryHandle {
         fn new(name: &[u8]) -> Option<Self> {
-            let handle = unsafe { LoadLibraryA(name.as_ptr() as _) };
+            let handle = unsafe { LoadLibraryA(name.as_ptr().cast()) };
             (!handle.is_null()).then_some(Self(handle))
         }
 
@@ -369,7 +370,7 @@ mod impl_ {
         ///
         /// The function returned cannot be used after the handle is dropped.
         unsafe fn get_proc_address<F>(&self, name: &[u8]) -> Option<F> {
-            let symbol = GetProcAddress(self.0, name.as_ptr() as _);
+            let symbol = GetProcAddress(self.0, name.as_ptr().cast());
             symbol.map(|symbol| mem::transmute_copy(&symbol))
         }
     }
@@ -392,7 +393,12 @@ mod impl_ {
                 .get_proc_address::<GetMachineTypeAttributesFuncType>(b"GetMachineTypeAttributes\0")
         }?;
         let mut attributes = Default::default();
-        if unsafe { get_machine_type_attributes(IMAGE_FILE_MACHINE_AMD64, &mut attributes) } == S_OK
+        if unsafe {
+            get_machine_type_attributes(
+                IMAGE_FILE_MACHINE_AMD64.try_into().unwrap(),
+                &mut attributes,
+            )
+        } == S_OK
         {
             Some((attributes & UserEnabled) != 0)
         } else {
@@ -561,21 +567,21 @@ mod impl_ {
         version: &'static str,
         env_getter: &dyn EnvGetter,
     ) -> Box<dyn Iterator<Item = PathBuf>> {
-        let instances = if let Some(instances) = vs15plus_instances(target, env_getter) {
-            instances
-        } else {
-            return Box::new(iter::empty());
-        };
-        Box::new(instances.into_iter().filter_map(move |instance| {
-            let installation_name = instance.installation_name()?;
-            if installation_name.starts_with(&format!("VisualStudio/{}.", version))
-                || installation_name.starts_with(&format!("VisualStudioPreview/{}.", version))
-            {
-                Some(instance.installation_path()?)
-            } else {
-                None
-            }
-        }))
+        Box::new(
+            vs15plus_instances(target, env_getter)
+                .into_iter()
+                .flatten()
+                .filter_map(move |instance| {
+                    instance
+                        .installation_name()
+                        .filter(|name| {
+                            ["VisualStudio", "VisualStudioPreview"]
+                                .into_iter()
+                                .any(|kind| name.starts_with(&format!("{kind}/{version}.")))
+                        })
+                        .and_then(|_| instance.installation_path())
+                }),
+        )
     }
 
     fn find_tool_in_vs16plus_path(
@@ -865,11 +871,10 @@ mod impl_ {
         // We use the first available host architecture that can build for the target
         let (host_path, host) = hosts.iter().find_map(|&x| {
             let candidate = path.join("bin").join(format!("Host{}", x));
-            if candidate.join(target_dir).exists() {
-                Some((candidate, x))
-            } else {
-                None
-            }
+            candidate
+                .join(target_dir)
+                .exists()
+                .then_some((candidate, x))
         })?;
         // This is the path to the toolchain for a particular target, running
         // on a given host
@@ -964,12 +969,10 @@ mod impl_ {
 
     fn atl_paths(target: TargetArch, path: &Path) -> Option<(PathBuf, PathBuf)> {
         let atl_path = path.join("atlmfc");
-        let sub = target.as_vs_arch();
-        if atl_path.exists() {
-            Some((atl_path.join("lib").join(sub), atl_path.join("include")))
-        } else {
-            None
-        }
+        atl_path.exists().then(|| {
+            let sub = target.as_vs_arch();
+            (atl_path.join("lib").join(sub), atl_path.join("include"))
+        })
     }
 
     // For MSVC 14 we need to find the Universal CRT as well as either
@@ -1255,10 +1258,7 @@ mod impl_ {
             let val = subkey
                 .to_str()
                 .and_then(|s| s.trim_start_matches('v').replace('.', "").parse().ok());
-            let val = match val {
-                Some(s) => s,
-                None => continue,
-            };
+            let Some(val) = val else { continue };
             if val > max_vers {
                 if let Ok(k) = key.open(&subkey) {
                     max_vers = val;

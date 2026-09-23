@@ -138,6 +138,20 @@ impl fmt::Display for EscapeLinkTitle<'_> {
     }
 }
 
+pub(crate) struct EscapeLinkLabel<'a>(pub &'a str);
+
+impl fmt::Display for EscapeLinkLabel<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for c in self.0.chars() {
+            if matches!(c, '\\' | '[' | ']') {
+                f.write_char('\\')?;
+            }
+            f.write_char(c)?;
+        }
+        Ok(())
+    }
+}
+
 pub(crate) fn escape_special_characters<'a>(t: &'a str, state: &State<'a>, options: &Options<'a>) -> Cow<'a, str> {
     if state.is_in_code_block() || t.is_empty() {
         return Cow::Borrowed(t);

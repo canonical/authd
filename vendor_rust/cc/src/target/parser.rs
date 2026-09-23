@@ -177,6 +177,10 @@ fn parse_arch(full_arch: &str) -> Option<&str> {
         // https://github.com/Clever-ISA/Clever-ISA
         arch if arch.starts_with("clever") => "clever",
 
+        // https://github.com/llvm-z80/rust-z80
+        "z80" => "z80",
+        "sm83" => "sm83",
+
         "sparc" | "sparcv7" | "sparcv8" => "sparc",
         "sparc64" | "sparcv9" => "sparc64",
 
@@ -379,6 +383,9 @@ impl<'a> TargetInfo<'a> {
             "armv7-unknown-linux-ohos" | "armv7-unknown-trusty" => {
                 abi = "eabi";
             }
+            "sparc-unknown-linux-gnu" => {
+                abi = "v8plus";
+            }
             _ => {}
         }
 
@@ -428,7 +435,13 @@ impl<'a> TargetInfo<'a> {
         if vendor == "uwp" {
             abi = "uwp";
         }
-        if ["powerpc64-unknown-linux-gnu", "powerpc64-wrs-vxworks"].contains(&target) {
+        if [
+            "powerpc64-unknown-linux-gnu",
+            "powerpc64-wrs-vxworks",
+            "powerpc64-sony-ps3",
+        ]
+        .contains(&target)
+        {
             abi = "elfv1";
         }
         if [
@@ -577,6 +590,7 @@ mod tests {
         ignore = "must enable explicitly with --cfg=rustc_target_test"
     )]
     fn parse_rustc_targets() {
+        #[allow(clippy::disallowed_methods)]
         let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
 
         let target_list = Command::new(&rustc)
