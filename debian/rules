@@ -7,7 +7,9 @@ include /usr/share/rustc/architecture.mk
 ifeq ($(DEB_DISTRIBUTION),noble)
 GNOME_SHELL_PATCHED_VERSION := 46.3.1-1ubuntu1~24.04.1authd11
 else ifeq ($(DEB_DISTRIBUTION),resolute)
-GNOME_SHELL_PATCHED_VERSION := 50.1-0ubuntu1.3
+# Keep the patched PPA build as the lower bound until the PPA catches up with
+# the archive SRU. Newer archive versions are also compatible on Resolute.
+GNOME_SHELL_PATCHED_VERSION := 50.1-0ubuntu1.2+authd1~26.04.1
 else ifeq ($(DEB_DISTRIBUTION),stonking)
 GNOME_SHELL_PATCHED_VERSION := 51~beta-0ubuntu1
 else
