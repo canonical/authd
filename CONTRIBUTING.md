@@ -228,6 +228,15 @@ The test suite must pass before merging the PR to our main branch. Any new featu
 
 This project follow the Go code-style. For more detailed information about the code style in use, please check <https://google.github.io/styleguide/go/>.
 
+Python files use Ruff for formatting and linting. Documentation scripts and
+the `libhimmelblau` submodule are excluded. Run these commands from the
+repository root:
+
+```shell
+ruff format .
+ruff check --fix .
+```
+
 ## Contributing to the documentation
 
 You can contribute to the documentation in various ways.

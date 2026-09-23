@@ -1,0 +1,38 @@
+name: Python code sanity
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*.py'
+      - 'pyproject.toml'
+      - '.github/workflows/python-sanity.yaml'
+  pull_request:
+    paths:
+      - '**/*.py'
+      - 'pyproject.toml'
+      - '.github/workflows/python-sanity.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-sanity:
+    name: "Python: Code sanity"
+    permissions: {}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run Ruff lint
+        uses: astral-sh/ruff-action@v3
+        with:
+          version: "0.16.8"
+          args: check --config pyproject.toml --output-format=github .
+      - name: Check Ruff formatting
+        uses: astral-sh/ruff-action@v3
+        with:
+          version: "0.16.8"
+          args: format --check --config pyproject.toml .
