@@ -30,6 +30,8 @@ Optional environment variables:
   AUTHD_DEB           Host path to the authd package for migration tests
   APT_SOURCE          PPA or Ubuntu archive suite for all packages except authd
   AUTHD_APT_SOURCE    PPA or Ubuntu archive suite for authd installation
+  AUTHD_APT_SOURCE_BASE
+                      Explicit stable authd baseline source
   BROKER_SNAP         Host path to the broker snap for migration tests
   E2E_TEST_SNAPSHOT   Existing snapshot to use when starting the VM and before
                       each test; must include memory state if the VM is stopped
@@ -297,6 +299,7 @@ env \
     AUTHD_DEB="${AUTHD_DEB:-}" \
     APT_SOURCE="${APT_SOURCE:-}" \
     AUTHD_APT_SOURCE="${AUTHD_APT_SOURCE:-}" \
+    AUTHD_APT_SOURCE_BASE="${AUTHD_APT_SOURCE_BASE:-}" \
     BROKER_SNAP="${BROKER_SNAP:-}" \
     VNC_PORT="$VNC_PORT" \
     SYSTEMD_SUPPORTS_VSOCK="${SYSTEMD_SUPPORTS_VSOCK:-}" \
