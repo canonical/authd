@@ -20,7 +20,9 @@ class StringUtils:
 
         match = re.search(regex, text)
         if match:
-            logger.debug(f"Matched regex '{regex}' against text '{text}': {match.groups()}")
+            logger.debug(
+                f"Matched regex '{regex}' against text '{text}': {match.groups()}"
+            )
 
             # In some cases, we need to match the text with whitespaces due to OCR inaccuracies.
             # So let's ensure we remove those whitespaces from the match.

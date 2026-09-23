@@ -1,10 +1,9 @@
 import subprocess
 
-from robot.api import logger
-from robot.api.deco import keyword, library  # type: ignore
-
 import ExecUtils
 import VMUtils
+from robot.api import logger
+from robot.api.deco import keyword, library  # type: ignore
 
 
 @library
@@ -23,6 +22,6 @@ class Snapshot:
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True
+            text=True,
         )
         logger.info("snapshot-revert output:\n" + process.stdout)
