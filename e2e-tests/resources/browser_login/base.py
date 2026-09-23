@@ -27,13 +27,17 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("WebKit2", "4.1")
 
+from browser_window import BrowserWindow, ascii_string_to_key_events  # noqa: F401
 from gi.repository import Gtk  # type: ignore
 
-from browser_window import BrowserWindow, ascii_string_to_key_events  # noqa: F401
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from generate_totp import generate_totp  # noqa: F401
 
-logging.basicConfig(format="%(asctime)s %(levelname)s: %(message)s", datefmt="%H:%M:%S", level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+    level=logging.INFO,
+)
 logger = logging.getLogger(__name__)
 
 
@@ -52,7 +56,9 @@ def run_browser_login(login_func: LoginFunc) -> None:
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("device_code")
-    parser.add_argument("--output-dir", required=False, default=os.path.realpath(os.curdir))
+    parser.add_argument(
+        "--output-dir", required=False, default=os.path.realpath(os.curdir)
+    )
     parser.add_argument("--recording-name", required=False, default="Webview_Recording")
     parser.add_argument("--show-webview", action="store_true")
     args = parser.parse_args()
@@ -61,7 +67,9 @@ def run_browser_login(login_func: LoginFunc) -> None:
     password = os.getenv("E2E_PASSWORD")
     totp_secret = os.getenv("TOTP_SECRET")
     if username is None or password is None or totp_secret is None:
-        logger.error("E2E_USER, E2E_PASSWORD, and TOTP_SECRET environment variables must be set")
+        logger.error(
+            "E2E_USER, E2E_PASSWORD, and TOTP_SECRET environment variables must be set"
+        )
         sys.exit(1)
 
     locale.setlocale(locale.LC_ALL, "C")
@@ -81,12 +89,21 @@ def run_browser_login(login_func: LoginFunc) -> None:
         browser.start_recording()
 
         try:
-            login_func(browser, username, password, args.device_code, totp_secret, screenshot_dir)
+            login_func(
+                browser,
+                username,
+                password,
+                args.device_code,
+                totp_secret,
+                screenshot_dir,
+            )
         except TimeoutError as e:
             # Sometimes the page can't be loaded due to TLS errors, retry once.
             if not retried_tls_error:
                 try:
-                    browser.wait_for_pattern("Unacceptable TLS certificate", timeout_ms=1000)
+                    browser.wait_for_pattern(
+                        "Unacceptable TLS certificate", timeout_ms=1000
+                    )
                     repeat = True
                     retried_tls_error = True
                 except TimeoutError:

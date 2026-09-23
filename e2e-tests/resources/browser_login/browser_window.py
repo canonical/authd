@@ -1,28 +1,27 @@
-import cairo
 import json
-import gi
 import logging
 import os
 import subprocess
+import sys
 import tempfile
 import time
 import traceback
-import sys
 
+import cairo
+import gi
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("WebKit2", "4.1")
 
-from gi.repository import (
-    Gdk,
-    Gtk,
-    GLib,
-    Gio,
-    WebKit2 as WebKit
-)  # type: ignore
+from gi.repository import Gdk, Gio, GLib, Gtk  # type: ignore
+from gi.repository import WebKit2 as WebKit
 
-logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%H:%M:%S', level=logging.DEBUG)
+logging.basicConfig(
+    format="%(asctime)s %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+    level=logging.DEBUG,
+)
 logger = logging.getLogger(__name__)
 
 
@@ -160,7 +159,9 @@ class BrowserWindow(Gtk.Window):
 
         if timed_out:
             GLib.source_remove(timeout_id)
-            raise TimeoutError(f"Timed out after {timeout_ms}ms waiting for page to load")
+            raise TimeoutError(
+                f"Timed out after {timeout_ms}ms waiting for page to load"
+            )
         logger.info("Page loaded")
 
     def wait_for_stable_page(self, timeout_ms=60000):
@@ -219,13 +220,16 @@ class BrowserWindow(Gtk.Window):
 
         if timed_out:
             GLib.source_remove(stable_timeout_id)
-            raise TimeoutError(f"Timed out after {timeout_ms}ms waiting for page to stabilize")
+            raise TimeoutError(
+                f"Timed out after {timeout_ms}ms waiting for page to stabilize"
+            )
 
         GLib.source_remove(stable_timeout_id)
         logger.info("Page is stable now")
 
-    def wait_for_pattern(self, pattern, timeout_ms=10000,
-                         poll_interval_ms=100) -> list[str]:
+    def wait_for_pattern(
+        self, pattern, timeout_ms=10000, poll_interval_ms=100
+    ) -> list[str]:
         """Wait until `pattern` is present in the page's visible text and return all matched substrings."""
         logger.info(f"Waiting for pattern '{pattern}'...")
         loop = GLib.MainLoop()
@@ -303,7 +307,9 @@ class BrowserWindow(Gtk.Window):
         cancellable.disconnect(connect_id)
 
         if not found:
-            raise TimeoutError(f"Timed out after {timeout_ms}ms waiting for pattern '{pattern}'")
+            raise TimeoutError(
+                f"Timed out after {timeout_ms}ms waiting for pattern '{pattern}'"
+            )
 
         logger.info(f"Found strings matching pattern: {found!r}")
         return found
@@ -375,8 +381,9 @@ class BrowserWindow(Gtk.Window):
             raise RuntimeError("JavaScript returned an invalid focused-input value")
         return value
 
-    def wait_for_focused_input(self, timeout_ms: int = 5000,
-                               poll_interval_ms: int = 50) -> str:
+    def wait_for_focused_input(
+        self, timeout_ms: int = 5000, poll_interval_ms: int = 50
+    ) -> str:
         """Wait until an input element is focused and return its value."""
         deadline = time.monotonic() + timeout_ms / 1000
         while True:
@@ -386,11 +393,13 @@ class BrowserWindow(Gtk.Window):
                 return value
             if time.monotonic() >= deadline:
                 raise TimeoutError(
-                    f"Timed out after {timeout_ms}ms waiting for a focused input")
+                    f"Timed out after {timeout_ms}ms waiting for a focused input"
+                )
             self.wait_ms(min(poll_interval_ms, remaining_ms))
 
-    def wait_for_focused_input_value(self, expected: str, timeout_ms: int = 5000,
-                                     poll_interval_ms: int = 50) -> str | None:
+    def wait_for_focused_input_value(
+        self, expected: str, timeout_ms: int = 5000, poll_interval_ms: int = 50
+    ) -> str | None:
         """Wait for the focused input to contain `expected`.
 
         Key events are delivered to the web page asynchronously, so the value
@@ -487,8 +496,9 @@ class BrowserWindow(Gtk.Window):
         for kt in key_taps:
             self.send_key_tap(kt, silent=True)
 
-    def _run_async_task(self, task_function, cancellable: Gio.Cancellable = None,
-                        wait: bool = True):
+    def _run_async_task(
+        self, task_function, cancellable: Gio.Cancellable = None, wait: bool = True
+    ):
         loop = None
         ret = False
 
@@ -519,8 +529,9 @@ class BrowserWindow(Gtk.Window):
         if wait:
             loop = GLib.MainLoop()
 
-        task = Gio.Task.new(source_object=self, cancellable=cancellable,
-                            callback=callback)
+        task = Gio.Task.new(
+            source_object=self, cancellable=cancellable, callback=callback
+        )
         task.run_in_thread(thread_func)
 
         if wait:
@@ -529,8 +540,14 @@ class BrowserWindow(Gtk.Window):
 
         return True
 
-    def capture_snapshot(self, path: str, filename: str = "snapshot", ext: str = "png",
-                         sync: bool = True, cancellable: Gio.Cancellable = None) -> str:
+    def capture_snapshot(
+        self,
+        path: str,
+        filename: str = "snapshot",
+        ext: str = "png",
+        sync: bool = True,
+        cancellable: Gio.Cancellable = None,
+    ) -> str:
         view_window = self.web_view.get_window()
         scale = view_window.get_scale_factor()
         width = view_window.get_width() * scale
@@ -539,8 +556,9 @@ class BrowserWindow(Gtk.Window):
         # Create an offscreen surface
         try:
             # This is failing in older PyGObject versions, so let's try both ways.
-            surface = view_window.create_similar_image_surface(cairo.Format.ARGB32,
-                                                               width, height, scale)
+            surface = view_window.create_similar_image_surface(
+                cairo.Format.ARGB32, width, height, scale
+            )
         except ValueError:
             surface = cairo.ImageSurface(cairo.Format.ARGB32, width, height)
             surface.set_device_scale(scale, scale)
@@ -558,8 +576,9 @@ class BrowserWindow(Gtk.Window):
         file_path = os.path.join(path, f"{snapshot_index:05}-{filename}.{ext}")
         self._snapshots_indexes[path] += 1
 
-        self._run_async_task(lambda: surface.write_to_png(file_path),
-                             cancellable=cancellable, wait=sync)
+        self._run_async_task(
+            lambda: surface.write_to_png(file_path), cancellable=cancellable, wait=sync
+        )
         return file_path
 
     def start_recording(self, fps: int = 5):
@@ -575,9 +594,12 @@ class BrowserWindow(Gtk.Window):
         def save_snapshot():
             nonlocal timeout
 
-            self.capture_snapshot(self._recording_path.name,
-                                  filename="frame", sync=False,
-                                  cancellable=cancellable)
+            self.capture_snapshot(
+                self._recording_path.name,
+                filename="frame",
+                sync=False,
+                cancellable=cancellable,
+            )
 
             timeout = GLib.timeout_add(max_delay_ms, save_snapshot)
 
@@ -603,9 +625,11 @@ class BrowserWindow(Gtk.Window):
         self._recording_cancellable_id = 0
 
         if rendered_output:
-            self._run_async_task(lambda: render_video(self._recording_path.name,
-                                                      rendered_output,
-                                                      self._recording_fps))
+            self._run_async_task(
+                lambda: render_video(
+                    self._recording_path.name, rendered_output, self._recording_fps
+                )
+            )
 
         self._recording_path.cleanup()
         self._recording_fps = 0
@@ -618,26 +642,39 @@ def ascii_string_to_key_events(string):
 
 
 def render_video(screenshot_dir: str, video_path: str, framerate: int = 1):
-    logger.info(f"Rendering video from screenshots in {screenshot_dir} to {video_path} at {framerate} fps...")
-    subprocess.check_call([
-        "ffmpeg",
-        "-loglevel", "warning",
-        # Overwrite output file if it already exists
-        "-y",
-        # Set the frame rate of the input image sequence
-        "-framerate", str(framerate),
-        # Allow glob patterns in the input path
-        "-pattern_type", "glob",
-        "-i", f"{screenshot_dir}/*.png",
-        # H.265 encoder: better compression than VP9, supported in Firefox 130+, Chrome 107+
-        "-codec:v", "libx265",
-        # Constant Rate Factor: quality scale 0-51, lower = better; 32 is good for screen content
-        "-crf", "32",
-        # Encoding speed preset; 'medium' gives better compression since this is post-processing
-        "-preset", "medium",
-        # Force 8-bit pixel format: browsers require yuv420p and won't play 10-bit H.265
-        "-pix_fmt", "yuv420p",
-        # Tag the stream as hvc1 (instead of default hev1) for broader browser compatibility
-        "-tag:v", "hvc1",
-        video_path,
-    ])
+    logger.info(
+        f"Rendering video from screenshots in {screenshot_dir} to {video_path} at {framerate} fps..."
+    )
+    subprocess.check_call(
+        [
+            "ffmpeg",
+            "-loglevel",
+            "warning",
+            # Overwrite output file if it already exists
+            "-y",
+            # Set the frame rate of the input image sequence
+            "-framerate",
+            str(framerate),
+            # Allow glob patterns in the input path
+            "-pattern_type",
+            "glob",
+            "-i",
+            f"{screenshot_dir}/*.png",
+            # H.265 encoder: better compression than VP9, supported in Firefox 130+, Chrome 107+
+            "-codec:v",
+            "libx265",
+            # Constant Rate Factor: quality scale 0-51, lower = better; 32 is good for screen content
+            "-crf",
+            "32",
+            # Encoding speed preset; 'medium' gives better compression since this is post-processing
+            "-preset",
+            "medium",
+            # Force 8-bit pixel format: browsers require yuv420p and won't play 10-bit H.265
+            "-pix_fmt",
+            "yuv420p",
+            # Tag the stream as hvc1 (instead of default hev1) for broader browser compatibility
+            "-tag:v",
+            "hvc1",
+            video_path,
+        ]
+    )
