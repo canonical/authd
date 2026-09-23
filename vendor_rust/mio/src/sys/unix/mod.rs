@@ -76,18 +76,18 @@ cfg_os_poll! {
         not(mio_unsupported_force_waker_pipe),
         not(mio_unsupported_force_poll_poll), // `kqueue(2)` based waker doesn't work with `poll(2)`.
         any(
+            target_os = "dragonfly",
             target_os = "freebsd",
             target_os = "ios",
             target_os = "macos",
+            target_os = "netbsd",
+            target_os = "openbsd",
+            target_os = "solaris",
             target_os = "tvos",
             target_os = "visionos",
             target_os = "watchos",
         )
-    ), path = "waker/kqueue.rs")]
-    #[cfg_attr(all(
-        not(mio_unsupported_force_poll_poll),
-        target_os = "solaris",
-    ), path = "waker/event_ports.rs")]
+    ), path = "waker/selector.rs")]
     #[cfg_attr(any(
         // NOTE: also add to the list for the `pipe` module below.
         mio_unsupported_force_waker_pipe,
@@ -95,21 +95,21 @@ cfg_os_poll! {
             // `kqueue(2)` based waker doesn't work with `poll(2)`.
             mio_unsupported_force_poll_poll,
             any(
+                target_os = "dragonfly",
                 target_os = "freebsd",
                 target_os = "ios",
                 target_os = "macos",
+                target_os = "netbsd",
+                target_os = "openbsd",
                 target_os = "tvos",
                 target_os = "visionos",
                 target_os = "watchos",
             ),
         ),
         target_os = "aix",
-        target_os = "dragonfly",
         target_os = "haiku",
         target_os = "hurd",
-        target_os = "netbsd",
         target_os = "nto",
-        target_os = "openbsd",
         target_os = "redox",
         all(mio_unsupported_force_poll_poll, target_os = "solaris"),
         target_os = "vita",

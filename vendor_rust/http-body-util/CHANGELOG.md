@@ -1,3 +1,7 @@
+# v0.1.5
+
+- Fix docs with new `doc_cfg` rendering.
+
 # v0.1.4
 
 - Add `Fused` body combinator that always returns `None` once completed.

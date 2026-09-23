@@ -13,7 +13,7 @@
 edition = "2018"
 rust-version = "1.71.1"
 name = "pulldown-cmark-to-cmark"
-version = "22.0.0"
+version = "22.0.1"
 authors = [
     "Sebastian Thiel <byronimo@gmail.com>",
     "Dylan Owen <dyltotheo@gmail.com>",

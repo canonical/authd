@@ -2,7 +2,7 @@
 # It is not intended for manual editing.
 [[package]]
 name = "futures-core"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "portable-atomic 1.13.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]

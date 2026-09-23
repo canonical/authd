@@ -8,18 +8,17 @@ version = "0.3.8"
 
 [dependencies.futures-util]
 default-features = false
-features = ["std"]
 optional = true
 version = "0.3.31"
 
 [dependencies.wasm-bindgen]
 default-features = false
-version = "=0.2.127"
+version = "=0.2.128"
 
 [features]
 default = ["std", "unsafe-eval"]
 futures-core-03-stream = ["dep:futures-util", "dep:futures-core"]
-std = ["wasm-bindgen/std", "dep:futures-util"]
+std = ["wasm-bindgen/std", "futures-util/std"]
 unsafe-eval = []
 
 [lib]
@@ -61,7 +60,7 @@ name = "js-sys"
 readme = "README.md"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/js-sys"
 rust-version = "1.77"
-version = "0.3.104"
+version = "0.3.105"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies.futures-channel]
 version = "0.3"

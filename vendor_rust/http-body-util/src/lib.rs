@@ -1,6 +1,6 @@
 #![deny(missing_debug_implementations, missing_docs, unreachable_pub)]
 #![cfg_attr(test, deny(warnings))]
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 //! Utilities for [`http_body::Body`].
 //!

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.13](https://github.com/rust-lang/cc-rs/compare/find-msvc-tools-v0.1.12...find-msvc-tools-v0.1.13) - 2026-09-18
+
+### Other
+
+- Regenerate windows sys bindings ([#1926](https://github.com/rust-lang/cc-rs/pull/1926) [#1919](https://github.com/rust-lang/cc-rs/pull/1919))
+
+## [0.1.12](https://github.com/rust-lang/cc-rs/compare/find-msvc-tools-v0.1.11...find-msvc-tools-v0.1.12) - 2026-09-04
+
+### Other
+
+- simplify conditional logic using `then` method ([#1860](https://github.com/rust-lang/cc-rs/pull/1860))
+
+## [0.1.11](https://github.com/rust-lang/cc-rs/compare/find-msvc-tools-v0.1.10...find-msvc-tools-v0.1.11) - 2026-08-14
+
+### Other
+
+- Update MSRV to 1.65 ([#1834](https://github.com/rust-lang/cc-rs/pull/1834))
+
 ## [0.1.10](https://github.com/rust-lang/cc-rs/compare/find-msvc-tools-v0.1.9...find-msvc-tools-v0.1.10) - 2026-08-07
 
 ### Other

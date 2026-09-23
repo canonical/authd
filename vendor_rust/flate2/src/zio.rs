@@ -1,6 +1,7 @@
-use std::io;
-use std::io::prelude::*;
-use std::mem;
+use crate::io;
+use crate::io::{BufRead, Write};
+use alloc::vec::Vec;
+use core::mem;
 
 use crate::{
     Compress, CompressError, Decompress, DecompressError, FlushCompress, FlushDecompress, Status,
@@ -144,11 +145,19 @@ where
         obj.consume(consumed);
 
         match ret {
-            // If we haven't ready any data and we haven't hit EOF yet,
+            // If we haven't read any data and we haven't hit EOF yet,
             // then we need to keep asking for more data because if we
             // return that 0 bytes of data have been read then it will
             // be interpreted as EOF.
             Ok(Status::Ok | Status::BufError) if read == 0 && !eof && !dst.is_empty() => continue,
+            // If we haven't read any data and we have hit EOF, then the
+            // deflate stream is incomplete.
+            Ok(Status::Ok | Status::BufError) if read == 0 && eof && !dst.is_empty() => {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "incomplete deflate stream",
+                ));
+            }
             Ok(Status::Ok | Status::BufError | Status::StreamEnd) => return Ok(read),
 
             Err(..) => {
@@ -185,7 +194,7 @@ impl<W: Write, D: Ops> Writer<W, D> {
     }
 
     pub fn replace(&mut self, w: W) -> W {
-        self.buf.truncate(0);
+        self.buf.clear();
         mem::replace(self.get_mut(), w)
     }
 

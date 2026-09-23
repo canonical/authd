@@ -714,7 +714,7 @@ where
                     if let Some(shortcut_text) = state.current_shortcut_text.take() {
                         state
                             .shortcuts
-                            .push((shortcut_text, uri.to_string(), title.to_string()));
+                            .push((EscapeLinkLabel(&shortcut_text).to_string(), uri.into(), title.into()));
                     }
                     formatter.write_str("][]")
                 }
@@ -722,7 +722,7 @@ where
                     if let Some(shortcut_text) = state.current_shortcut_text.take() {
                         state
                             .shortcuts
-                            .push((shortcut_text, uri.to_string(), title.to_string()));
+                            .push((EscapeLinkLabel(&shortcut_text).to_string(), uri.into(), title.into()));
                     }
                     formatter.write_char(']')
                 }
@@ -745,7 +745,7 @@ where
                     if let Some(shortcut_text) = state.current_shortcut_text.take() {
                         state
                             .shortcuts
-                            .push((shortcut_text, uri.to_string(), title.to_string()));
+                            .push((EscapeLinkLabel(&shortcut_text).to_string(), uri.into(), title.into()));
                     }
                     formatter.write_str("][]")
                 }
@@ -753,7 +753,7 @@ where
                     if let Some(shortcut_text) = state.current_shortcut_text.take() {
                         state
                             .shortcuts
-                            .push((shortcut_text, uri.to_string(), title.to_string()));
+                            .push((EscapeLinkLabel(&shortcut_text).to_string(), uri.into(), title.into()));
                     }
                     formatter.write_char(']')
                 }

@@ -1,7 +1,8 @@
 //! Implementation for `miniz_oxide` rust backend.
 
-use std::convert::TryInto;
-use std::fmt;
+use alloc::boxed::Box;
+use core::convert::TryInto;
+use core::fmt;
 
 use ::miniz_oxide::deflate::core::CompressorOxide;
 use ::miniz_oxide::inflate::stream::InflateState;
@@ -136,7 +137,8 @@ impl From<FlushCompress> for MZFlush {
     fn from(value: FlushCompress) -> Self {
         match value {
             FlushCompress::None => Self::None,
-            FlushCompress::Partial | FlushCompress::Sync => Self::Sync,
+            FlushCompress::Partial => Self::Partial,
+            FlushCompress::Sync => Self::Sync,
             FlushCompress::Full => Self::Full,
             FlushCompress::Finish => Self::Finish,
         }
