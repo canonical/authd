@@ -20,6 +20,16 @@ updates:
     commit-message:
       prefix: "deps(ci)"
 
+  ## Python lint tools
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "09:00"
+    commit-message:
+      prefix: "deps(python)"
+
   # authd codebase
   ## Go dependencies
   - package-ecosystem: "gomod"
