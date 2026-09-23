@@ -9,10 +9,10 @@ version = "1.0"
 
 [dependencies.syn]
 features = ["visit", "visit-mut", "full", "extra-traits"]
-version = "2.0"
+version = "3.0"
 
 [dependencies.wasm-bindgen-shared]
-version = "=0.2.127"
+version = "=0.2.128"
 
 [features]
 extra-traits = ["syn/extra-traits"]
@@ -52,6 +52,6 @@ include = ["/LICENSE-*", "/src"]
 license = "MIT OR Apache-2.0"
 name = "wasm-bindgen-macro-support"
 readme = false
-repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro-support"
+repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/main/crates/macro-support"
 rust-version = "1.77"
-version = "0.2.127"
+version = "0.2.128"

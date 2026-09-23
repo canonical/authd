@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 22.0.1 (2026-08-10)
+
+### Bug Fixes
+
+ - <csr-id-e4467422fbb68aff72a96808c3ab62b503897adc/> escape brackets in generated link labels
+   <!-- agent -->
+   Shortcut and collapsed link labels are reconstructed from decoded text, so
+   bracket escapes were lost when their reference definitions were emitted. This
+   made the generated Markdown invalid for labels containing brackets.
+   
+   Escape backslashes and square brackets while capturing generated link and image
+   labels, while leaving parser-provided explicit reference IDs unchanged to avoid
+   double escaping. Add regression coverage for shortcut, explicit, and image
+   references and update the CommonMark conformance count from 585 to 586.
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 2 commits contributed to the release.
+ - 230 days passed between releases.
+ - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
+ - 1 unique issue was worked on: [#109](https://github.com/Byron/pulldown-cmark-to-cmark/issues/109)
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **[#109](https://github.com/Byron/pulldown-cmark-to-cmark/issues/109)**
+    - Escape brackets in generated link labels ([`e446742`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/e4467422fbb68aff72a96808c3ab62b503897adc))
+ * **Uncategorized**
+    - Merge pull request #110 from Byron/escape-in-links ([`41f854b`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/41f854b001017daa44c8a9f6af3b9ab442a7d13a))
+</details>
+
 ## 22.0.0 (2025-12-23)
 
 ### New Features
@@ -25,8 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 7 commits contributed to the release.
- - 43 days passed between releases.
+ - 8 commits contributed to the release.
+ - 44 days passed between releases.
  - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -37,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Release pulldown-cmark-to-cmark v22.0.0 ([`d04ad95`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/d04ad95564f332d3953325a74282f17f47988be9))
     - Merge pull request #107 from kinnison/super-sub-not-html ([`15e7a74`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/15e7a74364cf05e437029d84ec6b78a6662fd137))
     - Refactor ([`aba929c`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/aba929c5068f69de5ae2e92b397fd901922f2c0d))
     - Add testing support for symbolic super/subscript ([`463b65a`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/463b65a0ede1c99d921862645931c8ecc117c159))
@@ -80,63 +117,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    Previously, if a change accidentally reduce the conformance, there was
    no easy way to know, since that information was not stored/tracked
    in any way.
-
-### Other
-
- - <csr-id-5b93e7e7b51000632bfecf6d7a49e48d9fb3bc19/> Drop comment headers
-
-### Refactor
-
- - <csr-id-942c42ba6fc517b595130603e9fd4aa1309ee755/> Add Repeated utility to simplify writing repeated content
- - <csr-id-30b706b719fd2554b664bc7d2c40bcb7e7095a8c/> Move and group related code
-   My impression reading through the code in this project is that
-   top-level statements have gotten a bit intertangled over time;
-   this tries to reorder things to have a clearer flow and
-   structure, grouping related things together.
-   
-   For example, this moves the recently added Error enum up above
-   all of the API functions, instead of leaving it somewhat
-   arbitrarily nestled between `cmark_resume_with_options()` and
-   `cmark_resume_one_event()`.
-   
-   No code changes were made to the body of functions or types.
-   This also does not change any of the public APIs, only where
-   code is located.
-   
-   * Group padded newline logic at top of text_modifications.rs
-   
-   * Rename `padding_of()` to `list_item_padding_of()`
-   
-   * Add 'Public API Functions' header in lib.rs
-   
-   * Consolidate public enum and struct types at the
-     top of lib.rs, instead of leaving them scattered
-     amongst the `cmark*()` public functions.
-   
-   * Consolidate the two `impl State<'_>` statements
-   
-   * Move `cmark_resume()`, `cmark()` and `cmark_with_options()`
-     from the bottom of lib.rs up to the top, before the ~600
-     implementation of `cmark_resume_one_event()` that makes up
-     the bulk of lib.rs
- - <csr-id-31a49d0d45c1c32bfcf1c653121ee3ca0a1d4fe8/> Add State::set_minimum_newlines_before_start()
-   This should help with readability. As an example, I didn't realize
-   initially that all of the `if` statements updated in this PR
-   were actually modifying the same field.
-   
-   But once I started doing the more generic refactoring of adding
-   a `set_option_minimum()` method, I looked at every line and
-   realized they were all the same.
-   
-   Factoring this to a method should clarify to future readers that
-   updating newlines_before_start specifically is a recurring operation.
- - <csr-id-3ab278b9db5546f405bcd13bdf5c3f0d59d2fb8a/> Use `write_padded_string()` in a couple additional places
-   Additionally, while in the neighhborhood, add `pub(crate)` to the other
-   text_modifications.rs private helpers
-   
-   These being marked as `pub` is misleading since the `text_modifications`
-   module is not actually externally public, and these functions
-   are never re-exported publicly.
 
 ### Commit Statistics
 
@@ -182,108 +162,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 The breaking release is to avoid side-effects with different `pulldown-cmark` versions.
 This crate now comes with version 13.
 
-### Refactor
-
- - <csr-id-942c42ba6fc517b595130603e9fd4aa1309ee755/> Add Repeated utility to simplify writing repeated content
- - <csr-id-30b706b719fd2554b664bc7d2c40bcb7e7095a8c/> Move and group related code
-   My impression reading through the code in this project is that
-   top-level statements have gotten a bit intertangled over time;
-   this tries to reorder things to have a clearer flow and
-   structure, grouping related things together.
-   
-   For example, this moves the recently added Error enum up above
-   all of the API functions, instead of leaving it somewhat
-   arbitrarily nestled between `cmark_resume_with_options()` and
-   `cmark_resume_one_event()`.
-   
-   No code changes were made to the body of functions or types.
-   This also does not change any of the public APIs, only where
-   code is located.
-   
-   * Group padded newline logic at top of text_modifications.rs
-   
-   * Rename `padding_of()` to `list_item_padding_of()`
-   
-   * Add 'Public API Functions' header in lib.rs
-   
-   * Consolidate public enum and struct types at the
-     top of lib.rs, instead of leaving them scattered
-     amongst the `cmark*()` public functions.
-   
-   * Consolidate the two `impl State<'_>` statements
-   
-   * Move `cmark_resume()`, `cmark()` and `cmark_with_options()`
-     from the bottom of lib.rs up to the top, before the ~600
-     implementation of `cmark_resume_one_event()` that makes up
-     the bulk of lib.rs
- - <csr-id-31a49d0d45c1c32bfcf1c653121ee3ca0a1d4fe8/> Add State::set_minimum_newlines_before_start()
-   This should help with readability. As an example, I didn't realize
-   initially that all of the `if` statements updated in this PR
-   were actually modifying the same field.
-   
-   But once I started doing the more generic refactoring of adding
-   a `set_option_minimum()` method, I looked at every line and
-   realized they were all the same.
-   
-   Factoring this to a method should clarify to future readers that
-   updating newlines_before_start specifically is a recurring operation.
- - <csr-id-3ab278b9db5546f405bcd13bdf5c3f0d59d2fb8a/> Use `write_padded_string()` in a couple additional places
-   Additionally, while in the neighhborhood, add `pub(crate)` to the other
-   text_modifications.rs private helpers
-   
-   These being marked as `pub` is misleading since the `text_modifications`
-   module is not actually externally public, and these functions
-   are never re-exported publicly.
-
-### Other
-
- - <csr-id-5b93e7e7b51000632bfecf6d7a49e48d9fb3bc19/> Drop comment headers
-
-### New Features
-
- - <csr-id-91ffc9508b129cd603b870d38fd9bd88240d07fe/> Improve CommonMark conformance testing output
-   This is a major improvement to the rendering of the failing
-   CommonMark conformance test output, that should make it easier
-   to read and understand when pulldown-cmark-to-cmark is producing
-   erroneous output.
-   
-   Additionally, this introduces a way to force the printing of the
-   CommonMark failure report from the command line:
-   
-   $ FULL_CMARK_RESULTS=true cargo test
-   
-   and documents in CONTRIBUTING.md that new contributors may want
-   to start with trying to improve conformance.
-   
-   This removes `#[should_panic]` from the main CommonMark test. Instead,
-   we now hard-code in how many of the CommonMark tests are known to pass.
-   
-   If the number that actually passes increases or decreases, this test
-   will fail, informing the user either that they have introduced a bug
-   (decrease), or that they've successfully improved conformance (increase).
-   
-   Previously, if a change accidentally reduce the conformance, there was
-   no easy way to know, since that information was not stored/tracked
-   in any way.
-
-### Other
-
- - <csr-id-05e247e5c7a74ac7bf9a906417724b8a275cabcc/> Adjust wording + typos
-
-### Refactor
-
- - <csr-id-2252ba1d9cf93256a8bcdd721813ed2397e32464/> Add helper to factor out newline + padding pattern
-   When writing a newline into the generated Markdown content
-   to start a new line of output, it is (almost) always necessary
-   to output the "padding" characters used to indent the content
-   at the current location in the document, based on the hierarchy
-   of block-level elements the output cursor is "inside" of.
-   
-   Since writing a newline and writing the current padding are
-   always paired, factoring them out into a function should help
-   with readability and consistency in performing this minor
-   two-step dance correctly.
-
 ### Commit Statistics
 
 <csr-read-only-do-not-edit/>
@@ -322,7 +200,7 @@ This crate now comes with version 13.
 <csr-read-only-do-not-edit/>
 
  - 8 commits contributed to the release.
- - 58 days passed between releases.
+ - 59 days passed between releases.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 1 unique issue was worked on: [#97](https://github.com/Byron/pulldown-cmark-to-cmark/issues/97)
 
@@ -442,6 +320,7 @@ This crate now comes with version 13.
 <csr-read-only-do-not-edit/>
 
  - 12 commits contributed to the release.
+ - 37 days passed between releases.
  - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -469,14 +348,6 @@ This crate now comes with version 13.
 ## 18.0.0 (2024-10-16)
 
 <csr-id-b3d7df263409e2f9ebdaae843e087c714b994367/>
-
-### Chore
-
- - <csr-id-b3d7df263409e2f9ebdaae843e087c714b994367/> use `TextMergeStream` for round-trip tests
-   This increases the amount of passing tests to 578.
-   It doesn't strictly improve the quality of implementation,
-   but since separate text events aren't supposed to be semantic,
-   these failures seem spurrious.
 
 ### New Features
 
@@ -538,7 +409,7 @@ This crate now comes with version 13.
 <csr-read-only-do-not-edit/>
 
  - 6 commits contributed to the release.
- - 14 days passed between releases.
+ - 15 days passed between releases.
  - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -560,15 +431,6 @@ This crate now comes with version 13.
 ## 16.0.1 (2024-08-22)
 
 <csr-id-21a7f26a611e7a5b99ab33e9386acd30f0188960/>
-
-### Other
-
- - <csr-id-21a7f26a611e7a5b99ab33e9386acd30f0188960/> Lower MSRV to 1.71.1
-   This project builds successfully with the MSRV of `pulldown-cmark`. Therefore we can lower `rust-version` to 1.71.1.
-   
-   Add documentation for the current MSRV and that this project follows MSRV policy of `pulldown-cmark`.
-   
-   Use `cargo hack` for MSRV CI job, to automatically install rustc according to `rust-version` and then execute `cargo check`.
 
 ### Commit Statistics
 
@@ -613,7 +475,7 @@ Add support for `pulldown-cmark` v0.12, and an understanding of markdown Definit
 <csr-read-only-do-not-edit/>
 
  - 8 commits contributed to the release.
- - 64 days passed between releases.
+ - 65 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -758,6 +620,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 17 commits contributed to the release.
+ - 85 days passed between releases.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -799,10 +662,6 @@ to `State`, which isn't used unless you do incremental event serialization.
 
  - <csr-id-7b27baad538570400eeb651b2e9b2b786ad43189/> set correct yaml metablock end tag
 
-### Test
-
- - <csr-id-5d940367d7d720a176c361b99ab8699897a53313/> add frontmatter snapshot
-
 ### New Features (BREAKING)
 
  - <csr-id-834c74b9df9b9451000b069988d8259e2b881692/> support for controlling the amount of newlines after metadata blocks.
@@ -812,6 +671,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 6 commits contributed to the release.
+ - 1 day passed between releases.
  - 4 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -834,10 +694,6 @@ to `State`, which isn't used unless you do incremental event serialization.
 
 <csr-id-b90defbf6ade8b3c1c0585f7933421f086eeb123/>
 
-### Other
-
- - <csr-id-b90defbf6ade8b3c1c0585f7933421f086eeb123/> update pulldown-cmark dependency
-
 ### New Features (BREAKING)
 
  - <csr-id-640148b354eb7325e1fbeec2acbd4867d3c536fc/> upgrade to pulldown-cmark v0.10
@@ -852,7 +708,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 18 commits contributed to the release.
- - 48 days passed between releases.
+ - 49 days passed between releases.
  - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -896,7 +752,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 4 commits contributed to the release.
- - 1 day passed between releases.
+ - 2 days passed between releases.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -926,7 +782,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 6 commits contributed to the release.
- - 61 days passed between releases.
+ - 62 days passed between releases.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -956,7 +812,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 5 commits contributed to the release.
- - 4 days passed between releases.
+ - 5 days passed between releases.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 1 unique issue was worked on: [#62](https://github.com/Byron/pulldown-cmark-to-cmark/issues/62)
 
@@ -986,6 +842,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 5 commits contributed to the release.
+ - 93 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 1 unique issue was worked on: [#61](https://github.com/Byron/pulldown-cmark-to-cmark/issues/61)
 
@@ -1027,6 +884,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 14 commits contributed to the release.
+ - 342 days passed between releases.
  - 3 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1098,11 +956,6 @@ to `State`, which isn't used unless you do incremental event serialization.
 
  - <csr-id-ff4050f4981f300d79b4d3214bdfe6c3c99ef205/> duplicated shortcut link definitions are only printed once.
 
-### Other
-
- - <csr-id-e214cc1be5305f9b43738affff4d1ca22242af37/> Replace `.travis.yml` with `.github/workflows/rust.yml`
-   We have already migrated from Travis CI to GitHub Actions.
-
 ### Commit Statistics
 
 <csr-read-only-do-not-edit/>
@@ -1168,7 +1021,7 @@ to `State`, which isn't used unless you do incremental event serialization.
 <csr-read-only-do-not-edit/>
 
  - 6 commits contributed to the release.
- - 42 days passed between releases.
+ - 43 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1284,7 +1137,7 @@ This release adds support for `pulldown-cmark v0.9`, [see the tracking issue](ht
 <csr-read-only-do-not-edit/>
 
  - 4 commits contributed to the release.
- - 20 days passed between releases.
+ - 21 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1371,7 +1224,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 7 commits contributed to the release over the course of 53 calendar days.
- - 53 days passed between releases.
+ - 54 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1401,7 +1254,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 3 commits contributed to the release.
- - 17 days passed between releases.
+ - 18 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1426,7 +1279,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 3 commits contributed to the release.
- - 75 days passed between releases.
+ - 76 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1519,7 +1372,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 2 commits contributed to the release over the course of 42 calendar days.
- - 72 days passed between releases.
+ - 73 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1569,7 +1422,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 4 commits contributed to the release over the course of 9 calendar days.
- - 20 days passed between releases.
+ - 21 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1651,7 +1504,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 10 commits contributed to the release over the course of 15 calendar days.
- - 81 days passed between releases.
+ - 82 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1730,6 +1583,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 5 commits contributed to the release.
+ - 35 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1754,6 +1608,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 3 commits contributed to the release.
+ - 117 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1797,6 +1652,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 6 commits contributed to the release.
+ - 195 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -1822,7 +1678,7 @@ Thanks to the author of [this PR](https://github.com/Byron/pulldown-cmark-to-cma
 <csr-read-only-do-not-edit/>
 
  - 4 commits contributed to the release over the course of 299 calendar days.
- - 309 days passed between releases.
+ - 310 days passed between releases.
  - 0 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 

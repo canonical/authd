@@ -107,15 +107,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "futures-channel"
-version = "0.3.33"
+version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "futures-core 0.3.33 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures-core 0.3.34 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "futures-core"
-version = "0.3.33"
+version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "portable-atomic 1.13.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -123,40 +123,40 @@ dependencies = [
 
 [[package]]
 name = "futures-io"
-version = "0.3.33"
+version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "futures-macro"
-version = "0.3.33"
+version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2 1.0.106 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.45 (registry+https://github.com/rust-lang/crates.io-index)",
- "syn 2.0.117 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn 3.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "futures-sink"
-version = "0.3.33"
+version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "futures-task"
-version = "0.3.33"
+version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "futures-util"
-version = "0.3.33"
+version = "0.3.34"
 dependencies = [
  "futures 0.1.31 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures-channel 0.3.33 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures-core 0.3.33 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures-io 0.3.33 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures-macro 0.3.33 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures-sink 0.3.33 (registry+https://github.com/rust-lang/crates.io-index)",
- "futures-task 0.3.33 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures-channel 0.3.34 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures-core 0.3.34 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures-io 0.3.34 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures-macro 0.3.34 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures-sink 0.3.34 (registry+https://github.com/rust-lang/crates.io-index)",
+ "futures-task 0.3.34 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.186 (registry+https://github.com/rust-lang/crates.io-index)",
  "memchr 2.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "pin-project-lite 0.2.17 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -409,7 +409,7 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.117"
+version = "3.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2 1.0.106 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -644,12 +644,12 @@ dependencies = [
 "checksum fuchsia-zircon 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "2e9763c69ebaae630ba35f74888db465e49e259ba1bc0eda7d06f4a067615d82"
 "checksum fuchsia-zircon-sys 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "3dcaa9ae7725d12cdb85b3ad99a434db70b468c09ded17e012d86b5c1010f7a7"
 "checksum futures 0.1.31 (registry+https://github.com/rust-lang/crates.io-index)" = "3a471a38ef8ed83cd6e40aa59c1ffe17db6855c18e3604d9c4ed8c08ebc28678"
-"checksum futures-channel 0.3.33 (registry+https://github.com/rust-lang/crates.io-index)" = "262590f4fe6afeb0bc83be1daa64e52657fe185690a958af7f3ad0e92085c5ae"
-"checksum futures-core 0.3.33 (registry+https://github.com/rust-lang/crates.io-index)" = "2cd50c473c80f6d7c3670a752354b8e569b1a7cbfdc0419ec88e5edad85e0dc7"
-"checksum futures-io 0.3.33 (registry+https://github.com/rust-lang/crates.io-index)" = "4577ecaa3c4f96589d473f679a71b596316f6641bc350038b962a5daf0085d7a"
-"checksum futures-macro 0.3.33 (registry+https://github.com/rust-lang/crates.io-index)" = "2d6d3cde68c518367be28956066ddfef33813991b77a55005a69dae04bf3b10b"
-"checksum futures-sink 0.3.33 (registry+https://github.com/rust-lang/crates.io-index)" = "e34418ac499d6305c2fb5ad0ed2f6ac998c5f8ca209b4510f7f94242c647e307"
-"checksum futures-task 0.3.33 (registry+https://github.com/rust-lang/crates.io-index)" = "b231ed28831efb4a61a08580c4bc233ec56bc009f4cd8f52da2c3cb97df0c109"
+"checksum futures-channel 0.3.34 (registry+https://github.com/rust-lang/crates.io-index)" = "b1f9e3d69d39e4862ffed03ed071a76f9a13ba1d9109d355b0f0aa6b15e393c4"
+"checksum futures-core 0.3.34 (registry+https://github.com/rust-lang/crates.io-index)" = "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
+"checksum futures-io 0.3.34 (registry+https://github.com/rust-lang/crates.io-index)" = "53c0fa8157de1303bfffdaa1cc2a673bfffb60102f76b0ef4441659124373fed"
+"checksum futures-macro 0.3.34 (registry+https://github.com/rust-lang/crates.io-index)" = "9fb9654ba8355388abeb8dcb4fc62f511300867002afc858860463bdd9fe0c44"
+"checksum futures-sink 0.3.34 (registry+https://github.com/rust-lang/crates.io-index)" = "1944426bf7d03f1d14f708785e4b33efd750b36d48a157b836b3efc15ede8e1d"
+"checksum futures-task 0.3.34 (registry+https://github.com/rust-lang/crates.io-index)" = "cd417de3d1d015fc3bfd2b1ea46dfc7bab72ef86f1cc7cc9c78e728b34a6d1fd"
 "checksum hermit-abi 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
 "checksum iovec 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)" = "b2b3ea6ff95e175473f8ffe6a7eb7c00d054240321b84c57051175fe3c1e075e"
 "checksum kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7507624b29483431c0ba2d82aece8ca6cdba9382bff4ddd0f7490560c056098d"
@@ -681,7 +681,7 @@ dependencies = [
 "checksum slab 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)" = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 "checksum smallvec 0.6.14 (registry+https://github.com/rust-lang/crates.io-index)" = "b97fcaeba89edba30f044a10c6a3cc39df9c3f17d7cd829dd1446cab35f890e0"
 "checksum spin 0.12.2 (registry+https://github.com/rust-lang/crates.io-index)" = "8abadc99fd9c7bbb7d0ca2b31d72a067d0c0dcd7aad25ab8cac71ba91417694b"
-"checksum syn 2.0.117 (registry+https://github.com/rust-lang/crates.io-index)" = "e665b8803e7b1d2a727f4023456bbbbe74da67099c585258af0ad9c5013b9b99"
+"checksum syn 3.0.3 (registry+https://github.com/rust-lang/crates.io-index)" = "53e9bae58849f64dfa4f5d5ae372c8341f7305f82a3868709269343628b659a3"
 "checksum tokio 0.1.22 (registry+https://github.com/rust-lang/crates.io-index)" = "5a09c0b5bb588872ab2f09afa13ee6e9dac11e10a0ec9e8e3ba39a5a5d530af6"
 "checksum tokio-codec 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "25b2998660ba0e70d18684de5d06b70b70a3a747469af9dea7618cc59e75976b"
 "checksum tokio-current-thread 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)" = "b1de0e32a83f131e002238d7ccde18211c0a5397f60cbfffcb112868c2e0e20e"

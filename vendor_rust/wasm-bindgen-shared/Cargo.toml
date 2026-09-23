@@ -40,4 +40,4 @@ name = "wasm-bindgen-shared"
 readme = false
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/shared"
 rust-version = "1.77"
-version = "0.2.127"
+version = "0.2.128"

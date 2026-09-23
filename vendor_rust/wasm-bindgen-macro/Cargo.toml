@@ -2,7 +2,7 @@
 version = "1.0"
 
 [dependencies.wasm-bindgen-macro-support]
-version = "=0.2.127"
+version = "=0.2.128"
 
 [dev-dependencies.trybuild]
 version = "1.0"
@@ -48,4 +48,4 @@ name = "wasm-bindgen-macro"
 readme = "README.md"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro"
 rust-version = "1.77"
-version = "0.2.127"
+version = "0.2.128"

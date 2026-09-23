@@ -1,7 +1,8 @@
-use std::error::Error;
-use std::fmt;
-use std::io;
-use std::mem::MaybeUninit;
+use crate::error::Error;
+use crate::io;
+use alloc::vec::Vec;
+use core::fmt;
+use core::mem::MaybeUninit;
 
 use crate::ffi::{self, Backend, Deflate, DeflateBackend, ErrorMessage, Inflate, InflateBackend};
 use crate::Compression;
@@ -273,7 +274,7 @@ impl Compress {
         // retained for longer than the lifetime of `self.inner.inner.stream_wrapper`.
         let stream = self.inner.inner.stream_wrapper.inner;
         let rc = unsafe {
-            (*stream).msg = std::ptr::null_mut();
+            (*stream).msg = core::ptr::null_mut();
             assert!(dictionary.len() < ffi::uInt::MAX as usize);
             ffi::deflateSetDictionary(stream, dictionary.as_ptr(), dictionary.len() as ffi::uInt)
         };
@@ -320,13 +321,13 @@ impl Compress {
 
         #[cfg(feature = "any_c_zlib")]
         {
-            use std::os::raw::c_int;
+            use core::ffi::c_int;
             // SAFETY: The field `inner` must always be accessed as a raw pointer,
             // since it points to a cyclic structure. No copies of `inner` can be
             // retained for longer than the lifetime of `self.inner.inner.stream_wrapper`.
             let stream = self.inner.inner.stream_wrapper.inner;
             unsafe {
-                (*stream).msg = std::ptr::null_mut();
+                (*stream).msg = core::ptr::null_mut();
             }
             let rc =
                 unsafe { ffi::deflateParams(stream, level.0 as c_int, ffi::MZ_DEFAULT_STRATEGY) };
@@ -543,7 +544,7 @@ impl Decompress {
         // retained for longer than the lifetime of `self.inner.inner.stream_wrapper`.
         let stream = self.inner.inner.stream_wrapper.inner;
         let rc = unsafe {
-            (*stream).msg = std::ptr::null_mut();
+            (*stream).msg = core::ptr::null_mut();
             assert!(dictionary.len() < ffi::uInt::MAX as usize);
             ffi::inflateSetDictionary(stream, dictionary.as_ptr(), dictionary.len() as ffi::uInt)
         };
@@ -658,12 +659,12 @@ unsafe fn write_to_spare_capacity_of_vec<T>(
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
+    use crate::io::Write;
+    use alloc::vec::Vec;
 
     use crate::write;
     use crate::{Compression, Decompress, FlushDecompress};
 
-    #[cfg(feature = "any_zlib")]
     use crate::{Compress, FlushCompress};
 
     #[test]
@@ -761,5 +762,67 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(err.message(), Some("invalid stored block lengths"));
+    }
+
+    fn compress_with_flush(flush: FlushCompress) -> Vec<u8> {
+        let incompressible = (0..=255).collect::<Vec<u8>>();
+        let mut output = vec![0; 1024];
+
+        // Feed in the incompressible data followed by the indicated flush type.
+        let mut w = Compress::new(Compression::default(), false);
+        w.compress(&incompressible, &mut output, flush).unwrap();
+
+        if flush != FlushCompress::None {
+            // The first instance of incompressible input should have been written uncompressed.
+            assert!(w.total_out() >= 261);
+            assert_eq!(&output[0..5], &[0, 0, 1, 0xff, !1]);
+            assert_eq!(&output[5..261], &incompressible);
+        }
+
+        // Feed in the same data again.
+        let len = w.total_out() as usize;
+        w.compress(&incompressible, &mut output[len..], FlushCompress::Finish)
+            .unwrap();
+
+        if flush != FlushCompress::Full {
+            // This time, the data should have been compressed (because it is an exact duplicate of
+            // the earlier block).
+            assert!(w.total_out() < 300);
+        }
+
+        // Assert that all input has been processed.
+        assert_eq!(w.total_in(), 256 * 2);
+
+        output.resize(w.total_out() as usize, 0);
+        output
+    }
+
+    #[test]
+    fn test_partial_flush() {
+        let output = compress_with_flush(FlushCompress::Partial);
+
+        // Check for partial flush marker.
+        assert_eq!(output[261], 0x2);
+        assert_eq!(output[262] & 0x7, 0x4);
+    }
+
+    #[test]
+    fn test_sync_flush() {
+        let output = compress_with_flush(FlushCompress::Sync);
+
+        // Check for sync flush marker.
+        assert_eq!(&output[261..][..5], &[0, 0, 0, 0xff, 0xff]);
+    }
+
+    #[test]
+    fn test_full_flush() {
+        let output = compress_with_flush(FlushCompress::Full);
+        assert_eq!(output.len(), 527);
+
+        // Check for sync flush marker.
+        assert_eq!(&output[261..][..5], &[0, 0, 0, 0xff, 0xff]);
+
+        // Check that the second instance of incompressible input was also written uncompressed.
+        assert_eq!(&output[266..][..5], &[1, 0, 1, 0xff, !1]);
     }
 }
