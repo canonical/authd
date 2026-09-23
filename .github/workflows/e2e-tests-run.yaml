@@ -268,6 +268,7 @@ jobs:
           AUTHD_DEB: ${{ steps.download-authd-deb.outputs.deb }}
           APT_SOURCE: ${{ inputs.apt-source }}
           AUTHD_APT_SOURCE: ${{ inputs.authd-apt-source }}
+          AUTHD_APT_SOURCE_BASE: ${{ inputs.authd-apt-source-base }}
           BROKER_SNAP: ${{ steps.download-broker-snap-from-store.outputs.snap || steps.download-broker-snap-from-oci.outputs.snap }}
         run: |
           set -eux
