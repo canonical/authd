@@ -128,6 +128,10 @@ override_dh_auto_configure:
 	# 'dh_auto_configure --buildsystem=cargo' does ourselves, but without the
 	# vendoring checks.
 	# TODO: Drop this when we won't care about noble anymore.
+	# The XS-Vendored-Sources-Rust field is generated with newer filtering
+	# semantics. Noble's older helper includes empty platform stubs, so the
+	# Noble build always prepares the tree itself and skips that check, even
+	# when cargo-vendor-filterer is installed.
 	# If cargo-vendor-filterer is installed, we can still only call
 	# 'dh_auto_configure --buildsystem=cargo' if the cargo in $PATH is the one
 	# from /usr/share/cargo/bin/cargo, for the same reason as in the
@@ -135,6 +139,10 @@ override_dh_auto_configure:
 	# 'dh_auto_configure --buildsystem=cargo' does ourselves,
 	# but using the cargo in $PATH.
 	if ! command -v cargo-vendor-filterer 2>/dev/null; then \
+		env DEB_CARGO_CRATE="$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM)" \
+		  cargo prepare-debian "$(CARGO_VENDOR_DIR)"; \
+	elif [ "$(DEB_DISTRIBUTION)" = noble ]; then \
+		cp debian/cargo-checksum.json .cargo-checksum.json; \
 		env DEB_CARGO_CRATE="$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM)" \
 		  cargo prepare-debian "$(CARGO_VENDOR_DIR)"; \
 	elif [ "$$(command -v cargo)" = "/usr/share/cargo/bin/cargo" ]; then \
