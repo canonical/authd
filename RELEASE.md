@@ -537,7 +537,8 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
 3. Create a separate commit which updates the changelog to target the next Ubuntu release instead of UNRELEASED:
 
     ```shell
-    debchange -r "" --distribution resolute # Replace it with the actual release name
+    RELEASE=stonking  # Replace it with the actual release name
+    debchange -r "" --distribution "$RELEASE"
     git commit -m "Upload $(dpkg-parsechangelog -SVersion) to $(dpkg-parsechangelog -SDistribution)" debian/changelog
     ```
 
