@@ -577,7 +577,7 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
 
 6. Review the dry run, make sure that it's on the correct commit.
 
-7. Generate the final debian source files in a clean git repo:
+7. Generate the final Debian source files in a clean git repo:
 
     ```shell
     GIT_DIR=$PWD
