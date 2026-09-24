@@ -246,7 +246,7 @@ TBD
 3. Create a release branch
 
     ```shell
-    RELEASE_BRANCH="release-$(dpkg-parsechangelog -SVersion | tr '~' '-')"
+    RELEASE_BRANCH="release-$(dpkg-parsechangelog -SVersion | sed 's/~.*//')"
     git checkout -b "${RELEASE_BRANCH}"
     ```
 
@@ -256,7 +256,8 @@ TBD
     git commit -m "Add changelog entry for $(dpkg-parsechangelog -SVersion)" debian/changelog
     ```
 
-5. Push and open a PR. Use the changelog entry as the PR description.
+5. Push and open a PR against `stable`, not `main`, so CI builds the release with
+   the stable branch contents. Use the changelog entry as the PR description.
 
 
 ### Download the source packages from the GitHub CI
@@ -362,16 +363,36 @@ gbp buildpackage -S --git-ignore-new --git-export-dir=/tmp/authd-build
 
 Note that this should be performed for all the supported versions (noble and plucky at the moment):
 
-1. If you didn't create an sbuild schroot before (TODO: Consider using sbuild with unshare instead):
+1. Create an unshare chroot for each release you need to test:
 
     ```shell
-    mk-sbuild <release> --distro ubuntu
+    sudo apt install sbuild mmdebstrap uidmap
+    ```
+
+   Unprivileged builds need subordinate UID and GID ranges. If your account
+   does not have them, add them and log out and back in before continuing:
+
+    ```shell
+    sudo usermod --add-subuids 100000-165535 \
+      --add-subgids 100000-165535 "${USER}"
+    ```
+
+   Then create the chroot tarball:
+
+    ```shell
+    mkdir -p "${HOME}/.cache/sbuild"
+    mmdebstrap --mode=unshare --include=ca-certificates --skip=output/dev \
+      --variant=buildd <release> \
+      "${HOME}/.cache/sbuild/<release>-amd64.tar" \
+      https://archive.ubuntu.com/ubuntu
     ```
 
 2. Build the binary package to ensure it builds and that there are no lintian issues to address on the binary package:
 
     ```shell
-    sbuild -A -v --build-dep-resolver=aptitude -d <release>-amd64 \
+    sbuild --chroot-mode=unshare \
+      --chroot="${HOME}/.cache/sbuild/<release>-amd64.tar" \
+      -A -v --build-dep-resolver=aptitude -d <release>-amd64 \
       "$(ls -t1 /tmp/authd-build/authd_*.dsc | head -n1)"
     ```
 
