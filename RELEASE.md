@@ -589,10 +589,10 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
     gbp buildpackage -S --git-debian-branch="release-$VERSION" --git-ignore-new -d
     ```
 
-8. Push the `.changes` file to the edge PPA:
+8. Push the `.changes` file to the candidate PPA:
 
     ```shell
-    dput ppa:ubuntu-enterprise-desktop/authd-edge "../authd_${VERSION}_source.changes"
+    dput ppa:ubuntu-enterprise-desktop/authd-candidate "../authd_${VERSION}_source.changes"
     ```
 
 9. Push the commits and tag to the release branch:
@@ -739,21 +739,21 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
 
 ### Test the published packages
 
-Install the authd package from the edge PPA and the snaps from the edge channel and try logging in via authd.
+Install the authd package from the candidate PPA and the snaps from the candidate channel and try logging in via authd.
 
-### Copy package from edge PPA to stable PPA
+### Copy package from candidate PPA to stable PPA
 
-1. Go to https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages
+1. Go to https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-candidate/+packages
 2. Click "Copy packages" in the top right
 3. Select the authd packages for all currently supported Ubuntu versions
 4. Destination PPA: authd stable
 5. Destination series: The the same series
-6. Copy options: Rebuild the copied sources (because we build for more architectures in the stable PPA than in the edge PPA)
+6. Copy options: Rebuild the copied sources (because we build for more architectures in the stable PPA than in the candidate PPA)
 
-### Promote snap from edge channel to stable
+### Promote snap from candidate channel to stable
 
 1. Go to https://snapcraft.io/authd-oidc/releases
-2. In the "0.x/edge" row, drag-and-drop both the AMD64 and the ARM64 releases to the "0.x/stable" row (do NOT use "Promote" to promote to latest/stable, we don't use that track).
+2. In the "0.x/candidate" row, drag-and-drop both the AMD64 and the ARM64 releases to the "0.x/stable" row (do NOT use "Promote" to promote to latest/stable, we don't use that track).
 3. Click "Save"
 4. Repeat the same for:
    1. https://snapcraft.io/authd-msentraid/releases
