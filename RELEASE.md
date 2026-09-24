@@ -602,8 +602,43 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
     gbp push --debian-branch="release-$VERSION"
     ```
 
-10. Merge the release branch into stable
-11. Merge stable into main, so that the tag is included in main.
+10. Check out a new branch for the previous still supported Ubuntu release:
+
+    ```shell
+    DIST=resolute
+    UBUNTU_VERSION=26.04
+    BRANCH="release-$(dpkg-parsechangelog -SVersion)-ubuntu${UBUNTU_VERSION}"
+    git checkout -b "${BRANCH}"
+    ```
+11. Reset to the previous commit and update the changelog entry:
+    ```shell
+    git reset --hard HEAD~1
+    debchange --force-bad-version --newversion "$(dpkg-parsechangelog -SVersion)~ubuntu$UBUNTU_VERSION" --distribution $DIST ''
+    git commit -m "Upload $(dpkg-parsechangelog -SVersion) to $(dpkg-parsechangelog -SDistribution)" debian/changelog
+    ```
+12. Generate the Debian source file in a clean git repo:
+
+    ```shell
+    GIT_DIR=$PWD
+    TMP_GIT_DIR=~/tmp/authd
+    RELEASE_BRANCH="release-$(dpkg-parsechangelog -SVersion | sed 's/~/-/')"
+    rm -rf "$TMP_GIT_DIR"
+    git clone "$GIT_DIR" "$TMP_GIT_DIR"
+    cd "$TMP_GIT_DIR"
+    git checkout "${RELEASE_BRANCH}"
+    gbp buildpackage -S --git-debian-branch="${RELEASE_BRANCH}" --git-ignore-new -d
+    ```
+
+13. Push the `.changes` file to the candidate PPA:
+
+    ```shell
+    dput ppa:ubuntu-enterprise-desktop/authd-candidate "../authd_$(dpkg-parsechangelog -SVersion)_source.changes"
+    ```
+
+14. Return to the generic release branch with `cd "${GIT_DIR}" && git checkout "release-$(dpkg-parsechangelog -SVersion | sed 's/~.*//')"`, then repeat steps 10 to 13 for all other still supported Ubuntu releases.
+
+15. Merge the release branch into stable
+16. Merge stable into main, so that the tag is included in main.
     In case of conflicts, keep the changes from main:
     ```shell
     git merge -X ours stable
