@@ -40,17 +40,19 @@ pub struct PressureRecord {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde1", derive(Serialize, Deserialize))]
 pub struct CpuPressure {
+    /// This record indicates the share of time in which at least some tasks are stalled.
     pub some: PressureRecord,
+    /// This record indicates this share of time in which all non-idle tasks are stalled
+    /// simultaneously.
+    ///
+    /// At the system level CPU full is set to zero.
+    pub full: PressureRecord,
 }
 
 impl super::FromBufRead for CpuPressure {
     fn from_buf_read<R: std::io::BufRead>(mut r: R) -> ProcResult<Self> {
-        let mut some = String::new();
-        r.read_line(&mut some)?;
-
-        Ok(CpuPressure {
-            some: parse_pressure_record(&some)?,
-        })
+        let (some, full) = get_pressure(r)?;
+        Ok(CpuPressure { some, full })
     }
 }
 
@@ -58,7 +60,7 @@ impl super::FromBufRead for CpuPressure {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde1", derive(Serialize, Deserialize))]
 pub struct MemoryPressure {
-    /// This record indicates the share of time in which at least some tasks are stalled
+    /// This record indicates the share of time in which at least some tasks are stalled.
     pub some: PressureRecord,
     /// This record indicates this share of time in which all non-idle tasks are stalled
     /// simultaneously.
@@ -76,7 +78,7 @@ impl super::FromBufRead for MemoryPressure {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde1", derive(Serialize, Deserialize))]
 pub struct IoPressure {
-    /// This record indicates the share of time in which at least some tasks are stalled
+    /// This record indicates the share of time in which at least some tasks are stalled.
     pub some: PressureRecord,
     /// This record indicates this share of time in which all non-idle tasks are stalled
     /// simultaneously.
@@ -104,7 +106,14 @@ fn get_total(map: &HashMap<&str, &str>) -> ProcResult<u64> {
     )
 }
 
-fn parse_pressure_record(line: &str) -> ProcResult<PressureRecord> {
+/// Parse a single `some`/`full` pressure record in the following format:
+///
+/// ```text
+/// full avg10=2.10 avg60=0.12 avg300=0.00 total=391926
+/// ```
+///
+/// See also [`get_pressure`].
+pub fn parse_pressure_record(line: &str) -> ProcResult<PressureRecord> {
     let mut parsed = HashMap::new();
 
     if !line.starts_with("some") && !line.starts_with("full") {
@@ -129,7 +138,16 @@ fn parse_pressure_record(line: &str) -> ProcResult<PressureRecord> {
     })
 }
 
-fn get_pressure<R: std::io::BufRead>(mut r: R) -> ProcResult<(PressureRecord, PressureRecord)> {
+/// Get the pressure records from a reader. The first line should be a `some` record, and the second line a `full` record.
+/// The records are returned in the same order.
+///
+/// ```text
+/// some avg10=4.50 avg60=0.91 avg300=0.00 total=681245
+/// full avg10=2.10 avg60=0.12 avg300=0.00 total=391926
+/// ```
+///
+/// See also [`parse_pressure_record`].
+pub fn get_pressure<R: std::io::BufRead>(mut r: R) -> ProcResult<(PressureRecord, PressureRecord)> {
     let mut some = String::new();
     r.read_line(&mut some)?;
     let mut full = String::new();

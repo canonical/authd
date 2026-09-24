@@ -625,10 +625,6 @@ Files: vendor_rust/linux-raw-sys/*
 Copyright: violation or misattribution of any kind.
 License: Apache-2.0 or Expat
 
-Files: vendor_rust/linux-raw-sys-0.4.15/*
-Copyright: violation or misattribution of any kind.
-License: Apache-2.0 or Expat
-
 Files: vendor_rust/log/*
 Copyright: 2014-2015 The Rust Project Developers
 License: Apache-2.0 or Expat
@@ -770,10 +766,6 @@ Copyright: 1991-2018 Unicode, Inc.
 License: Unicode-DFS-2016
 
 Files: vendor_rust/rustix/*
-Copyright: violation or misattribution of any kind.
-License: Apache-2.0 or Expat
-
-Files: vendor_rust/rustix-0.38.44/*
 Copyright: violation or misattribution of any kind.
 License: Apache-2.0 or Expat
 

@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use super::{FileWrapper, Io, Schedstat, Stat, Status};
+use super::{FileWrapper, Io, Schedstat, Stat, Status, Syscall};
 use crate::{ProcError, ProcResult};
 use procfs_core::FromRead;
 use rustix::fd::{BorrowedFd, OwnedFd};
@@ -77,6 +77,11 @@ impl Task {
         self.read("schedstat")
     }
 
+    /// Returns the status info from `/proc/<pid>/task/<tid>/syscall`.
+    pub fn syscall(&self) -> ProcResult<Syscall> {
+        self.read("syscall")
+    }
+
     /// Thread children from `/proc/<pid>/task/<tid>/children`
     ///
     /// WARNING:
@@ -106,14 +111,18 @@ impl Task {
     }
 
     /// Parse a file relative to the task proc structure.
-    pub fn read<T: FromRead>(&self, path: &str) -> ProcResult<T> {
+    pub fn read<P, T>(&self, path: P) -> ProcResult<T>
+    where
+        P: AsRef<Path>,
+        T: FromRead,
+    {
         FromRead::from_read(FileWrapper::open_at(&self.root, &self.fd, path)?)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::process::Io;
+    use crate::process::{Io, Syscall};
     use crate::ProcError;
     use rustix;
     use std::process;
@@ -187,6 +196,7 @@ mod tests {
             let stat = task.stat().unwrap();
             let status = task.status().unwrap();
             let io = task.io().unwrap();
+            let syscall = task.syscall().unwrap();
 
             summed_io.rchar += io.rchar;
             summed_io.wchar += io.wchar;
@@ -200,6 +210,7 @@ mod tests {
                 found_one = true;
                 assert!(io.rchar >= bytes_to_read);
                 assert!(stat.utime >= 50, "utime({}) too small", stat.utime);
+                assert!(matches!(syscall, Syscall::Blocked { .. }), "{:?}", syscall);
             }
             if stat.comm == "two" && status.name == "two" {
                 found_two = true;
@@ -209,6 +220,7 @@ mod tests {
                 assert!(io.rchar < bytes_to_read);
                 assert_eq!(io.wchar, 0);
                 assert_eq!(stat.utime, 0);
+                assert!(matches!(syscall, Syscall::Blocked { .. }), "{:?}", syscall);
             }
         }
 
