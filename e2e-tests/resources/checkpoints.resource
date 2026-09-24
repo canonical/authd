@@ -39,6 +39,14 @@ Documentation       Reusable test-checkpoint keywords for expensive setup steps.
 ...
 ...                         Test Setup    checkpoints.authd User Created
 ...
+...                 ``authd-user-created-from-stable-installed``
+...                     Captured from ``%{BROKER}-stable-installed`` after
+...                     CLI QR-code device authentication registers the remote
+...                     user. Use for migration tests that need a pre-upgrade
+...                     user without repeating the browser login.
+...
+...                         Test Setup    checkpoints.authd User Created From Stable Snapshot
+...
 ...                 ``authd-user-logged-in-via-gdm``
 ...                     Captured after the remote user logs in via GDM QR-code
 ...                     device authentication.  The VM is at the GNOME desktop
@@ -80,9 +88,24 @@ authd User Created
     ...    _Reach authd User Created Checkpoint
 
 
+authd User Created From Stable Snapshot
+    [Documentation]    Test setup for migration tests that need a remote user
+    ...    registered from the stable-installed snapshot.
+    ...
+    ...    The first test to call this keyword performs the browser-based
+    ...    QR-code login and creates a checkpoint from
+    ...    ``%{BROKER}-stable-installed``. Later tests restore that snapshot.
+    Set Suite Metadata    Ubuntu Version    %{RELEASE}    top=True
+    Set Suite Metadata    Broker    %{BROKER}    top=True
+    Checkpoint.Setup Checkpoint
+    ...    authd-user-created-from-stable-installed
+    ...    _Reach authd User Created Checkpoint
+    ...    base_snapshot=%{BROKER}-stable-installed
+
+
 _Reach authd User Created Checkpoint
-    [Documentation]    Performs the steps to reach the ``authd-user-created``
-    ...    checkpoint state from the ``%{BROKER}-installed`` base snapshot.
+    [Documentation]    Performs the steps to reach an authd-user-created
+    ...    checkpoint state from the selected base snapshot.
     ...
     ...    When this keyword returns the VM is at the GNOME desktop:
     ...    - ``%{E2E_USER}`` is registered in authd's database.

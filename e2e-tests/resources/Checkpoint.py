@@ -140,7 +140,9 @@ class Checkpoint:
         return f"{broker}-checkpoint-{name}"
 
     @keyword
-    def setup_checkpoint(self, name: str, setup_keyword: str) -> None:
+    def setup_checkpoint(
+        self, name: str, setup_keyword: str, base_snapshot: str = ''
+    ) -> None:
         """Run the full checkpoint state-machine for *name*.
 
         Determines whether the checkpoint snapshot already exists and, if so,
@@ -156,8 +158,10 @@ class Checkpoint:
         Args:
             name:          Logical checkpoint name, e.g. ``'authd-user-created'``.
             setup_keyword: Robot Framework keyword (no arguments) that drives
-                           the VM from the ``%{BROKER}-installed`` base snapshot
-                           to the desired checkpoint state.
+                           the VM from the base snapshot to the desired
+                           checkpoint state.
+            base_snapshot: VM snapshot to restore before setup. Defaults to
+                           ``%{BROKER}-installed``.
         """
         builtin = BuiltIn()
         broker = os.environ.get('BROKER', 'unknown')
@@ -170,7 +174,9 @@ class Checkpoint:
 
         status = builtin.run_keyword('Checkpoint.Claim Checkpoint', name)
         if status == 'claimed':
-            self._restore_and_start(builtin, f'{broker}-installed')
+            self._restore_and_start(
+                builtin, base_snapshot or f'{broker}-installed'
+            )
             try:
                 builtin.run_keyword(setup_keyword)
                 # Stop receiving journal from the VM before snapshotting:
