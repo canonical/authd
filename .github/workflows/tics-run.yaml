@@ -108,7 +108,7 @@ jobs:
           go build -tags=withmsentraid -o authd-msentraid ./cmd/authd-oidc
 
       - name: TICS Analysis
-        uses: tiobe/tics-github-action@v3
+        uses: tiobe/tics-github-action@v4
         with:
           mode: qserver
           project: authd
