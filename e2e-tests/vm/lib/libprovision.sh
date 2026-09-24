@@ -209,8 +209,8 @@ function reboot_system() {
 }
 
 function shutdown_system() {
-    # For some reason, `virsh shutdown` sometimes doesn't cause the VM
-    # to shut down, so we retry it a few times.
+    # Reissue shutdown requests at short intervals, but give a slow guest
+    # about a minute to finish shutting down.
     # `virsh await` is not available in all libvirt client versions.
     local cmd="if virsh domstate \"${VM_NAME}\" | grep -q '^shut off'; then
     exit 0
@@ -218,7 +218,7 @@ fi
 virsh shutdown \"${VM_NAME}\" && \
 timeout 5 retry --delay 1 -- sh -c \
 \"virsh domstate \\\"${VM_NAME}\\\" | grep -q '^shut off'\""
-    retry --times 3 --delay 1 -- sh -c "$cmd"
+    retry --times 10 --delay 1 -- sh -c "$cmd"
 }
 
 function boot_system() {
