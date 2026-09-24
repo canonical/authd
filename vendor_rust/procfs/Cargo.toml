@@ -11,11 +11,12 @@
 
 [package]
 edition = "2018"
-rust-version = "1.48"
+rust-version = "1.70"
 name = "procfs"
-version = "0.17.0"
+version = "0.18.0"
 authors = ["Andrew Chin <achin@eminence32.net>"]
 build = "build.rs"
+autolib = false
 autobins = false
 autoexamples = false
 autotests = false
@@ -38,6 +39,22 @@ repository = "https://github.com/eminence/procfs"
 
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--generate-link-to-definition"]
+
+[features]
+backtrace = [
+    "dep:backtrace",
+    "procfs-core/backtrace",
+]
+default = [
+    "chrono",
+    "flate2",
+    "procfs-core/default",
+]
+serde1 = [
+    "serde",
+    "procfs-core/serde1",
+]
 
 [lib]
 name = "procfs"
@@ -142,15 +159,12 @@ default-features = false
 version = "1.0.3"
 optional = true
 
-[dependencies.hex]
-version = "0.4"
-
 [dependencies.procfs-core]
-version = "0.17.0"
+version = "0.18.0"
 default-features = false
 
 [dependencies.rustix]
-version = "0.38.19"
+version = "1.0.1"
 features = [
     "fs",
     "process",
@@ -175,18 +189,3 @@ version = "0.2.139"
 
 [dev-dependencies.procinfo]
 version = "0.4.2"
-
-[features]
-backtrace = [
-    "dep:backtrace",
-    "procfs-core/backtrace",
-]
-default = [
-    "chrono",
-    "flate2",
-    "procfs-core/default",
-]
-serde1 = [
-    "serde",
-    "procfs-core/serde1",
-]

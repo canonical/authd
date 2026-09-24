@@ -1,7 +1,5 @@
 #![allow(unknown_lints)]
-// The suggested fix with `str::parse` removes support for Rust 1.48
-#![allow(clippy::from_str_radix_10)]
-#![deny(broken_intra_doc_links, invalid_html_tags)]
+#![deny(rustdoc::broken_intra_doc_links, rustdoc::invalid_html_tags)]
 //! This crate provides to an interface into the linux `procfs` filesystem, usually mounted at
 //! `/proc`.
 //!
@@ -105,7 +103,7 @@ pub trait IntoResult<T, E> {
 #[doc(hidden)]
 macro_rules! build_internal_error {
     ($err: expr) => {
-        crate::ProcError::InternalError(crate::InternalError {
+        $crate::ProcError::InternalError($crate::InternalError {
             msg: format!("Internal Unwrap Error: {}", $err),
             file: file!(),
             line: line!(),
@@ -114,7 +112,7 @@ macro_rules! build_internal_error {
         })
     };
     ($err: expr, $msg: expr) => {
-        crate::ProcError::InternalError(crate::InternalError {
+        $crate::ProcError::InternalError($crate::InternalError {
             msg: format!("Internal Unwrap Error: {}: {}", $msg, $err),
             file: file!(),
             line: line!(),
@@ -152,7 +150,7 @@ impl<T, E> IntoResult<T, E> for Result<T, E> {
 #[doc(hidden)]
 macro_rules! proc_panic {
     ($e:expr) => {
-        crate::IntoOption::into_option($e).unwrap_or_else(|| {
+        $crate::IntoOption::into_option($e).unwrap_or_else(|| {
             panic!(
                 "Failed to unwrap {}. Please report this as a procfs bug.",
                 stringify!($e)
@@ -160,7 +158,7 @@ macro_rules! proc_panic {
         })
     };
     ($e:expr, $msg:expr) => {
-        crate::IntoOption::into_option($e).unwrap_or_else(|| {
+        $crate::IntoOption::into_option($e).unwrap_or_else(|| {
             panic!(
                 "Failed to unwrap {} ({}). Please report this as a procfs bug.",
                 stringify!($e),
@@ -174,15 +172,15 @@ macro_rules! proc_panic {
 #[doc(hidden)]
 macro_rules! expect {
     ($e:expr) => {
-        match crate::IntoResult::into($e) {
+        match $crate::IntoResult::into($e) {
             Ok(v) => v,
-            Err(e) => return Err(crate::build_internal_error!(e)),
+            Err(e) => return Err($crate::build_internal_error!(e)),
         }
     };
     ($e:expr, $msg:expr) => {
-        match crate::IntoResult::into($e) {
+        match $crate::IntoResult::into($e) {
             Ok(v) => v,
-            Err(e) => return Err(crate::build_internal_error!(e, $msg)),
+            Err(e) => return Err($crate::build_internal_error!(e, $msg)),
         }
     };
 }
@@ -192,21 +190,21 @@ macro_rules! expect {
 macro_rules! from_str {
     ($t:tt, $e:expr) => {{
         let e = $e;
-        crate::expect!(
+        $crate::expect!(
             $t::from_str_radix(e, 10),
             format!("Failed to parse {} ({:?}) as a {}", stringify!($e), e, stringify!($t),)
         )
     }};
     ($t:tt, $e:expr, $radix:expr) => {{
         let e = $e;
-        crate::expect!(
+        $crate::expect!(
             $t::from_str_radix(e, $radix),
             format!("Failed to parse {} ({:?}) as a {}", stringify!($e), e, stringify!($t))
         )
     }};
     ($t:tt, $e:expr, $radix:expr, pid:$pid:expr) => {{
         let e = $e;
-        crate::expect!(
+        $crate::expect!(
             $t::from_str_radix(e, $radix),
             format!(
                 "Failed to parse {} ({:?}) as a {} (pid {})",
@@ -326,7 +324,7 @@ where
     let val = expect!(iter.next());
     match FromStr::from_str(val) {
         Ok(u) => Ok(u),
-        Err(..) => Err(build_internal_error!("Failed to convert")),
+        Err(..) => Err(build_internal_error!("Failed to convert", val)),
     }
 }
 
@@ -341,7 +339,34 @@ where
     };
     match FromStr::from_str(val) {
         Ok(u) => Ok(Some(u)),
-        Err(..) => Err(build_internal_error!("Failed to convert")),
+        Err(..) => Err(build_internal_error!("Failed to convert (optional)", val)),
+    }
+}
+
+fn from_iter_radix<'a, I, U>(i: I, radix: u32) -> ProcResult<U>
+where
+    I: IntoIterator<Item = &'a str>,
+    U: FromStrRadix,
+{
+    let mut iter = i.into_iter();
+    let val = expect!(iter.next());
+
+    let val = match radix {
+        16 => {
+            if let Some(val) = val.strip_prefix("0x") {
+                val
+            } else if let Some(val) = val.strip_prefix("0X") {
+                val
+            } else {
+                val
+            }
+        }
+        _ => val,
+    };
+
+    match FromStrRadix::from_str_radix(val, radix) {
+        Ok(u) => Ok(u),
+        Err(..) => Err(build_internal_error!("Failed to convert (radix)", val)),
     }
 }
 
@@ -406,6 +431,13 @@ impl FromStrRadix for u64 {
         u64::from_str_radix(s, radix)
     }
 }
+
+impl FromStrRadix for u32 {
+    fn from_str_radix(s: &str, radix: u32) -> Result<u32, std::num::ParseIntError> {
+        u32::from_str_radix(s, radix)
+    }
+}
+
 impl FromStrRadix for i32 {
     fn from_str_radix(s: &str, radix: u32) -> Result<i32, std::num::ParseIntError> {
         i32::from_str_radix(s, radix)
