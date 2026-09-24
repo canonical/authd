@@ -581,7 +581,12 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
     gbp push --debian-branch="release-$VERSION"
     ```
 
-10. Merge the release branch to main
+10. Merge the release branch into stable
+11. Merge stable into main, so that the tag is included in main.
+    In case of conflicts, keep the changes from main:
+    ```shell
+    git merge -X ours stable
+    ```
 
 ### Tag the broker branches with the version
 
