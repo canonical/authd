@@ -682,6 +682,9 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
 
     3. Request a build of the [authd-google snap](https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-google)
 
+11. Take a look at the [tags in the authd repo](https://github.com/canonical/authd/tags)
+    and check that the expected tags are there.
+
 ### Release the broker snaps with the new version
 
 1. Manually trigger import of the git repo:
