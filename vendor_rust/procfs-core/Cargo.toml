@@ -11,11 +11,12 @@
 
 [package]
 edition = "2018"
-rust-version = "1.48"
+rust-version = "1.70"
 name = "procfs-core"
-version = "0.17.0"
+version = "0.18.0"
 authors = ["Andrew Chin <achin@eminence32.net>"]
 build = false
+autolib = false
 autobins = false
 autoexamples = false
 autotests = false
@@ -38,6 +39,14 @@ repository = "https://github.com/eminence/procfs"
 
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--generate-link-to-definition"]
+
+[features]
+default = ["chrono"]
+serde1 = [
+    "serde",
+    "bitflags/serde",
+]
 
 [lib]
 name = "procfs_core"
@@ -63,10 +72,3 @@ version = "0.4"
 version = "1.0"
 features = ["derive"]
 optional = true
-
-[features]
-default = ["chrono"]
-serde1 = [
-    "serde",
-    "bitflags/serde",
-]
