@@ -435,17 +435,8 @@ License: Apache-2.0 or Expat
 Files: vendor_rust/ctor/*
 License: Apache-2.0 or Expat
 
-Files: vendor_rust/ctor-proc-macro/*
-License: Apache-2.0 or Expat
-
 Files: vendor_rust/deranged/*
 Copyright: 2024 Jacob Pratt et al.
-License: Apache-2.0 or Expat
-
-Files: vendor_rust/dtor/*
-License: Apache-2.0 or Expat
-
-Files: vendor_rust/dtor-proc-macro/*
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/either/*
@@ -619,6 +610,12 @@ License: Apache-2.0
 
 Files: vendor_rust/libc/*
 Copyright: The Rust Project Developers
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/link-section/*
+License: Apache-2.0 or Expat
+
+Files: vendor_rust/linktime-proc-macro/*
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/linux-raw-sys/*
