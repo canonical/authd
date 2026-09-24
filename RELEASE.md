@@ -665,7 +665,6 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
         git push --tags
         git push --force
         ```
-   3. Request a build of the [authd-msentraid snap](https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-msentraid)
 
 10. Repeat for the google broker:
      1. Find the commit ID of the [candidate release](https://snapcraft.io/authd-google/releases)
@@ -679,8 +678,6 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
         git push --tags
         git push --force
         ```
-
-    3. Request a build of the [authd-google snap](https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-google)
 
 11. Take a look at the [tags in the authd repo](https://github.com/canonical/authd/tags)
     and check that the expected tags are there.
