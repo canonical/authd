@@ -11,18 +11,17 @@
 
 [package]
 edition = "2021"
-rust-version = "1.60"
-name = "ctor"
-version = "1.0.13"
+rust-version = "1.85"
+name = "link-section"
+version = "0.19.3"
 authors = ["Matt Mastracci <matthew@mastracci.com>"]
 build = false
-exclude = ["tests"]
 autolib = false
 autobins = false
 autoexamples = false
 autotests = false
 autobenches = false
-description = "Global, no_std-compatible constructors for all platforms that run before main (like C/C++ __attribute__((constructor)))"
+description = "Link-time initialized slices for Rust, with full support for Linux, macOS, Windows, WASM and many more platforms."
 readme = "README.md"
 categories = [
     "development-tools::build-utils",
@@ -36,54 +35,60 @@ repository = "https://github.com/mmastrac/linktime"
 
 [features]
 default = [
-    "std",
     "proc_macro",
-    "priority",
+    "std",
 ]
-priority = ["dep:link-section"]
 proc_macro = ["dep:linktime-proc-macro"]
 std = []
 
 [lib]
-name = "ctor"
+name = "link_section"
 path = "src/lib.rs"
 
 [[example]]
-name = "ctor-advanced"
-path = "examples/ctor-advanced.rs"
+name = "link-section-const"
+path = "examples/const.rs"
 
 [[example]]
-name = "ctor-basic"
-path = "examples/ctor-basic.rs"
+name = "link-section-dyn"
+path = "examples/dyn.rs"
 
 [[example]]
-name = "ctor-dynamic"
-path = "examples/ctor-dynamic.rs"
+name = "link-section-empty"
+path = "examples/empty.rs"
 
 [[example]]
-name = "ctor-example"
-path = "examples/ctor-example.rs"
+name = "link-section-example"
+path = "examples/example.rs"
 
 [[example]]
-name = "ctor-priority"
-path = "examples/ctor-priority.rs"
+name = "link-section-movable"
+path = "examples/movable.rs"
 
 [[example]]
-name = "ctor-statics"
-path = "examples/ctor-statics.rs"
+name = "link-section-movable-no-macro"
+path = "examples/movable-no-macro.rs"
 
-[dependencies.link-section]
-version = "0.19.3"
-optional = true
-default-features = false
+[[example]]
+name = "link-section-mut"
+path = "examples/mut.rs"
+
+[[example]]
+name = "link-section-mut-no-macro"
+path = "examples/mut-no-macro.rs"
+
+[[example]]
+name = "link-section-ref"
+path = "examples/ref.rs"
+
+[[test]]
+name = "macrotest"
+path = "tests/macrotest.rs"
 
 [dependencies.linktime-proc-macro]
 version = "0.2.3"
-features = ["ctor"]
+features = ["link_section"]
 optional = true
-
-[dev-dependencies.libc-print]
-version = "0.5"
 
 [dev-dependencies.macrotest]
 version = "1"
@@ -101,7 +106,6 @@ version = "2"
 level = "warn"
 priority = 0
 check-cfg = [
-    "cfg(linktime_no_fail_on_missing_unsafe)",
     "cfg(linktime_used_linker)",
     "cfg(linktime_asan)",
 ]

@@ -15,19 +15,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
-name = "ctor"
-version = "1.0.13"
-dependencies = [
- "libc-print",
- "link-section",
- "linktime-proc-macro",
- "macrotest",
- "tempfile",
- "trybuild",
- "walkdir",
-]
-
-[[package]]
 name = "diff"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -101,19 +88,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 [[package]]
-name = "libc-print"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a52163ef340f2845a3973431341ec3afb9a9c3efedc28bce7c93a5eb35c44b3b"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "link-section"
 version = "0.19.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39c29a617ce3df32c08497bdc1ab6e2376e0b17948ac166a2fbe5977c5954cd9"
+dependencies = [
+ "linktime-proc-macro",
+ "macrotest",
+ "tempfile",
+ "trybuild",
+ "walkdir",
+]
 
 [[package]]
 name = "linktime-proc-macro"
