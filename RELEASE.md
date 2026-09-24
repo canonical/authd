@@ -787,8 +787,6 @@ After publishing a new release, the `stable-docs` branch should contain the same
 
 Since authd is also in the Ubuntu archive now, we also need to upload new releases there, targeting at least the next Ubuntu release, and maybe also existing ones, although that will require SRUs.
 
-We don’t have anyone with uploads rights in our squad currently, so for now we have to ask Didier to sponsor the upload.
-
 ## Release the GNOME Shell authd integration
 
 The GNOME Shell source package is maintained separately from authd. This
