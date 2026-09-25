@@ -394,6 +394,8 @@ action_module_data_cleanup (ActionData *action_data)
   g_autoptr(GDBusConnection) connection = NULL;
   GDBusServer *server = NULL;
 
+  g_cancellable_cancel (action_data->cancellable);
+
   if (module_data && (server = g_atomic_pointer_get (&module_data->server)))
     g_clear_signal_handler (&action_data->connection_new_id, server);
 
@@ -412,8 +414,6 @@ action_module_data_cleanup (ActionData *action_data)
       g_clear_signal_handler (&action_data->connection_closed_id, connection);
       g_dbus_connection_close (connection, NULL, NULL, NULL);
     }
-
-  g_cancellable_cancel (action_data->cancellable);
 
   g_log_set_debug_enabled (FALSE);
 
