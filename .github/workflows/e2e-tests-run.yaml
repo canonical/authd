@@ -379,6 +379,7 @@ jobs:
           set -euo pipefail
 
           # Each run has a unique prefix, so avoid listing the bucket's history.
+          aws configure set default.s3.max_concurrent_requests 32
           aws s3 cp "pages/${TARGET_DIR}/" "s3://authd-e2e-test-logs/${TARGET_DIR}/" \
             --recursive \
             --endpoint-url https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com \
