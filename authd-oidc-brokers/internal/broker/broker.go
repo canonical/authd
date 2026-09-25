@@ -2562,13 +2562,11 @@ func bypassesPasswordMethod(method string) bool {
 }
 
 func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (string, isAuthenticatedDataResponse) {
-	if b.cfg.shouldRegisterOwner() {
-		if err := b.cfg.registerOwner(b.cfg.ConfigFile, authInfo.UserInfo.Name); err != nil {
-			// The user is not allowed if we fail to create the owner-autoregistration file.
-			// Otherwise the owner might change if the broker is restarted.
-			log.Errorf(context.Background(), "Failed to assign the owner role: %v", err)
-			return AuthDenied, unexpectedErrMsg("failed to assign the owner role")
-		}
+	if err := b.cfg.registerOwner(b.cfg.ConfigFile, authInfo.UserInfo.Name); err != nil {
+		// The user is not allowed if we fail to create the owner-autoregistration file.
+		// Otherwise the owner might change if the broker is restarted.
+		log.Errorf(context.Background(), "Failed to assign the owner role: %v", err)
+		return AuthDenied, unexpectedErrMsg("failed to assign the owner role")
 	}
 
 	if !b.userNameIsAllowed(authInfo.UserInfo.Name) {
@@ -2654,6 +2652,9 @@ func (b *Broker) userNameIsAllowed(userName string) bool {
 
 // isOwner returns true if the user is the owner of the machine.
 func (b *Broker) isOwner(userName string) bool {
+	b.cfg.ownerMutex.RLock()
+	defer b.cfg.ownerMutex.RUnlock()
+
 	return b.cfg.owner == b.provider.NormalizeUsername(userName)
 }
 

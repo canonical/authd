@@ -439,6 +439,9 @@ func (uc *userConfig) registerOwner(cfgPath, userName string) error {
 	// considered the owner.
 	uc.ownerMutex.Lock()
 	defer uc.ownerMutex.Unlock()
+	if !uc.shouldRegisterOwner() {
+		return nil
+	}
 
 	// Reject any non-graphic characters in the username before writing it to
 	// the INI drop-in config. Control characters allow INI key injection, and
