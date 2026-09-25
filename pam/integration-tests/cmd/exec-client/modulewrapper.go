@@ -70,3 +70,11 @@ func (m moduleWrapper) SimulateClientSignalAfterDelay(sig syscall.Signal, delayM
 		m.SimulateClientSignal(sig, false)
 	})
 }
+
+// StartStringConvInBackground starts a string conversation without waiting for
+// its reply, so that other conversations can be queued while it's in progress.
+func (m moduleWrapper) StartStringConvInBackground(style pam.Style, prompt string) {
+	const method = "com.ubuntu.authd.pam.Prompt"
+	m.BusObject().Go(method, dbus.FlagNoAutoStart, make(chan *dbus.Call, 1),
+		style, prompt)
+}
