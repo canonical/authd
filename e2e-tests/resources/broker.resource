@@ -17,6 +17,12 @@ Library             String
 Variables           ./broker_vars.py
 
 
+*** Variables ***
+${GDM_LOGIN_OPTIONS_IMAGE}          ${CURDIR}/images/gdm-login-options.png
+${GDM_LOGIN_OPTIONS_NOBLE_IMAGE}   ${CURDIR}/images/gdm-login-options-noble.png
+${GDM_LOGIN_OPTIONS_RESOLUTE_IMAGE}   ${CURDIR}/images/gdm-login-options-resolute.png
+
+
 *** Keywords ***
 Update Broker
     [Documentation]    Install the broker snap built from the current branch
@@ -328,6 +334,42 @@ Select Broker Through GDM
     Left Button Click
     Builtin.Sleep    1
 
+Select Authentication Mode Through GDM
+    [Arguments]    ${authentication_mode}
+    # Login Options uses release-specific icons and layouts. Devel is the
+    # default because it is the current standard release.
+    ${image}=    Set Variable    ${GDM_LOGIN_OPTIONS_IMAGE}
+    IF    '%{RELEASE}' == 'noble'
+        ${image}=    Set Variable    ${GDM_LOGIN_OPTIONS_NOBLE_IMAGE}
+    ELSE IF    '%{RELEASE}' == 'resolute'
+        ${image}=    Set Variable    ${GDM_LOGIN_OPTIONS_RESOLUTE_IMAGE}
+    END
+    Move Pointer To ${image}
+    Left Button Click
+    Match Text    ${authentication_mode}    30
+    Move Pointer To ${authentication_mode}
+    Left Button Click
+
+Select Authentication Mode Through GDM Lock Screen
+    [Arguments]    ${authentication_mode}
+    # GDM places the Login Options button differently in each supported
+    # release. Noble uses the lower-right button, resolute the lower-left
+    # button, and devel the higher lower-right button.
+    ${x}=    Set Variable    0.95
+    ${y}=    Set Variable    0.92
+    IF    '%{RELEASE}' == 'noble'
+        ${x}=    Set Variable    0.97
+        ${y}=    Set Variable    0.95
+    ELSE IF    '%{RELEASE}' == 'resolute'
+        ${x}=    Set Variable    0.91
+        ${y}=    Set Variable    0.95
+    END
+    Hid.Move Pointer To Proportional    ${x}    ${y}
+    Left Button Click
+    Match Text    Login Options    30
+    Hid.Keys Combo    Down
+    Hid.Keys Combo    Return
+
 Enter Entra ID Password And MFA
     # With the device code flow disabled there is only one flow; the PAM module
     # auto-selects it and goes directly to the Entra ID password prompt.
@@ -352,6 +394,17 @@ Continue Log In With Remote User Through GDM: Define Local Password
     Hid.Keys Combo    Return
 
     Wait Until Desktop Ready
+
+
+Unlock Screen With Device Code
+    [Arguments]    ${local_password}
+    # Wake the display before selecting the alternate authentication flow.
+    Hid.Keys Combo    Return
+    Match Text    Password    30
+    Select Authentication Mode Through GDM Lock Screen    Device code flow
+    Match Text    ${DEVICE_URL}    120
+    Continue Log In With Remote User: Authenticate In External Browser
+    Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
 
 
 Log In With Remote User Through GDM: Entra Password
