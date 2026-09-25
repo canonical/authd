@@ -1,8 +1,8 @@
-authd (0.7.0+git260924+1256+ca6f582b) resolute; urgency=medium
+authd (0.7.0+git260925+1264+993a6fb6) resolute; urgency=medium
 
-  * Github build. Run id: 35998417059. Run number: 1256.
+  * Github build. Run id: 36130199792. Run number: 1264.
 
- -- Adrian <adrian.dombeck@canonical.com>  Thu, 24 Sep 2026 12:21:56 +0000
+ -- adombeck <18482300+adombeck@users.noreply.github.com>  Fri, 25 Sep 2026 11:40:33 +0000
 
 authd (0.7.0) stonking; urgency=medium
 
