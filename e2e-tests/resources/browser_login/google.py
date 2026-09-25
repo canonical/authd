@@ -108,9 +108,8 @@ class GoogleLoginFlow:
                         f"Failed to log in: TOTP code was rejected too many "
                         f"times ({TOTP_CODE_MAX_TRIES})")
                 logger.info("TOTP code was rejected, retrying with a new code")
-                # Wait until a fresh TOTP code is available.
-                while generate_totp(self._totp_secret) == self._last_totp_code:
-                    time.sleep(1)
+                # Wait until the rejected code has rolled over.
+                generate_totp(self._totp_secret, self._last_totp_code or "")
                 num_totp_failures += 1
 
     _LOGIN_TIMEOUT_S = 3 * 60  # 3 minutes

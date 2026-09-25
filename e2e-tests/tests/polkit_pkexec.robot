@@ -85,7 +85,7 @@ Test polkit authentication as authd user via pkexec using Entra ID password and 
     Hid.Type String    pkexec touch /tmp/polkit-authd-test-entra
     Hid.Keys Combo    Return
 
-    Log In With Remote User Through Polkit: Entra Password    ${username}    
+    Log In With Remote User Through Polkit: Entra Password    ${username}    /tmp/polkit-authd-test-entra
 
     # Verify polkit granted access: the marker file must exist and be root-owned.
     Wait Until Keyword Succeeds    30s    5s

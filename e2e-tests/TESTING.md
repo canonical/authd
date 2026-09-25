@@ -178,8 +178,10 @@ release. CI uses `E2E_MSENTRA_TOTP_SECRET_NOBLE` for noble,
 `E2E_MSENTRA_TOTP_SECRET_DEVEL` for devel.
 
 Different releases use separate TOTP streams. Same-release runs are not queued
-across branches; if they submit during the same 30-second window, Entra can
-reject one code as a replay.
+across branches; overlapping submissions can still replay a code. The Entra
+password-and-MFA tests wait for a rejection or confirmed login before deciding
+whether to retry. They submit up to three codes, generating a different one
+after each rejection.
 
 Migration suites start with the last stable authd and broker releases before
 installing the selected authd package or snap. To use locally built packages in

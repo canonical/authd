@@ -329,17 +329,51 @@ Select Broker Through GDM
     Builtin.Sleep    1
 
 Enter Entra ID Password And MFA
+    [Arguments]    ${success_keyword}    @{success_args}
     # With the device code flow disabled there is only one flow; the PAM module
     # auto-selects it and goes directly to the Entra ID password prompt.
     Match Text    Enter your Entra ID password    30    similarity=90
     Hid.Type String    %{E2E_PASSWORD}
     Hid.Keys Combo    Return
 
-    # Wait for the MFA code prompt and enter a fresh TOTP code.
+    # Retry only codes the broker rejects. The broker caps this MFA step at
+    # three submissions.
     Match Text    Enter your MFA code    30    similarity=88
-    ${totp_code} =    TOTP.Generate Totp Code
-    Hid.Type String    ${totp_code}
-    Hid.Keys Combo    Return
+    ${previous_totp_code} =    Set Variable    ${EMPTY}
+    FOR    ${attempt}    IN RANGE    3
+        ${rejections_before} =    Count Entra TOTP Rejections
+        ${totp_code} =    TOTP.Generate Totp Code    ${previous_totp_code}
+        Hid.Type String    ${totp_code}
+        Hid.Keys Combo    Return
+
+        ${authenticated} =    Wait Until Keyword Succeeds    1 min    1 sec
+        ...    Check Entra TOTP Outcome    ${rejections_before}    ${success_keyword}    @{success_args}
+        IF    ${authenticated}    RETURN
+        ${previous_totp_code} =    Set Variable    ${totp_code}
+        # The broker denies the flow after the third wrong code instead of
+        # re-prompting, so wait for a new prompt only when a retry remains.
+        IF    ${attempt} < 2
+            Match Text    Enter your MFA code    30    similarity=88
+        END
+    END
+    Fail    Entra rejected three TOTP submissions
+
+Check Entra TOTP Outcome
+    [Arguments]    ${rejections_before}    ${success_keyword}    @{success_args}
+    # The previous rejection stays on screen while the next code is verified,
+    # so count fresh rejections in the journal instead of matching screen text.
+    ${rejections} =    Count Entra TOTP Rejections
+    IF    ${rejections} != ${rejections_before}    RETURN    ${FALSE}
+    ${authenticated} =    Run Keyword And Return Status
+    ...    ${success_keyword}    @{success_args}
+    IF    ${authenticated}    RETURN    ${TRUE}
+    Fail    Waiting for the Entra MFA result
+
+Count Entra TOTP Rejections
+    ${rejections} =    SSH.Execute
+    ...    sudo journalctl --no-pager | grep -c "Incorrect MFA code" || test $? -eq 1
+    RETURN    ${rejections}
+
 
 Continue Log In With Remote User Through GDM: Define Local Password
     [Arguments]    ${local_password}
@@ -362,7 +396,7 @@ Log In With Remote User Through GDM: Entra Password
 
 
 Continue Log In With Remote User Through GDM: Entra Password
-    Enter Entra ID Password And MFA
+    Enter Entra ID Password And MFA    Try Desktop Ready
 
     Wait Until Desktop Ready
 
@@ -487,10 +521,7 @@ Log In With Remote User Through CLI: Entra Auth
     Match Text    2. ${PROVIDER_DISPLAY_NAME}
     Hid.Type String    2
 
-    Enter Entra ID Password And MFA
-
-    # Wait for the authenticated shell prompt.
-    Match Text    ${username}@ubuntu:~$    30
+    Enter Entra ID Password And MFA    Match Text    ${username}@ubuntu:~$    1
 
 
 Log In With Remote User Through CLI: Entra Passwordless TAP
@@ -518,7 +549,7 @@ Log In With Remote User Through CLI: Entra Passwordless TAP
     Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
 
 Log In With Remote User Through Polkit: Entra Password
-    [Arguments]    ${username}
+    [Arguments]    ${username}    ${marker_file}
 
     # Polkit auto-selects authentication via local password.
     # Cancel it ('r') to go back to the authentication-flow menu and choose the
@@ -532,5 +563,4 @@ Log In With Remote User Through Polkit: Entra Password
     Hid.Type String    2
     Hid.Keys Combo    Return
 
-    Enter Entra ID Password And MFA
-    Match Text    @ubuntu:~$    10
+    Enter Entra ID Password And MFA    SSH.Execute    test -f "${marker_file}"
