@@ -194,7 +194,7 @@ typedef struct
 {
   pam_handle_t *pamh;
 
-  char *prompt;
+  char *message;
   int   style;
   int   ret;
   char *response;
@@ -207,45 +207,88 @@ typedef struct
   GThread      *main_thread;
   GMainContext *action_context;
 #endif
-} PromptInvocationData;
+} ConversationInvocation;
 
 static void
-prompt_invocation_data_clear (PromptInvocationData *prompt_data)
+conversation_invocation_clear (ConversationInvocation *conversation_invocation)
 {
-  g_clear_pointer (&prompt_data->prompt, g_free);
-  g_clear_pointer (&prompt_data->response, g_free);
+  g_clear_pointer (&conversation_invocation->message, g_free);
+  g_clear_pointer (&conversation_invocation->response, g_free);
 #ifdef AUTHD_TEST_MODULE
-  g_clear_pointer (&prompt_data->action_context, g_main_context_unref);
+  g_clear_pointer (&conversation_invocation->action_context, g_main_context_unref);
 #endif
 
-  g_cond_clear (&prompt_data->completion_cond);
-  g_mutex_clear (&prompt_data->completion_mutex);
+  g_cond_clear (&conversation_invocation->completion_cond);
+  g_mutex_clear (&conversation_invocation->completion_mutex);
 }
 
-G_DEFINE_AUTO_CLEANUP_CLEAR_FUNC (PromptInvocationData,
-                                  prompt_invocation_data_clear);
+G_DEFINE_AUTO_CLEANUP_CLEAR_FUNC (ConversationInvocation,
+                                  conversation_invocation_clear);
 
 static gboolean
-invoke_prompt_on_main_thread (gpointer data)
+invoke_conversation_on_action_context (gpointer data)
 {
-  PromptInvocationData *prompt_data = data;
+  ConversationInvocation *conversation_invocation = data;
+  char **response_ptr = NULL;
 
 #ifdef AUTHD_TEST_MODULE
-  g_assert (prompt_data->main_thread == g_thread_self ());
-  g_assert (g_main_context_is_owner (prompt_data->action_context));
+  g_assert (conversation_invocation->main_thread == g_thread_self ());
+  g_assert (g_main_context_is_owner (conversation_invocation->action_context));
 #endif
 
-  prompt_data->ret = pam_prompt (prompt_data->pamh,
-                                 prompt_data->style,
-                                 &prompt_data->response, "%s",
-                                 prompt_data->prompt);
+  if (conversation_invocation->style == PAM_PROMPT_ECHO_ON ||
+      conversation_invocation->style == PAM_PROMPT_ECHO_OFF)
+    response_ptr = &conversation_invocation->response;
 
-  g_mutex_lock (&prompt_data->completion_mutex);
-  prompt_data->completed = TRUE;
-  g_cond_signal (&prompt_data->completion_cond);
-  g_mutex_unlock (&prompt_data->completion_mutex);
+  conversation_invocation->ret = pam_prompt (conversation_invocation->pamh,
+                                             conversation_invocation->style,
+                                             response_ptr,
+                                             "%s",
+                                             conversation_invocation->message);
+
+  g_mutex_lock (&conversation_invocation->completion_mutex);
+  conversation_invocation->completed = TRUE;
+  g_cond_signal (&conversation_invocation->completion_cond);
+  g_mutex_unlock (&conversation_invocation->completion_mutex);
 
   return G_SOURCE_REMOVE;
+}
+
+static int
+conversation_invocation_run (ActionData  *action_data,
+                             int          style,
+                             const char  *prompt,
+                             char       **response)
+{
+  g_auto(ConversationInvocation) conversation_invocation = {
+    .pamh = action_data->pamh,
+#ifdef AUTHD_TEST_MODULE
+    .main_thread = action_data->main_thread,
+    .action_context = g_main_context_ref (action_data->action_context),
+#endif
+    .style = style,
+    .message = g_strdup (prompt),
+  };
+
+  g_mutex_init (&conversation_invocation.completion_mutex);
+  g_cond_init (&conversation_invocation.completion_cond);
+
+  g_main_context_invoke (action_data->action_context,
+                         invoke_conversation_on_action_context,
+                         &conversation_invocation);
+
+  g_mutex_lock (&conversation_invocation.completion_mutex);
+  while (!conversation_invocation.completed)
+    {
+      g_cond_wait (&conversation_invocation.completion_cond,
+                   &conversation_invocation.completion_mutex);
+    }
+  g_mutex_unlock (&conversation_invocation.completion_mutex);
+
+  if (response)
+    *response = g_steal_pointer (&conversation_invocation.response);
+
+  return conversation_invocation.ret;
 }
 
 G_GNUC_PRINTF (2, 3)
@@ -713,42 +756,17 @@ on_pam_method_call (GDBusConnection       *connection,
     }
   else if (g_str_equal (method_name, "Prompt"))
     {
-      g_auto(PromptInvocationData) prompt_data = {0};
-      g_autofree char *prompt = NULL;
+      g_autofree char *response = NULL;
+      const char *prompt = NULL;
       int style;
+      int ret;
 
-      g_variant_get (parameters, "(is)", &style, &prompt);
+      g_variant_get (parameters, "(i&s)", &style, &prompt);
 
-      prompt_data = (PromptInvocationData){
-        .pamh = action_data->pamh,
-#ifdef AUTHD_TEST_MODULE
-        .main_thread = action_data->main_thread,
-        .action_context = g_main_context_ref (action_data->action_context),
-#endif
-        .style = style,
-        .prompt = g_steal_pointer (&prompt),
-      };
-
-      g_mutex_init (&prompt_data.completion_mutex);
-      g_cond_init (&prompt_data.completion_cond);
-
-      g_main_context_invoke (action_data->action_context,
-                             invoke_prompt_on_main_thread,
-                             &prompt_data);
-
-      g_mutex_lock (&prompt_data.completion_mutex);
-      while (!prompt_data.completed)
-        {
-          g_cond_wait (&prompt_data.completion_cond,
-                       &prompt_data.completion_mutex);
-        }
-      g_mutex_unlock (&prompt_data.completion_mutex);
-
+      ret = conversation_invocation_run (action_data, style, prompt, &response);
       g_dbus_method_invocation_return_value (invocation,
-                                             g_variant_new ("(is)",
-                                                            prompt_data.ret,
-                                                            prompt_data.response ?
-                                                            prompt_data.response : ""));
+                                             g_variant_new ("(is)", ret,
+                                                            response ? response : ""));
     }
   else
     {
