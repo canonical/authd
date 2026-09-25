@@ -367,14 +367,21 @@ jobs:
           # available in called reusable workflows.
           R2_E2E_TEST_DOMAIN="authd-e2e-test-logs.adrian-dombeck.workers.dev"
           echo "log-url=https://${R2_E2E_TEST_DOMAIN}/${TARGET_DIR}/log.html" >> "$GITHUB_OUTPUT"
+          echo "target-dir=${TARGET_DIR}" >> "$GITHUB_OUTPUT"
 
       - name: Upload test logs
         id: upload-pages
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          TARGET_DIR: ${{ steps.prepare-pages.outputs.target-dir }}
         run: |
-          aws s3 sync pages/ s3://authd-e2e-test-logs/ \
+          set -euo pipefail
+
+          # Each run has a unique prefix, so avoid listing the bucket's history.
+          aws configure set default.s3.max_concurrent_requests 32
+          aws s3 cp "pages/${TARGET_DIR}/" "s3://authd-e2e-test-logs/${TARGET_DIR}/" \
+            --recursive \
             --endpoint-url https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com \
             --region auto
 
