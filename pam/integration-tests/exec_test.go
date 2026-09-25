@@ -214,6 +214,10 @@ func TestExecModule(t *testing.T) {
 			methodCalls: []cliMethodCall{{m: "CallUnhandledMethod"}},
 			wantError:   pam.ErrSystem,
 		},
+		"Error_when_connection_is_closed": {
+			methodCalls: []cliMethodCall{{m: "CallConnectionClose"}},
+			wantError:   pam.ErrSystem,
+		},
 		"Error_when_argument_types_do_not_match_arguments": {
 			methodCalls: []cliMethodCall{{m: "SetItem", args: []any{"an-item", "value"}}},
 			wantError:   pam_test.ErrArgumentTypeMismatch,

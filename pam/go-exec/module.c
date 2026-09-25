@@ -122,6 +122,7 @@ const char *UBUNTU_AUTHD_PAM_OBJECT_NODE =
   "    </method>"
 #ifdef AUTHD_TEST_EXEC_MODULE
   "    <method name='UnhandledMethod' />"
+  "    <method name='ConnectionClose' />"
 #endif
   "  </interface>"
   "</node>";
@@ -760,6 +761,18 @@ on_pam_method_call (GDBusConnection       *connection,
                                              g_variant_new ("(is)", ret,
                                                             response ? response : ""));
     }
+#ifdef AUTHD_TEST_MODULE
+  else if (g_str_equal (method_name, "ConnectionClose"))
+    {
+      g_autoptr (GError) error = NULL;
+
+
+      g_dbus_connection_close_sync (action_data->connection,
+                                    action_data->cancellable,
+                                    &error);
+      g_assert_no_error (error);
+    }
+#endif
   else
     {
       g_dbus_method_invocation_return_error (invocation, G_DBUS_ERROR,
