@@ -35,6 +35,12 @@ func (m moduleWrapper) CallUnhandledMethod() error {
 	return m.BusObject().Call(method, dbus.FlagNoAutoStart).Err
 }
 
+// CallConnectionClose calls a method to simulate a connection being closed.
+func (m moduleWrapper) CallConnectionClose() error {
+	method := "com.ubuntu.authd.pam.ConnectionClose"
+	return m.BusObject().Call(method, dbus.FlagNoAutoStart).Err
+}
+
 // SimulateClientPanic forces the client to panic with the provided text.
 func (m moduleWrapper) SimulateClientPanic(text string) {
 	panic(text)
