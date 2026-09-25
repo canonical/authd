@@ -582,24 +582,25 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
     ```shell
     GIT_DIR=$PWD
     TMP_GIT_DIR=~/tmp/authd
+    RELEASE_BRANCH="release-$(dpkg-parsechangelog -SVersion)"
     rm -rf "$TMP_GIT_DIR"
     git clone "$GIT_DIR" "$TMP_GIT_DIR"
     cd "$TMP_GIT_DIR"
-    git checkout "release-$VERSION"
-    gbp buildpackage -S --git-debian-branch="release-$VERSION" --git-ignore-new -d
+    git checkout "${RELEASE_BRANCH}"
+    gbp buildpackage -S --git-debian-branch="${RELEASE_BRANCH}" --git-ignore-new -d
     ```
 
 8. Push the `.changes` file to the candidate PPA:
 
     ```shell
-    dput ppa:ubuntu-enterprise-desktop/authd-candidate "../authd_${VERSION}_source.changes"
+    dput ppa:ubuntu-enterprise-desktop/authd-candidate "../authd_$(dpkg-parsechangelog -SVersion)_source.changes"
     ```
 
 9. Push the commits and tag to the release branch:
 
     ```shell
     cd "${GIT_DIR}"
-    gbp push --debian-branch="release-$VERSION"
+    gbp push --debian-branch="${RELEASE_BRANCH}"
     ```
 
 10. Check out a new branch for the previous still supported Ubuntu release:
