@@ -47,15 +47,11 @@ class EntraTAP:
         # Fallback: return the whole string if it looks like a bare GUID.
         if len(stripped) == 36 and stripped.count("-") == 4:
             return stripped
-        raise ValueError(
-            f"Could not extract tenant ID from issuer URL: {issuer_url!r}"
-        )
+        raise ValueError(f"Could not extract tenant ID from issuer URL: {issuer_url!r}")
 
     def _acquire_token(self, tenant_id: str, client_id: str, client_secret: str) -> str:
         """Acquire an app-only token for Microsoft Graph."""
-        token_url = (
-            f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
-        )
+        token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
         payload = urllib.parse.urlencode(
             {
                 "grant_type": "client_credentials",
@@ -71,9 +67,7 @@ class EntraTAP:
                 result = json.load(resp)
         except urllib.error.HTTPError as exc:
             body = exc.read().decode(errors="replace")
-            raise RuntimeError(
-                f"Token request failed ({exc.code}): {body}"
-            ) from exc
+            raise RuntimeError(f"Token request failed ({exc.code}): {body}") from exc
 
         return result["access_token"]
 
@@ -183,7 +177,9 @@ class EntraTAP:
         tap = (result or {}).get("temporaryAccessPass")
         tap_id = (result or {}).get("id")
         if not tap or not tap_id:
-            raise RuntimeError("TAP creation response is missing a passcode or identifier.")
+            raise RuntimeError(
+                "TAP creation response is missing a passcode or identifier."
+            )
 
         # A freshly minted TAP isn't always usable immediately; poll until
         # Graph confirms it so the caller doesn't hand out a code that falls
@@ -249,4 +245,6 @@ class EntraTAP:
             created_at = datetime.fromisoformat(created.replace("Z", "+00:00"))
         except ValueError:
             return True
-        return datetime.now(timezone.utc) - created_at >= timedelta(minutes=min_age_minutes)
+        return datetime.now(timezone.utc) - created_at >= timedelta(
+            minutes=min_age_minutes
+        )

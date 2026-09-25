@@ -19,7 +19,14 @@ from base import (
 )
 
 
-def login(browser, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):
+def login(
+    browser,
+    username: str,
+    password: str,
+    device_code: str,
+    totp_secret: str,
+    screenshot_dir: str = ".",
+):
     url = "https://login.microsoft.com/device"
     logger.info(f"Loading URL: {url}")
     browser.web_view.load_uri(url)

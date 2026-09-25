@@ -9,6 +9,7 @@ import time
 
 TIME_WINDOW = 5
 
+
 def generate_totp(secret: str) -> str:
     # The code is generated according to the current time and is valid for 30 seconds.
     # This means that if we generate the code just before the time window changes,
@@ -22,9 +23,10 @@ def generate_totp(secret: str) -> str:
     hashed_obj = hmac.new(key, msg, hashlib.sha1).digest()
     o = hashed_obj[19] & 15
 
-    totp_code = (struct.unpack(">I", hashed_obj[o:o + 4])[0] & 0x7fffffff) % 1000000
+    totp_code = (struct.unpack(">I", hashed_obj[o : o + 4])[0] & 0x7FFFFFFF) % 1000000
 
     return f"{totp_code:06d}"
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

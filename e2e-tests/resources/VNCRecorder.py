@@ -1,27 +1,28 @@
 import ctypes
-import subprocess
-import signal
 import os
+import signal
+import subprocess
 import time
 
-from robot.api.deco import library, keyword
-from robot.api import logger
-from robot.libraries.BuiltIn import BuiltIn
-
 from RecordingUtils import recording_filename
+from robot.api import logger
+from robot.api.deco import keyword, library
+from robot.libraries.BuiltIn import BuiltIn
 
 PR_SET_PDEATHSIG = 1
 SIGTERM = 15
 
+
 # Ensure child processes are terminated when the parent process dies
 def set_death_signal():
-    libc = ctypes.CDLL('libc.so.6')
+    libc = ctypes.CDLL("libc.so.6")
     libc.prctl(PR_SET_PDEATHSIG, SIGTERM)
+
 
 def find_unused_display() -> int:
     used = set()
-    for name in os.listdir('/tmp/.X11-unix'):
-        if name.startswith('X'):
+    for name in os.listdir("/tmp/.X11-unix"):
+        if name.startswith("X"):
             try:
                 used.add(int(name[1:]))
             except ValueError:
@@ -31,14 +32,16 @@ def find_unused_display() -> int:
             return num
     raise RuntimeError("No unused display found")
 
+
 def wait_for_xvfb(display_num: int, timeout: float = 10.0):
-    socket_path = f'/tmp/.X11-unix/X{display_num}'
+    socket_path = f"/tmp/.X11-unix/X{display_num}"
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if os.path.exists(socket_path):
             return
         time.sleep(0.1)
     raise RuntimeError(f"Xvfb display :{display_num} did not become ready in time")
+
 
 def stop_process(proc: subprocess.Popen, stop_signal: int = signal.SIGTERM):
     """Terminate a process, killing it if it doesn't stop in time, and log its stderr."""
@@ -57,9 +60,9 @@ def stop_process(proc: subprocess.Popen, stop_signal: int = signal.SIGTERM):
         msg += f" stderr:\n{stderr}"
     logger.info(msg)
 
+
 @library
 class VNCRecorder:
-
     def __init__(self):
         self._xvfb_proc = None
         self._unclutter_proc = None
@@ -67,19 +70,17 @@ class VNCRecorder:
         self._ffmpeg_proc = None
 
     @keyword
-    def start_recording(self, host='localhost', resolution='1280x800'):
+    def start_recording(self, host="localhost", resolution="1280x800"):
         """Start recording the VNC session to a video file."""
-        port = os.getenv('VNC_PORT', 5901)
-        output_dir = str(BuiltIn().get_variable_value('${SUITE_OUTPUT_DIR}'))
-        output_path = os.path.join(
-            output_dir, recording_filename('VM_Recording')
-        )
+        port = os.getenv("VNC_PORT", 5901)
+        output_dir = str(BuiltIn().get_variable_value("${SUITE_OUTPUT_DIR}"))
+        output_path = os.path.join(output_dir, recording_filename("VM_Recording"))
 
         display_num = find_unused_display()
-        display = f':{display_num}'
+        display = f":{display_num}"
 
         # Start a virtual X server for the VNC session
-        cmd = ['Xvfb', display, '-screen', '0', f'{resolution}x24']
+        cmd = ["Xvfb", display, "-screen", "0", f"{resolution}x24"]
         logger.info(f"Starting Xvfb with command: {' '.join(cmd)}")
         self._xvfb_proc = subprocess.Popen(
             cmd,
@@ -90,7 +91,7 @@ class VNCRecorder:
         wait_for_xvfb(display_num)
 
         # Run unclutter to hide the mouse cursor so it doesn't show up in the recording
-        cmd = ['unclutter', '-display', display, '-root', '-idle', '0.1']
+        cmd = ["unclutter", "-display", display, "-root", "-idle", "0.1"]
         logger.info(f"Starting unclutter with command: {' '.join(cmd)}")
         self._unclutter_proc = subprocess.Popen(
             cmd,
@@ -101,9 +102,14 @@ class VNCRecorder:
 
         # Start a VNC viewer on the virtual X server
         env = os.environ.copy()
-        env['DISPLAY'] = display
-        cmd = ['xtightvncviewer', '-shared', '-viewonly', '-fullscreen',
-               f'{host}:{port}']
+        env["DISPLAY"] = display
+        cmd = [
+            "xtightvncviewer",
+            "-shared",
+            "-viewonly",
+            "-fullscreen",
+            f"{host}:{port}",
+        ]
         logger.info(f"Starting xtightvncviewer with command: {' '.join(cmd)}")
         self._viewer_proc = subprocess.Popen(
             cmd,
@@ -119,26 +125,36 @@ class VNCRecorder:
 
         # Record the VNC session to a video file
         cmd = [
-            'ffmpeg',
-            '-loglevel', 'warning',
+            "ffmpeg",
+            "-loglevel",
+            "warning",
             # Overwrite output file if it already exists
-            '-y',
+            "-y",
             # Use X11 screen capture as input
-            '-f', 'x11grab',
+            "-f",
+            "x11grab",
             # Capture at 25 frames per second, so we don't miss any quick screen updates
-            '-r', '25',
-            '-s', resolution,
-            '-i', f'{display}.0',
+            "-r",
+            "25",
+            "-s",
+            resolution,
+            "-i",
+            f"{display}.0",
             # H.265 encoder: better compression than VP9, supported in Firefox 130+, Chrome 107+
-            '-codec:v', 'libx265',
+            "-codec:v",
+            "libx265",
             # Constant Rate Factor: quality scale 0-51, lower = better; 32 is good for screen content
-            '-crf', '32',
+            "-crf",
+            "32",
             # Encoding speed preset; 'fast' gives good compression with acceptable encoding time
-            '-preset', 'fast',
+            "-preset",
+            "fast",
             # Force 8-bit pixel format: browsers require yuv420p and won't play 10-bit H.265
-            '-pix_fmt', 'yuv420p',
+            "-pix_fmt",
+            "yuv420p",
             # Tag the stream as hvc1 (instead of default hev1) for broader browser compatibility
-            '-tag:v', 'hvc1',
+            "-tag:v",
+            "hvc1",
             output_path,
         ]
 

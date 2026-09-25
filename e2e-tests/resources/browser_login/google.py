@@ -51,6 +51,7 @@ class TooManyFailedAttemptsError(Exception):
     This page indicates the test account is temporarily locked out (usually
     for a few hours), so retrying immediately would just fail again.
     """
+
     pass
 
 
@@ -69,21 +70,30 @@ class GoogleLoginFlow:
     """
 
     # All patterns that can appear after the device code is submitted.
-    _ALL_POST_CODE_PATTERNS = "|".join([
-        _SIGN_IN,
-        _ENTER_PASSWORD,
-        _PATTERN_ENTER_TOTP,
-        _CHOOSE_ACCOUNT,
-        _SIGNING_BACK_IN,
-        _SUCCESS,
-        _PATTERN_WRONG_TOTP,
-        _PATTERN_WRONG_EMAIL,
-        _WRONG_PASSWORD,
-        _TOO_MANY_FAILED_ATTEMPTS,
-    ])
+    _ALL_POST_CODE_PATTERNS = "|".join(
+        [
+            _SIGN_IN,
+            _ENTER_PASSWORD,
+            _PATTERN_ENTER_TOTP,
+            _CHOOSE_ACCOUNT,
+            _SIGNING_BACK_IN,
+            _SUCCESS,
+            _PATTERN_WRONG_TOTP,
+            _PATTERN_WRONG_EMAIL,
+            _WRONG_PASSWORD,
+            _TOO_MANY_FAILED_ATTEMPTS,
+        ]
+    )
 
-    def __init__(self, browser, username: str, password: str, device_code: str,
-                 totp_secret: str, screenshot_dir: str = "."):
+    def __init__(
+        self,
+        browser,
+        username: str,
+        password: str,
+        device_code: str,
+        totp_secret: str,
+        screenshot_dir: str = ".",
+    ):
         self._browser = browser
         self._username = username
         self._password = password
@@ -106,7 +116,8 @@ class GoogleLoginFlow:
                 if num_totp_failures == TOTP_CODE_MAX_TRIES:
                     raise RuntimeError(
                         f"Failed to log in: TOTP code was rejected too many "
-                        f"times ({TOTP_CODE_MAX_TRIES})")
+                        f"times ({TOTP_CODE_MAX_TRIES})"
+                    )
                 logger.info("TOTP code was rejected, retrying with a new code")
                 # Wait until a fresh TOTP code is available.
                 while generate_totp(self._totp_secret) == self._last_totp_code:
@@ -132,14 +143,16 @@ class GoogleLoginFlow:
         while True:
             if time.monotonic() > deadline:
                 raise RuntimeError(
-                    f"Login flow timed out after {self._LOGIN_TIMEOUT_S} seconds")
+                    f"Login flow timed out after {self._LOGIN_TIMEOUT_S} seconds"
+                )
             # Stabilize first so that wait_for_pattern reads the new page's
             # text rather than leftovers from the previous one.  This is safe
             # to do before typing because wait_for_stable_page no longer steals
             # focus (it suppresses cursor-blink draw events via CSS instead).
             self._browser.wait_for_stable_page()
             matches = self._browser.wait_for_pattern(
-                self._ALL_POST_CODE_PATTERNS, timeout_ms=20000)
+                self._ALL_POST_CODE_PATTERNS, timeout_ms=20000
+            )
             if self._dispatch(matches):
                 return  # success
 
@@ -158,8 +171,9 @@ class GoogleLoginFlow:
             self._handle_too_many_failed_attempts_page()
             raise TooManyFailedAttemptsError(
                 "Google blocked this login attempt with a "
-                "\"too many failed attempts\" lockout page. The test "
-                "account is likely locked out for a few hours.")
+                '"too many failed attempts" lockout page. The test '
+                "account is likely locked out for a few hours."
+            )
         if _matches_phrase(matches, _WRONG_TOTP, _WRONG_NUMBER_OF_DIGITS):
             raise WrongTOTPCodeError("TOTP code was rejected")
         if _matches_phrase(matches, "find your google account", _EMAIL_INVALID):
@@ -191,7 +205,9 @@ class GoogleLoginFlow:
         self._browser.send_key_taps([Gdk.KEY_Return])
 
     def _handle_sign_in_page(self) -> None:
-        self._browser.capture_snapshot(self._screenshot_dir, "device-login-enter-username")
+        self._browser.capture_snapshot(
+            self._screenshot_dir, "device-login-enter-username"
+        )
         # Clear any text that may have accumulated in the field from previous
         # attempts (due to the page-load race described in _handle_wrong_email).
         self._clear_input_field(self._username)
@@ -199,25 +215,35 @@ class GoogleLoginFlow:
         self._browser.send_key_taps([Gdk.KEY_Return])
 
     def _handle_enter_password_page(self) -> None:
-        self._browser.capture_snapshot(self._screenshot_dir, "device-login-enter-password")
+        self._browser.capture_snapshot(
+            self._screenshot_dir, "device-login-enter-password"
+        )
         self._browser.send_text(self._password)
         self._browser.send_key_taps([Gdk.KEY_Return])
 
     def _handle_totp_page(self) -> None:
-        self._browser.capture_snapshot(self._screenshot_dir, "device-login-enter-totp-code")
+        self._browser.capture_snapshot(
+            self._screenshot_dir, "device-login-enter-totp-code"
+        )
         self._last_totp_code = generate_totp(self._totp_secret)
         self._browser.send_text(self._last_totp_code)
         self._browser.send_key_taps([Gdk.KEY_Return])
 
     def _handle_choose_account_page(self) -> None:
-        self._browser.capture_snapshot(self._screenshot_dir, "device-login-choose-account")
+        self._browser.capture_snapshot(
+            self._screenshot_dir, "device-login-choose-account"
+        )
         self._browser.send_key_taps([Gdk.KEY_Return])
 
     def _handle_signing_back_in_page(self) -> None:
         # "You’re signing back in" – click "Continue".
         # Pressing Enter alone is not enough; we must tab to the button first.
-        self._browser.capture_snapshot(self._screenshot_dir, "device-login-confirmation")
-        self._browser.send_key_taps([Gdk.KEY_Tab, Gdk.KEY_Tab, Gdk.KEY_Tab, Gdk.KEY_Tab, Gdk.KEY_Tab])
+        self._browser.capture_snapshot(
+            self._screenshot_dir, "device-login-confirmation"
+        )
+        self._browser.send_key_taps(
+            [Gdk.KEY_Tab, Gdk.KEY_Tab, Gdk.KEY_Tab, Gdk.KEY_Tab, Gdk.KEY_Tab]
+        )
         self._browser.send_key_taps([Gdk.KEY_Return])
 
     def _handle_success_page(self) -> None:
@@ -236,14 +262,18 @@ class GoogleLoginFlow:
 
     def _handle_too_many_failed_attempts_page(self) -> None:
         self._browser.capture_snapshot(
-            self._screenshot_dir, "device-login-too-many-failed-attempts")
+            self._screenshot_dir, "device-login-too-many-failed-attempts"
+        )
         logger.error(
-            "Google blocked this login with a \"too many failed attempts\" "
+            'Google blocked this login with a "too many failed attempts" '
             "lockout page; the test account is likely locked out for a few "
-            "hours")
+            "hours"
+        )
 
     def _handle_wrong_password(self) -> None:
-        self._browser.capture_snapshot(self._screenshot_dir, "device-login-wrong-password")
+        self._browser.capture_snapshot(
+            self._screenshot_dir, "device-login-wrong-password"
+        )
         self._clear_input_field(self._password)
 
     def _clear_input_field(self, field_value: str) -> None:
@@ -255,8 +285,18 @@ class GoogleLoginFlow:
         """
         self._browser.send_key_taps(2 * len(field_value) * [Gdk.KEY_BackSpace])
 
-def login(browser, username: str, password: str, device_code: str, totp_secret: str, screenshot_dir: str = "."):
-    GoogleLoginFlow(browser, username, password, device_code, totp_secret, screenshot_dir).run()
+
+def login(
+    browser,
+    username: str,
+    password: str,
+    device_code: str,
+    totp_secret: str,
+    screenshot_dir: str = ".",
+):
+    GoogleLoginFlow(
+        browser, username, password, device_code, totp_secret, screenshot_dir
+    ).run()
 
 
 if __name__ == "__main__":
