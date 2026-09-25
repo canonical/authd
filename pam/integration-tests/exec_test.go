@@ -647,6 +647,7 @@ func TestExecModule(t *testing.T) {
 		convShouldNotBeCalled bool
 		convDelay             time.Duration
 		preMethodCalls        []cliMethodCall
+		wantConvCalls         int
 
 		want           string
 		stringResponse any
@@ -729,13 +730,31 @@ func TestExecModule(t *testing.T) {
 			},
 			wantExitError: pam.ErrSystem,
 		},
+		"Error_if_client_dying_while_a_conversation_is_queued": {
+			prompt:    "Are you still there?",
+			convStyle: pam.PromptEchoOn,
+			want:      "Sorry for the delay!",
+			convDelay: clientKillDelay * 4,
+			preMethodCalls: []cliMethodCall{
+				{
+					m:    "SimulateClientSignalAfterDelay",
+					args: []any{syscall.SIGKILL, int(clientKillDelay.Milliseconds())},
+				},
+				{
+					m:    "StartStringConvInBackground",
+					args: []any{pam.PromptEchoOn, "Are you still there?"},
+				},
+			},
+			wantConvCalls: 1,
+			wantExitError: pam.ErrSystem,
+		},
 	}
 	for name, tc := range stringConvTests {
 		t.Run("StringConv "+name, func(t *testing.T) {
 			t.Parallel()
 			t.Cleanup(pam_test.MaybeDoLeakCheck)
 
-			convFunCalled := false
+			convCalls := 0
 			convHandler := func() pam.ConversationFunc {
 				if tc.convHandler != nil {
 					return *tc.convHandler
@@ -746,7 +765,7 @@ func TestExecModule(t *testing.T) {
 				}
 				return pam.ConversationFunc(
 					func(style pam.Style, msg string) (string, error) {
-						convFunCalled = true
+						convCalls++
 						require.Equal(t, prompt, msg)
 						require.Equal(t, tc.convStyle, style)
 						if tc.convDelay > 0 {
@@ -798,7 +817,11 @@ func TestExecModule(t *testing.T) {
 				"Authenticate does not return expected error")
 
 			wantConFuncCalled := !tc.convShouldNotBeCalled && tc.convHandler == nil
-			require.Equal(t, wantConFuncCalled, convFunCalled)
+			require.Equal(t, wantConFuncCalled, convCalls > 0)
+			if tc.wantConvCalls > 0 {
+				require.Equal(t, tc.wantConvCalls, convCalls,
+					"Conversation handler called unexpected times")
+			}
 		})
 	}
 
