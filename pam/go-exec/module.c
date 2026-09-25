@@ -223,6 +223,7 @@ log_writer (GLogLevelFlags   log_level,
   int log_file_fd;
   gboolean use_colors;
   size_t length;
+  int errsv;
 
   if (g_log_writer_default_would_drop (log_level, log_domain))
     return G_LOG_WRITER_HANDLED;
@@ -244,7 +245,8 @@ log_writer (GLogLevelFlags   log_level,
       write (log_file_fd, "\n", 1) == 1)
     return G_LOG_WRITER_HANDLED;
 
-  g_printerr ("Can't write log to file: %s", g_strerror (errno));
+  errsv = errno;
+  g_printerr ("Can't write log to file: %s", g_strerror (errsv));
   return G_LOG_WRITER_UNHANDLED;
 }
 
@@ -931,7 +933,7 @@ handle_module_options (int          argc,
 
   /* We can now remove the first element that was added */
   argc = g_strv_length (args_strv);
-  args = g_ptr_array_new_full (argc - 1, g_free);
+  args = g_ptr_array_new_null_terminated (argc - 1, g_free, TRUE);
   for (int i = 1; i < argc; ++i)
     {
       g_autofree char *arg = g_steal_pointer (&args_strv[i]);
@@ -987,11 +989,14 @@ do_pam_action_thread (pam_handle_t *pamh,
   g_autofree char *log_file = NULL;
   g_autofree char *program_name = NULL;
   g_autofree char *wait_thread_name = NULL;
+  g_autofd int pam_tty_fd = -1;
   g_autofd int stdin_fd = -1;
   g_autofd int stdout_fd = -1;
   g_autofd int stderr_fd = -1;
   g_autofd int log_file_fd = -1;
   const char *action_name;
+  const char *pam_tty;
+  int errsv;
   int exit_status;
   gboolean interactive_mode;
   GPid child_pid;
@@ -1026,14 +1031,15 @@ do_pam_action_thread (pam_handle_t *pamh,
   else
     log_file_fd = dup (STDERR_FILENO);
 
+  errsv = errno;
   action_data.log_file_fd = g_steal_fd (&log_file_fd);
   G_UNLOCK (logger);
 
   if (action_data.log_file_fd == -1)
     {
       g_warning ("Impossible to open log file %s: %s",
-                 (log_file && *log_file != '\0') ? log_file : "<sderr>",
-                 g_strerror (errno));
+                 (log_file && *log_file != '\0') ? log_file : "<stderr>",
+                 g_strerror (errsv));
     }
 
   locker = g_mutex_locker_new (&G_LOCK_NAME (exec_module));
@@ -1098,29 +1104,76 @@ do_pam_action_thread (pam_handle_t *pamh,
   main_context = g_main_context_ref (module_data->main_context);
   context_pusher = g_main_context_pusher_new (main_context);
 
-  interactive_mode = isatty (STDIN_FILENO);
+  if ((exit_status = pam_get_item (pamh, PAM_TTY, (const void **) &pam_tty)) != PAM_SUCCESS)
+    return exit_status;
+
+  interactive_mode = FALSE;
+
+  if (pam_tty != NULL && *pam_tty != '\0')
+    {
+      g_debug ("Trying to use PAM TTY %s", pam_tty);
+      pam_tty_fd = open (pam_tty, O_RDWR, 0600);
+      errsv = errno;
+
+      if (pam_tty_fd >= 0)
+        {
+          if (isatty (pam_tty_fd))
+            {
+              stdin_fd = pam_tty_fd;
+              stdout_fd = pam_tty_fd;
+              stderr_fd = pam_tty_fd;
+              interactive_mode = TRUE;
+            }
+          else
+            {
+              g_warning ("PAM TTY '%s' is not really a TTY", pam_tty);
+            }
+        }
+      else
+        {
+          g_debug ("Impossible to open PAM_TTY %s: %s",
+                   pam_tty, g_strerror (errsv));
+        }
+    }
+
+  if (pam_tty_fd < 0 && !interactive_mode &&
+      isatty (STDIN_FILENO) && isatty (STDOUT_FILENO))
+    {
+      stdin_fd = STDIN_FILENO;
+      stdout_fd = STDOUT_FILENO;
+      stderr_fd = STDERR_FILENO;
+      interactive_mode = TRUE;
+    }
+
+  g_debug ("Running in interactive mode: %s", interactive_mode ? "true" : "false");
 
   if (interactive_mode)
     {
-      if ((stdin_fd = dup_fd_checked (STDIN_FILENO, &error)) < 0)
+      if ((stdin_fd = dup_fd_checked (stdin_fd, &error)) < 0)
         {
-          notify_error (pamh, action, "can't duplicate stdin file descriptor: %s",
-                        error->message);
-          return PAM_SYSTEM_ERR;
+          g_warning ("%s: can't duplicate stdin file descriptor: %s",
+                     action_type_to_string (action), error->message);
+          g_clear_error (&error);
         }
 
-      if ((stdout_fd = dup_fd_checked (STDOUT_FILENO, &error)) < 0)
+      if ((stdout_fd = dup_fd_checked (stdout_fd, &error)) < 0)
         {
-          notify_error (pamh, action, "can't duplicate stdout file descriptor: %s",
-                        error->message);
-          return PAM_SYSTEM_ERR;
+          g_warning ("%s: can't duplicate stdout file descriptor: %s",
+                     action_type_to_string (action), error->message);
+          g_clear_error (&error);
         }
 
-      if ((stderr_fd = dup_fd_checked (STDERR_FILENO, &error)) < 0)
+      if ((stderr_fd = dup_fd_checked (stderr_fd, &error)) < 0)
         {
-          notify_error (pamh, action, "can't duplicate stderr file descriptor: %s",
-                        error->message);
-          return PAM_SYSTEM_ERR;
+          g_warning ("%s: can't duplicate stderr file descriptor: %s",
+                     action_type_to_string (action), error->message);
+          g_clear_error (&error);
+        }
+
+      if (stdin_fd < 0 || stdout_fd < 0)
+        {
+          g_warning ("No relevant FD available for interactive mode");
+          interactive_mode = FALSE;
         }
     }
 
@@ -1131,7 +1184,8 @@ do_pam_action_thread (pam_handle_t *pamh,
   while (!g_dbus_server_is_active (server))
     g_thread_yield ();
 
-  envp = g_ptr_array_new_full (2, g_free);
+  envp = g_ptr_array_new_null_terminated (1 + (interactive_mode ? 9 : 0),
+                                          g_free, TRUE);
   if (interactive_mode)
     {
       maybe_replicate_env (envp, "COLORTERM");
@@ -1155,16 +1209,13 @@ do_pam_action_thread (pam_handle_t *pamh,
 
   g_ptr_array_add (envp, g_strdup_printf ("AUTHD_PAM_SERVER_ADDRESS=%s",
                                           g_dbus_server_get_client_address (server)));
-  /* FIXME: use g_ptr_array_new_null_terminated when we can use newer GLib. */
-  g_ptr_array_add (envp, NULL);
 
   int idx = 0;
   g_ptr_array_insert (args, idx++, g_strdup (exe));
   g_ptr_array_insert (args, idx++, g_strdup ("-flags"));
   g_ptr_array_insert (args, idx++, g_strdup_printf ("%d", flags));
   g_ptr_array_insert (args, idx++, g_strdup (action_name));
-  /* FIXME: use g_ptr_array_new_null_terminated when we can use newer GLib. */
-  g_ptr_array_add (args, NULL);
+  g_assert (g_ptr_array_is_null_terminated (args));
 
   if (is_debug_logging_enabled ())
     {

@@ -90,7 +90,7 @@ func newNativeModel(mTx pam.ModuleTransaction, userServiceClient authd.UserServi
 		log.Errorf(context.TODO(), "failed to get the PAM service: %v", err)
 	}
 
-	m.interactive = (isSSHSession(m.pamMTx) || IsTerminalTTY(m.pamMTx)) && !IsDumbTerminal()
+	m.interactive = isSSHSession(m.pamMTx) || IsTerminalTTY(m.pamMTx)
 
 	return m
 }
@@ -826,7 +826,7 @@ func (m nativeModel) isQrcodeRenderingSupported() bool {
 		if isSSHSession(m.pamMTx) {
 			return false
 		}
-		return IsTerminalTTY(m.pamMTx) && !IsDumbTerminal()
+		return IsTerminalTTY(m.pamMTx)
 	}
 }
 
