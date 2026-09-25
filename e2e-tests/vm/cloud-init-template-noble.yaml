@@ -68,6 +68,11 @@ write_files:
       [org/gnome/desktop/interface]
       text-scaling-factor=1.25
 
+      # Use the same fixed font as Ptyxis for better OCR results.
+      [org/gnome/terminal/legacy/profiles:/:b1dcc9dd-5262-4d8d-a863-c897e6d979b9]
+      use-system-font=false
+      font='Monospace 12'
+
   # Configure dconf for GDM
   - path: /usr/share/gdm/dconf/00-e2e-tests-requirements
     content: |
