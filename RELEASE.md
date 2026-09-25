@@ -361,7 +361,7 @@ gbp buildpackage -S --git-ignore-new --git-export-dir=/tmp/authd-build
 
 ### Build the binary package (obsolete if you download the binary package from the GitHub CI)
 
-Note that this should be performed for all the supported versions (noble and plucky at the moment):
+Note that this should be performed for all the supported Ubuntu releases:
 
 1. Create an unshare chroot for each release you need to test:
 
