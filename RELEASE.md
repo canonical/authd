@@ -551,11 +551,21 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
 
 ### Finalize the release branch
 
-1. Amend the changelog to remove the `~preX` suffix
+1. If any changes were necessary after doing the manual tests, cherry-pick those
+   from main - or, what is often easier, rebase onto main first and then do an
+   interactive rebase with merge commits onto the commit that was tested, and
+   drop those commits which are not relevant for the release:
 
-2. Wait for the PR to be approved.
+   ```shell
+   git rebase main
+   git rebase -i --rebase-merges <commit-id-of-tested-commit>~1
+   ```
 
-3. Create a separate commit which updates the changelog to target the next Ubuntu release instead of UNRELEASED:
+2. Amend the changelog to remove the `~preX` suffix
+
+3. Wait for the PR to be approved.
+
+4. Create a separate commit which updates the changelog to target the next Ubuntu release instead of UNRELEASED:
 
     ```shell
     RELEASE=stonking  # Replace it with the actual release name
@@ -563,21 +573,21 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
     git commit -m "Upload $(dpkg-parsechangelog -SVersion) to $(dpkg-parsechangelog -SDistribution)" debian/changelog
     ```
 
-4. Create a git tag:
+5. Create a git tag:
 
     ```shell
     gbp buildpackage --git-debian-branch="release-$(dpkg-parsechangelog -SVersion)" --git-tag-only --git-ignore-new --git-sign-tags || git reset --hard HEAD^
     ```
 
-5. Do a dry-run push:
+6. Do a dry-run push:
 
     ```shell
     gbp push --dry-run --debian-branch="release-$(dpkg-parsechangelog -SVersion)"
     ```
 
-6. Review the dry run, make sure that it's on the correct commit.
+7. Review the dry run, make sure that it's on the correct commit.
 
-7. Generate the final Debian source files in a clean git repo:
+8. Generate the final Debian source files in a clean git repo:
 
     ```shell
     GIT_DIR=$PWD
@@ -590,20 +600,20 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
     gbp buildpackage -S --git-debian-branch="${RELEASE_BRANCH}" --git-ignore-new -d
     ```
 
-8. Push the `.changes` file to the candidate PPA:
+9. Push the `.changes` file to the candidate PPA:
 
     ```shell
     dput ppa:ubuntu-enterprise-desktop/authd-candidate "../authd_$(dpkg-parsechangelog -SVersion)_source.changes"
     ```
 
-9. Push the commits and tag to the release branch:
+10. Push the commits and tag to the release branch:
 
     ```shell
     cd "${GIT_DIR}"
     gbp push --debian-branch="${RELEASE_BRANCH}"
     ```
 
-10. Check out a new branch for the previous still supported Ubuntu release:
+11. Check out a new branch for the previous still supported Ubuntu release:
 
     ```shell
     DIST=resolute
@@ -611,13 +621,13 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
     BRANCH="release-$(dpkg-parsechangelog -SVersion)-ubuntu${UBUNTU_VERSION}"
     git checkout -b "${BRANCH}"
     ```
-11. Reset to the previous commit and update the changelog entry:
+12. Reset to the previous commit and update the changelog entry:
     ```shell
     git reset --hard HEAD~1
     debchange --force-bad-version --newversion "$(dpkg-parsechangelog -SVersion)~ubuntu$UBUNTU_VERSION" --distribution $DIST ''
     git commit -m "Upload $(dpkg-parsechangelog -SVersion) to $(dpkg-parsechangelog -SDistribution)" debian/changelog
     ```
-12. Generate the Debian source file in a clean git repo:
+13. Generate the Debian source file in a clean git repo:
 
     ```shell
     GIT_DIR=$PWD
@@ -630,16 +640,16 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
     gbp buildpackage -S --git-debian-branch="${RELEASE_BRANCH}" --git-ignore-new -d
     ```
 
-13. Push the `.changes` file to the candidate PPA:
+14. Push the `.changes` file to the candidate PPA:
 
     ```shell
     dput ppa:ubuntu-enterprise-desktop/authd-candidate "../authd_$(dpkg-parsechangelog -SVersion)_source.changes"
     ```
 
-14. Return to the generic release branch with `cd "${GIT_DIR}" && git checkout "release-$(dpkg-parsechangelog -SVersion | sed 's/~.*//')"`, then repeat steps 10 to 13 for all other still supported Ubuntu releases.
+15. Return to the generic release branch with `cd "${GIT_DIR}" && git checkout "release-$(dpkg-parsechangelog -SVersion | sed 's/~.*//')"`, then repeat steps 11 to 14 for all other still supported Ubuntu releases.
 
-15. Merge the release branch into stable
-16. Merge stable into main, so that the tag is included in main.
+16. Merge the release branch into stable
+17. Merge stable into main, so that the tag is included in main.
     In case of conflicts, keep the changes from main:
     ```shell
     git merge -X ours stable
