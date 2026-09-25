@@ -65,7 +65,11 @@ on:
         required: false
       E2E_MSENTRA_PASSWORDLESS_PASSKEY_USERNAME:
         required: false
-      E2E_MSENTRA_TOTP_SECRET:
+      E2E_MSENTRA_TOTP_SECRET_NOBLE:
+        required: false
+      E2E_MSENTRA_TOTP_SECRET_RESOLUTE:
+        required: false
+      E2E_MSENTRA_TOTP_SECRET_DEVEL:
         required: false
       E2E_GOOGLE_CLIENT_ID:
         required: false
@@ -280,7 +284,12 @@ jobs:
             export E2E_PASSWORDLESS_USER="${{ secrets.E2E_MSENTRA_PASSWORDLESS_USERNAME }}"
             export E2E_PASSWORDLESS_PASSKEY_USER="${{ secrets.E2E_MSENTRA_PASSWORDLESS_PASSKEY_USERNAME }}"
             export E2E_PASSKEY_USER="${{ secrets.E2E_MSENTRA_PASSKEY_USERNAME }}"
-            export TOTP_SECRET="${{ secrets.E2E_MSENTRA_TOTP_SECRET }}"
+            case "$RELEASE" in
+              noble) export TOTP_SECRET="${{ secrets.E2E_MSENTRA_TOTP_SECRET_NOBLE }}" ;;
+              resolute) export TOTP_SECRET="${{ secrets.E2E_MSENTRA_TOTP_SECRET_RESOLUTE }}" ;;
+              devel) export TOTP_SECRET="${{ secrets.E2E_MSENTRA_TOTP_SECRET_DEVEL }}" ;;
+              *) echo "Unsupported Entra E2E release: $RELEASE" >&2; exit 1 ;;
+            esac
             export AUTHD_MSENTRAID_ISSUER_ID="${{ secrets.E2E_MSENTRA_ISSUER_ID }}"
             export AUTHD_MSENTRAID_CLIENT_ID="${{ secrets.E2E_MSENTRA_CLIENT_ID }}"
             export AUTHD_MSENTRAID_CLIENT_SECRET="${{ secrets.E2E_MSENTRA_CLIENT_SECRET }}"

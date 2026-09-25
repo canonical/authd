@@ -171,6 +171,18 @@ By default, GitHub CI runs the end-to-end tests against `authd-msentraid` on all
 supported Ubuntu releases (`noble`, `resolute`, and `devel`), using the complete
 test suite and the authd package and broker snap built from the current branch.
 All other packages are updated from the [authd-edge PPA][authd-edge-ppa].
+
+The Entra test user needs a separate registered OATH authenticator for each
+release. CI uses `E2E_MSENTRA_TOTP_SECRET_NOBLE` for noble,
+`E2E_MSENTRA_TOTP_SECRET_RESOLUTE` for resolute, and
+`E2E_MSENTRA_TOTP_SECRET_DEVEL` for devel.
+
+Different releases use separate TOTP streams. Same-release runs are not queued
+across branches; overlapping submissions can still replay a code. The Entra
+password-and-MFA tests wait for a rejection or confirmed login before deciding
+whether to retry. They submit up to three codes, generating a different one
+after each rejection.
+
 Migration suites start with the last stable authd and broker releases before
 installing the selected authd package or snap. To use locally built packages in
 those suites, set `AUTHD_DEB` and `BROKER_SNAP` to their host paths when
