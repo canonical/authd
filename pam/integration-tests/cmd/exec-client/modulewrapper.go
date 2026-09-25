@@ -29,7 +29,7 @@ func newModuleWrapper(serverAddress string) (moduleWrapper, func(), error) {
 	return moduleWrapper{mTx}, closeFunc, err
 }
 
-// SimulateClientPanic forces the client to panic with the provided text.
+// CallUnhandledMethod calls an un-handled method in the module.
 func (m moduleWrapper) CallUnhandledMethod() error {
 	method := "com.ubuntu.authd.pam.UnhandledMethod"
 	return m.BusObject().Call(method, dbus.FlagNoAutoStart).Err
