@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       files-hash:
-        description: 'Hash of build-relevant files, used as cache key'
+        description: 'Hash of build-relevant files, used as cache key and concurrency group'
         type: string
         required: true
       ubuntu-version:
@@ -21,6 +21,11 @@ on:
       pkg-src-changes:
         value: ${{ jobs.build-deb.outputs.pkg-src-changes }}
 
+concurrency:
+  # Queue builds of the same package so later runs can restore the artifact.
+  group: build-deb-${{ inputs.files-hash }}-${{ inputs.ubuntu-version }}
+  cancel-in-progress: false
+  queue: max
 
 env:
   # Keep this aligned with update-packaging-on-dependabot-pr.yaml.
@@ -29,7 +34,7 @@ env:
 
 jobs:
   build-deb:
-    name: Build Debian package (${{ inputs.files-hash }})
+    name: Build Debian package
     runs-on: ubuntu-latest
     permissions:
       # Needed by actions/checkout
@@ -51,8 +56,6 @@ jobs:
 
       - name: Try to restore deb and sources from OCI registry
         id: restore-cache
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           set -x
@@ -98,79 +101,6 @@ jobs:
           if try_restore; then
             exit 0
           fi
-
-          # Check if another run is already building the same package.
-          # We identify a builder run as any other non-completed workflow run
-          # with a lower run_id that:
-          #   1. references debian-build.yaml (i.e. calls the same reusable workflow), and
-          #   2. has an in-progress or queued job with the same name as ours
-          #      (which encodes ubuntu-version and files-hash).
-          BUILDER_JOB_ID=$(gh api \
-            "/repos/${{ github.repository }}/actions/runs?status=in_progress" \
-            --paginate \
-            --jq '.workflow_runs[]
-               | select(
-                   .id != ${{ github.run_id }}
-                   and .id < ${{ github.run_id }}
-                   and .status != "completed"
-                   and ([.referenced_workflows[]?.path // "" | contains("debian-build.yaml")] | any)
-                 )
-               | .id' \
-            | while read -r other_run_id; do
-                # Confirm this run has a job matching our exact job name
-                # (same files-hash and ubuntu-version), to avoid waiting for
-                # a run that builds a different ubuntu-version or from a
-                # different branch. Also emit the job ID so we can poll it
-                # directly rather than waiting for the entire run to finish.
-                gh api "/repos/${{ github.repository }}/actions/runs/${other_run_id}/jobs" \
-                  --jq '.jobs[] | select(.name | (contains("(${{ inputs.ubuntu-version }})") and contains("(${{ inputs.files-hash }})"))) | .id' \
-                  2>/dev/null || true
-              done | head -1)
-
-          if [ -z "${BUILDER_JOB_ID}" ]; then
-            # No earlier run is building this package: we are the builder.
-            echo "cache-hit=false" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-
-          # Another run (with a lower run_id) is already building this package.
-          # Wait for the specific build job to finish, then restore from OCI.
-          # We poll the job (not the run) so we don't wait for autopkgtests or
-          # other jobs in that run.
-          # TODO: Use GitHub's 'concurrency' keyword instead of busy-waiting
-          # once https://github.com/orgs/community/discussions/12835 is implemented.
-          echo "Job ${BUILDER_JOB_ID} is already building this package, waiting..."
-          DEADLINE=$(( SECONDS + 30 * 60 ))
-          while [ "${SECONDS}" -lt "${DEADLINE}" ]; do
-            sleep 10
-
-            # Check builder job status to detect completion, failure or cancellation.
-            BUILDER_JOB=$(gh api "/repos/${{ github.repository }}/actions/jobs/${BUILDER_JOB_ID}" \
-              --jq '{status: .status, conclusion: .conclusion}')
-            BUILDER_STATUS=$(echo "${BUILDER_JOB}" | jq -r '.status')
-            BUILDER_CONCLUSION=$(echo "${BUILDER_JOB}" | jq -r '.conclusion')
-
-            if [ "${BUILDER_STATUS}" != "completed" ]; then
-              REMAINING=$(( DEADLINE - SECONDS ))
-              echo "Still waiting... (${REMAINING}s remaining)"
-              continue
-            fi
-
-            if [ "${BUILDER_CONCLUSION}" = "success" ]; then
-              if try_restore; then
-                echo "Restored artifact after builder job succeeded."
-                exit 0
-              fi
-              echo "Builder job succeeded but artifact not found. Proceeding to build ourselves."
-            else
-              echo "Builder job finished with conclusion '${BUILDER_CONCLUSION}'. Proceeding to build ourselves."
-            fi
-            echo "cache-hit=false" >> "${GITHUB_OUTPUT}"
-            exit 0
-
-          done
-
-          echo "Timed out waiting for builder job. Proceeding to build ourselves."
           echo "cache-hit=false" >> "${GITHUB_OUTPUT}"
 
       - name: Build Debian package and sources
