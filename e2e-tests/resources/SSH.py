@@ -47,6 +47,35 @@ class SSH:
         return stdout
 
     @keyword
+    async def execute_with_status(
+        self, command: str, timeout: int|None = 30
+    ) -> tuple[str, str, int]:
+        """
+        Run a command via SSH and return stdout, stderr, and its exit status.
+        """
+        result = ExecUtils.run(
+            [SSH_SCRIPT, "--", command],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
+        stdout = result.stdout.strip()
+        if len(stdout) == 0:
+            logger.debug(f"stdout: <empty>")
+        else:
+            logger.debug(f"stdout: {stdout}")
+
+        stderr = result.stderr.strip()
+        if len(stderr) == 0:
+            logger.debug(f"stderr: <empty>")
+        else:
+            logger.debug(f"stderr: {stderr}")
+
+        return stdout, stderr, result.returncode
+
+    @keyword
     async def copy_to_vm(self, local_path: str, remote_path: str) -> None:
         """
         Copy a local file to the VM over its VSOCK SSH connection.

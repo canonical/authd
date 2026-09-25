@@ -260,8 +260,10 @@ Cancel Operation
 
 
 Update Authd
+    [Arguments]    ${skip_if_authd_stable_ppa_is_unavailable}=${False}
     ${apt_source}=    Get Environment Variable    APT_SOURCE    ${EMPTY}
     ${authd_apt_source}=    Get Environment Variable    AUTHD_APT_SOURCE    ${EMPTY}
+    ${authd_apt_source_base}=    Get Environment Variable    AUTHD_APT_SOURCE_BASE    ${EMPTY}
     ${authd_deb}=    Get Environment Variable    AUTHD_DEB    ${EMPTY}
     IF    $apt_source == ''
         ${apt_source}=    Set Variable    ppa:ubuntu-enterprise-desktop/authd-edge
@@ -275,7 +277,22 @@ Update Authd
     ${authd_policy_source}=    Set Variable If    $authd_apt_source != ''    ${authd_apt_source}    ${apt_source}
     Configure APT Policy    ${apt_source}    ${authd_policy_source}
 
-    SSH.Execute    apt-get update    timeout=300
+    ${apt_stdout}    ${apt_stderr}    ${apt_status}=    SSH.Execute With Status    apt-get update    timeout=300
+    IF    $apt_status != 0
+        ${apt_output}=    Catenate    ${apt_stdout}    ${apt_stderr}
+
+        # Skip the test when using the default authd APT source base (the
+        # stable PPA) and that PPA doesn't have a release yet for devel.
+        IF    $skip_if_authd_stable_ppa_is_unavailable and $authd_apt_source_base == '' and $apt_status == 100
+            ${release_codename}=    SSH.Execute    . /etc/os-release && printf '%s' "$VERSION_CODENAME"
+            ${missing_stable_release_error}=    Set Variable
+            ...    E: The repository 'https://ppa.launchpadcontent.net/ubuntu-enterprise-desktop/authd/ubuntu ${release_codename} Release' does not have a Release file.
+            IF    $missing_stable_release_error in $apt_output
+                Skip    Skipping migration test: the stable authd PPA has no release for ${release_codename}.
+            END
+        END
+        Fail    apt-get update failed with exit status ${apt_status}; stdout: ${apt_stdout}; stderr: ${apt_stderr}
+    END
     # authd constrains gnome-shell with a compatibility rule. Explicitly
     # install it from the selected source because the base image's archive
     # version may not satisfy authd's rule.

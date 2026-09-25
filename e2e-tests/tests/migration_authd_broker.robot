@@ -42,7 +42,7 @@ Test login after upgrading authd and broker
     Close Focused Window
 
     Update Broker
-    Update Authd
+    Update Authd    skip_if_authd_stable_ppa_is_unavailable=${True}
 
     ${authd_apt_policy}=    SSH.Execute    apt-cache policy authd
     ${gnome_shell_apt_policy}=    SSH.Execute    apt-cache policy gnome-shell yaru-theme-gnome-shell
