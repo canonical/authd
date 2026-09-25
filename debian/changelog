@@ -1,8 +1,8 @@
-authd (0.7.0+git260924+1256+ca6f582b) noble; urgency=medium
+authd (0.7.0+git260925+3339+0463ada1) noble; urgency=medium
 
-  * Github build. Run id: 35998417059. Run number: 1256.
+  * Github build. Run id: 36126303497. Run number: 3339.
 
- -- Adrian <adrian.dombeck@canonical.com>  Thu, 24 Sep 2026 12:23:56 +0000
+ -- Adrian <adrian.dombeck@canonical.com>  Fri, 25 Sep 2026 10:53:37 +0000
 
 authd (0.7.0) stonking; urgency=medium
 
