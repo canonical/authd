@@ -3,37 +3,27 @@ Resource        resources/utils.resource
 Resource        resources/authd.resource
 
 Resource        resources/broker.resource
+Resource        resources/checkpoints.resource
 
 # Test Tags       robot:exit-on-failure
 
-Test Setup    utils.Test Setup    snapshot=%{BROKER}-stable-installed
+Test Setup    checkpoints.authd User Created From Stable Snapshot
 Test Teardown   utils.Test Teardown
 
 
 *** Variables ***
 ${username}    %{E2E_USER}
-${local_password}    qwer1234
 
 
 *** Test Cases ***
 Test login after upgrading authd and broker
     [Documentation]    This test verifies that after upgrading authd to the
-    ...                version under test and the broker to the version under
-    ...                test,
-    ...                remote users can still log in using device code flow and
-    ...                local password, and their accounts are properly set up
-    ...                on the system.
+    ...    version under test and the broker to the version under test, a user
+    ...    registered from the stable snapshot can still log in with a local
+    ...    password, and their account remains properly set up on the system.
 
-    # Log in with local user
-    Log In
-
-    # Log in with remote user with device code flow
-    Open Terminal
-    Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
     # Check remote user is properly added to the system
     Check If User Was Added Properly    ${username}
-    Log Out From Terminal Session
-    Close Focused Window
 
     # Log in with remote user with local password
     Open Terminal

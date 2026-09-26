@@ -16,7 +16,8 @@ ${username}    %{E2E_USER}
 
 *** Test Cases ***
 Test that disabling authd prevents remote logins
-    [Documentation]    This test verifies that when authd is disabled, remote users cannot log in, while local users can still access the system.
+    [Documentation]    This test verifies that when authd is disabled, remote
+    ...    users cannot log in, while local users can still access the system.
 
     # Disable authd
     Disable Authd Socket And Service
