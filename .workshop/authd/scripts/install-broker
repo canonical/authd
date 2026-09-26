@@ -1,0 +1,287 @@
+#!/bin/bash
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source /project/.workshop/authd/lib/env.sh
+# shellcheck disable=SC1091
+source /project/.workshop/authd/lib/brokers.sh
+cd /project
+
+usage() {
+    echo "Usage: workshop run -- broker <${AUTHD_BROKER_VARIANTS[*]// /|}> [--client-id ID --client-secret SECRET --client-secret-file PATH_IN_WORKSHOP --issuer URL --ssh-suffixes LIST] [--start|--no-start]" >&2
+}
+
+read_secret_file() {
+    local path="$1"
+
+    if [ ! -r "$path" ]; then
+        echo "Cannot read client secret file inside the workshop: ${path}" >&2
+        echo "Create it from 'workshop shell' first, or pass --client-secret directly." >&2
+        exit 2
+    fi
+
+    head -n 1 "$path"
+}
+
+variant="${1:-}"
+if [ -z "$variant" ]; then
+    usage
+    exit 2
+fi
+shift
+
+tag="$(authd_broker_build_tag "$variant")" || { usage; exit 2; }
+case "$variant" in
+    google) issuer_default="https://accounts.google.com" ;;
+    *) issuer_default="" ;;
+esac
+
+issuer="$issuer_default"
+client_id=""
+client_secret=""
+secret_on_cmdline=no
+ssh_suffixes="*"
+ssh_suffixes_given=no
+start_override=""
+config_flag_given=no
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --issuer|--client-id|--client-secret|--client-secret-file|--ssh-suffixes)
+            if [ $# -lt 2 ]; then
+                echo "Missing value for $1" >&2
+                usage
+                exit 2
+            fi
+            config_flag_given=yes
+            ;;
+    esac
+
+    case "$1" in
+        --issuer) issuer="$2"; shift 2 ;;
+        --client-id) client_id="$2"; shift 2 ;;
+        --client-secret) client_secret="$2"; secret_on_cmdline=yes; shift 2 ;;
+        --client-secret-file) client_secret="$(read_secret_file "$2")"; shift 2 ;;
+        --ssh-suffixes) ssh_suffixes="$2"; ssh_suffixes_given=yes; shift 2 ;;
+        --start) start_override=yes; shift ;;
+        --no-start) start_override=no; shift ;;
+        *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
+    esac
+done
+
+if [ -n "$client_id" ]; then
+    case "$variant" in
+        google)
+            [ -n "$client_secret" ] || { echo "google requires --client-secret or --client-secret-file when --client-id is provided" >&2; exit 2; }
+            ;;
+        msentraid|oidc)
+            [ -n "$issuer" ] || { echo "${variant} requires --issuer when --client-id is provided" >&2; exit 2; }
+            ;;
+    esac
+fi
+
+bin="authd-${variant}"
+conf_dir="/etc/authd-${variant}"
+unit="${bin}.service"
+# Match build-component's overridable install location so `build brokers` and
+# this script agree on where the binary lives.
+AUTHD_DAEMONS_PATH="${AUTHD_DAEMONS_PATH:-/usr/libexec}"
+
+if [ "$secret_on_cmdline" = yes ]; then
+    echo "warning: --client-secret exposes the credential in shell history and the process list; prefer --client-secret-file" >&2
+fi
+
+start_broker() {
+    local unit="$1"
+
+    sudo systemctl enable "$unit" &&
+        sudo systemctl restart "$unit" &&
+        sudo systemctl is-active --quiet "$unit"
+}
+
+# A bare --start/--no-start (no config flags) only flips the service's
+# lifecycle state on an already-configured broker; it must not touch
+# broker.conf at all.
+if [ "$config_flag_given" = no ] && [ -n "$start_override" ]; then
+    if ! sudo test -x "${AUTHD_DAEMONS_PATH}/${bin}" ||
+        ! sudo test -f "${conf_dir}/broker.conf"; then
+        echo "${variant} broker is not configured yet; run 'workshop run -- broker ${variant} --client-id ID ...' first." >&2
+        exit 1
+    fi
+
+    if [ "$start_override" = yes ]; then
+        if ! start_broker "${unit}"; then
+            echo "${variant} broker failed to start:" >&2
+            sudo systemctl status --no-pager --full "${unit}" >&2 || true
+            exit 1
+        fi
+        echo "${variant} broker started."
+        echo "Follow logs with: workshop run -- logs ${variant}"
+    else
+        sudo systemctl disable --now "${unit}"
+        echo "${variant} broker stopped."
+    fi
+    exit 0
+fi
+
+was_enabled=no
+was_active=no
+if sudo systemctl is-enabled --quiet "${unit}" 2>/dev/null; then
+    was_enabled=yes
+fi
+if sudo systemctl is-active --quiet "${unit}" 2>/dev/null; then
+    was_active=yes
+fi
+
+src="authd-oidc-brokers/conf/variants/${variant}"
+[ -d "$src" ] || { echo "Missing upstream config templates: ${src}" >&2; exit 1; }
+dbus_name="$(sed -n 's/^dbus_name = //p' "${src}/authd.conf")"
+[ -n "$dbus_name" ] || { echo "Could not read dbus_name from ${src}/authd.conf" >&2; exit 1; }
+
+# Build the broker binary if it is not already installed. The first call always
+# builds from source; subsequent calls (after `workshop refresh` with a
+# previously-configured broker) use the binary restored by restore-state.
+if [ ! -x "${AUTHD_DAEMONS_PATH}/${bin}" ]; then
+    echo "[install-broker] Building ${bin} from source..." >&2
+    # shellcheck disable=SC1091
+    source /project/.workshop/authd/scripts/build-component
+    authd_generate_broker_native_deps "$variant"
+    _broker_tmpdir="$(mktemp -d)"
+    trap 'rm -rf "$_broker_tmpdir"' EXIT
+    authd_build_broker_binary "$variant" "$tag" "$_broker_tmpdir"
+    sudo install -Dm755 "${_broker_tmpdir}/${bin}" "${AUTHD_DAEMONS_PATH}/${bin}"
+else
+    echo "[install-broker] Keeping the existing ${AUTHD_DAEMONS_PATH}/${bin}; run 'workshop run -- build brokers ${variant}' first to rebuild from source." >&2
+fi
+
+sudo tee "/usr/share/dbus-1/system.d/${dbus_name}.conf" >/dev/null <<DBUS
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <policy user="root"><allow own="${dbus_name}"/></policy>
+  <policy context="default">
+    <allow send_destination="${dbus_name}" send_interface="com.ubuntu.authd.Broker"/>
+    <allow send_destination="${dbus_name}" send_interface="com.ubuntu.authd.Broker2"/>
+    <allow send_destination="${dbus_name}" send_interface="com.ubuntu.authd.Broker3"/>
+    <allow send_destination="${dbus_name}" send_interface="org.freedesktop.DBus.Introspectable"/>
+  </policy>
+</busconfig>
+DBUS
+sudo systemctl reload dbus
+
+sudo install -Dm644 "${src}/authd.conf" "/etc/authd/brokers.d/${variant}.conf"
+sudo sed -i 's|^brand_icon = .*|brand_icon =|' "/etc/authd/brokers.d/${variant}.conf"
+
+sudo install -d -m700 "$conf_dir"
+# Seed broker.conf from the upstream template only on first configure; later
+# runs edit it in place so fields this script doesn't re-derive from the
+# command line (client_id, client_secret, ...) survive. Without this guard a
+# partial-flag run (e.g. only --ssh-suffixes) would silently reset them.
+seeded_config=no
+if ! sudo test -f "${conf_dir}/broker.conf"; then
+    sudo install -m600 "${src}/broker.conf" "${conf_dir}/broker.conf"
+    seeded_config=yes
+fi
+set_kv() {
+    local key="$1"
+    local value="$2"
+
+    printf '%s' "$value" | sudo python3 -c '
+import re
+import sys
+
+path = sys.argv[1]
+key = sys.argv[2]
+value = sys.stdin.read()
+replacement = f"{key} = {value}"
+pattern = re.compile(rf"^#?\s*{re.escape(key)}\s*=.*$")
+
+with open(path, encoding="utf-8") as broker_conf:
+    lines = broker_conf.read().splitlines()
+
+for index, line in enumerate(lines):
+    if pattern.match(line):
+        lines[index] = replacement
+        break
+else:
+    lines.append(replacement)
+
+with open(path, "w", encoding="utf-8") as broker_conf:
+    broker_conf.write("\n".join(lines) + "\n")
+' "${conf_dir}/broker.conf" "$key"
+}
+[ -n "$issuer" ] && set_kv issuer "$issuer"
+[ -n "$client_id" ] && set_kv client_id "$client_id"
+[ -n "$client_secret" ] && set_kv client_secret "$client_secret"
+if [ "$variant" = msentraid ] && [ "$seeded_config" = yes ] &&
+    [ -z "$client_secret" ]; then
+    set_kv entra_password false
+fi
+# Defaults are written when seeding (the template's placeholders are stripped
+# below, leaving these keys empty) or when the flag is passed explicitly; an
+# existing, possibly hand-edited value is otherwise preserved.
+if [ "$seeded_config" = yes ] || [ "$ssh_suffixes_given" = yes ]; then
+    set_kv ssh_allowed_suffixes_first_auth "$ssh_suffixes"
+fi
+[ "$seeded_config" = yes ] && set_kv allowed_users OWNER
+# Strip <placeholder> values from the freshly seeded template; leave an
+# existing, possibly hand-edited broker.conf untouched.
+if [ "$seeded_config" = yes ]; then
+    sudo sed -i -E 's/^([a-z_]+ = ).*<[^>]+>.*$/\1/' "${conf_dir}/broker.conf"
+fi
+
+sudo tee "/etc/systemd/system/${bin}.service" >/dev/null <<UNIT
+[Unit]
+Description=${variant} broker for authd
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=notify
+ExecStart=${AUTHD_DAEMONS_PATH}/${bin} --config ${conf_dir}/broker.conf -vv
+Restart=on-failure
+StateDirectory=${bin}
+[Install]
+WantedBy=multi-user.target
+UNIT
+sudo systemctl daemon-reload
+
+restart_broker_preserving_enablement() {
+    local unit="$1"
+
+    if [ "$was_enabled" = yes ]; then
+        sudo systemctl enable "$unit"
+    else
+        sudo systemctl disable "$unit"
+    fi
+    sudo systemctl restart "$unit" &&
+        sudo systemctl is-active --quiet "$unit"
+}
+
+if [ "$start_override" = no ]; then
+    sudo systemctl disable --now "${unit}"
+    echo "${variant} broker installed but stopped."
+elif [ "$start_override" = yes ] || [ -n "$client_id" ]; then
+    if ! start_broker "${unit}"; then
+        echo "${variant} broker installation completed, but the service failed to start:" >&2
+        sudo systemctl status --no-pager --full "${unit}" >&2 || true
+        exit 1
+    fi
+    echo "${variant} broker installed and started."
+    echo "Follow logs with: workshop run -- logs ${variant}"
+elif [ "$was_active" = yes ]; then
+    if ! restart_broker_preserving_enablement "${unit}"; then
+        echo "${variant} broker configuration was updated, but the service failed to restart:" >&2
+        sudo systemctl status --no-pager --full "${unit}" >&2 || true
+        exit 1
+    fi
+    echo "${variant} broker configuration updated and service restarted."
+elif [ "$was_enabled" = yes ]; then
+    sudo systemctl enable "${unit}"
+    echo "${variant} broker installed but not started."
+    echo "Edit ${conf_dir}/broker.conf inside the workshop, then run:"
+    echo "  workshop run -- broker ${variant} --start"
+else
+    echo "${variant} broker installed but not started."
+    echo "Edit ${conf_dir}/broker.conf inside the workshop, then run:"
+    echo "  workshop run -- broker ${variant} --start"
+fi
+
+sudo systemctl try-restart authd.service
