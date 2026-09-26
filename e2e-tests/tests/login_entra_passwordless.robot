@@ -13,48 +13,10 @@ Test Teardown   Test Teardown
 Test Setup
     # The dedicated passwordless account keeps the TAP away from the shared
     # E2E_USER account; a TAP would change the prompt its tests expect.
-    ${passwordless_user} =    Get Environment Variable    E2E_PASSWORDLESS_USER    ${EMPTY}
-    Set Suite Variable    ${username}    ${passwordless_user}
-    utils.Test Setup    snapshot=%{BROKER}-installed
-    IF    not $username
-        Skip    E2E_PASSWORDLESS_USER is not set; skipping the passwordless Entra test
-    END
-    Configure Passwordless Broker
+    Prepare Passwordless Test    E2E_PASSWORDLESS_USER    E2E_PASSWORDLESS_USER is not set; skipping the passwordless Entra test
 
 Test Teardown
     utils.Test Teardown
-
-Configure Passwordless Broker
-    # Enable the Entra auth flow with device registration so group membership
-    # can be resolved from Microsoft Graph on first login.
-    # Disable the device code flow so only entra_auth is offered and the broker
-    # auto-selects it, bypassing the auth-mode selection menu.
-    Change Broker Configuration    register_device    true
-    Change Broker Configuration    entra_auth    true
-    Change Broker Configuration    device_code    false
-
-Reset Passwordless Test State
-    utils.Restore Snapshot    %{BROKER}-installed
-    Configure Passwordless Broker
-
-Run Passwordless Login Attempt
-    VAR    ${tap_id}    ${None}
-    TRY
-        # A concurrent release variant may hold the account's one TAP. Wait
-        # for it to finish before creating this attempt's TAP.
-        ${tap_code}    ${tap_id} =    Wait Until Keyword Succeeds    12x    60s
-        ...    EntraTAP.Create TAP For User    ${username}
-
-        Log In
-        Open Terminal
-        Log In With Remote User Through CLI: Entra Passwordless TAP
-        ...    ${username}    ${local_password}    ${tap_code}
-    FINALLY
-        IF    $tap_id is not None
-            Run Keyword And Warn On Failure    Wait Until Keyword Succeeds    3x    2s
-            ...    EntraTAP.Delete Tap By Id    ${username}    ${tap_id}
-        END
-    END
 
 
 *** Variables ***
@@ -83,15 +45,8 @@ Test login with CLI using Entra passwordless auth and TAP
     # TAP creation is not an atomic lock. If a concurrent release variant
     # replaces this attempt's TAP after it is minted, reset the VM and retry
     # the complete TAP login instead of reusing the broken terminal session.
-    FOR    ${attempt}    IN RANGE    3
-        ${status}    ${message} =    Run Keyword And Ignore Error
-        ...    Run Passwordless Login Attempt
-        IF    '${status}' == 'PASS'    BREAK
-        IF    ${attempt} < 2
-            Reset Passwordless Test State
-        END
-    END
-    Should Be Equal    ${status}    PASS    msg=${message}
+    Retry Passwordless Login    Run Passwordless Login Attempt    Reset Passwordless Test State
+    ...    Log In With Remote User Through CLI: Entra Passwordless TAP
 
     # Verify the user was provisioned correctly: NSS visibility, group
     # membership, and that the cached local password works for sudo.
