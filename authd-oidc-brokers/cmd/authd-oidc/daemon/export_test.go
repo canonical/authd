@@ -68,6 +68,9 @@ func GenerateBrokerConfig(t *testing.T, p, providerURL string) {
 
 	err := os.MkdirAll(filepath.Dir(p), 0700)
 	require.NoError(t, err, "Setup: could not create parent broker configuration directory for tests")
+	//nolint:gosec // Test config directories must be private.
+	err = os.Chmod(filepath.Dir(p), 0700)
+	require.NoError(t, err, "Setup: could not secure parent broker configuration directory for tests")
 
 	brokerCfg := fmt.Sprintf(`
 [oidc]
