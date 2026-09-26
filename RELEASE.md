@@ -220,7 +220,7 @@ TBD
     ```shell
     # Ensure your DEBEMAIL is set, for example:
     export DEBEMAIL="user@example.com"
-    gbp dch --multimaint-merge --local "~pre" HEAD
+    gbp dch --multimaint-merge --local "~pre"
     ```
 
    - This will generate a very verbose changelog with all the commits since last version, so clean it up so that only relevant changes are included.
@@ -237,6 +237,7 @@ TBD
 
      Search for "Merge: " to go through the merge commits.
 
+   - Only consider changes that affect the Debian package (authd, authctl, PAM, NSS, or files in `debian/`).
    - Also add the updated Go and Rust dependencies. You can use the [updated-go-dependencies](https://github.com/adombeck/authd-scripts/blob/main/updated-go-dependencies) and [updated-rust-dependencies](https://github.com/adombeck/authd-scripts/blob/main/updated-rust-dependencies) scripts for that.
 
    - Based on the changes, decide which version to use for the next release (increase of major, minor or patch version) and set it in the changelog entry. Keep the `~preX` suffix.
@@ -245,7 +246,7 @@ TBD
 3. Create a release branch
 
     ```shell
-    RELEASE_BRANCH="release-$(dpkg-parsechangelog -SVersion | tr '~' '-')"
+    RELEASE_BRANCH="release-$(dpkg-parsechangelog -SVersion | sed 's/~.*//')"
     git checkout -b "${RELEASE_BRANCH}"
     ```
 
@@ -255,7 +256,8 @@ TBD
     git commit -m "Add changelog entry for $(dpkg-parsechangelog -SVersion)" debian/changelog
     ```
 
-5. Push and open a PR. Use the changelog entry as the PR description.
+5. Push and open a PR against `stable`, not `main`, so CI builds the release with
+   the stable branch contents. Use the changelog entry as the PR description.
 
 
 ### Download the source packages from the GitHub CI
@@ -359,18 +361,38 @@ gbp buildpackage -S --git-ignore-new --git-export-dir=/tmp/authd-build
 
 ### Build the binary package (obsolete if you download the binary package from the GitHub CI)
 
-Note that this should be performed for all the supported versions (noble and plucky at the moment):
+Note that this should be performed for all the supported Ubuntu releases:
 
-1. If you didn't create an sbuild schroot before (TODO: Consider using sbuild with unshare instead):
+1. Create an unshare chroot for each release you need to test:
 
     ```shell
-    mk-sbuild <release> --distro ubuntu
+    sudo apt install sbuild mmdebstrap uidmap
+    ```
+
+   Unprivileged builds need subordinate UID and GID ranges. If your account
+   does not have them, add them and log out and back in before continuing:
+
+    ```shell
+    sudo usermod --add-subuids 100000-165535 \
+      --add-subgids 100000-165535 "${USER}"
+    ```
+
+   Then create the chroot tarball:
+
+    ```shell
+    mkdir -p "${HOME}/.cache/sbuild"
+    mmdebstrap --mode=unshare --include=ca-certificates --skip=output/dev \
+      --variant=buildd <release> \
+      "${HOME}/.cache/sbuild/<release>-amd64.tar" \
+      https://archive.ubuntu.com/ubuntu
     ```
 
 2. Build the binary package to ensure it builds and that there are no lintian issues to address on the binary package:
 
     ```shell
-    sbuild -A -v --build-dep-resolver=aptitude -d <release>-amd64 \
+    sbuild --chroot-mode=unshare \
+      --chroot="${HOME}/.cache/sbuild/<release>-amd64.tar" \
+      -A -v --build-dep-resolver=aptitude -d <release>-amd64 \
       "$(ls -t1 /tmp/authd-build/authd_*.dsc | head -n1)"
     ```
 
@@ -529,57 +551,109 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
 
 ### Finalize the release branch
 
-1. Amend the changelog to remove the `~preX` suffix
+1. If any changes were necessary after doing the manual tests, cherry-pick those
+   from main - or, what is often easier, rebase onto main first and then do an
+   interactive rebase with merge commits onto the commit that was tested, and
+   drop those commits which are not relevant for the release:
 
-2. Wait for the PR to be approved.
+   ```shell
+   git rebase main
+   git rebase -i --rebase-merges <commit-id-of-tested-commit>~1
+   ```
 
-3. Create a separate commit which updates the changelog to target the next Ubuntu release instead of UNRELEASED:
+2. Amend the changelog to remove the `~preX` suffix
+
+3. Wait for the PR to be approved.
+
+4. Create a separate commit which updates the changelog to target the next Ubuntu release instead of UNRELEASED:
 
     ```shell
-    debchange -r "" --distribution resolute # Replace it with the actual release name
+    RELEASE=stonking  # Replace it with the actual release name
+    debchange -r "" --distribution "$RELEASE"
     git commit -m "Upload $(dpkg-parsechangelog -SVersion) to $(dpkg-parsechangelog -SDistribution)" debian/changelog
     ```
 
-4. Create a git tag:
+5. Create a git tag:
 
     ```shell
     gbp buildpackage --git-debian-branch="release-$(dpkg-parsechangelog -SVersion)" --git-tag-only --git-ignore-new --git-sign-tags || git reset --hard HEAD^
     ```
 
-5. Do a dry-run push:
+6. Do a dry-run push:
 
     ```shell
     gbp push --dry-run --debian-branch="release-$(dpkg-parsechangelog -SVersion)"
     ```
 
-6. Review the dry run, make sure that it's on the correct commit.
+7. Review the dry run, make sure that it's on the correct commit.
 
-7. Generate the final debian source files in a clean git repo:
+8. Generate the final Debian source files in a clean git repo:
 
     ```shell
     GIT_DIR=$PWD
     TMP_GIT_DIR=~/tmp/authd
+    RELEASE_BRANCH="release-$(dpkg-parsechangelog -SVersion)"
     rm -rf "$TMP_GIT_DIR"
     git clone "$GIT_DIR" "$TMP_GIT_DIR"
     cd "$TMP_GIT_DIR"
-    git checkout "release-$VERSION"
-    gbp buildpackage -S --git-debian-branch="release-$VERSION" --git-ignore-new -d
+    git checkout "${RELEASE_BRANCH}"
+    gbp buildpackage -S --git-debian-branch="${RELEASE_BRANCH}" --git-ignore-new -d
     ```
 
-8. Push the `.changes` file to the edge PPA:
+9. Push the `.changes` file to the candidate PPA:
 
     ```shell
-    dput ppa:ubuntu-enterprise-desktop/authd-edge "../authd_${VERSION}_source.changes"
+    dput ppa:ubuntu-enterprise-desktop/authd-candidate "../authd_$(dpkg-parsechangelog -SVersion)_source.changes"
     ```
 
-9. Push the commits and tag to the release branch:
+10. Push the commits and tag to the release branch:
 
     ```shell
     cd "${GIT_DIR}"
-    gbp push --debian-branch="release-$VERSION"
+    gbp push --debian-branch="${RELEASE_BRANCH}"
     ```
 
-10. Merge the release branch to main
+11. Check out a new branch for the previous still supported Ubuntu release:
+
+    ```shell
+    DIST=resolute
+    UBUNTU_VERSION=26.04
+    BRANCH="release-$(dpkg-parsechangelog -SVersion)-ubuntu${UBUNTU_VERSION}"
+    git checkout -b "${BRANCH}"
+    ```
+12. Reset to the previous commit and update the changelog entry:
+    ```shell
+    git reset --hard HEAD~1
+    debchange --force-bad-version --newversion "$(dpkg-parsechangelog -SVersion)~ubuntu$UBUNTU_VERSION" --distribution $DIST ''
+    git commit -m "Upload $(dpkg-parsechangelog -SVersion) to $(dpkg-parsechangelog -SDistribution)" debian/changelog
+    ```
+13. Generate the Debian source file in a clean git repo:
+
+    ```shell
+    GIT_DIR=$PWD
+    TMP_GIT_DIR=~/tmp/authd
+    RELEASE_BRANCH="release-$(dpkg-parsechangelog -SVersion | sed 's/~/-/')"
+    rm -rf "$TMP_GIT_DIR"
+    git clone "$GIT_DIR" "$TMP_GIT_DIR"
+    cd "$TMP_GIT_DIR"
+    git checkout "${RELEASE_BRANCH}"
+    gbp buildpackage -S --git-debian-branch="${RELEASE_BRANCH}" --git-ignore-new -d
+    ```
+
+14. Push the `.changes` file to the candidate PPA:
+
+    ```shell
+    dput ppa:ubuntu-enterprise-desktop/authd-candidate "../authd_$(dpkg-parsechangelog -SVersion)_source.changes"
+    ```
+
+15. Return to the generic release branch with `cd "${GIT_DIR}" && git checkout "release-$(dpkg-parsechangelog -SVersion | sed 's/~.*//')"`, then repeat steps 11 to 14 for all other still supported Ubuntu releases.
+
+16. Merge the release branch into stable
+17. Merge stable into main, so that the tag is included in main.
+    In case of conflicts, keep the changes from main:
+    ```shell
+    git merge -X ours stable
+    ```
 
 ### Tag the broker branches with the version
 
@@ -637,7 +711,6 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
         git push --tags
         git push --force
         ```
-   3. Request a build of the [authd-msentraid snap](https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-msentraid)
 
 10. Repeat for the google broker:
      1. Find the commit ID of the [candidate release](https://snapcraft.io/authd-google/releases)
@@ -652,7 +725,8 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
         git push --force
         ```
 
-    3. Request a build of the [authd-google snap](https://launchpad.net/~ubuntu-enterprise-desktop/authd/+snap/authd-google)
+11. Take a look at the [tags in the authd repo](https://github.com/canonical/authd/tags)
+    and check that the expected tags are there.
 
 ### Release the broker snaps with the new version
 
@@ -676,21 +750,21 @@ git commit -m "Change $OLD_PRERELEASE_VERSION to $(dpkg-parsechangelog -SVersion
 
 ### Test the published packages
 
-Install the authd package from the edge PPA and the snaps from the edge channel and try logging in via authd.
+Install the authd package from the candidate PPA and the snaps from the candidate channel and try logging in via authd.
 
-### Copy package from edge PPA to stable PPA
+### Copy package from candidate PPA to stable PPA
 
-1. Go to https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge/+packages
+1. Go to https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-candidate/+packages
 2. Click "Copy packages" in the top right
 3. Select the authd packages for all currently supported Ubuntu versions
 4. Destination PPA: authd stable
 5. Destination series: The the same series
-6. Copy options: Rebuild the copied sources (because we build for more architectures in the stable PPA than in the edge PPA)
+6. Copy options: Rebuild the copied sources (because we build for more architectures in the stable PPA than in the candidate PPA)
 
-### Promote snap from edge channel to stable
+### Promote snap from candidate channel to stable
 
 1. Go to https://snapcraft.io/authd-oidc/releases
-2. In the "0.x/edge" row, drag-and-drop both the AMD64 and the ARM64 releases to the "0.x/stable" row (do NOT use "Promote" to promote to latest/stable, we don't use that track).
+2. In the "0.x/candidate" row, drag-and-drop both the AMD64 and the ARM64 releases to the "0.x/stable" row (do NOT use "Promote" to promote to latest/stable, we don't use that track).
 3. Click "Save"
 4. Repeat the same for:
    1. https://snapcraft.io/authd-msentraid/releases
@@ -723,8 +797,6 @@ After publishing a new release, the `stable-docs` branch should contain the same
 ### Upload the source package to the Ubuntu archive
 
 Since authd is also in the Ubuntu archive now, we also need to upload new releases there, targeting at least the next Ubuntu release, and maybe also existing ones, although that will require SRUs.
-
-We don’t have anyone with uploads rights in our squad currently, so for now we have to ask Didier to sponsor the upload.
 
 ## Release the GNOME Shell authd integration
 
