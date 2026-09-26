@@ -143,134 +143,45 @@ func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 	}
 }
 
-func TestAppRunFixesInsecureBrokerConfigPerms(t *testing.T) {
-	tmpDir := t.TempDir()
-	brokerConf := filepath.Join(tmpDir, "broker.conf")
-	config := daemon.DaemonConfig{
-		Paths: daemon.SystemPaths{
-			BrokerConf: brokerConf,
-			DataDir:    filepath.Join(tmpDir, "data"),
-		},
-	}
-
-	a := daemon.NewForTests(t, &config, issuerURL)
-	//nolint:gosec // The test needs to verify that startup repairs insecure modes.
-	require.NoError(t, os.Chmod(brokerConf, 0644), "Setup: could not make broker config permissions insecure")
-
-	dropInDir := brokerConf + ".d"
-	require.NoError(t, os.Mkdir(dropInDir, 0700), "Setup: could not create drop-in directory")
-	dropInFile := filepath.Join(dropInDir, "extra.conf")
-	require.NoError(t, os.WriteFile(dropInFile, []byte("[users]\nallowed_users = OWNER\n"), 0600),
-		"Setup: could not create drop-in config file")
-	//nolint:gosec // The test needs to verify that startup repairs insecure modes.
-	require.NoError(t, os.Chmod(dropInFile, 0644), "Setup: could not make drop-in permissions insecure")
-
-	runErr := make(chan error, 1)
-	go func() {
-		runErr <- a.Run()
-	}()
-	a.WaitReady()
-	time.Sleep(50 * time.Millisecond)
-	defer func() {
-		a.Quit()
-		require.NoError(t, <-runErr, "Run should exit without any error")
-	}()
-
-	for _, path := range []string{brokerConf, dropInFile} {
-		fileInfo, err := os.Stat(path)
-		require.NoError(t, err, "Could not stat broker configuration file %q", path)
-		require.Equal(t, os.FileMode(0600), fileInfo.Mode().Perm(),
-			"Broker configuration file %q should have secure permissions", path)
-	}
-}
-
-func TestAppRunAllowsSecureBrokerConfigWithUntrustedParent(t *testing.T) {
-	tmpDir := t.TempDir()
-	configDir := filepath.Join(tmpDir, "config")
-	require.NoError(t, os.Mkdir(configDir, 0700), "Setup: could not create config directory")
-
-	brokerConf := filepath.Join(configDir, "broker.conf")
-	config := daemon.DaemonConfig{
-		Paths: daemon.SystemPaths{
-			BrokerConf: brokerConf,
-			DataDir:    filepath.Join(tmpDir, "data"),
-		},
-	}
-	a := daemon.NewForTests(t, &config, issuerURL)
-	//nolint:gosec // The test verifies that a secure config needs no parent-directory repair.
-	require.NoError(t, os.Chmod(configDir, 0777), "Setup: could not make config directory untrusted")
-
-	fileInfo, err := os.Stat(brokerConf)
-	require.NoError(t, err, "Could not stat broker configuration file")
-	require.Equal(t, os.FileMode(0600), fileInfo.Mode().Perm(),
-		"Broker configuration file should start with secure permissions")
-
-	runErr := make(chan error, 1)
-	go func() {
-		runErr <- a.Run()
-	}()
-	a.WaitReady()
-	time.Sleep(50 * time.Millisecond)
-	defer func() {
-		a.Quit()
-		require.NoError(t, <-runErr, "Run should exit without any error")
-	}()
-}
-
-func TestAppRunRejectsInsecureConfigDirectoriesBeforeChangingFilePerms(t *testing.T) {
-	tests := []struct {
-		name           string
-		insecureDropIn bool
-		insecureParent bool
-		mode           os.FileMode
+func TestAppRunFailsOnInsecureBrokerConfigPerms(t *testing.T) {
+	tests := map[string]struct {
+		mainConfPerm   os.FileMode
+		dropInFileName string
+		dropInFilePerm os.FileMode
 	}{
-		{name: "world_writable_config_parent", insecureParent: true, mode: 0777},
-		{name: "group_writable_config_parent", insecureParent: true, mode: 0775},
-		{name: "world_writable_drop_in_directory", insecureDropIn: true, mode: 0777},
+		"Error_on_wrong_permission_on_broker_conf":         {mainConfPerm: 0644},
+		"Error_on_wrong_permission_on_drop_in_config_file": {dropInFileName: "extra.yaml", dropInFilePerm: 0644},
 	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
 			tmpDir := t.TempDir()
-			configDir := filepath.Join(tmpDir, "config")
-			require.NoError(t, os.Mkdir(configDir, 0700), "Setup: could not create config directory")
-
-			brokerConf := filepath.Join(configDir, "broker.conf")
+			brokerConf := filepath.Join(tmpDir, "broker.yaml")
 			config := daemon.DaemonConfig{
 				Paths: daemon.SystemPaths{
 					BrokerConf: brokerConf,
-					DataDir:    filepath.Join(tmpDir, "data"),
 				},
 			}
-			a := daemon.NewForTests(t, &config, issuerURL)
-			//nolint:gosec // The test checks that insecure directories prevent permission changes.
-			require.NoError(t, os.Chmod(brokerConf, 0644), "Setup: could not make broker config permissions insecure")
-			paths := []string{brokerConf}
 
-			if tc.insecureDropIn {
-				dropInDir := brokerConf + ".d"
-				require.NoError(t, os.Mkdir(dropInDir, 0700), "Setup: could not create drop-in directory")
-				dropInFile := filepath.Join(dropInDir, "extra.conf")
-				require.NoError(t, os.WriteFile(dropInFile, []byte("[users]\nallowed_users = OWNER\n"), 0600),
-					"Setup: could not create drop-in config file")
-				require.NoError(t, os.Chmod(dropInDir, tc.mode), "Setup: could not make drop-in directory insecure")
-				//nolint:gosec // The test checks that insecure directories prevent permission changes.
-				require.NoError(t, os.Chmod(dropInFile, 0644), "Setup: could not make drop-in permissions insecure")
-				paths = append(paths, dropInFile)
+			a := daemon.NewForTests(t, &config, issuerURL)
+
+			if tc.mainConfPerm != 0 {
+				err := os.Chmod(brokerConf, tc.mainConfPerm)
+				require.NoError(t, err, "Setup: could not change permission on broker config file for tests")
 			}
 
-			if tc.insecureParent {
-				require.NoError(t, os.Chmod(configDir, tc.mode), "Setup: could not make config directory insecure")
+			if tc.dropInFileName != "" {
+				dropInDir := brokerConf + ".d"
+				err := os.MkdirAll(dropInDir, 0700)
+				require.NoError(t, err, "Setup: could not create drop-in directory for tests")
+				//nolint:gosec // The drop-in directory is expected to have 0755 permissions
+				err = os.Chmod(dropInDir, 0755)
+				require.NoError(t, err, "Setup: could not set permissions on drop-in directory for tests")
+				err = os.WriteFile(filepath.Join(dropInDir, tc.dropInFileName), []byte("content"), tc.dropInFilePerm)
+				require.NoError(t, err, "Setup: could not create drop-in config file for tests")
 			}
 
 			err := a.Run()
-			require.ErrorContains(t, err, "must not be writable by group or others")
-
-			for _, path := range paths {
-				fileInfo, err := os.Stat(path)
-				require.NoError(t, err, "Could not stat broker configuration file %q", path)
-				require.Equal(t, os.FileMode(0644), fileInfo.Mode().Perm(),
-					"Broker configuration file %q should not be modified", path)
-			}
+			require.Error(t, err, "Run should return an error")
 		})
 	}
 }

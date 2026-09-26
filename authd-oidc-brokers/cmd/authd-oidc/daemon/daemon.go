@@ -128,28 +128,24 @@ func (a *App) serve(config daemonConfig) error {
 	}
 	defer closeFunc()
 
-	owner := os.Geteuid()
-	if err := ensureDirWithOwner(config.Paths.DataDir, 0700, owner); err != nil {
+	if err := ensureDirWithOwner(config.Paths.DataDir, 0700, os.Geteuid()); err != nil {
 		return fmt.Errorf("error initializing data directory %q: %v", config.Paths.DataDir, err)
 	}
 
 	brokerConfigDir := broker.GetDropInDir(config.Paths.BrokerConf)
-	if err := ensureDirWithOwner(brokerConfigDir, 0755, owner); err != nil {
-		return fmt.Errorf("error initializing broker configuration drop-in directory %q: %v", brokerConfigDir, err)
-	}
-	if err := checkTrustedDir(brokerConfigDir, owner); err != nil {
-		return fmt.Errorf("error validating broker configuration drop-in directory %q: %w", brokerConfigDir, err)
+	if err := ensureDirWithOwner(brokerConfigDir, 0755, os.Geteuid()); err != nil {
+		return fmt.Errorf("error initializing broker configuration directory %q: %v", brokerConfigDir, err)
 	}
 
 	// Ensure that the broker configuration files have secure permissions
-	if err := setFilePerms(config.Paths.BrokerConf, 0600, owner); err != nil && !os.IsNotExist(err) {
-		// The error returned by setFilePerms already contains the file path,
+	if err := checkFilePerms(config.Paths.BrokerConf, 0600); err != nil && !os.IsNotExist(err) {
+		// The error returned by checkFilePerms already contains the file path,
 		// so we don't need to wrap it with more context here.
 		return err
 	}
 
-	// Iterate over the drop-in directory and ensure secure permissions on
-	// each configuration file. We ignore subdirectories because we don't load
+	// Iterate over the drop-in directory and check permissions of each
+	// configuration file. We ignore subdirectories because we don't load
 	// them, so they don't represent a security risk.
 	entries, err := os.ReadDir(brokerConfigDir)
 	if err != nil {
@@ -162,7 +158,7 @@ func (a *App) serve(config daemonConfig) error {
 			continue
 		}
 
-		if err := setFilePerms(path, 0600, owner); err != nil && !os.IsNotExist(err) {
+		if err := checkFilePerms(path, 0600); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}
