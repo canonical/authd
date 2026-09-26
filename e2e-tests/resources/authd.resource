@@ -39,15 +39,16 @@ Change Password
 
 
 Try Log In With Remote User
-    [Arguments]    ${username}
-    Try machinectl login Prompt
+    [Arguments]    ${username}    ${prompt_timeout}=30
+    Try machinectl login Prompt    ${prompt_timeout}
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
 
 
 # Conditional checks
 Check That Remote User Has No Available Authentication Modes
-    Match Text    Error connecting to provider. Check your network connection.    120
+    [Arguments]    ${timeout}=30
+    Match Text    Error connecting to provider. Check your network connection.    ${timeout}
 
 
 Check That Log In Fails Because Authd Is Disabled
