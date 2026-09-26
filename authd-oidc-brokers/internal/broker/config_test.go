@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/google"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
 	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -150,9 +152,10 @@ func TestParseConfig(t *testing.T) {
 	ignoredFields := map[string]struct{}{"provider": {}, "ownerMutex": {}}
 
 	tests := map[string]struct {
-		configType string
-		dropInType string
-		provider   provider
+		configType        string
+		dropInType        string
+		provider          provider
+		allowLegacyConfig bool
 
 		wantErr                         bool
 		wantErrContainsDropInConfigPath bool
@@ -162,8 +165,8 @@ func TestParseConfig(t *testing.T) {
 		"Successfully_parse_config_file_with_optional_values":      {configType: "valid+optional"},
 		"Successfully_parse_config_file_with_register_device":      {configType: "valid+register_device"},
 		"Successfully_parse_config_file_with_flow_values":          {configType: "valid+one_flow_disabled", provider: &configTestProvider{MockProvider: &testutils.MockProvider{}}},
-		"Warns_and_uses_default_for_invalid_device_code_value":     {configType: "invalid_device_code_value"},
-		"Warns_and_uses_default_for_invalid_entra_auth_flow_value": {configType: "invalid_entra_auth_value"},
+		"Warns_and_uses_default_for_invalid_device_code_value":     {configType: "invalid_device_code_value", allowLegacyConfig: true},
+		"Warns_and_uses_default_for_invalid_entra_auth_flow_value": {configType: "invalid_entra_auth_value", allowLegacyConfig: true},
 		"Successfully_parse_config_with_drop_in_files":             {dropInType: "valid"},
 		"Successfully_parse_config_with_flow_drop_in_files": {
 			configType: "valid+flows_disabled",
@@ -185,6 +188,8 @@ func TestParseConfig(t *testing.T) {
 		"Error_if_drop_in_directory_is_unreadable":                                          {dropInType: "unreadable-dir", wantErr: true},
 		"Error_if_drop_in_file_is_unreadable":                                               {dropInType: "unreadable-file", wantErr: true},
 		"Error_if_config_contains_invalid_values":                                           {configType: "invalid_boolean_value", wantErr: true},
+		"Error_if_config_contains_invalid_device_code_value":                                {configType: "invalid_device_code_value", wantErr: true},
+		"Error_if_config_contains_invalid_entra_auth_value":                                 {configType: "invalid_entra_auth_value", wantErr: true},
 		"Error_if_config_contains_invalid_register_device_value":                            {configType: "invalid_register_device_value", wantErr: true},
 		"Error_if_drop_in_file_is_invalid":                                                  {dropInType: "invalid-ini", wantErr: true, wantErrContainsDropInConfigPath: true},
 		"Error_if_drop_in_file_is_not_updated":                                              {dropInType: "template", wantErr: true},
@@ -258,7 +263,7 @@ func TestParseConfig(t *testing.T) {
 			if configProvider == nil {
 				configProvider = p
 			}
-			cfg, err := parseConfigFromPath(confPath, configProvider)
+			cfg, err := parseConfigFromPath(confPath, configProvider, tc.allowLegacyConfig)
 			if tc.wantErr {
 				require.Error(t, err)
 				if tc.wantErrContains != "" {
@@ -345,7 +350,7 @@ register_device = %t
 
 %s
 `, tc.registerDevice, flowsSection)
-			cfg, err := parseConfig(configFile{content: []byte(config)}, nil, &testutils.MockProvider{})
+			cfg, err := parseConfig(configFile{content: []byte(config)}, nil, &testutils.MockProvider{}, false)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, cfg.flows)
 		})
@@ -380,8 +385,187 @@ entra_auth = true
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := parseConfig(configFile{content: []byte(config)}, nil, google.New())
+			_, err := parseConfig(configFile{content: []byte(config)}, nil, google.New(), false)
 			require.ErrorContains(t, err, `the "device_code" flow must be enabled`)
+		})
+	}
+}
+
+func TestLegacyFlowValidationPreservesPreviousBehavior(t *testing.T) {
+	t.Parallel()
+
+	config := `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+device_code = false
+entra_auth = true
+`
+	cfg, err := parseConfig(configFile{content: []byte(config)}, nil, google.New(), true)
+	require.NoError(t, err)
+	require.Equal(t, flowsConfig{DeviceAuth: false, EntraAuth: true}, cfg.flows)
+
+	disabledConfig := configTypes["valid+flows_disabled"]
+	_, err = parseConfig(configFile{content: []byte(disabledConfig)}, nil, google.New(), true)
+	require.ErrorContains(t, err, "all authentication flows are disabled")
+}
+
+func TestLegacyConfigValidationWarningsAndFallbacks(t *testing.T) {
+	p := &testutils.MockProvider{}
+	config := configFile{
+		path: "broker.conf",
+		content: []byte(`
+unsectioned_key = ignored
+
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+force_access_check_with_provider = invalid
+unknown_oidc_key = ignored
+
+[msentraid]
+register_device = invalid
+
+[users]
+allowed_users = ALL
+unknown_users_key = ignored
+
+[unknown_section]
+some_key = ignored
+`),
+	}
+	dropIns := []configFile{{
+		path: "broker.conf.d/10-extra.conf",
+		content: []byte(`
+[oidc]
+unknown_drop_in_key = ignored
+force_provider_authentication = invalid
+
+[unknown_drop_in_section]
+some_key = ignored
+
+[flows]
+device_code = invalid
+entra_auth = invalid
+`),
+	}}
+
+	var warnings []string
+	log.SetHandler(func(_ context.Context, level log.Level, format string, args ...interface{}) {
+		if level >= log.WarnLevel {
+			warnings = append(warnings, fmt.Sprintf(format, args...))
+		}
+	})
+	t.Cleanup(func() {
+		log.SetHandler(nil)
+	})
+
+	cfg, err := parseConfig(config, dropIns, p, true)
+	require.NoError(t, err)
+	require.False(t, cfg.forceAccessCheckWithProvider)
+	require.False(t, cfg.registerDevice)
+	require.Equal(t, flowsConfig{DeviceAuth: true, EntraAuth: false}, cfg.flows)
+	require.True(t, cfg.allUsersAllowed)
+
+	unsupportedFlowConfig := `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+device_code = false
+entra_auth = true
+`
+	cfg, err = parseConfig(configFile{path: "broker.conf", content: []byte(unsupportedFlowConfig)}, nil, google.New(), true)
+	require.NoError(t, err)
+	require.Equal(t, flowsConfig{DeviceAuth: false, EntraAuth: true}, cfg.flows)
+
+	warningText := strings.Join(warnings, "\n")
+	for _, warning := range []string{
+		"keys outside of any section in config file",
+		`unknown key "unknown_oidc_key" in section "oidc"`,
+		`unknown key "unknown_users_key" in section "users"`,
+		`unknown section "unknown_section"`,
+		`unknown key "unknown_drop_in_key" in section "oidc"`,
+		`unknown section "unknown_drop_in_section"`,
+		`invalid value for "force_access_check_with_provider"`,
+		`invalid value for "force_provider_authentication"`,
+		`invalid value for "register_device"`,
+		`invalid value for "device_code" in [flows] section`,
+		`invalid value for "entra_auth" in [flows] section`,
+		"no enabled flow in [flows] is supported by this provider",
+	} {
+		require.Contains(t, warningText, warning)
+	}
+}
+
+func TestLegacyConfigModeKeepsPreviouslyFatalErrorsFatal(t *testing.T) {
+	t.Parallel()
+
+	p := &testutils.MockProvider{}
+
+	_, err := parseConfig(configFile{path: "broker.conf", content: []byte("=invalid")}, nil, p, true)
+	require.ErrorContains(t, err, "error in config file")
+
+	_, err = parseConfig(configFile{path: "broker.conf", content: []byte(configTypes["template"])}, nil, p, true)
+	require.ErrorContains(t, err, "unedited template placeholder")
+
+	missingPath := filepath.Join(t.TempDir(), "missing.conf")
+	_, err = parseConfigFromPath(missingPath, p, true)
+	require.ErrorContains(t, err, "could not open config file")
+
+	requiredValuePath := filepath.Join(t.TempDir(), "broker.conf")
+	require.NoError(t, os.WriteFile(requiredValuePath, []byte(`
+[oidc]
+issuer = https://issuer.url.com
+`), 0600))
+	_, err = New(Config{
+		ConfigFile:        requiredValuePath,
+		DataDir:           t.TempDir(),
+		AllowLegacyConfig: true,
+	}, 1)
+	require.ErrorContains(t, err, "client ID is required and was not provided")
+}
+
+func TestStrictValidationAppliesToDropInFiles(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		content string
+		wantErr string
+	}{
+		"unknown section": {
+			content: "[future]\nkey = value\n",
+			wantErr: `unknown section "future"`,
+		},
+		"unknown key": {
+			content: "[oidc]\nfuture_key = value\n",
+			wantErr: `unknown key "future_key"`,
+		},
+		"invalid boolean": {
+			content: "[oidc]\nforce_access_check_with_provider = invalid\n",
+			wantErr: "error parsing 'force_access_check_with_provider'",
+		},
+		"invalid flow boolean": {
+			content: "[flows]\ndevice_code = invalid\n",
+			wantErr: "error parsing 'device_code'",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := parseConfig(
+				configFile{path: "broker.conf", content: []byte(configTypes["valid"])},
+				[]configFile{{path: "broker.conf.d/10-extra.conf", content: []byte(tc.content)}},
+				&testutils.MockProvider{},
+				false,
+			)
+			require.ErrorContains(t, err, tc.wantErr)
+			require.ErrorContains(t, err, "broker.conf.d/10-extra.conf")
 		})
 	}
 }
@@ -525,7 +709,7 @@ func TestParseUserConfig(t *testing.T) {
 			err = os.Mkdir(dropInDir, 0700)
 			require.NoError(t, err, "Setup: Failed to create drop-in directory")
 
-			cfg, err := parseConfigFromPath(confPath, p)
+			cfg, err := parseConfigFromPath(confPath, p, false)
 
 			// convert the allowed users array to a map
 			allowedUsersMap := map[string]struct{}{}
@@ -704,7 +888,7 @@ client_id = client_id
 			err := os.WriteFile(confPath, []byte(tc.config), 0600)
 			require.NoError(t, err, "Setup: Failed to write config file")
 
-			_, err = parseConfigFromPath(confPath, p)
+			_, err = parseConfigFromPath(confPath, p, false)
 			if tc.wantErr == "" {
 				require.NoError(t, err)
 			} else {
@@ -755,7 +939,7 @@ func TestBrokerConfFilesHaveNoUnknownSettings(t *testing.T) {
 			err = os.WriteFile(confPath, []byte(replaced), 0600)
 			require.NoError(t, err, "Setup: Failed to write config file")
 
-			cfg, err := parseConfigFromPath(confPath, p)
+			cfg, err := parseConfigFromPath(confPath, p, false)
 			require.NoError(t, err, "The %s broker.conf should not have unknown settings", name)
 			require.Equal(t, tc.wantFlows, cfg.flows, "The %s broker.conf should use the expected flow defaults", name)
 		})
@@ -765,6 +949,6 @@ func TestBrokerConfFilesHaveNoUnknownSettings(t *testing.T) {
 func FuzzParseConfig(f *testing.F) {
 	p := &testutils.MockProvider{}
 	f.Fuzz(func(t *testing.T, a []byte) {
-		_, _ = parseConfig(configFile{content: a}, nil, p)
+		_, _ = parseConfig(configFile{content: a}, nil, p, false)
 	})
 }
