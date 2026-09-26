@@ -264,10 +264,17 @@ fi
 mkdir -p "${TEST_RUNS_DIR}"
 ln -sf --no-target-directory "${OUTPUT_DIR}" "${TEST_RUNS_DIR}/${BROKER}-latest"
 
-# Set up YARF environment if not already set up
+# Set up YARF environment if it is missing or was built for another revision.
 YARF_DIR="${ROOT_DIR}/.yarf"
+YARF_ENVIRONMENT_REVISION_FILE="${YARF_DIR}/.venv/.authd-yarf-revision"
 if ! [ -f "${YARF_DIR}/.venv/bin/activate" ]; then
     "${ROOT_DIR}/setup-yarf.sh"
+else
+    YARF_REVISION=$(git -C "${ROOT_DIR}/.." rev-parse HEAD:e2e-tests/.yarf)
+    if [ ! -f "${YARF_ENVIRONMENT_REVISION_FILE}" ] ||
+        ! grep -Fqx "${YARF_REVISION}" "${YARF_ENVIRONMENT_REVISION_FILE}"; then
+        "${ROOT_DIR}/setup-yarf.sh"
+    fi
 fi
 
 # Activate YARF environment
