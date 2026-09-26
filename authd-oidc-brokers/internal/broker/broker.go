@@ -55,8 +55,9 @@ var reauthModes = []string{authmodes.EntraAuth, authmodes.Device, authmodes.Devi
 
 // Config is the configuration for the broker.
 type Config struct {
-	ConfigFile string
-	DataDir    string
+	ConfigFile        string
+	DataDir           string
+	AllowLegacyConfig bool
 
 	userConfig
 }
@@ -233,7 +234,7 @@ func New(cfg Config, apiVersion uint, args ...Option) (b *Broker, err error) {
 	p := providers.CurrentProvider()
 
 	if cfg.ConfigFile != "" {
-		cfg.userConfig, err = parseConfigFromPath(cfg.ConfigFile, p)
+		cfg.userConfig, err = parseConfigFromPath(cfg.ConfigFile, p, cfg.AllowLegacyConfig)
 		if err != nil {
 			return nil, err
 		}

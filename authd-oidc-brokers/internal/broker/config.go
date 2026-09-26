@@ -254,7 +254,7 @@ func (uc *userConfig) populateUsersConfig(users *ini.Section) {
 }
 
 // parseConfigFromPath parses the config file and returns a map with the configuration keys and values.
-func parseConfigFromPath(cfgPath string, p provider) (userConfig, error) {
+func parseConfigFromPath(cfgPath string, p provider, allowLegacyConfig bool) (userConfig, error) {
 	content, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return userConfig{}, fmt.Errorf("could not open config file %q: %v", cfgPath, err)
@@ -266,7 +266,7 @@ func parseConfigFromPath(cfgPath string, p provider) (userConfig, error) {
 		return userConfig{}, err
 	}
 
-	return parseConfig(cfgFile, dropInFiles, p)
+	return parseConfig(cfgFile, dropInFiles, p, allowLegacyConfig)
 }
 
 // validatePlaceholders checks that no values in iniCfg still contain unedited
@@ -289,25 +289,35 @@ func validatePlaceholders(path string, iniCfg *ini.File) error {
 }
 
 // validateConfigFile checks a parsed ini config for validity: parseable boolean
-// fields, and returns errors for unknown sections/keys. It does not check for
-// template placeholders; call validatePlaceholders for that.
-func validateConfigFile(path string, iniCfg *ini.File) error {
-	// Return errors for unknown sections and keys.
+// fields, and unknown sections and keys. It does not check for template
+// placeholders; call validatePlaceholders for that.
+func validateConfigFile(path string, iniCfg *ini.File, allowLegacyConfig bool) error {
 	for _, section := range iniCfg.Sections() {
 		if section.Name() == ini.DefaultSection {
 			if len(section.Keys()) > 0 {
-				return fmt.Errorf("keys outside of any section in config file %q", path)
+				if !allowLegacyConfig {
+					return fmt.Errorf("keys outside of any section in config file %q", path)
+				}
+				log.Warningf(context.Background(), "keys outside of any section in config file %q, ignoring in legacy compatibility mode", path)
 			}
 			continue
 		}
 		sectionKeys, ok := knownConfigKeys[section.Name()]
 		if !ok {
-			return fmt.Errorf("unknown section %q in config file %q", section.Name(), path)
+			if !allowLegacyConfig {
+				return fmt.Errorf("unknown section %q in config file %q", section.Name(), path)
+			}
+			log.Warningf(context.Background(), "unknown section %q in config file %q, ignoring in legacy compatibility mode", section.Name(), path)
+			continue
 		}
 
 		for _, key := range section.Keys() {
 			if _, ok := sectionKeys[key.Name()]; !ok {
-				return fmt.Errorf("unknown key %q in section %q in config file %q", key.Name(), section.Name(), path)
+				if !allowLegacyConfig {
+					return fmt.Errorf("unknown key %q in section %q in config file %q", key.Name(), section.Name(), path)
+				}
+				log.Warningf(context.Background(), "unknown key %q in section %q in config file %q, ignoring in legacy compatibility mode",
+					key.Name(), section.Name(), path)
 			}
 		}
 	}
@@ -320,7 +330,11 @@ func validateConfigFile(path string, iniCfg *ini.File) error {
 		}
 		if oidc.HasKey(forceAccessCheckKey) {
 			if _, err := oidc.Key(forceAccessCheckKey).Bool(); err != nil {
-				return fmt.Errorf("error parsing '%s' in config file %q: %w", forceAccessCheckKey, path, err)
+				if !allowLegacyConfig {
+					return fmt.Errorf("error parsing '%s' in config file %q: %w", forceAccessCheckKey, path, err)
+				}
+				log.Warningf(context.Background(), "invalid value for %q in config file %q, using default (%t): %v",
+					forceAccessCheckKey, path, false, err)
 			}
 		}
 	}
@@ -328,7 +342,24 @@ func validateConfigFile(path string, iniCfg *ini.File) error {
 	entraID := iniCfg.Section(entraIDSection)
 	if entraID != nil && entraID.HasKey(registerDeviceKey) {
 		if _, err := entraID.Key(registerDeviceKey).Bool(); err != nil {
-			return fmt.Errorf("error parsing '%s' in config file %q: %w", registerDeviceKey, path, err)
+			if !allowLegacyConfig {
+				return fmt.Errorf("error parsing '%s' in config file %q: %w", registerDeviceKey, path, err)
+			}
+			log.Warningf(context.Background(), "invalid value for %q in config file %q, using default (%t): %v",
+				registerDeviceKey, path, false, err)
+		}
+	}
+
+	if !allowLegacyConfig {
+		flows := iniCfg.Section(flowsSection)
+		if flows != nil {
+			for _, keyName := range []string{flowsDeviceAuthKey, flowsEntraAuthKey} {
+				if flows.HasKey(keyName) {
+					if _, err := flows.Key(keyName).Bool(); err != nil {
+						return fmt.Errorf("error parsing '%s' in config file %q: %w", keyName, path, err)
+					}
+				}
+			}
 		}
 	}
 
@@ -337,7 +368,7 @@ func validateConfigFile(path string, iniCfg *ini.File) error {
 
 // parseConfig parses the config file and returns a userConfig struct with the configuration keys and values.
 // It also checks if the keys contain any placeholders and returns an error if they do.
-func parseConfig(cfg configFile, dropInCfgs []configFile, p provider) (userConfig, error) {
+func parseConfig(cfg configFile, dropInCfgs []configFile, p provider, allowLegacyConfig bool) (userConfig, error) {
 	uc := userConfig{provider: p, ownerMutex: &sync.RWMutex{}}
 
 	iniCfg, err := ini.Load(cfg.content)
@@ -348,7 +379,7 @@ func parseConfig(cfg configFile, dropInCfgs []configFile, p provider) (userConfi
 	// Validate syntax of the main config, but defer the placeholder check until
 	// after all drop-ins are applied: drop-in files in broker.conf.d are allowed
 	// to override placeholder values from the main config.
-	if err := validateConfigFile(cfg.path, iniCfg); err != nil {
+	if err := validateConfigFile(cfg.path, iniCfg, allowLegacyConfig); err != nil {
 		return userConfig{}, err
 	}
 
@@ -358,7 +389,7 @@ func parseConfig(cfg configFile, dropInCfgs []configFile, p provider) (userConfi
 			return userConfig{}, fmt.Errorf("error in drop-in config file %q: %w", dropIn.path, err)
 		}
 
-		if err := validateConfigFile(dropIn.path, dropInCfg); err != nil {
+		if err := validateConfigFile(dropIn.path, dropInCfg, allowLegacyConfig); err != nil {
 			return userConfig{}, err
 		}
 
@@ -396,7 +427,7 @@ func parseConfig(cfg configFile, dropInCfgs []configFile, p provider) (userConfi
 		uc.registerDevice, _ = entraID.Key(registerDeviceKey).Bool()
 	}
 
-	uc.flows, err = parseFlowsConfig(iniCfg.Section(flowsSection), uc.registerDevice, p)
+	uc.flows, err = parseFlowsConfig(iniCfg.Section(flowsSection), uc.registerDevice, p, cfg.path, allowLegacyConfig)
 	if err != nil {
 		return userConfig{}, err
 	}
@@ -489,13 +520,16 @@ func (uc *userConfig) registerOwner(cfgPath, userName string) error {
 
 // parseFlowsConfig parses the [flows] section and returns a flowsConfig with
 // defaults for missing keys.
-func parseFlowsConfig(section *ini.Section, registerDevice bool, p provider) (flowsConfig, error) {
+func parseFlowsConfig(section *ini.Section, registerDevice bool, p provider, path string, allowLegacyConfig bool) (flowsConfig, error) {
 	fc := defaultFlowsConfig(registerDevice)
 
 	if section != nil {
 		if section.HasKey(flowsDeviceAuthKey) {
 			val, err := section.Key(flowsDeviceAuthKey).Bool()
 			if err != nil {
+				if !allowLegacyConfig {
+					return flowsConfig{}, fmt.Errorf("error parsing '%s' in config file %q: %w", flowsDeviceAuthKey, path, err)
+				}
 				log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (%t)", flowsDeviceAuthKey, flowsSection, fc.DeviceAuth)
 			} else {
 				fc.DeviceAuth = val
@@ -505,6 +539,9 @@ func parseFlowsConfig(section *ini.Section, registerDevice bool, p provider) (fl
 		if section.HasKey(flowsEntraAuthKey) {
 			val, err := section.Key(flowsEntraAuthKey).Bool()
 			if err != nil {
+				if !allowLegacyConfig {
+					return flowsConfig{}, fmt.Errorf("error parsing '%s' in config file %q: %w", flowsEntraAuthKey, path, err)
+				}
 				log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (%t)", flowsEntraAuthKey, flowsSection, fc.EntraAuth)
 			} else {
 				fc.EntraAuth = val
@@ -514,6 +551,15 @@ func parseFlowsConfig(section *ini.Section, registerDevice bool, p provider) (fl
 
 	supportedModes := p.SupportedOnlineAuthModes()
 	if !hasEnabledSupportedFlow(fc, supportedModes) {
+		if allowLegacyConfig {
+			if !fc.DeviceAuth && !fc.EntraAuth {
+				return flowsConfig{}, fmt.Errorf("invalid [%s] configuration: all authentication flows are disabled; at least one of the %q or %q flows must be enabled",
+					flowsSection, flowsDeviceAuthKey, flowsEntraAuthKey)
+			}
+			log.Warningf(context.Background(), "no enabled flow in [%s] is supported by this provider; continuing with legacy flow handling",
+				flowsSection)
+			return fc, nil
+		}
 		return flowsConfig{}, invalidFlowsConfigError(supportedModes)
 	}
 

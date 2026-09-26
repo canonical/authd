@@ -244,6 +244,52 @@ client_secret = <CLIENT_SECRET>
 ::::
 :::::
 
+## Configuration validation on fresh installs and upgrades
+
+Non-snap brokers and newly installed broker snaps use strict configuration
+validation. A fresh snap install creates a root-owned
+`strict-config-validation` marker in its data directory. The install hook does
+not run on refresh, so snap upgrades preserve the setting already in that
+directory. An existing installation without the marker keeps the earlier
+configuration behavior and logs warnings for newly enforced checks. A
+successful start or login does not add the marker or switch an existing
+installation to strict validation.
+
+Legacy mode keeps the old interpretation of unknown sections and keys and of
+malformed boolean values. For example, unknown settings are ignored and invalid
+booleans use their previous defaults. It does not hide errors that were already
+fatal: unreadable or malformed files, unedited template placeholders, missing
+required settings, and configurations with no enabled flow still prevent the
+broker from starting.
+
+At startup, the broker checks configuration file permissions and ownership,
+and whether the drop-in directory is writable by group or others. Strict mode
+rejects invalid permissions; legacy mode logs warnings and continues. Neither
+mode changes existing permissions during startup. Administrators must correct
+the reported permissions themselves. Other file access errors remain fatal.
+The snap install hook still creates configuration files with secure permissions,
+and existing refresh-hook permission migrations are unchanged.
+
+To opt an existing snap into strict validation, create the marker as root and
+restart the snap:
+
+```shell
+# Google IAM
+sudo install -o root -g root -m 0600 /dev/null /var/snap/authd-google/current/strict-config-validation
+sudo snap restart authd-google
+
+# Microsoft Entra ID
+sudo install -o root -g root -m 0600 /dev/null /var/snap/authd-msentraid/current/strict-config-validation
+sudo snap restart authd-msentraid
+
+# Generic OIDC
+sudo install -o root -g root -m 0600 /dev/null /var/snap/authd-oidc/current/strict-config-validation
+sudo snap restart authd-oidc
+```
+
+The marker persists through later refreshes. Remove it as root and restart the
+snap to return to legacy behavior.
+
 (ref::config-force-provider-auth)=
 ## Force remote access check with the identity provider
 
