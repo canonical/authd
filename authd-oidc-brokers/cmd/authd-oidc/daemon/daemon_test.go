@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/cmd/authd-oidc/daemon"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -144,13 +146,27 @@ func TestAppRunFailsOnComponentsCreationAndQuit(t *testing.T) {
 }
 
 func TestAppRunFailsOnInsecureBrokerConfigPerms(t *testing.T) {
+	t.Setenv("SNAP_DATA", "")
 	tests := map[string]struct {
 		mainConfPerm   os.FileMode
 		dropInFileName string
 		dropInFilePerm os.FileMode
+		dropInDirPerm  os.FileMode
+		wantError      string
 	}{
-		"Error_on_wrong_permission_on_broker_conf":         {mainConfPerm: 0644},
-		"Error_on_wrong_permission_on_drop_in_config_file": {dropInFileName: "extra.yaml", dropInFilePerm: 0644},
+		"Error_on_wrong_permission_on_broker_conf": {
+			mainConfPerm: 0644,
+			wantError:    "has permissions",
+		},
+		"Error_on_wrong_permission_on_drop_in_config_file": {
+			dropInFileName: "extra.yaml",
+			dropInFilePerm: 0644,
+			wantError:      "has permissions",
+		},
+		"Error_on_writable_drop_in_directory": {
+			dropInDirPerm: 0777,
+			wantError:     "must not be writable by group or others",
+		},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -169,19 +185,446 @@ func TestAppRunFailsOnInsecureBrokerConfigPerms(t *testing.T) {
 				require.NoError(t, err, "Setup: could not change permission on broker config file for tests")
 			}
 
-			if tc.dropInFileName != "" {
+			if tc.dropInFileName != "" || tc.dropInDirPerm != 0 {
 				dropInDir := brokerConf + ".d"
 				err := os.MkdirAll(dropInDir, 0700)
 				require.NoError(t, err, "Setup: could not create drop-in directory for tests")
 				//nolint:gosec // The drop-in directory is expected to have 0755 permissions
 				err = os.Chmod(dropInDir, 0755)
 				require.NoError(t, err, "Setup: could not set permissions on drop-in directory for tests")
-				err = os.WriteFile(filepath.Join(dropInDir, tc.dropInFileName), []byte("content"), tc.dropInFilePerm)
-				require.NoError(t, err, "Setup: could not create drop-in config file for tests")
+				if tc.dropInDirPerm != 0 {
+					require.NoError(t, os.Chmod(dropInDir, tc.dropInDirPerm))
+				}
+				if tc.dropInFileName != "" {
+					dropInFile := filepath.Join(dropInDir, tc.dropInFileName)
+					err = os.WriteFile(dropInFile, []byte("[users]\nallowed_users = OWNER\n"), tc.dropInFilePerm)
+					require.NoError(t, err, "Setup: could not create drop-in config file for tests")
+					err = os.Chmod(dropInFile, tc.dropInFilePerm)
+					require.NoError(t, err, "Setup: could not set permissions on drop-in config file for tests")
+				}
 			}
 
 			err := a.Run()
-			require.Error(t, err, "Run should return an error")
+			require.ErrorContains(t, err, tc.wantError)
+			for path, mode := range map[string]os.FileMode{
+				brokerConf: tc.mainConfPerm,
+				filepath.Join(brokerConf+".d", tc.dropInFileName): tc.dropInFilePerm,
+				brokerConf + ".d": tc.dropInDirPerm,
+			} {
+				if mode == 0 {
+					continue
+				}
+				info, err := os.Stat(path)
+				require.NoError(t, err)
+				require.Equal(t, mode, info.Mode().Perm(), "strict validation must not change permissions")
+			}
+		})
+	}
+}
+
+func TestAppRunSelectsBrokerConfigValidationPolicy(t *testing.T) {
+	tests := map[string]struct {
+		snap            bool
+		hasLegacyMarker bool
+		wantLegacy      bool
+	}{
+		"snap_without_marker_uses_strict_validation": {snap: true},
+		"snap_with_legacy_marker_allows_legacy_validation": {
+			snap:            true,
+			hasLegacyMarker: true,
+			wantLegacy:      true,
+		},
+		"non_snap_uses_strict_validation": {},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			snapData := t.TempDir()
+			if tc.snap {
+				t.Setenv("SNAP_DATA", snapData)
+			} else {
+				t.Setenv("SNAP_DATA", "")
+			}
+			if tc.hasLegacyMarker {
+				marker := filepath.Join(snapData, ".allow-legacy-config-pre-0.5.0")
+				require.NoError(t, os.WriteFile(marker, nil, 0600))
+			}
+
+			tmpDir := t.TempDir()
+			brokerConf := filepath.Join(tmpDir, "broker.conf")
+			config := daemon.DaemonConfig{
+				Paths: daemon.SystemPaths{
+					BrokerConf: brokerConf,
+					DataDir:    filepath.Join(tmpDir, "data"),
+				},
+			}
+			a := daemon.NewForTests(t, &config, issuerURL)
+
+			content, err := os.ReadFile(brokerConf)
+			require.NoError(t, err)
+			content = append(content, []byte("\n[future]\nkey = value\n")...)
+			require.NoError(t, os.WriteFile(brokerConf, content, 0600))
+
+			if !tc.wantLegacy {
+				err := a.Run()
+				require.ErrorContains(t, err, `unknown section "future"`)
+				return
+			}
+
+			runErr := make(chan error, 1)
+			go func() {
+				runErr <- a.Run()
+			}()
+			a.WaitReady()
+			a.Quit()
+			require.NoError(t, <-runErr)
+			_, err = os.Lstat(filepath.Join(snapData, ".allow-legacy-config-pre-0.5.0"))
+			require.NoError(t, err, "legacy config warnings must not remove the compatibility marker")
+		})
+	}
+}
+
+func TestLegacyInstallationPromotesAfterCleanStartAndUsesStrictValidation(t *testing.T) {
+	snapData := t.TempDir()
+	t.Setenv("SNAP_DATA", snapData)
+	legacyMarkerPath := filepath.Join(snapData, ".allow-legacy-config-pre-0.5.0")
+	require.NoError(t, os.WriteFile(legacyMarkerPath, nil, 0600))
+
+	var notices []string
+	log.SetHandler(func(_ context.Context, level log.Level, format string, args ...interface{}) {
+		if level == log.NoticeLevel {
+			notices = append(notices, fmt.Sprintf(format, args...))
+		}
+	})
+	t.Cleanup(func() { log.SetHandler(nil) })
+
+	tmpDir := t.TempDir()
+	config := daemon.DaemonConfig{
+		Paths: daemon.SystemPaths{
+			BrokerConf: filepath.Join(tmpDir, "broker.conf"),
+			DataDir:    filepath.Join(tmpDir, "data"),
+		},
+	}
+
+	app := daemon.NewForTests(t, &config, issuerURL)
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- app.Run()
+	}()
+	app.WaitReady()
+	app.Quit()
+	require.NoError(t, <-runErr)
+	require.Contains(t, strings.Join(notices, "\n"), "Strict configuration validation is now enabled")
+
+	_, err := os.Lstat(legacyMarkerPath)
+	require.ErrorIs(t, err, os.ErrNotExist, "a clean legacy start removes the compatibility marker")
+
+	strictApp := daemon.NewForTests(t, &config, issuerURL)
+	content, err := os.ReadFile(config.Paths.BrokerConf)
+	require.NoError(t, err)
+	content = append(content, []byte("\n[future]\nkey = value\n")...)
+	require.NoError(t, os.WriteFile(config.Paths.BrokerConf, content, 0600))
+
+	err = strictApp.Run()
+	require.ErrorContains(t, err, `unknown section "future"`)
+}
+
+func TestLegacyInstallationWithOwnerOnlyDropInDirectoryAllowsBroadFileModes(t *testing.T) {
+	snapData := t.TempDir()
+	t.Setenv("SNAP_DATA", snapData)
+	legacyMarkerPath := filepath.Join(snapData, ".allow-legacy-config-pre-0.5.0")
+	require.NoError(t, os.WriteFile(legacyMarkerPath, nil, 0600))
+
+	tmpDir := t.TempDir()
+	brokerConf := filepath.Join(tmpDir, "broker.conf")
+	config := daemon.DaemonConfig{
+		Paths: daemon.SystemPaths{
+			BrokerConf: brokerConf,
+			DataDir:    filepath.Join(tmpDir, "data"),
+		},
+	}
+	app := daemon.NewForTests(t, &config, issuerURL)
+
+	dropInDir := brokerConf + ".d"
+	require.NoError(t, os.Mkdir(dropInDir, 0700))
+	dropInFile := filepath.Join(dropInDir, "extra.conf")
+	require.NoError(t, os.WriteFile(dropInFile, []byte("[users]\nallowed_users = OWNER\n"), 0600))
+	//nolint:gosec // A 0.4.1 owner-only directory protects drop-ins with broader file modes.
+	require.NoError(t, os.Chmod(dropInFile, 0777))
+
+	var warnings []string
+	log.SetHandler(func(_ context.Context, level log.Level, format string, args ...interface{}) {
+		if level == log.WarnLevel {
+			warnings = append(warnings, fmt.Sprintf(format, args...))
+		}
+	})
+	t.Cleanup(func() { log.SetHandler(nil) })
+
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- app.Run()
+	}()
+	app.WaitReady()
+	app.Quit()
+	require.NoError(t, <-runErr)
+
+	require.Empty(t, warnings)
+	_, err := os.Lstat(legacyMarkerPath)
+	require.ErrorIs(t, err, os.ErrNotExist, "owner-only drop-in directories must allow promotion")
+
+	strictApp := daemon.NewForTests(t, &config, issuerURL)
+	strictRunErr := make(chan error, 1)
+	go func() {
+		strictRunErr <- strictApp.Run()
+	}()
+	strictApp.WaitReady()
+	strictApp.Quit()
+	require.NoError(t, <-strictRunErr)
+	require.Empty(t, warnings, "strict validation must accept drop-ins protected by an owner-only directory")
+}
+
+func TestAppRunDoesNotPromoteWithoutSnapData(t *testing.T) {
+	t.Setenv("SNAP_DATA", "")
+
+	var notices []string
+	log.SetHandler(func(_ context.Context, level log.Level, format string, args ...interface{}) {
+		if level == log.NoticeLevel {
+			notices = append(notices, fmt.Sprintf(format, args...))
+		}
+	})
+	t.Cleanup(func() { log.SetHandler(nil) })
+
+	tmpDir := t.TempDir()
+	config := daemon.DaemonConfig{
+		Paths: daemon.SystemPaths{
+			BrokerConf: filepath.Join(tmpDir, "broker.conf"),
+			DataDir:    filepath.Join(tmpDir, "data"),
+		},
+	}
+	app := daemon.NewForTests(t, &config, issuerURL)
+
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- app.Run()
+	}()
+	app.WaitReady()
+	app.Quit()
+	require.NoError(t, <-runErr)
+	require.Empty(t, notices)
+
+	for _, dir := range []string{tmpDir, config.Paths.DataDir} {
+		_, err := os.Lstat(filepath.Join(dir, ".allow-legacy-config-pre-0.5.0"))
+		require.ErrorIs(t, err, os.ErrNotExist)
+	}
+}
+
+func TestLegacyMarkerRemovalFailureDoesNotFailStartup(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("read-only directory permissions do not block root")
+	}
+
+	snapData := t.TempDir()
+	t.Setenv("SNAP_DATA", snapData)
+	markerPath := filepath.Join(snapData, ".allow-legacy-config-pre-0.5.0")
+	require.NoError(t, os.WriteFile(markerPath, nil, 0600))
+	//nolint:gosec // Exercise failure to remove the marker from a read-only SNAP_DATA directory.
+	require.NoError(t, os.Chmod(snapData, 0500))
+	t.Cleanup(func() {
+		//nolint:gosec // Restore permissions so TempDir cleanup can proceed.
+		require.NoError(t, os.Chmod(snapData, 0700))
+	})
+
+	tmpDir := t.TempDir()
+	config := daemon.DaemonConfig{
+		Paths: daemon.SystemPaths{
+			BrokerConf: filepath.Join(tmpDir, "broker.conf"),
+			DataDir:    filepath.Join(tmpDir, "data"),
+		},
+	}
+	app := daemon.NewForTests(t, &config, issuerURL)
+
+	var warnings []string
+	log.SetHandler(func(_ context.Context, level log.Level, format string, args ...interface{}) {
+		if level == log.WarnLevel {
+			warnings = append(warnings, fmt.Sprintf(format, args...))
+		}
+	})
+	t.Cleanup(func() { log.SetHandler(nil) })
+
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- app.Run()
+	}()
+	app.WaitReady()
+	app.Quit()
+	require.NoError(t, <-runErr)
+
+	require.Len(t, warnings, 1)
+	require.Contains(t, warnings[0], "Failed to disable legacy configuration compatibility")
+	_, err := os.Lstat(markerPath)
+	require.NoError(t, err)
+}
+
+func TestAppRunSurfacesSnapDataInspectionErrors(t *testing.T) {
+	missingSnapData := filepath.Join(t.TempDir(), "missing")
+	t.Setenv("SNAP_DATA", missingSnapData)
+
+	a := daemon.NewForTests(t, nil, issuerURL)
+	err := a.Run()
+	require.ErrorContains(t, err, "error determining broker configuration validation mode")
+	require.ErrorContains(t, err, "could not inspect SNAP_DATA directory")
+	require.NotPanics(t, a.Quit)
+}
+
+func TestBrokerConfigPermissionsDuringStartup(t *testing.T) {
+	tests := map[string]struct {
+		strict           bool
+		configDirMode    os.FileMode
+		mainConfMode     os.FileMode
+		dropInDirMode    os.FileMode
+		dropInFileMode   os.FileMode
+		wantError        string
+		wantWarningFor   []string
+		wantLegacyMarker bool
+	}{
+		"legacy_private_drop_in": {
+			configDirMode:  0700,
+			mainConfMode:   0600,
+			dropInDirMode:  0700,
+			dropInFileMode: 0777,
+		},
+		"legacy_public_drop_in": {
+			configDirMode:    0700,
+			mainConfMode:     0600,
+			dropInDirMode:    0755,
+			dropInFileMode:   0644,
+			wantWarningFor:   []string{"dropInFile"},
+			wantLegacyMarker: true,
+		},
+		"legacy_main_config": {
+			configDirMode:    0700,
+			mainConfMode:     0644,
+			dropInDirMode:    0700,
+			dropInFileMode:   0644,
+			wantWarningFor:   []string{"mainConfig"},
+			wantLegacyMarker: true,
+		},
+		"legacy_writable_drop_in_directory": {
+			configDirMode:    0700,
+			mainConfMode:     0600,
+			dropInDirMode:    0777,
+			dropInFileMode:   0600,
+			wantError:        "must not be writable by group or others",
+			wantLegacyMarker: true,
+		},
+		"legacy_writable_drop_in_file": {
+			configDirMode:    0700,
+			mainConfMode:     0600,
+			dropInDirMode:    0755,
+			dropInFileMode:   0666,
+			wantError:        "must not be writable by group or others",
+			wantLegacyMarker: true,
+		},
+		"strict_private_drop_in": {
+			strict:         true,
+			configDirMode:  0700,
+			mainConfMode:   0600,
+			dropInDirMode:  0700,
+			dropInFileMode: 0644,
+		},
+		"legacy_writable_config_parent_and_drop_in_directory": {
+			configDirMode:    0777,
+			mainConfMode:     0644,
+			dropInDirMode:    0777,
+			dropInFileMode:   0644,
+			wantError:        "must not be writable by group or others",
+			wantWarningFor:   []string{"mainConfig"},
+			wantLegacyMarker: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			snapData := t.TempDir()
+			t.Setenv("SNAP_DATA", snapData)
+			if !tc.strict {
+				marker := filepath.Join(snapData, ".allow-legacy-config-pre-0.5.0")
+				require.NoError(t, os.WriteFile(marker, nil, 0600))
+			}
+
+			tmpDir := t.TempDir()
+			brokerConf := filepath.Join(tmpDir, "broker.conf")
+			config := daemon.DaemonConfig{
+				Paths: daemon.SystemPaths{
+					BrokerConf: brokerConf,
+					DataDir:    filepath.Join(tmpDir, "data"),
+				},
+			}
+			a := daemon.NewForTests(t, &config, issuerURL)
+			require.NoError(t, os.Chmod(tmpDir, tc.configDirMode))
+			require.NoError(t, os.Chmod(brokerConf, tc.mainConfMode))
+
+			dropInDir := brokerConf + ".d"
+			require.NoError(t, os.Mkdir(dropInDir, tc.dropInDirMode))
+			require.NoError(t, os.Chmod(dropInDir, tc.dropInDirMode))
+			dropInFile := filepath.Join(dropInDir, "extra.conf")
+			require.NoError(t, os.WriteFile(dropInFile, []byte("[users]\nallowed_users = OWNER\n"), tc.dropInFileMode))
+			require.NoError(t, os.Chmod(dropInFile, tc.dropInFileMode))
+
+			var warnings []string
+			log.SetHandler(func(_ context.Context, level log.Level, format string, args ...interface{}) {
+				if level == log.WarnLevel {
+					warnings = append(warnings, fmt.Sprintf(format, args...))
+				}
+			})
+			t.Cleanup(func() { log.SetHandler(nil) })
+
+			runErr := make(chan error, 1)
+			go func() {
+				runErr <- a.Run()
+			}()
+			a.WaitReady()
+			if tc.wantError != "" {
+				require.ErrorContains(t, <-runErr, tc.wantError)
+				a.Quit()
+			} else {
+				a.Quit()
+				require.NoError(t, <-runErr)
+			}
+
+			require.Len(t, warnings, len(tc.wantWarningFor))
+			warningText := strings.Join(warnings, "\n")
+			warningPaths := map[string]string{
+				"mainConfig": brokerConf,
+				"dropInDir":  dropInDir,
+				"dropInFile": dropInFile,
+			}
+			for _, expected := range tc.wantWarningFor {
+				path, ok := warningPaths[expected]
+				require.Truef(t, ok, "unknown warning source %q", expected)
+				require.Contains(t, warningText, fmt.Sprintf("%q", path))
+			}
+
+			markerPath := filepath.Join(snapData, ".allow-legacy-config-pre-0.5.0")
+			if tc.wantLegacyMarker {
+				_, err := os.Lstat(markerPath)
+				require.NoError(t, err, "legacy validation must remain enabled")
+			} else {
+				_, err := os.Lstat(markerPath)
+				require.ErrorIs(t, err, os.ErrNotExist, "clean startup must enable strict validation")
+			}
+
+			for path, wantMode := range map[string]os.FileMode{
+				tmpDir:     tc.configDirMode,
+				brokerConf: tc.mainConfMode,
+				dropInDir:  tc.dropInDirMode,
+				dropInFile: tc.dropInFileMode,
+			} {
+				fileInfo, err := os.Stat(path)
+				require.NoError(t, err)
+				require.Equal(t, wantMode, fileInfo.Mode().Perm(),
+					"startup must not change existing permissions")
+			}
 		})
 	}
 }
