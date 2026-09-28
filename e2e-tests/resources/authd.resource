@@ -55,7 +55,7 @@ Check That Log In Fails Because Authd Is Disabled
 
 
 Check That User Is Redirected To Local Broker
-    Match Text    Password:    120
+    Match Text    Password:    120    confidence=88
 
 
 Check That Authenticated User Does Not Match Requested User

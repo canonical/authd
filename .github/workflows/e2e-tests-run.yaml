@@ -3,7 +3,7 @@ name: run-e2e-test (reusable)
 on:
   workflow_call:
     inputs:
-      ubuntu-version:
+      ubuntu-release:
         required: true
         type: string
       broker:
@@ -14,13 +14,33 @@ on:
         required: false
         type: string
         default: ''
-      authd-ppa:
-        description: 'If set, use this PPA instead of authd-edge when installing the authd package and its dependencies'
+      apt-source:
+        description: 'If set, update all packages except authd from this PPA or Ubuntu archive suite'
+        required: false
+        type: string
+        default: ''
+      authd-apt-source:
+        description: 'If set, install authd from this PPA or Ubuntu archive suite'
+        required: false
+        type: string
+        default: ''
+      apt-source-base:
+        description: 'If set, install the stable system package baseline from this Ubuntu archive suite'
+        required: false
+        type: string
+        default: ''
+      authd-apt-source-base:
+        description: 'If set, install the stable authd baseline from this PPA or Ubuntu archive suite'
         required: false
         type: string
         default: ''
       e2e-tests:
         description: 'JSON array of test suite filenames; an empty array runs the full suite'
+        required: false
+        type: string
+        default: '[]'
+      e2e-test-cases:
+        description: 'JSON array of exact Robot test case names; an empty array runs all cases in the selected suites'
         required: false
         type: string
         default: '[]'
@@ -41,7 +61,15 @@ on:
         required: false
       E2E_MSENTRA_PASSWORDLESS_USERNAME:
         required: false
-      E2E_MSENTRA_TOTP_SECRET:
+      E2E_MSENTRA_PASSKEY_USERNAME:
+        required: false
+      E2E_MSENTRA_PASSWORDLESS_PASSKEY_USERNAME:
+        required: false
+      E2E_MSENTRA_TOTP_SECRET_NOBLE:
+        required: false
+      E2E_MSENTRA_TOTP_SECRET_RESOLUTE:
+        required: false
+      E2E_MSENTRA_TOTP_SECRET_DEVEL:
         required: false
       E2E_GOOGLE_CLIENT_ID:
         required: false
@@ -65,7 +93,7 @@ env:
   VM_NAME_BASE: e2e-runner
   ARTIFACTS_DIR: /tmp/e2e-artifacts
   E2E_TESTS_DIR: e2e-tests
-  OUTPUT_DIR: /tmp/e2e-${{ inputs.broker }}-${{ inputs.ubuntu-version }}/output
+  OUTPUT_DIR: /tmp/e2e-${{ inputs.broker }}-${{ inputs.ubuntu-release }}/output
 
 jobs:
   build-broker-snap:
@@ -131,8 +159,9 @@ jobs:
 
       - name: Download the authd deb
         id: download-authd-deb
+        if: inputs.authd-apt-source == ''
         env:
-          OCI_REPO: ghcr.io/${{ github.repository }}/authd-deb-${{ inputs.ubuntu-version }}
+          OCI_REPO: ghcr.io/${{ github.repository }}/authd-deb-${{ inputs.ubuntu-release }}
           OCI_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail
@@ -157,8 +186,8 @@ jobs:
         id: download-vm-image
         env:
           OCI_REPO: ghcr.io/${{ github.repository }}/e2e-runner
-          OCI_TAG: ${{ inputs.ubuntu-version }}
-          IMAGE_PATH: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-version }}.qcow2
+          OCI_TAG: ${{ inputs.ubuntu-release }}
+          IMAGE_PATH: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-release }}.qcow2
         run: |
           set -euo pipefail
 
@@ -190,7 +219,7 @@ jobs:
 
       - name: Provision authd and the broker
         env:
-          RELEASE: ${{ inputs.ubuntu-version }}
+          RELEASE: ${{ inputs.ubuntu-release }}
           BROKER: ${{ inputs.broker }}
           AUTHD_MSENTRAID_ISSUER_ID: ${{ secrets.E2E_MSENTRA_ISSUER_ID }}
           AUTHD_MSENTRAID_CLIENT_ID: ${{ secrets.E2E_MSENTRA_CLIENT_ID }}
@@ -206,7 +235,7 @@ jobs:
           template="${{ env.E2E_TESTS_DIR }}/vm/e2e-runner-template.xml"
           env \
             IMAGE_FILE=${{ steps.download-vm-image.outputs.image-path }} \
-            VM_NAME=${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-version }} \
+            VM_NAME=${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-release }} \
             envsubst \
               < "${template}" \
               > "${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}.xml"
@@ -214,8 +243,11 @@ jobs:
           # Provision the VM (reads RELEASE, BROKER, VM_NAME_BASE, ARTIFACTS_DIR, and
           # broker credentials from the environment)
           ${{ env.E2E_TESTS_DIR }}/vm/provision-authd.sh \
-            --authd-deb "${{ steps.download-authd-deb.outputs.deb }}" \
-            ${{ inputs.authd-ppa && format('--authd-ppa {0}', inputs.authd-ppa) || '' }} \
+            ${{ inputs.authd-apt-source == '' && format('--authd-deb "{0}"', steps.download-authd-deb.outputs.deb) || '' }} \
+            ${{ inputs.apt-source-base && format('--apt-source-base {0}', inputs.apt-source-base) || '' }} \
+            ${{ inputs.authd-apt-source-base && format('--authd-apt-source-base {0}', inputs.authd-apt-source-base) || '' }} \
+            ${{ inputs.apt-source && format('--apt-source {0}', inputs.apt-source) || '' }} \
+            ${{ inputs.authd-apt-source && format('--authd-apt-source {0}', inputs.authd-apt-source) || '' }} \
             --broker-snap "${{ steps.download-broker-snap-from-store.outputs.snap || steps.download-broker-snap-from-oci.outputs.snap }}"
 
       - name: Checkout YARF repo
@@ -233,11 +265,13 @@ jobs:
       - name: Run tests
         id: run-tests
         env:
-          RELEASE: ${{ inputs.ubuntu-version }}
+          RELEASE: ${{ inputs.ubuntu-release }}
           BROKER: ${{ inputs.broker }}
           E2E_TESTS: ${{ inputs.e2e-tests }}
+          E2E_TEST_CASES: ${{ inputs.e2e-test-cases }}
           AUTHD_DEB: ${{ steps.download-authd-deb.outputs.deb }}
-          AUTHD_PPA: ${{ inputs.authd-ppa }}
+          APT_SOURCE: ${{ inputs.apt-source }}
+          AUTHD_APT_SOURCE: ${{ inputs.authd-apt-source }}
           BROKER_SNAP: ${{ steps.download-broker-snap-from-store.outputs.snap || steps.download-broker-snap-from-oci.outputs.snap }}
         run: |
           set -eux
@@ -248,7 +282,14 @@ jobs:
             export E2E_USER="${{ secrets.E2E_MSENTRA_USERNAME }}"
             export E2E_PASSWORD="${{ secrets.E2E_MSENTRA_PASSWORD }}"
             export E2E_PASSWORDLESS_USER="${{ secrets.E2E_MSENTRA_PASSWORDLESS_USERNAME }}"
-            export TOTP_SECRET="${{ secrets.E2E_MSENTRA_TOTP_SECRET }}"
+            export E2E_PASSWORDLESS_PASSKEY_USER="${{ secrets.E2E_MSENTRA_PASSWORDLESS_PASSKEY_USERNAME }}"
+            export E2E_PASSKEY_USER="${{ secrets.E2E_MSENTRA_PASSKEY_USERNAME }}"
+            case "$RELEASE" in
+              noble) export TOTP_SECRET="${{ secrets.E2E_MSENTRA_TOTP_SECRET_NOBLE }}" ;;
+              resolute) export TOTP_SECRET="${{ secrets.E2E_MSENTRA_TOTP_SECRET_RESOLUTE }}" ;;
+              devel) export TOTP_SECRET="${{ secrets.E2E_MSENTRA_TOTP_SECRET_DEVEL }}" ;;
+              *) echo "Unsupported Entra E2E release: $RELEASE" >&2; exit 1 ;;
+            esac
             export AUTHD_MSENTRAID_ISSUER_ID="${{ secrets.E2E_MSENTRA_ISSUER_ID }}"
             export AUTHD_MSENTRAID_CLIENT_ID="${{ secrets.E2E_MSENTRA_CLIENT_ID }}"
             export AUTHD_MSENTRAID_CLIENT_SECRET="${{ secrets.E2E_MSENTRA_CLIENT_SECRET }}"
@@ -265,8 +306,20 @@ jobs:
           fi
           mapfile -t e2e_tests < <(jq -r '.[]' <<< "${E2E_TESTS}")
 
+          if ! jq -e 'type == "array" and all(.[]; type == "string")' \
+              <<< "${E2E_TEST_CASES}" >/dev/null; then
+            echo "Invalid e2e-test-cases JSON input" >&2
+            exit 1
+          fi
+          mapfile -t e2e_test_cases < <(jq -r '.[]' <<< "${E2E_TEST_CASES}")
+          test_case_args=()
+          for test_case in "${e2e_test_cases[@]}"; do
+            test_case_args+=(--test "${test_case}")
+          done
+
           ${{ env.E2E_TESTS_DIR }}/run-tests.sh \
             --output-dir "${{ env.OUTPUT_DIR }}" \
+            "${test_case_args[@]}" \
             -- "${e2e_tests[@]}" \
             || exit_code=$?
 
@@ -286,7 +339,7 @@ jobs:
         id: upload-results
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-tests-${{ inputs.ubuntu-version }}-${{ inputs.broker }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: e2e-tests-${{ inputs.ubuntu-release }}-${{ inputs.broker }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.OUTPUT_DIR }}
 
       - name: Prepare upload of test logs
@@ -300,7 +353,7 @@ jobs:
             EVENT_DIR="${{ github.event_name }}-${{ github.run_id }}"
           fi
 
-          TARGET_DIR="${EVENT_DIR}/run-${{ github.run_id }}-${{ github.run_attempt }}/${{ inputs.ubuntu-version }}-${{ inputs.broker }}"
+          TARGET_DIR="${EVENT_DIR}/run-${{ github.run_id }}-${{ github.run_attempt }}/${{ inputs.ubuntu-release }}-${{ inputs.broker }}"
           PAGES_DIR="$(pwd)/pages/${TARGET_DIR}"
           mkdir -p "${PAGES_DIR}"
 
@@ -323,14 +376,21 @@ jobs:
           # available in called reusable workflows.
           R2_E2E_TEST_DOMAIN="authd-e2e-test-logs.adrian-dombeck.workers.dev"
           echo "log-url=https://${R2_E2E_TEST_DOMAIN}/${TARGET_DIR}/log.html" >> "$GITHUB_OUTPUT"
+          echo "target-dir=${TARGET_DIR}" >> "$GITHUB_OUTPUT"
 
       - name: Upload test logs
         id: upload-pages
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          TARGET_DIR: ${{ steps.prepare-pages.outputs.target-dir }}
         run: |
-          aws s3 sync pages/ s3://authd-e2e-test-logs/ \
+          set -euo pipefail
+
+          # Each run has a unique prefix, so avoid listing the bucket's history.
+          aws configure set default.s3.max_concurrent_requests 32
+          aws s3 cp "pages/${TARGET_DIR}/" "s3://authd-e2e-test-logs/${TARGET_DIR}/" \
+            --recursive \
             --endpoint-url https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com \
             --region auto
 
@@ -348,7 +408,7 @@ jobs:
               state: '${{ steps.run-tests.outputs.state }}',
               target_url: '${{ steps.prepare-pages.outputs.log-url }}',
               description: 'View logs',
-              context: 'e2e-tests (${{ inputs.ubuntu-version }}) (${{ inputs.broker }})',
+              context: 'e2e-tests (${{ inputs.ubuntu-release }}) (${{ inputs.broker }})',
             });
             console.log(JSON.stringify(response, null, 2));
 

@@ -1,0 +1,111 @@
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication flow
+Gimme your password:
+>
+== Authentication flow selection ==
+  1. Password authentication
+  2. Send URL to user-mfa-integration-mfa-twice-native-testnativeauthenticate@example.com
+  3. Use your fido device foo
+  4. Use your phone +33...
+  5. Use your phone +1...
+  6. Pin code
+  7. Use a QR code
+  8. Authentication code
+Or enter 'r' to go back to choose the provider
+Choose your authentication flow:
+> 1
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication flow
+Gimme your password:
+>
+== Use your fido device foo ==
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
+Plug your fido device and press with your thumb:
+> r
+== Authentication flow selection ==
+  1. Use your fido device foo
+  2. Use your phone +33...
+  3. Authentication code
+Or enter 'r' to go back to choose the provider
+Choose your authentication flow:
+> 1
+== Use your fido device foo ==
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
+Plug your fido device and press with your thumb:
+> r
+== Authentication flow selection ==
+  1. Use your fido device foo
+  2. Use your phone +33...
+  3. Authentication code
+Or enter 'r' to go back to choose the provider
+Choose your authentication flow:
+> 2
+== Use your phone +33... ==
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
+Unlock your phone +33... or accept request on web interface:
+>
+== Use your fido device foo ==
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
+Plug your fido device and press with your thumb:
+>
+  PAM_AUTHTOK: "goodpass"
+PAM Authenticate()
+  User: "user-mfa-integration-mfa-twice-native-testnativeauthenticate@example.com"
+  Result: success
+
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication flow
+Gimme your password:
+>
+== Authentication flow selection ==
+  1. Password authentication
+  2. Send URL to user-mfa-integration-mfa-twice-native-testnativeauthenticate@example.com
+  3. Use your fido device foo
+  4. Use your phone +33...
+  5. Use your phone +1...
+  6. Pin code
+  7. Use a QR code
+  8. Authentication code
+Choose your authentication flow:
+> 1
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication flow
+Gimme your password:
+>
+== Use your fido device foo ==
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
+Plug your fido device and press with your thumb:
+> r
+== Authentication flow selection ==
+  1. Use your fido device foo
+  2. Use your phone +33...
+  3. Authentication code
+Choose your authentication flow:
+> 1
+== Use your fido device foo ==
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
+Plug your fido device and press with your thumb:
+> r
+== Authentication flow selection ==
+  1. Use your fido device foo
+  2. Use your phone +33...
+  3. Authentication code
+Choose your authentication flow:
+> 2
+== Use your phone +33... ==
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
+Unlock your phone +33... or accept request on web interface:
+>
+== Use your fido device foo ==
+Press Enter to wait for authentication or enter 'r' to go back to select the authentication flow
+Plug your fido device and press with your thumb:
+>
+  PAM_AUTHTOK: "goodpass"
+PAM Authenticate()
+  User: "user-mfa-integration-mfa-twice-native-testnativeauthenticate@example.com"
+  Result: success

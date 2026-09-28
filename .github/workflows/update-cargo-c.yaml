@@ -69,6 +69,7 @@ jobs:
         with:
           branch: auto-update-cargo-c
           delete-branch: true
+          sign-commits: true
           commit-message: "deps(snap): update cargo-c to v${{ steps.update.outputs.version }}"
           title: "deps(snap): update cargo-c to v${{ steps.update.outputs.version }}"
           body: |

@@ -8,6 +8,8 @@ from robot.api.deco import library, keyword
 from robot.api import logger
 from robot.libraries.BuiltIn import BuiltIn
 
+from RecordingUtils import recording_filename
+
 PR_SET_PDEATHSIG = 1
 SIGTERM = 15
 
@@ -69,7 +71,9 @@ class VNCRecorder:
         """Start recording the VNC session to a video file."""
         port = os.getenv('VNC_PORT', 5901)
         output_dir = str(BuiltIn().get_variable_value('${SUITE_OUTPUT_DIR}'))
-        output_path = os.path.join(output_dir, 'VM_Recording.mp4')
+        output_path = os.path.join(
+            output_dir, recording_filename('VM_Recording')
+        )
 
         display_num = find_unused_display()
         display = f':{display_num}'

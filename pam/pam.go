@@ -106,7 +106,7 @@ func showPamMessage(mTx pam.ModuleTransaction, style pam.Style, msg string) erro
 	return nil
 }
 
-func sendReturnMessageToPam(mTx pam.ModuleTransaction, retStatus adapter.PamReturnValue) {
+func sendReturnMessageToPam(mTx pam.ModuleTransaction, clientType adapter.PamClientType, retStatus adapter.PamReturnValue) {
 	msg := retStatus.Message()
 	if msg == "" {
 		return
@@ -122,21 +122,32 @@ func sendReturnMessageToPam(mTx pam.ModuleTransaction, retStatus adapter.PamRetu
 		}
 	}
 
+	if !shouldSendPamMessage(style, clientType, retStatus) {
+		return
+	}
+
 	if err := showPamMessage(mTx, style, msg); err != nil {
 		log.Warningf(context.TODO(), "Impossible to send PAM message: %v", err)
 	}
 }
 
-func shouldSendAuthMessage(clientType adapter.PamClientType, msg string, isSuccess bool) bool {
-	if msg == "" {
-		return false
+func shouldSendPamMessage(style pam.Style, clientType adapter.PamClientType, retStatus adapter.PamReturnValue) bool {
+	if style == pam.TextInfo {
+		// Native clients already display successful authentication messages via
+		// the native model. Keep informational PAM errors, such as PAM_IGNORE,
+		// visible to the caller.
+		if _, ok := retStatus.(adapter.PamSuccess); ok {
+			return clientType != adapter.Native
+		}
+		return true
 	}
 
-	if isSuccess {
-		// Native clients (SSH, non-TTY) already display the success message
-		// via the native model's sendInfo path; skip the PAM-conversation echo
-		// to avoid printing it twice.
-		return clientType != adapter.Native
+	if style == pam.ErrorMsg && clientType == adapter.Gdm {
+		// GDM renders authentication failures itself. Preserve messages for
+		// service and system errors because GDM does not own those details.
+		if rs, ok := retStatus.(adapter.PamReturnError); ok {
+			return rs.Status() != pam.ErrAuth && rs.Status() != pam.ErrMaxtries
+		}
 	}
 
 	return true
@@ -357,8 +368,8 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 
 	conn, closeConn, err := newClientConnection(parsedArgs)
 	if err != nil {
-		if err := showPamMessage(mTx, pam.ErrorMsg, err.Error()); err != nil {
-			log.Warningf(context.TODO(), "Impossible to show PAM message: %v", err)
+		if msgErr := showPamMessage(mTx, pam.ErrorMsg, err.Error()); msgErr != nil {
+			log.Warningf(context.TODO(), "Impossible to show PAM message: %v", msgErr)
 		}
 		return fmt.Errorf("%w: %w", pam.ErrAuthinfoUnavail, err)
 	}
@@ -375,9 +386,7 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 
 	switch returnValue := pamReturnValue.(type) {
 	case adapter.PamSuccess:
-		if shouldSendAuthMessage(pamClientType, returnValue.Message(), true) {
-			sendReturnMessageToPam(mTx, returnValue)
-		}
+		sendReturnMessageToPam(mTx, pamClientType, returnValue)
 		if returnValue.AuthTok != "" {
 			if err := mTx.SetItem(pam.Authtok, returnValue.AuthTok); err != nil {
 				return err
@@ -393,15 +402,13 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 		return nil
 
 	case adapter.PamReturnError:
-		if shouldSendAuthMessage(pamClientType, returnValue.Message(), false) {
-			sendReturnMessageToPam(mTx, returnValue)
-		}
+		sendReturnMessageToPam(mTx, pamClientType, returnValue)
 		return fmt.Errorf("%w: %s", returnValue.Status(), returnValue.Message())
 
 	default:
 		// Preserve the previous behavior of showing any message associated with
 		// unexpected exit statuses before returning the system error.
-		sendReturnMessageToPam(mTx, returnValue)
+		sendReturnMessageToPam(mTx, pamClientType, returnValue)
 		return fmt.Errorf("%w: unknown exit code: %#v", pam.ErrSystem, returnValue)
 	}
 }

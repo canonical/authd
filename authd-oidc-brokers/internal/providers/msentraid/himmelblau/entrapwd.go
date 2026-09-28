@@ -2,10 +2,13 @@ package himmelblau
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
+	"github.com/canonical/authd/log"
 	"golang.org/x/oauth2"
 )
 
@@ -20,8 +23,9 @@ type EntraAuthProvider interface {
 	// When withDeviceScope is true, the MFA flow adds Intune enrollment
 	// resources to the token request (needed for PRT-based token exchange).
 	// When false, it uses only MS Graph scopes.
-	// authOpts toggles optional flow behaviors (e.g. AuthOptionFido to let
-	// Entra ID negotiate a FIDO/security-key challenge).
+	// authOpts toggles optional flow behaviors. AuthOptionFido advertises FIDO
+	// capability; AuthOptionPasswordlessSecurityKey explicitly selects the
+	// local security-key transport for a passwordless request.
 	InitiateEntraAuth(
 		ctx context.Context,
 		clientID string,
@@ -156,6 +160,9 @@ type MFAChallengeInfo struct {
 	// FidoAllowList contains the credential IDs (base64-encoded) that Entra ID
 	// accepts for the FIDO assertion. Empty for non-FIDO challenges.
 	FidoAllowList []string
+	// HasPassword reports whether Entra supports password authentication for
+	// the account that produced this continuation.
+	HasPassword bool
 }
 
 // MFAErrorCategory classifies an MFA error so the broker can route
@@ -166,6 +173,13 @@ type MFAErrorCategory int
 // that is not present in the tenant. It must stay in this untagged file
 // because IsMFAUserNotFound is used by untagged builds.
 const userNotFoundErrorCode = 50034
+
+// These errors mean that Entra could not complete the request because its
+// backend was temporarily unavailable or was throttling the tenant.
+const (
+	externalServerRetryableErrorCode = 90006
+	tenantThrottlingErrorCode        = 90055
+)
 
 const (
 	// MFAErrorOther is the default category and means the error has no
@@ -178,6 +192,11 @@ const (
 	MFAErrorDenied
 	// MFAErrorRequired means MFA is required to complete authentication.
 	MFAErrorRequired
+	// MFAErrorDAGFallbackDisabled means the native MFA flow could not find a
+	// supported method and the caller disabled Device Authorization fallback.
+	// A passwordless probe uses this to distinguish passwordless-only accounts
+	// from accounts that can fall back to an Entra password.
+	MFAErrorDAGFallbackDisabled
 	// MFAErrorRetryableCode means a submitted one-time code was incorrect or
 	// expired while the MFA flow itself remains valid, so the user can simply
 	// re-enter the code without restarting the flow. See newMFAError for how
@@ -219,9 +238,15 @@ func (e *MFAError) IsMFADenied() bool {
 	return e.Category == MFAErrorDenied
 }
 
-// IsMFARequired returns true if the error indicates MFA is required.
+// IsMFARequired returns true for errors that need a separate MFA-capable flow.
 func (e *MFAError) IsMFARequired() bool {
-	return e.Category == MFAErrorRequired
+	return e.Category == MFAErrorRequired || e.Category == MFAErrorDAGFallbackDisabled
+}
+
+// IsMFADAGFallbackDisabled returns true when Device Authorization fallback
+// was disabled before the native MFA flow could be created.
+func (e *MFAError) IsMFADAGFallbackDisabled() bool {
+	return e.Category == MFAErrorDAGFallbackDisabled
 }
 
 // IsMFARetryableCode returns true if the error indicates a submitted one-time
@@ -242,4 +267,51 @@ func (e *MFAError) IsMFAPasswordRequired() bool {
 // the Entra tenant.
 func (e *MFAError) IsMFAUserNotFound() bool {
 	return e.AADSTS == userNotFoundErrorCode
+}
+
+// IsMFATransient returns true when Entra reports a temporary service or
+// throttling failure while starting the MFA flow.
+//
+// Keep these checks based on AADSTS: the libhimmelblau revision supported by
+// authd reports every AADSTS error as MSAL_ERROR_CODE::AADSTS_ERROR while
+// preserving the actual code in MFAError.AADSTS.
+func (e *MFAError) IsMFATransient() bool {
+	return e.AADSTS == externalServerRetryableErrorCode ||
+		e.AADSTS == tenantThrottlingErrorCode
+}
+
+func retryTransientInitiate(
+	ctx context.Context,
+	delays []time.Duration,
+	initiate func() (*MFAFlowState, error),
+) (*MFAFlowState, error) {
+	flow, err := initiate()
+	for _, delay := range delays {
+		var mfaErr *MFAError
+		if err == nil || !errors.As(err, &mfaErr) || !mfaErr.IsMFATransient() {
+			return flow, err
+		}
+		log.Warningf(ctx, "Transient Entra error (AADSTS%d) while initiating the MFA flow; retrying in %v", mfaErr.AADSTS, delay)
+		if err := waitForRetry(ctx, delay); err != nil {
+			return flow, err
+		}
+		if err := ctx.Err(); err != nil {
+			return flow, err
+		}
+		flow, err = initiate()
+	}
+	return flow, err
+}
+
+// waitForRetry waits for the retry delay or context cancellation.
+func waitForRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }

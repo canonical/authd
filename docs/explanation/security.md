@@ -63,8 +63,27 @@ authentication flow.
 
 Strong passwords are critical to prevent unauthorized access.
 
-authd uses libpwquality to enforce password complexity requirements. See the
-[Configure password quality](ref::config-pwquality) section for details.
+authd uses `libpwquality` to enforce password complexity requirements for local
+passwords. See the [Configure password quality](ref::config-pwquality) section
+for details.
+
+(ref::cached-entra-passwords)=
+
+#### Cached Entra ID passwords
+
+After a successful login through the Entra authentication flow using an Entra ID
+password, authd stores a salted hash of the password for offline authentication.
+
+authd does not apply its local `libpwquality` policy to Entra ID passwords
+used in the Entra authentication flow. Changes made to
+`/etc/security/pwquality.conf` do not affect users authenticating with an Entra
+ID password through that flow.
+A weak password accepted by the tenant is cached the same way. Configure the
+tenant password policy to reject weak passwords.
+
+The local policy applies when authd creates or changes a local password,
+including after passwordless or device-code authentication.
+See [Authentication flows](/reference/authentication-flows/) for details.
 
 (ref::force-auth-security)=
 #### Force provider authentication
@@ -87,12 +106,14 @@ setting.
 #### SSH public key authentication
 
 If SSH public key authentication is enabled, users whose access has been revoked
-at the identity provider can still log in using their SSH keys. This is because
-SSH key authentication does not involve authd.
+at the identity provider or whose authd account has been locked can still log in
+using their SSH keys. This is because SSH key authentication does not involve
+authd.
 
-To prevent users with revoked access from logging in with SSH, disable public
-key authentication for users managed by authd, by adding the following to
-`/etc/ssh/sshd_config.d/authd.conf` or directly to `/etc/ssh/sshd_config`:
+To prevent users with revoked access or locked accounts from logging in with
+SSH, disable public key authentication for users managed by authd, by adding
+the following to `/etc/ssh/sshd_config.d/authd.conf` or directly to
+`/etc/ssh/sshd_config`:
 
 ```text
 Match User *@example.com
@@ -155,13 +176,15 @@ To avoid this risk:
 * Remove all files and directories owned by any users that you delete,
   especially if they contain sensitive data. The
   [`authctl user delete`](../reference/cli/authctl_user_delete.md) command can
-  also remove the user's home directory with the `--remove` option, but files
+  also remove the user's home directory with the `--remove-home` option, but files
   outside the home directory must be handled separately.
 
 ## How authd is designed for security
 
 This section describes how authd is built to protect stored data and limit
 system exposure.
+
+(ref::stored-secrets)=
 
 ### Stored secrets
 

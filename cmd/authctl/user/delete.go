@@ -38,7 +38,7 @@ var deleteCmd = &cobra.Command{
   authctl user delete --yes alice
 
   # Delete user "alice" and remove their home directory
-  authctl user delete --remove alice`,
+  authctl user delete --remove-home alice`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: completion.Users,
 	RunE:              runDeleteUser,
@@ -49,7 +49,7 @@ var deleteUserRemoveHome bool
 
 func init() {
 	deleteCmd.Flags().BoolVarP(&deleteUserYes, "yes", "y", false, "Skip confirmation prompt")
-	deleteCmd.Flags().BoolVarP(&deleteUserRemoveHome, "remove", "r", false, "Remove the user's home directory")
+	deleteCmd.Flags().BoolVarP(&deleteUserRemoveHome, "remove-home", "r", false, "Remove the user's home directory")
 }
 
 func runDeleteUser(cmd *cobra.Command, args []string) error {

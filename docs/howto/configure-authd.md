@@ -516,8 +516,8 @@ followed by an MFA challenge, such as a number-matching prompt or a one-time
 code, or use a passwordless method instead, such as a FIDO2 security key or
 passwordless sign-in in the Microsoft Authenticator app.
 
-If a security key challenge is expected but no key is connected, login falls
-back to the device code flow when it is enabled.
+When a local security key cannot complete a FIDO2 challenge, authd can fall back
+to Entra ID password authentication if the account supports it.
 
 ```{admonition} Local password after a passwordless login
 :class: note
@@ -649,8 +649,15 @@ If your mobile device management (MDM) solution includes a compliance check for
 the passwords of authd users, you may also need to configure authd's password
 policy so that it matches that of the MDM.
 
-authd depends on the libpwquality library, which supports configuring password
+authd depends on the `libpwquality` library, which supports configuring password
 quality.
+
+```{note}
+This policy applies only to local passwords created or changed through authd.
+To reject weak Entra ID passwords, configure the tenant password policy. See
+[Cached Entra ID passwords](ref::cached-entra-passwords) in the security
+overview.
+```
 
 To configure the local password policy for authd, create a drop file in
 `/etc/security/pwquality.conf.d/`.

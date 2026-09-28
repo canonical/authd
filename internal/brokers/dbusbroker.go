@@ -141,8 +141,12 @@ func getInterface(obj dbus.BusObject) (dbusInterface, error) {
 
 	var supportedInterfaces []dbusInterface
 	for _, iface := range node.Interfaces {
-		// Ignore interfaces that do not satisfy the expected format, as they are not relevant for selecting the broker
-		// interface version.
+		if !strings.HasPrefix(iface.Name, DbusBaseInterface) {
+			continue
+		}
+
+		// Only authd broker interfaces are relevant for selecting the broker interface version.
+		// Warn when one of those interfaces does not satisfy the expected format.
 		// The expected format is com.ubuntu.authd.BrokerX, where X is the version number (or empty for the first
 		// version).
 		version, err := interfaceVersion(iface.Name)

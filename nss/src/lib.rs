@@ -81,7 +81,7 @@ fn grpc_status_to_nss_response<T>(status: Status) -> Response<T> {
     }
 }
 
-#[ctor::ctor]
+#[ctor::ctor(unsafe)]
 /// init_logger is a constructor that ensures the logger object initialization only happens once per
 /// library invocation in order to avoid races to the log file.
 fn init_logger() {
@@ -134,7 +134,7 @@ mod tests {
 }
 
 #[cfg(feature = "integration_tests")]
-#[ctor::ctor]
+#[ctor::ctor(unsafe)]
 /// register_local_aad_nss_service_for_tests executes the C API to override the NSS lookup.
 fn register_local_aad_nss_service_for_tests() {
     #[link(name = "db_override")]

@@ -8,11 +8,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math/rand/v2"
 	"net/url"
 	"os"
-	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/canonical/authd/log"
 	"github.com/golang-jwt/jwt/v5"
@@ -344,18 +345,19 @@ func AcquireAccessTokenForGraphAPI(
 // that can be used to complete the MFA challenge.
 // When withDeviceScope is true, the MFA flow requests scopes required for device
 // enrollment. When false, it uses standard scopes without enrollment resources.
-// authOpts toggles optional flow behaviors (e.g. AuthOptionFido to let Entra ID
-// negotiate a FIDO/security-key challenge).
+// authOpts toggles optional flow behaviors. AuthOptionFido advertises FIDO
+// capability to Entra ID; AuthOptionPasswordlessSecurityKey explicitly selects
+// the local security-key transport for a passwordless request.
 //
 // An empty password selects passwordless authentication: libhimmelblau then
-// negotiates a passwordless method (Authenticator number-matching, TAP,
-// security key, ...) from the user's credential type. This is independent of
-// withDeviceScope: the device certificate and transport key device enrollment
-// produces are generated locally via the TPM, not derived from the password,
-// so passwordless device enrollment is supported by this function the same
-// way passwordless MFA is (callers may still choose not to combine the two,
-// e.g. to avoid Conditional Access checks on the enrollment resource before a
-// password is submitted).
+// negotiates a passwordless method from the user's credential type. The caller
+// can explicitly enable the local security-key transport when needed. This is
+// independent of withDeviceScope: the device certificate and transport key
+// device enrollment produces are generated locally via the TPM, not derived
+// from the password, so passwordless device enrollment is supported by this
+// function the same way passwordless MFA is (callers may still choose not to
+// combine the two, e.g. to avoid Conditional Access checks on the enrollment
+// resource before a password is submitted).
 func InitiateMFAFlow(ctx context.Context, clientID, tenantID string, data *DeviceRegistrationData, username, password string, withDeviceScope bool, authOpts ...AuthOption) (*MFAFlowState, *MFAChallengeInfo, error) {
 	brokerClientApp, err := brokerClientAppFor(clientID, tenantID, data)
 	if err != nil {
@@ -367,22 +369,28 @@ func InitiateMFAFlow(ctx context.Context, clientID, tenantID string, data *Devic
 	// dedicated auth modes and never wants the silent DAG fallback.
 	opts := append([]AuthOption{AuthOptionNoDAGFallback}, authOpts...)
 	// An empty password means there is no secret to validate, so this is a
-	// passwordless login. Ask libhimmelblau to negotiate passwordless factors
-	// and, when a local FIDO client is available, to select the physical-key
-	// transport explicitly. The NULL password alone does not select a flow.
+	// passwordless login. The caller selects any local FIDO transport
+	// explicitly; advertising FIDO capability alone must not select a physical
+	// key before Remote NGC has been tried.
 	if password == "" {
 		opts = append(opts, AuthOptionPasswordless)
-		if slices.Contains(authOpts, AuthOptionFido) {
-			opts = append(opts, AuthOptionPasswordlessSecurityKey)
-		}
 	}
 
-	var flow *MFAFlowState
-	if withDeviceScope {
-		flow, err = initiateMFAFlowForEnrollment(brokerClientApp, username, password, opts)
-	} else {
-		flow, err = initiateMFAFlow(brokerClientApp, username, password, opts)
+	initiate := func() (*MFAFlowState, error) {
+		if withDeviceScope {
+			return initiateMFAFlowForEnrollment(brokerClientApp, username, password, opts)
+		}
+		return initiateMFAFlow(brokerClientApp, username, password, opts)
 	}
+
+	// Use one- and two-second exponential backoff with bounded jitter so
+	// tenant-wide throttling does not synchronize retries.
+	const retryJitterRange = 500 * time.Millisecond
+	delays := []time.Duration{
+		time.Second + rand.N(retryJitterRange),   //nolint:gosec // retry jitter is not security-sensitive
+		2*time.Second + rand.N(retryJitterRange), //nolint:gosec // retry jitter is not security-sensitive
+	}
+	flow, err := retryTransientInitiate(ctx, delays, initiate)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -419,6 +427,11 @@ func mfaChallengeInfoFromFlow(flow *MFAFlowState) (*MFAChallengeInfo, error) {
 		return nil, err
 	}
 
+	hasPassword, err := mfaFlowHasPassword(flow)
+	if err != nil {
+		return nil, err
+	}
+
 	return &MFAChallengeInfo{
 		Message:           msg,
 		Method:            method,
@@ -427,6 +440,7 @@ func mfaChallengeInfoFromFlow(flow *MFAFlowState) (*MFAChallengeInfo, error) {
 
 		FidoChallenge: fidoChallenge,
 		FidoAllowList: fidoAllowList,
+		HasPassword:   hasPassword,
 	}, nil
 }
 

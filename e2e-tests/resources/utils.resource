@@ -10,6 +10,7 @@ Library             ./Snapshot.py    AS    Snapshot
 Library             ./SSH.py    AS    SSH
 Library             Process
 Library             OperatingSystem
+Library             String
 
 
 *** Variables ***
@@ -49,11 +50,11 @@ Log In And Set Password
     Hid.Type String    ubuntu
     Hid.Keys Combo    Return
 
-    Match Text    New password    30
+    Match Text    New password    30    confidence=88
     Hid.Type String    ${new_password}
     Hid.Keys Combo    Return
 
-    Match Text    Retype new password    30
+    Match Text    Retype new password    30    confidence=88
     Hid.Type String    ${new_password}
     Hid.Keys Combo    Return
 
@@ -67,11 +68,39 @@ Select User
 
 Try Select User
     Hid.Keys Combo    Return
-    Match Text    Password
+    # The blinking text cursor can fuse with the field's placeholder text,
+    # making OCR read it as e.g. "IPassword", which lowers confidence below
+    # the suite's global threshold.
+    Match Text    Password    confidence=88
 
 
 Log Out
     SSH.Execute    loginctl terminate-seat seat0
+
+
+Lock Screen
+    ${session_id} =    SSH.Execute    loginctl show-seat seat0 -p ActiveSession --value
+    Should Not Be Empty    ${session_id}
+    SSH.Execute    loginctl lock-session ${session_id}
+    Wait Until Keyword Succeeds    30s    1s    Check Session Is Locked    ${session_id}
+
+
+Check Session Is Locked
+    [Arguments]    ${session_id}
+    ${locked} =    SSH.Execute    loginctl show-session ${session_id} -p LockedHint --value
+    Should Be Equal    ${locked}    yes
+
+
+Unlock Screen With Password
+    [Arguments]    ${password}
+    # Locking the session can leave the display asleep until it receives input.
+    Hid.Keys Combo    Return
+    # Use a lower confidence threshold because the blinking text cursor can
+    # merge with the prompt and lower OCR confidence
+    Match Text    Enter your password    confidence=88
+    Hid.Type String    ${password}
+    Hid.Keys Combo    Return
+    Wait Until Desktop Ready
 
 
 Wait Until GDM Login Screen Ready
@@ -231,18 +260,112 @@ Cancel Operation
 
 
 Update Authd
-    ${authd_ppa}=    Get Environment Variable    AUTHD_PPA    ${EMPTY}
-    IF    $authd_ppa == ''
-        ${authd_ppa}=    Set Variable    ubuntu-enterprise-desktop/authd-edge
-    END
-    SSH.Execute    add-apt-repository ppa:${authd_ppa} -y    timeout=300
+    ${apt_source}=    Get Environment Variable    APT_SOURCE    ${EMPTY}
+    ${authd_apt_source}=    Get Environment Variable    AUTHD_APT_SOURCE    ${EMPTY}
     ${authd_deb}=    Get Environment Variable    AUTHD_DEB    ${EMPTY}
+    IF    $apt_source == ''
+        ${apt_source}=    Set Variable    ppa:ubuntu-enterprise-desktop/authd-edge
+    END
+
+    Add APT Source    ${apt_source}
+    IF    $authd_apt_source != '' and $authd_apt_source != $apt_source
+        Add APT Source    ${authd_apt_source}
+    END
+
+    ${authd_policy_source}=    Set Variable If    $authd_apt_source != ''    ${authd_apt_source}    ${apt_source}
+    Configure APT Policy    ${apt_source}    ${authd_policy_source}
+
+    SSH.Execute    apt-get update    timeout=300
+    # authd constrains gnome-shell with a compatibility rule. Explicitly
+    # install it from the selected source because the base image's archive
+    # version may not satisfy authd's rule.
+    SSH.Execute    apt-get install -y gnome-shell    timeout=120
     IF    $authd_deb != ''
         SSH.Copy To VM    ${authd_deb}    /home/ubuntu/authd-under-test.deb
-        SSH.Execute    apt-get install -y /home/ubuntu/authd-under-test.deb    timeout=120
-    ELSE
-        SSH.Execute    apt-get install -y authd    timeout=120
+        SSH.Execute    apt-mark unhold authd || true
+        SSH.Execute    apt-get install -y --allow-downgrades /home/ubuntu/authd-under-test.deb    timeout=120
+        Configure Local Authd Policy
+        Verify Local Authd
     END
+    SSH.Execute    apt-get full-upgrade -y    timeout=600
+
+    IF    $authd_deb != ''
+        Verify Local Authd
+    ELSE
+        SSH.Execute    apt-get install -y --allow-downgrades authd    timeout=120
+        Verify Authd Source    ${authd_policy_source}
+    END
+
+
+Add APT Source
+    [Arguments]    ${source}
+    IF    '${source}'.startswith('ppa:')
+        SSH.Execute    add-apt-repository -y -n ppa:${source[4:]}    timeout=300
+    ELSE
+        SSH.Execute
+        ...    add-apt-repository -y -n -S 'deb http://archive.ubuntu.com/ubuntu/ ${source} main restricted universe multiverse'
+    END
+
+
+Get APT Pin
+    [Arguments]    ${source}
+    IF    '${source}'.startswith('ppa:')
+        ${ppa}=    Get Substring    ${source}    4
+        ${ppa}=    Replace String    ${ppa}    /    -
+        RETURN    o=LP-PPA-${ppa}
+    ELSE
+        RETURN    a=${source}
+    END
+
+
+Get APT Source Reference
+    [Arguments]    ${source}
+    IF    '${source}'.startswith('ppa:')
+        ${ppa}=    Get Substring    ${source}    4
+        RETURN    /${ppa}/ubuntu
+    ELSE
+        RETURN    ${source}/
+    END
+
+
+Configure APT Policy
+    [Arguments]    ${system_source}    ${authd_source}
+    ${system_pin}=    Get APT Pin    ${system_source}
+    ${authd_pin}=    Get APT Pin    ${authd_source}
+    SSH.Execute
+    ...    mkdir -p /etc/apt/preferences.d && printf '%s\n' 'Package: *' 'Pin: release ${system_pin}' 'Pin-Priority: 990' > /etc/apt/preferences.d/99-e2e-system-source
+    SSH.Execute
+    ...    printf '%s\n' 'Package: authd' 'Pin: release ${authd_pin}' 'Pin-Priority: 1001' > /etc/apt/preferences.d/99-e2e-authd-source
+    IF    $system_source != $authd_source
+        SSH.Execute
+        ...    printf '%s\n' 'Package: *' 'Pin: release ${authd_pin}' 'Pin-Priority: 100' > /etc/apt/preferences.d/98-e2e-authd-source-fallback
+    ELSE
+        SSH.Execute    rm -f /etc/apt/preferences.d/98-e2e-authd-source-fallback
+    END
+
+
+Configure Local Authd Policy
+    ${authd_version}=    SSH.Execute    dpkg-query -W -f='\${Version}' authd
+    SSH.Execute
+    ...    printf '%s\n' 'Package: authd' 'Pin: version ${authd_version}' 'Pin-Priority: 1001' > /etc/apt/preferences.d/99-e2e-authd-source
+    SSH.Execute    apt-mark hold authd
+
+
+Verify Authd Source
+    [Arguments]    ${source}
+    ${source_reference}=    Get APT Source Reference    ${source}
+    ${installed_version}=    SSH.Execute    dpkg-query -W -f='\${Version}' authd
+    ${candidate_version}=    SSH.Execute    apt-cache policy authd | awk '/Candidate:/ { print $2; exit }'
+    Should Be Equal    ${candidate_version}    ${installed_version}
+    ${policy}=    SSH.Execute    apt-cache policy authd
+    Should Contain    ${policy}    ${source_reference}
+
+
+Verify Local Authd
+    ${installed_version}=    SSH.Execute    dpkg-query -W -f='\${Version}' authd
+    Should Not Be Empty    ${installed_version}
+    ${held_packages}=    SSH.Execute    apt-mark showhold
+    Should Contain    ${held_packages}    authd
 
 
 Sync System Time
@@ -301,7 +424,7 @@ Terminal Password Change Error
     Hid.Keys Combo    Return
     Match Text    ${expected_error}
     Hid.Keys Combo    Control_L    d
-    Match Text    password unchanged     10 
+    Match Text    password unchanged     10
     Match Text    ubuntu@ubuntu:~$    10
     Clear Terminal
 
@@ -316,18 +439,48 @@ Escape Back to GDM Login Screen
     Match Text    Not listed    120
 
 
+Log Installed Package Information
+    [Arguments]    ${snapshot}
+    ${broker_version}=    SSH.Execute    snap list %{BROKER} | awk -v broker='%{BROKER}' '$1 == broker {if ($3 ~ /^x[0-9]+$/) printf "%s (local, rev %s)\\n", $2, $3; else printf "%s (%s, rev %s)\\n", $2, $4, $3; exit}'
+    ${authd_dependencies}=    SSH.Execute
+    ...    { printf '%s\\n' authd gnome-shell; apt-cache depends authd | awk '/^[[:space:]|]+(Pre-Depends|Depends|Recommends|Breaks): / {print $2}'; } | sort -u | while read -r package; do if ! dpkg-query --show "$package" 2>/dev/null; then printf '%s (not installed)\\n' "$package"; fi; done
+    ${authd_apt_policy}=    SSH.Execute    apt-cache policy authd
+    ${gnome_shell_apt_policy}=    SSH.Execute    apt-cache policy gnome-shell yaru-theme-gnome-shell
+
+    # Keep stable package versions separate so migration setup does not
+    # overwrite the under-test versions stored on the root suite.
+    IF    '${snapshot}' == '%{BROKER}-stable-installed'
+        Set Suite Metadata    authd and Dependencies (Stable)    ${authd_dependencies}    top=True
+        Set Suite Metadata    Broker Version (Stable)    ${broker_version}    top=True
+    ELSE
+        Set Suite Metadata    authd and Dependencies    ${authd_dependencies}    top=True
+        Set Suite Metadata    Broker Version    ${broker_version}    top=True
+    END
+
+    Log    authd apt policy:\n${authd_apt_policy}
+    Log    gnome-shell apt policy:\n${gnome_shell_apt_policy}
+
+
 ### Setup ###
 
 Restore Snapshot
     [Arguments]    ${snapshot}
+    ${snapshot_override}=    Get Environment Variable    E2E_TEST_SNAPSHOT    ${EMPTY}
+    IF    $snapshot_override
+        ${snapshot}=    Set Variable    ${snapshot_override}
+    END
     Snapshot.Restore    ${snapshot}
     Wait Until System Time Synced
+    RETURN    ${snapshot}
 
 Test Setup
     [Arguments]    ${snapshot}
+    [Documentation]    Restores the suite snapshot, or the snapshot named by
+    ...    E2E_TEST_SNAPSHOT when that environment variable is non-empty.
     Set Suite Metadata    Ubuntu Version   %{RELEASE}    top=True
     Set Suite Metadata    Broker    %{BROKER}    top=True
-    Restore Snapshot    ${snapshot}
+    ${snapshot}=    Restore Snapshot    ${snapshot}
+    Log Installed Package Information    ${snapshot}
     Journal.Start Receiving Journal
     VNCRecorder.Start Recording
 

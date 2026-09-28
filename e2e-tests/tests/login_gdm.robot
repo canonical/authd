@@ -27,6 +27,7 @@ Test login with GDM
     # Check remote user is properly added to the system
     Check If User Was Added Properly    ${username}
     Check Home Directory    ${username}
+    Check User Shell    ${username}
     Log Out
 
     # Log in with remote user with local password via GDM

@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/canonical/authd/internal/brokers/layouts"
 	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/canonical/authd/pam/internal/gdm"
 	"github.com/canonical/authd/pam/internal/gdm_test"
@@ -27,6 +28,9 @@ func collectMessages(cmd tea.Cmd) []tea.Msg {
 		return nil
 	}
 	msg := cmd()
+	if msg == nil {
+		return nil
+	}
 	if cmds, ok := asCmdSlice(msg); ok {
 		var msgs []tea.Msg
 		for _, c := range cmds {
@@ -279,4 +283,90 @@ func TestGdmAuthModeEchoDoesNotSelectAuthenticationModeTwice(t *testing.T) {
 
 	require.Equal(t, int32(1), client.selectAuthenticationModeCalls.Load(),
 		"GDM's echo must not select the auth mode again")
+}
+
+func TestGdmChallengeProtocolEventsAreOrdered(t *testing.T) {
+	t.Parallel()
+
+	var protocolEvents []string
+	mTx := pam_test.NewModuleTransactionDummy(gdm.DataConversationFunc(
+		func(data *gdm.Data) (*gdm.Data, error) {
+			switch data.Type {
+			case gdm.DataType_event:
+				switch data.Event.Type {
+				case gdm.EventType_uiLayoutReceived:
+					protocolEvents = append(protocolEvents, "layout")
+				case gdm.EventType_startAuthentication:
+					protocolEvents = append(protocolEvents, "start")
+				}
+				return &gdm.Data{Type: gdm.DataType_eventAck}, nil
+
+			case gdm.DataType_request:
+				protocolEvents = append(protocolEvents, "stage")
+				return &gdm.Data{
+					Type: gdm.DataType_response,
+					Response: &gdm.ResponseData{
+						Type: data.Request.Type,
+						Data: &gdm.ResponseData_Ack{},
+					},
+				}, nil
+			}
+
+			return &gdm.Data{Type: gdm.DataType_eventAck}, nil
+		},
+	))
+
+	client := pam_test.NewDummyClient(nil,
+		pam_test.WithIgnoreSessionIDChecks(),
+		pam_test.WithUILayout(layouts.QrCode, "Device authentication", pam_test.QrCodeUILayout()),
+	)
+	m := newUIModelForClients(mTx, Gdm, authd.SessionMode_LOGIN, client, nil, nil)
+	m.currentSession = &sessionInfo{brokerID: "broker", sessionID: "session"}
+	label := "Device authentication"
+
+	updated, cmd := m.Update(UILayoutReceived{
+		layout: &authd.UILayout{
+			Type:  layouts.QrCode,
+			Label: &label,
+		},
+	})
+	m = convertTo[uiModel](updated)
+	layoutCommands, ok := asCmdSlice(cmd())
+	require.True(t, ok)
+	require.Len(t, layoutCommands, 2)
+	require.Nil(t, layoutCommands[0]())
+	require.Equal(t, []string{"layout"}, protocolEvents)
+
+	stageRequest, ok := layoutCommands[1]().(ChangeStage)
+	require.True(t, ok)
+	require.Equal(t, proto.Stage_challenge, stageRequest.Stage)
+
+	updated, cmd = m.Update(stageRequest)
+	m = convertTo[uiModel](updated)
+	msgs := collectMessages(cmd)
+
+	var stageChanged StageChanged
+	for _, msg := range msgs {
+		if msg, ok := msg.(StageChanged); ok {
+			stageChanged = msg
+			break
+		}
+	}
+	require.Equal(t, proto.Stage_challenge, stageChanged.Stage)
+
+	updated, cmd = m.Update(stageChanged)
+	m = convertTo[uiModel](updated)
+	stageCommands, ok := asCmdSlice(cmd())
+	require.True(t, ok)
+	require.Len(t, stageCommands, 2)
+	require.Nil(t, stageCommands[0]())
+	require.Equal(t, []string{"layout", "stage"}, protocolEvents)
+
+	start, ok := stageCommands[1]().(startAuthentication)
+	require.True(t, ok)
+	updated, cmd = m.Update(start)
+	m = convertTo[uiModel](updated)
+	_ = collectMessages(cmd)
+
+	require.Equal(t, []string{"layout", "stage", "start"}, protocolEvents)
 }

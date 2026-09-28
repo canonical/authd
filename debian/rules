@@ -7,6 +7,8 @@ include /usr/share/rustc/architecture.mk
 ifeq ($(DEB_DISTRIBUTION),noble)
 GNOME_SHELL_PATCHED_VERSION := 46.3.1-1ubuntu1~24.04.1authd11
 else ifeq ($(DEB_DISTRIBUTION),resolute)
+# Keep the patched PPA build as the lower bound until the PPA catches up with
+# the archive SRU. Newer archive versions are also compatible on Resolute.
 GNOME_SHELL_PATCHED_VERSION := 50.1-0ubuntu1.2+authd1~26.04.1
 else ifeq ($(DEB_DISTRIBUTION),stonking)
 GNOME_SHELL_PATCHED_VERSION := 51~beta-0ubuntu1
@@ -15,17 +17,16 @@ $(error Unsupported distribution "$(DEB_DISTRIBUTION)" for gnome-shell dependenc
 endif
 
 # Keep gnome-shell optional for server installations. Newer versions are
-# accepted on stonking because the patch that fixes
-# https://bugs.launchpad.net/ubuntu/+source/gnome-shell/+bug/2160622 landed
-# upstream there.
-ifeq ($(DEB_DISTRIBUTION),stonking)
-GNOME_SHELL_BREAKS := gnome-shell (<< $(GNOME_SHELL_PATCHED_VERSION))
-else
-# On older releases, reject versions other than the patched one from the authd PPA,
+# accepted on Resolute and Stonking because the patch that fixes
+# https://bugs.launchpad.net/ubuntu/+source/gnome-shell/+bug/2160622 already
+# landed in the archive for those releases.
+ifeq ($(DEB_DISTRIBUTION),noble)
+# On Noble, reject versions other than the patched one from the authd PPA,
 # because they would cause https://github.com/canonical/authd/issues/1424 to
 # occur almost every time.
-# TODO: Accept newer versions for resolute once the fix was SRUed there.
 GNOME_SHELL_BREAKS := gnome-shell (<< $(GNOME_SHELL_PATCHED_VERSION)), gnome-shell (>> $(GNOME_SHELL_PATCHED_VERSION))
+else
+GNOME_SHELL_BREAKS := gnome-shell (<< $(GNOME_SHELL_PATCHED_VERSION))
 endif
 
 # The package name for authd, used only locally to avoid repetitions
@@ -127,6 +128,10 @@ override_dh_auto_configure:
 	# 'dh_auto_configure --buildsystem=cargo' does ourselves, but without the
 	# vendoring checks.
 	# TODO: Drop this when we won't care about noble anymore.
+	# The XS-Vendored-Sources-Rust field is generated with newer filtering
+	# semantics. Noble's older helper includes empty platform stubs, so the
+	# Noble build always prepares the tree itself and skips that check, even
+	# when cargo-vendor-filterer is installed.
 	# If cargo-vendor-filterer is installed, we can still only call
 	# 'dh_auto_configure --buildsystem=cargo' if the cargo in $PATH is the one
 	# from /usr/share/cargo/bin/cargo, for the same reason as in the
@@ -134,6 +139,10 @@ override_dh_auto_configure:
 	# 'dh_auto_configure --buildsystem=cargo' does ourselves,
 	# but using the cargo in $PATH.
 	if ! command -v cargo-vendor-filterer 2>/dev/null; then \
+		env DEB_CARGO_CRATE="$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM)" \
+		  cargo prepare-debian "$(CARGO_VENDOR_DIR)"; \
+	elif [ "$(DEB_DISTRIBUTION)" = noble ]; then \
+		cp debian/cargo-checksum.json .cargo-checksum.json; \
 		env DEB_CARGO_CRATE="$(DEB_SOURCE)_$(DEB_VERSION_UPSTREAM)" \
 		  cargo prepare-debian "$(CARGO_VENDOR_DIR)"; \
 	elif [ "$$(command -v cargo)" = "/usr/share/cargo/bin/cargo" ]; then \

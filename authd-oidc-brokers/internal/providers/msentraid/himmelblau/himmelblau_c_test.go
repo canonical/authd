@@ -38,8 +38,8 @@ func TestMFAErrorCategoryMapping(t *testing.T) {
 		"AUTHORIZATION_DENIED must map to MFAErrorDenied")
 	require.Equal(t, MFAErrorRetryableCode, mfaErrorCategory(codeMFAInvalidCode),
 		"MFA_INVALID_CODE must map to MFAErrorRetryableCode")
-	require.Equal(t, MFAErrorRequired, mfaErrorCategory(codeMFADAGFallbackDisab),
-		"MFA_DAG_FALLBACK_DISABLED must map to MFAErrorRequired")
+	require.Equal(t, MFAErrorDAGFallbackDisabled, mfaErrorCategory(codeMFADAGFallbackDisab),
+		"MFA_DAG_FALLBACK_DISABLED must map to MFAErrorDAGFallbackDisabled")
 	require.Equal(t, MFAErrorPasswordRequired, mfaErrorCategory(codePasswordRequired),
 		"PASSWORD_REQUIRED must map to MFAErrorPasswordRequired")
 

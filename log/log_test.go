@@ -1,8 +1,11 @@
 package log_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/canonical/authd/log"
@@ -63,6 +66,39 @@ func callLogHandlerf(ctx context.Context, level log.Level, format string, args .
 	}
 }
 
+func TestLogPreservesLiteralMessages(t *testing.T) {
+	defaultLevel := log.GetLevel()
+	t.Cleanup(func() {
+		log.SetOutput(os.Stderr)
+		log.SetLevel(defaultLevel)
+	})
+	log.SetLevel(log.DebugLevel)
+
+	tests := map[string][]any{
+		"no arguments":       nil,
+		"empty message":      {""},
+		"plain message":      {"plain message"},
+		"trailing percent":   {"100%"},
+		"format directives":  {"%s %d %v %%"},
+		"multiple arguments": {"progress: ", 100, "%"},
+		"error":              {fmt.Errorf("file %q has insecure permissions", "/tmp/100%/broker.conf")},
+	}
+	for _, level := range supportedLevels {
+		for name, args := range tests {
+			t.Run(fmt.Sprintf("%s/%s", level, name), func(t *testing.T) {
+				var output bytes.Buffer
+				log.SetOutput(&output)
+
+				callLogHandler(context.Background(), level, args...)
+
+				parts := strings.SplitN(output.String(), " ", 3)
+				require.Len(t, parts, 3, "Expected timestamp, level, and message")
+				require.Equal(t, fmt.Sprint(args...)+"\n", parts[2])
+			})
+		}
+	}
+}
+
 func TestSetLevelHandler(t *testing.T) {
 	defaultLevel := log.GetLevel()
 	t.Cleanup(func() {
@@ -75,13 +111,13 @@ func TestSetLevelHandler(t *testing.T) {
 	for _, level := range supportedLevels {
 		t.Run(fmt.Sprintf("Set log handler for %s", level), func(t *testing.T) {
 			handlerCalled := false
-			wantArgs := []any{true, 5.5, []string{"bar"}}
+			wantArgs := []any{true, 5.5, []string{"bar"}, "100% %s %%"}
 			wantCtx := context.TODO()
 			log.SetLevelHandler(level, func(ctx context.Context, l log.Level, format string, args ...interface{}) {
 				handlerCalled = true
 				require.Equal(t, wantCtx, ctx, "Context should match expected")
 				require.Equal(t, level, l, "Log level should match %v", l)
-				require.Equal(t, fmt.Sprint(wantArgs...), format, "Format should match")
+				require.Equal(t, fmt.Sprint(wantArgs...), fmt.Sprintf(format, args...), "Message should match")
 			})
 
 			log.SetLevel(level)
@@ -142,14 +178,14 @@ func TestSetHandler(t *testing.T) {
 
 	handlerCalled := false
 	wantLevel := log.Level(0)
-	wantArgs := []any{true, 5.5, []string{"bar"}}
+	wantArgs := []any{true, 5.5, []string{"bar"}, "100% %s %%"}
 	wantCtx := context.TODO()
 
 	log.SetHandler(func(ctx context.Context, l log.Level, format string, args ...interface{}) {
 		handlerCalled = true
 		require.Equal(t, wantCtx, ctx, "Context should match expected")
 		require.Equal(t, wantLevel, l, "Log level should match %v", l)
-		require.Equal(t, fmt.Sprint(wantArgs...), format, "Format should match")
+		require.Equal(t, fmt.Sprint(wantArgs...), fmt.Sprintf(format, args...), "Message should match")
 	})
 	for idx, level := range supportedLevels {
 		t.Run(fmt.Sprintf("Set log handler, testing level %s", level), func(t *testing.T) {})
@@ -182,7 +218,7 @@ func TestSetHandler(t *testing.T) {
 		require.False(t, handlerCalled, "Handler should not have been called")
 	}
 
-	wantFormat := "Bool is %v, float is %f, array is %v"
+	wantFormat := "Bool is %v, float is %f, array is %v, string is %s"
 	log.SetHandler(func(ctx context.Context, l log.Level, format string, args ...interface{}) {
 		handlerCalled = true
 		require.Equal(t, wantCtx, ctx, "Context should match expected")

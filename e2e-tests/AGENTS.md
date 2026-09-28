@@ -180,6 +180,16 @@ e2e-tests/run-tests.sh \
     --broker authd-google --release noble ./e2e-tests/tests/login_gdm.robot
 ```
 
+In a sandboxed agent session, `XDG_DATA_HOME` and `XDG_RUNTIME_DIR` refer to
+isolated session roots rather than the host paths. The E2E VM images and
+libvirt artifacts are kept in host-visible directories, and test output must
+be stored where the session can read and preserve it. If the scripts derive
+their paths from the XDG variables, they may not use those host-visible paths.
+
+Set `AUTHD_E2E_DATA_DIR` for VM artifacts and `AUTHD_E2E_TEST_RUNS_DIR` for
+test and YARF output, or pass `--data-dir` to `vm/provision.sh` and
+`--test-runs-dir` to `run-tests.sh`.
+
 **Read the live stderr trace, not `log.html`.** `listener/Listener.py` prints a
 color-coded, real-time trace of every suite/test/keyword as it runs: each
 keyword with its arguments, ✓/✗ status, timing, every `INFO`+ log message, and

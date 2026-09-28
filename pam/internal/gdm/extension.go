@@ -54,7 +54,7 @@ var validateJSONFunc = validateJSONDisabled
 func IsPamExtensionSupported(extension string) bool {
 	cExtension := C.CString(extension)
 	defer C.free(unsafe.Pointer(cExtension))
-	return bool(C.is_gdm_pam_extension_supported(cExtension))
+	return bool(C.gdm_pam_extension_supported(cExtension))
 }
 
 // AdvertisePamExtensions enable GDM pam extensions in the current binary.
@@ -113,7 +113,7 @@ func (msg *jsonProtoMessage) initFull(protoName string, protoVersion uint, jsonV
 	if jsonValue != nil {
 		cJSON = C.CString(string(jsonValue))
 	}
-	C.gdm_custom_json_request_init((*C.GdmPamExtensionJSONProtocol)(msg),
+	C.gdm_pam_extension_custom_json_request_init((*C.GdmPamExtensionJSONProtocol)(msg),
 		cProto, C.uint(protoVersion), cJSON)
 }
 
@@ -122,8 +122,7 @@ func (msg *jsonProtoMessage) release() {
 		return
 	}
 
-	C.free(unsafe.Pointer(msg.json))
-	C.free(unsafe.Pointer(msg))
+	C.gdm_pam_extension_custom_json_response_free((*C.GdmPamExtensionJSONProtocol)(msg))
 }
 
 func (msg *jsonProtoMessage) protoName() string {

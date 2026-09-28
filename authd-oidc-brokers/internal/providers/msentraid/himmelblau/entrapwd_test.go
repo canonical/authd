@@ -1,7 +1,12 @@
 package himmelblau
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -21,6 +26,127 @@ func TestMFAError_Error(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tc.want, tc.err.Error())
+		})
+	}
+}
+
+func TestMFAError_IsMFATransient(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		err  *MFAError
+		want bool
+	}{
+		"External_server_retryable": {err: &MFAError{AADSTS: externalServerRetryableErrorCode}, want: true},
+		"Tenant_throttling":         {err: &MFAError{AADSTS: tenantThrottlingErrorCode}, want: true},
+		"Other_AADSTS":              {err: &MFAError{AADSTS: 50126}, want: false},
+		"Without_AADSTS":            {err: &MFAError{}, want: false},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, tc.err.IsMFATransient())
+		})
+	}
+}
+
+func TestRetryTransientInitiate(t *testing.T) {
+	t.Parallel()
+
+	transientErr := &MFAError{AADSTS: externalServerRetryableErrorCode}
+	nonTransientErr := &MFAError{AADSTS: 50126}
+	plainErr := errors.New("plain failure")
+	successFlow := &MFAFlowState{}
+
+	tests := map[string]struct {
+		results          []error
+		cancelDuringWait bool
+		wantCalls        int
+		wantElapsed      time.Duration
+		wantFlow         *MFAFlowState
+		wantErr          error
+	}{
+		"Success_without_retry": {
+			results:     []error{nil},
+			wantCalls:   1,
+			wantElapsed: 0,
+			wantFlow:    successFlow,
+		},
+		"Transient_then_success": {
+			results:     []error{transientErr, nil},
+			wantCalls:   2,
+			wantElapsed: time.Second,
+			wantFlow:    successFlow,
+		},
+		"Wrapped_transient_error_retries": {
+			results:     []error{fmt.Errorf("wrapped: %w", transientErr), nil},
+			wantCalls:   2,
+			wantElapsed: time.Second,
+			wantFlow:    successFlow,
+		},
+		"Three_transient_failures": {
+			results:     []error{transientErr, transientErr, transientErr},
+			wantCalls:   3,
+			wantElapsed: 3 * time.Second,
+			wantErr:     transientErr,
+		},
+		"Non_transient_error_stops_immediately": {
+			results:     []error{nonTransientErr},
+			wantCalls:   1,
+			wantElapsed: 0,
+			wantErr:     nonTransientErr,
+		},
+		"Plain_error_stops_immediately": {
+			results:     []error{plainErr},
+			wantCalls:   1,
+			wantElapsed: 0,
+			wantErr:     plainErr,
+		},
+		"Cancellation_during_backoff": {
+			results:          []error{transientErr, nil},
+			cancelDuringWait: true,
+			wantCalls:        1,
+			wantElapsed:      time.Millisecond,
+			wantErr:          context.Canceled,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				if tc.cancelDuringWait {
+					go func() {
+						time.Sleep(time.Millisecond)
+						cancel()
+					}()
+				}
+
+				var calls int
+				start := time.Now()
+				flow, err := retryTransientInitiate(ctx, []time.Duration{time.Second, 2 * time.Second}, func() (*MFAFlowState, error) {
+					require.Less(t, calls, len(tc.results))
+					result := tc.results[calls]
+					calls++
+					if result != nil {
+						return nil, result
+					}
+					return successFlow, nil
+				})
+
+				require.Equal(t, tc.wantCalls, calls)
+				require.Equal(t, tc.wantElapsed, time.Since(start))
+				require.Same(t, tc.wantFlow, flow)
+				if tc.wantErr == nil {
+					require.NoError(t, err)
+				} else {
+					require.ErrorIs(t, err, tc.wantErr)
+				}
+			})
 		})
 	}
 }
@@ -76,10 +202,11 @@ func TestMFAError_IsMFARequired(t *testing.T) {
 		err  *MFAError
 		want bool
 	}{
-		"Required":      {err: &MFAError{Category: MFAErrorRequired}, want: true},
-		"Poll_continue": {err: &MFAError{Category: MFAErrorPollContinue}, want: false},
-		"Denied":        {err: &MFAError{Category: MFAErrorDenied}, want: false},
-		"Other":         {err: &MFAError{Category: MFAErrorOther}, want: false},
+		"Required":              {err: &MFAError{Category: MFAErrorRequired}, want: true},
+		"DAG_fallback_disabled": {err: &MFAError{Category: MFAErrorDAGFallbackDisabled}, want: true},
+		"Poll_continue":         {err: &MFAError{Category: MFAErrorPollContinue}, want: false},
+		"Denied":                {err: &MFAError{Category: MFAErrorDenied}, want: false},
+		"Other":                 {err: &MFAError{Category: MFAErrorOther}, want: false},
 	}
 
 	for name, tc := range tests {

@@ -6,6 +6,8 @@ import threading
 from robot.api.deco import keyword, library  # type: ignore
 from robot.api import logger
 
+from RecordingUtils import current_test_name_for_filename
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BROWSER_LOGIN_DIR = os.path.join(SCRIPT_DIR, "browser_login")
 
@@ -52,7 +54,14 @@ class Browser:
                 f"Known brokers: {sorted(_BROKER_LOGIN_SCRIPTS.keys())}"
             )
 
-        command = [script, usercode, "--output-dir", output_dir]
+        command = [
+            script,
+            usercode,
+            "--output-dir",
+            output_dir,
+            "--recording-name",
+            f"Webview_Recording_{current_test_name_for_filename()}",
+        ]
         if not os.getenv("SHOW_WEBVIEW"):
             command = ["/usr/bin/env", "GDK_BACKEND=x11", "xvfb-run", "-a", "--"] + command
 

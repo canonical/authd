@@ -23,7 +23,8 @@ Microsoft Entra ID supports the following authentication flows:
   method, or with their Entra ID password followed by an MFA challenge.
   On success, authd caches the access tokens and user information locally.
   For offline login, it stores only a salted hash of the Entra ID or local
-  password. See [Stored secrets](/explanation/security.md#stored-secrets).
+  password. See [Stored secrets](ref::stored-secrets) and
+  [Cached Entra ID passwords](ref::cached-entra-passwords).
 
 The device code flow is enabled by default. If `entra_auth` is omitted, its
 default follows `register_device`: it is enabled when device registration is
@@ -49,8 +50,9 @@ an invalid configuration and the broker fails to start. See
 2. **Passwordless sign-in or password**: If a passwordless method is enrolled,
    such as a FIDO2 security key (for example, a YubiKey), passwordless sign-in
    through the Microsoft Authenticator app, or a Temporary Access Pass, the
-   matching challenge is presented directly and no password is entered.
-   Otherwise, the user enters their Entra ID password.
+   matching challenge is offered. For passwordless FIDO2 challenges, Entra ID
+   password entry is also available if the account supports it. If no
+   passwordless method is enrolled, the user enters their Entra ID password.
 3. **MFA challenge**: A password sign-in is followed by an MFA challenge: the
    user approves a push notification or a number-matching prompt, enters a
    time-based one-time password, or touches a FIDO2 security key. A
@@ -60,9 +62,13 @@ an invalid configuration and the broker fails to start. See
    authd asks them to create a local password on first login. Only a salted
    hash of this password is stored for subsequent offline logins.
 
-If a security key challenge is expected but no key is connected, the broker
-waits briefly for one to be plugged in. If none appears, login falls back to the
-device code flow when it is enabled.
+A FIDO2 challenge may refer to a passkey that is not available on this
+computer, such as one stored on a phone or in a browser on another device. If
+a local security key cannot complete the challenge, authd first uses an
+available Microsoft Authenticator number-matching flow and then falls back to
+Entra ID password authentication when the account supports it. Authenticator
+number matching is probed before selecting the local security-key transport so
+an unsupported synced or cross-device passkey does not cause a password prompt.
 
 ### Compatibility and requirements
 
@@ -76,9 +82,10 @@ otherwise:
 - Accounts without an MFA method enrolled
 - Federated (on-premises AD FS) accounts
 
-Accounts whose only enrolled MFA method is a FIDO2 security key need a
-security key connected to the machine during login. Without one, they follow the
-same fallback to the device code flow.
+Falling back to the Entra ID password assumes the tenant allows password
+sign-in for the account. Accounts that only allow passwordless FIDO sign-in
+need a security key that holds the account's credential connected to the
+machine, or must use the device code flow.
 
 ## Keycloak
 

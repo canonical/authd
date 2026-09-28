@@ -76,6 +76,13 @@ write_files:
       use-system-font=false
       font-name='Monospace 12'
 
+  # Configure dconf for GDM
+  - path: /usr/share/gdm/dconf/00-e2e-tests-requirements
+    content: |
+      # Use larger text for better OCR results
+      [org/gnome/desktop/interface]
+      text-scaling-factor=1.25
+
   - path: /etc/ssh/sshd_config.d/root.conf
     content: |
       ${CI_ROOT_SSHD_CONFIG}

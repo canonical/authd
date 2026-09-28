@@ -85,7 +85,7 @@ parts:
       install -D ${CARGO_TARGET_DIR}/${TARGET_TRIPLE}/release/himmelblau.h ${CRAFT_PART_INSTALL}/include/himmelblau.h
     prime:
       - -include/**
-      - -lib/**.so
+      - -lib/**/*.so
   broker:
     source: authd-oidc-brokers
     source-type: local

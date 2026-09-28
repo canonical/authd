@@ -1,5 +1,108 @@
 #!/bin/bash
 
+# shellcheck disable=SC2034 # Used by scripts that source this library.
+AUTHD_DEFAULT_APT_SOURCE="ppa:ubuntu-enterprise-desktop/authd-edge"
+
+function normalize_apt_source() {
+    local source="$1"
+
+    case "${source}" in
+        authd|stable|ubuntu-enterprise-desktop/authd|ppa:ubuntu-enterprise-desktop/authd)
+            echo "ppa:ubuntu-enterprise-desktop/authd"
+            ;;
+        authd-edge|edge|ubuntu-enterprise-desktop/authd-edge|ppa:ubuntu-enterprise-desktop/authd-edge)
+            echo "ppa:ubuntu-enterprise-desktop/authd-edge"
+            ;;
+        authd-dev|dev|ubuntu-enterprise-desktop/authd-dev|ppa:ubuntu-enterprise-desktop/authd-dev)
+            echo "ppa:ubuntu-enterprise-desktop/authd-dev"
+            ;;
+        ppa:*)
+            echo "Invalid APT source '${source}'." >&2
+            return 1
+            ;;
+        "")
+            echo "APT source must not be empty." >&2
+            return 1
+            ;;
+        *)
+            if [[ "${source}" =~ ^[a-z0-9][a-z0-9+.-]*$ ]]; then
+                echo "${source}"
+            else
+                echo "Invalid APT source '${source}'." >&2
+                return 1
+            fi
+            ;;
+    esac
+}
+
+function is_ppa_source() {
+    [[ "$1" == ppa:* ]]
+}
+
+function ppa_has_suite() {
+    # Return 0 if published, 1 if missing, and 2 if the check failed.
+    local ppa="$1"
+    local suite="$2"
+    local metadata
+    local status
+    local url="https://ppa.launchpadcontent.net/${ppa}/ubuntu/dists/${suite}"
+
+    for metadata in InRelease Release; do
+        if ! status="$(
+            curl \
+                --silent \
+                --show-error \
+                --head \
+                --location \
+                --output /dev/null \
+                --write-out '%{http_code}' \
+                --connect-timeout 10 \
+                --max-time 30 \
+                "${url}/${metadata}"
+        )"; then
+            echo "Failed to check PPA '${ppa}' for suite '${suite}'." >&2
+            return 2
+        fi
+
+        case "${status}" in
+            200)
+                return 0
+                ;;
+            404)
+                ;;
+            *)
+                echo "Unexpected HTTP status '${status}' checking PPA '${ppa}' for suite '${suite}'." >&2
+                return 2
+                ;;
+        esac
+    done
+
+    return 1
+}
+
+function source_pin() {
+    local source="$1"
+    local ppa
+
+    if is_ppa_source "${source}"; then
+        ppa="${source#ppa:}"
+        ppa="${ppa//\//-}"
+        echo "o=LP-PPA-${ppa}"
+    else
+        echo "a=${source}"
+    fi
+}
+
+function source_policy_reference() {
+    local source="$1"
+
+    if is_ppa_source "${source}"; then
+        echo "/${source#ppa:}/ubuntu"
+    else
+        echo "${source}/"
+    fi
+}
+
 function assert_env_vars() {
     local template="e2e-tests/vm/config.env.template"
     if [[ "${1:-}" == "--template" ]]; then
@@ -108,8 +211,13 @@ function reboot_system() {
 function shutdown_system() {
     # For some reason, `virsh shutdown` sometimes doesn't cause the VM
     # to shut down, so we retry it a few times.
-    local cmd="virsh shutdown \"${VM_NAME}\" && \
-virsh await \"${VM_NAME}\" --condition domain-inactive --timeout 5"
+    # `virsh await` is not available in all libvirt client versions.
+    local cmd="if virsh domstate \"${VM_NAME}\" | grep -q '^shut off'; then
+    exit 0
+fi
+virsh shutdown \"${VM_NAME}\" && \
+timeout 5 retry --delay 1 -- sh -c \
+\"virsh domstate \\\"${VM_NAME}\\\" | grep -q '^shut off'\""
     retry --times 3 --delay 1 -- sh -c "$cmd"
 }
 

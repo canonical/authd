@@ -8,16 +8,18 @@ name: Update packaging files on Dependabot PR
 #     vendor_rust/.
 #
 # This workflow regenerates the files and pushes them to the Dependabot branch.
+# The commit is created through the GitHub API so GitHub can verify its bot
+# signature. The generation jobs still have read-only permissions.
 #
 # It handles only the root Cargo and Go manifests. Dependencies in tools/,
 # authd-oidc-brokers/, GitHub Actions, and submodules are not part of the
 # Debian package, so they do not need entries in debian/copyright.
 #
-# Cargo.lock and debian/control are generated in Ubuntu Noble, the oldest
-# supported release and the package build environment. Noble's default Cargo
-# is too old to parse Cargo.toml, so the pinned Cargo bin directory is placed
-# first in PATH. debian/copyright is generated in ubuntu:devel, which provides
-# python3-anytree and matches the licenserecon check.
+# Cargo.lock is generated in Ubuntu Noble, the oldest supported release.
+# Noble's default Cargo is too old to parse Cargo.toml, so the pinned Cargo
+# bin directory is placed first in PATH. debian/control's
+# XS-Vendored-Sources-Rust field and debian/copyright are generated in
+# ubuntu:devel from the same filtered vendor tree.
 # Generation jobs run Cargo, cargo-vendor-filterer, Go, and a repository
 # script, which may execute dependency build code, so they have read-only
 # permissions. The separate commit-and-push job has the write token but only
@@ -39,9 +41,6 @@ permissions:
   contents: read
 
 env:
-  # Keep these aligned with debian-build.yaml.
-  # Noble's Rust 1.75 supports cargo-vendor-filterer only up to 0.5.16.
-  CARGO_VENDOR_FILTERER_NOBLE_VERSION: 0.5.16
   # The ubuntu:devel image provides OpenSSL 4, which requires 0.5.18.
   CARGO_VENDOR_FILTERER_DEVEL_VERSION: 0.5.18
 
@@ -53,7 +52,7 @@ defaults:
 
 jobs:
   generate-cargo:
-    name: Regenerate Cargo.lock and XS-Vendored-Sources-Rust
+    name: Regenerate Cargo.lock
     # Run only for Dependabot updates to the root Rust or Go dependencies.
     # Check the PR author instead of github.actor because a maintainer may
     # trigger a run. Dependabot PRs use branches in this repository, so the
@@ -71,6 +70,7 @@ jobs:
       IS_CARGO_PR: ${{ startsWith(github.event.pull_request.head.ref, 'dependabot/cargo/') }}
 
     steps:
+      - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
       # The container image does not include git, which checkout needs.
       - name: Install git
         run: |
@@ -96,62 +96,23 @@ jobs:
           fi
           echo "CARGO_NOBLE_VERSION=${CARGO_NOBLE_VERSION}" >> "${GITHUB_ENV}"
 
-      - name: Install build dependencies
+      - name: Install Cargo
         if: env.IS_CARGO_PR == 'true'
         run: |
-          apt-get update -y
-          # build-essential builds cargo-vendor-filterer.
           apt-get install -y --no-install-recommends \
-            build-essential \
-            dh-cargo \
-            libssl-dev \
-            pkg-config \
             "cargo-${CARGO_NOBLE_VERSION}"
 
-          # dh-cargo installs an old unversioned Cargo. Use the pinned Cargo
-          # directly; the dh-cargo wrapper would force offline/vendor mode,
-          # but this step needs network access.
+          # Use the pinned Cargo directly; the system Cargo may be older.
+          # This step needs network access.
           echo "/usr/lib/rust-${CARGO_NOBLE_VERSION}/bin" >> "${GITHUB_PATH}"
 
-      - name: Regenerate Cargo.lock and XS-Vendored-Sources-Rust
-        # Go-only updates cannot change Cargo.lock or
-        # XS-Vendored-Sources-Rust. Skip Rust generation and upload the
-        # checked-out files unchanged.
+      - name: Regenerate Cargo.lock
+        # Go-only updates cannot change Cargo.lock. Skip Rust generation and
+        # upload the checked-out files unchanged.
         if: env.IS_CARGO_PR == 'true'
         run: |
           cargo --version
-
-          cargo install --locked --root=/usr \
-            cargo-vendor-filterer@"${CARGO_VENDOR_FILTERER_NOBLE_VERSION}"
-
           cargo generate-lockfile
-
-          # Use a temporary vendor tree to compute XS-Vendored-Sources-Rust.
-          # The copyright job recreates it from Cargo.lock instead of
-          # transferring the tree between jobs.
-          rm -rf vendor_rust
-          cargo vendor-filterer vendor_rust
-
-          echo "Running dh-cargo-vendored-sources"
-          export CARGO_VENDOR_DIR=vendor_rust
-          VENDORED_SOURCES=$(/usr/share/cargo/bin/dh-cargo-vendored-sources 2>&1) \
-            || cmd_status=$?
-          echo "${VENDORED_SOURCES}"
-
-          OUTPUT=$(echo "${VENDORED_SOURCES}" | grep ^XS-Vendored-Sources-Rust: || true)
-          if [ -z "${OUTPUT}" ]; then
-            if [ "${cmd_status:-0}" -ne 0 ]; then
-              # Propagate an unexpected dh-cargo failure.
-              echo "dh-cargo-vendored-sources failed unexpectedly (exit code ${cmd_status})"
-              exit "${cmd_status}"
-            fi
-
-            echo "XS-Vendored-Sources-Rust is up to date. No change is needed."
-          else
-            sed -i "s/^XS-Vendored-Sources-Rust:.*/${OUTPUT}/" debian/control
-          fi
-
-          rm -rf vendor_rust
 
       - name: Upload Cargo.lock and debian/control
         uses: actions/upload-artifact@v7
@@ -164,6 +125,8 @@ jobs:
 
   generate-copyright:
     name: Regenerate debian/copyright
+    # This job consumes the Cargo.lock and debian/control artifact from
+    # generate-cargo to recreate the Rust vendor tree consistently.
     needs: generate-cargo
     runs-on: ubuntu-latest
     container:
@@ -172,6 +135,7 @@ jobs:
       changed: ${{ steps.diff.outputs.changed }}
 
     steps:
+      - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
       # The container image does not include git, which checkout and setup-go
       # need.
       - name: Install git
@@ -216,12 +180,12 @@ jobs:
             exit 1
           fi
 
-      - name: Install cargo and cargo-vendor-filterer
+      - name: Install Cargo, dh-cargo, and cargo-vendor-filterer
         run: |
-          apt-get update -y
           apt-get install -y --no-install-recommends \
             build-essential \
             cargo \
+            dh-cargo \
             libssl-dev \
             pkg-config
 
@@ -230,27 +194,38 @@ jobs:
 
       - name: Vendor the Rust dependencies
         run: |
-          # ubuntu:devel's Cargo may rewrite Cargo.lock while vendoring. Keep
-          # the Noble-generated file so it still matches
-          # XS-Vendored-Sources-Rust.
+          # Keep the Noble-generated lockfile unchanged while recreating the
+          # vendor tree with the Devel vendoring stack.
           cp Cargo.lock Cargo.lock.noble
 
           # Cargo.lock fully determines this tree, so recreate it instead of
-          # transferring the tree from generate-cargo.
+          # transferring the tree from the other job.
           rm -rf vendor_rust
           cargo vendor-filterer vendor_rust
 
           mv Cargo.lock.noble Cargo.lock
 
+      - name: Regenerate XS-Vendored-Sources-Rust
+        run: |
+          export CARGO_VENDOR_DIR=vendor_rust
+          OUTPUT=$(/usr/share/cargo/bin/dh-cargo-vendored-sources --output-expected)
+          sed -i "s/^XS-Vendored-Sources-Rust:.*/XS-Vendored-Sources-Rust: ${OUTPUT}/" debian/control
+          /usr/share/cargo/bin/dh-cargo-vendored-sources
+
       - name: Install licensecheck and python3-anytree
         run: |
           apt-get update -y
+          # Enable licensecheck's RE2 regex engine. Without it, ubuntu:devel
+          # double-encodes non-ASCII copyright holders.
           apt-get install -y --no-install-recommends \
             licensecheck \
+            libre-engine-re2-perl \
             python3-anytree
 
       - name: Regenerate debian/copyright
         run: |
+          # licensecheck uses the process locale when writing its output.
+          export LC_ALL=C.UTF-8
           # Pass both trees because the script rewrites all vendored Files:
           # stanzas. Use relative paths because they are written verbatim to
           # debian/copyright.
@@ -259,9 +234,8 @@ jobs:
       - name: Check whether the packaging files changed
         id: diff
         run: |
-          # Compare the worktree with the index directly. This avoids Git
-          # interpreting the paths as a no-index comparison.
-          if git diff-files --quiet -- Cargo.lock debian/control debian/copyright; then
+          # Compare file contents with HEAD
+          if git diff --quiet HEAD -- Cargo.lock debian/control debian/copyright; then
             echo "Nothing to commit."
             echo "changed=false" >> "${GITHUB_OUTPUT}"
           else
@@ -294,8 +268,9 @@ jobs:
           # Use the exact SHA used by generation. If the branch moved, the push
           # must fail instead of applying stale files to the new tip.
           ref: ${{ github.event.pull_request.head.sha }}
-          # The push uses the default token.
-          persist-credentials: true
+          # The API calls use GH_TOKEN directly. Do not persist the checkout
+          # token in .git/config, where later commands could use it implicitly.
+          persist-credentials: false
 
       # This job only applies the artifact. It does not run repository scripts,
       # Cargo, or Go, so the write token is not exposed to PR code.
@@ -305,23 +280,67 @@ jobs:
           name: packaging-files
 
       - name: Commit and push changes
-        run: |-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add Cargo.lock debian/control debian/copyright
-          git commit -F - <<'EOF'
-          Regenerate packaging files
-
-          Generated by the update-packaging-on-dependabot-pr workflow:
-
-          - Cargo.lock (using Cargo from Ubuntu Noble)
-          - debian/control (XS-Vendored-Sources-Rust)
-          - debian/copyright
-          EOF
-          # A moved branch makes this run obsolete; the new run handles its tip.
-          git push origin "HEAD:${HEAD_REF}"
         env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
           # head.ref is untrusted input. Passing it through the environment
           # avoids putting it directly in shell syntax.
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |-
+          # The API creates a commit even when all additions match the branch.
+          # Compare contents with HEAD
+          if git diff --quiet HEAD -- Cargo.lock debian/control debian/copyright; then
+            echo "Generated packaging files already match the PR branch."
+            exit 0
+          fi
+
+          BASE_SHA=$(git rev-parse HEAD)
+          COMMIT_RESPONSE=$(jq -n \
+            --arg repository "${REPOSITORY}" \
+            --arg branch "${HEAD_REF}" \
+            --arg expected_head_oid "${BASE_SHA}" \
+            --rawfile cargo_lock Cargo.lock \
+            --rawfile control debian/control \
+            --rawfile copyright debian/copyright \
+            '{
+              query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid signature { isValid } } } }",
+              variables: {
+                input: {
+                  branch: {
+                    repositoryNameWithOwner: $repository,
+                    branchName: $branch
+                  },
+                  expectedHeadOid: $expected_head_oid,
+                  message: {
+                    headline: "Regenerate packaging files",
+                    body: "Generated by the update-packaging-on-dependabot-pr workflow:\n\n- Cargo.lock (using Cargo from Ubuntu Noble)\n- debian/control (XS-Vendored-Sources-Rust)\n- debian/copyright"
+                  },
+                  fileChanges: {
+                    additions: [
+                      {
+                        path: "Cargo.lock",
+                        contents: ($cargo_lock | @base64)
+                      },
+                      {
+                        path: "debian/control",
+                        contents: ($control | @base64)
+                      },
+                      {
+                        path: "debian/copyright",
+                        contents: ($copyright | @base64)
+                      }
+                    ]
+                  }
+                }
+              }
+            }' \
+            | gh api graphql \
+              --input -)
+
+          if ! jq -e '.data.createCommitOnBranch.commit.signature.isValid == true' \
+            <<<"${COMMIT_RESPONSE}" >/dev/null; then
+            echo "GitHub did not verify the generated commit signature." >&2
+            jq '.errors // .data.createCommitOnBranch.commit.signature' \
+              <<<"${COMMIT_RESPONSE}" >&2
+            exit 1
+          fi

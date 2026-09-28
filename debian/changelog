@@ -1,3 +1,73 @@
+authd (0.7.0) stonking; urgency=medium
+
+  * Improve error behavior when broker fails to start
+  * Avoid Tokio panic during late NSS lookups
+  * pam/gdm: Ignore GDM echo of our own auth mode selection
+  * pam/adapter: Ignore stale stopAuthentication from a superseded challenge
+  * Hide terminal password prompt after submission
+  * config: nest PAM settings under `pam:` with per-service overrides
+  * pam: Don't offer existing users to choose a different provider
+  * Ensure GDM sees managed users after reboot
+  * pam/main-exec: Exit with failure if the server connection is lost
+  * pam: don't fail auth when UpdateBrokerForUser write fails
+  * Use "authentication flow" terminology consistently
+  * pam/gdm: serialise concurrent PAM conversations
+  * pam: fall back to native mode when TERM=dumb
+  * pam/native: don't show stage headers in polkit dialog
+  * pam: Return PAM_IGNORE early when only the local broker is available
+  * Improve PAM prompts
+  * Fix selection menu shown briefly before auto-selection
+  * pam/go-exec: drain GMainContext after stopping GDBusServer on cleanup
+  * pam: Set `PAM_AUTHTOK` on successful authentication
+  * Allow non-root processes to use the PAM service
+  * Use "device code flow" terminology consistently
+  * pam: reject broker mismatch early in SelectBroker
+  * brokers: use providerID for user identification
+  * authctl: add authctl user set-home
+  * debian/rules: Fix dh_auto_configure using wrong cargo version
+  * Add `authctl user set-shell` command
+  * Support deleting users and groups via authctl
+  * pam/adapter: Return ErrAuthinfoUnavail when broker listing fails
+  * Return PAM_MAXTRIES on too many auth failures
+  * Support API versioning in broker API and authd
+  * pam/adapter: fix authTracker race with a generation counter
+  * pam: use dynamic padding for URL/Code labels alignment
+  * Improve login layout
+  * pam/main-exec: Don't set timeout for D-Bus connection
+  * pam: Support Ctrl-D in text entries
+  * Remove bbolt to SQLite migration code
+  * Update Go dependencies:
+    - toolchain go1.26.7
+    - github.com/mattn/go-sqlite3 v1.14.52
+    - github.com/stretchr/testify v1.12.1
+    - golang.org/x/sys v0.48.0
+    - golang.org/x/term v0.45.0
+    - google.golang.org/grpc v1.83.2
+    - google.golang.org/protobuf v1.36.12
+    - gopkg.in/ini.v1 v1.67.3
+    - go.yaml.in/yaml/v3 v3.0.5 // indirect
+    - golang.org/x/net v0.58.0 // indirect
+    - golang.org/x/sync v0.22.0 // indirect
+    - golang.org/x/text v0.41.0 // indirect
+    - google.golang.org/genproto/googleapis/rpc
+      v0.0.0-20260526163538-3dc84a4a5aaa // indirect
+  * Update Rust dependencies:
+    - cc 1.4.7
+    - hyper-util 0.1.20
+    - libc 0.2.189
+    - log 0.4.34
+    - once_cell 1.21.4
+    - prost 0.14.4
+    - rustix 1.1.5
+    - simple_logger 5.2.0
+    - time 0.3.55
+    - tokio 1.53.1
+    - tonic 0.14.6
+    - tonic-prost 0.14.6
+    - tonic-prost-build 0.14.6
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Thu, 24 Sep 2026 12:47:34 +0200
+
 authd (0.6.4) resolute; urgency=medium
 
   * Fix primary group ID reset to UID during login

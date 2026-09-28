@@ -46,6 +46,13 @@ sudo journalctl -u snap.authd-msentraid.authd-msentraid.service
 sudo journalctl -u snap.authd-google.authd-google.service
 ```
 :::
+:::{tab-item} Keycloak
+:sync: keycloak
+
+```shell
+sudo journalctl -u snap.authd-oidc.authd-oidc.service
+```
+:::
 ::::
 
 For the GDM integration:
@@ -180,6 +187,41 @@ On earlier Ubuntu versions, use:
 ```
 sudo systemctl restart snap.authd-google.authd-google.service
 sudo systemctl status snap.authd-google.authd-google.service
+```
+
+:::
+
+:::{tab-item} Keycloak
+:sync: keycloak
+
+To increase the verbosity of the broker service, edit the service file:
+
+```shell
+sudo systemctl edit snap.authd-oidc.authd-oidc.service
+```
+
+Add the following lines to the override file and make sure to add `-vv` to the
+exec command:
+
+```ini
+[Service]
+ExecStart=
+ExecStart=/usr/bin/snap run authd-oidc -vv
+```
+
+You will then need to restart the service, as follows.
+
+On Ubuntu 26.04 or later, you can restart the broker and print its logs with:
+
+```
+sudo systemctl restart -v snap.authd-oidc.authd-oidc.service
+```
+
+On earlier Ubuntu versions, use:
+
+```
+sudo systemctl restart snap.authd-oidc.authd-oidc.service
+sudo systemctl status snap.authd-oidc.authd-oidc.service
 ```
 
 :::

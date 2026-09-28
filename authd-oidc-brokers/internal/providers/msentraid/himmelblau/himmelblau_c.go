@@ -72,7 +72,7 @@ func mfaErrorCategory(code uint32) MFAErrorCategory {
 	case codeMFAInvalidCode:
 		return MFAErrorRetryableCode
 	case codeMFADAGFallbackDisab:
-		return MFAErrorRequired
+		return MFAErrorDAGFallbackDisabled
 	case codePasswordRequired:
 		return MFAErrorPasswordRequired
 	}
@@ -679,6 +679,24 @@ func mfaFlowMaxPollAttempts(flow *MFAFlowState) int {
 		return -1
 	}
 	return int(C.mfa_auth_continue_max_poll_attempts(c))
+}
+
+func mfaFlowHasPassword(flow *MFAFlowState) (bool, error) {
+	if flow == nil {
+		return false, fmt.Errorf("missing MFA flow state")
+	}
+	flow.mu.Lock()
+	defer flow.mu.Unlock()
+	c := cFlow(flow)
+	if c == nil {
+		return false, fmt.Errorf("missing MFA flow state")
+	}
+	var hasPassword C.bool
+	msalErr := C.mfa_auth_continue_has_password(c, &hasPassword)
+	if msalErr != nil {
+		return false, fmt.Errorf("failed to get password capability: %v", msalErrorMsg(msalErr))
+	}
+	return bool(hasPassword), nil
 }
 
 // mfaFlowFidoChallenge returns the WebAuthn challenge negotiated for a FIDO

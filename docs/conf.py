@@ -151,6 +151,8 @@ sitemap_excludes = [
 ################################
 
 html_static_path = ["_static"]
+# Publishes context7.json as-is at the site root.
+html_extra_path = ["context7.json"]
 templates_path = ["_templates"]
 
 #############
