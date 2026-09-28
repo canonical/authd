@@ -641,6 +641,37 @@ func TestParseConfigReportsLegacyViolations(t *testing.T) {
 	require.ErrorContains(t, reported[0], `unknown section "future"`)
 }
 
+func TestNewBrokersParsesConfigOnce(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "broker.conf")
+	require.NoError(t, os.WriteFile(configPath, []byte(configTypes["valid"]+"\n[future]\nkey = value\n"), 0600))
+
+	var calls int
+	var reported []error
+	brokers, err := NewBrokers(Config{
+		ConfigFile:        configPath,
+		DataDir:           t.TempDir(),
+		AllowLegacyConfig: true,
+		ReportConfigViolations: func(violations []error) {
+			calls++
+			reported = append(reported, violations...)
+		},
+	}, []string{"Broker", "Broker2", "Broker3"})
+	require.NoError(t, err)
+	require.Len(t, brokers, 3)
+	for i, b := range brokers {
+		require.Equal(t, uint(i)+1, b.apiVersion)
+	}
+	require.Equal(t, 1, calls)
+	require.Len(t, reported, 1)
+	require.ErrorContains(t, reported[0], `unknown section "future"`)
+
+	require.NoError(t, brokers[0].cfg.registerOwner("", "first-user"))
+	require.Equal(t, "first-user", brokers[0].cfg.owner)
+	require.Empty(t, brokers[1].cfg.owner)
+}
+
 var testParseUserConfigTypes = map[string]string{
 	"All_are_allowed": `
 [oidc]

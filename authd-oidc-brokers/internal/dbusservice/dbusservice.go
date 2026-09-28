@@ -10,7 +10,6 @@ import (
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
-	"github.com/canonical/authd/log"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/introspect"
 )
@@ -138,15 +137,14 @@ func New(_ context.Context, brokerConfig broker.Config) (*Service, error) {
 		return nil, err
 	}
 
+	brokers, err := broker.NewBrokers(brokerConfig, interfaceNames)
+	if err != nil {
+		service.initializationFailed(err)
+		service.disconnect()
+		return nil, err
+	}
 	for i, s := range service.interfaces {
-		log.Debugf(context.Background(), "Initializing broker for interface %s", s.iface)
-		b, err := broker.New(brokerConfig, uint(i)+1)
-		if err != nil {
-			service.initializationFailed(err)
-			service.disconnect()
-			return nil, err
-		}
-		s.broker = b
+		s.broker = brokers[i]
 	}
 
 	service.initializationDone()

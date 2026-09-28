@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -267,6 +268,19 @@ func parseConfigFromPath(cfgPath string, p provider, allowLegacyConfig bool, rep
 	}
 
 	return parseConfigWithReporter(cfgFile, dropInFiles, p, allowLegacyConfig, reportConfigViolations)
+}
+
+func cloneUserConfig(uc userConfig) userConfig {
+	uc.ownerMutex = &sync.RWMutex{}
+
+	uc.allowedUsers = maps.Clone(uc.allowedUsers)
+
+	uc.allowedSSHSuffixes = slices.Clone(uc.allowedSSHSuffixes)
+	uc.extraGroups = slices.Clone(uc.extraGroups)
+	uc.ownerExtraGroups = slices.Clone(uc.ownerExtraGroups)
+	uc.extraScopes = slices.Clone(uc.extraScopes)
+
+	return uc
 }
 
 // validatePlaceholders checks that no values in iniCfg still contain unedited
