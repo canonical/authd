@@ -3,6 +3,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -128,48 +129,65 @@ func (a *App) serve(config daemonConfig) error {
 	}
 	defer closeFunc()
 
+	snapData := os.Getenv("SNAP_DATA")
+	allowLegacyConfig, err := allowLegacyConfigFromSnapData(snapData)
+	if err != nil {
+		return fmt.Errorf("error determining broker configuration validation mode: %w", err)
+	}
+
 	owner := os.Geteuid()
 	if err := ensureDirWithOwner(config.Paths.DataDir, 0700, owner); err != nil {
 		return fmt.Errorf("error initializing data directory %q: %v", config.Paths.DataDir, err)
 	}
 
-	brokerConfigDir := broker.GetDropInDir(config.Paths.BrokerConf)
-	if err := ensureDirWithOwner(brokerConfigDir, 0755, owner); err != nil {
-		return fmt.Errorf("error initializing broker configuration drop-in directory %q: %v", brokerConfigDir, err)
-	}
-	if err := checkTrustedDir(brokerConfigDir, owner); err != nil {
-		return fmt.Errorf("error validating broker configuration drop-in directory %q: %w", brokerConfigDir, err)
+	brokerDropInDir := broker.GetDropInDir(config.Paths.BrokerConf)
+	//nolint:gosec // G301: Admins must be able to read and list config drop-ins.
+	if err := os.Mkdir(brokerDropInDir, 0755); err != nil && !errors.Is(err, os.ErrExist) {
+		return fmt.Errorf("error initializing broker configuration drop-in directory %q: %w", brokerDropInDir, err)
 	}
 
-	// Ensure that the broker configuration files have secure permissions
-	if err := setFilePerms(config.Paths.BrokerConf, 0600, owner); err != nil && !os.IsNotExist(err) {
-		// The error returned by setFilePerms already contains the file path,
-		// so we don't need to wrap it with more context here.
+	warned, err := checkBrokerConfigFilePermissions(ctx, config.Paths.BrokerConf, owner, allowLegacyConfig, false)
+	if err != nil {
+		return err
+	}
+	legacyViolationSeen := warned
+
+	privateDropInDir, err := checkTrustedDir(brokerDropInDir, owner)
+	if err != nil {
 		return err
 	}
 
-	// Iterate over the drop-in directory and ensure secure permissions on
-	// each configuration file. We ignore subdirectories because we don't load
+	// Iterate over the drop-in directory and check permissions of each
+	// configuration file. We ignore subdirectories because we don't load
 	// them, so they don't represent a security risk.
-	entries, err := os.ReadDir(brokerConfigDir)
+	entries, err := os.ReadDir(brokerDropInDir)
 	if err != nil {
-		return fmt.Errorf("error reading broker configuration directory %q: %v", brokerConfigDir, err)
+		return fmt.Errorf("error reading broker configuration directory %q: %v", brokerDropInDir, err)
 	}
 	for _, entry := range entries {
-		path := filepath.Join(brokerConfigDir, entry.Name())
+		path := filepath.Join(brokerDropInDir, entry.Name())
 
 		if entry.IsDir() {
 			continue
 		}
 
-		if err := setFilePerms(path, 0600, owner); err != nil && !os.IsNotExist(err) {
+		warned, err := checkBrokerConfigFilePermissions(ctx, path, owner, allowLegacyConfig, privateDropInDir)
+		if err != nil {
 			return err
 		}
+		legacyViolationSeen = legacyViolationSeen || warned
 	}
 
 	brokerConfig := broker.Config{
-		ConfigFile: config.Paths.BrokerConf,
-		DataDir:    config.Paths.DataDir,
+		ConfigFile:        config.Paths.BrokerConf,
+		DataDir:           config.Paths.DataDir,
+		AllowLegacyConfig: allowLegacyConfig,
+		// dbusservice.New initializes each broker interface sequentially.
+		ReportConfigViolations: func(violations []error) {
+			if len(violations) > 0 {
+				legacyViolationSeen = true
+			}
+		},
 	}
 
 	s, err := dbusservice.New(ctx, brokerConfig)
@@ -184,10 +202,33 @@ func (a *App) serve(config daemonConfig) error {
 		return err
 	}
 
+	if allowLegacyConfig && !legacyViolationSeen && snapData != "" {
+		removed, err := removeAllowLegacyConfigMarker(snapData)
+		if err != nil {
+			log.Warningf(ctx, "Failed to disable legacy configuration compatibility: %v", err)
+		} else if removed {
+			log.Noticef(ctx, "Strict configuration validation is now enabled")
+		}
+	}
+
 	a.daemon = daemon
 	closeFunc()
 
 	return daemon.Serve(ctx)
+}
+
+func checkBrokerConfigFilePermissions(ctx context.Context, path string, owner int, allowLegacyConfig, parentDirOwnerOnly bool) (bool, error) {
+	if err := checkFilePerms(path, 0600, owner, parentDirOwnerOnly); err != nil && !errors.Is(err, os.ErrNotExist) {
+		var safeModeMismatchErr *safeFileModeMismatchError
+		if allowLegacyConfig && errors.As(err, &safeModeMismatchErr) {
+			log.Warning(ctx, err.Error())
+			return true, nil
+		}
+		// The error returned by checkFilePerms already contains the file path,
+		// so we don't need to wrap it with more context here.
+		return false, err
+	}
+	return false, nil
 }
 
 // installVerbosityFlag adds the -v and -vv options and returns the reference to it.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -254,7 +255,7 @@ func (uc *userConfig) populateUsersConfig(users *ini.Section) {
 }
 
 // parseConfigFromPath parses the config file and returns a map with the configuration keys and values.
-func parseConfigFromPath(cfgPath string, p provider) (userConfig, error) {
+func parseConfigFromPath(cfgPath string, p provider, allowLegacyConfig bool, reportConfigViolations func([]error)) (userConfig, error) {
 	content, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return userConfig{}, fmt.Errorf("could not open config file %q: %v", cfgPath, err)
@@ -266,7 +267,20 @@ func parseConfigFromPath(cfgPath string, p provider) (userConfig, error) {
 		return userConfig{}, err
 	}
 
-	return parseConfig(cfgFile, dropInFiles, p)
+	return parseConfigWithReporter(cfgFile, dropInFiles, p, allowLegacyConfig, reportConfigViolations)
+}
+
+func cloneUserConfig(uc userConfig) userConfig {
+	uc.ownerMutex = &sync.RWMutex{}
+
+	uc.allowedUsers = maps.Clone(uc.allowedUsers)
+
+	uc.allowedSSHSuffixes = slices.Clone(uc.allowedSSHSuffixes)
+	uc.extraGroups = slices.Clone(uc.extraGroups)
+	uc.ownerExtraGroups = slices.Clone(uc.ownerExtraGroups)
+	uc.extraScopes = slices.Clone(uc.extraScopes)
+
+	return uc
 }
 
 // validatePlaceholders checks that no values in iniCfg still contain unedited
@@ -289,25 +303,27 @@ func validatePlaceholders(path string, iniCfg *ini.File) error {
 }
 
 // validateConfigFile checks a parsed ini config for validity: parseable boolean
-// fields, and returns errors for unknown sections/keys. It does not check for
-// template placeholders; call validatePlaceholders for that.
-func validateConfigFile(path string, iniCfg *ini.File) error {
-	// Return errors for unknown sections and keys.
+// fields, and unknown sections and keys. It does not check for template
+// placeholders; call validatePlaceholders for that.
+func validateConfigFile(path string, iniCfg *ini.File) []error {
+	var violations []error
+
 	for _, section := range iniCfg.Sections() {
 		if section.Name() == ini.DefaultSection {
 			if len(section.Keys()) > 0 {
-				return fmt.Errorf("keys outside of any section in config file %q", path)
+				violations = append(violations, fmt.Errorf("keys outside of any section in config file %q", path))
 			}
 			continue
 		}
 		sectionKeys, ok := knownConfigKeys[section.Name()]
 		if !ok {
-			return fmt.Errorf("unknown section %q in config file %q", section.Name(), path)
+			violations = append(violations, fmt.Errorf("unknown section %q in config file %q", section.Name(), path))
+			continue
 		}
 
 		for _, key := range section.Keys() {
 			if _, ok := sectionKeys[key.Name()]; !ok {
-				return fmt.Errorf("unknown key %q in section %q in config file %q", key.Name(), section.Name(), path)
+				violations = append(violations, fmt.Errorf("unknown key %q in section %q in config file %q", key.Name(), section.Name(), path))
 			}
 		}
 	}
@@ -320,7 +336,8 @@ func validateConfigFile(path string, iniCfg *ini.File) error {
 		}
 		if oidc.HasKey(forceAccessCheckKey) {
 			if _, err := oidc.Key(forceAccessCheckKey).Bool(); err != nil {
-				return fmt.Errorf("error parsing '%s' in config file %q: %w", forceAccessCheckKey, path, err)
+				violations = append(violations,
+					fmt.Errorf("error parsing '%s' in config file %q: %w", forceAccessCheckKey, path, err))
 			}
 		}
 	}
@@ -328,16 +345,31 @@ func validateConfigFile(path string, iniCfg *ini.File) error {
 	entraID := iniCfg.Section(entraIDSection)
 	if entraID != nil && entraID.HasKey(registerDeviceKey) {
 		if _, err := entraID.Key(registerDeviceKey).Bool(); err != nil {
-			return fmt.Errorf("error parsing '%s' in config file %q: %w", registerDeviceKey, path, err)
+			violations = append(violations,
+				fmt.Errorf("error parsing '%s' in config file %q: %w", registerDeviceKey, path, err))
 		}
 	}
 
-	return nil
+	flows := iniCfg.Section(flowsSection)
+	for _, keyName := range []string{flowsDeviceAuthKey, flowsEntraAuthKey} {
+		if flows.HasKey(keyName) {
+			if _, err := flows.Key(keyName).Bool(); err != nil {
+				violations = append(violations,
+					fmt.Errorf("error parsing '%s' in config file %q: %w", keyName, path, err))
+			}
+		}
+	}
+
+	return violations
 }
 
 // parseConfig parses the config file and returns a userConfig struct with the configuration keys and values.
 // It also checks if the keys contain any placeholders and returns an error if they do.
-func parseConfig(cfg configFile, dropInCfgs []configFile, p provider) (userConfig, error) {
+func parseConfig(cfg configFile, dropInCfgs []configFile, p provider, allowLegacyConfig bool) (userConfig, error) {
+	return parseConfigWithReporter(cfg, dropInCfgs, p, allowLegacyConfig, nil)
+}
+
+func parseConfigWithReporter(cfg configFile, dropInCfgs []configFile, p provider, allowLegacyConfig bool, reportConfigViolations func([]error)) (userConfig, error) {
 	uc := userConfig{provider: p, ownerMutex: &sync.RWMutex{}}
 
 	iniCfg, err := ini.Load(cfg.content)
@@ -348,9 +380,7 @@ func parseConfig(cfg configFile, dropInCfgs []configFile, p provider) (userConfi
 	// Validate syntax of the main config, but defer the placeholder check until
 	// after all drop-ins are applied: drop-in files in broker.conf.d are allowed
 	// to override placeholder values from the main config.
-	if err := validateConfigFile(cfg.path, iniCfg); err != nil {
-		return userConfig{}, err
-	}
+	violations := validateConfigFile(cfg.path, iniCfg)
 
 	for _, dropIn := range dropInCfgs {
 		dropInCfg, err := ini.Load(dropIn.content)
@@ -358,13 +388,35 @@ func parseConfig(cfg configFile, dropInCfgs []configFile, p provider) (userConfi
 			return userConfig{}, fmt.Errorf("error in drop-in config file %q: %w", dropIn.path, err)
 		}
 
-		if err := validateConfigFile(dropIn.path, dropInCfg); err != nil {
-			return userConfig{}, err
-		}
+		violations = append(violations, validateConfigFile(dropIn.path, dropInCfg)...)
 
 		if err := iniCfg.Append(dropIn.content); err != nil {
 			return userConfig{}, fmt.Errorf("error in drop-in config file %q: %w", dropIn.path, err)
 		}
+	}
+
+	entraID := iniCfg.Section(entraIDSection)
+	if entraID.HasKey(registerDeviceKey) {
+		// Already validated per-file above; ignore error.
+		uc.registerDevice, _ = entraID.Key(registerDeviceKey).Bool()
+	}
+
+	flows, flowsErr := parseFlowsConfig(iniCfg.Section(flowsSection), uc.registerDevice, p)
+	uc.flows = flows
+
+	if len(violations) > 0 {
+		if !allowLegacyConfig {
+			return userConfig{}, errors.Join(violations...)
+		}
+		for _, violation := range violations {
+			log.Warning(context.Background(), violation.Error())
+		}
+	}
+
+	// Checked after the violations, so that a config with both problems
+	// reports the full list instead of only the flows error.
+	if flowsErr != nil {
+		return userConfig{}, flowsErr
 	}
 
 	// Check that all placeholders from the main config were overridden by drop-ins.
@@ -390,18 +442,11 @@ func parseConfig(cfg configFile, dropInCfgs []configFile, p provider) (userConfi
 		}
 	}
 
-	entraID := iniCfg.Section(entraIDSection)
-	if entraID != nil && entraID.HasKey(registerDeviceKey) {
-		// Already validated per-file above; ignore error.
-		uc.registerDevice, _ = entraID.Key(registerDeviceKey).Bool()
-	}
-
-	uc.flows, err = parseFlowsConfig(iniCfg.Section(flowsSection), uc.registerDevice, p)
-	if err != nil {
-		return userConfig{}, err
-	}
-
 	uc.populateUsersConfig(iniCfg.Section(usersSection))
+
+	if allowLegacyConfig && reportConfigViolations != nil {
+		reportConfigViolations(append([]error(nil), violations...))
+	}
 
 	return uc, nil
 }
@@ -492,21 +537,19 @@ func (uc *userConfig) registerOwner(cfgPath, userName string) error {
 func parseFlowsConfig(section *ini.Section, registerDevice bool, p provider) (flowsConfig, error) {
 	fc := defaultFlowsConfig(registerDevice)
 
+	// Unparseable values fall back to the default here. validateConfigFile
+	// already reported them per file, where the file path is known.
 	if section != nil {
 		if section.HasKey(flowsDeviceAuthKey) {
 			val, err := section.Key(flowsDeviceAuthKey).Bool()
-			if err != nil {
-				log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (%t)", flowsDeviceAuthKey, flowsSection, fc.DeviceAuth)
-			} else {
+			if err == nil {
 				fc.DeviceAuth = val
 			}
 		}
 
 		if section.HasKey(flowsEntraAuthKey) {
 			val, err := section.Key(flowsEntraAuthKey).Bool()
-			if err != nil {
-				log.Warningf(context.Background(), "invalid value for %q in [%s] section, using default (%t)", flowsEntraAuthKey, flowsSection, fc.EntraAuth)
-			} else {
+			if err == nil {
 				fc.EntraAuth = val
 			}
 		}

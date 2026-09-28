@@ -1,100 +1,185 @@
 package daemon
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
+	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sys/unix"
 )
 
-func TestSetFilePermsRejectsSymlinkedParent(t *testing.T) {
-	tmpDir := t.TempDir()
-	targetDir := filepath.Join(tmpDir, "target")
-	require.NoError(t, os.Mkdir(targetDir, 0700), "Setup: could not create target directory")
+func TestCheckBrokerConfigFilePermissions(t *testing.T) {
+	tests := map[string]struct {
+		mode               os.FileMode
+		wrongOwner         bool
+		symlink            bool
+		parentDirOwnerOnly bool
+		legacyRecoverable  bool
+		wantIssue          string
+	}{
+		"secure":                   {mode: 0600},
+		"broad_mode":               {mode: 0644, legacyRecoverable: true, wantIssue: "should be -rw-------"},
+		"read_only":                {mode: 0400, legacyRecoverable: true, wantIssue: "should be -rw-------"},
+		"group_writable":           {mode: 0660, wantIssue: "must not be writable by group or others"},
+		"owner_unreadable":         {mode: 0200, wantIssue: "must be readable by its owner"},
+		"wrong_owner":              {mode: 0600, wrongOwner: true, wantIssue: "should be owned by"},
+		"symlink":                  {mode: 0600, symlink: true},
+		"symlink_broad_mode":       {mode: 0644, symlink: true, legacyRecoverable: true, wantIssue: "should be -rw-------"},
+		"symlink_read_only":        {mode: 0400, symlink: true, legacyRecoverable: true, wantIssue: "should be -rw-------"},
+		"symlink_group_writable":   {mode: 0660, symlink: true, wantIssue: "must not be writable by group or others"},
+		"symlink_owner_unreadable": {mode: 0200, symlink: true, wantIssue: "must be readable by its owner"},
+		"symlink_wrong_owner":      {mode: 0600, symlink: true, wrongOwner: true, wantIssue: "should be owned by"},
+		"private_symlink":          {mode: 0600, symlink: true, parentDirOwnerOnly: true},
+		"private_symlink_broad_mode": {
+			mode: 0644, symlink: true, parentDirOwnerOnly: true, legacyRecoverable: true, wantIssue: "should be -rw-------",
+		},
+		"private_symlink_group_writable": {
+			mode: 0660, symlink: true, parentDirOwnerOnly: true, wantIssue: "must not be writable by group or others",
+		},
+	}
 
-	targetFile := filepath.Join(targetDir, "broker.conf")
-	//nolint:gosec // The test verifies that permission repair does not follow a symlink.
-	require.NoError(t, os.WriteFile(targetFile, nil, 0644), "Setup: could not create target file")
+	var warnings []string
+	log.SetHandler(func(_ context.Context, level log.Level, format string, args ...interface{}) {
+		if level == log.WarnLevel {
+			warnings = append(warnings, fmt.Sprintf(format, args...))
+		}
+	})
+	t.Cleanup(func() { log.SetHandler(nil) })
 
-	linkDir := filepath.Join(tmpDir, "link")
-	require.NoError(t, os.Symlink(targetDir, linkDir), "Setup: could not create directory symlink")
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "broker.conf")
+			require.NoError(t, os.WriteFile(path, nil, 0600))
+			require.NoError(t, os.Chmod(path, tc.mode))
+			target := path
+			if tc.symlink {
+				path = filepath.Join(t.TempDir(), "broker.conf.link")
+				require.NoError(t, os.Symlink(target, path))
+			}
+			owner := os.Geteuid()
+			if tc.wrongOwner {
+				owner++
+			}
 
-	err := setFilePerms(filepath.Join(linkDir, "broker.conf"), 0600, os.Geteuid())
-	require.Error(t, err, "permission changes must not follow a symlinked immediate parent")
-
-	fileInfo, err := os.Stat(targetFile)
-	require.NoError(t, err, "Could not stat target file")
-	require.Equal(t, os.FileMode(0644), fileInfo.Mode().Perm(),
-		"Target file permissions should not be changed")
-}
-
-func TestSetFilePermsAllowsSymlinkedHigherAncestor(t *testing.T) {
-	tmpDir := t.TempDir()
-	targetDir := filepath.Join(tmpDir, "target")
-	configDir := filepath.Join(targetDir, "config")
-	require.NoError(t, os.MkdirAll(configDir, 0700), "Setup: could not create config directory")
-
-	targetFile := filepath.Join(configDir, "broker.conf")
-	//nolint:gosec // The test verifies permission repair below a trusted symlinked ancestor.
-	require.NoError(t, os.WriteFile(targetFile, nil, 0644), "Setup: could not create config file")
-
-	linkDir := filepath.Join(tmpDir, "link")
-	require.NoError(t, os.Symlink(targetDir, linkDir), "Setup: could not create directory symlink")
-
-	for _, perm := range []os.FileMode{0600, 0400} {
-		err := setFilePerms(filepath.Join(linkDir, "config", "broker.conf"), perm, os.Geteuid())
-		require.NoError(t, err, "Higher ancestors are trusted and may contain administrator-managed symlinks")
-
-		fileInfo, err := os.Stat(targetFile)
-		require.NoError(t, err, "Could not stat config file")
-		require.Equal(t, perm, fileInfo.Mode().Perm(),
-			"Config file permissions should match the requested mode")
+			for _, legacy := range []bool{false, true} {
+				warnings = nil
+				warned, err := checkBrokerConfigFilePermissions(context.Background(), path, owner, legacy, tc.parentDirOwnerOnly)
+				if tc.wantIssue == "" {
+					require.False(t, warned)
+					require.NoError(t, err)
+				} else if legacy && tc.legacyRecoverable {
+					require.True(t, warned)
+					require.NoError(t, err)
+				} else {
+					require.False(t, warned)
+					var permissionErr *invalidConfigPermissionsError
+					require.ErrorAs(t, err, &permissionErr)
+					if tc.legacyRecoverable {
+						var safeModeMismatchErr *safeFileModeMismatchError
+						require.ErrorAs(t, err, &safeModeMismatchErr)
+						require.EqualError(t, err, fmt.Sprintf("file %q has permissions: %v (should be %v)",
+							path, tc.mode, os.FileMode(0600)))
+					}
+					require.ErrorContains(t, err, tc.wantIssue)
+					require.ErrorContains(t, err, path)
+				}
+				if tc.wantIssue != "" && legacy && tc.legacyRecoverable {
+					require.Len(t, warnings, 1)
+					require.Contains(t, warnings[0], tc.wantIssue)
+					require.Contains(t, warnings[0], path)
+				} else {
+					require.Empty(t, warnings)
+				}
+				info, err := os.Stat(target)
+				require.NoError(t, err)
+				require.Equal(t, tc.mode, info.Mode().Perm(), "validation must not change permissions")
+			}
+		})
 	}
 }
 
-func TestSetFilePermsAtUsesOpenedFileAfterParentIsReplaced(t *testing.T) {
-	tmpDir := t.TempDir()
-	configDir := filepath.Join(tmpDir, "config")
-	dropInDir := filepath.Join(configDir, "broker.conf.d")
-	targetDir := filepath.Join(tmpDir, "target")
-	require.NoError(t, os.Mkdir(configDir, 0700), "Setup: could not create config directory")
-	require.NoError(t, os.Mkdir(dropInDir, 0700), "Setup: could not create drop-in directory")
-	require.NoError(t, os.Mkdir(targetDir, 0700), "Setup: could not create target directory")
+func TestCheckBrokerConfigFilePermissionsInOwnerOnlyDirectory(t *testing.T) {
+	for _, mode := range []os.FileMode{0644, 0777} {
+		t.Run(mode.String(), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "broker.conf")
+			require.NoError(t, os.WriteFile(path, nil, 0600))
+			require.NoError(t, os.Chmod(path, mode))
 
-	filePath := filepath.Join(dropInDir, "extra.conf")
-	targetPath := filepath.Join(targetDir, "extra.conf")
-	//nolint:gosec // The test verifies that permission repair uses the original file descriptor.
-	require.NoError(t, os.WriteFile(filePath, nil, 0644), "Setup: could not create drop-in file")
-	//nolint:gosec // The target file must remain insecure so the test can detect redirection.
-	require.NoError(t, os.WriteFile(targetPath, nil, 0644), "Setup: could not create target file")
-	// This is the writable ancestor that could replace broker.conf.d by a symlink.
-	//nolint:gosec // The test requires a writable ancestor to exercise the symlink swap.
-	require.NoError(t, os.Chmod(configDir, 0777), "Setup: could not make config directory writable")
+			for _, legacy := range []bool{false, true} {
+				warned, err := checkBrokerConfigFilePermissions(context.Background(), path, os.Geteuid(), legacy, true)
+				require.False(t, warned)
+				require.NoError(t, err)
+			}
+		})
+	}
+}
 
-	parentFD, baseName, err := openParentDirNoFollow(filePath)
-	require.NoError(t, err, "Could not open the drop-in directory")
-	defer unix.Close(parentFD)
+func TestEnsureDirWithOwnerReportsUID(t *testing.T) {
+	dir := t.TempDir()
+	owner := os.Geteuid() + 1
 
-	fileFD, err := unix.Openat(parentFD, baseName, unix.O_PATH|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
-	require.NoError(t, err, "Could not open the drop-in file")
-	defer unix.Close(fileFD)
+	err := ensureDirWithOwner(dir, 0700, owner)
+	var permissionErr *invalidConfigPermissionsError
+	require.ErrorAs(t, err, &permissionErr)
+	require.ErrorContains(t, err, "owned by UID")
+	require.ErrorContains(t, err, fmt.Sprintf("should be owned by %d", owner))
+}
 
-	movedDropInDir := filepath.Join(configDir, "broker.conf.d.original")
-	require.NoError(t, os.Rename(dropInDir, movedDropInDir), "Setup: could not move drop-in directory")
-	require.NoError(t, os.Symlink(targetDir, dropInDir), "Setup: could not replace drop-in directory with a symlink")
+func TestPermissionValidationDoesNotIgnoreOperationalErrors(t *testing.T) {
+	dir := t.TempDir()
+	fifo := filepath.Join(dir, "fifo")
+	require.NoError(t, syscall.Mkfifo(fifo, 0600))
+	dirLink := filepath.Join(dir, "dir.link")
+	require.NoError(t, os.Symlink(dir, dirLink))
+	fifoLink := filepath.Join(dir, "fifo.link")
+	require.NoError(t, os.Symlink(fifo, fifoLink))
+	loop := filepath.Join(dir, "loop")
+	require.NoError(t, os.Symlink(loop, loop))
 
-	require.NoError(t, setFilePermsAt(filePath, parentFD, baseName, fileFD, 0600, os.Geteuid()),
-		"Permission repair should use the already-open file and directory")
+	for _, path := range []string{"invalid\x00path", dir, fifo, dirLink, fifoLink, loop} {
+		for _, legacy := range []bool{false, true} {
+			warned, err := checkBrokerConfigFilePermissions(context.Background(), path, os.Geteuid(), legacy, false)
+			require.False(t, warned)
+			require.Error(t, err)
+			var permissionErr *invalidConfigPermissionsError
+			require.False(t, errors.As(err, &permissionErr))
+		}
+	}
+}
 
-	fileInfo, err := os.Stat(filepath.Join(movedDropInDir, "extra.conf"))
-	require.NoError(t, err, "Could not stat the opened drop-in file")
-	require.Equal(t, os.FileMode(0600), fileInfo.Mode().Perm(),
-		"Permissions should be changed on the file opened before the directory swap")
+func TestCheckTrustedDir(t *testing.T) {
+	dir := t.TempDir()
+	//nolint:gosec // This is a directory, which needs execute permission.
+	require.NoError(t, os.Chmod(dir, 0700))
+	owner := os.Geteuid()
+	private, err := checkTrustedDir(dir, owner)
+	require.NoError(t, err)
+	require.True(t, private)
+	_, err = checkTrustedDir(dir, owner+1)
+	var permissionErr *invalidConfigPermissionsError
+	require.ErrorAs(t, err, &permissionErr)
+	require.ErrorContains(t, err, "owned by")
 
-	fileInfo, err = os.Stat(targetPath)
-	require.NoError(t, err, "Could not stat the symlink target")
-	require.Equal(t, os.FileMode(0644), fileInfo.Mode().Perm(),
-		"Permissions must not be changed on the symlink target")
+	//nolint:gosec // Exercise validation of a directory writable by other users.
+	require.NoError(t, os.Chmod(dir, 0777))
+	private, err = checkTrustedDir(dir, owner)
+	require.False(t, private)
+	require.ErrorAs(t, err, &permissionErr)
+	require.ErrorContains(t, err, "must not be writable by group or others")
+	info, err := os.Stat(dir)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0777), info.Mode().Perm())
+
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(dir, link))
+	_, err = checkTrustedDir(link, owner)
+	require.ErrorAs(t, err, &permissionErr)
+	require.ErrorContains(t, err, "must not be a symlink")
+	_, err = checkTrustedDir(filepath.Join(dir, "missing"), owner)
+	require.Error(t, err)
 }

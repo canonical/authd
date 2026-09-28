@@ -55,8 +55,11 @@ var reauthModes = []string{authmodes.EntraAuth, authmodes.Device, authmodes.Devi
 
 // Config is the configuration for the broker.
 type Config struct {
-	ConfigFile string
-	DataDir    string
+	ConfigFile        string
+	DataDir           string
+	AllowLegacyConfig bool
+	// ReportConfigViolations receives policy issues after a successful legacy parse.
+	ReportConfigViolations func(violations []error)
 
 	userConfig
 }
@@ -228,17 +231,72 @@ type option struct {
 // Option is a func that allows to override some of the broker default settings.
 type Option func(*option)
 
-// New returns a new oidc Broker with the providers listed in the configuration file.
-func New(cfg Config, apiVersion uint, args ...Option) (b *Broker, err error) {
+// New returns a new OIDC broker for the given API version.
+func New(cfg Config, apiVersion uint, args ...Option) (*Broker, error) {
 	p := providers.CurrentProvider()
 
-	if cfg.ConfigFile != "" {
-		cfg.userConfig, err = parseConfigFromPath(cfg.ConfigFile, p)
+	cfg, err := loadBrokerConfig(cfg, p)
+	if err != nil {
+		return nil, err
+	}
+
+	return newBroker(cfg, apiVersion, p, args...)
+}
+
+// NewBrokers returns a broker for each API interface, parsing the shared
+// configuration file only once. The interface's position determines its API
+// version, starting at one.
+func NewBrokers(cfg Config, apiInterfaces []string) ([]*Broker, error) {
+	if len(apiInterfaces) == 0 {
+		return nil, nil
+	}
+
+	configProvider := providers.CurrentProvider()
+	cfg, err := loadBrokerConfig(cfg, configProvider)
+	if err != nil {
+		return nil, err
+	}
+
+	brokers := make([]*Broker, 0, len(apiInterfaces))
+	for i, apiInterface := range apiInterfaces {
+		apiVersion := uint(i) + 1
+		log.Debugf(context.Background(), "Initializing broker for interface %s", apiInterface)
+
+		p := configProvider
+		if i > 0 {
+			p = providers.CurrentProvider()
+		}
+
+		brokerConfig := cfg
+		brokerConfig.userConfig = cloneUserConfig(cfg.userConfig)
+		if cfg.ConfigFile != "" {
+			brokerConfig.provider = p
+		}
+
+		b, err := newBroker(brokerConfig, apiVersion, p)
 		if err != nil {
 			return nil, err
 		}
+		brokers = append(brokers, b)
 	}
 
+	return brokers, nil
+}
+
+func loadBrokerConfig(cfg Config, p provider) (Config, error) {
+	if cfg.ConfigFile == "" {
+		return cfg, nil
+	}
+
+	parsedConfig, err := parseConfigFromPath(cfg.ConfigFile, p, cfg.AllowLegacyConfig, cfg.ReportConfigViolations)
+	if err != nil {
+		return cfg, err
+	}
+	cfg.userConfig = parsedConfig
+	return cfg, nil
+}
+
+func newBroker(cfg Config, apiVersion uint, p providers.Provider, args ...Option) (b *Broker, err error) {
 	opts := option{
 		provider: p,
 		fido:     defaultFIDOAuthenticator(),

@@ -9,19 +9,29 @@ if [ -f "${SNAP_DATA}/broker.conf" ]; then
   chmod 0600 "${SNAP_DATA}/broker.conf"
 fi
 
-PREVIOUS_VERSION=$(snapctl get previous-version)
-
 # Important: If you add new migrations, make sure to tag the commit which
 # first introduces the change, so that pre-release versions which already
 # contain the change (and which were automatically uploaded to the edge channel)
 # will not be migrated.
 INITIAL_WORLD_READABLE_BROKER_CONF_DIR="0.5.0-pre1"
+# This migration is first shipped after broker-0.5.1. Tag its first commit as
+# 0.5.2-pre1 so later edge refreshes do not re-enable legacy compatibility.
+INITIAL_LEGACY_CONFIG_MIGRATION_VERSION="0.5.2-pre1"
+
+# This filename references the validation rules shipped in 0.5.0; the
+# migration boundary below is separate.
+ALLOW_LEGACY_CONFIG_MARKER="${SNAP_DATA}/.allow-legacy-config-pre-0.5.0"
 
 log() {
   logger -t "${SNAP_NAME}" "post-refresh: $*"
 }
 
 version_less_than() {
+  # Broker snaps before 0.2.0 did not record their version in the pre-refresh hook,
+  # so treat an empty version as lower than the current version.
+  if [ -z "$1" ]; then
+    return 0
+  fi
   output=$(semver compare "$1" "$2") || exit 1
   [ "${output}" = "less" ]
 }
@@ -35,6 +45,10 @@ valid_semver() {
 
 should_transition_to_world_readable_broker_conf_dir() {
   version_less_than "${PREVIOUS_VERSION}" "${INITIAL_WORLD_READABLE_BROKER_CONF_DIR}"
+}
+
+should_enable_legacy_config_compatibility() {
+  version_less_than "${PREVIOUS_VERSION}" "${INITIAL_LEGACY_CONFIG_MIGRATION_VERSION}"
 }
 
 transition_to_world_readable_broker_conf_dir() {
@@ -55,13 +69,35 @@ transition_to_world_readable_broker_conf_dir() {
   chmod 0755 "${dir}"
 }
 
+enable_legacy_config_compatibility() {
+  if [ -e "${ALLOW_LEGACY_CONFIG_MARKER}" ] || [ -L "${ALLOW_LEGACY_CONFIG_MARKER}" ]; then
+    log "Legacy configuration marker already exists; leaving it unchanged"
+    return
+  fi
+
+  log "Enabling legacy configuration compatibility for installs before the migration boundary"
+  install -o root -g root -m 0600 /dev/null "${ALLOW_LEGACY_CONFIG_MARKER}"
+}
+
+if ! PREVIOUS_VERSION=$(snapctl get previous-version); then
+  log "Could not read previous-version from snap configuration"
+  exit 1
+fi
+
 if [ -z "${PREVIOUS_VERSION}" ]; then
-  log "previous-version: <not set>"
+  log "previous-version: <not set>; treating as older than migration boundaries"
 elif ! valid_semver "${PREVIOUS_VERSION}"; then
-  log "previous-version: ${PREVIOUS_VERSION} (invalid semver)"
+  # A malformed value does not prove this is an old snap. Fail rather than
+  # guessing which migrations are safe for an unknown version.
+  log "previous-version: ${PREVIOUS_VERSION} (invalid semver); cannot determine required migrations"
+  exit 1
 else
   log "previous-version: $PREVIOUS_VERSION"
-  if should_transition_to_world_readable_broker_conf_dir; then
-    transition_to_world_readable_broker_conf_dir
-  fi
+fi
+
+if should_transition_to_world_readable_broker_conf_dir; then
+  transition_to_world_readable_broker_conf_dir
+fi
+if should_enable_legacy_config_compatibility; then
+  enable_legacy_config_compatibility
 fi
