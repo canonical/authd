@@ -16,7 +16,7 @@ type (
 	// Level is the log level for the logs.
 	Level = slog.Level
 
-	// Handler is the log handler function.
+	// Handler receives a printf-style format string and its arguments.
 	Handler = func(_ context.Context, _ Level, format string, args ...interface{})
 )
 
@@ -136,7 +136,7 @@ func log(context context.Context, level Level, args ...interface{}) {
 		return
 	}
 
-	logf(context, level, fmt.Sprint(args...))
+	logf(context, level, "%s", fmt.Sprint(args...))
 }
 
 func logf(context context.Context, level Level, format string, args ...interface{}) {
