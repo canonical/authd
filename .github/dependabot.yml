@@ -91,10 +91,3 @@ updates:
         update-types: ["minor", "patch"]
     commit-message:
       prefix: "deps(brokers/go-tools)"
-  ## rust-toolchain.toml
-  - package-ecosystem: "cargo"
-    directory: "/authd-oidc-brokers"
-    schedule:
-      interval: "weekly"
-    commit-message:
-      prefix: "deps(brokers/rust)"
