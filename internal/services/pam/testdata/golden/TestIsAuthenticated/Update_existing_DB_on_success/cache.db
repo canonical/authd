@@ -32,4 +32,4 @@ users_to_groups:
       gid: 22222
     - uid: 77777
       gid: 88888
-schema_version: 3
+schema_version: 4

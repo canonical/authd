@@ -149,6 +149,28 @@ func (m *Manager) BrokerForUser(username string) (broker *Broker) {
 	return m.usersToBroker[username]
 }
 
+// RenameUser moves the memorized broker of a user from its old name to its new one.
+//
+// The lookup of the broker to use for a login is served from this cache before the database, so a
+// stale entry would keep the old login name working until authd restarts, and authenticating with
+// it would rename the user back to the name the identity provider reports.
+func (m *Manager) RenameUser(oldName, newName string) {
+	m.usersToBrokerMu.Lock()
+	defer m.usersToBrokerMu.Unlock()
+
+	// Drop anything cached under the new name first. A previous holder of that name
+	// may have authenticated and been deleted during this daemon lifetime, and their
+	// entry would otherwise shadow the renamed user's database row.
+	delete(m.usersToBroker, newName)
+
+	broker, ok := m.usersToBroker[oldName]
+	if !ok {
+		return
+	}
+	delete(m.usersToBroker, oldName)
+	m.usersToBroker[newName] = broker
+}
+
 // BrokerFromSessionID returns broker currently in use for a given transaction sessionID.
 func (m *Manager) BrokerFromSessionID(id string) (broker *Broker, err error) {
 	m.transactionsToBrokerMu.RLock()

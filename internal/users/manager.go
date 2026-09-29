@@ -164,8 +164,18 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 			return fmt.Errorf("failed to look up user by provider ID: %w", providerIDErr)
 		}
 		if providerIDErr == nil && providerIDMatch.Name != u.Name {
-			log.Noticef(context.TODO(), "User identified by broker ID %q and provider ID %q: username changed from %q to %q",
-				u.BrokerID, u.ProviderID, providerIDMatch.Name, u.Name)
+			if providerIDMatch.NameIsLocalOverride {
+				// The administrator renamed this user with `authctl user set-name`. That name
+				// wins over the one the identity provider reports, otherwise every login would
+				// undo the rename. Adopt it as the name to store so that the private group and
+				// the local group memberships are keyed on it as well.
+				log.Noticef(context.TODO(), "User identified by broker ID %q and provider ID %q: keeping the locally set username %q instead of %q",
+					u.BrokerID, u.ProviderID, providerIDMatch.Name, u.Name)
+				u.Name = providerIDMatch.Name
+			} else {
+				log.Noticef(context.TODO(), "User identified by broker ID %q and provider ID %q: username changed from %q to %q",
+					u.BrokerID, u.ProviderID, providerIDMatch.Name, u.Name)
+			}
 			lookupName = providerIDMatch.Name
 		}
 	}
@@ -501,6 +511,7 @@ func (m *Manager) SetUserID(name string, uid uint32) (resp *SetUserIDResp, err e
 		return nil, err
 	}
 
+	// Update the database
 	err = m.db.SetUserID(name, uid)
 	if err != nil {
 		return nil, err
@@ -862,6 +873,115 @@ func (m *Manager) SetHomeDir(name, home string) (resp *SetHomeDirResp, err error
 	return resp, nil
 }
 
+// SetUserNameResp is the response type of SetUserName.
+type SetUserNameResp struct {
+	PrivateGroupRenamed bool
+	Warnings            []string
+}
+
+// SetUserName renames a user. It does not rename the user's home directory.
+//
+// The new name is recorded as a local override, so later broker logins keep it instead of
+// restoring the name the identity provider reports.
+func (m *Manager) SetUserName(oldName, newName string) (resp SetUserNameResp, err error) {
+	if oldName == "" {
+		return resp, errors.New("empty old username")
+	}
+	// Validate before touching anything: a name that the group file cannot represent would
+	// otherwise only be rejected once the database rename had already been committed.
+	if err := types.ValidateUserName(newName); err != nil {
+		return resp, err
+	}
+
+	if oldName == newName {
+		return resp, errors.New("old and new usernames are the same")
+	}
+
+	m.userManagementMu.Lock()
+	defer m.userManagementMu.Unlock()
+
+	// Lock local entries which also locks the user database
+	lockedEntries, unlockEntries, err := localentries.WithUserDBLock()
+	if err != nil {
+		return resp, err
+	}
+	defer func() { err = errors.Join(err, unlockEntries()) }()
+
+	// Check if the old user exists
+	oldUser, err := m.db.UserByName(oldName)
+	if err != nil {
+		return resp, err
+	}
+
+	// Without a stable provider ID there is nothing to tie the new name to, so the next login
+	// would recreate the user under the name the identity provider reports. Report that before
+	// the other checks, because no answer they give can make the rename possible.
+	if oldUser.ProviderID == "" {
+		return resp, fmt.Errorf("cannot rename user %q because it has no stable provider ID", oldName)
+	}
+
+	// Check if a user with the new name already exists in the system
+	unique, err := lockedEntries.IsUniqueUserName(newName)
+	if err != nil {
+		return resp, err
+	}
+	if !unique {
+		return resp, fmt.Errorf("username %q already exists in the system", newName)
+	}
+
+	// Check if the user has active processes
+	err = proc.CheckUserBusy(oldName, oldUser.UID)
+	if err != nil {
+		return resp, err
+	}
+
+	// The private group is renamed along with the user, so report it to let the caller tell the
+	// user which group name changed.
+	privateGroup, err := m.db.GroupByID(oldUser.GID)
+	if err != nil && !errors.Is(err, db.NoDataFoundError{}) {
+		return resp, err
+	}
+	renamesPrivateGroup := err == nil && privateGroup.Name == oldName && privateGroup.UGID == oldName
+	if renamesPrivateGroup {
+		unique, err := lockedEntries.IsUniqueGroupName(newName)
+		if err != nil {
+			return resp, err
+		}
+		if !unique {
+			return resp, fmt.Errorf("group name %q already exists in the system", newName)
+		}
+	}
+	// Update the database
+	if err := m.db.SetUserName(oldName, newName, true); err != nil {
+		return resp, err
+	}
+	resp.PrivateGroupRenamed = renamesPrivateGroup
+
+	// Update local groups. The group file is written atomically, so a failure here leaves it
+	// untouched and only the database has changed. Undo that rename, otherwise the command would
+	// report an error while leaving the user renamed and still listed under the old name in the
+	// group file, and retrying with the old name would fail.
+	if err := lockedEntries.RenameUserInGroups(oldName, newName); err != nil {
+		if rerr := m.db.SetUserName(newName, oldName, oldUser.NameIsLocalOverride); rerr != nil {
+			return resp, errors.Join(err, fmt.Errorf(
+				"could not undo the rename of user %q in the database, it is now named %q while the group file still refers to %q: %w",
+				oldName, newName, oldName, rerr))
+		}
+		resp.PrivateGroupRenamed = false
+		return resp, err
+	}
+
+	// The home directory is not moved, so it keeps pointing at a path named after the old user.
+	// Warn about it so that the caller does not assume the rename was complete.
+	if strings.Contains(oldUser.Dir, oldName) {
+		resp.Warnings = append(resp.Warnings, fmt.Sprintf(
+			"Warning: the home directory %q still refers to the old username. It was not renamed to avoid data loss.",
+			oldUser.Dir))
+	}
+
+	return resp, nil
+}
+
 // BrokerForUser returns the broker ID for the given user.
 func (m *Manager) BrokerForUser(username string) (string, error) {
 	u, err := m.db.UserByName(username)
@@ -891,6 +1011,30 @@ func (m *Manager) UpdateBrokerForUser(username, brokerID string) error {
 	}
 
 	return nil
+}
+
+// LocalUserName returns the name that was set locally for the user identified by the given
+// broker-scoped provider ID, or an empty string when that user has no locally set name.
+//
+// A user renamed with `authctl user set-name` keeps that name across logins, so callers that only
+// know the name the identity provider reports must use this one instead.
+func (m *Manager) LocalUserName(brokerID, providerID string) (string, error) {
+	if brokerID == "" || providerID == "" {
+		return "", nil
+	}
+
+	u, err := m.db.UserByProviderID(brokerID, providerID)
+	if errors.Is(err, db.NoDataFoundError{}) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if !u.NameIsLocalOverride {
+		return "", nil
+	}
+
+	return u.Name, nil
 }
 
 // LockUser sets the "locked" field to true for the given user.

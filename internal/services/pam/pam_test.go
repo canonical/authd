@@ -409,6 +409,9 @@ func TestIsAuthenticated(t *testing.T) {
 		secondCall      bool
 		cancelFirstCall bool
 		localGroupsFile string
+		// exactUsername starts the session with username as is, instead of prefixing it with the
+		// test name, so that authd can match it against a name stored in the database.
+		exactUsername bool
 
 		// There is no wantErr as it's stored in the golden file.
 	}{
@@ -422,6 +425,14 @@ func TestIsAuthenticated(t *testing.T) {
 		"Successfully_authenticate_user_with_uppercase":        {username: "SUCCESS@example.com"},
 		"Successfully_authenticate_with_groups_with_uppercase": {username: "success_with_uppercase_groups@example.com"},
 
+		// A user renamed with `authctl user set-name` keeps the local name, even though the broker
+		// still reports the one the identity provider has.
+		"Successfully_authenticate_locally_renamed_user": {
+			username:      "ia_info_mismatching_user_name@example.com",
+			existingDB:    "cache-with-locally-renamed-user.db",
+			exactUsername: true,
+		},
+
 		// DB write failure: UpdateBrokerForUser fails (read-only filesystem) but auth still succeeds.
 		// UpdateUser is a no-op because the DB already has up-to-date user info; the first actual
 		// write attempt (UpdateBrokerForUser) fails when SQLite cannot create the rollback-journal
@@ -432,6 +443,15 @@ func TestIsAuthenticated(t *testing.T) {
 		"Error_when_sessionID_is_empty": {sessionID: "-"},
 		"Error_when_there_is_no_broker": {sessionID: "invalid-session"},
 		"Error_when_user_is_locked":     {username: "locked@example.com", existingDB: "cache-with-locked-user.db"},
+
+		// The name a renamed user had before is not in the database anymore, so the broker can
+		// only check it against the identity provider, which still accepts it. authd has to refuse
+		// the login itself, otherwise the old name would keep working.
+		"Error_when_user_was_renamed_and_the_old_name_is_used": {
+			username:      "success@example.com",
+			existingDB:    "cache-with-renamed-user.db",
+			exactUsername: true,
+		},
 
 		// broker errors
 		"Error_when_authenticating":                                              {username: "ia_error@example.com"},
@@ -489,7 +509,12 @@ func TestIsAuthenticated(t *testing.T) {
 			case "-":
 				tc.sessionID = ""
 			default:
-				id := startSession(t, client, tc.username)
+				var id string
+				if tc.exactUsername {
+					id = startSessionWithExactUsername(t, client, tc.username, "")
+				} else {
+					id = startSession(t, client, tc.username)
+				}
 				if tc.sessionID == "" {
 					tc.sessionID = id
 				}
@@ -952,7 +977,14 @@ func startSessionWithService(t *testing.T, client authd.PAMClient, username, ser
 	}
 
 	// Prefixes the username to avoid concurrency issues.
-	username = t.Name() + testutils.IDSeparator + username
+	return startSessionWithExactUsername(t, client, t.Name()+testutils.IDSeparator+username, serviceName)
+}
+
+// startSessionWithExactUsername starts a session with the given username as is. Use it when authd
+// itself compares the requested name with a name stored in the database, which the test name
+// prefix added by startSession would not match.
+func startSessionWithExactUsername(t *testing.T, client authd.PAMClient, username, serviceName string) string {
+	t.Helper()
 
 	sbResp, err := client.SelectBroker(context.Background(), &authd.SBRequest{
 		BrokerId:    mockBrokerGeneratedID,

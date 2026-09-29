@@ -517,6 +517,83 @@ func TestMigrationAddProviderIDColumnIsIdempotent(t *testing.T) {
 	require.Equal(t, want, got, "Re-running migrations should not change the database")
 }
 
+func TestMigrationAddNameIsLocalOverrideColumnToUsersTable(t *testing.T) {
+	// Create a database from the testdata, which predates the name_is_local_override column.
+	dbDir := t.TempDir()
+	sqlDump := "TestMigrationAddNameIsLocalOverrideColumnToUsersTable/two_users_without_name_is_local_override_column.sql"
+	err := db.Z_ForTests_CreateDBFromDump(filepath.Join("testdata", sqlDump), dbDir)
+	require.NoError(t, err, "Setup: could not create database from testdata")
+
+	// Run the migrations
+	m, err := db.New(dbDir)
+	require.NoError(t, err)
+
+	// Every pre-migration user carries the name its broker gave it, so none of them may come out
+	// of the migration flagged as locally renamed.
+	for _, name := range []string{"user1", "user2"} {
+		u, err := m.UserByName(name)
+		require.NoError(t, err, "Pre-migration user %q should still exist after migration", name)
+		require.False(t, u.NameIsLocalOverride,
+			"Pre-migration user %q should not be flagged as locally renamed", name)
+	}
+
+	dbContent, err := db.Z_ForTests_DumpNormalizedYAML(m)
+	require.NoError(t, err)
+
+	golden.CheckOrUpdate(t, dbContent)
+}
+
+func TestMigrationAddNameIsLocalOverrideColumnIsIdempotent(t *testing.T) {
+	// Create a database from the testdata, which predates the name_is_local_override column.
+	dbDir := t.TempDir()
+	sqlDump := "TestMigrationAddNameIsLocalOverrideColumnToUsersTable/two_users_without_name_is_local_override_column.sql"
+	err := db.Z_ForTests_CreateDBFromDump(filepath.Join("testdata", sqlDump), dbDir)
+	require.NoError(t, err, "Setup: could not create database from testdata")
+
+	// Run the migrations a first time.
+	m, err := db.New(dbDir)
+	require.NoError(t, err)
+	want, err := db.Z_ForTests_DumpNormalizedYAML(m)
+	require.NoError(t, err)
+	m.Close()
+
+	// Re-open the database to make sure running the migrations again is a no-op.
+	m, err = db.New(dbDir)
+	require.NoError(t, err)
+	defer m.Close()
+
+	got, err := db.Z_ForTests_DumpNormalizedYAML(m)
+	require.NoError(t, err)
+
+	require.Equal(t, want, got, "Re-running migrations should not change the database")
+}
+
+// TestSetUserNameKeepsTheLocalOverrideAcrossUserUpdates pins that a locally set username survives
+// the broker update path. UpdateUserEntry rewrites every column of the user row from the
+// broker-provided information, which does not carry the flag, so it must take it from the row it
+// is about to overwrite.
+func TestSetUserNameKeepsTheLocalOverrideAcrossUserUpdates(t *testing.T) {
+	t.Parallel()
+
+	m := initDB(t, "one_user_with_private_group")
+
+	require.NoError(t, m.SetUserName("user1", "user1-renamed", true),
+		"Setup: SetUserName should not return an error")
+
+	u, err := m.UserByName("user1-renamed")
+	require.NoError(t, err, "Setup: the renamed user should exist")
+	require.True(t, u.NameIsLocalOverride, "Setup: the renamed user should carry the local override")
+
+	// Update the user as a broker login would, without the flag.
+	updated := db.NewUserRow(u.Name, u.UID, u.GID, "New gecos", u.Dir, u.Shell, u.BrokerID, u.ProviderID)
+	require.NoError(t, m.UpdateUserEntry(updated, nil, nil), "UpdateUserEntry should not return an error")
+
+	u, err = m.UserByName("user1-renamed")
+	require.NoError(t, err, "The renamed user should still exist")
+	require.True(t, u.NameIsLocalOverride, "The local override should survive a user update")
+	require.Equal(t, "New gecos", u.Gecos, "The update should still have been applied")
+}
+
 // TestProviderIDUniquenessEnforcedAfterMigration ensures that the partial unique index created by
 // the provider_id migration is actually active for rows inserted after the migration: it enforces
 // uniqueness on (broker_id, provider_id) when both are non-empty, while still allowing multiple
@@ -1203,6 +1280,121 @@ func TestSetHomeDir(t *testing.T) {
 
 			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(m)
 			require.NoError(t, err)
+
+			golden.CheckOrUpdate(t, dbContent)
+		})
+	}
+}
+
+func TestSetUserName(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		dbFile              string
+		oldName             string
+		newName             string
+		nameIsLocalOverride bool
+		wantErr             bool
+		wantErrType         error
+		wantUnchangedDB     bool
+		// wantErrContains pins which check rejected the rename, so that a case cannot silently
+		// stop at an earlier check than the one it is named after.
+		wantErrContains string
+	}{
+		// The primary group of this fixture is a shared group (UGID != name), so it must survive
+		// the rename untouched.
+		"Successfully_rename_user_with_a_shared_primary_group": {
+			dbFile:  "one_user_and_group",
+			oldName: "user1",
+			newName: "user1-renamed",
+		},
+		// A locally chosen name is flagged so that a later broker login keeps it instead of
+		// restoring the name the identity provider reports.
+		"Successfully_rename_user_recording_a_local_name_override": {
+			dbFile:              "one_user_with_private_group",
+			oldName:             "user1",
+			newName:             "user1-renamed",
+			nameIsLocalOverride: true,
+		},
+		"Successfully_rename_user_and_its_private_group": {
+			dbFile:  "one_user_with_private_group",
+			oldName: "user1",
+			newName: "user1-renamed",
+		},
+		// Local group memberships are keyed by UID and name local groups, not users, so they must
+		// not be rewritten by a rename.
+		"Successfully_rename_user_keeping_its_local_groups": {
+			dbFile:  "one_user_with_private_group_and_local_groups",
+			oldName: "user1",
+			newName: "user1-renamed",
+		},
+		// A user whose GID has no matching group row is an inconsistent database, but the rename
+		// must still go through instead of failing on the missing group.
+		"Successfully_rename_user_without_a_primary_group": {
+			dbFile:  "one_user_without_primary_group",
+			oldName: "user1",
+			newName: "user1-renamed",
+		},
+
+		"Error_when_old_user_does_not_exist": {
+			dbFile:      "one_user_and_group",
+			oldName:     "nonexistent",
+			newName:     "newname",
+			wantErr:     true,
+			wantErrType: db.NoDataFoundError{},
+		},
+		"Error_when_new_username_already_exists": {
+			dbFile:          "multiple_users_and_groups",
+			oldName:         "user1",
+			newName:         "user2",
+			wantErr:         true,
+			wantUnchangedDB: true,
+			wantErrContains: `username "user2" already in use`,
+		},
+		// The username is checked before the private group, so a name that is taken by both
+		// stops at the username. "sharedgroup" is a group only, which is the only way to reach
+		// the private group check.
+		"Error_when_new_name_is_taken_by_a_group_only": {
+			dbFile:          "one_user_with_private_group",
+			oldName:         "user1",
+			newName:         "sharedgroup",
+			wantErr:         true,
+			wantUnchangedDB: true,
+			wantErrContains: `group "sharedgroup" already in use`,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			m := initDB(t, tc.dbFile)
+
+			oldDBContent, err := db.Z_ForTests_DumpNormalizedYAML(m)
+			require.NoError(t, err)
+
+			err = m.SetUserName(tc.oldName, tc.newName, tc.nameIsLocalOverride)
+			if tc.wantErrType != nil {
+				require.ErrorIs(t, err, tc.wantErrType, "SetUserName should return expected error")
+				return
+			}
+			if tc.wantErr {
+				require.Error(t, err, "SetUserName should return an error for case %q", name)
+			} else {
+				require.NoError(t, err, "SetUserName should not return an error for case %q", name)
+			}
+			if tc.wantErrContains != "" {
+				require.ErrorContains(t, err, tc.wantErrContains,
+					"SetUserName should have been rejected by the check this case covers")
+			}
+
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(m)
+			require.NoError(t, err)
+
+			if tc.wantUnchangedDB {
+				require.Equal(t, oldDBContent, dbContent, "SetUserName should not change the database content")
+				return
+			}
 
 			golden.CheckOrUpdate(t, dbContent)
 		})

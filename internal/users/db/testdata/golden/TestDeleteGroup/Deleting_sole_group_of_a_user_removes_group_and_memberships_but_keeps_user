@@ -11,4 +11,4 @@ users:
       provider_id: ""
 groups: []
 users_to_groups: []
-schema_version: 3
+schema_version: 4

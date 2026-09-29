@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 )
 
@@ -151,6 +152,20 @@ func (b *Broker) UserDataDirForSession(sessionID string) string {
 	return session.userDataDir
 }
 
+// ExpectedProviderIDForSession returns the provider ID authd asked the given
+// session to verify.
+func (b *Broker) ExpectedProviderIDForSession(sessionID string) string {
+	b.currentSessionsMu.Lock()
+	defer b.currentSessionsMu.Unlock()
+
+	session, ok := b.currentSessions[sessionID]
+	if !ok {
+		return ""
+	}
+
+	return session.expectedProviderID
+}
+
 // DataDir returns the path to the data directory for tests.
 func (b *Broker) DataDir() string {
 	return b.cfg.DataDir
@@ -183,6 +198,17 @@ func (b *Broker) EnsureProviderIDCacheDir(username, currentDataDir, providerID s
 		TokenPath:    s.tokenPath,
 		PasswordPath: s.passwordPath,
 	}
+}
+
+// VerifyUserIdentity builds a session for username with the given cached and
+// expected provider IDs, and runs verifyUserIdentity against userInfo.
+func (b *Broker) VerifyUserIdentity(username, cachedProviderID, expectedProviderID string, userInfo info.User) error {
+	s := &session{
+		username:           username,
+		providerID:         cachedProviderID,
+		expectedProviderID: expectedProviderID,
+	}
+	return b.verifyUserIdentity(s, userInfo)
 }
 
 // NormalizedIssuer exposes the broker's normalizedIssuer method for tests.

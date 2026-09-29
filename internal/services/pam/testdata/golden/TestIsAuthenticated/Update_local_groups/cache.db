@@ -24,4 +24,4 @@ users_to_local_groups:
       group_name: localgroup1
     - uid: 1111
       group_name: localgroup3
-schema_version: 3
+schema_version: 4

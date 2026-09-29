@@ -5688,6 +5688,151 @@ func TestCompatibilitySymlinkSurvivesIssuerTreeMove(t *testing.T) {
 		"compatibility symlink should point to the provider ID dir in the new location")
 }
 
+// TestNewSessionKeepsExpectedProviderID verifies that the provider ID authd
+// supplies is remembered for the identity check even when the cache directory
+// cannot be keyed by it. Otherwise a locally renamed user would be verified by
+// username and rejected, because they log in with a name the provider does not
+// know.
+func TestNewSessionKeepsExpectedProviderID(t *testing.T) {
+	t.Parallel()
+
+	const (
+		username   = "user@example.com"
+		providerID = "provider-id-123"
+	)
+
+	tests := map[string]struct {
+		providerID string
+		// createProviderIDDir makes the provider ID cache directory exist, so the
+		// session can be keyed by it right away.
+		createProviderIDDir bool
+
+		want string
+	}{
+		"Cache_directory_is_adopted": {
+			providerID: providerID, createProviderIDDir: true, want: providerID,
+		},
+		"No_cache_directory_exists_yet": {
+			providerID: providerID, want: providerID,
+		},
+		"Provider_ID_cannot_be_used_as_a_path": {
+			providerID: "../escape", want: "../escape",
+		},
+		"No_provider_ID_supplied_by_authd": {
+			providerID: "", want: "",
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			b := newBrokerForTests(t, &brokerForTestConfig{issuerURL: defaultIssuerURL})
+
+			if tc.createProviderIDDir {
+				providerIDDir, err := b.UserDataDir(tc.providerID)
+				require.NoError(t, err, "Setup: deriving the provider ID data dir should not fail")
+				require.NoError(t, os.MkdirAll(providerIDDir, 0700), "Setup: creating the provider ID cache dir should not fail")
+			}
+
+			sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, tc.providerID)
+			require.NoError(t, err, "NewSession should not have returned an error")
+			require.Equal(t, tc.want, b.ExpectedProviderIDForSession(sessionID),
+				"NewSession should have kept the provider ID supplied by authd")
+		})
+	}
+}
+
+func TestVerifyUserIdentity(t *testing.T) {
+	t.Parallel()
+
+	const (
+		loginName  = "user@example.com"
+		idpName    = "user@example.com"
+		providerID = "provider-id-123"
+	)
+
+	tests := map[string]struct {
+		// username is the name the user logs in with.
+		username string
+		// cachedProviderID is the provider ID the session's cache directory is keyed
+		// by. It is empty whenever that directory could not be created, migrated or
+		// resolved.
+		cachedProviderID string
+		// expectedProviderID is the provider ID authd has on record for username.
+		expectedProviderID string
+		// idpProviderID is the provider ID returned by the identity provider.
+		idpProviderID string
+		// idpUserName is the name returned by the identity provider.
+		idpUserName string
+
+		wantErrContains string
+	}{
+		"First_login_without_any_provider_ID_matches_on_the_username": {
+			username: loginName, idpUserName: idpName, idpProviderID: providerID,
+		},
+		"Matching_provider_ID_from_the_cache_is_accepted": {
+			username: loginName, cachedProviderID: providerID,
+			idpUserName: idpName, idpProviderID: providerID,
+		},
+		"Matching_provider_ID_from_authd_is_accepted": {
+			username: loginName, expectedProviderID: providerID,
+			idpUserName: idpName, idpProviderID: providerID,
+		},
+
+		// A locally renamed user logs in with a name the provider does not know, so
+		// the provider ID is the only identity that can be verified for them.
+		"Renamed_user_is_accepted_when_the_cache_is_keyed_by_the_provider_ID": {
+			username: "renamed-" + loginName, cachedProviderID: providerID,
+			expectedProviderID: providerID,
+			idpUserName:        idpName, idpProviderID: providerID,
+		},
+		"Renamed_user_is_accepted_when_the_cache_could_not_be_keyed_by_the_provider_ID": {
+			username: "renamed-" + loginName, expectedProviderID: providerID,
+			idpUserName: idpName, idpProviderID: providerID,
+		},
+
+		"Error_when_the_provider_ID_from_authd_does_not_match": {
+			username: loginName, expectedProviderID: providerID,
+			idpUserName: idpName, idpProviderID: "another-provider-id",
+			wantErrContains: `provider ID "another-provider-id" does not match the requested provider ID "provider-id-123"`,
+		},
+		"Error_when_the_provider_ID_from_the_cache_does_not_match": {
+			username: loginName, cachedProviderID: providerID,
+			idpUserName: idpName, idpProviderID: "another-provider-id",
+			wantErrContains: `provider ID "another-provider-id" does not match the requested provider ID "provider-id-123"`,
+		},
+		// authd's record wins over the cache: the cache only reflects where the token
+		// happens to live, while authd knows which user is being logged in.
+		"Error_when_only_the_provider_ID_from_the_cache_matches": {
+			username: loginName, cachedProviderID: "another-provider-id",
+			expectedProviderID: providerID,
+			idpUserName:        idpName, idpProviderID: "another-provider-id",
+			wantErrContains: `provider ID "another-provider-id" does not match the requested provider ID "provider-id-123"`,
+		},
+		"Error_when_no_provider_ID_is_known_and_the_username_does_not_match": {
+			username: "someone-else@example.com", idpUserName: idpName, idpProviderID: providerID,
+			wantErrContains: `requested username "someone-else@example.com" does not match the authenticated user "user@example.com"`,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			b := newBrokerForTests(t, &brokerForTestConfig{issuerURL: defaultIssuerURL})
+
+			userInfo := info.NewUser(tc.idpUserName, "", tc.idpProviderID, "", "", nil)
+			err := b.VerifyUserIdentity(tc.username, tc.cachedProviderID, tc.expectedProviderID, userInfo)
+
+			if tc.wantErrContains != "" {
+				require.Error(t, err, "VerifyUserIdentity should have returned an error")
+				require.ErrorContains(t, err, tc.wantErrContains, "VerifyUserIdentity returned an unexpected error")
+				return
+			}
+			require.NoError(t, err, "VerifyUserIdentity should not have returned an error")
+		})
+	}
+}
+
 func TestIsFIDOMethod(t *testing.T) {
 	t.Parallel()
 

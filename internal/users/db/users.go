@@ -9,9 +9,9 @@ import (
 	"github.com/canonical/authd/log"
 )
 
-const allUserColumns = "name, uid, gid, gecos, dir, shell, broker_id, locked, provider_id"
-const publicUserColumns = "name, uid, gid, gecos, dir, shell, broker_id, locked, provider_id"
-const allUserColumnsWithPlaceholders = "name = ?, uid = ?, gid = ?, gecos = ?, dir = ?, shell = ?, broker_id = ?, locked = ?, provider_id = ?"
+const allUserColumns = "name, uid, gid, gecos, dir, shell, broker_id, locked, provider_id, name_is_local_override"
+const publicUserColumns = "name, uid, gid, gecos, dir, shell, broker_id, locked, provider_id, name_is_local_override"
+const allUserColumnsWithPlaceholders = "name = ?, uid = ?, gid = ?, gecos = ?, dir = ?, shell = ?, broker_id = ?, locked = ?, provider_id = ?, name_is_local_override = ?"
 
 // UserRow represents a user row in the database.
 type UserRow struct {
@@ -32,6 +32,11 @@ type UserRow struct {
 	// and users authenticated via v2 brokers. It is scoped by BrokerID and is always
 	// serialized (no omitempty) so the user's identity fields are explicit in dumps.
 	ProviderID string `yaml:"provider_id"`
+
+	// NameIsLocalOverride reports that Name was set by the administrator through
+	// `authctl user set-name` rather than by the broker. When it is set, a broker update must keep
+	// Name instead of restoring the name the identity provider reports.
+	NameIsLocalOverride bool `yaml:"name_is_local_override,omitempty"`
 }
 
 // NewUserRow creates a new UserRow.
@@ -58,7 +63,7 @@ func userByID(db queryable, uid uint32) (UserRow, error) {
 	row := db.QueryRow(query, uid)
 
 	var u UserRow
-	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
+	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID, &u.NameIsLocalOverride)
 	if errors.Is(err, sql.ErrNoRows) {
 		return UserRow{}, NewUIDNotFoundError(uid)
 	}
@@ -79,7 +84,7 @@ func userByName(db queryable, name string) (UserRow, error) {
 	row := db.QueryRow(query, name)
 
 	var u UserRow
-	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
+	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID, &u.NameIsLocalOverride)
 	if errors.Is(err, sql.ErrNoRows) {
 		return UserRow{}, NewUserNotFoundError(name)
 	}
@@ -100,7 +105,7 @@ func userByProviderID(db queryable, brokerID, providerID string) (UserRow, error
 	row := db.QueryRow(query, brokerID, providerID)
 
 	var u UserRow
-	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
+	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID, &u.NameIsLocalOverride)
 	if errors.Is(err, sql.ErrNoRows) {
 		return UserRow{}, NoDataFoundError{fmt.Sprintf("user with broker ID %q and provider ID %q not found", brokerID, providerID)}
 	}
@@ -127,7 +132,7 @@ func allUsers(db queryable) ([]UserRow, error) {
 	var users []UserRow
 	for rows.Next() {
 		var u UserRow
-		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
+		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID, &u.NameIsLocalOverride)
 		if err != nil {
 			return nil, fmt.Errorf("scan error: %w", err)
 		}
@@ -180,8 +185,8 @@ func userExists(db queryable, u UserRow) (bool, error) {
 // insertUser inserts a new user into the database.
 func insertUser(db queryable, u UserRow) error {
 	log.Debugf(context.Background(), "Inserting user %v", u.Name)
-	query := fmt.Sprintf(`INSERT INTO users (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, allUserColumns)
-	_, err := db.Exec(query, u.Name, u.UID, u.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.Locked, u.ProviderID)
+	query := fmt.Sprintf(`INSERT INTO users (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, allUserColumns)
+	_, err := db.Exec(query, u.Name, u.UID, u.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.Locked, u.ProviderID, u.NameIsLocalOverride)
 	if err != nil {
 		return fmt.Errorf("insert user error: %w", err)
 	}
@@ -192,7 +197,7 @@ func insertUser(db queryable, u UserRow) error {
 func updateUserByID(db queryable, u UserRow) error {
 	log.Debugf(context.Background(), "Updating user %v", u.Name)
 	query := fmt.Sprintf(`UPDATE users SET %s WHERE uid = ?`, allUserColumnsWithPlaceholders)
-	_, err := db.Exec(query, u.Name, u.UID, u.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.Locked, u.ProviderID, u.UID)
+	_, err := db.Exec(query, u.Name, u.UID, u.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.Locked, u.ProviderID, u.NameIsLocalOverride, u.UID)
 	if err != nil {
 		return fmt.Errorf("update user error: %w", err)
 	}
@@ -236,7 +241,7 @@ func usersWithPrimaryGroup(db queryable, gid uint32) ([]UserRow, error) {
 	var users []UserRow
 	for rows.Next() {
 		var u UserRow
-		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
+		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID, &u.NameIsLocalOverride)
 		if err != nil {
 			return nil, fmt.Errorf("scan error: %w", err)
 		}

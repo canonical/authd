@@ -99,6 +99,10 @@ func handleUserUpdate(db queryable, u UserRow) error {
 	// disabled account.
 	u.Locked = existingUser.Locked
 
+	// Preserve the local name override for the same reason: it is managed exclusively via
+	// SetUserName and is never carried in the broker-provided UserInfo.
+	u.NameIsLocalOverride = existingUser.NameIsLocalOverride
+
 	return insertOrUpdateUserByID(db, u)
 }
 
@@ -433,5 +437,103 @@ func (m *Manager) SetHomeDir(username, dir string) error {
 	if rowsAffected == 0 {
 		return NewUserNotFoundError(username)
 	}
+	return nil
+}
+
+// SetUserName updates the username of a user. The home directory is not renamed.
+//
+// nameIsLocalOverride records whether the new name was chosen locally. A locally chosen name wins
+// over the name the identity provider reports, so UpdateUserEntry keeps it on later broker logins.
+// Callers that undo a rename pass the flag the user had before, so that a rollback also restores
+// how the name is owned.
+//
+// If the user's primary group is their private group, it is renamed too. authd names private
+// groups after the user, so leaving the old name behind would make the group reported by NSS
+// disagree with the username until the next broker login renames it.
+func (m *Manager) SetUserName(oldName, newName string, nameIsLocalOverride bool) (err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Start a transaction
+	tx, err := m.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+
+	// Ensure the transaction is committed or rolled back
+	defer func() {
+		err = commitOrRollBackTransaction(err, tx)
+	}()
+
+	// Check if the old user exists
+	oldUser, err := userByName(tx, oldName)
+	if errors.Is(err, NoDataFoundError{}) {
+		return err
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get user by name: %w", err)
+	}
+
+	// Check if a user with the new name already exists. Don't assign to err here, because the
+	// deferred commit would see the NoDataFoundError of the expected case and roll back.
+	_, checkErr := userByName(tx, newName)
+	if checkErr != nil && !errors.Is(checkErr, NoDataFoundError{}) {
+		return fmt.Errorf("failed to check if new username already exists: %w", checkErr)
+	}
+	if checkErr == nil {
+		log.Errorf(context.TODO(), "Username %q already in use", newName)
+		return fmt.Errorf("username %q already in use", newName)
+	}
+
+	// Update the users table
+	if _, err := tx.Exec(`UPDATE users SET name = ?, name_is_local_override = ? WHERE name = ?`,
+		newName, nameIsLocalOverride, oldName); err != nil {
+		return fmt.Errorf("failed to update username: %w", err)
+	}
+
+	if err := renamePrivateGroup(tx, oldUser.GID, oldName, newName); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// renamePrivateGroup renames the group with the given GID if it is the private group of the user
+// being renamed. A private group is identified by both its name and its UGID matching the old
+// username, which is how UpdateUserEntry creates it. Any other group is shared with other users
+// and is left untouched.
+func renamePrivateGroup(tx queryable, gid uint32, oldName, newName string) error {
+	primaryGroup, err := groupByID(tx, gid)
+	if errors.Is(err, NoDataFoundError{}) {
+		// A user without a primary group row has no private group to rename.
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get primary group of user %q: %w", oldName, err)
+	}
+
+	if primaryGroup.Name != oldName || primaryGroup.UGID != oldName {
+		log.Debugf(context.TODO(), "Not renaming primary group %q of user %q: it is not the user's private group",
+			primaryGroup.Name, oldName)
+		return nil
+	}
+
+	// A group with the new name may already exist, for instance because the user previously had
+	// that name. Renaming into it would violate the unique index on the name, so fail with a
+	// message that points at the actual conflict instead of a bare constraint error.
+	if _, err := groupByName(tx, newName); err == nil {
+		log.Errorf(context.TODO(), "Group %q already in use, cannot rename private group of user %q", newName, oldName)
+		return fmt.Errorf("group %q already in use", newName)
+	} else if !errors.Is(err, NoDataFoundError{}) {
+		return fmt.Errorf("failed to check if group %q already exists: %w", newName, err)
+	}
+
+	log.Infof(context.TODO(), "Renaming private group of user %q from %q to %q", oldName, primaryGroup.Name, newName)
+	primaryGroup.Name = newName
+	primaryGroup.UGID = newName
+	if err := updateGroupByID(tx, primaryGroup); err != nil {
+		return fmt.Errorf("failed to rename private group of user %q: %w", oldName, err)
+	}
+
 	return nil
 }
