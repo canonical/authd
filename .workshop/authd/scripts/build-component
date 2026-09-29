@@ -1,0 +1,344 @@
+#!/bin/bash
+set -euo pipefail
+
+AUTHD_PROJECT_DIR="${AUTHD_PROJECT_DIR:-/project}"
+AUTHD_DAEMONS_PATH="${AUTHD_DAEMONS_PATH:-/usr/libexec}"
+AUTHD_AUTHD_PROTO_GENERATED=0
+AUTHD_PAM_SOURCES_GENERATED=0
+AUTHD_BUILD_COMPONENT_TMPDIR=""
+AUTHD_GENERATED_PROTO_RESTORE=()
+
+# shellcheck disable=SC1091
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/brokers.sh"
+
+authd_cleanup_build_dir() {
+    if [ -n "${AUTHD_BUILD_COMPONENT_TMPDIR:-}" ]; then
+        rm -rf -- "${AUTHD_BUILD_COMPONENT_TMPDIR}"
+    fi
+}
+
+authd_prepare_build_environment() {
+    # shellcheck disable=SC1091
+    source "${AUTHD_PROJECT_DIR}/.workshop/authd/lib/env.sh"
+    cd "${AUTHD_PROJECT_DIR}"
+
+    AUTHD_MULTIARCH="$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
+    AUTHD_PAM_DIR="/usr/lib/${AUTHD_MULTIARCH}/security"
+    AUTHD_NSS_DIR="/usr/lib/${AUTHD_MULTIARCH}"
+}
+
+authd_generate_authd_proto() {
+    if [ "$AUTHD_AUTHD_PROTO_GENERATED" = 1 ]; then
+        return 0
+    fi
+
+    go generate ./internal/proto/authd/
+    AUTHD_AUTHD_PROTO_GENERATED=1
+}
+
+authd_generate_pam_sources() {
+    if [ "$AUTHD_PAM_SOURCES_GENERATED" = 1 ]; then
+        return 0
+    fi
+
+    authd_generate_authd_proto
+    go generate ./pam/internal/gdm/
+    go generate ./pam/
+    AUTHD_PAM_SOURCES_GENERATED=1
+}
+
+authd_build_authd() {
+    local build_dir="$1"
+    local restart_services="${2:-yes}"
+
+    authd_generate_authd_proto
+    go build -o "${build_dir}/authd" ./cmd/authd
+    sudo install -Dm755 "${build_dir}/authd" "${AUTHD_DAEMONS_PATH}/authd"
+
+    # list-unit-files exits 0 even with no match, so it cannot test
+    # that the unit exists. cat fails for a missing unit instead.
+    if [ "$restart_services" = yes ] && systemctl cat authd.service >/dev/null 2>&1; then
+        sudo systemctl restart authd.service
+    fi
+}
+
+authd_build_authctl() {
+    local build_dir="$1"
+
+    authd_generate_authd_proto
+    go build -o "${build_dir}/authctl" ./cmd/authctl
+    sudo install -Dm755 "${build_dir}/authctl" /usr/bin/authctl
+}
+
+authd_build_pam() {
+    local build_dir="$1"
+
+    authd_generate_pam_sources
+    go build -o "${build_dir}/authd-pam" ./pam
+    sudo install -Dm755 "${build_dir}/authd-pam" "${AUTHD_DAEMONS_PATH}/authd-pam"
+    sudo install -Dm644 pam/go-exec/pam_authd_exec.so "${AUTHD_PAM_DIR}/pam_authd_exec.so"
+    sudo install -Dm644 pam/pam_authd.so "${AUTHD_PAM_DIR}/pam_authd.so"
+}
+
+authd_build_nss() {
+    cargo build --release -p nss
+    sudo install -Dm644 "${AUTHD_PROJECT_DIR}/target/release/libnss_authd.so" "${AUTHD_NSS_DIR}/libnss_authd.so.2"
+    sudo ldconfig
+}
+
+# Regenerate the msentraid himmelblau native library (header + .so) from the
+# vendored Rust submodule. No-op for other variants. generate.sh itself is
+# idempotent, so it is safe to call unconditionally wherever a msentraid
+# binary might be built (broker, restore-state, authd_build_brokers).
+authd_generate_broker_native_deps() {
+    local variant="$1"
+
+    [ "$variant" = msentraid ] || return 0
+    (cd "${AUTHD_PROJECT_DIR}/authd-oidc-brokers" && bash ./internal/providers/msentraid/himmelblau/generate.sh)
+}
+
+# Build (but do not install) a single broker binary into build_dir/authd-<name>.
+# Shared by authd_build_brokers, scripts/broker and hooks/restore-state
+# so the actual build command lives in exactly one place.
+authd_build_broker_binary() {
+    local name="$1" tag="$2" build_dir="$3"
+    # vendor/ is ignored and can be stale after switching branches.
+    # shellcheck disable=SC2086
+    go build -C "${AUTHD_PROJECT_DIR}/authd-oidc-brokers" -mod=mod $tag -o "${build_dir}/authd-${name}" ./cmd/authd-oidc
+}
+
+# Build and install a single broker binary. Not called directly; use
+# authd_build_brokers instead so authd_generate_broker_native_deps is handled
+# correctly across the whole requested variant list.
+_authd_build_one_broker() {
+    local name="$1" tag="$2" build_dir="$3"
+    authd_build_broker_binary "$name" "$tag" "$build_dir"
+    sudo install -Dm755 "${build_dir}/authd-${name}" "${AUTHD_DAEMONS_PATH}/authd-${name}"
+    # Restart an active broker so the new binary takes effect immediately. Do
+    # not mask a failed restart; a successful build must not leave the service
+    # running stale or inactive without reporting it.
+    if sudo systemctl is-active --quiet "authd-${name}.service"; then
+        sudo systemctl restart "authd-${name}.service"
+    fi
+}
+
+authd_build_usage() {
+    echo "Usage: workshop run -- build [COMPONENT...]" >&2
+    echo "       workshop run -- build brokers [VARIANT...]" >&2
+    echo "COMPONENT: authd|authctl|pam|nss|brokers|all" >&2
+    echo "VARIANT: google|msentraid|oidc" >&2
+    echo "  no args: build the default set (authd authctl pam nss)" >&2
+    echo "  brokers [variant...]: build brokers (no variant builds all three)" >&2
+    echo "  all: build the default set plus all brokers" >&2
+    echo "Examples:" >&2
+    echo "  workshop run -- build pam" >&2
+    echo "  workshop run -- build brokers google oidc" >&2
+    echo "  workshop run -- build all" >&2
+}
+
+authd_build_brokers() {
+    local build_dir="$1"
+    shift
+
+    local variants=()
+    if [ $# -eq 0 ]; then
+        variants=("${AUTHD_BROKER_VARIANTS[@]}")
+    else
+        variants=("$@")
+    fi
+
+    # libhimmelblau (cargo) is slow; only run it when msentraid is requested,
+    # and only once even if it appears more than once.
+    local need_himmelblau=0
+    for v in "${variants[@]}"; do
+        [ "$v" = msentraid ] && { need_himmelblau=1; break; }
+    done
+    if [ "$need_himmelblau" = 1 ]; then
+        authd_generate_broker_native_deps msentraid
+    fi
+
+    local tag
+    for v in "${variants[@]}"; do
+        tag="$(authd_broker_build_tag "$v")" || {
+            echo "Unknown broker variant '${v}'. Valid values: ${AUTHD_BROKER_VARIANTS[*]}" >&2
+            return 2
+        }
+        _authd_build_one_broker "$v" "$tag" "$build_dir"
+    done
+}
+
+authd_capture_generated_proto_state() {
+    local path
+
+    AUTHD_GENERATED_PROTO_RESTORE=()
+    git rev-parse --git-dir >/dev/null 2>&1 || return 0
+
+    while IFS= read -r path; do
+        if git diff --quiet -- "$path" &&
+            git diff --cached --quiet -- "$path"; then
+            AUTHD_GENERATED_PROTO_RESTORE+=("$path")
+        fi
+    done < <(git ls-files -- '*.pb.go')
+}
+
+authd_restore_generated_proto() {
+    [ "${#AUTHD_GENERATED_PROTO_RESTORE[@]}" -gt 0 ] || return 0
+
+    # protoc's version is recorded in generated headers and can vary between
+    # environments; restore only outputs that were clean before generation so
+    # a developer's existing generated-code changes remain untouched.
+    git checkout -- "${AUTHD_GENERATED_PROTO_RESTORE[@]}"
+}
+
+# Build an explicit list of stack components and broker variants.
+# Stack order is fixed (authd authctl pam nss). Brokers keep the requested
+# order. Used by the CLI and by setup-project.
+# Runs in a subshell so the EXIT trap for proto restore stays local and
+# can never clobber the caller's own EXIT trap (e.g. temp dir cleanup).
+authd_build_selected() (
+    local build_dir="$1"
+    local restart_services="$2"
+    shift 2
+
+    local stack_list=()
+    local broker_list=()
+    local arg seen
+    local -A seen_broker=()
+    for arg in "$@"; do
+        case "$arg" in
+            authd|authctl|pam|nss)
+                # Keep stack order fixed below; avoid duplicates here.
+                case " ${stack_list[*]} " in
+                    *" ${arg} "*) ;;
+                    *) stack_list+=("$arg") ;;
+                esac
+                ;;
+            google|msentraid|oidc)
+                if [ -z "${seen_broker[$arg]:-}" ]; then
+                    seen_broker[$arg]=1
+                    broker_list+=("$arg")
+                fi
+                ;;
+            *)
+                echo "Unknown component '${arg}'." >&2
+                authd_build_usage
+                return 2
+                ;;
+        esac
+    done
+
+    # Order the stack as authd authctl pam nss even if requested mixed.
+    local ordered_stack=()
+    for seen in authd authctl pam nss; do
+        case " ${stack_list[*]} " in
+            *" ${seen} "*) ordered_stack+=("$seen") ;;
+        esac
+    done
+
+    if [ "${#ordered_stack[@]}" -gt 0 ]; then
+        authd_capture_generated_proto_state
+        trap authd_restore_generated_proto EXIT
+    fi
+
+    local component
+    for component in "${ordered_stack[@]}"; do
+        case "$component" in
+            authd)   authd_build_authd   "$build_dir" "$restart_services" ;;
+            authctl) authd_build_authctl "$build_dir" ;;
+            pam)     authd_build_pam     "$build_dir" ;;
+            nss)     authd_build_nss ;;
+        esac
+    done
+
+    if [ "${#broker_list[@]}" -gt 0 ]; then
+        authd_build_brokers "$build_dir" "${broker_list[@]}"
+    fi
+
+    if [ "${#ordered_stack[@]}" -gt 0 ]; then
+        trap - EXIT
+        authd_restore_generated_proto
+    fi
+)
+
+authd_build_component_main() {
+    local arg
+    local stack_list=()
+    local broker_list=()
+    local brokers_keyword_seen=no
+    local all_seen=no
+    local -A seen_broker_main=()
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help) authd_build_usage; return 0 ;;
+            authd|authctl|pam|nss)
+                case " ${stack_list[*]} " in
+                    *" ${arg} "*) ;;
+                    *) stack_list+=("$arg") ;;
+                esac
+                ;;
+            google|msentraid|oidc)
+                if [ -z "${seen_broker_main[$arg]:-}" ]; then
+                    seen_broker_main[$arg]=1
+                    broker_list+=("$arg")
+                fi
+                ;;
+            brokers) brokers_keyword_seen=yes ;;
+            all) all_seen=yes ;;
+            -*) echo "Unknown option '${arg}'." >&2; authd_build_usage; return 2 ;;
+            *) echo "Unknown component '${arg}'." >&2; authd_build_usage; return 2 ;;
+        esac
+    done
+    # Broker variants live under the brokers group, so a bare variant is
+    # likely a missing keyword rather than an unknown word.
+    if [ "${#broker_list[@]}" -gt 0 ] && [ "$brokers_keyword_seen" = no ] && [ "$all_seen" = no ]; then
+        # Re-scan to name the first bare variant for a precise hint.
+        for arg in "$@"; do
+            case "$arg" in
+                google|msentraid|oidc)
+                    echo "Did you mean 'workshop run -- build brokers ${arg}'?" >&2
+                    break
+                    ;;
+            esac
+        done
+        authd_build_usage
+        return 2
+    fi
+
+    authd_prepare_build_environment
+    AUTHD_BUILD_COMPONENT_TMPDIR="$(mktemp -d)"
+    trap authd_cleanup_build_dir EXIT
+
+    local selected=()
+    if [ "$all_seen" = yes ] && { [ "$brokers_keyword_seen" = no ] || [ "${#stack_list[@]}" -gt 0 ]; }; then
+        selected=(authd authctl pam nss "${AUTHD_BROKER_VARIANTS[@]}")
+    elif [ "$all_seen" = yes ]; then
+        # `build brokers all` means all brokers, not the whole stack.
+        selected=("${AUTHD_BROKER_VARIANTS[@]}")
+    elif [ "$#" -eq 0 ]; then
+        selected=(authd authctl pam nss)
+    else
+        # Keep stack order fixed.
+        local c
+        for c in authd authctl pam nss; do
+            case " ${stack_list[*]} " in
+                *" ${c} "*) selected+=("$c") ;;
+            esac
+        done
+        if [ "$brokers_keyword_seen" = yes ] && [ "${#broker_list[@]}" -eq 0 ]; then
+            selected+=("${AUTHD_BROKER_VARIANTS[@]}")
+        else
+            selected+=("${broker_list[@]}")
+        fi
+        if [ "${#selected[@]}" -eq 0 ]; then
+            authd_build_usage
+            return 2
+        fi
+    fi
+
+    authd_build_selected "$AUTHD_BUILD_COMPONENT_TMPDIR" yes "${selected[@]}"
+    echo "Rebuilt: ${selected[*]}"
+}
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    authd_build_component_main "$@"
+fi

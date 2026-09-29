@@ -1,0 +1,572 @@
+#!/bin/bash
+set -euo pipefail
+
+AUTHD_SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+if [ -r "${AUTHD_SCRIPT_DIR}/../lib/env.sh" ]; then
+    source "${AUTHD_SCRIPT_DIR}/../lib/env.sh"
+else
+    source /project/.workshop/authd/lib/env.sh
+fi
+# shellcheck disable=SC1091
+if [ -r "${AUTHD_SCRIPT_DIR}/../lib/brokers.sh" ]; then
+    source "${AUTHD_SCRIPT_DIR}/../lib/brokers.sh"
+else
+    source /project/.workshop/authd/lib/brokers.sh
+fi
+if [ -d /project ]; then
+    cd /project
+fi
+
+usage() {
+    cat >&2 <<EOF
+Usage:
+  workshop run -- broker <variant> [options]
+  workshop run -- broker edit <variant> [--editor CMD]
+  workshop run -- broker start <variant>
+  workshop run -- broker stop <variant>
+  workshop run -- broker status <variant>
+variant: ${AUTHD_BROKER_VARIANTS[*]}
+
+<variant> options:
+  --issuer URL --client-id ID
+  --client-secret SECRET | --client-secret-file GUEST_PATH
+  --ssh-suffixes LIST
+  --register-device | --no-register-device       (msentraid only)
+  --entra-auth | --no-entra-auth                 (msentraid only)
+
+Passing a variant writes its files, then starts a new complete broker or
+restarts an active one to apply the change. A stopped broker stays stopped.
+GUEST_PATH is inside the VM, e.g. /project/secret.
+Examples:
+  workshop run -- broker google --client-id ID --client-secret-file /project/secret --ssh-suffixes '@example.com'
+  workshop run -- broker msentraid --issuer URL --client-id ID --register-device --entra-auth --ssh-suffixes '@example.com'
+EOF
+}
+
+usage_flags() {
+    cat >&2 <<EOF
+Usage: workshop run -- broker <variant> [--issuer URL --client-id ID --client-secret SECRET --client-secret-file GUEST_PATH --ssh-suffixes LIST --register-device|--no-register-device --entra-auth|--no-entra-auth]
+variant: ${AUTHD_BROKER_VARIANTS[*]}
+Note: --register-device, --no-register-device, --entra-auth and --no-entra-auth are msentraid only.
+EOF
+}
+
+usage_edit() {
+    cat >&2 <<EOF
+Usage: workshop run -- broker edit <variant> [--editor CMD]
+variant: ${AUTHD_BROKER_VARIANTS[*]}
+  Opens the broker config in an editor, then restarts an active broker
+  to apply the change. Needs a terminal; force one with
+  'workshop run -i -- broker edit <variant>' or use 'workshop shell'
+  and sudoedit the shown path instead.
+  The editor defaults to \$VISUAL/\$EDITOR (forward yours with
+  'workshop run --env EDITOR -- broker edit <variant>'), else nano/vi.
+Example:
+  workshop run -- broker edit google
+EOF
+}
+
+read_secret_file() {
+    local path="$1"
+
+    if [ ! -r "$path" ]; then
+        echo "Cannot read client secret file inside the workshop: ${path}" >&2
+        echo "Create it from 'workshop shell' first, or pass --client-secret directly." >&2
+        exit 2
+    fi
+
+    # Strip carriage returns. Secret files saved with Windows line
+    # endings would else fail broker login with no clear cause.
+    head -n 1 "$path" | tr -d '\r'
+}
+
+start_broker() {
+    local unit="$1"
+
+    sudo systemctl enable "$unit" &&
+        sudo systemctl restart "$unit" &&
+        sudo systemctl is-active --quiet "$unit"
+}
+
+broker_start() {
+    local variant="$1"
+    local bin="authd-${variant}"
+    local conf_dir="/etc/authd-${variant}"
+    local unit="${bin}.service"
+    local daemons_path="${2:-/usr/libexec}"
+
+    if ! sudo test -f "${conf_dir}/broker.conf"; then
+        echo "${variant} broker is not configured yet; run 'workshop run -- broker ${variant} --client-id ID ...' first." >&2
+        return 1
+    fi
+    if ! sudo test -x "${daemons_path}/${bin}"; then
+        echo "${variant} broker binary is missing at ${daemons_path}/${bin}; run 'workshop run -- build brokers ${variant}' first." >&2
+        return 1
+    fi
+    if ! sudo test -f "/etc/systemd/system/${unit}"; then
+        echo "${variant} broker unit is missing; run 'workshop run -- broker ${variant} --client-id ID ...' first." >&2
+        return 1
+    fi
+    if ! start_broker "${unit}"; then
+        echo "${variant} broker failed to start:" >&2
+        sudo systemctl status --no-pager --full "${unit}" >&2 || true
+        return 1
+    fi
+    echo "${variant} broker started."
+    echo "Follow logs with: workshop run -- logs ${variant}"
+}
+
+broker_stop() {
+    local variant="$1"
+    local unit="authd-${variant}.service"
+
+    sudo systemctl disable --now "${unit}" || true
+    echo "${variant} broker stopped."
+}
+
+broker_edit() {
+    local variant="$1"
+    shift
+
+    local editor=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --editor)
+                [ $# -ge 2 ] || { echo "Missing value for --editor" >&2; usage_edit; return 2; }
+                editor="$2"
+                shift 2
+                ;;
+            -h|--help) usage_edit; return 0 ;;
+            *) echo "Unknown option: $1" >&2; usage_edit; return 2 ;;
+        esac
+    done
+
+    local conf="/etc/authd-${variant}/broker.conf"
+    local unit="authd-${variant}.service"
+    if ! sudo test -f "$conf"; then
+        echo "${variant} broker is not configured yet; run 'workshop run -- broker ${variant} --client-id ID ...' first." >&2
+        return 1
+    fi
+
+    if [ ! -t 0 ]; then
+        echo "No terminal attached, so no editor can open." >&2
+        echo "Run from a terminal, force one with 'workshop run -i -- broker edit ${variant}'," >&2
+        echo "or use 'workshop shell' and edit ${conf} with sudoedit instead." >&2
+        return 2
+    fi
+
+    # Resolve the editor without involving root: it runs as the workshop
+    # user on a temp copy, so SUDO_EDITOR plumbing is never needed.
+    if [ -z "$editor" ]; then
+        editor="${VISUAL:-${EDITOR:-}}"
+    fi
+    if [ -z "$editor" ]; then
+        if command -v nano >/dev/null 2>&1; then
+            editor="nano"
+        else
+            editor="vi"
+        fi
+    fi
+    local editor_first="${editor%% *}"
+    command -v "$editor_first" >/dev/null 2>&1 || {
+        echo "Editor '${editor_first}' not found in the workshop." >&2
+        echo "Install it or pass --editor CMD (or forward yours with 'workshop run --env EDITOR -- broker edit ${variant}')." >&2
+        return 1
+    }
+
+    local backup
+    backup="${conf}.bak-$(date +%Y%m%d-%H%M%S)"
+    sudo cp -a "$conf" "$backup" || return 1
+    echo "Backup: ${backup}"
+
+    local tmpdir
+    tmpdir="$(mktemp -d)"
+    trap 'rm -rf "$tmpdir"' EXIT
+    # Redirect runs as the workshop user on purpose: the temp copy is
+    # user-owned so the editor never runs as root.
+    # shellcheck disable=SC2024
+    sudo cat "$conf" > "${tmpdir}/broker.conf"
+
+    # shellcheck disable=SC2086
+    $editor "${tmpdir}/broker.conf"
+    local edit_rc=$?
+    if [ "$edit_rc" -ne 0 ]; then
+        echo "Editor exited with status ${edit_rc}; config left unchanged." >&2
+        trap - EXIT
+        rm -rf "$tmpdir"
+        return "$edit_rc"
+    fi
+    if cmp -s "${tmpdir}/broker.conf" <(sudo cat "$conf"); then
+        echo "No changes; broker left alone."
+        trap - EXIT
+        rm -rf "$tmpdir"
+        return 0
+    fi
+
+    sudo install -m600 "${tmpdir}/broker.conf" "$conf"
+    trap - EXIT
+    rm -rf "$tmpdir"
+    echo "${variant} broker config updated."
+
+    if sudo systemctl is-active --quiet "$unit" 2>/dev/null; then
+        if systemctl is-enabled --quiet "$unit" 2>/dev/null; then
+            sudo systemctl enable "$unit" >/dev/null
+        else
+            sudo systemctl disable "$unit" >/dev/null
+        fi
+        if sudo systemctl restart "$unit" && sudo systemctl is-active --quiet "$unit"; then
+            echo "${variant} broker restarted to apply the change."
+        else
+            echo "${variant} broker failed to restart after the edit:" >&2
+            sudo systemctl status --no-pager --full "$unit" >&2 || true
+            return 1
+        fi
+    else
+        echo "Broker is stopped; apply with: workshop run -- broker start ${variant}"
+    fi
+
+    sudo systemctl try-restart authd.service
+}
+
+broker_status() {
+    local variant="$1"
+    local unit="authd-${variant}.service"
+    local conf_dir="/etc/authd-${variant}"
+
+    if sudo test -f "${conf_dir}/broker.conf"; then
+        echo "config: ${conf_dir}/broker.conf"
+    else
+        echo "config: missing (not configured)"
+    fi
+    if systemctl is-enabled --quiet "${unit}" 2>/dev/null; then
+        echo "enabled: yes"
+    else
+        echo "enabled: no"
+    fi
+    if systemctl is-active --quiet "${unit}" 2>/dev/null; then
+        echo "active: yes"
+        return 0
+    else
+        echo "active: no"
+        return 1
+    fi
+}
+
+broker_configure() {
+    local variant="$1"
+    shift
+
+    local tag
+    tag="$(authd_broker_build_tag "$variant")" || { usage_flags; return 2; }
+    local issuer_default=""
+    case "$variant" in
+        google) issuer_default="https://accounts.google.com" ;;
+    esac
+
+    local issuer="$issuer_default"
+    local client_id=""
+    local client_secret=""
+    local secret_on_cmdline=no
+    local ssh_suffixes=""
+    local ssh_suffixes_given=no
+    local register_device_given=no
+    local register_device_value=""
+    local entra_auth_given=no
+    local entra_auth_value=""
+    local config_provided=no
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --issuer|--client-id|--client-secret|--client-secret-file|--ssh-suffixes)
+                if [ $# -lt 2 ]; then
+                    echo "Missing value for $1" >&2
+                    usage_flags
+                    return 2
+                fi
+                config_provided=yes
+                ;;
+        esac
+
+        case "$1" in
+            --issuer) issuer="$2"; shift 2 ;;
+            --client-id) client_id="$2"; shift 2 ;;
+            --client-secret) client_secret="$2"; secret_on_cmdline=yes; shift 2 ;;
+            --client-secret-file) client_secret="$(read_secret_file "$2")"; shift 2 ;;
+            --ssh-suffixes) ssh_suffixes="$2"; ssh_suffixes_given=yes; shift 2 ;;
+            --register-device|--no-register-device|--entra-auth|--no-entra-auth)
+                [ "$variant" = msentraid ] || { echo "$1 is only supported for msentraid" >&2; return 2; }
+                config_provided=yes
+                case "$1" in
+                    --register-device) register_device_given=yes; register_device_value=true ;;
+                    --no-register-device) register_device_given=yes; register_device_value=false ;;
+                    --entra-auth) entra_auth_given=yes; entra_auth_value=true ;;
+                    --no-entra-auth) entra_auth_given=yes; entra_auth_value=false ;;
+                esac
+                shift
+                ;;
+            -h|--help) usage_flags; return 0 ;;
+            *) echo "Unknown option: $1" >&2; usage_flags; return 2 ;;
+        esac
+    done
+
+    if [ -n "$client_id" ]; then
+        case "$variant" in
+            google)
+                [ -n "$client_secret" ] || { echo "google requires --client-secret or --client-secret-file when --client-id is provided" >&2; return 2; }
+                ;;
+            msentraid|oidc)
+                [ -n "$issuer" ] || { echo "${variant} requires --issuer when --client-id is provided" >&2; return 2; }
+                ;;
+        esac
+    fi
+
+    local bin="authd-${variant}"
+    local conf_dir="/etc/authd-${variant}"
+    local unit="${bin}.service"
+    # Keep the selected install path with the broker config so refresh hooks
+    # and later rebuilds use the same location. Log it so the two sources
+    # (env override vs saved file) stay visible.
+    local daemons_path="${AUTHD_DAEMONS_PATH:-}"
+    if [ -z "$daemons_path" ] && sudo test -f "${conf_dir}/daemon_path"; then
+        daemons_path="$(sudo cat "${conf_dir}/daemon_path")"
+        echo "[broker] Using saved daemons path: ${daemons_path}" >&2
+    fi
+    daemons_path="${daemons_path:-/usr/libexec}"
+    echo "[broker] Using daemons path: ${daemons_path}" >&2
+
+    if [ "$secret_on_cmdline" = yes ]; then
+        echo "warning: --client-secret exposes the credential in shell history and the process list; prefer --client-secret-file" >&2
+    fi
+
+    local was_enabled=no
+    local was_active=no
+    if sudo systemctl is-enabled --quiet "${unit}" 2>/dev/null; then
+        was_enabled=yes
+    fi
+    if sudo systemctl is-active --quiet "${unit}" 2>/dev/null; then
+        was_active=yes
+    fi
+
+    local src="authd-oidc-brokers/conf/variants/${variant}"
+    [ -d "$src" ] || { echo "Missing upstream config templates: ${src}" >&2; return 1; }
+    local dbus_name
+    if sudo test -f "/etc/authd/brokers.d/${variant}.conf"; then
+        dbus_name="$(sudo sed -n 's/^dbus_name = //p' "/etc/authd/brokers.d/${variant}.conf")"
+    else
+        dbus_name="$(sed -n 's/^dbus_name = //p' "${src}/authd.conf")"
+    fi
+    [ -n "$dbus_name" ] || { echo "Could not read dbus_name for ${variant}" >&2; return 1; }
+
+    # Build the broker binary if it is not already installed. The first call
+    # always builds from source; later calls reuse the installed binary.
+    if [ ! -x "${daemons_path}/${bin}" ]; then
+        echo "[broker] Building ${bin} from source..." >&2
+        # shellcheck disable=SC1091
+        source "${AUTHD_SCRIPT_DIR}/build-component"
+        authd_generate_broker_native_deps "$variant"
+        _broker_tmpdir="$(mktemp -d)"
+        trap 'rm -rf "$_broker_tmpdir"' EXIT
+        authd_build_broker_binary "$variant" "$tag" "$_broker_tmpdir"
+        sudo install -Dm755 "${_broker_tmpdir}/${bin}" "${daemons_path}/${bin}"
+        trap - EXIT
+        rm -rf "$_broker_tmpdir"
+    else
+        echo "[broker] Keeping the existing ${daemons_path}/${bin}; run 'workshop run -- build brokers ${variant}' first to rebuild from source." >&2
+    fi
+
+    sudo tee "/usr/share/dbus-1/system.d/${dbus_name}.conf" >/dev/null <<DBUS
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <policy user="root"><allow own="${dbus_name}"/></policy>
+  <policy context="default">
+    <allow send_destination="${dbus_name}" send_interface="com.ubuntu.authd.Broker"/>
+    <allow send_destination="${dbus_name}" send_interface="com.ubuntu.authd.Broker2"/>
+    <allow send_destination="${dbus_name}" send_interface="com.ubuntu.authd.Broker3"/>
+    <allow send_destination="${dbus_name}" send_interface="org.freedesktop.DBus.Introspectable"/>
+  </policy>
+</busconfig>
+DBUS
+    sudo systemctl reload dbus
+
+    if ! sudo test -f "/etc/authd/brokers.d/${variant}.conf"; then
+        sudo install -Dm644 "${src}/authd.conf" "/etc/authd/brokers.d/${variant}.conf"
+        sudo sed -i 's|^brand_icon = .*|brand_icon =|' "/etc/authd/brokers.d/${variant}.conf"
+    fi
+
+    sudo install -d -m700 "$conf_dir"
+    # Seed broker.conf from the upstream template only on first configure;
+    # later runs edit it in place so fields this script does not re-derive
+    # (client_id, client_secret, ...) survive. Without this guard a
+    # partial-flag run (e.g. only --ssh-suffixes) would silently reset them.
+    local seeded_config=no
+    if ! sudo test -f "${conf_dir}/broker.conf"; then
+        sudo install -m600 "${src}/broker.conf" "${conf_dir}/broker.conf"
+        seeded_config=yes
+    fi
+    set_kv() {
+        local key="$1"
+        local value="$2"
+
+        printf '%s' "$value" | sudo python3 -c '
+import re
+import sys
+
+path = sys.argv[1]
+key = sys.argv[2]
+value = sys.stdin.read()
+replacement = f"{key} = {value}"
+pattern = re.compile(rf"^#?\s*{re.escape(key)}\s*=.*$")
+
+with open(path, encoding="utf-8") as broker_conf:
+    lines = broker_conf.read().splitlines()
+
+for index, line in enumerate(lines):
+    if pattern.match(line):
+        lines[index] = replacement
+        break
+else:
+    lines.append(replacement)
+
+with open(path, "w", encoding="utf-8") as broker_conf:
+    broker_conf.write("\n".join(lines) + "\n")
+' "${conf_dir}/broker.conf" "$key"
+    }
+    if [ -n "$issuer" ]; then
+        set_kv issuer "$issuer"
+    fi
+    [ -n "$client_id" ] && set_kv client_id "$client_id"
+    [ -n "$client_secret" ] && set_kv client_secret "$client_secret"
+    # Defaults are written when seeding or when the flag is passed explicitly;
+    # an existing, possibly hand-edited value is otherwise preserved.
+    if [ "$seeded_config" = yes ] || [ "$ssh_suffixes_given" = yes ]; then
+        set_kv ssh_allowed_suffixes_first_auth "$ssh_suffixes"
+    fi
+    # register_device and entra_auth are independent keys in the msentraid
+    # template. --register-device does not imply --entra-auth: the upstream
+    # template sets entra_auth = false explicitly. Set each key only when its
+    # flag was passed, preserving hand edits.
+    [ "$register_device_given" = yes ] && set_kv register_device "$register_device_value"
+    [ "$entra_auth_given" = yes ] && set_kv entra_auth "$entra_auth_value"
+    [ "$seeded_config" = yes ] && set_kv allowed_users OWNER
+    # Strip <placeholder> values from the freshly seeded template; leave an
+    # existing, possibly hand-edited broker.conf untouched.
+    if [ "$seeded_config" = yes ]; then
+        sudo sed -i -E 's/^([a-z_]+ = ).*<[^>]+>.*$/\1/' "${conf_dir}/broker.conf"
+    fi
+    printf '%s\n' "$daemons_path" | sudo tee "${conf_dir}/daemon_path" >/dev/null
+
+    if ! sudo test -f "/etc/systemd/system/${unit}"; then
+        sudo tee "/etc/systemd/system/${bin}.service" >/dev/null <<UNIT
+[Unit]
+Description=${variant} broker for authd
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=notify
+ExecStart="${daemons_path}/${bin}" --config "${conf_dir}/broker.conf" -vv
+Restart=on-failure
+StateDirectory=${bin}
+[Install]
+WantedBy=multi-user.target
+UNIT
+    fi
+    sudo systemctl daemon-reload
+
+    # Is the stored config complete enough to start? Check the file, not just
+    # this run's flags, so a second run that completes the config still starts.
+    local stored_id=""
+    local stored_issuer=""
+    local stored_secret=""
+    stored_id="$(sudo sed -n 's/^client_id = //p' "${conf_dir}/broker.conf" | head -n 1 || true)"
+    stored_issuer="$(sudo sed -n 's/^issuer = //p' "${conf_dir}/broker.conf" | head -n 1 || true)"
+    stored_secret="$(sudo sed -n 's/^client_secret = //p' "${conf_dir}/broker.conf" | head -n 1 || true)"
+    local now_complete=no
+    case "$variant" in
+        google)
+            [ -n "$stored_id" ] && [ -n "$stored_secret" ] && now_complete=yes
+            ;;
+        msentraid|oidc)
+            [ -n "$stored_id" ] && [ -n "$stored_issuer" ] && now_complete=yes
+            ;;
+    esac
+
+    restart_preserving() {
+        if [ "$was_enabled" = yes ]; then
+            sudo systemctl enable "$unit"
+        else
+            sudo systemctl disable "$unit"
+        fi
+        sudo systemctl restart "$unit" &&
+            sudo systemctl is-active --quiet "$unit"
+    }
+
+    if [ "$was_active" = yes ]; then
+        if ! restart_preserving "${unit}"; then
+            echo "${variant} broker configuration was updated, but the service failed to restart:" >&2
+            sudo systemctl status --no-pager --full "${unit}" >&2 || true
+            return 1
+        fi
+        echo "${variant} broker configuration updated and service restarted."
+    elif [ "$now_complete" = yes ] && { [ "$config_provided" = yes ] || [ "$seeded_config" = yes ]; }; then
+        if ! start_broker "${unit}"; then
+            echo "${variant} broker installation completed, but the service failed to start:" >&2
+            sudo systemctl status --no-pager --full "${unit}" >&2 || true
+            return 1
+        fi
+        echo "${variant} broker installed and started."
+        echo "Follow logs with: workshop run -- logs ${variant}"
+    else
+        if [ "$was_enabled" = yes ]; then
+            sudo systemctl enable "${unit}"
+        fi
+        echo "${variant} broker installed but not started."
+        if [ "$now_complete" = no ]; then
+            echo "Complete the config, then run:"
+            echo "  workshop run -- broker ${variant} --client-id ID ..."
+        else
+            echo "Run: workshop run -- broker start ${variant}"
+        fi
+    fi
+
+    sudo systemctl try-restart authd.service
+}
+
+verb="${1:-}"
+case "$verb" in
+    -h|--help) usage; exit 0 ;;
+    google|msentraid|oidc)
+        variant="$verb"
+        shift
+        broker_configure "$variant" "$@"
+        ;;
+    edit)
+        shift
+        variant="${1:-}"
+        [ -n "$variant" ] || { usage_edit; exit 2; }
+        authd_broker_build_tag "$variant" >/dev/null || { usage_edit; exit 2; }
+        shift
+        broker_edit "$variant" "$@"
+        ;;
+    start|stop|status)
+        shift
+        variant="${1:-}"
+        [ -n "$variant" ] || { usage; exit 2; }
+        authd_broker_build_tag "$variant" >/dev/null || { usage; exit 2; }
+        [ "$#" -eq 1 ] || { usage; exit 2; }
+        case "$verb" in
+            start)
+                daemons_path="${AUTHD_DAEMONS_PATH:-}"
+                conf_dir="/etc/authd-${variant}"
+                if [ -z "$daemons_path" ] && sudo test -f "${conf_dir}/daemon_path"; then
+                    daemons_path="$(sudo cat "${conf_dir}/daemon_path")"
+                fi
+                broker_start "$variant" "${daemons_path:-/usr/libexec}"
+                ;;
+            stop) broker_stop "$variant" ;;
+            status) broker_status "$variant" ;;
+        esac
+        ;;
+    "" ) usage; exit 2 ;;
+    -*) usage; exit 2 ;;
+    *) echo "Unknown broker action: $verb" >&2; usage; exit 2 ;;
+esac

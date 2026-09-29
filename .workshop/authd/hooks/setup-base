@@ -1,0 +1,109 @@
+#!/bin/bash
+# setup-base — system provisioning that is baked into the workshop snapshot.
+#
+# Runs as root when this SDK is installed during launch or refresh, before the
+# project is mounted and before systemd is supervising services. It is therefore
+# restricted to package installation and static file writes: no access to
+# /project and no `systemctl`.
+# Everything that needs the project tree or a running systemd lives in
+# setup-project builds with Ubuntu's Go package and the Workshop Rust SDK.
+#
+# Per Workshop best practice, system (apt) packages belong here — the install is
+# part of the SDK snapshot, so refreshes can reuse it while the SDK is unchanged.
+set -euo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+
+# --- Build- and test-time system dependencies -------------------------------
+# Authd build dependencies come from debian/control; libfido2-dev supplies the
+# Entra broker's cgo headers. Test dependencies (bubblewrap, cracklib, dbus,
+# uidmap) match what authd's CI installs so `workshop run -- test` behaves
+# like CI. Go comes from the pinned Store SDK (see .workshop.yaml), not the
+# archive, so the compiler cannot drift ahead of go.mod. gcc stays here:
+# the Go SDK ships no C toolchain and cgo needs one.
+apt-get update
+apt-get install --yes --no-install-recommends \
+    ca-certificates curl git make gcc pkgconf dpkg-dev \
+    protobuf-compiler \
+    libpam0g-dev libglib2.0-dev libpwquality-dev libc6-dev libssl-dev \
+    libfido2-dev systemd-dev \
+    bubblewrap cracklib-runtime dbus uidmap python3 \
+    openssh-server software-properties-common \
+    jq
+
+# --- GDM: desktop greeter for in-VM graphical login testing -----------------
+# The greeter mechanism is in setup-project; spice-vdagent scales the SPICE
+# console that .workshop/authd/host-console.sh opens.
+# GDM's authd login needs the patched local-password transition in this PPA.
+add-apt-repository --yes ppa:ubuntu-enterprise-desktop/authd
+apt-get update
+# policykit-desktop-privileges and gsettings-ubuntu-schemas match what the
+# e2e GDM VMs install; ubuntu-desktop-minimal does not pull them in.
+# gnome-keyring and libpam-gnome-keyring provide the keyring PAM module
+# referenced by debian/authd.gdm-authd.pam; without them every greeter
+# login logs a faulty-module warning and the session stack is incomplete.
+apt-get install --yes ubuntu-desktop-minimal gnome-shell spice-vdagent dconf-cli \
+    libpam-pwquality libsecret-tools policykit-desktop-privileges \
+    gsettings-ubuntu-schemas gnome-keyring libpam-gnome-keyring
+dpkg --compare-versions "$(dpkg-query -W -f='${Version}' gnome-shell)" ge \
+    '50.1-0ubuntu1.2+authd1~26.04.1'
+
+# --- Project tool PATH -------------------------------------------------------
+# Hooks do NOT get /etc/profile.d sourced, but interactive `workshop shell`
+# sessions do. Rust comes from the Store SDK; Go comes from Ubuntu's apt
+# package. This profile adds per-user `go install` and cargo locations.
+cat > /etc/profile.d/authd-dev.sh <<'PROFILE'
+# authd Workshop dev environment - project tool PATH
+export PATH="${HOME}/go/bin:${HOME}/.cargo/bin:${PATH}"
+PROFILE
+chmod 0644 /etc/profile.d/authd-dev.sh
+
+# --- GDM/console defaults ---------------------------------------------------
+# Greeter/session defaults for console testing: no suspend/blank/lock; larger
+# greeter text.
+install -d -m0755 /etc/dconf/profile /etc/dconf/db/local.d /usr/share/gdm/dconf
+cat > /etc/dconf/profile/user <<'DCONF_PROFILE'
+user-db:user
+system-db:local
+DCONF_PROFILE
+cat > /etc/dconf/db/local.d/00-authd-workshop <<'DCONF_LOCAL'
+[org/gnome/settings-daemon/plugins/power]
+sleep-inactive-ac-type='nothing'
+sleep-inactive-ac-timeout=0
+
+[org/gnome/desktop/session]
+idle-delay=uint32 0
+
+[org/gnome/desktop/screensaver]
+lock-enabled=false
+DCONF_LOCAL
+cat > /usr/share/gdm/dconf/00-authd-workshop <<'DCONF_GDM'
+[org/gnome/desktop/interface]
+text-scaling-factor=1.25
+DCONF_GDM
+chmod 0644 /etc/dconf/profile/user /etc/dconf/db/local.d/00-authd-workshop \
+    /usr/share/gdm/dconf/00-authd-workshop
+dconf update
+
+# --- Passwordless sudo for the workshop user ---------------------------------
+# setup-project and the dev actions run as the unprivileged `workshop` user but
+# must install into /usr and /etc and drive systemd, exactly like the Debian
+# package's maintainer scripts do as root. Grant sudo so they can.
+cat > /etc/sudoers.d/authd-dev <<'SUDOERS'
+workshop ALL=(ALL) NOPASSWD:ALL
+SUDOERS
+chmod 0440 /etc/sudoers.d/authd-dev
+
+# --- sshd: route cloud-identity logins through PAM ---------------------------
+# authd authenticates SSH users over PAM keyboard-interactive (the exec module's
+# native UI mode). The authd PAM stack itself is wired by pam-auth-update in
+# setup-project; here we only make sshd defer to PAM for `user@domain` logins.
+cat > /etc/ssh/sshd_config.d/authd.conf <<'SSHD'
+UsePAM yes
+KbdInteractiveAuthentication yes
+# Device-code authentication can take longer than sshd's default 2 minutes.
+LoginGraceTime 300
+SSHD
+chmod 0644 /etc/ssh/sshd_config.d/authd.conf
+
+printf '[setup-base] Base dependencies and static configuration installed.\n'
