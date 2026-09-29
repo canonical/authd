@@ -50,10 +50,11 @@ authd's NSS module gets information from its local database of the identity
 provider's users and groups. This is discussed in the [overview of authd's
 architecture](explanation::authd-architecture).
 
-## authd users should be managed using authctl
+## authd provides the authctl tool for managing users
 
-For authd-managed users and groups, use [`authctl`](reference::cli),
-a dedicated command-line tool for user management.
+For authd-managed users and groups, you can use [`authctl`](reference::cli), a
+dedicated command-line tool for user management. [Read the `authctl` CLI
+reference](reference::cli).
 
 `authctl` supports operations including locking users, deleting users, and
 modifying user home directories.
@@ -66,4 +67,4 @@ described in the [group and privilege management guide](reference::group-managem
 * [System databases and NSS in the GNU C library manual](https://sourceware.org/glibc/manual/latest/html_mono/libc.html#Name-Service-Switch)
 * [authctl CLI reference documentation](reference::cli)
 * [Group and privilege management with authd](reference::group-management)
-
+* [How-to guides on authd user management](howto::user-management)

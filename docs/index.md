@@ -57,8 +57,8 @@ full transition to the cloud.
 |------------------------------------------|---------------------------------------------------------------------|
 |**Setup** | [Installing authd](/howto/install-authd/) • [Configuring authd](/howto/configure-authd/) • [Changing authd versions](/howto/changing-versions/) |
 |**User login** | [Logging in with GDM](/howto/login-gdm/) • [Logging in with SSH](/howto/login-ssh/) • [Authentication flows](/reference/authentication-flows) |
+|**User management** | [Onboard a user](howto::onboard-user) • [Reset a password](howto::reset-password) • [Lock a user](howto::lock-user) • [Offboard a user](howto::offboard-user) • [authctl CLI tool](/reference/cli/authctl) • [User management explained](explanation::user-management) |
 |**Groups (sudo, docker)** | [Configure user groups](ref::config-user-groups) • [Group management reference](/reference/group-management) |
-|**User management** | [authctl CLI tool](/reference/cli/authctl) • [User management explained](/explanation/user-management) |
 |**Deployment** | [Deploying with Landscape](/reference/landscape-deploy/) • [Deploying with cloud-init](/reference/cloud-init-deploy/) |
 |**Network file systems** | [Using with NFS](/howto/use-with-nfs/) • [Using with Samba](/howto/use-with-samba/) |
 |**authd design** | [Architecture](/explanation/authd-architecture/) • [Security overview](/explanation/security/) |
@@ -77,7 +77,7 @@ Thinking about using authd for your next project? Get in touch!
 
 ```{toctree}
 :hidden:
-:maxdepth: 2
+:titlesonly:
 
 authd <self>
 How-to guides </howto/index>
