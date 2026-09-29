@@ -842,7 +842,7 @@ New authd-specific patches to GNOME Shell should be added to:
 * The `ubuntu/latest` branch when targeting the next Ubuntu release.
 * The `ubuntu/$RELEASE-authd` branch when the new release should be published in
   the authd PPA (e.g., `ubuntu/noble-authd` for Ubuntu 24.04).
-* The `ubuntu/$RELEASE` branch when the new release should be published in the 
+* The `ubuntu/$RELEASE` branch when the new release should be published in the
   Ubuntu archive (e.g., `ubuntu/resolute` for Ubuntu 26.04).
 
 The steps below describe how to prepare a new release of the patched
