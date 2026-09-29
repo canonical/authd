@@ -1,7 +1,7 @@
 .\" Generated from authctl man page generator
 .\" Do not edit manually
 .nh
-.TH "AUTHCTL" "1" "2026-06-10" "authd"
+.TH "AUTHCTL" "1" "2026-09-30" "authd"
 .SH NAME
 authctl \- Manage authd users and groups
 .SH SYNOPSIS
@@ -29,6 +29,23 @@ The new UID must be unique and non-negative. The command must be run as root.
 The ownership of the user's home directory, and any files within the directory that the user owns, will automatically be updated to the new UID.
 .sp
 Files outside the user's home directory are not updated and must be changed manually. Note that changing a UID can be unsafe if files on the system are still owned by the original UID: those files may become accessible to a different account that is later assigned that UID.
+.RE
+.PP
+\fBuser\fP \fBset-name\fP \fI<old-name>\fP \fI<new-name>\fP
+.RS 4
+Rename a user managed by authd to a new username.
+.sp
+The new username must be unique. The command must be run as root.
+.sp
+Note: This command does NOT rename the user's home directory. The home directory path remains unchanged to avoid potential data loss and permission issues. You will need to manually rename the home directory if desired.
+.sp
+The user's private group is renamed along with the user, because authd names private groups after the user they belong to.
+.sp
+The new username is kept across logins: authd remembers that it was set locally, so the broker does not restore the username reported by the identity provider. The user must log in with the new username from now on.
+.sp
+Only users that authd identifies by a stable provider ID can be renamed, because that ID is what ties the new name to the account. Users stored before authd started recording it get one on their next login with a broker that provides it.
+.sp
+The user must not have any active processes when renaming.
 .RE
 .PP
 \fBuser\fP \fBset-shell\fP \fI<name>\fP \fI<shell>\fP
