@@ -23,6 +23,11 @@ type AuthCachedInfo struct {
 	// from the provider at least once. A group-fetch failure may only fall
 	// back to cached groups when this is set.
 	GroupsResolved bool
+	// DeviceRegistrationDataInvalidated is set when a provider rejects the
+	// cached registration data. It keeps local password authentication
+	// available while the next online authentication re-registers the device.
+	// Omitting false preserves the existing on-disk token format.
+	DeviceRegistrationDataInvalidated bool `json:",omitempty"`
 	// DeviceRegistrationDataValidationPending is set when fresh registration
 	// data was obtained but group lookup has not yet succeeded.
 	// The data is retained and reused until group lookup succeeds.
