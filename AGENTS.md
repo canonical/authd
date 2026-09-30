@@ -99,6 +99,16 @@ The PAM module has two implementations (see `pam/README.md`):
 - Test-only exports via `export_test.go` files (no build tag, package-level visibility)
 - PAM integration tests use `ptytest` in `pam/integration-tests/`
 
+## Code Review
+
+During reviews, assess changes against existing installations as well as clean
+installs. For any new or stricter validation, verify that configurations and
+file modes accepted or tolerated by previous releases still work, including
+legacy layouts or settings that were previously ignored. Flag upgrade paths
+that could prevent a service from starting or users from authenticating.
+Require backward-compatible handling or a clear migration path and upgrade
+notice for intentional incompatibilities.
+
 ## Common Workflows
 
 ### Adding a gRPC Service Method
