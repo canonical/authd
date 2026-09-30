@@ -29,9 +29,15 @@ func newModuleWrapper(serverAddress string) (moduleWrapper, func(), error) {
 	return moduleWrapper{mTx}, closeFunc, err
 }
 
-// SimulateClientPanic forces the client to panic with the provided text.
+// CallUnhandledMethod calls an un-handled method in the module.
 func (m moduleWrapper) CallUnhandledMethod() error {
 	method := "com.ubuntu.authd.pam.UnhandledMethod"
+	return m.BusObject().Call(method, dbus.FlagNoAutoStart).Err
+}
+
+// CallConnectionClose calls a method to simulate a connection being closed.
+func (m moduleWrapper) CallConnectionClose() error {
+	method := "com.ubuntu.authd.pam.ConnectionClose"
 	return m.BusObject().Call(method, dbus.FlagNoAutoStart).Err
 }
 
@@ -60,4 +66,21 @@ func (m moduleWrapper) SimulateClientSignal(sig syscall.Signal, shouldExit bool)
 		// The program is expected to exit once the signal is sent, so let's wait
 		<-time.After(24 * time.Hour)
 	}
+}
+
+// SimulateClientSignalAfterDelay sends a signal to the child process after the
+// given amount of milliseconds, without blocking the caller, so that the client
+// can be killed while it's waiting for another call to be completed.
+func (m moduleWrapper) SimulateClientSignalAfterDelay(sig syscall.Signal, delayMs int) {
+	time.AfterFunc(time.Duration(delayMs)*time.Millisecond, func() {
+		m.SimulateClientSignal(sig, false)
+	})
+}
+
+// StartStringConvInBackground starts a string conversation without waiting for
+// its reply, so that other conversations can be queued while it's in progress.
+func (m moduleWrapper) StartStringConvInBackground(style pam.Style, prompt string) {
+	const method = "com.ubuntu.authd.pam.Prompt"
+	m.BusObject().Go(method, dbus.FlagNoAutoStart, make(chan *dbus.Call, 1),
+		style, prompt)
 }
