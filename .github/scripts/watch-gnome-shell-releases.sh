@@ -8,7 +8,6 @@ readonly AUTHD_DEV_PPA="${LAUNCHPAD_API}/~ubuntu-enterprise-desktop/+archive/ubu
 
 declare -A SALSA_BRANCHES=(
     [noble]="ubuntu/noble"
-    [resolute]="ubuntu/resolute"
 )
 
 launchpad_sources() {
@@ -74,7 +73,7 @@ Ubuntu's published \`gnome-shell\` version is ahead of \`authd-dev\` for
 - Latest \`authd-dev\` version: \`${ppa_version:-not published}\`
 
 This watcher is temporary. It can be removed after the authd patches are
-merged into the Ubuntu gnome-shell branches.
+merged into the Noble Ubuntu gnome-shell branch.
 EOF
 }
 
@@ -202,7 +201,7 @@ resolve_release() {
         >/dev/null
 }
 
-for series in noble resolute; do
+for series in noble; do
     ubuntu_sources="$(launchpad_sources "${UBUNTU_ARCHIVE}" "${series}")"
     IFS=$'\t' read -r ubuntu_version ubuntu_date ubuntu_link < <(
         latest_source_version "${ubuntu_sources}" "${series}"
