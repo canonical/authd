@@ -12,6 +12,7 @@ permissions:
 jobs:
   watch:
     name: Check Ubuntu gnome-shell releases
+    if: github.repository == 'canonical/authd'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
