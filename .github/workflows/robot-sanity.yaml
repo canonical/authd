@@ -1,0 +1,33 @@
+name: Robot Framework code sanity
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*.robot'
+      - '.github/workflows/robot-sanity.yaml'
+  pull_request:
+    paths:
+      - '**/*.robot'
+      - '.github/workflows/robot-sanity.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  robot-format:
+    name: "Robot Framework: Format"
+    permissions: {}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install Robocop
+        run: python -m pip install "robotframework-robocop==8.2.4" "click>=8.0.0"
+      - name: Check Robot Framework formatting
+        run: robocop format --check e2e-tests/tests
