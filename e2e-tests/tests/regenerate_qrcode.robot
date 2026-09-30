@@ -1,18 +1,16 @@
 *** Settings ***
-Resource        resources/utils.resource
-Resource        resources/authd.resource
+Resource            resources/utils.resource
+Resource            resources/authd.resource
+Resource            resources/broker.resource
 
-Resource        resources/broker.resource
-
-# Test Tags       robot:exit-on-failure
-
-Test Setup    utils.Test Setup    snapshot=%{BROKER}-installed
-Test Teardown   utils.Test Teardown
+# Test Tags    robot:exit-on-failure
+Test Setup          utils.Test Setup    snapshot=%{BROKER}-installed
+Test Teardown       utils.Test Teardown
 
 
 *** Variables ***
-${username}    %{E2E_USER}
-${local_password}    qwer1234
+${username}             %{E2E_USER}
+${local_password}       qwer1234
 
 
 *** Test Cases ***
@@ -24,7 +22,7 @@ Test login with CLI and QR code regeneration
 
     # Log in with remote user with device code flow
     Open Terminal
-    Start Log In With Remote User Through CLI: QR Code   ${username}
+    Start Log In With Remote User Through CLI: QR Code    ${username}
     Select Provider
     # Let's try regenerating the QR code a couple of times
     Regenerate QR Code
@@ -32,7 +30,7 @@ Test login with CLI and QR code regeneration
     Regenerate QR Code
     # Now we should be able to log in with the remote user using the latest QR code
     Continue Log In With Remote User: Authenticate In External Browser
-    Continue Log In With Remote User Through CLI: Define Local Password   ${username}    ${local_password}
+    Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
     # Check remote user is properly added to the system
     Check If User Was Added Properly    ${username}
     Log Out From Terminal Session

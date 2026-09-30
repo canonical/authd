@@ -1,18 +1,17 @@
 *** Settings ***
-Resource        resources/utils.resource
-Resource        resources/authd.resource
-Resource        resources/broker.resource
+Resource            resources/utils.resource
+Resource            resources/authd.resource
+Resource            resources/broker.resource
 
-# Test Tags       robot:exit-on-failure
-
-Test Setup    utils.Test Setup    snapshot=%{BROKER}-installed
-Test Teardown   utils.Test Teardown
+# Test Tags    robot:exit-on-failure
+Test Setup          utils.Test Setup    snapshot=%{BROKER}-installed
+Test Teardown       utils.Test Teardown
 
 
 *** Variables ***
-${username}    %{E2E_USER}
-${local_password}    qwer1234
-${new_uid}    60500
+${username}             %{E2E_USER}
+${local_password}       qwer1234
+${new_uid}              60500
 
 
 *** Test Cases ***
@@ -34,7 +33,7 @@ Test authctl user set-uid
 
     # Terminate the remote user's session so that proc.CheckUserBusy (which
     # rejects set-uid when any process runs under that UID) does not block the
-    # operation.  Use loginctl to tear down the session gracefully, then poll
+    # operation. Use loginctl to tear down the session gracefully, then poll
     # until all processes have exited rather than relying on a hard sleep.
     SSH.Execute    loginctl terminate-user ${username} || true
     Wait Until Keyword Succeeds    30s    1s    SSH.Execute    test -z "$(pgrep -u ${username})"

@@ -1,24 +1,16 @@
 *** Settings ***
-Resource        resources/utils.resource
-Resource        resources/authd.resource
+Resource            resources/utils.resource
+Resource            resources/authd.resource
+Resource            resources/broker.resource
 
-Resource        resources/broker.resource
-
-# Test Tags       robot:exit-on-failure
-
-Test Setup    Test Setup
-Test Teardown   utils.Test Teardown
-
-
-*** Keywords ***
-Test Setup
-    utils.Test Setup    snapshot=%{BROKER}-installed
-    Change Broker Configuration    ssh_allowed_suffixes_first_auth    %{E2E_USER}
+# Test Tags    robot:exit-on-failure
+Test Setup          Test Setup
+Test Teardown       utils.Test Teardown
 
 
 *** Variables ***
-${username}    %{E2E_USER}
-${local_password}    qwer1234
+${username}             %{E2E_USER}
+${local_password}       qwer1234
 
 
 *** Test Cases ***
@@ -39,3 +31,9 @@ Test login with SSH
     # Log in with remote user with local password through SSH
     Open Terminal
     Log In With Remote User Through SSH: Local Password    ${username}    ${local_password}
+
+
+*** Keywords ***
+Test Setup
+    utils.Test Setup    snapshot=%{BROKER}-installed
+    Change Broker Configuration    ssh_allowed_suffixes_first_auth    %{E2E_USER}
