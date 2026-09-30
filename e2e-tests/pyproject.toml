@@ -14,3 +14,9 @@ yarf = { workspace = true }
 
 [tool.uv.workspace]
 members = [".yarf"]
+
+[dependency-groups]
+robocop = [
+    "click>=8.0.0",
+    "robotframework-robocop==8.2.4",
+]
