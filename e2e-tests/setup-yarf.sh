@@ -4,6 +4,8 @@ set -x
 
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 YARF_DIR="${SCRIPT_DIR}/.yarf"
+# shellcheck source=yarf-env.sh
+source "${SCRIPT_DIR}/yarf-env.sh"
 
 # Ensure that the YARF submodule is initialized
 git -C "${SCRIPT_DIR}/.." submodule update --init --depth=1 e2e-tests/.yarf
@@ -16,12 +18,12 @@ else
     echo "uv snap already installed"
 fi
 
-# Set up YARF in a virtual environment using uv
-cd "$YARF_DIR"
-uv sync --locked --group dev
-# We need pygobject in the Python environment for some tests
-uv pip install pygobject
-# We need ansi2html to log colored journalctl output as HTML
-uv pip install ansi2html
-uv pip install "$YARF_DIR"
-printf '%s\n' "$(git rev-parse HEAD)" > "${YARF_DIR}/.venv/.authd-yarf-revision"
+# Clear the marker before changing the environment so a failed sync is retried.
+REVISION_FILE="${YARF_DIR}/.venv/.authd-yarf-revision"
+rm -f "${REVISION_FILE}"
+REVISION=$(yarf_environment_revision)
+
+UV_PROJECT_ENVIRONMENT="${YARF_DIR}/.venv" \
+    uv sync --project "${SCRIPT_DIR}" --locked --no-editable --no-default-groups \
+        --reinstall-package yarf --python "$(cat "${YARF_DIR}/.python-version")"
+printf '%s\n' "${REVISION}" > "${REVISION_FILE}"
