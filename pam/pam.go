@@ -352,11 +352,12 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 			return fmt.Errorf("%w: can't create tea options: %w", pam.ErrSystem, err)
 		}
 		teaOpts = append(teaOpts, modeOpts...)
-	} else if !forceNativeClient && adapter.IsTerminalTTY(mTx) && !adapter.IsDumbTerminal() {
+	} else if !forceNativeClient && adapter.IsTerminalTTY(mTx) {
 		pamClientType = adapter.InteractiveTerminal
-		tty, cleanup := adapter.GetPamTTY(mTx)
+		input, output, cleanup := adapter.GetPamIO(mTx)
 		defer cleanup()
-		teaOpts = append(teaOpts, tea.WithInput(tty))
+		teaOpts = append(teaOpts, tea.WithInput(input))
+		teaOpts = append(teaOpts, tea.WithOutput(output))
 	} else {
 		pamClientType = adapter.Native
 		modeOpts, err := adapter.TeaHeadlessOptions()
