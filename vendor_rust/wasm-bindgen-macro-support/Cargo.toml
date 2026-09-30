@@ -12,7 +12,7 @@ features = ["visit", "visit-mut", "full", "extra-traits"]
 version = "3.0"
 
 [dependencies.wasm-bindgen-shared]
-version = "=0.2.128"
+version = "=0.2.129"
 
 [features]
 extra-traits = ["syn/extra-traits"]
@@ -34,7 +34,7 @@ uninlined_format_args = "warn"
 unused_lifetimes = "warn"
 
 [lints.rust.unexpected_cfgs]
-check-cfg = ["cfg(wasm_bindgen_unstable_test_coverage)", "cfg(wasm_bindgen_use_js_sys)", "cfg(xxx_debug_only_print_generated_code)", "cfg(legacy_eh)"]
+check-cfg = ["cfg(wasm_bindgen_unstable_test_coverage)", "cfg(wasm_bindgen_use_js_sys)", "cfg(xxx_debug_only_print_generated_code)", "cfg(legacy_eh)", "cfg(tokio_unstable)", "cfg(wasm_bindgen_unstable_tokio)", "cfg(wasm_bindgen_unstable_jspi)"]
 level = "warn"
 priority = 0
 
@@ -54,5 +54,5 @@ license = "MIT OR Apache-2.0"
 name = "wasm-bindgen-macro-support"
 readme = false
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/main/crates/macro-support"
-rust-version = "1.77"
-version = "0.2.128"
+rust-version = "1.81"
+version = "0.2.129"

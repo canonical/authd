@@ -46,10 +46,9 @@ pub use self::internal::Negotiate;
 pub use self::internal::Negotiated;
 
 mod internal {
-    use std::future::Future;
     use std::pin::Pin;
     use std::sync::{Arc, Mutex};
-    use std::task::{self, ready, Poll};
+    use std::task::{self, Poll, ready};
 
     use pin_project_lite::pin_project;
     use tower_layer::Layer;
@@ -353,7 +352,7 @@ mod internal {
 
         /// Get a reference to the fallback service if this is it.
         pub fn fallback_ref(&self) -> Option<&L> {
-            if let Negotiated::Fallback(ref left) = self {
+            if let Negotiated::Fallback(left) = self {
                 Some(left)
             } else {
                 None
@@ -362,7 +361,7 @@ mod internal {
 
         /// Get a mutable reference to the fallback service if this is it.
         pub fn fallback_mut(&mut self) -> Option<&mut L> {
-            if let Negotiated::Fallback(ref mut left) = self {
+            if let Negotiated::Fallback(left) = self {
                 Some(left)
             } else {
                 None
@@ -371,7 +370,7 @@ mod internal {
 
         /// Get a reference to the upgraded service if this is it.
         pub fn upgraded_ref(&self) -> Option<&R> {
-            if let Negotiated::Upgraded(ref right) = self {
+            if let Negotiated::Upgraded(right) = self {
                 Some(right)
             } else {
                 None
@@ -380,7 +379,7 @@ mod internal {
 
         /// Get a mutable reference to the upgraded service if this is it.
         pub fn upgraded_mut(&mut self) -> Option<&mut R> {
-            if let Negotiated::Upgraded(ref mut right) = self {
+            if let Negotiated::Upgraded(right) = self {
                 Some(right)
             } else {
                 None
@@ -399,17 +398,17 @@ mod internal {
 
         fn poll_ready(&mut self, cx: &mut task::Context<'_>) -> Poll<Result<(), Self::Error>> {
             match self {
-                Negotiated::Fallback(ref mut s) => s.poll_ready(cx),
-                Negotiated::Upgraded(ref mut s) => s.poll_ready(cx),
+                Negotiated::Fallback(s) => s.poll_ready(cx),
+                Negotiated::Upgraded(s) => s.poll_ready(cx),
             }
         }
 
         fn call(&mut self, req: Req) -> Self::Future {
             match self {
-                Negotiated::Fallback(ref mut s) => NegotiatedFuture::Fallback {
+                Negotiated::Fallback(s) => NegotiatedFuture::Fallback {
                     future: s.call(req),
                 },
-                Negotiated::Upgraded(ref mut s) => NegotiatedFuture::Upgraded {
+                Negotiated::Upgraded(s) => NegotiatedFuture::Upgraded {
                     future: s.call(req),
                 },
             }

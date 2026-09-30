@@ -13,7 +13,7 @@
 edition = "2021"
 rust-version = "1.65.0"
 name = "cc"
-version = "1.4.7"
+version = "1.5.1"
 build = false
 exclude = [
     "/.github",
@@ -50,7 +50,7 @@ name = "cc"
 path = "src/lib.rs"
 
 [dependencies.find-msvc-tools]
-version = "0.1.13"
+version = "0.1.14"
 
 [dependencies.jobserver]
 version = "0.1.32"
