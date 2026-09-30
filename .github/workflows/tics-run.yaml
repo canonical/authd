@@ -47,18 +47,48 @@ jobs:
           tools-directory: ./tools
           token: ${{ github.token }}
 
-      - name: Fetch last successful QA runs ids
+      - name: Fetch the QA runs to take coverage from
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          echo "LAST_AUTHD_QA_ID=$(gh run list --workflow 'authd QA & sanity checks' --limit 1 --status success --json databaseId -b main | jq '.[].databaseId')" >> $GITHUB_ENV
-          echo "LAST_BROKERS_QA_ID=$(gh run list --workflow 'Brokers QA & sanity checks' --limit 1 --status success --json databaseId -b main | jq '.[].databaseId')" >> $GITHUB_ENV
+
+          # Name the workflows by file. The display name "authd QA & sanity
+          # checks" is claimed by two workflows, and gh then refuses to pick one.
+          #
+          # Take the newest run that still has a coverage artifact, whatever the
+          # workflow conclusion. The QA workflows often fail on unrelated jobs
+          # while the coverage job still uploads, and artifacts are deleted after
+          # 90 days, so filtering on success skips usable coverage and lands on a
+          # run with nothing left to download.
+          newest_run_with_coverage() {
+            for run in $(gh run list --workflow "$1" --limit 20 -b main --json databaseId -q '.[].databaseId'); do
+              if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/artifacts" \
+                --jq 'any(.artifacts[]?; .name == "coverage" and (.expired | not))' 2>/dev/null \
+                | grep -qx true; then
+                echo "$run"
+                return 0
+              fi
+            done
+            echo "No run of $1 on main has a coverage artifact left" >&2
+            return 1
+          }
+
+          # Assign before writing: echo "VAR=$(f)" discards the exit status of f,
+          # so set -e would never see a failure.
+          authd_id=$(newest_run_with_coverage qa.yaml)
+          brokers_id=$(newest_run_with_coverage brokers-qa.yaml)
+
+          printf 'LAST_AUTHD_QA_ID=%s\nLAST_BROKERS_QA_ID=%s\n' \
+            "$authd_id" "$brokers_id" >> "$GITHUB_ENV"
 
       - name: Download coverage artifact from authd QA
         uses: actions/download-artifact@v8
         with:
           github-token: ${{ github.token }}
+          # Name the artifact so it lands directly in path, not in a subdirectory
+          # named after it.
+          name: coverage
           path: .artifacts/authd
           run-id: ${{ env.LAST_AUTHD_QA_ID }}
 
@@ -66,6 +96,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           github-token: ${{ github.token }}
+          name: coverage
           path: .artifacts/brokers
           run-id: ${{ env.LAST_BROKERS_QA_ID }}
 
@@ -77,8 +108,8 @@ jobs:
 
           export PATH="$PATH:/home/ubuntu/.dotnet/tools"
 
-          mv .artifacts/authd/coverage/Cobertura.xml .artifacts/authd-coverage.xml
-          mv .artifacts/brokers/Cobertura.xml .artifacts/broker-coverage.xml
+          mv .artifacts/authd/Cobertura.xml .artifacts/authd-coverage.xml
+          mv .artifacts/brokers/Cobertura.xml .artifacts/brokers-coverage.xml
 
           # TICS expects the coverage report to:
           # - be in a directory named 'coverage' in the current working directory
