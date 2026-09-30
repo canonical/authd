@@ -70,9 +70,6 @@ parts:
       # scratch. (Only CARGO_TARGET_DIR is moved: CARGO_HOME stays at its
       # default /root/.cargo, which already persists across builds).
       - CARGO_TARGET_DIR: ${HOME}/.cache/authd-oidc-brokers/cargo-target
-    override-pull: |
-      snapcraftctl pull
-      cp "$SNAPCRAFT_PROJECT_DIR/authd-oidc-brokers/rust-toolchain.toml" "$SNAPCRAFT_PART_SRC/"
     override-build: |
       # Install cargo-c's prebuilt static binary so its build-time Rust MSRV
       # does not constrain the Rust toolchain used for libhimmelblau.
