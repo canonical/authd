@@ -1,7 +1,7 @@
 name: Watch gnome-shell releases
 
 on:
-  # TODO: Remove this workflow after the authd patches land in the Ubuntu branches.
+  # TODO: Remove this workflow after the authd patches land in the Noble Ubuntu branch.
   schedule:
     - cron: '13 */6 * * *'
   workflow_dispatch:
