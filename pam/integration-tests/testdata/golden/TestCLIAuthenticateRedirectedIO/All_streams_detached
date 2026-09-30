@@ -1,0 +1,20 @@
+  Select your provider:
+
+> 1. local
+  2. ExampleBroker
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+>
+
+  Press escape key to go back to select the authentication flow
+────────────────────────────────────────────────────────────────────────────────
+Gimme your password:
+> ********
+
+  Press escape key to go back to select the authentication flow
+────────────────────────────────────────────────────────────────────────────────
+  PAM_AUTHTOK: "goodpass"
+PAM Authenticate()
+  User: "user-integration-cli-redirected-io-all-streams-detached@example.com"
+  Result: success
+────────────────────────────────────────────────────────────────────────────────

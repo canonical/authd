@@ -342,7 +342,7 @@ func TestIsDumbTerminal(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("TERM", tc.term)
-			require.Equal(t, tc.want, IsDumbTerminal())
+			require.Equal(t, tc.want, isDumbTerminal())
 		})
 	}
 }
