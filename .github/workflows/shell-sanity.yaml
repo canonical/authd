@@ -1,0 +1,36 @@
+name: shell-sanity
+
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - ".github/workflows/shell-sanity.yaml"
+      - ".shellcheckrc"
+      - "authd-oidc-brokers/.shellcheckrc"
+      - "**.sh"
+      - "authd-oidc-brokers/tools/install-cargo-c"
+      - "debian/postinst"
+      - "debian/postrm"
+      - "debian/prerm"
+      - "e2e-tests/vm/helpers/virsh"
+      - "scripts/golangci-lint"
+      - "scripts/gotestcov"
+      - "snap/hooks/**"
+      - "snap/scripts/**"
+  pull_request:
+    paths: *paths
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shell-sanity:
+    name: "Shell: Code sanity"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          additional_files: "postinst postrm prerm"

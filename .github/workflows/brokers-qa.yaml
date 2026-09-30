@@ -65,16 +65,6 @@ jobs:
           tools-directory: "./authd-oidc-brokers/tools"
           go-tags: "withmsentraid"
 
-  shell-sanity:
-    name: "Shell: Code sanity"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Run ShellCheck
-        uses: ludeeus/action-shellcheck@master
-        with:
-          scandir: "./authd-oidc-brokers"
-
   go-tests:
     name: "Go: Tests"
     runs-on: ubuntu-24.04 # ubuntu-latest-runner
