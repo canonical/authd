@@ -1,6 +1,5 @@
-use std::marker::Unpin;
 use std::pin::Pin;
-use std::task::{ready, Poll};
+use std::task::{Poll, ready};
 
 use hyper::rt::{Read, ReadBuf, Write};
 

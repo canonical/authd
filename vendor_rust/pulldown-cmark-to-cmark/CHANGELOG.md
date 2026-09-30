@@ -5,6 +5,162 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 22.0.3 (2026-09-28)
+
+### Bug Fixes
+
+ - <csr-id-9905181d4721007b27c2ce2a214314450067d28e/> discard quote terminators when definitions end
+   Ending a definition emits a newline outside its block quote. Discard
+   the pending quote-ending line there so the next tight-list child cannot
+   start an extra empty quote. Keep pending lines across item and list ends,
+   which do not themselves write outside the quote.
+   
+   Cover direct and nested definitions, enclosing block quotes, and resumed
+   serialization.
+ - <csr-id-a7d1f06907d22b13ec7aad3b62b4c4e049a2e2b9/> preserve paragraph spacing in loose definitions
+   Once inline events consume the title's pending newline, a code term no
+   longer leaves a blank line before its definition. Defer the definition
+   marker until its first child so a paragraph can request the required
+   blank line before the marker. Flush a pending marker when finalizing.
+   
+   Cover tight and loose terms, multiple definitions, nested containers,
+   empty definitions, and serialization resumed at every event boundary.
+   Update the definition-list snapshot for the added paragraph spacing.
+ - <csr-id-afe8ac6ac5476d4149c9c04b3c88aea16aac5741/> account for HTML newlines in tight list items
+   HTML events already emit their trailing newline. Count that line break
+   when limiting separators in tight items so following inline content does
+   not make the list loose. Keep normal paragraph spacing and remember the
+   newline across resumed serialization.
+ - <csr-id-64dca630f68c087bc2f58d11e6f73071b74a96d9/> write pending newlines before every inline event
+   For `Text` and `InlineHtml` events, we'd write out pending newlines, but for
+   `Code`, `InlineMath`, `DisplayMath`, `FootnoteReference`, and `TaskListMarker`,
+   we did not. In a tight list item, inline content can directly follow the
+   end of a block, so the input:
+   
+   ```
+   * # heading
+     `code`
+   ```
+   
+   would roundtrip as:
+   
+   ```
+   * # heading`code`
+   ```
+ - <csr-id-2ab730f6e6fb545fbef897e0411e9a0e92aca0e2/> avoid instances of tight lists roundtripping to loose
+   This is a somewhat subtle commit because we have to handle tight list block
+   quotes carefully, such as:
+   
+   ```markdown
+   * item
+     * a
+       > q
+       >
+     text
+   ```
+   
+   Most of the commit is about dealing with this case.
+ - <csr-id-94382897ed118617b43d5addb98000b95de4d9c0/> in tight list items, start thematic breaks on their own line
+   In a tight list item, a thematic break can directly follow the item's text.
+   Nothing before the break asks for a newline in that case, so the input:
+   
+   ```
+   * item
+     ***
+   ```
+   
+   would roundtrip as:
+   
+   ```
+   * item---
+   ```
+   
+   which parses as a single line of text.
+   
+   Start the break on a new line. A `---` line directly under a line of text is a
+   setext heading underline, which would turn `item` into a heading, so write the
+   break as `***` in this case. Thematic breaks everywhere else are still written
+   as `---`.
+ - <csr-id-fcc8237554ab6814b66079e30d7bd4d881402058/> in tight list items, start blocks on a new line after inline content
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 8 commits contributed to the release.
+ - 7 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Merge pull request #112 from sunshowers/more-fixes ([`299ed9b`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/299ed9b86fa43d4778037cbf05b30f044928c9c9))
+    - Discard quote terminators when definitions end ([`9905181`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/9905181d4721007b27c2ce2a214314450067d28e))
+    - Preserve paragraph spacing in loose definitions ([`a7d1f06`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/a7d1f06907d22b13ec7aad3b62b4c4e049a2e2b9))
+    - Account for HTML newlines in tight list items ([`afe8ac6`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/afe8ac6ac5476d4149c9c04b3c88aea16aac5741))
+    - Write pending newlines before every inline event ([`64dca63`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/64dca630f68c087bc2f58d11e6f73071b74a96d9))
+    - Avoid instances of tight lists roundtripping to loose ([`2ab730f`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/2ab730f6e6fb545fbef897e0411e9a0e92aca0e2))
+    - In tight list items, start thematic breaks on their own line ([`9438289`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/94382897ed118617b43d5addb98000b95de4d9c0))
+    - In tight list items, start blocks on a new line after inline content ([`fcc8237`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/fcc8237554ab6814b66079e30d7bd4d881402058))
+</details>
+
+## 22.0.2 (2026-09-28)
+
+### Bug Fixes
+
+ - <csr-id-b4c3dacd7808a47aa44ff1d0df3fd64cd0426588/> ensure blank lines are emitted after nested lists if necessary
+   Previously, the input:
+   
+   ```
+   1. item
+   
+   * a
+   * b
+   
+   para
+   ```
+   
+   would roundtrip as:
+   
+   ```
+   1. item
+   
+   * a
+   * b
+   para
+   ```
+   
+   This is incorrect, because the CommonMark spec would treat `para` as part of
+   the `b` item.
+   
+   Fix this by tracking the last event, and using that to emit a blank line if
+   necessary. This isn't perfect but it should handle the vast majority of cases.
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 3 commits contributed to the release.
+ - 49 days passed between releases.
+ - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Release pulldown-cmark-to-cmark v22.0.2 ([`b438b59`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/b438b59f25f266a5175dcc78c49f1eae7a9fdc8a))
+    - Merge pull request #111 from sunshowers/blank-lines-after-nested-lists ([`a218fb1`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/a218fb19a097f3a08c86b2d13650adec1a93dc0c))
+    - Ensure blank lines are emitted after nested lists if necessary ([`b4c3dac`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/b4c3dacd7808a47aa44ff1d0df3fd64cd0426588))
+</details>
+
 ## 22.0.1 (2026-08-10)
 
 ### Bug Fixes
@@ -24,7 +180,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 2 commits contributed to the release.
+ - 3 commits contributed to the release.
  - 230 days passed between releases.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 1 unique issue was worked on: [#109](https://github.com/Byron/pulldown-cmark-to-cmark/issues/109)
@@ -38,6 +194,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  * **[#109](https://github.com/Byron/pulldown-cmark-to-cmark/issues/109)**
     - Escape brackets in generated link labels ([`e446742`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/e4467422fbb68aff72a96808c3ab62b503897adc))
  * **Uncategorized**
+    - Release pulldown-cmark-to-cmark v22.0.1 ([`66f7c5d`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/66f7c5d4a99bd312eacc876b81dad1c91f623e4f))
     - Merge pull request #110 from Byron/escape-in-links ([`41f854b`](https://github.com/Byron/pulldown-cmark-to-cmark/commit/41f854b001017daa44c8a9f6af3b9ab442a7d13a))
 </details>
 

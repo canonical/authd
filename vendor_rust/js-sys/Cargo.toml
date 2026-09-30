@@ -13,7 +13,7 @@ version = "0.3.31"
 
 [dependencies.wasm-bindgen]
 default-features = false
-version = "=0.2.128"
+version = "=0.2.129"
 
 [features]
 default = ["std", "unsafe-eval"]
@@ -32,7 +32,7 @@ too_many_arguments = "allow"
 type_complexity = "allow"
 
 [lints.rust.unexpected_cfgs]
-check-cfg = ["cfg(js_sys_unstable_apis)"]
+check-cfg = ["cfg(js_sys_unstable_apis)", "cfg(wasm_bindgen_unstable_jspi)"]
 level = "warn"
 priority = 0
 
@@ -56,8 +56,8 @@ license = "MIT OR Apache-2.0"
 name = "js-sys"
 readme = "README.md"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/js-sys"
-rust-version = "1.77"
-version = "0.3.105"
+rust-version = "1.81"
+version = "0.3.106"
 
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies.futures-channel]
 version = "0.3"

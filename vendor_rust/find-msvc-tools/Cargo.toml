@@ -13,7 +13,7 @@
 edition = "2021"
 rust-version = "1.65.0"
 name = "find-msvc-tools"
-version = "0.1.13"
+version = "0.1.14"
 build = false
 autolib = false
 autobins = false

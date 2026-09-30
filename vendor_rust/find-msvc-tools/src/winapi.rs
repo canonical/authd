@@ -9,7 +9,7 @@
 
 pub type wchar_t = u16;
 
-pub use crate::windows_sys::{FILETIME, GUID, HRESULT, SAFEARRAY};
+pub(crate) use crate::windows_sys::{FILETIME, GUID, HRESULT, SAFEARRAY};
 
 pub type REFIID = *const IID;
 pub type IID = GUID;
@@ -98,7 +98,7 @@ macro_rules! RIDL {
         RIDL!{@uuid $interface $($uuid),+}
     );
     (@deref $interface:ident $pinterface:ident) => (
-        impl ::std::ops::Deref for $interface {
+        impl ::core::ops::Deref for $interface {
             type Target = $pinterface;
             #[inline]
             fn deref(&self) -> &$pinterface {
