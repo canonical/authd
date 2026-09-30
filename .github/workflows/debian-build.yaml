@@ -48,9 +48,12 @@ jobs:
       pkg-src-changes: ${{ steps.outputs.outputs.pkg-src-changes }}
 
     steps:
+      # Keep the source root name stable across forks.
       - uses: actions/checkout@v7
+        with:
+          path: authd
 
-      - uses: ./.github/actions/setup-oras
+      - uses: ./authd/.github/actions/setup-oras
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -87,8 +90,11 @@ jobs:
             [ -n "${PKG_SOURCE_CHANGES}" ] || return 1
             [ -n "${PKG_TARBALL}" ] || return 1
 
-            echo "PKG_NAME=$(dpkg-parsechangelog --show-field source)" >> "${GITHUB_ENV}"
-            echo "PKG_VERSION=$(dpkg-parsechangelog --show-field version)" >> "${GITHUB_ENV}"
+            (
+              cd authd
+              echo "PKG_NAME=$(dpkg-parsechangelog --show-field source)"
+              echo "PKG_VERSION=$(dpkg-parsechangelog --show-field version)"
+            ) >> "${GITHUB_ENV}"
             echo "PKG_DEB=${PKG_DEB}" >> "${GITHUB_ENV}"
             echo "PKG_DSC=${PKG_DSC}" >> "${GITHUB_ENV}"
             echo "PKG_SOURCE_CHANGES=${PKG_SOURCE_CHANGES}" >> "${GITHUB_ENV}"
@@ -107,6 +113,7 @@ jobs:
         if: steps.restore-cache.outputs.cache-hit != 'true'
         uses: canonical/desktop-engineering/gh-actions/common/build-debian@main
         with:
+          source-dir: authd
           docker-image: ubuntu:${{ inputs.ubuntu-version }}
           # Add the Go backports PPA if we're testing a Ubuntu release which
           # doesn't have the required Go version in main.
