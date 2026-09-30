@@ -1,0 +1,36 @@
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
+>
+────────────────────────────────────────────────────────────────────────────────
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
+> 2
+────────────────────────────────────────────────────────────────────────────────
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication flow
+Gimme your password:
+>
+────────────────────────────────────────────────────────────────────────────────
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
+> 2
+== Password authentication ==
+Enter 'r' to cancel the request and go back to select the authentication flow
+Gimme your password:
+>
+  PAM_AUTHTOK: "goodpass"
+PAM Authenticate()
+  User: "user-integration-native-redirected-io-closed-stderr@example.com"
+  Result: success
+────────────────────────────────────────────────────────────────────────────────
