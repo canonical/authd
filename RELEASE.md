@@ -493,8 +493,8 @@ snapcraft pack
 2. Install the new snaps:
 
     ```shell
-    sudo snap install --dangerous "$(ls -t ~/projects/authd-oidc-brokers/authd-msentraid*.snap | head -n1)"
-    sudo snap install --dangerous "$(ls -t ~/projects/authd-oidc-brokers/authd-google*.snap | head -n1)"
+    sudo snap install --dangerous "$(ls -t ~/projects/brokers/authd-msentraid*.snap | head -n1)"
+    sudo snap install --dangerous "$(ls -t ~/projects/brokers/authd-google*.snap | head -n1)"
     ```
 
 3. Configure the msentraid broker. You can find the issuer ID and client ID in

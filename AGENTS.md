@@ -53,16 +53,16 @@ cargo build                              # NSS (debug mode)
   the provider-specific wiring. When changing broker code, run tests for every
   provider configuration:
   ```bash
-  go -C authd-oidc-brokers test ./...
-  go -C authd-oidc-brokers test -tags withgoogle ./...
-  go -C authd-oidc-brokers generate --tags withmsentraid ./internal/providers/msentraid/...
-  go -C authd-oidc-brokers test -tags withmsentraid ./...
+  go -C brokers test ./...
+  go -C brokers test -tags withgoogle ./...
+  go -C brokers generate --tags withmsentraid ./internal/providers/msentraid/...
+  go -C brokers test -tags withmsentraid ./...
   ```
   The `withmsentraid` generation step requires the recursive
   `libhimmelblau` submodule and generates the `himmelblau.h` and library
   artifacts.
 - **Broker linting**: Pass provider tags explicitly, for example:
-  `scripts/golangci-lint -C authd-oidc-brokers run --build-tags withmsentraid`.
+  `scripts/golangci-lint -C brokers run --build-tags withmsentraid`.
   Use `--build-tags withgoogle` for Google-specific changes.
 
 ### Code Generation
@@ -176,7 +176,7 @@ After making changes to Go files, run `scripts/golangci-lint` to check for lint 
 scripts/golangci-lint run
 ```
 
-If the changed files are below `authd-oidc-brokers/`, use the `-C` flag to run the linter in that directory:
+If the changed files are below `brokers/`, use the `-C` flag to run the linter in that directory:
 ```bash
-scripts/golangci-lint -C authd-oidc-brokers run
+scripts/golangci-lint -C brokers run
 ```

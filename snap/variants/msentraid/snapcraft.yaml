@@ -19,7 +19,7 @@ description: |
 icon: snap/variants/msentraid/icon.svg
 website: https://ubuntu.com/docs/authd
 issues: https://github.com/canonical/authd/issues
-source-code: https://github.com/canonical/authd/tree/main/authd-oidc-brokers
+source-code: https://github.com/canonical/authd/tree/main/brokers
 adopt-info: version
 grade: stable
 base: core24
@@ -56,7 +56,7 @@ slots:
 
 parts:
   libhimmelblau:
-    source: ./authd-oidc-brokers/third_party/libhimmelblau
+    source: ./brokers/third_party/libhimmelblau
     plugin: rust
     # Force the rust plugin onto its rustup code path.
     rust-channel: stable
@@ -69,14 +69,14 @@ parts:
       # in the same instance, so this avoids rebuilding libhimmelblau from
       # scratch. (Only CARGO_TARGET_DIR is moved: CARGO_HOME stays at its
       # default /root/.cargo, which already persists across builds).
-      - CARGO_TARGET_DIR: ${HOME}/.cache/authd-oidc-brokers/cargo-target
+      - CARGO_TARGET_DIR: ${HOME}/.cache/brokers/cargo-target
     override-pull: |
       snapcraftctl pull
-      cp "$SNAPCRAFT_PROJECT_DIR/authd-oidc-brokers/rust-toolchain.toml" "$SNAPCRAFT_PART_SRC/"
+      cp "$SNAPCRAFT_PROJECT_DIR/brokers/rust-toolchain.toml" "$SNAPCRAFT_PART_SRC/"
     override-build: |
       # Install cargo-c's prebuilt static binary so its build-time Rust MSRV
       # does not constrain the Rust toolchain used for libhimmelblau.
-      "$SNAPCRAFT_PROJECT_DIR/authd-oidc-brokers/tools/install-cargo-c"
+      "$SNAPCRAFT_PROJECT_DIR/brokers/tools/install-cargo-c"
       cargo cbuild --release --lib --features=broker,changepassword,on_behalf_of,set_timeout
       echo "Installing libhimmelblau.so and himmelblau.h"
       TARGET_TRIPLE=$(rustc -vV | awk '/host:/ {print $2}')
@@ -87,7 +87,7 @@ parts:
       - -include/**
       - -lib/**/*.so
   broker:
-    source: authd-oidc-brokers
+    source: brokers
     source-type: local
     plugin: nil
     build-snaps:
@@ -112,9 +112,9 @@ parts:
       retry -t 3 -d 10 -- go mod download all
       go mod vendor
       VERSION=$(craftctl get version)
-      go build -tags=withmsentraid,release -ldflags "-X=github.com/canonical/authd/authd-oidc-brokers/internal/consts.Version=${VERSION}" -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc
+      go build -tags=withmsentraid,release -ldflags "-X=github.com/canonical/authd/brokers/internal/consts.Version=${VERSION}" -o ${GOBIN}/authd-msentraid ./cmd/authd-oidc
   config:
-    source: authd-oidc-brokers/conf/
+    source: brokers/conf/
     source-type: local
     plugin: dump
     organize:
@@ -125,7 +125,7 @@ parts:
       - conf
   # SemVer comparison helper
   semver:
-    source: authd-oidc-brokers/tools
+    source: brokers/tools
     source-type: local
     plugin: nil
     build-snaps:

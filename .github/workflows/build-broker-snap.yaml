@@ -28,7 +28,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          hash=${{ hashFiles('authd-oidc-brokers/**', 'snap/**') }}
+          hash=${{ hashFiles('brokers/**', 'snap/**') }}
 
           # Print the hash for debugging purposes.
           echo "Hash: ${hash}"

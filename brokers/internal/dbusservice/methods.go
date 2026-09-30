@@ -1,0 +1,178 @@
+package dbusservice
+
+import (
+	"context"
+	"errors"
+
+	"github.com/canonical/authd/brokers/internal/broker"
+	"github.com/canonical/authd/log"
+	"github.com/godbus/dbus/v5"
+)
+
+func dbusErrorForBrokerCall(err error) *dbus.Error {
+	var unavailableErr *brokerUnavailableError
+	if errors.As(err, &unavailableErr) {
+		return dbus.NewError(brokerUnavailableDBusErrorName, []any{unavailableErr.Error()})
+	}
+	return dbus.MakeFailedError(err)
+}
+
+// NewSession is the method through which the broker and the daemon will communicate once dbusInterface.NewSession is called.
+//
+// This is the v3+ version that accepts the providerID identifier for cache directory resolution.
+func (s *Interface) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "Creating new session (v3) (username=%s, lang=%s, mode=%s, provider_id=%s)", username, lang, mode, providerID)
+	b, err := s.brokerForCall()
+	if err != nil {
+		return "", "", dbusErrorForBrokerCall(err)
+	}
+	sessionID, encryptionKey, err = b.NewSession(username, lang, mode, providerID)
+	if err != nil {
+		return "", "", dbus.MakeFailedError(err)
+	}
+	log.Debugf(context.Background(), "Created new session %s", sessionID)
+	return sessionID, encryptionKey, nil
+}
+
+// GetAuthenticationModes is the method through which the broker and the daemon will communicate once dbusInterface.GetAuthenticationModes is called.
+func (s *Interface) GetAuthenticationModes(sessionID string, supportedUILayouts []map[string]string) (authenticationModes []map[string]string, dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "Getting authentication modes for session %s", sessionID)
+	b, err := s.brokerForCall()
+	if err != nil {
+		return nil, dbusErrorForBrokerCall(err)
+	}
+	authenticationModes, err = b.GetAuthenticationModes(sessionID, supportedUILayouts)
+	if err != nil {
+		return nil, dbus.MakeFailedError(err)
+	}
+	log.Debugf(context.Background(), "Got authentication modes for session %s: %v", sessionID, authenticationModes)
+	return authenticationModes, nil
+}
+
+// SelectAuthenticationMode is the method through which the broker and the daemon will communicate once dbusInterface.SelectAuthenticationMode is called.
+func (s *Interface) SelectAuthenticationMode(sessionID, authenticationModeName string) (uiLayoutInfo map[string]string, dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "Selecting authentication mode %s for session %s", authenticationModeName, sessionID)
+	b, err := s.brokerForCall()
+	if err != nil {
+		return nil, dbusErrorForBrokerCall(err)
+	}
+	uiLayoutInfo, err = b.SelectAuthenticationMode(sessionID, authenticationModeName)
+	if err != nil {
+		return nil, dbus.MakeFailedError(err)
+	}
+	log.Debugf(context.Background(), "Selected authentication mode %s for session %s: %v", authenticationModeName, sessionID, uiLayoutInfo)
+	return uiLayoutInfo, nil
+}
+
+// IsAuthenticated is the method through which the broker and the daemon will communicate once dbusInterface.IsAuthenticated is called.
+func (s *Interface) IsAuthenticated(sessionID, authenticationData string) (access, data string, dbusErr *dbus.Error) {
+	// Do *not* log authenticationData here, because it may contain the user's password in cleartext.
+	log.Debugf(context.Background(), "Handling IsAuthenticated call for session %s", sessionID)
+	b, err := s.brokerForCall()
+	if err != nil {
+		return "", "", dbusErrorForBrokerCall(err)
+	}
+	access, data, err = b.IsAuthenticated(sessionID, authenticationData)
+	if errors.Is(err, context.Canceled) {
+		return access, data, makeCanceledError()
+	}
+	if err != nil {
+		log.Warningf(context.Background(), "IsAuthenticated error: %v", err)
+		return broker.AuthDenied, "", dbus.MakeFailedError(err)
+	}
+	log.Debugf(context.Background(), "IsAuthenticated result (session %s): %s, %s", sessionID, access, data)
+	return access, data, nil
+}
+
+// EndSession is the method through which the broker and the daemon will communicate once dbusInterface.EndSession is called.
+func (s *Interface) EndSession(sessionID string) (dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "Ending session %s", sessionID)
+	b, err := s.brokerForCall()
+	if err != nil {
+		return dbusErrorForBrokerCall(err)
+	}
+	err = b.EndSession(sessionID)
+	if err != nil {
+		return dbus.MakeFailedError(err)
+	}
+	return nil
+}
+
+// CancelIsAuthenticated is the method through which the broker and the daemon will communicate once dbusInterface.CancelIsAuthenticated is called.
+func (s *Interface) CancelIsAuthenticated(sessionID string) (dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "Cancelling IsAuthenticated call for session %s", sessionID)
+	b, err := s.brokerForCall()
+	if err != nil {
+		return dbusErrorForBrokerCall(err)
+	}
+	b.CancelIsAuthenticated(sessionID)
+	return nil
+}
+
+// UserPreCheck is the method through which the broker and the daemon will communicate once dbusInterface.UserPreCheck is called.
+func (s *Interface) UserPreCheck(username string) (userinfo string, dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "UserPreCheck: %s", username)
+	b, err := s.brokerForCall()
+	if err != nil {
+		return "", dbusErrorForBrokerCall(err)
+	}
+	userinfo, err = b.UserPreCheck(username)
+	if err != nil {
+		return "", dbus.MakeFailedError(err)
+	}
+	log.Debugf(context.Background(), "UserPreCheck result: %s", userinfo)
+	return userinfo, nil
+}
+
+// DeleteUser is the method through which the broker and the daemon will communicate once dbusInterface.DeleteUser is called.
+//
+// This is the v3+ version that accepts the providerID identifier for cache directory resolution.
+func (s *Interface) DeleteUser(username, providerID string) (dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "DeleteUser (v3): username=%s provider_id=%s", username, providerID)
+	b, err := s.brokerForCall()
+	if err != nil {
+		return dbusErrorForBrokerCall(err)
+	}
+	if err := b.DeleteUser(username, providerID); err != nil {
+		return dbus.MakeFailedError(err)
+	}
+	return nil
+}
+
+// InterfaceV2 wraps Interface and exposes old methods that do not accept a providerID argument.
+type InterfaceV2 struct {
+	*Interface
+}
+
+// NewSession is the method through which the broker and the daemon will communicate once dbusInterface.NewSession is called.
+func (s *InterfaceV2) NewSession(username, lang, mode string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "Creating new session (username=%s, lang=%s, mode=%s)", username, lang, mode)
+	b, err := s.brokerForCall()
+	if err != nil {
+		return "", "", dbusErrorForBrokerCall(err)
+	}
+	sessionID, encryptionKey, err = b.NewSession(username, lang, mode, "")
+	if err != nil {
+		return "", "", dbus.MakeFailedError(err)
+	}
+	log.Debugf(context.Background(), "Created new session %s", sessionID)
+	return sessionID, encryptionKey, nil
+}
+
+// DeleteUser is the method through which the broker and the daemon will communicate once dbusInterface.DeleteUser is called.
+func (s *InterfaceV2) DeleteUser(username string) (dbusErr *dbus.Error) {
+	log.Debugf(context.Background(), "DeleteUser: %s", username)
+	b, err := s.brokerForCall()
+	if err != nil {
+		return dbusErrorForBrokerCall(err)
+	}
+	if err := b.DeleteUser(username, ""); err != nil {
+		return dbus.MakeFailedError(err)
+	}
+	return nil
+}
+
+// makeCanceledError creates a dbus.Error for a canceled operation.
+func makeCanceledError() *dbus.Error {
+	return &dbus.Error{Name: "com.ubuntu.authd.Canceled"}
+}

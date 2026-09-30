@@ -70,10 +70,10 @@ updates:
     commit-message:
       prefix: "deps(submodule)"
 
-  # authd-oidc-brokers codebase
+  # brokers codebase
   ## Go dependencies
   - package-ecosystem: "gomod"
-    directory: "/authd-oidc-brokers" # Location of package manifests
+    directory: "/brokers" # Location of package manifests
     schedule:
       interval: "weekly"
     groups:
@@ -83,7 +83,7 @@ updates:
       prefix: "deps(brokers/go)"
 
   - package-ecosystem: "gomod"
-    directory: "/authd-oidc-brokers/tools"
+    directory: "/brokers/tools"
     schedule:
       interval: "weekly"
     groups:

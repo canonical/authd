@@ -1,0 +1,1056 @@
+package broker
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"sync"
+	"testing"
+	"unsafe"
+
+	"github.com/canonical/authd/brokers/internal/broker/authmodes"
+	"github.com/canonical/authd/brokers/internal/providers/google"
+	"github.com/canonical/authd/brokers/internal/testutils"
+	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/log"
+	"github.com/stretchr/testify/require"
+)
+
+type configTestProvider struct {
+	*testutils.MockProvider
+}
+
+func (p *configTestProvider) SupportedOnlineAuthModes() []string {
+	return []string{authmodes.Device, authmodes.DeviceQr, authmodes.EntraAuth}
+}
+
+var configTypes = map[string]string{
+	"valid": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+`,
+
+	"valid+optional": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+force_access_check_with_provider = true
+extra_scopes = groups,offline_access, some_other_scope
+
+[users]
+home_base_dir = /home
+ssh_allowed_suffixes_first_auth = @issuer.url.com
+`,
+
+	"invalid_boolean_value": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+force_access_check_with_provider = invalid
+`,
+
+	"singles": `
+[oidc]
+issuer = https://ISSUER_URL>
+client_id = <CLIENT_ID
+`,
+
+	"template": `
+[oidc]
+issuer = https://<ISSUER_URL>
+client_id = <CLIENT_ID>
+`,
+
+	"valid+register_device": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[msentraid]
+register_device = true
+`,
+
+	"valid+flows_disabled": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+device_code = false
+entra_auth = false
+`,
+
+	"valid+one_flow_disabled": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+device_code = false
+entra_auth = true
+`,
+
+	"invalid_device_code_value": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+device_code = not-a-bool
+`,
+
+	"invalid_entra_auth_value": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+entra_auth = not-a-bool
+`,
+
+	"invalid_register_device_value": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[msentraid]
+register_device = invalid
+`,
+
+	"invalid-ini": `=invalid`,
+
+	"override_template": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+`,
+
+	"overwrite_lower_precedence": `
+[oidc]
+issuer = https://lower-precedence-issuer.url.com
+client_id = lower_precedence_client_id
+`,
+
+	"overwrite_higher_precedence": `
+[oidc]
+issuer = https://higher-precedence-issuer.url.com
+`,
+
+	"overwrite_enable_entra_auth": `
+[flows]
+entra_auth = true
+`,
+}
+
+func TestParseConfig(t *testing.T) {
+	t.Parallel()
+	p := &testutils.MockProvider{}
+	ignoredFields := map[string]struct{}{"provider": {}, "ownerMutex": {}}
+
+	tests := map[string]struct {
+		configType        string
+		dropInType        string
+		provider          provider
+		allowLegacyConfig bool
+
+		wantErr                         bool
+		wantErrContainsDropInConfigPath bool
+		wantErrContains                 string
+	}{
+		"Successfully_parse_config_file":                           {},
+		"Successfully_parse_config_file_with_optional_values":      {configType: "valid+optional"},
+		"Successfully_parse_config_file_with_register_device":      {configType: "valid+register_device"},
+		"Successfully_parse_config_file_with_flow_values":          {configType: "valid+one_flow_disabled", provider: &configTestProvider{MockProvider: &testutils.MockProvider{}}},
+		"Warns_and_uses_default_for_invalid_device_code_value":     {configType: "invalid_device_code_value", allowLegacyConfig: true},
+		"Warns_and_uses_default_for_invalid_entra_auth_flow_value": {configType: "invalid_entra_auth_value", allowLegacyConfig: true},
+		"Successfully_parse_config_with_drop_in_files":             {dropInType: "valid"},
+		"Successfully_parse_config_with_flow_drop_in_files": {
+			configType: "valid+flows_disabled",
+			dropInType: "flows",
+			provider:   &configTestProvider{MockProvider: &testutils.MockProvider{}},
+		},
+		"Successfully_parse_config_when_placeholders_are_overridden_by_drop_in": {
+			configType: "template",
+			dropInType: "override-template",
+		},
+
+		"Do_not_fail_if_values_contain_a_single_template_delimiter": {configType: "singles"},
+
+		"Error_if_all_flows_are_disabled":                                                   {configType: "valid+flows_disabled", wantErr: true, wantErrContains: `the "device_code" flow must be enabled`},
+		"Error_if_file_does_not_exist":                                                      {configType: "inexistent", wantErr: true},
+		"Error_if_file_is_unreadable":                                                       {configType: "unreadable", wantErr: true},
+		"Error_if_file_is_not_updated":                                                      {configType: "template", wantErr: true},
+		"Error_if_main_config_has_invalid_syntax":                                           {configType: "invalid-ini", wantErr: true},
+		"Error_if_drop_in_directory_is_unreadable":                                          {dropInType: "unreadable-dir", wantErr: true},
+		"Error_if_drop_in_file_is_unreadable":                                               {dropInType: "unreadable-file", wantErr: true},
+		"Error_if_config_contains_invalid_values":                                           {configType: "invalid_boolean_value", wantErr: true},
+		"Error_if_config_contains_invalid_device_code_value":                                {configType: "invalid_device_code_value", wantErr: true},
+		"Error_if_config_contains_invalid_entra_auth_value":                                 {configType: "invalid_entra_auth_value", wantErr: true},
+		"Error_if_config_contains_invalid_register_device_value":                            {configType: "invalid_register_device_value", wantErr: true},
+		"Error_if_drop_in_file_is_invalid":                                                  {dropInType: "invalid-ini", wantErr: true, wantErrContainsDropInConfigPath: true},
+		"Error_if_drop_in_file_is_not_updated":                                              {dropInType: "template", wantErr: true},
+		"Successfully_parse_config_when_drop_in_placeholder_is_overridden_by_later_drop_in": {dropInType: "override-template-later"},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			confPath := filepath.Join(t.TempDir(), "broker.conf")
+
+			if tc.configType == "" {
+				tc.configType = "valid"
+			}
+			err := os.WriteFile(confPath, []byte(configTypes[tc.configType]), 0600)
+			require.NoError(t, err, "Setup: Failed to write config file")
+
+			switch tc.configType {
+			case "inexistent":
+				err = os.Remove(confPath)
+				require.NoError(t, err, "Setup: Failed to remove config file")
+			case "unreadable":
+				err = os.Chmod(confPath, 0000)
+				require.NoError(t, err, "Setup: Failed to make config file unreadable")
+			}
+
+			dropInDir := GetDropInDir(confPath)
+			if tc.dropInType != "" {
+				err = os.Mkdir(dropInDir, 0700)
+				require.NoError(t, err, "Setup: Failed to create drop-in directory")
+			}
+
+			switch tc.dropInType {
+			case "valid":
+				// Create multiple drop-in files to test that they are loaded in the correct order.
+				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["overwrite_lower_precedence"]), 0600)
+				require.NoError(t, err, "Setup: Failed to write drop-in file")
+				err = os.WriteFile(filepath.Join(dropInDir, "01-drop-in.conf"), []byte(configTypes["overwrite_higher_precedence"]), 0600)
+				require.NoError(t, err, "Setup: Failed to write drop-in file")
+				// Create the main config file, to test that the options which are not overwritten by the drop-in files
+				// are still present.
+				err = os.WriteFile(confPath, []byte(configTypes["valid+optional"]), 0600)
+				require.NoError(t, err, "Setup: Failed to write config file")
+			case "flows":
+				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["overwrite_enable_entra_auth"]), 0600)
+				require.NoError(t, err, "Setup: Failed to write drop-in file")
+			case "unreadable-dir":
+				err = os.Chmod(dropInDir, 0000)
+				require.NoError(t, err, "Setup: Failed to make drop-in directory unreadable")
+			case "unreadable-file":
+				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["valid"]), 0000)
+				require.NoError(t, err, "Setup: Failed to make drop-in file unreadable")
+			case "invalid-ini":
+				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte("=invalid"), 0600)
+				require.NoError(t, err, "Setup: Failed to write drop-in file")
+			case "template":
+				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["template"]), 0600)
+				require.NoError(t, err, "Setup: Failed to write drop-in file")
+			case "override-template":
+				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["override_template"]), 0600)
+				require.NoError(t, err, "Setup: Failed to write drop-in file")
+			case "override-template-later":
+				// 00-drop-in.conf has template placeholders; 01-drop-in.conf overrides them.
+				err = os.WriteFile(filepath.Join(dropInDir, "00-drop-in.conf"), []byte(configTypes["template"]), 0600)
+				require.NoError(t, err, "Setup: Failed to write drop-in file")
+				err = os.WriteFile(filepath.Join(dropInDir, "01-drop-in.conf"), []byte(configTypes["override_template"]), 0600)
+				require.NoError(t, err, "Setup: Failed to write drop-in file")
+			}
+
+			configProvider := tc.provider
+			if configProvider == nil {
+				configProvider = p
+			}
+			cfg, err := parseConfigFromPath(confPath, configProvider, tc.allowLegacyConfig, nil)
+			if tc.wantErr {
+				require.Error(t, err)
+				if tc.wantErrContains != "" {
+					require.ErrorContains(t, err, tc.wantErrContains)
+				}
+				if tc.wantErrContainsDropInConfigPath {
+					require.ErrorContains(t, err, filepath.Join(dropInDir, "00-drop-in.conf"))
+				}
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, cfg.provider, configProvider)
+
+			outDir := t.TempDir()
+			// Write the names and values of all fields in the config to a file. We can't use the json or yaml
+			// packages because they can't access unexported fields.
+			var fields []string
+			val := reflect.ValueOf(&cfg).Elem()
+			typ := reflect.TypeOf(&cfg).Elem()
+			for i := 0; i < typ.NumField(); i++ {
+				field := typ.Field(i)
+				if _, ok := ignoredFields[field.Name]; ok {
+					continue
+				}
+				fieldValue := val.Field(i)
+				if field.PkgPath != "" {
+					//nolint: gosec // We are using unsafe to access unexported fields for testing purposes
+					fieldValue = reflect.NewAt(fieldValue.Type(), unsafe.Pointer(fieldValue.UnsafeAddr())).Elem()
+				}
+				fields = append(fields, fmt.Sprintf("%s=%v", field.Name, fieldValue))
+			}
+			err = os.WriteFile(filepath.Join(outDir, "config.txt"), []byte(strings.Join(fields, "\n")), 0600)
+			require.NoError(t, err)
+
+			golden.CheckOrUpdateFileTree(t, outDir)
+		})
+	}
+}
+
+func TestParseFlowsConfigDefaults(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		registerDevice bool
+		omitFlows      bool
+		flows          string
+		want           flowsConfig
+	}{
+		"Entra_auth_follows_register_device_when_section_is_omitted": {
+			registerDevice: true,
+			omitFlows:      true,
+			want:           flowsConfig{DeviceAuth: true, EntraAuth: true},
+		},
+		"Entra_auth_is_disabled_when_register_device_is_disabled": {
+			omitFlows: true,
+			want:      flowsConfig{DeviceAuth: true, EntraAuth: false},
+		},
+		"Explicit_false_overrides_register_device": {
+			registerDevice: true,
+			flows:          "entra_auth = false",
+			want:           flowsConfig{DeviceAuth: true, EntraAuth: false},
+		},
+		"Explicit_true_overrides_register_device": {
+			flows: "entra_auth = true",
+			want:  flowsConfig{DeviceAuth: true, EntraAuth: true},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			flowsSection := fmt.Sprintf("\n[flows]\n%s", tc.flows)
+			if tc.omitFlows {
+				flowsSection = ""
+			}
+			config := fmt.Sprintf(`
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[msentraid]
+register_device = %t
+
+%s
+`, tc.registerDevice, flowsSection)
+			cfg, err := parseConfig(configFile{content: []byte(config)}, nil, &testutils.MockProvider{}, false)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, cfg.flows)
+		})
+	}
+}
+
+func TestParseFlowsConfigErrorUsesProviderSupportedModes(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"all supported flows disabled": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+device_code = false
+entra_auth = false
+`,
+		"unsupported flow enabled": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+device_code = false
+entra_auth = true
+`,
+	}
+
+	for name, config := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := parseConfig(configFile{content: []byte(config)}, nil, google.New(), false)
+			require.ErrorContains(t, err, `the "device_code" flow must be enabled`)
+		})
+	}
+}
+
+func TestLegacyConfigValidationWarningsAndFallbacks(t *testing.T) {
+	p := &testutils.MockProvider{}
+	config := configFile{
+		path: "broker.conf",
+		content: []byte(`
+unsectioned_key = ignored
+
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+force_access_check_with_provider = invalid
+unknown_oidc_key = ignored
+
+[msentraid]
+register_device = invalid
+
+[users]
+allowed_users = ALL
+unknown_users_key = ignored
+
+[unknown_section]
+some_key = ignored
+`),
+	}
+	dropIns := []configFile{{
+		path: "broker.conf.d/10-extra.conf",
+		content: []byte(`
+[oidc]
+unknown_drop_in_key = ignored
+force_provider_authentication = invalid
+
+[unknown_drop_in_section]
+some_key = ignored
+
+[flows]
+device_code = invalid
+entra_auth = invalid
+`),
+	}}
+
+	var warnings []string
+	log.SetHandler(func(_ context.Context, level log.Level, format string, args ...interface{}) {
+		if level >= log.WarnLevel {
+			warnings = append(warnings, fmt.Sprintf(format, args...))
+		}
+	})
+	t.Cleanup(func() {
+		log.SetHandler(nil)
+	})
+
+	cfg, err := parseConfig(config, dropIns, p, true)
+	require.NoError(t, err)
+	require.False(t, cfg.forceAccessCheckWithProvider)
+	require.False(t, cfg.registerDevice)
+	require.Equal(t, flowsConfig{DeviceAuth: true, EntraAuth: false}, cfg.flows)
+	require.True(t, cfg.allUsersAllowed)
+
+	unsupportedFlowConfig := `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[flows]
+device_code = false
+entra_auth = true
+`
+	_, err = parseConfig(configFile{path: "broker.conf", content: []byte(unsupportedFlowConfig)}, nil, google.New(), true)
+	require.ErrorContains(t, err, `the "device_code" flow must be enabled`)
+
+	invalidEntraAuthConfig := `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[msentraid]
+register_device = true
+
+[flows]
+entra_auth = invalid
+`
+	cfg, err = parseConfig(configFile{path: "broker.conf", content: []byte(invalidEntraAuthConfig)}, nil, p, true)
+	require.NoError(t, err)
+	require.Equal(t, flowsConfig{DeviceAuth: true, EntraAuth: true}, cfg.flows)
+
+	warningText := strings.Join(warnings, "\n")
+	for _, warning := range []string{
+		"keys outside of any section in config file",
+		`unknown key "unknown_oidc_key" in section "oidc"`,
+		`unknown key "unknown_users_key" in section "users"`,
+		`unknown section "unknown_section"`,
+		`unknown key "unknown_drop_in_key" in section "oidc"`,
+		`unknown section "unknown_drop_in_section"`,
+		`error parsing 'force_access_check_with_provider'`,
+		`error parsing 'force_provider_authentication'`,
+		`error parsing 'register_device'`,
+		`error parsing 'device_code' in config file`,
+		`error parsing 'entra_auth' in config file`,
+	} {
+		require.Contains(t, warningText, warning)
+	}
+}
+
+func TestLegacyConfigModeKeepsPreviouslyFatalErrorsFatal(t *testing.T) {
+	t.Parallel()
+
+	p := &testutils.MockProvider{}
+
+	_, err := parseConfig(configFile{path: "broker.conf", content: []byte("=invalid")}, nil, p, true)
+	require.ErrorContains(t, err, "error in config file")
+
+	disabledConfig := configTypes["valid+flows_disabled"]
+	_, err = parseConfig(configFile{path: "broker.conf", content: []byte(disabledConfig)}, nil, p, true)
+	require.ErrorContains(t, err, `the "device_code" flow must be enabled`)
+
+	_, err = parseConfig(configFile{path: "broker.conf", content: []byte(configTypes["template"])}, nil, p, true)
+	require.ErrorContains(t, err, "unedited template placeholder")
+
+	missingPath := filepath.Join(t.TempDir(), "missing.conf")
+	_, err = parseConfigFromPath(missingPath, p, true, nil)
+	require.ErrorContains(t, err, "could not open config file")
+
+	requiredValuePath := filepath.Join(t.TempDir(), "broker.conf")
+	require.NoError(t, os.WriteFile(requiredValuePath, []byte(`
+[oidc]
+issuer = https://issuer.url.com
+`), 0600))
+	_, err = New(Config{
+		ConfigFile:        requiredValuePath,
+		DataDir:           t.TempDir(),
+		AllowLegacyConfig: true,
+	}, 1)
+	require.ErrorContains(t, err, "client ID is required and was not provided")
+}
+
+func TestStrictValidationAppliesToDropInFiles(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		content string
+		wantErr string
+	}{
+		"unknown section": {
+			content: "[future]\nkey = value\n",
+			wantErr: `unknown section "future"`,
+		},
+		"unknown key": {
+			content: "[oidc]\nfuture_key = value\n",
+			wantErr: `unknown key "future_key"`,
+		},
+		"invalid boolean": {
+			content: "[oidc]\nforce_access_check_with_provider = invalid\n",
+			wantErr: "error parsing 'force_access_check_with_provider'",
+		},
+		"invalid flow boolean": {
+			content: "[flows]\ndevice_code = invalid\n",
+			wantErr: "error parsing 'device_code'",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := parseConfig(
+				configFile{path: "broker.conf", content: []byte(configTypes["valid"])},
+				[]configFile{{path: "broker.conf.d/10-extra.conf", content: []byte(tc.content)}},
+				&testutils.MockProvider{},
+				false,
+			)
+			require.ErrorContains(t, err, tc.wantErr)
+			require.ErrorContains(t, err, "broker.conf.d/10-extra.conf")
+		})
+	}
+}
+
+func TestStrictValidationAggregatesAllViolations(t *testing.T) {
+	t.Parallel()
+
+	_, err := parseConfig(
+		configFile{
+			path: "broker.conf",
+			content: []byte(`
+outside_key = ignored
+
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+unknown_oidc_key = ignored
+force_access_check_with_provider = invalid
+
+[msentraid]
+register_device = invalid
+
+[flows]
+device_code = invalid
+entra_auth = invalid
+
+[future]
+some_key = ignored
+`),
+		},
+		[]configFile{{
+			path: "broker.conf.d/10-extra.conf",
+			content: []byte(`
+[oidc]
+force_provider_authentication = invalid
+
+[users]
+unknown_users_key = ignored
+`),
+		}},
+		&testutils.MockProvider{},
+		false,
+	)
+
+	require.Error(t, err)
+	for _, violation := range []string{
+		"keys outside of any section in config file",
+		`unknown key "unknown_oidc_key" in section "oidc"`,
+		`error parsing 'force_access_check_with_provider'`,
+		`error parsing 'register_device'`,
+		`error parsing 'device_code'`,
+		`error parsing 'entra_auth'`,
+		`unknown section "future"`,
+		`error parsing 'force_provider_authentication'`,
+		`unknown key "unknown_users_key" in section "users"`,
+	} {
+		require.ErrorContains(t, err, violation)
+	}
+	require.ErrorContains(t, err, "broker.conf.d/10-extra.conf")
+}
+
+func TestParseConfigReportsLegacyViolations(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "broker.conf")
+	require.NoError(t, os.WriteFile(configPath, []byte(configTypes["valid"]+"\n[future]\nkey = value\n"), 0600))
+
+	var calls int
+	var reported []error
+	_, err := parseConfigFromPath(configPath, &testutils.MockProvider{}, true, func(violations []error) {
+		calls++
+		reported = append(reported, violations...)
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, calls)
+	require.Len(t, reported, 1)
+	require.ErrorContains(t, reported[0], `unknown section "future"`)
+}
+
+func TestNewBrokersParsesConfigOnce(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "broker.conf")
+	require.NoError(t, os.WriteFile(configPath, []byte(configTypes["valid"]+"\n[future]\nkey = value\n"), 0600))
+
+	var calls int
+	var reported []error
+	brokers, err := NewBrokers(Config{
+		ConfigFile:        configPath,
+		DataDir:           t.TempDir(),
+		AllowLegacyConfig: true,
+		ReportConfigViolations: func(violations []error) {
+			calls++
+			reported = append(reported, violations...)
+		},
+	}, []string{"Broker", "Broker2", "Broker3"})
+	require.NoError(t, err)
+	require.Len(t, brokers, 3)
+	for i, b := range brokers {
+		require.Equal(t, uint(i)+1, b.apiVersion)
+	}
+	require.Equal(t, 1, calls)
+	require.Len(t, reported, 1)
+	require.ErrorContains(t, reported[0], `unknown section "future"`)
+
+	require.NoError(t, brokers[0].cfg.registerOwner("", "first-user"))
+	require.Equal(t, "first-user", brokers[0].cfg.owner)
+	require.Empty(t, brokers[1].cfg.owner)
+}
+
+var testParseUserConfigTypes = map[string]string{
+	"All_are_allowed": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = ALL
+owner = machine_owner
+home_base_dir = /home
+ssh_allowed_suffixes_first_auth = @issuer.url.com
+`,
+	"Only_owner_is_allowed": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = OWNER
+owner = machine_owner
+home_base_dir = /home
+ssh_allowed_suffixes_first_auth = @issuer.url.com
+`,
+	"By_default_only_owner_is_allowed": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+owner = machine_owner
+home_base_dir = /home
+ssh_allowed_suffixes_first_auth = @issuer.url.com
+`,
+	"Only_owner_is_allowed_but_is_unset": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+home_base_dir = /home
+ssh_allowed_suffixes_first_auth = @issuer.url.com
+`,
+	"Only_owner_is_allowed_but_is_empty": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+owner =
+home_base_dir = /home
+ssh_allowed_suffixes_first_auth = @issuer.url.com
+`,
+	"Users_u1_and_u2_are_allowed": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = u1,u2
+home_base_dir = /home
+ssh_allowed_suffixes_first_auth = @issuer.url.com
+`,
+	"Unset_owner_and_u1_is_allowed": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = OWNER,u1
+home_base_dir = /home
+ssh_allowed_suffixes_first_auth = @issuer.url.com
+`,
+	"Set_owner_and_u1_is_allowed": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = OWNER,u1
+owner = machine_owner
+home_base_dir = /home
+ssh_allowed_suffixes_first_auth = @issuer.url.com
+`,
+	"Support_old_suffixes_key": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+allowed_users = ALL
+owner = machine_owner
+home_base_dir = /home
+ssh_allowed_suffixes_first_auth = @issuer.url.com
+`,
+}
+
+func TestParseUserConfig(t *testing.T) {
+	t.Parallel()
+	p := &testutils.MockProvider{}
+
+	tests := map[string]struct {
+		wantAllUsersAllowed       bool
+		wantOwnerAllowed          bool
+		wantFirstUserBecomesOwner bool
+		wantOwner                 string
+		wantAllowedUsers          []string
+	}{
+		"All_are_allowed":                    {wantAllUsersAllowed: true, wantOwner: "machine_owner"},
+		"Only_owner_is_allowed":              {wantOwnerAllowed: true, wantOwner: "machine_owner"},
+		"By_default_only_owner_is_allowed":   {wantOwnerAllowed: true, wantOwner: "machine_owner"},
+		"Only_owner_is_allowed_but_is_unset": {wantOwnerAllowed: true, wantFirstUserBecomesOwner: true},
+		"Only_owner_is_allowed_but_is_empty": {wantOwnerAllowed: true},
+		"Users_u1_and_u2_are_allowed":        {wantAllowedUsers: []string{"u1", "u2"}},
+		"Unset_owner_and_u1_is_allowed": {
+			wantOwnerAllowed:          true,
+			wantFirstUserBecomesOwner: true,
+			wantAllowedUsers:          []string{"u1"},
+		},
+		"Set_owner_and_u1_is_allowed": {
+			wantOwnerAllowed: true,
+			wantOwner:        "machine_owner",
+			wantAllowedUsers: []string{"u1"},
+		},
+		"Support_old_suffixes_key": {wantAllUsersAllowed: true, wantOwner: "machine_owner"},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			outDir := t.TempDir()
+			confPath := filepath.Join(outDir, "broker.conf")
+
+			err := os.WriteFile(confPath, []byte(testParseUserConfigTypes[name]), 0600)
+			require.NoError(t, err, "Setup: Failed to write config file")
+
+			dropInDir := GetDropInDir(confPath)
+			err = os.Mkdir(dropInDir, 0700)
+			require.NoError(t, err, "Setup: Failed to create drop-in directory")
+
+			cfg, err := parseConfigFromPath(confPath, p, false, nil)
+
+			// convert the allowed users array to a map
+			allowedUsersMap := map[string]struct{}{}
+			for _, k := range tc.wantAllowedUsers {
+				allowedUsersMap[k] = struct{}{}
+			}
+
+			require.Equal(t, tc.wantAllUsersAllowed, cfg.allUsersAllowed)
+			require.Equal(t, tc.wantOwnerAllowed, cfg.ownerAllowed)
+			require.Equal(t, tc.wantOwner, cfg.owner)
+			require.Equal(t, tc.wantFirstUserBecomesOwner, cfg.firstUserBecomesOwner)
+			require.Equal(t, allowedUsersMap, cfg.allowedUsers)
+
+			require.NoError(t, err)
+			golden.CheckOrUpdateFileTree(t, outDir)
+		})
+	}
+}
+
+func TestRegisterOwner(t *testing.T) {
+	t.Parallel()
+
+	p := &testutils.MockProvider{}
+	userName := "owner_name"
+
+	tests := map[string]struct {
+		preCreateDropInDir     bool
+		dropInDirBlockedByFile bool
+		wantErr                string
+	}{
+		"Drop_in_dir_already_exists": {preCreateDropInDir: true},
+		"Drop_in_dir_missing":        {},
+		"Drop_in_dir_creation_fails": {dropInDirBlockedByFile: true, wantErr: "failed to create drop-in directory"},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			outDir := t.TempDir()
+			confPath := filepath.Join(outDir, "broker.conf")
+
+			err := os.WriteFile(confPath, []byte(configTypes["valid"]), 0600)
+			require.NoError(t, err, "Setup: Failed to write config file")
+
+			dropInDir := GetDropInDir(confPath)
+			if tc.preCreateDropInDir {
+				err = os.Mkdir(dropInDir, 0700)
+				require.NoError(t, err, "Setup: Failed to create drop-in directory")
+			}
+			if tc.dropInDirBlockedByFile {
+				// Place a regular file where the directory would be created, so MkdirAll fails.
+				err = os.WriteFile(dropInDir, []byte{}, 0600)
+				require.NoError(t, err, "Setup: Failed to create blocking file")
+			}
+
+			cfg := userConfig{firstUserBecomesOwner: true, ownerAllowed: true, provider: p, ownerMutex: &sync.RWMutex{}}
+			err = cfg.registerOwner(confPath, userName)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+
+			require.Equal(t, cfg.owner, userName)
+			require.Equal(t, cfg.firstUserBecomesOwner, false)
+
+			golden.CheckOrUpdateFileTree(t, outDir)
+		})
+	}
+}
+
+func TestRegisterOwnerRejectsInvalidChars(t *testing.T) {
+	t.Parallel()
+
+	p := &testutils.MockProvider{}
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "broker.conf")
+	require.NoError(t, os.WriteFile(cfgPath,
+		[]byte("[oidc]\nissuer = https://issuer.url.com\nclient_id = client_id\n"), 0600))
+
+	uc := userConfig{provider: p, ownerMutex: &sync.RWMutex{}}
+
+	tests := map[string]struct {
+		username string
+	}{
+		"newline_injection": {username: "attacker@evil.test\nallowed_users = ALL\nowner_extra_groups = sudo"},
+		"carriage_return":   {username: "user@x.com\ralert"},
+		"nul_byte":          {username: "user@x.com\x00evil"},
+		"bell_char":         {username: "user@x.com\x07evil"},
+		"escape_char":       {username: "user@x.com\x1bevil"},
+		"line_separator":    {username: "user@x.com\u2028evil"},
+		"zero_width_space":  {username: "user\u200bname"},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			err := uc.registerOwner(cfgPath, tc.username)
+			require.ErrorContains(t, err, "invalid characters")
+		})
+	}
+}
+
+func TestParseConfigUnknownSettings(t *testing.T) {
+	t.Parallel()
+	p := &testutils.MockProvider{}
+
+	tests := map[string]struct {
+		config  string
+		wantErr string
+	}{
+		"No_error_for_valid_config": {
+			config: configTypes["valid"],
+		},
+		"No_error_for_valid_config_with_optional_values": {
+			config: configTypes["valid+optional"],
+		},
+		"No_error_for_valid_config_with_old_force_provider_authentication_key": {
+			config: `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+force_provider_authentication = true
+`,
+		},
+		"Error_for_unknown_section": {
+			config: `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[unknown_section]
+some_key = some_value
+`,
+			wantErr: `unknown section "unknown_section" in config file`,
+		},
+		"Error_for_unknown_key_in_oidc_section": {
+			config: `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+unknown_key = some_value
+`,
+			wantErr: `unknown key "unknown_key" in section "oidc" in config file`,
+		},
+		"Error_for_unknown_key_in_users_section": {
+			config: `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[users]
+unknown_key = some_value
+`,
+			wantErr: `unknown key "unknown_key" in section "users" in config file`,
+		},
+		"Error_for_key_outside_any_section": {
+			config: `
+owner = someuser
+
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+`,
+			wantErr: `keys outside of any section in config file`,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			confPath := filepath.Join(t.TempDir(), "broker.conf")
+			err := os.WriteFile(confPath, []byte(tc.config), 0600)
+			require.NoError(t, err, "Setup: Failed to write config file")
+
+			_, err = parseConfigFromPath(confPath, p, false, nil)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestBrokerConfFilesHaveNoUnknownSettings(t *testing.T) {
+	t.Parallel()
+	p := &testutils.MockProvider{}
+
+	confFiles := map[string]struct {
+		path      string
+		wantFlows flowsConfig
+	}{
+		"google": {
+			path:      "../../conf/variants/google/broker.conf",
+			wantFlows: defaultFlowsConfig(false),
+		},
+		"msentraid": {
+			path:      "../../conf/variants/msentraid/broker.conf",
+			wantFlows: defaultFlowsConfig(false),
+		},
+		"oidc": {
+			path:      "../../conf/variants/oidc/broker.conf",
+			wantFlows: defaultFlowsConfig(false),
+		},
+	}
+
+	for name, tc := range confFiles {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			content, err := os.ReadFile(tc.path)
+			require.NoError(t, err, "Setup: Failed to read broker.conf")
+
+			// Replace template placeholders with valid dummy values so that
+			// parseConfig does not fail on the placeholder check.
+			replaced := strings.NewReplacer(
+				"<CLIENT_ID>", "test-client-id",
+				"<CLIENT_SECRET>", "test-client-secret",
+				"<ISSUER_URL>", "https://example.com",
+				"<ISSUER_ID>", "test-issuer-id",
+			).Replace(string(content))
+
+			confPath := filepath.Join(t.TempDir(), "broker.conf")
+			err = os.WriteFile(confPath, []byte(replaced), 0600)
+			require.NoError(t, err, "Setup: Failed to write config file")
+
+			cfg, err := parseConfigFromPath(confPath, p, false, nil)
+			require.NoError(t, err, "The %s broker.conf should not have unknown settings", name)
+			require.Equal(t, tc.wantFlows, cfg.flows, "The %s broker.conf should use the expected flow defaults", name)
+		})
+	}
+}
+
+func FuzzParseConfig(f *testing.F) {
+	p := &testutils.MockProvider{}
+	f.Fuzz(func(t *testing.T, a []byte) {
+		_, _ = parseConfig(configFile{content: a}, nil, p, false)
+	})
+}
