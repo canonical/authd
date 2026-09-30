@@ -470,12 +470,7 @@ impl NoProxy {
     pub fn contains(&self, host: &str) -> bool {
         // According to RFC3986, raw IPv6 hosts will be wrapped in []. So we need to strip those off
         // the end in order to parse correctly
-        let host = if host.starts_with('[') {
-            let x: &[_] = &['[', ']'];
-            host.trim_matches(x)
-        } else {
-            host
-        };
+        let host = crate::client::strip_ipv6_brackets(host);
         match host.parse::<IpAddr>() {
             // If we can parse an IP addr, then use it, otherwise, assume it is a domain
             Ok(ip) => self.ips.contains(ip),
@@ -662,6 +657,41 @@ mod mac {
 #[cfg(feature = "client-proxy-system")]
 #[cfg(windows)]
 mod win {
+    fn ipv4_wildcard_to_cidr(value: &str) -> Option<String> {
+        let parts = value.split('.').collect::<Vec<_>>();
+        let wildcard = parts.iter().position(|part| *part == "*")?;
+
+        if wildcard == 0 || wildcard > 3 || parts[wildcard..].iter().any(|part| *part != "*") {
+            return None;
+        }
+
+        let mut octets = [0; 4];
+        for (index, part) in parts[..wildcard].iter().enumerate() {
+            octets[index] = part.parse().ok()?;
+        }
+
+        Some(format!(
+            "{}.{}.{}.{}/{}",
+            octets[0],
+            octets[1],
+            octets[2],
+            octets[3],
+            wildcard * 8
+        ))
+    }
+
+    pub(super) fn normalize_proxy_override(value: &str) -> String {
+        value
+            .split(';')
+            .map(|entry| {
+                let entry = entry.trim();
+                ipv4_wildcard_to_cidr(entry).unwrap_or_else(|| entry.to_string())
+            })
+            .collect::<Vec<_>>()
+            .join(",")
+            .replace("*.", "")
+    }
+
     pub(super) fn with_system(builder: &mut super::Builder) {
         let settings = if let Ok(settings) = windows_registry::CURRENT_USER
             .open("Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings")
@@ -686,12 +716,7 @@ mod win {
 
         if builder.no.is_empty() {
             if let Ok(val) = settings.get_string("ProxyOverride") {
-                builder.no = val
-                    .split(';')
-                    .map(|s| s.trim())
-                    .collect::<Vec<&str>>()
-                    .join(",")
-                    .replace("*.", "");
+                builder.no = normalize_proxy_override(&val);
             }
         }
     }
@@ -781,6 +806,25 @@ mod tests {
         for host in &should_match {
             assert!(no_proxy.contains(host), "should contain {host:?}");
         }
+    }
+
+    #[cfg(all(feature = "client-proxy-system", windows))]
+    #[test]
+    fn test_windows_proxy_override_ip_wildcard() {
+        let normalized =
+            win::normalize_proxy_override("127.*; 10.*.*.*; 192.168.*; 192.168.1.*; *.example.com");
+        let no_proxy = NoProxy::from_string(&normalized);
+
+        assert!(no_proxy.contains("127.0.0.1"));
+        assert!(no_proxy.contains("10.12.34.56"));
+        assert!(no_proxy.contains("192.168.42.1"));
+        assert!(no_proxy.contains("192.168.1.42"));
+        assert!(no_proxy.contains("www.example.com"));
+        assert!(!no_proxy.contains("128.0.0.1"));
+        assert!(!no_proxy.contains("192.169.42.1"));
+
+        let subnet = NoProxy::from_string(&win::normalize_proxy_override("192.168.1.*"));
+        assert!(!subnet.contains("192.168.2.42"));
     }
 
     macro_rules! p {
@@ -905,25 +949,31 @@ mod tests {
         };
 
         // should bypass proxy (case insensitive match)
-        assert!(p
-            .intercept(&"http://example.com".parse().unwrap())
-            .is_none());
-        assert!(p
-            .intercept(&"http://EXAMPLE.COM".parse().unwrap())
-            .is_none());
-        assert!(p
-            .intercept(&"http://Example.com".parse().unwrap())
-            .is_none());
+        assert!(
+            p.intercept(&"http://example.com".parse().unwrap())
+                .is_none()
+        );
+        assert!(
+            p.intercept(&"http://EXAMPLE.COM".parse().unwrap())
+                .is_none()
+        );
+        assert!(
+            p.intercept(&"http://Example.com".parse().unwrap())
+                .is_none()
+        );
 
         // subdomain should bypass proxy (case insensitive match)
-        assert!(p
-            .intercept(&"http://www.example.com".parse().unwrap())
-            .is_none());
-        assert!(p
-            .intercept(&"http://WWW.EXAMPLE.COM".parse().unwrap())
-            .is_none());
-        assert!(p
-            .intercept(&"http://Www.Example.Com".parse().unwrap())
-            .is_none());
+        assert!(
+            p.intercept(&"http://www.example.com".parse().unwrap())
+                .is_none()
+        );
+        assert!(
+            p.intercept(&"http://WWW.EXAMPLE.COM".parse().unwrap())
+                .is_none()
+        );
+        assert!(
+            p.intercept(&"http://Www.Example.Com".parse().unwrap())
+                .is_none()
+        );
     }
 }
