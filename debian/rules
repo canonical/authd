@@ -16,18 +16,7 @@ else
 $(error Unsupported distribution "$(DEB_DISTRIBUTION)" for gnome-shell dependency)
 endif
 
-# Keep gnome-shell optional for server installations. Newer versions are
-# accepted on Resolute and Stonking because the patch that fixes
-# https://bugs.launchpad.net/ubuntu/+source/gnome-shell/+bug/2160622 already
-# landed in the archive for those releases.
-ifeq ($(DEB_DISTRIBUTION),noble)
-# On Noble, reject versions other than the patched one from the authd PPA,
-# because they would cause https://github.com/canonical/authd/issues/1424 to
-# occur almost every time.
-GNOME_SHELL_BREAKS := gnome-shell (<< $(GNOME_SHELL_PATCHED_VERSION)), gnome-shell (>> $(GNOME_SHELL_PATCHED_VERSION))
-else
 GNOME_SHELL_BREAKS := gnome-shell (<< $(GNOME_SHELL_PATCHED_VERSION))
-endif
 
 # The package name for authd, used only locally to avoid repetitions
 AUTHD_GO_PACKAGE := $(shell grep-dctrl -s XS-Go-Import-Path -n - ./debian/control)
