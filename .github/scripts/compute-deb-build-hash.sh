@@ -11,7 +11,7 @@ relevant_files=$(git ls-files | grep -v \
     -e '^\.golangci\.yaml$' \
     -e '\.md$' \
     -e '^COPYING' \
-    -e '^authd-oidc-brokers/' \
+    -e '^brokers/' \
     -e '^docs/' \
     -e '^e2e-tests/' \
     -e '^examplebroker/' \

@@ -1,0 +1,317 @@
+package himmelblau
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/canonical/authd/brokers/internal/providers/info"
+	"github.com/canonical/authd/log"
+	"golang.org/x/oauth2"
+)
+
+// EntraAuthProvider is an optional interface that providers can implement
+// to support the Entra ID password/passwordless + MFA authentication flow.
+type EntraAuthProvider interface {
+	// InitiateEntraAuth starts the Entra password/passwordless + MFA flow.
+	// It submits credentials and returns an MFA challenge state.
+	// clientID is the OIDC application client ID (on_behalf_of_client_id);
+	// it is used to build the OIDC app inside the Rust layer so that the
+	// resulting tokens can include Microsoft Graph API scopes.
+	// When withDeviceScope is true, the MFA flow adds Intune enrollment
+	// resources to the token request (needed for PRT-based token exchange).
+	// When false, it uses only MS Graph scopes.
+	// authOpts toggles optional flow behaviors. AuthOptionFido advertises FIDO
+	// capability; AuthOptionPasswordlessSecurityKey explicitly selects the
+	// local security-key transport for a passwordless request.
+	InitiateEntraAuth(
+		ctx context.Context,
+		clientID string,
+		issuerURL string,
+		username, password string,
+		deviceRegistrationData []byte,
+		withDeviceScope bool,
+		authOpts ...AuthOption,
+	) (*MFAFlowState, *MFAChallengeInfo, error)
+
+	// AcquireTokenByMFAFlow completes the MFA challenge.
+	// clientID is the OIDC application client ID (on_behalf_of_client_id).
+	// For poll-based MFA, authData is empty and pollAttempt increments.
+	// For code-based MFA, authData is the user-entered code.
+	// Returns an OAuth token built from the MFA result on success.
+	AcquireTokenByMFAFlow(
+		ctx context.Context,
+		clientID string,
+		issuerURL string,
+		username string,
+		flow *MFAFlowState,
+		authData string,
+		pollAttempt int,
+		deviceRegistrationData []byte,
+	) (*oauth2.Token, error)
+
+	// RefreshEntraToken refreshes a cached Entra password/passwordless + MFA refresh
+	// token to re-verify the account against Entra ID on a returning login, the
+	// same way the device-auth flow's token refresh does. It is a plain OAuth2
+	// refresh as a public client (no client_secret) for basic scopes only — never
+	// Microsoft Graph — so it works regardless of register_device and never hits
+	// the Broker-app↔Graph preauthorization wall.
+	//
+	// On success it returns the rotated token (the new refresh token must be
+	// persisted). On an Entra rejection it returns an *oauth2.RetrieveError so the
+	// broker can classify it with the same checks it uses for device-auth
+	// (IsUserDisabledError → AADSTS50057, IsTokenExpiredError → AADSTS50173, etc.).
+	RefreshEntraToken(
+		ctx context.Context,
+		issuerURL string,
+		refreshToken string,
+	) (*oauth2.Token, error)
+
+	// VerifyAccessToken verifies the RS256 signature of the MFA-flow access token
+	// against the tenant's published JWKS (handling the header-nonce rewrite that
+	// Microsoft first-party tokens use) and that its tenant claim matches. It is
+	// the defense-in-depth check that the token genuinely came from Microsoft, so
+	// the identity read from its claims is not trusted on TLS alone. Returns nil
+	// only when the token verifies.
+	VerifyAccessToken(
+		ctx context.Context,
+		issuerURL string,
+		accessToken string,
+	) error
+
+	// UserInfoFromAccessToken extracts user identity from a verified Entra access
+	// token, mapping provider-specific claims (e.g. oid/upn) to the same info.User
+	// shape that GetUserInfo returns for OIDC ID tokens / UserInfo responses.
+	UserInfoFromAccessToken(accessToken string) (info.User, error)
+}
+
+// MFAFlowState is an opaque handle to an in-progress MFA flow.
+// The actual continuation state is owned by the libhimmelblau-backed
+// implementation, which also supplies the release callback used by
+// FreeMFAFlowState.
+type MFAFlowState struct {
+	// mu serializes access to the underlying continuation state so that a
+	// concurrent FreeMFAFlowState (e.g. from EndSession while a cancelled
+	// poll goroutine is still running) cannot release it while it is in use
+	// or release it twice.
+	mu      sync.Mutex
+	opaque  any
+	release func()
+}
+
+// FreeMFAFlowState releases resources associated with the MFA flow state.
+// It is safe to call with a nil state, to call repeatedly, and to call
+// concurrently with an in-flight use of the flow (it blocks until the use
+// completes).
+func FreeMFAFlowState(flow *MFAFlowState) {
+	if flow == nil {
+		return
+	}
+	flow.mu.Lock()
+	defer flow.mu.Unlock()
+	if flow.release != nil {
+		flow.release()
+	}
+	flow.release = nil
+	flow.opaque = nil
+}
+
+// AuthOption toggles optional behaviors of the MFA flow initiation, mirroring
+// libhimmelblau's AuthOption without exposing its C enum values.
+type AuthOption int
+
+const (
+	// AuthOptionNoDAGFallback suppresses the silent Device Authorization Grant
+	// fallback in libhimmelblau. The broker surfaces MFA challenges through
+	// dedicated auth modes and never wants the DAG fallback, so this is always
+	// passed by InitiateMFAFlow.
+	AuthOptionNoDAGFallback AuthOption = iota
+
+	// AuthOptionFido advertises that the caller can perform a FIDO/WebAuthn
+	// assertion. Without it, Entra ID may still select a FIDO method for the
+	// user, but libhimmelblau does not fetch the WebAuthn challenge, so the
+	// flow cannot be completed locally.
+	AuthOptionFido
+
+	// AuthOptionPasswordless advertises support for Remote NGC passwordless
+	// authentication. FIDO transports are independent and must be selected with
+	// their specific options. InitiateMFAFlow adds it when no password is supplied
+	// so Entra returns the Remote NGC parameters.
+	AuthOptionPasswordless
+
+	// AuthOptionPasswordlessSecurityKey lets libhimmelblau offer a local
+	// security-key ceremony as the primary factor. It is independent of Remote
+	// NGC and is selected when the caller can perform a local FIDO assertion.
+	AuthOptionPasswordlessSecurityKey
+)
+
+// MFAChallengeInfo describes the MFA challenge that must be presented to the user.
+type MFAChallengeInfo struct {
+	Message           string
+	Method            string
+	PollingIntervalMs int
+	MaxPollAttempts   int
+
+	// FidoChallenge is the WebAuthn challenge to sign when a FIDO method was
+	// negotiated. Empty for non-FIDO challenges.
+	FidoChallenge string
+	// FidoAllowList contains the credential IDs (base64-encoded) that Entra ID
+	// accepts for the FIDO assertion. Empty for non-FIDO challenges.
+	FidoAllowList []string
+	// HasPassword reports whether Entra supports password authentication for
+	// the account that produced this continuation.
+	HasPassword bool
+}
+
+// MFAErrorCategory classifies an MFA error so the broker can route
+// it without depending on libhimmelblau-specific numeric codes.
+type MFAErrorCategory int
+
+// userNotFoundErrorCode is the standard Entra error code for an account
+// that is not present in the tenant. It must stay in this untagged file
+// because IsMFAUserNotFound is used by untagged builds.
+const userNotFoundErrorCode = 50034
+
+// These errors mean that Entra could not complete the request because its
+// backend was temporarily unavailable or was throttling the tenant.
+const (
+	externalServerRetryableErrorCode = 90006
+	tenantThrottlingErrorCode        = 90055
+)
+
+const (
+	// MFAErrorOther is the default category and means the error has no
+	// specific routing semantics.
+	MFAErrorOther MFAErrorCategory = iota
+	// MFAErrorPollContinue means the MFA poll loop should keep polling.
+	MFAErrorPollContinue
+	// MFAErrorDenied means the user actively rejected the MFA challenge
+	// (e.g. tapped "Deny" on a push notification).
+	MFAErrorDenied
+	// MFAErrorRequired means MFA is required to complete authentication.
+	MFAErrorRequired
+	// MFAErrorDAGFallbackDisabled means the native MFA flow could not find a
+	// supported method and the caller disabled Device Authorization fallback.
+	// A passwordless probe uses this to distinguish passwordless-only accounts
+	// from accounts that can fall back to an Entra password.
+	MFAErrorDAGFallbackDisabled
+	// MFAErrorRetryableCode means a submitted one-time code was incorrect or
+	// expired while the MFA flow itself remains valid, so the user can simply
+	// re-enter the code without restarting the flow. See newMFAError for how
+	// this is detected.
+	MFAErrorRetryableCode
+	// MFAErrorPasswordRequired means a passwordless flow found no usable
+	// passwordless method for the account, so authentication needs the
+	// password flow instead.
+	MFAErrorPasswordRequired
+)
+
+// MFAError represents an error from initiating or continuing an MFA flow.
+//
+// Category is set so that consumers can branch on well-known outcomes without
+// referencing libhimmelblau-specific error codes. AADSTS, when non-zero,
+// carries the Entra ID AADSTS error code.
+type MFAError struct {
+	Category MFAErrorCategory
+	AADSTS   int
+	Message  string
+}
+
+// Error returns the formatted error message.
+func (e *MFAError) Error() string {
+	if e.AADSTS != 0 {
+		return fmt.Sprintf("AADSTS%d: %s", e.AADSTS, e.Message)
+	}
+	return e.Message
+}
+
+// IsMFAPollContinue returns true if the error indicates the MFA poll should continue.
+func (e *MFAError) IsMFAPollContinue() bool {
+	return e.Category == MFAErrorPollContinue
+}
+
+// IsMFADenied returns true if the error indicates the MFA request was actively
+// rejected (e.g., user denied the push notification).
+func (e *MFAError) IsMFADenied() bool {
+	return e.Category == MFAErrorDenied
+}
+
+// IsMFARequired returns true for errors that need a separate MFA-capable flow.
+func (e *MFAError) IsMFARequired() bool {
+	return e.Category == MFAErrorRequired || e.Category == MFAErrorDAGFallbackDisabled
+}
+
+// IsMFADAGFallbackDisabled returns true when Device Authorization fallback
+// was disabled before the native MFA flow could be created.
+func (e *MFAError) IsMFADAGFallbackDisabled() bool {
+	return e.Category == MFAErrorDAGFallbackDisabled
+}
+
+// IsMFARetryableCode returns true if the error indicates a submitted one-time
+// code was incorrect or expired while the MFA flow remains valid, so the user
+// can retry the code without restarting the flow.
+func (e *MFAError) IsMFARetryableCode() bool {
+	return e.Category == MFAErrorRetryableCode
+}
+
+// IsMFAPasswordRequired returns true if the error indicates that a
+// passwordless flow found no usable passwordless method for the account, so
+// authentication needs the password flow instead.
+func (e *MFAError) IsMFAPasswordRequired() bool {
+	return e.Category == MFAErrorPasswordRequired
+}
+
+// IsMFAUserNotFound returns true if the requested account does not exist in
+// the Entra tenant.
+func (e *MFAError) IsMFAUserNotFound() bool {
+	return e.AADSTS == userNotFoundErrorCode
+}
+
+// IsMFATransient returns true when Entra reports a temporary service or
+// throttling failure while starting the MFA flow.
+//
+// Keep these checks based on AADSTS: the libhimmelblau revision supported by
+// authd reports every AADSTS error as MSAL_ERROR_CODE::AADSTS_ERROR while
+// preserving the actual code in MFAError.AADSTS.
+func (e *MFAError) IsMFATransient() bool {
+	return e.AADSTS == externalServerRetryableErrorCode ||
+		e.AADSTS == tenantThrottlingErrorCode
+}
+
+func retryTransientInitiate(
+	ctx context.Context,
+	delays []time.Duration,
+	initiate func() (*MFAFlowState, error),
+) (*MFAFlowState, error) {
+	flow, err := initiate()
+	for _, delay := range delays {
+		var mfaErr *MFAError
+		if err == nil || !errors.As(err, &mfaErr) || !mfaErr.IsMFATransient() {
+			return flow, err
+		}
+		log.Warningf(ctx, "Transient Entra error (AADSTS%d) while initiating the MFA flow; retrying in %v", mfaErr.AADSTS, delay)
+		if err := waitForRetry(ctx, delay); err != nil {
+			return flow, err
+		}
+		if err := ctx.Err(); err != nil {
+			return flow, err
+		}
+		flow, err = initiate()
+	}
+	return flow, err
+}
+
+// waitForRetry waits for the retry delay or context cancellation.
+func waitForRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}

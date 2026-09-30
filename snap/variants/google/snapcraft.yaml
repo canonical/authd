@@ -19,7 +19,7 @@ description: |
 icon: snap/variants/google/icon.svg
 website: https://ubuntu.com/docs/authd
 issues: https://github.com/canonical/authd/issues
-source-code: https://github.com/canonical/authd/tree/main/authd-oidc-brokers
+source-code: https://github.com/canonical/authd/tree/main/brokers
 adopt-info: version
 grade: stable
 base: core24
@@ -47,7 +47,7 @@ slots:
 
 parts:
   broker:
-    source: authd-oidc-brokers
+    source: brokers
     source-type: local
     plugin: nil
     build-snaps:
@@ -60,11 +60,11 @@ parts:
       retry -t 3 -d 10 -- go mod download all
       go mod vendor
       VERSION=$(craftctl get version)
-      go build -tags=withgoogle,release -ldflags "-X=github.com/canonical/authd/authd-oidc-brokers/internal/consts.Version=${VERSION}" -o ${GOBIN}/authd-google ./cmd/authd-oidc
+      go build -tags=withgoogle,release -ldflags "-X=github.com/canonical/authd/brokers/internal/consts.Version=${VERSION}" -o ${GOBIN}/authd-google ./cmd/authd-oidc
     after:
       - version
   config:
-    source: authd-oidc-brokers/conf/
+    source: brokers/conf/
     source-type: local
     plugin: dump
     organize:
@@ -75,7 +75,7 @@ parts:
       - conf
   # SemVer comparison helper
   semver:
-    source: authd-oidc-brokers/tools
+    source: brokers/tools
     source-type: local
     plugin: nil
     build-snaps:

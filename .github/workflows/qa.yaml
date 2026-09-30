@@ -12,7 +12,7 @@ on:
       - '!.gitmodules'
       - '!*.md'
       - '!COPYING*'
-      - '!authd-oidc-brokers/**'
+      - '!brokers/**'
       - '!docs/**'
       - '!e2e-tests/**'
       - '!examplebroker/**'
@@ -30,7 +30,7 @@ on:
       - '!.gitmodules'
       - '!*.md'
       - '!COPYING*'
-      - '!authd-oidc-brokers/**'
+      - '!brokers/**'
       - '!docs/**'
       - '!e2e-tests/**'
       - '!examplebroker/**'
@@ -117,7 +117,7 @@ jobs:
       - name: Run ShellCheck
         uses: ludeeus/action-shellcheck@master
         with:
-          ignore_paths: "./authd-oidc-brokers"
+          ignore_paths: "./brokers"
 
   rust-sanity:
     name: "Rust: Code sanity"

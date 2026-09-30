@@ -12,7 +12,7 @@ name: Update packaging files on Dependabot PR
 # signature. The generation jobs still have read-only permissions.
 #
 # It handles only the root Cargo and Go manifests. Dependencies in tools/,
-# authd-oidc-brokers/, GitHub Actions, and submodules are not part of the
+# brokers/, GitHub Actions, and submodules are not part of the
 # Debian package, so they do not need entries in debian/copyright.
 #
 # Cargo.lock is generated in Ubuntu Noble, the oldest supported release.

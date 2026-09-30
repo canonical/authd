@@ -183,7 +183,7 @@ The library resulting from the build is located in `./target/debug/libnss_authd.
 
 The authd brokers are packaged as separate snaps that are built and released
 independently from authd. The source code for the brokers is located in
-`./authd-oidc-brokers` and the snap packaging files are located in `./snap`.
+`./brokers` and the snap packaging files are located in `./snap`.
 
 To build the broker snap for a specific broker variant, follow these steps from the top of the source tree:
 

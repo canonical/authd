@@ -23,7 +23,7 @@ jobs:
         id: update
         env:
           GH_TOKEN: ${{ github.token }}
-          INSTALL_SCRIPT: authd-oidc-brokers/tools/install-cargo-c
+          INSTALL_SCRIPT: brokers/tools/install-cargo-c
         shell: bash
         run: |
           set -euo pipefail
