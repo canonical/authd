@@ -128,6 +128,9 @@ the full suite. To run one test case from a suite, pass its exact name with
 
 Run `./e2e-tests/run-tests.sh --help` for all available options, including
 `--rerunfailed`, `--output-dir`, and `--test-runs-dir`.
+When a test launches a GUI app over SSH, the helper passes the active GNOME
+session's `DISPLAY`, `WAYLAND_DISPLAY`, and `XAUTHORITY` values so GTK can use
+the VM's desktop.
 
 After a successful run, the e2e VM is stopped. If a test fails, the VM remains
 running for investigation.
