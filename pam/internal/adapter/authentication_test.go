@@ -36,6 +36,20 @@ func TestAuthenticationModelLocksTerminalInputWhileAuthenticating(t *testing.T) 
 	require.True(t, updated.Focused())
 }
 
+func TestAuthenticationModelUsesCurrentGenerationForUnscopedNewPasswordCheck(t *testing.T) {
+	t.Parallel()
+
+	model := newAuthenticationModel(nil, InteractiveTerminal, authd.SessionMode_LOGIN)
+	model.authGen = 1
+
+	_, cmd := model.Update(newPasswordCheck{password: "AuthdTest2026!"})
+	require.NotNil(t, cmd)
+
+	result, ok := cmd().(newPasswordCheckResult)
+	require.True(t, ok)
+	require.Equal(t, uint64(1), result.authGen)
+}
+
 func TestAuthenticationModelIgnoresStaleStopAuthentication(t *testing.T) {
 	t.Parallel()
 

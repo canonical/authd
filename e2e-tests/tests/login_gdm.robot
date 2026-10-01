@@ -56,3 +56,27 @@ Test switching authentication flow in GDM
     Continue Log In With Remote User: Authenticate In External Browser
     # The device code flow asks for a local password before completing login.
     Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
+
+
+Test switching back to password while device-code authentication is active in GDM
+    [Documentation]    Verify that a user can switch from password to device
+    ...    code and back to password while the device-code request is polling.
+
+    # Register the user and create the local password used by the default flow.
+    Log In With Remote User Through GDM: QR Code    ${username}    ${local_password}
+    Log Out
+
+    Wait Until GDM Login Screen Ready
+    Move Pointer To ${user_display_name}
+    Left Button Click
+    Match Text    Password    120
+
+    # Switch before submitting the password, wait for device-code polling to
+    # start, then return to the local password flow and complete the login.
+    Select Authentication Mode Through GDM    Device code flow
+    Match Text    ${DEVICE_URL}    120
+    Select Authentication Mode Through GDM    Local password
+    Match Text    Password    30
+    Hid.Type String    ${local_password}
+    Hid.Keys Combo    Return
+    Wait Until Desktop Ready
