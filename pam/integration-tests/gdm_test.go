@@ -883,7 +883,10 @@ func TestGdmModule(t *testing.T) {
 				},
 			},
 			wantAuthModeIDs: []string{passwordAuthID},
-			wantError:       pam.ErrAuth,
+			wantAuthResponses: []*authd.IAResponse{
+				{Access: auth.Denied, Msg: "user not found"},
+			},
+			wantError: pam.ErrAuth,
 		},
 		"Error_on_invalid_fido_ack": {
 			pamUserPrefix:   examplebroker.UserIntegrationMfaPrefix,
@@ -902,6 +905,7 @@ func TestGdmModule(t *testing.T) {
 			},
 			wantAuthResponses: []*authd.IAResponse{
 				{Access: auth.Next},
+				{Access: auth.Denied, Msg: "fidodevice1 should have wait set to true"},
 			},
 			wantError: pam.ErrAuth,
 		},

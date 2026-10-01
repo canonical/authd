@@ -80,6 +80,10 @@ type mockEntraAuthProvider struct {
 	registrationEnrollments       int
 	registrationExistingData      []byte
 	registrationExistingDataCalls [][]byte
+	unixUID                       uint32
+	unixGID                       uint32
+	unixEnrichmentCalls           int
+	unixAttributeConfig           info.UnixAttributeConfig
 }
 
 type blockingMFAProvider struct {
@@ -177,6 +181,16 @@ func (p *mockEntraAuthProvider) MaybeRegisterDevice(_ context.Context, _ *oauth2
 	}
 	p.registrationEnrollments++
 	return mockDeviceRegistrationData, func() {}, nil
+}
+
+func (p *mockEntraAuthProvider) EnrichUserWithUnixAttributes(_ context.Context, user info.User, _ string, _ string, _ *oauth2.Token, _ map[string]interface{}, _ []byte, config info.UnixAttributeConfig) (info.User, error) {
+	p.unixEnrichmentCalls++
+	p.unixAttributeConfig = config
+	uid := p.unixUID
+	gid := p.unixGID
+	user.UID = &uid
+	user.Groups = []info.Group{{Name: "enriched-remote-group", UGID: "enriched-group-id", GID: &gid}}
+	return user, nil
 }
 
 // mockMFADeniedProvider simulates MFA push notification being denied by the user.
