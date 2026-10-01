@@ -133,10 +133,13 @@ jobs:
           go -C ./authd-oidc-brokers build -tags=withgoogle -o authd-google ./cmd/authd-oidc
 
           # We also need to build libhimmelblau when building the msentraid variant
-          git submodule update --init
+          git submodule update --init -- authd-oidc-brokers/third_party/libhimmelblau
           cd ./authd-oidc-brokers
           go generate --tags=withmsentraid ./internal/providers/msentraid/...
           go build -tags=withmsentraid -o authd-msentraid ./cmd/authd-oidc
+
+      - name: Remove submodules before TICS analysis
+        run: git submodule deinit --force --all
 
       - name: TICS Analysis
         uses: tiobe/tics-github-action@v4
