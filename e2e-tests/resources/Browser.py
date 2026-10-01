@@ -37,7 +37,14 @@ class Browser:
     """Library for browser automation using a headless browser."""
 
     @keyword
-    def login(self, usercode: str, output_dir: str = "."):
+    def login(
+        self,
+        usercode: str,
+        output_dir: str = ".",
+        username: str = "",
+        password: str = "",
+        totp_secret: str = "",
+    ):
         """Perform device code flow with the given username, password and
         usercode using a broker-specific browser automation script. The window
         opened by the script is run off screen using Xvfb unless ``SHOW_WEBVIEW``
@@ -70,12 +77,21 @@ class Browser:
                 "--",
             ] + command
 
+        browser_env = os.environ.copy()
+        if username:
+            browser_env["E2E_USER"] = username
+        if password:
+            browser_env["E2E_PASSWORD"] = password
+        if totp_secret:
+            browser_env["TOTP_SECRET"] = totp_secret
+
         lines = []
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            env=browser_env,
         )
         stdout_thread = threading.Thread(
             target=_stream_to_stderr, args=(process.stdout, lines), daemon=True
