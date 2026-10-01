@@ -1,17 +1,16 @@
 import os
-from ansi2html import Ansi2HTMLConverter
 import select
 import subprocess
 import time
 
+import ExecUtils
+import VMUtils
+from ansi2html import Ansi2HTMLConverter
 from robot.api import logger
 from robot.api.deco import keyword, library  # type: ignore
 from robot.libraries.BuiltIn import BuiltIn
 
-import ExecUtils
-import VMUtils
-
-HOST_CID = 2 # 2 always refers to the host
+HOST_CID = 2  # 2 always refers to the host
 PORT = 55000
 
 
@@ -29,7 +28,7 @@ class Journal:
         if self.process:
             return
 
-        suite_output_dir = BuiltIn().get_variable_value('${SUITE_OUTPUT_DIR}')
+        suite_output_dir = BuiltIn().get_variable_value("${SUITE_OUTPUT_DIR}")
         self.output_dir = os.path.join(suite_output_dir, "journal")
         os.makedirs(self.output_dir, exist_ok=True)
 
@@ -43,7 +42,9 @@ class Journal:
                 stderr=subprocess.PIPE,
             )
         else:
-            self.process, self.socat_process = stream_journal_from_vm_via_tcp(output_dir=self.output_dir)
+            self.process, self.socat_process = stream_journal_from_vm_via_tcp(
+                output_dir=self.output_dir
+            )
 
     @keyword
     async def stop_receiving_journal(self) -> None:
@@ -67,17 +68,23 @@ class Journal:
             try:
                 self.process.wait(timeout=30)
             except subprocess.TimeoutExpired:
-                logger.error("systemd-journal-remote did not exit after socat termination, killing it")
+                logger.error(
+                    "systemd-journal-remote did not exit after socat termination, killing it"
+                )
                 self.process.kill()
                 self.process.wait()
 
-            logger.info("systemd-journal-remote stderr:\n" + self.process.stderr.read().decode())
+            logger.info(
+                "systemd-journal-remote stderr:\n" + self.process.stderr.read().decode()
+            )
             self.process = None
 
         elif self.process:
             self.process.terminate()
             self.process.wait()
-            logger.info("systemd-journal-remote stderr:\n" + self.process.stderr.read().decode())
+            logger.info(
+                "systemd-journal-remote stderr:\n" + self.process.stderr.read().decode()
+            )
             self.process = None
 
     @keyword
@@ -87,11 +94,12 @@ class Journal:
         """
         output = ExecUtils.check_output(
             [
-                'journalctl',
-                '--no-pager',
-                '--directory', self.output_dir,
+                "journalctl",
+                "--no-pager",
+                "--directory",
+                self.output_dir,
             ],
-            env={'SYSTEMD_COLORS': 'true'},
+            env={"SYSTEMD_COLORS": "true"},
             text=True,
         )
 
@@ -99,16 +107,15 @@ class Journal:
 
         # ansi2html produces a <pre> block; split on newlines so we can wrap each
         # line in a <span> that JS can toggle.
-        lines = html_output.split('\n')
-        wrapped_lines = ''.join(
-            f'<span class="jline" style="display:block">{line}</span>'
-            for line in lines
+        lines = html_output.split("\n")
+        wrapped_lines = "".join(
+            f'<span class="jline" style="display:block">{line}</span>' for line in lines
         )
 
         uid = id(html_output)  # unique enough within a single report
-        container_id = f'journal-{uid}'
-        filter_id = f'journal-filter-{uid}'
-        count_id = f'journal-count-{uid}'
+        container_id = f"journal-{uid}"
+        filter_id = f"journal-filter-{uid}"
+        count_id = f"journal-count-{uid}"
 
         html = f"""
             <input id="{filter_id}"
@@ -137,7 +144,12 @@ class Journal:
             <span id="{count_id}" style="margin-left:8px;font-size:0.85em;color:#888"></span>
             <pre id="{container_id}" style="background:#1b1b1b;color:#f8f8f2;overflow:auto;max-height:600px;margin:2px 0 0 0">{wrapped_lines}</pre>
             """
-        BuiltIn().set_test_message(f'*HTML*<h3 data-skip-stderr style="margin-bottom:0">Journal</h3>{html}', append=True, separator='\n')
+        BuiltIn().set_test_message(
+            f'*HTML*<h3 data-skip-stderr style="margin-bottom:0">Journal</h3>{html}',
+            append=True,
+            separator="\n",
+        )
+
 
 def _filter_socat_stderr(stderr):
     """Filter socat stderr, keeping the first write/read line and summarizing the rest."""
@@ -169,7 +181,7 @@ def stream_journal_from_vm_via_tcp(output_dir, timeout=60):
             ["socat", "-u", "-d", "-d", f"TCP:{vm_ip}:{PORT}", "STDOUT"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=False, # `journalctl -o export` produces binary output
+            text=False,  # `journalctl -o export` produces binary output
             bufsize=0,
         )
 
@@ -191,7 +203,10 @@ def stream_journal_from_vm_via_tcp(output_dir, timeout=60):
             stderr_buf.append(line)
 
             if "successfully connected" in line:
-                logger.info("socat successfully connected to VM journal stream:\n" + "".join(stderr_buf))
+                logger.info(
+                    "socat successfully connected to VM journal stream:\n"
+                    + "".join(stderr_buf)
+                )
                 stderr_buf.clear()
                 connected = True
                 break
@@ -218,6 +233,4 @@ def stream_journal_from_vm_via_tcp(output_dir, timeout=60):
         socat.stdout.close()
         return journal_remote, socat
 
-    raise RuntimeError(
-        f"Failed to connect to VM journal stream within {timeout}s"
-    )
+    raise RuntimeError(f"Failed to connect to VM journal stream within {timeout}s")

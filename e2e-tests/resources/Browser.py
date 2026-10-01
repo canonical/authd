@@ -3,10 +3,9 @@ import subprocess
 import sys
 import threading
 
-from robot.api.deco import keyword, library  # type: ignore
-from robot.api import logger
-
 from RecordingUtils import current_test_name_for_filename
+from robot.api import logger
+from robot.api.deco import keyword, library  # type: ignore
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BROWSER_LOGIN_DIR = os.path.join(SCRIPT_DIR, "browser_login")
@@ -63,7 +62,13 @@ class Browser:
             f"Webview_Recording_{current_test_name_for_filename()}",
         ]
         if not os.getenv("SHOW_WEBVIEW"):
-            command = ["/usr/bin/env", "GDK_BACKEND=x11", "xvfb-run", "-a", "--"] + command
+            command = [
+                "/usr/bin/env",
+                "GDK_BACKEND=x11",
+                "xvfb-run",
+                "-a",
+                "--",
+            ] + command
 
         lines = []
         process = subprocess.Popen(
@@ -83,6 +88,4 @@ class Browser:
             logger.info(line)
 
         if process.returncode != 0:
-            raise RuntimeError(
-                f"Browser login failed (exit code {process.returncode})"
-            )
+            raise RuntimeError(f"Browser login failed (exit code {process.returncode})")

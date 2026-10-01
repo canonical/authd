@@ -13,23 +13,23 @@ from robot.api.interfaces import ListenerV3
 _out = sys.__stderr__
 
 # ANSI colour codes
-_RESET  = "\033[0m"
-_BOLD   = "\033[1m"
-_DIM    = "\033[2m"
-_GREEN  = "\033[32m"
-_RED    = "\033[31m"
+_RESET = "\033[0m"
+_BOLD = "\033[1m"
+_DIM = "\033[2m"
+_GREEN = "\033[32m"
+_RED = "\033[31m"
 _YELLOW = "\033[33m"
-_CYAN   = "\033[36m"
-_WHITE  = "\033[37m"
+_CYAN = "\033[36m"
+_WHITE = "\033[37m"
 
 # Log level colours (matching Robot Framework conventions)
 _LEVEL_COLOUR = {
     "TRACE": _DIM,
     "DEBUG": _DIM,
-    "INFO":  "",
-    "WARN":  _YELLOW,
+    "INFO": "",
+    "WARN": _YELLOW,
     "ERROR": _RED,
-    "FAIL":  _RED,
+    "FAIL": _RED,
 }
 
 SILENT_KEYWORDS = [
@@ -42,6 +42,7 @@ SILENT_KEYWORDS = [
     # as silent so its log messages are not printed to stderr.
     "Browser.Login",
 ]
+
 
 def _write(text: str) -> None:
     _out.write(text + "\n")
@@ -71,7 +72,9 @@ def _sanitize_html(text: str) -> str:
     """Remove HTML blocks marked with data-skip-stderr to avoid dumping large HTML content to the terminal."""
     # Match any opening tag carrying the data-skip-stderr attribute and strip
     # everything from it to the end of the string.
-    return re.sub(r"<\w[^>]*\bdata-skip-stderr\b[^>]*>.*", "", text, flags=re.DOTALL).rstrip()
+    return re.sub(
+        r"<\w[^>]*\bdata-skip-stderr\b[^>]*>.*", "", text, flags=re.DOTALL
+    ).rstrip()
 
 
 def _fmt_args(args: tuple) -> str:
@@ -146,9 +149,7 @@ class Listener(ListenerV3):
     # Keywords  (user keywords + library keywords share start/end_keyword)
     # ------------------------------------------------------------------
 
-    def start_keyword(
-        self, data: running.Keyword, result: result.Keyword
-    ) -> None:
+    def start_keyword(self, data: running.Keyword, result: result.Keyword) -> None:
         depth = len(self._kw_stack)
         self._kw_stack.append((data.name, time.monotonic()))
 
@@ -161,9 +162,7 @@ class Listener(ListenerV3):
         args_str = _fmt_args(data.args)
         _write(f"{indent}{_DIM}⋯  {data.name}{args_str}{silent_str}{_RESET}")
 
-    def end_keyword(
-        self, data: running.Keyword, result: result.Keyword
-    ) -> None:
+    def end_keyword(self, data: running.Keyword, result: result.Keyword) -> None:
         if not self._kw_stack:
             return
         if data.name in SILENT_KEYWORDS:

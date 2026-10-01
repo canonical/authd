@@ -3,7 +3,6 @@
 import os
 
 from generate_totp import generate_totp
-
 from robot.api.deco import keyword, library
 
 
