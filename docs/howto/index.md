@@ -23,6 +23,7 @@ configuring authentication behavior and user management:
 
 Installing authd <install-authd>
 Configuring authd <configure-authd>
+Configuring stable Entra Unix IDs <configure-entra-unix-ids>
 ```
 
 ## Login and authentication
