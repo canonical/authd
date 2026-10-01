@@ -41,8 +41,18 @@ Test login after upgrading authd and broker
     Log Out From su Session
     Close Focused Window
 
+    ${authd_version_before_update}=    SSH.Execute    dpkg-query -W -f='\${Version}' authd
+    Set Suite Metadata    Authd Version (Before Migration)    ${authd_version_before_update}
+    ${broker_version_before_update}=    Get Installed Broker Version
+    Set Suite Metadata    Broker Version (Before Migration)    ${broker_version_before_update}
+
     Update Broker
+    ${broker_version_after_update}=    Get Installed Broker Version
+    Set Suite Metadata    Broker Version (After Migration)    ${broker_version_after_update}
+
     Update Authd    skip_if_authd_stable_ppa_is_unavailable=${True}
+    ${authd_version_after_update}=    SSH.Execute    dpkg-query -W -f='\${Version}' authd
+    Set Suite Metadata    Authd Version (After Migration)    ${authd_version_after_update}
 
     ${authd_apt_policy}=    SSH.Execute    apt-cache policy authd
     ${gnome_shell_apt_policy}=    SSH.Execute    apt-cache policy gnome-shell yaru-theme-gnome-shell
