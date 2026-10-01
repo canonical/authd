@@ -90,12 +90,28 @@ See [Authentication flows](/reference/authentication-flows/) for details.
 
 If the identity provider is reachable during login, authd verifies that the user
 is still allowed to authenticate with the identity provider. If the user's
-account has been disabled or removed, login is denied.
+account has been disabled or removed, login is denied. If the check fails for a
+non-authoritative reason, such as a network or token verification error, authd
+continues with the local password by default. Authoritative identity or
+configuration failures still deny login. When forced provider authentication is
+enabled, non-authoritative failures also deny login.
 
-By default, if the identity provider cannot be reached (for example, due to
-network issues), users can still log in with their local password. This is to
-prevent accidental lockouts, but it also allows users whose access has been
-revoked at the identity provider to log in while the provider is unreachable.
+By default, this prevents accidental lockouts, but it also allows users whose
+access has been revoked at the identity provider to log in while the provider
+cannot confirm that revocation.
+
+The refresh result determines the authentication response as follows:
+
+| Refresh result | Provider check optional (`false`) | Provider check forced (`true`) |
+| --- | --- | --- |
+| User or device is disabled | `AuthDenied`; cache the disabled state | `AuthDenied` |
+| Refresh grant was revoked or the remote password changed | `AuthNext`; invalidate cached credentials and require re-authentication | `AuthNext`; require re-authentication |
+| Refresh token is expired | `AuthGranted`; use cached credentials and mark the session offline | `AuthNext`; require re-authentication |
+| Network or temporary provider error | `AuthGranted`; use cached credentials and mark the session offline | `AuthDenied` |
+| Non-authoritative token verification or user-info failure | `AuthGranted`; use cached credentials and mark the session offline | `AuthDenied`; preserve a safe display message when available |
+| Unknown or unclassified refresh error | `AuthGranted`; treat the check as best effort and use cached credentials | `AuthDenied` |
+| Known authoritative identity or configuration error | `AuthDenied`; do not use cached credentials | `AuthDenied` |
+| No cached refresh token | `AuthNext`; require re-authentication | `AuthNext`; require re-authentication |
 
 To enforce verification with the identity provider even when it is unreachable,
 enable the [force_access_check_with_provider](ref::config-force-provider-auth)

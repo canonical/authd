@@ -2,6 +2,7 @@ package genericprovider_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -16,10 +17,11 @@ func TestGetUserInfo(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		claims      map[string]interface{}
-		wantUser    info.User
-		wantErr     bool
-		wantErrType error
+		claims            map[string]interface{}
+		wantUser          info.User
+		wantErr           bool
+		wantErrType       func(error) bool
+		wantAuthoritative bool
 	}{
 		"Successfully_get_user_info_with_all_fields": {
 			claims: map[string]interface{}{
@@ -59,8 +61,12 @@ func TestGetUserInfo(t *testing.T) {
 				"sub":   "sub123",
 				"email": "user@example.com",
 			},
-			wantErr:     true,
-			wantErrType: &providerErrors.MissingClaimError{Claim: "email_verified"},
+			wantErr: true,
+			wantErrType: func(err error) bool {
+				var target *providerErrors.MissingClaimError
+				return errors.As(err, &target)
+			},
+			wantAuthoritative: true,
 		},
 		"Error_when_email_is_not_verified": {
 			claims: map[string]interface{}{
@@ -68,8 +74,12 @@ func TestGetUserInfo(t *testing.T) {
 				"sub":            "sub123",
 				"email_verified": false,
 			},
-			wantErr:     true,
-			wantErrType: &providerErrors.ForDisplayError{},
+			wantErr: true,
+			wantErrType: func(err error) bool {
+				var target *providerErrors.ForDisplayError
+				return errors.As(err, &target)
+			},
+			wantAuthoritative: true,
 		},
 	}
 
@@ -86,7 +96,11 @@ func TestGetUserInfo(t *testing.T) {
 			if tc.wantErr {
 				require.Error(t, err)
 				if tc.wantErrType != nil {
-					require.ErrorAs(t, err, &tc.wantErrType)
+					require.True(t, tc.wantErrType(err), "error has an unexpected type")
+				}
+				if tc.wantAuthoritative {
+					var authoritativeErr *providerErrors.AuthoritativeError
+					require.True(t, errors.As(err, &authoritativeErr))
 				}
 				return
 			}
@@ -111,6 +125,46 @@ func (m *mockIDToken) Claims(v interface{}) error {
 	}
 
 	return nil
+}
+
+func TestVerifyUsername(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		requestedUsername string
+		username          string
+
+		wantErr bool
+	}{
+		"Success_when_usernames_match": {
+			requestedUsername: "user@example.com",
+			username:          "user@example.com",
+		},
+		"Error_when_usernames_do_not_match": {
+			requestedUsername: "user@example.com",
+			username:          "other@example.com",
+			wantErr:           true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			p := genericprovider.New()
+			err := p.VerifyUsername(tc.requestedUsername, tc.username)
+
+			if tc.wantErr {
+				require.Error(t, err)
+				var displayErr *providerErrors.ForDisplayError
+				require.ErrorAs(t, err, &displayErr)
+				var authoritativeErr *providerErrors.AuthoritativeError
+				require.True(t, errors.As(err, &authoritativeErr))
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestIsTokenExpiredError(t *testing.T) {
