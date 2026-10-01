@@ -3,20 +3,17 @@ name: dependabot validate
 on:
   pull_request:
     paths:
-      - '.github/dependabot.yaml'
+      - '.github/dependabot.yml'
+      - '.github/workflows/validate-dependabot.yaml'
 
 jobs:
   validate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
       - uses: marocchino/validate-dependabot@v3
-        id: validate
-      - uses: marocchino/sticky-pull-request-comment@v3
-        if: always()
-        with:
-          header: validate-dependabot
-          message: ${{ steps.validate.outputs.markdown }}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
