@@ -171,6 +171,62 @@ automatically. The setting overrides suite-specific snapshots, including the
 stable snapshots used by migration tests, so use it only with compatible test
 suites. Leave it unset for normal isolated and CI runs.
 
+### Entra Unix ID fixtures
+
+Like the passwordless suite, `entra_unix_uid_gid_provisioning.robot` runs when
+its account and fixture settings are configured and skips cases whose required
+settings are missing. There is no separate enable flag. Set the directory
+fixture values in the ignored `e2e-tests-msentraid.env` file using the
+`E2E_UNIX_IDS_*` variables from `e2e-tests-msentraid.env.template`:
+
+- `E2E_UNIX_IDS_UID_ATTRIBUTE` and `E2E_UNIX_IDS_GID_ATTRIBUTE`: the full
+  extension property names to test.
+- `E2E_UNIX_IDS_EXPECTED_UID` and `E2E_UNIX_IDS_EXPECTED_GID`: the assigned
+  positive integer values.
+- `E2E_UNIX_IDS_GROUP`: the remote group with that GID.
+- `E2E_UNIX_IDS_EXPECTED_UGID`: optionally, that group's Entra object ID.
+- `E2E_UNIX_IDS_GENERIC_GROUP`: a group without a GID for missing-attribute
+  cases.
+- `E2E_UNIX_IDS_NO_GID_EXPECTED_UID`: the valid UID assigned to the optional
+  no-GID test account.
+
+The short attribute names used by the suite are `Linux_UID` and `Linux_GID`.
+Use full property names in the environment variables so the suite tests both
+full and short-name resolution.
+In GitHub CI, the optional repository variables
+`E2E_UNIX_IDS_UID_SHORT_ATTRIBUTE` and `E2E_UNIX_IDS_GID_SHORT_ATTRIBUTE`
+override these short names.
+
+Configure `E2E_UNIX_IDS_USER`, `E2E_UNIX_IDS_PASSWORD`, and
+`E2E_UNIX_IDS_TOTP_SECRET` in the Microsoft Entra broker's `.env` file. These
+credentials belong to a member of `${configured_group}` with the expected UID;
+positive tests never fall back to the shared `E2E_USER`.
+
+For missing-attribute cases, use the shared `E2E_USER` without a UID who belongs
+to `${generic_test_group}`. The optional no-GID fixture also belongs to this
+group but has a valid UID. Configure its `E2E_UNIX_IDS_NO_GID_USER`,
+`E2E_UNIX_IDS_NO_GID_PASSWORD`, and `E2E_UNIX_IDS_NO_GID_TOTP_SECRET` in the
+`.env` file. Cases with missing fixture settings skip before VM setup.
+
+```bash
+./e2e-tests/run-tests.sh --broker authd-msentraid --release resolute \
+    e2e-tests/tests/entra_unix_uid_gid_provisioning.robot
+```
+
+In GitHub CI, the suite participates in normal Entra runs and uses the same
+configuration-based skipping as local runs. Configure the fixture values as
+repository secrets: `E2E_MSENTRA_UNIX_IDS_UID_ATTRIBUTE`,
+`E2E_MSENTRA_UNIX_IDS_GID_ATTRIBUTE`, `E2E_MSENTRA_UNIX_IDS_EXPECTED_UID`,
+`E2E_MSENTRA_UNIX_IDS_EXPECTED_GID`, `E2E_MSENTRA_UNIX_IDS_EXPECTED_UGID`,
+`E2E_MSENTRA_UNIX_IDS_GROUP`, `E2E_MSENTRA_UNIX_IDS_GENERIC_GROUP`, and
+`E2E_MSENTRA_UNIX_IDS_NO_GID_EXPECTED_UID`. Use the
+`E2E_MSENTRA_UNIX_IDS_USERNAME`, `E2E_MSENTRA_UNIX_IDS_PASSWORD`, and
+`E2E_MSENTRA_UNIX_IDS_TOTP_SECRET` secrets for the positive account. For the
+optional no-GID account, use `E2E_MSENTRA_UNIX_IDS_NO_GID_USERNAME`,
+`E2E_MSENTRA_UNIX_IDS_NO_GID_PASSWORD`, and
+`E2E_MSENTRA_UNIX_IDS_NO_GID_TOTP_SECRET`. The reusable workflows forward
+these settings and credentials to the runner.
+
 ## Running in GitHub CI
 
 By default, GitHub CI runs the end-to-end tests against `authd-msentraid` on all

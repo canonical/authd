@@ -57,7 +57,7 @@ required, the corresponding login fails.
 
 ## Authentication and Graph access matrix
 
-The UID and GID lookups use Microsoft Graph. Authentication and Graph access
+The UID and GID are retrieved from Microsoft Graph. Authentication and Graph access
 are separate steps: a token that proves the user's identity is not necessarily
 usable for the Graph requests.
 
@@ -184,7 +184,8 @@ returns a suitable delegated Graph token.
 3. The registration data is persisted in `token.json`.
 4. The broker exchanges the refresh token and device keys for a delegated Graph
    token requesting `GroupMember.Read.All` and `User.Read`.
-5. The broker fetches the UID and groups, including GIDs and group GUIDs.
+5. The broker fetches the UID and groups, including GIDs and one GUID for each
+   group.
 6. The complete enriched snapshot is cached.
 7. The response sent to authd excludes the cache-only UID and GID fields.
 
@@ -211,7 +212,7 @@ its state is needed by the token exchange.
 3. The broker uses client credentials to obtain an app-only Graph token when
    the native token lacks `GroupMember.Read.All`.
 4. The broker fetches groups through the user's object ID.
-5. The broker can cache group GIDs and group GUIDs.
+5. The broker can cache group GIDs and one GUID for each group.
 6. The UID lookup is unavailable through the app-only token. An optional UID is
    left unset; `unix_uid_required = true` denies the login.
 

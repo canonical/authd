@@ -27,6 +27,10 @@ Prerequisites:
 Optional environment variables:
   AUTHD_E2E_TEST_RUNS_DIR
                       Directory for test run artifacts (default: \${XDG_RUNTIME_DIR:-/tmp}/authd-e2e-test-runs)
+    E2E_UNIX_IDS_USER, E2E_UNIX_IDS_PASSWORD, E2E_UNIX_IDS_TOTP_SECRET
+                                            Dedicated credentials for entra_unix_uid_gid_provisioning.robot
+    E2E_UNIX_IDS_NO_GID_USER, E2E_UNIX_IDS_NO_GID_PASSWORD, E2E_UNIX_IDS_NO_GID_TOTP_SECRET
+                                            Account for the missing-GID test in entra_unix_uid_gid_provisioning.robot
   AUTHD_DEB           Host path to the authd package for migration tests
   APT_SOURCE          Comma-separated PPA/archive source list; defaults to the
                       matching -proposed suite and authd-edge
@@ -288,6 +292,22 @@ YARF_LOG_LEVEL=DEBUG
 env \
     E2E_USER="$E2E_USER" \
     E2E_PASSWORD="$E2E_PASSWORD" \
+    E2E_UNIX_IDS_UID_ATTRIBUTE="${E2E_UNIX_IDS_UID_ATTRIBUTE:-uidNumber}" \
+    E2E_UNIX_IDS_GID_ATTRIBUTE="${E2E_UNIX_IDS_GID_ATTRIBUTE:-gidNumber}" \
+    E2E_UNIX_IDS_UID_SHORT_ATTRIBUTE="${E2E_UNIX_IDS_UID_SHORT_ATTRIBUTE:-Linux_UID}" \
+    E2E_UNIX_IDS_GID_SHORT_ATTRIBUTE="${E2E_UNIX_IDS_GID_SHORT_ATTRIBUTE:-Linux_GID}" \
+    E2E_UNIX_IDS_EXPECTED_UID="${E2E_UNIX_IDS_EXPECTED_UID:-}" \
+    E2E_UNIX_IDS_EXPECTED_GID="${E2E_UNIX_IDS_EXPECTED_GID:-}" \
+    E2E_UNIX_IDS_EXPECTED_UGID="${E2E_UNIX_IDS_EXPECTED_UGID:-}" \
+    E2E_UNIX_IDS_GROUP="${E2E_UNIX_IDS_GROUP:-}" \
+    E2E_UNIX_IDS_GENERIC_GROUP="${E2E_UNIX_IDS_GENERIC_GROUP:-}" \
+    E2E_UNIX_IDS_NO_GID_EXPECTED_UID="${E2E_UNIX_IDS_NO_GID_EXPECTED_UID:-}" \
+    E2E_UNIX_IDS_USER="${E2E_UNIX_IDS_USER:-}" \
+    E2E_UNIX_IDS_PASSWORD="${E2E_UNIX_IDS_PASSWORD:-}" \
+    E2E_UNIX_IDS_TOTP_SECRET="${E2E_UNIX_IDS_TOTP_SECRET:-}" \
+    E2E_UNIX_IDS_NO_GID_USER="${E2E_UNIX_IDS_NO_GID_USER:-}" \
+    E2E_UNIX_IDS_NO_GID_PASSWORD="${E2E_UNIX_IDS_NO_GID_PASSWORD:-}" \
+    E2E_UNIX_IDS_NO_GID_TOTP_SECRET="${E2E_UNIX_IDS_NO_GID_TOTP_SECRET:-}" \
     E2E_PASSWORDLESS_USER="${E2E_PASSWORDLESS_USER:-}" \
     E2E_PASSWORDLESS_PASSKEY_USER="${E2E_PASSWORDLESS_PASSKEY_USER:-}" \
     E2E_PASSKEY_USER="${E2E_PASSKEY_USER:-}" \

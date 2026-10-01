@@ -59,6 +59,34 @@ on:
         required: false
       E2E_MSENTRA_PASSWORD:
         required: false
+      E2E_MSENTRA_UNIX_IDS_USERNAME:
+        required: false
+      E2E_MSENTRA_UNIX_IDS_PASSWORD:
+        required: false
+      E2E_MSENTRA_UNIX_IDS_TOTP_SECRET:
+        required: false
+      E2E_MSENTRA_UNIX_IDS_NO_GID_USERNAME:
+        required: false
+      E2E_MSENTRA_UNIX_IDS_NO_GID_PASSWORD:
+        required: false
+      E2E_MSENTRA_UNIX_IDS_NO_GID_TOTP_SECRET:
+        required: false
+      E2E_MSENTRA_UNIX_IDS_UID_ATTRIBUTE:
+        required: false
+      E2E_MSENTRA_UNIX_IDS_GID_ATTRIBUTE:
+        required: false
+      E2E_MSENTRA_UNIX_IDS_EXPECTED_UID:
+        required: false
+      E2E_MSENTRA_UNIX_IDS_EXPECTED_GID:
+        required: false
+      E2E_MSENTRA_UNIX_IDS_EXPECTED_UGID:
+        required: false
+      E2E_MSENTRA_UNIX_IDS_GROUP:
+        required: false
+      E2E_MSENTRA_UNIX_IDS_GENERIC_GROUP:
+        required: false
+      E2E_MSENTRA_UNIX_IDS_NO_GID_EXPECTED_UID:
+        required: false
       E2E_MSENTRA_PASSWORDLESS_USERNAME:
         required: false
       E2E_MSENTRA_PASSKEY_USERNAME:
@@ -273,6 +301,22 @@ jobs:
           BROKER: ${{ inputs.broker }}
           E2E_TESTS: ${{ inputs.e2e-tests }}
           E2E_TEST_CASES: ${{ inputs.e2e-test-cases }}
+          E2E_UNIX_IDS_UID_ATTRIBUTE: ${{ secrets.E2E_MSENTRA_UNIX_IDS_UID_ATTRIBUTE || 'uidNumber' }}
+          E2E_UNIX_IDS_GID_ATTRIBUTE: ${{ secrets.E2E_MSENTRA_UNIX_IDS_GID_ATTRIBUTE || 'gidNumber' }}
+          E2E_UNIX_IDS_UID_SHORT_ATTRIBUTE: ${{ vars.E2E_UNIX_IDS_UID_SHORT_ATTRIBUTE || 'Linux_UID' }}
+          E2E_UNIX_IDS_GID_SHORT_ATTRIBUTE: ${{ vars.E2E_UNIX_IDS_GID_SHORT_ATTRIBUTE || 'Linux_GID' }}
+          E2E_UNIX_IDS_EXPECTED_UID: ${{ secrets.E2E_MSENTRA_UNIX_IDS_EXPECTED_UID }}
+          E2E_UNIX_IDS_EXPECTED_GID: ${{ secrets.E2E_MSENTRA_UNIX_IDS_EXPECTED_GID }}
+          E2E_UNIX_IDS_EXPECTED_UGID: ${{ secrets.E2E_MSENTRA_UNIX_IDS_EXPECTED_UGID }}
+          E2E_UNIX_IDS_GROUP: ${{ secrets.E2E_MSENTRA_UNIX_IDS_GROUP }}
+          E2E_UNIX_IDS_GENERIC_GROUP: ${{ secrets.E2E_MSENTRA_UNIX_IDS_GENERIC_GROUP }}
+          E2E_UNIX_IDS_NO_GID_EXPECTED_UID: ${{ secrets.E2E_MSENTRA_UNIX_IDS_NO_GID_EXPECTED_UID }}
+          E2E_UNIX_IDS_NO_GID_USER: ${{ secrets.E2E_MSENTRA_UNIX_IDS_NO_GID_USERNAME }}
+          E2E_UNIX_IDS_NO_GID_PASSWORD: ${{ secrets.E2E_MSENTRA_UNIX_IDS_NO_GID_PASSWORD }}
+          E2E_UNIX_IDS_NO_GID_TOTP_SECRET: ${{ secrets.E2E_MSENTRA_UNIX_IDS_NO_GID_TOTP_SECRET }}
+          E2E_UNIX_IDS_USER: ${{ secrets.E2E_MSENTRA_UNIX_IDS_USERNAME }}
+          E2E_UNIX_IDS_PASSWORD: ${{ secrets.E2E_MSENTRA_UNIX_IDS_PASSWORD }}
+          E2E_UNIX_IDS_TOTP_SECRET: ${{ secrets.E2E_MSENTRA_UNIX_IDS_TOTP_SECRET }}
           AUTHD_DEB: ${{ steps.download-authd-deb.outputs.deb }}
           APT_SOURCE: ${{ join(fromJSON(inputs.apt-sources), ',') }}
           AUTHD_APT_SOURCE: ${{ join(fromJSON(inputs.authd-apt-sources), ',') }}
