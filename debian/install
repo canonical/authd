@@ -6,6 +6,9 @@ usr/bin/authd ${env:AUTHD_DAEMONS_PATH}
 # Install CLI tool
 usr/bin/authctl /usr/bin/
 
+# Install the Entra Unix ID provisioning script
+scripts/apply-entra-unix-ids /usr/bin/
+
 # Install authd config file
 debian/authd-config/authd.yaml /etc/authd/
 

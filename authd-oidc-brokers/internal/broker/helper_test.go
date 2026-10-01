@@ -29,6 +29,10 @@ type brokerForTestConfig struct {
 	clientSecret                 string
 	forceAccessCheckWithProvider bool
 	registerDevice               bool
+	unixUIDAttribute             string
+	unixGIDAttribute             string
+	unixUIDRequired              bool
+	unixGIDRequired              bool
 	deviceAuthFlowDisabled       bool
 	entraAuthFlowDisabled        bool
 	allowedUsers                 map[string]struct{}
@@ -98,6 +102,9 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	}
 	if cfg.registerDevice {
 		cfg.SetRegisterDevice(cfg.registerDevice)
+	}
+	if cfg.unixUIDAttribute != "" || cfg.unixGIDAttribute != "" || cfg.unixUIDRequired || cfg.unixGIDRequired {
+		cfg.SetUnixAttributes(cfg.unixUIDAttribute, cfg.unixGIDAttribute, cfg.unixUIDRequired, cfg.unixGIDRequired)
 	}
 	if cfg.deviceAuthFlowDisabled || cfg.entraAuthFlowDisabled {
 		cfg.SetFlows(!cfg.deviceAuthFlowDisabled, !cfg.entraAuthFlowDisabled)

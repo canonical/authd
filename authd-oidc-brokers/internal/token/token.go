@@ -21,12 +21,23 @@ type AuthCachedInfo struct {
 	DeviceRegistrationData []byte
 	DeviceIsDisabled       bool
 	UserIsDisabled         bool
+	UnixAttributesEnriched *bool `json:",omitempty"`
+	// UnixAttributeNames are the attribute names that the Unix IDs in UserInfo
+	// were read from. A nil value means that the names are unknown, so the
+	// cached Unix IDs cannot be trusted.
+	UnixAttributeNames *UnixAttributeNames `json:",omitempty"`
 	// ObtainedViaEntraAuth is set when the token was obtained through the
 	// entra_auth flow. On a returning login it selects the refresh path:
 	// these tokens are refreshed as the Microsoft Broker App (public client, no
 	// client_secret) for the liveness/revocation check, rather than via the OIDC
 	// app refresh used by device-auth tokens.
 	ObtainedViaEntraAuth bool
+}
+
+// UnixAttributeNames are the Entra extension attribute names for the Unix UID and GID.
+type UnixAttributeNames struct {
+	UID string `json:",omitempty"`
+	GID string `json:",omitempty"`
 }
 
 // NewAuthCachedInfo creates a new AuthCachedInfo. It sets the provided token and rawIDToken and the provider-specific
