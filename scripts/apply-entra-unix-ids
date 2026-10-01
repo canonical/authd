@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+
+set -u
+
+apply=false
+authctl_command=${AUTHCTL:-authctl}
+token_path=
+
+fail() {
+	printf 'apply-entra-unix-ids: %s\n' "$1" >&2
+	exit 1
+}
+
+usage() {
+	cat <<'EOF'
+Usage: apply-entra-unix-ids [--apply] [--authctl PATH] TOKEN_JSON
+
+Read cached Microsoft Entra Unix IDs from one token.json file. Without
+--apply, print the planned authctl commands without changing the system.
+
+Application is not transactional: a later authctl command can fail after
+earlier commands have succeeded.
+EOF
+}
+
+while (($# > 0)); do
+	case "$1" in
+	--apply)
+		apply=true
+		shift
+		;;
+	--authctl)
+		(($# >= 2)) || fail "--authctl requires a path"
+		authctl_command=$2
+		shift 2
+		;;
+	-h|--help)
+		usage
+		exit 0
+		;;
+	-*)
+		fail "unknown option: $1"
+		;;
+	*)
+		[[ -z "$token_path" ]] || fail "exactly one token.json path is required"
+		token_path=$1
+		shift
+		;;
+	esac
+done
+
+[[ -n "$token_path" ]] || { usage >&2; exit 2; }
+[[ -f "$token_path" ]] || fail "token file does not exist: $token_path"
+command -v jq >/dev/null 2>&1 || fail "jq is required"
+
+token_json=$(jq -ces 'if length == 1 then .[0] else error("expected one JSON document") end' "$token_path") \
+	|| fail "invalid token.json: expected one JSON document"
+jq -e 'type == "object" and (.UserInfo | type) == "object" and (.UserInfo.groups == null or (.UserInfo.groups | type) == "array") and all((.UserInfo.groups // [])[]; type == "object")' <<<"$token_json" >/dev/null \
+	|| fail "invalid token.json: expected an object at .UserInfo and an array at .UserInfo.groups"
+
+if ! username=$(jq -er '.UserInfo.name | select(type == "string" and length > 0)' <<<"$token_json"); then
+	fail "invalid token.json: .UserInfo.name must be a non-empty string"
+fi
+
+validate_id() {
+	local label=$1
+	local value=$2
+
+	[[ "$value" =~ ^[1-9][0-9]*$ ]] || fail "$label must be a positive integer: $value"
+	if (( ${#value} > 10 )) || { (( ${#value} == 10 )) && [[ "$value" > "2147483647" ]]; }; then
+		fail "$label is outside the positive signed 32-bit range: $value"
+	fi
+	case "$value" in
+	65534|65535|4294967295)
+		fail "$label is reserved: $value"
+		;;
+	esac
+}
+
+uid_type=$(jq -r '.UserInfo.uid | type' <<<"$token_json") || fail "could not read cached UID type"
+uid=
+if [[ "$uid_type" == number ]]; then
+	uid=$(jq -r '.UserInfo.uid' <<<"$token_json") || fail "could not read cached UID"
+	validate_id "cached UID" "$uid"
+elif [[ "$uid_type" != null ]]; then
+	fail "invalid token.json: .UserInfo.uid must be a JSON number or null"
+fi
+
+declare -A gid_by_ugid=()
+declare -A gid_by_name=()
+declare -A ugid_by_gid=()
+declare -A group_index_by_ugid=()
+group_names=()
+group_ugids=()
+group_gids=()
+
+group_rows_json=$(jq -c '(.UserInfo.groups // [])[] | select((.ugid // "") != "" and .gid != null)' <<<"$token_json") \
+	|| fail "could not read cached groups"
+group_rows=()
+if [[ -n "$group_rows_json" ]]; then
+	mapfile -t group_rows <<<"$group_rows_json"
+fi
+for group_row in "${group_rows[@]}"; do
+	if ! group_name=$(jq -er '.name | select(type == "string" and length > 0) | ascii_downcase' <<<"$group_row"); then
+		fail "invalid token.json: each applied group must have a non-empty string name"
+	fi
+	if ! group_ugid=$(jq -er '.ugid | select(type == "string" and length > 0)' <<<"$group_row"); then
+		fail "invalid token.json: each applied group must have a non-empty string ugid"
+	fi
+	group_gid_type=$(jq -r '.gid | type' <<<"$group_row") || fail "could not read cached GID type"
+	[[ "$group_gid_type" == number ]] || fail "invalid token.json: group $group_name has a non-number gid"
+	group_gid=$(jq -r '.gid' <<<"$group_row") || fail "could not read cached GID"
+	validate_id "cached GID for group $group_name" "$group_gid"
+
+	if [[ ${gid_by_ugid[$group_ugid]+set} ]]; then
+		[[ "${gid_by_ugid[$group_ugid]}" == "$group_gid" ]] || fail "conflicting GIDs for Entra group $group_ugid"
+		[[ "${group_index_by_ugid[$group_ugid]}" == "$group_name" ]] || fail "one Entra group identity has multiple normalized names: $group_ugid"
+		continue
+	fi
+	if [[ ${gid_by_name[$group_name]+set} ]]; then
+		[[ "${gid_by_name[$group_name]}" == "$group_gid" ]] || fail "conflicting GIDs for normalized group name $group_name"
+		fail "multiple Entra groups use normalized group name $group_name"
+	fi
+	if [[ ${ugid_by_gid[$group_gid]+set} && "${ugid_by_gid[$group_gid]}" != "$group_ugid" ]]; then
+		fail "GID $group_gid is assigned to multiple Entra groups"
+	fi
+
+	gid_by_ugid[$group_ugid]=$group_gid
+	gid_by_name[$group_name]=$group_gid
+	ugid_by_gid[$group_gid]=$group_ugid
+	group_index_by_ugid[$group_ugid]=$group_name
+	group_names+=("$group_name")
+	group_ugids+=("$group_ugid")
+	group_gids+=("$group_gid")
+done
+
+if [[ -n "$uid" && ${ugid_by_gid[$uid]+set} ]]; then
+	collision_ugid=${ugid_by_gid[$uid]}
+	collision_name=${group_index_by_ugid[$collision_ugid]}
+	if [[ "$collision_name" != "${username,,}" ]]; then
+		fail "cached UID $uid conflicts with remote group $collision_name GID"
+	fi
+fi
+
+if [[ -z "$uid" && ${#group_names[@]} -eq 0 ]]; then
+	printf 'No cached Unix UID or remote group GID assignments found.\n'
+	exit 0
+fi
+
+if [[ "$apply" == true ]]; then
+	printf 'Applying cached assignments for %s:\n' "$username"
+else
+	printf 'Dry run; no changes will be made for %s:\n' "$username"
+fi
+if [[ -n "$uid" ]]; then
+	printf '  %q user set-uid %q %s\n' "$authctl_command" "$username" "$uid"
+	printf '  %q group set-gid %q %s\n' "$authctl_command" "$username" "$uid"
+fi
+for ((index = 0; index < ${#group_names[@]}; index++)); do
+	printf '  %q group set-gid %q %s  # Entra group %s\n' "$authctl_command" "${group_names[$index]}" "${group_gids[$index]}" "${group_ugids[$index]}"
+done
+
+[[ "$apply" == true ]] || exit 0
+command -v "$authctl_command" >/dev/null 2>&1 || [[ -x "$authctl_command" ]] || fail "authctl command not found: $authctl_command"
+printf 'Application is not transactional; a later authctl command may fail after earlier commands have succeeded.\n' >&2
+
+if [[ -n "$uid" ]] && ! "$authctl_command" user set-uid "$username" "$uid"; then
+	fail "authctl user set-uid failed; earlier changes, if any, were not rolled back"
+fi
+if [[ -n "$uid" ]] && ! "$authctl_command" group set-gid "$username" "$uid"; then
+	fail "authctl group set-gid failed for private group $username; earlier changes were not rolled back"
+fi
+for ((index = 0; index < ${#group_names[@]}; index++)); do
+	if ! "$authctl_command" group set-gid "${group_names[$index]}" "${group_gids[$index]}"; then
+		fail "authctl group set-gid failed for ${group_names[$index]}; earlier changes were not rolled back"
+	fi
+done

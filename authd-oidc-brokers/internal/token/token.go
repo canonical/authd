@@ -21,6 +21,7 @@ type AuthCachedInfo struct {
 	DeviceRegistrationData []byte
 	DeviceIsDisabled       bool
 	UserIsDisabled         bool
+	UnixAttributesEnriched *bool `json:",omitempty"`
 	// ObtainedViaEntraAuth is set when the token was obtained through the
 	// entra_auth flow. On a returning login it selects the refresh path:
 	// these tokens are refreshed as the Microsoft Broker App (public client, no

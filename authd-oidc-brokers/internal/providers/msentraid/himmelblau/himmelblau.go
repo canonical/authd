@@ -315,13 +315,14 @@ func AcquireAccessTokenForGraphAPI(
 	userToken, cleanup, err := acquireTokenByRefreshToken(
 		brokerClientApp,
 		token.RefreshToken,
-		[]string{"GroupMember.Read.All"},
+		[]string{"GroupMember.Read.All", "User.Read"},
 		"",
-		// Acquire the token on behalf of the user's OIDC app. This is what makes
-		// the user's groups resolvable; without a client ID here (and without an
-		// OIDC app registered in Entra) the group claims are unavailable. It is
-		// passed per-call rather than via broker_init because the per-call value
-		// takes precedence over the broker app's default on_behalf_of client ID.
+		// Acquire the token on behalf of the user's OIDC app. These scopes make
+		// both group membership and the /me UID lookup available; without a
+		// client ID here (and without an OIDC app registered in Entra), the
+		// directory data is unavailable. It is passed per-call rather than via
+		// broker_init because the per-call value takes precedence over the broker
+		// app's default on_behalf_of client ID.
 		clientID,
 		tpm,
 		machineKey,

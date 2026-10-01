@@ -34,6 +34,7 @@ import (
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
 	msgraphauth "github.com/microsoftgraph/msgraph-sdk-go-core/authentication"
 	msgraphmodels "github.com/microsoftgraph/msgraph-sdk-go/models"
+	msgraphusers "github.com/microsoftgraph/msgraph-sdk-go/users"
 	"golang.org/x/oauth2"
 )
 
@@ -549,8 +550,13 @@ func (p *Provider) fetchUserGroups(token *jwt.Token, msgraphHost string) ([]info
 // processSecurityGroups converts a slice of Graph API group objects into the
 // internal info.Group representation, deduplicating and normalising names.
 func processSecurityGroups(graphGroups []msgraphmodels.Groupable) ([]info.Group, error) {
+	return processSecurityGroupsWithGID(graphGroups, "", false)
+}
+
+func processSecurityGroupsWithGID(graphGroups []msgraphmodels.Groupable, gidAttribute string, gidRequired bool) ([]info.Group, error) {
 	var groups []info.Group
-	var msGroupNames []string
+	groupIndexes := make(map[string]int)
+	groupDisplayNames := make(map[string]string)
 	for _, msGroup := range graphGroups {
 		var group info.Group
 
@@ -568,15 +574,9 @@ func processSecurityGroups(graphGroups []msgraphmodels.Groupable) ([]info.Group,
 		}
 		msGroupName := *msGroupNamePtr
 
-		// Check if there is a name conflict with another group returned by the Graph API. It's not clear in which case
-		// the Graph API returns multiple groups with the same name (or the same group twice), but we've seen it happen
-		// in https://github.com/canonical/authd/issues/789.
-		if checkGroupIsDuplicate(msGroupName, msGroupNames) {
-			continue
-		}
-
 		// Microsoft groups are case-insensitive, see https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/resource-name-rules
-		group.Name = strings.ToLower(msGroupName)
+		normalizedName := strings.ToLower(msGroupName)
+		group.Name = normalizedName
 
 		isLocalGroup := strings.HasPrefix(group.Name, localGroupPrefix)
 		if isLocalGroup {
@@ -589,34 +589,51 @@ func processSecurityGroups(graphGroups []msgraphmodels.Groupable) ([]info.Group,
 			group.UGID = id
 		}
 
+		if !isLocalGroup && gidAttribute != "" {
+			gid, err := parseConfiguredUnixID(msGroup.GetAdditionalData(), gidAttribute, fmt.Sprintf("group %q", msGroupName), gidRequired)
+			if err != nil {
+				return nil, err
+			}
+			group.GID = gid
+		}
+
+		duplicateKey := "remote:" + group.Name
+		if isLocalGroup {
+			duplicateKey = "local:" + group.Name
+		}
+		if previousIndex, ok := groupIndexes[duplicateKey]; ok {
+			previous := &groups[previousIndex]
+			if !isLocalGroup && previous.GID != nil && group.GID != nil && *previous.GID != *group.GID {
+				log.Warningf(context.Background(), "The Microsoft Graph API returned duplicate group name %q with conflicting GIDs %d and %d; omitting the GID", group.Name, *previous.GID, *group.GID)
+				previous.GID = nil
+				if gidRequired {
+					return nil, fmt.Errorf("%w: duplicate group name %q has conflicting Unix GIDs", info.ErrUnixGIDRequired, group.Name)
+				}
+			} else if !isLocalGroup && (previous.GID == nil) != (group.GID == nil) {
+				log.Warningf(context.Background(), "The Microsoft Graph API returned duplicate group name %q with inconsistent Unix GID data; omitting the GID", group.Name)
+				previous.GID = nil
+			} else if msGroupName == groupDisplayNames[duplicateKey] {
+				log.Warningf(context.Background(), "The Microsoft Graph API returned the group %q multiple times, ignoring the duplicate", msGroupName)
+			} else {
+				log.Warningf(context.Background(), "The Microsoft Graph API returned the group %q multiple times, but with different case, ignoring the duplicate", msGroupName)
+			}
+			continue
+		}
+
 		groups = append(groups, group)
-		msGroupNames = append(msGroupNames, msGroupName)
+		groupIndexes[duplicateKey] = len(groups) - 1
+		groupDisplayNames[duplicateKey] = msGroupName
 	}
 
 	return groups, nil
 }
 
-func checkGroupIsDuplicate(groupName string, groupNames []string) bool {
-	for _, name := range groupNames {
-		// We don't want to treat local groups without the prefix as duplicates of non-local groups
-		// (e.g. "linux-sudo" and "sudo"), so we compare the names as returned by the Graph API - except that we
-		// ignore the case, because we use the group names in lowercase.
-		if !strings.EqualFold(name, groupName) {
-			// Not a duplicate
-			continue
-		}
-
-		// To make debugging easier, check if the groups differ in case, and mention that in the log message.
-		if name == groupName {
-			log.Warningf(context.Background(), "The Microsoft Graph API returned the group %q multiple times, ignoring the duplicate", name)
-		} else {
-			log.Warningf(context.Background(), "The Microsoft Graph API returned the group %[1]q multiple times, but with different case (%[2]q and %[1]q), ignoring the duplicate", groupName, name)
-		}
-
-		return true
+func groupSelectFields(gidAttribute string) []string {
+	fields := []string{"id", "displayName", "securityEnabled", "groupTypes"}
+	if gidAttribute != "" {
+		fields = append(fields, gidAttribute)
 	}
-
-	return false
+	return fields
 }
 
 func removeNonSecurityGroups(groups []msgraphmodels.Groupable) []msgraphmodels.Groupable {
@@ -678,15 +695,24 @@ func collectSecurityGroups(logContext string, getPage func(nextLink string) ([]m
 }
 
 func getSecurityGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.Groupable, error) {
+	return getSecurityGroupsWithSelect(context.Background(), client, nil)
+}
+
+func getSecurityGroupsWithSelect(ctx context.Context, client *msgraphsdk.GraphServiceClient, selectFields []string) ([]msgraphmodels.Groupable, error) {
 	requestBuilder := client.Me().TransitiveMemberOf().GraphGroup()
 	return collectSecurityGroups("", func(nextLink string) ([]msgraphmodels.Groupable, *string, error) {
 		rb := requestBuilder
+		var requestConfiguration *msgraphusers.ItemTransitiveMemberOfGraphGroupRequestBuilderGetRequestConfiguration
 		if nextLink != "" {
 			rb = requestBuilder.WithUrl(nextLink)
+		} else if len(selectFields) > 0 {
+			requestConfiguration = &msgraphusers.ItemTransitiveMemberOfGraphGroupRequestBuilderGetRequestConfiguration{
+				QueryParameters: &msgraphusers.ItemTransitiveMemberOfGraphGroupRequestBuilderGetQueryParameters{Select: selectFields},
+			}
 		}
-		result, err := rb.Get(context.Background(), nil)
+		result, err := rb.Get(ctx, requestConfiguration)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get user groups: %v", err)
+			return nil, nil, fmt.Errorf("failed to get user groups: %w", err)
 		}
 		if result == nil {
 			log.Debug(context.Background(), "Got nil response from Microsoft Graph API for user's groups, assuming that user is not a member of any group.")
@@ -700,15 +726,24 @@ func getSecurityGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.G
 // the application-permission endpoint /users/{id}/transitiveMemberOf/microsoft.graph.group.
 // This requires GroupMember.Read.All Application permission and an app-only token.
 func getSecurityGroupsByUserID(client *msgraphsdk.GraphServiceClient, userID string) ([]msgraphmodels.Groupable, error) {
+	return getSecurityGroupsByUserIDWithSelect(context.Background(), client, userID, nil)
+}
+
+func getSecurityGroupsByUserIDWithSelect(ctx context.Context, client *msgraphsdk.GraphServiceClient, userID string, selectFields []string) ([]msgraphmodels.Groupable, error) {
 	requestBuilder := client.Users().ByUserId(userID).TransitiveMemberOf().GraphGroup()
 	return collectSecurityGroups(fmt.Sprintf(" for user %s", userID), func(nextLink string) ([]msgraphmodels.Groupable, *string, error) {
 		rb := requestBuilder
+		var requestConfiguration *msgraphusers.ItemTransitiveMemberOfGraphGroupRequestBuilderGetRequestConfiguration
 		if nextLink != "" {
 			rb = requestBuilder.WithUrl(nextLink)
+		} else if len(selectFields) > 0 {
+			requestConfiguration = &msgraphusers.ItemTransitiveMemberOfGraphGroupRequestBuilderGetRequestConfiguration{
+				QueryParameters: &msgraphusers.ItemTransitiveMemberOfGraphGroupRequestBuilderGetQueryParameters{Select: selectFields},
+			}
 		}
-		result, err := rb.Get(context.Background(), nil)
+		result, err := rb.Get(ctx, requestConfiguration)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get user groups by user ID: %v", err)
+			return nil, nil, fmt.Errorf("failed to get user groups by user ID: %w", err)
 		}
 		if result == nil {
 			log.Debug(context.Background(), "Got nil response from Microsoft Graph API for user's groups, assuming that user is not a member of any group.")

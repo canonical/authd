@@ -1,6 +1,7 @@
 package token_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -124,4 +125,57 @@ func TestLoadAuthInfo(t *testing.T) {
 			require.Equal(t, tc.expectedRet, got, "LoadAuthInfo should return the expected value")
 		})
 	}
+}
+
+func TestCacheAuthInfoRoundTripsUnixIDsAndPreservesCacheLayout(t *testing.T) {
+	t.Parallel()
+
+	uid := uint32(1001)
+	gid := uint32(2001)
+	cached := &token.AuthCachedInfo{
+		Token: &oauth2.Token{AccessToken: "access", RefreshToken: "refresh"},
+		UserInfo: info.User{
+			Name:   "alice",
+			UID:    &uid,
+			Groups: []info.Group{{Name: "engineering", UGID: "group-id", GID: &gid}},
+		},
+	}
+	tokenPath := filepath.Join(t.TempDir(), "issuer", "provider-id", "token.json")
+
+	require.NoError(t, token.CacheAuthInfo(tokenPath, cached))
+	fileInfo, err := os.Stat(tokenPath)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0600), fileInfo.Mode().Perm())
+	directoryInfo, err := os.Stat(filepath.Dir(tokenPath))
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0700), directoryInfo.Mode().Perm())
+
+	data, err := os.ReadFile(tokenPath)
+	require.NoError(t, err)
+	var raw map[string]any
+	require.NoError(t, json.Unmarshal(data, &raw))
+	userInfo, ok := raw["UserInfo"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, float64(1001), userInfo["uid"])
+	groups, ok := userInfo["groups"].([]any)
+	require.True(t, ok)
+	firstGroup, ok := groups[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, float64(2001), firstGroup["gid"])
+
+	loaded, err := token.LoadAuthInfo(tokenPath)
+	require.NoError(t, err)
+	require.Equal(t, cached.UserInfo, loaded.UserInfo)
+}
+
+func TestLoadAuthInfoAcceptsLegacyUserInfoWithoutUnixIDs(t *testing.T) {
+	t.Parallel()
+
+	tokenPath := filepath.Join(t.TempDir(), "token.json")
+	require.NoError(t, os.WriteFile(tokenPath, []byte(`{"UserInfo":{"name":"alice","groups":[{"name":"engineering","ugid":"group-id"}]}}`), 0600))
+
+	loaded, err := token.LoadAuthInfo(tokenPath)
+	require.NoError(t, err)
+	require.Nil(t, loaded.UserInfo.UID)
+	require.Nil(t, loaded.UserInfo.Groups[0].GID)
 }
