@@ -1,6 +1,7 @@
 package info_test
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -73,6 +74,76 @@ func TestNewUser(t *testing.T) {
 			require.Equal(t, wantShell, got.Shell, "Shell does not match the expected value")
 			require.Equal(t, tc.gecos, got.Gecos, "Gecos does not match the expected value")
 			require.Equal(t, tc.groups, got.Groups, "Groups do not match the expected value")
+		})
+	}
+}
+
+func TestUserAndGroupIDsAreOptionalJSONFields(t *testing.T) {
+	t.Parallel()
+
+	uid := uint32(1001)
+	gid := uint32(2001)
+	user := info.User{
+		Name: "alice@example.com",
+		Groups: []info.Group{
+			{Name: "engineering", UGID: "group-id", GID: &gid},
+			{Name: "local", GID: nil},
+		},
+		UID: &uid,
+	}
+
+	data, err := json.Marshal(user)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"name":"alice@example.com","provider_id":"","dir":"","shell":"","gecos":"","groups":[{"name":"engineering","ugid":"group-id","gid":2001},{"name":"local","ugid":""}],"uid":1001}`, string(data))
+
+	var roundTripped info.User
+	require.NoError(t, json.Unmarshal(data, &roundTripped))
+	require.Equal(t, user, roundTripped)
+
+	withoutIDs := []byte(`{"name":"alice@example.com","groups":[{"name":"engineering","ugid":"group-id"}]}`)
+	var legacy info.User
+	require.NoError(t, json.Unmarshal(withoutIDs, &legacy))
+	require.Nil(t, legacy.UID)
+	require.Nil(t, legacy.Groups[0].GID)
+}
+
+func TestKeepCachedGIDs(t *testing.T) {
+	t.Parallel()
+
+	cachedGID := uint32(2001)
+	freshGID := uint32(3001)
+	tests := map[string]struct {
+		groups []info.Group
+		cached []info.Group
+		want   []info.Group
+	}{
+		"Keeps_cached_GID_of_the_same_group": {
+			groups: []info.Group{{Name: "engineering", UGID: "group-id"}},
+			cached: []info.Group{{Name: "engineering", UGID: "group-id", GID: &cachedGID}},
+			want:   []info.Group{{Name: "engineering", UGID: "group-id", GID: &cachedGID}},
+		},
+		"Fresh_GID_is_not_replaced_by_cached_GID": {
+			groups: []info.Group{{Name: "engineering", UGID: "group-id", GID: &freshGID}},
+			cached: []info.Group{{Name: "engineering", UGID: "group-id", GID: &cachedGID}},
+			want:   []info.Group{{Name: "engineering", UGID: "group-id", GID: &freshGID}},
+		},
+		"Local_groups_are_not_matched_by_name": {
+			groups: []info.Group{{Name: "sudo"}},
+			cached: []info.Group{{Name: "sudo", GID: &cachedGID}},
+			want:   []info.Group{{Name: "sudo"}},
+		},
+		"Groups_missing_from_cache_stay_without_GID": {
+			groups: []info.Group{{Name: "ops", UGID: "new-group-id"}},
+			cached: []info.Group{{Name: "engineering", UGID: "group-id", GID: &cachedGID}},
+			want:   []info.Group{{Name: "ops", UGID: "new-group-id"}},
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			info.KeepCachedGIDs(tc.groups, tc.cached)
+			require.Equal(t, tc.want, tc.groups)
 		})
 	}
 }
