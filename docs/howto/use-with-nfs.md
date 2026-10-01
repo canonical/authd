@@ -14,6 +14,13 @@ machines, which leads to permission issues.
 To avoid these issues, you can use NFS with ID mapping and Kerberos. This
 ensures that the UIDs and GIDs are mapped correctly across all machines.
 
+If the deployment uses the Microsoft Entra Unix ID feature, administrators can
+apply the same cached UID and group GIDs on every authd-enabled machine. This
+provides stable numeric ownership for shared files. The existing NFS ID
+mapping and Kerberos guidance remains valid and may still be preferred for
+larger deployments or mixed identity sources. See [Configure stable Unix IDs
+from Entra ID](configure-entra-unix-ids) for the provisioning workflow.
+
 ## Setting up NFS with IDMAP and Kerberos
 
 This guide will walk you through setting up an NFS server with ID mapping and
