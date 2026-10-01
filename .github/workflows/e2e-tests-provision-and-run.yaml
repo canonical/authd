@@ -119,12 +119,53 @@ jobs:
             ) }}
           fail-on-cache-miss: false
 
+      - name: Prepare APT archive cache key
+        id: apt-cache-key
+        if: steps.restore-cache.outputs.cache-hit != 'true' || inputs.force-fresh-image
+        run: |
+          . /etc/os-release
+          echo "codename=${VERSION_CODENAME}" >> "$GITHUB_OUTPUT"
+          echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached APT archives
+        id: apt-archives-cache
+        if: steps.restore-cache.outputs.cache-hit != 'true' || inputs.force-fresh-image
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/e2e-apt-cache/archives
+          key: >-
+            e2e-apt-archives-${{ runner.os }}-${{ runner.arch }}-${{ steps.apt-cache-key.outputs.codename }}-${{ hashFiles('e2e-tests/vm/install-provision-deps.sh') }}-${{ steps.apt-cache-key.outputs.week }}
+          restore-keys: |
+            e2e-apt-archives-${{ runner.os }}-${{ runner.arch }}-${{ steps.apt-cache-key.outputs.codename }}-
+
+      - name: Configure APT archive cache
+        if: steps.restore-cache.outputs.cache-hit != 'true' || inputs.force-fresh-image
+        run: |
+          echo "APT archive cache exact hit: ${{ steps.apt-archives-cache.outputs.cache-hit }}"
+          bash .github/scripts/configure-apt-archive-cache.sh
+
       - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
         if: steps.restore-cache.outputs.cache-hit != 'true' || inputs.force-fresh-image
 
       - name: Install APT dependencies for VM provisioning
+        id: install-provision-deps
         if: steps.restore-cache.outputs.cache-hit != 'true' || inputs.force-fresh-image
         run: ./${{ env.E2E_TESTS_DIR }}/vm/install-provision-deps.sh
+
+      - name: Clean and report APT archive cache
+        if: steps.install-provision-deps.outcome == 'success'
+        run: |
+          sudo apt-get autoclean
+          sudo chown -R "$(id -u):$(id -g)" "${RUNNER_TEMP}/e2e-apt-cache/archives"
+          du -sh "${RUNNER_TEMP}/e2e-apt-cache/archives"
+
+      - name: Save APT archives cache
+        if: steps.install-provision-deps.outcome == 'success' && steps.apt-archives-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/e2e-apt-cache/archives
+          key: >-
+            e2e-apt-archives-${{ runner.os }}-${{ runner.arch }}-${{ steps.apt-cache-key.outputs.codename }}-${{ hashFiles('e2e-tests/vm/install-provision-deps.sh') }}-${{ steps.apt-cache-key.outputs.week }}
 
       - name: Set up SSH keys for the VM provisioning
         id: set-ssh-keys
