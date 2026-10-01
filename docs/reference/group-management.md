@@ -61,3 +61,17 @@ scope, so the groups are resolved in one of two ways:
 If neither device registration nor a client secret is available while the
 **Entra authentication** flow is enabled, the broker fails to start because
 group membership cannot be resolved.
+
+### Stable group GIDs
+
+The broker can cache a Unix GID from a configured Entra group extension
+property. It does not apply the GID during login. Administrators can review the
+cached value and run `authctl group set-gid <group> <gid>`, or use the
+dry-run-first `apply-entra-unix-ids` command. The command uses the Entra
+group object ID in `ugid` for identity and conflict checks, and passes the
+normalized group name to `authctl`.
+
+Groups named with the `linux-` prefix are local mappings. Their `ugid` is empty,
+they do not receive a remote GID, and they are exempt from required remote-GID
+checks. See [Configure stable Unix IDs from Entra ID](howto::configure-entra-unix-ids)
+for registration, cache inspection, and failure behavior.
