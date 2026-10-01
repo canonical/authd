@@ -228,11 +228,14 @@ package under test.
 
 To run only selected end-to-end test suites, add an `e2e-tests:` line to the
 pull request description, followed by a space- or comma-separated list of suite
-filenames. Repeat the marker to select more than one suite:
+filenames or shell-style glob patterns (`*`, `?`, and bracket expressions).
+Patterns match `.robot` files directly under `e2e-tests/tests`; a pattern that
+matches no suites fails the workflow. Repeat the marker to select more than
+one suite:
 
 ```text
-e2e-tests: login_gdm.robot
-e2e-tests: login.robot
+e2e-tests: login*.robot
+e2e-tests: migration*.robot
 ```
 
 To run only selected test cases from the selected suites, add one or more

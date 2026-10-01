@@ -75,7 +75,7 @@ on:
         default: ''
         type: string
       e2e-tests:
-        description: 'e2e-tests: Optional comma- or space-separated test suite list; empty runs the full suite'
+        description: 'e2e-tests: Optional comma- or space-separated suite filenames or glob patterns; empty runs the full suite'
         required: false
         default: ''
         type: string
