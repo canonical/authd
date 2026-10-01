@@ -202,6 +202,18 @@ func (b *Broker) GetNextAuthModes(sessionID string) []string {
 	return session.nextAuthModes
 }
 
+// MFAFlowForSession returns the MFA flow the specified session currently holds.
+func (b *Broker) MFAFlowForSession(sessionID string) *himmelblau.MFAFlowState {
+	b.currentSessionsMu.Lock()
+	defer b.currentSessionsMu.Unlock()
+
+	session, ok := b.currentSessions[sessionID]
+	if !ok {
+		return nil
+	}
+	return session.mfaFlowActive
+}
+
 // SetNextAuthModes sets the next auth mode of the specified session.
 func (b *Broker) SetNextAuthModes(sessionID string, authModes []string) {
 	b.currentSessionsMu.Lock()
