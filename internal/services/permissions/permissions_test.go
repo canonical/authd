@@ -24,27 +24,33 @@ func TestNew(t *testing.T) {
 func TestCheckRequestIsFromRoot(t *testing.T) {
 	t.Parallel()
 
+	const nonRootUID uint32 = 1
+
 	tests := map[string]struct {
-		currentUserNotRoot bool
-		noPeerInfo         bool
-		noPeerAuthInfo     bool
+		peerIsNotRoot  bool
+		noPeerInfo     bool
+		noPeerAuthInfo bool
 
 		wantErr bool
 	}{
 		"Granted_if_current_user_considered_as_root": {},
 
-		"Error_if_current_user_is_not_root": {currentUserNotRoot: true, wantErr: true},
-		"Error_if_missing_peer_info":        {noPeerInfo: true, wantErr: true},
-		"Error_if_missing_peer_auth_info":   {noPeerAuthInfo: true, wantErr: true},
+		"Error_if_peer_is_not_root":       {peerIsNotRoot: true, wantErr: true},
+		"Error_if_missing_peer_info":      {noPeerInfo: true, wantErr: true},
+		"Error_if_missing_peer_auth_info": {noPeerAuthInfo: true, wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := setupPermissionTestContext(t, tc.noPeerInfo, tc.noPeerAuthInfo)
+			peerUID := permissions.CurrentUserUID()
+			if tc.peerIsNotRoot {
+				peerUID = nonRootUID
+			}
+			ctx := setupPermissionTestContext(t, tc.noPeerInfo, tc.noPeerAuthInfo, peerUID)
 
 			var opts []permissions.Option
-			if !tc.currentUserNotRoot {
+			if !tc.peerIsNotRoot {
 				opts = append(opts, permissions.Z_ForTests_WithCurrentUserAsRoot())
 			}
 			pm := permissions.New(opts...)
@@ -69,7 +75,7 @@ func TestWithUnixPeerCreds(t *testing.T) {
 }
 
 // setupPermissionTestContext creates a context with peer credentials for testing.
-func setupPermissionTestContext(t *testing.T, noPeerInfo, noAuthInfo bool) context.Context {
+func setupPermissionTestContext(t *testing.T, noPeerInfo, noAuthInfo bool, peerUID uint32) context.Context {
 	t.Helper()
 
 	ctx := context.Background()
@@ -79,13 +85,12 @@ func setupPermissionTestContext(t *testing.T, noPeerInfo, noAuthInfo bool) conte
 
 	var authInfo credentials.AuthInfo
 	if !noAuthInfo {
-		uid := permissions.CurrentUserUID()
 		pid := os.Getpid()
 		if pid > math.MaxInt32 {
 			require.Fail(t, "Setup: pid is too large to be converted to int32: %d", pid)
 		}
 		//nolint:gosec // we checked for an integer overflow above.
-		authInfo = permissions.NewTestPeerAuthInfo(uid, int32(pid))
+		authInfo = permissions.NewTestPeerAuthInfo(peerUID, int32(pid))
 	}
 	p := peer.Peer{
 		AuthInfo: authInfo,
