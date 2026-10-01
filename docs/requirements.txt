@@ -23,7 +23,7 @@ sphinx-ubuntu-images~=0.1
 sphinx-youtube-links~=0.1
 
 # Other dependencies
-packaging~=26.1
+packaging~=26.3
 sphinxcontrib-svg2pdfconverter[CairoSVG]~=2.1
 sphinx-last-updated-by-git~=0.3
 sphinx-sitemap~=2.9
