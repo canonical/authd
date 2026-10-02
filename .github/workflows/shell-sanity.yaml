@@ -27,7 +27,7 @@ concurrency:
 jobs:
   shell-sanity:
     name: "Shell: Code sanity"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - name: Run ShellCheck

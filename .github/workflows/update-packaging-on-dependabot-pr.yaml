@@ -63,7 +63,7 @@ jobs:
         startsWith(github.event.pull_request.head.ref, 'dependabot/cargo/') ||
         startsWith(github.event.pull_request.head.ref, 'dependabot/go_modules/')
       )
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     container:
       image: ubuntu:noble
     env:
@@ -128,7 +128,7 @@ jobs:
     # This job consumes the Cargo.lock and debian/control artifact from
     # generate-cargo to recreate the Rust vendor tree consistently.
     needs: generate-cargo
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     container:
       image: ubuntu:devel
     outputs:
@@ -257,7 +257,7 @@ jobs:
     name: Commit and push regenerated packaging files
     needs: generate-copyright
     if: needs.generate-copyright.outputs.changed == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       contents: write
 

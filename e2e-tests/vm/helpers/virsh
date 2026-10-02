@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-exec sudo -E /usr/bin/virsh "$@"
+exec sudo LIBVIRT_DEFAULT_URI="${LIBVIRT_DEFAULT_URI:-qemu:///system}" /usr/bin/virsh "$@"
