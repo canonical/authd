@@ -8,6 +8,7 @@ Library             ./VideoLogger.py    AS    VideoLogger
 Library             ./VNCRecorder.py   AS    VNCRecorder
 Library             ./Snapshot.py    AS    Snapshot
 Library             ./SSH.py    AS    SSH
+Library             Collections
 Library             Process
 Library             OperatingSystem
 Library             String
@@ -261,21 +262,37 @@ Cancel Operation
 
 Update Authd
     [Arguments]    ${skip_if_authd_stable_ppa_is_unavailable}=${False}
-    ${apt_source}=    Get Environment Variable    APT_SOURCE    ${EMPTY}
-    ${authd_apt_source}=    Get Environment Variable    AUTHD_APT_SOURCE    ${EMPTY}
+    ${apt_source_list}=    Get Environment Variable    APT_SOURCE    ${EMPTY}
+    ${authd_apt_source_list}=    Get Environment Variable    AUTHD_APT_SOURCE    ${EMPTY}
     ${authd_apt_source_base}=    Get Environment Variable    AUTHD_APT_SOURCE_BASE    ${EMPTY}
     ${authd_deb}=    Get Environment Variable    AUTHD_DEB    ${EMPTY}
-    IF    $apt_source == ''
-        ${apt_source}=    Set Variable    ppa:ubuntu-enterprise-desktop/authd-edge
+    IF    $apt_source_list == ''
+        ${release_codename}=    SSH.Execute    . /etc/os-release && printf '%s' "$VERSION_CODENAME"
+        ${apt_source_list}=    Set Variable    ${release_codename}-proposed,ppa:ubuntu-enterprise-desktop/authd-edge
+    END
+    ${apt_source_list}=    Replace String    ${apt_source_list}    ,    ${SPACE}
+    ${apt_sources}=    Split String    ${apt_source_list}
+
+    ${added_sources}=    Create List
+    FOR    ${source}    IN    @{apt_sources}
+        Add APT Source If Needed    ${source}    ${added_sources}
+    END
+    IF    $authd_apt_source_list == ''
+        ${authd_sources}=    Set Variable    ${apt_sources}
+    ELSE
+        ${authd_apt_source_list}=    Replace String    ${authd_apt_source_list}    ,    ${SPACE}
+        ${authd_sources}=    Split String    ${authd_apt_source_list}
     END
 
-    Add APT Source    ${apt_source}
-    IF    $authd_apt_source != '' and $authd_apt_source != $apt_source
-        Add APT Source    ${authd_apt_source}
+    FOR    ${source}    IN    @{authd_sources}
+        Add APT Source If Needed    ${source}    ${added_sources}
     END
-
-    ${authd_policy_source}=    Set Variable If    $authd_apt_source != ''    ${authd_apt_source}    ${apt_source}
-    Configure APT Policy    ${apt_source}    ${authd_policy_source}
+    Configure APT Policy    ${apt_sources}    ${authd_sources}
+    ${release_codename}=    SSH.Execute    . /etc/os-release && printf '%s' "$VERSION_CODENAME"
+    ${default_archive_sources}=    Create List    ${release_codename}    ${release_codename}-updates
+    ...    ${release_codename}-security    ${release_codename}-backports
+    ${authd_candidate_sources}=    Combine Lists    ${apt_sources}    ${authd_sources}    ${default_archive_sources}
+    ${authd_candidate_sources}=    Remove Duplicates    ${authd_candidate_sources}
 
     ${apt_stdout}    ${apt_stderr}    ${apt_status}=    SSH.Execute With Status    apt-get update    timeout=300
     IF    $apt_status != 0
@@ -294,8 +311,7 @@ Update Authd
         Fail    apt-get update failed with exit status ${apt_status}; stdout: ${apt_stdout}; stderr: ${apt_stderr}
     END
     # authd constrains gnome-shell with a compatibility rule. Explicitly
-    # install it from the selected source because the base image's archive
-    # version may not satisfy authd's rule.
+    # install it because the base image's version may not satisfy authd's rule.
     SSH.Execute    apt-get install -y gnome-shell    timeout=120
     IF    $authd_deb != ''
         SSH.Copy To VM    ${authd_deb}    /home/ubuntu/authd-under-test.deb
@@ -310,17 +326,35 @@ Update Authd
         Verify Local Authd
     ELSE
         SSH.Execute    apt-get install -y --allow-downgrades authd    timeout=120
-        Verify Authd Source    ${authd_policy_source}
+        Verify Authd Source    ${authd_candidate_sources}
     END
 
 
 Add APT Source
     [Arguments]    ${source}
+    ${release_codename}=    SSH.Execute    . /etc/os-release && printf '%s' "$VERSION_CODENAME"
+    ${default_archive_sources}=    Create List    ${release_codename}    ${release_codename}-updates
+    ...    ${release_codename}-security    ${release_codename}-backports
+    ${is_default_archive}=    Run Keyword And Return Status
+    ...    List Should Contain Value    ${default_archive_sources}    ${source}
+    IF    $is_default_archive
+        RETURN
+    END
     IF    '${source}'.startswith('ppa:')
         SSH.Execute    add-apt-repository -y -n ppa:${source[4:]}    timeout=300
     ELSE
         SSH.Execute
         ...    add-apt-repository -y -n -S 'deb http://archive.ubuntu.com/ubuntu/ ${source} main restricted universe multiverse'
+    END
+
+
+Add APT Source If Needed
+    [Arguments]    ${source}    ${added_sources}
+    ${already_added}=    Run Keyword And Return Status
+    ...    List Should Contain Value    ${added_sources}    ${source}
+    IF    not $already_added
+        Add APT Source    ${source}
+        Append To List    ${added_sources}    ${source}
     END
 
 
@@ -346,18 +380,54 @@ Get APT Source Reference
 
 
 Configure APT Policy
-    [Arguments]    ${system_source}    ${authd_source}
-    ${system_pin}=    Get APT Pin    ${system_source}
-    ${authd_pin}=    Get APT Pin    ${authd_source}
+    [Arguments]    ${system_sources}    ${authd_sources}
+    ${release_codename}=    SSH.Execute    . /etc/os-release && printf '%s' "$VERSION_CODENAME"
+    ${system_policy_sources}=    Create List    @{system_sources}
+    ${default_archive_sources}=    Create List    ${release_codename}    ${release_codename}-updates
+    ...    ${release_codename}-security    ${release_codename}-backports
+    FOR    ${source}    IN    @{default_archive_sources}
+        Append To List    ${system_policy_sources}    ${source}
+    END
+    ${system_policy_sources}=    Remove Duplicates    ${system_policy_sources}
+    ${authd_fallback_sources}=    Create List
     SSH.Execute
-    ...    mkdir -p /etc/apt/preferences.d && printf '%s\n' 'Package: *' 'Pin: release ${system_pin}' 'Pin-Priority: 990' > /etc/apt/preferences.d/99-e2e-system-source
-    SSH.Execute
-    ...    printf '%s\n' 'Package: authd' 'Pin: release ${authd_pin}' 'Pin-Priority: 1001' > /etc/apt/preferences.d/99-e2e-authd-source
-    IF    $system_source != $authd_source
+    ...    rm -f /etc/apt/preferences.d/99-e2e-system-source /etc/apt/preferences.d/99-e2e-authd-source /etc/apt/preferences.d/98-e2e-authd-source-fallback
+    FOR    ${source}    IN    @{system_policy_sources}
+        ${system_pin}=    Get APT Pin    ${source}
         SSH.Execute
-        ...    printf '%s\n' 'Package: *' 'Pin: release ${authd_pin}' 'Pin-Priority: 100' > /etc/apt/preferences.d/98-e2e-authd-source-fallback
-    ELSE
-        SSH.Execute    rm -f /etc/apt/preferences.d/98-e2e-authd-source-fallback
+        ...    printf '%s\n' 'Package: *' 'Pin: release ${system_pin}' 'Pin-Priority: 500' '' >> /etc/apt/preferences.d/99-e2e-system-source
+    END
+    FOR    ${source}    IN    @{authd_sources}
+        ${source_is_system}=    Run Keyword And Return Status
+        ...    List Should Contain Value    ${system_policy_sources}    ${source}
+        IF    not $source_is_system
+            ${source_is_default_archive}=    Run Keyword And Return Status
+            ...    List Should Contain Value    ${default_archive_sources}    ${source}
+            IF    not $source_is_default_archive
+                Append To List    ${authd_fallback_sources}    ${source}
+                ${authd_pin}=    Get APT Pin    ${source}
+                SSH.Execute
+                ...    printf '%s\n' 'Package: authd' 'Pin: release ${authd_pin}' 'Pin-Priority: 500' '' >> /etc/apt/preferences.d/99-e2e-authd-source
+            END
+        END
+    END
+    ${known_authd_ppas}=    Create List    ppa:ubuntu-enterprise-desktop/authd
+    ...    ppa:ubuntu-enterprise-desktop/authd-edge    ppa:ubuntu-enterprise-desktop/authd-dev
+    FOR    ${source}    IN    @{known_authd_ppas}
+        ${source_is_system}=    Run Keyword And Return Status
+        ...    List Should Contain Value    ${system_policy_sources}    ${source}
+        ${source_is_authd}=    Run Keyword And Return Status
+        ...    List Should Contain Value    ${authd_sources}    ${source}
+        ${source_is_fallback}=    Run Keyword And Return Status
+        ...    List Should Contain Value    ${authd_fallback_sources}    ${source}
+        IF    not $source_is_system and not $source_is_authd and not $source_is_fallback
+            Append To List    ${authd_fallback_sources}    ${source}
+        END
+    END
+    FOR    ${source}    IN    @{authd_fallback_sources}
+        ${authd_pin}=    Get APT Pin    ${source}
+        SSH.Execute
+        ...    printf '%s\n' 'Package: *' 'Pin: release ${authd_pin}' 'Pin-Priority: 100' '' >> /etc/apt/preferences.d/98-e2e-authd-source-fallback
     END
 
 
@@ -369,13 +439,21 @@ Configure Local Authd Policy
 
 
 Verify Authd Source
-    [Arguments]    ${source}
-    ${source_reference}=    Get APT Source Reference    ${source}
+    [Arguments]    ${sources}
     ${installed_version}=    SSH.Execute    dpkg-query -W -f='\${Version}' authd
     ${candidate_version}=    SSH.Execute    apt-cache policy authd | awk '/Candidate:/ { print $2; exit }'
     Should Be Equal    ${candidate_version}    ${installed_version}
     ${policy}=    SSH.Execute    apt-cache policy authd
-    Should Contain    ${policy}    ${source_reference}
+    ${found_source}=    Set Variable    ${False}
+    FOR    ${source}    IN    @{sources}
+        ${source_reference}=    Get APT Source Reference    ${source}
+        ${found_source}=    Run Keyword And Return Status
+        ...    Should Contain    ${policy}    ${source_reference}
+        IF    $found_source
+            BREAK
+        END
+    END
+    Should Be True    $found_source
 
 
 Verify Local Authd
