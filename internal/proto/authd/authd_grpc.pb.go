@@ -355,6 +355,7 @@ const (
 	UserService_LockUser_FullMethodName       = "/authd.UserService/LockUser"
 	UserService_UnlockUser_FullMethodName     = "/authd.UserService/UnlockUser"
 	UserService_SetUserID_FullMethodName      = "/authd.UserService/SetUserID"
+	UserService_SetUserName_FullMethodName    = "/authd.UserService/SetUserName"
 	UserService_SetGroupID_FullMethodName     = "/authd.UserService/SetGroupID"
 	UserService_SetShell_FullMethodName       = "/authd.UserService/SetShell"
 	UserService_SetHomeDir_FullMethodName     = "/authd.UserService/SetHomeDir"
@@ -375,6 +376,7 @@ type UserServiceClient interface {
 	LockUser(ctx context.Context, in *LockUserRequest, opts ...grpc.CallOption) (*Empty, error)
 	UnlockUser(ctx context.Context, in *UnlockUserRequest, opts ...grpc.CallOption) (*Empty, error)
 	SetUserID(ctx context.Context, in *SetUserIDRequest, opts ...grpc.CallOption) (*SetUserIDResponse, error)
+	SetUserName(ctx context.Context, in *SetUserNameRequest, opts ...grpc.CallOption) (*SetUserNameResponse, error)
 	SetGroupID(ctx context.Context, in *SetGroupIDRequest, opts ...grpc.CallOption) (*SetGroupIDResponse, error)
 	SetShell(ctx context.Context, in *SetShellRequest, opts ...grpc.CallOption) (*SetShellResponse, error)
 	SetHomeDir(ctx context.Context, in *SetHomeDirRequest, opts ...grpc.CallOption) (*SetHomeDirResponse, error)
@@ -447,6 +449,16 @@ func (c *userServiceClient) SetUserID(ctx context.Context, in *SetUserIDRequest,
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SetUserIDResponse)
 	err := c.cc.Invoke(ctx, UserService_SetUserID_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) SetUserName(ctx context.Context, in *SetUserNameRequest, opts ...grpc.CallOption) (*SetUserNameResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetUserNameResponse)
+	err := c.cc.Invoke(ctx, UserService_SetUserName_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -543,6 +555,7 @@ type UserServiceServer interface {
 	LockUser(context.Context, *LockUserRequest) (*Empty, error)
 	UnlockUser(context.Context, *UnlockUserRequest) (*Empty, error)
 	SetUserID(context.Context, *SetUserIDRequest) (*SetUserIDResponse, error)
+	SetUserName(context.Context, *SetUserNameRequest) (*SetUserNameResponse, error)
 	SetGroupID(context.Context, *SetGroupIDRequest) (*SetGroupIDResponse, error)
 	SetShell(context.Context, *SetShellRequest) (*SetShellResponse, error)
 	SetHomeDir(context.Context, *SetHomeDirRequest) (*SetHomeDirResponse, error)
@@ -578,6 +591,9 @@ func (UnimplementedUserServiceServer) UnlockUser(context.Context, *UnlockUserReq
 }
 func (UnimplementedUserServiceServer) SetUserID(context.Context, *SetUserIDRequest) (*SetUserIDResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetUserID not implemented")
+}
+func (UnimplementedUserServiceServer) SetUserName(context.Context, *SetUserNameRequest) (*SetUserNameResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetUserName not implemented")
 }
 func (UnimplementedUserServiceServer) SetGroupID(context.Context, *SetGroupIDRequest) (*SetGroupIDResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetGroupID not implemented")
@@ -728,6 +744,24 @@ func _UserService_SetUserID_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UserServiceServer).SetUserID(ctx, req.(*SetUserIDRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_SetUserName_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetUserNameRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).SetUserName(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_SetUserName_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).SetUserName(ctx, req.(*SetUserNameRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -906,6 +940,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SetUserID",
 			Handler:    _UserService_SetUserID_Handler,
+		},
+		{
+			MethodName: "SetUserName",
+			Handler:    _UserService_SetUserName_Handler,
 		},
 		{
 			MethodName: "SetGroupID",

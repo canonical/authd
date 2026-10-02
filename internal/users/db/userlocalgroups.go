@@ -33,6 +33,36 @@ func userLocalGroups(db queryable, uid uint32) ([]string, error) {
 	return localGroups, nil
 }
 
+// userToLocalGroupRow is a row of the users_to_local_groups table.
+type userToLocalGroupRow struct {
+	UID       uint32 `yaml:"uid"`
+	GroupName string `yaml:"group_name"`
+}
+
+func allUserLocalGroupsInternal(db queryable) ([]userToLocalGroupRow, error) {
+	rows, err := db.Query(`SELECT uid, group_name FROM users_to_local_groups`)
+	if err != nil {
+		return nil, fmt.Errorf("query error: %w", err)
+	}
+	defer closeRows(rows)
+
+	var userLocalGroups []userToLocalGroupRow
+	for rows.Next() {
+		var ulg userToLocalGroupRow
+		if err := rows.Scan(&ulg.UID, &ulg.GroupName); err != nil {
+			return nil, fmt.Errorf("scan error: %w", err)
+		}
+		userLocalGroups = append(userLocalGroups, ulg)
+	}
+
+	// Check for errors from iteration
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+
+	return userLocalGroups, nil
+}
+
 func addUserToLocalGroup(db queryable, uid uint32, groupName string) error {
 	_, err := db.Exec(`INSERT INTO users_to_local_groups (uid, group_name) VALUES (?, ?)`, uid, groupName)
 	if err != nil {

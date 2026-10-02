@@ -491,6 +491,27 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 	for i, g := range uInfo.Groups {
 		uInfo.Groups[i].Name = strings.ToLower(g.Name)
 	}
+	// The administrator may have renamed this user with `authctl user set-name`. That name is the
+	// one authd stores and the one the user logs in with, so adopt it for the rest of this login
+	// instead of the name the identity provider reports.
+	localName, err := s.userManager.LocalUserName(uInfo.BrokerID, uInfo.ProviderID)
+	if err != nil {
+		log.Errorf(ctx, "IsAuthenticated: Could not check whether user %q was renamed locally: %v", uInfo.Name, err)
+		return nil, fmt.Errorf("could not check whether user %q was renamed locally: %w", uInfo.Name, err)
+	}
+	if localName != "" && localName != username {
+		// The renamed user is no longer in the database under the name the identity provider
+		// reports, so SelectBroker had no provider ID to hand to the broker and the broker fell
+		// back to comparing the requested name with the provider one, which still matches. Without
+		// this check, the old name would keep working and would silently authenticate the renamed
+		// account, while the whole point of the rename is that the new name is the login name.
+		log.Noticef(ctx, "Authentication failure: user %q was renamed to %q, log in with the new name", username, localName)
+		return nil, status.Errorf(codes.PermissionDenied, "user %q was renamed to %q, log in with the new name", username, localName)
+	}
+	if localName != "" && localName != uInfo.Name {
+		log.Noticef(ctx, "IsAuthenticated: User %q was renamed to %q locally, keeping the local name", uInfo.Name, localName)
+		uInfo.Name = localName
+	}
 	// Check if the user is locked. We can only do this after the broker has granted access, because we want to avoid
 	// leaking whether a user exists or not to unauthenticated users.
 	// TODO: We might want to let the broker know whether the user is locked or not, so that it can avoid storing any

@@ -136,6 +136,38 @@ var schemaMigrations = []schemaMigration{
 			return nil
 		},
 	},
+	{
+		description: "Add column 'name_is_local_override' to users table",
+		migrate: func(m *Manager) (err error) {
+			tx, err := m.db.Begin()
+			if err != nil {
+				return fmt.Errorf("failed to start transaction: %w", err)
+			}
+
+			// Ensure the transaction is committed or rolled back
+			defer func() {
+				err = commitOrRollBackTransaction(err, tx)
+			}()
+
+			var exists bool
+			err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM pragma_table_info('users') WHERE name = 'name_is_local_override')").Scan(&exists)
+			if err != nil {
+				return fmt.Errorf("failed to check if 'name_is_local_override' column exists: %w", err)
+			}
+			if exists {
+				log.Debug(context.Background(), "'name_is_local_override' column already exists in users table, skipping migration")
+				return nil
+			}
+
+			// Existing users carry the name their broker gave them, so none of them has a local
+			// override yet and the default of FALSE is correct for every row.
+			if _, err = tx.Exec("ALTER TABLE users ADD COLUMN name_is_local_override BOOLEAN DEFAULT FALSE"); err != nil {
+				return fmt.Errorf("failed to add 'name_is_local_override' column to users table: %w", err)
+			}
+
+			return nil
+		},
+	},
 }
 
 func (m *Manager) maybeApplyMigrations() error {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"os/user"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -404,6 +405,102 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		stillLocked, err := m.IsUserLocked("newuser1@example.com")
 		require.NoError(t, err, "IsUserLocked should not return an error")
 		require.True(t, stillLocked, "renamed user must remain locked")
+	})
+
+	t.Run("Keep_locally_set_username_when_the_broker_logs_the_user_in_again", func(t *testing.T) {
+		localgroupstestutils.SetupGroupMock(t,
+			filepath.Join("testdata", "groups", "users_in_groups.group"))
+
+		dbDir := t.TempDir()
+		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_with_private_group_and_local_groups.db.yaml"), dbDir)
+		require.NoError(t, err, "Setup: could not create database from testdata")
+
+		m := newManagerForTests(t, dbDir)
+
+		_, err = m.SetUserName("user1@example.com", "user1-renamed@example.com")
+		require.NoError(t, err, "Setup: SetUserName should not return an error")
+
+		// The broker still knows the user under the name the IdP gave it. Since the local name was
+		// set on purpose by an administrator, the login must not silently undo it.
+		err = m.UpdateUser(newUser("user1@example.com", "providerid-user1"))
+		require.NoError(t, err, "UpdateUser should not return an error, but did")
+
+		got, err := userstestutils.DBManager(m).UserByName("user1-renamed@example.com")
+		require.NoError(t, err, "the locally set username should survive the login")
+		require.Equal(t, uint32(1111), got.UID, "the user should keep its UID")
+
+		_, err = userstestutils.DBManager(m).UserByName("user1@example.com")
+		require.Error(t, err, "the broker-provided name should not be restored")
+
+		// The private group is named after the user, so it must follow the local name too instead
+		// of being renamed back or recreated under the broker-provided one.
+		privateGroup, err := userstestutils.DBManager(m).GroupByID(got.GID)
+		require.NoError(t, err, "the private group should still exist")
+		require.Equal(t, "user1-renamed@example.com", privateGroup.Name,
+			"the private group should keep following the locally set username")
+	})
+
+	t.Run("Keep_locally_set_username_when_the_IdP_renames_the_user", func(t *testing.T) {
+		localgroupstestutils.SetupGroupMock(t,
+			filepath.Join("testdata", "groups", "users_in_groups.group"))
+
+		dbDir := t.TempDir()
+		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_with_private_group_and_local_groups.db.yaml"), dbDir)
+		require.NoError(t, err, "Setup: could not create database from testdata")
+
+		m := newManagerForTests(t, dbDir)
+
+		_, err = m.SetUserName("user1@example.com", "user1-renamed@example.com")
+		require.NoError(t, err, "Setup: SetUserName should not return an error")
+
+		// An IdP-side rename normally renames the local user too, but an explicit local name wins
+		// over it: otherwise the administrator's choice would be overwritten behind their back.
+		err = m.UpdateUser(newUser("user1-at-the-idp@example.com", "providerid-user1"))
+		require.NoError(t, err, "UpdateUser should not return an error, but did")
+
+		got, err := userstestutils.DBManager(m).UserByName("user1-renamed@example.com")
+		require.NoError(t, err, "the locally set username should win over the IdP-side rename")
+		require.Equal(t, uint32(1111), got.UID, "the user should keep its UID")
+
+		_, err = userstestutils.DBManager(m).UserByName("user1-at-the-idp@example.com")
+		require.Error(t, err, "the IdP-side name should not be applied")
+	})
+
+	t.Run("Report_the_locally_set_username_for_a_provider_ID", func(t *testing.T) {
+		localgroupstestutils.SetupGroupMock(t,
+			filepath.Join("testdata", "groups", "users_in_groups.group"))
+
+		dbDir := t.TempDir()
+		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_with_private_group_and_local_groups.db.yaml"), dbDir)
+		require.NoError(t, err, "Setup: could not create database from testdata")
+
+		m := newManagerForTests(t, dbDir)
+
+		// Without a local rename there is nothing to report, so the broker-provided name is used
+		// as-is.
+		name, err := m.LocalUserName("broker-id", "providerid-user1")
+		require.NoError(t, err, "LocalUserName should not return an error")
+		require.Empty(t, name, "no local name should be reported before a local rename")
+
+		_, err = m.SetUserName("user1@example.com", "user1-renamed@example.com")
+		require.NoError(t, err, "Setup: SetUserName should not return an error")
+
+		name, err = m.LocalUserName("broker-id", "providerid-user1")
+		require.NoError(t, err, "LocalUserName should not return an error")
+		require.Equal(t, "user1-renamed@example.com", name, "the locally set username should be reported")
+
+		// Unknown users and callers that have no provider ID to look up with must not be treated
+		// as an error: they simply have no local name.
+		for _, tc := range []struct{ brokerID, providerID string }{
+			{"broker-id", "providerid-unknown"},
+			{"other-broker-id", "providerid-user1"},
+			{"", "providerid-user1"},
+			{"broker-id", ""},
+		} {
+			name, err = m.LocalUserName(tc.brokerID, tc.providerID)
+			require.NoError(t, err, "LocalUserName should not return an error for %q/%q", tc.brokerID, tc.providerID)
+			require.Empty(t, name, "no local name should be reported for %q/%q", tc.brokerID, tc.providerID)
+		}
 	})
 
 	t.Run("Keep_old_username_in_local_groups_when_rename_fails", func(t *testing.T) {
@@ -2073,6 +2170,285 @@ func TestSetHomeDir(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSetUserName(t *testing.T) {
+	tests := map[string]struct {
+		oldName             string
+		newName             string
+		dbFile              string
+		groupsFile          string
+		nonExistentUser     bool
+		emptyOldName        bool
+		emptyNewName        bool
+		sameNames           bool
+		existingNewName     bool
+		newNameFromSysGroup bool
+		unwritableGroupFile bool
+
+		wantPrivateGroupRenamed bool
+		wantPrivateGroupKeeps   bool
+		wantWarnings            bool
+		wantErr                 bool
+		wantErrType             error
+		// wantErrContains pins which check rejected the rename. SetUserName has several
+		// reasons to refuse, and a bare "an error was returned" assertion passes even when
+		// the case stops at an earlier check than the one it is named after.
+		wantErrContains string
+	}{
+		// The fixture's primary group is shared (UGID != name), so only the user is renamed and
+		// the home directory warning fires because the directory is named after the user.
+		"Successfully_rename_user": {
+			oldName:      "user1@example.com",
+			newName:      "user1-renamed@example.com",
+			groupsFile:   "users_in_groups.group",
+			wantWarnings: true,
+		},
+		"Successfully_rename_user_not_in_local_groups": {
+			oldName:      "user1@example.com",
+			newName:      "user1-renamed@example.com",
+			groupsFile:   "empty.group",
+			wantWarnings: true,
+		},
+		// This fixture models a user as authd actually creates it: a private group named after the
+		// user, plus a shared group and local group memberships that must survive untouched.
+		"Successfully_rename_user_and_its_private_group": {
+			dbFile:                  "one_user_with_private_group_and_local_groups",
+			oldName:                 "user1@example.com",
+			newName:                 "user1-renamed@example.com",
+			groupsFile:              "users_in_groups.group",
+			wantPrivateGroupRenamed: true,
+			wantWarnings:            true,
+		},
+
+		// Empty names
+		"Error_if_old_username_is_empty": {
+			emptyOldName: true,
+			newName:      "newname@example.com",
+			wantErr:      true,
+		},
+		"Error_if_new_username_is_empty": {
+			oldName:      "user1@example.com",
+			emptyNewName: true,
+			wantErr:      true,
+		},
+
+		// Same names
+		"Error_if_old_and_new_names_are_the_same": {
+			oldName:   "user1@example.com",
+			sameNames: true,
+			wantErr:   true,
+		},
+
+		// Non-existent user
+		"Error_if_user_does_not_exist": {
+			oldName:         "nonexistent@example.com",
+			newName:         "newname@example.com",
+			nonExistentUser: true,
+			wantErr:         true,
+			wantErrType:     db.NoDataFoundError{},
+		},
+
+		// Existing new name
+		"Error_if_new_username_already_exists": {
+			dbFile:          "two_users_with_providerid_and_local_group",
+			oldName:         "user1@example.com",
+			existingNewName: true,
+			wantErr:         true,
+			wantErrContains: `username "newuser1@example.com" already in use`,
+		},
+		// "root" is not in the authd database, but it is a real user of the system, so renaming
+		// onto it would shadow it in NSS.
+		"Error_if_new_username_already_exists_on_the_system": {
+			oldName:         "user1@example.com",
+			newName:         "root",
+			wantErr:         true,
+			wantErrContains: `username "root" already exists in the system`,
+		},
+		// The private group is renamed along with the user, so a group that the system already
+		// knows under the new name blocks the rename even though no user carries that name.
+		"Error_if_new_username_is_taken_by_a_group_on_the_system": {
+			dbFile:              "one_user_with_private_group_and_local_groups",
+			oldName:             "user1@example.com",
+			newNameFromSysGroup: true,
+			groupsFile:          "users_in_groups.group",
+			wantErr:             true,
+			wantErrContains:     "already exists in the system",
+		},
+
+		// Without a stable provider ID the next login cannot re-identify the user, so it would
+		// come back under the name the identity provider reports and the rename would be undone.
+		"Error_if_user_has_no_provider_id": {
+			dbFile:          "one_user_and_group",
+			oldName:         "user1@example.com",
+			newName:         "user1-renamed@example.com",
+			wantErr:         true,
+			wantErrContains: "has no stable provider ID",
+		},
+
+		// Invalid new names. These must be rejected before anything is written, otherwise a name
+		// carrying a group file separator or a control character would corrupt /etc/group.
+		"Error_if_new_username_contains_a_comma": {
+			oldName: "user1@example.com",
+			newName: "user1,user2",
+			wantErr: true,
+		},
+		"Error_if_new_username_contains_a_colon": {
+			oldName: "user1@example.com",
+			newName: "user1:x:0:0",
+			wantErr: true,
+		},
+		"Error_if_new_username_contains_a_newline": {
+			oldName: "user1@example.com",
+			newName: "user1\nroot:x:0:",
+			wantErr: true,
+		},
+		"Error_if_new_username_contains_a_space": {
+			oldName: "user1@example.com",
+			newName: "user 1",
+			wantErr: true,
+		},
+		"Error_if_new_username_starts_with_a_dash": {
+			oldName: "user1@example.com",
+			newName: "-user1",
+			wantErr: true,
+		},
+
+		// The group file is written after the database, so a failure there must roll the database
+		// back to keep both views of the user in sync.
+		"Error_if_the_group_file_cannot_be_written": {
+			dbFile:                "one_user_with_private_group_and_local_groups",
+			oldName:               "user1@example.com",
+			newName:               "user1-renamed@example.com",
+			groupsFile:            "users_in_groups.group",
+			unwritableGroupFile:   true,
+			wantErr:               true,
+			wantPrivateGroupKeeps: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			if tc.groupsFile == "" {
+				tc.groupsFile = "empty.group"
+			}
+			destGroupFile := localgroupstestutils.SetupGroupMock(t,
+				filepath.Join("testdata", "groups", tc.groupsFile))
+
+			if tc.unwritableGroupFile {
+				// Point the output at a path inside a directory that does not exist, so that
+				// writing the group file fails no matter which user runs the test.
+				destGroupFile = filepath.Join(t.TempDir(), "missing-dir", "group")
+				localentries.Z_ForTests_SetGroupPath(
+					filepath.Join("testdata", "groups", tc.groupsFile), destGroupFile)
+			}
+
+			if tc.dbFile == "" {
+				tc.dbFile = "one_user_and_group_with_providerid"
+			}
+
+			dbDir := t.TempDir()
+			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
+			require.NoError(t, err, "Setup: could not create database from testdata")
+
+			m := newManagerForTests(t, dbDir)
+
+			oldName := tc.oldName
+			if tc.emptyOldName {
+				oldName = ""
+			}
+
+			newName := tc.newName
+			if tc.emptyNewName {
+				newName = ""
+			} else if tc.sameNames {
+				newName = oldName
+			} else if tc.existingNewName {
+				newName = "newuser1@example.com"
+			} else if tc.newNameFromSysGroup {
+				newName = systemGroupWithoutUser(t)
+			}
+
+			resp, err := m.SetUserName(oldName, newName)
+			requireErrorAssertions(t, err, tc.wantErrType, tc.wantErr)
+			if tc.wantErrContains != "" {
+				require.ErrorContains(t, err, tc.wantErrContains,
+					"SetUserName should have been rejected by the check this case covers")
+			}
+			if tc.wantErr {
+				// A failed rename must leave the user reachable under its original name.
+				if !tc.nonExistentUser && !tc.emptyOldName {
+					oldUser, err := m.UserByName(oldName)
+					require.NoError(t, err, "User should still exist under its old name after a failed rename")
+
+					if newName != "" && newName != oldName && !tc.existingNewName {
+						_, err = m.UserByName(newName)
+						require.Error(t, err, "User should not be reachable under the name the rename failed on")
+					}
+
+					if tc.wantPrivateGroupKeeps {
+						require.False(t, resp.PrivateGroupRenamed,
+							"A rolled back rename must not report the private group as renamed")
+						privateGroup, err := m.GroupByID(oldUser.GID)
+						require.NoError(t, err, "The user's private group should still exist")
+						require.Equal(t, oldName, privateGroup.Name,
+							"The private group should have been rolled back to the old username")
+					}
+				}
+				return
+			}
+
+			require.Equal(t, tc.wantPrivateGroupRenamed, resp.PrivateGroupRenamed,
+				"PrivateGroupRenamed should report whether the private group was renamed")
+			if tc.wantWarnings {
+				require.NotEmpty(t, resp.Warnings, "A home directory named after the user should be warned about")
+			} else {
+				require.Empty(t, resp.Warnings, "No warnings should be returned")
+			}
+
+			// The user must be reachable under the new name and gone under the old one.
+			_, err = m.UserByName(oldName)
+			require.Error(t, err, "User should no longer be reachable under its old name")
+			renamed, err := m.UserByName(newName)
+			require.NoError(t, err, "User should be reachable under its new name")
+
+			// The private group is named after the user, so NSS must report the new name as the
+			// user's primary group once it has been renamed.
+			primaryGroup, err := m.GroupByID(renamed.GID)
+			require.NoError(t, err, "The user's primary group should exist")
+			if tc.wantPrivateGroupRenamed {
+				require.Equal(t, newName, primaryGroup.Name,
+					"The private group should be reported under the new username")
+			}
+
+			yamlData, err := db.Z_ForTests_DumpNormalizedYAML(m.DB())
+			require.NoError(t, err)
+			golden.CheckOrUpdate(t, yamlData, golden.WithPath("db"))
+
+			localgroupstestutils.RequireGroupFile(t, destGroupFile, filepath.Join(golden.Path(t), "groups"))
+		})
+	}
+}
+
+// systemGroupWithoutUser returns the name of a group that exists on the system but is not also a
+// user name, so that a rename onto it gets past the username check and is rejected by the group
+// check. The uniqueness checks query NSS rather than the mocked group file, so the name has to be
+// one the running system really knows.
+func systemGroupWithoutUser(t *testing.T) string {
+	t.Helper()
+
+	for _, name := range []string{"sudo", "adm", "tty", "disk", "dialout", "plugdev", "audio", "video", "cdrom", "users"} {
+		if _, err := user.LookupGroup(name); err != nil {
+			continue
+		}
+		if _, err := user.Lookup(name); err == nil {
+			continue
+		}
+		return name
+	}
+
+	t.Skip("No system group without a user of the same name to rename onto")
+	return ""
 }
 
 func requireErrorAssertions(t *testing.T, gotErr, wantErrType error, wantErr bool) {

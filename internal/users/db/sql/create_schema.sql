@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS users (
     shell     TEXT DEFAULT "/bin/bash",
     broker_id   TEXT DEFAULT "",
     locked      BOOLEAN DEFAULT FALSE,
-    provider_id TEXT DEFAULT ""  -- Stable provider identifier; uniqueness per broker is enforced by the partial index below
+    provider_id TEXT DEFAULT "",  -- Stable provider identifier; uniqueness per broker is enforced by the partial index below
+    name_is_local_override BOOLEAN DEFAULT FALSE  -- The name was set locally and must not be overwritten by the broker
 );
 CREATE UNIQUE INDEX "idx_user_name" ON users ("name");
 CREATE UNIQUE INDEX "idx_user_broker_provider_id" ON users ("broker_id", "provider_id") WHERE broker_id != "" AND provider_id != "";

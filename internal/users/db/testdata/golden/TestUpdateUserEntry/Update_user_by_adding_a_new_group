@@ -21,4 +21,4 @@ users_to_groups:
       gid: 11111
     - uid: 1111
       gid: 22222
-schema_version: 3
+schema_version: 4

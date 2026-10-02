@@ -121,6 +121,55 @@ func TestBrokerForUser(t *testing.T) {
 	require.Nil(t, got, "BrokerForUser should return nil if no broker is assigned, but did not")
 }
 
+func TestRenameUser(t *testing.T) {
+	t.Parallel()
+
+	m, err := brokers.NewManager(context.Background(), filepath.Join(brokerConfFixtures, "valid_brokers"), nil)
+	require.NoError(t, err, "Setup: could not create manager")
+
+	err = m.SetBroker(brokers.LocalBrokerName, "user@example.com")
+	require.NoError(t, err, "Setup: could not set default broker")
+
+	// The cache is consulted before the database, so a renamed user must be looked up under its
+	// new name only. Leaving the old entry behind would keep answering for a user that no longer
+	// exists.
+	m.RenameUser("user@example.com", "renamed@example.com")
+
+	got := m.BrokerForUser("renamed@example.com")
+	require.NotNil(t, got, "BrokerForUser should return the broker cached under the new name")
+	require.Equal(t, brokers.LocalBrokerName, got.ID, "The renamed user should keep its broker")
+
+	got = m.BrokerForUser("user@example.com")
+	require.Nil(t, got, "BrokerForUser should no longer return a broker for the old name")
+
+	// Renaming a user which was never cached must not create an entry out of thin air.
+	m.RenameUser("not_cached@example.com", "also_not_cached@example.com")
+	got = m.BrokerForUser("also_not_cached@example.com")
+	require.Nil(t, got, "Renaming an uncached user should not cache anything")
+
+	// A previous holder of the new name may have authenticated and been deleted during
+	// this daemon lifetime. Its entry must not survive the rename, or it would answer
+	// for the renamed user and send it to the wrong broker.
+	otherBroker := m.AvailableBrokers()[1]
+	require.NotEqual(t, brokers.LocalBrokerName, otherBroker.ID, "Setup: need a broker other than the local one")
+	err = m.SetBroker(otherBroker.ID, "stale@example.com")
+	require.NoError(t, err, "Setup: could not cache a broker for the stale name")
+
+	m.RenameUser("renamed@example.com", "stale@example.com")
+	got = m.BrokerForUser("stale@example.com")
+	require.NotNil(t, got, "BrokerForUser should return the broker of the renamed user")
+	require.Equal(t, brokers.LocalBrokerName, got.ID, "The stale entry should have been replaced by the renamed user's broker")
+
+	// Same, but the renamed user itself is not cached: the stale entry must still go,
+	// so that the lookup falls back to the database.
+	err = m.SetBroker(otherBroker.ID, "stale2@example.com")
+	require.NoError(t, err, "Setup: could not cache a broker for the stale name")
+
+	m.RenameUser("uncached@example.com", "stale2@example.com")
+	got = m.BrokerForUser("stale2@example.com")
+	require.Nil(t, got, "The stale entry should have been dropped even though the renamed user was not cached")
+}
+
 func TestBrokerFromSessionID(t *testing.T) {
 	t.Parallel()
 

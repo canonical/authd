@@ -591,6 +591,139 @@ func TestDeleteGroup(t *testing.T) {
 	}
 }
 
+func TestSetUserName(t *testing.T) {
+	tests := map[string]struct {
+		sourceDB string
+
+		oldName            string
+		newName            string
+		closeDB            bool
+		currentUserNotRoot bool
+
+		wantPrivateGroupRenamed bool
+		wantWarnings            bool
+		wantErr                 bool
+		wantErrCode             codes.Code
+		// wantErrContains pins which check rejected the rename. SetUserName has several
+		// reasons to refuse, and a bare "an error was returned" assertion passes even when
+		// the case stops at an earlier check than the one it is named after.
+		wantErrContains string
+	}{
+		// The primary group in the default fixture is not named after the user, so it is left
+		// alone and no private group rename is reported.
+		"Successfully_rename_user": {
+			sourceDB: "default-with-providerid.db.yaml",
+			oldName:  "user1@example.com", newName: "user1-renamed@example.com",
+			wantWarnings: true,
+		},
+		// authd lowercases usernames, so the request is normalized before it reaches the manager.
+		"Successfully_rename_user_with_uppercase": {
+			sourceDB: "default-with-providerid.db.yaml",
+			oldName:  "USER1@example.com", newName: "USER1-RENAMED@example.com",
+			wantWarnings: true,
+		},
+		"Successfully_rename_user_and_its_private_group": {
+			sourceDB: "private-groups.db.yaml",
+			oldName:  "user1@example.com", newName: "user1-renamed@example.com",
+			wantPrivateGroupRenamed: true,
+			wantWarnings:            true,
+		},
+
+		"Error_when_old_username_is_empty": {
+			oldName: "", newName: "newname",
+			wantErr: true, wantErrCode: codes.InvalidArgument,
+		},
+		"Error_when_new_username_is_empty": {
+			oldName: "user1@example.com", newName: "",
+			wantErr: true, wantErrCode: codes.InvalidArgument,
+		},
+		"Error_when_user_does_not_exist": {
+			oldName: "doesnotexist@example.com", newName: "newname",
+			wantErr: true, wantErrCode: codes.NotFound,
+		},
+		"Error_when_new_username_already_exists": {
+			sourceDB: "private-groups.db.yaml",
+			oldName:  "user1@example.com", newName: "user2@example.com",
+			wantErr: true, wantErrContains: `username "user2@example.com" already in use`,
+		},
+		// No user carries the name, so the rename gets past the username check and is only
+		// rejected when the private group rename hits the group that already has it.
+		"Error_when_new_name_is_taken_by_a_group_only": {
+			sourceDB: "private-groups.db.yaml",
+			oldName:  "user1@example.com", newName: "sharedgroup@example.com",
+			wantErr: true, wantErrContains: `group "sharedgroup@example.com" already in use`,
+		},
+		// Without a stable provider ID the next login cannot re-identify the user, so it would
+		// come back under the name the identity provider reports and undo the rename.
+		"Error_when_user_has_no_provider_id": {
+			oldName: "user1@example.com", newName: "user1-renamed@example.com",
+			wantErr: true, wantErrContains: "has no stable provider ID",
+		},
+		"Error_when_old_and_new_names_are_same": {
+			oldName: "user1@example.com", newName: "user1@example.com",
+			wantErr: true,
+		},
+		"Error_on_database_error": {
+			oldName: "user1@example.com", newName: "newname", closeDB: true,
+			wantErr: true,
+		},
+		"Error_when_not_root": {
+			oldName: "user1@example.com", newName: "newname", currentUserNotRoot: true,
+			wantErr: true, wantErrCode: codes.PermissionDenied,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			// SetUserName locks the user database, so the override is needed for every case that
+			// reaches the manager. Without it the error cases below would fail on the lock instead
+			// of on the condition they are meant to cover.
+			userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
+
+			client, m := newUserServiceClient(t, tc.sourceDB, tc.currentUserNotRoot)
+
+			if tc.closeDB {
+				// Close the database to trigger a database error
+				err := userstestutils.DBManager(m).Close()
+				require.NoError(t, err, "Setup: failed to close database")
+			}
+
+			resp, err := client.SetUserName(context.Background(), &authd.SetUserNameRequest{OldName: tc.oldName, NewName: tc.newName})
+			if tc.wantErr {
+				require.Error(t, err, "SetUserName should return an error, but did not")
+				if tc.wantErrCode != codes.OK {
+					require.Equal(t, tc.wantErrCode.String(), status.Code(err).String(),
+						"SetUserName should return the expected gRPC status code")
+				}
+				if tc.wantErrContains != "" {
+					require.ErrorContains(t, err, tc.wantErrContains,
+						"SetUserName should have been rejected by the check this case covers")
+				}
+				return
+			}
+			require.NoError(t, err, "SetUserName should not return an error, but did")
+
+			// authd lowercases usernames, so the response reports the names it actually used
+			// rather than the ones from the request.
+			require.Equal(t, strings.ToLower(tc.oldName), resp.GetOldName(),
+				"SetUserName should report the normalized old name")
+			require.Equal(t, strings.ToLower(tc.newName), resp.GetNewName(),
+				"SetUserName should report the normalized new name")
+			require.Equal(t, tc.wantPrivateGroupRenamed, resp.GetPrivateGroupRenamed(),
+				"SetUserName should report whether the private group was renamed")
+			if tc.wantWarnings {
+				require.NotEmpty(t, resp.GetWarnings(), "SetUserName should warn about the unchanged home directory")
+			} else {
+				require.Empty(t, resp.GetWarnings(), "SetUserName should not return warnings")
+			}
+
+			// Verify the rename was successful by checking the database
+			dbContent, err := db.Z_ForTests_DumpNormalizedYAML(userstestutils.DBManager(m))
+			require.NoError(t, err, "Setup: failed to dump database for comparing")
+			golden.CheckOrUpdate(t, dbContent)
+		})
+	}
+}
+
 // newUserServiceClient returns a new gRPC client for the CLI service.
 func newUserServiceClient(t *testing.T, dbFile string, currentUserNotRoot ...bool) (client authd.UserServiceClient, userManager *users.Manager) {
 	t.Helper()
