@@ -37,7 +37,11 @@ Test login after updating authd to the version under test
     Log Out From su Session
     Close Focused Window
 
+    ${authd_version_before_update}=    SSH.Execute    dpkg-query -W -f='\${Version}' authd
+    Set Suite Metadata    Authd Version (Before Migration)    ${authd_version_before_update}
     Update Authd    skip_if_authd_stable_ppa_is_unavailable=${True}
+    ${authd_version_after_update}=    SSH.Execute    dpkg-query -W -f='\${Version}' authd
+    Set Suite Metadata    Authd Version (After Migration)    ${authd_version_after_update}
 
     ${authd_apt_policy}=    SSH.Execute    apt-cache policy authd
     ${gnome_shell_apt_policy}=    SSH.Execute    apt-cache policy gnome-shell yaru-theme-gnome-shell
