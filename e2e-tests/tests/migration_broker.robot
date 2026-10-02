@@ -17,9 +17,24 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login with broker version under test
-    [Documentation]    Test login with the broker version under test with
-    ...                device code flow and local password, before and after
-    ...                upgrading the broker.
+    [Documentation]    Verify that a user registered on the stable broker can still log
+    ...    in after the broker is upgraded to the version under test.
+    ...
+    ...    The test starts from the ``-stable-installed`` snapshot, so the broker
+    ...    configuration and the cached token are written by the released broker snap.
+    ...    Refreshing the snap must not invalidate them or require the user to go
+    ...    through the device code flow again.
+    ...
+    ...    Steps:
+    ...      1. register the user with the device code flow on the stable broker and
+    ...         check the account is set up correctly
+    ...      2. log in again with the local password
+    ...      3. install the broker version under test
+    ...      4. log in again with the local password and check the home directory
+    ...         survived the upgrade
+    ...
+    ...    Only the broker is upgraded here; authd stays on its stable version, which
+    ...    tells an upgraded broker apart from an upgraded authd when this fails.
 
     # Log in with local user
     Log In

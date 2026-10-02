@@ -17,12 +17,24 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login after upgrading authd and broker
-    [Documentation]    This test verifies that after upgrading authd to the
-    ...                version under test and the broker to the version under
-    ...                test,
-    ...                remote users can still log in using device code flow and
-    ...                local password, and their accounts are properly set up
-    ...                on the system.
+    [Documentation]    Verify that a user registered on the stable authd and stable
+    ...    broker can still log in after both are upgraded to the versions under test.
+    ...
+    ...    This is the full upgrade path that users actually go through. The user
+    ...    database, the broker configuration and the cached token are all created by
+    ...    the released versions, and neither upgrade may invalidate them.
+    ...
+    ...    Steps:
+    ...      1. register the user with the device code flow on the stable stack and
+    ...         check the account is set up correctly
+    ...      2. log in again with the local password
+    ...      3. upgrade the broker snap, then authd, and gnome-shell with it because
+    ...         authd constrains which gnome-shell versions it works with
+    ...      4. log in again with the local password and check the home directory
+    ...         survived the upgrade
+    ...
+    ...    migration_authd.robot and migration_broker.robot upgrade only one component
+    ...    each, which narrows down which upgrade broke things when this test fails.
 
     # Log in with local user
     Log In

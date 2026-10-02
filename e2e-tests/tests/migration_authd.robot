@@ -17,8 +17,25 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login after updating authd to the version under test
-    [Documentation]    Test login via CLI with device code flow and local password
-    ...                after updating authd to the version under test.
+    [Documentation]    Verify that a user registered on the stable authd can still log
+    ...    in after authd is upgraded to the version under test.
+    ...
+    ...    The test starts from the ``-stable-installed`` snapshot, so the user
+    ...    database and home directory are created by the released authd, while the
+    ...    broker's cached credentials are populated during login. The upgrade must
+    ...    not invalidate them, for instance through a database schema migration.
+    ...
+    ...    Steps:
+    ...      1. register the user with the device code flow on stable authd and check
+    ...         the account is set up correctly
+    ...      2. log in again with the local password
+    ...      3. upgrade authd, and gnome-shell with it because authd constrains which
+    ...         gnome-shell versions it works with
+    ...      4. log in again with the local password and check the home directory
+    ...         and the broker's cached credentials survived the upgrade
+    ...
+    ...    Only authd is upgraded here; the broker stays on its stable version, which
+    ...    tells an upgraded authd apart from an upgraded broker when this fails.
 
     # Log in with local user
     Log In

@@ -22,7 +22,18 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test that login is denied if user is not allowed to log in via SSH
-    [Documentation]    Test that login via SSH is denied when the user is not allowed by the ssh_allowed_suffixes_first_auth setting.
+    [Documentation]    Verify that a remote user whose name does not match
+    ...    ``ssh_allowed_suffixes_first_auth`` is not offered the broker over SSH.
+    ...
+    ...    A first SSH authentication creates the account, so letting the broker handle
+    ...    any name would expose the device code flow to anyone who can reach the SSH
+    ...    port. The broker therefore only handles names ending with one of the
+    ...    configured suffixes. The setup allows the test account's own name and
+    ...    nothing else.
+    ...
+    ...    The test then connects as a different user in the same domain. authd has to
+    ...    step aside and let pam_unix handle the login, which shows the plain
+    ...    "Password:" prompt instead of a provider menu.
 
     # Log in with local user
     Log In

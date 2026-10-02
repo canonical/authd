@@ -19,6 +19,18 @@ Test sudo authentication when run in the background
     [Documentation]    Regresses authd issue #1566. Verify a backgrounded sudo
     ...    process can read its password from stdin when its controlling TTY
     ...    cannot be switched to raw mode.
+    ...
+    ...    The authd PAM client puts the terminal into raw mode to draw its prompt.
+    ...    A background process is not in the terminal's foreground process group, so
+    ...    that fails, and authd used to abort the conversation instead of falling
+    ...    back to plain reads from stdin. Scripts that pipe a password into ``sudo``
+    ...    stopped working for authd users as a result.
+    ...
+    ...    The remote user is registered through the device code flow, added to the
+    ...    sudo group, and a fresh ``su`` session is opened so that sudo runs as them
+    ...    on a real TTY. ``sudo -S ... &`` then reads the password from a here-string
+    ...    while in the background, and the test asserts over SSH that the redirected
+    ...    ``id`` output reports uid=0.
     Log In
     Open Terminal
     Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}

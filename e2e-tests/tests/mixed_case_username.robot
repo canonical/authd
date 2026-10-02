@@ -17,7 +17,17 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login with mixed case username
-    [Documentation]    Test login with mixed case username via CLI with device code flow and local password.
+    [Documentation]    Verify that a remote user whose name contains upper-case
+    ...    characters can log in through the CLI, first with the device code flow and
+    ...    then with the cached local password.
+    ...
+    ...    authd lower-cases user and group names before storing them, because POSIX
+    ...    user names are case-sensitive while identity providers hand out names in
+    ...    their original casing. PAM still receives the name exactly as typed, so
+    ...    both logins have to normalise it the same way and resolve to one account.
+    ...
+    ...    The name comes from ``E2E_USER``, so this only exercises the mixed-case path
+    ...    when that account is configured with the provider's original casing.
 
     # Log in with local user
     Log In
