@@ -243,6 +243,7 @@ if [[ "${BROKER}" != "authd-msentraid" ]]; then
 fi
 
 # Launch the domain if it's not already running, so that we can get its VNC port
+lock_vm
 if ! virsh domstate "${VM_NAME}" | grep -q '^running'; then
     # For some reason, when using external snapshot and the host was rebooted,
     # `virsh start` fails with a permission denied error.

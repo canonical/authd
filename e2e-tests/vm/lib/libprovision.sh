@@ -157,6 +157,15 @@ function has_snapshot() {
     virsh snapshot-list "${VM_NAME}" | grep -q "${snapshot_name}"
 }
 
+function lock_vm() {
+    local lock_dir="${XDG_RUNTIME_DIR:-/tmp}/authd-e2e-vms"
+    mkdir -p "${lock_dir}"
+    # Keep this descriptor open until the runner exits, not just during setup.
+    exec {VM_LOCK_FD}>"${lock_dir}/${VM_NAME}.lock"
+    echo "Waiting for exclusive access to VM '${VM_NAME}'"
+    flock "${VM_LOCK_FD}"
+}
+
 function force_create_snapshot() {
     local snapshot_name="$1"
     if has_snapshot "${snapshot_name}"; then
@@ -208,17 +217,44 @@ function reboot_system() {
     boot_system
 }
 
+function vm_is_shut_off() {
+    virsh domstate "${VM_NAME}" | grep -q '^shut off'
+}
+
+function wait_for_vm_shutdown() {
+    local poll
+    for ((poll = 0; poll < 5; poll++)); do
+        if vm_is_shut_off; then
+            return 0
+        fi
+        sleep 1
+    done
+    vm_is_shut_off
+}
+
 function shutdown_system() {
-    # For some reason, `virsh shutdown` sometimes doesn't cause the VM
-    # to shut down, so we retry it a few times.
+    # Reissue shutdown requests at short intervals, but give a slow guest
+    # about a minute to finish shutting down.
     # `virsh await` is not available in all libvirt client versions.
-    local cmd="if virsh domstate \"${VM_NAME}\" | grep -q '^shut off'; then
-    exit 0
-fi
-virsh shutdown \"${VM_NAME}\" && \
-timeout 5 retry --delay 1 -- sh -c \
-\"virsh domstate \\\"${VM_NAME}\\\" | grep -q '^shut off'\""
-    retry --times 3 --delay 1 -- sh -c "$cmd"
+    local max_attempts=10
+    local attempt
+
+    for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+        if vm_is_shut_off; then
+            return 0
+        fi
+
+        if virsh shutdown "${VM_NAME}" && wait_for_vm_shutdown; then
+            return 0
+        fi
+
+        if ((attempt < max_attempts)); then
+            sleep 1
+        fi
+    done
+
+    echo "VM '${VM_NAME}' did not shut down after ${max_attempts} attempts." >&2
+    return 1
 }
 
 function boot_system() {

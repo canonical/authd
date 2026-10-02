@@ -12,12 +12,13 @@ Test Teardown   utils.Test Teardown
 
 *** Variables ***
 ${username}    %{E2E_USER}
-${local_password}    qwer1234
 
 
 *** Test Cases ***
 Test login with CLI and QR code regeneration
-    [Documentation]    This test verifies that a remote user can log in using device code flow via CLI with QR code regeneration, and subsequently log in using a local password.
+    [Documentation]    This test verifies that a remote user can log in using
+    ...    device code flow via CLI with QR code regeneration, and
+    ...    subsequently log in using a local password.
 
     # Log in with local user
     Log In

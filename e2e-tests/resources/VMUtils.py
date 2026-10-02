@@ -6,6 +6,8 @@ VM_NAME_BASE = "e2e-runner"
 
 
 def vm_name() -> str:
+    if name := os.environ.get("VM_NAME"):
+        return name
     release = os.environ.get("RELEASE")
     if not release:
         raise Exception("RELEASE environment variable is not set")
