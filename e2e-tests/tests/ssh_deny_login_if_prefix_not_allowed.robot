@@ -1,23 +1,15 @@
 *** Settings ***
-Resource        resources/utils.resource
-Resource        resources/authd.resource
+Resource            resources/utils.resource
+Resource            resources/authd.resource
+Resource            resources/broker.resource
 
-Resource        resources/broker.resource
-
-# Test Tags       robot:exit-on-failure
-
-Test Setup    Test Setup
-Test Teardown   utils.Test Teardown
-
-
-*** Keywords ***
-Test Setup
-    utils.Test Setup    snapshot=%{BROKER}-installed
-    Change Broker Configuration    ssh_allowed_suffixes_first_auth    %{E2E_USER}
+# Test Tags    robot:exit-on-failure
+Test Setup          Test Setup
+Test Teardown       utils.Test Teardown
 
 
 *** Variables ***
-${local_password}    qwer1234
+${local_password}       qwer1234
 
 
 *** Test Cases ***
@@ -33,3 +25,9 @@ Test that login is denied if user is not allowed to log in via SSH
     Open Terminal
     Start Log In With Remote User Through SSH: QR Code    ${username}
     Check That Login Is Handled By PAM Unix
+
+
+*** Keywords ***
+Test Setup
+    utils.Test Setup    snapshot=%{BROKER}-installed
+    Change Broker Configuration    ssh_allowed_suffixes_first_auth    %{E2E_USER}

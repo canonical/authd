@@ -1,17 +1,16 @@
 *** Settings ***
-Resource        resources/utils.resource
-Resource        resources/authd.resource
-Resource        resources/broker.resource
+Resource            resources/utils.resource
+Resource            resources/authd.resource
+Resource            resources/broker.resource
 
-# Test Tags       robot:exit-on-failure
-
-Test Setup    utils.Test Setup    snapshot=%{BROKER}-installed
-Test Teardown   utils.Test Teardown
+# Test Tags    robot:exit-on-failure
+Test Setup          utils.Test Setup    snapshot=%{BROKER}-installed
+Test Teardown       utils.Test Teardown
 
 
 *** Variables ***
-${username}    %{E2E_USER}
-${local_password}    qwer1234
+${username}             %{E2E_USER}
+${local_password}       qwer1234
 
 
 *** Test Cases ***
@@ -30,7 +29,6 @@ Test second login succeeds with force_access_check_with_provider enabled
 
     Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
-
 
 Test second login fails with force_access_check_with_provider enabled offline
     [Documentation]    Verify that a registered user cannot log in when

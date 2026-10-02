@@ -1,19 +1,17 @@
 *** Settings ***
-Resource        resources/utils.resource
-Resource        resources/authd.resource
+Resource            resources/utils.resource
+Resource            resources/authd.resource
+Resource            resources/broker.resource
 
-Resource        resources/broker.resource
-
-# Test Tags       robot:exit-on-failure
-
-Test Setup    utils.Test Setup    snapshot=%{BROKER}-installed
-Test Teardown   utils.Test Teardown
+# Test Tags    robot:exit-on-failure
+Test Setup          utils.Test Setup    snapshot=%{BROKER}-installed
+Test Teardown       utils.Test Teardown
 
 
 *** Variables ***
-${username}    %{E2E_USER}
-${local_password}    qwer1234
-${non_allowed_user}    different-user
+${username}             %{E2E_USER}
+${local_password}       qwer1234
+${non_allowed_user}     different-user
 
 
 *** Test Cases ***
@@ -35,7 +33,7 @@ Test allowed_users values with cached local password authentication
     Log In
 
     # Perform device code flow once to register the user and cache their
-    # local password.  All subsequent logins reuse this cached password.
+    # local password.    All subsequent logins reuse this cached password.
     Open Terminal
     Log In With Remote User Through CLI: QR Code    ${username}    ${local_password}
     Log Out From Terminal Session

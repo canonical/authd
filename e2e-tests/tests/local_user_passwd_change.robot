@@ -1,17 +1,15 @@
 *** Settings ***
-Resource        resources/utils.resource
-Resource        resources/authd.resource
+Resource            resources/utils.resource
+Resource            resources/authd.resource
+Resource            resources/broker.resource
 
-Resource        resources/broker.resource
-
-# Test Tags       robot:exit-on-failure
-
-Test Setup    utils.Test Setup    snapshot=%{BROKER}-installed
-Test Teardown   utils.Test Teardown
+# Test Tags    robot:exit-on-failure
+Test Setup          utils.Test Setup    snapshot=%{BROKER}-installed
+Test Teardown       utils.Test Teardown
 
 
 *** Variables ***
-${new_password}    Passwd1234
+${new_password}     Passwd1234
 
 
 *** Test Cases ***
