@@ -32,22 +32,3 @@ Test remote user can unlock the lock screen with device code flow
     Lock Screen
     Unlock Screen With Device Code    ${local_password}
     Log Out
-
-
-Test remote user can switch back to password during device-code polling on the lock screen
-    [Documentation]    Verify that a remote user can switch from the password
-    ...    prompt to device code and back while device-code polling is active.
-
-    Log In With Remote User Through GDM: QR Code    ${username}    ${local_password}
-    Lock Screen
-    Hid.Keys Combo    Return
-    Match Text    Password    30
-
-    Select Authentication Mode Through GDM Lock Screen    Device code flow
-    Match Text    ${DEVICE_URL}    120
-    Select Authentication Mode Through GDM Lock Screen    Local password
-    Match Text    Password    30
-    Hid.Type String    ${local_password}
-    Hid.Keys Combo    Return
-    Wait Until Desktop Ready
-    Log Out

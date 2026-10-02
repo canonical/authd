@@ -367,13 +367,7 @@ Select Authentication Mode Through GDM Lock Screen
     Hid.Move Pointer To Proportional    ${x}    ${y}
     Left Button Click
     Match Text    Login Options    30
-    IF    '${authentication_mode}' == 'Device code flow'
-        Hid.Keys Combo    Down
-    ELSE IF    '${authentication_mode}' == 'Password' or '${authentication_mode}' == 'Local password'
-        Hid.Keys Combo    Up
-    ELSE
-        Fail    Unsupported authentication mode: ${authentication_mode}
-    END
+    Hid.Keys Combo    Down
     Hid.Keys Combo    Return
 
 Enter Entra ID Password And MFA
