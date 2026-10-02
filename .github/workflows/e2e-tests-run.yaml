@@ -205,9 +205,32 @@ jobs:
           fi
           echo "image-path=${IMAGE_PATH}" >> $GITHUB_OUTPUT
 
+      - name: Prepare APT archive cache key
+        id: apt-cache-key
+        run: |
+          . /etc/os-release
+          echo "codename=${VERSION_CODENAME}" >> "$GITHUB_OUTPUT"
+          echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached APT archives
+        id: apt-archives-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/e2e-apt-cache/archives
+          key: >-
+            e2e-apt-archives-${{ runner.os }}-${{ runner.arch }}-${{ steps.apt-cache-key.outputs.codename }}-${{ hashFiles('e2e-tests/vm/install-provision-deps.sh', 'e2e-tests/install-deps.sh') }}-${{ steps.apt-cache-key.outputs.week }}
+          restore-keys: |
+            e2e-apt-archives-${{ runner.os }}-${{ runner.arch }}-${{ steps.apt-cache-key.outputs.codename }}-
+
+      - name: Configure APT archive cache
+        run: |
+          echo "APT archive cache exact hit: ${{ steps.apt-archives-cache.outputs.cache-hit }}"
+          bash .github/scripts/configure-apt-archive-cache.sh
+
       - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
 
       - name: Install APT dependencies for provisioning
+        id: install-provision-deps
         run: ${{ env.E2E_TESTS_DIR }}/vm/install-provision-deps.sh
 
       - name: Set up SSH keys for the VM provisioning
@@ -257,7 +280,23 @@ jobs:
           path: ${{ env.E2E_TESTS_DIR }}/.yarf
 
       - name: Install APT dependencies for running the E2E tests
+        id: install-test-deps
         run: ${{ env.E2E_TESTS_DIR }}/install-deps.sh
+
+      - name: Clean and report APT archive cache
+        if: steps.install-provision-deps.outcome == 'success' && steps.install-test-deps.outcome == 'success'
+        run: |
+          sudo apt-get autoclean
+          sudo chown -R "$(id -u):$(id -g)" "${RUNNER_TEMP}/e2e-apt-cache/archives"
+          du -sh "${RUNNER_TEMP}/e2e-apt-cache/archives"
+
+      - name: Save APT archives cache
+        if: steps.install-provision-deps.outcome == 'success' && steps.install-test-deps.outcome == 'success' && steps.apt-archives-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/e2e-apt-cache/archives
+          key: >-
+            e2e-apt-archives-${{ runner.os }}-${{ runner.arch }}-${{ steps.apt-cache-key.outputs.codename }}-${{ hashFiles('e2e-tests/vm/install-provision-deps.sh', 'e2e-tests/install-deps.sh') }}-${{ steps.apt-cache-key.outputs.week }}
 
       - name: Configure YARF
         run: ${{ env.E2E_TESTS_DIR }}/setup-yarf.sh
