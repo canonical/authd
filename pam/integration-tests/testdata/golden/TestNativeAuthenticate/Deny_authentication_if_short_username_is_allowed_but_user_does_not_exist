@@ -1,0 +1,10 @@
+== Provider selection ==
+  1. local
+  2. ExampleBroker
+Choose your provider:
+> 2
+PAM Error Message: unknown user "user-integration-shortusername": the first login has to use the fully qualified username, including the domain
+PAM Authenticate()
+  User: "user-integration-shortusername"
+  Result: error: PAM exit code: 10
+    User not known to the underlying authentication module
