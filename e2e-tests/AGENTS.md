@@ -106,9 +106,71 @@ sleep when there is genuinely no observable signal to poll on.
      detect a command finished without OCR-matching the command echo itself,
      append `&& echo Y21kLWZpbmlzaGVkCg== | base64 -d` and `Match Text
      cmd-finished`. Reuse this pattern for new terminal commands.
-3. **Develop any new OCR matches in the interactive console** (next section).
-4. **Run the test and read the live trace** (see "Running and reading results").
-5. Iterate.
+3. **Write the `[Documentation]` block** (see "Documenting tests").
+4. **Develop any new OCR matches in the interactive console** (see "Developing
+   OCR matches").
+5. **Run the test and read the live trace** (see "Running and reading results").
+6. Iterate.
+
+## Documenting tests
+
+Every test case needs a `[Documentation]` block. It is the only place that
+records *why* a test exists, and it is what `log.html` shows next to a failure,
+so write it for somebody who has to debug that failure without knowing the
+feature.
+
+`tests/allowed_users.robot` is the reference. The shape is:
+
+1. **A one-line summary** on the `[Documentation]` line itself, starting with
+   "Verify that …". Say which behavior is asserted, not which keywords are
+   called.
+2. **A paragraph explaining why that behavior matters** — the failure a user
+   would hit if it broke, or the regression the test guards. This is the part
+   that cannot be recovered by reading the test body.
+3. **A numbered list of the scenarios or steps**, when the test covers more than
+   one. List what is asserted, in the order the test runs them.
+4. **Anything non-obvious about the setup**: why a config key is set the way it
+   is, why an account other than `E2E_USER` is used, why cleanup is left to the
+   snapshot restore, or a link to the issue/PR a regression test guards.
+
+```robotframework
+Test that disabling authd prevents remote logins
+    [Documentation]    Verify that disabling authd blocks remote logins without
+    ...    locking local users out of the machine.
+    ...
+    ...    authd inserts itself into the PAM stack for every login, so a broken or
+    ...    stopped daemon must fail closed for the users it manages and stay out of
+    ...    the way for everyone else. An administrator who disables authd still needs
+    ...    a way back into the system.
+    ...
+    ...    authd is socket-activated, so both ``authd.socket`` and ``authd.service``
+    ...    are masked; masking only the service would let the socket start it again on
+    ...    the first login attempt.
+    ...
+    ...    Checks performed (in order):
+    ...      1. the local user can still log in through GDM
+    ...      2. the local user can still become root with sudo
+    ...      3. a remote login through ``machinectl login`` fails because the PAM
+    ...         module cannot reach unix:///run/authd.sock
+```
+
+Mechanics and conventions:
+
+- Continuation rows are `...` at the test's indentation. Robot Framework joins
+  them with newlines, so each row renders as its own line; wrap prose at about
+  80 columns and indent wrapped list items under their number.
+- A row holding only `...` renders as a blank line. Use it between paragraphs.
+- Mark literals — config keys, commands, paths — with double backticks. Single
+  backticks are not formatting in Robot Framework and render as themselves.
+- Write plain, simple English and short sentences, as the rest of the repository
+  does.
+- Keep `#` comments for details tied to one specific line, such as an OCR
+  workaround or a keystroke quirk. The `[Documentation]` block states the test's
+  contract; comments explain the mechanics.
+- Don't list the keywords the test calls. The live trace already shows those.
+
+When you change what a test asserts, update its `[Documentation]` in the same
+commit.
 
 ## Developing OCR matches (the interactive console)
 
