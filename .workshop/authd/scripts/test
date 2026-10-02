@@ -1,0 +1,51 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+    cat >&2 <<EOF
+Usage: workshop run -- test [--no-race] [-- GO_TEST_ARGS...]
+  no args: go test -race ./...
+  --no-race: drop -race
+  Extra args pass to go test. Use -- to separate them.
+Examples:
+  workshop run -- test
+  workshop run -- test ./pam/...
+  workshop run -- test --no-race ./...
+  workshop run -- test -- -run TestFoo -count=1 ./internal/...
+EOF
+}
+
+for _arg in "$@"; do
+    case "$_arg" in
+        -h|--help) usage; exit 0 ;;
+    esac
+done
+
+AUTHD_SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+if [ -r "${AUTHD_SCRIPT_DIR}/../lib/env.sh" ]; then
+    source "${AUTHD_SCRIPT_DIR}/../lib/env.sh"
+else
+    source /project/.workshop/authd/lib/env.sh
+fi
+if [ -d /project ]; then
+    cd /project
+fi
+
+race_flag=(-race)
+args=()
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help) usage; exit 0 ;;
+        --no-race) race_flag=() ;;
+        --) ;;
+        *) args+=("$arg") ;;
+    esac
+done
+[ "${#args[@]}" -eq 0 ] && args=(./...)
+
+# Skip root-only tests only when running as root. An unconditional skip
+# would lose coverage for other users.
+[ "$(id -u)" -eq 0 ] && export AUTHD_SKIP_ROOT_TESTS=1
+
+exec go test "${race_flag[@]}" "${args[@]}"
