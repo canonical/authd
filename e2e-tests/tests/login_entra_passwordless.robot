@@ -33,23 +33,28 @@ Configure Passwordless Broker
     Change Broker Configuration    entra_auth    true
     Change Broker Configuration    device_code    false
 
-Reset Passwordless Test State
-    utils.Restore Snapshot    %{BROKER}-installed
-    Configure Passwordless Broker
-
 Run Passwordless Login Attempt
     VAR    ${tap_id}    ${None}
+    VAR    ${terminal_open}    ${False}
+    VAR    ${attempt_succeeded}    ${False}
     TRY
         # A concurrent release variant may hold the account's one TAP. Wait
         # for it to finish before creating this attempt's TAP.
         ${tap_code}    ${tap_id} =    Wait Until Keyword Succeeds    12x    60s
         ...    EntraTAP.Create TAP For User    ${username}
 
-        Log In
+        ${terminal_open} =    Set Variable    ${True}
         Open Terminal
         Log In With Remote User Through CLI: Entra Passwordless TAP
         ...    ${username}    ${local_password}    ${tap_code}
+        ${attempt_succeeded} =    Set Variable    ${True}
     FINALLY
+        IF    not $attempt_succeeded
+            IF    $terminal_open
+                Run Keyword And Warn On Failure    Log Out From Terminal Session    ${False}
+                Run Keyword And Warn On Failure    Close Focused Window
+            END
+        END
         IF    $tap_id is not None
             Run Keyword And Warn On Failure    Wait Until Keyword Succeeds    3x    2s
             ...    EntraTAP.Delete Tap By Id    ${username}    ${tap_id}
@@ -81,14 +86,21 @@ Test login with CLI using Entra passwordless auth and TAP
     ...    permissions.
 
     # TAP creation is not an atomic lock. If a concurrent release variant
-    # replaces this attempt's TAP after it is minted, reset the VM and retry
-    # the complete TAP login instead of reusing the broken terminal session.
+    # replaces this attempt's TAP after it is minted, retry only while the
+    # remote user is still unprovisioned.
+    # Keep the desktop session alive; failed attempts close only their
+    # machinectl session and terminal.
+    Log In
     FOR    ${attempt}    IN RANGE    3
         ${status}    ${message} =    Run Keyword And Ignore Error
         ...    Run Passwordless Login Attempt
         IF    '${status}' == 'PASS'    BREAK
         IF    ${attempt} < 2
-            Reset Passwordless Test State
+            ${user_entry} =    SSH.Execute    getent passwd ${username} || true
+            IF    $user_entry
+                Log    Not retrying because the remote user is already provisioned.
+                BREAK
+            END
         END
     END
     Should Be Equal    ${status}    PASS    msg=${message}

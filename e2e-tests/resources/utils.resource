@@ -191,7 +191,10 @@ Clear Terminal
 
 
 Log Out From Terminal Session
-    Match Text    @ubuntu    120
+    [Arguments]    ${verify_prompt}=${True}
+    IF    $verify_prompt
+        Match Text    @ubuntu    120
+    END
     # We are in a machinectl session, so we need to ^] thrice to exit properly
     Hid.Keys Combo    Control_L    ]
     Hid.Keys Combo    Control_L    ]
