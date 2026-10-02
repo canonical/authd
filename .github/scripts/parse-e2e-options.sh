@@ -151,16 +151,47 @@ parse_apt_source_marker() {
     printf -v "${output_var}" '%s' "${parsed_source}"
 }
 
+parse_apt_sources_marker() {
+    local marker="$1"
+    local output_var="$2"
+    local selected_apt_source
+    local normalized_source
+    local existing_source
+    local duplicate
+    local -n parsed_sources="${output_var}"
+
+    parsed_sources=()
+    while IFS= read -r selected_apt_source; do
+        [[ -n "${selected_apt_source}" ]] || continue
+
+        if ! normalized_source="$(normalize_apt_source "${selected_apt_source}")"; then
+            echo "::error::Invalid APT source '${selected_apt_source}' in ${marker} marker"
+            exit 1
+        fi
+
+        duplicate=false
+        for existing_source in "${parsed_sources[@]}"; do
+            if [[ "${existing_source}" == "${normalized_source}" ]]; then
+                duplicate=true
+                break
+            fi
+        done
+        if [[ "${duplicate}" == false ]]; then
+            parsed_sources+=("${normalized_source}")
+        fi
+    done < <(marker_values "${marker}")
+}
+
 if [[ -n "$(marker_lines e2e-ppa)" ]]; then
     echo "::error::The e2e-ppa marker was removed; use e2e-apt-source or e2e-authd-apt-source"
     exit 1
 fi
 
-apt_source=
-parse_apt_source_marker e2e-apt-source apt_source "${AUTHD_DEFAULT_APT_SOURCE}"
+apt_sources=()
+parse_apt_sources_marker e2e-apt-source apt_sources
 
-authd_apt_source=
-parse_apt_source_marker e2e-authd-apt-source authd_apt_source
+authd_apt_sources=()
+parse_apt_sources_marker e2e-authd-apt-source authd_apt_sources
 
 apt_source_base=
 parse_apt_source_marker e2e-apt-source-base apt_source_base
@@ -204,14 +235,16 @@ tests_json="$(json_array "${tests[@]}")"
 test_cases_json="$(json_array "${test_cases[@]}")"
 default_brokers_json="$(json_array "${default_brokers[@]}")"
 default_ubuntu_releases_json="$(json_array "${default_ubuntu_releases[@]}")"
+apt_sources_json="$(json_array "${apt_sources[@]}")"
+authd_apt_sources_json="$(json_array "${authd_apt_sources[@]}")"
 
 emit_non_default_annotation e2e-brokers "${brokers_json}" "${default_brokers_json}"
 emit_non_default_annotation e2e-ubuntu-releases "${ubuntu_releases_json}" \
     "${default_ubuntu_releases_json}"
 emit_non_default_annotation e2e-tests "${tests_json}" '[]'
 emit_non_default_annotation e2e-test-case "${test_cases_json}" '[]'
-emit_non_default_annotation e2e-apt-source "${apt_source}" "${AUTHD_DEFAULT_APT_SOURCE}"
-emit_non_default_annotation e2e-authd-apt-source "${authd_apt_source}" ""
+emit_non_default_annotation e2e-apt-source "${apt_sources_json}" '[]'
+emit_non_default_annotation e2e-authd-apt-source "${authd_apt_sources_json}" '[]'
 emit_non_default_annotation e2e-apt-source-base "${apt_source_base}" ""
 emit_non_default_annotation e2e-authd-apt-source-base "${authd_apt_source_base}" ""
 
@@ -220,8 +253,8 @@ emit_non_default_annotation e2e-authd-apt-source-base "${authd_apt_source_base}"
     printf 'ubuntu_releases=%s\n' "${ubuntu_releases_json}"
     printf 'tests=%s\n' "${tests_json}"
     printf 'test_cases=%s\n' "${test_cases_json}"
-    printf 'apt_source=%s\n' "${apt_source}"
-    printf 'authd_apt_source=%s\n' "${authd_apt_source}"
+    printf 'apt_sources=%s\n' "${apt_sources_json}"
+    printf 'authd_apt_sources=%s\n' "${authd_apt_sources_json}"
     printf 'apt_source_base=%s\n' "${apt_source_base}"
     printf 'authd_apt_source_base=%s\n' "${authd_apt_source_base}"
 } >>"${GITHUB_OUTPUT}"

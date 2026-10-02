@@ -4,10 +4,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 CONFIG_FILE="${SCRIPT_DIR}/config.env"
+APT_SOURCE_ARGS=()
+AUTHD_APT_SOURCE_ARGS=()
 
 usage(){
     cat << EOF
-Usage: $0 [--config-file <config file>] [--release <release>] [--data-dir <directory>] [--broker <broker>] [--authd-deb <deb>] [--apt-source <source>] [--authd-apt-source <source>] [--apt-source-base <source>] [--authd-apt-source-base <source>] [--broker-snap <snap>] [--force]
+Usage: $0 [--config-file <config file>] [--release <release>] [--data-dir <directory>] [--broker <broker>] [--authd-deb <deb>] [--apt-source <source> ...] [--authd-apt-source <source> ...] [--apt-source-base <source>] [--authd-apt-source-base <source>] [--broker-snap <snap>] [--force]
 
 Options:
   --config-file <config file>  Path to the configuration file (default: config.env)
@@ -15,8 +17,8 @@ Options:
   --data-dir <directory>       Base directory for VM artifacts (or AUTHD_E2E_DATA_DIR)
   --broker <broker>            The broker to install ("authd-google", "authd-msentraid", ...)
   --authd-deb <deb>            Path to the authd deb file to install
-  --apt-source <source>        PPA or Ubuntu archive suite for all packages except authd
-  --authd-apt-source <source> PPA or Ubuntu archive suite from which to install authd
+  --apt-source <source>        Add a PPA or Ubuntu archive suite for all packages except authd; repeatable
+  --authd-apt-source <source> Add a PPA or Ubuntu archive suite for authd; repeatable
   --apt-source-base <source>  Ubuntu archive suite for the stable system package baseline
   --authd-apt-source-base <source>
                               PPA or Ubuntu archive suite for the stable authd baseline
@@ -64,11 +66,11 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --apt-source)
-            APT_SOURCE="$2"
+            APT_SOURCE_ARGS+=("$2")
             shift 2
             ;;
         --authd-apt-source)
-            AUTHD_APT_SOURCE="$2"
+            AUTHD_APT_SOURCE_ARGS+=("$2")
             shift 2
             ;;
         --broker-snap)
@@ -116,15 +118,37 @@ set -x
   ${FORCE:+--force}
 
 # Provision authd in the VM
-"${SCRIPT_DIR}/provision-authd.sh" \
-  --config-file "${CONFIG_FILE}" \
-  ${RELEASE_ARG:+--release "${RELEASE_ARG}"} \
-  ${DATA_DIR_ARG:+--data-dir "${DATA_DIR_ARG}"} \
-  ${BROKER:+--broker "${BROKER}"} \
-  ${AUTHD_DEB:+--authd-deb "${AUTHD_DEB}"} \
-  ${APT_SOURCE_BASE:+--apt-source-base "${APT_SOURCE_BASE}"} \
-  ${AUTHD_APT_SOURCE_BASE:+--authd-apt-source-base "${AUTHD_APT_SOURCE_BASE}"} \
-  ${APT_SOURCE:+--apt-source "${APT_SOURCE}"} \
-  ${AUTHD_APT_SOURCE:+--authd-apt-source "${AUTHD_APT_SOURCE}"} \
-  ${BROKER_SNAP:+--broker-snap "${BROKER_SNAP}"} \
-  ${FORCE:+--force}
+provision_authd_args=(
+    --config-file "${CONFIG_FILE}"
+)
+if [[ -n "${RELEASE_ARG:-}" ]]; then
+    provision_authd_args+=(--release "${RELEASE_ARG}")
+fi
+if [[ -n "${DATA_DIR_ARG:-}" ]]; then
+    provision_authd_args+=(--data-dir "${DATA_DIR_ARG}")
+fi
+if [[ -n "${BROKER:-}" ]]; then
+    provision_authd_args+=(--broker "${BROKER}")
+fi
+if [[ -n "${AUTHD_DEB:-}" ]]; then
+    provision_authd_args+=(--authd-deb "${AUTHD_DEB}")
+fi
+if [[ -n "${APT_SOURCE_BASE:-}" ]]; then
+    provision_authd_args+=(--apt-source-base "${APT_SOURCE_BASE}")
+fi
+if [[ -n "${AUTHD_APT_SOURCE_BASE:-}" ]]; then
+    provision_authd_args+=(--authd-apt-source-base "${AUTHD_APT_SOURCE_BASE}")
+fi
+for source in "${APT_SOURCE_ARGS[@]}"; do
+    provision_authd_args+=(--apt-source "${source}")
+done
+for source in "${AUTHD_APT_SOURCE_ARGS[@]}"; do
+    provision_authd_args+=(--authd-apt-source "${source}")
+done
+if [[ -n "${BROKER_SNAP:-}" ]]; then
+    provision_authd_args+=(--broker-snap "${BROKER_SNAP}")
+fi
+if [[ -n "${FORCE:-}" ]]; then
+    provision_authd_args+=(--force)
+fi
+"${SCRIPT_DIR}/provision-authd.sh" "${provision_authd_args[@]}"

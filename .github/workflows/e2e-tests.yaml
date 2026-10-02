@@ -85,12 +85,12 @@ on:
         default: ''
         type: string
       e2e-apt-source:
-        description: 'e2e-apt-source: Optional authd PPA or Ubuntu archive suite for all packages except authd'
+        description: 'e2e-apt-source: Optional comma- or space-separated APT source list for all packages except authd; empty uses -proposed and authd-edge'
         required: false
         default: ''
         type: string
       e2e-authd-apt-source:
-        description: 'e2e-authd-apt-source: Optional authd PPA or Ubuntu archive suite for authd'
+        description: 'e2e-authd-apt-source: Optional comma- or space-separated APT source list for authd; jobs with no matching source use the branch-built package'
         required: false
         default: ''
         type: string
@@ -138,8 +138,8 @@ jobs:
       ubuntu_releases: ${{ steps.parse_e2e_options.outputs.ubuntu_releases }}
       tests: ${{ steps.parse_e2e_options.outputs.tests }}
       test_cases: ${{ steps.parse_e2e_options.outputs.test_cases }}
-      apt_source: ${{ steps.parse_e2e_options.outputs.apt_source }}
-      authd_apt_source: ${{ steps.parse_e2e_options.outputs.authd_apt_source }}
+      apt_sources: ${{ steps.parse_e2e_options.outputs.apt_sources }}
+      authd_apt_sources: ${{ steps.parse_e2e_options.outputs.authd_apt_sources }}
       apt_source_base: ${{ steps.parse_e2e_options.outputs.apt_source_base }}
       authd_apt_source_base: ${{ steps.parse_e2e_options.outputs.authd_apt_source_base }}
     steps:
@@ -207,9 +207,9 @@ jobs:
       files-hash: ${{ needs.prepare-e2e.outputs.files-hash }}
       force-fresh-image: ${{ github.event_name == 'schedule' }}
       broker-snap-channel: ${{ inputs.broker-snap-channel || '' }}
-      # Apply archive sources only to the matrix job for their matching Ubuntu release.
-      apt-source: ${{ needs.prepare-e2e.outputs.apt_source }}
-      authd-apt-source: ${{ needs.prepare-e2e.outputs.authd_apt_source }}
+      # PPA sources apply to every release; archive suites are filtered per job.
+      apt-sources: ${{ needs.prepare-e2e.outputs.apt_sources }}
+      authd-apt-sources: ${{ needs.prepare-e2e.outputs.authd_apt_sources }}
       apt-source-base: ${{ needs.prepare-e2e.outputs.apt_source_base }}
       authd-apt-source-base: ${{ needs.prepare-e2e.outputs.authd_apt_source_base }}
       brokers: ${{ needs.prepare-e2e.outputs.brokers }}
