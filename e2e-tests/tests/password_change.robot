@@ -18,8 +18,16 @@ ${new_password}    passwd1234
 
 *** Test Cases ***
 Test changing local password of remote user
-    [Documentation]    This test verifies that a remote user can change their local password and subsequently log in using the new password.
-
+    [Documentation]    A remote user can change the local password with ``passwd``
+    ...    and log in with the new one.
+    ...
+    ...    The broker stores and verifies the local-password hash. Users can use it
+    ...    when the provider is unreachable. ``passwd`` must go through authd to the
+    ...    broker, not ``pam_unix``, to keep the stored credential current.
+    ...
+    ...    Device-code login sets the first local password. The test changes it with
+    ...    ``passwd`` in an ``su`` session, then logs in again with the new password.
+    ...    passwd_changes_keyring_password.robot covers the keyring update.
     # Log in with local user
     Log In
 

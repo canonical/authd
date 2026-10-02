@@ -16,7 +16,21 @@ ${username}    %{E2E_USER}
 
 *** Test Cases ***
 Test that disabling authd prevents remote logins
-    [Documentation]    This test verifies that when authd is disabled, remote users cannot log in, while local users can still access the system.
+    [Documentation]    Disabling authd blocks remote logins while local accounts
+    ...    keep access to the machine.
+    ...
+    ...    PAM calls authd for every login. When the daemon is down, managed users
+    ...    must be denied, while local users and administrators still need a way in.
+    ...
+    ...    authd uses socket activation, so the test masks both
+    ...    ``authd.socket`` and ``authd.service``. Stopping only the service would
+    ...    let the socket restart it on the next login.
+    ...
+    ...    The test checks these cases in order:
+    ...    - the local user can still log in through GDM
+    ...    - the local user can still become root with sudo
+    ...    - a remote ``machinectl login`` fails because the PAM module cannot
+    ...      reach unix:///run/authd.sock
 
     # Disable authd
     Disable Authd Socket And Service

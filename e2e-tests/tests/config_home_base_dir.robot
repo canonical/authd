@@ -16,7 +16,16 @@ ${second_home_base_dir}    /srv/authd-second-homes
 
 *** Test Cases ***
 Test login keeps existing home directory after changing home base dir
-    [Documentation]    Verify that a first login uses the configured home_base_dir and that changing the value later does not move an existing user home directory.
+    [Documentation]    Changing ``home_base_dir`` after the first login must not
+    ...    move the user's existing home directory.
+    ...
+    ...    authd stores the home path in its user database when it creates the
+    ...    account. Recalculating the path from the current config could leave the
+    ...    user's data behind, so later logins use the saved path.
+    ...
+    ...    The test sets the first ``home_base_dir``, registers the user and checks
+    ...    the path, owner and shell. It then points the setting at a second
+    ...    directory and confirms that a later login still uses the first one.
 
     SSH.Execute    mkdir -p ${first_home_base_dir} ${second_home_base_dir}
     Change Broker Configuration    home_base_dir    ${first_home_base_dir}

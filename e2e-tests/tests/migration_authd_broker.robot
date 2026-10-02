@@ -17,12 +17,15 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login after upgrading authd and broker
-    [Documentation]    This test verifies that after upgrading authd to the
-    ...                version under test and the broker to the version under
-    ...                test,
-    ...                remote users can still log in using device code flow and
-    ...                local password, and their accounts are properly set up
-    ...                on the system.
+    [Documentation]    A user registered on stable authd and broker should still
+    ...    log in after both are upgraded.
+    ...
+    ...    The stable snapshot supplies stable authd and the configured broker.
+    ...    A device-code login creates the user database entry and broker cache.
+    ...    The test checks setup and logs in with the cached local password, then
+    ...    upgrades the broker and authd with supported gnome-shell packages. It
+    ...    checks login, home path, and ownership again. The single-component tests
+    ...    help identify which upgrade caused a failure.
 
     # Log in with local user
     Log In

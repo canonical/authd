@@ -18,7 +18,14 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test that login fails if usernames do not match
-    [Documentation]    This test verifies that when attempting to log in with a remote user whose username does not match the requested username, the login fails, while local users can still access the system.
+    [Documentation]    The broker rejects a login when the authenticated name differs
+    ...    from the requested name.
+    ...
+    ...    The test starts as "different_user", then the browser authenticates the
+    ...    real test account. Accepting that mismatch could let someone take over the
+    ...    local account named in the request.
+    ...
+    ...    The test logs in a local user first as a baseline.
 
     # Log in with local user
     Log In

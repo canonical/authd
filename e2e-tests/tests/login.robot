@@ -17,7 +17,14 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login with CLI
-    [Documentation]    Test login via CLI with device code flow and local password.
+    [Documentation]    The first CLI login registers a remote user through device
+    ...    code; later ``su`` logins use the cached local password.
+    ...
+    ...    Setup checks NSS and home ownership, plus groups and sudo for MS Entra ID.
+    ...    For a known remote user, Escape returns to the authentication-flow screen.
+    ...    Cancelling there aborts ``su`` instead of returning to user or provider
+    ...    selection. A local-user check confirms the local broker handles local
+    ...    accounts.
 
     # Log in with local user
     Log In
@@ -42,5 +49,5 @@ Test login with CLI
     Check That Username Cannot Be Changed When Using su    ${username}
     Clear Terminal
 
-    # Check that `su` to a local user goes to the local broker, not authd.
+    # Check that ``su`` to a local user goes to the local broker, not authd.
     Check That su To Local User Goes To Local Broker

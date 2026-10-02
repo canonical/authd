@@ -130,7 +130,6 @@ block should cover:
 4. Setup choices that need context, such as a config value, an account other
    than `E2E_USER`, snapshot cleanup, or the issue/PR behind a regression test.
 
-
 Mechanics and conventions:
 
 - Put `...` at the test's indentation to continue documentation.
@@ -141,7 +140,7 @@ Mechanics and conventions:
 - Mark config keys, commands, and paths with double backticks. Single backticks
   appear as literal characters.
 - Write plain, simple English and short sentences. Follow the repository's
-  [prose style guidance](https://github.com/canonical/authd/blob/main/AGENTS.md#prose-style).
+  [prose style guidance](../AGENTS.md#prose-style).
 - Keep `#` comments for details tied to a specific line, such as an OCR
   workaround or a keystroke quirk. Documentation explains the test contract;
   comments explain the mechanics.

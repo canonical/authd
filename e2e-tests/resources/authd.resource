@@ -54,7 +54,7 @@ Check That Log In Fails Because Authd Is Disabled
     Match Text    could not connect to unix:///run/authd.sock    120
 
 
-Check That User Is Redirected To Local Broker
+Check That PAM Unix Prompt Is Shown
     Match Text    Password:    120    confidence=88
 
 

@@ -18,8 +18,18 @@ ${new_password_too_simple}    12345678
 
 *** Test Cases ***
 Test changing local password of local user with passwd
-    [Documentation]    This test verifies that a local user can still change their local password with authd installed.
-    ...                It also verifies that the new password is not too short or too simple, and that the user can log in with the new password.
+    [Documentation]    A local user can change a password with ``passwd`` in a
+    ...    terminal and still get password-quality checks.
+    ...
+    ...    authd is part of the PAM stack, so pam_unix and pam_pwquality must still
+    ...    reject weak passwords for unmanaged users. A rejected password must leave
+    ...    the old one in place.
+    ...
+    ...    Scenarios covered (in order):
+    ...    - a password shorter than 8 characters is rejected
+    ...    - a password that fails the dictionary check is rejected
+    ...    - a strong password is accepted
+    ...    - the user can log in through GDM with the new password
 
     # Log in with local user
     Log In

@@ -20,14 +20,14 @@ ${keyring_secret}    s3cr3t-survives-passwd
 
 *** Test Cases ***
 Changing the local password also changes the keyring password
-    [Documentation]    Changing a remote user's local password with `passwd` must re-key the
-    ...    GNOME login keyring so it keeps unlocking with the new password.
+    [Documentation]    Changing a remote user's local password with ``passwd`` also
+    ...    updates the GNOME login keyring.
     ...
-    ...    Regression guard: the keyring is unlocked from PAM_AUTHTOK at login. If the
-    ...    password change does not propagate the old/new password to the keyring's PAM
-    ...    module, the next login creates a fresh keyring and any previously stored secret
-    ...    is lost. We seed a secret before the change and require it to still be there
-    ...    after logging in again with the new password.
+    ...    The keyring unlocks from ``PAM_AUTHTOK`` at login. If the password change
+    ...    fails to pass both old and new passwords to the keyring's PAM module,
+    ...    the next login creates a fresh keyring and loses stored secrets. The test
+    ...    stores a secret before the change and checks it after a login with the
+    ...    new password.
 
     # Log in with device authentication. This creates the login keyring and
     # unlocks it with ${local_password}.
