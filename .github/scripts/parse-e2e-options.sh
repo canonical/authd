@@ -83,7 +83,33 @@ fi
 tests=()
 while IFS= read -r test; do
     [[ -n "${test}" ]] || continue
-    tests+=("${test}")
+
+    case "${test}" in
+        *'*'*|*'?'*|*'['*)
+            matched_tests=()
+            while IFS= read -r -d '' matched_test; do
+                matched_tests+=("${matched_test##*/}")
+            done < <(
+                find e2e-tests/tests \
+                    -maxdepth 1 \
+                    -type f \
+                    -name "${test}" \
+                    -name '*.robot' \
+                    -print0 |
+                    LC_ALL=C sort -z
+            )
+
+            if ((${#matched_tests[@]} == 0)); then
+                echo "::error::No test suites matched wildcard pattern '${test}'"
+                exit 1
+            fi
+
+            tests+=("${matched_tests[@]}")
+            ;;
+        *)
+            tests+=("${test}")
+            ;;
+    esac
 done < <(marker_values e2e-tests)
 
 test_cases=()
