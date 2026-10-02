@@ -29,25 +29,27 @@ Prepare Synced Passkey Test
     Change Broker Configuration    entra_auth    true
     Change Broker Configuration    device_code    false
 
-Reset Synced Passkey Test State
-    utils.Restore Snapshot    %{BROKER}-installed
-    Change Broker Configuration    register_device    true
-    Change Broker Configuration    entra_auth    true
-    Change Broker Configuration    device_code    false
-
 Run Passwordless TAP Login Attempt
     VAR    ${tap_id}    ${None}
+    VAR    ${login_attempt_started}    ${False}
+    VAR    ${attempt_succeeded}    ${False}
     TRY
         ${tap_code}    ${tap_id} =    Wait Until Keyword Succeeds    12x    60s
         ...    EntraTAP.Create TAP For User    ${username}
 
+        ${login_attempt_started} =    Set Variable    ${True}
         Start Log In With Remote User Through GDM    ${username}
         Select Broker Through GDM
         Match Text    Enter your MFA code    120    similarity=88
         Hid.Type String    ${tap_code.value}
         Hid.Keys Combo    Return
         Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
+        ${attempt_succeeded} =    Set Variable    ${True}
     FINALLY
+        IF    not $attempt_succeeded and $login_attempt_started
+            Run Keyword And Warn On Failure    Log Out
+            Run Keyword And Warn On Failure    Wait Until GDM Login Screen Ready
+        END
         IF    $tap_id is not None
             Run Keyword And Warn On Failure    Wait Until Keyword Succeeds    3x    2s
             ...    EntraTAP.Delete Tap By Id    ${username}    ${tap_id}
@@ -89,12 +91,19 @@ Test passwordless synced passkey user falls back to TAP
     ...    Set E2E_PASSWORDLESS_PASSKEY_USER to an Entra account with a synced
     ...    passkey and passwordless Authenticator sign-in enabled.
 
+    # TAP creation is not an atomic lock. Retry a failed login only while the
+    # account is still unprovisioned; logging out the GDM seat cleans up a
+    # failed PAM attempt without reverting the VM.
     FOR    ${attempt}    IN RANGE    3
         ${status}    ${message} =    Run Keyword And Ignore Error
         ...    Run Passwordless TAP Login Attempt
         IF    '${status}' == 'PASS'    BREAK
         IF    ${attempt} < 2
-            Reset Synced Passkey Test State
+            ${user_entry} =    SSH.Execute    getent passwd ${username} || true
+            IF    $user_entry
+                Log    Not retrying because the remote user is already provisioned.
+                BREAK
+            END
         END
     END
     Should Be Equal    ${status}    PASS    msg=${message}
