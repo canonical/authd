@@ -41,6 +41,8 @@ Test login after upgrading authd and broker
     Log Out From su Session
     Close Focused Window
 
+    Create File In User Home    ${username}
+
     Update Broker
     Update Authd    skip_if_authd_stable_ppa_is_unavailable=${True}
 
@@ -49,7 +51,10 @@ Test login after upgrading authd and broker
     Log    authd apt policy:\n${authd_apt_policy}
     Log    gnome-shell apt policy:\n${gnome_shell_apt_policy}
 
+    Check User Entry Exists    ${username}
+
     # Log in with remote user with local password after upgrading
     Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
     Check Home Directory    ${username}
+    Check File In User Home    ${username}

@@ -50,6 +50,10 @@ Check That Remote User Has No Available Authentication Modes
     Match Text    Error connecting to provider. Check your network connection.    120
 
 
+Check That Broker Is Unavailable
+    Match Text    regex:(?i)(couldn.?t connect to broker|failed to activate service .*authd)    120
+
+
 Check That Log In Fails Because Authd Is Disabled
     Match Text    could not connect to unix:///run/authd.sock    120
 
