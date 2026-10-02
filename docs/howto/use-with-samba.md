@@ -14,6 +14,12 @@ client machines, which leads to permission issues.
 To avoid these issues, you can use Samba with ID mapping. This ensures that the
 UIDs and GIDs are mapped correctly across all machines.
 
+For a Microsoft Entra deployment, administrators can instead apply the same
+cached UID and group GIDs on every authd-enabled machine to keep numeric file
+ownership stable. The existing Samba ID-mapping guidance remains valid and may
+be preferred for mixed identity sources. See [Configure stable Unix IDs from
+Entra ID](configure-entra-unix-ids) for the provisioning workflow.
+
 ## Setting up Samba with ID mapping
 
 This guide will walk you through setting up a Samba server with ID mapping. By

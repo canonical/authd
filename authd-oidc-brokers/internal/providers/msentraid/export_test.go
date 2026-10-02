@@ -13,3 +13,9 @@ func AllExpectedScopes() string {
 func (p *Provider) SetTokenScopesForGraphAPI(scopes []string) {
 	p.tokenScopesForGraphAPI = scopes
 }
+
+var ParseUnixID = parseUnixID
+
+var ProcessSecurityGroupsWithGID = processSecurityGroupsWithGID
+
+var GroupSelectFields = groupSelectFields

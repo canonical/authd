@@ -48,6 +48,14 @@ func (cfg *Config) SetRegisterDevice(value bool) {
 	cfg.registerDevice = value
 }
 
+// SetUnixAttributes configures Unix attribute enrichment for tests.
+func (cfg *Config) SetUnixAttributes(uidAttribute, gidAttribute string, uidRequired, gidRequired bool) {
+	cfg.unixUIDAttribute = uidAttribute
+	cfg.unixGIDAttribute = gidAttribute
+	cfg.unixUIDRequired = uidRequired
+	cfg.unixGIDRequired = gidRequired
+}
+
 func (cfg *Config) SetHomeBaseDir(homeBaseDir string) {
 	cfg.homeBaseDir = homeBaseDir
 }
@@ -233,6 +241,15 @@ func (b *Broker) IsOffline(sessionID string) (bool, error) {
 		return false, err
 	}
 	return session.isOffline, nil
+}
+
+func (b *Broker) SetOffline(sessionID string) error {
+	session, err := b.getSession(sessionID)
+	if err != nil {
+		return err
+	}
+	session.isOffline = true
+	return b.updateSession(sessionID, session)
 }
 
 func (b *Broker) SetAttemptsPerMode(sessionID, mode string, attempts int) error {
