@@ -144,7 +144,7 @@ Test that disabling authd prevents remote logins
     ...    a way back into the system.
     ...
     ...    authd is socket-activated, so both ``authd.socket`` and ``authd.service``
-    ...    are masked; masking only the service would let the socket start it again on
+    ...    are masked; stopping only the service would let the socket start it again on
     ...    the first login attempt.
     ...
     ...    Checks performed (in order):

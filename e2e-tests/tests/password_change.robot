@@ -18,7 +18,22 @@ ${new_password}    passwd1234
 
 *** Test Cases ***
 Test changing local password of remote user
-    [Documentation]    This test verifies that a remote user can change their local password and subsequently log in using the new password.
+    [Documentation]    Verify that a remote user can change their local password with
+    ...    ``passwd`` and then log in with the new one.
+    ...
+    ...    The local password is the credential authd caches during device
+    ...    authentication and the only one that works while the provider is
+    ...    unreachable, so ``passwd`` has to be routed through authd rather than
+    ...    pam_unix for a managed user.
+    ...
+    ...    Steps:
+    ...      1. register the user with the device code flow, which sets the first local
+    ...         password
+    ...      2. log in with ``su`` and change the password with ``passwd``
+    ...      3. log in again with ``su`` using the new password
+    ...
+    ...    passwd_changes_keyring_password.robot additionally covers that this change
+    ...    re-keys the GNOME login keyring.
 
     # Log in with local user
     Log In

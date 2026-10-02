@@ -17,8 +17,25 @@ ${new_uid}    60500
 
 *** Test Cases ***
 Test authctl user set-uid
-    [Documentation]    Test that authctl user set-uid changes the UID of a remote user
-    ...    and updates the home directory ownership.
+    [Documentation]    Verify that ``authctl user set-uid`` changes the UID of a
+    ...    remote user and re-owns the files that belonged to the old UID.
+    ...
+    ...    Administrators need this to line up authd-managed users with UIDs that
+    ...    already exist elsewhere, for example on a shared NFS server. Changing the
+    ...    UID is only safe if every place that stores it is updated at once.
+    ...
+    ...    The user is first registered through the device code flow, and a file is
+    ...    created in the home directory so the recursive re-ownership is covered as
+    ...    well. The user's session is then terminated, because set-uid refuses to run
+    ...    while any process is still running under the old UID.
+    ...
+    ...    Checks performed after the change:
+    ...      1. authctl reports the new UID
+    ...      2. ``getent passwd <name>`` returns the new UID
+    ...      3. ``getent passwd <new uid>`` resolves back to the user name
+    ...      4. ``id`` reports the new UID
+    ...      5. the home directory and the file inside it are owned by the new UID
+    ...      6. logging in again with the local password keeps the new UID
 
     Log In
 

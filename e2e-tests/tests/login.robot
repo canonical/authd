@@ -17,7 +17,21 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login with CLI
-    [Documentation]    Test login via CLI with device code flow and local password.
+    [Documentation]    Verify the core CLI login paths for a remote user: the first
+    ...    login through ``machinectl login`` with the device code flow, and later
+    ...    logins through ``su`` with the cached local password.
+    ...
+    ...    Steps:
+    ...      1. register the user with the device code flow, set a local password, and
+    ...         check the user is visible through NSS, has a home directory owned by
+    ...         them, and, for MS Entra ID, is in the expected groups and can run sudo
+    ...      2. log in again with ``su`` using only the local password
+    ...      3. check the user cannot get back to user or provider selection from an
+    ...         ``su`` login. For a known user the provider is already recorded, so
+    ...         Escape stops at the authentication-flow screen and cancelling there
+    ...         aborts ``su`` instead of letting the caller pick another identity
+    ...      4. check that ``su`` to a local user is still handled by the local broker
+    ...         rather than by authd
 
     # Log in with local user
     Log In
