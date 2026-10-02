@@ -6346,6 +6346,60 @@ func TestPasswordAuthAllowsLegacyZeroGroupCacheFallback(t *testing.T) {
 		"the cached-group fallback must survive the cache write of the previous login")
 }
 
+// TestPasswordAuthDropsUserDisabledFlagOfAnotherIdentity verifies that a cached
+// authorization belonging to another identity contributes no state at all: its
+// disabled-user flag must not deny a later offline login of this identity.
+func TestPasswordAuthDropsUserDisabledFlagOfAnotherIdentity(t *testing.T) {
+	t.Parallel()
+
+	const (
+		username          = "test-user@email.com"
+		correctPassword   = "password"
+		sessionProviderID = "saved-user-id"
+	)
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              newDeviceAuthProviderForTests(nil),
+		registerDevice:        true,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{
+				{"aud": consts.MicrosoftBrokerAppID},
+			},
+		},
+	})
+
+	// The cache lives in this identity's directory but records another provider
+	// ID, and must exist before the session so the session keeps its own ID.
+	providerIDDir, err := b.UserDataDir(sessionProviderID)
+	require.NoError(t, err, "Setup: deriving the provider ID cache dir should not fail")
+	generateAndStoreCachedInfo(t, tokenOptions{
+		username:                username,
+		providerID:              "other-user-id",
+		userIsDisabled:          true,
+		obtainedViaEntraAuth:    true,
+		isForDeviceRegistration: true,
+		groups:                  []info.Group{{Name: "cached-group", UGID: "cached-id"}},
+	}, filepath.Join(providerIDDir, "token.json"))
+
+	sessionID, key, err := b.NewSession(username, "some lang", sessionmode.Login, sessionProviderID)
+	require.NoError(t, err, "Setup: creating the session should not fail")
+	require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+	access, _, err := b.IsAuthenticated(sessionID, authData)
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthGranted, access,
+		"a disabled-user flag stored for another provider ID must not affect this login")
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.False(t, cached.UserIsDisabled,
+		"a cache of another identity must not leave its disabled-user flag behind for offline logins")
+}
+
 // TestPasswordAuthFallsBackForUnresolvedGroupsAfterCacheRewrite verifies that
 // a cache rewritten before its groups resolve keeps the password-file
 // fallback: the marker is only stored when set, so rewriting such a cache must

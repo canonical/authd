@@ -1587,12 +1587,13 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 	}
 	if !b.cachedAuthInfoMatchesIdentity(session, authInfo, cachedAuthInfo) {
 		// The cached authorization belongs to another identity: do not reuse its
-		// groups, device registration or device state.
+		// groups, device registration, or its disabled device or user state.
 		authInfo.UserInfo.Groups = nil
 		authInfo.GroupsResolved = false
 		authInfo.DeviceRegistrationData = nil
 		authInfo.DeviceRegistrationDataObtainedAt = 0
 		authInfo.DeviceIsDisabled = false
+		authInfo.UserIsDisabled = false
 		cachedAuthInfo = nil
 	}
 
