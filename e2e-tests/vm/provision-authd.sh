@@ -7,10 +7,12 @@ LIB_DIR="${SCRIPT_DIR}/lib"
 SSH="${SCRIPT_DIR}/ssh.sh"
 SCP="${SCRIPT_DIR}/scp.sh"
 DATA_DIR_ARG=
+APT_SOURCE_ARGS=()
+AUTHD_APT_SOURCE_ARGS=()
 
 usage(){
     cat << EOF
-Usage: $0 [--config-file <file>] [--release <release>] [--data-dir <directory>] [--authd-deb <deb>] [--apt-source <source>] [--authd-apt-source <source>] [--apt-source-base <source>] [--authd-apt-source-base <source>] [--broker-snap <snap>]
+Usage: $0 [--config-file <file>] [--release <release>] [--data-dir <directory>] [--authd-deb <deb>] [--apt-source <source> ...] [--authd-apt-source <source> ...] [--apt-source-base <source>] [--authd-apt-source-base <source>] [--broker-snap <snap>]
 
 Options:
    --config-file <file>  Path to the configuration file (default: config.env)
@@ -22,11 +24,13 @@ Options:
    --broker <broker>    The broker to install ("authd-google", "authd-msentraid", ...)
    --authd-deb <deb>    Path to the authd deb file to install
    --apt-source <source>
-                        PPA or Ubuntu archive suite for all packages except
-                        authd
+                        Add a PPA or Ubuntu archive suite for packages except
+                        authd. Repeat to add more sources. Defaults to the
+                        matching -proposed suite and authd-edge; explicit
+                        sources replace those defaults.
    --authd-apt-source <source>
-                        PPA or Ubuntu archive suite from which to install
-                        authd
+                        Add a PPA or Ubuntu archive suite for authd. Repeat to
+                        add more sources.
    --apt-source-base <source>
                         Ubuntu archive suite from which to install the stable
                         system package baseline for migration tests
@@ -75,11 +79,19 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --apt-source)
-            APT_SOURCE_ARG="$2"
+            if [[ -z "${2:-}" ]]; then
+                echo "--apt-source requires a non-empty source." >&2
+                exit 1
+            fi
+            APT_SOURCE_ARGS+=("$2")
             shift 2
             ;;
         --authd-apt-source)
-            AUTHD_APT_SOURCE_ARG="$2"
+            if [[ -z "${2:-}" ]]; then
+                echo "--authd-apt-source requires a non-empty source." >&2
+                exit 1
+            fi
+            AUTHD_APT_SOURCE_ARGS+=("$2")
             shift 2
             ;;
         --broker-snap)
@@ -174,8 +186,18 @@ if [[ -n "${DATA_DIR_ARG}" || -n "${AUTHD_E2E_DATA_DIR:-}" ]]; then
 fi
 requested_apt_source_base="${APT_SOURCE_BASE_ARG:-${APT_SOURCE_BASE:-}}"
 requested_authd_apt_source_base="${AUTHD_APT_SOURCE_BASE_ARG:-${AUTHD_APT_SOURCE_BASE:-}}"
-requested_apt_source="${APT_SOURCE_ARG:-${APT_SOURCE:-${AUTHD_DEFAULT_APT_SOURCE}}}"
-requested_authd_apt_source="${AUTHD_APT_SOURCE_ARG:-${AUTHD_APT_SOURCE:-}}"
+requested_apt_sources=()
+if ((${#APT_SOURCE_ARGS[@]})); then
+    requested_apt_sources=("${APT_SOURCE_ARGS[@]}")
+elif [[ -n "${APT_SOURCE:-}" ]]; then
+    requested_apt_sources=("${APT_SOURCE}")
+fi
+requested_authd_apt_sources=()
+if ((${#AUTHD_APT_SOURCE_ARGS[@]})); then
+    requested_authd_apt_sources=("${AUTHD_APT_SOURCE_ARGS[@]}")
+elif [[ -n "${AUTHD_APT_SOURCE:-}" ]]; then
+    requested_authd_apt_sources=("${AUTHD_APT_SOURCE}")
+fi
 
 APT_SOURCE_BASE=
 if [ -n "${requested_apt_source_base}" ]; then
@@ -197,48 +219,62 @@ if [ -n "${requested_authd_apt_source_base}" ]; then
     fi
 fi
 
-if ! APT_SOURCE="$(normalize_apt_source "${requested_apt_source}")"; then
-    echo "Invalid APT source '${requested_apt_source}'." >&2
-    exit 1
-fi
-
-AUTHD_APT_SOURCE=
-if [ -n "${requested_authd_apt_source}" ]; then
-    if ! AUTHD_APT_SOURCE="$(normalize_apt_source "${requested_authd_apt_source}")"; then
-        echo "Invalid authd APT source '${requested_authd_apt_source}'." >&2
-        exit 1
-    fi
-    if [ -n "${AUTHD_DEB:-}" ]; then
-        echo "--authd-apt-source cannot be used together with --authd-deb." >&2
-        exit 1
-    fi
-fi
-unset requested_apt_source_base requested_authd_apt_source_base requested_apt_source requested_authd_apt_source
-
 VM_NAME_BASE="${VM_NAME_BASE:-e2e-runner}"
 
 assert_env_vars RELEASE BROKER
 
 VM_RELEASE=$(resolve_devel_release "${RELEASE}")
 
-validate_archive_source() {
-    local source="$1"
-    local source_name="$2"
-
-    if [ -z "${source}" ] || is_ppa_source "${source}"; then
-        return
-    fi
-
-    if [[ "${source}" != "${VM_RELEASE}" && "${source}" != "${VM_RELEASE}-"* ]]; then
-        echo "${source_name} APT source '${source}' does not match VM release '${VM_RELEASE}'." >&2
+APT_SOURCES=()
+if ((${#requested_apt_sources[@]})); then
+    if ! normalize_apt_sources_into_array APT_SOURCES "${requested_apt_sources[@]}"; then
+        echo "Invalid system APT source list." >&2
         exit 1
     fi
-}
+    if ((${#APT_SOURCES[@]} == 0)); then
+        echo "System APT source list must not be empty." >&2
+        exit 1
+    fi
+else
+    APT_SOURCES=("${VM_RELEASE}-proposed" "${AUTHD_DEFAULT_APT_SOURCE}")
+fi
 
-validate_archive_source "${APT_SOURCE_BASE:-}" base
-validate_archive_source "${AUTHD_APT_SOURCE_BASE:-}" authd-base
-validate_archive_source "${APT_SOURCE}" target
-validate_archive_source "${AUTHD_APT_SOURCE:-}" authd
+AUTHD_APT_SOURCES=()
+if ((${#requested_authd_apt_sources[@]})); then
+    if ! normalize_apt_sources_into_array AUTHD_APT_SOURCES "${requested_authd_apt_sources[@]}"; then
+        echo "Invalid authd APT source list." >&2
+        exit 1
+    fi
+    if ((${#AUTHD_APT_SOURCES[@]} == 0)); then
+        echo "Authd APT source list must not be empty." >&2
+        exit 1
+    fi
+fi
+
+if ((${#AUTHD_APT_SOURCES[@]})) && [ -n "${AUTHD_DEB:-}" ]; then
+    echo "--authd-apt-source cannot be used together with --authd-deb." >&2
+    exit 1
+fi
+
+APT_SOURCE="$(join_apt_sources "${APT_SOURCES[@]}")"
+AUTHD_APT_SOURCE="$(join_apt_sources "${AUTHD_APT_SOURCES[@]}")"
+unset requested_apt_source_base requested_authd_apt_source_base
+unset requested_apt_sources requested_authd_apt_sources
+
+if ! validate_apt_source_for_release "${APT_SOURCE_BASE:-}" "${VM_RELEASE}" base ||
+   ! validate_apt_source_for_release "${AUTHD_APT_SOURCE_BASE:-}" "${VM_RELEASE}" authd-base; then
+    exit 1
+fi
+for source in "${APT_SOURCES[@]}"; do
+    if ! validate_apt_source_for_release "${source}" "${VM_RELEASE}" target; then
+        exit 1
+    fi
+done
+for source in "${AUTHD_APT_SOURCES[@]}"; do
+    if ! validate_apt_source_for_release "${source}" "${VM_RELEASE}" authd; then
+        exit 1
+    fi
+done
 
 ARTIFACTS_DIR="${ARTIFACTS_DIR:-${DATA_DIR}/${RELEASE}}"
 
@@ -361,12 +397,37 @@ function add_apt_source() {
         local cmd="add-apt-repository -y -n ppa:${ppa}"
         # Launchpad is sometimes slow to respond, so retry PPA additions.
         retry --times 5 --delay 3 -- "$SSH" -- "$cmd"
-    elif [[ "${apt_source}" == "${VM_RELEASE:-}" ]]; then
-        # The base suite is already enabled.
+    elif is_default_archive_source "${apt_source}" "${VM_RELEASE:-}"; then
         return
     else
         $SSH "add-apt-repository -y -n -S 'deb http://archive.ubuntu.com/ubuntu/ ${apt_source} main restricted universe multiverse'"
     fi
+}
+
+function add_apt_sources() {
+    local source
+    local -a added_sources=()
+
+    for source in "$@"; do
+        if source_in_array "${source}" "${added_sources[@]}"; then
+            continue
+        fi
+        add_apt_source "${source}"
+        added_sources+=("${source}")
+    done
+}
+
+function source_in_array() {
+    local source="$1"
+    shift
+
+    local candidate
+    for candidate in "$@"; do
+        if [[ "${candidate}" == "${source}" ]]; then
+            return 0
+        fi
+    done
+    return 1
 }
 
 function configure_apt_policy() {
@@ -410,6 +471,63 @@ ${authd_fallback_policy}
 	EOF
 }
 
+function configure_target_apt_policy() {
+    local system_sources_name="$1"
+    local authd_sources_name="$2"
+    local -n system_sources_ref="${system_sources_name}"
+    local -n authd_sources_ref="${authd_sources_name}"
+    local system_policy=
+    local authd_candidate_policy=
+    local authd_fallback_policy=
+    local source pin
+    local -a fallback_sources=()
+    local -a known_authd_ppas=(
+        "ppa:ubuntu-enterprise-desktop/authd"
+        "ppa:ubuntu-enterprise-desktop/authd-edge"
+        "ppa:ubuntu-enterprise-desktop/authd-dev"
+    )
+
+    # Give every system feed equal priority so package version selects the candidate.
+    for source in "${system_sources_ref[@]}"; do
+        pin="$(source_pin "${source}")"
+        system_policy+=$'Package: *\nPin: release '"${pin}"$'\nPin-Priority: 500\n\n'
+    done
+
+    for source in "${authd_sources_ref[@]}"; do
+        if ! source_in_array "${source}" "${system_sources_ref[@]}" &&
+           ! is_default_archive_source "${source}" "${VM_RELEASE}"; then
+            fallback_sources+=("${source}")
+            pin="$(source_pin "${source}")"
+            authd_candidate_policy+=$'Package: authd\nPin: release '"${pin}"$'\nPin-Priority: 500\n\n'
+        fi
+    done
+
+    for source in "${known_authd_ppas[@]}"; do
+        if ! source_in_array "${source}" "${system_sources_ref[@]}" &&
+           ! source_in_array "${source}" "${authd_sources_ref[@]}" &&
+           ! source_in_array "${source}" "${fallback_sources[@]}"; then
+            fallback_sources+=("${source}")
+        fi
+    done
+    for source in "${fallback_sources[@]}"; do
+        pin="$(source_pin "${source}")"
+        authd_fallback_policy+=$'Package: *\nPin: release '"${pin}"$'\nPin-Priority: 100\n\n'
+    done
+
+    $SSH bash -euo pipefail -s <<-EOF
+		mkdir -p /etc/apt/preferences.d
+		cat > /etc/apt/preferences.d/99-e2e-system-source <<'PREFERENCE'
+${system_policy}
+		PREFERENCE
+		cat > /etc/apt/preferences.d/99-e2e-authd-source <<'PREFERENCE'
+${authd_candidate_policy}
+		PREFERENCE
+		cat > /etc/apt/preferences.d/98-e2e-authd-source-fallback <<'PREFERENCE'
+${authd_fallback_policy}
+		PREFERENCE
+	EOF
+}
+
 function configure_authd_only_policy() {
     local authd_source="$1"
     local authd_pin
@@ -438,26 +556,34 @@ function configure_local_authd_policy() {
 }
 
 function verify_authd_source() {
-    local expected_source="$1"
-    local expected_reference
+    local -a expected_sources=("$@")
+    local source expected_reference
+    local found=false
+    local apt_policy
+    local installed_version
+    local candidate_version
 
-    expected_reference="$(source_policy_reference "${expected_source}")"
+    apt_policy="$($SSH "apt-cache policy authd")"
+    installed_version="$($SSH "dpkg-query -W -f='\${Version}' authd")"
+    candidate_version="$(awk '/Candidate:/ { print $2; exit }' <<<"${apt_policy}")"
+    if [[ -z "${installed_version}" || "${candidate_version}" != "${installed_version}" ]]; then
+        echo "authd candidate ${candidate_version} does not match installed version ${installed_version}" >&2
+        printf '%s\n' "${apt_policy}" >&2
+        return 1
+    fi
 
-    $SSH bash -euo pipefail -s <<-EOF
-		apt_policy="\$(apt-cache policy authd)"
-		installed_version="\$(dpkg-query -W -f='\${Version}' authd)"
-		candidate_version="\$(awk '/Candidate:/ { print \$2; exit }' <<<"\${apt_policy}")"
-		if [ -z "\${installed_version}" ] || [ "\${candidate_version}" != "\${installed_version}" ]; then
-			echo "authd candidate \${candidate_version} does not match installed version \${installed_version}" >&2
-			printf '%s\n' "\${apt_policy}" >&2
-			exit 1
-		fi
-		if ! grep -Fq '${expected_reference}' <<<"\${apt_policy}"; then
-			echo "authd APT policy does not contain the selected source '${expected_source}'" >&2
-			printf '%s\n' "\${apt_policy}" >&2
-			exit 1
-		fi
-	EOF
+    for source in "${expected_sources[@]}"; do
+        expected_reference="$(source_policy_reference "${source}")"
+        if grep -Fq "${expected_reference}" <<<"${apt_policy}"; then
+            found=true
+            break
+        fi
+    done
+    if [[ "${found}" != true ]]; then
+        echo "authd APT policy does not contain any selected source: ${expected_sources[*]}" >&2
+        printf '%s\n' "${apt_policy}" >&2
+        return 1
+    fi
 }
 
 function verify_local_authd() {
@@ -548,18 +674,17 @@ unset REBUILD_STABLE_SNAPSHOTS
 # Revert to the pre-authd setup snapshot before installing the version to test
 restore_snapshot_and_sync_time "$PRE_AUTHD_SNAPSHOT"
 
-# Add the selected sources. The system source is also the default authd source
-# when no local package or explicit authd source was requested.
-add_apt_source "${APT_SOURCE}"
-if [ -n "${AUTHD_APT_SOURCE:-}" ] && [ "${AUTHD_APT_SOURCE}" != "${APT_SOURCE}" ]; then
-    add_apt_source "${AUTHD_APT_SOURCE}"
-fi
+# Add all selected sources. The VM's standard archive suites remain enabled.
+add_apt_sources "${APT_SOURCES[@]}" "${AUTHD_APT_SOURCES[@]}"
 
-# Pin the system source for all packages, then override authd with its
-# independently selected source. This keeps authd dependencies on the normal
-# system policy and avoids apt-get -t changing dependency selection globally.
-AUTHD_POLICY_SOURCE="${AUTHD_APT_SOURCE:-${APT_SOURCE}}"
-configure_apt_policy "${APT_SOURCE}" "${AUTHD_POLICY_SOURCE}"
+SYSTEM_APT_POLICY_SOURCES=(
+    "${VM_RELEASE}"
+    "${VM_RELEASE}-updates"
+    "${VM_RELEASE}-security"
+    "${VM_RELEASE}-backports"
+    "${APT_SOURCES[@]}"
+)
+configure_target_apt_policy SYSTEM_APT_POLICY_SOURCES AUTHD_APT_SOURCES
 
 # Configure authd to be verbose. We do this before installing authd to avoid
 # having to restart the service after installation (just a simple optimization).
@@ -572,11 +697,11 @@ $SSH bash -euo pipefail -s <<-EOF
 	UNIT
 EOF
 
-# Refresh metadata and update the whole system from the selected system source.
+# Refresh metadata and update the whole system. APT chooses the highest version
+# across the enabled archive suites and selected system sources.
 $SSH apt-get update
 # authd constrains gnome-shell with a compatibility rule. Explicitly
-# install it from the selected source because the base image's archive version
-# may not satisfy authd's rule.
+# install it because the base image's version may not satisfy authd's rule.
 $SSH apt-get install -y gnome-shell
 if [ -n "${AUTHD_DEB:-}" ]; then
     # Keep a stable authd package out of the system upgrade until the local
@@ -600,7 +725,7 @@ if [ -n "${AUTHD_DEB:-}" ]; then
     verify_local_authd
 else
     $SSH apt-get install -y --allow-downgrades authd
-    verify_authd_source "${AUTHD_POLICY_SOURCE}"
+    verify_authd_source "${SYSTEM_APT_POLICY_SOURCES[@]}" "${AUTHD_APT_SOURCES[@]}"
 fi
 
 # Configure the PAM module to be verbose as well

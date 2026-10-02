@@ -24,16 +24,16 @@ on:
         type: string
         required: false
         default: ''
-      apt-source:
-        description: 'If set, update all packages except authd from this PPA or Ubuntu archive suite'
+      apt-sources:
+        description: 'JSON array of APT sources for all packages except authd; an empty array uses the release -proposed suite and authd-edge'
         type: string
         required: false
-        default: ''
-      authd-apt-source:
-        description: 'If set, install authd from this PPA or Ubuntu archive suite'
+        default: '[]'
+      authd-apt-sources:
+        description: 'JSON array of APT sources for authd; an empty array uses the branch-built package'
         type: string
         required: false
-        default: ''
+        default: '[]'
       apt-source-base:
         description: 'If set, install the stable system package baseline from this Ubuntu archive suite'
         type: string
@@ -77,6 +77,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       codename: ${{ steps.resolve.outputs.codename }}
+      apt_sources: ${{ steps.resolve.outputs.apt_sources }}
+      authd_apt_sources: ${{ steps.resolve.outputs.authd_apt_sources }}
     steps:
       - uses: actions/checkout@v7
 
@@ -85,8 +87,8 @@ jobs:
         env:
           RELEASE: ${{ inputs.ubuntu-release }}
           SELECTED_RELEASES: ${{ inputs.ubuntu-releases }}
-          APT_SOURCE: ${{ inputs.apt-source }}
-          AUTHD_APT_SOURCE: ${{ inputs.authd-apt-source }}
+          APT_SOURCES: ${{ inputs.apt-sources }}
+          AUTHD_APT_SOURCES: ${{ inputs.authd-apt-sources }}
           APT_SOURCE_BASE: ${{ inputs.apt-source-base }}
           AUTHD_APT_SOURCE_BASE: ${{ inputs.authd-apt-source-base }}
         run: bash ./.github/scripts/resolve-release.sh
@@ -204,20 +206,7 @@ jobs:
 
   build-deb:
     needs: resolve_release
-    if: >-
-      ${{
-        inputs.authd-apt-source == '' ||
-        (
-          !startsWith(inputs.authd-apt-source, 'ppa:') &&
-          !(
-            startsWith(
-              inputs.authd-apt-source,
-              format('{0}-', needs.resolve_release.outputs.codename)
-            ) ||
-            inputs.authd-apt-source == needs.resolve_release.outputs.codename
-          )
-        )
-      }}
+    if: needs.resolve_release.outputs.authd_apt_sources == '[]'
     uses: ./.github/workflows/debian-build.yaml
     with:
       files-hash: ${{ inputs.files-hash }}
@@ -247,30 +236,8 @@ jobs:
       ubuntu-release: ${{ inputs.ubuntu-release }}
       broker: ${{ matrix.broker }}
       broker-snap-channel: ${{ inputs.broker-snap-channel }}
-      apt-source: >-
-        ${{
-          (
-            startsWith(inputs.apt-source, 'ppa:') ||
-            startsWith(
-              inputs.apt-source,
-              format('{0}-', needs.resolve_release.outputs.codename)
-            ) ||
-            inputs.apt-source == needs.resolve_release.outputs.codename
-          ) &&
-          inputs.apt-source || ''
-        }}
-      authd-apt-source: >-
-        ${{
-          (
-            startsWith(inputs.authd-apt-source, 'ppa:') ||
-            startsWith(
-              inputs.authd-apt-source,
-              format('{0}-', needs.resolve_release.outputs.codename)
-            ) ||
-            inputs.authd-apt-source == needs.resolve_release.outputs.codename
-          ) &&
-          inputs.authd-apt-source || ''
-        }}
+      apt-sources: ${{ needs.resolve_release.outputs.apt_sources }}
+      authd-apt-sources: ${{ needs.resolve_release.outputs.authd_apt_sources }}
       apt-source-base: >-
         ${{
           (
