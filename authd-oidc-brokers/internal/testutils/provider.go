@@ -498,9 +498,10 @@ func (p *MockDeviceRegistererProvider) IsTokenForDeviceRegistration(authInfo *to
 	return authInfo != nil && len(authInfo.DeviceRegistrationData) > 0
 }
 
-// MaybeRegisterDevice is a no-op for the mock device registrar.
-func (p *MockDeviceRegistererProvider) MaybeRegisterDevice(_ context.Context, _ *oauth2.Token, _, _ string, _ []byte) ([]byte, func(), error) {
-	return nil, func() {}, nil
+// MaybeRegisterDevice is a no-op for the mock device registrar: an existing
+// registration is reused, and a first-time login reports no registration data.
+func (p *MockDeviceRegistererProvider) MaybeRegisterDevice(_ context.Context, _ *oauth2.Token, _, _ string, existingData []byte) ([]byte, func(), error) {
+	return existingData, func() {}, nil
 }
 
 // MockMetadataProvider wraps MockProvider and adds MetadataProvider support.

@@ -5,6 +5,7 @@ package msentraid_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,8 +14,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
+	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
@@ -406,6 +409,275 @@ func TestGetGroupsInvalidTokenWithClientCredentialsReturnsError(t *testing.T) {
 		false,
 	)
 	require.Error(t, err, "GetGroups should return an error instead of panicking on invalid delegated tokens")
+}
+
+// TestClassifyGraphTokenAcquisitionError verifies the #1721 regression
+// boundary at the classification level: only a positively-confirmed
+// device-authentication failure (AADSTS50155) must be classified as a
+// RetryWithDeviceAuthError. Every other error -- including
+// ErrMissingClientCredentials (AADSTS7000218) and any other himmelblau
+// error (unknown/future AADSTS codes, or any other acquisition failure) --
+// must NOT be classified as one, since that would
+// make the broker clear the cached device registration data and force a new
+// Entra device enrollment even though the registration itself was never
+// confirmed invalid.
+func TestClassifyGraphTokenAcquisitionError(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		err error
+
+		wantRetryWithDeviceAuth bool
+		wantForDisplay          bool
+		wantDeviceDisabled      bool
+	}{
+		"Device_disabled_denies_login": {
+			err:                himmelblau.ErrDeviceDisabled,
+			wantDeviceDisabled: true,
+		},
+		"Invalid_redirect_URI_is_displayed_to_the_user": {
+			err:            himmelblau.ErrInvalidRedirectURI,
+			wantForDisplay: true,
+		},
+		"Device_authentication_failed_retries_with_device_auth": {
+			err:                     himmelblau.ErrDeviceAuthenticationFailed,
+			wantRetryWithDeviceAuth: true,
+		},
+		"Missing_client_credentials_is_a_plain_error": {
+			err: himmelblau.ErrMissingClientCredentials,
+		},
+		"Unclassified_token_acquisition_error_is_a_plain_error": {
+			err: errors.New("unclassified token acquisition error"),
+		},
+		"Unrelated_error_is_a_plain_error": {
+			err: fmt.Errorf("some other unrelated error"),
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := msentraid.ClassifyGraphTokenAcquisitionError(tc.err)
+			require.Error(t, got, "classifyGraphTokenAcquisitionError should always return an error for a non-nil input")
+
+			var retryWithDeviceAuthErr *providerErrors.RetryWithDeviceAuthError
+			require.Equal(t, tc.wantRetryWithDeviceAuth, errors.As(got, &retryWithDeviceAuthErr),
+				"unexpected RetryWithDeviceAuthError classification")
+
+			var forDisplayErr *providerErrors.ForDisplayError
+			require.Equal(t, tc.wantForDisplay, errors.As(got, &forDisplayErr),
+				"unexpected ForDisplayError classification")
+
+			require.Equal(t, tc.wantDeviceDisabled, errors.Is(got, providerErrors.ErrDeviceDisabled),
+				"unexpected ErrDeviceDisabled classification")
+		})
+	}
+}
+
+func TestAcquireGraphAccessTokenWithRetry(t *testing.T) {
+	t.Parallel()
+
+	otherErr := errors.New("token endpoint unavailable")
+	tests := map[string]struct {
+		errs          []error
+		tokens        []string
+		wantToken     string
+		wantErr       error
+		wantCalls     int
+		retryInterval time.Duration
+		retryTimeout  time.Duration
+		cancelOnCall  int
+		cancelBefore  bool
+		cancelAfter   time.Duration
+		// repeat runs a case more than once when its timers become due
+		// together: the select then picks between them at random, so one run
+		// could miss a regression.
+		repeat int
+	}{
+		"Transient_device_authentication_failure_retries_until_success": {
+			errs:          []error{himmelblau.ErrDeviceAuthenticationFailed, himmelblau.ErrDeviceAuthenticationFailed, nil},
+			tokens:        []string{"", "", "access-token"},
+			wantToken:     "access-token",
+			wantCalls:     3,
+			retryInterval: 0,
+			retryTimeout:  time.Second,
+		},
+		"Persistent_device_authentication_failure_is_returned": {
+			errs:      []error{himmelblau.ErrDeviceAuthenticationFailed},
+			wantErr:   himmelblau.ErrDeviceAuthenticationFailed,
+			wantCalls: 3,
+			// Non-coincident deadlines: retries at 0/2/4 ms and the timeout at
+			// 5 ms, so the retry and timeout timers never become due together.
+			retryInterval: 2 * time.Millisecond,
+			retryTimeout:  5 * time.Millisecond,
+		},
+		"Retry_result_with_other_error_is_not_destructive": {
+			errs:          []error{himmelblau.ErrDeviceAuthenticationFailed, otherErr},
+			wantErr:       otherErr,
+			wantCalls:     2,
+			retryInterval: 0,
+			retryTimeout:  time.Second,
+		},
+		"Other_errors_are_not_retried": {
+			errs:      []error{otherErr},
+			wantErr:   otherErr,
+			wantCalls: 1,
+			// A short interval makes this case fail loudly if the helper ever
+			// starts retrying every error instead of only AADSTS50155.
+			retryInterval: time.Millisecond,
+			retryTimeout:  time.Second,
+		},
+		"Cancelled_request_is_not_retried": {
+			errs:          []error{himmelblau.ErrDeviceAuthenticationFailed},
+			wantErr:       context.Canceled,
+			wantCalls:     1,
+			retryInterval: time.Second,
+			retryTimeout:  time.Second,
+			cancelOnCall:  1,
+		},
+		"Token_returned_after_cancellation_is_rejected": {
+			errs:          []error{nil},
+			tokens:        []string{"access-token"},
+			wantErr:       context.Canceled,
+			wantCalls:     1,
+			retryInterval: time.Second,
+			retryTimeout:  time.Second,
+			cancelOnCall:  1,
+		},
+		"Retry_token_returned_after_cancellation_is_rejected": {
+			errs:          []error{himmelblau.ErrDeviceAuthenticationFailed, nil},
+			tokens:        []string{"", "access-token"},
+			wantErr:       context.Canceled,
+			wantCalls:     2,
+			retryInterval: 0,
+			retryTimeout:  time.Second,
+			cancelOnCall:  2,
+		},
+		"Already_cancelled_request_does_not_acquire_a_token": {
+			errs:          []error{nil},
+			tokens:        []string{"access-token"},
+			wantErr:       context.Canceled,
+			retryInterval: time.Second,
+			retryTimeout:  time.Second,
+			cancelBefore:  true,
+		},
+		"Cancelled_during_the_retry_delay_is_not_retried": {
+			errs:          []error{himmelblau.ErrDeviceAuthenticationFailed},
+			wantErr:       context.Canceled,
+			wantCalls:     1,
+			retryInterval: time.Hour,
+			retryTimeout:  time.Hour,
+			cancelAfter:   time.Minute,
+		},
+		"Retry_and_timeout_due_together_do_not_start_another_exchange": {
+			errs:          []error{himmelblau.ErrDeviceAuthenticationFailed},
+			wantErr:       himmelblau.ErrDeviceAuthenticationFailed,
+			wantCalls:     1,
+			retryInterval: 5 * time.Millisecond,
+			retryTimeout:  5 * time.Millisecond,
+			repeat:        20,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			synctest.Test(t, func(t *testing.T) {
+				for range max(tc.repeat, 1) {
+					ctx, cancel := context.WithCancel(context.Background())
+					t.Cleanup(cancel)
+					if tc.cancelBefore {
+						cancel()
+					}
+					// synctest advances the fake clock, so a cancellation during the
+					// retry delay does not make the test wait.
+					if tc.cancelAfter != 0 {
+						time.AfterFunc(tc.cancelAfter, cancel)
+					}
+
+					calls := 0
+					gotToken, gotErr := msentraid.AcquireGraphAccessTokenWithRetry(ctx, func() (string, error) {
+						calls++
+						if calls == tc.cancelOnCall {
+							cancel()
+						}
+						token := ""
+						if calls <= len(tc.tokens) {
+							token = tc.tokens[calls-1]
+						}
+						err := tc.errs[min(calls-1, len(tc.errs)-1)]
+						return token, err
+					}, tc.retryInterval, tc.retryTimeout)
+
+					if tc.wantErr != nil {
+						require.ErrorIs(t, gotErr, tc.wantErr)
+					} else {
+						require.NoError(t, gotErr)
+					}
+					require.Equal(t, tc.wantToken, gotToken)
+					require.Equal(t, tc.wantCalls, calls)
+				}
+			})
+		})
+	}
+}
+
+func TestGetGroupsRetriesTransientDeviceAuthenticationFailure(t *testing.T) {
+	t.Parallel()
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"scp": "User.Read",
+	})
+	accessTokenStr, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err, "Failed to sign access token")
+
+	graphAccessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"scp": "GroupMember.Read.All",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	graphAccessTokenStr, err := graphAccessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err, "Failed to sign Graph access token")
+
+	mockServer, cleanup := startMockMSServer(t, nil)
+	t.Cleanup(cleanup)
+
+	var acquireCalls atomic.Int32
+	p := msentraid.New()
+	p.SetTokenScopesForGraphAPI([]string{"GroupMember.Read.All"})
+	p.SetGraphTokenAcquisitionRetryForTests(time.Millisecond, time.Second)
+	p.SetGraphAccessTokenAcquirerForTests(func(
+		context.Context,
+		string,
+		string,
+		*oauth2.Token,
+		himmelblau.DeviceRegistrationData,
+	) (string, error) {
+		if acquireCalls.Add(1) < 3 {
+			return "", himmelblau.ErrDeviceAuthenticationFailed
+		}
+		return graphAccessTokenStr, nil
+	})
+
+	deviceRegistrationData, err := json.Marshal(himmelblau.DeviceRegistrationData{})
+	require.NoError(t, err)
+
+	got, err := p.GetGroups(
+		context.Background(),
+		"client-id",
+		"tenant-id",
+		&oauth2.Token{AccessToken: accessTokenStr, RefreshToken: "refresh-token"},
+		map[string]any{"msgraph_host": mockServer.URL},
+		deviceRegistrationData,
+		true,
+	)
+	require.NoError(t, err, "GetGroups should retry transient device authentication failures")
+	require.Equal(t, int32(3), acquireCalls.Load(), "Graph token acquisition should be retried until it succeeds")
+	require.ElementsMatch(t, []info.Group{
+		{Name: "group1", UGID: "id1"},
+		{Name: "group2", UGID: "id2"},
+	}, got)
 }
 
 func TestGetGroupsClientCredentialsUsesConfiguredIssuerAndGraphHosts(t *testing.T) {

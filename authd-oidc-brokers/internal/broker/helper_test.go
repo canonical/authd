@@ -1,11 +1,14 @@
 package broker_test
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha512"
 	"crypto/x509"
 	"encoding/base64"
+	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,6 +16,7 @@ import (
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/sessionmode"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
@@ -165,6 +169,27 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 		for endpoint, handler := range cfg.customHandlers {
 			serverOpts = append(serverOpts, testutils.WithHandler(endpoint, handler))
 		}
+		if cfg.tokenHandlerOptions != nil {
+			// Clone before mutating: tests run in parallel and must not share
+			// option maps. This aligns live-token identity with the cached
+			// identity the broker tests use. A test that needs an empty
+			// "sub" claim can opt out by setting claims["sub"] = "".
+			opts := *cfg.tokenHandlerOptions
+			opts.IDTokenClaims = make([]map[string]interface{}, len(cfg.tokenHandlerOptions.IDTokenClaims))
+			for i, claims := range cfg.tokenHandlerOptions.IDTokenClaims {
+				// maps.Clone returns nil for a nil map, which would panic on
+				// the assignment below.
+				cloned := maps.Clone(claims)
+				if cloned == nil {
+					cloned = map[string]interface{}{}
+				}
+				if _, exists := cloned["sub"]; !exists {
+					cloned["sub"] = "saved-user-id"
+				}
+				opts.IDTokenClaims[i] = cloned
+			}
+			cfg.tokenHandlerOptions = &opts
+		}
 		issuerURL, cleanup := testutils.StartMockProviderServer(
 			cfg.listenAddress,
 			cfg.tokenHandlerOptions,
@@ -212,6 +237,123 @@ func newSessionForTests(t *testing.T, b *broker.Broker, username, mode string) (
 	return id, key
 }
 
+// newDeviceAuthBrokerForTests returns a broker that enrolls devices and whose
+// group lookup is provided by provider, plus a login session for it. The mock
+// token endpoint gives the first two token acquisitions the broker app
+// audience, which the device-auth flows need when they acquire a token again
+// after registering a device.
+func newDeviceAuthBrokerForTests(t *testing.T, provider *mockEntraAuthProvider) (b *broker.Broker, sessionID, key string) {
+	t.Helper()
+
+	b = newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		registerDevice:        true,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{
+				{"aud": consts.MicrosoftBrokerAppID},
+				{"aud": consts.MicrosoftBrokerAppID},
+			},
+		},
+	})
+
+	sessionID, key = newSessionForTests(t, b, "", "")
+	return b, sessionID, key
+}
+
+// newEntraMFABrokerForTests returns a broker whose group lookup is provided by
+// provider, plus a login session for it. withDeviceRegistration enables device
+// registration for the flows that register a device during the login.
+func newEntraMFABrokerForTests(t *testing.T, provider *mockEntraAuthProvider, withDeviceRegistration bool) (b *broker.Broker, sessionID, key string) {
+	t.Helper()
+
+	b = newBrokerForTests(t, &brokerForTestConfig{
+		Config:                broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		provider:              provider,
+		issuerURL:             defaultIssuerURL,
+		registerDevice:        withDeviceRegistration,
+	})
+
+	sessionID, key = newSessionForTests(t, b, "", "")
+	return b, sessionID, key
+}
+
+// newDeviceAuthProviderForTests returns a mock Entra provider whose group
+// lookup fails with groupErr, or returns a single remote group when groupErr is
+// nil.
+func newDeviceAuthProviderForTests(groupErr error) *mockEntraAuthProvider {
+	return &mockEntraAuthProvider{
+		MockProvider: &testutils.MockProvider{GetGroupsFunc: groupsOrError(groupErr)},
+	}
+}
+
+// newEntraMFAProviderForTests returns a mock Entra provider whose group lookup
+// fails with groupErr and whose MFA flow answers the code step.
+func newEntraMFAProviderForTests(t *testing.T, groupErr error) *mockEntraAuthProvider {
+	t.Helper()
+
+	provider := newDeviceAuthProviderForTests(groupErr)
+	provider.flowState = &himmelblau.MFAFlowState{}
+	provider.challengeInfo = &himmelblau.MFAChallengeInfo{
+		Message:           "Please type in the code displayed on your authenticator app from your device:",
+		Method:            "PhoneAppOTP",
+		PollingIntervalMs: 5000,
+		MaxPollAttempts:   10,
+	}
+	provider.mfaTokenResult = newMFATokenResult(generateCachedInfo(t, tokenOptions{
+		username: "test-user@email.com",
+		issuer:   defaultIssuerURL,
+	}).Token)
+	return provider
+}
+
+// disabledDeviceFlagCases drives the flows that keep a persisted
+// disabled-device flag until a group lookup succeeds: a refresh or a
+// group-fetch failure is not evidence that the device is valid again.
+var disabledDeviceFlagCases = map[string]struct {
+	groupsErr    error
+	wantDisabled bool
+}{
+	"Group_lookup_failure_keeps_the_flag": {
+		groupsErr:    errors.New("temporary group lookup failure"),
+		wantDisabled: true,
+	},
+	"Successful_group_lookup_clears_the_flag": {
+		wantDisabled: false,
+	},
+}
+
+// groupsOrError returns a group lookup that fails with err, or returns a single
+// remote group when err is nil.
+func groupsOrError(err error) func() ([]info.Group, error) {
+	return func() ([]info.Group, error) {
+		if err != nil {
+			return nil, err
+		}
+		return []info.Group{{Name: "remote-group"}}, nil
+	}
+}
+
+// assertDisabledDeviceFlag asserts whether the persisted disabled-device flag
+// survived the last login: only a successful group lookup is evidence that the
+// device is valid again.
+func assertDisabledDeviceFlag(t *testing.T, b *broker.Broker, sessionID string, wantDisabled bool) {
+	t.Helper()
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	if wantDisabled {
+		require.True(t, cached.DeviceIsDisabled,
+			"a refresh or a group-fetch failure is not evidence the device is valid: the disabled flag must survive until a group lookup succeeds")
+		return
+	}
+	require.False(t, cached.DeviceIsDisabled,
+		"a successful group lookup proves the device is valid and must clear the disabled flag")
+}
 func encryptSecret(t *testing.T, secret, strKey string) string {
 	t.Helper()
 
@@ -260,6 +402,46 @@ func requireAuthModes(t *testing.T, b *broker.Broker, sessionID string, want ...
 	require.Equal(t, want, got, "the client must be offered these modes, in this order")
 }
 
+// cancelWhileGroupLookupRuns starts an authentication whose group lookup blocks
+// until the test releases it, cancels the request while the lookup runs, and
+// asserts that the cancellation ends the request without waiting for the
+// lookup. Callers then assert that the cancelled request left no side effect
+// behind.
+func cancelWhileGroupLookupRuns(t *testing.T, b *broker.Broker, sessionID, authData string, groupsStarted, releaseGroups, groupsDone chan struct{}) {
+	t.Helper()
+
+	authDone := make(chan struct{})
+	var access, data string
+	var authErr error
+	go func() {
+		access, data, authErr = b.IsAuthenticated(sessionID, authData)
+		close(authDone)
+	}()
+
+	select {
+	case <-groupsStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("group lookup did not start")
+	}
+
+	b.CancelIsAuthenticated(sessionID)
+	select {
+	case <-authDone:
+	case <-time.After(time.Second):
+		t.Fatal("cancelled authentication did not return")
+	}
+	require.Equal(t, broker.AuthCancelled, access)
+	require.Contains(t, data, "Authentication request cancelled")
+	require.ErrorIs(t, authErr, context.Canceled)
+
+	close(releaseGroups)
+	select {
+	case <-groupsDone:
+	case <-time.After(time.Second):
+		t.Fatal("group lookup did not finish")
+	}
+}
+
 func generateAndStoreCachedInfo(t *testing.T, options tokenOptions, path string) {
 	t.Helper()
 
@@ -273,10 +455,15 @@ func generateAndStoreCachedInfo(t *testing.T, options tokenOptions, path string)
 }
 
 type tokenOptions struct {
-	username string
-	issuer   string
-	gecos    string
-	groups   []info.Group
+	username   string
+	issuer     string
+	gecos      string
+	groups     []info.Group
+	providerID string
+	// registrationAge, when non-zero, seeds how long ago the device
+	// registration data was obtained. That marks the data as older than the
+	// replication window, so a confirmed failure discards it.
+	registrationAge time.Duration
 
 	expired                     bool
 	noRefreshToken              bool
@@ -306,10 +493,13 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 	if options.username == "-" {
 		options.username = ""
 	}
+	if options.providerID == "" {
+		options.providerID = "saved-user-id"
+	}
 
 	idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
 		"iss":                options.issuer,
-		"sub":                "saved-user-id",
+		"sub":                options.providerID,
 		"aud":                "test-client-id",
 		"exp":                9999999999,
 		"name":               "test-user",
@@ -329,6 +519,9 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 		DeviceIsDisabled:     options.deviceIsDisabled,
 		UserIsDisabled:       options.userIsDisabled,
 		ObtainedViaEntraAuth: options.obtainedViaEntraAuth,
+		// A seeded cache simulates a previously successful login, so its
+		// groups count as resolved.
+		GroupsResolved: true,
 	}
 
 	if options.expired {
@@ -349,6 +542,9 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 	if options.isForDeviceRegistration {
 		tok.DeviceRegistrationData = []byte("device-registration-data")
 	}
+	if options.registrationAge > 0 {
+		tok.DeviceRegistrationDataObtainedAt = time.Now().Add(-options.registrationAge).Unix()
+	}
 
 	if !options.noUserInfo {
 		if options.gecos == "" {
@@ -356,7 +552,7 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 		}
 		tok.UserInfo = info.User{
 			Name:       options.username,
-			ProviderID: "saved-user-id",
+			ProviderID: options.providerID,
 			Home:       "/home/" + options.username,
 			Gecos:      options.gecos,
 			Shell:      "/usr/bin/bash",
