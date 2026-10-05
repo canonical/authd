@@ -110,7 +110,7 @@ func (p *mockEntraAuthProvider) UserInfoFromAccessToken(_ string) (info.User, er
 	if p.accessTokenUserInfo != nil {
 		return *p.accessTokenUserInfo, nil
 	}
-	return info.NewUser("test-user@email.com", "", "saved-user-id", "", "test-user", nil), nil
+	return info.NewUser("test-user@email.com", "", "test-user-id", "", "test-user", nil), nil
 }
 
 type mockProviderWithEntraModes struct {
@@ -674,12 +674,16 @@ func TestNewSessionWithProviderIDRepairsUsernameCompatibilityPath(t *testing.T) 
 	providerIDDir, err := b.UserDataDir(providerID)
 	require.NoError(t, err, "Setup: deriving the provider ID data dir should not fail")
 
+	writeCachedToken := func(dir string) {
+		cached := generateCachedInfo(t, tokenOptions{providerID: providerID})
+		cached.Token.AccessToken = "cached-token-marker"
+		require.NoError(t, token.CacheAuthInfo(filepath.Join(dir, "token.json"), cached),
+			"Setup: writing the cached token should not fail")
+	}
 	require.NoError(t, os.MkdirAll(usernameDir, 0700), "Setup: creating stale username cache dir should not fail")
-	require.NoError(t, os.WriteFile(filepath.Join(usernameDir, "token.json"), []byte("cached-token-marker"), 0600),
-		"Setup: writing stale username token should not fail")
+	writeCachedToken(usernameDir)
 	require.NoError(t, os.MkdirAll(providerIDDir, 0700), "Setup: creating provider ID cache dir should not fail")
-	require.NoError(t, os.WriteFile(filepath.Join(providerIDDir, "token.json"), []byte("cached-token-marker"), 0600),
-		"Setup: writing provider ID token should not fail")
+	writeCachedToken(providerIDDir)
 
 	sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, providerID)
 	require.NoError(t, err, "NewSession should not error when repairing a stale username cache dir")
@@ -699,6 +703,212 @@ func TestNewSessionWithProviderIDRepairsUsernameCompatibilityPath(t *testing.T) 
 		"provider-id-123/token.json": "file",
 		"user@example.com":           "symlink -> provider-id-123",
 	})
+}
+
+func TestNewSessionRejectsConflictingCacheIdentityBeforeConsolidation(t *testing.T) {
+	t.Parallel()
+
+	const (
+		username   = "user@example.com"
+		providerID = "provider-id-123"
+		oldID      = "previous-provider-id"
+	)
+	tests := map[string]struct {
+		providerIDCacheID string
+		usernameCacheID   string
+	}{
+		"Provider_ID_cache_identity_conflict": {
+			providerIDCacheID: oldID,
+		},
+		"Username_cache_identity_conflict": {
+			providerIDCacheID: providerID,
+			usernameCacheID:   oldID,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			b := newBrokerForTests(t, &brokerForTestConfig{issuerURL: defaultIssuerURL})
+			usernameDir, err := b.UserDataDir(username)
+			require.NoError(t, err, "Setup: deriving the username cache dir should not fail")
+			providerIDDir, err := b.UserDataDir(providerID)
+			require.NoError(t, err, "Setup: deriving the provider ID cache dir should not fail")
+
+			writeCache := func(dir, cachedProviderID, marker string) []string {
+				require.NoError(t, os.MkdirAll(dir, 0700), "Setup: creating cache dir should not fail")
+				cached := generateCachedInfo(t, tokenOptions{})
+				cached.UserInfo.ProviderID = cachedProviderID
+				cached.Token.AccessToken = marker
+				tokenPath := filepath.Join(dir, "token.json")
+				passwordPath := filepath.Join(dir, "password")
+				require.NoError(t, token.CacheAuthInfo(tokenPath, cached), "Setup: writing token should not fail")
+				require.NoError(t, password.HashAndStorePassword(marker, passwordPath), "Setup: writing password should not fail")
+				return []string{tokenPath, passwordPath}
+			}
+
+			paths := writeCache(providerIDDir, tc.providerIDCacheID, "provider-id-cache")
+			if tc.usernameCacheID != "" {
+				paths = append(paths, writeCache(usernameDir, tc.usernameCacheID, "username-cache")...)
+				older, newer := time.Now().Add(-time.Hour), time.Now()
+				for _, path := range paths[:2] {
+					require.NoError(t, os.Chtimes(path, older, older), "Setup: aging provider ID cache should not fail")
+				}
+				for _, path := range paths[2:] {
+					require.NoError(t, os.Chtimes(path, newer, newer), "Setup: aging username cache should not fail")
+				}
+			}
+
+			before := make(map[string][]byte, len(paths))
+			for _, path := range paths {
+				before[path], err = os.ReadFile(path)
+				require.NoError(t, err, "Setup: reading cached credentials should not fail")
+			}
+
+			sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, providerID)
+			require.ErrorContains(t, err, "provider ID does not match the existing user")
+			require.Empty(t, sessionID, "a conflicting cache must not create a session")
+
+			for _, path := range paths {
+				got, err := os.ReadFile(path)
+				require.NoError(t, err, "a rejected identity must leave cache files in place")
+				require.Equal(t, before[path], got, "a rejected identity must not modify cached credentials")
+			}
+			require.DirExists(t, providerIDDir, "the provider ID cache must remain intact")
+			if tc.usernameCacheID != "" {
+				info, err := os.Lstat(usernameDir)
+				require.NoError(t, err, "the conflicting username cache must remain in place")
+				require.True(t, info.IsDir(), "the conflicting username cache must not become a compatibility symlink")
+			}
+		})
+	}
+}
+
+func TestNewSessionWithProviderIDEqualToUsernameKeepsCacheDirectory(t *testing.T) {
+	t.Parallel()
+
+	b := newBrokerForTests(t, &brokerForTestConfig{issuerURL: defaultIssuerURL})
+
+	const username = "user@example.com"
+	userDataDir, err := b.UserDataDir(username)
+	require.NoError(t, err, "Setup: deriving the cache dir should not fail")
+	require.NoError(t, os.MkdirAll(userDataDir, 0700), "Setup: creating the cache dir should not fail")
+
+	cached := generateCachedInfo(t, tokenOptions{})
+	cached.UserInfo.ProviderID = username
+	tokenPath := filepath.Join(userDataDir, "token.json")
+	passwordPath := filepath.Join(userDataDir, "password")
+	require.NoError(t, token.CacheAuthInfo(tokenPath, cached), "Setup: writing token should not fail")
+	require.NoError(t, password.HashAndStorePassword("cached-password", passwordPath), "Setup: writing password should not fail")
+	tokenBefore, err := os.ReadFile(tokenPath)
+	require.NoError(t, err, "Setup: reading token should not fail")
+	passwordBefore, err := os.ReadFile(passwordPath)
+	require.NoError(t, err, "Setup: reading password should not fail")
+
+	sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, username)
+	require.NoError(t, err, "NewSession should accept a provider ID equal to the username")
+	t.Cleanup(func() { require.NoError(t, b.EndSession(sessionID)) })
+	require.Equal(t, userDataDir, b.UserDataDirForSession(sessionID), "the session should use the existing cache dir")
+
+	info, err := os.Lstat(userDataDir)
+	require.NoError(t, err, "the cache dir should remain in place")
+	require.True(t, info.IsDir(), "the cache dir must not be replaced with a self-referential symlink")
+	tokenAfter, err := os.ReadFile(tokenPath)
+	require.NoError(t, err, "the cached token should remain readable")
+	require.Equal(t, tokenBefore, tokenAfter, "the cached token should not be removed or replaced")
+	passwordAfter, err := os.ReadFile(passwordPath)
+	require.NoError(t, err, "the cached password should remain readable")
+	require.Equal(t, passwordBefore, passwordAfter, "the cached password should not be removed or replaced")
+}
+
+func TestNewSessionRejectsConflictingLegacyCacheDuringMigration(t *testing.T) {
+	t.Parallel()
+
+	b := newBrokerForTests(t, &brokerForTestConfig{issuerURL: defaultIssuerURL})
+
+	const (
+		username         = "user@example.com"
+		providerID       = "saved-user-id"
+		conflictingID    = "replacement-user-id"
+		usernameMarker   = "username-cache"
+		providerIDMarker = "provider-id-cache"
+	)
+	usernameDir, err := b.UserDataDir(username)
+	require.NoError(t, err, "Setup: deriving the username cache dir should not fail")
+	providerIDDir, err := b.UserDataDir(providerID)
+	require.NoError(t, err, "Setup: deriving the provider ID cache dir should not fail")
+
+	writeCache := func(dir, identityID, marker string) []string {
+		require.NoError(t, os.MkdirAll(dir, 0700), "Setup: creating a cache dir should not fail")
+		cached := generateCachedInfo(t, tokenOptions{})
+		cached.UserInfo.ProviderID = identityID
+		cached.Token.AccessToken = marker
+		tokenPath := filepath.Join(dir, "token.json")
+		passwordPath := filepath.Join(dir, "password")
+		require.NoError(t, token.CacheAuthInfo(tokenPath, cached), "Setup: writing a token should not fail")
+		require.NoError(t, password.HashAndStorePassword(marker, passwordPath), "Setup: writing a password should not fail")
+		return []string{tokenPath, passwordPath}
+	}
+
+	usernamePaths := writeCache(usernameDir, providerID, usernameMarker)
+	providerIDPaths := writeCache(providerIDDir, conflictingID, providerIDMarker)
+	older, newer := time.Now().Add(-time.Hour), time.Now()
+	for _, path := range providerIDPaths {
+		require.NoError(t, os.Chtimes(path, older, older), "Setup: aging the provider ID cache should not fail")
+	}
+	for _, path := range usernamePaths {
+		require.NoError(t, os.Chtimes(path, newer, newer), "Setup: aging the username cache should not fail")
+	}
+
+	before := make(map[string][]byte, len(usernamePaths)+len(providerIDPaths))
+	for _, path := range append(usernamePaths, providerIDPaths...) {
+		before[path], err = os.ReadFile(path)
+		require.NoError(t, err, "Setup: reading cache files should not fail")
+	}
+
+	sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, "")
+	require.ErrorContains(t, err, "provider ID does not match the existing user")
+	require.Empty(t, sessionID, "conflicting caches must not create a session")
+
+	for _, path := range append(usernamePaths, providerIDPaths...) {
+		got, err := os.ReadFile(path)
+		require.NoError(t, err, "both caches must remain readable after rejection")
+		require.Equal(t, before[path], got, "a conflicting identity must not change cache files")
+	}
+	info, err := os.Lstat(usernameDir)
+	require.NoError(t, err, "the username cache should remain in place")
+	require.True(t, info.IsDir(), "the username cache must not become a compatibility symlink")
+	require.DirExists(t, providerIDDir, "the conflicting provider ID cache must remain in place")
+}
+
+func TestNewSessionRejectsMalformedCachedAuthInfo(t *testing.T) {
+	t.Parallel()
+
+	b := newBrokerForTests(t, &brokerForTestConfig{issuerURL: defaultIssuerURL})
+
+	const username = "user@example.com"
+	cacheDir, err := b.UserDataDir(username)
+	require.NoError(t, err, "Setup: deriving the username cache dir should not fail")
+	require.NoError(t, os.MkdirAll(cacheDir, 0700), "Setup: creating the cache dir should not fail")
+
+	tokenPath := filepath.Join(cacheDir, "token.json")
+	malformedToken := []byte("{")
+	require.NoError(t, os.WriteFile(tokenPath, malformedToken, 0600), "Setup: writing the malformed token should not fail")
+	passwordPath := filepath.Join(cacheDir, "password")
+	require.NoError(t, password.HashAndStorePassword("cached-password", passwordPath), "Setup: writing the cached password should not fail")
+	passwordBefore, err := os.ReadFile(passwordPath)
+	require.NoError(t, err, "Setup: reading the cached password should not fail")
+
+	sessionID, _, err := b.NewSession(username, "lang", sessionmode.Login, "")
+	require.ErrorContains(t, err, "could not unmarshal token")
+	require.Empty(t, sessionID, "a cache with an unreadable identity must not create a session")
+
+	tokenAfter, err := os.ReadFile(tokenPath)
+	require.NoError(t, err, "the malformed token should remain in place")
+	require.Equal(t, malformedToken, tokenAfter, "the malformed token should not be modified")
+	passwordAfter, err := os.ReadFile(passwordPath)
+	require.NoError(t, err, "the cached password should remain in place")
+	require.Equal(t, passwordBefore, passwordAfter, "the cached password should not be changed")
 }
 
 // TestNewSessionRemovesUnsafeCacheSymlink verifies that when the username cache path is a
@@ -1289,14 +1499,14 @@ func TestIsAuthenticated(t *testing.T) {
 		},
 		"Authenticating_with_password_still_allowed_if_server_is_unreachable": {
 			firstMode: authmodes.Password,
-			token:     &tokenOptions{},
+			token:     &tokenOptions{providerID: "saved-user-id"},
 			customHandlers: map[string]testutils.EndpointHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
 		},
 		"Authenticating_with_password_still_allowed_if_token_is_expired_and_server_is_unreachable": {
 			firstMode: authmodes.Password,
-			token:     &tokenOptions{expired: true},
+			token:     &tokenOptions{expired: true, providerID: "saved-user-id"},
 			customHandlers: map[string]testutils.EndpointHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
@@ -1323,7 +1533,7 @@ func TestIsAuthenticated(t *testing.T) {
 		},
 		"Authenticating_with_password_keeps_old_groups_if_session_is_offline": {
 			firstMode:      authmodes.Password,
-			token:          &tokenOptions{groups: []info.Group{{Name: "old-group"}}},
+			token:          &tokenOptions{groups: []info.Group{{Name: "old-group"}}, providerID: "saved-user-id"},
 			sessionOffline: true,
 			wantGroups:     []info.Group{{Name: "old-group"}},
 		},
@@ -1369,7 +1579,11 @@ func TestIsAuthenticated(t *testing.T) {
 		},
 		"Authenticating_with_password_still_allowed_if_no_refresh_token_and_server_is_unreachable": {
 			firstMode: authmodes.Password,
-			token:     &tokenOptions{noRefreshToken: true, groups: []info.Group{{Name: "old-group"}}},
+			token: &tokenOptions{
+				noRefreshToken: true,
+				groups:         []info.Group{{Name: "old-group"}},
+				providerID:     "saved-user-id",
+			},
 			customHandlers: map[string]testutils.EndpointHandler{
 				"/.well-known/openid-configuration": testutils.UnavailableHandler(),
 			},
@@ -1405,7 +1619,7 @@ func TestIsAuthenticated(t *testing.T) {
 			token: &tokenOptions{groups: []info.Group{
 				{Name: "remote-group"},
 				{Name: "extra-group"},
-			}},
+			}, providerID: "saved-user-id"},
 			sessionOffline:   true,
 			extraGroups:      []string{"extra-group", "other-extra-group"},
 			ownerExtraGroups: []string{"owner-group"},
@@ -1417,7 +1631,7 @@ func TestIsAuthenticated(t *testing.T) {
 				{Name: "remote-group"},
 				{Name: "extra-group"},
 				{Name: "owner-group"},
-			}},
+			}, providerID: "saved-user-id"},
 			sessionOffline:   true,
 			extraGroups:      []string{"extra-group"},
 			ownerExtraGroups: []string{"owner-group"},
@@ -1488,7 +1702,9 @@ func TestIsAuthenticated(t *testing.T) {
 		"Error_when_mode_is_password_and_token_is_invalid":       {firstMode: authmodes.Password, token: &tokenOptions{invalid: true}},
 		"Error_when_mode_is_password_and_no_refresh_token":       {firstMode: authmodes.Password, token: &tokenOptions{noRefreshToken: true}},
 		"Error_when_token_is_expired_and_refreshing_token_fails": {firstMode: authmodes.Password, token: &tokenOptions{expired: true, noRefreshToken: true}},
-		"Authenticating_with_password_skips_token_refresh_network_error": {firstMode: authmodes.Password, token: &tokenOptions{expired: true},
+		"Authenticating_with_password_skips_token_refresh_network_error": {
+			firstMode: authmodes.Password,
+			token:     &tokenOptions{expired: true, providerID: "saved-user-id"},
 			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.HangingHandler(broker.MaxRequestDuration + 1),
 			},
@@ -1921,6 +2137,181 @@ func TestIsAuthenticated(t *testing.T) {
 	}
 }
 
+func TestIsAuthenticatedProviderIDConflict(t *testing.T) {
+	t.Parallel()
+
+	for _, flow := range []string{"device", "entra", "oidc_refresh", "entra_refresh"} {
+		for _, source := range []string{
+			"database_and_cache",
+			"database_only",
+			"cache_only",
+			"matching_identity",
+			"both_conflicts",
+			"legacy_cache_target_conflict",
+		} {
+			if strings.HasSuffix(flow, "_refresh") && source == "database_only" {
+				continue
+			}
+			if source == "both_conflicts" && !strings.HasSuffix(flow, "_refresh") {
+				continue
+			}
+			t.Run(flow+"/"+source, func(t *testing.T) {
+				t.Parallel()
+
+				const username = "test-user@email.com"
+				const incomingID = "test-user-id"
+				incomingName := username
+				if source == "both_conflicts" {
+					incomingName = "someone-else@email.com"
+				}
+				existingID := "saved-user-id"
+				if source == "matching_identity" {
+					existingID = incomingID
+				}
+				if source == "legacy_cache_target_conflict" {
+					existingID = ""
+				}
+				cfg := &brokerForTestConfig{
+					Config:                     broker.Config{DataDir: t.TempDir()},
+					allUsersAllowed:            true,
+					issuerURL:                  defaultIssuerURL,
+					registerDevice:             true,
+					supportsDeviceRegistration: true,
+				}
+				var entraProvider *mockEntraAuthProvider
+				if strings.HasPrefix(flow, "entra") {
+					entraProvider = &mockEntraAuthProvider{
+						MockProvider: &testutils.MockProvider{},
+						flowState:    &himmelblau.MFAFlowState{},
+						challengeInfo: &himmelblau.MFAChallengeInfo{
+							PollingIntervalMs: 1,
+							MaxPollAttempts:   1,
+						},
+						mfaTokenResult: &oauth2.Token{AccessToken: "new-access-token", RefreshToken: "new-refresh-token"},
+						accessTokenUserInfo: &info.User{
+							Name: incomingName, ProviderID: incomingID,
+						},
+					}
+					cfg.provider = entraProvider
+				} else {
+					cfg.issuerURL = ""
+					cfg.tokenHandlerOptions = &testutils.TokenHandlerOptions{
+						IDTokenClaims: []map[string]interface{}{
+							{
+								"aud":                consts.MicrosoftBrokerAppID,
+								"sub":                incomingID,
+								"email":              incomingName,
+								"preferred_username": incomingName,
+							},
+						},
+					}
+				}
+				b := newBrokerForTests(t, cfg)
+
+				if source != "database_only" {
+					cacheDir, err := b.UserDataDir(username)
+					require.NoError(t, err)
+					cached := generateCachedInfo(t, tokenOptions{
+						providerID:           existingID,
+						obtainedViaEntraAuth: flow == "entra_refresh",
+					})
+					cached.UserInfo.ProviderID = existingID
+					cached.Token.RefreshToken = "original-refresh-token"
+					require.NoError(t, token.CacheAuthInfo(filepath.Join(cacheDir, "token.json"), cached))
+					require.NoError(t, password.HashAndStorePassword("password", filepath.Join(cacheDir, "password")))
+				}
+				var conflictingCachePaths []string
+				if source == "legacy_cache_target_conflict" {
+					cacheDir, err := b.UserDataDir(incomingID)
+					require.NoError(t, err)
+					require.NoError(t, os.MkdirAll(cacheDir, 0700))
+					cached := generateCachedInfo(t, tokenOptions{providerID: incomingID})
+					cached.UserInfo.ProviderID = "other-user-id"
+					cached.Token.RefreshToken = "target-refresh-token"
+					tokenPath := filepath.Join(cacheDir, "token.json")
+					passwordPath := filepath.Join(cacheDir, "password")
+					require.NoError(t, token.CacheAuthInfo(tokenPath, cached))
+					require.NoError(t, password.HashAndStorePassword("target-password", passwordPath))
+					conflictingCachePaths = []string{tokenPath, passwordPath}
+				}
+
+				databaseID := existingID
+				if source == "cache_only" {
+					databaseID = ""
+				}
+				sessionID, key, err := b.NewSession(username, "en", sessionmode.Login, databaseID)
+				require.NoError(t, err)
+				t.Cleanup(func() { require.NoError(t, b.EndSession(sessionID)) })
+
+				paths := append([]string{b.TokenPathForSession(sessionID), b.PasswordFilepathForSession(sessionID)}, conflictingCachePaths...)
+				before := make(map[string][]byte)
+				if source != "database_only" {
+					for _, path := range paths {
+						before[path], err = os.ReadFile(path)
+						require.NoError(t, err)
+					}
+				}
+
+				authData := "{}"
+				switch flow {
+				case "device":
+					updateAuthModes(t, b, sessionID, authmodes.Device)
+				case "entra":
+					advanceToEntraMFAWait(t, b, sessionID, key)
+				default:
+					updateAuthModes(t, b, sessionID, authmodes.Password)
+					authData = fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
+				}
+				access, data, err := b.IsAuthenticated(sessionID, authData)
+				require.NoError(t, err)
+
+				if source == "matching_identity" {
+					if flow == "device" {
+						require.Equal(t, broker.AuthNext, access)
+						updateAuthModes(t, b, sessionID, authmodes.NewPassword)
+						authData = fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "new-password", key))
+						access, _, err = b.IsAuthenticated(sessionID, authData)
+						require.NoError(t, err)
+					}
+					require.Equal(t, broker.AuthGranted, access)
+					return
+				}
+
+				require.Equal(t, broker.AuthDenied, access, "a reused username must not authorize a different identity")
+				if strings.HasSuffix(flow, "_refresh") {
+					require.Contains(t, data, "Authentication failure: account identity changed. Contact your administrator.",
+						"a refresh that identifies a different account must give the user identity-change guidance")
+				}
+				for _, path := range paths {
+					if source == "database_only" {
+						require.NoFileExists(t, path)
+						continue
+					}
+					after, err := os.ReadFile(path)
+					require.NoError(t, err)
+					require.Equal(t, before[path], after, "a rejected identity must not overwrite credentials")
+				}
+				if source == "both_conflicts" {
+					cached, err := token.LoadAuthInfo(paths[0])
+					require.NoError(t, err)
+					require.Equal(t, "original-refresh-token", cached.Token.RefreshToken,
+						"a conflicting identity must not persist a rotated refresh token")
+				}
+				newCacheDir, err := b.UserDataDir(incomingID)
+				require.NoError(t, err)
+				if source == "legacy_cache_target_conflict" {
+					require.DirExists(t, newCacheDir, "the conflicting target cache must remain in place")
+				} else {
+					require.NoDirExists(t, newCacheDir, "a rejected identity must not migrate the old cache")
+				}
+				if entraProvider != nil {
+					require.Zero(t, entraProvider.registerDeviceCalls, "identity must be checked before registering a device")
+				}
+			})
+		}
+	}
+}
+
 // Due to ordering restrictions, this test can not be run in parallel, otherwise the routines would not be ordered as expected.
 func TestConcurrentIsAuthenticated(t *testing.T) {
 	tests := map[string]struct {
@@ -1983,13 +2374,13 @@ func TestConcurrentIsAuthenticated(t *testing.T) {
 			})
 
 			firstSession, firstKey := newSessionForTests(t, b, username1, "")
-			firstToken := tokenOptions{username: username1}
+			firstToken := tokenOptions{username: username1, providerID: "user1"}
 			generateAndStoreCachedInfo(t, firstToken, b.TokenPathForSession(firstSession))
 			err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(firstSession))
 			require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
 
 			secondSession, secondKey := newSessionForTests(t, b, username2, "")
-			secondToken := tokenOptions{username: username2}
+			secondToken := tokenOptions{username: username2, providerID: "user2"}
 			generateAndStoreCachedInfo(t, secondToken, b.TokenPathForSession(secondSession))
 			err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(secondSession))
 			require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
@@ -2175,7 +2566,7 @@ func TestIsAuthenticatedAllowedUsersConfig(t *testing.T) {
 
 			for _, u := range allUsers {
 				sessionID, key := newSessionForTests(t, b, u, "")
-				token := tokenOptions{username: u}
+				token := tokenOptions{username: u, providerID: "user"}
 				generateAndStoreCachedInfo(t, token, b.TokenPathForSession(sessionID))
 				err = password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID))
 				require.NoError(t, err, "Setup: HashAndStorePassword should not have returned an error")
@@ -3745,6 +4136,7 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshUpdatesUserInfo(t *testing.T) {
 		obtainedViaEntraAuth: true,
 		gecos:                "stale gecos",
 		groups:               []info.Group{{Name: "remote-group"}},
+		providerID:           "saved-user-id",
 	}, b.TokenPathForSession(sessionID))
 	require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
 
@@ -3894,7 +4286,7 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch(t *tes
 			return []info.Group{{Name: "remote-group"}}, nil
 		}},
 		refreshResult:       &oauth2.Token{AccessToken: "new-access-token", RefreshToken: "new-refresh-token"},
-		accessTokenUserInfo: &info.User{Name: "someone-else@email.com", ProviderID: "different-user-id"},
+		accessTokenUserInfo: &info.User{Name: "someone-else@email.com", ProviderID: "saved-user-id"},
 	}
 
 	b := newBrokerForTests(t, &brokerForTestConfig{
@@ -3906,7 +4298,10 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch(t *tes
 	})
 
 	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
-	generateAndStoreCachedInfo(t, tokenOptions{obtainedViaEntraAuth: true}, b.TokenPathForSession(sessionID))
+	generateAndStoreCachedInfo(t, tokenOptions{
+		obtainedViaEntraAuth: true,
+		providerID:           "saved-user-id",
+	}, b.TokenPathForSession(sessionID))
 	require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
 
 	updateAuthModes(t, b, sessionID, authmodes.Password)
@@ -4705,7 +5100,11 @@ func TestIsAuthenticatedEntraAuthFallsBackToEmailClaim(t *testing.T) {
 	t.Parallel()
 
 	username := "test-user@email.com"
-	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{
+		username:   username,
+		issuer:     defaultIssuerURL,
+		providerID: "saved-user-id",
+	})
 	provider := &mockEntraAuthProvider{
 		MockProvider: &testutils.MockProvider{},
 		flowState:    &himmelblau.MFAFlowState{},
@@ -4976,7 +5375,7 @@ func TestDeleteUser(t *testing.T) {
 
 			if tc.createProviderIDDir {
 				// Create the real provider ID-keyed directory with cached data.
-				generateAndStoreCachedInfo(t, tokenOptions{}, filepath.Join(providerIDDir, "token.json"))
+				generateAndStoreCachedInfo(t, tokenOptions{providerID: providerID}, filepath.Join(providerIDDir, "token.json"))
 				err := os.WriteFile(filepath.Join(providerIDDir, "password"), []byte("hashed"), 0600)
 				require.NoError(t, err, "Setup: could not write dummy password file")
 			}
@@ -5112,7 +5511,8 @@ func TestDeviceAuthRedirectsToExistingProviderIDDir(t *testing.T) {
 	// Simulate the cache left behind by the previous login: the provider ID directory
 	// already exists and holds a cached token.
 	require.NoError(t, os.MkdirAll(providerIDDir, 0700), "Setup: creating the existing provider ID dir should not fail")
-	require.NoError(t, os.WriteFile(filepath.Join(providerIDDir, "token.json"), []byte("previous-login-token"), 0600),
+	cached := generateCachedInfo(t, tokenOptions{providerID: providerID})
+	require.NoError(t, token.CacheAuthInfo(filepath.Join(providerIDDir, "token.json"), cached),
 		"Setup: writing the existing provider ID token should not fail")
 
 	// authd has not been updated, so it does not pass a provider ID to NewSession, and
@@ -5226,16 +5626,18 @@ func TestOfflineLoginCacheDirectoryResolution(t *testing.T) {
 			switch {
 			case tc.alreadyMigrated:
 				require.NoError(t, os.MkdirAll(providerIDDir, 0700), "Setup: creating the provider ID dir")
-				generateAndStoreCachedInfo(t, tokenOptions{}, filepath.Join(providerIDDir, "token.json"))
+				generateAndStoreCachedInfo(t, tokenOptions{providerID: providerID}, filepath.Join(providerIDDir, "token.json"))
 				require.NoError(t, os.Symlink(providerIDDir, usernameDir), "Setup: creating the compatibility symlink")
 			case tc.legacyDirWithProviderID:
 				require.NoError(t, os.MkdirAll(usernameDir, 0700), "Setup: creating the legacy username dir")
 				// generateCachedInfo stores a token whose ProviderID is "saved-user-id".
-				generateAndStoreCachedInfo(t, tokenOptions{}, filepath.Join(usernameDir, "token.json"))
+				generateAndStoreCachedInfo(t, tokenOptions{providerID: providerID}, filepath.Join(usernameDir, "token.json"))
 			case tc.legacyDirWithoutProviderID:
 				require.NoError(t, os.MkdirAll(usernameDir, 0700), "Setup: creating the legacy username dir")
-				// A token without a provider ID cannot be migrated offline.
-				require.NoError(t, os.WriteFile(filepath.Join(usernameDir, "token.json"), []byte("{}"), 0600),
+				// A valid legacy token without a stored provider ID cannot be migrated offline.
+				cached := generateCachedInfo(t, tokenOptions{})
+				cached.UserInfo.ProviderID = ""
+				require.NoError(t, token.CacheAuthInfo(filepath.Join(usernameDir, "token.json"), cached),
 					"Setup: writing the legacy token without a provider ID")
 			}
 
@@ -5548,19 +5950,23 @@ func TestEnsureProviderIDCacheDir(t *testing.T) {
 			require.NoError(t, os.MkdirAll(issuerDir, 0700), "Setup: creating the issuer dir should not fail")
 
 			const tokenContent = "cached-token-marker"
+			writeToken := func(dir, accessToken string) {
+				cached := generateCachedInfo(t, tokenOptions{providerID: providerID})
+				cached.Token.AccessToken = accessToken
+				require.NoError(t, token.CacheAuthInfo(filepath.Join(dir, "token.json"), cached),
+					"Setup: writing the cached token")
+			}
 			if tc.createProviderIDDir {
 				providerIDTokenContent := tokenContent
 				if tc.providerIDTokenContent != "" {
 					providerIDTokenContent = tc.providerIDTokenContent
 				}
 				require.NoError(t, os.MkdirAll(providerIDDir, 0700), "Setup: creating the provider ID dir")
-				require.NoError(t, os.WriteFile(filepath.Join(providerIDDir, "token.json"), []byte(providerIDTokenContent), 0600),
-					"Setup: writing the provider ID token file")
+				writeToken(providerIDDir, providerIDTokenContent)
 			}
 			if tc.createUsernameDir {
 				require.NoError(t, os.MkdirAll(usernameDir, 0700), "Setup: creating the username dir")
-				require.NoError(t, os.WriteFile(filepath.Join(usernameDir, "token.json"), []byte(tokenContent), 0600),
-					"Setup: writing the username token file")
+				writeToken(usernameDir, tokenContent)
 			}
 			if tc.usernameExtraFile != "" {
 				require.NoError(t, os.WriteFile(filepath.Join(usernameDir, tc.usernameExtraFile), []byte("extra"), 0600),
@@ -5623,6 +6029,7 @@ func TestEnsureProviderIDCacheDir(t *testing.T) {
 
 			got := b.EnsureProviderIDCacheDir(username, currentDataDir, providerIDArg)
 			restorePerms()
+			require.NoError(t, got.Err, "Ensuring cache paths should not return an identity conflict")
 
 			if tc.wantProviderIDSet {
 				require.Equal(t, providerID, got.ProviderID, "Provider ID should have been set on the session")
@@ -5646,9 +6053,9 @@ func TestEnsureProviderIDCacheDir(t *testing.T) {
 						wantProviderIDTokenContent = tc.wantProviderIDTokenContent
 					}
 					// The cached token must be reachable through the provider ID dir.
-					gotToken, err := os.ReadFile(filepath.Join(providerIDDir, "token.json"))
+					gotToken, err := token.LoadAuthInfo(filepath.Join(providerIDDir, "token.json"))
 					require.NoError(t, err, "Reading the provider ID token file should not fail")
-					require.Equal(t, wantProviderIDTokenContent, string(gotToken), "The cached token should have been preserved")
+					require.Equal(t, wantProviderIDTokenContent, gotToken.Token.AccessToken, "The cached token should have been preserved")
 				}
 			} else {
 				require.NoDirExists(t, providerIDDir, "Provider ID directory should not exist")
@@ -5700,10 +6107,12 @@ func TestCompatibilitySymlinkSurvivesIssuerTreeMove(t *testing.T) {
 
 	issuerDir := filepath.Dir(usernameDir)
 	require.NoError(t, os.MkdirAll(providerIDDir, 0700), "Setup: creating the provider ID dir")
-	require.NoError(t, os.WriteFile(filepath.Join(providerIDDir, "token.json"), []byte("cached-token"), 0600),
+	cached := generateCachedInfo(t, tokenOptions{providerID: providerID})
+	require.NoError(t, token.CacheAuthInfo(filepath.Join(providerIDDir, "token.json"), cached),
 		"Setup: writing the provider ID token file")
 
 	got := b.EnsureProviderIDCacheDir(username, usernameDir, providerID)
+	require.NoError(t, got.Err, "Ensuring cache paths should not return an error")
 	require.Equal(t, providerIDDir, got.UserDataDir, "Session should use the provider ID cache dir")
 
 	// The raw symlink value must be relative so it is not tied to the current path prefix.

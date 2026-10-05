@@ -273,10 +273,11 @@ func generateAndStoreCachedInfo(t *testing.T, options tokenOptions, path string)
 }
 
 type tokenOptions struct {
-	username string
-	issuer   string
-	gecos    string
-	groups   []info.Group
+	username   string
+	issuer     string
+	providerID string
+	gecos      string
+	groups     []info.Group
 
 	expired                     bool
 	noRefreshToken              bool
@@ -306,10 +307,13 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 	if options.username == "-" {
 		options.username = ""
 	}
+	if options.providerID == "" {
+		options.providerID = "test-user-id"
+	}
 
 	idToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
 		"iss":                options.issuer,
-		"sub":                "saved-user-id",
+		"sub":                options.providerID,
 		"aud":                "test-client-id",
 		"exp":                9999999999,
 		"name":               "test-user",
@@ -356,7 +360,7 @@ func generateCachedInfo(t *testing.T, options tokenOptions) *token.AuthCachedInf
 		}
 		tok.UserInfo = info.User{
 			Name:       options.username,
-			ProviderID: "saved-user-id",
+			ProviderID: options.providerID,
 			Home:       "/home/" + options.username,
 			Gecos:      options.gecos,
 			Shell:      "/usr/bin/bash",

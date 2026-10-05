@@ -86,15 +86,18 @@ func TestLoadAuthInfo(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		expectedRet *token.AuthCachedInfo
-		fileExists  bool
-		invalidJSON bool
+		expectedRet  *token.AuthCachedInfo
+		fileExists   bool
+		invalidJSON  bool
+		missingToken bool
 
-		wantError bool
+		wantError    bool
+		wantNotExist bool
 	}{
 		"Successfully_load_token_from_existing_file": {fileExists: true, expectedRet: testToken},
-		"Error_when_file_does_not_exist":             {wantError: true},
+		"Error_when_file_does_not_exist":             {wantError: true, wantNotExist: true},
 		"Error_when_file_contains_invalid_JSON":      {fileExists: true, invalidJSON: true, wantError: true},
+		"Error_when_file_has_no_OAuth_token":         {fileExists: true, missingToken: true, wantError: true},
 	}
 
 	for name, tc := range tests {
@@ -109,6 +112,9 @@ func TestLoadAuthInfo(t *testing.T) {
 				if tc.invalidJSON {
 					err = os.WriteFile(tokenPath, []byte("invalid json"), 0600)
 					require.NoError(t, err, "WriteFile should not return an error")
+				} else if tc.missingToken {
+					err = os.WriteFile(tokenPath, []byte(`{"ExtraFields":{}}`), 0600)
+					require.NoError(t, err, "WriteFile should not return an error")
 				} else {
 					err = token.CacheAuthInfo(tokenPath, testToken)
 					require.NoError(t, err, "CacheAuthInfo should not return an error")
@@ -118,6 +124,9 @@ func TestLoadAuthInfo(t *testing.T) {
 			got, err := token.LoadAuthInfo(tokenPath)
 			if tc.wantError {
 				require.Error(t, err, "LoadAuthInfo should return an error")
+				if tc.wantNotExist {
+					require.ErrorIs(t, err, os.ErrNotExist, "missing token errors should preserve os.ErrNotExist")
+				}
 				return
 			}
 			require.NoError(t, err, "LoadAuthInfo should not return an error")
