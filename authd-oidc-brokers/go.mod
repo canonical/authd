@@ -5,7 +5,7 @@ go 1.26.0
 toolchain go1.26.7
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.1
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.2
 	github.com/canonical/authd v0.7.0
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf
