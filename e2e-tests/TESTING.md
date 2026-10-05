@@ -63,20 +63,25 @@ ssh-add /path/to/key
 ```
 
 This sets up a libvirt VM with Ubuntu, installs authd and the broker, and
-creates the snapshots required by the tests. By default, packages other than
-authd come from the [authd-edge PPA][authd-edge-ppa], authd comes from the local
-package when `--authd-deb` is supplied, and the broker comes from the edge
-channel snap. Use `--authd-apt-source <source>` to select the source for authd
-or `--apt-source <source>` to select the source for all packages except authd.
-Each source can be `authd`, `authd-edge`, `authd-dev`, or an Ubuntu archive
-suite. Use `--authd-deb` for a local authd package; it cannot be combined with
-`--authd-apt-source`. Use `--broker-snap` to install a locally built broker
-snap. Run `./e2e-tests/vm/provision.sh --help` for all available options,
-including `--force` to reprovision.
+creates the snapshots required by the tests. By default, the VM's normal
+archive suites, the matching `-proposed` suite, and the
+[authd-edge PPA][authd-edge-ppa] are enabled. APT selects the highest available
+package version across those sources. Authd comes from the local package when
+`--authd-deb` is supplied, and the broker comes from the edge channel snap.
 
-APT policy pins authd to its selected source while allowing authd dependencies
-to use the system source and normal archive fallbacks. Provisioning upgrades
-the whole system from the system source, not only authd dependencies.
+Use `--apt-source <source>` to add a source for all packages except authd, or
+`--authd-apt-source <source>` to add a source for authd. Both options accept
+`authd`, `authd-edge`, `authd-dev`, or an Ubuntu archive suite, and can be
+repeated to add more sources. If any `--apt-source` options are supplied, they
+replace the default `-proposed` and `authd-edge` sources. Use `--authd-deb` for
+a local authd package; it cannot be combined with `--authd-apt-source`. Use
+`--broker-snap` to install a locally built broker snap. Run
+`./e2e-tests/vm/provision.sh --help` for all available options, including
+`--force` to reprovision.
+
+APT uses the highest package version available from the enabled system
+sources. Authd-only sources remain lower priority for other packages, while
+authd can use the highest version from both source lists.
 
 To test migration from one source set to another, pass the stable system
 baseline with `--apt-source-base`, the stable authd baseline with
@@ -90,6 +95,7 @@ the authd target with `--authd-apt-source`:
   --apt-source-base resolute-updates \
   --authd-apt-source-base authd \
   --apt-source resolute-proposed \
+  --apt-source authd-edge \
   --authd-apt-source authd-edge \
   --force
 ```
@@ -170,13 +176,18 @@ suites. Leave it unset for normal isolated and CI runs.
 By default, GitHub CI runs the end-to-end tests against `authd-msentraid` on all
 supported Ubuntu releases (`noble`, `resolute`, and `devel`), using the complete
 test suite and the authd package and broker snap built from the current branch.
-All other packages are updated from the [authd-edge PPA][authd-edge-ppa].
+The VM's default archive suites, the matching Ubuntu release's `-proposed`
+pocket, and the `authd-edge` PPA are enabled for system packages. APT installs
+the highest available package version from those sources.
 Migration suites start with the last stable authd and broker releases before
 installing the selected authd package or snap. To use locally built packages in
 those suites, set `AUTHD_DEB` and `BROKER_SNAP` to their host paths when
-running `run-tests.sh`. `APT_SOURCE` selects the source for all packages except
-authd, and `AUTHD_APT_SOURCE` independently selects the authd source. Both
-variables accept the three authd PPA names or an Ubuntu archive suite.
+running `run-tests.sh`. `APT_SOURCE` and `AUTHD_APT_SOURCE` accept
+comma- or space-separated lists of the three authd PPA names and/or Ubuntu
+archive suites. An unset `APT_SOURCE` uses the matching `-proposed` suite and
+`authd-edge`; an unset `AUTHD_APT_SOURCE` uses the system sources for local APT
+installs. GitHub CI continues to use the branch-built authd package unless
+`e2e-authd-apt-source` is set.
 `APT_SOURCE_BASE` selects the Ubuntu archive suite for the stable baseline of
 all packages except authd. `AUTHD_APT_SOURCE_BASE` independently selects the
 source for the stable authd baseline. If it is unset, the stable authd PPA is
@@ -189,24 +200,32 @@ releases, brokers, test suites, test cases, and package sources. Copy the
 relevant line into the visible part of the pull request description to enable
 it; leave it commented to use the default.
 
-To update all packages except authd from an Ubuntu archive suite, add an
-`e2e-apt-source:` line with the full suite name. For example:
+The `e2e-apt-source:` marker adds one or more sources for all packages except
+authd. Each value can be an authd PPA name or a full Ubuntu archive suite.
+Repeat the marker to add more sources. When the marker is absent, the workflow
+adds the release's `-proposed` suite and the `authd-edge` PPA. When it is
+present, its values replace those extra defaults; the VM's normal archive
+suites stay enabled. For example, to add both sources explicitly:
 
 ```text
 e2e-apt-source: resolute-proposed
+e2e-apt-source: authd-edge
 ```
 
-To install authd from a PPA or archive suite independently, add an
-`e2e-authd-apt-source:` line:
+The `e2e-authd-apt-source:` marker adds sources for authd and accepts the same
+PPA names and Ubuntu suites. Repeat it to add more sources. If omitted, the
+branch-built authd package remains under test for jobs with no matching source.
+To add two authd sources:
 
 ```text
-e2e-authd-apt-source: resolute-updates
+e2e-authd-apt-source: resolute-proposed
+e2e-authd-apt-source: authd-edge
 ```
 
-Either marker also accepts `authd`, `authd-edge`, or `authd-dev` to select the
-stable, edge, or development PPA. PPA selections apply to every release. An
-archive selection is used only by the matrix job whose Ubuntu release matches
-the suite prefix.
+APT selects the highest available version across enabled sources. PPA sources
+apply to every release; archive suites apply only to matching release jobs.
+Jobs with no applicable system sources use their default `-proposed` suite and
+`authd-edge` PPA.
 
 To test migration from an archive update suite to a proposed suite with authd
 from a different source, add both base markers:
@@ -215,16 +234,16 @@ from a different source, add both base markers:
 e2e-apt-source-base: resolute-updates
 e2e-authd-apt-source-base: authd
 e2e-apt-source: resolute-proposed
+e2e-apt-source: authd-edge
 e2e-authd-apt-source: authd-edge
 ```
 
 `e2e-apt-source-base` must be an Ubuntu archive suite. The authd base marker
-accepts an authd PPA or an Ubuntu archive suite. The archive sources are used
-only by the matrix job whose Ubuntu release matches the suite prefix (the
-`devel` job is matched using the current Ubuntu codename, not the literal
-`devel` label); other release jobs use their defaults. If
-`e2e-authd-apt-source` is omitted, the branch-built authd package remains the
-package under test.
+accepts an authd PPA or an Ubuntu archive suite. Archive sources are used only
+by the matrix job whose Ubuntu release matches the suite prefix (the `devel`
+job is matched using the current Ubuntu codename, not the literal `devel`
+label). If `e2e-authd-apt-source` is omitted, the branch-built authd package
+remains the package under test.
 
 To run only selected end-to-end test suites, add an `e2e-tests:` line to the
 pull request description, followed by a space- or comma-separated list of suite
@@ -264,7 +283,7 @@ e2e-brokers: google
 
 Editing the pull request description does not automatically re-run the
 workflow. If you change an `e2e-ubuntu-releases:`, `e2e-tests:`,
-`e2e-test-case:`, `e2e-brokers:`, `e2e-apt-source:`, or
+`e2e-test-case:`, `e2e-brokers:`, `e2e-apt-source:`,
 `e2e-authd-apt-source:`, `e2e-apt-source-base:`, or
 `e2e-authd-apt-source-base:` line after the workflow has already run, re-run the
 workflow. It fetches the current pull request description from GitHub. If you

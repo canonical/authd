@@ -35,8 +35,91 @@ function normalize_apt_source() {
     esac
 }
 
+function normalize_apt_sources() {
+    local input source normalized existing
+    local -a fields=()
+    local -a normalized_sources=()
+    local duplicate
+    local has_input=false
+
+    for input in "$@"; do
+        if [[ -n "${input}" ]]; then
+            has_input=true
+        fi
+        input="${input//,/ }"
+        read -r -a fields <<<"${input}"
+        for source in "${fields[@]}"; do
+            if ! normalized="$(normalize_apt_source "${source}")"; then
+                return 1
+            fi
+
+            duplicate=false
+            for existing in "${normalized_sources[@]}"; do
+                if [[ "${existing}" == "${normalized}" ]]; then
+                    duplicate=true
+                    break
+                fi
+            done
+            if [[ "${duplicate}" == false ]]; then
+                normalized_sources+=("${normalized}")
+            fi
+        done
+    done
+
+    if ((${#normalized_sources[@]})); then
+        printf '%s\n' "${normalized_sources[@]}"
+    elif [[ "${has_input}" == true ]]; then
+        echo "APT source list must not be empty." >&2
+        return 1
+    fi
+}
+
+function normalize_apt_sources_into_array() {
+    local output_name="$1"
+    shift
+
+    local normalized_sources
+    local -n output_ref="${output_name}"
+
+    normalized_sources="$(normalize_apt_sources "$@")" || return 1
+    output_ref=()
+    if [[ -n "${normalized_sources}" ]]; then
+        mapfile -t output_ref <<<"${normalized_sources}"
+    fi
+}
+
+function join_apt_sources() {
+    local IFS=,
+    printf '%s' "$*"
+}
+
 function is_ppa_source() {
     [[ "$1" == ppa:* ]]
+}
+
+function is_default_archive_source() {
+    local source="$1"
+    local release="$2"
+
+    [[ "${source}" == "${release}" ||
+       "${source}" == "${release}-updates" ||
+       "${source}" == "${release}-security" ||
+       "${source}" == "${release}-backports" ]]
+}
+
+function validate_apt_source_for_release() {
+    local source="$1"
+    local release="$2"
+    local source_name="${3:-APT}"
+
+    if [[ -z "${source}" ]] ||
+       is_ppa_source "${source}" ||
+       [[ "${source}" == "${release}" || "${source}" == "${release}-"* ]]; then
+        return
+    fi
+
+    echo "${source_name} APT source '${source}' does not match VM release '${release}'." >&2
+    return 1
 }
 
 function ppa_has_suite() {

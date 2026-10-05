@@ -35,7 +35,7 @@ Required environment variables (or use the corresponding command-line options):
 Optional:
   E2E_USER, E2E_PASSWORD, E2E_PASSWORDLESS_USER, TOTP_SECRET,
   AUTHD_MSENTRAID_ISSUER_ID, AUTHD_MSENTRAID_CLIENT_ID, AUTHD_MSENTRAID_CLIENT_SECRET,
-  AUTHD_DEB, APT_SOURCE, AUTHD_APT_SOURCE
+  AUTHD_DEB, APT_SOURCE (comma-separated), AUTHD_APT_SOURCE (comma-separated)
                                         Forwarded to the console so keywords
                                         that reference them work as in a run.
   AUTHD_E2E_TEST_RUNS_DIR              Directory for console artifacts
@@ -140,43 +140,43 @@ if [ -z "${BROKER:-}" ] || [ -z "${RELEASE:-}" ]; then
     exit 1
 fi
 
-requested_apt_source="${APT_SOURCE:-${AUTHD_DEFAULT_APT_SOURCE}}"
-requested_authd_apt_source="${AUTHD_APT_SOURCE:-}"
-if ! APT_SOURCE="$(normalize_apt_source "${requested_apt_source}")"; then
-    echo >&2 "Invalid APT source '${requested_apt_source}'."
-    exit 1
+VM_RELEASE=$(resolve_devel_release "${RELEASE}")
+
+APT_SOURCES=()
+if [[ -n "${APT_SOURCE:-}" ]]; then
+    if ! normalize_apt_sources_into_array APT_SOURCES "${APT_SOURCE}"; then
+        echo >&2 "Invalid APT source list '${APT_SOURCE}'."
+        exit 1
+    fi
+else
+    APT_SOURCES=("${VM_RELEASE}-proposed" "${AUTHD_DEFAULT_APT_SOURCE}")
 fi
-AUTHD_APT_SOURCE=
-if [ -n "${requested_authd_apt_source}" ]; then
-    if ! AUTHD_APT_SOURCE="$(normalize_apt_source "${requested_authd_apt_source}")"; then
-        echo >&2 "Invalid authd APT source '${requested_authd_apt_source}'."
+for source in "${APT_SOURCES[@]}"; do
+    if ! validate_apt_source_for_release "${source}" "${VM_RELEASE}" system; then
+        exit 1
+    fi
+done
+APT_SOURCE="$(join_apt_sources "${APT_SOURCES[@]}")"
+
+requested_authd_apt_sources="${AUTHD_APT_SOURCE:-}"
+AUTHD_APT_SOURCES=()
+if [[ -n "${requested_authd_apt_sources}" ]]; then
+    if ! normalize_apt_sources_into_array AUTHD_APT_SOURCES "${requested_authd_apt_sources}"; then
+        echo >&2 "Invalid authd APT source list '${requested_authd_apt_sources}'."
         exit 1
     fi
 fi
-if [ -n "${AUTHD_APT_SOURCE}" ] && [ -n "${AUTHD_DEB:-}" ]; then
+for source in "${AUTHD_APT_SOURCES[@]}"; do
+    if ! validate_apt_source_for_release "${source}" "${VM_RELEASE}" authd; then
+        exit 1
+    fi
+done
+AUTHD_APT_SOURCE="$(join_apt_sources "${AUTHD_APT_SOURCES[@]}")"
+unset requested_authd_apt_sources
+
+if ((${#AUTHD_APT_SOURCES[@]})) && [ -n "${AUTHD_DEB:-}" ]; then
     echo >&2 "AUTHD_APT_SOURCE cannot be used together with AUTHD_DEB."
     exit 1
-fi
-unset requested_apt_source requested_authd_apt_source
-
-if ! is_ppa_source "${APT_SOURCE}"; then
-    VM_RELEASE=$(resolve_devel_release "${RELEASE}")
-elif [ -n "${AUTHD_APT_SOURCE:-}" ] && ! is_ppa_source "${AUTHD_APT_SOURCE}"; then
-    VM_RELEASE=$(resolve_devel_release "${RELEASE}")
-fi
-
-if ! is_ppa_source "${APT_SOURCE}"; then
-    if [[ "${APT_SOURCE}" != "${VM_RELEASE}" && "${APT_SOURCE}" != "${VM_RELEASE}-"* ]]; then
-        echo >&2 "APT source suite '${APT_SOURCE}' does not match VM release '${VM_RELEASE}'."
-        exit 1
-    fi
-fi
-
-if [ -n "${AUTHD_APT_SOURCE:-}" ] && ! is_ppa_source "${AUTHD_APT_SOURCE}"; then
-    if [[ "${AUTHD_APT_SOURCE}" != "${VM_RELEASE}" && "${AUTHD_APT_SOURCE}" != "${VM_RELEASE}-"* ]]; then
-        echo >&2 "Authd APT source suite '${AUTHD_APT_SOURCE}' does not match VM release '${VM_RELEASE}'."
-        exit 1
-    fi
 fi
 
 VM_NAME=${VM_NAME:-"e2e-runner-${RELEASE}"}
