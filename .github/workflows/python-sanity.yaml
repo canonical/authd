@@ -19,7 +19,8 @@ concurrency:
 jobs:
   python-sanity:
     name: "Python: Code sanity"
-    permissions: {}
+    permissions:
+      contents: read
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7

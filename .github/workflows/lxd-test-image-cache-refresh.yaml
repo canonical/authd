@@ -19,7 +19,8 @@ jobs:
     # * the LXD_UBUNTU_VERSION environment variable matches the version used in
     #   the test case.
     runs-on: ubuntu-24.04
-    permissions: {}
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
 
