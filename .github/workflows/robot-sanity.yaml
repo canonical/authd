@@ -1,0 +1,49 @@
+name: Robot Framework code sanity
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**/*.robot'
+      - '**/*.resource'
+      - 'e2e-tests/.yarf'
+      - 'e2e-tests/pyproject.toml'
+      - 'e2e-tests/uv.lock'
+      - '.gitmodules'
+      - '.github/workflows/robot-sanity.yaml'
+  pull_request:
+    paths:
+      - '**/*.robot'
+      - '**/*.resource'
+      - 'e2e-tests/.yarf'
+      - 'e2e-tests/pyproject.toml'
+      - 'e2e-tests/uv.lock'
+      - '.gitmodules'
+      - '.github/workflows/robot-sanity.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  robot-format:
+    name: "Robot Framework: Format"
+    permissions: {}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: e2e-tests/uv.lock
+      - name: Install Robocop
+        run: uv sync --project e2e-tests --locked --only-group robocop --no-install-project --no-install-workspace
+      - name: Check Robot Framework formatting
+        run: uv run --project e2e-tests --no-sync robocop format --check --no-cache e2e-tests/tests e2e-tests/resources

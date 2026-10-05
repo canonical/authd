@@ -5,7 +5,7 @@ Resource            kvm.resource
 Library             ./Journal.py    AS    Journal
 Library             ./StringUtils.py    AS    StringUtils
 Library             ./VideoLogger.py    AS    VideoLogger
-Library             ./VNCRecorder.py   AS    VNCRecorder
+Library             ./VNCRecorder.py    AS    VNCRecorder
 Library             ./Snapshot.py    AS    Snapshot
 Library             ./SSH.py    AS    SSH
 Library             Process
@@ -14,19 +14,18 @@ Library             String
 
 
 *** Variables ***
-${SUITE_OUTPUT_DIR}    ${OUTPUT_DIR}/${SUITE_NAME.rsplit('.')[-1]}
+${SUITE_OUTPUT_DIR}             ${OUTPUT_DIR}/${SUITE_NAME.rsplit('.')[-1]}
 # Save yarf debug screenshots as files in the suite output directory so that
 # they are referenced by relative URLs in log.html instead of being embedded
 # as base64. Set to an empty string to fall back to inline base64 embedding.
-${YARF_IMAGE_DIR}    ${SUITE_OUTPUT_DIR}/screenshots
-${OCR_CONFIDENCE_THRESHOLD}    93
-${OCR_SIMILARITY_THRESHOLD}    92
+${YARF_IMAGE_DIR}               ${SUITE_OUTPUT_DIR}/screenshots
+${OCR_CONFIDENCE_THRESHOLD}     93
+${OCR_SIMILARITY_THRESHOLD}     92
 
 
 *** Keywords ***
 Log In
     Log In With Password    ubuntu
-
 
 Log In With Password
     [Arguments]    ${password}
@@ -36,7 +35,6 @@ Log In With Password
     Hid.Keys Combo    Return
     Wait Until Desktop Ready
 
-
 Log In And Set Password
     [Arguments]    ${new_password}
     Wait Until GDM Login Screen Ready
@@ -45,8 +43,8 @@ Log In And Set Password
     Hid.Keys Combo    Return
 
     Match Text    You are required to change your password immediately    30
-    Match Text    Changing password   30
-    Sleep   2
+    Match Text    Changing password    30
+    Sleep    2
     Hid.Type String    ubuntu
     Hid.Keys Combo    Return
 
@@ -60,11 +58,9 @@ Log In And Set Password
 
     Wait Until Desktop Ready
 
-
 Select User
     Wait Until Keyword Succeeds    120 sec    1 sec
     ...    Try Select User
-
 
 Try Select User
     Hid.Keys Combo    Return
@@ -73,23 +69,19 @@ Try Select User
     # the suite's global threshold.
     Match Text    Password    confidence=88
 
-
 Log Out
     SSH.Execute    loginctl terminate-seat seat0
 
-
 Lock Screen
-    ${session_id} =    SSH.Execute    loginctl show-seat seat0 -p ActiveSession --value
+    ${session_id}=    SSH.Execute    loginctl show-seat seat0 -p ActiveSession --value
     Should Not Be Empty    ${session_id}
     SSH.Execute    loginctl lock-session ${session_id}
     Wait Until Keyword Succeeds    30s    1s    Check Session Is Locked    ${session_id}
 
-
 Check Session Is Locked
     [Arguments]    ${session_id}
-    ${locked} =    SSH.Execute    loginctl show-session ${session_id} -p LockedHint --value
+    ${locked}=    SSH.Execute    loginctl show-session ${session_id} -p LockedHint --value
     Should Be Equal    ${locked}    yes
-
 
 Unlock Screen With Password
     [Arguments]    ${password}
@@ -102,7 +94,6 @@ Unlock Screen With Password
     Hid.Keys Combo    Return
     Wait Until Desktop Ready
 
-
 Wait Until GDM Login Screen Ready
     Match Text    Not listed    180
     # Sometimes the "Not listed" is shown for a brief moment before the other
@@ -110,7 +101,6 @@ Wait Until GDM Login Screen Ready
     # list item being clicked in the next step. To avoid that, we sleep for
     # 2 seconds to ensure the login screen is fully loaded before proceeding.
     BuiltIn.Sleep    2
-
 
 Wait Until Desktop Ready
     Wait Until Keyword Succeeds    1 min    1 sec
@@ -130,18 +120,14 @@ Close Activities Overview
         Hid.Keys Combo    Escape
         BuiltIn.Sleep    1
         ${matches}=    Find Text    Type to search
-        IF    not ${matches}
-            BREAK
-        END
+        IF    not ${matches}    BREAK
     END
-
 
 Try Desktop Ready
     Hid.Move Pointer To Proportional    1    1
     BuiltIn.Sleep    1
     Hid.Move Pointer To Proportional    0    1
     Match Text    Show Apps    5
-
 
 Open Terminal
     IF    '%{RELEASE}' == 'noble'
@@ -155,11 +141,9 @@ Open Terminal
     Hid.Move Pointer To Proportional    1    1
     Match Text    @ubuntu:~$    120
 
-
 Open Terminal In Sudo Mode
     Open Terminal
     Enter Sudo Mode In Terminal
-
 
 Enter Sudo Mode In Terminal
     Hid.Type String    clear
@@ -171,10 +155,8 @@ Enter Sudo Mode In Terminal
     Hid.Keys Combo    Return
     Match Text    root@ubuntu    120
 
-
 Close Focused Window
-    Hid.Keys Combo    Alt_L   F4
-
+    Hid.Keys Combo    Alt_L    F4
 
 Close Terminal In Sudo Mode
     Hid.Type String    clear
@@ -184,11 +166,9 @@ Close Terminal In Sudo Mode
     Hid.Keys Combo    Return
     Close Focused Window
 
-
 Clear Terminal
     Hid.Type String    clear
     Hid.Keys Combo    Return
-
 
 Log Out From Terminal Session
     Match Text    @ubuntu    120
@@ -197,19 +177,16 @@ Log Out From Terminal Session
     Hid.Keys Combo    Control_L    ]
     Hid.Keys Combo    Control_L    ]
 
-
 Log Out From su Session
     Match Text    @ubuntu    120
     Hid.Type String    exit
     Hid.Keys Combo    Return
     Match Text    @ubuntu:~$    30
 
-
 Log Out From SSH Session
     Hid.Type String    exit
     Hid.Keys Combo    Return
     Match Text    ubuntu@ubuntu    120
-
 
 Run Command In Terminal
     [Arguments]    ${command}    ${timeout}=${600}
@@ -217,11 +194,10 @@ Run Command In Terminal
     # Y21kLWZpbmlzaGVkCg== is the base64 encoding of "cmd-finished\n"
     # We use it to avoid that the `Match Text` below matches the command itself,
     # before the first clear is executed.
-    Hid.Type String   clear && ${command} && echo Y21kLWZpbmlzaGVkCg== | base64 -d
+    Hid.Type String    clear && ${command} && echo Y21kLWZpbmlzaGVkCg== | base64 -d
     Hid.Keys Combo    Return
     Match Text    cmd-finished    ${timeout}
     Close Focused Window
-
 
 Left Button Click
     BuiltIn.Sleep    0.5
@@ -229,11 +205,11 @@ Left Button Click
     BuiltIn.Sleep    0.5
     Hid.Move Pointer To Proportional    1    1
 
-
 # Run Command uses the Alt+F2 shortcut to open the "Run a Command" dialog and
 # execute the given command.
 # Consider using SSH.Execute As Current User instead, which is more reliable and
 # faster because it doesn't use simulated keyboard input.
+
 Run Command
     [Arguments]    ${command}
     Hid.Keys Combo    Alt_L    F2
@@ -248,16 +224,13 @@ Submit Run Command Dialog
     ${matches}=    Find Text    Run a Command
     Should Be Empty    ${matches}
 
-
 Launch App
     [Arguments]    ${app-id}
     SSH.Execute As Current User    gtk-launch ${app-id}    timeout=60
 
-
 Cancel Operation
     Hid.Keys Combo    Control_L    c
     Match Text    @ubuntu    15
-
 
 Update Authd
     [Arguments]    ${skip_if_authd_stable_ppa_is_unavailable}=${False}
@@ -313,7 +286,6 @@ Update Authd
         Verify Authd Source    ${authd_policy_source}
     END
 
-
 Add APT Source
     [Arguments]    ${source}
     IF    '${source}'.startswith('ppa:')
@@ -322,7 +294,6 @@ Add APT Source
         SSH.Execute
         ...    add-apt-repository -y -n -S 'deb http://archive.ubuntu.com/ubuntu/ ${source} main restricted universe multiverse'
     END
-
 
 Get APT Pin
     [Arguments]    ${source}
@@ -334,7 +305,6 @@ Get APT Pin
         RETURN    a=${source}
     END
 
-
 Get APT Source Reference
     [Arguments]    ${source}
     IF    '${source}'.startswith('ppa:')
@@ -343,7 +313,6 @@ Get APT Source Reference
     ELSE
         RETURN    ${source}/
     END
-
 
 Configure APT Policy
     [Arguments]    ${system_source}    ${authd_source}
@@ -360,13 +329,11 @@ Configure APT Policy
         SSH.Execute    rm -f /etc/apt/preferences.d/98-e2e-authd-source-fallback
     END
 
-
 Configure Local Authd Policy
     ${authd_version}=    SSH.Execute    dpkg-query -W -f='\${Version}' authd
     SSH.Execute
     ...    printf '%s\n' 'Package: authd' 'Pin: version ${authd_version}' 'Pin-Priority: 1001' > /etc/apt/preferences.d/99-e2e-authd-source
     SSH.Execute    apt-mark hold authd
-
 
 Verify Authd Source
     [Arguments]    ${source}
@@ -377,44 +344,38 @@ Verify Authd Source
     ${policy}=    SSH.Execute    apt-cache policy authd
     Should Contain    ${policy}    ${source_reference}
 
-
 Verify Local Authd
     ${installed_version}=    SSH.Execute    dpkg-query -W -f='\${Version}' authd
     Should Not Be Empty    ${installed_version}
     ${held_packages}=    SSH.Execute    apt-mark showhold
     Should Contain    ${held_packages}    authd
 
-
 Sync System Time
-    ${output} =    SSH.Execute    nm-online -q && systemctl restart systemd-timesyncd
+    ${output}=    SSH.Execute    nm-online -q && systemctl restart systemd-timesyncd
     Log    ${output}    level=DEBUG
-    ${output} =   SSH.Execute    timedatectl show -p NTPSynchronized | grep -q NTPSynchronized=yes
+    ${output}=    SSH.Execute    timedatectl show -p NTPSynchronized | grep -q NTPSynchronized=yes
     Log    ${output}    level=DEBUG
-
 
 Wait Until System Time Synced
     Wait Until Keyword Succeeds    1 min    1 sec
     ...    Sync System Time
 
-
 Try machinectl login Prompt
-    VAR    ${tries}    3
+    VAR    ${tries}=    3
     WHILE    ${tries} > 0
         Hid.Type String    machinectl login
         Hid.Keys Combo    Return
-        ${match} =     Run Keyword And Return Status
+        ${match}=    Run Keyword And Return Status
         ...    Match Text    ubuntu login:    120
-        IF   '${match}' == 'True'
-            BREAK
-        END
+        IF    '${match}' == 'True'    BREAK
         Hid.Keys Combo    Control_L    ]
         Hid.Keys Combo    Control_L    ]
         Hid.Keys Combo    Control_L    ]
-        ${tries} =    Evaluate    ${tries} - 1
+        ${tries}=    Evaluate    ${tries} - 1
     END
 
 Terminal Password Change
-    [arguments]    ${new_password}
+    [Arguments]    ${new_password}
     Hid.Type String    passwd
     Hid.Keys Combo    Return
     Match Text    Current password:    5
@@ -430,7 +391,7 @@ Terminal Password Change
     Clear Terminal
 
 Terminal Password Change Error
-    [arguments]    ${new_password}    ${expected_error}
+    [Arguments]    ${new_password}    ${expected_error}
     Hid.Type String    passwd
     Hid.Keys Combo    Return
     Match Text    Current password:    5
@@ -441,7 +402,7 @@ Terminal Password Change Error
     Hid.Keys Combo    Return
     Match Text    ${expected_error}
     Hid.Keys Combo    Control_L    d
-    Match Text    password unchanged     10
+    Match Text    password unchanged    10
     Match Text    ubuntu@ubuntu:~$    10
     Clear Terminal
 
@@ -450,15 +411,14 @@ Force Password Change
     Hid.Keys Combo    Return
     Match Text    passwd: password changed.    30
 
-
 Escape Back to GDM Login Screen
     Hid.Keys Combo    Escape
     Match Text    Not listed    120
 
-
 Log Installed Package Information
     [Arguments]    ${snapshot}
-    ${broker_version}=    SSH.Execute    snap list %{BROKER} | awk -v broker='%{BROKER}' '$1 == broker {if ($3 ~ /^x[0-9]+$/) printf "%s (local, rev %s)\\n", $2, $3; else printf "%s (%s, rev %s)\\n", $2, $4, $3; exit}'
+    ${broker_version}=    SSH.Execute
+    ...    snap list %{BROKER} | awk -v broker='%{BROKER}' '$1 == broker {if ($3 ~ /^x[0-9]+$/) printf "%s (local, rev %s)\\n", $2, $3; else printf "%s (%s, rev %s)\\n", $2, $4, $3; exit}'
     ${authd_dependencies}=    SSH.Execute
     ...    { printf '%s\\n' authd gnome-shell; apt-cache depends authd | awk '/^[[:space:]|]+(Pre-Depends|Depends|Recommends|Breaks): / {print $2}'; } | sort -u | while read -r package; do if ! dpkg-query --show "$package" 2>/dev/null; then printf '%s (not installed)\\n' "$package"; fi; done
     ${authd_apt_policy}=    SSH.Execute    apt-cache policy authd
@@ -477,7 +437,6 @@ Log Installed Package Information
     Log    authd apt policy:\n${authd_apt_policy}
     Log    gnome-shell apt policy:\n${gnome_shell_apt_policy}
 
-
 ### Setup ###
 
 Restore Snapshot
@@ -491,10 +450,10 @@ Restore Snapshot
     RETURN    ${snapshot}
 
 Test Setup
-    [Arguments]    ${snapshot}
     [Documentation]    Restores the suite snapshot, or the snapshot named by
     ...    E2E_TEST_SNAPSHOT when that environment variable is non-empty.
-    Set Suite Metadata    Ubuntu Version   %{RELEASE}    top=True
+    [Arguments]    ${snapshot}
+    Set Suite Metadata    Ubuntu Version    %{RELEASE}    top=True
     Set Suite Metadata    Broker    %{BROKER}    top=True
     ${snapshot}=    Restore Snapshot    ${snapshot}
     Log Installed Package Information    ${snapshot}

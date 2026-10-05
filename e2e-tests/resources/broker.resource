@@ -22,7 +22,7 @@ Update Broker
     [Documentation]    Install the broker snap built from the current branch
     ...                when one was provided for the test run. Otherwise
     ...                refresh the broker from the edge channel.
-    ${broker_snap}=    Get Environment Variable    BROKER_SNAP    ${EMPTY}
+    ${broker_snap} =    Get Environment Variable    BROKER_SNAP    ${EMPTY}
     IF    $broker_snap != ''
         SSH.Copy To VM    ${broker_snap}    /home/ubuntu/broker-under-test.snap
         SSH.Execute    snap install --dangerous /home/ubuntu/broker-under-test.snap
@@ -30,12 +30,10 @@ Update Broker
         SSH.Execute    snap refresh ${BROKER_SNAP_NAME} --edge
     END
 
-
 Disable Broker And Purge Config
     SSH.Execute    snap stop ${BROKER_SNAP_NAME}
     SSH.Execute    rm ${AUTHD_BROKER_CFG}
     SSH.Execute    systemctl restart authd.service
-
 
 Log In With Remote User Through CLI: QR Code
     [Arguments]    ${username}    ${local_password}
@@ -43,7 +41,6 @@ Log In With Remote User Through CLI: QR Code
     Select Provider
     Continue Log In With Remote User: Authenticate In External Browser
     Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
-
 
 Start Log In With Remote User Through CLI: QR Code
     [Arguments]    ${username}
@@ -53,7 +50,6 @@ Start Log In With Remote User Through CLI: QR Code
 
     Match Text    Select your provider:    15
 
-
 Select Provider
     Match Text    Select your provider:    15
     Match Text    2. ${PROVIDER_DISPLAY_NAME}
@@ -61,12 +57,10 @@ Select Provider
     Hid.Type String    2
     Builtin.Sleep    2
 
-
 Regenerate QR Code
     Match Text    Request new code    120
     Hid.Keys Combo    Return
     Match Text    ${DEVICE_URL}    15
-
 
 Continue Log In With Remote User: Authenticate In External Browser
     # Wait until the verification URL is displayed.
@@ -83,12 +77,10 @@ Continue Log In With Remote User: Authenticate In External Browser
 
     Browser.Login    ${user_code}    ${SUITE_OUTPUT_DIR}
 
-
 Extract Device Code
     ${text} =    Read Text
     ${user_code} =    StringUtils.First Match    ${DEVICE_URL_REGEX}    ${text}
     RETURN    ${user_code}
-
 
 Continue Log In With Remote User Through CLI: Define Local Password
     [Arguments]    ${username}    ${local_password}
@@ -107,7 +99,6 @@ Continue Log In With Remote User Through CLI: Define Local Password
 
     # Wait for the login to complete
     Wait For Shell Prompt After Login    ${username}@ubuntu
-
 
 Wait For Shell Prompt After Login
     [Documentation]    Waits for the shell prompt that indicates a successful login.
@@ -138,11 +129,11 @@ Wait For Shell Prompt After Login
         ${system_error} =    SSH.Execute
         ...    sudo journalctl --no-pager --since "10 minutes ago" | grep "FAILED LOGIN" | grep "System error" || true
         IF    $system_error != ''
-            Skip    Login failed with a PAM "System error" after authentication succeeded. This is the flaky failure tracked in https://github.com/canonical/authd/issues/1642.\n\nMatching journal line(s):\n${system_error}
+            Skip
+            ...    Login failed with a PAM "System error" after authentication succeeded. This is the flaky failure tracked in https://github.com/canonical/authd/issues/1642.\n\nMatching journal line(s):\n${system_error}
         END
     END
     Fail    ${error}
-
 
 Log In With Remote User Through CLI: Local Password
     [Arguments]    ${username}    ${local_password}
@@ -155,7 +146,6 @@ Log In With Remote User Through CLI: Local Password
     Hid.Keys Combo    Return
     Wait For Shell Prompt After Login    ${username}@ubuntu:~$
 
-
 Check That su To Local User Goes To Local Broker
     Hid.Type String    su ubuntu
     Hid.Keys Combo    Return
@@ -164,7 +154,6 @@ Check That su To Local User Goes To Local Broker
     Hid.Keys Combo    Return
     Match Text    ubuntu@ubuntu:~$    120
 
-
 Check That Username Cannot Be Changed When Using su
     [Arguments]    ${username}
     Hid.Type String    su ${username}
@@ -172,7 +161,6 @@ Check That Username Cannot Be Changed When Using su
     Try Navigating Back to User Selection
     Cancel Operation
     Match Text    su: Critical error - immediate abort    120
-
 
 Try Navigating Back to User Selection
     # First screen is the autoselected local password flow
@@ -184,12 +172,11 @@ Try Navigating Back to User Selection
     Hid.Keys Combo    Escape
 
     # For existing users the provider is already known, so the provider-selection
-    # screen is skipped.  Pressing Escape should not navigate back to user or
+    # screen is skipped. Pressing Escape should not navigate back to user or
     # provider selection; the user is stuck at the authentication-flow screen.
     Match Text    Select the authentication flow:    120
     Hid.Keys Combo    Escape
     Match Text    Select the authentication flow:    120
-
 
 Log In With Remote User Through CLI: Local Password And Expect Failure
     [Arguments]    ${username}    ${local_password}
@@ -204,14 +191,12 @@ Log In With Remote User Through CLI: Local Password And Expect Failure
     # su exits automatically after authentication failure; wait for the shell prompt.
     Match Text    @ubuntu:~$    30
 
-
 Remove Registered Owner
     [Documentation]    Removes the auto-registration drop-in that the broker creates when
     ...               the first user logs in, so that subsequent OWNER-based tests start
     ...               from a known-clean state.
     SSH.Execute    rm -f ${BROKER_CFG_DIR}/20-owner-autoregistration.conf
     SSH.Execute    snap restart ${BROKER_SNAP_NAME}
-
 
 Block Network Access To Identity Provider
     [Documentation]    Blocks outbound HTTPS traffic (IPv4 and IPv6) to simulate the identity
@@ -220,30 +205,28 @@ Block Network Access To Identity Provider
     SSH.Execute    iptables -I OUTPUT -p tcp --dport 443 -j REJECT
     SSH.Execute    ip6tables -I OUTPUT -p tcp --dport 443 -j REJECT
 
-
 # Uses sed to change the broker configuration.
 # It should match both commented and uncommented lines.
 # The full command looks like:
-#     sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${BROKER_CFG}
+#    sed -i 's/#*${config_key} = .*/${config_key} = ${config_value}/g' ${BROKER_CFG}
+
 Change Broker Configuration
     [Arguments]    ${config_key}    ${config_value}
     SSH.Execute    sed -i 's|^#*${config_key} =.*|${config_key} = ${config_value}|g' ${BROKER_CFG}
     SSH.Execute    snap restart ${BROKER_SNAP_NAME}
 
-
 # Pretty much the same as the function above, but since YARF does not have support for
 # shifted characters yet, we need to do some workarounds.
+
 Change allowed_users In Broker Configuration
     [Arguments]    ${config_value}
     SSH.Execute    sed -i 's/^#*allowed_users =.*/allowed_users = ${config_value}/g' ${BROKER_CFG}
     SSH.Execute    snap restart ${BROKER_SNAP_NAME}
 
-
 Comment Key In Broker Configuration
     [Arguments]    ${config_key}
     SSH.Execute    sed -i 's/^#*${config_key} =.*/#${config_key} = .*/g' ${BROKER_CFG}
     SSH.Execute    snap restart ${BROKER_SNAP_NAME}
-
 
 Log In With Remote User Through SSH: QR Code
     [Arguments]    ${username}    ${local_password}
@@ -253,7 +236,6 @@ Log In With Remote User Through SSH: QR Code
     Continue Log In With Remote User Through SSH: QR Code
     Continue Log In With Remote User Through SSH: Define Local Password    ${username}    ${local_password}
 
-
 Start Log In With Remote User Through SSH: QR Code
     [Arguments]    ${username}
     Hid.Type String    ssh ${username}@localhost
@@ -262,19 +244,16 @@ Start Log In With Remote User Through SSH: QR Code
     Hid.Type String    yes
     Hid.Keys Combo    Return
 
-
 Select Provider through SSH
     Match Text    2. ${PROVIDER_DISPLAY_NAME}    120
     Match Text    Choose your provider:    120
     Hid.Type String    2
     Hid.Keys Combo    Return
 
-
 Continue Log In With Remote User Through SSH: QR Code
     Match Text    Choose action:    120
     Hid.Type String    1
     Hid.Keys Combo    Return
-
 
 Continue Log In With Remote User Through SSH: Define Local Password
     [Arguments]    ${username}    ${local_password}
@@ -288,7 +267,6 @@ Continue Log In With Remote User Through SSH: Define Local Password
 
     Match Text    ${username}@ubuntu:~$    120
 
-
 Log In With Remote User Through SSH: Local Password
     [Arguments]    ${username}    ${local_password}
     Hid.Type String    ssh ${username}@localhost
@@ -298,14 +276,12 @@ Log In With Remote User Through SSH: Local Password
     Hid.Keys Combo    Return
     Match Text    ${username}@ubuntu:~$    120
 
-
 Log In With Remote User Through GDM: QR Code
     [Arguments]    ${username}    ${local_password}
     Start Log In With Remote User Through GDM    ${username}
     Select Broker Through GDM
     Continue Log In With Remote User: Authenticate In External Browser
     Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
-
 
 Start Log In With Remote User Through GDM
     [Arguments]    ${username}
@@ -320,7 +296,6 @@ Start Log In With Remote User Through GDM
     Match Text    Username    30    confidence=88
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
-
 
 Select Broker Through GDM
     Match Text    Select the broker    120
@@ -374,19 +349,17 @@ Count Entra TOTP Rejections
     ...    sudo journalctl --no-pager | grep -c "Incorrect MFA code" || test $? -eq 1
     RETURN    ${rejections}
 
-
 Continue Log In With Remote User Through GDM: Define Local Password
     [Arguments]    ${local_password}
     Match Text    Create a local password    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
-    Match Text   Please, type the new passphrase again    120
+    Match Text    Please, type the new passphrase again    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
     Wait Until Desktop Ready
-
 
 Log In With Remote User Through GDM: Entra Password
     [Arguments]    ${username}
@@ -394,12 +367,10 @@ Log In With Remote User Through GDM: Entra Password
     Select Broker Through GDM
     Continue Log In With Remote User Through GDM: Entra Password
 
-
 Continue Log In With Remote User Through GDM: Entra Password
     Enter Entra ID Password And MFA    Try Desktop Ready
 
     Wait Until Desktop Ready
-
 
 Log In With Remote User Through GDM: Local Password
     [Arguments]    ${username}    ${local_password}
@@ -422,24 +393,20 @@ Log In With Remote User Through GDM: Local Password
 
     Wait Until Desktop Ready
 
-
 Check User Information
     [Arguments]    ${username}
     ${output} =    SSH.Execute    getent passwd ${username}
     Should Contain    ${output}    ${username}:x:
-
 
 Check Configuration Value
     [Arguments]    ${config_key}    ${expected_value}
     ${content} =    SSH.Execute    grep ${config_key} ${BROKER_CFG}
     Should Contain    ${content}    ${expected_value}
 
-
 Check If Owner Was Registered
     [Arguments]    ${username}
     ${content} =    SSH.Execute    cat ${BROKER_CFG_DIR}/20-owner-autoregistration.conf
     Should Contain    ${content}    owner = ${username}
-
 
 Check Home Directory
     [Arguments]    ${username}    ${base_dir}=/home
@@ -448,20 +415,16 @@ Check Home Directory
     ${ownership} =    SSH.Execute    stat -c %U:%G ${home_dir}
     Should Be Equal    ${ownership}    ${username}:${username}
 
-
 Check User Shell
     [Arguments]    ${username}
     ${shell} =    SSH.Execute    getent passwd ${username} | cut -d: -f7
     Should Be Equal    ${shell}    /usr/bin/bash
 
-
 Check That Remote User Is Not Allowed To Log In
     Match Text    authentication failure: user not allowed in broker configuration    120
 
-
 Check That Login Is Handled By PAM Unix
     Match Text    Password:
-
 
 Check If User Was Added Properly
     [Arguments]    ${username}    ${password}=${local_password}
@@ -477,13 +440,11 @@ Check User Groups
     Should Contain    ${output}    sudo
     Should Contain    ${output}    ${remote_group}
 
-
 Enable Device Registration
     [Documentation]    Turns on automatic device registration in the broker config.
     ...               The 'register_device' key lives in the '[msentraid]' section and is
     ...               only meaningful for the msentraid broker.
     Change Broker Configuration    register_device    true
-
 
 Check That Device Was Registered
     [Documentation]    Verifies that device registration data was persisted for the user.
@@ -510,7 +471,6 @@ Check That Device Was Registered
     Should Be Equal    ${registered}    true
     ...    msg=token.json has no DeviceRegistrationData; the device was not registered.
 
-
 Log In With Remote User Through CLI: Entra Auth
     [Arguments]    ${username}
     Try machinectl login Prompt
@@ -522,7 +482,6 @@ Log In With Remote User Through CLI: Entra Auth
     Hid.Type String    2
 
     Enter Entra ID Password And MFA    Match Text    ${username}@ubuntu:~$    1
-
 
 Log In With Remote User Through CLI: Entra Passwordless TAP
     [Arguments]    ${username}    ${local_password}    ${tap_code}

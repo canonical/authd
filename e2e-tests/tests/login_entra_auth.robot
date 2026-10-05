@@ -1,32 +1,20 @@
 *** Settings ***
-Resource        resources/utils.resource
-Resource        resources/authd.resource
-Resource        resources/broker.resource
+Resource            resources/utils.resource
+Resource            resources/authd.resource
+Resource            resources/broker.resource
 
-# Test Tags       robot:exit-on-failure
-Test Tags         requires:msentraid
+Test Setup          Test Setup
+Test Teardown       utils.Test Teardown
 
-Test Setup    Test Setup
-Test Teardown   utils.Test Teardown
-
-
-*** Keywords ***
-Test Setup
-    utils.Test Setup    snapshot=%{BROKER}-installed
-    # Enable the Entra auth flow and disable device auth so only the
-    # new password+MFA mode is offered, avoiding a provider-selection menu.
-    # entra_auth requires register_device=true (or a client_secret) to fetch
-    # groups from Microsoft Graph on first login.
-    Change Broker Configuration    register_device    true
-    Change Broker Configuration    entra_auth    true
-    Change Broker Configuration    device_code    false
+# Test Tags    robot:exit-on-failure
+Test Tags           requires:msentraid
 
 
 *** Variables ***
-${username}        %{E2E_USER}
+${username}             %{E2E_USER}
 # Check If User Was Added Properly uses this cached local password when it
 # verifies that sudo prompts for, and accepts, the post-login local password.
-${local_password}    %{E2E_PASSWORD}
+${local_password}       %{E2E_PASSWORD}
 
 
 *** Test Cases ***
@@ -50,7 +38,7 @@ Test login with CLI using Entra auth and MFA
     # cached local-password path via sudo.
     Check If User Was Added Properly    ${username}
 
-    # Verify the user was provisioned in the system.  NSS may be briefly
+    # Verify the user was provisioned in the system. NSS may be briefly
     # unavailable while authd commits the new user record, so retry.
     Wait Until Keyword Succeeds    30s    3s    Check Home Directory    ${username}
 
@@ -62,3 +50,15 @@ Test GDM login with Entra ID password and MFA
     Check If User Was Added Properly    ${username}
 
     Wait Until Keyword Succeeds    30s    3s    Check Home Directory    ${username}
+
+
+*** Keywords ***
+Test Setup
+    utils.Test Setup    snapshot=%{BROKER}-installed
+    # Enable the Entra auth flow and disable device auth so only the
+    # new password+MFA mode is offered, avoiding a provider-selection menu.
+    # entra_auth requires register_device=true (or a client_secret) to fetch
+    # groups from Microsoft Graph on first login.
+    Change Broker Configuration    register_device    true
+    Change Broker Configuration    entra_auth    true
+    Change Broker Configuration    device_code    false

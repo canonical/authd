@@ -1,17 +1,17 @@
 *** Settings ***
-Resource        resources/utils.resource
-Resource        resources/authd.resource
-Resource        resources/broker.resource
+Resource            resources/utils.resource
+Resource            resources/authd.resource
+Resource            resources/broker.resource
 
-Test Setup    utils.Test Setup    snapshot=${snapshot}
-Test Teardown   utils.Test Teardown
+Test Setup          utils.Test Setup    snapshot=${snapshot}
+Test Teardown       utils.Test Teardown
 
 
 *** Variables ***
-${snapshot}    %{BROKER}-installed
-${username}    %{E2E_USER}
-${local_password}    qwer1234
-${sudo_output_file}    /tmp/authd-pam-tty-background-sudo.out
+${snapshot}             %{BROKER}-installed
+${username}             %{E2E_USER}
+${local_password}       qwer1234
+${sudo_output_file}     /tmp/authd-pam-tty-background-sudo.out
 
 
 *** Test Cases ***
@@ -35,7 +35,8 @@ Test sudo authentication when run in the background
     SSH.Execute    rm -f ${sudo_output_file}
     # Reproduce the failure: sudo reads its password from stdin while running in
     # the background. Save id's output so the test can verify sudo became root.
-    Hid.Type String    bash -c 'sudo -S <<< "${local_password}" id > ${sudo_output_file} 2>&1 &' && echo Y21kLWZpbmlzaGVkCg== | base64 -d
+    Hid.Type String
+    ...    bash -c 'sudo -S <<< "${local_password}" id > ${sudo_output_file} 2>&1 &' && echo Y21kLWZpbmlzaGVkCg== | base64 -d
     Hid.Keys Combo    Return
     # Wait for the shell to accept the command, then poll until sudo completes.
     Match Text    cmd-finished    30
