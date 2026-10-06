@@ -28,6 +28,8 @@ packages:
   - gnome-shell-extension-ubuntu-dock
   - gnome-terminal
   - gsettings-ubuntu-schemas
+  # Store VM core dumps.
+  - systemd-coredump
   - libpam-pwquality
   # Required to test that the keyring is unlocked (ships secret-tool)
   - libsecret-tools

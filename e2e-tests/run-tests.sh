@@ -295,6 +295,7 @@ env \
     BROKER="$BROKER" \
     RELEASE="$RELEASE" \
     VM_NAME="$VM_NAME" \
+    E2E_TEST_OUTPUT_DIR="$OUTPUT_DIR" \
     AUTHD_DEB="${AUTHD_DEB:-}" \
     APT_SOURCE="${APT_SOURCE:-}" \
     AUTHD_APT_SOURCE="${AUTHD_APT_SOURCE:-}" \
@@ -318,6 +319,11 @@ env \
         "$@" \
         "${TESTS_TO_RUN[@]}" \
         || test_result=$?
+
+if ! "${ROOT_DIR}/vm/collect-coredumps.sh" \
+    "${RELEASE}" "${OUTPUT_DIR}" final; then
+    echo "Warning: end-of-run VM coredump collection failed." >&2
+fi
 
 if [ "${test_result:-0}" -eq 0 ]; then
     vm_state="$(virsh domstate "${VM_NAME}")"

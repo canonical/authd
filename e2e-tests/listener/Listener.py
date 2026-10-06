@@ -1,4 +1,6 @@
+import os
 import re
+import subprocess
 import sys
 import time
 from datetime import timedelta
@@ -99,6 +101,8 @@ class Listener(ListenerV3):
     def __init__(self) -> None:
         self._suite_start: float = 0.0
         self._test_start: float = 0.0
+        self._test_index = 0
+        self._last_test_name: str | None = None
         # Stack of (name, start_time) for keywords so we can track depth
         self._kw_stack: list[tuple[str, float]] = []
         self.silent = False
@@ -129,6 +133,9 @@ class Listener(ListenerV3):
     # ------------------------------------------------------------------
 
     def start_test(self, data: running.TestCase, result: result.TestCase) -> None:
+        if self._last_test_name is not None:
+            self._collect_coredumps(self._test_index, self._last_test_name)
+        self._test_index += 1
         self._test_start = time.monotonic()
         self._kw_stack.clear()
         _write(f"\n{_BOLD}▶  {data.name}{_RESET}")
@@ -144,6 +151,36 @@ class Listener(ListenerV3):
             f"  {_DIM}{_elapsed(elapsed)}{_RESET}"
             f"{msg}"
         )
+
+        self._last_test_name = data.name
+
+    def _collect_coredumps(self, test_index: int, test_name: str) -> None:
+        output_dir = os.getenv("E2E_TEST_OUTPUT_DIR")
+        release = os.getenv("RELEASE")
+        if not output_dir or not release:
+            _write("Warning: cannot collect VM core files because run metadata is missing.")
+            return
+
+        safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", test_name).strip("-.")[:80]
+        label = f"test-{test_index:03d}-{safe_name or 'unknown'}"
+        collector = Path(__file__).resolve().parents[1] / "vm" / "collect-coredumps.sh"
+        try:
+            completed = subprocess.run(
+                ["bash", str(collector), release, output_dir, label],
+                check=False,
+                stdout=_out,
+                stderr=_out,
+                timeout=180,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            _write(f"Warning: VM core-file collection failed: {error}")
+            return
+
+        if completed.returncode != 0:
+            _write(
+                f"Warning: VM core-file collection exited with status "
+                f"{completed.returncode}."
+            )
 
     # ------------------------------------------------------------------
     # Keywords  (user keywords + library keywords share start/end_keyword)
