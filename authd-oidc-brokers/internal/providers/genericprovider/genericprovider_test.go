@@ -2,6 +2,7 @@ package genericprovider_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -16,10 +17,11 @@ func TestGetUserInfo(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		claims      map[string]interface{}
-		wantUser    info.User
-		wantErr     bool
-		wantErrType error
+		claims            map[string]interface{}
+		wantUser          info.User
+		wantErr           bool
+		wantErrType       func(error) bool
+		wantAuthoritative bool
 	}{
 		"Successfully_get_user_info_with_all_fields": {
 			claims: map[string]interface{}{
@@ -59,8 +61,12 @@ func TestGetUserInfo(t *testing.T) {
 				"sub":   "sub123",
 				"email": "user@example.com",
 			},
-			wantErr:     true,
-			wantErrType: &providerErrors.MissingClaimError{Claim: "email_verified"},
+			wantErr: true,
+			wantErrType: func(err error) bool {
+				var target *providerErrors.MissingClaimError
+				return errors.As(err, &target)
+			},
+			wantAuthoritative: true,
 		},
 		"Error_when_email_is_not_verified": {
 			claims: map[string]interface{}{
@@ -68,8 +74,12 @@ func TestGetUserInfo(t *testing.T) {
 				"sub":            "sub123",
 				"email_verified": false,
 			},
-			wantErr:     true,
-			wantErrType: &providerErrors.ForDisplayError{},
+			wantErr: true,
+			wantErrType: func(err error) bool {
+				var target *providerErrors.ForDisplayError
+				return errors.As(err, &target)
+			},
+			wantAuthoritative: true,
 		},
 	}
 
@@ -86,7 +96,11 @@ func TestGetUserInfo(t *testing.T) {
 			if tc.wantErr {
 				require.Error(t, err)
 				if tc.wantErrType != nil {
-					require.ErrorAs(t, err, &tc.wantErrType)
+					require.True(t, tc.wantErrType(err), "error has an unexpected type")
+				}
+				if tc.wantAuthoritative {
+					var authoritativeErr *providerErrors.AuthoritativeError
+					require.True(t, errors.As(err, &authoritativeErr))
 				}
 				return
 			}
@@ -113,24 +127,80 @@ func (m *mockIDToken) Claims(v interface{}) error {
 	return nil
 }
 
-func TestIsTokenExpiredError(t *testing.T) {
+func TestVerifyUsername(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		requestedUsername string
+		username          string
+
+		wantErr bool
+	}{
+		"Success_when_usernames_match": {
+			requestedUsername: "user@example.com",
+			username:          "user@example.com",
+		},
+		"Error_when_usernames_do_not_match": {
+			requestedUsername: "user@example.com",
+			username:          "other@example.com",
+			wantErr:           true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			p := genericprovider.New()
+			err := p.VerifyUsername(tc.requestedUsername, tc.username)
+
+			if tc.wantErr {
+				require.Error(t, err)
+				var displayErr *providerErrors.ForDisplayError
+				require.ErrorAs(t, err, &displayErr)
+				var authoritativeErr *providerErrors.AuthoritativeError
+				require.True(t, errors.As(err, &authoritativeErr))
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestClassifyRefreshTokenError(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
 		errorCode        string
 		errorDescription string
 
-		wantExpired bool
+		wantKind providerErrors.RefreshTokenErrorKind
 	}{
-		"Keycloak_session_not_active":         {errorCode: "invalid_grant", errorDescription: "Session not active", wantExpired: true},
-		"Keycloak_offline_session_not_active": {errorCode: "invalid_grant", errorDescription: "Offline session not active", wantExpired: true},
-		"Keycloak_token_not_active":           {errorCode: "invalid_grant", errorDescription: "Token is not active", wantExpired: true},
-		"Keycloak_stale_token":                {errorCode: "invalid_grant", errorDescription: "Stale token", wantExpired: true},
+		"Keycloak_session_not_active": {
+			errorCode:        "invalid_grant",
+			errorDescription: "Session not active",
+			wantKind:         providerErrors.RefreshTokenErrorExpired,
+		},
+		"Keycloak_offline_session_not_active": {
+			errorCode:        "invalid_grant",
+			errorDescription: "Offline session not active",
+			wantKind:         providerErrors.RefreshTokenErrorExpiredOrRevoked,
+		},
+		"Keycloak_token_not_active": {
+			errorCode:        "invalid_grant",
+			errorDescription: "Token is not active",
+			wantKind:         providerErrors.RefreshTokenErrorExpired,
+		},
+		"Keycloak_stale_token": {
+			errorCode:        "invalid_grant",
+			errorDescription: "Stale token",
+			wantKind:         providerErrors.RefreshTokenErrorExpiredOrRevoked,
+		},
 
-		"Non_invalid_grant_error":           {errorCode: "access_denied", errorDescription: "Session not active", wantExpired: false},
-		"Keycloak_user_disabled":            {errorCode: "invalid_grant", errorDescription: "User disabled", wantExpired: false},
-		"Unknown_invalid_grant_description": {errorCode: "invalid_grant", errorDescription: "The user has not consented to the application.", wantExpired: false},
-		"Empty_description":                 {errorCode: "invalid_grant", errorDescription: "", wantExpired: false},
+		"Non_invalid_grant_error":           {errorCode: "access_denied", errorDescription: "Session not active", wantKind: providerErrors.RefreshTokenErrorUnknown},
+		"Keycloak_user_disabled":            {errorCode: "invalid_grant", errorDescription: "User disabled", wantKind: providerErrors.RefreshTokenErrorUnknown},
+		"Unknown_invalid_grant_description": {errorCode: "invalid_grant", errorDescription: "The user has not consented to the application.", wantKind: providerErrors.RefreshTokenErrorUnknown},
+		"Empty_description":                 {errorCode: "invalid_grant", errorDescription: "", wantKind: providerErrors.RefreshTokenErrorUnknown},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -141,8 +211,8 @@ func TestIsTokenExpiredError(t *testing.T) {
 				ErrorCode:        tc.errorCode,
 				ErrorDescription: tc.errorDescription,
 			}
-			got := p.IsTokenExpiredError(err)
-			require.Equal(t, tc.wantExpired, got, "IsTokenExpiredError returned unexpected result")
+			got := p.ClassifyRefreshTokenError(err)
+			require.Equal(t, tc.wantKind, got, "ClassifyRefreshTokenError returned unexpected result")
 		})
 	}
 }

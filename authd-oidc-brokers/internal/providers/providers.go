@@ -4,6 +4,7 @@ package providers
 import (
 	"context"
 
+	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -17,7 +18,7 @@ type Provider interface {
 	AuthOptions() []oauth2.AuthCodeOption
 	DisplayName() string
 	GetUserInfo(claimer info.Claimer, isRefresh bool) (info.User, error)
-	IsTokenExpiredError(err *oauth2.RetrieveError) bool
+	ClassifyRefreshTokenError(err *oauth2.RetrieveError) providerErrors.RefreshTokenErrorKind
 	NormalizeUsername(username string) string
 	// SupportedOnlineAuthModes returns the authentication modes that require a
 	// working connection to the identity provider (in contrast to the local

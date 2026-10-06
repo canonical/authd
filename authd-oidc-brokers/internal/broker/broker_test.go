@@ -23,7 +23,10 @@ import (
 	"github.com/canonical/authd/authd-oidc-brokers/internal/consts"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/fido"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/password"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers"
 	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/genericprovider"
+	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/google"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/testutils"
@@ -125,8 +128,11 @@ type mockGrantRevokedProvider struct {
 	*mockProviderWithEntraModes
 }
 
-func (p *mockGrantRevokedProvider) IsTokenExpiredError(err *oauth2.RetrieveError) bool {
-	return err != nil && err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50173:")
+func (p *mockGrantRevokedProvider) ClassifyRefreshTokenError(err *oauth2.RetrieveError) providerErrors.RefreshTokenErrorKind {
+	if err != nil && err.ErrorCode == "invalid_grant" && strings.HasPrefix(err.ErrorDescription, "AADSTS50173:") {
+		return providerErrors.RefreshTokenErrorRevoked
+	}
+	return p.MockProvider.ClassifyRefreshTokenError(err)
 }
 
 var mockDeviceRegistrationData = []byte(`{"device_id":"test-device-id","cert_key":"Y2VydA==","transport_key":"dHJhbnNwb3J0","auth_value":"test-auth-value","tpm_machine_key":"dHBtLW1hY2hpbmUta2V5"}`)
@@ -1340,25 +1346,28 @@ func TestIsAuthenticated(t *testing.T) {
 			getGroupsFails:    true,
 		},
 		"Authenticating_with_password_when_refresh_token_is_expired_results_in_device_auth_as_next_mode": {
-			firstMode:         authmodes.Password,
-			token:             &tokenOptions{refreshTokenExpired: true},
-			wantNextAuthModes: []string{authmodes.EntraAuth, authmodes.Device, authmodes.DeviceQr},
-			wantSecondCall:    true,
-			secondMode:        authmodes.DeviceQr,
+			firstMode:                    authmodes.Password,
+			forceAccessCheckWithProvider: true,
+			token:                        &tokenOptions{refreshTokenExpired: true},
+			wantNextAuthModes:            []string{authmodes.EntraAuth, authmodes.Device, authmodes.DeviceQr},
+			wantSecondCall:               true,
+			secondMode:                   authmodes.DeviceQr,
 		},
 		"Authenticating_with_password_when_refresh_token_is_expired_due_to_inactivity_results_in_device_auth_as_next_mode": {
-			firstMode:         authmodes.Password,
-			token:             &tokenOptions{refreshTokenInactiveExpired: true},
-			wantNextAuthModes: []string{authmodes.EntraAuth, authmodes.Device, authmodes.DeviceQr},
-			wantSecondCall:    true,
-			secondMode:        authmodes.DeviceQr,
+			firstMode:                    authmodes.Password,
+			forceAccessCheckWithProvider: true,
+			token:                        &tokenOptions{refreshTokenInactiveExpired: true},
+			wantNextAuthModes:            []string{authmodes.EntraAuth, authmodes.Device, authmodes.DeviceQr},
+			wantSecondCall:               true,
+			secondMode:                   authmodes.DeviceQr,
 		},
-		"Authenticating_with_password_when_refresh_token_is_expired_due_to_ca_sign_in_frequency_results_in_device_auth_as_next_mode": {
-			firstMode:         authmodes.Password,
-			token:             &tokenOptions{refreshTokenStale: true},
-			wantNextAuthModes: []string{authmodes.EntraAuth, authmodes.Device, authmodes.DeviceQr},
-			wantSecondCall:    true,
-			secondMode:        authmodes.DeviceQr,
+		"Authenticating_with_password_when_refresh_token_is_ambiguous_requiring_device_auth": {
+			firstMode:                    authmodes.Password,
+			forceAccessCheckWithProvider: true,
+			token:                        &tokenOptions{refreshTokenStale: true},
+			wantNextAuthModes:            []string{authmodes.EntraAuth, authmodes.Device, authmodes.DeviceQr},
+			wantSecondCall:               true,
+			secondMode:                   authmodes.DeviceQr,
 		},
 		"Authenticating_with_password_when_no_refresh_token_results_in_device_auth_as_next_mode": {
 			firstMode:         authmodes.Password,
@@ -1479,8 +1488,9 @@ func TestIsAuthenticated(t *testing.T) {
 
 		"Error_when_mode_is_password_and_token_does_not_exist": {firstMode: authmodes.Password},
 		"Error_when_mode_is_password_but_server_returns_error": {
-			firstMode: authmodes.Password,
-			token:     &tokenOptions{expired: true},
+			firstMode:                    authmodes.Password,
+			forceAccessCheckWithProvider: true,
+			token:                        &tokenOptions{expired: true},
 			customHandlers: map[string]testutils.EndpointHandler{
 				"/token": testutils.BadRequestHandler(),
 			},
@@ -3620,12 +3630,208 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDetectsDisabledUser(t *testing.
 	require.True(t, cached.UserIsDisabled, "UserIsDisabled must be cached after an AADSTS50057 refresh rejection")
 }
 
-// TestIsAuthenticatedPasswordRefreshPreservesRotationOnUserInfoError verifies
-// that the generic OIDC refresh path preserves a rotated refresh token even if
-// a later local validation step (here: ID-token verification in getUserInfo)
-// fails. Otherwise the cache can be stranded with a refresh token the provider
-// already invalidated server-side.
-func TestIsAuthenticatedPasswordRefreshPreservesRotationOnUserInfoError(t *testing.T) {
+func TestIsAuthenticatedPasswordRefreshFallsBackOnTransientRetrieveError(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]*oauth2.RetrieveError{
+		"server_error": {
+			ErrorCode: "server_error",
+		},
+		"temporarily_unavailable": {
+			ErrorCode: "temporarily_unavailable",
+		},
+		"http_5xx": {
+			Response: &http.Response{StatusCode: http.StatusBadGateway},
+		},
+	}
+
+	for name, refreshErr := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := &mockEntraAuthProvider{
+				MockProvider: &testutils.MockProvider{GetGroupsFunc: func() ([]info.Group, error) {
+					return []info.Group{{Name: "cached-group"}}, nil
+				}},
+				refreshErr: refreshErr,
+			}
+
+			b, sessionID, access, _ := runReturningEntraAuthLogin(t, provider, false)
+			require.Equal(t, broker.AuthGranted, access,
+				"a transient token endpoint failure must use cached credentials")
+
+			offline, err := b.IsOffline(sessionID)
+			require.NoError(t, err)
+			require.True(t, offline, "a transient token endpoint failure must mark the session offline")
+		})
+	}
+}
+
+func TestIsAuthenticatedPasswordRefreshFallsBackOnExpiredRetrieveError(t *testing.T) {
+	t.Parallel()
+
+	provider := &mockEntraAuthProvider{
+		MockProvider: &testutils.MockProvider{},
+		refreshErr: &oauth2.RetrieveError{
+			ErrorCode:        "invalid_grant",
+			ErrorDescription: "Session not active",
+		},
+	}
+
+	b, sessionID, access, _ := runReturningEntraAuthLogin(t, provider, false)
+	require.Equal(t, broker.AuthGranted, access,
+		"an expired refresh token must use cached credentials when provider access checks are optional")
+
+	offline, err := b.IsOffline(sessionID)
+	require.NoError(t, err)
+	require.True(t, offline, "an expired refresh token must mark the session offline")
+}
+
+func TestIsAuthenticatedPasswordRefreshRequiresReauthenticationForAmbiguousExpiredOrRevokedErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		provider         providers.Provider
+		errorDescription string
+	}{
+		"google_expired_or_revoked": {
+			provider:         google.New(),
+			errorDescription: "Token has been expired or revoked",
+		},
+		"keycloak_stale_token": {
+			provider:         genericprovider.New(),
+			errorDescription: "Stale token",
+		},
+		"keycloak_offline_session_not_active": {
+			provider:         genericprovider.New(),
+			errorDescription: "Offline session not active",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			const correctPassword = "password"
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config:       broker.Config{DataDir: t.TempDir()},
+				ownerAllowed: true,
+				provider:     tc.provider,
+				customHandlers: map[string]testutils.EndpointHandler{
+					"/token": func(w http.ResponseWriter, _ *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusBadRequest)
+						fmt.Fprintf(w, `{"error":"invalid_grant","error_description":%q}`, tc.errorDescription)
+					},
+				},
+			})
+
+			sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+			seeded := generateCachedInfo(t, tokenOptions{})
+			require.NoError(t, token.CacheAuthInfo(b.TokenPathForSession(sessionID), seeded))
+			require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+			updateAuthModes(t, b, sessionID, authmodes.Password)
+			authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+			access, _, err := b.IsAuthenticated(sessionID, authData)
+			require.NoError(t, err)
+			require.Equal(t, broker.AuthNext, access,
+				"an ambiguous expired-or-revoked refresh error must require reauthentication when provider checks are optional")
+
+			offline, err := b.IsOffline(sessionID)
+			require.NoError(t, err)
+			require.False(t, offline, "an ambiguous expired-or-revoked refresh error must not start offline login")
+			_, err = os.Stat(b.TokenPathForSession(sessionID))
+			require.NoError(t, err, "an ambiguous refresh error must not invalidate cached token data")
+			_, err = os.Stat(b.PasswordFilepathForSession(sessionID))
+			require.NoError(t, err, "an ambiguous refresh error must not invalidate the cached password")
+		})
+	}
+}
+
+func TestIsAuthenticatedPasswordRefreshHandlesUnknownRetrieveError(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		forceAccessCheckWithProvider bool
+		wantAccess                   string
+		wantOffline                  bool
+	}{
+		"optional_provider_check": {
+			wantAccess:  broker.AuthGranted,
+			wantOffline: true,
+		},
+		"forced_provider_check": {
+			forceAccessCheckWithProvider: true,
+			wantAccess:                   broker.AuthDenied,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := &mockEntraAuthProvider{
+				MockProvider: &testutils.MockProvider{},
+				refreshErr: &oauth2.RetrieveError{
+					ErrorCode: "unexpected_error",
+				},
+			}
+
+			b, sessionID, access, _ := runReturningEntraAuthLogin(t, provider, tc.forceAccessCheckWithProvider)
+			require.Equal(t, tc.wantAccess, access)
+
+			offline, err := b.IsOffline(sessionID)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantOffline, offline)
+		})
+	}
+}
+
+func TestIsAuthenticatedPasswordRefreshFallsBackOnConfigurationRetrieveError(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]bool{
+		"optional_provider_check_falls_back": false,
+		"forced_provider_check_denies":       true,
+	}
+
+	for name, forceAccessCheckWithProvider := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := &mockEntraAuthProvider{
+				MockProvider: &testutils.MockProvider{},
+				refreshErr: &oauth2.RetrieveError{
+					ErrorCode: "invalid_client",
+				},
+			}
+
+			b, sessionID, access, _ := runReturningEntraAuthLogin(t, provider, forceAccessCheckWithProvider)
+
+			if forceAccessCheckWithProvider {
+				require.Equal(t, broker.AuthDenied, access,
+					"a broker client configuration failure must deny login when provider access checks are forced")
+				return
+			}
+
+			require.Equal(t, broker.AuthGranted, access,
+				"a broker client configuration failure must use cached credentials when provider access checks are optional, "+
+					"because it does not establish that the user is no longer authorized")
+
+			offline, err := b.IsOffline(sessionID)
+			require.NoError(t, err)
+			require.True(t, offline, "a broker client configuration failure must mark the session offline")
+		})
+	}
+}
+
+// TestIsAuthenticatedPasswordRefreshFallsBackOnUserInfoError verifies that the
+// generic OIDC refresh path permits a returning login when an optional local
+// validation step (here: ID-token verification in getUserInfo) fails, while
+// preserving the rotated refresh token. Otherwise the cache can be stranded
+// with a refresh token the provider already invalidated server-side.
+func TestIsAuthenticatedPasswordRefreshFallsBackOnUserInfoError(t *testing.T) {
 	t.Parallel()
 
 	const correctPassword = "password"
@@ -3663,8 +3869,8 @@ func TestIsAuthenticatedPasswordRefreshPreservesRotationOnUserInfoError(t *testi
 
 	access, _, err := b.IsAuthenticated(sessionID, authData)
 	require.NoError(t, err)
-	require.Equal(t, broker.AuthDenied, access,
-		"a refreshed token whose ID token cannot be verified must deny the returning login")
+	require.Equal(t, broker.AuthGranted, access,
+		"a local verification failure must not block a returning login when provider access checks are optional")
 
 	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
 	require.NoError(t, err)
@@ -3765,16 +3971,17 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshUpdatesUserInfo(t *testing.T) {
 		"groups must be preserved from the cached token, not overwritten by the refresh")
 }
 
-func runReturningEntraAuthLogin(t *testing.T, provider *mockEntraAuthProvider) (*broker.Broker, string, string) {
+func runReturningEntraAuthLogin(t *testing.T, provider *mockEntraAuthProvider, forceAccessCheckWithProvider bool) (*broker.Broker, string, string, string) {
 	t.Helper()
 
 	const correctPassword = "password"
 	b := newBrokerForTests(t, &brokerForTestConfig{
-		Config:                broker.Config{DataDir: t.TempDir()},
-		ownerAllowed:          true,
-		firstUserBecomesOwner: true,
-		provider:              provider,
-		issuerURL:             defaultIssuerURL,
+		Config:                       broker.Config{DataDir: t.TempDir()},
+		ownerAllowed:                 true,
+		firstUserBecomesOwner:        true,
+		forceAccessCheckWithProvider: forceAccessCheckWithProvider,
+		provider:                     provider,
+		issuerURL:                    defaultIssuerURL,
 	})
 
 	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
@@ -3783,35 +3990,68 @@ func runReturningEntraAuthLogin(t *testing.T, provider *mockEntraAuthProvider) (
 
 	updateAuthModes(t, b, sessionID, authmodes.Password)
 	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
-	access, _, err := b.IsAuthenticated(sessionID, authData)
+	access, data, err := b.IsAuthenticated(sessionID, authData)
 	require.NoError(t, err)
 
-	return b, sessionID, access
+	return b, sessionID, access, data
 }
 
-// TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnVerificationFailure verifies
-// that if the refreshed Entra password token fails signature verification the
-// returning login is denied — mirroring the first-login deny path in
-// TestIsAuthenticatedEntraAuthDeniesOnAccessTokenVerificationFailure.
-func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnVerificationFailure(t *testing.T) {
+// TestIsAuthenticatedPasswordEntraTokenRefreshFallsBackOnVerificationFailure verifies
+// that a local password remains sufficient when an optional provider check cannot
+// verify the refreshed Entra access token. The ForDisplayError is intentionally
+// not authoritative, so the optional fallback remains available.
+func TestIsAuthenticatedPasswordEntraTokenRefreshFallsBackOnVerificationFailure(t *testing.T) {
 	t.Parallel()
 
 	provider := &mockEntraAuthProvider{
 		MockProvider: &testutils.MockProvider{GetGroupsFunc: func() ([]info.Group, error) {
 			return []info.Group{{Name: "remote-group"}}, nil
 		}},
-		refreshResult:        &oauth2.Token{AccessToken: "new-access-token", RefreshToken: "new-refresh-token"},
-		verifyAccessTokenErr: errors.New("token signature verification failed"),
+		refreshResult: &oauth2.Token{AccessToken: "new-access-token", RefreshToken: "new-refresh-token"},
+		verifyAccessTokenErr: &providerErrors.ForDisplayError{
+			Message: "temporary token verification failure",
+			Err:     errors.New("token signature verification failed"),
+		},
 	}
 
-	b, sessionID, access := runReturningEntraAuthLogin(t, provider)
-	require.Equal(t, broker.AuthDenied, access,
-		"a refreshed token that fails signature verification must deny the returning login")
+	b, sessionID, access, _ := runReturningEntraAuthLogin(t, provider, false)
+	require.Equal(t, broker.AuthGranted, access,
+		"a local password must remain sufficient when the optional token verification fails")
 
 	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
 	require.NoError(t, err)
 	require.Equal(t, "new-refresh-token", cached.Token.RefreshToken,
 		"a local verification failure must not discard an already-rotated refresh token")
+}
+
+// TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnVerificationFailureWhenForced
+// verifies that force_access_check_with_provider makes the same verification
+// failure deny the returning login.
+func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnVerificationFailureWhenForced(t *testing.T) {
+	t.Parallel()
+
+	const verificationMsg = "temporary token verification failure"
+	provider := &mockEntraAuthProvider{
+		MockProvider: &testutils.MockProvider{GetGroupsFunc: func() ([]info.Group, error) {
+			return []info.Group{{Name: "remote-group"}}, nil
+		}},
+		refreshResult: &oauth2.Token{AccessToken: "new-access-token", RefreshToken: "new-refresh-token"},
+		verifyAccessTokenErr: &providerErrors.ForDisplayError{
+			Message: verificationMsg,
+			Err:     errors.New("token signature verification failed"),
+		},
+	}
+
+	_, _, access, data := runReturningEntraAuthLogin(t, provider, true)
+	require.Equal(t, broker.AuthDenied, access,
+		"a forced provider check must deny when token verification fails")
+
+	var payload struct {
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(data), &payload))
+	require.Equal(t, verificationMsg, payload.Message,
+		"a forced provider check must preserve a displayable refresh error")
 }
 
 // TestIsAuthenticatedPasswordEntraTokenRefreshVerificationHasOwnTimeout verifies
@@ -3855,11 +4095,12 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshVerificationHasOwnTimeout(t *te
 		"verification should get a fresh timeout instead of sharing the refresh context")
 }
 
-// TestIsAuthenticatedPasswordEntraTokenRefreshPreservesRotationOnUserInfoError
-// verifies that a local failure after a successful Entra refresh still persists
-// the rotated refresh token. Otherwise the cache can be stranded with a refresh
-// token that Entra already invalidated server-side.
-func TestIsAuthenticatedPasswordEntraTokenRefreshPreservesRotationOnUserInfoError(t *testing.T) {
+// TestIsAuthenticatedPasswordEntraTokenRefreshFallsBackOnUserInfoError verifies
+// that a local failure after a successful Entra refresh still permits a returning
+// login when provider access checks are optional, while persisting the rotated
+// refresh token. Otherwise the cache can be stranded with a refresh token that
+// Entra already invalidated server-side.
+func TestIsAuthenticatedPasswordEntraTokenRefreshFallsBackOnUserInfoError(t *testing.T) {
 	t.Parallel()
 
 	provider := &mockEntraAuthProvider{
@@ -3870,9 +4111,9 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshPreservesRotationOnUserInfoErro
 		userInfoFromTokenErr: errors.New("missing preferred_username claim"),
 	}
 
-	b, sessionID, access := runReturningEntraAuthLogin(t, provider)
-	require.Equal(t, broker.AuthDenied, access,
-		"a refreshed token whose user info cannot be extracted must deny the returning login")
+	b, sessionID, access, _ := runReturningEntraAuthLogin(t, provider, false)
+	require.Equal(t, broker.AuthGranted, access,
+		"a local user-info failure must not block a returning login when provider access checks are optional")
 
 	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
 	require.NoError(t, err)
@@ -3920,6 +4161,134 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch(t *tes
 	require.NoError(t, err)
 	require.Equal(t, "new-refresh-token", cached.Token.RefreshToken,
 		"a local username verification failure must not discard an already-rotated refresh token")
+}
+
+// TestIsAuthenticatedPasswordRefreshFallsBackOnUserInfoSubMismatch verifies
+// that a UserInfo subject mismatch during a returning login (a sign that the
+// /userinfo response cannot be trusted, not that the user's access was
+// revoked by the IdP) follows the same optional/forced policy as other
+// failures we cannot attribute to the user: the tainted UserInfo claims must
+// never be used (that is enforced by returning an error from getUserInfo
+// regardless), but the login itself falls back to the last-known-good cached
+// credentials unless provider access checks are forced.
+func TestIsAuthenticatedPasswordRefreshFallsBackOnUserInfoSubMismatch(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]bool{
+		"optional_provider_check_falls_back": false,
+		"forced_provider_check_denies":       true,
+	}
+
+	for name, forceAccessCheckWithProvider := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			const correctPassword = "password"
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config:                       broker.Config{DataDir: t.TempDir()},
+				ownerAllowed:                 true,
+				firstUserBecomesOwner:        true,
+				forceAccessCheckWithProvider: forceAccessCheckWithProvider,
+				customHandlers: map[string]testutils.EndpointHandler{
+					"/userinfo": testutils.UserInfoHandler(map[string]interface{}{
+						"sub":             "victim-provider-id",
+						"must-have-claim": "present",
+					}),
+				},
+				tokenHandlerOptions: &testutils.TokenHandlerOptions{
+					DeleteClaims: []string{"must-have-claim"},
+					IDTokenClaims: []map[string]interface{}{
+						{"sub": "attacker-provider-id"},
+					},
+				},
+			})
+
+			sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+			seeded := generateCachedInfo(t, tokenOptions{})
+			require.NoError(t, token.CacheAuthInfo(b.TokenPathForSession(sessionID), seeded))
+			require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+			updateAuthModes(t, b, sessionID, authmodes.Password)
+			authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+			access, _, err := b.IsAuthenticated(sessionID, authData)
+			require.NoError(t, err)
+
+			if forceAccessCheckWithProvider {
+				require.Equal(t, broker.AuthDenied, access,
+					"a UserInfo subject mismatch must deny the returning login when provider access checks are forced")
+				return
+			}
+
+			require.Equal(t, broker.AuthGranted, access,
+				"a UserInfo subject mismatch must use cached credentials when provider access checks are optional, "+
+					"because it does not establish that the user is no longer authorized")
+
+			offline, err := b.IsOffline(sessionID)
+			require.NoError(t, err)
+			require.True(t, offline, "a UserInfo subject mismatch must mark the session offline")
+
+			// The tainted UserInfo claims must never be used, regardless of mode.
+			cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+			require.NoError(t, err)
+			require.NotEqual(t, "victim-provider-id", cached.UserInfo.ProviderID,
+				"the mismatched UserInfo subject must never be adopted, even when falling back")
+		})
+	}
+}
+
+func TestIsAuthenticatedPasswordRefreshFallsBackWhenProviderNoLongerImplementsEntraAuthProvider(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]bool{
+		"optional_provider_check_falls_back": false,
+		"forced_provider_check_denies":       true,
+	}
+
+	for name, forceAccessCheckWithProvider := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			const correctPassword = "password"
+			// A cached token can be marked ObtainedViaEntraAuth while the
+			// currently configured provider does not implement
+			// EntraAuthProvider, e.g. after a broker downgrade/version change,
+			// or a token copied into the wrong broker's data dir. Neither case
+			// tells us anything about whether the user is still authorized.
+			provider := &testutils.MockProvider{}
+
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config:                       broker.Config{DataDir: t.TempDir()},
+				ownerAllowed:                 true,
+				firstUserBecomesOwner:        true,
+				forceAccessCheckWithProvider: forceAccessCheckWithProvider,
+				provider:                     provider,
+				issuerURL:                    defaultIssuerURL,
+			})
+
+			sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+			generateAndStoreCachedInfo(t, tokenOptions{obtainedViaEntraAuth: true}, b.TokenPathForSession(sessionID))
+			require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+			updateAuthModes(t, b, sessionID, authmodes.Password)
+			authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+			access, _, err := b.IsAuthenticated(sessionID, authData)
+			require.NoError(t, err)
+
+			if forceAccessCheckWithProvider {
+				require.Equal(t, broker.AuthDenied, access,
+					"a provider that no longer implements EntraAuthProvider must deny login when provider access checks are forced")
+				return
+			}
+
+			require.Equal(t, broker.AuthGranted, access,
+				"a provider that no longer implements EntraAuthProvider must use cached credentials when provider access checks are optional, "+
+					"because it does not establish that the user is no longer authorized")
+
+			offline, err := b.IsOffline(sessionID)
+			require.NoError(t, err)
+			require.True(t, offline, "a provider that no longer implements EntraAuthProvider must mark the session offline")
+		})
+	}
 }
 
 // TestDeviceAuthClearsDeviceRegistrationDataWhenRegistrationDisabled verifies that

@@ -37,7 +37,7 @@ const (
 	ExpiredRefreshToken = "expired-refresh-token"
 	// InactiveExpiredRefreshToken is used to test the expired refresh token due to inactivity error (simulates Keycloak "Token is not active").
 	InactiveExpiredRefreshToken = "inactive-expired-refresh-token"
-	// StaleRefreshToken is used to test the expired refresh token due to a not-before policy (simulates Keycloak "Stale token").
+	// StaleRefreshToken simulates Keycloak "Stale token", which can mean a not-before policy or detected reuse.
 	StaleRefreshToken = "stale-refresh-token"
 )
 
