@@ -31,6 +31,7 @@ import "C"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -571,6 +572,22 @@ func initiateMFAFlowForEnrollment(broker *brokerClientApplication, username, pas
 	}
 
 	return newMFAFlowState(flow), nil
+}
+
+func verifyAccessToken(broker *brokerClientApplication, accessToken, tenantID string) error {
+	cToken := C.CString(accessToken)
+	defer C.free(unsafe.Pointer(cToken))
+	cTenant := C.CString(tenantID)
+	defer C.free(unsafe.Pointer(cTenant))
+
+	if msalErr := C.broker_verify_access_token(
+		(*C.BrokerClientApplication)(unsafe.Pointer(broker)),
+		cToken,
+		cTenant,
+	); msalErr != nil {
+		return errors.New(msalErrorMsg(msalErr))
+	}
+	return nil
 }
 
 func acquireTokenByMFAFlow(broker *brokerClientApplication, username string, flow *MFAFlowState, authData string, pollAttempt int) (token *C.UserToken, cleanup func(), err error) {

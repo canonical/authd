@@ -5,7 +5,6 @@ package msentraid
 
 import (
 	"context"
-	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,7 +14,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -25,7 +23,6 @@ import (
 	providerErrors "github.com/canonical/authd/authd-oidc-brokers/internal/providers/errors"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/info"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/himmelblau"
-	"github.com/canonical/authd/authd-oidc-brokers/internal/providers/msentraid/tokenverify"
 	"github.com/canonical/authd/authd-oidc-brokers/internal/token"
 	"github.com/canonical/authd/log"
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -59,12 +56,6 @@ type Provider struct {
 
 	// Used as the token scopes of the access token for the Microsoft Graph API in tests.
 	tokenScopesForGraphAPI []string
-
-	// keySetMu guards keySets.
-	keySetMu sync.Mutex
-	// keySets caches RemoteKeySet instances by JWKS URI so that the in-memory
-	// key cache survives across logins for the same tenant.
-	keySets map[string]*tokenverify.RemoteKeySet
 }
 
 // SetGraphClientSecret stores the OIDC app's client secret so that GetGroups can
@@ -826,37 +817,14 @@ func (p *Provider) RefreshEntraToken(ctx context.Context, issuerURL, refreshToke
 	return tok, nil
 }
 
-// VerifyAccessToken verifies the RS256 signature of the MFA-flow access token
-// against the tenant's published JWKS and that its tenant claim matches the one
-// in issuerURL. Microsoft first-party (e.g. Graph) tokens carry a header nonce
-// that is SHA256-rewritten before signing; tokenverify handles that. This is the
-// defense-in-depth check that the token genuinely came from Microsoft, so the
-// identity extracted from its claims does not rest on TLS alone.
+// VerifyAccessToken verifies the signature against the tenant JWKS using
+// libhimmelblau, including Microsoft's header-nonce rewrite, then checks exp and tid.
 func (p *Provider) VerifyAccessToken(ctx context.Context, issuerURL, accessToken string) error {
-	u, err := url.Parse(issuerURL)
-	if err != nil {
-		return fmt.Errorf("could not parse issuer URL %q: %w", issuerURL, err)
-	}
-	segments := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(segments) == 0 || segments[0] == "" {
+	tid := tenantID(issuerURL)
+	if tid == "" {
 		return fmt.Errorf("could not derive tenant from issuer URL %q", issuerURL)
 	}
-	tenantID := segments[0]
-	jwksURI := fmt.Sprintf("%s://%s/%s/discovery/v2.0/keys", u.Scheme, u.Host, tenantID)
-
-	p.keySetMu.Lock()
-	if p.keySets == nil {
-		p.keySets = make(map[string]*tokenverify.RemoteKeySet)
-	}
-	if _, ok := p.keySets[jwksURI]; !ok {
-		p.keySets[jwksURI] = tokenverify.NewRemoteKeySet(jwksURI, nil)
-	}
-	keySet := p.keySets[jwksURI]
-	p.keySetMu.Unlock()
-
-	return tokenverify.Verify(accessToken, tenantID, func(kid string) (*rsa.PublicKey, error) {
-		return keySet.KeyForKID(ctx, kid)
-	})
+	return himmelblau.VerifyAccessToken(ctx, tid, accessToken)
 }
 
 // VerifyUsername checks if the authenticated username matches the requested username and that both are valid.

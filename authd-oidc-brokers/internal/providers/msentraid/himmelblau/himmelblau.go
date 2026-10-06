@@ -28,6 +28,9 @@ var (
 
 	brokerClientApps   = make(map[brokerClientAppCacheKey]*brokerClientAppEntry)
 	brokerClientAppsMu sync.Mutex
+	// Keep verification separate from device registration, which mutates its C app.
+	verifierApps   = map[string]*brokerClientAppEntry{}
+	verifierAppsMu sync.Mutex
 
 	authorityBaseURL   = "https://login.microsoftonline.com"
 	authorityBaseURLMu sync.RWMutex
@@ -126,6 +129,45 @@ func brokerClientAppFor(clientID, tenantID string, data *DeviceRegistrationData)
 	}
 
 	return entry.app, nil
+}
+
+// VerifyAccessToken verifies an Entra access token's signature, expiry, and tenant.
+func VerifyAccessToken(ctx context.Context, tenantID, accessToken string) error {
+	authorityBaseURLMu.RLock()
+	authority, err := url.JoinPath(authorityBaseURL, tenantID)
+	authorityBaseURLMu.RUnlock()
+	if err != nil {
+		return fmt.Errorf("failed to construct authority URL: %v", err)
+	}
+
+	verifierAppsMu.Lock()
+	entry := verifierApps[authority]
+	if entry == nil {
+		entry = &brokerClientAppEntry{}
+		verifierApps[authority] = entry
+	}
+	verifierAppsMu.Unlock()
+
+	entry.once.Do(func() {
+		entry.app, entry.err = initBroker(authority, "", nil, nil)
+	})
+	if entry.err != nil {
+		verifierAppsMu.Lock()
+		if verifierApps[authority] == entry {
+			delete(verifierApps, authority)
+		}
+		verifierAppsMu.Unlock()
+		return entry.err
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- verifyAccessToken(entry.app, accessToken, tenantID) }()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func hashCacheKeyBytes(value []byte) string {

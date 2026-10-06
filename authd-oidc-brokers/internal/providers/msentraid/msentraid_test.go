@@ -4,6 +4,11 @@ package msentraid_test
 
 import (
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -188,6 +193,130 @@ func TestRefreshEntraToken(t *testing.T) {
 			require.Nil(t, got.Extra("preferred_username"), "refresh should not add redundant preferred_username extras")
 			require.Nil(t, got.Extra("sub"), "refresh should not add redundant sub extras")
 			require.Nil(t, got.Extra("name"), "refresh should not add redundant name extras")
+		})
+	}
+}
+
+func signVerifyAccessToken(t *testing.T, key *rsa.PrivateKey, kid, tenant string, exp int64) string {
+	t.Helper()
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"tid": tenant,
+		"exp": exp,
+		"upn": "u@example.com",
+	})
+	token.Header["kid"] = kid
+	signed, err := token.SignedString(key)
+	require.NoError(t, err)
+	return signed
+}
+
+func signVerifyAccessTokenWithNonce(t *testing.T, key *rsa.PrivateKey, kid, tenant, nonce string, exp int64) string {
+	t.Helper()
+	payload, err := json.Marshal(jwt.MapClaims{
+		"tid": tenant,
+		"exp": exp,
+		"upn": "u@example.com",
+	})
+	require.NoError(t, err)
+
+	nonceHash := sha256.Sum256([]byte(nonce))
+	servedHeader := fmt.Sprintf(`{"typ":"nonce","nonce":%q,"alg":"RS256","kid":%q}`, nonce, kid)
+	signedHeader := fmt.Sprintf(`{"typ":"nonce","nonce":%q,"alg":"RS256","kid":%q}`, base64.RawURLEncoding.EncodeToString(nonceHash[:]), kid)
+	payloadB64 := base64.RawURLEncoding.EncodeToString(payload)
+	signingInput := base64.RawURLEncoding.EncodeToString([]byte(signedHeader)) + "." + payloadB64
+	digest := sha256.Sum256([]byte(signingInput))
+	signature, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
+	require.NoError(t, err)
+	return base64.RawURLEncoding.EncodeToString([]byte(servedHeader)) + "." + payloadB64 + "." + base64.RawURLEncoding.EncodeToString(signature)
+}
+
+func TestVerifyAccessToken(t *testing.T) {
+	t.Parallel()
+	ensureMockMSServerForDeviceRegistration(t)
+	mockServer := mockMSServerForDeviceRegistration
+	const tenant = "11111111-2222-3333-4444-555555555555"
+	issuerURL := mockServer.URL + "/" + tenant + "/v2.0"
+	expires := time.Now().Add(time.Hour).Unix()
+	tests := []struct {
+		name            string
+		makeToken       func(*testing.T) string
+		wantErr         bool
+		wantErrContains string
+	}{
+		{
+			name: "valid token",
+			makeToken: func(t *testing.T) string {
+				return signVerifyAccessToken(t, mockServer.rsaPrivateKey, mockSigningKeyID, tenant, expires)
+			},
+		},
+		{
+			name: "token with nonce header",
+			makeToken: func(t *testing.T) string {
+				return signVerifyAccessTokenWithNonce(t, mockServer.rsaPrivateKey, mockSigningKeyID, tenant, "client-nonce", expires)
+			},
+		},
+		{
+			name: "tampered payload",
+			makeToken: func(t *testing.T) string {
+				signed := signVerifyAccessToken(t, mockServer.rsaPrivateKey, mockSigningKeyID, tenant, expires)
+				parts := strings.Split(signed, ".")
+				require.Len(t, parts, 3)
+				payload, err := json.Marshal(jwt.MapClaims{
+					"tid": tenant,
+					"exp": expires,
+					"upn": "attacker@example.com",
+				})
+				require.NoError(t, err)
+				parts[1] = base64.RawURLEncoding.EncodeToString(payload)
+				return strings.Join(parts, ".")
+			},
+			wantErr: true,
+		},
+		{
+			name: "wrong signing key",
+			makeToken: func(t *testing.T) string {
+				key, err := rsa.GenerateKey(rand.Reader, 2048)
+				require.NoError(t, err)
+				return signVerifyAccessToken(t, key, mockSigningKeyID, tenant, expires)
+			},
+			wantErr:         true,
+			wantErrContains: "signature",
+		},
+		{
+			name: "wrong tenant",
+			makeToken: func(t *testing.T) string {
+				return signVerifyAccessToken(t, mockServer.rsaPrivateKey, mockSigningKeyID, "66666666-2222-3333-4444-555555555555", expires)
+			},
+			wantErr: true,
+		},
+		{
+			name: "expired token",
+			makeToken: func(t *testing.T) string {
+				return signVerifyAccessToken(t, mockServer.rsaPrivateKey, mockSigningKeyID, tenant, time.Now().Add(-time.Hour).Unix())
+			},
+			wantErr: true,
+		},
+		{
+			name: "unknown signing key",
+			makeToken: func(t *testing.T) string {
+				return signVerifyAccessToken(t, mockServer.rsaPrivateKey, "unknown-signing-key", tenant, expires)
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := msentraid.New().VerifyAccessToken(context.Background(), issuerURL, tc.makeToken(t))
+			if tc.wantErr {
+				require.Error(t, err)
+				if tc.wantErrContains != "" {
+					require.ErrorContains(t, err, tc.wantErrContains)
+				}
+				return
+			}
+			require.NoError(t, err)
 		})
 	}
 }
