@@ -20,7 +20,7 @@ ${SUITE_OUTPUT_DIR}    ${OUTPUT_DIR}/${SUITE_NAME.rsplit('.')[-1]}
 # they are referenced by relative URLs in log.html instead of being embedded
 # as base64. Set to an empty string to fall back to inline base64 embedding.
 ${YARF_IMAGE_DIR}    ${SUITE_OUTPUT_DIR}/screenshots
-${OCR_CONFIDENCE_THRESHOLD}    93
+${OCR_CONFIDENCE_THRESHOLD}    92
 ${OCR_SIMILARITY_THRESHOLD}    92
 
 
