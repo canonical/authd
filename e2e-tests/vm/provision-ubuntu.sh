@@ -233,7 +233,27 @@ if [ ! -f "${CLOUD_INIT_ISO}" ]; then
       SOCAT_ADDRESS="${SOCAT_ADDRESS}" \
       CI_ROOT_SSHD_CONFIG="${CI_ROOT_SSHD_CONFIG}" \
       CI_ROOT_PASSWD_CMD="${CI_ROOT_PASSWD_CMD}" \
-      envsubst < "${CLOUD_INIT_TEMPLATE}" > "${CLOUD_INIT_DIR}/user-data"
+      envsubst < "${CLOUD_INIT_TEMPLATE}" > "${CLOUD_INIT_DIR}/cloud-config.yaml"
+
+    # MIME script parts run in filename order after cloud-init installs packages.
+    cloud_init_scripts_dir="${SCRIPT_DIR}/cloud-init-scripts"
+    if ! compgen -G "${cloud_init_scripts_dir}/*" >/dev/null; then
+        echo "No cloud-init scripts found in ${cloud_init_scripts_dir}." >&2
+        exit 1
+    fi
+    cloud_init_script_parts=()
+    for script in "${cloud_init_scripts_dir}/"*; do
+        if [[ ! -f "${script}" ]]; then
+            echo "Cloud-init script path is not a file: ${script}" >&2
+            exit 1
+        fi
+        cloud_init_script_parts+=("${script}:text/x-shellscript")
+    done
+
+    write-mime-multipart \
+      --output "${CLOUD_INIT_DIR}/user-data" \
+      "${CLOUD_INIT_DIR}/cloud-config.yaml:text/cloud-config" \
+      "${cloud_init_script_parts[@]}"
 
     cloud-localds "${CLOUD_INIT_ISO}" "${CLOUD_INIT_DIR}/user-data"
 else

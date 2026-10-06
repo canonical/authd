@@ -140,13 +140,6 @@ runcmd:
   - systemctl mask systemd-networkd-wait-online.service
   # Enable our systemd services
   - systemctl enable journal-export.service
-  # Avoid APT downloads and upgrades during the tests
-  - systemctl mask apt-daily.service
-  - systemctl mask apt-daily.timer
-  - systemctl mask apt-daily-upgrade.service
-  - systemctl mask apt-daily-upgrade.timer
-  - systemctl mask unattended-upgrades.service
-  - rm -f /etc/apt/apt.conf.d/20auto-upgrades /etc/apt/apt.conf.d/50unattended-upgrades
 
 final_message: "Provisioning finished after $UPTIME seconds"
 
