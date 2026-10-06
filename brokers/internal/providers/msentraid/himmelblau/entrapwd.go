@@ -62,7 +62,7 @@ type EntraAuthProvider interface {
 	// On success it returns the rotated token (the new refresh token must be
 	// persisted). On an Entra rejection it returns an *oauth2.RetrieveError so the
 	// broker can classify it with the same checks it uses for device-auth
-	// (IsUserDisabledError → AADSTS50057, IsTokenExpiredError → AADSTS50173, etc.).
+	// (IsUserDisabledError → AADSTS50057, ClassifyRefreshTokenError → AADSTS50173, etc.).
 	RefreshEntraToken(
 		ctx context.Context,
 		issuerURL string,
