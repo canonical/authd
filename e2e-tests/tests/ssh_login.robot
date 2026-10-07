@@ -18,12 +18,12 @@ Test Setup
 
 *** Variables ***
 ${username}    %{E2E_USER}
-${local_password}    qwer1234
 
 
 *** Test Cases ***
 Test login with SSH
-    [Documentation]    Test login via SSH with device code flow and local password.
+    [Documentation]    Test login via SSH with device code flow and local
+    ...    password.
 
     # Log in with local user
     Log In

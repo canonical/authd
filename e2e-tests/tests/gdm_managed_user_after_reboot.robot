@@ -2,8 +2,9 @@
 Resource        resources/utils.resource
 Resource        resources/authd.resource
 Resource        resources/broker.resource
+Resource        resources/checkpoints.resource
 
-Test Setup       utils.Test Setup    snapshot=%{BROKER}-installed
+Test Setup       checkpoints.authd User Logged In Via GDM
 Test Teardown    utils.Test Teardown
 
 
@@ -18,7 +19,7 @@ Managed user is listed by GDM after reboot
     ...
     ...                Do not query NSS after the reboot: that would activate authd and
     ...                hide the startup-ordering regression this test covers.
-    Log In With Remote User Through GDM: QR Code    ${username}    ${local_password}
+    # The GDM checkpoint already logged in as the user; log out before rebooting.
     Log Out
     ${display_name} =    SSH.Execute    getent passwd ${username} | cut -d: -f5 | cut -d, -f1
     Should Not Be Empty    ${display_name}

@@ -9,14 +9,15 @@ Test Teardown   utils.Test Teardown
 
 *** Variables ***
 ${username}    %{E2E_USER}
-${local_password}    qwer1234
 ${first_home_base_dir}    /srv/authd-first-homes
 ${second_home_base_dir}    /srv/authd-second-homes
 
 
 *** Test Cases ***
 Test login keeps existing home directory after changing home base dir
-    [Documentation]    Verify that a first login uses the configured home_base_dir and that changing the value later does not move an existing user home directory.
+    [Documentation]    Verify that a first login uses the configured
+    ...    home_base_dir and that changing the value later does not move an
+    ...    existing user home directory.
 
     SSH.Execute    mkdir -p ${first_home_base_dir} ${second_home_base_dir}
     Change Broker Configuration    home_base_dir    ${first_home_base_dir}
