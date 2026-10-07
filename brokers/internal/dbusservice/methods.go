@@ -20,9 +20,9 @@ func dbusErrorForBrokerCall(err error) *dbus.Error {
 	return dbus.MakeFailedError(err)
 }
 
-func authorizeDeleteUser(sender dbus.Sender, uidForSender func(dbus.Sender) (uint32, error)) *dbus.Error {
+func authorizeRootCaller(sender dbus.Sender, uidForSender func(dbus.Sender) (uint32, error), method string) *dbus.Error {
 	if sender == "" {
-		return dbus.NewError(dbusAccessDeniedErrorName, []any{"DeleteUser is restricted to root"})
+		return dbus.NewError(dbusAccessDeniedErrorName, []any{method + " is restricted to root"})
 	}
 	if uidForSender == nil {
 		return dbus.MakeFailedError(errors.New("could not determine D-Bus caller UID"))
@@ -33,7 +33,7 @@ func authorizeDeleteUser(sender dbus.Sender, uidForSender func(dbus.Sender) (uin
 		return dbus.MakeFailedError(fmt.Errorf("could not determine D-Bus caller UID: %w", err))
 	}
 	if uid != 0 {
-		return dbus.NewError(dbusAccessDeniedErrorName, []any{"DeleteUser is restricted to root"})
+		return dbus.NewError(dbusAccessDeniedErrorName, []any{method + " is restricted to root"})
 	}
 	return nil
 }
@@ -41,8 +41,17 @@ func authorizeDeleteUser(sender dbus.Sender, uidForSender func(dbus.Sender) (uin
 // NewSession is the method through which the broker and the daemon will communicate once dbusInterface.NewSession is called.
 //
 // This is the v3+ version that accepts the providerID identifier for cache directory resolution.
-func (s *Interface) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+func (s *Interface) NewSession(sender dbus.Sender, username, lang, mode, providerID string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
 	log.Debugf(context.Background(), "Creating new session (v3) (username=%s, lang=%s, mode=%s, provider_id=%s)", username, lang, mode, providerID)
+	if providerID != "" {
+		var uidForSender func(dbus.Sender) (uint32, error)
+		if s.service != nil {
+			uidForSender = s.service.uidForSender
+		}
+		if dbusErr := authorizeRootCaller(sender, uidForSender, "NewSession with a provider ID"); dbusErr != nil {
+			return "", "", dbusErr
+		}
+	}
 	b, err := s.brokerForCall()
 	if err != nil {
 		return "", "", dbusErrorForBrokerCall(err)
@@ -158,7 +167,7 @@ func (s *Interface) deleteUser(sender dbus.Sender, username, providerID string) 
 	if s.service != nil {
 		uidForSender = s.service.uidForSender
 	}
-	if dbusErr := authorizeDeleteUser(sender, uidForSender); dbusErr != nil {
+	if dbusErr := authorizeRootCaller(sender, uidForSender, "DeleteUser"); dbusErr != nil {
 		return dbusErr
 	}
 
