@@ -33,11 +33,17 @@ class Journal:
         os.makedirs(self.output_dir, exist_ok=True)
 
         if os.getenv("SYSTEMD_SUPPORTS_VSOCK"):
+            vm_name = VMUtils.vm_name()
+            # --split-mode=none is required for a single output file: with the
+            # default (host) a listening source must be given a directory, and
+            # a directory would name the file after the vsock peer, which
+            # contains colons that GitHub Actions cannot upload.
             self.process = ExecUtils.Popen(
                 [
                     "/lib/systemd/systemd-journal-remote",
                     f"--listen-raw=vsock:{HOST_CID}:{PORT}",
-                    f"--output={self.output_dir}",
+                    "--split-mode=none",
+                    f"--output={self.output_dir}/{vm_name}.journal",
                 ],
                 stderr=subprocess.PIPE,
             )

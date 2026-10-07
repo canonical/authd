@@ -242,34 +242,16 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			interactiveShell: true,
 			test:             sshPtyAuthWithShell,
 		},
-		// On Ubuntu 24.04 (OpenSSH 9.6p1) there is no check_pam_user() in sshd,
-		// so uppercase usernames are handled by authd which normalises them to
-		// lowercase and authenticates successfully.
-		"Authenticate_user_successfully_with_upper_case_on_ubuntu_24.04": {
-			ubuntuVersion: "24.04",
+		// OpenSSH 10.2p1-2ubuntu3.7 compares account UIDs, so authd's
+		// case-insensitive NSS lookup accepts uppercase names.
+		"Authenticate_user_successfully_with_upper_case": {
 			user: strings.ToUpper(testUserNameFull(t,
 				examplebroker.UserIntegrationPreCheckPrefix, "upper-case")),
 			test: sshPtySimpleAuth,
 		},
-		"Authenticate_user_successfully_if_already_registered_with_upper_case_on_ubuntu_24.04": {
-			ubuntuVersion: "24.04",
-			user:          "USER-SSH2@example.com",
-			test:          sshPtySimpleAuth,
-		},
-		// On Ubuntu 26.04 (OpenSSH 10.2+), check_pam_user() rejects logins
-		// when authd canonicalizes PAM_USER differently from the requested name.
-		"Deny_authentication_if_username_has_uppercase_on_ubuntu_26.04": {
-			ubuntuVersion: "26.04",
-			user: strings.ToUpper(testUserNameFull(t,
-				examplebroker.UserIntegrationPreCheckPrefix, "upper-case")),
-			wantNoHomeDir: true,
-			test:          sshPtyUppercaseRejected,
-		},
-		"Deny_authentication_if_username_has_uppercase_and_already_registered_on_ubuntu_26.04": {
-			ubuntuVersion: "26.04",
-			user:          "USER-SSH2@example.com",
-			wantNoHomeDir: true,
-			test:          sshPtyUppercaseRejected,
+		"Authenticate_user_successfully_if_already_registered_with_upper_case": {
+			user: "USER-SSH2@example.com",
+			test: sshPtySimpleAuth,
 		},
 		"Authenticate_user_with_mfa": {
 			userPrefix: examplebroker.UserIntegrationMfaPrefix,
@@ -285,20 +267,11 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			userPrefix: examplebroker.UserIntegrationNeedsResetPrefix,
 			test:       sshPtyMandatoryPasswordReset,
 		},
-		// As in the previous uppercase tests, behavior differs between Ubuntu versions.
-		"Authenticate_user_and_reset_password_then_allow_uppercase_re-login_on_ubuntu_24.04": {
-			ubuntuVersion: "24.04",
+		"Authenticate_user_and_reset_password_then_allow_uppercase_re-login": {
 			user: testUserNameFull(t,
 				examplebroker.UserIntegrationNeedsResetPrefix+
 					examplebroker.UserIntegrationPreCheckValue, "case-insensitive"),
 			test: sshPtyMandatoryPasswordResetThenUppercaseSucceeds,
-		},
-		"Authenticate_user_and_reset_password_then_deny_uppercase_re-login_on_ubuntu_26.04": {
-			ubuntuVersion: "26.04",
-			user: testUserNameFull(t,
-				examplebroker.UserIntegrationNeedsResetPrefix+
-					examplebroker.UserIntegrationPreCheckValue, "case-insensitive"),
-			test: sshPtyMandatoryPasswordResetThenUppercaseRejected,
 		},
 		"Authenticate_user_with_mfa_and_reset_password_while_enforcing_policy": {
 			userPrefix: examplebroker.UserIntegrationMfaWithResetPrefix,
@@ -316,6 +289,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			userPrefix: examplebroker.UserIntegrationCanResetPrefix,
 			test:       sshPtyOptionalPasswordResetAccept,
 		},
+
 		"Authenticate_user_switching_auth_mode": {
 			test: sshPtySwitchAuthMode,
 		},
@@ -998,37 +972,6 @@ func sshPtyAuthWithShell(t *testing.T, args sshPtyArgs) {
 	golden.CheckOrUpdate(t, got)
 }
 
-func sshPtyUppercaseRejected(t *testing.T, args sshPtyArgs) {
-	t.Helper()
-
-	c := startSSHForPty(t, args)
-
-	// sshd 10.2 rejects uppercase usernames because PAM_USER doesn't match pw_name.
-	// Since sshd 10.2p1-2ubuntu3.3 that rejection is deferred until after PAM authentication.
-	// Complete that flow to verify it still rejects the login.
-	sshPtyCompleteDeferredUsernameRejection(t, c, "goodpass")
-	c.RequireExitCode(t, 255)
-	c.Close(t)
-
-	got := sshPtySanitizeOutput(t, c.RawOutput())
-	golden.CheckOrUpdate(t, got)
-}
-
-func sshPtyCompleteDeferredUsernameRejection(t *testing.T, c *ptytest.Console, password string) {
-	t.Helper()
-
-	out := c.WaitFor(t, `uppercase characters|Connection closed|Choose your provider|Gimme your password`)
-	if strings.Contains(out, "Choose your provider") {
-		sendEchoedLine(t, c, "2")
-		c.WaitFor(t, `Gimme your password`)
-	} else if !strings.Contains(out, "Gimme your password") {
-		return
-	}
-
-	c.SendLine(t, password)
-	c.WaitFor(t, `uppercase characters|Disconnected from|Connection closed`)
-}
-
 func sshPtyMfaAuth(t *testing.T, args sshPtyArgs) {
 	t.Helper()
 
@@ -1458,35 +1401,6 @@ func sshPtyMandatoryPasswordReset(t *testing.T, args sshPtyArgs) {
 	golden.CheckOrUpdate(t, got)
 }
 
-func sshPtyMandatoryPasswordResetThenUppercaseRejected(t *testing.T, args sshPtyArgs) {
-	t.Helper()
-
-	// First auth with lowercase user (initial password reset).
-	c := startSSHForPty(t, args)
-
-	sshPtySelectBroker(t, c)
-	c.WaitFor(t, `Gimme your password`)
-	c.SendLine(t, "goodpass")
-
-	c.WaitFor(t, `Enter your new password`)
-	c.SendLine(t, "authd2404")
-	c.WaitFor(t, `Confirm Password`)
-	c.SendLine(t, "authd2404")
-	sshPtyWaitForSSHConnection(t, c)
-
-	c.RequireSuccessfulExit(t)
-
-	// Second auth with uppercase username may be rejected after PAM authentication.
-	got := sshPtySanitizeOutput(t, c.RawOutput())
-	upperUser := strings.ToUpper(args.user)
-	c2 := startSSHForPtyWithUser(t, args, upperUser)
-	sshPtyCompleteDeferredUsernameRejection(t, c2, "authd2404")
-	c2.RequireExitCode(t, 255)
-
-	got += sshPtySanitizeOutput(t, c2.RawOutput())
-	golden.CheckOrUpdate(t, got)
-}
-
 func sshPtyMandatoryPasswordResetThenUppercaseSucceeds(t *testing.T, args sshPtyArgs) {
 	t.Helper()
 
@@ -1505,8 +1419,8 @@ func sshPtyMandatoryPasswordResetThenUppercaseSucceeds(t *testing.T, args sshPty
 
 	c.RequireSuccessfulExit(t)
 
-	// Second auth with uppercase username - on 24.04 (OpenSSH 9.6p1) there is no
-	// check_pam_user(), so authd normalises the username and authenticates successfully.
+	// Case-variant re-login succeeds on both versions: OpenSSH 9.6p1 has no
+	// check_pam_user(), while 10.2p1-2ubuntu3.7 compares account UIDs.
 	// The broker and auth mode are auto-selected from the previous session.
 	upperUser := strings.ToUpper(args.user)
 	c2 := startSSHForPtyWithUser(t, args, upperUser)

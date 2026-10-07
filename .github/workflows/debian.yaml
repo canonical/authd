@@ -58,7 +58,7 @@ concurrency:
 jobs:
   compute-hash:
     name: Compute hash of build-relevant files
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     outputs:
       files-hash: ${{ steps.hash.outputs.hash }}
     steps:
@@ -71,7 +71,7 @@ jobs:
 
   get-modified-files:
     name: Get modified files
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # ubuntu-latest
     outputs:
       list: ${{ fromJSON(steps.git-diff.outputs.modified_files) }}
 

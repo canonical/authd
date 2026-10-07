@@ -8,7 +8,7 @@ on:
 env:
   DEBIAN_FRONTEND: noninteractive
   AUTHD_TESTS_USE_LXD: true
-  LXD_UBUNTU_VERSION: "2604"
+  LXD_UBUNTU_VERSION: "2404"
 
 jobs:
   refresh-lxd-image-cache:
@@ -18,7 +18,7 @@ jobs:
     #   it's run in LXD.
     # * the LXD_UBUNTU_VERSION environment variable matches the version used in
     #   the test case.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       contents: read
     steps:
@@ -32,7 +32,7 @@ jobs:
       - name: Warm version-specific LXD test container
         run: |
           go test -count=1 ./pam/integration-tests \
-            -run 'TestSSHAuthenticate/Exit_if_user_is_not_pre-checked_on_ssh_service_on_ubuntu_26\.04$'
+            -run 'TestSSHAuthenticate/Exit_if_user_is_not_pre-checked_on_ssh_service_on_ubuntu_24\.04$'
 
       - name: Export LXD test image for cache
         id: export-lxd-test-image
