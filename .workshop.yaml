@@ -1,0 +1,69 @@
+# authd development workshop.
+#
+# A single VM builds and installs authd's daemon, PAM and NSS modules from
+# source, with sshd for SSH login testing and a virtual console for GDM tests.
+# See .workshop/README.md for prerequisites, sizing, and validation.
+name: authd-dev
+base: ubuntu@26.04
+# Workshop 0.9.7 syntax for experimental VM support; see .workshop/README.md.
+confinement: virtual-machine
+
+sdks:
+  # latest/stable is the only channel the Store rust SDK offers, so this
+  # names the channel rather than pinning a version: Rust tracks latest
+  # here, like CI (`rustup update stable`). Any current stable clears the
+  # MSRV of the nss crate (rust-version in nss/Cargo.toml).
+  - name: rust
+    channel: latest/stable
+
+  # Pinned Go toolchain matching go.mod (go 1.26.0). The Ubuntu archive
+  # drifts across the 26.04 lifetime, which would silently build with a
+  # newer compiler than CI tests.
+  - name: go
+    channel: 1.26/stable
+
+  # Project-specific SDK: hooks build + install the authd stack and set up
+  # GDM. See .workshop/authd/.
+  - name: project-authd
+
+actions:
+  # Rebuild + reinstall from source without a full refresh.
+  #   workshop run -- build [COMPONENT...]
+  #   workshop run -- build brokers [VARIANT...]
+  # COMPONENT: authd|authctl|pam|nss|brokers|all. VARIANT: google|msentraid|oidc.
+  # Bare build = default set (authd authctl pam nss). all = default + brokers.
+  # Broker variants live under brokers: `build brokers google`, not `build google`.
+  # After rebuilding pam, run `workshop run -- gdm restart`.
+  build: exec /project/.workshop/authd/scripts/build-component "$@"
+
+  # Run Go tests for the root module (race detection by default).
+  #   workshop run -- test [--no-race] [-- GO_TEST_ARGS...]
+  test: exec /project/.workshop/authd/scripts/test "$@"
+
+  # Configure and run an OIDC broker from source.
+  #   workshop run -- broker configure google --client-id ID --client-secret-file /project/.authd-client-secret --ssh-suffixes '@example.com'
+  #   workshop run -- broker edit google
+  #   workshop run -- broker start google
+  # Configure builds a missing binary; use build brokers <variant> to rebuild.
+  # Active brokers restart after configuration updates; stopped ones stay stopped.
+  broker: exec /project/.workshop/authd/scripts/broker "$@"
+
+  # Check PAM, NSS, GDM, sshd and the socket.
+  #   workshop run -- validate
+  validate: exec /project/.workshop/authd/scripts/validate "$@"
+
+  # Show journal logs. Exits by default; -f follows.
+  #   workshop run -- logs [all|brokers|authd|google|msentraid|oidc|<unit>] [-f] [-n N]
+  logs: exec /project/.workshop/authd/scripts/logs "$@"
+
+  # Run golangci-lint via the pinned wrapper.
+  #   workshop run -- lint [-- LINT_ARGS...]
+  lint: exec /project/.workshop/authd/scripts/lint "$@"
+
+  # Open a login shell through sshd and PAM as the cloud user.
+  #   workshop run -- login user@domain
+  login: exec /project/.workshop/authd/scripts/login "$@"
+
+  # Check or restart GDM inside the VM.
+  #   workshop run -- gdm status | restart | logs [-f]
+  gdm: exec /project/.workshop/authd/scripts/gdm "$@"
