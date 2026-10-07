@@ -9,6 +9,7 @@ import (
 
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/canonical/authd/internal/testutils/golden"
+	"github.com/canonical/authd/internal/users/db"
 	"github.com/stretchr/testify/require"
 )
 
@@ -148,6 +149,69 @@ func TestIntegration(t *testing.T) {
 				require.NotEqual(t, codeNotFound, status, "Expected no error, but got %v", status)
 				require.Empty(t, got, "Expected empty output, but got %q", got)
 			}
+		})
+	}
+}
+
+func TestProviderAliasSupplementaryGroups(t *testing.T) {
+	t.Parallel()
+
+	const unixName = "user1@example.com"
+	const providerName = "renamed-user1@example.com"
+	libPath, rustCovEnv := testutils.BuildRustNSSLib(t, false)
+	dbDir := filepath.Join(t.TempDir(), "db")
+	require.NoError(t, os.Mkdir(dbDir, 0700))
+	fixture, err := os.ReadFile(filepath.Join("testdata", "db", "multiple_users_and_groups.db.yaml"))
+	require.NoError(t, err)
+	content := strings.Replace(string(fixture), "    - name: "+unixName+"\n",
+		"    - name: "+unixName+"\n      provider_username: "+providerName+"\n", 1)
+	require.NoError(t, db.Z_ForTests_CreateDBFromYAMLReader(strings.NewReader(content), dbDir))
+
+	groupFile := filepath.Join(t.TempDir(), "group")
+	require.NoError(t, os.WriteFile(groupFile, []byte("localgroup:x:45000:"+unixName+"\n"), 0600))
+	socket := testutils.StartAuthd(t, daemonPath, testutils.WithDBPath(dbDir),
+		testutils.WithGroupFile(groupFile), testutils.WithCurrentUserAsRoot)
+	unixEntry, status := getentOutputForLib(t, libPath, socket, rustCovEnv, false, "passwd", unixName)
+	require.Zero(t, status)
+	aliasEntry, status := getentOutputForLib(t, libPath, socket, rustCovEnv, false, "passwd", providerName)
+	require.Zero(t, status)
+	require.Equal(t, unixEntry, aliasEntry)
+	require.True(t, strings.HasPrefix(aliasEntry, unixName+":"))
+
+	nsswitch := filepath.Join(filepath.Dir(groupFile), "nsswitch.conf")
+	require.NoError(t, os.WriteFile(nsswitch, []byte("passwd: authd\ngroup: files authd\n"), 0600))
+	runLookup := func(database, name string) string {
+		t.Helper()
+		env := append(os.Environ(), rustCovEnv...)
+		env = append(env, "AUTHD_NSS_SOCKET="+socket, "LD_LIBRARY_PATH="+filepath.Dir(libPath))
+		cmd := testutils.BubbleWrapCommand(t, env)
+		cmd.Args = append(cmd.Args,
+			"--ro-bind", filepath.Dir(groupFile), "/etc",
+			"--ro-bind", filepath.Dir(socket), filepath.Dir(socket),
+			"--ro-bind", filepath.Dir(libPath), filepath.Dir(libPath),
+			"/usr/bin/getent", database, name,
+		)
+		var output strings.Builder
+		cmd.Stdout = &output
+		require.NoError(t, cmd.Run())
+		return strings.TrimSpace(output.String())
+	}
+	require.Equal(t, "localgroup:x:45000:"+unixName, runLookup("group", "localgroup"))
+	require.Equal(t, "commongroup::99999:user1@example.com,user2@example.com,user3@example.com",
+		runLookup("group", "commongroup"))
+	for _, name := range []string{unixName, providerName} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			groups := strings.Fields(runLookup("initgroups", name))
+			require.NotEmpty(t, groups)
+			require.Equal(t, name, groups[0])
+			if name == unixName {
+				require.ElementsMatch(t, []string{"11111", "45000", "99999"}, groups[1:])
+				return
+			}
+			// glibc's fallback compares the requested name with canonical group members.
+			require.Empty(t, groups[1:])
 		})
 	}
 }

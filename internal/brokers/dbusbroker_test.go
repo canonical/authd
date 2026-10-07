@@ -63,6 +63,61 @@ func introspectionXML(interfaces ...string) string {
 	return string(data)
 }
 
+func TestDeleteUserWarnsForCachedLegacyInterface(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockBusObject{introspectXML: introspectionXML("com.ubuntu.authd.Broker3")}
+	b := dbusBroker{
+		dbusObject: mock,
+		iface:      dbusInterface{name: "com.ubuntu.authd.Broker2", version: 2},
+	}
+	err := b.DeleteUser(context.Background(), "renamed-user", "provider-id")
+	require.ErrorContains(t, err, "old username caches may remain")
+	require.Equal(t, "com.ubuntu.authd.Broker2.DeleteUser", mock.lastCalledMethod,
+		"attempt legacy cleanup even when complete deletion cannot be verified")
+}
+
+func TestRequiresStableProviderIDForNewUsers(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		interfaces []string
+		cached     dbusInterface
+		want       bool
+		wantErr    bool
+	}{
+		"Unversioned": {interfaces: []string{DbusBaseInterface}},
+		"API_v2":      {interfaces: []string{DbusBaseInterface + "2"}},
+		"API_v3":      {interfaces: []string{DbusBaseInterface + "3"}, want: true},
+		"Highest_supported_API": {
+			interfaces: []string{DbusBaseInterface + "2", DbusBaseInterface + "3"},
+			want:       true,
+		},
+		"Cached_API_v2": {
+			interfaces: []string{DbusBaseInterface + "3"},
+			cached:     dbusInterface{name: DbusBaseInterface + "2", version: 2},
+		},
+		"Unsupported_API": {interfaces: []string{DbusBaseInterface + "999"}, wantErr: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			b := Broker{brokerer: &dbusBroker{
+				dbusObject: &mockBusObject{introspectXML: introspectionXML(tc.interfaces...)},
+				iface:      tc.cached,
+			}}
+			got, err := b.RequiresStableProviderIDForNewUsers()
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
 func TestGetInterface(t *testing.T) {
 	t.Parallel()
 

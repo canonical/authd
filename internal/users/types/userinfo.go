@@ -15,6 +15,9 @@ func (u UserInfo) Diff(other UserInfo) []string {
 	if u.Name != other.Name {
 		diffs = append(diffs, fmt.Sprintf("name (%q → %q)", u.Name, other.Name))
 	}
+	if u.ProviderUsername != other.ProviderUsername {
+		diffs = append(diffs, fmt.Sprintf("provider username (%q → %q)", u.ProviderUsername, other.ProviderUsername))
+	}
 	if u.UID != other.UID {
 		diffs = append(diffs, fmt.Sprintf("uid (%d → %d)", u.UID, other.UID))
 	}
@@ -39,6 +42,7 @@ func (u UserInfo) Diff(other UserInfo) []string {
 // Equals checks that two users are equal.
 func (u UserInfo) Equals(other UserInfo) bool {
 	if u.Name != other.Name ||
+		u.ProviderUsername != other.ProviderUsername ||
 		u.UID != other.UID ||
 		u.Gecos != other.Gecos ||
 		u.Dir != other.Dir ||

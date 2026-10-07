@@ -405,12 +405,18 @@ func userInfoFromName(sessionID string, extraGroups []groupJSONInfo) string {
 	shell := "/bin/sh/" + name
 	gecos := "gecos for " + name
 	ugid := "ugid-" + name
+	providerIDMissing := false
+	providerUsername := ""
 
 	switch parsedID {
 	case "ia_info_empty_user_name":
 		name = ""
+	case "ia_info_no_provider_id":
+		providerIDMissing = true
 	case "ia_info_mismatching_user_name":
 		name = "different_username@example.com"
+	case "ia_info_distinct_provider_username":
+		providerUsername = "provider-" + name
 	case "ia_info_empty_group_name":
 		group = ""
 	case "ia_info_empty_ugid":
@@ -428,6 +434,11 @@ func userInfoFromName(sessionID string, extraGroups []groupJSONInfo) string {
 		home = "/root"
 	}
 
+	providerID := "providerid-" + name
+	if providerIDMissing {
+		providerID = ""
+	}
+
 	groups := []groupJSONInfo{{Name: group, UGID: ugid}}
 	for _, g := range extraGroups {
 		var ugid string
@@ -442,20 +453,22 @@ func userInfoFromName(sessionID string, extraGroups []groupJSONInfo) string {
 	}
 
 	user := struct {
-		Name       string
-		ProviderID string
-		Dir        string
-		Shell      string
-		Groups     []groupJSONInfo
-		Gecos      string
-	}{Name: name, ProviderID: "providerid-" + name, Dir: home, Shell: shell, Groups: groups, Gecos: gecos}
+		Name             string
+		ProviderID       string
+		ProviderUsername string
+		Dir              string
+		Shell            string
+		Groups           []groupJSONInfo
+		Gecos            string
+	}{Name: name, ProviderID: providerID, ProviderUsername: providerUsername, Dir: home, Shell: shell, Groups: groups, Gecos: gecos}
 
 	// only used for tests, we can ignore the template execution error as the returned data will be failing.
 	var buf bytes.Buffer
 	_ = template.Must(template.New("").Parse(`{
 		"name": "{{.Name}}",
 		"provider_id": "{{.ProviderID}}",
-		"gecos": "{{.Gecos}}",
+		{{if .ProviderUsername}}"provider_username": "{{.ProviderUsername}}",
+		{{end}}"gecos": "{{.Gecos}}",
 		"dir": "{{.Dir}}",
 		"shell": "{{.Shell}}",
 		"avatar": "avatar for {{.Name}}",
