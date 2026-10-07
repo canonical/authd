@@ -280,7 +280,7 @@ timedatectl show -p NTPSynchronized --value | grep -q yes"
 
 function wait_for_system_running() {
     # Wait until we can connect via SSH
-    retry --times 30 --delay 3 -- "$SSH" -- true
+    retry --times 30 --delay 3 -- "$SSH" -- true || return $?
     # shellcheck disable=SC2016
     local cmd='output=$(systemctl is-system-running --wait) || [ $output = degraded ]'
     retry --times 3 --delay 3 -- timeout 30 "$SSH" -- "$cmd"
@@ -306,5 +306,31 @@ timeout 5 retry --delay 1 -- sh -c \
 
 function boot_system() {
     virsh start "${VM_NAME}"
-    wait_for_system_running
+
+    # Save serial output so failed boots provide the guest's startup log.
+    local console_log
+    console_log="$(mktemp)"
+    # shellcheck disable=SC2016
+    VM_NAME="${VM_NAME}" script -q -e -f "${console_log}" \
+        -c 'virsh console "$VM_NAME"' >/dev/null 2>&1 &
+    local console_pid=$!
+
+    local status=0
+    wait_for_system_running || status=$?
+
+    kill "${console_pid}" 2>/dev/null || true
+    wait "${console_pid}" 2>/dev/null || true
+
+    if ((status != 0)); then
+        echo "VM '${VM_NAME}' failed readiness checks; last 200 serial-console lines follow:" >&2
+        if [[ -s "${console_log}" ]]; then
+            tail -n 200 "${console_log}" >&2
+        else
+            echo "No serial-console output was captured." >&2
+        fi
+        rm -f "${console_log}"
+        return "${status}"
+    fi
+
+    rm -f "${console_log}"
 }
