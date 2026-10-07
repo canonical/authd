@@ -15,6 +15,13 @@ run on the host to interface with remote identity providers.
 Steps for building the components, testing authd, and contributing to the code,
 are described on this page.
 
+## Development environment (recommended)
+
+The Workshop setup builds authd in a single Ubuntu 26.04 LXD VM with a real
+GDM greeter. See the [Workshop development environment
+guide](https://github.com/canonical/authd/blob/main/.workshop/README.md) for
+prerequisites, launch, build, broker setup, and validation.
+
 ## Required dependencies
 
 This project has several build dependencies. You can install these dependencies from the top of the source tree using the `apt` command as follows:
