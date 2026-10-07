@@ -1,0 +1,137 @@
+#!/bin/bash
+# restore-state — restore authd config and rebuild brokers after a refresh.
+#
+# Workshop calls this hook (as root) after all setup-project hooks have run,
+# reading $SDK_STATE_DIR written by save-state. Rebuilds each broker binary
+# using the workshop user's warm Go/Rust build caches, then restores config
+# files and re-enables the services that were running before the refresh.
+set -euo pipefail
+
+# shellcheck disable=SC1091
+source "$SDK/lib/brokers.sh"
+config_helper="$SDK/lib/broker_config.py"
+
+# The install path travels with the saved broker config so the rebuilt
+# binary matches its systemd unit.
+AUTHD_DAEMONS_PATH="${AUTHD_DAEMONS_PATH:-/usr/libexec}"
+
+state_dir="${SDK_STATE_DIR}/brokers"
+restored_config=0
+if [ -f "${SDK_STATE_DIR}/authd.yaml" ]; then
+    authd_install_broker_file "${SDK_STATE_DIR}/authd.yaml" /etc/authd/authd.yaml 600
+    restored_config=1
+fi
+
+if [ ! -d "$state_dir" ]; then
+    if [ "$restored_config" -eq 1 ]; then
+        systemctl try-restart authd.service
+    fi
+    printf 'No broker state to restore.\n'
+    exit 0
+fi
+
+# Build into a directory owned by the workshop user; install from it as root.
+umask 077
+build_root="$(mktemp -d)"
+build_dir="${build_root}/build"
+config_stage=""
+unit_stage=""
+trap 'rm -rf -- "$build_root" ${config_stage:+"$config_stage"} ${unit_stage:+"$unit_stage"}' EXIT
+chmod 711 "$build_root"
+install -d -m700 -o workshop -g workshop "$build_dir"
+
+restored=0
+units=()
+reload_dbus=no
+for variant in "${AUTHD_BROKER_VARIANTS[@]}"; do
+    src="${state_dir}/${variant}"
+    config_source="${src}/config"
+    [ -f "${config_source}/broker.conf" ] || continue
+    daemon_path="${AUTHD_DAEMONS_PATH}"
+    daemon_path_source="default ${AUTHD_DAEMONS_PATH}"
+    if [ -f "${config_source}/daemon_path" ]; then
+        daemon_path="$(<"${config_source}/daemon_path")"
+        daemon_path_source="saved daemon_path file"
+    fi
+    authd_broker_daemon_path_valid "$daemon_path"
+
+    printf 'Restoring broker: %s (daemons path %s from %s)\n' "$variant" "$daemon_path" "$daemon_path_source"
+
+    # Rebuild the broker binary as the workshop user so the warm Go/Rust caches
+    # (populated by setup-project) are used instead of the empty root caches.
+    # Shares the actual build command with scripts/broker and
+    # build-component's authd_build_brokers via authd_build_broker_binary.
+    tag="$(authd_broker_build_tag "$variant")"
+    sudo -Hu workshop -- bash -lc \
+        'set -euo pipefail; source "$1"; authd_prepare_build_environment
+         authd_generate_broker_native_deps "$2"
+         authd_build_broker_binary "$2" "$3" "$4"' \
+        _ "$SDK/scripts/build-component" "$variant" "$tag" "$build_dir"
+    authd_install_broker_file "${build_dir}/authd-${variant}" "${daemon_path}/authd-${variant}" 755
+
+    # Restore the D-Bus policy and reload the bus before starting the service
+    # below. A broker claims its bus name as it starts, and the bus denies
+    # names without a loaded policy.
+    if [ -f "${src}/dbus.conf" ]; then
+        dbus_name="$(python3 "$config_helper" dbus-name "${src}/authd.conf")"
+        authd_install_broker_file "${src}/dbus.conf" "/usr/share/dbus-1/system.d/${dbus_name}.conf" 644
+        reload_dbus=yes
+    fi
+
+    if [ -f "${src}/authd.conf" ]; then
+        authd_install_broker_file "${src}/authd.conf" "/etc/authd/brokers.d/${variant}.conf" 644
+    fi
+
+    config_dir="/etc/authd-${variant}"
+    config_stage="$(mktemp -d -- "${config_dir}.stage.XXXXXX")"
+    authd_stage_broker_config "$config_source" "$config_stage"
+    python3 "$config_helper" replace-tree "$config_stage" "$config_dir"
+    rm -rf -- "$config_stage"
+    config_stage=""
+
+    unit="authd-${variant}.service"
+    unit_file="/etc/systemd/system/${unit}"
+    if [ -d "${src}/service.d" ]; then
+        unit_stage="$(mktemp -d -- "${unit_file}.stage.XXXXXX")"
+        cp -a -- "${src}/service.d" "${unit_stage}/drop-ins"
+        python3 "$config_helper" replace-tree "${unit_stage}/drop-ins" "${unit_file}.d"
+        rm -rf -- "$unit_stage"
+        unit_stage=""
+    fi
+    if [ -f "${src}/service" ]; then
+        authd_install_broker_file "${src}/service" "$unit_file" 644
+        units+=("$variant")
+    fi
+
+    restored=$((restored + 1))
+done
+
+if [ "$reload_dbus" = yes ]; then
+    systemctl reload dbus
+fi
+if [ "${#units[@]}" -gt 0 ]; then
+    systemctl daemon-reload
+fi
+for variant in "${units[@]}"; do
+    src="${state_dir}/${variant}"
+    unit="authd-${variant}.service"
+    if [ -f "${src}/was-running" ]; then
+        # On retry the previous attempt may already have started this unit.
+        systemctl restart "$unit"
+        systemctl is-active --quiet "$unit"
+    elif systemctl is-active --quiet "$unit"; then
+        systemctl stop "$unit"
+    fi
+    if [ -f "${src}/was-enabled" ]; then
+        systemctl enable "$unit"
+    elif systemctl is-enabled --quiet "$unit"; then
+        systemctl disable "$unit"
+    fi
+done
+
+if [ "$restored" -gt 0 ] || [ "$restored_config" -eq 1 ]; then
+    systemctl try-restart authd.service
+    printf '%d broker(s) restored.\n' "$restored"
+else
+    printf 'No broker state to restore.\n'
+fi
