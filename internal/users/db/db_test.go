@@ -2,10 +2,12 @@ package db_test
 
 import (
 	"context"
+	"database/sql"
 	"io/fs"
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/canonical/authd/internal/consts"
@@ -492,6 +494,118 @@ func TestMigrationAddProviderIDColumnToUsersTable(t *testing.T) {
 	golden.CheckOrUpdate(t, dbContent)
 }
 
+func TestMigrationAddProviderUsernameColumnToUsersTable(t *testing.T) {
+	dbDir := t.TempDir()
+	sqlDump := "TestMigrationAddProviderIDColumnToUsersTable/two_users_without_provider_id_column.sql"
+	err := db.Z_ForTests_CreateDBFromDump(filepath.Join("testdata", sqlDump), dbDir)
+	require.NoError(t, err, "Setup: could not create database from testdata")
+
+	m, err := db.New(dbDir)
+	require.NoError(t, err)
+	defer m.Close()
+
+	for _, name := range []string{"user1", "user2"} {
+		got, err := m.UserByName(name)
+		require.NoError(t, err, "pre-migration user should remain available")
+		require.Equal(t, name, got.ProviderUsername, "provider username should be backfilled from the existing Unix name")
+	}
+}
+
+func TestMigrationAddProviderUsernameColumnIsRetrySafe(t *testing.T) {
+	dbDir := t.TempDir()
+	m, err := db.New(dbDir)
+	require.NoError(t, err)
+
+	users := []db.UserRow{
+		{Name: "user1", UID: 1111, GID: 1111, BrokerID: "broker"},
+		{Name: "user2", UID: 2222, GID: 2222, BrokerID: "broker"},
+	}
+	for _, u := range users {
+		group := db.GroupRow{Name: u.Name, GID: u.GID, UGID: u.Name}
+		require.NoError(t, m.UpdateUserEntry(u, []db.GroupRow{group}, nil))
+	}
+	require.NoError(t, m.Close())
+
+	dbPath := filepath.Join(dbDir, consts.DefaultDatabaseFileName)
+	rawDB, err := sql.Open("sqlite3", dbPath)
+	require.NoError(t, err)
+	_, err = rawDB.Exec(`UPDATE users SET provider_username = CASE name
+			WHEN 'user1' THEN 'stored-provider-name'
+			ELSE 'stored-provider-name-2'
+		END;
+		UPDATE schema_version SET version = 3`)
+	require.NoError(t, err)
+	require.NoError(t, rawDB.Close())
+
+	m, err = db.New(dbDir)
+	require.NoError(t, err, "retrying a completed migration should succeed")
+	user1, err := m.UserByName("user1")
+	require.NoError(t, err)
+	user2, err := m.UserByName("user2")
+	require.NoError(t, err)
+	require.Equal(t, "stored-provider-name", user1.ProviderUsername, "migration must preserve an alias already written before a retry")
+	require.Equal(t, "stored-provider-name-2", user2.ProviderUsername, "migration must preserve all aliases when the column already exists")
+	require.NoError(t, m.Close())
+
+	rawDB, err = sql.Open("sqlite3", dbPath)
+	require.NoError(t, err)
+	_, err = rawDB.Exec(`UPDATE schema_version SET version = 3`)
+	require.NoError(t, err)
+	require.NoError(t, rawDB.Close())
+
+	m, err = db.New(dbDir)
+	require.NoError(t, err, "retrying the migration should succeed")
+	defer m.Close()
+	user1, err = m.UserByName("user1")
+	require.NoError(t, err)
+	require.Equal(t, "stored-provider-name", user1.ProviderUsername, "retry must not overwrite a stored alias")
+	user2, err = m.UserByName("user2")
+	require.NoError(t, err)
+	require.Equal(t, "stored-provider-name-2", user2.ProviderUsername, "retry must not overwrite a stored alias")
+}
+
+func TestMigrationEnforceUniqueProviderUsernames(t *testing.T) {
+	dbDir := t.TempDir()
+	sqlDump := "TestMigrationAddProviderIDColumnToUsersTable/two_users_without_provider_id_column.sql"
+	err := db.Z_ForTests_CreateDBFromDump(filepath.Join("testdata", sqlDump), dbDir)
+	require.NoError(t, err, "Setup: could not create a database without provider usernames")
+
+	m, err := db.New(dbDir)
+	require.NoError(t, err, "migration should create a unique provider username index")
+	defer m.Close()
+
+	users := []db.UserRow{
+		{Name: "unix-user-3", UID: 3333, GID: 3333, ProviderUsername: "shared-provider-name"},
+		{Name: "unix-user-4", UID: 4444, GID: 4444, ProviderUsername: "shared-provider-name"},
+	}
+	for i, user := range users {
+		group := db.GroupRow{Name: user.Name, GID: user.GID, UGID: user.Name}
+		err := m.UpdateUserEntry(user, []db.GroupRow{group}, nil)
+		if i == 0 {
+			require.NoError(t, err)
+			continue
+		}
+		require.ErrorContains(t, err, "UNIQUE constraint failed: users.provider_username")
+	}
+}
+
+func TestCreateDBFromYAMLForProviderUsernameSchemaKeepsUniqueIndex(t *testing.T) {
+	dbDir := t.TempDir()
+	err := db.Z_ForTests_CreateDBFromYAMLReader(strings.NewReader(`
+schema_version: 4
+users:
+  - name: user1
+    uid: 1111
+    gid: 1111
+    provider_username: shared-provider-name
+  - name: user2
+    uid: 2222
+    gid: 2222
+    provider_username: shared-provider-name
+`), dbDir)
+	require.ErrorContains(t, err, "UNIQUE constraint failed: users.provider_username")
+}
+
 func TestMigrationAddProviderIDColumnIsIdempotent(t *testing.T) {
 	// Create a database from the testdata, which predates the provider_id column.
 	dbDir := t.TempDir()
@@ -515,6 +629,42 @@ func TestMigrationAddProviderIDColumnIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, want, got, "Re-running migrations should not change the database")
+}
+
+func TestUserByLoginName(t *testing.T) {
+	t.Parallel()
+
+	m, err := db.New(t.TempDir())
+	require.NoError(t, err)
+	defer m.Close()
+
+	group := db.GroupRow{Name: "unix-user", GID: 1111, UGID: "unix-user"}
+	require.NoError(t, m.UpdateUserEntry(db.UserRow{
+		Name:             "unix-user",
+		UID:              1111,
+		GID:              1111,
+		ProviderUsername: "provider-user@example.com",
+	}, []db.GroupRow{group}, nil))
+
+	got, err := m.UserByLoginName("provider-user@example.com")
+	require.NoError(t, err)
+	require.Equal(t, "unix-user", got.Name, "provider alias lookup must return the canonical Unix record")
+	require.Equal(t, "provider-user@example.com", got.ProviderUsername)
+
+	_, err = m.UserByName("provider-user@example.com")
+	require.Error(t, err, "UserByName must continue to be an exact Unix-name lookup")
+
+	otherGroup := db.GroupRow{Name: "provider-user@example.com", GID: 2222, UGID: "provider-user@example.com"}
+	require.NoError(t, m.UpdateUserEntry(db.UserRow{
+		Name:             "provider-user@example.com",
+		UID:              2222,
+		GID:              2222,
+		ProviderUsername: "other-provider-user@example.com",
+	}, []db.GroupRow{otherGroup}, nil))
+
+	got, err = m.UserByLoginName("provider-user@example.com")
+	require.NoError(t, err, "an exact Unix-name match must take precedence over a provider username")
+	require.Equal(t, uint32(2222), got.UID)
 }
 
 // TestProviderIDUniquenessEnforcedAfterMigration ensures that the partial unique index created by

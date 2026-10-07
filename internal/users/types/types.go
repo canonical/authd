@@ -3,16 +3,21 @@ package types
 
 // UserInfo is the user information returned by the broker.
 type UserInfo struct {
-	Name  string
-	UID   uint32
-	Gecos string
-	Dir   string
-	Shell string
+	Name             string
+	ProviderUsername string `json:"provider_username,omitempty" yaml:"provider_username,omitempty"`
+	UID              uint32
+	Gecos            string
+	Dir              string
+	Shell            string
 
 	// BrokerID is the provider scope for ProviderID. It is set by authd from the
 	// selected broker, not by broker-returned JSON. It is always serialized (no
 	// omitempty) because it scopes the user's identity.
 	BrokerID string `json:"-" yaml:"broker_id"`
+
+	// RequireStableProviderIDForNewUsers is set by authd from the selected
+	// broker's API version. It is not part of the data provided by the broker.
+	RequireStableProviderIDForNewUsers bool `json:"-" yaml:"-"`
 
 	// ProviderID is the stable OIDC subject identifier (or oid for MS Entra ID).
 	// It is used as the primary matching key for returning users. Empty for
@@ -20,6 +25,17 @@ type UserInfo struct {
 	ProviderID string `json:"provider_id,omitempty" yaml:"provider_id"`
 
 	Groups []GroupInfo
+}
+
+// LoginIdentity contains the persisted identity fields needed to resolve a
+// login without exposing provider usernames through the NSS UserEntry.
+type LoginIdentity struct {
+	Name             string
+	ProviderUsername string
+	UID              uint32
+	BrokerID         string
+	ProviderID       string
+	Locked           bool
 }
 
 // GroupInfo is the group information returned by the broker.

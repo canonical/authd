@@ -20,6 +20,7 @@ type PamReturnError interface {
 // PamSuccess signals PAM module to return with provided pam.Success and Quit tea.Model.
 type PamSuccess struct {
 	BrokerID string
+	User     string
 	AuthTok  string
 	// OldAuthTok is the previous local password, set only when the user changed
 	// their password (chauthtok) and entered the old one as part of the flow. It

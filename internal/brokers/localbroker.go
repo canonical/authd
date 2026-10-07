@@ -47,3 +47,8 @@ func (b localBroker) UserPreCheck(ctx context.Context, username string) (string,
 func (b localBroker) DeleteUser(ctx context.Context, username, providerID string) error {
 	return errors.New("DeleteUser should never be called on local broker")
 }
+
+//nolint:unused // We still need localBroker to implement the brokerer interface.
+func (b localBroker) requiresStableProviderIDForNewUsers() (bool, error) {
+	return false, nil
+}
