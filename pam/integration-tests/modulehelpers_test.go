@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/canonical/authd/internal/fileutils"
 	"github.com/canonical/authd/internal/testlog"
 	"github.com/canonical/authd/internal/testutils"
 	"github.com/canonical/authd/pam/internal/pam_test"
@@ -106,14 +107,14 @@ func buildSharedModule(t *testing.T, logMsg string, sources []string, pkgConfigD
 
 			// Also keep track of notes and data files as they're useful to generate
 			// an html output locally using geninfo + genhtml.
-			err = os.Rename(filepath.Join(libDir, dataFilename),
+			err = fileutils.CopyFile(filepath.Join(libDir, dataFilename),
 				filepath.Join(gcovDir, dataFilename))
 			require.NoError(t, err,
-				"Teardown: Can't move coverage report data for c Library: %v", err)
-			err = os.Rename(filepath.Join(libDir, notesFilename),
+				"Teardown: Can't copy coverage report data for c Library: %v", err)
+			err = fileutils.CopyFile(filepath.Join(libDir, notesFilename),
 				filepath.Join(gcovDir, notesFilename))
 			require.NoError(t, err,
-				"Teardown: Can't move coverage report notes for c Library: %v", err)
+				"Teardown: Can't copy coverage report notes for c Library: %v", err)
 		})
 	}
 
