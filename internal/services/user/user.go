@@ -47,7 +47,7 @@ func (s Service) GetUserByName(ctx context.Context, req *authd.GetUserByNameRequ
 		return nil, status.Error(codes.InvalidArgument, "no user name provided")
 	}
 
-	user, err := s.userManager.UserByName(name)
+	user, err := s.userManager.UserByLoginName(name)
 	if err == nil {
 		return userToProtobuf(user), nil
 	}
@@ -328,16 +328,23 @@ func (s Service) DeleteUser(ctx context.Context, req *authd.DeleteUserRequest) (
 		return nil, status.Error(codes.InvalidArgument, "no user name provided")
 	}
 
-	// Look up which broker owns this user and the user's stable provider ID before removing them
-	// from the DB, so we can attempt broker-side cleanup afterwards and pass the provider ID for
-	// provider-ID keyed cache directory cleanup (API v3). A failure here is non-fatal for the
-	// deletion itself.
+	// Look up the broker, provider ID, and provider username before removing the user from the DB.
+	// The provider username is needed to clean up caches for users without a provider ID. Use the
+	// Unix name as a compatibility fallback when no provider username is stored.
 	var warnings []string
 	var brokerCleanupFailedOrSkipped bool
-	brokerID, providerID, err := s.userManager.BrokerAndProviderIDForUser(name)
+	var brokerID, providerID, brokerUsername string
+	identity, err := s.userManager.LoginIdentityByUnixName(name)
 	if err != nil {
 		brokerCleanupFailedOrSkipped = true
-		log.Errorf(context.Background(), "failed to look up broker and provider ID for user %q: %v", name, err)
+		log.Errorf(context.Background(), "failed to look up broker and provider identity for user %q: %v", name, err)
+	} else {
+		brokerID = identity.BrokerID
+		providerID = identity.ProviderID
+		brokerUsername = identity.ProviderUsername
+		if brokerUsername == "" {
+			brokerUsername = identity.Name
+		}
 	}
 
 	if err := s.userManager.DeleteUser(name, req.GetRemoveHome()); err != nil {
@@ -354,7 +361,7 @@ func (s Service) DeleteUser(ctx context.Context, req *authd.DeleteUserRequest) (
 		if err != nil {
 			brokerCleanupFailedOrSkipped = true
 			log.Errorf(context.Background(), "failed to get broker %q for user %q: %v", brokerID, name, err)
-		} else if err := broker.DeleteUser(ctx, name, providerID); err != nil {
+		} else if err := broker.DeleteUser(ctx, brokerUsername, providerID); err != nil {
 			brokerCleanupFailedOrSkipped = true
 			log.Errorf(context.Background(), "failed to delete user %q from broker %q: %v", name, brokerID, err)
 		}
@@ -448,6 +455,7 @@ func (s Service) userPreCheck(ctx context.Context, username string) (types.UserE
 	if err := json.Unmarshal([]byte(userinfo), &u); err != nil {
 		return types.UserEntry{}, fmt.Errorf("user data from broker invalid: %v", err)
 	}
+	u.Name = strings.ToLower(u.Name)
 
 	// Register a temporary user with a unique UID. If the user authenticates successfully, the user will be added to
 	// the database with the same UID.

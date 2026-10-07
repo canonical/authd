@@ -301,7 +301,9 @@ func (b *Broker) NewSession(ctx context.Context, username, lang, mode, providerI
 
 	exampleUsersMu.Lock()
 	defer exampleUsersMu.Unlock()
-	if _, ok := exampleUsers[username]; !ok && strings.HasPrefix(username, UserIntegrationPrefix) {
+	if _, ok := exampleUsers[username]; !ok &&
+		(strings.HasPrefix(username, UserIntegrationPrefix) ||
+			strings.HasPrefix(username, UserIntegrationProviderAliasPrefix)) {
 		exampleUsers[username] = userInfoBroker{Password: "goodpass"}
 	}
 
@@ -1026,6 +1028,10 @@ func userInfoFromName(name string) string {
 		Name string
 		UGID string
 	}
+	unixName := name
+	if strings.HasPrefix(name, UserIntegrationProviderAliasPrefix) {
+		unixName = "unix-" + strings.TrimPrefix(name, UserIntegrationProviderAliasPrefix)
+	}
 
 	homeBaseDirOnce.Do(func() {
 		homeBaseDir = os.Getenv("AUTHD_EXAMPLE_BROKER_HOME_BASE_DIR")
@@ -1035,22 +1041,24 @@ func userInfoFromName(name string) string {
 	})
 
 	user := struct {
-		Name       string
-		ProviderID string
-		Dir        string
-		Shell      string
-		Groups     []groupJSONInfo
-		Gecos      string
+		Name             string
+		ProviderUsername string
+		ProviderID       string
+		Dir              string
+		Shell            string
+		Groups           []groupJSONInfo
+		Gecos            string
 	}{
-		Name:       name,
-		ProviderID: "providerid-" + name,
-		Dir:        filepath.Join(homeBaseDir, name),
-		Shell:      "/bin/sh",
-		Groups:     []groupJSONInfo{{Name: "group-" + name, UGID: "ugid-" + name}},
-		Gecos:      "gecos for " + name,
+		Name:             unixName,
+		ProviderUsername: name,
+		ProviderID:       "providerid-" + name,
+		Dir:              filepath.Join(homeBaseDir, unixName),
+		Shell:            "/bin/sh",
+		Groups:           []groupJSONInfo{{Name: "group-" + unixName, UGID: "ugid-" + unixName}},
+		Gecos:            "gecos for " + unixName,
 	}
 
-	switch name {
+	switch unixName {
 	case "user-local-groups@example.com":
 		user.Groups = append(user.Groups, groupJSONInfo{Name: "localgroup", UGID: ""})
 
@@ -1058,7 +1066,7 @@ func userInfoFromName(name string) string {
 		user.Groups = append(user.Groups, groupJSONInfo{Name: "sudo", UGID: ""}, groupJSONInfo{Name: "admin", UGID: ""})
 	}
 
-	if strings.HasPrefix(name, "user-local-groups-integration") {
+	if strings.HasPrefix(unixName, "user-local-groups-integration") {
 		user.Groups = append(user.Groups, groupJSONInfo{Name: "localgroup", UGID: ""})
 	}
 
@@ -1066,6 +1074,7 @@ func userInfoFromName(name string) string {
 	var buf bytes.Buffer
 	_ = template.Must(template.New("").Parse(`{
 		"name": "{{.Name}}",
+		"provider_username": "{{.ProviderUsername}}",
 		"provider_id": "{{.ProviderID}}",
 		"gecos": "{{.Gecos}}",
 		"dir": "{{.Dir}}",

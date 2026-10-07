@@ -41,7 +41,7 @@ func TestUserDeleteCommand(t *testing.T) {
 
 		expectedExitCode int
 	}{
-		"Delete_user_success": {
+		"Delete_user_via_provider_alias": {
 			args:             []string{"delete", "--yes", "user1@example.com"},
 			expectedExitCode: 0,
 		},
@@ -62,12 +62,12 @@ func TestUserDeleteCommand(t *testing.T) {
 			expectedExitCode: 0,
 		},
 		"Confirmation_prompt_aborted_with_n": {
-			args:             []string{"delete", "user1@example.com"},
+			args:             []string{"delete", "user1"},
 			stdin:            "n\n",
 			expectedExitCode: 0,
 		},
 		"Confirmation_prompt_aborted_with_empty_input": {
-			args:             []string{"delete", "user1@example.com"},
+			args:             []string{"delete", "user1"},
 			stdin:            "\n",
 			expectedExitCode: 0,
 		},
@@ -102,7 +102,7 @@ func TestUserDeleteCommand(t *testing.T) {
 			expectedExitCode: int(codes.NotFound),
 		},
 		"Error_when_authd_is_unavailable": {
-			args:             []string{"delete", "--yes", "user1@example.com"},
+			args:             []string{"delete", "--yes", "user1"},
 			authdUnavailable: true,
 			expectedExitCode: int(codes.Unavailable),
 		},

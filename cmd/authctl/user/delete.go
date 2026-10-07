@@ -60,7 +60,8 @@ func runDeleteUser(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if _, err = c.GetUserByName(context.Background(), &authd.GetUserByNameRequest{Name: name}); err != nil {
+	name, err = resolveName(context.Background(), c, name)
+	if err != nil {
 		return err
 	}
 

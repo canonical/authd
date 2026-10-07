@@ -150,39 +150,86 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 	if u.Name == "" {
 		return errors.New("empty username")
 	}
+	requestedName := strings.ToLower(u.Name)
+	requestedProviderUsername := strings.ToLower(u.ProviderUsername)
+	u.Name = requestedName
+	u.ProviderUsername = requestedProviderUsername
 	if u.ProviderID != "" && u.BrokerID == "" {
 		return fmt.Errorf("provider ID for user %q is not scoped by a broker ID", u.Name)
 	}
 
-	// Try to resolve the user's stable identity via broker-scoped provider ID (sub/oid). If found under
-	// a different name, this is an email change at the IdP: use the old DB name as
-	// the lookup key for the "existing user" checks, then let the update rename it.
-	lookupName := u.Name
-	if u.BrokerID != "" && u.ProviderID != "" {
-		providerIDMatch, providerIDErr := m.db.UserByProviderID(u.BrokerID, u.ProviderID)
-		if providerIDErr != nil && !errors.Is(providerIDErr, db.NoDataFoundError{}) {
-			return fmt.Errorf("failed to look up user by provider ID: %w", providerIDErr)
-		}
-		if providerIDErr == nil && providerIDMatch.Name != u.Name {
-			log.Noticef(context.TODO(), "User identified by broker ID %q and provider ID %q: username changed from %q to %q",
-				u.BrokerID, u.ProviderID, providerIDMatch.Name, u.Name)
-			lookupName = providerIDMatch.Name
-		}
-	}
-
-	// Prepend the user private group
-	u.Groups = append([]types.GroupInfo{{Name: u.Name, UGID: u.Name}}, u.Groups...)
-	userPrivateGroup := &u.Groups[0]
-
+	brokerGroups := slices.Clone(u.Groups)
 	var oldUserInfo *types.UserInfo
 	var pendingDiffs []string
+	var userPrivateGroup *types.GroupInfo
+	lookupName := requestedName
 	checkUserNeedsUpdate := func() (needsUpdate bool, err error) {
-		// Check if the user already exists in the database.
+		u.Name = requestedName
+		u.ProviderUsername = requestedProviderUsername
+		lookupName = requestedName
+		oldUserInfo = nil
+		pendingDiffs = nil
+
+		// The stable provider identity is authoritative. The names remain
+		// useful for users that have not yet recorded a provider ID.
+		var providerIDMatch *db.UserRow
+		if u.BrokerID != "" && u.ProviderID != "" {
+			row, lookupErr := m.db.UserByProviderID(u.BrokerID, u.ProviderID)
+			switch {
+			case lookupErr == nil:
+				providerIDMatch = &row
+			case errors.Is(lookupErr, db.NoDataFoundError{}):
+			default:
+				return false, fmt.Errorf("failed to look up user by provider ID: %w", lookupErr)
+			}
+		}
+
+		var nameMatch *db.UserRow
+		loginNames := []string{requestedName}
+		if requestedProviderUsername != "" && requestedProviderUsername != requestedName {
+			loginNames = append(loginNames, requestedProviderUsername)
+		}
+		for _, name := range loginNames {
+			row, lookupErr := m.db.UserByLoginName(name)
+			switch {
+			case errors.Is(lookupErr, db.NoDataFoundError{}):
+				continue
+			case lookupErr != nil:
+				return false, lookupErr
+			}
+			if nameMatch != nil && nameMatch.UID != row.UID {
+				return false, fmt.Errorf("login name %q resolves to more than one user", name)
+			}
+			nameMatch = &row
+		}
+
+		if providerIDMatch != nil && nameMatch != nil && providerIDMatch.UID != nameMatch.UID {
+			return false, fmt.Errorf("provider ID for user %q conflicts with the matched login name", requestedName)
+		}
+
+		var matchedRow *db.UserRow
+		if providerIDMatch != nil {
+			matchedRow = providerIDMatch
+		} else {
+			matchedRow = nameMatch
+		}
+		if matchedRow != nil {
+			lookupName = matchedRow.Name
+			u.Name = matchedRow.Name
+		}
+
+		// Read the selected account by its canonical Unix name.
 		oldUserInfo, err = m.getOldUserInfoFromDB(lookupName)
 		if err != nil {
 			return false, err
 		}
 		if oldUserInfo == nil {
+			if u.ProviderUsername == "" {
+				u.ProviderUsername = requestedName
+			}
+			u.Groups = append([]types.GroupInfo{{Name: u.Name, UGID: u.Name}}, brokerGroups...)
+			userPrivateGroup = &u.Groups[0]
+
 			// A brand new user authenticated by a broker must come with a stable provider
 			// identifier so we can reliably re-identify them across username changes at the IdP.
 			if u.BrokerID != "" && u.ProviderID == "" {
@@ -190,6 +237,15 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 			}
 			return true, nil
 		}
+		if u.ProviderUsername == "" {
+			u.ProviderUsername = oldUserInfo.ProviderUsername
+			if u.ProviderUsername == "" {
+				u.ProviderUsername = oldUserInfo.Name
+			}
+		}
+		u.Groups = append([]types.GroupInfo{{Name: u.Name, UGID: u.Name}}, brokerGroups...)
+		userPrivateGroup = &u.Groups[0]
+
 		if oldUserInfo.BrokerID != "" && u.BrokerID != "" && oldUserInfo.BrokerID != u.BrokerID {
 			// The broker ID scopes the stored provider ID and must not change once set: a user
 			// is bound to the broker they first authenticated with.
@@ -213,10 +269,6 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		}
 		if oldUserInfo.ProviderID == "" && u.ProviderID != "" {
 			// First login after migration: persist provider ID in DB.
-			return true, nil
-		}
-		if lookupName != u.Name {
-			// Username changed (provider-ID matched rename): always trigger an update.
 			return true, nil
 		}
 		pendingDiffs = diffNormalizedUserInfo(u, *oldUserInfo)
@@ -259,6 +311,23 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 	}
 	defer func() { err = errors.Join(err, unlockEntries()) }()
 
+	// Consume the provider-name pre-auth entry before uniqueness checks while
+	// holding the user-management lock. This removes the temporary NSS record
+	// that would look like a system user and lets a new account inherit its UID.
+	var providerPreAuthUID uint32
+	hasProviderPreAuth := false
+	if u.ProviderUsername != "" && u.ProviderUsername != u.Name {
+		uid, cleanup, preAuthErr := m.preAuthRecords.MaybeCompletePreauthUser(u.ProviderUsername)
+		if preAuthErr != nil && !errors.Is(preAuthErr, tempentries.NoDataFoundError{}) {
+			return preAuthErr
+		}
+		if preAuthErr == nil {
+			providerPreAuthUID = uid
+			hasProviderPreAuth = true
+			cleanup()
+		}
+	}
+
 	if oldUserInfo != nil {
 		// The user already exists in the database, use the existing UID to avoid permission issues.
 		u.UID = oldUserInfo.UID
@@ -280,13 +349,45 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 				return fmt.Errorf("another system user exists with %q name", u.Name)
 			}
 
-			var cleanupUID func()
-			u.UID, cleanupUID, err = m.idGenerator.GenerateUID(lockedEntries, m)
-			if err != nil {
-				return err
+			if hasProviderPreAuth {
+				u.UID = providerPreAuthUID
+				log.Debugf(context.Background(), "Using pre-auth UID %d for user %q", u.UID, u.Name)
+			} else {
+				var cleanupUID func()
+				u.UID, cleanupUID, err = m.idGenerator.GenerateUID(lockedEntries, m)
+				if err != nil {
+					return err
+				}
+				defer cleanupUID()
+				log.Debugf(context.Background(), "Using new UID %d for user %q", u.UID, u.Name)
 			}
-			defer cleanupUID()
-			log.Debugf(context.Background(), "Using new UID %d for user %q", u.UID, u.Name)
+		}
+	}
+
+	loginNames := []string{u.Name}
+	if u.ProviderUsername != u.Name {
+		loginNames = append(loginNames, u.ProviderUsername)
+	}
+	for _, name := range loginNames {
+		if name == "" {
+			continue
+		}
+		conflict, err := m.db.UserLoginNameConflict(name, u.UID)
+		if err != nil {
+			return fmt.Errorf("failed to check login name %q: %w", name, err)
+		}
+		if conflict != "" {
+			return fmt.Errorf("login name %q is already in use by user %q", name, conflict)
+		}
+	}
+	if u.ProviderUsername != u.Name &&
+		(oldUserInfo == nil || oldUserInfo.ProviderUsername != u.ProviderUsername) {
+		unique, err := lockedEntries.IsUniqueUserName(u.ProviderUsername)
+		if err != nil {
+			return err
+		}
+		if !unique {
+			return fmt.Errorf("provider username %q is already used by a system user", u.ProviderUsername)
 		}
 	}
 
@@ -374,7 +475,7 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		}
 	}
 
-	userRow := db.NewUserRow(u.Name, u.UID, *userPrivateGroup.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.ProviderID)
+	userRow := db.NewUserRow(u.Name, u.UID, *userPrivateGroup.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.ProviderID, u.ProviderUsername)
 
 	if err = m.db.UpdateUserEntry(userRow, groupRows, localGroups); err != nil {
 		return err
@@ -383,15 +484,6 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 	// Update local groups.
 	if err := localentries.UpdateGroups(lockedEntries, u.Name, localGroups, oldLocalGroups); err != nil {
 		return err
-	}
-
-	// If the username changed (provider-ID matched rename), remove the old username from its local
-	// groups. This runs only after the database update has succeeded, so a failed rename (e.g. the
-	// new name collides with another user) cannot strip the still-existing old user from its groups.
-	if oldUserInfo != nil && lookupName != u.Name && len(oldLocalGroups) > 0 {
-		if err := localentries.UpdateGroups(lockedEntries, lookupName, nil, oldLocalGroups); err != nil {
-			return fmt.Errorf("failed to remove old username %q from local groups: %w", lookupName, err)
-		}
 	}
 
 	if err = checkHomeDirOwner(userRow.Dir, userRow.UID, userRow.GID); err != nil {
@@ -875,18 +967,6 @@ func (m *Manager) BrokerForUser(username string) (string, error) {
 	return u.BrokerID, nil
 }
 
-// BrokerAndProviderIDForUser returns the broker ID and the stable provider identifier recorded
-// for the user in a single database lookup. Both values are empty if not recorded (pre-migration
-// user, v2 broker, or local user).
-func (m *Manager) BrokerAndProviderIDForUser(username string) (brokerID, providerID string, err error) {
-	u, err := m.db.UserByName(username)
-	if err != nil {
-		return "", "", err
-	}
-
-	return u.BrokerID, u.ProviderID, nil
-}
-
 // UpdateBrokerForUser updates the broker ID for the given user.
 func (m *Manager) UpdateBrokerForUser(username, brokerID string) error {
 	if err := m.db.UpdateBrokerForUser(username, brokerID); err != nil {
@@ -898,7 +978,11 @@ func (m *Manager) UpdateBrokerForUser(username, brokerID string) error {
 
 // LockUser sets the "locked" field to true for the given user.
 func (m *Manager) LockUser(username string) error {
-	if err := m.db.UpdateLockedFieldForUser(username, true); err != nil {
+	identity, err := m.LoginIdentityByName(username)
+	if err != nil {
+		return err
+	}
+	if err := m.db.UpdateLockedFieldForUser(identity.Name, true); err != nil {
 		return err
 	}
 
@@ -907,7 +991,11 @@ func (m *Manager) LockUser(username string) error {
 
 // UnlockUser sets the "locked" field to false for the given user.
 func (m *Manager) UnlockUser(username string) error {
-	if err := m.db.UpdateLockedFieldForUser(username, false); err != nil {
+	identity, err := m.LoginIdentityByName(username)
+	if err != nil {
+		return err
+	}
+	if err := m.db.UpdateLockedFieldForUser(identity.Name, false); err != nil {
 		return err
 	}
 
@@ -1002,7 +1090,7 @@ func (m *Manager) DeleteGroup(groupname string) error {
 
 // IsUserLocked returns true if the user with the given user name is locked, false otherwise.
 func (m *Manager) IsUserLocked(username string) (bool, error) {
-	u, err := m.db.UserByName(username)
+	u, err := m.db.UserByLoginName(strings.ToLower(username))
 	if err != nil {
 		return false, err
 	}
@@ -1029,6 +1117,124 @@ func (m *Manager) UserByName(username string) (types.UserEntry, error) {
 		return types.UserEntry{}, err
 	}
 	return userEntryFromUserRow(usr), nil
+}
+
+// UserByLoginName returns an authd user matching either their canonical Unix
+// name or provider username. The returned entry always uses the canonical name.
+func (m *Manager) UserByLoginName(username string) (types.UserEntry, error) {
+	usr, err := m.db.UserByLoginName(strings.ToLower(username))
+	if err != nil {
+		return types.UserEntry{}, err
+	}
+	return userEntryFromUserRow(usr), nil
+}
+
+// LoginIdentityByName returns the identity for a login name, whether it is the
+// canonical Unix name or the provider username.
+func (m *Manager) LoginIdentityByName(username string) (types.LoginIdentity, error) {
+	usr, err := m.db.UserByLoginName(strings.ToLower(username))
+	if err != nil {
+		return types.LoginIdentity{}, err
+	}
+	return loginIdentityFromUserRow(usr), nil
+}
+
+// LoginIdentityByUnixName performs an exact lookup of a canonical Unix name.
+func (m *Manager) LoginIdentityByUnixName(username string) (types.LoginIdentity, error) {
+	usr, err := m.db.UserByName(strings.ToLower(username))
+	if err != nil {
+		return types.LoginIdentity{}, err
+	}
+	return loginIdentityFromUserRow(usr), nil
+}
+
+// ResolveAuthenticatedIdentity chooses the stored account that a broker has
+// authenticated. Stable provider identity takes precedence; the session
+// account and provider username support legacy users without a provider ID.
+// newUnixName is used only when no existing account matches.
+func (m *Manager) ResolveAuthenticatedIdentity(sessionUsername, brokerID, providerID, providerUsername, newUnixName string) (types.LoginIdentity, error) {
+	sessionUsername = strings.ToLower(sessionUsername)
+	providerUsername = strings.ToLower(providerUsername)
+	if providerUsername == "" {
+		return types.LoginIdentity{}, errors.New("empty provider username")
+	}
+
+	var byProviderID, bySession, byProviderUsername types.LoginIdentity
+	var hasProviderID, hasSession, hasProviderUsername bool
+
+	if brokerID != "" && providerID != "" {
+		row, err := m.db.UserByProviderID(brokerID, providerID)
+		switch {
+		case err == nil:
+			byProviderID, hasProviderID = loginIdentityFromUserRow(row), true
+		case errors.Is(err, db.NoDataFoundError{}):
+		default:
+			return types.LoginIdentity{}, fmt.Errorf("failed to resolve user by provider ID: %w", err)
+		}
+	}
+
+	if sessionUsername != "" {
+		identity, err := m.LoginIdentityByUnixName(sessionUsername)
+		switch {
+		case err == nil:
+			bySession, hasSession = identity, true
+		case errors.Is(err, db.NoDataFoundError{}):
+		default:
+			return types.LoginIdentity{}, fmt.Errorf("failed to resolve session user: %w", err)
+		}
+	}
+
+	identity, err := m.LoginIdentityByName(providerUsername)
+	switch {
+	case err == nil:
+		byProviderUsername, hasProviderUsername = identity, true
+	case errors.Is(err, db.NoDataFoundError{}):
+	default:
+		return types.LoginIdentity{}, fmt.Errorf("failed to resolve provider username: %w", err)
+	}
+
+	var selected types.LoginIdentity
+	hasSelected := false
+	for _, candidate := range []struct {
+		identity types.LoginIdentity
+		found    bool
+	}{
+		{byProviderID, hasProviderID},
+		{bySession, hasSession},
+		{byProviderUsername, hasProviderUsername},
+	} {
+		if !candidate.found {
+			continue
+		}
+		if hasSelected && selected.UID != candidate.identity.UID {
+			return types.LoginIdentity{}, fmt.Errorf("authenticated provider username %q conflicts with the selected account", providerUsername)
+		}
+		if !hasSelected {
+			selected, hasSelected = candidate.identity, true
+		}
+	}
+
+	if !hasSelected {
+		return types.LoginIdentity{
+			Name:             strings.ToLower(newUnixName),
+			ProviderUsername: providerUsername,
+			BrokerID:         brokerID,
+			ProviderID:       providerID,
+		}, nil
+	}
+	if selected.BrokerID != "" && selected.BrokerID != brokerID {
+		return types.LoginIdentity{}, fmt.Errorf("user %q is already bound to broker %q and cannot authenticate with broker %q",
+			selected.Name, selected.BrokerID, brokerID)
+	}
+	if selected.ProviderID != "" && providerID != "" && selected.ProviderID != providerID {
+		return types.LoginIdentity{}, fmt.Errorf("authenticated provider ID conflicts with the stored identity for user %q", selected.Name)
+	}
+	if selected.ProviderID == "" && selected.ProviderUsername != providerUsername {
+		return types.LoginIdentity{}, fmt.Errorf("authenticated provider username %q conflicts with the stored identity for user %q",
+			providerUsername, selected.Name)
+	}
+
+	return selected, nil
 }
 
 // UserByID returns the user information for the given user ID.
@@ -1178,7 +1384,8 @@ func (m *Manager) AllShadows() ([]types.ShadowEntry, error) {
 
 // RegisterUserPreAuth registers a temporary user with a unique UID in our NSS handler (in memory, not in the database).
 //
-// The temporary user record is removed when UpdateUser is called with the same username.
+// The temporary user record is removed when UpdateUser is called with a user
+// whose canonical or provider username matches the registered name.
 func (m *Manager) RegisterUserPreAuth(name string) (uid uint32, err error) {
 	defer decorate.OnError(&err, "failed to register pre-auth user %q", name)
 
@@ -1234,4 +1441,19 @@ func (m *Manager) RegisterUserPreAuth(name string) (uid uint32, err error) {
 
 	log.Debugf(context.Background(), "Using new UID %d for temporary user %q", uid, name)
 	return uid, nil
+}
+
+// CompleteUserPreAuth removes a temporary user record after its account has
+// been persisted. It is safe to call when no temporary record exists.
+func (m *Manager) CompleteUserPreAuth(name string) error {
+	_, cleanup, err := m.preAuthRecords.MaybeCompletePreauthUser(strings.ToLower(name))
+	if errors.Is(err, tempentries.NoDataFoundError{}) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to complete pre-auth user %q: %w", name, err)
+	}
+
+	cleanup()
+	return nil
 }

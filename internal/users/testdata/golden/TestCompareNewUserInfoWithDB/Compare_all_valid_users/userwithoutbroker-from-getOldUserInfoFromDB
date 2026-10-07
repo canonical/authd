@@ -1,4 +1,5 @@
 name: userwithoutbroker@example.com
+provider_username: userwithoutbroker@example.com
 uid: 4444
 gecos: userwithoutbroker
 dir: /home/userwithoutbroker@example.com
