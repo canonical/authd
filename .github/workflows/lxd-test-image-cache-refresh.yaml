@@ -9,6 +9,17 @@ env:
   DEBIAN_FRONTEND: noninteractive
   AUTHD_TESTS_USE_LXD: true
   LXD_UBUNTU_VERSION: "2404"
+  GO_TESTS_TIMEOUT: 30m
+  go_build_dependencies: >-
+    libglib2.0-dev
+    libpam-dev
+    libpwquality-dev
+  go_test_dependencies: >-
+    bubblewrap
+    cracklib-runtime
+    git-delta
+    openssh-client
+    openssh-server
 
 jobs:
   refresh-lxd-image-cache:
@@ -31,7 +42,7 @@ jobs:
 
       - name: Warm version-specific LXD test container
         run: |
-          go test -count=1 ./pam/integration-tests \
+          go test -timeout "${GO_TESTS_TIMEOUT}" -count=1 ./pam/integration-tests \
             -run 'TestSSHAuthenticate/Exit_if_user_is_not_pre-checked_on_ssh_service_on_ubuntu_24\.04$'
 
       - name: Export LXD test image for cache
