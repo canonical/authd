@@ -733,7 +733,7 @@ func isSecurityGroup(group msgraphmodels.Groupable) bool {
 func (p *Provider) NormalizeUsername(username string) string {
 	// Microsoft Entra usernames are case-insensitive. We can safely use strings.ToLower here without worrying about
 	// different Unicode characters that fold to the same lowercase letter, because the Microsoft Entra username policy
-	// (which we check in VerifyUsername) ensures that the username only contains ASCII characters.
+	// (which we check in ValidateUsername) ensures that the username only contains ASCII characters.
 	return strings.ToLower(username)
 }
 
@@ -859,13 +859,8 @@ func (p *Provider) VerifyAccessToken(ctx context.Context, issuerURL, accessToken
 	})
 }
 
-// VerifyUsername checks if the authenticated username matches the requested username and that both are valid.
-func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername string) error {
-	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(authenticatedUsername) {
-		msg := fmt.Sprintf("Authentication failure: requested username %q does not match the authenticated username %q", requestedUsername, authenticatedUsername)
-		return &providerErrors.ForDisplayError{Message: msg}
-	}
-
+// ValidateUsername checks that the authenticated username meets Microsoft Entra's username policy.
+func (*Provider) ValidateUsername(authenticatedUsername string) error {
 	// Check that the usernames only contain the characters allowed by the Microsoft Entra username policy
 	// https://learn.microsoft.com/en-us/entra/identity/authentication/concept-sspr-policy#username-policies
 	usernameRegexp := regexp.MustCompile(`^[a-zA-Z0-9'.\-_!#^~@]+$`)
@@ -873,10 +868,6 @@ func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername strin
 		// If this error occurs, we should investigate and probably relax the username policy, so we ask the user
 		// explicitly to report this error.
 		msg := fmt.Sprintf("Authentication failure: the authenticated username %q contains invalid characters. Please report this error on https://github.com/canonical/authd/issues", authenticatedUsername)
-		return &providerErrors.ForDisplayError{Message: msg}
-	}
-	if !usernameRegexp.MatchString(requestedUsername) {
-		msg := fmt.Sprintf("Authentication failure: requested username %q contains invalid characters", requestedUsername)
 		return &providerErrors.ForDisplayError{Message: msg}
 	}
 
