@@ -227,15 +227,27 @@ func (s Service) GetBroker(ctx context.Context, req *authd.GBRequest) (*authd.GB
 	// authd usernames are lowercase
 	username := strings.ToLower(req.GetUsername())
 
-	// Use in memory cache first
-	if b := s.brokerManager.BrokerForUser(username); b != nil {
+	identity, err := s.userManager.LoginIdentityByName(username)
+	if err != nil && !errors.Is(err, users.NoDataFoundError{}) {
+		log.Infof(ctx, "GetBroker: Could not resolve user %q: %v", username, err)
+		return &authd.GBResponse{}, nil
+	}
+
+	// Use the canonical account for in-memory broker state. A provider
+	// username and Unix username therefore share one broker selection.
+	if err == nil {
+		username = identity.Name
+		if b := s.brokerManager.BrokerForUser(username); b != nil {
+			return &authd.GBResponse{Broker: b.ID}, nil
+		}
+	} else if b := s.brokerManager.BrokerForUser(username); b != nil {
 		return &authd.GBResponse{Broker: b.ID}, nil
 	}
 
-	// Load from database.
-	brokerID, err := s.userManager.BrokerForUser(username)
-	// User is not in our database.
-	if err != nil && errors.Is(err, users.NoDataFoundError{}) {
+	brokerID := ""
+	if err == nil {
+		brokerID = identity.BrokerID
+	} else {
 		// FIXME: this part will not be here in the v2 API version, as we won’t have GetBroker and handle
 		// autoselection silently in authd.
 		// User not in database, if there is only the local broker available, return this one without saving it.
@@ -253,9 +265,6 @@ func (s Service) GetBroker(ctx context.Context, req *authd.GBRequest) (*authd.GB
 		// We could resolve the user through NSS, which means then that another non authd service
 		// service (passwd, winbind, sss…) is handling that user.
 		brokerID = brokers.LocalBrokerName
-	} else if err != nil {
-		log.Infof(ctx, "GetBroker: Could not get broker for user %q from database: %v", username, err)
-		return &authd.GBResponse{}, nil
 	}
 
 	// No error but the brokerID is empty (broker in database but default broker not stored yet due no successful login)
@@ -291,6 +300,7 @@ func (s Service) GetBroker(ctx context.Context, req *authd.GBRequest) (*authd.GB
 func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *authd.SBResponse, err error) {
 	// authd usernames are lowercase
 	username := strings.ToLower(req.GetUsername())
+	providerUsername := username
 	brokerID := req.GetBrokerId()
 	lang := req.GetLang()
 
@@ -320,10 +330,20 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 	// Look up the user's stored broker and stable provider identifier. If the
 	// user is already bound to a different broker, reject early before opening
 	// a session that would inevitably fail after authentication completes.
-	storedBrokerID, userProviderID, err := s.userManager.BrokerAndProviderIDForUser(username)
+	identity, err := s.userManager.LoginIdentityByName(username)
 	if err != nil && !errors.Is(err, users.NoDataFoundError{}) {
-		log.Errorf(ctx, "SelectBroker: Could not look up broker and provider ID for user %q: %v", username, err)
-		return nil, fmt.Errorf("could not look up broker for user %q: %w", username, err)
+		log.Errorf(ctx, "SelectBroker: Could not resolve user %q: %v", username, err)
+		return nil, status.Errorf(codes.FailedPrecondition, "could not resolve login name %q: %v", username, err)
+	}
+	storedBrokerID, userProviderID := "", ""
+	if err == nil {
+		username = identity.Name
+		providerUsername = identity.ProviderUsername
+		if providerUsername == "" {
+			providerUsername = identity.Name
+		}
+		storedBrokerID = identity.BrokerID
+		userProviderID = identity.ProviderID
 	}
 	if storedBrokerID != "" && storedBrokerID != brokerID {
 		log.Errorf(ctx, "SelectBroker: User %q is bound to broker %q and cannot authenticate with broker %q", username, storedBrokerID, brokerID)
@@ -336,7 +356,7 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 	}
 
 	// Create a session and Memorize selected broker for it.
-	sessionID, encryptionKey, err := s.brokerManager.NewSession(brokerID, username, lang, mode, userProviderID, req.GetServiceName())
+	sessionID, encryptionKey, err := s.brokerManager.NewSessionForUser(brokerID, providerUsername, lang, mode, userProviderID, req.GetServiceName(), username)
 	if err != nil {
 		log.Errorf(ctx, "SelectBroker: Could not create session for user %q with broker %q: %v", username, brokerID, err)
 		return nil, err
@@ -485,33 +505,26 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		return nil, fmt.Errorf("user data from broker invalid: %v", err)
 	}
 	uInfo := grantedData.UserInfo
-	// authd uses lowercase user and group names
-	uInfo.Name = strings.ToLower(uInfo.Name)
+	preAuthUsername := strings.ToLower(uInfo.Name)
+	// The broker username is authenticated provider data. Keep it separate
+	// from the stable canonical Unix name stored for this account.
+	providerUsername := strings.ToLower(uInfo.ProviderUsername)
+	if providerUsername == "" {
+		providerUsername = strings.ToLower(uInfo.Name)
+	}
+	identity, err := s.userManager.ResolveAuthenticatedIdentity(
+		username, broker.ID, uInfo.ProviderID, providerUsername, strings.ToLower(uInfo.Name))
+	if err != nil {
+		log.Errorf(ctx, "IsAuthenticated: Could not resolve broker identity for %q: %v", providerUsername, err)
+		return nil, status.Error(codes.PermissionDenied, err.Error())
+	}
+	uInfo.Name = identity.Name
+	uInfo.ProviderUsername = providerUsername
 	uInfo.BrokerID = broker.ID
 	for i, g := range uInfo.Groups {
 		uInfo.Groups[i].Name = strings.ToLower(g.Name)
 	}
-	// Check if the user is locked. We can only do this after the broker has granted access, because we want to avoid
-	// leaking whether a user exists or not to unauthenticated users.
-	// TODO: We might want to let the broker know whether the user is locked or not, so that it can avoid storing any
-	//       updated tokens or user info on disk.
-	userIsLocked, err := s.userManager.IsUserLocked(uInfo.Name)
-	if err != nil && !errors.Is(err, users.NoDataFoundError{}) {
-		log.Errorf(ctx, "IsAuthenticated: Could not check if user %q is locked: %v", uInfo.Name, err)
-		return nil, fmt.Errorf("could not check if user %q is locked: %w", uInfo.Name, err)
-	}
-	// The username may have changed at the IdP, in which case the locked row is still stored under the
-	// previous name and the name-based lookup above misses it. Resolve the stable identity by the
-	// broker-scoped provider ID and honor its locked state too.
-	if errors.Is(err, users.NoDataFoundError{}) && uInfo.BrokerID != "" && uInfo.ProviderID != "" {
-		userIsLocked, err = s.userManager.IsUserLockedByProviderID(uInfo.BrokerID, uInfo.ProviderID)
-		if err != nil && !errors.Is(err, users.NoDataFoundError{}) {
-			log.Errorf(ctx, "IsAuthenticated: Could not check if user %q is locked: %v", uInfo.Name, err)
-			return nil, fmt.Errorf("could not check if user %q is locked: %w", uInfo.Name, err)
-		}
-	}
-	// Throw an error if the user trying to authenticate already exists in the database and is locked.
-	if userIsLocked {
+	if identity.Locked {
 		log.Noticef(ctx, "Authentication failure: user %q is locked", uInfo.Name)
 		return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("user %s is locked", uInfo.Name))
 	}
@@ -519,6 +532,14 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 	if err := s.userManager.UpdateUser(uInfo); err != nil {
 		log.Errorf(ctx, "IsAuthenticated: Could not update user %q in database: %v", uInfo.Name, err)
 		return nil, err
+	}
+	for _, name := range []string{preAuthUsername, username} {
+		if name == "" {
+			continue
+		}
+		if err := s.userManager.CompleteUserPreAuth(name); err != nil {
+			log.Warningf(ctx, "IsAuthenticated: Could not remove pre-auth record for user %q: %v", name, err)
+		}
 	}
 	// IAResponse.Msg carries a JSON {"message": ...} envelope (or an empty
 	// string when there is no message), matching the format expected by the
@@ -550,8 +571,9 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 	s.failedAuths.recordSuccess(serviceName, username)
 
 	return &authd.IAResponse{
-		Access: access,
-		Msg:    msg,
+		Access:            access,
+		Msg:               msg,
+		CanonicalUsername: uInfo.Name,
 	}, nil
 }
 

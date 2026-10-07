@@ -258,6 +258,158 @@ func TestSelectBroker(t *testing.T) {
 	}
 }
 
+func TestProviderUsernameLoginResolvesCanonicalAccount(t *testing.T) {
+	t.Parallel()
+
+	canonicalName := "unix-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
+	oldProviderUsername := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_")) +
+		testutils.IDSeparator + "ia_info_mismatching_user_name@example.com"
+	m := newPamManagerWithUser(t, canonicalName, oldProviderUsername, "")
+	client := newPamClient(t, m, globalBrokerManager)
+
+	for _, username := range []string{canonicalName, oldProviderUsername} {
+		got, err := client.GetBroker(context.Background(), &authd.GBRequest{Username: username})
+		require.NoError(t, err)
+		require.Equal(t, mockBrokerGeneratedID, got.GetBroker(),
+			"both names should resolve to the broker bound to the canonical account")
+	}
+
+	firstSession := selectBrokerForTest(t, client, oldProviderUsername)
+	require.Equal(t, canonicalName, globalBrokerManager.UsernameFromSessionID(firstSession),
+		"failure tracking should use the canonical account name")
+	require.Contains(t, firstSession, oldProviderUsername,
+		"the broker session should use the stored provider username, not the Unix alias")
+
+	response, err := client.IsAuthenticated(context.Background(), &authd.IARequest{SessionId: firstSession})
+	require.NoError(t, err)
+	require.Equal(t, auth.Granted, response.GetAccess())
+	require.Equal(t, canonicalName, response.GetCanonicalUsername(),
+		"the PAM client needs the canonical Unix name for NSS/OpenSSH consistency")
+	_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: firstSession})
+	require.NoError(t, err)
+
+	stored, err := userstestutils.DBManager(m).UserByName(canonicalName)
+	require.NoError(t, err)
+	require.Equal(t, canonicalName, stored.Name, "provider username changes must not rename the Unix account")
+	require.Equal(t, "different_username@example.com", stored.ProviderUsername,
+		"the authenticated provider name should replace the legacy alias")
+	require.Equal(t, "providerid-different_username@example.com", stored.ProviderID,
+		"the legacy record should learn its stable provider ID")
+
+	_, err = m.UserByName(oldProviderUsername)
+	require.Error(t, err, "the exact Unix-name API must not resolve a provider alias")
+	newIdentity, err := m.LoginIdentityByName("different_username@example.com")
+	require.NoError(t, err)
+	require.Equal(t, canonicalName, newIdentity.Name)
+
+	newBroker, err := client.GetBroker(context.Background(), &authd.GBRequest{Username: "different_username@example.com"})
+	require.NoError(t, err)
+	require.Equal(t, mockBrokerGeneratedID, newBroker.GetBroker(),
+		"the updated provider alias should reuse the canonical account's broker selection")
+	oldBroker, err := client.GetBroker(context.Background(), &authd.GBRequest{Username: oldProviderUsername})
+	require.NoError(t, err)
+	require.Empty(t, oldBroker.GetBroker(), "the old alias must not retain a stale broker cache entry")
+
+	// Locking through either alias affects the same account.
+	require.NoError(t, m.LockUser("different_username@example.com"))
+	locked, err := m.IsUserLocked(canonicalName)
+	require.NoError(t, err)
+	require.True(t, locked)
+
+	secondSession := selectBrokerForTest(t, client, canonicalName)
+	_, err = client.IsAuthenticated(context.Background(), &authd.IARequest{SessionId: secondSession})
+	require.ErrorContains(t, err, "is locked",
+		"authentication through the canonical name must honor a lock set through the provider alias")
+	_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: secondSession})
+	require.NoError(t, err)
+}
+
+func TestProviderIDRenameRemovesPreAuthAlias(t *testing.T) {
+	t.Parallel()
+
+	canonicalName := "unix-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
+	oldProviderUsername := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_")) + "@example.com"
+	providerID := "providerid-different_username@example.com"
+	m := newPamManagerWithUser(t, canonicalName, oldProviderUsername, providerID)
+
+	preAuthUsername := "different_username@example.com"
+	preAuthUID, err := m.RegisterUserPreAuth(preAuthUsername)
+	require.NoError(t, err, "Setup: could not register the provider username as a pre-auth user")
+
+	client := newPamClient(t, m, globalBrokerManager)
+	loginName := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_")) +
+		testutils.IDSeparator + "ia_info_mismatching_user_name@example.com"
+	sessionID := selectBrokerForTest(t, client, loginName)
+
+	response, err := client.IsAuthenticated(context.Background(), &authd.IARequest{SessionId: sessionID})
+	require.NoError(t, err)
+	require.Equal(t, canonicalName, response.GetCanonicalUsername(),
+		"a provider ID match must keep the existing canonical Unix name")
+
+	_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: sessionID})
+	require.NoError(t, err)
+
+	_, err = m.UserByID(preAuthUID)
+	require.Error(t, err, "the temporary provider-name record must be removed")
+	allUsers, err := m.AllUsers()
+	require.NoError(t, err)
+	require.Len(t, allUsers, 1, "the temporary provider name must not duplicate NSS enumeration")
+	require.Equal(t, canonicalName, allUsers[0].Name)
+}
+
+func TestAuthenticationFailureTrackingUsesCanonicalUsername(t *testing.T) {
+	t.Parallel()
+
+	canonicalName := "unix-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
+	providerUsername := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_")) +
+		testutils.IDSeparator + "ia_denied@example.com"
+	m := newPamManagerWithUser(t, canonicalName, providerUsername, "")
+	cfg := pam.DefaultConfig
+	cfg.AuthFailDelayThreshold = 1
+	cfg.AuthFailDelay = 100 * time.Millisecond
+	cfg.AuthFailResetWindow = time.Hour
+	client := newPamClientWithConfig(t, m, globalBrokerManager, cfg)
+
+	makeAttempt := func(username string) time.Duration {
+		t.Helper()
+		sessionID := selectBrokerForTest(t, client, username)
+		start := time.Now()
+		_, err := client.IsAuthenticated(context.Background(), &authd.IARequest{SessionId: sessionID})
+		require.NoError(t, err, "denied credentials are returned as an authentication result")
+		elapsed := time.Since(start)
+		_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: sessionID})
+		require.NoError(t, err)
+		return elapsed
+	}
+
+	require.Less(t, makeAttempt(providerUsername), cfg.AuthFailDelay,
+		"the first failure should not trigger the threshold delay")
+	require.GreaterOrEqual(t, makeAttempt(canonicalName), cfg.AuthFailDelay,
+		"failures through the two aliases should share one canonical account counter")
+}
+
+func TestAuthenticationRejectsProviderIDConflict(t *testing.T) {
+	t.Parallel()
+
+	canonicalName := "unix-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
+	providerUsername := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_")) +
+		testutils.IDSeparator + "ia_info_mismatching_user_name@example.com"
+	m := newPamManagerWithUser(t, canonicalName, providerUsername, "stored-provider-id")
+	client := newPamClient(t, m, globalBrokerManager)
+
+	sessionID := selectBrokerForTest(t, client, providerUsername)
+	_, err := client.IsAuthenticated(context.Background(), &authd.IARequest{SessionId: sessionID})
+	require.ErrorContains(t, err, "conflicts with the stored identity",
+		"an authenticated provider ID must not be merged into an account with a different stable ID")
+	_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: sessionID})
+	require.NoError(t, err)
+
+	stored, err := userstestutils.DBManager(m).UserByName(canonicalName)
+	require.NoError(t, err)
+	require.Equal(t, "stored-provider-id", stored.ProviderID)
+	require.Equal(t, providerUsername, stored.ProviderUsername)
+}
+
 func TestGetAuthenticationModes(t *testing.T) {
 	t.Parallel()
 
@@ -767,6 +919,42 @@ func TestIsAuthenticated_FailDelayTrackerFull(t *testing.T) {
 		"first failure for new user should be delayed when tracker is full")
 }
 
+func newPamManagerWithUser(t *testing.T, canonicalName, providerUsername, providerID string) *users.Manager {
+	t.Helper()
+
+	m, err := users.NewManager(users.DefaultConfig, t.TempDir())
+	require.NoError(t, err, "Setup: could not create user manager")
+	t.Cleanup(func() { _ = m.Stop() })
+
+	row := db.UserRow{
+		Name:             canonicalName,
+		UID:              1111,
+		GID:              1111,
+		Dir:              "/home/" + canonicalName,
+		Shell:            "/bin/bash",
+		BrokerID:         mockBrokerGeneratedID,
+		ProviderID:       providerID,
+		ProviderUsername: providerUsername,
+	}
+	group := db.GroupRow{Name: canonicalName, GID: row.GID, UGID: canonicalName}
+	require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(row, []db.GroupRow{group}, nil),
+		"Setup: could not create an authd user")
+
+	return m
+}
+
+func selectBrokerForTest(t *testing.T, client authd.PAMClient, username string) string {
+	t.Helper()
+
+	response, err := client.SelectBroker(context.Background(), &authd.SBRequest{
+		BrokerId: mockBrokerGeneratedID,
+		Username: username,
+		Mode:     authd.SessionMode_LOGIN,
+	})
+	require.NoError(t, err, "Setup: could not start a broker session")
+	return response.GetSessionId()
+}
+
 func TestIDGeneration(t *testing.T) {
 	t.Parallel()
 	usernamePrefix := t.Name()
@@ -919,7 +1107,12 @@ func newPamClientWithConfig(t *testing.T, m *users.Manager, brokerManager *broke
 		<-done
 	})
 
-	conn, err := grpc.NewClient("unix://"+socketPath, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithUnaryInterceptor(errmessages.FormatErrorMessage))
+	conn, err := grpc.NewClient("passthrough:///authd",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
+		}),
+		grpc.WithUnaryInterceptor(errmessages.FormatErrorMessage))
 	require.NoError(t, err, "Setup: Could not connect to gRPC server")
 
 	t.Cleanup(func() { _ = conn.Close() }) // We don't care about the error on cleanup

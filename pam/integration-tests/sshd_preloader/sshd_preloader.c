@@ -87,11 +87,28 @@ is_valid_test_user (const char *name)
   if (strcasecmp (test_user, name) == 0)
     return true;
 
+  static const char provider_alias_prefix[] =
+    "user-provider-alias-integration-";
+  static const char unix_prefix[] = "unix-";
+  size_t provider_alias_prefix_len = sizeof (provider_alias_prefix) - 1;
+  size_t unix_prefix_len = sizeof (unix_prefix) - 1;
+  if (strlen (test_user) > provider_alias_prefix_len &&
+      strlen (name) > unix_prefix_len &&
+      strncasecmp (test_user, provider_alias_prefix,
+                   provider_alias_prefix_len) == 0 &&
+      strncasecmp (name, unix_prefix, unix_prefix_len) == 0 &&
+      strcasecmp (test_user + provider_alias_prefix_len,
+                  name + unix_prefix_len) == 0)
+    return true;
+
   if (strcasecmp (test_user, AUTHD_SPECIAL_USER_ACCEPT_ALL) != 0)
     return false;
 
   /* Here we accept all the users supported by the example broker */
   if (strncasecmp (name, "user", 4) == 0 && strlen (name) > 4)
+    return true;
+
+  if (strncasecmp (name, "unix-pre-check-", 15) == 0)
     return true;
 
   return is_supported_test_fake_user (name);

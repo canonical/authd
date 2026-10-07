@@ -758,11 +758,12 @@ func (x *IARequest) GetAuthenticationData() *IARequest_AuthenticationData {
 }
 
 type IAResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Access        string                 `protobuf:"bytes,1,opt,name=access,proto3" json:"access,omitempty"`
-	Msg           string                 `protobuf:"bytes,2,opt,name=msg,proto3" json:"msg,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Access            string                 `protobuf:"bytes,1,opt,name=access,proto3" json:"access,omitempty"`
+	Msg               string                 `protobuf:"bytes,2,opt,name=msg,proto3" json:"msg,omitempty"`
+	CanonicalUsername string                 `protobuf:"bytes,3,opt,name=canonical_username,json=canonicalUsername,proto3" json:"canonical_username,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *IAResponse) Reset() {
@@ -805,6 +806,13 @@ func (x *IAResponse) GetAccess() string {
 func (x *IAResponse) GetMsg() string {
 	if x != nil {
 		return x.Msg
+	}
+	return ""
+}
+
+func (x *IAResponse) GetCanonicalUsername() string {
+	if x != nil {
+		return x.CanonicalUsername
 	}
 	return ""
 }
@@ -2263,11 +2271,12 @@ const file_authd_proto_rawDesc = "" +
 	"\x04wait\x18\x02 \x01(\tH\x00R\x04wait\x12\x14\n" +
 	"\x04skip\x18\x03 \x01(\tH\x00R\x04skip\x12\x1f\n" +
 	"\tchallenge\x18\xe7\a \x01(\tH\x00R\tchallengeB\x06\n" +
-	"\x04item\"6\n" +
+	"\x04item\"e\n" +
 	"\n" +
 	"IAResponse\x12\x16\n" +
 	"\x06access\x18\x01 \x01(\tR\x06access\x12\x10\n" +
-	"\x03msg\x18\x02 \x01(\tR\x03msg\"*\n" +
+	"\x03msg\x18\x02 \x01(\tR\x03msg\x12-\n" +
+	"\x12canonical_username\x18\x03 \x01(\tR\x11canonicalUsername\"*\n" +
 	"\tESRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"R\n" +

@@ -118,6 +118,7 @@ message IARequest {
 message IAResponse {
   string access = 1;
   string msg = 2;
+  string canonical_username = 3;
 }
 
 
