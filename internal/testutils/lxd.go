@@ -32,7 +32,7 @@ const (
 	UseLXDEnvVar = "AUTHD_TESTS_USE_LXD"
 
 	// lxdImageAliasEnvVarPrefix is used to inject a pre-imported LXD image alias
-	// for a specific Ubuntu version in CI, e.g. AUTHD_TESTS_LXD_IMAGE_2604_ALIAS.
+	// for a specific Ubuntu version in CI, e.g. AUTHD_TESTS_LXD_IMAGE_2404_ALIAS.
 	lxdImageAliasEnvVarPrefix = "AUTHD_TESTS_LXD_IMAGE_"
 
 	// provisionedMarker is created inside the container after provisioning to
