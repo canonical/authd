@@ -29,9 +29,6 @@ var (
 const (
 	// UserIntegrationPrefix is the prefix for a user for integration tests.
 	UserIntegrationPrefix = "user-integration-"
-	// UserIntegrationProviderAliasPrefix identifies an integration user whose
-	// provider username differs from their canonical Unix username.
-	UserIntegrationProviderAliasPrefix = "user-provider-alias-integration-"
 	// UserIntegrationMfaPrefix is the prefix for an mfa user for integration tests.
 	UserIntegrationMfaPrefix = "user-mfa-integration-"
 	// UserIntegrationMfaNeedsResetPrefix is the prefix for an mfa-needs-reset user for integration tests.

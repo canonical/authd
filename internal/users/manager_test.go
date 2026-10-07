@@ -285,26 +285,6 @@ func TestUpdateUser(t *testing.T) {
 	}
 }
 
-func TestResolveAuthenticatedIdentityKeepsNewUnixName(t *testing.T) {
-	t.Parallel()
-
-	m, err := users.NewManager(users.DefaultConfig, t.TempDir())
-	require.NoError(t, err, "Setup: could not create user manager")
-	t.Cleanup(func() { _ = m.Stop() })
-
-	got, err := m.ResolveAuthenticatedIdentity(
-		"provider-user@example.com",
-		"broker-id",
-		"provider-id",
-		"provider-user@example.com",
-		"unix-account")
-	require.NoError(t, err)
-	require.Equal(t, "unix-account", got.Name,
-		"a new account should use the broker's canonical Unix name")
-	require.Equal(t, "provider-user@example.com", got.ProviderUsername,
-		"the provider username should remain a separate login alias")
-}
-
 func TestUpdateUserProviderIDHandling(t *testing.T) {
 	// This test and its subtests are intentionally not parallel: some subtests use SetupGroupMock,
 	// which mutates the process-global localentries options. Running concurrently with other tests
@@ -312,14 +292,13 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 
 	newUser := func(name, providerID string, groups ...types.GroupInfo) types.UserInfo {
 		return types.UserInfo{
-			Name:             name,
-			ProviderUsername: name,
-			Gecos:            "gecos for " + name,
-			Dir:              "/home/" + name,
-			Shell:            "/bin/bash",
-			BrokerID:         "broker-id",
-			ProviderID:       providerID,
-			Groups:           groups,
+			Name:       name,
+			Gecos:      "gecos for " + name,
+			Dir:        "/home/" + name,
+			Shell:      "/bin/bash",
+			BrokerID:   "broker-id",
+			ProviderID: providerID,
+			Groups:     groups,
 		}
 	}
 
@@ -338,7 +317,7 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		require.Equal(t, "providerid-user1", got.ProviderID, "provider ID should be persisted")
 	})
 
-	t.Run("Preserve_unix_name_when_provider_username_changes", func(t *testing.T) {
+	t.Run("Resolve_existing_user_by_providerid_and_rename", func(t *testing.T) {
 		destGroupFile := localgroupstestutils.SetupGroupMock(t,
 			filepath.Join("testdata", "groups", "single_localgroup_user1.group"))
 
@@ -354,37 +333,40 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		err = m.UpdateUser(newUser("newuser1@example.com", "providerid-user1", types.GroupInfo{Name: "localgroup1", UGID: ""}))
 		require.NoError(t, err, "UpdateUser should not return an error, but did")
 
-		updated, err := userstestutils.DBManager(m).UserByName("user1@example.com")
-		require.NoError(t, err, "canonical Unix username should remain unchanged")
-		require.Equal(t, oldUser.UID, updated.UID, "UID should be preserved")
-		require.Equal(t, "providerid-user1", updated.ProviderID, "provider ID should be preserved")
-		require.Equal(t, "newuser1@example.com", updated.ProviderUsername, "provider username should be updated")
-		_, err = m.UserByName("newuser1@example.com")
-		require.Error(t, err, "provider username should not become the Unix username")
+		_, err = m.UserByName("user1@example.com")
+		require.Error(t, err, "old username should no longer exist")
 
-		_, _, localGroups, err := userstestutils.DBManager(m).UserWithGroups("user1@example.com")
-		require.NoError(t, err, "could not read the user's local groups")
-		require.Equal(t, []string{"localgroup1"}, localGroups,
-			"local group membership should remain tied to the canonical Unix username")
-		require.NoFileExists(t, destGroupFile,
-			"an unchanged local membership should not trigger a group-file rewrite")
+		renamed, err := userstestutils.DBManager(m).UserByName("newuser1@example.com")
+		require.NoError(t, err, "new username should exist")
+		require.Equal(t, oldUser.UID, renamed.UID, "UID should be preserved when renaming by provider ID")
+		require.Equal(t, "providerid-user1", renamed.ProviderID, "provider ID should be preserved when renaming by provider ID")
+
+		groupContent, err := os.ReadFile(destGroupFile)
+		require.NoError(t, err, "could not read mocked group file")
+		require.Equal(t, "localgroup1:x:41:newuser1@example.com\n", string(groupContent),
+			"local group membership should be rewritten to the renamed user")
 	})
 
 	t.Run("Rename_onto_an_existing_different_username_fails_gracefully", func(t *testing.T) {
-		// An IdP-side email change can land on a login name that already belongs to a different
-		// account. The provider ID must not cause that alias to be attached to another user.
+		// An IdP-side email change can land on a username that already belongs to a *different* user.
+		// The provider-ID match authorises the rename and bypasses the "UID already in use" guard, so
+		// without an explicit collision check the UPDATE hits the raw UNIQUE(name) constraint and
+		// surfaces an opaque SQLite error. The rename must instead fail with a clear message and leave
+		// both existing users intact.
 		dbDir := t.TempDir()
 		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "two_users_with_providerid_and_local_group.db.yaml"), dbDir)
 		require.NoError(t, err, "Setup: could not create database from testdata")
 
 		m := newManagerForTests(t, dbDir)
 
-		// user1 (matched by providerid-user1) changes its provider username to one owned by
-		// newuser1 (uid 2222, providerid-newuser1).
+		// user1 (matched by providerid-user1) "renames" to newuser1@example.com, which is a different
+		// existing user (uid 2222, providerid-newuser1).
 		err = m.UpdateUser(newUser("newuser1@example.com", "providerid-user1"))
-		require.Error(t, err, "colliding with another account's login name must fail")
-		require.Contains(t, err.Error(), "conflicts with the matched login name",
-			"the failure must identify the conflicting account")
+		require.Error(t, err, "renaming onto an existing different username must fail")
+		require.Contains(t, err.Error(), "already in use by a different user",
+			"the failure must be a clear message")
+		require.NotContains(t, err.Error(), "UNIQUE constraint failed",
+			"the raw SQLite constraint error must not leak to the caller")
 
 		// Both original users must survive intact (no partial corruption from the failed rename).
 		user1, err := userstestutils.DBManager(m).UserByName("user1@example.com")
@@ -409,39 +391,19 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		require.NoError(t, err, "Setup: LockUser should not return an error")
 
 		// The user's email changes at the IdP and they log in under the new name. The provider ID still
-		// matches, so authd updates the alias on the existing locked row.
+		// matches, so authd renames the existing (locked) row instead of creating a new user.
 		err = m.UpdateUser(newUser("newuser1@example.com", "providerid-user1"))
 		require.NoError(t, err, "UpdateUser should not return an error, but did")
 
 		// The lock must survive the rename: a disabled account must not be silently re-enabled by an
 		// IdP-side username change.
-		updated, err := userstestutils.DBManager(m).UserByName("user1@example.com")
-		require.NoError(t, err, "canonical Unix username should remain")
-		require.Equal(t, "newuser1@example.com", updated.ProviderUsername)
-		require.True(t, updated.Locked, "locked state must be preserved across a provider username change")
+		renamed, err := userstestutils.DBManager(m).UserByName("newuser1@example.com")
+		require.NoError(t, err, "new username should exist")
+		require.True(t, renamed.Locked, "locked state must be preserved across a provider-ID rename")
 
 		stillLocked, err := m.IsUserLocked("newuser1@example.com")
 		require.NoError(t, err, "IsUserLocked should not return an error")
-		require.True(t, stillLocked, "the provider username must resolve to the locked account")
-	})
-
-	t.Run("Reject_provider_username_used_by_a_system_account", func(t *testing.T) {
-		dbDir := t.TempDir()
-		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_and_group_with_providerid.db.yaml"), dbDir)
-		require.NoError(t, err, "Setup: could not create database from testdata")
-
-		m := newManagerForTests(t, dbDir)
-
-		u := newUser("user1@example.com", "providerid-user1")
-		u.ProviderUsername = "root"
-		err = m.UpdateUser(u)
-		require.ErrorContains(t, err, "already used by a system user",
-			"a provider alias must not shadow a local system account")
-
-		stored, err := userstestutils.DBManager(m).UserByName("user1@example.com")
-		require.NoError(t, err)
-		require.Equal(t, "user1@example.com", stored.ProviderUsername,
-			"a rejected alias must not change the stored identity")
+		require.True(t, stillLocked, "renamed user must remain locked")
 	})
 
 	t.Run("Keep_old_username_in_local_groups_when_rename_fails", func(t *testing.T) {
@@ -454,8 +416,10 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 
 		m := newManagerForTests(t, dbDir)
 
-		// Changing the provider username to newuser1@example.com must fail because that login name
-		// already belongs to a different account. The existing local group membership must remain.
+		// Renaming user1@example.com (matched by providerid-user1) to newuser1@example.com must fail,
+		// because newuser1@example.com already exists as a different user. The DB update fails and
+		// is rolled back, so the post-update cleanup must not strip the still-existing old user from
+		// its local groups.
 		err = m.UpdateUser(newUser("newuser1@example.com", "providerid-user1", types.GroupInfo{Name: "localgroup1", UGID: ""}))
 		require.Error(t, err, "UpdateUser should return an error when the rename collides with an existing user")
 
@@ -527,8 +491,11 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 	})
 
 	t.Run("Rename_user_whose_private_group_has_ugid_equal_to_name", func(t *testing.T) {
-		// The private group is keyed by the canonical Unix name and must not change when the
-		// provider username changes.
+		// When authd creates a user it prepends a private group {Name: username, UGID: username}.
+		// On an IdP-side email rename the new private group arrives with {Name: newname, UGID: newname},
+		// but the existing DB row has {UGID: oldname} under the same GID.  Without the fix in
+		// handleGroupsUpdate this triggers a spurious "GID already in use" error because the UGID
+		// change looks like a hijack.
 		dbDir := t.TempDir()
 		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_with_private_group_ugid_equals_name.db.yaml"), dbDir)
 		require.NoError(t, err, "Setup: could not create database from testdata")
@@ -536,14 +503,13 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		m := newManagerForTests(t, dbDir)
 
 		err = m.UpdateUser(newUser("newuser1@example.com", "providerid-user1"))
-		require.NoError(t, err, "UpdateUser should preserve the canonical private group")
+		require.NoError(t, err, "UpdateUser should succeed when renaming a user whose private group has UGID == Name")
 
-		user, err := userstestutils.DBManager(m).UserByName("user1@example.com")
-		require.NoError(t, err, "canonical username should remain after the provider rename")
-		require.Equal(t, "newuser1@example.com", user.ProviderUsername)
+		_, err = m.UserByName("user1@example.com")
+		require.Error(t, err, "old username should no longer exist after rename")
 
 		_, err = m.UserByName("newuser1@example.com")
-		require.Error(t, err, "provider username must not replace the canonical Unix name")
+		require.NoError(t, err, "new username should exist after rename")
 	})
 
 	t.Run("Reject_new_user_without_provider_ID", func(t *testing.T) {

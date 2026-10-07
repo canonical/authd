@@ -7,7 +7,6 @@ users:
       shell: /bin/bash
       broker_id: broker-id
       provider_id: ""
-      provider_username: user1
     - name: user2
       uid: 2222
       gid: 22222
@@ -16,7 +15,6 @@ users:
       shell: /bin/bash
       broker_id: broker-id
       provider_id: ""
-      provider_username: user2
     - name: user3
       uid: 3333
       gid: 33333
@@ -25,7 +23,6 @@ users:
       shell: /bin/bash
       broker_id: broker-id
       provider_id: provider-1
-      provider_username: user3
     - name: user5
       uid: 5555
       gid: 33333
@@ -34,7 +31,6 @@ users:
       shell: /bin/bash
       broker_id: broker-id
       provider_id: ""
-      provider_username: user5
     - name: user6
       uid: 6666
       gid: 33333
@@ -43,7 +39,6 @@ users:
       shell: /bin/bash
       broker_id: broker-id
       provider_id: ""
-      provider_username: user6
     - name: user7
       uid: 7777
       gid: 33333
@@ -52,7 +47,6 @@ users:
       shell: /bin/bash
       broker_id: other-broker-id
       provider_id: provider-1
-      provider_username: user7
 groups:
     - name: group1
       gid: 11111
@@ -76,4 +70,4 @@ users_to_groups:
       gid: 33333
     - uid: 7777
       gid: 33333
-schema_version: 4
+schema_version: 3

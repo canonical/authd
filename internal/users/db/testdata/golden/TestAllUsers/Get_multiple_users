@@ -8,7 +8,6 @@
   shell: /bin/bash
   broker_id: broker-id
   provider_id: ""
-  provider_username: user1
 - name: user2
   uid: 2222
   gid: 22222
@@ -17,7 +16,6 @@
   shell: /bin/dash
   broker_id: broker-id
   provider_id: ""
-  provider_username: user2
 - name: user3
   uid: 3333
   gid: 33333
@@ -26,7 +24,6 @@
   shell: /bin/zsh
   broker_id: broker-id
   provider_id: ""
-  provider_username: user3
 - name: userwithoutbroker
   uid: 4444
   gid: 44444
@@ -35,4 +32,3 @@
   shell: /bin/sh
   broker_id: ""
   provider_id: ""
-  provider_username: userwithoutbroker

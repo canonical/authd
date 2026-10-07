@@ -3,30 +3,12 @@ package adapter
 import (
 	"testing"
 
-	"github.com/canonical/authd/internal/brokers/auth"
 	"github.com/canonical/authd/internal/brokers/layouts"
 	"github.com/canonical/authd/internal/brokers/layouts/entries"
 	"github.com/canonical/authd/internal/proto/authd"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"
 )
-
-func TestAuthenticationModelForwardsCanonicalUsername(t *testing.T) {
-	t.Parallel()
-
-	model := newAuthenticationModel(nil, Native, authd.SessionMode_LOGIN)
-	model.currentBrokerID = "broker-id"
-
-	_, command := model.Update(isAuthenticatedResultReceived{
-		access:            auth.Granted,
-		canonicalUsername: "unix-user",
-	})
-	require.NotNil(t, command)
-
-	result, ok := command().(PamSuccess)
-	require.True(t, ok)
-	require.Equal(t, "unix-user", result.CanonicalUsername)
-}
 
 func TestAuthenticationModelLocksTerminalInputWhileAuthenticating(t *testing.T) {
 	t.Parallel()

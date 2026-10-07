@@ -47,7 +47,7 @@ func (s Service) GetUserByName(ctx context.Context, req *authd.GetUserByNameRequ
 		return nil, status.Error(codes.InvalidArgument, "no user name provided")
 	}
 
-	user, err := s.userManager.UserByLoginName(name)
+	user, err := s.userManager.UserByName(name)
 	if err == nil {
 		return userToProtobuf(user), nil
 	}
@@ -448,7 +448,6 @@ func (s Service) userPreCheck(ctx context.Context, username string) (types.UserE
 	if err := json.Unmarshal([]byte(userinfo), &u); err != nil {
 		return types.UserEntry{}, fmt.Errorf("user data from broker invalid: %v", err)
 	}
-	u.Name = strings.ToLower(u.Name)
 
 	// Register a temporary user with a unique UID. If the user authenticates successfully, the user will be added to
 	// the database with the same UID.

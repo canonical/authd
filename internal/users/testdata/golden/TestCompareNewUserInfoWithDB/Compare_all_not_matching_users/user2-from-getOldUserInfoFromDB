@@ -1,5 +1,4 @@
 name: user2@example.com
-provider_username: user2@example.com
 uid: 2222
 gecos: User2
 dir: /home/user2@example.com

@@ -1,5 +1,4 @@
 name: user1@example.com
-provider_username: user1@example.com
 uid: 1111
 gecos: |-
     User1 gecos

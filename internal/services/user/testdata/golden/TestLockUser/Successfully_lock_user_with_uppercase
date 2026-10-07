@@ -10,7 +10,6 @@ users:
       broker_id: broker-id
       locked: true
       provider_id: ""
-      provider_username: user1@example.com
     - name: user2@example.com
       uid: 2222
       gid: 22222
@@ -19,7 +18,6 @@ users:
       shell: /bin/dash
       broker_id: broker-id
       provider_id: ""
-      provider_username: user2@example.com
     - name: user3@example.com
       uid: 3333
       gid: 33333
@@ -28,7 +26,6 @@ users:
       shell: /bin/zsh
       broker_id: broker-id
       provider_id: ""
-      provider_username: user3@example.com
 groups:
     - name: group1
       gid: 11111
@@ -53,4 +50,4 @@ users_to_groups:
       gid: 33333
     - uid: 3333
       gid: 99999
-schema_version: 4
+schema_version: 3

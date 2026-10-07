@@ -130,12 +130,6 @@ func createDBFromYAMLReader(r io.Reader, destDir string) (err error) {
 	if err != nil {
 		return err
 	}
-	fillProviderUsername := true
-	legacySchemaVersion := false
-	if version, ok := dbContent["schema_version"].(int); ok && version < schemaVersion {
-		fillProviderUsername = false
-		legacySchemaVersion = true
-	}
 
 	db, err := New(destDir)
 	if err != nil {
@@ -146,12 +140,6 @@ func createDBFromYAMLReader(r io.Reader, destDir string) (err error) {
 			err = errors.Join(err, closeErr)
 		}
 	}()
-
-	if legacySchemaVersion {
-		if _, err := db.db.Exec(`DROP INDEX IF EXISTS "idx_user_provider_username"`); err != nil {
-			return fmt.Errorf("failed to prepare database for loading an older schema version: %w", err)
-		}
-	}
 
 	tablesInOrder := []string{"users", "groups", "users_to_groups", "schema_version"}
 
@@ -188,12 +176,6 @@ func createDBFromYAMLReader(r io.Reader, destDir string) (err error) {
 		}
 
 		for _, record := range records {
-			if table == "users" && fillProviderUsername {
-				if _, exists := record["provider_username"]; !exists {
-					record["provider_username"] = record["name"]
-				}
-			}
-
 			columns := ""
 			values := ""
 			var vals []any

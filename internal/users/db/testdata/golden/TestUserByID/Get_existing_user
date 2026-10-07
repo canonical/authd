@@ -8,4 +8,3 @@ dir: /home/user1
 shell: /bin/bash
 broker_id: broker-id
 provider_id: ""
-provider_username: user1

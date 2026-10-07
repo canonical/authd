@@ -7,7 +7,6 @@ users:
       shell: /bin/sh/success_with_local_groups@example.com
       broker_id: "1902181170"
       provider_id: providerid-success_with_local_groups@example.com
-      provider_username: success_with_local_groups@example.com
 groups:
     - name: success_with_local_groups@example.com
       gid: 1111
@@ -20,4 +19,4 @@ users_to_groups:
       gid: 1111
     - uid: 1111
       gid: 22222
-schema_version: 4
+schema_version: 3

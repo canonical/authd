@@ -388,11 +388,6 @@ func (h *pamModule) handleAuthRequest(mode authd.SessionMode, mTx pam.ModuleTran
 	switch returnValue := pamReturnValue.(type) {
 	case adapter.PamSuccess:
 		sendReturnMessageToPam(mTx, pamClientType, returnValue)
-		if returnValue.CanonicalUsername != "" {
-			if err := mTx.SetItem(pam.User, returnValue.CanonicalUsername); err != nil {
-				return err
-			}
-		}
 		if returnValue.AuthTok != "" {
 			if err := mTx.SetItem(pam.Authtok, returnValue.AuthTok); err != nil {
 				return err
