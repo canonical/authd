@@ -1,7 +1,9 @@
 package pam
 
 import (
+	"context"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -41,4 +43,26 @@ func TestAuthFailTracker_ResetWindow_NonZero_ResetsAfterInactivity(t *testing.T)
 	// After sleeping past the reset window the entry expires and the counter resets.
 	time.Sleep(100 * time.Millisecond)
 	require.Equal(t, 1, tracker.recordFailure("", "user", cfg.AuthFailResetWindow), "counter should reset after inactivity")
+}
+
+func TestServiceDelayAfterFailedAuthenticationUsesFakeTime(t *testing.T) {
+	t.Parallel()
+
+	delay := 100 * time.Millisecond
+	service := Service{failedAuths: newAuthFailTracker()}
+	cfg := BruteForceMitigationConfig{
+		AuthFailDelayThreshold: 1,
+		AuthFailDelay:          delay,
+		AuthFailResetWindow:    time.Hour,
+	}
+
+	synctest.Test(t, func(t *testing.T) {
+		start := time.Now()
+		service.delayAfterFailedAuthentication(context.Background(), "session", "sshd", "canonical-user", cfg)
+		require.Zero(t, time.Since(start), "the first failure should not trigger a delay")
+
+		start = time.Now()
+		service.delayAfterFailedAuthentication(context.Background(), "session", "sshd", "canonical-user", cfg)
+		require.Equal(t, delay, time.Since(start), "a failure over the threshold should trigger the configured delay")
+	})
 }

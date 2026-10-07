@@ -5,7 +5,7 @@ users:
       gecos: gecos for other user
       dir: /home/locked@example.com
       shell: /bin/bash
-      broker_id: broker-id
+      broker_id: MOCKBROKERID
       locked: true
 groups:
     - name: group1

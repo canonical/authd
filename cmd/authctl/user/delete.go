@@ -60,11 +60,12 @@ func runDeleteUser(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if _, err = c.GetUserByName(context.Background(), &authd.GetUserByNameRequest{Name: name}); err != nil {
-		return err
-	}
-
 	if !deleteUserYes {
+		_, lookupErr := c.GetUserByName(context.Background(), &authd.GetUserByNameRequest{Name: name})
+		if lookupErr != nil {
+			return lookupErr
+		}
+
 		log.Warning(warningMessage)
 		fmt.Fprintf(os.Stderr, "\nAre you sure you want to delete user %q? [y/N] ", name)
 

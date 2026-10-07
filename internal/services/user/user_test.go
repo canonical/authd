@@ -101,6 +101,53 @@ func TestGetUserByName(t *testing.T) {
 	}
 }
 
+func TestGetUserByProviderUsernameReturnsCanonicalIdentity(t *testing.T) {
+	t.Parallel()
+
+	client, manager := newUserServiceClient(t, "")
+	user := db.UserRow{
+		Name:             "unix-user",
+		UID:              12345,
+		GID:              12345,
+		Dir:              "/home/unix-user",
+		Shell:            "/bin/bash",
+		ProviderUsername: "provider-user@example.com",
+	}
+	groups := []db.GroupRow{
+		{Name: "unix-user", GID: 12345, UGID: "unix-user"},
+		{Name: "staff", GID: 12346, UGID: "staff-id"},
+	}
+	require.NoError(t, userstestutils.DBManager(manager).UpdateUserEntry(user, groups, nil))
+
+	got, err := client.GetUserByName(context.Background(), &authd.GetUserByNameRequest{
+		Name: "PROVIDER-USER@EXAMPLE.COM",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "unix-user", got.GetName(), "lookup by provider username must return the Unix name")
+
+	group, err := client.GetGroupByID(context.Background(), &authd.GetGroupByIDRequest{Id: 12345})
+	require.NoError(t, err)
+	require.Contains(t, group.GetMembers(), "unix-user",
+		"supplementary group membership should use the Unix name")
+	require.NotContains(t, group.GetMembers(), "provider-user@example.com",
+		"provider aliases should not be duplicated in group membership")
+
+	allUsers, err := client.ListUsers(context.Background(), &authd.Empty{})
+	require.NoError(t, err)
+	require.Len(t, allUsers.GetUsers(), 4, "aliases must not duplicate NSS enumeration")
+	var listedNames []string
+	for _, entry := range allUsers.GetUsers() {
+		listedNames = append(listedNames, entry.GetName())
+	}
+	require.Contains(t, listedNames, "unix-user")
+	require.NotContains(t, listedNames, "provider-user@example.com")
+
+	staff, err := client.GetGroupByName(context.Background(), &authd.GetGroupByNameRequest{Name: "staff"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"unix-user"}, staff.GetMembers(),
+		"supplementary group membership must use the Unix username")
+}
+
 //nolint:dupl // This is not a duplicate test
 func TestGetUserByID(t *testing.T) {
 	tests := map[string]struct {
@@ -556,6 +603,75 @@ func TestDeleteUser(t *testing.T) {
 	}
 }
 
+func TestUserMutationsByProviderUsername(t *testing.T) {
+	for _, method := range []string{"LockUser", "UnlockUser", "SetUserID", "SetShell", "SetHomeDir", "DeleteUser"} {
+		t.Run(method, func(t *testing.T) {
+			userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
+
+			client, manager := newUserServiceClient(t, "")
+			database := userstestutils.DBManager(manager)
+			userRow, groups, localGroups, err := database.UserWithGroups("user1@example.com")
+			require.NoError(t, err)
+			userRow.ProviderUsername = "renamed@example.com"
+			userRow.Locked = method == "UnlockUser"
+			require.NoError(t, database.UpdateUserEntry(userRow, groups, localGroups))
+
+			name := strings.ToUpper(userRow.ProviderUsername)
+			ctx := context.Background()
+			switch method {
+			case "LockUser":
+				_, err = client.LockUser(ctx, &authd.LockUserRequest{Name: name})
+				userRow.Locked = true
+			case "UnlockUser":
+				_, err = client.UnlockUser(ctx, &authd.UnlockUserRequest{Name: name})
+				userRow.Locked = false
+			case "SetUserID":
+				_, err = client.SetUserID(ctx, &authd.SetUserIDRequest{Name: name, Id: 5555})
+				userRow.UID = 5555
+			case "SetShell":
+				_, err = client.SetShell(ctx, &authd.SetShellRequest{Name: name, Shell: "/bin/sh"})
+				userRow.Shell = "/bin/sh"
+			case "SetHomeDir":
+				home := filepath.Join(t.TempDir(), "new-home")
+				_, err = client.SetHomeDir(ctx, &authd.SetHomeDirRequest{Name: name, Home: home})
+				userRow.Dir = home
+			case "DeleteUser":
+				_, err = client.DeleteUser(ctx, &authd.DeleteUserRequest{Name: name})
+			}
+			require.NoError(t, err, "mutation should accept a provider alias directly over gRPC")
+
+			got, err := database.UserByName(userRow.Name)
+			if method == "DeleteUser" {
+				require.ErrorIs(t, err, users.NoDataFoundError{})
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, userRow, got, "mutation should update the canonical account")
+		})
+	}
+}
+
+func TestDeleteUserUsesProviderUsernameForBrokerCleanup(t *testing.T) {
+	userslocking.Z_ForTests_OverrideLockingWithCleanup(t)
+
+	const username = "user1@example.com"
+	client, manager := newUserServiceClient(t, "delete-user.db.yaml")
+
+	database := userstestutils.DBManager(manager)
+	userRow, groups, localGroups, err := database.UserWithGroups(username)
+	require.NoError(t, err, "Setup: could not load user")
+	require.Empty(t, userRow.ProviderID, "Setup: user should represent a v2 account")
+
+	userRow.ProviderUsername = "delete_error-provider@example.com"
+	require.NoError(t, database.UpdateUserEntry(userRow, groups, localGroups),
+		"Setup: could not set provider username")
+
+	resp, err := client.DeleteUser(context.Background(), &authd.DeleteUserRequest{Name: userRow.ProviderUsername})
+	require.NoError(t, err, "DeleteUser should still succeed when broker cleanup fails")
+	require.Len(t, resp.GetWarnings(), 1,
+		"broker cleanup should receive the provider username for a v2 user")
+}
+
 func TestDeleteGroup(t *testing.T) {
 	tests := map[string]struct {
 		sourceDB string
@@ -632,7 +748,11 @@ func newUserServiceClient(t *testing.T, dbFile string, currentUserNotRoot ...boo
 		<-done
 	})
 
-	conn, err := grpc.NewClient("unix://"+socketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient("passthrough:///authd",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
+		}))
 	require.NoError(t, err, "Setup: Could not connect to gRPC server")
 
 	t.Cleanup(func() { _ = conn.Close() }) // We don't care about the error on cleanup

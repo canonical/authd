@@ -405,10 +405,13 @@ func userInfoFromName(sessionID string, extraGroups []groupJSONInfo) string {
 	shell := "/bin/sh/" + name
 	gecos := "gecos for " + name
 	ugid := "ugid-" + name
+	providerIDMissing := false
 
 	switch parsedID {
 	case "ia_info_empty_user_name":
 		name = ""
+	case "ia_info_no_provider_id":
+		providerIDMissing = true
 	case "ia_info_mismatching_user_name":
 		name = "different_username@example.com"
 	case "ia_info_empty_group_name":
@@ -426,6 +429,11 @@ func userInfoFromName(sessionID string, extraGroups []groupJSONInfo) string {
 	case "local-pre-check":
 		name = "root"
 		home = "/root"
+	}
+
+	providerID := "providerid-" + name
+	if providerIDMissing {
+		providerID = ""
 	}
 
 	groups := []groupJSONInfo{{Name: group, UGID: ugid}}
@@ -448,7 +456,7 @@ func userInfoFromName(sessionID string, extraGroups []groupJSONInfo) string {
 		Shell      string
 		Groups     []groupJSONInfo
 		Gecos      string
-	}{Name: name, ProviderID: "providerid-" + name, Dir: home, Shell: shell, Groups: groups, Gecos: gecos}
+	}{Name: name, ProviderID: providerID, Dir: home, Shell: shell, Groups: groups, Gecos: gecos}
 
 	// only used for tests, we can ignore the template execution error as the returned data will be failing.
 	var buf bytes.Buffer

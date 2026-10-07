@@ -17,12 +17,12 @@ var lockCmd = &cobra.Command{
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: completion.Users,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := client.NewUserServiceClient()
+		userClient, err := client.NewUserServiceClient()
 		if err != nil {
 			return err
 		}
 
-		_, err = client.LockUser(context.Background(), &authd.LockUserRequest{Name: args[0]})
+		_, err = userClient.LockUser(context.Background(), &authd.LockUserRequest{Name: args[0]})
 		if err != nil {
 			return err
 		}
