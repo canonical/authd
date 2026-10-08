@@ -15,14 +15,22 @@ import (
 )
 
 var (
-	bubbleWrapSupportsUnprivilegedNamespacesOnce sync.Once
-	bubbleWrapSupportsUnprivilegedNamespaces     bool
+	bubbleWrapSupportsUserNamespacesOnce sync.Once
+	bubbleWrapSupportsUserNamespaces     bool
+	bubbleWrapUserNamespaceMapMode       = userNamespaceMapModeAuto
 
 	bubbleWrapNeedsSudoOnce sync.Once
 	bubbleWrapNeedsSudo     bool
 
 	copyBwrapOnce   sync.Once
 	copiedBwrapPath string
+)
+
+type userNamespaceMapMode int
+
+const (
+	userNamespaceMapModeAuto userNamespaceMapMode = iota
+	userNamespaceMapModeExplicit
 )
 
 const bubbleWrapTestEnvVar = "BUBBLEWRAP_TEST"
@@ -35,16 +43,19 @@ func RunningInBubblewrap() bool {
 func canRunBubblewrap(t *testing.T) bool {
 	t.Helper()
 
-	if os.Geteuid() == 0 {
+	isRoot := os.Geteuid() == 0
+	if isRoot {
 		t.Log("Running as EUID 0")
-		return true
 	}
 
-	bubbleWrapSupportsUnprivilegedNamespacesOnce.Do(func() {
-		bubbleWrapSupportsUnprivilegedNamespaces = canUseUnprivilegedUserNamespaces(t)
+	bubbleWrapSupportsUserNamespacesOnce.Do(func() {
+		bubbleWrapSupportsUserNamespaces = canUseBubblewrapUserNamespaces(t)
 	})
-	if bubbleWrapSupportsUnprivilegedNamespaces {
+	if bubbleWrapSupportsUserNamespaces {
 		return true
+	}
+	if isRoot {
+		return false
 	}
 
 	bubbleWrapNeedsSudoOnce.Do(func() {
@@ -162,6 +173,11 @@ func BubbleWrapCommand(t *testing.T, env []string) *exec.Cmd {
 
 func bubbleWrapCommand(t *testing.T, env []string, withSudo bool) *exec.Cmd {
 	t.Helper()
+	return bubbleWrapCommandWithMapMode(t, env, withSudo, bubbleWrapUserNamespaceMapMode)
+}
+
+func bubbleWrapCommandWithMapMode(t *testing.T, env []string, withSudo bool, mapMode userNamespaceMapMode) *exec.Cmd {
+	t.Helper()
 	var cmd *exec.Cmd
 
 	// Since 25.10 Ubuntu ships the AppArmor profile /etc/apparmor.d/bwrap-userns-restrict
@@ -186,15 +202,19 @@ func bubbleWrapCommand(t *testing.T, env []string, withSudo bool) *exec.Cmd {
 		// with a uid mapping. Bubblewrap itself only supports mapping a single UID via
 		// --uid, so we use unshare to create a new user namespace with the desired mapping
 		// and run bwrap in that.
-		//nolint:gosec // We're not running untrusted code here.
-		cmd = exec.Command(
-			"unshare",
-			"--user",
-			"--map-root-user",
-			"--map-users=auto",
-			"--map-groups=auto",
-			copiedBwrapPath,
-		)
+		args := []string{"--user", "--map-root-user"}
+		if mapMode == userNamespaceMapModeExplicit {
+			// Run as namespace root and use IDs from the parent namespace.
+			// This works when newuidmap cannot add subordinate IDs, such as
+			// inside a sandbox with no_new_privs enabled.
+			cmd = exec.Command("setpriv", "--reuid=0", "--regid=0", "--clear-groups", "unshare")
+			args = append(args, "--map-users=1:1:65535", "--map-groups=1:1:65535")
+		} else {
+			cmd = exec.Command("unshare")
+			args = append(args, "--map-users=auto", "--map-groups=auto")
+		}
+		cmd.Args = append(cmd.Args, args...)
+		cmd.Args = append(cmd.Args, copiedBwrapPath)
 		cmd.Env = env
 	}
 
@@ -210,10 +230,10 @@ func bubbleWrapCommand(t *testing.T, env []string, withSudo bool) *exec.Cmd {
 	return cmd
 }
 
-func canUseUnprivilegedUserNamespaces(t *testing.T) bool {
+func canUseBubblewrapUserNamespaces(t *testing.T) bool {
 	t.Helper()
 
-	if IsCI() {
+	if IsCI() && os.Geteuid() != 0 {
 		// Try enabling unprivileged user namespaces in the CI.
 		cmd := exec.Command("sudo", "sysctl", "-w",
 			"kernel.unprivileged_userns_clone=1",
@@ -234,23 +254,36 @@ func canUseUnprivilegedUserNamespaces(t *testing.T) bool {
 	cmd := exec.Command("unshare", "--map-root-user", "/bin/true")
 	cmd.Stdout = t.Output()
 	cmd.Stderr = t.Output()
-	testlog.LogCommand(t, "Checking unprivileged user namespaces", cmd)
+	testlog.LogCommand(t, "Checking user namespaces", cmd)
 	if err := cmd.Run(); err != nil {
-		testlog.LogRedEndSeparator(t, "Cannot use unprivileged user namespaces")
+		testlog.LogRedEndSeparatorf(t, "Cannot create a user namespace: %v", err)
 		return false
 	}
-	testlog.LogEndSeparator(t, "Can use unprivileged user namespaces")
+	testlog.LogEndSeparator(t, "Can create a user namespace")
 
-	cmd = bubbleWrapCommand(t, nil, false)
-	cmd.Args = append(cmd.Args, "/bin/true")
-	testlog.LogCommand(t, "Checking bubblewrap with unprivileged user namespaces", cmd)
-	if err := cmd.Run(); err != nil {
-		testlog.LogRedEndSeparator(t, "Cannot use bubblewrap with unprivileged user namespaces")
-		return false
+	for _, candidate := range []struct {
+		mode userNamespaceMapMode
+		name string
+	}{
+		{mode: userNamespaceMapModeAuto, name: "automatic"},
+		{mode: userNamespaceMapModeExplicit, name: "explicit"},
+	} {
+		cmd = bubbleWrapCommandWithMapMode(t, nil, false, candidate.mode)
+		cmd.Args = append(cmd.Args, "/bin/true")
+		testlog.LogCommand(t, "Checking bubblewrap with "+candidate.name+" user namespace mappings", cmd)
+		if err := cmd.Run(); err != nil {
+			testlog.LogRedEndSeparatorf(t,
+				"Cannot use bubblewrap with %s user namespace mappings: %v",
+				candidate.name, err)
+			continue
+		}
+
+		bubbleWrapUserNamespaceMapMode = candidate.mode
+		testlog.LogEndSeparator(t, "Can use bubblewrap with "+candidate.name+" user namespace mappings")
+		return true
 	}
 
-	testlog.LogEndSeparator(t, "Can use unprivileged user namespaces")
-	return true
+	return false
 }
 
 func canUseBwrapWithSudoNonInteractively(t *testing.T) bool {
