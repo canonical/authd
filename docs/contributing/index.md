@@ -59,8 +59,6 @@ In general, we follow the ["fork-and-pull" Git workflow](https://github.com/susa
 PRs will trigger unit and integration tests with and without race detection, linting and formatting validations, static and security checks, and freshness of generated files verification. All these tests must pass before any merge into the main branch.
 :::
 
-Once merged into the main branch, `po` files and any documentation change will be automatically updated. Updates to these files are therefore not necessary in the pull request itself, which helps minimize diff review.
-
 The authd documentation is published in **edge-docs** and **stable-docs** versions. Only the edge version is updated when documentation changes are merged into the main branch.
 If a documentation change should be applied to the stable documentation *before* the next release, create a separate PR
 against the `stable-docs` branch after your main PR has been merged, with the changes to the documentation cherry-picked
