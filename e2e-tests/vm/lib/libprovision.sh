@@ -242,27 +242,31 @@ function has_snapshot() {
 
 function force_create_snapshot() {
     local snapshot_name="$1"
+    local vm_state
     if has_snapshot "${snapshot_name}"; then
         time virsh snapshot-delete --domain "${VM_NAME}" --snapshotname "${snapshot_name}"
     fi
 
-    if virsh domstate "${VM_NAME}" | grep -q '^running'; then
-        # If the VM is running, we have to use --memspec to create the snapshot
-        # Libvirt's default disk filename is derived from the snapshot name.
-        # A failed or metadata-only-deleted snapshot can leave that file behind.
-        local snapshot_id
-        snapshot_id="$(date +%s%N)"
-        local diskfile="${IMAGE%.qcow2}.${snapshot_name}.${snapshot_id}"
-        local memfile="${IMAGE%.qcow2}-${snapshot_name}.${snapshot_id}.mem"
-        time virsh snapshot-create-as \
-          --domain "${VM_NAME}" \
-          --name "${snapshot_name}" \
-          --diskspec "vda,file=${diskfile},snapshot=external" \
-          --memspec "${memfile},snapshot=external"
-        return
+    if ! vm_state="$(virsh domstate "${VM_NAME}")"; then
+        echo "Cannot create snapshot '${snapshot_name}': failed to read the state of VM '${VM_NAME}'." >&2
+        return 1
+    fi
+    if [[ "${vm_state}" != running* ]]; then
+        echo "Cannot create snapshot '${snapshot_name}': expected VM '${VM_NAME}' to be running, but its state is '${vm_state}'." >&2
+        return 1
     fi
 
-    time virsh snapshot-create-as --domain "${VM_NAME}" --name "${snapshot_name}" --disk-only
+    # Libvirt's default disk filename is derived from the snapshot name.
+    # A failed or metadata-only-deleted snapshot can leave that file behind.
+    local snapshot_id
+    snapshot_id="$(date +%s%N)"
+    local diskfile="${IMAGE%.qcow2}.${snapshot_name}.${snapshot_id}"
+    local memfile="${IMAGE%.qcow2}-${snapshot_name}.${snapshot_id}.mem"
+    time virsh snapshot-create-as \
+      --domain "${VM_NAME}" \
+      --name "${snapshot_name}" \
+      --diskspec "vda,file=${diskfile},snapshot=external" \
+      --memspec "${memfile},snapshot=external"
 }
 
 function restore_snapshot_and_sync_time() {
