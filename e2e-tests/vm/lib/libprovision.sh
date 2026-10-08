@@ -240,6 +240,19 @@ function has_snapshot() {
     virsh snapshot-list "${VM_NAME}" | grep -q "${snapshot_name}"
 }
 
+function print_vm_console_log() {
+    local message="$1"
+
+    echo "${message}" >&2
+    if [[ -n "${VM_CONSOLE_LOG:-}" && -s "${VM_CONSOLE_LOG}" ]]; then
+        echo "Last 200 serial-console lines:" >&2
+        tail -n 200 "${VM_CONSOLE_LOG}" >&2
+        echo "Full serial-console log: ${VM_CONSOLE_LOG}" >&2
+    else
+        echo "No serial-console output was captured." >&2
+    fi
+}
+
 function force_create_snapshot() {
     local snapshot_name="$1"
     local vm_state
@@ -248,11 +261,11 @@ function force_create_snapshot() {
     fi
 
     if ! vm_state="$(virsh domstate "${VM_NAME}")"; then
-        echo "Cannot create snapshot '${snapshot_name}': failed to read the state of VM '${VM_NAME}'." >&2
+        print_vm_console_log "Cannot create snapshot '${snapshot_name}': failed to read the state of VM '${VM_NAME}'."
         return 1
     fi
     if [[ "${vm_state}" != running* ]]; then
-        echo "Cannot create snapshot '${snapshot_name}': expected VM '${VM_NAME}' to be running, but its state is '${vm_state}'." >&2
+        print_vm_console_log "Cannot create snapshot '${snapshot_name}': expected VM '${VM_NAME}' to be running, but its state is '${vm_state}'."
         return 1
     fi
 
@@ -262,11 +275,17 @@ function force_create_snapshot() {
     snapshot_id="$(date +%s%N)"
     local diskfile="${IMAGE%.qcow2}.${snapshot_name}.${snapshot_id}"
     local memfile="${IMAGE%.qcow2}-${snapshot_name}.${snapshot_id}.mem"
-    time virsh snapshot-create-as \
-      --domain "${VM_NAME}" \
-      --name "${snapshot_name}" \
-      --diskspec "vda,file=${diskfile},snapshot=external" \
-      --memspec "${memfile},snapshot=external"
+    if time virsh snapshot-create-as \
+        --domain "${VM_NAME}" \
+        --name "${snapshot_name}" \
+        --diskspec "vda,file=${diskfile},snapshot=external" \
+        --memspec "${memfile},snapshot=external"; then
+        return 0
+    else
+        local snapshot_status=$?
+        print_vm_console_log "Failed to create live snapshot '${snapshot_name}' (virsh exit status ${snapshot_status})."
+        return "${snapshot_status}"
+    fi
 }
 
 function restore_snapshot_and_sync_time() {
@@ -311,11 +330,13 @@ timeout 5 retry --delay 1 -- sh -c \
 function boot_system() {
     virsh start "${VM_NAME}"
 
-    # Save serial output so failed boots provide the guest's startup log.
-    local console_log
-    console_log="$(mktemp)"
+    # Retain serial output so a later snapshot failure can show the guest's startup log.
+    local diagnostics_dir="${E2E_VM_DIAGNOSTICS_DIR:-${ARTIFACTS_DIR:-${TMPDIR:-/tmp}}/diagnostics}"
+    mkdir -p "${diagnostics_dir}"
+    VM_CONSOLE_LOG="${diagnostics_dir}/${VM_NAME}-serial-console.log"
+    : > "${VM_CONSOLE_LOG}"
     # shellcheck disable=SC2016
-    VM_NAME="${VM_NAME}" script -q -e -f "${console_log}" \
+    VM_NAME="${VM_NAME}" script -q -e -f "${VM_CONSOLE_LOG}" \
         -c 'virsh console "$VM_NAME"' >/dev/null 2>&1 &
     local console_pid=$!
 
@@ -326,15 +347,7 @@ function boot_system() {
     wait "${console_pid}" 2>/dev/null || true
 
     if ((status != 0)); then
-        echo "VM '${VM_NAME}' failed readiness checks; last 200 serial-console lines follow:" >&2
-        if [[ -s "${console_log}" ]]; then
-            tail -n 200 "${console_log}" >&2
-        else
-            echo "No serial-console output was captured." >&2
-        fi
-        rm -f "${console_log}"
+        print_vm_console_log "VM '${VM_NAME}' failed readiness checks."
         return "${status}"
     fi
-
-    rm -f "${console_log}"
 }
