@@ -31,7 +31,7 @@ runs:
           lxc --project authd-tests image delete "${image_alias}" || true
         }
         trap cleanup EXIT
-        lxc publish --project authd-tests --quiet "${container_name}" --alias "${image_alias}"
+        lxc publish --project authd-tests --quiet --force "${container_name}" --alias "${image_alias}"
         lxc image export --project authd-tests --quiet "${image_alias}" "${image_prefix}"
         echo "Files in cache dir after export:"
         ls -la "${cache_dir}/"
