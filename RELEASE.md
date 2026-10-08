@@ -3,6 +3,13 @@
 This document describes the process of releasing stable and bugfix releases of
 the authd Debian packages and the broker snaps.
 
+## Pre-release
+
+### Contact the support team
+
+We use authd internally, and this means that authd’s releases can have a huge and immediate impact that can potentially lead to a lot of disruption.
+Before releasing a new version, we should inform the support team that we have a new version coming, through the `corporate-laptop---operations` channel.
+
 ## Bugfix release - brokers
 
 ### Prepare release branch
@@ -824,6 +831,10 @@ After publishing a new release, the `stable-docs` branch should contain the same
 ### Upload the source package to the Ubuntu archive
 
 Since authd is also in the Ubuntu archive now, we also need to upload new releases there, targeting at least the next Ubuntu release, and maybe also existing ones, although that will require SRUs.
+
+### Enable notifications for support channels
+
+To be alerted about issues affecting the corporate laptops, enable notifications on the `canonical-support`, `is-corp-laptop` and `ubuntu-devs-overcoming-company-laptop-issues` channels for at least three days after the release.
 
 ## Release the GNOME Shell authd integration
 

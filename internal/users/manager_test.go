@@ -490,6 +490,47 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		require.Equal(t, "broker-id", got.BrokerID, "user should remain bound to its original broker")
 	})
 
+	t.Run("Reject_reassigned_username", func(t *testing.T) {
+		destGroupFile := localgroupstestutils.SetupGroupMock(t,
+			filepath.Join("testdata", "groups", "single_localgroup_user1.group"))
+		dbDir := t.TempDir()
+		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_and_group_with_providerid_and_local_group.db.yaml"), dbDir)
+		require.NoError(t, err)
+		m := newManagerForTests(t, dbDir)
+		dbManager := userstestutils.DBManager(m)
+		oldUser, oldGroups, oldLocalGroups, err := dbManager.UserWithGroups("user1@example.com")
+		require.NoError(t, err)
+		require.False(t, oldUser.Locked)
+
+		err = m.UpdateUser(newUser(oldUser.Name, "replacement-account"))
+		require.ErrorContains(t, err, "already bound to a different provider ID")
+
+		gotUser, gotGroups, gotLocalGroups, err := dbManager.UserWithGroups(oldUser.Name)
+		require.NoError(t, err)
+		require.Equal(t, oldUser, gotUser, "the UID, home and original identity must not change")
+		require.Equal(t, oldGroups, gotGroups)
+		require.Equal(t, oldLocalGroups, gotLocalGroups)
+		require.NoFileExists(t, destGroupFile, "local groups must not be modified")
+	})
+
+	t.Run("Database_rejects_reassigned_username", func(t *testing.T) {
+		dbDir := t.TempDir()
+		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_and_group_with_providerid.db.yaml"), dbDir)
+		require.NoError(t, err)
+		m := newManagerForTests(t, dbDir)
+		dbManager := userstestutils.DBManager(m)
+		oldUser, groups, localGroups, err := dbManager.UserWithGroups("user1@example.com")
+		require.NoError(t, err)
+		replacement := oldUser
+		replacement.ProviderID = "replacement-account"
+
+		err = dbManager.UpdateUserEntry(replacement, groups, localGroups)
+		require.ErrorContains(t, err, "already bound to a different provider ID")
+		got, err := dbManager.UserByName(oldUser.Name)
+		require.NoError(t, err)
+		require.Equal(t, oldUser, got)
+	})
+
 	t.Run("Rename_user_whose_private_group_has_ugid_equal_to_name", func(t *testing.T) {
 		// When authd creates a user it prepends a private group {Name: username, UGID: username}.
 		// On an IdP-side email rename the new private group arrives with {Name: newname, UGID: newname},
