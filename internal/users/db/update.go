@@ -57,6 +57,10 @@ func handleUserUpdate(db queryable, u UserRow) error {
 		return err
 	}
 
+	if existingUser.ProviderID != "" && u.ProviderID != "" && existingUser.ProviderID != u.ProviderID {
+		return fmt.Errorf("user %q is already bound to a different provider ID", existingUser.Name)
+	}
+
 	// If a user with the same UID exists, we need to ensure that it's the same user or that the
 	// name change was authorised (i.e. the provider ID matched during UpdateUser).
 	if existingUser.Name != "" && existingUser.Name != u.Name {

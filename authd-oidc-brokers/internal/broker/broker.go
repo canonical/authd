@@ -41,8 +41,9 @@ const (
 	// Note: Remember to also bump the LatestAPIVersion in internal/brokers/dbusbroker.go.
 	LatestAPIVersion uint = 3
 
-	maxAuthAttempts    = 3
-	maxRequestDuration = 5 * time.Second
+	maxAuthAttempts               = 3
+	maxRequestDuration            = 5 * time.Second
+	accountIdentityChangedMessage = "Authentication failure: account identity changed. Contact your administrator."
 
 	// maxMFAPollDuration caps the total wall-clock time spent polling for MFA
 	// approval, to prevent infinite polling.
@@ -101,8 +102,10 @@ type Broker struct {
 type session struct {
 	username   string
 	providerID string // stable provider identifier; empty until learned via auth or cache migration
-	lang       string
-	mode       string
+	// Keep the expected identity even when its cache directory is missing.
+	expectedProviderID string
+	lang               string
+	mode               string
 
 	selectedMode    string
 	authModes       []string
@@ -136,6 +139,31 @@ type session struct {
 type isAuthenticatedCtx struct {
 	ctx        context.Context
 	cancelFunc context.CancelFunc
+}
+
+var errProviderIDMismatch = errors.New("provider ID does not match the existing user")
+
+func (s *session) verifyProviderID(providerID string) error {
+	if providerID == "" {
+		return nil
+	}
+	for _, existingID := range []string{s.expectedProviderID, s.providerID} {
+		if existingID != "" && existingID != providerID {
+			return fmt.Errorf("%w for %q; contact your administrator", errProviderIDMismatch, s.username)
+		}
+	}
+	return nil
+}
+
+func (s *session) loadAuthInfo(path string) (*token.AuthCachedInfo, error) {
+	authInfo, err := token.LoadAuthInfo(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.verifyProviderID(authInfo.UserInfo.ProviderID); err != nil {
+		return nil, err
+	}
+	return authInfo, nil
 }
 
 // verifyAndExtractEntraUserInfo verifies the Entra auth access token's RS256
@@ -175,6 +203,9 @@ func (b *Broker) userInfoFromTokenExtras(ctx context.Context, session *session, 
 
 	if err := b.provider.VerifyUsername(session.username, userInfo.Name); err != nil {
 		return info.User{}, fmt.Errorf("username verification failed: %w", err)
+	}
+	if err := session.verifyProviderID(userInfo.ProviderID); err != nil {
+		return info.User{}, err
 	}
 
 	return userInfo, nil
@@ -504,6 +535,14 @@ func (b *Broker) ensureCompatibilitySymlink(linkPath, target string) error {
 	return os.Symlink(relTarget, linkPath)
 }
 
+func (b *Broker) verifyCachedProviderID(s *session, dataDir string) error {
+	_, err := s.loadAuthInfo(filepath.Join(dataDir, "token.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
 // consolidateCacheDirs retains the contents of the newer cache directory and
 // removes the other directory.
 //
@@ -596,10 +635,13 @@ func newestCacheEntryModTime(entries []os.DirEntry) (time.Time, error) {
 	return newest, nil
 }
 
-func (b *Broker) ensureUsernameCompatibilityPath(username, providerIDDir string) error {
-	usernameDir, err := b.userDataDir(username)
+func (b *Broker) ensureUsernameCompatibilityPath(session *session, providerIDDir string) error {
+	usernameDir, err := b.userDataDir(session.username)
 	if err != nil {
 		return err
+	}
+	if filepath.Clean(usernameDir) == filepath.Clean(providerIDDir) {
+		return nil
 	}
 
 	info, err := os.Lstat(usernameDir)
@@ -615,6 +657,12 @@ func (b *Broker) ensureUsernameCompatibilityPath(username, providerIDDir string)
 	}
 	if !info.IsDir() {
 		return fmt.Errorf("path already exists and is not a directory or symlink")
+	}
+	if err := b.verifyCachedProviderID(session, usernameDir); err != nil {
+		return err
+	}
+	if err := b.verifyCachedProviderID(session, providerIDDir); err != nil {
+		return err
 	}
 	if err := consolidateCacheDirs(usernameDir, providerIDDir); err != nil {
 		return err
@@ -643,51 +691,72 @@ func adoptProviderIDDir(s *session, providerID, providerIDDir string) {
 //     provider ID path and a compatibility symlink is left behind. If there is no username
 //     directory to migrate yet, the provider ID directory is created directly.
 //
-// On any unrecoverable error the function logs a warning and returns without changing the session
-// paths, leaving the username-based layout in place for a later attempt. s.providerID is set only
-// after the cache has been switched to the provider ID directory.
-func (b *Broker) ensureProviderIDCacheDir(s *session, providerID string) {
+// A cached identity conflict is returned as an error before any files are moved or consolidated.
+// Other migration errors are logged and leave the session on its existing paths for a later
+// attempt. s.providerID is set only after the cache has been switched to the provider ID directory.
+func (b *Broker) ensureProviderIDCacheDir(s *session, providerID string) error {
+	if providerID == "" {
+		return nil
+	}
+	if err := s.verifyProviderID(providerID); err != nil {
+		return err
+	}
+	if s.expectedProviderID == "" && s.providerID == "" {
+		// Keep the identity bound even if it cannot be used as a cache directory.
+		s.expectedProviderID = providerID
+	}
+
 	providerIDDir, err := b.userDataDir(providerID)
 	if err != nil {
 		log.Warningf(context.Background(), "Could not determine cache directory for provider ID %q: %v", providerID, err)
-		return
+		return nil
 	}
 	if providerIDDir == s.userDataDir {
 		// The session is already using the provider ID-keyed directory.
-		return
+		return nil
 	}
 
 	exists, err := fileutils.FileExists(providerIDDir)
 	if err != nil {
 		log.Errorf(context.Background(), "Could not check if provider ID cache directory %q exists: %v", providerIDDir, err)
-		return
+		return nil
 	}
 
 	if exists {
-		b.redirectToExistingProviderIDDir(s, providerID, providerIDDir)
-		return
+		return b.redirectToExistingProviderIDDir(s, providerID, providerIDDir)
+	}
+	if err := b.verifyCachedProviderID(s, s.userDataDir); err != nil {
+		return err
 	}
 	b.migrateUsernameDirToProviderIDDir(s, providerID, providerIDDir)
+	return nil
 }
 
 // redirectToExistingProviderIDDir handles the case where the provider ID-keyed directory already
 // exists (e.g. the user changed their email at the IdP and a directory for the new username was
 // created). Any cache files still sitting in the username directory are consolidated into the
 // provider ID directory and a compatibility symlink is left at the username path.
-func (b *Broker) redirectToExistingProviderIDDir(s *session, providerID, providerIDDir string) {
+func (b *Broker) redirectToExistingProviderIDDir(s *session, providerID, providerIDDir string) error {
 	log.Infof(context.Background(), "Redirecting cache for user %q to existing provider ID-based directory %q", s.username, providerIDDir)
 
+	if err := b.verifyCachedProviderID(s, providerIDDir); err != nil {
+		return err
+	}
 	if info, lstatErr := os.Lstat(s.userDataDir); lstatErr == nil && info.IsDir() {
+		if err := b.verifyCachedProviderID(s, s.userDataDir); err != nil {
+			return err
+		}
 		if moveErr := consolidateCacheDirs(s.userDataDir, providerIDDir); moveErr != nil {
 			log.Warningf(context.Background(), "Could not consolidate cache directory %q into %q: %v", s.userDataDir, providerIDDir, moveErr)
-			return
+			return nil
 		}
 	}
 	if linkErr := b.ensureCompatibilitySymlink(s.userDataDir, providerIDDir); linkErr != nil {
 		log.Warningf(context.Background(), "Could not create cache compatibility symlink %q: %v", s.userDataDir, linkErr)
-		return
+		return nil
 	}
 	adoptProviderIDDir(s, providerID, providerIDDir)
+	return nil
 }
 
 // migrateUsernameDirToProviderIDDir renames the username-keyed cache directory to the provider
@@ -764,8 +833,8 @@ func (b *Broker) userDataDir(basePath string) (string, error) {
 }
 
 // NewSession creates a new session for the user. providerID is the stable provider
-// identifier from authd's database; when non-empty it is used to locate the
-// provider ID-keyed cache directory directly, bypassing the username-based lookup.
+// identifier from authd's database. It binds the session to that identity and is
+// used to locate the provider ID-keyed cache directory.
 func (b *Broker) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
 	if username == "" {
 		return "", "", errors.New("username is required")
@@ -773,9 +842,10 @@ func (b *Broker) NewSession(username, lang, mode, providerID string) (sessionID,
 
 	sessionID = uuid.New().String()
 	s := session{
-		username: username,
-		lang:     lang,
-		mode:     mode,
+		username:           username,
+		expectedProviderID: providerID,
+		lang:               lang,
+		mode:               mode,
 
 		attemptsPerMode: make(map[string]int),
 	}
@@ -794,7 +864,13 @@ func (b *Broker) NewSession(username, lang, mode, providerID string) (sessionID,
 			if fi, statErr := os.Stat(providerIDDir); statErr == nil && fi.IsDir() {
 				s.providerID = providerID
 				setCachePaths(&s, providerIDDir)
-				if linkErr := b.ensureUsernameCompatibilityPath(username, providerIDDir); linkErr != nil {
+				if err := b.verifyCachedProviderID(&s, s.userDataDir); err != nil {
+					return "", "", err
+				}
+				if linkErr := b.ensureUsernameCompatibilityPath(&s, providerIDDir); linkErr != nil {
+					if errors.Is(linkErr, errProviderIDMismatch) {
+						return "", "", linkErr
+					}
 					log.Warningf(context.Background(), "Could not repair cache compatibility path for user %q: %v", username, linkErr)
 				}
 			}
@@ -818,8 +894,11 @@ func (b *Broker) NewSession(username, lang, mode, providerID string) (sessionID,
 			case linkInfo.Mode()&os.ModeSymlink != 0:
 				if providerIDDir, evalErr := b.cacheSymlinkTarget(s.userDataDir); evalErr == nil {
 					setCachePaths(&s, providerIDDir)
-					if cachedInfo, loadErr := token.LoadAuthInfo(s.tokenPath); loadErr == nil {
+					cachedInfo, loadErr := s.loadAuthInfo(s.tokenPath)
+					if loadErr == nil {
 						s.providerID = cachedInfo.UserInfo.ProviderID
+					} else if !errors.Is(loadErr, os.ErrNotExist) {
+						return "", "", loadErr
 					}
 				} else {
 					// The compatibility symlink is dangling or unsafe. Leaving it in place would make
@@ -831,8 +910,14 @@ func (b *Broker) NewSession(username, lang, mode, providerID string) (sessionID,
 					}
 				}
 			case linkInfo.IsDir():
-				if cachedInfo, loadErr := token.LoadAuthInfo(s.tokenPath); loadErr == nil && cachedInfo.UserInfo.ProviderID != "" {
-					b.ensureProviderIDCacheDir(&s, cachedInfo.UserInfo.ProviderID)
+				cachedInfo, loadErr := s.loadAuthInfo(s.tokenPath)
+				if loadErr != nil && !errors.Is(loadErr, os.ErrNotExist) {
+					return "", "", loadErr
+				}
+				if loadErr == nil && cachedInfo.UserInfo.ProviderID != "" {
+					if err := b.ensureProviderIDCacheDir(&s, cachedInfo.UserInfo.ProviderID); err != nil {
+						return "", "", err
+					}
 				}
 			}
 		}
@@ -975,7 +1060,7 @@ func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 			return false
 		}
 
-		authInfo, err := token.LoadAuthInfo(session.tokenPath)
+		authInfo, err := session.loadAuthInfo(session.tokenPath)
 		if err != nil {
 			log.Warningf(context.Background(), "Could not load token, so local password authentication is not available: %v", err)
 			return false
@@ -1441,11 +1526,21 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 
 	// Load existing device registration data if there is any, to avoid re-registering the device.
 	var deviceRegistrationData []byte
-	if oldAuthInfo, err := token.LoadAuthInfo(session.tokenPath); err == nil {
+	oldAuthInfo, err := session.loadAuthInfo(session.tokenPath)
+	if err == nil {
 		deviceRegistrationData = oldAuthInfo.DeviceRegistrationData
+	} else if errors.Is(err, errProviderIDMismatch) {
+		log.Error(context.Background(), err.Error())
+		return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		log.Errorf(context.Background(), "Could not load cached auth info: %v", err)
+		return AuthDenied, unexpectedErrMsg("could not load stored token")
 	}
 	if authInfo.UserInfo.ProviderID != "" && session.providerID == "" {
-		b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID)
+		if err := b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID); err != nil {
+			log.Error(context.Background(), err.Error())
+			return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+		}
 	}
 
 	cleanup, access, data := b.maybeRegisterDevice(ctx, session, authInfo, t, deviceRegistrationData)
@@ -1481,9 +1576,12 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		return AuthRetry, errorMessage{Message: "Incorrect password, please try again."}
 	}
 
-	authInfo, err := token.LoadAuthInfo(session.tokenPath)
+	authInfo, err := session.loadAuthInfo(session.tokenPath)
 	if err != nil {
 		log.Error(context.Background(), err.Error())
+		if errors.Is(err, errProviderIDMismatch) {
+			return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+		}
 		return AuthDenied, unexpectedErrMsg("could not load stored token")
 	}
 
@@ -1555,7 +1653,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 				authInfo = oldAuthInfo
 				session.isOffline = true
 			} else {
-				return AuthDenied, errorMessage{Message: "Failed to refresh token"}
+				return AuthDenied, errorMessageForDisplay(err, "Failed to refresh token")
 			}
 		}
 	}
@@ -1576,6 +1674,12 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 	// If device registration is enabled, ensure that the device is registered.
 	// Skipped when offline: registration requires a live provider connection.
 	if !session.isOffline {
+		if authInfo.UserInfo.ProviderID != "" && session.providerID == "" {
+			if err := b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID); err != nil {
+				log.Error(context.Background(), err.Error())
+				return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+			}
+		}
 		cleanup, access, data := b.maybeRegisterDevice(ctx, session, authInfo, authInfo.Token, authInfo.DeviceRegistrationData)
 		defer cleanup()
 		if access != "" {
@@ -1653,13 +1757,18 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 	// session, so the second step (entra_mfa_wait/entra_mfa_code → finishEntraAuth)
 	// reuses it instead of re-reading the token from disk on every call.
 	//
-	// A load error is non-fatal: it is expected on a first login (no cached token
-	// yet), and for any other reason (e.g. an unreadable token) the flow can still
-	// proceed by treating it as "no prior device data". A nil session.authInfo is
-	// the correct state in both cases; log it for visibility.
-	cachedAuthInfo, err := token.LoadAuthInfo(session.tokenPath)
-	if err != nil {
-		log.Debugf(context.Background(), "No cached auth info for user %q (first login or unreadable token): %v", session.username, err)
+	// A missing token is expected on a first login. Other load errors must not be
+	// treated as an empty cache, since it may contain credentials for another
+	// identity.
+	cachedAuthInfo, err := session.loadAuthInfo(session.tokenPath)
+	if errors.Is(err, os.ErrNotExist) {
+		log.Debugf(context.Background(), "No cached auth info for user %q: %v", session.username, err)
+	} else if err != nil {
+		log.Errorf(context.Background(), "Could not load cached auth info for user %q: %v", session.username, err)
+		if errors.Is(err, errProviderIDMismatch) {
+			return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+		}
+		return AuthDenied, unexpectedErrMsg("could not load cached token")
 	}
 	session.authInfo = cachedAuthInfo
 
@@ -2404,6 +2513,12 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	if oldAuthInfo != nil {
 		deviceRegistrationData = oldAuthInfo.DeviceRegistrationData
 	}
+	if authInfo.UserInfo.ProviderID != "" && session.providerID == "" {
+		if err := b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID); err != nil {
+			log.Error(context.Background(), err.Error())
+			return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+		}
+	}
 	// A successful passwordless MFA flow can still yield a token that is valid
 	// for first-time device registration, so do not gate registration on an
 	// entered Entra password here.
@@ -2620,6 +2735,10 @@ func bypassesPasswordMethod(method string) bool {
 }
 
 func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (string, isAuthenticatedDataResponse) {
+	if err := session.verifyProviderID(authInfo.UserInfo.ProviderID); err != nil {
+		log.Error(context.Background(), err.Error())
+		return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+	}
 	if b.cfg.shouldRegisterOwner() {
 		if err := b.cfg.registerOwner(b.cfg.ConfigFile, authInfo.UserInfo.Name); err != nil {
 			// The user is not allowed if we fail to create the owner-autoregistration file.
@@ -2669,7 +2788,10 @@ func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (s
 	// So, before migrating it, we need to ensure that we have the information required and that the dir was not
 	// migrated yet.
 	if authInfo.UserInfo.ProviderID != "" && session.providerID == "" {
-		b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID)
+		if err := b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID); err != nil {
+			log.Error(context.Background(), err.Error())
+			return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+		}
 	}
 
 	err := token.CacheAuthInfo(session.tokenPath, authInfo)
@@ -2695,6 +2817,16 @@ func (b *Broker) newPassword(session *session, secret string) (string, isAuthent
 	if authInfo == nil {
 		log.Error(context.Background(), "auth info is not set")
 		return AuthDenied, unexpectedErrMsg("auth info is not set")
+	}
+	if err := session.verifyProviderID(authInfo.UserInfo.ProviderID); err != nil {
+		log.Error(context.Background(), err.Error())
+		return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+	}
+	if authInfo.UserInfo.ProviderID != "" && session.providerID == "" {
+		if err := b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID); err != nil {
+			log.Error(context.Background(), err.Error())
+			return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+		}
 	}
 
 	if err := password.HashAndStorePassword(secret, session.passwordPath); err != nil {
@@ -2969,6 +3101,10 @@ func (b *Broker) refreshEntraToken(ctx context.Context, session *session, oldTok
 	// getUserInfo (the device-auth refresh path) re-checks this on every refresh,
 	// not just on first login; do the same here so a refreshed Entra token can't
 	// silently swap the cached identity.
+	if err := session.verifyProviderID(userInfo.ProviderID); err != nil {
+		return oldToken, err
+	}
+	// Prefer a stable-ID conflict so a rotated token for another account is not cached.
 	if err := b.provider.VerifyUsername(session.username, userInfo.Name); err != nil {
 		cacheRotatedToken("username verification failure")
 		return oldToken, fmt.Errorf("username verification failed: %w", err)
@@ -3031,7 +3167,10 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 		// Token refresh has already succeeded server-side. Preserve a rotated
 		// refresh token even if a later local validation step fails, otherwise the
 		// cache can be stranded with a refresh token the provider already invalidated.
-		cacheRotatedToken("user info refresh failure")
+		// A conflicting identity must not replace any part of the old cache.
+		if !errors.Is(err, errProviderIDMismatch) {
+			cacheRotatedToken("user info refresh failure")
+		}
 		return oldToken, err
 	}
 	if t.UserInfo.Gecos == "" {
@@ -3107,6 +3246,11 @@ func (b *Broker) getUserInfo(ctx context.Context, session *session, token *oauth
 		return info.User{}, err
 	}
 
+	// Check stable identity first so refreshToken can avoid persisting a rotated
+	// token from another account.
+	if err = session.verifyProviderID(userInfo.ProviderID); err != nil {
+		return info.User{}, err
+	}
 	if err = b.provider.VerifyUsername(session.username, userInfo.Name); err != nil {
 		return info.User{}, fmt.Errorf("username verification failed: %w", err)
 	}
@@ -3185,6 +3329,9 @@ func errorMessageForDisplay(err error, fallback string) errorMessage {
 	var forDisplayErr *providerErrors.ForDisplayError
 	if errors.As(err, &forDisplayErr) {
 		return errorMessage{Message: forDisplayErr.Error()}
+	}
+	if errors.Is(err, errProviderIDMismatch) {
+		return errorMessage{Message: accountIdentityChangedMessage}
 	}
 	return errorMessage{Message: fallback}
 }

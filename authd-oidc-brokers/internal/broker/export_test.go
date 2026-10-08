@@ -168,6 +168,7 @@ type EnsuredCachePaths struct {
 	UserDataDir  string
 	TokenPath    string
 	PasswordPath string
+	Err          error
 }
 
 // EnsureProviderIDCacheDir builds a session for username whose cache paths are
@@ -176,12 +177,13 @@ type EnsuredCachePaths struct {
 func (b *Broker) EnsureProviderIDCacheDir(username, currentDataDir, providerID string) EnsuredCachePaths {
 	s := &session{username: username}
 	setCachePaths(s, currentDataDir)
-	b.ensureProviderIDCacheDir(s, providerID)
+	err := b.ensureProviderIDCacheDir(s, providerID)
 	return EnsuredCachePaths{
 		ProviderID:   s.providerID,
 		UserDataDir:  s.userDataDir,
 		TokenPath:    s.tokenPath,
 		PasswordPath: s.passwordPath,
+		Err:          err,
 	}
 }
 
