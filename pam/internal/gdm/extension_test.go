@@ -22,9 +22,8 @@ func TestExtension(t *testing.T) {
 		"protocol name '%s' exceeds the maximum size", JSONProtoName)
 }
 
-//nolint:tparallel // Subtests can't run in parallel as they act on global data
+// This test changes the process-global GDM extension state.
 func TestGdmExtensionSupport(t *testing.T) {
-	t.Parallel()
 	t.Cleanup(pam_test.MaybeDoLeakCheck)
 
 	testCases := map[string]struct {
