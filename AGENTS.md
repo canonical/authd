@@ -190,3 +190,12 @@ If the changed files are below `authd-oidc-brokers/`, use the `-C` flag to run t
 ```bash
 scripts/golangci-lint -C authd-oidc-brokers run
 ```
+
+For Python files, this repository uses Ruff for linting and formatting. Install
+the pinned version and run the same checks used in CI:
+```bash
+python -m pip install -r .ruff-requirements.txt
+ruff check --config .ruff.toml .
+ruff format --check --config .ruff.toml .
+```
+
