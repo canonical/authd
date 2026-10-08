@@ -33,7 +33,9 @@ Alternatively, for development purposes, each binary can be built manually and s
 
 Building the Debian package from source is the most straightforward and standard method for compiling the binaries and running the test suite. To do this, run the following commands from the top of the source tree:
 
-> This is required to vendorize the Rust crates and must be done only once.
+:::{note}
+This is required to vendorize the Rust crates and must be done only once.
+:::
 
 ```shell
 sudo apt install libssl-dev
