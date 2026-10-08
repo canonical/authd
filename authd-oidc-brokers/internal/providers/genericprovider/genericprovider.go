@@ -4,7 +4,6 @@ package genericprovider
 import (
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/canonical/authd/authd-oidc-brokers/internal/broker/authmodes"
@@ -58,13 +57,17 @@ func (p GenericProvider) GetUserInfo(claimer info.Claimer, _ bool) (info.User, e
 	if !present {
 		return info.User{}, &providerErrors.ForDisplayError{
 			Message: "Authentication failure: email not verified",
-			Err:     providerErrors.NewMissingClaimError("email_verified"),
+			Err: &providerErrors.AuthoritativeError{
+				Err: providerErrors.NewMissingClaimError("email_verified"),
+			},
 		}
 	}
 	if verified, ok := rawEmailVerified.(bool); !ok || !verified {
 		return info.User{}, &providerErrors.ForDisplayError{
 			Message: "Authentication failure: email not verified",
-			Err:     errors.New("email_verified claim value is false or malformed"),
+			Err: &providerErrors.AuthoritativeError{
+				Err: errors.New("email_verified claim value is false or malformed"),
+			},
 		}
 	}
 
@@ -92,7 +95,10 @@ func (p GenericProvider) NormalizeUsername(username string) string {
 func (p GenericProvider) VerifyUsername(requestedUsername, username string) error {
 	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(username) {
 		msg := fmt.Sprintf("Authentication failure: requested username %q does not match the authenticated user %q", requestedUsername, username)
-		return &providerErrors.ForDisplayError{Message: msg}
+		return &providerErrors.ForDisplayError{
+			Message: msg,
+			Err:     &providerErrors.AuthoritativeError{},
+		}
 	}
 	return nil
 }
@@ -103,20 +109,20 @@ func (p GenericProvider) SupportedOnlineAuthModes() []string {
 	return []string{authmodes.Device, authmodes.DeviceQr}
 }
 
-// IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.
-func (p GenericProvider) IsTokenExpiredError(err *oauth2.RetrieveError) bool {
-	if err.ErrorCode != "invalid_grant" {
-		return false
+// ClassifyRefreshTokenError classifies known errors from the token endpoint.
+func (p GenericProvider) ClassifyRefreshTokenError(err *oauth2.RetrieveError) providerErrors.RefreshTokenErrorKind {
+	if err == nil || err.ErrorCode != "invalid_grant" {
+		return providerErrors.RefreshTokenErrorUnknown
 	}
 
-	expiredDescriptions := []string{
-		"Session not active",         // Keycloak: online user session expired
-		"Offline session not active", // Keycloak: offline session expired or revoked
-		"Token is not active",        // Keycloak: refresh token JWT expired (exp/nbf check)
-		"Stale token",                // Keycloak: token issued before not-before policy or reuse detected
+	switch {
+	case strings.Contains(err.ErrorDescription, "Offline session not active"),
+		strings.Contains(err.ErrorDescription, "Stale token"):
+		return providerErrors.RefreshTokenErrorExpiredOrRevoked
+	case strings.Contains(err.ErrorDescription, "Session not active"),
+		strings.Contains(err.ErrorDescription, "Token is not active"):
+		return providerErrors.RefreshTokenErrorExpired
+	default:
+		return providerErrors.RefreshTokenErrorUnknown
 	}
-
-	return slices.ContainsFunc(expiredDescriptions, func(desc string) bool {
-		return strings.Contains(err.ErrorDescription, desc)
-	})
 }

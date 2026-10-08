@@ -1,4 +1,4 @@
-// Package errors provides custom error types which can be returned by the providers
+// Package errors provides custom error types and classifications for provider errors.
 //
 // The package name conflicts with `errors` from the standard library.
 // That's not ideal, but we're planning a major refactoring of the broker and
@@ -6,6 +6,20 @@
 package errors
 
 import stderrors "errors"
+
+// RefreshTokenErrorKind classifies a token endpoint error during refresh.
+type RefreshTokenErrorKind uint8
+
+const (
+	// RefreshTokenErrorUnknown means the provider did not recognize the error.
+	RefreshTokenErrorUnknown RefreshTokenErrorKind = iota
+	// RefreshTokenErrorExpired means the refresh token is known to be expired.
+	RefreshTokenErrorExpired
+	// RefreshTokenErrorRevoked means the refresh token is known to be revoked.
+	RefreshTokenErrorRevoked
+	// RefreshTokenErrorExpiredOrRevoked means the provider cannot distinguish expiration from revocation.
+	RefreshTokenErrorExpiredOrRevoked
+)
 
 // ErrDeviceDisabled is returned when the device is disabled in the identity provider.
 var ErrDeviceDisabled = stderrors.New("device is disabled")
@@ -33,7 +47,8 @@ func (e *RetryWithDeviceCodeFlowError) Unwrap() error {
 	return e.Err
 }
 
-// ForDisplayError is an error type for errors that are meant to be displayed to the user.
+// ForDisplayError wraps an error with a message that is safe to display to the user.
+// It does not indicate whether a caller may fall back to cached data.
 type ForDisplayError struct {
 	Message string
 	Err     error
@@ -44,6 +59,25 @@ func (e *ForDisplayError) Error() string {
 }
 
 func (e *ForDisplayError) Unwrap() error {
+	return e.Err
+}
+
+// AuthoritativeError marks an error as an authoritative provider result, such
+// as an identity or configuration failure. Callers can use errors.As to
+// distinguish it from a transient failure. It may be wrapped by a
+// ForDisplayError when the result should also be shown to the user.
+type AuthoritativeError struct {
+	Err error
+}
+
+func (e *AuthoritativeError) Error() string {
+	if e.Err != nil {
+		return e.Err.Error()
+	}
+	return "authoritative provider error"
+}
+
+func (e *AuthoritativeError) Unwrap() error {
 	return e.Err
 }
 
