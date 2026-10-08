@@ -134,10 +134,13 @@ class VNCRecorder:
             "-f",
             "x11grab",
             # Capture at 25 frames per second, so we don't miss any quick screen updates
-            "-r",
+            "-framerate",
             "25",
             "-s",
             resolution,
+            # Keep timestamps tied to capture time if encoding cannot keep up.
+            "-use_wallclock_as_timestamps",
+            "1",
             "-i",
             f"{display}.0",
             # H.265 encoder: better compression than VP9, supported in Firefox 130+, Chrome 107+
@@ -155,6 +158,9 @@ class VNCRecorder:
             # Tag the stream as hvc1 (instead of default hev1) for broader browser compatibility
             "-tag:v",
             "hvc1",
+            # Preserve wall-clock gaps instead of speeding up delayed frames.
+            "-fps_mode",
+            "passthrough",
             output_path,
         ]
 
