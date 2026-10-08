@@ -183,6 +183,7 @@ jobs:
     env:
       RAW_COVERAGE_DIR: ${{ github.workspace }}/raw-coverage
       COVERAGE_DIR: ${{ github.workspace }}/coverage
+      GO_TESTS_TIMEOUT: 30m
       # Also run tests which require a different Ubuntu version, which we run in LXD
       # containers.
       AUTHD_TESTS_USE_LXD: true
@@ -264,6 +265,7 @@ jobs:
     env:
       RAW_COVERAGE_DIR: ${{ github.workspace }}/raw-coverage
       COVERAGE_DIR: ${{ github.workspace }}/coverage
+      GO_TESTS_TIMEOUT: 30m
       # Also run tests which require a different Ubuntu version, which we run in LXD
       # containers.
       AUTHD_TESTS_USE_LXD: true
