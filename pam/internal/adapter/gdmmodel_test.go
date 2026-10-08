@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/msteinert/pam/v2"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 )
 
 var gdmTestPrivateKey *rsa.PrivateKey
@@ -2812,6 +2814,182 @@ func TestGdmModel(t *testing.T) {
 			require.Equal(t, tc.wantSelectedBroker, gdmHandler.selectedBrokerID)
 		})
 	}
+}
+
+type modeCountingPAMClient struct {
+	authd.PAMClient
+	getAuthenticationModesCalls atomic.Int32
+}
+
+func (c *modeCountingPAMClient) GetAuthenticationModes(
+	ctx context.Context, req *authd.GAMRequest, opts ...grpc.CallOption,
+) (*authd.GAMResponse, error) {
+	c.getAuthenticationModesCalls.Add(1)
+	return c.PAMClient.GetAuthenticationModes(ctx, req, opts...)
+}
+
+func TestGDMAcknowledgesNextAndStageResetBeforeFetchingModes(t *testing.T) {
+	var events []string
+	started := true
+	challengeVisible := false
+	authNextReceived := make(chan struct{}, 1)
+	authNextAcknowledged := make(chan struct{})
+	stageResetRequested := make(chan struct{}, 1)
+	stageResetAcknowledged := make(chan struct{})
+
+	var authNextAckOnce, stageResetAckOnce sync.Once
+	ackAuthNext := func() {
+		authNextAckOnce.Do(func() { close(authNextAcknowledged) })
+	}
+	ackStageReset := func() {
+		stageResetAckOnce.Do(func() { close(stageResetAcknowledged) })
+	}
+	t.Cleanup(func() {
+		ackAuthNext()
+		ackStageReset()
+	})
+
+	mTx := pam_test.NewModuleTransactionDummy(gdm.DataConversationFunc(
+		func(data *gdm.Data) (*gdm.Data, error) {
+			if data.Type == gdm.DataType_request {
+				if data.Request == nil || data.Request.GetChangeStage() == nil {
+					return nil, fmt.Errorf("unexpected GDM request: %#v", data)
+				}
+				stage := data.Request.GetChangeStage().Stage
+				events = append(events, stage.String())
+				started = false
+				if stage == proto.Stage_authModeSelection {
+					stageResetRequested <- struct{}{}
+					<-stageResetAcknowledged
+				}
+				return &gdm.Data{
+					Type: gdm.DataType_response,
+					Response: &gdm.ResponseData{
+						Type: data.Request.Type,
+						Data: &gdm.ResponseData_Ack{},
+					},
+				}, nil
+			}
+
+			if data.Type != gdm.DataType_event || data.Event == nil {
+				return nil, fmt.Errorf("unexpected GDM conversation data: %#v", data)
+			}
+			events = append(events, data.Event.Type.String())
+			switch data.Event.Type {
+			case gdm.EventType_startAuthentication:
+				started = true
+				challengeVisible = true
+			case gdm.EventType_authEvent:
+				authNextReceived <- struct{}{}
+				<-authNextAcknowledged
+				if started {
+					started = false
+					challengeVisible = false
+				}
+			}
+			return &gdm.Data{Type: gdm.DataType_eventAck}, nil
+		},
+	))
+	dummyClient := pam_test.NewDummyClient(nil,
+		pam_test.WithIgnoreSessionIDChecks(),
+		pam_test.WithUILayout("newpassword", "Define your local password", pam_test.NewPasswordUILayout()),
+		pam_test.WithGetAuthenticationModesReturn([]*authd.GAMResponse_AuthenticationMode{
+			{Id: "newpassword", Label: "Define your local password"},
+		}, nil),
+	)
+	client := &modeCountingPAMClient{PAMClient: dummyClient}
+	model := newUIModelForClients(mTx, Gdm, authd.SessionMode_LOGIN, client, nil, nil)
+	model.currentSession = &sessionInfo{brokerID: "broker", sessionID: "session"}
+	model.authenticationModel.inProgress = true
+	model.authenticationModel.currentModel = &focusTrackerModel{focused: true}
+
+	var run func(tea.Cmd) error
+	run = func(cmd tea.Cmd) error {
+		if cmd == nil {
+			return nil
+		}
+		msg := cmd()
+		if msg == nil {
+			return nil
+		}
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			for i := len(batch) - 1; i >= 0; i-- {
+				if err := run(batch[i]); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		if sequence, ok := asCmdSlice(msg); ok {
+			for _, child := range sequence {
+				if err := run(child); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		if _, failed := msg.(pamError); failed {
+			return fmt.Errorf("unexpected PAM error: %#v", msg)
+		}
+		updated, next := model.Update(msg)
+		model = convertTo[uiModel](updated)
+		return run(next)
+	}
+	waitFor := func(signal <-chan struct{}, description string) {
+		t.Helper()
+		select {
+		case <-signal:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for %s", description)
+		}
+	}
+	waitForWorker := func(done <-chan error, description string) {
+		t.Helper()
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for %s", description)
+		}
+	}
+
+	updated, cmd := model.Update(isAuthenticatedResultReceived{access: auth.Next, msg: "{}"})
+	model = convertTo[uiModel](updated)
+	msg := cmd()
+	require.NotNil(t, msg)
+	_, batched := msg.(tea.BatchMsg)
+	require.False(t, batched,
+		"GDM auth.Next and the replacement transition must not be batched concurrently")
+	sequence, ok := asCmdSlice(msg)
+	require.True(t, ok)
+	require.Len(t, sequence, 2)
+
+	authNextDone := make(chan error, 1)
+	go func() {
+		authNextDone <- run(sequence[0])
+	}()
+	waitFor(authNextReceived, "GDM auth.Next event")
+	require.Zero(t, client.getAuthenticationModesCalls.Load())
+	select {
+	case <-stageResetRequested:
+		t.Fatal("stage reset started before GDM acknowledged auth.Next")
+	default:
+	}
+	ackAuthNext()
+	waitForWorker(authNextDone, "GDM auth.Next acknowledgement")
+
+	replacementDone := make(chan error, 1)
+	go func() {
+		replacementDone <- run(sequence[1])
+	}()
+	waitFor(stageResetRequested, "GDM auth-mode-selection request")
+	require.Zero(t, client.getAuthenticationModesCalls.Load(),
+		"replacement modes were fetched before GDM acknowledged the stage reset")
+	ackStageReset()
+	waitForWorker(replacementDone, "replacement challenge")
+
+	require.EqualValues(t, 1, client.getAuthenticationModesCalls.Load())
+	require.True(t, challengeVisible, "replacement challenge was reset: %v", events)
 }
 
 func TestMain(m *testing.M) {
