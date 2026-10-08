@@ -101,8 +101,13 @@ type Broker struct {
 type session struct {
 	username   string
 	providerID string // stable provider identifier; empty until learned via auth or cache migration
-	lang       string
-	mode       string
+	// expectedProviderID is the stable provider identifier authd has on record for
+	// username. It comes from the NewSession argument and never depends on the cache
+	// layout, so identity checks keep working when the cache directory cannot be
+	// keyed by the provider ID.
+	expectedProviderID string
+	lang               string
+	mode               string
 
 	selectedMode    string
 	authModes       []string
@@ -173,7 +178,7 @@ func (b *Broker) userInfoFromTokenExtras(ctx context.Context, session *session, 
 		return info.User{}, err
 	}
 
-	if err := b.provider.VerifyUsername(session.username, userInfo.Name); err != nil {
+	if err := b.verifyUserIdentity(session, userInfo); err != nil {
 		return info.User{}, fmt.Errorf("username verification failed: %w", err)
 	}
 
@@ -764,8 +769,9 @@ func (b *Broker) userDataDir(basePath string) (string, error) {
 }
 
 // NewSession creates a new session for the user. providerID is the stable provider
-// identifier from authd's database; when non-empty it is used to locate the
-// provider ID-keyed cache directory directly, bypassing the username-based lookup.
+// identifier from authd's database; when non-empty it is the identity the
+// authenticated user must match, and it is also used to locate the provider
+// ID-keyed cache directory directly, bypassing the username-based lookup.
 func (b *Broker) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
 	if username == "" {
 		return "", "", errors.New("username is required")
@@ -776,6 +782,12 @@ func (b *Broker) NewSession(username, lang, mode, providerID string) (sessionID,
 		username: username,
 		lang:     lang,
 		mode:     mode,
+
+		// Keep the provider ID authd asked for, independently of whether the cache
+		// directory below can be keyed by it. A locally renamed user logs in with a
+		// name the provider does not know, so the provider ID is the only identity
+		// we can verify for them.
+		expectedProviderID: providerID,
 
 		attemptsPerMode: make(map[string]int),
 	}
@@ -2969,7 +2981,7 @@ func (b *Broker) refreshEntraToken(ctx context.Context, session *session, oldTok
 	// getUserInfo (the device-auth refresh path) re-checks this on every refresh,
 	// not just on first login; do the same here so a refreshed Entra token can't
 	// silently swap the cached identity.
-	if err := b.provider.VerifyUsername(session.username, userInfo.Name); err != nil {
+	if err := b.verifyUserIdentity(session, userInfo); err != nil {
 		cacheRotatedToken("username verification failure")
 		return oldToken, fmt.Errorf("username verification failed: %w", err)
 	}
@@ -3107,7 +3119,7 @@ func (b *Broker) getUserInfo(ctx context.Context, session *session, token *oauth
 		return info.User{}, err
 	}
 
-	if err = b.provider.VerifyUsername(session.username, userInfo.Name); err != nil {
+	if err = b.verifyUserIdentity(session, userInfo); err != nil {
 		return info.User{}, fmt.Errorf("username verification failed: %w", err)
 	}
 
@@ -3117,6 +3129,29 @@ func (b *Broker) getUserInfo(ctx context.Context, session *session, token *oauth
 	}
 
 	return userInfo, nil
+}
+
+// verifyUserIdentity checks the requested identity for a first login, and the
+// stable provider identity for users that have a local login name.
+func (b *Broker) verifyUserIdentity(session *session, userInfo info.User) error {
+	// Prefer the provider ID authd recorded for this login name. session.providerID
+	// only says how the cache directory is keyed, and it stays empty when that
+	// directory could not be created, migrated or resolved. Falling back to the
+	// username check in that case would lock out every locally renamed user, because
+	// the name they log in with is not the name the provider knows them by.
+	expectedProviderID := session.expectedProviderID
+	if expectedProviderID == "" {
+		expectedProviderID = session.providerID
+	}
+
+	if expectedProviderID != "" {
+		if userInfo.ProviderID != expectedProviderID {
+			return fmt.Errorf("provider ID %q does not match the requested provider ID %q", userInfo.ProviderID, expectedProviderID)
+		}
+		return nil
+	}
+
+	return b.provider.VerifyUsername(session.username, userInfo.Name)
 }
 
 // maybeRegisterDevice registers the device when the provider supports it and

@@ -63,6 +63,20 @@ func Z_ForTests_DumpNormalizedYAML(c *Manager) (string, error) {
 		return userGroups[i].UID < userGroups[j].UID
 	})
 
+	// Get all rows from the users_to_local_groups table.
+	userLocalGroups, err := allUserLocalGroupsInternal(c.db)
+	if err != nil {
+		return "", err
+	}
+
+	// Sort the userLocalGroups by UID, then by group name.
+	sort.Slice(userLocalGroups, func(i, j int) bool {
+		if userLocalGroups[i].UID == userLocalGroups[j].UID {
+			return userLocalGroups[i].GroupName < userLocalGroups[j].GroupName
+		}
+		return userLocalGroups[i].UID < userLocalGroups[j].UID
+	})
+
 	// Get the schema version
 	schemaVersion, err := getSchemaVersion(c.db)
 	if err != nil {
@@ -70,15 +84,17 @@ func Z_ForTests_DumpNormalizedYAML(c *Manager) (string, error) {
 	}
 
 	content := struct {
-		Users         []UserRow        `yaml:"users"`
-		Groups        []GroupRow       `yaml:"groups"`
-		UsersToGroups []userToGroupRow `yaml:"users_to_groups"`
-		SchemaVersion int              `yaml:"schema_version"`
+		Users              []UserRow             `yaml:"users"`
+		Groups             []GroupRow            `yaml:"groups"`
+		UsersToGroups      []userToGroupRow      `yaml:"users_to_groups"`
+		UsersToLocalGroups []userToLocalGroupRow `yaml:"users_to_local_groups,omitempty"`
+		SchemaVersion      int                   `yaml:"schema_version"`
 	}{
-		Users:         users,
-		Groups:        groups,
-		UsersToGroups: userGroups,
-		SchemaVersion: schemaVersion,
+		Users:              users,
+		Groups:             groups,
+		UsersToGroups:      userGroups,
+		UsersToLocalGroups: userLocalGroups,
+		SchemaVersion:      schemaVersion,
 	}
 
 	// Marshal the content into a YAML string.
@@ -141,7 +157,7 @@ func createDBFromYAMLReader(r io.Reader, destDir string) (err error) {
 		}
 	}()
 
-	tablesInOrder := []string{"users", "groups", "users_to_groups", "schema_version"}
+	tablesInOrder := []string{"users", "groups", "users_to_groups", "users_to_local_groups", "schema_version"}
 
 	// Insert data
 	for _, table := range tablesInOrder {

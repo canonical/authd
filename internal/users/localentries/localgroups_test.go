@@ -626,6 +626,121 @@ func TestValidateChangedGroups(t *testing.T) {
 	}
 }
 
+func TestRenameUserInGroups(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		groupFilePath string
+		oldName       string
+		newName       string
+
+		wantErr bool
+	}{
+		"Successfully_rename_user_in_groups":           {groupFilePath: "user_in_both_groups.group", oldName: "myuser", newName: "myuser-renamed"},
+		"Successfully_rename_user_in_single_group":     {groupFilePath: "user_in_one_group.group", oldName: "myuser", newName: "myuser-renamed"},
+		"Successfully_rename_user_with_multiple_users": {groupFilePath: "user_and_others_in_one_groups.group", oldName: "myuser", newName: "myuser-renamed"},
+		"No-Op_when_user_not_in_any_group":             {groupFilePath: "no_users_in_our_groups.group", oldName: "myuser", newName: "myuser-renamed"},
+		"Successfully_handle_user_in_many_groups":      {groupFilePath: "user_in_many_groups.group", oldName: "myuser", newName: "myuser-renamed"},
+
+		// parseLocalGroups keeps entries it cannot make sense of, so the failure only surfaces
+		// when the rewritten file is validated before being written. Nothing is written then.
+		"Error_when_the_group_file_has_a_duplicated_group": {
+			groupFilePath: "malformed_file_duplicated.group",
+			oldName:       "otheruser",
+			newName:       "otheruser-renamed",
+			wantErr:       true,
+		},
+		// A comma is the member separator of the group file, so writing such a name would turn one
+		// member into two.
+		"Error_when_the_new_name_contains_a_comma": {
+			groupFilePath: "user_in_both_groups.group",
+			oldName:       "myuser",
+			newName:       "no,commas,please",
+			wantErr:       true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			inputGroupFilePath := filepath.Join("testdata", tc.groupFilePath)
+			outputGroupFilePath := filepath.Join(t.TempDir(), "group")
+
+			if exists, _ := fileutils.FileExists(inputGroupFilePath); exists {
+				tempGroupFile := filepath.Join(t.TempDir(), "group")
+				err := fileutils.CopyFile(inputGroupFilePath, tempGroupFile)
+				require.NoError(t, err, "failed to copy group file for testing")
+				inputGroupFilePath = tempGroupFile
+			}
+
+			defer localentriestestutils.RequireGroupFile(t, outputGroupFilePath, golden.Path(t))
+
+			entries, entriesUnlock, err := localentries.WithUserDBLock(
+				localentries.WithGroupInputPath(inputGroupFilePath),
+				localentries.WithGroupOutputPath(outputGroupFilePath),
+				localentries.WithMockUserDBLocking(),
+			)
+			require.NoError(t, err, "Failed to lock the local entries")
+			t.Cleanup(func() {
+				err := entriesUnlock()
+				require.NoError(t, err, "entriesUnlock should not fail to unlock the local entries")
+			})
+
+			err = entries.RenameUserInGroups(tc.oldName, tc.newName)
+			if tc.wantErr {
+				require.Error(t, err, "RenameUserInGroups should have failed")
+			} else {
+				require.NoError(t, err, "RenameUserInGroups should not have failed")
+			}
+		})
+	}
+}
+
+// TestRenameUserInGroupsWritesAfterReadingEntries pins a regression where the rename was a silent
+// no-op. GetLocalGroupEntries hands out the cached entries, so mutating them in place made
+// saveLocalGroups compare the new entries against an already-updated cache, conclude there was
+// nothing to do, and never write the group file.
+func TestRenameUserInGroupsWritesAfterReadingEntries(t *testing.T) {
+	t.Parallel()
+
+	inputGroupFilePath := filepath.Join(t.TempDir(), "group")
+	err := fileutils.CopyFile(filepath.Join("testdata", "user_in_both_groups.group"), inputGroupFilePath)
+	require.NoError(t, err, "Setup: failed to copy group file for testing")
+	outputGroupFilePath := filepath.Join(t.TempDir(), "group")
+
+	entries, entriesUnlock, err := localentries.WithUserDBLock(
+		localentries.WithGroupInputPath(inputGroupFilePath),
+		localentries.WithGroupOutputPath(outputGroupFilePath),
+		localentries.WithMockUserDBLocking(),
+	)
+	require.NoError(t, err, "Setup: failed to lock the local entries")
+	t.Cleanup(func() {
+		require.NoError(t, entriesUnlock(), "entriesUnlock should not fail to unlock the local entries")
+	})
+
+	// Populate the entry cache before renaming, which is what the manager does via IsUniqueUserName.
+	before, err := entries.GetLocalGroupEntries()
+	require.NoError(t, err, "Setup: failed to read the local group entries")
+	require.NotEmpty(t, before, "Setup: the group file should contain entries")
+
+	err = entries.RenameUserInGroups("myuser", "myuser-renamed")
+	require.NoError(t, err, "RenameUserInGroups should not have failed")
+
+	// The group file must actually have been written.
+	written, err := os.ReadFile(outputGroupFilePath)
+	require.NoError(t, err, "RenameUserInGroups should have written the group file")
+	require.Contains(t, string(written), "myuser-renamed", "The group file should contain the new username")
+	require.NotRegexp(t, `(^|[,:])myuser($|[,\n])`, string(written),
+		"The group file should no longer contain the old username")
+
+	// The entries handed out earlier must not have been mutated behind the caller's back.
+	for _, group := range before {
+		require.NotContains(t, group.Users, "myuser-renamed",
+			"RenameUserInGroups should not mutate entries previously returned to the caller")
+	}
+}
+
 func TestMain(m *testing.M) {
 	log.SetLevel(log.DebugLevel)
 

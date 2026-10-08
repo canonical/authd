@@ -1,0 +1,26 @@
+users:
+    - name: user1@example.com
+      uid: 1111
+      gid: 1111
+      gecos: User1
+      dir: /home/user1@example.com
+      shell: /bin/bash
+      broker_id: broker-id
+      provider_id: providerid-user1
+groups:
+    - name: user1@example.com
+      gid: 1111
+      ugid: user1@example.com
+    - name: sharedgroup@example.com
+      gid: 99999
+      ugid: "87654321"
+users_to_groups:
+    - uid: 1111
+      gid: 1111
+    - uid: 1111
+      gid: 99999
+users_to_local_groups:
+    - uid: 1111
+      group_name: localgroup1
+    - uid: 1111
+      group_name: localgroup2

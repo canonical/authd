@@ -1,0 +1,11 @@
+Usage:
+  authctl user set-name <old-name> <new-name> [flags]
+
+Examples:
+  # Rename user "alice" to "alice-new"
+  authctl user set-name alice alice-new
+
+Flags:
+  -h, --help   help for set-name
+
+accepts 2 arg(s), received 3

@@ -1,0 +1,17 @@
+users:
+    - name: ia_info_mismatching_user_name@example.com
+      uid: 1111
+      gid: 1111
+      gecos: gecos for different_username@example.com
+      dir: /home/different_username@example.com
+      shell: /bin/sh/different_username@example.com
+      broker_id: "1902181170"
+      provider_id: providerid-different_username@example.com
+      name_is_local_override: true
+groups:
+    - name: ia_info_mismatching_user_name@example.com
+      gid: 1111
+      ugid: ia_info_mismatching_user_name@example.com
+users_to_groups:
+    - uid: 1111
+      gid: 1111

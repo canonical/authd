@@ -19,4 +19,7 @@ users_to_groups:
       gid: 1111
     - uid: 1111
       gid: 11111
-schema_version: 3
+users_to_local_groups:
+    - uid: 1111
+      group_name: localgroup1
+schema_version: 4

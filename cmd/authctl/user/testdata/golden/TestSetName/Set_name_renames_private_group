@@ -1,0 +1,3 @@
+User 'user1@example.com' renamed to 'user1-renamed@example.com'.
+The user's private group was renamed to 'user1-renamed@example.com' as well.
+Warning: the home directory "/home/user1@example.com" still refers to the old username. It was not renamed to avoid data loss.

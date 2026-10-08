@@ -1,0 +1,17 @@
+users:
+    - name: renamed@example.com
+      uid: 1111
+      gid: 1111
+      gecos: gecos for success@example.com
+      dir: /home/success@example.com
+      shell: /bin/sh/success@example.com
+      broker_id: "1902181170"
+      provider_id: providerid-success@example.com
+      name_is_local_override: true
+groups:
+    - name: renamed@example.com
+      gid: 1111
+      ugid: renamed@example.com
+users_to_groups:
+    - uid: 1111
+      gid: 1111

@@ -1,0 +1,37 @@
+users:
+    - name: user1-renamed
+      uid: 1111
+      gid: 1111
+      gecos: User1
+      dir: /home/user1
+      shell: /bin/bash
+      broker_id: broker-id
+      provider_id: providerid-user1
+    - name: user2
+      uid: 2222
+      gid: 2222
+      gecos: User2
+      dir: /home/user2
+      shell: /bin/bash
+      broker_id: broker-id
+      provider_id: providerid-user2
+groups:
+    - name: user1-renamed
+      gid: 1111
+      ugid: user1-renamed
+    - name: user2
+      gid: 2222
+      ugid: user2
+users_to_groups:
+    - uid: 1111
+      gid: 1111
+    - uid: 2222
+      gid: 2222
+users_to_local_groups:
+    - uid: 1111
+      group_name: localgroup1
+    - uid: 1111
+      group_name: localgroup2
+    - uid: 2222
+      group_name: localgroup1
+schema_version: 4
