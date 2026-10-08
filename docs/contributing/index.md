@@ -7,11 +7,16 @@ myst:
 (contribute)=
 # General contribution guidelines
 
-A big welcome and thank you for considering making a contribution to authd and Ubuntu! It’s people like you that help make these products a reality for users in our community.
-
-By agreeing to follow these guidelines the contribution process should be easy and effective for everyone involved. This also communicates that you agree to respect the time of the developers working on this project. In return, we will reciprocate that respect by addressing your issues, assessing proposed changes and helping you finalize your pull requests.
-
 These are mostly guidelines, not rules. Use your best judgment and feel free to propose changes to this document in a pull request.
+
+:::{admonition} Specific contributing guides
+:class: tip
+If you are interested in specific guidance on contributing to the code
+or docs, it is provided in the following pages:
+
+* [Contributing to the code](/contributing/code)
+* [Contributing to the documentation](/contributing/docs)
+:::
 
 ## Code of conduct
 
