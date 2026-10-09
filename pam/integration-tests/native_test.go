@@ -225,6 +225,8 @@ func TestNativeAuthenticate(t *testing.T) {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()
 				c.WaitFor(t, `Gimme your password`)
+				// The runner prints the prompt before it disables terminal echo.
+				c.WaitForEchoDisabled(t)
 				c.SendLine(t, "r")
 				c.WaitFor(t, `Choose your authentication flow:`)
 				sendEchoedLine(t, c, "7")

@@ -76,6 +76,10 @@ func (c *Console) WaitFor(t *testing.T, pattern string) string
 // WaitForTimeout is like WaitFor but with an explicit timeout override.
 func (c *Console) WaitForTimeout(t *testing.T, pattern string, timeout time.Duration) string
 
+// WaitForEchoDisabled waits until the PTY stops echoing input, or the default
+// timeout expires.
+func (c *Console) WaitForEchoDisabled(t *testing.T)
+
 // WaitForExit blocks until the command exits. Returns the exit error (nil on success).
 func (c *Console) WaitForExit(t *testing.T) error
 
