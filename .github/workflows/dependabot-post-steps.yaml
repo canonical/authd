@@ -1,0 +1,35 @@
+name: Run custom steps on Dependabot PRs
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches:
+      - main
+
+jobs:
+  amend-dependabot-commit:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Use Cargo lock file version 3
+        run: |
+          # This is a workaround for the issue that dependabot updates the
+          # Cargo.lock file to version 4, which is not available in Noble.
+          cargo generate-lockfile
+
+      - name: Amend commit and push
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          
+          git add -A
+          git commit --amend --no-edit
+          git push --force
