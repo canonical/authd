@@ -5,52 +5,21 @@ on:
     - cron: '0 5 * * *'
   workflow_dispatch:
 
+concurrency:
+  group: oci-artifacts-cleanup
+  cancel-in-progress: false
+
 jobs:
-  cleanup-broker-snap:
+  cleanup:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
-      packages: write
-    strategy:
-      matrix:
-        broker: [authd-msentraid, authd-google]
-    steps:
-      - name: Delete broker snap OCI artifacts
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: authd/${{ matrix.broker }}-snap
-          package-type: container
-          min-versions-to-keep: 10
-
-  cleanup-deb:
-    runs-on: ubuntu-26.04 # ubuntu-latest
-    permissions:
-      packages: write
-    strategy:
-      matrix:
-        ubuntu-version: ['noble', 'resolute', 'devel']
-    steps:
-      - name: Delete deb OCI artifacts
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: authd/authd-deb-${{ matrix.ubuntu-version }}
-          package-type: container
-          min-versions-to-keep: 10
-
-      - name: Delete deb sources OCI artifacts
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: authd/authd-deb-sources-${{ matrix.ubuntu-version }}
-          package-type: container
-          min-versions-to-keep: 10
-
-  cleanup-e2e-test-vm-image:
-    runs-on: ubuntu-26.04 # ubuntu-latest
-    permissions:
+      contents: read
       packages: write
     steps:
-      - name: Delete e2e-test VM image OCI artifacts
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: authd/e2e-runner
-          package-type: container
-          min-versions-to-keep: 10
+      - uses: actions/checkout@v7
+
+      - name: Delete OCI artifacts older than seven days
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/scripts/cleanup_oci_artifacts.py
