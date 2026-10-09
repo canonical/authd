@@ -68,7 +68,8 @@ Test polkit authentication as authd user via pkexec using Entra ID password and 
     [Tags]    requires:msentraid
     [Setup]    Entra Polkit Test Setup
     [Documentation]    Verify that pkexec authenticates the authd user through
-    ...    polkit using their Entra ID password + MFA flow.
+    ...    polkit using their Entra ID password + MFA flow, and shows retry
+    ...    feedback after an incorrect MFA code.
     ...
     ...    The authd user is also added to the sudo group so that polkit prompts
     ...    for their own credentials rather than falling back to the local admin
@@ -85,7 +86,10 @@ Test polkit authentication as authd user via pkexec using Entra ID password and 
     Hid.Type String    pkexec touch /tmp/polkit-authd-test-entra
     Hid.Keys Combo    Return
 
-    Log In With Remote User Through Polkit: Entra Password    ${username}    /tmp/polkit-authd-test-entra
+    Log In With Remote User Through Polkit: Entra Password
+    ...    ${username}
+    ...    /tmp/polkit-authd-test-entra
+    ...    request_invalid_code=${TRUE}
 
     # Verify polkit granted access: the marker file must exist and be root-owned.
     Wait Until Keyword Succeeds    30s    5s

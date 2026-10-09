@@ -1112,6 +1112,22 @@ func TestNativeChangeAuthTok(t *testing.T) {
 				nativeWaitForChangeAuthTokResult(t, c)
 			},
 		},
+		"Retry_if_new_password_is_rejected_by_broker_in_polkit": {
+			// Separate user from the polkit success case: testUserNameFull uses the parent test name.
+			clientOptions: clientOptions{
+				PamServiceName: "polkit-1",
+				PamUser:        testUserNameFull(t, examplebroker.UserIntegrationAuthModesPrefix, "password,mandatoryreset-integration-polkit-retry"),
+			},
+			expectedUser: testUserNameFull(t, examplebroker.UserIntegrationAuthModesPrefix, "password,mandatoryreset-integration-polkit-retry"),
+			test: func(t *testing.T, c *ptytest.Console) {
+				t.Helper()
+				c.WaitFor(t, `Gimme your password`)
+				c.SendLine(t, "goodpass")
+				nativeChangePassword(t, c, "wrongpass", "wrongpass")
+				nativeChangePassword(t, c, "authd2404", "authd2404")
+				nativeWaitForChangeAuthTokResult(t, c)
+			},
+		},
 		"Retry_if_new_password_is_same_of_previous": {
 			test: func(t *testing.T, c *ptytest.Console) {
 				t.Helper()

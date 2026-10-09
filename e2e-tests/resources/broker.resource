@@ -329,7 +329,7 @@ Select Broker Through GDM
     Builtin.Sleep    1
 
 Enter Entra ID Password And MFA
-    [Arguments]    ${success_keyword}    @{success_args}
+    [Arguments]    ${success_keyword}    ${submit_invalid_code}=${FALSE}    @{success_args}
     # With the device code flow disabled there is only one flow; the PAM module
     # auto-selects it and goes directly to the Entra ID password prompt.
     Match Text    Enter your Entra ID password    30    similarity=90
@@ -340,7 +340,22 @@ Enter Entra ID Password And MFA
     # three submissions.
     Match Text    Enter your MFA code    30    similarity=88
     ${previous_totp_code} =    Set Variable    ${EMPTY}
-    FOR    ${attempt}    IN RANGE    3
+    ${first_attempt} =    Set Variable    0
+    IF    ${submit_invalid_code}
+        ${reference_totp_code} =    TOTP.Generate Totp Code    ${EMPTY}
+        # Change the current code while keeping the expected six-digit format.
+        ${rejected_code} =    Evaluate    f"{(int('${reference_totp_code}') + 1) % 1000000:06d}"
+        Hid.Type String    ${rejected_code}
+        Hid.Keys Combo    Return
+
+        Match Text    Incorrect or expired code    30    similarity=85
+        Match Text    Please try again    30    similarity=85
+        Match Text    Enter your MFA code    30    similarity=88
+        ${previous_totp_code} =    Set Variable    ${rejected_code}
+        ${first_attempt} =    Set Variable    1
+    END
+
+    FOR    ${attempt}    IN RANGE    ${first_attempt}    3
         ${rejections_before} =    Count Entra TOTP Rejections
         ${totp_code} =    TOTP.Generate Totp Code    ${previous_totp_code}
         Hid.Type String    ${totp_code}
@@ -400,7 +415,7 @@ Log In With Remote User Through GDM: Entra Password
 
 
 Continue Log In With Remote User Through GDM: Entra Password
-    Enter Entra ID Password And MFA    Try Desktop Ready
+    Enter Entra ID Password And MFA    Try Desktop Ready    ${FALSE}
 
     Wait Until Desktop Ready
 
@@ -525,7 +540,7 @@ Log In With Remote User Through CLI: Entra Auth
     Match Text    2. ${PROVIDER_DISPLAY_NAME}
     Hid.Type String    2
 
-    Enter Entra ID Password And MFA    Match Text    ${username}@ubuntu:~$    1
+    Enter Entra ID Password And MFA    Match Text    ${FALSE}    ${username}@ubuntu:~$    1
 
 
 Log In With Remote User Through CLI: Entra Passwordless TAP
@@ -553,7 +568,7 @@ Log In With Remote User Through CLI: Entra Passwordless TAP
     Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
 
 Log In With Remote User Through Polkit: Entra Password
-    [Arguments]    ${username}    ${marker_file}
+    [Arguments]    ${username}    ${marker_file}    ${request_invalid_code}=${FALSE}
 
     # Polkit auto-selects authentication via local password.
     # Cancel it ('r') to go back to the authentication-flow menu and choose the
@@ -567,4 +582,5 @@ Log In With Remote User Through Polkit: Entra Password
     Hid.Type String    2
     Hid.Keys Combo    Return
 
-    Enter Entra ID Password And MFA    SSH.Execute    test -f "${marker_file}"
+    Enter Entra ID Password And MFA
+    ...    SSH.Execute    ${request_invalid_code}    test -f "${marker_file}"
