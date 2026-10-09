@@ -19,6 +19,16 @@ chpasswd:
   users:
     - { name: ubuntu, password: ubuntu, type: text }
 
+apt:
+  sources:
+    ubuntu-dbgsym:
+      source: |
+        deb [signed-by=$KEY_FILE] http://ddebs.ubuntu.com $RELEASE main restricted universe multiverse
+        deb [signed-by=$KEY_FILE] http://ddebs.ubuntu.com $RELEASE-updates main restricted universe multiverse
+        deb [signed-by=$KEY_FILE] http://ddebs.ubuntu.com $RELEASE-proposed main restricted universe multiverse
+      keyid: C8CAB6595FDFF622
+      keyserver: keyserver.ubuntu.com
+
 package_update: true
 package_upgrade: true
 packages:
@@ -28,6 +38,11 @@ packages:
   - gnome-shell-extension-ubuntu-dock
   - gnome-terminal
   - gsettings-ubuntu-schemas
+  # Resolve libc, PAM and GLib frames in crash logs.
+  - libc6-dbg
+  - libpam-modules-dbgsym
+  - '?name(^libpam0.*-dbgsym$)'
+  - '?name(^libglib2[.]0-0.*-dbgsym$)'
   - libpam-pwquality
   # Required to test that the keyring is unlocked (ships secret-tool)
   - libsecret-tools
