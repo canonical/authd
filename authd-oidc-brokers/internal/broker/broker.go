@@ -1610,10 +1610,14 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 			session.nextAuthModes = reauthModes
 			return AuthNext, errorMessage{Message: "Remote authentication failed: No refresh token. Please contact your administrator."}
 		}
+		log.Debugf(context.Background(), "Starting token refresh for user %q", session.username)
 		if authInfo.ObtainedViaEntraAuth {
 			authInfo, err = b.refreshEntraToken(ctx, session, authInfo)
 		} else {
 			authInfo, err = b.refreshToken(ctx, session, authInfo)
+		}
+		if err == nil {
+			log.Debugf(context.Background(), "Successfully refreshed token for user %q", session.username)
 		}
 		var retrieveErr *oauth2.RetrieveError
 		if errors.As(err, &retrieveErr) {

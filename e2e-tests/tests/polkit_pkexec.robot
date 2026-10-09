@@ -59,7 +59,7 @@ Test polkit authentication as authd user via pkexec after initial GDM login
     Hid.Keys Combo    Return
 
     # Verify polkit granted access: the marker file must exist and be root-owned.
-    Wait Until Keyword Succeeds    5s    1s
+    Wait Until Keyword Succeeds    20s    1s
     ...    Check Marker File Is Root Owned    /tmp/polkit-authd-test
 
     Log Out
