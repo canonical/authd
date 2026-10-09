@@ -26,9 +26,6 @@ on:
       - '!**_test.go'
       - '!**/testdata/**'
       - '!**/testutils/**'
-
-    tags:
-      - "*"
   pull_request:
     paths:
       - '**'
