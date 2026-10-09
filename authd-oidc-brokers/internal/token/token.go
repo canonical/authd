@@ -21,12 +21,23 @@ type AuthCachedInfo struct {
 	DeviceRegistrationData []byte
 	DeviceIsDisabled       bool
 	UserIsDisabled         bool
+	UnixAttributesEnriched *bool `json:",omitempty"`
+	// UnixAttributeNames are the attribute names that the Unix IDs in UserInfo
+	// were read from. A nil value means that the names are unknown, so the
+	// cached Unix IDs cannot be trusted.
+	UnixAttributeNames *UnixAttributeNames `json:",omitempty"`
 	// ObtainedViaEntraAuth is set when the token was obtained through the
 	// entra_auth flow. On a returning login it selects the refresh path:
 	// these tokens are refreshed as the Microsoft Broker App (public client, no
 	// client_secret) for the liveness/revocation check, rather than via the OIDC
 	// app refresh used by device-auth tokens.
 	ObtainedViaEntraAuth bool
+}
+
+// UnixAttributeNames are the Entra extension attribute names for the Unix UID and GID.
+type UnixAttributeNames struct {
+	UID string `json:",omitempty"`
+	GID string `json:",omitempty"`
 }
 
 // NewAuthCachedInfo creates a new AuthCachedInfo. It sets the provided token and rawIDToken and the provider-specific
@@ -47,11 +58,40 @@ func CacheAuthInfo(path string, token *AuthCachedInfo) (err error) {
 	}
 
 	// Create issuer specific cache directory if it doesn't exist.
-	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	dir := filepath.Dir(path)
+	if err = os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("could not create token directory: %v", err)
 	}
 
-	if err = os.WriteFile(path, jsonData, 0600); err != nil {
+	// Rename over the target so a failed write keeps the old file and its mode.
+	mode := os.FileMode(0600)
+	if fileInfo, statErr := os.Stat(path); statErr == nil {
+		mode = fileInfo.Mode().Perm()
+	}
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("could not save token: %v", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmp.Name())
+		}
+	}()
+
+	if _, err = tmp.Write(jsonData); err != nil {
+		return fmt.Errorf("could not save token: %v", err)
+	}
+	if err = tmp.Sync(); err != nil {
+		return fmt.Errorf("could not save token: %v", err)
+	}
+	if err = tmp.Chmod(mode); err != nil {
+		return fmt.Errorf("could not save token: %v", err)
+	}
+	if err = tmp.Close(); err != nil {
+		return fmt.Errorf("could not save token: %v", err)
+	}
+	if err = os.Rename(tmp.Name(), path); err != nil {
 		return fmt.Errorf("could not save token: %v", err)
 	}
 

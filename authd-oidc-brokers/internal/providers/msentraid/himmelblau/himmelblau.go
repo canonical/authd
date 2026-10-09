@@ -281,13 +281,14 @@ var OSVersion = sync.OnceValue(func() string {
 })
 
 // AcquireAccessTokenForGraphAPI uses the refresh token from the provided
-// OAuth 2.0 token with the required scopes to access the Microsoft Graph API.
+// OAuth 2.0 token with the requested scopes to access the Microsoft Graph API.
 func AcquireAccessTokenForGraphAPI(
 	ctx context.Context,
 	clientID string,
 	tenantID string,
 	token *oauth2.Token,
 	data DeviceRegistrationData,
+	scopes []string,
 ) (string, error) {
 	// Pass an empty client ID to broker_init: there it only sets the *default*
 	// on_behalf_of client ID, which we always override per-call below in
@@ -315,13 +316,12 @@ func AcquireAccessTokenForGraphAPI(
 	userToken, cleanup, err := acquireTokenByRefreshToken(
 		brokerClientApp,
 		token.RefreshToken,
-		[]string{"GroupMember.Read.All"},
+		scopes,
 		"",
-		// Acquire the token on behalf of the user's OIDC app. This is what makes
-		// the user's groups resolvable; without a client ID here (and without an
-		// OIDC app registered in Entra) the group claims are unavailable. It is
-		// passed per-call rather than via broker_init because the per-call value
-		// takes precedence over the broker app's default on_behalf_of client ID.
+		// Acquire the token on behalf of the user's OIDC app. The caller chooses
+		// scopes based on the Graph data it needs. Passing the client ID here
+		// rather than via broker_init ensures that the token is acquired for the
+		// OIDC app registered in Entra.
 		clientID,
 		tpm,
 		machineKey,

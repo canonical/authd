@@ -23,6 +23,7 @@ import (
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/log"
 	"github.com/golang-jwt/jwt/v5"
+	msgraphmodels "github.com/microsoftgraph/msgraph-sdk-go/models"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 )
@@ -33,6 +34,491 @@ func TestNew(t *testing.T) {
 	p := msentraid.New()
 
 	require.NotEmpty(t, p, "New should return a non-empty provider")
+}
+
+func TestParseUnixID(t *testing.T) {
+	t.Parallel()
+
+	validInt64 := int64(1001)
+	validFloat64 := float64(1002)
+	validNumber := json.Number("1003")
+	valid := uint32(1001)
+
+	tests := map[string]struct {
+		value   any
+		want    *uint32
+		wantErr bool
+	}{
+		"Absent":                {value: nil},
+		"Int64":                 {value: int64(1001), want: &valid},
+		"Pointer_int64":         {value: &validInt64, want: &valid},
+		"Float64":               {value: float64(1002), want: func() *uint32 { v := uint32(1002); return &v }()},
+		"Pointer_float64":       {value: &validFloat64, want: func() *uint32 { v := uint32(1002); return &v }()},
+		"JSON_number":           {value: validNumber, want: func() *uint32 { v := uint32(1003); return &v }()},
+		"String_is_rejected":    {value: "1001", wantErr: true},
+		"Boolean_is_rejected":   {value: true, wantErr: true},
+		"Negative_is_rejected":  {value: int64(-1), wantErr: true},
+		"Zero_is_rejected":      {value: int64(0), wantErr: true},
+		"Fraction_is_rejected":  {value: float64(1001.5), wantErr: true},
+		"Too_large_is_rejected": {value: int64(2147483648), wantErr: true},
+		"Reserved_65534":        {value: int64(65534), wantErr: true},
+		"Reserved_65535":        {value: int64(65535), wantErr: true},
+		"Reserved_max_uint32":   {value: uint64(1<<32 - 1), wantErr: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := msentraid.ParseUnixID(tc.value)
+			if tc.wantErr {
+				require.Error(t, err)
+				require.Nil(t, got)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestProcessSecurityGroupsWithGID(t *testing.T) {
+	t.Parallel()
+
+	makeGroup := func(id, name string, gid any) msgraphmodels.Groupable {
+		group := msgraphmodels.NewGroup()
+		group.SetId(&id)
+		group.SetDisplayName(&name)
+		securityEnabled := true
+		group.SetSecurityEnabled(&securityEnabled)
+		group.SetAdditionalData(map[string]any{"extension_gidNumber": gid})
+		return group
+	}
+
+	t.Run("Valid_remote_and_local_groups", func(t *testing.T) {
+		t.Parallel()
+
+		groups, err := msentraid.ProcessSecurityGroupsWithGID([]msgraphmodels.Groupable{
+			makeGroup("remote-id", "Engineering", int64(2001)),
+			makeGroup("local-id", "linux-sudo", int64(9999)),
+		}, "extension_gidNumber", true)
+		require.NoError(t, err)
+		require.Len(t, groups, 2)
+		require.Equal(t, "engineering", groups[0].Name)
+		require.Equal(t, "remote-id", groups[0].UGID)
+		require.NotNil(t, groups[0].GID)
+		require.Equal(t, uint32(2001), *groups[0].GID)
+		require.Equal(t, info.Group{Name: "sudo"}, groups[1])
+	})
+
+	t.Run("Conflicting_duplicate_GIDs_are_omitted_when_optional", func(t *testing.T) {
+		t.Parallel()
+
+		groups, err := msentraid.ProcessSecurityGroupsWithGID([]msgraphmodels.Groupable{
+			makeGroup("first", "Engineering", int64(2001)),
+			makeGroup("second", "engineering", int64(2002)),
+		}, "extension_gidNumber", false)
+		require.NoError(t, err)
+		require.Len(t, groups, 1)
+		require.Nil(t, groups[0].GID)
+	})
+
+	t.Run("Conflicting_duplicate_GIDs_fail_when_required", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := msentraid.ProcessSecurityGroupsWithGID([]msgraphmodels.Groupable{
+			makeGroup("first", "Engineering", int64(2001)),
+			makeGroup("second", "engineering", int64(2002)),
+		}, "extension_gidNumber", true)
+		require.ErrorIs(t, err, info.ErrUnixGIDRequired)
+		require.Contains(t, err.Error(), "conflicting Unix GIDs")
+	})
+
+	t.Run("Malformed_optional_GID_is_omitted", func(t *testing.T) {
+		t.Parallel()
+
+		groups, err := msentraid.ProcessSecurityGroupsWithGID([]msgraphmodels.Groupable{
+			makeGroup("remote-id", "Engineering", "2001"),
+		}, "extension_gidNumber", false)
+		require.NoError(t, err)
+		require.Len(t, groups, 1)
+		require.Nil(t, groups[0].GID)
+	})
+
+	t.Run("Malformed_required_GID_fails", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := msentraid.ProcessSecurityGroupsWithGID([]msgraphmodels.Groupable{
+			makeGroup("remote-id", "Engineering", "2001"),
+		}, "extension_gidNumber", true)
+		require.ErrorIs(t, err, info.ErrUnixAttributeRequired)
+		require.ErrorIs(t, err, info.ErrUnixGIDRequired)
+	})
+
+	t.Run("Missing_required_GID_fails", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := msentraid.ProcessSecurityGroupsWithGID([]msgraphmodels.Groupable{
+			makeGroup("remote-id", "Engineering", nil),
+		}, "extension_gidNumber", true)
+		require.ErrorIs(t, err, info.ErrUnixAttributeRequired)
+		require.ErrorIs(t, err, info.ErrUnixGIDRequired)
+	})
+
+	t.Run("Duplicate_missing_and_valid_GIDs_are_omitted", func(t *testing.T) {
+		t.Parallel()
+
+		groups, err := msentraid.ProcessSecurityGroupsWithGID([]msgraphmodels.Groupable{
+			makeGroup("first", "Engineering", "not-a-number"),
+			makeGroup("second", "engineering", int64(2002)),
+		}, "extension_gidNumber", false)
+		require.NoError(t, err)
+		require.Len(t, groups, 1)
+		require.Nil(t, groups[0].GID)
+	})
+}
+
+func TestGroupSelectFields(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, []string{"id", "displayName", "securityEnabled", "groupTypes"}, msentraid.GroupSelectFields(""))
+	require.Equal(t, []string{"id", "displayName", "securityEnabled", "groupTypes", "extension_abc_gidNumber"}, msentraid.GroupSelectFields("extension_abc_gidNumber"))
+}
+
+func TestGraphScopesForUnixAttributes(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		config info.UnixAttributeConfig
+		want   []string
+	}{
+		"Groups_only": {
+			want: []string{"GroupMember.Read.All"},
+		},
+		"GID_only": {
+			config: info.UnixAttributeConfig{GIDAttribute: "extension_gidNumber"},
+			want:   []string{"GroupMember.Read.All"},
+		},
+		"UID": {
+			config: info.UnixAttributeConfig{UIDAttribute: "extension_uidNumber"},
+			want:   []string{"GroupMember.Read.All", "User.Read"},
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := msentraid.GraphScopesForUnixAttributes(tc.config)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestMissingGraphScope(t *testing.T) {
+	t.Parallel()
+
+	requiredScopes := []string{"GroupMember.Read.All", "User.Read"}
+	require.Empty(t, msentraid.MissingGraphScope(requiredScopes, requiredScopes))
+	require.Equal(
+		t,
+		"User.Read",
+		msentraid.MissingGraphScope([]string{"GroupMember.Read.All"}, requiredScopes),
+	)
+}
+
+func TestEnrichUserWithUnixAttributesRequiresUserReadForUID(t *testing.T) {
+	t.Parallel()
+
+	var graphRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		graphRequests.Add(1)
+		http.Error(w, "unexpected Graph request", http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"scp": "GroupMember.Read.All",
+	})
+	accessTokenString, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err)
+
+	_, err = msentraid.New().EnrichUserWithUnixAttributes(
+		context.Background(),
+		info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
+		"client-id",
+		"https://issuer.example/tenant/v2.0",
+		&oauth2.Token{AccessToken: accessTokenString},
+		map[string]any{"msgraph_host": server.URL},
+		nil,
+		info.UnixAttributeConfig{UIDAttribute: "extension_uidNumber"},
+	)
+	require.ErrorContains(t, err, "missing the User.Read permission")
+	require.Zero(t, graphRequests.Load())
+}
+
+func TestEnrichUserWithUnixAttributesDoesNotLogDeviceRegistrationData(t *testing.T) {
+	registrationData := []byte(`{"cert_key":"registration-secret"} trailing`)
+	var loggedMessage string
+	log.SetLevelHandler(log.NoticeLevel, func(_ context.Context, _ log.Level, format string, args ...interface{}) {
+		loggedMessage = fmt.Sprintf(format, args...)
+	})
+	t.Cleanup(func() {
+		log.SetLevelHandler(log.NoticeLevel, nil)
+	})
+
+	_, err := msentraid.New().EnrichUserWithUnixAttributes(
+		context.Background(),
+		info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
+		"client-id",
+		"https://issuer.example/tenant/v2.0",
+		&oauth2.Token{AccessToken: "invalid-token"},
+		nil,
+		registrationData,
+		info.UnixAttributeConfig{},
+	)
+	require.Error(t, err)
+	require.Contains(t, loggedMessage, "Could not decode device registration data")
+	require.NotContains(t, loggedMessage, "registration-secret")
+}
+
+func TestEnrichUserWithUnixAttributesNeedsOnlyGroupScopeForGID(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/me/transitiveMemberOf/graph.group", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"value":[]}`)
+	}))
+	t.Cleanup(server.Close)
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"scp": "GroupMember.Read.All",
+	})
+	accessTokenString, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err)
+
+	got, err := msentraid.New().EnrichUserWithUnixAttributes(
+		context.Background(),
+		info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
+		"client-id",
+		"https://issuer.example/tenant/v2.0",
+		&oauth2.Token{AccessToken: accessTokenString},
+		map[string]any{"msgraph_host": server.URL},
+		nil,
+		info.UnixAttributeConfig{GIDAttribute: "extension_gidNumber"},
+	)
+	require.NoError(t, err)
+	require.Empty(t, got.Groups)
+}
+
+func TestEnrichUserWithUnixAttributes(t *testing.T) {
+	t.Parallel()
+
+	var userRequests, groupRequests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/me":
+			userRequests.Add(1)
+			require.Equal(t, "extension_uidNumber", r.URL.Query().Get("$select"))
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"extension_uidNumber":1001}`)
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/me/transitiveMemberOf/graph.group"):
+			groupRequests.Add(1)
+			require.ElementsMatch(t, []string{"id", "displayName", "securityEnabled", "groupTypes", "extension_gidNumber"}, strings.Split(r.URL.Query().Get("$select"), ","))
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"value":[{"id":"group-id","displayName":"Engineering","securityEnabled":true,"groupTypes":[],"extension_gidNumber":2001}]}`)
+		default:
+			t.Fatalf("unexpected Graph request: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"scp": "GroupMember.Read.All User.Read",
+		"oid": "user-id",
+	})
+	accessTokenString, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err)
+
+	got, err := msentraid.New().EnrichUserWithUnixAttributes(
+		context.Background(),
+		info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
+		"client-id",
+		"https://issuer.example/tenant/v2.0",
+		&oauth2.Token{AccessToken: accessTokenString},
+		map[string]any{"msgraph_host": server.URL},
+		nil,
+		info.UnixAttributeConfig{
+			UIDAttribute: "extension_uidNumber",
+			GIDAttribute: "extension_gidNumber",
+		},
+	)
+	require.NoError(t, err)
+	require.NotNil(t, got.UID)
+	require.Equal(t, uint32(1001), *got.UID)
+	require.Len(t, got.Groups, 1)
+	require.NotNil(t, got.Groups[0].GID)
+	require.Equal(t, uint32(2001), *got.Groups[0].GID)
+	require.Equal(t, int32(1), userRequests.Load())
+	require.Equal(t, int32(1), groupRequests.Load())
+}
+
+func TestEnrichUserWithUnixAttributesAppOnlyLeavesOptionalUIDUnavailable(t *testing.T) {
+	t.Parallel()
+
+	mockServer, cleanup := startMockMSServer(t, nil)
+	t.Cleanup(cleanup)
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"oid": "user-id"})
+	accessTokenString, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err)
+
+	provider := msentraid.New()
+	provider.SetGraphClientSecret("client-secret")
+	got, err := provider.EnrichUserWithUnixAttributes(
+		context.Background(),
+		info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
+		"client-id",
+		mockServer.URL+"/tenant-id/v2.0",
+		&oauth2.Token{AccessToken: accessTokenString},
+		map[string]any{"msgraph_host": mockServer.URL},
+		nil,
+		info.UnixAttributeConfig{UIDAttribute: "extension_uidNumber"},
+	)
+	require.NoError(t, err)
+	require.Nil(t, got.UID)
+	require.Len(t, got.Groups, 2)
+}
+
+func TestEnrichUserWithUnixAttributesAppOnlyRejectsRequiredUID(t *testing.T) {
+	t.Parallel()
+
+	mockServer, cleanup := startMockMSServer(t, nil)
+	t.Cleanup(cleanup)
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"oid": "user-id"})
+	accessTokenString, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err)
+
+	provider := msentraid.New()
+	provider.SetGraphClientSecret("client-secret")
+	_, err = provider.EnrichUserWithUnixAttributes(
+		context.Background(),
+		info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
+		"client-id",
+		mockServer.URL+"/tenant-id/v2.0",
+		&oauth2.Token{AccessToken: accessTokenString},
+		map[string]any{"msgraph_host": mockServer.URL},
+		nil,
+		info.UnixAttributeConfig{UIDAttribute: "extension_uidNumber", UIDRequired: true},
+	)
+	require.ErrorIs(t, err, info.ErrUnixAttributeRequired)
+	require.ErrorIs(t, err, info.ErrUnixUIDRequired)
+}
+
+func TestEnrichUserWithUnixAttributesClearsNullUID(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/me":
+			_, _ = fmt.Fprint(w, `{"extension_uidNumber":null}`)
+		case "/me/transitiveMemberOf/graph.group":
+			_, _ = fmt.Fprint(w, `{"value":[]}`)
+		default:
+			t.Fatalf("unexpected Graph request: %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"scp": "GroupMember.Read.All User.Read"})
+	accessTokenString, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err)
+	previousUID := uint32(1001)
+	got, err := msentraid.New().EnrichUserWithUnixAttributes(
+		context.Background(),
+		info.User{Name: "alice@example.com", UID: &previousUID},
+		"client-id",
+		"https://issuer.example/tenant/v2.0",
+		&oauth2.Token{AccessToken: accessTokenString},
+		map[string]any{"msgraph_host": server.URL},
+		nil,
+		info.UnixAttributeConfig{UIDAttribute: "extension_uidNumber"},
+	)
+	require.NoError(t, err)
+	require.Nil(t, got.UID)
+}
+
+func TestEnrichUserWithUnixAttributesRejectsUnavailableRequiredUID(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"Missing":   `{}`,
+		"Null":      `{"extension_uidNumber":null}`,
+		"Malformed": `{"extension_uidNumber":"1001"}`,
+	}
+	for name, userResponse := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "/me", r.URL.Path)
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = fmt.Fprint(w, userResponse)
+			}))
+			t.Cleanup(server.Close)
+
+			accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"scp": "GroupMember.Read.All User.Read"})
+			accessTokenString, err := accessToken.SignedString(testutils.MockKey)
+			require.NoError(t, err)
+
+			_, err = msentraid.New().EnrichUserWithUnixAttributes(
+				context.Background(),
+				info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
+				"client-id",
+				"https://issuer.example/tenant/v2.0",
+				&oauth2.Token{AccessToken: accessTokenString},
+				map[string]any{"msgraph_host": server.URL},
+				nil,
+				info.UnixAttributeConfig{UIDAttribute: "extension_uidNumber", UIDRequired: true},
+			)
+			require.ErrorIs(t, err, info.ErrUnixAttributeRequired)
+			require.ErrorIs(t, err, info.ErrUnixUIDRequired)
+		})
+	}
+}
+
+func TestEnrichUserWithUnixAttributesClearsNullGID(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/me/transitiveMemberOf/graph.group", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"value":[{"id":"group-id","displayName":"Engineering","securityEnabled":true,"groupTypes":[],"extension_gidNumber":null}]}`)
+	}))
+	t.Cleanup(server.Close)
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"scp": "GroupMember.Read.All User.Read"})
+	accessTokenString, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err)
+	previousGID := uint32(2001)
+	got, err := msentraid.New().EnrichUserWithUnixAttributes(
+		context.Background(),
+		info.User{
+			Name:   "alice@example.com",
+			Groups: []info.Group{{Name: "engineering", UGID: "group-id", GID: &previousGID}},
+		},
+		"client-id",
+		"https://issuer.example/tenant/v2.0",
+		&oauth2.Token{AccessToken: accessTokenString},
+		map[string]any{"msgraph_host": server.URL},
+		nil,
+		info.UnixAttributeConfig{GIDAttribute: "extension_gidNumber"},
+	)
+	require.NoError(t, err)
+	require.Len(t, got.Groups, 1)
+	require.Nil(t, got.Groups[0].GID)
 }
 
 func TestNormalizeUsername(t *testing.T) {

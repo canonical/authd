@@ -42,6 +42,14 @@ const (
 	entraIDSection = "msentraid"
 	// registerDeviceKey is the key in the config file for the setting that enables automatic device registration.
 	registerDeviceKey = "register_device"
+	// unixUIDAttributeKey is the configured Entra extension attribute containing a user's Unix UID.
+	unixUIDAttributeKey = "unix_uid_attribute"
+	// unixGIDAttributeKey is the configured Entra extension attribute containing a group's Unix GID.
+	unixGIDAttributeKey = "unix_gid_attribute"
+	// unixUIDRequiredKey controls whether a usable UID is required for login.
+	unixUIDRequiredKey = "unix_uid_required"
+	// unixGIDRequiredKey controls whether usable remote group GIDs are required for login.
+	unixGIDRequiredKey = "unix_gid_required"
 
 	// usersSection is the section name in the config file for the users and broker specific configuration.
 	usersSection = "users"
@@ -91,7 +99,11 @@ var (
 			forceAccessCheckWithProviderKeyOld: {},
 		},
 		entraIDSection: {
-			registerDeviceKey: {},
+			registerDeviceKey:   {},
+			unixUIDAttributeKey: {},
+			unixGIDAttributeKey: {},
+			unixUIDRequiredKey:  {},
+			unixGIDRequiredKey:  {},
 		},
 		usersSection: {
 			allowedUsersKey:     {},
@@ -131,6 +143,10 @@ type userConfig struct {
 
 	forceAccessCheckWithProvider bool
 	registerDevice               bool
+	unixUIDAttribute             string
+	unixGIDAttribute             string
+	unixUIDRequired              bool
+	unixGIDRequired              bool
 
 	allowedUsers          map[string]struct{}
 	allUsersAllowed       bool
@@ -343,10 +359,14 @@ func validateConfigFile(path string, iniCfg *ini.File) []error {
 	}
 
 	entraID := iniCfg.Section(entraIDSection)
-	if entraID != nil && entraID.HasKey(registerDeviceKey) {
-		if _, err := entraID.Key(registerDeviceKey).Bool(); err != nil {
-			violations = append(violations,
-				fmt.Errorf("error parsing '%s' in config file %q: %w", registerDeviceKey, path, err))
+	if entraID != nil {
+		for _, key := range []string{registerDeviceKey, unixUIDRequiredKey, unixGIDRequiredKey} {
+			if entraID.HasKey(key) {
+				if _, err := entraID.Key(key).Bool(); err != nil {
+					violations = append(violations,
+						fmt.Errorf("error parsing '%s' in config file %q: %w", key, path, err))
+				}
+			}
 		}
 	}
 
@@ -442,6 +462,30 @@ func parseConfigWithReporter(cfg configFile, dropInCfgs []configFile, p provider
 		}
 	}
 
+	entraID = iniCfg.Section(entraIDSection)
+	uc.unixUIDAttribute, err = resolveUnixAttributeName(entraID.Key(unixUIDAttributeKey).String(), uc.clientID)
+	if err != nil {
+		return userConfig{}, fmt.Errorf("invalid %q in [%s] section: %w", unixUIDAttributeKey, entraIDSection, err)
+	}
+	uc.unixGIDAttribute, err = resolveUnixAttributeName(entraID.Key(unixGIDAttributeKey).String(), uc.clientID)
+	if err != nil {
+		return userConfig{}, fmt.Errorf("invalid %q in [%s] section: %w", unixGIDAttributeKey, entraIDSection, err)
+	}
+	if entraID.HasKey(unixUIDRequiredKey) {
+		// Already validated per-file above; ignore error.
+		uc.unixUIDRequired, _ = entraID.Key(unixUIDRequiredKey).Bool()
+	}
+	if entraID.HasKey(unixGIDRequiredKey) {
+		// Already validated per-file above; ignore error.
+		uc.unixGIDRequired, _ = entraID.Key(unixGIDRequiredKey).Bool()
+	}
+	if uc.unixUIDRequired && uc.unixUIDAttribute == "" {
+		return userConfig{}, fmt.Errorf("%q is required but %q is empty in [%s] section", unixUIDRequiredKey, unixUIDAttributeKey, entraIDSection)
+	}
+	if uc.unixGIDRequired && uc.unixGIDAttribute == "" {
+		return userConfig{}, fmt.Errorf("%q is required but %q is empty in [%s] section", unixGIDRequiredKey, unixGIDAttributeKey, entraIDSection)
+	}
+
 	uc.populateUsersConfig(iniCfg.Section(usersSection))
 
 	if allowLegacyConfig && reportConfigViolations != nil {
@@ -449,6 +493,41 @@ func parseConfigWithReporter(cfg configFile, dropInCfgs []configFile, p provider
 	}
 
 	return uc, nil
+}
+
+// resolveUnixAttributeName turns a short Entra extension attribute name into
+// the full name generated for the configured OIDC application.
+func resolveUnixAttributeName(attributeName, clientID string) (string, error) {
+	attributeName = strings.TrimSpace(attributeName)
+	if attributeName == "" {
+		return "", nil
+	}
+	if !isASCIIIdentifier(attributeName) {
+		return "", fmt.Errorf("attribute name %q must contain only ASCII letters, digits, and underscores", attributeName)
+	}
+	if strings.HasPrefix(attributeName, "extension_") {
+		return attributeName, nil
+	}
+
+	clientID = strings.ReplaceAll(strings.TrimSpace(clientID), "-", "")
+	if clientID == "" {
+		return "", errors.New("a client ID is required to resolve a short attribute name")
+	}
+	resolved := "extension_" + clientID + "_" + attributeName
+	if !isASCIIIdentifier(resolved) {
+		return "", fmt.Errorf("resolved attribute name %q must contain only ASCII letters, digits, and underscores", resolved)
+	}
+	return resolved, nil
+}
+
+func isASCIIIdentifier(value string) bool {
+	for _, char := range []byte(value) {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '_' {
+			continue
+		}
+		return false
+	}
+	return value != ""
 }
 
 func (uc *userConfig) userNameIsAllowed(userName string) bool {

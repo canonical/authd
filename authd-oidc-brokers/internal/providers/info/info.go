@@ -2,13 +2,27 @@
 package info
 
 import (
+	"context"
+	"errors"
+	"fmt"
+
 	"github.com/mitchellh/mapstructure"
+	"golang.org/x/oauth2"
+)
+
+// ErrUnixAttributeRequired marks an enrichment failure caused by a required
+// Unix attribute being unavailable or invalid.
+var (
+	ErrUnixAttributeRequired = errors.New("required Unix attribute is unavailable")
+	ErrUnixUIDRequired       = fmt.Errorf("%w: required Unix UID is unavailable", ErrUnixAttributeRequired)
+	ErrUnixGIDRequired       = fmt.Errorf("%w: required Unix GID is unavailable", ErrUnixAttributeRequired)
 )
 
 // Group represents the group information that is fetched by the broker.
 type Group struct {
-	Name string `json:"name"`
-	UGID string `json:"ugid"`
+	Name string  `json:"name"`
+	UGID string  `json:"ugid"`
+	GID  *uint32 `json:"gid,omitempty" yaml:"gid,omitempty"`
 }
 
 // User represents the user information obtained from the provider.
@@ -22,6 +36,32 @@ type User struct {
 	Shell      string  `json:"shell"`
 	Gecos      string  `json:"gecos"`
 	Groups     []Group `json:"groups"`
+	UID        *uint32 `json:"uid,omitempty" yaml:"uid,omitempty"`
+}
+
+// UnixAttributeConfig controls optional Microsoft Entra Unix ID enrichment.
+// Attribute names are already resolved to their full Graph property names by
+// the broker configuration parser.
+type UnixAttributeConfig struct {
+	UIDAttribute string
+	GIDAttribute string
+	UIDRequired  bool
+	GIDRequired  bool
+}
+
+// UnixAttributeEnricher is an optional provider capability that returns one
+// complete user snapshot with directory-backed Unix IDs.
+type UnixAttributeEnricher interface {
+	EnrichUserWithUnixAttributes(
+		ctx context.Context,
+		user User,
+		clientID string,
+		issuerURL string,
+		token *oauth2.Token,
+		providerMetadata map[string]interface{},
+		deviceRegistrationData []byte,
+		config UnixAttributeConfig,
+	) (User, error)
 }
 
 // NewUser creates a new user with the specified values.
