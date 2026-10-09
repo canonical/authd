@@ -210,7 +210,7 @@ Remove Registered Owner
     ...               the first user logs in, so that subsequent OWNER-based tests start
     ...               from a known-clean state.
     SSH.Execute    rm -f ${BROKER_CFG_DIR}/20-owner-autoregistration.conf
-    SSH.Execute    snap restart ${BROKER_SNAP_NAME}
+    Restart Broker
 
 
 Block Network Access To Identity Provider
@@ -228,7 +228,7 @@ Block Network Access To Identity Provider
 Change Broker Configuration
     [Arguments]    ${config_key}    ${config_value}
     SSH.Execute    sed -i 's|^#*${config_key} =.*|${config_key} = ${config_value}|g' ${BROKER_CFG}
-    SSH.Execute    snap restart ${BROKER_SNAP_NAME}
+    Restart Broker
 
 
 # Pretty much the same as the function above, but since YARF does not have support for
@@ -236,13 +236,36 @@ Change Broker Configuration
 Change allowed_users In Broker Configuration
     [Arguments]    ${config_value}
     SSH.Execute    sed -i 's/^#*allowed_users =.*/allowed_users = ${config_value}/g' ${BROKER_CFG}
-    SSH.Execute    snap restart ${BROKER_SNAP_NAME}
+    Restart Broker
 
 
 Comment Key In Broker Configuration
     [Arguments]    ${config_key}
     SSH.Execute    sed -i 's/^#*${config_key} =.*/#${config_key} = .*/g' ${BROKER_CFG}
-    SSH.Execute    snap restart ${BROKER_SNAP_NAME}
+    Restart Broker
+
+
+Restart Broker
+    [Documentation]    Restart the broker and capture its state if the SSH command fails.
+    ${status}    ${error}=    Run Keyword And Ignore Error
+    ...    SSH.Execute    snap restart ${BROKER_SNAP_NAME}
+    IF    '${status}' == 'FAIL'
+        Run Broker Restart Diagnostic    snap changes    snap changes
+        Run Broker Restart Diagnostic    broker services    snap services ${BROKER_SNAP_NAME}
+        Run Broker Restart Diagnostic    broker systemd unit
+        ...    systemctl status "snap.${BROKER_SNAP_NAME}.${BROKER_SNAP_NAME}.service" --no-pager --full || true
+        Run Broker Restart Diagnostic    pending systemd jobs    systemctl list-jobs --no-pager
+        Run Broker Restart Diagnostic    snap processes
+        ...    ps -eo pid,ppid,state,etime,comm,args | grep -E '[s]nap (restart|start|stop)|[s]napd' || true
+        Fail    ${error}
+    END
+
+
+Run Broker Restart Diagnostic
+    [Arguments]    ${name}    ${command}
+    ${status}    ${result}=    Run Keyword And Ignore Error
+    ...    SSH.Execute With Status    ${command}    timeout=10
+    Log    Broker restart diagnostic (${name}, ${status}): ${result}    WARN
 
 
 Log In With Remote User Through SSH: QR Code
