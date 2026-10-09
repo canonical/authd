@@ -143,6 +143,21 @@ func (m nativeModel) Init() tea.Cmd {
 	}
 }
 
+func (nativeModel) authenticationModesRequested(
+	currentStage proto.Stage, getModesCmd, changeStageCmd tea.Cmd,
+) tea.Cmd {
+	if currentStage == proto.Stage_challenge {
+		// Move through auth mode selection before fetching modes so auto-selection
+		// starts the replacement challenge through the normal stage-change path.
+		return tea.Sequence(changeStageCmd, getModesCmd)
+	}
+	return tea.Sequence(getModesCmd, changeStageCmd)
+}
+
+func (nativeModel) combineUpdateCommands(_ tea.Msg, clientCmd, modelCmd tea.Cmd) tea.Cmd {
+	return tea.Batch(clientCmd, modelCmd)
+}
+
 func (m nativeModel) checkStage(expected proto.Stage) bool {
 	if m.currentStage != expected {
 		log.Debugf(context.Background(),

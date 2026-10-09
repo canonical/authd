@@ -41,6 +41,10 @@ type gdmModel struct {
 	// in-flight poll). It is consumed (cleared) by the first matching echo, so
 	// a later genuine re-selection of the same mode is still honored.
 	pendingEchoAuthModeID string
+
+	// pendingAuthenticationModesSessionID identifies the session whose modes
+	// should be fetched after GDM acknowledges the stage transition.
+	pendingAuthenticationModesSessionID string
 }
 
 type gdmPollResponse struct {
@@ -50,6 +54,10 @@ type gdmPollResponse struct {
 type gdmPollDone struct{}
 
 type gdmStopConversations struct{}
+
+type gdmStageChangeCompleted struct {
+	stage proto.Stage
+}
 
 // Init initializes the main model orchestrator.
 func (m gdmModel) Init() tea.Cmd {
@@ -243,8 +251,29 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 		// echo pending from the previous selection is no longer relevant.
 		if msg.Stage == proto.Stage_authModeSelection {
 			m.pendingEchoAuthModeID = ""
+		} else {
+			m.pendingAuthenticationModesSessionID = ""
 		}
 		return m, m.changeStage(msg.Stage)
+
+	case ChangeStage:
+		if msg.Stage != proto.Stage_authModeSelection {
+			m.pendingAuthenticationModesSessionID = ""
+		}
+
+	case SessionStarted, SessionEnded:
+		m.pendingEchoAuthModeID = ""
+		m.pendingAuthenticationModesSessionID = ""
+
+	case gdmStageChangeCompleted:
+		if msg.stage != proto.Stage_authModeSelection ||
+			m.pendingAuthenticationModesSessionID == "" {
+			return m, nil
+		}
+
+		sessionID := m.pendingAuthenticationModesSessionID
+		m.pendingAuthenticationModesSessionID = ""
+		return m, sendEvent(authenticationModesFetchRequested{sessionID: sessionID})
 
 	case userSelected:
 		return m, m.emitEvent(&gdm.EventData_UserSelected{
@@ -346,6 +375,34 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 	return m, nil
 }
 
+func (m gdmModel) authenticationModesRequested(
+	currentStage proto.Stage, sessionID string, getModesCmd, changeStageCmd tea.Cmd,
+) (gdmModel, tea.Cmd) {
+	m.pendingAuthenticationModesSessionID = ""
+	if currentStage == proto.Stage_challenge {
+		m.pendingAuthenticationModesSessionID = sessionID
+		return m, changeStageCmd
+	}
+	return m, tea.Sequence(getModesCmd, changeStageCmd)
+}
+
+func (m gdmModel) combineUpdateCommands(msg tea.Msg, clientCmd, modelCmd tea.Cmd) tea.Cmd {
+	switch msg := msg.(type) {
+	case StageChanged:
+		if msg.Stage == proto.Stage_challenge {
+			// GDM must enter the challenge stage before it receives the
+			// startAuthentication event.
+			return tea.Sequence(clientCmd, modelCmd)
+		}
+	case isAuthenticatedResultReceived:
+		if msg.access == auth.Next && clientCmd != nil {
+			// GDM can reset the current challenge when it receives auth.Next.
+			return tea.Sequence(clientCmd, modelCmd)
+		}
+	}
+	return tea.Batch(clientCmd, modelCmd)
+}
+
 func (m gdmModel) changeStage(s proto.Stage) tea.Cmd {
 	return func() tea.Msg {
 		_, err := gdm.SendRequest(m.pamMTx, &gdm.RequestData_ChangeStage{
@@ -358,7 +415,7 @@ func (m gdmModel) changeStage(s proto.Stage) tea.Cmd {
 			}
 		}
 		log.Debugf(context.TODO(), "Gdm stage change to %v sent", s)
-		return nil
+		return gdmStageChangeCompleted{stage: s}
 	}
 }
 
