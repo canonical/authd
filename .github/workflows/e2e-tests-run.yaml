@@ -186,6 +186,11 @@ jobs:
           DEB=$(realpath "${{ env.ARTIFACTS_DIR }}/$DEB")
           echo "deb=${DEB}" >> $GITHUB_OUTPUT
 
+      - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
+
+      - name: Install APT dependencies for provisioning
+        run: ${{ env.E2E_TESTS_DIR }}/vm/install-provision-deps.sh
+
       - name: Download the VM image
         id: download-vm-image
         env:
@@ -200,7 +205,7 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-          oras pull "${OCI_REPO}:${OCI_TAG}" -o "$(dirname "$IMAGE_PATH")"
+          retry --times 3 --delay 1 -- oras pull "${OCI_REPO}:${OCI_TAG}" -o "$(dirname "$IMAGE_PATH")"
           if [ ! -f "$IMAGE_PATH" ]; then
             echo "Error: Expected image not found at $IMAGE_PATH after pull"
             echo "Downloaded files:"
@@ -208,11 +213,6 @@ jobs:
             exit 1
           fi
           echo "image-path=${IMAGE_PATH}" >> $GITHUB_OUTPUT
-
-      - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
-
-      - name: Install APT dependencies for provisioning
-        run: ${{ env.E2E_TESTS_DIR }}/vm/install-provision-deps.sh
 
       - name: Set up SSH keys for the VM provisioning
         id: set-ssh-keys
