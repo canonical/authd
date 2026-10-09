@@ -3,8 +3,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - "*"
     paths:
       - ".github/workflows/brokers-qa.yaml"
       - "authd-oidc-brokers/**"
