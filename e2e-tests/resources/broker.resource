@@ -377,7 +377,11 @@ Count Entra TOTP Rejections
 
 Continue Log In With Remote User Through GDM: Define Local Password
     [Arguments]    ${local_password}
-    Match Text    Create a local password    120
+    ${prompt_matches}    ${prompt_image}=    Match Text    Create a local password    120
+    # Check that the QR dialog is not visible anymore (see #1973)
+    ${device_url_matches} =    Find Text    ${DEVICE_URL}    image=${prompt_image}
+    Should Be Empty    ${device_url_matches}
+    ...    Local password entry is shown overlayed over QR code dialog
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
