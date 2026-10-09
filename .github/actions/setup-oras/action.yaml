@@ -4,7 +4,7 @@ inputs:
   version:
     description: 'Version of oras to install'
     required: false
-    default: '1.3.0'
+    default: '1.3.4'
   token:
     description: 'GitHub token used for authenticated downloads (higher rate limits)'
     required: true
