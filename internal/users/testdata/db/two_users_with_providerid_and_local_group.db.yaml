@@ -7,6 +7,7 @@ users:
       shell: /bin/bash
       broker_id: broker-id
       provider_id: providerid-user1
+      full_username: user1@example.com
     - name: newuser1@example.com
       uid: 2222
       gid: 22222
@@ -15,6 +16,7 @@ users:
       shell: /bin/bash
       broker_id: broker-id
       provider_id: providerid-newuser1
+      full_username: newuser1@example.com
 groups:
     - name: group1@example.com
       gid: 11111

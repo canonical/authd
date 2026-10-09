@@ -87,6 +87,13 @@ is_valid_test_user (const char *name)
   if (strcasecmp (test_user, name) == 0)
     return true;
 
+  /* When authd shortens usernames, the same account is looked up both fully
+   * qualified (as typed by the SSH client) and shortened (as stored by authd). */
+  const char *domain = strchr (test_user, '@');
+  if (domain != NULL && (size_t) (domain - test_user) == strlen (name) &&
+      strncasecmp (test_user, name, domain - test_user) == 0)
+    return true;
+
   if (strcasecmp (test_user, AUTHD_SPECIAL_USER_ACCEPT_ALL) != 0)
     return false;
 
@@ -273,6 +280,22 @@ getpwnam (const char *name)
                   getpid (), name, passwd_entity->pw_name);
         }
     }
+
+#ifdef AUTHD_TESTS_SSH_USE_AUTHD_NSS
+  /* When authd stores the user under a shortened name, the NSS entry has a
+   * different name than the one being looked up, so it was not usable as a
+   * source entity above. The looked up name must be preserved for sshd, but the
+   * home directory authd assigned is still the authoritative one: without this,
+   * helpers started with the fully qualified name (e.g. mkhomedir_helper) would
+   * operate on a home directory that authd never assigned.
+   */
+  if (nss_entity)
+    {
+      passwd_entity->pw_dir = nss_entity->pw_dir;
+      passwd_entity->pw_gecos = nss_entity->pw_gecos;
+      passwd_entity->pw_shell = nss_entity->pw_shell;
+    }
+#endif
 
   /* authd uses lower-case user names */
   assert (is_lower_case (passwd_entity->pw_name));
