@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/canonical/authd/internal/brokers/auth"
 	"github.com/canonical/authd/internal/brokers/layouts"
 	"github.com/canonical/authd/internal/brokers/layouts/entries"
 	"github.com/canonical/authd/internal/proto/authd"
@@ -72,6 +73,128 @@ func TestNativeModelFormatInfo(t *testing.T) {
 
 			m := nativeModel{serviceName: tc.serviceName}
 			require.Equal(t, tc.want, m.formatInfo(tc.title, tc.message))
+		})
+	}
+}
+
+func TestNativeModelAuthenticationRetry(t *testing.T) {
+	t.Parallel()
+
+	const retryMessage = "Incorrect or expired code. Please try again."
+
+	tests := map[string]struct {
+		serviceName        string
+		wantPolkitFeedback bool
+	}{
+		"Polkit_includes_retry_message_with_the_next_prompt": {
+			serviceName:        polkitServiceName,
+			wantPolkitFeedback: true,
+		},
+		"Other_services_keep_the_PAM_error_message": {
+			serviceName: "login",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			handler := &recordingConvHandler{reply: "123456"}
+			label := "Enter your MFA code:"
+			entry := entries.CharsPassword
+			m := nativeModel{
+				pamMTx:      pam_test.NewModuleTransactionDummy(handler),
+				serviceName: tc.serviceName,
+				interactive: true,
+				uiLayout: &authd.UILayout{
+					Type:  layouts.Form,
+					Label: &label,
+					Entry: &entry,
+				},
+			}
+
+			m, cmd := m.Update(isAuthenticatedResultReceived{
+				access: auth.Retry,
+				msg:    `{"message":"Incorrect or expired code. Please try again."}`,
+			})
+			require.Nil(t, cmd)
+
+			if !tc.wantPolkitFeedback {
+				require.Empty(t, m.pendingRetryMessage)
+				require.Equal(t, []recordedConv{{pam.ErrorMsg, retryMessage}}, handler.calls)
+				return
+			}
+
+			require.Empty(t, handler.calls, "polkit feedback is sent with the next challenge")
+			require.Equal(t, retryMessage, m.pendingRetryMessage)
+
+			cmd = m.startChallenge()
+			require.NotNil(t, cmd)
+			_, ok := cmd().(isAuthenticatedRequested)
+			require.True(t, ok)
+			require.Equal(t, []recordedConv{
+				{pam.TextInfo, retryMessage + "\n\nEnter your MFA code"},
+				{pam.PromptEchoOff, " \n> "},
+			}, handler.calls)
+		})
+	}
+}
+
+func TestNativeModelNewPasswordRetry(t *testing.T) {
+	t.Parallel()
+
+	const retryMessage = "Password was rejected. Please choose another one."
+
+	tests := map[string]struct {
+		serviceName string
+		wantCalls   []recordedConv
+	}{
+		"Polkit_includes_retry_message_with_the_new_password_prompt": {
+			serviceName: polkitServiceName,
+			wantCalls: []recordedConv{
+				{pam.TextInfo, retryMessage},
+				{pam.PromptEchoOff, "Enter your new password:\n> "},
+			},
+		},
+		"Other_services_keep_the_PAM_error_message": {
+			serviceName: "login",
+			wantCalls: []recordedConv{
+				{pam.ErrorMsg, retryMessage},
+				{pam.TextInfo, "== Password Update =="},
+				{pam.PromptEchoOff, "Enter your new password:\n> "},
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			handler := &recordingConvHandler{reply: "new-secret"}
+			label := "Enter your new password"
+			entry := entries.CharsPassword
+			m := nativeModel{
+				pamMTx:      pam_test.NewModuleTransactionDummy(handler),
+				serviceName: tc.serviceName,
+				interactive: true,
+				uiLayout: &authd.UILayout{
+					Type:  layouts.NewPassword,
+					Label: &label,
+					Entry: &entry,
+				},
+			}
+
+			m, cmd := m.Update(isAuthenticatedResultReceived{
+				access: auth.Retry,
+				msg:    `{"message":"Password was rejected. Please choose another one."}`,
+			})
+			require.Nil(t, cmd)
+
+			cmd = m.startChallenge()
+			require.NotNil(t, cmd)
+			_, ok := cmd().(newPasswordCheck)
+			require.True(t, ok)
+			require.Equal(t, tc.wantCalls, handler.calls)
 		})
 	}
 }
