@@ -1,0 +1,71 @@
+name: Update oras
+
+on:
+  schedule:
+    # Check for new oras releases every Thursday at 09:00 UTC.
+    - cron: '0 9 * * 4'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-oras
+
+jobs:
+  update-oras:
+    runs-on: ubuntu-26.04 # ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Update to the latest oras release
+        id: update
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTION_FILE: .github/actions/setup-oras/action.yaml
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release=$(gh api repos/oras-project/oras/releases/latest)
+          version=$(jq --raw-output '.tag_name | ltrimstr("v")' <<<"${release}")
+
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Latest oras release has an unexpected version tag: ${version}" >&2
+            exit 1
+          fi
+
+          mapfile -t current_versions < <(
+            sed -nE "s/^[[:space:]]*default: '([^']+)'$/\\1/p" "${ACTION_FILE}"
+          )
+          if [[ "${#current_versions[@]}" -ne 1 ]]; then
+            echo "Expected one quoted default version in ${ACTION_FILE}" >&2
+            exit 1
+          fi
+          current_version="${current_versions[0]}"
+
+          if [[ "${version}" == "${current_version}" ]]; then
+            echo "No oras update is needed (latest version: v${version})"
+            exit 0
+          fi
+
+          sed -i -E \
+            "s/^([[:space:]]*default: ')[^']+(')$/\\1${version}\\2/" \
+            "${ACTION_FILE}"
+
+          echo "modified=true" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Create pull request
+        if: steps.update.outputs.modified == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          branch: auto-update-oras
+          delete-branch: true
+          sign-commits: true
+          commit-message: "deps(ci): update oras to v${{ steps.update.outputs.version }}"
+          title: "deps(ci): update oras to v${{ steps.update.outputs.version }}"
+          body: |-
+            Updates the oras CLI version used by `.github/actions/setup-oras`
+            to the latest stable release.
