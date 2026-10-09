@@ -1969,7 +1969,8 @@ func TestIsAuthenticated(t *testing.T) {
 			var readOnlyDataCleanup, readOnlyTokenCleanup func()
 			if tc.readOnlyDataDir {
 				if tc.token != nil {
-					readOnlyTokenCleanup = testutils.MakeReadOnly(t, b.TokenPathForSession(sessionID))
+					// The token is replaced by a rename, so its directory must be read-only.
+					readOnlyTokenCleanup = testutils.MakeReadOnly(t, filepath.Dir(b.TokenPathForSession(sessionID)))
 					t.Cleanup(readOnlyTokenCleanup)
 				}
 				readOnlyDataCleanup = testutils.MakeReadOnly(t, b.DataDir())

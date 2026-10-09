@@ -58,11 +58,40 @@ func CacheAuthInfo(path string, token *AuthCachedInfo) (err error) {
 	}
 
 	// Create issuer specific cache directory if it doesn't exist.
-	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	dir := filepath.Dir(path)
+	if err = os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("could not create token directory: %v", err)
 	}
 
-	if err = os.WriteFile(path, jsonData, 0600); err != nil {
+	// Rename over the target so a failed write keeps the old file and its mode.
+	mode := os.FileMode(0600)
+	if fileInfo, statErr := os.Stat(path); statErr == nil {
+		mode = fileInfo.Mode().Perm()
+	}
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("could not save token: %v", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmp.Name())
+		}
+	}()
+
+	if _, err = tmp.Write(jsonData); err != nil {
+		return fmt.Errorf("could not save token: %v", err)
+	}
+	if err = tmp.Sync(); err != nil {
+		return fmt.Errorf("could not save token: %v", err)
+	}
+	if err = tmp.Chmod(mode); err != nil {
+		return fmt.Errorf("could not save token: %v", err)
+	}
+	if err = tmp.Close(); err != nil {
+		return fmt.Errorf("could not save token: %v", err)
+	}
+	if err = os.Rename(tmp.Name(), path); err != nil {
 		return fmt.Errorf("could not save token: %v", err)
 	}
 

@@ -83,6 +83,45 @@ func TestCacheAuthInfo(t *testing.T) {
 	}
 }
 
+func TestCacheAuthInfoKeepsPreviousFileWhenWriteFails(t *testing.T) {
+	t.Parallel()
+
+	if os.Geteuid() == 0 {
+		t.Skip("read-only directory permissions do not block root")
+	}
+
+	dir := filepath.Join(t.TempDir(), "parent")
+	tokenPath := filepath.Join(dir, "token.json")
+	require.NoError(t, os.MkdirAll(dir, 0700), "Setup: creating the parent directory should not fail")
+	require.NoError(t, os.WriteFile(tokenPath, []byte("previous content"), 0600), "Setup: writing the previous token should not fail")
+	require.NoError(t, os.Chmod(dir, 0500), "Setup: making the parent directory read-only should not fail") //nolint:gosec // Intentional read-only permission for testing
+	t.Cleanup(func() { _ = os.Chmod(dir, 0700) })                                                           //nolint:gosec // Restore full permissions after test
+
+	err := token.CacheAuthInfo(tokenPath, testToken)
+	require.Error(t, err, "CacheAuthInfo should return an error when the parent directory is read-only")
+
+	got, err := os.ReadFile(tokenPath)
+	require.NoError(t, err, "the previous token file should still exist")
+	require.Equal(t, "previous content", string(got), "the previous token file should not change")
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err, "the parent directory should still be readable")
+	require.Len(t, entries, 1, "no temporary file should be left behind")
+}
+
+func TestCacheAuthInfoKeepsExistingFileMode(t *testing.T) {
+	t.Parallel()
+
+	tokenPath := filepath.Join(t.TempDir(), "token.json")
+	require.NoError(t, os.WriteFile(tokenPath, []byte("previous content"), 0600), "Setup: writing the previous token should not fail")
+	require.NoError(t, os.Chmod(tokenPath, 0640), "Setup: changing the mode should not fail") //nolint:gosec // The mode must differ from the default to test that it is kept
+
+	require.NoError(t, token.CacheAuthInfo(tokenPath, testToken), "CacheAuthInfo should not return an error")
+
+	fileInfo, err := os.Stat(tokenPath)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0640), fileInfo.Mode().Perm(), "CacheAuthInfo should keep the mode of the existing file")
+}
+
 func TestLoadAuthInfo(t *testing.T) {
 	t.Parallel()
 
