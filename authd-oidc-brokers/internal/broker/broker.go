@@ -3479,6 +3479,10 @@ func (b *Broker) loadCachedAuthInfo(session *session, path string) (*token.AuthC
 		return authInfo, nil
 	}
 	if err := token.CacheAuthInfo(path, authInfo); err != nil {
+		// A required ID must not keep the old attribute's value, so deny instead of continuing.
+		if b.cfg.forceAccessCheckWithProvider && (b.cfg.unixUIDRequired || b.cfg.unixGIDRequired) {
+			return nil, fmt.Errorf("failed to store cleaned Unix ID data: %w", err)
+		}
 		// The IDs are already dropped in memory, so this login does not use them.
 		log.Errorf(context.Background(), "Failed to store cleaned Unix ID data: %v", err)
 	}

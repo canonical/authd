@@ -2,6 +2,7 @@ package broker
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -272,6 +273,66 @@ func TestLoadCachedAuthInfoRewritesStaleUnixIDs(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, stored.UserInfo.UID)
 	require.Equal(t, uint32(2001), *stored.UserInfo.Groups[0].GID)
+}
+
+func TestLoadCachedAuthInfoStaleIDRewriteFailure(t *testing.T) {
+	t.Parallel()
+
+	if os.Geteuid() == 0 {
+		t.Skip("read-only directory permissions do not block root")
+	}
+
+	tests := map[string]struct {
+		forceAccessCheck bool
+		uidRequired      bool
+		gidRequired      bool
+
+		wantLoginDenied bool
+	}{
+		"Deny_login_when_forced_check_requires_UID":     {forceAccessCheck: true, uidRequired: true, wantLoginDenied: true},
+		"Deny_login_when_forced_check_requires_GID":     {forceAccessCheck: true, gidRequired: true, wantLoginDenied: true},
+		"Allow_login_when_forced_check_requires_no_ID":  {forceAccessCheck: true},
+		"Allow_login_when_no_forced_check_requires_UID": {uidRequired: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			uid := uint32(1001)
+			gid := uint32(2001)
+			broker := &Broker{cfg: Config{userConfig: userConfig{
+				unixUIDAttribute:             "extension_newUidNumber",
+				unixGIDAttribute:             "extension_gidNumber",
+				forceAccessCheckWithProvider: tc.forceAccessCheck,
+				unixUIDRequired:              tc.uidRequired,
+				unixGIDRequired:              tc.gidRequired,
+			}}}
+			dir := filepath.Join(t.TempDir(), "provider-id")
+			tokenPath := filepath.Join(dir, "token.json")
+			require.NoError(t, token.CacheAuthInfo(tokenPath, &token.AuthCachedInfo{
+				Token:              &oauth2.Token{AccessToken: "access-token"},
+				UnixAttributeNames: &token.UnixAttributeNames{UID: "extension_uidNumber", GID: "extension_gidNumber"},
+				UserInfo: info.User{
+					Name:   "alice",
+					UID:    &uid,
+					Groups: []info.Group{{Name: "engineering", UGID: "group-id", GID: &gid}},
+				},
+			}))
+			require.NoError(t, os.Chmod(dir, 0500), "Setup: making the cache directory read-only should not fail") //nolint:gosec // Intentional read-only permission for testing
+			t.Cleanup(func() { _ = os.Chmod(dir, 0700) })                                                          //nolint:gosec // Restore full permissions after test
+
+			authInfo, err := broker.loadCachedAuthInfo(&session{tokenPath: tokenPath}, tokenPath)
+			if tc.wantLoginDenied {
+				require.Error(t, err, "loading should fail when the stale ID cannot be removed")
+				stored, loadErr := token.LoadAuthInfo(tokenPath)
+				require.NoError(t, loadErr)
+				require.NotNil(t, stored.UserInfo.UID, "the stale UID should stay in the cache")
+				return
+			}
+			require.NoError(t, err)
+			require.Nil(t, authInfo.UserInfo.UID, "the stale UID should be dropped in memory")
+		})
+	}
 }
 
 func TestCacheCredentialsMarksNewEnrichmentCheckpointIncomplete(t *testing.T) {
