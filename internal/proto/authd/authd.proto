@@ -118,6 +118,8 @@ message IARequest {
 message IAResponse {
   string access = 1;
   string msg = 2;
+  // Canonical Unix username PAM should use for this authenticated session.
+  string username = 3;
 }
 
 

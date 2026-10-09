@@ -44,6 +44,11 @@ func runSetHomeDir(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	name, err = resolveName(context.Background(), svc, name)
+	if err != nil {
+		return err
+	}
+
 	resp, err := svc.SetHomeDir(context.Background(), &authd.SetHomeDirRequest{
 		Name: name,
 		Home: home,

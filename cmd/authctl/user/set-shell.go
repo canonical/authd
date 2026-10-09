@@ -27,6 +27,11 @@ func runSetShell(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	name, err = resolveName(context.Background(), svc, name)
+	if err != nil {
+		return err
+	}
+
 	resp, err := svc.SetShell(context.Background(), &authd.SetShellRequest{
 		Name:  name,
 		Shell: shell,

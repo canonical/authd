@@ -155,6 +155,28 @@ func (s *session) verifyProviderID(providerID string) error {
 	return nil
 }
 
+func (s *session) hasBoundProviderID(providerID string) bool {
+	return providerID != "" && (providerID == s.expectedProviderID || providerID == s.providerID)
+}
+
+// verifyAuthenticatedIdentity permits a provider username change only when
+// the provider ID was already bound to this session.
+func (b *Broker) verifyAuthenticatedIdentity(session *session, userInfo info.User) error {
+	if err := session.verifyProviderID(userInfo.ProviderID); err != nil {
+		return err
+	}
+	if session.hasBoundProviderID(userInfo.ProviderID) {
+		return nil
+	}
+	if b.provider.NormalizeUsername(session.username) == b.provider.NormalizeUsername(userInfo.Name) {
+		return nil
+	}
+
+	return &providerErrors.ForDisplayError{
+		Message: fmt.Sprintf("Authentication failure: requested username %q does not match the authenticated username %q", session.username, userInfo.Name),
+	}
+}
+
 func (s *session) loadAuthInfo(path string) (*token.AuthCachedInfo, error) {
 	authInfo, err := token.LoadAuthInfo(path)
 	if err != nil {
@@ -168,8 +190,7 @@ func (s *session) loadAuthInfo(path string) (*token.AuthCachedInfo, error) {
 
 // verifyAndExtractEntraUserInfo verifies the Entra auth access token's RS256
 // signature against the tenant JWKS and extracts user info from that verified
-// access token. It does NOT cross-check the username against the session; first
-// login does that via userInfoFromTokenExtras.
+// access token. authd resolves the returned identity by its stable provider ID.
 func (b *Broker) verifyAndExtractEntraUserInfo(ctx context.Context, token *oauth2.Token) (info.User, error) {
 	ep, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](b.provider)
 	if !ok {
@@ -191,21 +212,19 @@ func (b *Broker) verifyAndExtractEntraUserInfo(ctx context.Context, token *oauth
 	return userInfo, nil
 }
 
-// userInfoFromTokenExtras is verifyAndExtractEntraUserInfo plus a cross-check
-// that the returned access-token identity matches the username the user
-// authenticated as. Used on first login (finishEntraAuth), where the username
-// has not yet been bound to a verified identity.
+// userInfoFromTokenExtras validates the authenticated username returned by the
+// Entra access token on first login (finishEntraAuth).
 func (b *Broker) userInfoFromTokenExtras(ctx context.Context, session *session, token *oauth2.Token) (info.User, error) {
 	userInfo, err := b.verifyAndExtractEntraUserInfo(ctx, token)
 	if err != nil {
 		return info.User{}, err
 	}
 
-	if err := b.provider.VerifyUsername(session.username, userInfo.Name); err != nil {
-		return info.User{}, fmt.Errorf("username verification failed: %w", err)
-	}
-	if err := session.verifyProviderID(userInfo.ProviderID); err != nil {
+	if err := b.verifyAuthenticatedIdentity(session, userInfo); err != nil {
 		return info.User{}, err
+	}
+	if err := b.provider.ValidateUsername(userInfo.Name); err != nil {
+		return info.User{}, fmt.Errorf("username validation failed: %w", err)
 	}
 
 	return userInfo, nil
@@ -2482,8 +2501,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 
 	// The MFA token is issued for the Entra native API audience, so standard OIDC
 	// ID token verification (getUserInfo) would fail. Extract user info from the
-	// access token after verifying it, then cross-check it against the session
-	// username.
+	// verified access token and validate the username against provider policy.
 	userInfo, err := b.userInfoFromTokenExtras(ctx, session, t)
 	if err != nil {
 		log.Errorf(context.Background(), "could not get user info: %s", err)
@@ -2735,9 +2753,9 @@ func bypassesPasswordMethod(method string) bool {
 }
 
 func (b *Broker) finishAuth(session *session, authInfo *token.AuthCachedInfo) (string, isAuthenticatedDataResponse) {
-	if err := session.verifyProviderID(authInfo.UserInfo.ProviderID); err != nil {
+	if err := b.verifyAuthenticatedIdentity(session, authInfo.UserInfo); err != nil {
 		log.Error(context.Background(), err.Error())
-		return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+		return AuthDenied, errorMessageForDisplay(err, accountIdentityChangedMessage)
 	}
 	if b.cfg.shouldRegisterOwner() {
 		if err := b.cfg.registerOwner(b.cfg.ConfigFile, authInfo.UserInfo.Name); err != nil {
@@ -2818,9 +2836,9 @@ func (b *Broker) newPassword(session *session, secret string) (string, isAuthent
 		log.Error(context.Background(), "auth info is not set")
 		return AuthDenied, unexpectedErrMsg("auth info is not set")
 	}
-	if err := session.verifyProviderID(authInfo.UserInfo.ProviderID); err != nil {
+	if err := b.verifyAuthenticatedIdentity(session, authInfo.UserInfo); err != nil {
 		log.Error(context.Background(), err.Error())
-		return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
+		return AuthDenied, errorMessageForDisplay(err, accountIdentityChangedMessage)
 	}
 	if authInfo.UserInfo.ProviderID != "" && session.providerID == "" {
 		if err := b.ensureProviderIDCacheDir(session, authInfo.UserInfo.ProviderID); err != nil {
@@ -3098,16 +3116,20 @@ func (b *Broker) refreshEntraToken(ctx context.Context, session *session, oldTok
 		cacheRotatedToken("user info extraction failure")
 		return oldToken, fmt.Errorf("could not refresh user info from the refreshed Entra token: %w", err)
 	}
-	// getUserInfo (the device-auth refresh path) re-checks this on every refresh,
-	// not just on first login; do the same here so a refreshed Entra token can't
-	// silently swap the cached identity.
-	if err := session.verifyProviderID(userInfo.ProviderID); err != nil {
+	// Check the refreshed identity before replacing cached user info. A username
+	// change is accepted only if its provider ID was already bound to this session.
+	if err := b.verifyAuthenticatedIdentity(session, userInfo); err != nil {
+		if errors.Is(err, errProviderIDMismatch) {
+			return oldToken, err
+		}
+		cacheRotatedToken("username verification failure")
 		return oldToken, err
 	}
-	// Prefer a stable-ID conflict so a rotated token for another account is not cached.
-	if err := b.provider.VerifyUsername(session.username, userInfo.Name); err != nil {
-		cacheRotatedToken("username verification failure")
-		return oldToken, fmt.Errorf("username verification failed: %w", err)
+	// Keep applying provider-specific username validation when refreshed claims
+	// replace cached user info.
+	if err := b.provider.ValidateUsername(userInfo.Name); err != nil {
+		cacheRotatedToken("username validation failure")
+		return oldToken, fmt.Errorf("username validation failed: %w", err)
 	}
 	if !filepath.IsAbs(userInfo.Home) {
 		userInfo.Home = filepath.Join(b.cfg.homeBaseDir, userInfo.Home)
@@ -3248,11 +3270,11 @@ func (b *Broker) getUserInfo(ctx context.Context, session *session, token *oauth
 
 	// Check stable identity first so refreshToken can avoid persisting a rotated
 	// token from another account.
-	if err = session.verifyProviderID(userInfo.ProviderID); err != nil {
+	if err = b.verifyAuthenticatedIdentity(session, userInfo); err != nil {
 		return info.User{}, err
 	}
-	if err = b.provider.VerifyUsername(session.username, userInfo.Name); err != nil {
-		return info.User{}, fmt.Errorf("username verification failed: %w", err)
+	if err = b.provider.ValidateUsername(userInfo.Name); err != nil {
+		return info.User{}, fmt.Errorf("username validation failed: %w", err)
 	}
 
 	// This means that home was not provided by the claims, so we need to set it to the broker default.

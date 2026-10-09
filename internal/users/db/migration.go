@@ -136,6 +136,52 @@ var schemaMigrations = []schemaMigration{
 			return nil
 		},
 	},
+	{
+		description: "Add provider username to users table",
+		migrate: func(m *Manager) (err error) {
+			tx, err := m.db.Begin()
+			if err != nil {
+				return fmt.Errorf("failed to start transaction: %w", err)
+			}
+
+			defer func() {
+				err = commitOrRollBackTransaction(err, tx)
+			}()
+
+			var exists bool
+			err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM pragma_table_info('users') WHERE name = 'provider_username')").Scan(&exists)
+			if err != nil {
+				return fmt.Errorf("failed to check if 'provider_username' column exists: %w", err)
+			}
+			if !exists {
+				if _, err = tx.Exec(`ALTER TABLE users ADD COLUMN provider_username TEXT NOT NULL DEFAULT ''`); err != nil {
+					return fmt.Errorf("failed to add 'provider_username' column to users table: %w", err)
+				}
+			}
+
+			if _, err = tx.Exec(`UPDATE users SET provider_username = name WHERE provider_username IS NULL OR provider_username = ''`); err != nil {
+				return fmt.Errorf("failed to backfill provider usernames: %w", err)
+			}
+
+			var hasDuplicates bool
+			err = tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM users GROUP BY provider_username HAVING COUNT(*) > 1)`).Scan(&hasDuplicates)
+			if err != nil {
+				return fmt.Errorf("failed to check provider username uniqueness: %w", err)
+			}
+			if hasDuplicates {
+				return errors.New("cannot enforce unique provider usernames: existing users have duplicate provider_username values; assign distinct values and retry the migration")
+			}
+
+			if _, err = tx.Exec(`DROP INDEX IF EXISTS "idx_user_provider_username"`); err != nil {
+				return fmt.Errorf("failed to replace provider username index: %w", err)
+			}
+			if _, err = tx.Exec(`CREATE UNIQUE INDEX "idx_user_provider_username" ON users ("provider_username")`); err != nil {
+				return fmt.Errorf("failed to create unique provider username index: %w", err)
+			}
+
+			return nil
+		},
+	},
 }
 
 func (m *Manager) maybeApplyMigrations() error {

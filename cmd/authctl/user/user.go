@@ -2,6 +2,9 @@
 package user
 
 import (
+	"context"
+
+	"github.com/canonical/authd/internal/proto/authd"
 	"github.com/spf13/cobra"
 )
 
@@ -20,4 +23,15 @@ func init() {
 	UserCmd.AddCommand(setShellCmd)
 	UserCmd.AddCommand(setHomeDirCmd)
 	UserCmd.AddCommand(deleteCmd)
+}
+
+// resolveName resolves a username, which can be either the Unix username or
+// provider username, to the canonical Unix username.
+func resolveName(ctx context.Context, service authd.UserServiceClient, username string) (string, error) {
+	user, err := service.GetUserByName(ctx, &authd.GetUserByNameRequest{Name: username})
+	if err != nil {
+		return "", err
+	}
+
+	return user.GetName(), nil
 }

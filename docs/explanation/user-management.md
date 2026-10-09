@@ -50,6 +50,9 @@ authd's NSS module gets information from its local database of the identity
 provider's users and groups. This is discussed in the [overview of authd's
 architecture](explanation::authd-architecture).
 
+Both the Unix username and the username in the provider are resolved by the NSS
+module, allowing users to log in with either name.
+
 ## authd provides the authctl tool for managing users
 
 For authd-managed users and groups, you can use [`authctl`](reference::cli), a

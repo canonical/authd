@@ -223,6 +223,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		socketPath       string
 		interactiveShell bool
 		ubuntuVersion    string
+		providerAlias    bool
 
 		wantUserAlreadyExist  bool
 		wantUserNotInDatabase bool
@@ -253,6 +254,18 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			user: "USER-SSH2@example.com",
 			test: sshPtySimpleAuth,
 		},
+		"Authenticate_with_provider_alias_and_canonical_name_on_ubuntu_24.04": {
+			ubuntuVersion: "24.04",
+			userPrefix:    examplebroker.UserIntegrationProviderAliasPrefix,
+			providerAlias: true,
+			test:          sshPtyProviderUsernameAlias,
+		},
+		"Authenticate_with_provider_alias_and_canonical_name_on_ubuntu_26.04": {
+			ubuntuVersion: "26.04",
+			userPrefix:    examplebroker.UserIntegrationProviderAliasPrefix,
+			providerAlias: true,
+			test:          sshPtyProviderUsernameAlias,
+		},
 		"Authenticate_user_with_mfa": {
 			userPrefix: examplebroker.UserIntegrationMfaPrefix,
 			test:       sshPtyMfaAuth,
@@ -267,6 +280,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			userPrefix: examplebroker.UserIntegrationNeedsResetPrefix,
 			test:       sshPtyMandatoryPasswordReset,
 		},
+		// The canonical PAM username also allows uppercase re-login after a password reset.
 		"Authenticate_user_and_reset_password_then_allow_uppercase_re-login": {
 			user: testUserNameFull(t,
 				examplebroker.UserIntegrationNeedsResetPrefix+
@@ -537,11 +551,25 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 				}
 			} else {
 				if userClient != nil {
-					authdUser := requireAuthdUser(t, userClient, user)
+					var authdUser *authd.User
+					if tc.providerAlias {
+						var err error
+						aliasedUser, err := userClient.GetUserByName(context.Background(),
+							&authd.GetUserByNameRequest{Name: user, ShouldPreCheck: false})
+						require.NoError(t, err, "provider username alias should resolve")
+						authdUser = requireAuthdUser(t, userClient, providerAliasCanonicalName(user))
+						require.Equal(t, authdUser, aliasedUser,
+							"the provider username should resolve to the same canonical user record")
+					} else {
+						authdUser = requireAuthdUser(t, userClient, user)
+					}
 					group := requireAuthdGroup(t, userClient, authdUser.Gid)
 					require.Contains(t, group.Members, authdUser.Name,
 						"Group lacks of the expected user")
 
+					if tc.providerAlias {
+						userHome = authdUser.Homedir
+					}
 					if nssLibrary != "" {
 						userHome = authdUser.Homedir
 
@@ -939,6 +967,31 @@ func sshPtySimpleAuth(t *testing.T, args sshPtyArgs) {
 
 	got := sshPtySanitizeOutput(t, c.RawOutput())
 	golden.CheckOrUpdate(t, got)
+}
+
+func providerAliasCanonicalName(username string) string {
+	return "unix-" + strings.TrimPrefix(username, examplebroker.UserIntegrationProviderAliasPrefix)
+}
+
+func sshPtyProviderUsernameAlias(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+	sshPtyWaitForSSHConnection(t, c)
+	c.RequireSuccessfulExit(t)
+
+	canonicalName := providerAliasCanonicalName(args.user)
+	require.Contains(t, c.RawOutput(), fmt.Sprintf("finished for user '%s'", canonicalName),
+		"PAM_USER should be set to the canonical Unix username after authenticating the provider alias")
+
+	canonicalLogin := startSSHForPtyWithUser(t, args, canonicalName)
+	canonicalLogin.WaitFor(t, `Gimme your password`)
+	canonicalLogin.SendLine(t, "goodpass")
+	sshPtyWaitForSSHConnection(t, canonicalLogin)
+	canonicalLogin.RequireSuccessfulExit(t)
 }
 
 func sshPtyAuthWithShell(t *testing.T, args sshPtyArgs) {

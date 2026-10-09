@@ -9,4 +9,4 @@ If you only want to prevent the user from logging in, consider using
 'authctl user lock' instead. A locked user retains their UID, ensuring
 no other user can be assigned the same UID.
 
-Are you sure you want to delete user "user1@example.com"? [y/N] Aborted.
+Are you sure you want to delete user "user1"? [y/N] Aborted.
