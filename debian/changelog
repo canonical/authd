@@ -1,3 +1,10 @@
+authd (0.7.1) UNRELEASED; urgency=medium
+
+  * CVE-2026-102631: Prevent recycled usernames from inheriting existing
+    accounts
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Thu, 08 Oct 2026 17:29:04 +0200
+
 authd (0.7.0) stonking; urgency=medium
 
   * Improve error behavior when broker fails to start

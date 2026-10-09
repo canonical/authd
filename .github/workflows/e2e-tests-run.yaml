@@ -65,7 +65,11 @@ on:
         required: false
       E2E_MSENTRA_PASSWORDLESS_PASSKEY_USERNAME:
         required: false
-      E2E_MSENTRA_TOTP_SECRET:
+      E2E_MSENTRA_TOTP_SECRET_DEVEL:
+        required: false
+      E2E_MSENTRA_TOTP_SECRET_NOBLE:
+        required: false
+      E2E_MSENTRA_TOTP_SECRET_RESOLUTE:
         required: false
       E2E_GOOGLE_CLIENT_ID:
         required: false
@@ -269,6 +273,19 @@ jobs:
           APT_SOURCE: ${{ inputs.apt-source }}
           AUTHD_APT_SOURCE: ${{ inputs.authd-apt-source }}
           BROKER_SNAP: ${{ steps.download-broker-snap-from-store.outputs.snap || steps.download-broker-snap-from-oci.outputs.snap }}
+          TOTP_SECRET: >-
+            ${{
+              (
+                inputs.broker == 'authd-msentraid' &&
+                (
+                  (inputs.ubuntu-release == 'devel' && secrets.E2E_MSENTRA_TOTP_SECRET_DEVEL) ||
+                  (inputs.ubuntu-release == 'noble' && secrets.E2E_MSENTRA_TOTP_SECRET_NOBLE) ||
+                  (inputs.ubuntu-release == 'resolute' && secrets.E2E_MSENTRA_TOTP_SECRET_RESOLUTE)
+                )
+              ) ||
+              (inputs.broker == 'authd-google' && secrets.E2E_GOOGLE_TOTP_SECRET) ||
+              ''
+            }}
         run: |
           set -eux
           export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
@@ -280,14 +297,12 @@ jobs:
             export E2E_PASSWORDLESS_USER="${{ secrets.E2E_MSENTRA_PASSWORDLESS_USERNAME }}"
             export E2E_PASSWORDLESS_PASSKEY_USER="${{ secrets.E2E_MSENTRA_PASSWORDLESS_PASSKEY_USERNAME }}"
             export E2E_PASSKEY_USER="${{ secrets.E2E_MSENTRA_PASSKEY_USERNAME }}"
-            export TOTP_SECRET="${{ secrets.E2E_MSENTRA_TOTP_SECRET }}"
             export AUTHD_MSENTRAID_ISSUER_ID="${{ secrets.E2E_MSENTRA_ISSUER_ID }}"
             export AUTHD_MSENTRAID_CLIENT_ID="${{ secrets.E2E_MSENTRA_CLIENT_ID }}"
             export AUTHD_MSENTRAID_CLIENT_SECRET="${{ secrets.E2E_MSENTRA_CLIENT_SECRET }}"
           elif [ "${{ inputs.broker }}" = "authd-google" ]; then
             export E2E_USER="${{ secrets.E2E_GOOGLE_USERNAME }}"
             export E2E_PASSWORD="${{ secrets.E2E_GOOGLE_PASSWORD }}"
-            export TOTP_SECRET="${{ secrets.E2E_GOOGLE_TOTP_SECRET }}"
           fi
 
           if ! jq -e 'type == "array" and all(.[]; type == "string")' \

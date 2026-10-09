@@ -196,6 +196,9 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 			return false, fmt.Errorf("user %q is already bound to broker %q and cannot authenticate with broker %q",
 				u.Name, oldUserInfo.BrokerID, u.BrokerID)
 		}
+		if oldUserInfo.ProviderID != "" && u.ProviderID != "" && oldUserInfo.ProviderID != u.ProviderID {
+			return false, fmt.Errorf("user %q is already bound to a different provider ID; contact your administrator", u.Name)
+		}
 		if oldUserInfo.BrokerID != "" {
 			// The broker ID scopes the stored provider ID and should not change after it is set.
 			u.BrokerID = oldUserInfo.BrokerID

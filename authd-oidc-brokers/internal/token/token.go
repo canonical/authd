@@ -62,12 +62,15 @@ func CacheAuthInfo(path string, token *AuthCachedInfo) (err error) {
 func LoadAuthInfo(path string) (*AuthCachedInfo, error) {
 	jsonData, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("could not read token: %v", err)
+		return nil, fmt.Errorf("could not read token: %w", err)
 	}
 
 	var cachedInfo AuthCachedInfo
 	if err := json.Unmarshal(jsonData, &cachedInfo); err != nil {
-		return nil, fmt.Errorf("could not unmarshal token: %v", err)
+		return nil, fmt.Errorf("could not unmarshal token: %w", err)
+	}
+	if cachedInfo.Token == nil {
+		return nil, fmt.Errorf("could not unmarshal token: missing OAuth token")
 	}
 	// Set the extra fields of the token.
 	if cachedInfo.ExtraFields != nil {
