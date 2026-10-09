@@ -5,6 +5,11 @@ set -u
 apply=false
 authctl_command=${AUTHCTL:-authctl}
 token_path=
+uid_attribute=
+gid_attribute=
+client_id=
+uid_attribute_set=false
+gid_attribute_set=false
 
 fail() {
 	printf 'apply-entra-unix-ids: %s\n' "$1" >&2
@@ -13,14 +18,34 @@ fail() {
 
 usage() {
 	cat <<'EOF'
-Usage: apply-entra-unix-ids [--apply] [--authctl PATH] TOKEN_JSON
+Usage: apply-entra-unix-ids --uid-attribute NAME --gid-attribute NAME
+       [--client-id ID] [--apply] [--authctl PATH] TOKEN_JSON
 
 Read cached Microsoft Entra Unix IDs from one token.json file. Without
 --apply, print the planned authctl commands without changing the system.
 
+NAME is the attribute value from the [msentraid] section of broker.conf. An
+empty NAME means that the attribute is not configured. A short NAME also needs
+--client-id, which is the [oidc] client_id. The cache is refused when its
+attribute names differ from these names.
+
 Application is not transactional: a later authctl command can fail after
 earlier commands have succeeded.
 EOF
+}
+
+# Resolves a short NAME the same way as the broker's resolveUnixAttributeName.
+resolve_attribute_name() {
+	local name=$1
+
+	[[ -z "$name" || "$name" =~ ^[A-Za-z0-9_]+$ ]] || fail "attribute name must contain only ASCII letters, digits, and underscores: $name"
+	resolved_attribute_name=$name
+	if [[ -z "$name" || "$name" == extension_* ]]; then
+		return
+	fi
+	[[ -n "$client_id" ]] || fail "a short attribute name needs --client-id: $name"
+	resolved_attribute_name="extension_${client_id//-/}_$name"
+	[[ "$resolved_attribute_name" =~ ^[A-Za-z0-9_]+$ ]] || fail "resolved attribute name must contain only ASCII letters, digits, and underscores: $resolved_attribute_name"
 }
 
 while (($# > 0)); do
@@ -32,6 +57,23 @@ while (($# > 0)); do
 	--authctl)
 		(($# >= 2)) || fail "--authctl requires a path"
 		authctl_command=$2
+		shift 2
+		;;
+	--uid-attribute)
+		(($# >= 2)) || fail "--uid-attribute requires a value"
+		uid_attribute=$2
+		uid_attribute_set=true
+		shift 2
+		;;
+	--gid-attribute)
+		(($# >= 2)) || fail "--gid-attribute requires a value"
+		gid_attribute=$2
+		gid_attribute_set=true
+		shift 2
+		;;
+	--client-id)
+		(($# >= 2)) || fail "--client-id requires a value"
+		client_id=$2
 		shift 2
 		;;
 	-h|--help)
@@ -50,6 +92,15 @@ while (($# > 0)); do
 done
 
 [[ -n "$token_path" ]] || { usage >&2; exit 2; }
+if [[ "$uid_attribute_set" != true || "$gid_attribute_set" != true ]]; then
+	printf 'apply-entra-unix-ids: --uid-attribute and --gid-attribute are required\n' >&2
+	usage >&2
+	exit 2
+fi
+resolve_attribute_name "$uid_attribute"
+expected_uid_name=$resolved_attribute_name
+resolve_attribute_name "$gid_attribute"
+expected_gid_name=$resolved_attribute_name
 [[ -f "$token_path" ]] || fail "token file does not exist: $token_path"
 command -v jq >/dev/null 2>&1 || fail "jq is required"
 
@@ -57,6 +108,8 @@ token_json=$(jq -ces 'if length == 1 then .[0] else error("expected one JSON doc
 	|| fail "invalid token.json: expected one JSON document"
 jq -e 'type == "object" and (.UserInfo | type) == "object" and (.UserInfo.groups == null or (.UserInfo.groups | type) == "array") and all((.UserInfo.groups // [])[]; type == "object")' <<<"$token_json" >/dev/null \
 	|| fail "invalid token.json: expected an object at .UserInfo and an array at .UserInfo.groups"
+jq -e '(.UnixAttributeNames == null or (.UnixAttributeNames | type) == "object") and ((.UnixAttributeNames.UID // "") | type) == "string" and ((.UnixAttributeNames.GID // "") | type) == "string"' <<<"$token_json" >/dev/null \
+	|| fail "invalid token.json: .UnixAttributeNames must be an object with string UID and GID names"
 
 if ! username=$(jq -er '.UserInfo.name | select(type == "string" and length > 0)' <<<"$token_json"); then
 	fail "invalid token.json: .UserInfo.name must be a non-empty string"
@@ -155,6 +208,14 @@ if [[ -z "$uid" && ${#group_names[@]} -eq 0 ]]; then
 	printf 'No cached Unix UID or remote group GID assignments found.\n'
 	exit 0
 fi
+
+names_present=$(jq -r '.UnixAttributeNames != null' <<<"$token_json") || fail "could not read cached attribute names"
+[[ "$names_present" == true ]] || fail "cached Unix IDs have no attribute names; log in again with the current configuration"
+cached_uid_name=$(jq -r '.UnixAttributeNames.UID // ""' <<<"$token_json") || fail "could not read cached UID attribute name"
+cached_gid_name=$(jq -r '.UnixAttributeNames.GID // ""' <<<"$token_json") || fail "could not read cached GID attribute name"
+[[ "$cached_uid_name" == "$expected_uid_name" ]] || fail "cached Unix IDs were read from UID attribute '${cached_uid_name:-none}', but the configured UID attribute is '${expected_uid_name:-none}'; log in again with the current configuration"
+[[ "$cached_gid_name" == "$expected_gid_name" ]] || fail "cached Unix IDs were read from GID attribute '${cached_gid_name:-none}', but the configured GID attribute is '${expected_gid_name:-none}'; log in again with the current configuration"
+printf 'Configured Unix attribute names: UID %s, GID %s\n' "${expected_uid_name:-none}" "${expected_gid_name:-none}"
 
 if [[ "$apply" == true ]]; then
 	printf 'Applying cached assignments for %s:\n' "$username"

@@ -22,7 +22,8 @@ func TestApplyEntraUnixIDsSkipsLocalMappings(t *testing.T) {
       {"name": "engineering", "ugid": "group-engineering", "gid": 42001},
       {"name": "without-gid", "ugid": "group-without-gid", "gid": null}
     ]
-  }
+  },
+  "UnixAttributeNames": {"UID": "extension_uidNumber", "GID": "extension_gidNumber"}
 }`
 	output, calls, err := runApplyEntraUnixIDs(t, token, true)
 	require.NoError(t, err, "apply-entra-unix-ids failed: %s", output)
@@ -39,7 +40,31 @@ func TestApplyEntraUnixIDsSkipsLocalMappings(t *testing.T) {
 	)
 }
 
+// defaultAttributeArgs returns the attribute options that match the names in the test fixtures.
+func defaultAttributeArgs() []string {
+	return []string{"--uid-attribute", "extension_uidNumber", "--gid-attribute", "extension_gidNumber"}
+}
+
+// applyRun holds the observable results of one script run.
+type applyRun struct {
+	output    string
+	calls     string
+	reads     string
+	tokenPath string
+	err       error
+}
+
+// runApplyEntraUnixIDs runs the script with the default attribute names and requires one cache read.
 func runApplyEntraUnixIDs(t *testing.T, input string, apply bool, extraEnv ...string) (output, calls string, runErr error) {
+	t.Helper()
+
+	run := runApplyEntraUnixIDsWithArgs(t, input, apply, defaultAttributeArgs(), extraEnv...)
+	require.Equal(t, run.tokenPath+"\n", run.reads, "the cache must be opened exactly once")
+	return run.output, run.calls, run.err
+}
+
+// runApplyEntraUnixIDsWithArgs runs the script with args and returns what it did.
+func runApplyEntraUnixIDsWithArgs(t *testing.T, input string, apply bool, args []string, extraEnv ...string) applyRun {
 	t.Helper()
 
 	jqPath, err := exec.LookPath("jq")
@@ -76,12 +101,14 @@ if [ "$reads_token" = true ] && [ -n "${REPLACEMENT_TOKEN:-}" ]; then
     printf '%s' "$REPLACEMENT_TOKEN" > "$TOKEN_PATH"
 fi
 `), 0700))
-	args := []string{"--authctl", authctlPath, tokenPath}
+	var scriptArgs []string
 	if apply {
-		args = append([]string{"--apply"}, args...)
+		scriptArgs = append(scriptArgs, "--apply")
 	}
+	scriptArgs = append(scriptArgs, args...)
+	scriptArgs = append(scriptArgs, "--authctl", authctlPath, tokenPath)
 	// #nosec:G204 - The script and arguments are controlled by this test.
-	cmd := exec.Command("bash", append([]string{"apply-entra-unix-ids"}, args...)...)
+	cmd := exec.Command("bash", append([]string{"apply-entra-unix-ids"}, scriptArgs...)...)
 	cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"AUTHCTL_LOG="+logPath, "REAL_JQ="+jqPath, "TOKEN_PATH="+tokenPath, "READ_LOG="+readLogPath)
 	cmd.Env = append(cmd.Env, extraEnv...)
@@ -90,8 +117,7 @@ fi
 	require.NoError(t, err)
 	reads, err := os.ReadFile(readLogPath)
 	require.NoError(t, err)
-	require.Equal(t, tokenPath+"\n", string(reads), "the cache must be opened exactly once")
-	return string(result), string(log), runErr
+	return applyRun{output: string(result), calls: string(log), reads: string(reads), tokenPath: tokenPath, err: runErr}
 }
 
 func TestApplyEntraUnixIDsRejectsInvalidInputBeforeApplying(t *testing.T) {
@@ -119,6 +145,8 @@ func TestApplyEntraUnixIDsRejectsInvalidInputBeforeApplying(t *testing.T) {
 		"same GID different identities": `{"UserInfo":{"name":"alice","uid":41001,"groups":[
 {"name":"engineering","ugid":"first","gid":42001},{"name":"staff","ugid":"second","gid":42001}]}}`,
 		"UID conflicts with remote group GID": `{"UserInfo":{"name":"alice","uid":42001,"groups":[{"name":"engineering","ugid":"first","gid":42001}]}}`,
+		"names not an object":                 `{"UserInfo":{"name":"alice","uid":41001},"UnixAttributeNames":"extension_uidNumber"}`,
+		"UID name not a string":               `{"UserInfo":{"name":"alice","uid":41001},"UnixAttributeNames":{"UID":1,"GID":""}}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -142,7 +170,7 @@ func TestApplyEntraUnixIDsRejectsPrivateGroupGIDConflictBeforeApplying(t *testin
 func TestApplyEntraUnixIDsAllowsPrivateGroupGIDMatchingUID(t *testing.T) {
 	t.Parallel()
 
-	input := `{"UserInfo":{"name":"Alice","uid":41001,"groups":[{"name":"ALICE","ugid":"private-group-id","gid":41001}]}}`
+	input := `{"UserInfo":{"name":"Alice","uid":41001,"groups":[{"name":"ALICE","ugid":"private-group-id","gid":41001}]},"UnixAttributeNames":{"UID":"extension_uidNumber","GID":"extension_gidNumber"}}`
 	output, calls, err := runApplyEntraUnixIDs(t, input, true)
 	require.NoError(t, err, output)
 	require.Equal(t,
@@ -175,7 +203,7 @@ func TestApplyEntraUnixIDsRejectsInvalidNumbers(t *testing.T) {
 func TestApplyEntraUnixIDsAcceptsMaximumSigned32BitIDs(t *testing.T) {
 	t.Parallel()
 
-	const token = `{"UserInfo":{"name":"alice","uid":2147483647,"groups":[{"name":"engineering","ugid":"group-engineering","gid":2147483646}]}}`
+	const token = `{"UserInfo":{"name":"alice","uid":2147483647,"groups":[{"name":"engineering","ugid":"group-engineering","gid":2147483646}]},"UnixAttributeNames":{"UID":"extension_uidNumber","GID":"extension_gidNumber"}}`
 	output, calls, err := runApplyEntraUnixIDs(t, token, true)
 	require.NoError(t, err, output)
 	require.Equal(t,
@@ -191,7 +219,8 @@ func TestApplyEntraUnixIDsPlanAndFailures(t *testing.T) {
 	const input = `{"UserInfo":{"name":"alice","uid":41001,"groups":[
 {"name":"Engineering","ugid":"first","gid":42001},
 {"name":"engineering","ugid":"first","gid":42001},
-{"name":"staff","ugid":"second","gid":42002}]}}`
+{"name":"staff","ugid":"second","gid":42002}]},
+"UnixAttributeNames":{"UID":"extension_uidNumber","GID":"extension_gidNumber"}}`
 	for _, tc := range []struct {
 		name      string
 		apply     bool
@@ -227,7 +256,7 @@ func TestApplyEntraUnixIDsPlanAndFailures(t *testing.T) {
 
 func TestApplyEntraUnixIDsUsesOneSnapshot(t *testing.T) {
 	t.Parallel()
-	const input = `{"UserInfo":{"name":"alice","uid":41001,"groups":[{"name":"engineering","ugid":"first","gid":42001}]}}`
+	const input = `{"UserInfo":{"name":"alice","uid":41001,"groups":[{"name":"engineering","ugid":"first","gid":42001}]},"UnixAttributeNames":{"UID":"extension_uidNumber","GID":"extension_gidNumber"}}`
 	const replacement = `{"UserInfo":{"name":"bob","uid":51001,"groups":[{"name":"staff","ugid":"second","gid":52001}]}}`
 	output, calls, err := runApplyEntraUnixIDs(t, input, true, "REPLACEMENT_TOKEN="+replacement)
 	require.NoError(t, err, output)
@@ -243,17 +272,17 @@ func TestApplyEntraUnixIDsPartialAssignments(t *testing.T) {
 	}{
 		{
 			name:      "UID only updates private group",
-			input:     `{"UserInfo":{"name":"alice","uid":41001}}`,
+			input:     `{"UserInfo":{"name":"alice","uid":41001},"UnixAttributeNames":{"UID":"extension_uidNumber","GID":"extension_gidNumber"}}`,
 			wantCalls: "user set-uid alice 41001\ngroup set-gid alice 41001\n",
 		},
 		{
 			name:      "remote GID only leaves private group unchanged",
-			input:     `{"UserInfo":{"name":"alice","groups":[{"name":"engineering","ugid":"first","gid":42001}]}}`,
+			input:     `{"UserInfo":{"name":"alice","groups":[{"name":"engineering","ugid":"first","gid":42001}]},"UnixAttributeNames":{"UID":"extension_uidNumber","GID":"extension_gidNumber"}}`,
 			wantCalls: "group set-gid engineering 42001\n",
 		},
 		{
 			name:      "null UID leaves private group unchanged",
-			input:     `{"UserInfo":{"name":"alice","uid":null,"groups":[{"name":"engineering","ugid":"first","gid":42001}]}}`,
+			input:     `{"UserInfo":{"name":"alice","uid":null,"groups":[{"name":"engineering","ugid":"first","gid":42001}]},"UnixAttributeNames":{"UID":"extension_uidNumber","GID":"extension_gidNumber"}}`,
 			wantCalls: "group set-gid engineering 42001\n",
 		},
 	} {
@@ -281,4 +310,98 @@ func TestApplyEntraUnixIDsAcceptsMissingOptionalFields(t *testing.T) {
 			require.Contains(t, output, "No cached Unix UID or remote group GID assignments found")
 		})
 	}
+}
+
+func TestApplyEntraUnixIDsRefusesCacheWithOtherAttributeNames(t *testing.T) {
+	t.Parallel()
+
+	const cached = `{"UserInfo":{"name":"alice","uid":41001,"groups":[{"name":"engineering","ugid":"group-engineering","gid":42001}]},"UnixAttributeNames":{"UID":"extension_uidNumber","GID":"extension_gidNumber"}}`
+	const withoutNames = `{"UserInfo":{"name":"alice","uid":41001,"groups":[{"name":"engineering","ugid":"group-engineering","gid":42001}]}}`
+	for _, tc := range []struct {
+		name        string
+		input       string
+		args        []string
+		wantMessage string
+	}{
+		{
+			name:        "UID attribute changed",
+			input:       cached,
+			args:        []string{"--uid-attribute", "extension_newUidNumber"},
+			wantMessage: "read from UID attribute 'extension_uidNumber', but the configured UID attribute is 'extension_newUidNumber'",
+		},
+		{
+			name:        "GID attribute changed",
+			input:       cached,
+			args:        []string{"--gid-attribute", "extension_newGidNumber"},
+			wantMessage: "read from GID attribute 'extension_gidNumber', but the configured GID attribute is 'extension_newGidNumber'",
+		},
+		{
+			name:        "attribute names missing",
+			input:       withoutNames,
+			wantMessage: "have no attribute names",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			run := runApplyEntraUnixIDsWithArgs(t, tc.input, true, append(defaultAttributeArgs(), tc.args...))
+			require.Error(t, run.err, run.output)
+			require.Contains(t, run.output, tc.wantMessage)
+			require.Empty(t, run.calls, "a refused cache must not invoke authctl")
+			require.Equal(t, run.tokenPath+"\n", run.reads, "the cache must be opened exactly once")
+		})
+	}
+}
+
+func TestApplyEntraUnixIDsIgnoresAttributeNamesWithoutCachedIDs(t *testing.T) {
+	t.Parallel()
+
+	const input = `{"UserInfo":{"name":"alice","uid":null,"groups":[{"name":"linux-sudo","ugid":"","gid":49001}]},"UnixAttributeNames":{"UID":"extension_oldUidNumber","GID":"extension_oldGidNumber"}}`
+	output, calls, err := runApplyEntraUnixIDs(t, input, true)
+	require.NoError(t, err, output)
+	require.Empty(t, calls)
+	require.Contains(t, output, "No cached Unix UID or remote group GID assignments found")
+}
+
+func TestApplyEntraUnixIDsRequiresAttributeNameOptions(t *testing.T) {
+	t.Parallel()
+
+	const input = `{"UserInfo":{"name":"alice","uid":41001},"UnixAttributeNames":{"UID":"extension_uidNumber","GID":"extension_gidNumber"}}`
+	for name, args := range map[string][]string{
+		"no options":         nil,
+		"only UID attribute": {"--uid-attribute", "extension_uidNumber"},
+		"only GID attribute": {"--gid-attribute", "extension_gidNumber"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			run := runApplyEntraUnixIDsWithArgs(t, input, true, args)
+			require.Error(t, run.err, run.output)
+			require.Contains(t, run.output, "--uid-attribute and --gid-attribute are required")
+			require.Empty(t, run.reads, "the cache must not be opened without the attribute names")
+			require.Empty(t, run.calls, "missing options must not invoke authctl")
+		})
+	}
+}
+
+func TestApplyEntraUnixIDsResolvesShortAttributeNames(t *testing.T) {
+	t.Parallel()
+
+	const input = `{"UserInfo":{"name":"alice","uid":41001},"UnixAttributeNames":{"UID":"extension_abc123_Linux_UID","GID":"extension_abc123_Linux_GID"}}`
+	t.Run("with client ID", func(t *testing.T) {
+		t.Parallel()
+
+		run := runApplyEntraUnixIDsWithArgs(t, input, true, []string{"--uid-attribute", "Linux_UID", "--gid-attribute", "Linux_GID", "--client-id", "abc-123"})
+		require.NoError(t, run.err, run.output)
+		require.Equal(t, "user set-uid alice 41001\ngroup set-gid alice 41001\n", run.calls)
+		require.Equal(t, run.tokenPath+"\n", run.reads, "the cache must be opened exactly once")
+	})
+	t.Run("without client ID", func(t *testing.T) {
+		t.Parallel()
+
+		run := runApplyEntraUnixIDsWithArgs(t, input, true, []string{"--uid-attribute", "Linux_UID", "--gid-attribute", "Linux_GID"})
+		require.Error(t, run.err, run.output)
+		require.Contains(t, run.output, "a short attribute name needs --client-id: Linux_UID")
+		require.Empty(t, run.calls, "an unresolved name must not invoke authctl")
+	})
 }

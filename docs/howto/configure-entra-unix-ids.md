@@ -183,6 +183,12 @@ new attribute. An optional ID stays empty until then. With
 `force_access_check_with_provider = true`, cached IDs are never used for login,
 so the login needs a successful online lookup.
 
+If the broker cannot rewrite `token.json`, for example on a full or read-only
+disk, the login is denied when `force_access_check_with_provider` is `true` and
+`unix_uid_required` or `unix_gid_required` is `true`. In other cases the login
+continues, and `apply-entra-unix-ids` refuses the cache until a later login
+rewrites it.
+
 Restart the broker after changing the configuration. See
 [Configure authd](ref::config) for the service-specific restart command.
 
@@ -301,22 +307,38 @@ file accessible only to root or the broker service.
 
 After you change the attribute configuration, log in as the user before you
 apply the values. The broker drops IDs from the old attribute only during a
-login. The script reads `token.json` as it is, so it can apply stale values
-until then.
+login. Until then the script refuses the cache, because its attribute names
+differ from the configured names.
 
 Review a cache first. The `apply-entra-unix-ids` command is installed with the
-`authd` package and needs `jq`, which the package recommends. The command
-defaults to a dry run:
+`authd` package and needs `jq`, which the package recommends. Pass the
+attribute names from the `[msentraid]` section of the broker configuration. An
+empty name means that the attribute is not configured. The command defaults to
+a dry run:
 
 ```shell
-sudo apply-entra-unix-ids /path/to/token.json
+sudo apply-entra-unix-ids --uid-attribute extension_abc123_uidNumber \
+  --gid-attribute extension_abc123_gidNumber /path/to/token.json
+```
+
+If the configuration uses short names, also pass the `client_id` from the
+`[oidc]` section:
+
+```shell
+sudo apply-entra-unix-ids --uid-attribute uidNumber --gid-attribute gidNumber \
+  --client-id <APPLICATION_CLIENT_ID> /path/to/token.json
 ```
 
 Use `--apply` only after reviewing the planned changes:
 
 ```shell
-sudo apply-entra-unix-ids --apply /path/to/token.json
+sudo apply-entra-unix-ids --apply --uid-attribute extension_abc123_uidNumber \
+  --gid-attribute extension_abc123_gidNumber /path/to/token.json
 ```
+
+The script refuses a cache that holds Unix IDs when its attribute names differ
+from the names you pass, or when the names are missing. Log in again with the
+current configuration to refresh the cache, then review it again.
 
 The script reads the cache once and builds the entire plan from that captured
 JSON document. It rejects malformed input or multiple JSON documents before
