@@ -51,6 +51,10 @@ type gdmPollDone struct{}
 
 type gdmStopConversations struct{}
 
+type gdmAuthModesStageReady struct {
+	sessionID string
+}
+
 // Init initializes the main model orchestrator.
 func (m gdmModel) Init() tea.Cmd {
 	return tea.Sequence(m.protoHello(),
@@ -196,7 +200,7 @@ func (m gdmModel) handlePollResponse(gdmPollResults []*gdm.EventData) (gdmModel,
 				})
 			}
 			log.Infof(context.TODO(), "GDM Stage changed to %s", res.StageChanged.Stage)
-			commands = append(commands, sendEvent(ChangeStage{res.StageChanged.Stage}))
+			commands = append(commands, sendEvent(ChangeStage{Stage: res.StageChanged.Stage}))
 		}
 	}
 
@@ -244,7 +248,7 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 		if msg.Stage == proto.Stage_authModeSelection {
 			m.pendingEchoAuthModeID = ""
 		}
-		return m, m.changeStage(msg.Stage)
+		return m, m.changeStage(msg.Stage, msg.authModesSessionID)
 
 	case userSelected:
 		return m, m.emitEvent(&gdm.EventData_UserSelected{
@@ -267,9 +271,10 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 		})
 
 	case authModesReceived:
-		return m, m.emitEvent(&gdm.EventData_AuthModesReceived{
+		// Send the mode list before the following stage-change request.
+		return m, sendEvent(m.emitEventSync(&gdm.EventData_AuthModesReceived{
 			AuthModesReceived: &gdm.Events_AuthModesReceived{AuthModes: msg.authModes},
-		})
+		}))
 
 	case AuthModeSelected:
 		if !msg.fromGDM {
@@ -346,7 +351,7 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m gdmModel) changeStage(s proto.Stage) tea.Cmd {
+func (m gdmModel) changeStage(s proto.Stage, authModesSessionID string) tea.Cmd {
 	return func() tea.Msg {
 		_, err := gdm.SendRequest(m.pamMTx, &gdm.RequestData_ChangeStage{
 			ChangeStage: &gdm.Requests_ChangeStage{Stage: s},
@@ -358,6 +363,9 @@ func (m gdmModel) changeStage(s proto.Stage) tea.Cmd {
 			}
 		}
 		log.Debugf(context.TODO(), "Gdm stage change to %v sent", s)
+		if authModesSessionID != "" {
+			return gdmAuthModesStageReady{sessionID: authModesSessionID}
+		}
 		return nil
 	}
 }

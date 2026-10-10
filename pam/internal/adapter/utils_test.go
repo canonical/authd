@@ -23,7 +23,7 @@ func TestDebugMessageFormatter(t *testing.T) {
 	}{
 		"Empty_msg": {},
 		"StageChanged_message": {
-			msg:            StageChanged{proto.Stage_brokerSelection},
+			msg:            StageChanged{Stage: proto.Stage_brokerSelection},
 			wantSafeString: `adapter.StageChanged{Stage:"brokerSelection"}`,
 		},
 		"ChangeStage_message": {
@@ -144,7 +144,7 @@ func TestSafeMessageDebug(t *testing.T) {
 			formatAndArgs: []any{"suffix"},
 		},
 		"StageChanged_message": {
-			msg:            StageChanged{proto.Stage_brokerSelection},
+			msg:            StageChanged{Stage: proto.Stage_brokerSelection},
 			wantSafeString: `adapter.StageChanged{Stage:"brokerSelection"}`,
 		},
 		"startAuthentication_message_with_prefix": {
