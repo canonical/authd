@@ -265,10 +265,19 @@ fi
 mkdir -p "${TEST_RUNS_DIR}"
 ln -sf --no-target-directory "${OUTPUT_DIR}" "${TEST_RUNS_DIR}/${BROKER}-latest"
 
-# Set up YARF environment if not already set up
+# Set up YARF if its revision or the combined dependency lock has changed.
+# shellcheck source=yarf-env.sh
+source "${ROOT_DIR}/yarf-env.sh"
 YARF_DIR="${ROOT_DIR}/.yarf"
+YARF_ENVIRONMENT_REVISION_FILE="${YARF_DIR}/.venv/.authd-yarf-revision"
 if ! [ -f "${YARF_DIR}/.venv/bin/activate" ]; then
     "${ROOT_DIR}/setup-yarf.sh"
+else
+    YARF_REVISION=$(yarf_environment_revision)
+    if [ ! -f "${YARF_ENVIRONMENT_REVISION_FILE}" ] ||
+        ! grep -Fqx "${YARF_REVISION}" "${YARF_ENVIRONMENT_REVISION_FILE}"; then
+        "${ROOT_DIR}/setup-yarf.sh"
+    fi
 fi
 
 # Activate YARF environment
