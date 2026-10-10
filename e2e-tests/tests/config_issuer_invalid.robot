@@ -17,7 +17,16 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test that invalid broker issuer prevents remote logins
-    [Documentation]    This test verifies that when the broker is configured with an invalid issuer, remote users cannot log in, while local users can still access the system.
+    [Documentation]    Verify that a broker configured with an invalid issuer offers no
+    ...    authentication mode to a remote user.
+    ...
+    ...    The broker discovers the device code and token endpoints from the issuer's
+    ...    OIDC metadata. With a bogus issuer that discovery fails, so after the user
+    ...    picks the provider the broker has no flow left to offer and reports that it
+    ...    cannot connect to the provider.
+    ...
+    ...    The local user logs in first to confirm that a broken broker configuration
+    ...    does not affect local authentication.
 
     # Log in with local user
     Log In

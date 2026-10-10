@@ -17,7 +17,19 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login with CLI and QR code regeneration
-    [Documentation]    This test verifies that a remote user can log in using device code flow via CLI with QR code regeneration, and subsequently log in using a local password.
+    [Documentation]    Verify that a remote user can complete the device code flow
+    ...    after asking for a new code several times.
+    ...
+    ...    Device codes expire, so the flow lets the user request a fresh one without
+    ...    restarting the login. Each request has to replace the code on screen and
+    ...    start a new device authorization; authenticating with the latest code must
+    ...    still complete the login.
+    ...
+    ...    Steps:
+    ...      1. start the device code flow and request a new code three times
+    ...      2. authenticate in the browser with the last code and set a local password
+    ...      3. check the user is set up correctly on the system
+    ...      4. log in again with ``su`` using the local password
 
     # Log in with local user
     Log In
