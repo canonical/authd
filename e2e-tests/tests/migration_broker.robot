@@ -38,10 +38,15 @@ Test login with broker version under test
     Log Out From su Session
     Close Focused Window
 
+    Create File In User Home    ${username}
+
     # Install the broker version under test.
     Update Broker
+
+    Check User Entry Exists    ${username}
 
     # Log in with remote user with local password after upgrading
     Open Terminal
     Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
     Check Home Directory    ${username}
+    Check File In User Home    ${username}
