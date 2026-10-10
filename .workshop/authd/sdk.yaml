@@ -1,0 +1,5 @@
+# In-project SDK for the authd development workshop (referenced as
+# `project-authd`): hooks build + install the authd stack and wire up GDM.
+# No check-health hook — Workshop skips SDK health checks under VM
+# confinement; use `workshop run -- validate` instead.
+name: authd
