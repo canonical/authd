@@ -69,21 +69,15 @@ type EntraAuthProvider interface {
 		refreshToken string,
 	) (*oauth2.Token, error)
 
-	// VerifyAccessToken verifies the RS256 signature of the MFA-flow access token
-	// against the tenant's published JWKS (handling the header-nonce rewrite that
-	// Microsoft first-party tokens use) and that its tenant claim matches. It is
-	// the defense-in-depth check that the token genuinely came from Microsoft, so
-	// the identity read from its claims is not trusted on TLS alone. Returns nil
-	// only when the token verifies.
+	// VerifyAccessToken checks the signature, exp, optional nbf (60s skew), and
+	// tenant. It does not check audience or issuer.
 	VerifyAccessToken(
 		ctx context.Context,
 		issuerURL string,
 		accessToken string,
 	) error
 
-	// UserInfoFromAccessToken extracts user identity from a verified Entra access
-	// token, mapping provider-specific claims (e.g. oid/upn) to the same info.User
-	// shape that GetUserInfo returns for OIDC ID tokens / UserInfo responses.
+	// UserInfoFromAccessToken decodes identity claims; call VerifyAccessToken first.
 	UserInfoFromAccessToken(accessToken string) (info.User, error)
 }
 
