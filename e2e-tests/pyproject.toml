@@ -1,0 +1,16 @@
+[project]
+name = "authd-e2e-tests"
+version = "0.0.0"
+dependencies = [
+    "yarf",
+    # Used by the browser-based authentication tests.
+    "pygobject",
+    # Used to include colored journalctl output in HTML logs.
+    "ansi2html",
+]
+
+[tool.uv.sources]
+yarf = { workspace = true }
+
+[tool.uv.workspace]
+members = [".yarf"]
