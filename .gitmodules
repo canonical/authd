@@ -1,6 +1,9 @@
+# TEMPORARY CI override: use the fork while the verifier change awaits upstream merge.
+# Restore the samba-team URL and merged gitlink after the upstream MR lands.
 [submodule "authd-oidc-brokers/third_party/libhimmelblau"]
 	path = authd-oidc-brokers/third_party/libhimmelblau
-	url = https://gitlab.com/samba-team/libhimmelblau.git
+	url = https://gitlab.com/nooreldeensalah/libhimmelblau.git
+	branch = feat/entra-token-verification
 [submodule "e2e-tests/.yarf"]
 	path = e2e-tests/.yarf
 	url = https://github.com/adombeck/yarf
