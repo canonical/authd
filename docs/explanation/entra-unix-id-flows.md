@@ -245,6 +245,13 @@ written to `token.json`.
 If the initial enrichment fails as a whole, there is no cached snapshot to fall
 back to, so the login fails.
 
+Credentials are saved before enrichment. A failed first login can therefore
+leave `token.json` with device-registration data but no groups or UID. The
+broker does not mark this entry as incomplete. A later login can then use it as
+the previous snapshot when a lookup fails completely. The device-code flow does
+this only without the forced check. This is a known limitation. The next
+successful online login replaces the entry with a complete snapshot.
+
 ### Returning online login
 
 On a returning login, the broker obtains a provider token and then refreshes
@@ -261,13 +268,18 @@ with the forced check. Cached IDs from attribute names that are no longer
 configured are dropped first, as described under Offline login. With the forced
 check, a required value that is missing, invalid, or cannot be read denies the
 login. So does a required value that the snapshot lacks when enrichment fails.
+The exception is an entry left by a failed first login. See
+Initial online login.
 
 Credential freshness is separate from directory-data freshness. After token
 refresh or device registration, intermediate cache writes save the new
-credentials with the previous `UserInfo`. Only successful enrichment replaces
-that directory snapshot. This preserves rotated refresh tokens and registration
-data even when enrichment denies login. An online login that falls back to
-cached directory data remains online and persists its refreshed credentials.
+credentials with the previous `UserInfo`. Only enrichment that returns a snapshot
+replaces that directory snapshot, even when the forced check then denies the login.
+On a first login there is no previous `UserInfo`, so
+these writes store no groups and no UID. This preserves rotated refresh tokens
+and registration data even when enrichment denies login. An online login that
+falls back to cached directory data remains online and persists its refreshed
+credentials.
 
 A successful response with a missing or invalid value clears that field in the
 newly cached snapshot. A failed lookup keeps the cached value. In both cases, the

@@ -159,6 +159,9 @@ unix_uid_required = false
 unix_gid_required = false
 ```
 
+The `unix_uid_required` and `unix_gid_required` flags deny a login only when
+`force_access_check_with_provider = true`.
+
 Use the full names when the properties were created by Entra Connect or Cloud
 Sync:
 
@@ -233,6 +236,16 @@ previous directory snapshot until enrichment returns a snapshot. They are retain
 even if enrichment later denies login. A snapshot that clears a required ID is also
 saved, even when the forced check denies the login. Falling back to the previous
 `UserInfo` does not discard those credentials or mark an online session as offline.
+
+Known limitation: if a first login fails after device registration and before
+enrichment completes, `token.json` keeps the registration data but has no
+groups and no UID. The broker does not mark this entry as incomplete, so a
+later login can use it as the previous snapshot when a lookup fails
+completely. Such a login can succeed without remote groups or a UID. The
+device-code flow does this only when `force_access_check_with_provider` is
+`false`. Required flags stop such a login only with
+`force_access_check_with_provider = true`. The next successful online login
+replaces the entry with a complete snapshot.
 
 Offline login does not issue Graph requests. It uses the cached UID and GID
 values and grants the login even when some of them are missing; missing values
