@@ -42,16 +42,20 @@ class Browser:
         usercode: str,
         output_dir: str = ".",
         username: str = "",
-        password: str = "",
-        totp_secret: str = "",
+        password_env: str = "E2E_PASSWORD",
+        totp_env: str = "TOTP_SECRET",
     ):
-        """Perform device code flow with the given username, password and
-        usercode using a broker-specific browser automation script. The window
-        opened by the script is run off screen using Xvfb unless ``SHOW_WEBVIEW``
-        is set. Output is streamed to stderr in real time and also logged to the
-        Robot Framework log file after the process completes.
+        """Perform device code flow with the given username and usercode using a
+        broker-specific browser automation script. The password and TOTP secret
+        are read from the environment variables named by ``password_env`` and
+        ``totp_env``, so they are never passed as Robot Framework arguments.
+        The window opened by the script is run off screen using Xvfb unless
+        ``SHOW_WEBVIEW`` is set. Output is streamed to stderr in real time and
+        also logged to the Robot Framework log file after the process completes.
         The ``BROKER`` environment variable selects which login script to use.
         """
+        password = os.environ.get(password_env, "")
+        totp_secret = os.environ.get(totp_env, "")
         broker = os.environ.get("BROKER")
         script = _BROKER_LOGIN_SCRIPTS.get(broker)
         if not script:

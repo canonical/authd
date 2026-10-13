@@ -11,13 +11,15 @@ class TOTP:
     """Generates time-based one-time passwords (TOTP) for use in e2e tests."""
 
     @keyword
-    def generate_totp_code(self, secret: str = "", previous_code: str = "") -> str:
-        """Return a code for a secret, waiting for a fresh value after rejection.
+    def generate_totp_code(
+        self, secret_env: str = "TOTP_SECRET", previous_code: str = ""
+    ) -> str:
+        """Return a code for the secret in the environment variable secret_env.
 
         Waits until there are at least 5 seconds left in the current time window
         before generating each code (see generate_totp.py).
         """
-        secret = secret or os.environ.get("TOTP_SECRET", "")
+        secret = os.environ.get(secret_env, "")
         if not secret:
-            raise ValueError("TOTP_SECRET environment variable is not set")
+            raise ValueError(f"{secret_env} environment variable is not set")
         return generate_totp(secret, previous_code)

@@ -36,10 +36,10 @@ Disable Broker And Purge Config
     SSH.Execute    systemctl restart authd.service
 
 Log In With Remote User Through CLI: QR Code
-    [Arguments]    ${username}    ${local_password}    ${entra_username}=${EMPTY}    ${entra_password}=${EMPTY}    ${entra_totp_secret}=${EMPTY}
+    [Arguments]    ${username}    ${local_password}    ${entra_username}=${EMPTY}    ${entra_password_env}=E2E_PASSWORD    ${entra_totp_env}=TOTP_SECRET
     Start Log In With Remote User Through CLI: QR Code    ${username}
     Select Provider
-    Continue Log In With Remote User: Authenticate In External Browser    ${entra_username}    ${entra_password}    ${entra_totp_secret}
+    Continue Log In With Remote User: Authenticate In External Browser    ${entra_username}    ${entra_password_env}    ${entra_totp_env}
     Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
 
 Start Log In With Remote User Through CLI: QR Code
@@ -63,14 +63,14 @@ Regenerate QR Code
     Match Text    ${DEVICE_URL}    15
 
 Continue Log In With Remote User: Authenticate In External Browser
-    [Arguments]    ${entra_username}=${EMPTY}    ${entra_password}=${EMPTY}    ${entra_totp_secret}=${EMPTY}
+    [Arguments]    ${entra_username}=${EMPTY}    ${entra_password_env}=E2E_PASSWORD    ${entra_totp_env}=TOTP_SECRET
     # Wait until the verification URL is displayed.
     Match Text    ${DEVICE_URL}
     # The code can be rendered separately from its label, so wait until the
     # actual code is available before starting the browser login.
     ${user_code} =    Wait Until Keyword Succeeds    30s    1s    Extract Device Code
 
-    Browser.Login    ${user_code}    ${SUITE_OUTPUT_DIR}    ${entra_username}    ${entra_password}    ${entra_totp_secret}
+    Browser.Login    ${user_code}    ${SUITE_OUTPUT_DIR}    ${entra_username}    password_env=${entra_password_env}    totp_env=${entra_totp_env}
 
 Extract Device Code
     ${text} =    Read Text
@@ -326,28 +326,20 @@ Select Broker Through GDM
     Builtin.Sleep    1
 
 Enter Entra ID Password And MFA
-    [Arguments]    ${success_keyword}    @{success_args}    ${entra_password}=${EMPTY}    ${entra_totp_secret}=${EMPTY}
+    [Arguments]    ${success_keyword}    @{success_args}    ${entra_password_env}=E2E_PASSWORD    ${entra_totp_env}=TOTP_SECRET
     # With the device code flow disabled there is only one flow; the PAM module
     # auto-selects it and goes directly to the Entra ID password prompt.
     Match Text    Enter your Entra ID password    30    similarity=90
-    ${password}=    Get Environment Variable    E2E_PASSWORD    ${EMPTY}
-    IF    $entra_password != ''
-        ${password}=    Set Variable    ${entra_password}
-    END
-    Hid.Type String    ${password}
+    Hid.Type String    %{${entra_password_env}}
     Hid.Keys Combo    Return
 
     # Retry only codes the broker rejects. The broker caps this MFA step at
     # three submissions.
     Match Text    Enter your MFA code    30    similarity=88
-    ${totp_secret}=    Get Environment Variable    TOTP_SECRET    ${EMPTY}
-    IF    $entra_totp_secret != ''
-        ${totp_secret}=    Set Variable    ${entra_totp_secret}
-    END
     ${previous_totp_code} =    Set Variable    ${EMPTY}
     FOR    ${attempt}    IN RANGE    3
         ${rejections_before} =    Count Entra TOTP Rejections
-        ${totp_code} =    TOTP.Generate Totp Code    ${totp_secret}    ${previous_totp_code}
+        ${totp_code} =    TOTP.Generate Totp Code    secret_env=${entra_totp_env}    previous_code=${previous_totp_code}
         Hid.Type String    ${totp_code}
         Hid.Keys Combo    Return
 
@@ -396,15 +388,15 @@ Continue Log In With Remote User Through GDM: Define Local Password
     Wait Until Desktop Ready
 
 Log In With Remote User Through GDM: Entra Password
-    [Arguments]    ${username}    ${entra_password}=${EMPTY}    ${entra_totp_secret}=${EMPTY}
+    [Arguments]    ${username}    ${entra_password_env}=E2E_PASSWORD    ${entra_totp_env}=TOTP_SECRET
     Start Log In With Remote User Through GDM    ${username}
     Select Broker Through GDM
-    Continue Log In With Remote User Through GDM: Entra Password    ${entra_password}    ${entra_totp_secret}
+    Continue Log In With Remote User Through GDM: Entra Password    ${entra_password_env}    ${entra_totp_env}
 
 Continue Log In With Remote User Through GDM: Entra Password
-    [Arguments]    ${entra_password}=${EMPTY}    ${entra_totp_secret}=${EMPTY}
+    [Arguments]    ${entra_password_env}=E2E_PASSWORD    ${entra_totp_env}=TOTP_SECRET
     Enter Entra ID Password And MFA    Try Desktop Ready
-    ...    entra_password=${entra_password}    entra_totp_secret=${entra_totp_secret}
+    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
 
     Wait Until Desktop Ready
 
@@ -508,7 +500,7 @@ Check That Device Was Registered
     ...    msg=token.json has no DeviceRegistrationData; the device was not registered.
 
 Log In With Remote User Through CLI: Entra Auth
-    [Arguments]    ${username}    ${entra_password}=${EMPTY}    ${entra_totp_secret}=${EMPTY}
+    [Arguments]    ${username}    ${entra_password_env}=E2E_PASSWORD    ${entra_totp_env}=TOTP_SECRET
     Try machinectl login Prompt
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
@@ -519,7 +511,7 @@ Log In With Remote User Through CLI: Entra Auth
 
     # Wait for the authenticated shell prompt.
     Enter Entra ID Password And MFA    Match Text    ${username}@ubuntu:~$    30
-    ...    entra_password=${entra_password}    entra_totp_secret=${entra_totp_secret}
+    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
 
 Log In With Remote User Through CLI: Entra Passwordless TAP
     [Arguments]    ${username}    ${local_password}    ${tap_code}
@@ -546,7 +538,7 @@ Log In With Remote User Through CLI: Entra Passwordless TAP
     Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
 
 Log In With Remote User Through Polkit: Entra Password
-    [Arguments]    ${username}    ${marker_file}=${EMPTY}    ${entra_password}=${EMPTY}    ${entra_totp_secret}=${EMPTY}
+    [Arguments]    ${username}    ${marker_file}=${EMPTY}    ${entra_password_env}=E2E_PASSWORD    ${entra_totp_env}=TOTP_SECRET
 
     # Polkit auto-selects authentication via local password.
     # Cancel it ('r') to go back to the authentication-flow menu and choose the
@@ -562,8 +554,8 @@ Log In With Remote User Through Polkit: Entra Password
 
     IF    $marker_file != ''
         Enter Entra ID Password And MFA    SSH.Execute    test -f "${marker_file}"
-        ...    entra_password=${entra_password}    entra_totp_secret=${entra_totp_secret}
+        ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
     ELSE
         Enter Entra ID Password And MFA    Match Text    @ubuntu:~$    10
-        ...    entra_password=${entra_password}    entra_totp_secret=${entra_totp_secret}
+        ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
     END
