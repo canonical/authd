@@ -11,8 +11,8 @@ Test Teardown   Test Teardown
 
 *** Variables ***
 ${username}        ${EMPTY}
-${entra_password}    ${EMPTY}
-${entra_totp_secret}    ${EMPTY}
+${entra_password_env}    E2E_PASSWORD
+${entra_totp_env}    TOTP_SECRET
 ${uid_attribute}    %{E2E_UNIX_IDS_UID_ATTRIBUTE=${EMPTY}}
 ${gid_attribute}    %{E2E_UNIX_IDS_GID_ATTRIBUTE=${EMPTY}}
 ${uid_short_attribute}    %{E2E_UNIX_IDS_UID_SHORT_ATTRIBUTE=Linux_UID}
@@ -33,22 +33,24 @@ Test Setup
         Skip    Configure the tenant-specific Entra Unix ID fixture values in e2e-tests-msentraid.env.
     END
     ${shared_user}=    Get Environment Variable    E2E_USER    ${EMPTY}
-    ${shared_password}=    Get Environment Variable    E2E_PASSWORD    ${EMPTY}
-    ${shared_totp}=    Get Environment Variable    TOTP_SECRET    ${EMPTY}
     ${extension_user}=    Get Environment Variable    E2E_UNIX_IDS_USER    ${EMPTY}
     IF    $use_extension_user
-        ${extension_password}=    Get Environment Variable    E2E_UNIX_IDS_PASSWORD    ${EMPTY}
-        ${extension_totp}=    Get Environment Variable    E2E_UNIX_IDS_TOTP_SECRET    ${EMPTY}
-        IF    not $extension_user or not $extension_password or not $extension_totp
+        # Check that the secrets are set without assigning their values to Robot
+        # variables, so the values never reach the Robot log.
+        ${extension_password_set}=    Run Keyword And Return Status
+        ...    Should Not Be Empty    %{E2E_UNIX_IDS_PASSWORD=${EMPTY}}
+        ${extension_totp_set}=    Run Keyword And Return Status
+        ...    Should Not Be Empty    %{E2E_UNIX_IDS_TOTP_SECRET=${EMPTY}}
+        IF    not $extension_user or not $extension_password_set or not $extension_totp_set
             Skip    E2E_UNIX_IDS_USER, E2E_UNIX_IDS_PASSWORD, and E2E_UNIX_IDS_TOTP_SECRET must be set.
         END
         Set Test Variable    ${username}    ${extension_user}
-        Set Test Variable    ${entra_password}    ${extension_password}
-        Set Test Variable    ${entra_totp_secret}    ${extension_totp}
+        Set Test Variable    ${entra_password_env}    E2E_UNIX_IDS_PASSWORD
+        Set Test Variable    ${entra_totp_env}    E2E_UNIX_IDS_TOTP_SECRET
     ELSE
         Set Test Variable    ${username}    ${shared_user}
-        Set Test Variable    ${entra_password}    ${shared_password}
-        Set Test Variable    ${entra_totp_secret}    ${shared_totp}
+        Set Test Variable    ${entra_password_env}    E2E_PASSWORD
+        Set Test Variable    ${entra_totp_env}    TOTP_SECRET
     END
 
     Set Test Variable    ${fixture_started}    ${True}
@@ -71,16 +73,20 @@ Test Setup With Generic Entra Account
 
 Test Setup With No GID Entra Account
     ${extension_user}=    Get Environment Variable    E2E_UNIX_IDS_NO_GID_USER    ${EMPTY}
-    ${extension_password}=    Get Environment Variable    E2E_UNIX_IDS_NO_GID_PASSWORD    ${EMPTY}
-    ${extension_totp}=    Get Environment Variable    E2E_UNIX_IDS_NO_GID_TOTP_SECRET    ${EMPTY}
-    IF    not $extension_user or not $extension_password or not $extension_totp or not $no_gid_expected_uid or not $generic_test_group
+    # Check that the secrets are set without assigning their values to Robot
+    # variables, so the values never reach the Robot log.
+    ${extension_password_set}=    Run Keyword And Return Status
+    ...    Should Not Be Empty    %{E2E_UNIX_IDS_NO_GID_PASSWORD=${EMPTY}}
+    ${extension_totp_set}=    Run Keyword And Return Status
+    ...    Should Not Be Empty    %{E2E_UNIX_IDS_NO_GID_TOTP_SECRET=${EMPTY}}
+    IF    not $extension_user or not $extension_password_set or not $extension_totp_set or not $no_gid_expected_uid or not $generic_test_group
         Skip    Configure the no-GID credentials and fixture values in e2e-tests-msentraid.env.
     END
     Set Test Variable    ${configured_group}    ${generic_test_group}
     Test Setup    use_extension_user=${False}
     Set Test Variable    ${username}    ${extension_user}
-    Set Test Variable    ${entra_password}    ${extension_password}
-    Set Test Variable    ${entra_totp_secret}    ${extension_totp}
+    Set Test Variable    ${entra_password_env}    E2E_UNIX_IDS_NO_GID_PASSWORD
+    Set Test Variable    ${entra_totp_env}    E2E_UNIX_IDS_NO_GID_TOTP_SECRET
 
 Check Marker File Is Root Owned
     [Arguments]    ${marker_file}
@@ -125,7 +131,7 @@ Start Entra Login
     Start Log In With Remote User Through CLI: QR Code    ${username}
     Select Provider
     Continue Log In With Remote User: Authenticate In External Browser
-    ...    ${entra_user}    ${entra_password}    ${entra_totp_secret}
+    ...    ${entra_user}    ${entra_password_env}    ${entra_totp_env}
 
 Retry Entra Login
     [Arguments]    ${entra_user}=${username}
@@ -133,7 +139,7 @@ Retry Entra Login
     Hid.Keys Combo    Return
     Select Provider
     Continue Log In With Remote User: Authenticate In External Browser
-    ...    ${entra_user}    ${entra_password}    ${entra_totp_secret}
+    ...    ${entra_user}    ${entra_password_env}    ${entra_totp_env}
 
 Should Show Full Required Error
     [Arguments]    ${expected_text}
@@ -152,7 +158,7 @@ Test Entra Unix IDs are cached and can be applied
 
     Open Terminal
     Log In With Remote User Through CLI: QR Code
-    ...    ${username}    ${local_password}    ${username}    ${entra_password}    ${entra_totp_secret}
+    ...    ${username}    ${local_password}    ${username}    ${entra_password_env}    ${entra_totp_env}
     Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
 
     Wait Until Keyword Succeeds    30s    2s    Find User Token Cache    ${username}
@@ -207,7 +213,7 @@ Test Entra Unix IDs can be applied with the bridge script
 
     Open Terminal
     Log In With Remote User Through CLI: QR Code
-    ...    ${username}    ${local_password}    ${username}    ${entra_password}    ${entra_totp_secret}
+    ...    ${username}    ${local_password}    ${username}    ${entra_password_env}    ${entra_totp_env}
     Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
 
     Wait Until Keyword Succeeds    30s    2s    Find User Token Cache    ${username}
@@ -262,7 +268,7 @@ Test Offline Login Uses Complete Cached Unix IDs Unless Provider Check Is Forced
 
     Open Terminal
     Log In With Remote User Through CLI: QR Code
-    ...    ${username}    ${local_password}    ${username}    ${entra_password}    ${entra_totp_secret}
+    ...    ${username}    ${local_password}    ${username}    ${entra_password_env}    ${entra_totp_env}
     Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
 
     ${token_path}=    Find User Token Cache    ${username}
@@ -331,15 +337,15 @@ Test GDM login rejects missing group GID then succeeds when optional
     Start Log In With Remote User Through GDM    ${username}
     Select Broker Through GDM
     Enter Entra ID Password And MFA    Match Text    Select the broker    30
-    ...    entra_password=${entra_password}    entra_totp_secret=${entra_totp_secret}
+    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
     Match Text    Select the broker    30
     ${sessions}=    SSH.Execute    loginctl list-sessions --no-legend | awk '$3 == "${username}" {print}'
     Should Be Empty    ${sessions}
 
     Change Broker Configuration    unix_gid_required    false
     Select Broker Through GDM
-    Continue Log In With Remote User Through GDM: Entra Password    ${entra_password}    ${entra_totp_secret}
-    Check If User Was Added Properly    ${username}    ${entra_password}    ${configured_group}
+    Continue Log In With Remote User Through GDM: Entra Password    ${entra_password_env}    ${entra_totp_env}
+    Check If User Was Added Properly    ${username}    %{${entra_password_env}}    ${configured_group}
 
 
 Test polkit authentication rejects missing group GID then succeeds when optional
@@ -350,7 +356,7 @@ Test polkit authentication rejects missing group GID then succeeds when optional
     Start Log In With Remote User Through GDM    ${username}
     Select Broker Through GDM
     Continue Log In With Remote User: Authenticate In External Browser
-    ...    ${username}    ${entra_password}    ${entra_totp_secret}
+    ...    ${username}    ${entra_password_env}    ${entra_totp_env}
     Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
     Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
     SSH.Execute    sudo usermod -aG sudo ${username}
@@ -370,9 +376,11 @@ Test polkit authentication rejects missing group GID then succeeds when optional
     Match Text    2. Entra ID authentication    15
     Hid.Type String    2
     Hid.Keys Combo    Return
-    Enter Entra ID Password And MFA    Match Text    Authentication Required    30
-    ...    entra_password=${entra_password}    entra_totp_secret=${entra_totp_secret}
-    Match Text    Authentication Required    30
+    Enter Entra ID Password And MFA    Should Show Full Required Error
+    ...    Microsoft Entra ID did not provide a valid required Unix GID for one or more of your groups. Please contact your administrator.
+    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
+    Wait Until Keyword Succeeds    30s    1s    Should Show Full Required Error
+    ...    Microsoft Entra ID did not provide a valid required Unix GID for one or more of your groups. Please contact your administrator.
     ${marker_exists}=    SSH.Execute    test -e /tmp/polkit-authd-test-no-gid && echo yes || true
     Should Be Empty    ${marker_exists}
 
@@ -382,7 +390,7 @@ Test polkit authentication rejects missing group GID then succeeds when optional
     Hid.Type String    pkexec touch /tmp/polkit-authd-test-no-gid
     Hid.Keys Combo    Return
     Log In With Remote User Through Polkit: Entra Password    ${username}
-    ...    entra_password=${entra_password}    entra_totp_secret=${entra_totp_secret}
+    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
     Wait Until Keyword Succeeds    30s    5s
     ...    Check Marker File Is Root Owned    /tmp/polkit-authd-test-no-gid
 
@@ -407,7 +415,7 @@ Test Entra MFA login rejects missing group GID then succeeds when optional
     Hid.Keys Combo    Return
     Enter Entra ID Password And MFA    Should Show Full Required Error
     ...    Microsoft Entra ID did not provide a valid required Unix GID for one or more of your groups. Please contact your administrator.
-    ...    entra_password=${entra_password}    entra_totp_secret=${entra_totp_secret}
+    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
     Wait Until Keyword Succeeds    30s    1s    Should Show Full Required Error
     ...    Microsoft Entra ID did not provide a valid required Unix GID for one or more of your groups. Please contact your administrator.
     Match Text    Login incorrect    30
@@ -420,8 +428,8 @@ Test Entra MFA login rejects missing group GID then succeeds when optional
     Hid.Type String    2
     Hid.Keys Combo    Return
     Enter Entra ID Password And MFA    Match Text    ${username}@ubuntu:~$    30
-    ...    entra_password=${entra_password}    entra_totp_secret=${entra_totp_secret}
-    Check If User Was Added Properly    ${username}    ${entra_password}    ${configured_group}
+    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
+    Check If User Was Added Properly    ${username}    %{${entra_password_env}}    ${configured_group}
 
 Test Required Entra UID rejects users without a UID, optional UID allows login
     [Documentation]    Verify the generic Entra account without a UID is rejected when
@@ -482,7 +490,7 @@ Test Entra Unix ID short attribute names resolve correctly
     Change Broker Configuration    unix_gid_attribute    ${gid_short_attribute}
     Open Terminal
     Log In With Remote User Through CLI: QR Code
-    ...    ${username}    ${local_password}    ${username}    ${entra_password}    ${entra_totp_secret}
+    ...    ${username}    ${local_password}    ${username}    ${entra_password_env}    ${entra_totp_env}
     Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
 
     Wait Until Keyword Succeeds    30s    2s    Find User Token Cache    ${username}
