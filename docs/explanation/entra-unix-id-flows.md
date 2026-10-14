@@ -162,6 +162,12 @@ signed 32-bit range. The broker rejects:
 - `4294967295`; and
 - values greater than `2147483647`.
 
+The Microsoft Graph client reads every JSON number as a 64-bit float before the
+broker validates it. A fraction that rounds to a whole number in a 64-bit float,
+such as `1.0000000000000000001`, is therefore accepted as that whole number. The
+Unix ID attributes are registered as integers, so Graph should not return such
+values.
+
 Invalid data is logged and omitted. For a required attribute with the forced
 check, the login fails with a required Unix attribute error instead.
 

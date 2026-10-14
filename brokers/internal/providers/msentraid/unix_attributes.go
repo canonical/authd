@@ -162,7 +162,8 @@ func validateUnixIDNumber(value json.Number) (*uint32, error) {
 		return nil, fmt.Errorf("invalid numeric value %q", value)
 	}
 	// Parse the exact decimal value. Converting to float64 first would round
-	// a value such as 1.0000000000000000001 to an integer.
+	// a value such as 1.0000000000000000001 to an integer. Graph values reach
+	// parseUnixID as float64, so this path only handles json.Number values.
 	exact, ok := new(big.Rat).SetString(string(value))
 	if !ok {
 		return nil, fmt.Errorf("value %s is outside the supported range", value)
