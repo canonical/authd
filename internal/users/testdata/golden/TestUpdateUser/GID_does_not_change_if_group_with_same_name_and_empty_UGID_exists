@@ -7,6 +7,7 @@ users:
       shell: /bin/bash
       broker_id: broker-id
       provider_id: ""
+      full_username: user1@example.com
 groups:
     - name: user1@example.com
       gid: 1111
@@ -19,4 +20,4 @@ users_to_groups:
       gid: 1111
     - uid: 1111
       gid: 11111
-schema_version: 3
+schema_version: 5

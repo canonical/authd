@@ -7,6 +7,7 @@ users:
       shell: /bin/dash
       broker_id: broker-id
       provider_id: ""
+      full_username: user2@example.com
     - name: user3@example.com
       uid: 3333
       gid: 33333
@@ -15,6 +16,7 @@ users:
       shell: /bin/zsh
       broker_id: broker-id
       provider_id: ""
+      full_username: user3@example.com
     - name: userwithoutbroker@example.com
       uid: 4444
       gid: 44444
@@ -23,6 +25,7 @@ users:
       shell: /bin/sh
       broker_id: ""
       provider_id: ""
+      full_username: userwithoutbroker@example.com
 groups:
     - name: group2withoutugid
       gid: 22222
@@ -49,4 +52,4 @@ users_to_groups:
       gid: 44444
     - uid: 4444
       gid: 99999
-schema_version: 3
+schema_version: 5

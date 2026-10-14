@@ -16,6 +16,26 @@ type schemaMigration struct {
 	migrate     func(*Manager) error
 }
 
+func backfillEmptyFullUsernames(q queryable) error {
+	// A downgrade can write rows without full_username after the column migration has already run.
+	// Do not claim a full username that another row already owns, since that would violate the
+	// unique index and prevent authd from starting.
+	_, err := q.Exec(`
+		UPDATE users
+		SET full_username = name
+		WHERE (full_username IS NULL OR full_username = '')
+		  AND NOT EXISTS (
+			  SELECT 1
+			  FROM users AS existing
+			  WHERE existing.uid != users.uid
+			    AND existing.full_username = users.name
+		  )`)
+	if err != nil {
+		return fmt.Errorf("failed to populate 'full_username' column: %w", err)
+	}
+	return nil
+}
+
 var schemaMigrations = []schemaMigration{
 	{
 		description: "Migrate to lowercase user and group names",
@@ -134,6 +154,79 @@ var schemaMigrations = []schemaMigration{
 				log.Debug(context.Background(), "'provider_id' column already exists in users table, ensured provider ID index")
 			}
 			return nil
+		},
+	},
+	{
+		description: "Add column 'full_username' to users table",
+		migrate: func(m *Manager) (err error) {
+			tx, err := m.db.Begin()
+			if err != nil {
+				return fmt.Errorf("failed to start transaction: %w", err)
+			}
+
+			// Ensure the transaction is committed or rolled back
+			defer func() {
+				err = commitOrRollBackTransaction(err, tx)
+			}()
+
+			var exists bool
+			err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM pragma_table_info('users') WHERE name = 'full_username')").Scan(&exists)
+			if err != nil {
+				return fmt.Errorf("failed to check if 'full_username' column exists: %w", err)
+			}
+			if !exists {
+				if _, err = tx.Exec(`ALTER TABLE users ADD COLUMN full_username TEXT DEFAULT ''`); err != nil {
+					return fmt.Errorf("failed to add 'full_username' column to users table: %w", err)
+				}
+			}
+
+			// Until now users could only authenticate with their full username, so the
+			// stored name is also their full username.
+			if err = backfillEmptyFullUsernames(tx); err != nil {
+				return err
+			}
+
+			var emptyCount int
+			err = tx.QueryRow(`SELECT COUNT(*) FROM users WHERE full_username IS NULL OR full_username = ''`).Scan(&emptyCount)
+			if err != nil {
+				return fmt.Errorf("failed to check for empty 'full_username' values: %w", err)
+			}
+			if emptyCount > 0 {
+				return fmt.Errorf("cannot create unique index: found %d user(s) with empty 'full_username'", emptyCount)
+			}
+
+			// Looking a user up by full username is the fallback of every name lookup that misses,
+			// which includes the frequent NSS requests for users authd does not know about. Index
+			// the column so those misses do not scan the whole table.
+			//
+			// The index is unique because the full username identifies the user: it is what maps
+			// the name authd stores them under back to the name the brokers know them by, and it
+			// authorises renaming a row between the two forms. Two rows claiming the same one would
+			// make that mapping ambiguous, and the lookup would silently pick either of them.
+			// Dropping any previous index first keeps the name free for the unique one.
+			if _, err = tx.Exec(`DROP INDEX IF EXISTS "idx_user_full_username"`); err != nil {
+				return fmt.Errorf("failed to drop the previous full username index: %w", err)
+			}
+			if _, err = tx.Exec(`CREATE UNIQUE INDEX "idx_user_full_username" ON users ("full_username")`); err != nil {
+				return fmt.Errorf("failed to create full username index: %w", err)
+			}
+
+			return nil
+		},
+	},
+	{
+		description: "Backfill full usernames left empty by older authd versions",
+		migrate: func(m *Manager) (err error) {
+			tx, err := m.db.Begin()
+			if err != nil {
+				return fmt.Errorf("failed to start transaction: %w", err)
+			}
+
+			defer func() {
+				err = commitOrRollBackTransaction(err, tx)
+			}()
+
+			return backfillEmptyFullUsernames(tx)
 		},
 	},
 }

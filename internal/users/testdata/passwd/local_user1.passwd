@@ -1,0 +1,2 @@
+root:x:0:0:root:/root:/bin/bash
+user1:x:3333:3333:Local user 1:/home/user1:/bin/bash

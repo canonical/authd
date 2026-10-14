@@ -5,13 +5,20 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/canonical/authd/log"
 )
 
-const allUserColumns = "name, uid, gid, gecos, dir, shell, broker_id, locked, provider_id"
-const publicUserColumns = "name, uid, gid, gecos, dir, shell, broker_id, locked, provider_id"
-const allUserColumnsWithPlaceholders = "name = ?, uid = ?, gid = ?, gecos = ?, dir = ?, shell = ?, broker_id = ?, locked = ?, provider_id = ?"
+// userColumns lists the user table columns in the order every query below selects, scans and
+// inserts them. There is a single list so that the readers and the writers can never drift apart
+// and start filling the wrong fields.
+const userColumns = "name, uid, gid, gecos, dir, shell, broker_id, locked, provider_id, full_username"
+const userColumnsWithPlaceholders = "name = ?, uid = ?, gid = ?, gecos = ?, dir = ?, shell = ?, broker_id = ?, locked = ?, provider_id = ?, full_username = ?"
+
+// userColumnPlaceholders is the VALUES list of an insert covering userColumns. It is derived from
+// them, so that adding a column cannot leave the two out of step.
+var userColumnPlaceholders = strings.TrimSuffix(strings.Repeat("?, ", strings.Count(userColumns, ",")+1), ", ")
 
 // UserRow represents a user row in the database.
 type UserRow struct {
@@ -32,19 +39,28 @@ type UserRow struct {
 	// and users authenticated via v2 brokers. It is scoped by BrokerID and is always
 	// serialized (no omitempty) so the user's identity fields are explicit in dumps.
 	ProviderID string `yaml:"provider_id"`
+
+	// FullUsername is the full username (including domain) as returned by the broker. It differs from Name
+	// when short usernames are enabled. It is always serialized (no omitempty) because it is the
+	// name authd hands to the broker on subsequent authentications.
+	//
+	// ProviderID cannot serve this purpose: it is an opaque identifier, so the full username cannot
+	// be derived from it, and it is empty for local users and for users created before brokers reported it.
+	FullUsername string `yaml:"full_username"`
 }
 
 // NewUserRow creates a new UserRow.
-func NewUserRow(name string, uid, gid uint32, gecos, dir, shell, brokerID, providerID string) UserRow {
+func NewUserRow(name string, uid, gid uint32, gecos, dir, shell, brokerID, providerID, fullUsername string) UserRow {
 	return UserRow{
-		Name:       name,
-		UID:        uid,
-		GID:        gid,
-		Gecos:      gecos,
-		Dir:        dir,
-		Shell:      shell,
-		BrokerID:   brokerID,
-		ProviderID: providerID,
+		Name:         name,
+		UID:          uid,
+		GID:          gid,
+		Gecos:        gecos,
+		Dir:          dir,
+		Shell:        shell,
+		BrokerID:     brokerID,
+		ProviderID:   providerID,
+		FullUsername: fullUsername,
 	}
 }
 
@@ -54,11 +70,11 @@ func (m *Manager) UserByID(uid uint32) (UserRow, error) {
 }
 
 func userByID(db queryable, uid uint32) (UserRow, error) {
-	query := fmt.Sprintf(`SELECT %s FROM users WHERE uid = ?`, publicUserColumns)
+	query := fmt.Sprintf(`SELECT %s FROM users WHERE uid = ?`, userColumns)
 	row := db.QueryRow(query, uid)
 
 	var u UserRow
-	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
+	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID, &u.FullUsername)
 	if errors.Is(err, sql.ErrNoRows) {
 		return UserRow{}, NewUIDNotFoundError(uid)
 	}
@@ -75,11 +91,11 @@ func (m *Manager) UserByName(name string) (UserRow, error) {
 }
 
 func userByName(db queryable, name string) (UserRow, error) {
-	query := fmt.Sprintf(`SELECT %s FROM users WHERE name = ?`, publicUserColumns)
+	query := fmt.Sprintf(`SELECT %s FROM users WHERE name = ?`, userColumns)
 	row := db.QueryRow(query, name)
 
 	var u UserRow
-	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
+	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID, &u.FullUsername)
 	if errors.Is(err, sql.ErrNoRows) {
 		return UserRow{}, NewUserNotFoundError(name)
 	}
@@ -96,13 +112,34 @@ func (m *Manager) UserByProviderID(brokerID, providerID string) (UserRow, error)
 }
 
 func userByProviderID(db queryable, brokerID, providerID string) (UserRow, error) {
-	query := fmt.Sprintf(`SELECT %s FROM users WHERE broker_id = ? AND provider_id = ?`, publicUserColumns)
+	query := fmt.Sprintf(`SELECT %s FROM users WHERE broker_id = ? AND provider_id = ?`, userColumns)
 	row := db.QueryRow(query, brokerID, providerID)
 
 	var u UserRow
-	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
+	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID, &u.FullUsername)
 	if errors.Is(err, sql.ErrNoRows) {
 		return UserRow{}, NoDataFoundError{fmt.Sprintf("user with broker ID %q and provider ID %q not found", brokerID, providerID)}
+	}
+	if err != nil {
+		return UserRow{}, fmt.Errorf("query error: %w", err)
+	}
+
+	return u, nil
+}
+
+// UserByFullUsername returns a user matching this fully qualified username or an error if no entry was found.
+func (m *Manager) UserByFullUsername(fullUsername string) (UserRow, error) {
+	return userByFullUsername(m.db, fullUsername)
+}
+
+func userByFullUsername(db queryable, fullUsername string) (UserRow, error) {
+	query := fmt.Sprintf(`SELECT %s FROM users WHERE full_username = ?`, userColumns)
+	row := db.QueryRow(query, fullUsername)
+
+	var u UserRow
+	err := row.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID, &u.FullUsername)
+	if errors.Is(err, sql.ErrNoRows) {
+		return UserRow{}, NoDataFoundError{fmt.Sprintf("user with full username %q not found", fullUsername)}
 	}
 	if err != nil {
 		return UserRow{}, fmt.Errorf("query error: %w", err)
@@ -117,7 +154,7 @@ func (m *Manager) AllUsers() ([]UserRow, error) {
 }
 
 func allUsers(db queryable) ([]UserRow, error) {
-	query := fmt.Sprintf(`SELECT %s FROM users`, allUserColumns)
+	query := fmt.Sprintf(`SELECT %s FROM users`, userColumns)
 	rows, err := db.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("query error: %w", err)
@@ -127,7 +164,7 @@ func allUsers(db queryable) ([]UserRow, error) {
 	var users []UserRow
 	for rows.Next() {
 		var u UserRow
-		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
+		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID, &u.FullUsername)
 		if err != nil {
 			return nil, fmt.Errorf("scan error: %w", err)
 		}
@@ -180,8 +217,8 @@ func userExists(db queryable, u UserRow) (bool, error) {
 // insertUser inserts a new user into the database.
 func insertUser(db queryable, u UserRow) error {
 	log.Debugf(context.Background(), "Inserting user %v", u.Name)
-	query := fmt.Sprintf(`INSERT INTO users (%s) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, allUserColumns)
-	_, err := db.Exec(query, u.Name, u.UID, u.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.Locked, u.ProviderID)
+	query := fmt.Sprintf(`INSERT INTO users (%s) VALUES (%s)`, userColumns, userColumnPlaceholders)
+	_, err := db.Exec(query, u.Name, u.UID, u.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.Locked, u.ProviderID, u.FullUsername)
 	if err != nil {
 		return fmt.Errorf("insert user error: %w", err)
 	}
@@ -191,8 +228,8 @@ func insertUser(db queryable, u UserRow) error {
 // updateUserByID updates the user with the same UID in the database.
 func updateUserByID(db queryable, u UserRow) error {
 	log.Debugf(context.Background(), "Updating user %v", u.Name)
-	query := fmt.Sprintf(`UPDATE users SET %s WHERE uid = ?`, allUserColumnsWithPlaceholders)
-	_, err := db.Exec(query, u.Name, u.UID, u.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.Locked, u.ProviderID, u.UID)
+	query := fmt.Sprintf(`UPDATE users SET %s WHERE uid = ?`, userColumnsWithPlaceholders)
+	_, err := db.Exec(query, u.Name, u.UID, u.GID, u.Gecos, u.Dir, u.Shell, u.BrokerID, u.Locked, u.ProviderID, u.FullUsername, u.UID)
 	if err != nil {
 		return fmt.Errorf("update user error: %w", err)
 	}
@@ -226,7 +263,7 @@ func (m *Manager) UsersWithPrimaryGroup(gid uint32) ([]UserRow, error) {
 }
 
 func usersWithPrimaryGroup(db queryable, gid uint32) ([]UserRow, error) {
-	query := fmt.Sprintf(`SELECT %s FROM users WHERE gid = ? ORDER BY uid`, publicUserColumns)
+	query := fmt.Sprintf(`SELECT %s FROM users WHERE gid = ? ORDER BY uid`, userColumns)
 	rows, err := db.Query(query, gid)
 	if err != nil {
 		return nil, fmt.Errorf("query error: %w", err)
@@ -236,7 +273,7 @@ func usersWithPrimaryGroup(db queryable, gid uint32) ([]UserRow, error) {
 	var users []UserRow
 	for rows.Next() {
 		var u UserRow
-		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
+		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID, &u.FullUsername)
 		if err != nil {
 			return nil, fmt.Errorf("scan error: %w", err)
 		}

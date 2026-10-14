@@ -8,6 +8,7 @@ users:
       dir: /home/userwithbroker@example.com
       shell: /bin/bash
       broker_id: broker-id
+      full_username: userwithbroker@example.com
     - name: userwithinactivebroker@example.com
       uid: 2222
       gid: 22222
@@ -15,18 +16,21 @@ users:
       dir: /home/userwithinactivebroker@example.com
       shell: /bin/dash
       broker_id: inactive-broker-id
+      full_username: userwithinactivebroker@example.com
     - name: userlocalbroker@example.com
       uid: 3333
       gid: 33333
       gecos: userlocalbroker
       dir: /home/userlocalbroker@example.com
       shell: /bin/zsh
+      full_username: userlocalbroker@example.com
     - name: usersetbroker@example.com
       uid: 4444
       gid: 44444
       gecos: usersetbroker
       dir: /home/usersetbroker@example.com
       shell: /bin/dash
+      full_username: usersetbroker@example.com
     - name: userupdatebroker@example.com
       uid: 5555
       gid: 55555
@@ -34,6 +38,7 @@ users:
       dir: /home/userupdatebroker@example.com
       shell: /bin/zsh
       broker_id: tobereplaced-broker-id
+      full_username: userupdatebroker@example.com
 groups:
     - name: group1
       gid: 11111

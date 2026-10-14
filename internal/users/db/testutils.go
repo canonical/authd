@@ -90,6 +90,17 @@ func Z_ForTests_DumpNormalizedYAML(c *Manager) (string, error) {
 	return string(yamlData), nil
 }
 
+// Z_ForTests_Exec executes a raw query against the database for tests that need to create invalid
+// states which the public API prevents.
+//
+// nolint:revive,nolintlint // We want to use underscores in the function name here.
+func Z_ForTests_Exec(c *Manager, query string, args ...any) error {
+	testsdetection.MustBeTesting()
+
+	_, err := c.db.Exec(query, args...)
+	return err
+}
+
 // Z_ForTests_CreateDBFromYAML creates the database inside destDir and loads the src file content into it.
 //
 // nolint:revive,nolintlint // We want to use underscores in the function name here.
@@ -141,7 +152,7 @@ func createDBFromYAMLReader(r io.Reader, destDir string) (err error) {
 		}
 	}()
 
-	tablesInOrder := []string{"users", "groups", "users_to_groups", "schema_version"}
+	tablesInOrder := []string{"users", "groups", "users_to_groups", "users_to_local_groups", "schema_version"}
 
 	// Insert data
 	for _, table := range tablesInOrder {

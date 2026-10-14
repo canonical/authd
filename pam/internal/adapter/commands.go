@@ -11,6 +11,8 @@ import (
 	"github.com/canonical/authd/log"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/msteinert/pam/v2"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // sendEvent sends an event msg to the main event loop.
@@ -48,6 +50,11 @@ func startBrokerSession(client authd.PAMClient, brokerID, username, serviceName 
 
 		sbResp, err := client.SelectBroker(context.TODO(), sbReq)
 		if err != nil {
+			// A user authd does not know about is not a failure of the authentication stack, and
+			// reporting it as one makes an expected situation look like a broken system.
+			if st, ok := status.FromError(err); ok && st.Code() == codes.NotFound {
+				return pamError{status: pam.ErrUserUnknown, msg: st.Message()}
+			}
 			return pamError{status: pam.ErrSystem, msg: err.Error()}
 		}
 
