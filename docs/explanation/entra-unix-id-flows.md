@@ -279,13 +279,14 @@ Initial online login.
 
 Credential freshness is separate from directory-data freshness. After token
 refresh or device registration, intermediate cache writes save the new
-credentials with the previous `UserInfo`. Only enrichment that returns a snapshot
-replaces that directory snapshot, even when the forced check then denies the login.
-On a first login there is no previous `UserInfo`, so
+credentials with the previous `UserInfo`. On a returning login, only enrichment
+that returns a snapshot replaces that directory snapshot, even when the forced
+check then denies the login. On a first login there is no previous `UserInfo`, so
 these writes store no groups and no UID. This preserves rotated refresh tokens
-and registration data even when enrichment denies login. An online login that
-falls back to cached directory data remains online and persists its refreshed
-credentials.
+and registration data even when enrichment denies login. On a first login, the
+forced check denies the login without storing the enriched snapshot, even when
+enrichment returned one. An online login that falls back to cached directory data
+remains online and persists its refreshed credentials.
 
 A successful response with a missing or invalid value clears that field in the
 newly cached snapshot. A failed lookup keeps the cached value. In both cases, the

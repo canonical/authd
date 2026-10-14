@@ -3299,7 +3299,7 @@ func (b *Broker) enrichUserInfo(ctx context.Context, session *session, authInfo 
 		}
 		// Partial results only report mandatory attributes, and only the forced check denies them.
 		if b.cfg.forceAccessCheckWithProvider {
-			// The caller stores this snapshot before denying the login.
+			// On a returning login, the caller stores this snapshot before denying the login.
 			authInfo.UserInfo = enriched
 			b.recordUnixAttributeNames(authInfo)
 			return err
