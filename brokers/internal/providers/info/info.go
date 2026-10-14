@@ -59,16 +59,23 @@ type UnixAttributeConfig struct {
 // KeepCachedGIDs sets the GID of each group that has none to the cached GID of
 // the group with the same UGID.
 func KeepCachedGIDs(groups, cached []Group) {
+	// The first cached GID of a UGID wins.
+	cachedGIDs := make(map[string]uint32, len(cached))
+	for _, c := range cached {
+		if c.UGID == "" || c.GID == nil {
+			continue
+		}
+		if _, ok := cachedGIDs[c.UGID]; !ok {
+			cachedGIDs[c.UGID] = *c.GID
+		}
+	}
+
 	for i := range groups {
 		if groups[i].UGID == "" || groups[i].GID != nil {
 			continue
 		}
-		for _, c := range cached {
-			if c.UGID == groups[i].UGID && c.GID != nil {
-				gid := *c.GID
-				groups[i].GID = &gid
-				break
-			}
+		if gid, ok := cachedGIDs[groups[i].UGID]; ok {
+			groups[i].GID = &gid
 		}
 	}
 }
