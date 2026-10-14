@@ -23,7 +23,7 @@ _BROKER_CONFIGS = {
         # its colon, render it full-width, or change its case. Require the
         # value to end its OCR line so a label-only frame cannot capture
         # adjacent dialog text.
-        "DEVICE_URL_REGEX": r"(?:URL:\s*)?(https://)?login.microsoft.com/device\n(?:(?i:Code|Login[ \t]*code)(?=[:\uFF1A][ \t]*|[ \t]+|\n)[:\uFF1A]?[ \t]*\n?|(?!(?i:CODE|LOGIN[ \t]*CODE)(?:[ \t]*[:\uFF1A]|[ \t]+|\n|$))\s*)([A-Za-z0-9]+)(?=[ \t]*(?:\n|$))",
+        "DEVICE_URL_REGEX": r"(?:URL:\s*)?(https://)?(?i:login\.microsoft\.com/device)\n(?:(?i:Code|Login[ \t]*code)(?=[:\uFF1A][ \t]*|[ \t]+|\n)[:\uFF1A]?[ \t]*\n?|(?!(?i:CODE|LOGIN[ \t]*CODE)(?:[ \t]*[:\uFF1A]|[ \t]+|\n|$))\s*)([A-Za-z0-9]+)(?=[ \t]*(?:\n|$))",
         "remote_group": "e2e-test-group",
     },
     "authd-google": {
