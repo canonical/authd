@@ -134,6 +134,16 @@ your organization's domain. `Update-MgUser` also accepts the user's Entra
 object ID instead of a UPN. Replace `<GROUP_OBJECT_ID>` with the Entra object
 ID of the group whose GID you are assigning.
 
+Avoid giving an Entra group the same name as a user. authd already creates a
+private group for each user, named after that user. An Entra group with the same
+name collides with that private group. If the cache has no UID, the script
+refuses to apply the cache, because applying the group's GID would change the
+private group's GID. If the cache has a UID, the group's GID must match that UID.
+Avoid other name collisions too. For example, two Entra groups whose names are
+the same in lowercase conflict, and the script refuses them. Also avoid names
+that match local groups. `authctl` is the final check for local and authd
+database conflicts.
+
 Use the full property names returned when the properties were created. For
 example, an attribute created by Entra Connect or Cloud Sync may use
 `extension_<SYNC_APP_ID_WITHOUT_HYPHENS>_uidNumber` rather than the broker
