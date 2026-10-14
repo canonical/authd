@@ -43,9 +43,8 @@ var DefaultConfig = Config{
 
 // Manager is the manager for any user related operation.
 type Manager struct {
-	// userManagementMu must be used to protect all the operations in which we
-	// do users registration to the DB, to ensure that concurrent goroutines may
-	// not falsify the checks we are performing (such as the users existence).
+	// userManagementMu protects user registration and updates, as well as lock
+	// state changes that must be serialized with authenticated updates.
 	userManagementMu sync.Mutex
 
 	db             *db.Manager
@@ -53,6 +52,9 @@ type Manager struct {
 	preAuthRecords *tempentries.PreAuthUserRecords
 	idGenerator    IDGeneratorIface
 }
+
+// ErrUserLocked is returned when an authenticated update targets a locked user.
+var ErrUserLocked = errors.New("user is locked")
 
 type options struct {
 	idGenerator IDGeneratorIface
@@ -142,7 +144,17 @@ func (m *Manager) Stop() error {
 }
 
 // UpdateUser updates the user information in the db.
-func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
+func (m *Manager) UpdateUser(u types.UserInfo) error {
+	return m.updateUser(u, false)
+}
+
+// UpdateAuthenticatedUser updates user information after authentication and
+// verifies that the account is not locked while holding the user-management lock.
+func (m *Manager) UpdateAuthenticatedUser(u types.UserInfo) error {
+	return m.updateUser(u, true)
+}
+
+func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 	defer decorate.OnError(&err, "failed to update user %q", u.Name)
 
 	log.Debugf(context.TODO(), "Updating user %q", u.Name)
@@ -255,6 +267,16 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		if oldUserInfo.ProviderID != "" && u.ProviderID != "" && oldUserInfo.ProviderID != u.ProviderID {
 			return false, fmt.Errorf("user %q is already bound to a different provider ID; contact your administrator", u.Name)
 		}
+		if oldUserInfo.ProviderID == "" {
+			storedProviderUsername := oldUserInfo.ProviderUsername
+			if storedProviderUsername == "" {
+				storedProviderUsername = oldUserInfo.Name
+			}
+			if storedProviderUsername != u.ProviderUsername {
+				return false, fmt.Errorf("authenticated provider username %q conflicts with the stored identity for user %q",
+					u.ProviderUsername, oldUserInfo.Name)
+			}
+		}
 		if oldUserInfo.BrokerID != "" {
 			// The broker ID scopes the stored provider ID and should not change after it is set.
 			u.BrokerID = oldUserInfo.BrokerID
@@ -280,13 +302,15 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 		return true, nil
 	}
 
-	// Do a first check before locking, so that if the user is already there and
-	// matches the DB entry, we can avoid any kind of locking (and so being
-	// blocked by other pre-auth users that may try to login meanwhile).
+	// Check first so ordinary updates for users already up to date can avoid
+	// waiting on user registration. Authenticated updates still take the lock
+	// below to recheck the current lock state.
 	needsUpdate, err := checkUserNeedsUpdate()
-	if !needsUpdate || err != nil {
-		// The user is up to date, or an error occurred.
+	if err != nil {
 		return err
+	}
+	if !needsUpdate && !rejectLocked {
+		return nil
 	}
 
 	m.userManagementMu.Lock()
@@ -295,8 +319,21 @@ func (m *Manager) UpdateUser(u types.UserInfo) (err error) {
 	// Now that we're locked, check again if meanwhile some other request
 	// created the same user, if not we can do all the kinds of locking since
 	// we're sure that the user needs to be added or updated in the database.
-	if needsUpdate, err := checkUserNeedsUpdate(); !needsUpdate || err != nil {
+	needsUpdate, err = checkUserNeedsUpdate()
+	if err != nil {
 		return err
+	}
+	if rejectLocked && oldUserInfo != nil {
+		identity, err := m.LoginIdentityByUnixName(oldUserInfo.Name)
+		if err != nil {
+			return fmt.Errorf("failed to recheck lock state for user %q: %w", oldUserInfo.Name, err)
+		}
+		if identity.Locked {
+			return fmt.Errorf("user %q is locked: %w", oldUserInfo.Name, ErrUserLocked)
+		}
+	}
+	if !needsUpdate {
+		return nil
 	}
 
 	if oldUserInfo == nil {
@@ -978,6 +1015,9 @@ func (m *Manager) UpdateBrokerForUser(username, brokerID string) error {
 
 // LockUser sets the "locked" field to true for the given user.
 func (m *Manager) LockUser(username string) error {
+	m.userManagementMu.Lock()
+	defer m.userManagementMu.Unlock()
+
 	identity, err := m.LoginIdentityByName(username)
 	if err != nil {
 		return err
@@ -991,6 +1031,9 @@ func (m *Manager) LockUser(username string) error {
 
 // UnlockUser sets the "locked" field to false for the given user.
 func (m *Manager) UnlockUser(username string) error {
+	m.userManagementMu.Lock()
+	defer m.userManagementMu.Unlock()
+
 	identity, err := m.LoginIdentityByName(username)
 	if err != nil {
 		return err
@@ -1155,6 +1198,7 @@ func (m *Manager) LoginIdentityByUnixName(username string) (types.LoginIdentity,
 func (m *Manager) ResolveAuthenticatedIdentity(sessionUsername, brokerID, providerID, providerUsername, newUnixName string) (types.LoginIdentity, error) {
 	sessionUsername = strings.ToLower(sessionUsername)
 	providerUsername = strings.ToLower(providerUsername)
+	newUnixName = strings.ToLower(newUnixName)
 	if providerUsername == "" {
 		return types.LoginIdentity{}, errors.New("empty provider username")
 	}
@@ -1215,8 +1259,16 @@ func (m *Manager) ResolveAuthenticatedIdentity(sessionUsername, brokerID, provid
 	}
 
 	if !hasSelected {
+		_, err := m.LoginIdentityByUnixName(newUnixName)
+		switch {
+		case err == nil:
+			return types.LoginIdentity{}, fmt.Errorf("unix name %q is already used by an existing account", newUnixName)
+		case errors.Is(err, db.NoDataFoundError{}):
+		default:
+			return types.LoginIdentity{}, fmt.Errorf("failed to check new Unix name %q: %w", newUnixName, err)
+		}
 		return types.LoginIdentity{
-			Name:             strings.ToLower(newUnixName),
+			Name:             newUnixName,
 			ProviderUsername: providerUsername,
 			BrokerID:         brokerID,
 			ProviderID:       providerID,

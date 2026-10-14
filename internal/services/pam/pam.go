@@ -544,7 +544,11 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		return nil, fmt.Errorf("could not look up pre-auth UID for user %q: %w", username, preAuthErr)
 	}
 	// Update database and local groups on granted auth.
-	if err := s.userManager.UpdateUser(uInfo); err != nil {
+	if err := s.userManager.UpdateAuthenticatedUser(uInfo); err != nil {
+		if errors.Is(err, users.ErrUserLocked) {
+			log.Noticef(ctx, "Authentication failure: user %q is locked", uInfo.Name)
+			return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("user %s is locked", uInfo.Name))
+		}
 		log.Errorf(ctx, "IsAuthenticated: Could not update user %q in database: %v", uInfo.Name, err)
 		return nil, err
 	}
