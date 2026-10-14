@@ -141,13 +141,6 @@ Retry Entra Login
     Continue Log In With Remote User: Authenticate In External Browser
     ...    ${entra_user}    ${entra_password_env}    ${entra_totp_env}
 
-Should Show Full Required Error
-    [Arguments]    ${expected_text}
-    ${screen_text}=    Read Text
-    Log To Console    OCR screen text: ${screen_text}
-    ${expected_pattern}=    Evaluate    '(?s).*' + (chr(92) + 'n?').join(__import__('re').escape(char) for char in $expected_text) + '.*'
-    Should Match Regexp    ${screen_text}    ${expected_pattern}
-
 *** Test Cases ***
 Test Entra Unix IDs are cached and can be applied
     [Documentation]    Verify the admin workflow for pre-provisioned Entra UID and GID extension attributes.
@@ -308,8 +301,9 @@ Test User with Entra UID and at least one group without a GID
     Change Broker Configuration    unix_gid_required    true
     Change Broker Configuration    force_access_check_with_provider    true
     Start Entra Login
-    Wait Until Keyword Succeeds    30s    1s    Should Show Full Required Error
-    ...    Microsoft Entra ID did not provide a valid required Unix GID for one or more of your groups. Please contact your administrator.
+    Match Text    Microsoft Entra ID did not provide a valid required Unix GID    30
+    Match Text    for one or more of your groups.    30
+    Match Text    Please contact your administrator.    30
     Match Text    Login incorrect    30
 
     Change Broker Configuration    unix_gid_required    false
@@ -376,11 +370,11 @@ Test polkit authentication rejects missing group GID then succeeds when optional
     Match Text    2. Entra ID authentication    15
     Hid.Type String    2
     Hid.Keys Combo    Return
-    Enter Entra ID Password And MFA    Should Show Full Required Error
-    ...    Microsoft Entra ID did not provide a valid required Unix GID for one or more of your groups. Please contact your administrator.
+    Enter Entra ID Password And MFA    Match Text    Microsoft Entra ID did not provide a valid required Unix GID    30
     ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
-    Wait Until Keyword Succeeds    30s    1s    Should Show Full Required Error
-    ...    Microsoft Entra ID did not provide a valid required Unix GID for one or more of your groups. Please contact your administrator.
+    Match Text    Microsoft Entra ID did not provide a valid required Unix GID    30
+    Match Text    for one or more of your groups.    30
+    Match Text    Please contact your administrator.    30
     ${marker_exists}=    SSH.Execute    test -e /tmp/polkit-authd-test-no-gid && echo yes || true
     Should Be Empty    ${marker_exists}
 
@@ -413,11 +407,11 @@ Test Entra MFA login rejects missing group GID then succeeds when optional
     Match Text    2. ${PROVIDER_DISPLAY_NAME}
     Hid.Type String    2
     Hid.Keys Combo    Return
-    Enter Entra ID Password And MFA    Should Show Full Required Error
-    ...    Microsoft Entra ID did not provide a valid required Unix GID for one or more of your groups. Please contact your administrator.
+    Enter Entra ID Password And MFA    Match Text    Microsoft Entra ID did not provide a valid required Unix GID    30
     ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
-    Wait Until Keyword Succeeds    30s    1s    Should Show Full Required Error
-    ...    Microsoft Entra ID did not provide a valid required Unix GID for one or more of your groups. Please contact your administrator.
+    Match Text    Microsoft Entra ID did not provide a valid required Unix GID    30
+    Match Text    for one or more of your groups.    30
+    Match Text    Please contact your administrator.    30
     Match Text    Login incorrect    30
 
     Change Broker Configuration    unix_gid_required    false
@@ -440,8 +434,9 @@ Test Required Entra UID rejects users without a UID, optional UID allows login
     Open Terminal
     Change Broker Configuration    force_access_check_with_provider    true
     Start Entra Login
-    Wait Until Keyword Succeeds    30s    1s    Should Show Full Required Error
-    ...    Microsoft Entra ID did not provide a valid required Unix UID for your account. Please contact your administrator.
+    Match Text    Microsoft Entra ID did not provide a valid required Unix UID    30
+    Match Text    for your account.    30
+    Match Text    Please contact your administrator.    30
     Match Text    Login incorrect    30
 
     Change Broker Configuration    unix_uid_required    false
@@ -466,8 +461,9 @@ Test Required Entra group GID rejects groups without a GID, optional GID allows 
     Change Broker Configuration    unix_gid_required    true
     Change Broker Configuration    force_access_check_with_provider    true
     Start Entra Login
-    Wait Until Keyword Succeeds    30s    1s    Should Show Full Required Error
-    ...    Microsoft Entra ID did not provide a valid required Unix GID for one or more of your groups. Please contact your administrator.
+    Match Text    Microsoft Entra ID did not provide a valid required Unix GID    30
+    Match Text    for one or more of your groups.    30
+    Match Text    Please contact your administrator.    30
     Match Text    Login incorrect    30
 
     Change Broker Configuration    unix_gid_required    false
@@ -512,8 +508,9 @@ Test Wrong Entra Unix UID extension name is treated as missing
     Change Broker Configuration    unix_uid_attribute    ${uid_short_attribute}_typo
     Change Broker Configuration    force_access_check_with_provider    true
     Start Entra Login
-    Wait Until Keyword Succeeds    30s    1s    Should Show Full Required Error
-    ...    Microsoft Entra ID did not provide a valid required Unix UID for your account. Please contact your administrator.
+    Match Text    Microsoft Entra ID did not provide a valid required Unix UID    30
+    Match Text    for your account.    30
+    Match Text    Please contact your administrator.    30
 
 
 Test Wrong Entra Unix GID extension name is treated as missing
@@ -529,5 +526,6 @@ Test Wrong Entra Unix GID extension name is treated as missing
     Change Broker Configuration    unix_gid_required    true
     Change Broker Configuration    force_access_check_with_provider    true
     Start Entra Login
-    Wait Until Keyword Succeeds    30s    1s    Should Show Full Required Error
-    ...    Microsoft Entra ID did not provide a valid required Unix GID for one or more of your groups. Please contact your administrator.
+    Match Text    Microsoft Entra ID did not provide a valid required Unix GID    30
+    Match Text    for one or more of your groups.    30
+    Match Text    Please contact your administrator.    30
