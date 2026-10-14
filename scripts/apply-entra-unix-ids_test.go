@@ -27,15 +27,15 @@ func TestApplyEntraUnixIDsSkipsLocalMappings(t *testing.T) {
 }`
 	output, calls, err := runApplyEntraUnixIDs(t, token, true)
 	require.NoError(t, err, "apply-entra-unix-ids failed: %s", output)
-	require.Contains(t, output, "user set-uid alice@example.com 41001")
-	require.Contains(t, output, "group set-gid alice@example.com 41001")
-	require.Contains(t, output, "group set-gid engineering 42001")
+	require.Contains(t, output, "user set-uid -- alice@example.com 41001")
+	require.Contains(t, output, "group set-gid -- alice@example.com 41001")
+	require.Contains(t, output, "group set-gid -- engineering 42001")
 	require.NotContains(t, output, "linux-sudo")
 	require.NotContains(t, output, "without-gid")
 	require.Equal(t,
-		"user set-uid alice@example.com 41001\n"+
-			"group set-gid alice@example.com 41001\n"+
-			"group set-gid engineering 42001\n",
+		"user set-uid -- alice@example.com 41001\n"+
+			"group set-gid -- alice@example.com 41001\n"+
+			"group set-gid -- engineering 42001\n",
 		calls,
 	)
 }
@@ -82,7 +82,11 @@ func runApplyEntraUnixIDsWithArgs(t *testing.T, input string, apply bool, args [
 	// #nosec:G306 - This mock must be executable and is private to the test directory.
 	require.NoError(t, os.WriteFile(authctlPath, []byte(`#!/bin/sh
 printf '%s\n' "$*" >> "$AUTHCTL_LOG"
-if [ "$3" = "${AUTHCTL_FAIL_TARGET:-}" ] && { [ -z "${AUTHCTL_FAIL_KIND:-}" ] || [ "$1" = "$AUTHCTL_FAIL_KIND" ]; }; then
+name=$3
+if [ "$name" = "--" ]; then
+    name=$4
+fi
+if [ "$name" = "${AUTHCTL_FAIL_TARGET:-}" ] && { [ -z "${AUTHCTL_FAIL_KIND:-}" ] || [ "$1" = "$AUTHCTL_FAIL_KIND" ]; }; then
     exit 1
 fi
 `), 0700))
@@ -193,9 +197,9 @@ func TestApplyEntraUnixIDsAllowsPrivateGroupGIDMatchingUID(t *testing.T) {
 	output, calls, err := runApplyEntraUnixIDs(t, input, true)
 	require.NoError(t, err, output)
 	require.Equal(t,
-		"user set-uid Alice 41001\n"+
-			"group set-gid Alice 41001\n"+
-			"group set-gid alice 41001\n",
+		"user set-uid -- Alice 41001\n"+
+			"group set-gid -- Alice 41001\n"+
+			"group set-gid -- alice 41001\n",
 		calls,
 	)
 }
@@ -226,9 +230,30 @@ func TestApplyEntraUnixIDsAcceptsMaximumSigned32BitIDs(t *testing.T) {
 	output, calls, err := runApplyEntraUnixIDs(t, token, true)
 	require.NoError(t, err, output)
 	require.Equal(t,
-		"user set-uid alice 2147483647\n"+
-			"group set-gid alice 2147483647\n"+
-			"group set-gid engineering 2147483646\n",
+		"user set-uid -- alice 2147483647\n"+
+			"group set-gid -- alice 2147483647\n"+
+			"group set-gid -- engineering 2147483646\n",
+		calls,
+	)
+}
+
+func TestApplyEntraUnixIDsPassesFlagLikeNamesAsOperands(t *testing.T) {
+	t.Parallel()
+
+	const token = `{"UserInfo":{"name":"-alice@example.com","uid":41001,"groups":[{"name":"--help","ugid":"group-help","gid":42001}]},"UnixAttributeNames":{"UID":"extension_uidNumber","GID":"extension_gidNumber"}}`
+
+	output, _, err := runApplyEntraUnixIDs(t, token, false)
+	require.NoError(t, err, output)
+	require.Contains(t, output, "user set-uid -- -alice@example.com 41001")
+	require.Contains(t, output, "group set-gid -- -alice@example.com 41001")
+	require.Contains(t, output, "group set-gid -- --help 42001")
+
+	output, calls, err := runApplyEntraUnixIDs(t, token, true)
+	require.NoError(t, err, output)
+	require.Equal(t,
+		"user set-uid -- -alice@example.com 41001\n"+
+			"group set-gid -- -alice@example.com 41001\n"+
+			"group set-gid -- --help 42001\n",
 		calls,
 	)
 }
@@ -248,10 +273,10 @@ func TestApplyEntraUnixIDsPlanAndFailures(t *testing.T) {
 		wantCalls string
 	}{
 		{name: "dry run"},
-		{name: "deduplicate and normalize", apply: true, wantCalls: "user set-uid alice 41001\ngroup set-gid alice 41001\ngroup set-gid engineering 42001\ngroup set-gid staff 42002\n"},
-		{name: "stop after UID failure", apply: true, failName: "alice", wantCalls: "user set-uid alice 41001\n"},
-		{name: "stop after private GID failure", apply: true, failName: "alice", failKind: "group", wantCalls: "user set-uid alice 41001\ngroup set-gid alice 41001\n"},
-		{name: "stop after GID failure", apply: true, failName: "engineering", wantCalls: "user set-uid alice 41001\ngroup set-gid alice 41001\ngroup set-gid engineering 42001\n"},
+		{name: "deduplicate and normalize", apply: true, wantCalls: "user set-uid -- alice 41001\ngroup set-gid -- alice 41001\ngroup set-gid -- engineering 42001\ngroup set-gid -- staff 42002\n"},
+		{name: "stop after UID failure", apply: true, failName: "alice", wantCalls: "user set-uid -- alice 41001\n"},
+		{name: "stop after private GID failure", apply: true, failName: "alice", failKind: "group", wantCalls: "user set-uid -- alice 41001\ngroup set-gid -- alice 41001\n"},
+		{name: "stop after GID failure", apply: true, failName: "engineering", wantCalls: "user set-uid -- alice 41001\ngroup set-gid -- alice 41001\ngroup set-gid -- engineering 42001\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -267,8 +292,8 @@ func TestApplyEntraUnixIDsPlanAndFailures(t *testing.T) {
 				require.NoError(t, err, output)
 			}
 			require.Equal(t, tc.wantCalls, calls)
-			require.Contains(t, output, "group set-gid alice 41001")
-			require.Contains(t, output, "group set-gid engineering 42001")
+			require.Contains(t, output, "group set-gid -- alice 41001")
+			require.Contains(t, output, "group set-gid -- engineering 42001")
 		})
 	}
 }
@@ -279,7 +304,7 @@ func TestApplyEntraUnixIDsUsesOneSnapshot(t *testing.T) {
 	const replacement = `{"UserInfo":{"name":"bob","uid":51001,"groups":[{"name":"staff","ugid":"second","gid":52001}]}}`
 	output, calls, err := runApplyEntraUnixIDs(t, input, true, "REPLACEMENT_TOKEN="+replacement)
 	require.NoError(t, err, output)
-	require.Equal(t, "user set-uid alice 41001\ngroup set-gid alice 41001\ngroup set-gid engineering 42001\n", calls)
+	require.Equal(t, "user set-uid -- alice 41001\ngroup set-gid -- alice 41001\ngroup set-gid -- engineering 42001\n", calls)
 }
 
 func TestApplyEntraUnixIDsPartialAssignments(t *testing.T) {
@@ -292,17 +317,17 @@ func TestApplyEntraUnixIDsPartialAssignments(t *testing.T) {
 		{
 			name:      "UID only updates private group",
 			input:     `{"UserInfo":{"name":"alice","uid":41001},"UnixAttributeNames":{"UID":"extension_uidNumber","GID":"extension_gidNumber"}}`,
-			wantCalls: "user set-uid alice 41001\ngroup set-gid alice 41001\n",
+			wantCalls: "user set-uid -- alice 41001\ngroup set-gid -- alice 41001\n",
 		},
 		{
 			name:      "remote GID only leaves private group unchanged",
 			input:     `{"UserInfo":{"name":"alice","groups":[{"name":"engineering","ugid":"first","gid":42001}]},"UnixAttributeNames":{"UID":"extension_uidNumber","GID":"extension_gidNumber"}}`,
-			wantCalls: "group set-gid engineering 42001\n",
+			wantCalls: "group set-gid -- engineering 42001\n",
 		},
 		{
 			name:      "null UID leaves private group unchanged",
 			input:     `{"UserInfo":{"name":"alice","uid":null,"groups":[{"name":"engineering","ugid":"first","gid":42001}]},"UnixAttributeNames":{"UID":"extension_uidNumber","GID":"extension_gidNumber"}}`,
-			wantCalls: "group set-gid engineering 42001\n",
+			wantCalls: "group set-gid -- engineering 42001\n",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -412,7 +437,7 @@ func TestApplyEntraUnixIDsResolvesShortAttributeNames(t *testing.T) {
 
 		run := runApplyEntraUnixIDsWithArgs(t, input, true, []string{"--uid-attribute", "Linux_UID", "--gid-attribute", "Linux_GID", "--client-id", "abc-123"})
 		require.NoError(t, run.err, run.output)
-		require.Equal(t, "user set-uid alice 41001\ngroup set-gid alice 41001\n", run.calls)
+		require.Equal(t, "user set-uid -- alice 41001\ngroup set-gid -- alice 41001\n", run.calls)
 		require.Equal(t, run.tokenPath+"\n", run.reads, "the cache must be opened exactly once")
 	})
 	t.Run("without client ID", func(t *testing.T) {

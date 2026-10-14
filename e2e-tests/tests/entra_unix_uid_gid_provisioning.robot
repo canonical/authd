@@ -235,9 +235,9 @@ Test Entra Unix IDs can be applied with the bridge script
 
     ${attribute_args}=    Set Variable    --uid-attribute ${uid_attribute} --gid-attribute ${gid_attribute}
     ${dry_run_output}=    SSH.Execute    ${apply_command} ${attribute_args} --authctl authctl ${token_path}
-    Should Contain    ${dry_run_output}    authctl user set-uid ${username} ${expected_uid}
-    Should Contain    ${dry_run_output}    authctl group set-gid ${username} ${expected_uid}
-    Should Contain    ${dry_run_output}    authctl group set-gid ${configured_group} ${expected_gid}
+    Should Contain    ${dry_run_output}    authctl user set-uid -- ${username} ${expected_uid}
+    Should Contain    ${dry_run_output}    authctl group set-gid -- ${username} ${expected_uid}
+    Should Contain    ${dry_run_output}    authctl group set-gid -- ${configured_group} ${expected_gid}
 
     ${apply_output}=    SSH.Execute    ${apply_command} --apply ${attribute_args} --authctl authctl ${token_path} 2>&1
     Should Contain    ${apply_output}    Applying cached assignments for ${username}:
