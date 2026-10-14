@@ -30,6 +30,9 @@ type nativeModel struct {
 	authModes        []*authd.GAMResponse_AuthenticationMode
 	selectedAuthMode string
 	uiLayout         *authd.UILayout
+	// pendingRetryMessage is included with the next prompt because polkit
+	// does not display PAM_ERROR_MSG.
+	pendingRetryMessage string
 
 	serviceName          string
 	interactive          bool
@@ -162,6 +165,9 @@ func (m nativeModel) Update(msg tea.Msg) (nativeModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case StageChanged:
 		m.currentStage = msg.Stage
+		if msg.Stage != proto.Stage_challenge {
+			m.pendingRetryMessage = ""
+		}
 
 	case nativeStageChangeRequest:
 		if m.currentStage != msg.Stage {
@@ -330,6 +336,9 @@ func (m nativeModel) Update(msg tea.Msg) (nativeModel, tea.Cmd) {
 		if cmd := maybeSendPamError(err); cmd != nil {
 			return m, cmd
 		}
+		if access != auth.Retry {
+			m.pendingRetryMessage = ""
+		}
 
 		switch access {
 		case auth.Granted:
@@ -338,6 +347,10 @@ func (m nativeModel) Update(msg tea.Msg) (nativeModel, tea.Cmd) {
 			m.uiLayout = nil
 			return m, maybeSendPamError(m.sendInfo(authMsg))
 		case auth.Retry:
+			if m.serviceName == polkitServiceName {
+				m.pendingRetryMessage = authMsg
+				return m, nil
+			}
 			return m, maybeSendPamError(m.sendError(authMsg))
 		case auth.Denied:
 			// This is handled by the main authentication model
@@ -448,13 +461,23 @@ func (m nativeModel) formatInfo(title, message string) string {
 	return fmt.Sprintf("== %s ==\n%s", title, message)
 }
 
+func (m nativeModel) includePendingRetryMessage(message string) string {
+	if m.serviceName != polkitServiceName || m.pendingRetryMessage == "" {
+		return message
+	}
+	if message == "" {
+		return m.pendingRetryMessage
+	}
+	return fmt.Sprintf("%s\n\n%s", m.pendingRetryMessage, message)
+}
+
 type choicePair struct {
 	id    string
 	label string
 }
 
 func (m nativeModel) promptForChoiceWithMessage(title string, message string, choices []choicePair, prompt string) (string, error) {
-	msg := m.formatInfo(title, message)
+	msg := m.formatInfo(title, m.includePendingRetryMessage(message))
 	if msg != "" {
 		msg += "\n"
 	}
@@ -666,7 +689,7 @@ func (m nativeModel) handleFormChallenge(hasWait bool) tea.Cmd {
 	// Input text box is still present but not interactable (cannot be removed due to GNOME shell limitation)
 	// This is used for MFA challenges as in MS Entra flow where the user has to approve the sign-in in their authenticator app.
 	if m.serviceName == polkitServiceName && hasWait && m.uiLayout.GetEntry() == "" {
-		info := m.formatInfo(authMode, prompt)
+		info := m.formatInfo(authMode, m.includePendingRetryMessage(prompt))
 		if cmd := maybeSendPamError(m.sendInfo(info)); cmd != nil {
 			return cmd
 		}
@@ -706,7 +729,7 @@ func (m nativeModel) handleFormChallenge(hasWait bool) tea.Cmd {
 		prompt = polkitBlankPrompt
 	}
 
-	info := m.formatInfo(authMode, instructions)
+	info := m.formatInfo(authMode, m.includePendingRetryMessage(instructions))
 	if cmd := maybeSendPamError(m.sendInfo(info)); cmd != nil {
 		return cmd
 	}
@@ -868,7 +891,7 @@ func (m nativeModel) newPasswordChallenge(previousPassword *string) tea.Cmd {
 				nativeCancelKey, goBackLabel)
 		}
 		title := m.selectedAuthModeLabel("Password Update")
-		info := m.formatInfo(title, instructions)
+		info := m.formatInfo(title, m.includePendingRetryMessage(instructions))
 		if cmd := maybeSendPamError(m.sendInfo(info)); cmd != nil {
 			return cmd
 		}
