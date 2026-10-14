@@ -6,7 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/big"
+	"regexp"
 )
+
+// decimalNumberPattern matches plain decimal numbers such as 12, -3.0, or 1e3.
+// big.Rat also accepts fractions and hexadecimal forms, so they are rejected first.
+var decimalNumberPattern = regexp.MustCompile(`^[+-]?[0-9]+(\.[0-9]+)?([eE][+-]?[0-9]+)?$`)
 
 func parseUnixID(value any) (*uint32, error) {
 	if value == nil {
@@ -152,9 +158,25 @@ func validateUnixIDNumber(value json.Number) (*uint32, error) {
 	if integer, err := value.Int64(); err == nil {
 		return validateUnixID(integer)
 	}
-	parsed, err := value.Float64()
-	if err != nil {
-		return nil, fmt.Errorf("invalid numeric value %q: %w", value, err)
+	if !decimalNumberPattern.MatchString(string(value)) {
+		return nil, fmt.Errorf("invalid numeric value %q", value)
 	}
-	return validateUnixIDFloat(parsed)
+	// Parse the exact decimal value. Converting to float64 first would round
+	// a value such as 1.0000000000000000001 to an integer.
+	exact, ok := new(big.Rat).SetString(string(value))
+	if !ok {
+		return nil, fmt.Errorf("value %s is outside the supported range", value)
+	}
+	if !exact.IsInt() {
+		return nil, fmt.Errorf("value %s is fractional", value)
+	}
+	integer := exact.Num()
+	if integer.Sign() < 0 {
+		return nil, fmt.Errorf("value %s is negative", value)
+	}
+	// Uint64 truncates larger values, so check IsUint64 first.
+	if !integer.IsUint64() || integer.Uint64() > math.MaxInt32 {
+		return nil, fmt.Errorf("value %s is greater than the signed 32-bit maximum", value)
+	}
+	return validateUnixIDUnsigned(integer.Uint64())
 }

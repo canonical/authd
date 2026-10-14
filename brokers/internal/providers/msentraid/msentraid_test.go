@@ -69,6 +69,16 @@ func TestParseUnixID(t *testing.T) {
 		"Reserved_65534":        {value: int64(65534), wantErr: true},
 		"Reserved_65535":        {value: int64(65535), wantErr: true},
 		"Reserved_max_uint32":   {value: uint64(1<<32 - 1), wantErr: true},
+
+		"JSON_number_with_zero_fraction":              {value: json.Number("1000.0"), want: func() *uint32 { v := uint32(1000); return &v }()},
+		"JSON_number_with_exponent":                   {value: json.Number("1e3"), want: func() *uint32 { v := uint32(1000); return &v }()},
+		"JSON_number_fraction_is_rejected":            {value: json.Number("1001.5"), wantErr: true},
+		"JSON_number_rounding_to_integer_is_rejected": {value: json.Number("1.0000000000000000001"), wantErr: true},
+		"JSON_number_negative_fraction_is_rejected":   {value: json.Number("-1.0"), wantErr: true},
+		"JSON_number_too_large_is_rejected":           {value: json.Number("1e10"), wantErr: true},
+		"JSON_number_huge_exponent_is_rejected":       {value: json.Number("1e1000000001"), wantErr: true},
+		"JSON_number_hex_syntax_is_rejected":          {value: json.Number("0x10"), wantErr: true},
+		"JSON_number_fraction_syntax_is_rejected":     {value: json.Number("3/1"), wantErr: true},
 	}
 
 	for name, tc := range tests {
