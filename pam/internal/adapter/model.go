@@ -108,6 +108,10 @@ type SessionStarted struct {
 // GetAuthenticationModesRequested signals that a model needs to get the broker authentication modes.
 type GetAuthenticationModesRequested struct{}
 
+type authenticationModesFetchRequested struct {
+	sessionID string
+}
+
 // AuthModeSelected is triggered when the authentication mode has been chosen.
 type AuthModeSelected struct {
 	ID      string
@@ -322,9 +326,6 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SessionStarted:
 		safeMessageDebug(msg)
 		m.sessionStartingForBroker = ""
-		if m.clientType == Gdm {
-			m.gdmModel.pendingEchoAuthModeID = ""
-		}
 		pubASN1, err := base64.StdEncoding.DecodeString(msg.encryptionKey)
 		if err != nil {
 			return m, sendEvent(pamError{
@@ -353,7 +354,12 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			sessionID:     msg.sessionID,
 			encryptionKey: rsaPublicKey,
 		}
-		return m, sendEvent(GetAuthenticationModesRequested{})
+		clientCmd := m.updateClientModel(msg)
+		getModesCmd := sendEvent(GetAuthenticationModesRequested{})
+		if clientCmd == nil {
+			return m, getModesCmd
+		}
+		return m, tea.Sequence(clientCmd, getModesCmd)
 
 	case ChangeStage:
 		safeMessageDebug(msg)
@@ -362,19 +368,15 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Stage == proto.Stage_brokerSelection && m.userIsBoundToBroker {
 			msg.Stage = proto.Stage_userSelection
 		}
-		return m, m.changeStage(msg.Stage)
+		clientCmd := m.updateClientModel(msg)
+		changeStageCmd := m.changeStage(msg.Stage)
+		if clientCmd == nil {
+			return m, changeStageCmd
+		}
+		return m, tea.Sequence(clientCmd, changeStageCmd)
 
 	case StageChanged:
 		safeMessageDebug(msg)
-		if m.clientType == Gdm && msg.Stage == proto.Stage_challenge {
-			// GDM must enter the challenge stage before it receives the
-			// startAuthentication event. These commands are otherwise
-			// returned in a batch and can reach GDM in either order.
-			var gdmCmd, authCmd tea.Cmd
-			m.gdmModel, gdmCmd = m.gdmModel.Update(msg)
-			m.authenticationModel, authCmd = m.authenticationModel.Update(msg)
-			return m, tea.Sequence(gdmCmd, authCmd)
-		}
 
 	case GetAuthenticationModesRequested:
 		safeMessageDebug(msg)
@@ -394,21 +396,18 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		changeStageCmd := sendEvent(ChangeStage{proto.Stage_authModeSelection})
+		return m, m.authenticationModesRequested(getModesCmd, changeStageCmd)
 
-		// For native/SSH mode during MFA (auth.Next), the stage is still
-		// "challenge". We need to transition through authModeSelection so
-		// that the subsequent auto-selection properly triggers a new challenge
-		// via the normal stage change path (Compose → ChangeStage{challenge}
-		// → StageChanged → nativeChallengeRequested).
-		// Stage change must happen BEFORE fetching modes, so that when
-		// authModesReceived fires the list is already focused and the
-		// immediate auto-selection is safe (no risk of the deferred
-		// ChangeStage{authModeSelection} pulling us back after challenge starts).
-		if m.clientType == Native && m.currentStage() == proto.Stage_challenge {
-			return m, tea.Sequence(changeStageCmd, getModesCmd)
+	case authenticationModesFetchRequested:
+		safeMessageDebug(msg)
+		if m.currentSession == nil || m.currentSession.sessionID != msg.sessionID {
+			return m, nil
 		}
-
-		return m, tea.Sequence(getModesCmd, changeStageCmd)
+		return m, getAuthenticationModes(
+			m.client,
+			msg.sessionID,
+			m.authModeSelectionModel.SupportedUILayouts(),
+		)
 
 	case AuthModeSelected:
 		safeMessageDebug(msg)
@@ -449,12 +448,10 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case SessionEnded:
 		safeMessageDebug(msg)
+		clientCmd := m.updateClientModel(msg)
 		m.sessionStartingForBroker = ""
 		m.currentSession = nil
-		if m.clientType == Gdm {
-			m.gdmModel.pendingEchoAuthModeID = ""
-		}
-		return m, nil
+		return m, clientCmd
 
 	case stopAuthentication:
 		if msg.gen != m.authenticationModel.authGen {
@@ -475,9 +472,42 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.authenticationModel, cmd = m.authenticationModel.Update(msg)
 	cmds = append(cmds, cmd)
 
-	cmds = append(cmds, m.updateClientModel(msg))
+	clientCmd := m.updateClientModel(msg)
+	return m, m.combineUpdateCommands(msg, clientCmd, tea.Batch(cmds...))
+}
 
-	return m, tea.Batch(cmds...)
+func (m *uiModel) authenticationModesRequested(getModesCmd, changeStageCmd tea.Cmd) tea.Cmd {
+	currentStage := m.currentStage()
+	switch m.clientType {
+	case Gdm:
+		var cmd tea.Cmd
+		m.gdmModel, cmd = m.gdmModel.authenticationModesRequested(
+			currentStage,
+			m.currentSession.sessionID,
+			getModesCmd,
+			changeStageCmd,
+		)
+		return cmd
+	case Native:
+		return m.nativeModel.authenticationModesRequested(
+			currentStage,
+			getModesCmd,
+			changeStageCmd,
+		)
+	default:
+		return tea.Sequence(getModesCmd, changeStageCmd)
+	}
+}
+
+func (m *uiModel) combineUpdateCommands(msg tea.Msg, clientCmd, modelCmd tea.Cmd) tea.Cmd {
+	switch m.clientType {
+	case Gdm:
+		return m.gdmModel.combineUpdateCommands(msg, clientCmd, modelCmd)
+	case Native:
+		return m.nativeModel.combineUpdateCommands(msg, clientCmd, modelCmd)
+	default:
+		return tea.Batch(clientCmd, modelCmd)
+	}
 }
 
 func (m *uiModel) updateClientModel(msg tea.Msg) tea.Cmd {

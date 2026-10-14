@@ -359,7 +359,7 @@ func TestGdmChallengeProtocolEventsAreOrdered(t *testing.T) {
 	stageCommands, ok := asCmdSlice(cmd())
 	require.True(t, ok)
 	require.Len(t, stageCommands, 2)
-	require.Nil(t, stageCommands[0]())
+	require.Equal(t, gdmStageChangeCompleted{stage: proto.Stage_challenge}, stageCommands[0]())
 	require.Equal(t, []string{"layout", "stage"}, protocolEvents)
 
 	start, ok := stageCommands[1]().(startAuthentication)
