@@ -233,9 +233,11 @@ required value that the snapshot lacks when enrichment fails.
 
 Refreshed credentials and device-registration data are saved without replacing the
 previous directory snapshot until enrichment returns a snapshot. They are retained
-even if enrichment later denies login. A snapshot that clears a required ID is also
-saved, even when the forced check denies the login. Falling back to the previous
-`UserInfo` does not discard those credentials or mark an online session as offline.
+even if enrichment later denies login. On a returning login, a snapshot that clears
+a required ID is also saved, even when the forced check denies the login. On a
+first login, the forced check denies the login without saving that snapshot.
+Falling back to the previous `UserInfo` does not discard those credentials or mark
+an online session as offline.
 
 Known limitation: if a first login fails after device registration and before
 enrichment completes, `token.json` keeps the registration data but has no
