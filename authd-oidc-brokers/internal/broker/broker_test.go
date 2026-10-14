@@ -1382,6 +1382,7 @@ func TestIsAuthenticated(t *testing.T) {
 		sessionMode                        string
 		sessionOffline                     bool
 		username                           string
+		sessionProviderID                  string
 		forceAccessCheckWithProvider       bool
 		userDoesNotBecomeOwner             bool
 		allUsersAllowed                    bool
@@ -1753,8 +1754,11 @@ func TestIsAuthenticated(t *testing.T) {
 		},
 		"Error_when_empty_secret_is_provided_for_local_password":  {firstSecret: "-", wantSecondCall: true, secondSecret: "-"},
 		"Error_when_mode_is_newpassword_and_session_has_no_token": {firstMode: authmodes.NewPassword},
-		// This test case also tests that errors with double quotes are marshaled to JSON correctly.
-		"Error_when_selected_username_does_not_match_the_provider_one": {username: "not-matching", firstSecret: "-"},
+		"Authenticated_username_may_differ_from_selected_username": {
+			username:          "not-matching",
+			sessionProviderID: "test-user-id",
+			firstSecret:       "-",
+		},
 		"Error_when_user_is_disabled_and_session_is_offline": {
 			firstMode:      authmodes.Password,
 			token:          &tokenOptions{userIsDisabled: true},
@@ -1944,7 +1948,13 @@ func TestIsAuthenticated(t *testing.T) {
 			}
 			b := newBrokerForTests(t, cfg)
 
-			sessionID, key := newSessionForTests(t, b, tc.username, tc.sessionMode)
+			var sessionID, key string
+			if tc.sessionProviderID == "" {
+				sessionID, key = newSessionForTests(t, b, tc.username, tc.sessionMode)
+			} else {
+				sessionID, key, err = b.NewSession(tc.username, "some lang", tc.sessionMode, tc.sessionProviderID)
+				require.NoError(t, err, "Setup: NewSession should not have returned an error")
+			}
 
 			if tc.token != nil {
 				generateAndStoreCachedInfo(t, *tc.token, b.TokenPathForSession(sessionID))
@@ -4272,12 +4282,10 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshPreservesRotationOnUserInfoErro
 		"a local user-info failure must not discard an already-rotated refresh token")
 }
 
-// TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch verifies
-// that if the refreshed Entra password token's identity no longer matches the
-// session's username, the returning login is denied — mirroring the username
-// cross-check that the device-auth refresh path (getUserInfo) performs on every
-// refresh, and that the Entra password flow itself performs on first login.
-func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch(t *testing.T) {
+// TestIsAuthenticatedPasswordEntraTokenRefreshAllowsUsernameChange verifies
+// that a refreshed Entra token can return the same provider identity under a
+// new username.
+func TestIsAuthenticatedPasswordEntraTokenRefreshAllowsUsernameChange(t *testing.T) {
 	t.Parallel()
 
 	const correctPassword = "password"
@@ -4286,7 +4294,7 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch(t *tes
 			return []info.Group{{Name: "remote-group"}}, nil
 		}},
 		refreshResult:       &oauth2.Token{AccessToken: "new-access-token", RefreshToken: "new-refresh-token"},
-		accessTokenUserInfo: &info.User{Name: "someone-else@email.com", ProviderID: "saved-user-id"},
+		accessTokenUserInfo: &info.User{Name: "renamed-user@email.com", ProviderID: "saved-user-id"},
 	}
 
 	b := newBrokerForTests(t, &brokerForTestConfig{
@@ -4297,7 +4305,8 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch(t *tes
 		issuerURL:             defaultIssuerURL,
 	})
 
-	sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	sessionID, key, err := b.NewSession("test-user@email.com", "some lang", sessionmode.Login, "saved-user-id")
+	require.NoError(t, err)
 	generateAndStoreCachedInfo(t, tokenOptions{
 		obtainedViaEntraAuth: true,
 		providerID:           "saved-user-id",
@@ -4308,13 +4317,15 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch(t *tes
 	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
 	access, _, err := b.IsAuthenticated(sessionID, authData)
 	require.NoError(t, err)
-	require.Equal(t, broker.AuthDenied, access,
-		"a refreshed token whose identity no longer matches the session's username must deny the returning login")
+	require.Equal(t, broker.AuthGranted, access,
+		"a refreshed token with the same provider ID should allow a changed username")
 
 	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
 	require.NoError(t, err)
 	require.Equal(t, "new-refresh-token", cached.Token.RefreshToken,
-		"a local username verification failure must not discard an already-rotated refresh token")
+		"the refreshed token should be cached")
+	require.Equal(t, "renamed-user@email.com", cached.UserInfo.Name)
+	require.Equal(t, "saved-user-id", cached.UserInfo.ProviderID)
 }
 
 // TestDeviceAuthClearsDeviceRegistrationDataWhenRegistrationDisabled verifies that
@@ -5142,6 +5153,43 @@ func TestIsAuthenticatedEntraAuthFallsBackToEmailClaim(t *testing.T) {
 	require.Equal(t, broker.AuthGranted, access, "email claim should satisfy the user identity when preferred_username is absent")
 }
 
+func TestFirstSSHLoginRejectsUsernameMismatchWithoutBoundProviderID(t *testing.T) {
+	t.Parallel()
+
+	const (
+		requestedUsername       = "alice@allowed.example"
+		authenticatedUsername   = "alice@blocked.example"
+		authenticatedProviderID = "new-provider-id"
+	)
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		allowedSSHSuffixes: []string{"@allowed.example"},
+		allUsersAllowed:    true,
+		tokenHandlerOptions: &testutils.TokenHandlerOptions{
+			IDTokenClaims: []map[string]interface{}{
+				{
+					"sub":                authenticatedProviderID,
+					"email":              authenticatedUsername,
+					"preferred_username": authenticatedUsername,
+				},
+			},
+		},
+	})
+
+	precheckedUser, err := b.UserPreCheck(requestedUsername)
+	require.NoError(t, err)
+	require.NotEmpty(t, precheckedUser, "the requested username should pass the first-auth SSH suffix check")
+
+	sessionID, _ := newSessionForTests(t, b, requestedUsername, sessionmode.Login)
+	t.Cleanup(func() { require.NoError(t, b.EndSession(sessionID)) })
+	updateAuthModes(t, b, sessionID, authmodes.Device)
+
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthDenied, access)
+	require.Contains(t, data, requestedUsername)
+	require.Contains(t, data, authenticatedUsername)
+}
+
 func TestUserPreCheck(t *testing.T) {
 	t.Parallel()
 
@@ -5487,9 +5535,8 @@ func runDeviceAuthAndNewPassword(t *testing.T, b *broker.Broker, sessionID, key,
 // a compatibility symlink left at the username path.
 //
 // The mock provider's live ID token is fixed to email "test-user@email.com" and sub
-// "test-user-id", and VerifyUsername requires the session username to match that email,
-// so the session uses that username; the pre-existing provider ID directory standing in
-// for the prior login is what exercises the redirect.
+// "test-user-id"; the pre-existing provider ID directory standing in for the prior
+// login is what exercises the redirect.
 func TestDeviceAuthRedirectsToExistingProviderIDDir(t *testing.T) {
 	t.Parallel()
 
@@ -6571,12 +6618,9 @@ func TestIsAuthenticatedEntraAuthUsesVerifiedAccessTokenIdentity(t *testing.T) {
 	require.Equal(t, "verified-access-token-user-id", cached.UserInfo.ProviderID)
 }
 
-// TestIsAuthenticatedEntraAuthDeniesOnUsernameMismatch verifies the first-login
-// identity cross-check: when the verified MFA access token identity does not
-// match the username the user authenticated as, VerifyUsername fails and the
-// login is denied. This is the first-login counterpart to the refresh-path
-// mismatch test (TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnUsernameMismatch).
-func TestIsAuthenticatedEntraAuthDeniesOnUsernameMismatch(t *testing.T) {
+// TestIsAuthenticatedEntraAuthAllowsUsernameChange verifies that a verified
+// Entra access token can return the same provider identity under a new username.
+func TestIsAuthenticatedEntraAuthAllowsUsernameChange(t *testing.T) {
 	t.Parallel()
 
 	username := "test-user@email.com"
@@ -6589,7 +6633,7 @@ func TestIsAuthenticatedEntraAuthDeniesOnUsernameMismatch(t *testing.T) {
 			PollingIntervalMs: 1,
 			MaxPollAttempts:   1,
 		},
-		accessTokenUserInfo: &info.User{Name: "someone-else@email.com", ProviderID: "different-user-id"},
+		accessTokenUserInfo: &info.User{Name: "renamed-user@email.com", ProviderID: "saved-user-id"},
 		mfaTokenResult:      newMFATokenResult(mfaAuthInfo.Token),
 	}
 
@@ -6601,13 +6645,55 @@ func TestIsAuthenticatedEntraAuthDeniesOnUsernameMismatch(t *testing.T) {
 		issuerURL:             defaultIssuerURL,
 	})
 
-	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	sessionID, key, err := b.NewSession(username, "some lang", sessionmode.Login, "saved-user-id")
+	require.NoError(t, err)
 	advanceToEntraMFAWait(t, b, sessionID, key)
 
 	access, _, err := b.IsAuthenticated(sessionID, "{}")
 	require.NoError(t, err)
-	require.Equal(t, broker.AuthDenied, access,
-		"a first-login MFA access token whose identity does not match the session username must be denied")
+	require.Equal(t, broker.AuthGranted, access,
+		"a changed username should be accepted when the session is bound to the same provider ID")
+
+	cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+	require.NoError(t, err)
+	require.Equal(t, "renamed-user@email.com", cached.UserInfo.Name)
+	require.Equal(t, "saved-user-id", cached.UserInfo.ProviderID)
+}
+
+func TestIsAuthenticatedEntraAuthRejectsUsernameChangeWithoutBoundProviderID(t *testing.T) {
+	t.Parallel()
+
+	username := "test-user@email.com"
+	mfaAuthInfo := generateCachedInfo(t, tokenOptions{username: username, issuer: defaultIssuerURL})
+	provider := &mockEntraAuthProvider{
+		MockProvider: &testutils.MockProvider{},
+		flowState:    &himmelblau.MFAFlowState{},
+		challengeInfo: &himmelblau.MFAChallengeInfo{
+			Message:           "Approve the sign-in request",
+			PollingIntervalMs: 1,
+			MaxPollAttempts:   1,
+		},
+		accessTokenUserInfo: &info.User{Name: "renamed-user@email.com", ProviderID: "new-provider-id"},
+		mfaTokenResult:      newMFATokenResult(mfaAuthInfo.Token),
+	}
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		Config:          broker.Config{DataDir: t.TempDir()},
+		allUsersAllowed: true,
+		provider:        provider,
+		issuerURL:       defaultIssuerURL,
+	})
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	advanceToEntraMFAWait(t, b, sessionID, key)
+
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthDenied, access)
+	require.Contains(t, data, username)
+	require.Contains(t, data, "renamed-user@email.com")
+	require.NoFileExists(t, b.TokenPathForSession(sessionID),
+		"a username mismatch must be rejected before caching a first-login token")
 }
 
 // TestIsAuthenticatedEntraAuthDenialsDoNotCachePassword verifies that an Entra MFA

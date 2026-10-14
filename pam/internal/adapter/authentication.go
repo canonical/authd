@@ -74,9 +74,10 @@ func sendIsAuthenticated(ctx context.Context, client authd.PAMClient, sessionID 
 		}
 
 		return isAuthenticatedResultReceived{
-			access: res.Access,
-			msg:    res.Msg,
-			secret: secret,
+			access:            res.Access,
+			canonicalUsername: res.GetPamUser(),
+			msg:               res.Msg,
+			secret:            secret,
 		}
 	}
 }
@@ -97,9 +98,10 @@ type isAuthenticatedRequestedSend struct {
 // isAuthenticatedResultReceived is the internal event with the authentication access result
 // and data that was retrieved.
 type isAuthenticatedResultReceived struct {
-	access string
-	secret *string
-	msg    string
+	access            string
+	canonicalUsername string
+	secret            *string
+	msg               string
 }
 
 // isAuthenticatedCancelled is the event to cancel the auth request.
@@ -432,6 +434,7 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 			}
 			return m, sendEvent(PamSuccess{
 				BrokerID:   m.currentBrokerID,
+				User:       msg.canonicalUsername,
 				AuthTok:    secret,
 				OldAuthTok: oldSecret,
 				msg:        authMsg,

@@ -44,6 +44,7 @@ type brokerer interface {
 	// identifier and is used by v3 brokers to locate the provider ID-keyed cache directory.
 	// v2 brokers ignore the providerID parameter.
 	DeleteUser(ctx context.Context, username, providerID string) error
+	requiresStableProviderIDForNewUsers() (bool, error)
 }
 
 // Broker represents a broker object that can be used for authentication.
@@ -304,6 +305,15 @@ func (b Broker) cancelIsAuthenticated(ctx context.Context, sessionID string) {
 func (b Broker) UserPreCheck(ctx context.Context, username string) (userinfo string, err error) {
 	log.Debugf(context.TODO(), "Pre-checking user %q", username)
 	return b.brokerer.UserPreCheck(ctx, username)
+}
+
+// RequiresStableProviderIDForNewUsers reports whether this broker's API
+// version requires stable provider IDs for new users.
+func (b Broker) RequiresStableProviderIDForNewUsers() (bool, error) {
+	if b.brokerer == nil {
+		return false, nil
+	}
+	return b.brokerer.requiresStableProviderIDForNewUsers()
 }
 
 // DeleteUser calls the broker to delete any broker side data associated with the user.

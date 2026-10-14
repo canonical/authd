@@ -169,12 +169,18 @@ func (m *Manager) BrokerFromSessionID(id string) (broker *Broker, err error) {
 
 // NewSession create a new session for the broker and store the sessionID on the manager.
 func (m *Manager) NewSession(brokerID, username, lang, mode, providerID, serviceName string) (sessionID string, encryptionKey string, err error) {
+	return m.NewSessionForUser(brokerID, username, lang, mode, providerID, serviceName, username)
+}
+
+// NewSessionForUser starts a broker session using providerUsername while
+// tracking username as the canonical authd account for the session.
+func (m *Manager) NewSessionForUser(brokerID, providerUsername, lang, mode, providerID, serviceName, username string) (sessionID string, encryptionKey string, err error) {
 	broker, err := m.BrokerFromID(brokerID)
 	if err != nil {
 		return "", "", fmt.Errorf("invalid broker: %v", err)
 	}
 
-	sessionID, encryptionKey, err = broker.newSession(context.Background(), username, lang, mode, providerID)
+	sessionID, encryptionKey, err = broker.newSession(context.Background(), providerUsername, lang, mode, providerID)
 	if err != nil {
 		return "", "", err
 	}

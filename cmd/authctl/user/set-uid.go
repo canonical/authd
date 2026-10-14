@@ -51,6 +51,11 @@ different account that is later assigned that UID.`,
 			return err
 		}
 
+		name, err = resolveName(context.Background(), client, name)
+		if err != nil {
+			return err
+		}
+
 		resp, err := client.SetUserID(context.Background(), &authd.SetUserIDRequest{
 			Name: name,
 			Id:   uint32(uid),

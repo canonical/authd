@@ -280,3 +280,31 @@ func TestDbusBrokerCallTranslatesErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestBrokerRequiresStableProviderIDForNewUsers(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		version uint
+		want    bool
+	}{
+		{name: "API_v2", version: 2, want: false},
+		{name: "API_v3", version: 3, want: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			b := Broker{
+				brokerer: &dbusBroker{
+					iface: dbusInterface{name: "test", version: tc.version},
+				},
+			}
+
+			got, err := b.RequiresStableProviderIDForNewUsers()
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}

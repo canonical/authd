@@ -62,25 +62,19 @@ func TestNormalizeUsername(t *testing.T) {
 	}
 }
 
-func TestVerifyUsername(t *testing.T) {
+func TestValidateUsername(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		requestedUsername string
-		authenticatedUser string
+		username string
 
 		wantErr bool
 	}{
-		"Success_when_usernames_are_the_same":   {requestedUsername: "foo-bar@example", authenticatedUser: "foo-bar@example"},
-		"Success_when_usernames_differ_in_case": {requestedUsername: "foo-bar@example", authenticatedUser: "Foo-Bar@example"},
-
-		"Error_when_usernames_differ": {requestedUsername: "foo@example", authenticatedUser: "bar@foo", wantErr: true},
-		"Error_when_requested_username_contains_invalid_characters": {
-			requestedUsername: "fóó@example", authenticatedUser: "foo@example", wantErr: true,
+		"Success_when_username_is_valid": {username: "foo-bar@example"},
+		"Error_when_username_contains_invalid_characters": {
+			username: "fóó@example", wantErr: true,
 		},
-		"Error_when_authenticated_username_contains_invalid_characters": {
-			requestedUsername: "foo@example", authenticatedUser: "fóó@example", wantErr: true,
-		},
+		"Error_when_username_is_empty": {username: "", wantErr: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -88,13 +82,13 @@ func TestVerifyUsername(t *testing.T) {
 
 			p := msentraid.New()
 
-			err := p.VerifyUsername(tc.requestedUsername, tc.authenticatedUser)
+			err := p.ValidateUsername(tc.username)
 			if tc.wantErr {
-				require.Error(t, err, "VerifyUsername should return an error")
+				require.Error(t, err, "ValidateUsername should return an error")
 				return
 			}
 
-			require.NoError(t, err, "VerifyUsername should not return an error")
+			require.NoError(t, err, "ValidateUsername should not return an error")
 		})
 	}
 }

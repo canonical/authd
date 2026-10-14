@@ -360,7 +360,7 @@ func (m *Manager) SetGroupID(groupName string, newGID uint32) ([]UserRow, error)
 	oldGID := oldGroup.GID
 
 	// Get the list of users whose primary group is the old GID
-	query := `SELECT name, uid, gid, gecos, dir, shell, broker_id, locked, provider_id FROM users WHERE gid = ?`
+	query := fmt.Sprintf(`SELECT %s FROM users WHERE gid = ?`, publicUserColumns)
 	rows, err := tx.Query(query, oldGID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get users with old group as primary group: %w", err)
@@ -370,7 +370,7 @@ func (m *Manager) SetGroupID(groupName string, newGID uint32) ([]UserRow, error)
 	var users []UserRow
 	for rows.Next() {
 		var u UserRow
-		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID)
+		err := rows.Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID, &u.ProviderUsername)
 		if err != nil {
 			return nil, fmt.Errorf("scan error: %w", err)
 		}

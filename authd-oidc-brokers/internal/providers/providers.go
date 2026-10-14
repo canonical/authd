@@ -19,12 +19,13 @@ type Provider interface {
 	GetUserInfo(claimer info.Claimer, isRefresh bool) (info.User, error)
 	IsTokenExpiredError(err *oauth2.RetrieveError) bool
 	NormalizeUsername(username string) string
+	// ValidateUsername applies provider-specific validation to an authenticated username.
+	ValidateUsername(username string) error
 	// SupportedOnlineAuthModes returns the authentication modes that require a
 	// working connection to the identity provider (in contrast to the local
 	// password mode, which the broker prepends). These are not necessarily OIDC
 	// flows: entra_auth issues OAuth 2.0 tokens without an OIDC id_token.
 	SupportedOnlineAuthModes() []string
-	VerifyUsername(requestedUsername, authenticatedUsername string) error
 }
 
 // GroupFetcher is implemented by providers that can fetch group memberships from the identity provider.
