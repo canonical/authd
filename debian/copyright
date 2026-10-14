@@ -601,7 +601,6 @@ Files: vendor_rust/itoa/*
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/lazy_static/*
-Copyright: 2010 The Rust Project Developers
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/lazy_static/src/*
