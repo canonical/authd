@@ -372,7 +372,9 @@ conflicting UID/GID assignments. Application is not transactional: a later
 When the cache contains a UID, the script first sets the user's UID, then sets
 the GID of the user's private group (named after the user) to the same value.
 It then applies remote group GIDs. Without a cached UID, it leaves the private
-group unchanged.
+group unchanged. If a remote group has the same name as the user and the cache
+has no UID, the script aborts before running any command, because applying that
+group would change the private group's GID.
 
 The underlying commands remain available for individual changes:
 
