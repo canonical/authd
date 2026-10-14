@@ -36,13 +36,13 @@ func TestDebugMessageFormatter(t *testing.T) {
 		},
 		"New_password_check": {
 			msg:             newPasswordCheck{password: "Super secret password!"},
-			wantSafeString:  `adapter.newPasswordCheck{ctx:context.Context(nil), password:"***********"}`,
-			wantDebugString: `adapter.newPasswordCheck{ctx:context.Context(nil), password:"Super secret password!"}`,
+			wantSafeString:  `adapter.newPasswordCheck{ctx:context.Context(nil), password:"***********", authGen:0x0}`,
+			wantDebugString: `adapter.newPasswordCheck{ctx:context.Context(nil), password:"Super secret password!", authGen:0x0}`,
 		},
 		"New_password_check_result": {
 			msg:             newPasswordCheckResult{password: "Super secret password!", msg: "Some message"},
-			wantSafeString:  `adapter.newPasswordCheckResult{ctx:context.Context(nil), password:"***********", msg:"Some message"}`,
-			wantDebugString: `adapter.newPasswordCheckResult{ctx:context.Context(nil), password:"Super secret password!", msg:"Some message"}`,
+			wantSafeString:  `adapter.newPasswordCheckResult{ctx:context.Context(nil), password:"***********", msg:"Some message", authGen:0x0}`,
+			wantDebugString: `adapter.newPasswordCheckResult{ctx:context.Context(nil), password:"Super secret password!", msg:"Some message", authGen:0x0}`,
 		},
 		"Key_rune_message": {
 			msg:             tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p', 'a', 's', 's'}},
@@ -150,41 +150,41 @@ func TestSafeMessageDebug(t *testing.T) {
 		"startAuthentication_message_with_prefix": {
 			msg:            startAuthentication{},
 			prefix:         "prefix",
-			wantSafeString: "prefix: adapter.startAuthentication{}",
+			wantSafeString: "prefix: adapter.startAuthentication{authGen:0x0}",
 		},
 		"startAuthentication_message_with_prefix_and_single_value_suffix": {
 			msg:            startAuthentication{},
 			prefix:         "prefix",
 			formatAndArgs:  []any{true},
-			wantSafeString: "prefix: adapter.startAuthentication{}, true",
+			wantSafeString: "prefix: adapter.startAuthentication{authGen:0x0}, true",
 		},
 		"startAuthentication_message_with_prefix_and_multiple_value_suffix": {
 			msg:            startAuthentication{},
 			prefix:         "prefix",
 			formatAndArgs:  []any{true, false},
-			wantSafeString: "prefix: adapter.startAuthentication{}, true false",
+			wantSafeString: "prefix: adapter.startAuthentication{authGen:0x0}, true false",
 		},
 		"startAuthentication_message_with_prefix_and_single_string_suffix": {
 			msg:            startAuthentication{},
 			prefix:         "prefix",
 			formatAndArgs:  []any{"suffix"},
-			wantSafeString: "prefix: adapter.startAuthentication{}, suffix",
+			wantSafeString: "prefix: adapter.startAuthentication{authGen:0x0}, suffix",
 		},
 		"startAuthentication_message_with_prefix_and_format_suffix": {
 			msg:            startAuthentication{},
 			prefix:         "prefix",
 			formatAndArgs:  []any{"suffix is %#v and %q", stopAuthentication{}, "suffix"},
-			wantSafeString: `prefix: adapter.startAuthentication{}, suffix is adapter.stopAuthentication{gen:0x0} and "suffix"`,
+			wantSafeString: `prefix: adapter.startAuthentication{authGen:0x0}, suffix is adapter.stopAuthentication{gen:0x0} and "suffix"`,
 		},
 		"New_password_check": {
 			msg:             newPasswordCheck{password: "Super secret password!"},
-			wantSafeString:  `adapter.newPasswordCheck{ctx:context.Context(nil), password:"***********"}`,
-			wantDebugString: `adapter.newPasswordCheck{ctx:context.Context(nil), password:"Super secret password!"}`,
+			wantSafeString:  `adapter.newPasswordCheck{ctx:context.Context(nil), password:"***********", authGen:0x0}`,
+			wantDebugString: `adapter.newPasswordCheck{ctx:context.Context(nil), password:"Super secret password!", authGen:0x0}`,
 		},
 		"New_password_check_result": {
 			msg:             newPasswordCheckResult{password: "Super secret password!", msg: "Some message"},
-			wantSafeString:  `adapter.newPasswordCheckResult{ctx:context.Context(nil), password:"***********", msg:"Some message"}`,
-			wantDebugString: `adapter.newPasswordCheckResult{ctx:context.Context(nil), password:"Super secret password!", msg:"Some message"}`,
+			wantSafeString:  `adapter.newPasswordCheckResult{ctx:context.Context(nil), password:"***********", msg:"Some message", authGen:0x0}`,
+			wantDebugString: `adapter.newPasswordCheckResult{ctx:context.Context(nil), password:"Super secret password!", msg:"Some message", authGen:0x0}`,
 		},
 		"Key_rune_message": {
 			msg:             tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p', 'a', 's', 's'}},

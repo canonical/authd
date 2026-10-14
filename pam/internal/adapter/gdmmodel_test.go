@@ -632,9 +632,6 @@ func TestGdmModel(t *testing.T) {
 			messages: []tea.Msg{
 				gdmTestWaitForStage{
 					stage: proto.Stage_authModeSelection,
-					events: []*gdm.EventData{
-						gdm_test.AuthModeSelectedEvent(passwordUILayoutID),
-					},
 				},
 				gdmTestWaitForStage{
 					stage: proto.Stage_challenge,
@@ -710,9 +707,8 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_authEvent, // retry
 				gdm.EventType_startAuthentication,
 			},
-			// One authModeSelected/uiLayoutReceived per genuine selection (the
-			// three password-stage cycles in wantGdmRequests). The GDM echo of
-			// each selection must not add extra cycles.
+			// One authModeSelected/uiLayoutReceived pair per genuine selection
+			// (the three password-stage cycles in wantGdmRequests).
 			wantGdmEventsCount: map[gdm.EventType]int{
 				gdm.EventType_authModeSelected: 3,
 				gdm.EventType_uiLayoutReceived: 3,
@@ -1296,9 +1292,8 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_authEvent,
 			},
 			// Each genuine selection of the auth mode (the initial one and the
-			// re-selection after navigating back to authModeSelection) must
-			// produce exactly one selection cycle: the GDM echo of the
-			// selection must not add a third one.
+			// re-selection after navigating back to authModeSelection) produces
+			// exactly one selection cycle.
 			wantGdmEventsCount: map[gdm.EventType]int{
 				gdm.EventType_authModeSelected:    2,
 				gdm.EventType_uiLayoutReceived:    2,

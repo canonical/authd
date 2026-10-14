@@ -268,6 +268,13 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		safeMessageDebug(msg)
 		return m, m.startHealthCheck()
 
+	case startAuthentication:
+		// Assign the challenge generation before forwarding the event to GDM,
+		// so requests received by the next poll can be tied to this challenge.
+		if msg.authGen == 0 {
+			msg.authGen = m.authenticationModel.authGen + 1
+		}
+
 	// Exit cases
 	case PamReturnValue:
 		safeMessageDebug(msg)
@@ -280,6 +287,14 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		*m.pamReturnValue = msg
 		return m, m.quit()
+
+	case isAuthenticatedResultReceived:
+		if msg.authGen != m.authenticationModel.authGen {
+			safeMessageDebug(msg, "ignoring stale result; current challenge generation %d",
+				m.authenticationModel.authGen)
+			m.authenticationModel, _ = m.authenticationModel.Update(msg)
+			return m, nil
+		}
 
 	// Events
 	case BrokerListReceived:
@@ -322,9 +337,6 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SessionStarted:
 		safeMessageDebug(msg)
 		m.sessionStartingForBroker = ""
-		if m.clientType == Gdm {
-			m.gdmModel.pendingEchoAuthModeID = ""
-		}
 		pubASN1, err := base64.StdEncoding.DecodeString(msg.encryptionKey)
 		if err != nil {
 			return m, sendEvent(pamError{
@@ -425,7 +437,16 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				msg:    "reselection of current auth mode without current ID",
 			})
 		}
+
+		var resetCmd tea.Cmd
+		if m.clientType == Gdm && msg.fromGDM {
+			// Invalidate PAM's active challenge before composing the new
+			// layout, so its terminal response cannot affect the replacement.
+			resetCmd = m.authenticationModel.ResetForAuthModeSwitch()
+		}
+
 		return m, tea.Sequence(
+			resetCmd,
 			m.updateClientModel(msg),
 			getLayout(m.client, m.currentSession.sessionID, msg.ID),
 		)
@@ -451,9 +472,6 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		safeMessageDebug(msg)
 		m.sessionStartingForBroker = ""
 		m.currentSession = nil
-		if m.clientType == Gdm {
-			m.gdmModel.pendingEchoAuthModeID = ""
-		}
 		return m, nil
 
 	case stopAuthentication:

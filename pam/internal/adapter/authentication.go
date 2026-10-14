@@ -38,7 +38,7 @@ var (
 // sendIsAuthenticated sends the authentication secrets or wait request to the brokers.
 // The event will contain the returned value from the broker.
 func sendIsAuthenticated(ctx context.Context, client authd.PAMClient, sessionID string,
-	authData *authd.IARequest_AuthenticationData, secret *string) tea.Cmd {
+	authData *authd.IARequest_AuthenticationData, secret *string, authGen uint64) tea.Cmd {
 	return func() (msg tea.Msg) {
 		log.Debugf(context.TODO(), "Authentication request for session %q: %#v",
 			sessionID, authData.Item)
@@ -63,8 +63,9 @@ func sendIsAuthenticated(ctx context.Context, client authd.PAMClient, sessionID 
 				<-time.After(cancellationWait)
 
 				return isAuthenticatedResultReceived{
-					access: auth.Cancelled,
-					secret: secret,
+					access:  auth.Cancelled,
+					secret:  secret,
+					authGen: authGen,
 				}
 			}
 			return pamError{
@@ -74,9 +75,10 @@ func sendIsAuthenticated(ctx context.Context, client authd.PAMClient, sessionID 
 		}
 
 		return isAuthenticatedResultReceived{
-			access: res.Access,
-			msg:    res.Msg,
-			secret: secret,
+			access:  res.Access,
+			msg:     res.Msg,
+			secret:  secret,
+			authGen: authGen,
 		}
 	}
 }
@@ -84,7 +86,8 @@ func sendIsAuthenticated(ctx context.Context, client authd.PAMClient, sessionID 
 // isAuthenticatedRequested is the internal events signalling that authentication
 // with the given password or wait has been requested.
 type isAuthenticatedRequested struct {
-	item authd.IARequestAuthenticationDataItem
+	item    authd.IARequestAuthenticationDataItem
+	authGen uint64
 }
 
 // isAuthenticatedRequestedSend is the internal event signaling that the authentication
@@ -97,9 +100,10 @@ type isAuthenticatedRequestedSend struct {
 // isAuthenticatedResultReceived is the internal event with the authentication access result
 // and data that was retrieved.
 type isAuthenticatedResultReceived struct {
-	access string
-	secret *string
-	msg    string
+	access  string
+	secret  *string
+	msg     string
+	authGen uint64
 }
 
 // isAuthenticatedCancelled is the event to cancel the auth request.
@@ -163,7 +167,9 @@ type authTracker struct {
 
 // startAuthentication signals that the authentication model can start
 // wait:true authentication and reset fields.
-type startAuthentication struct{}
+type startAuthentication struct {
+	authGen uint64
+}
 
 // stopAuthentication signals that the authentication has been stopped.
 //
@@ -182,6 +188,7 @@ type errMsgToDisplay struct {
 type newPasswordCheck struct {
 	ctx      context.Context
 	password string
+	authGen  uint64
 }
 
 // newPasswordCheckResult returns the password quality check result.
@@ -189,6 +196,7 @@ type newPasswordCheckResult struct {
 	ctx      context.Context
 	password string
 	msg      string
+	authGen  uint64
 }
 
 // newAuthenticationModel initializes a authenticationModel which needs to be Compose then.
@@ -243,7 +251,11 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 		// a superseded challenge and must be ignored, otherwise it would tear
 		// this one down. The stop captured the generation current when it was
 		// scheduled, which is now older than this one.
-		m.authGen++
+		if msg.authGen == 0 {
+			m.authGen++
+		} else {
+			m.authGen = msg.authGen
+		}
 		m.inProgress = true
 		if m.inputLocked {
 			m.inputLocked = false
@@ -266,7 +278,14 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 		return m, tea.Sequence(m.cancelIsAuthenticated(), sendEvent(AuthModeSelected{}))
 
 	case newPasswordCheck:
+		if msg.authGen == 0 {
+			msg.authGen = m.authGen
+		}
 		safeMessageDebug(msg)
+		if msg.authGen != m.authGen {
+			m.authTracker.finish()
+			return m, nil
+		}
 		var oldPassword string
 		if m.mode == authd.SessionMode_CHANGE_PASSWORD {
 			// Only compare the new password with the current one if the session is for changing the password.
@@ -279,7 +298,11 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 		}
 
 		return m, func() tea.Msg {
-			res := newPasswordCheckResult{ctx: msg.ctx, password: msg.password}
+			res := newPasswordCheckResult{
+				ctx:      msg.ctx,
+				password: msg.password,
+				authGen:  msg.authGen,
+			}
 			if err := checkPasswordQuality(oldPassword, msg.password); err != nil {
 				res.msg = err.Error()
 			}
@@ -288,6 +311,10 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 
 	case newPasswordCheckResult:
 		safeMessageDebug(msg)
+		if msg.authGen != m.authGen {
+			m.authTracker.finish()
+			return m, nil
+		}
 		if m.clientType != Gdm {
 			// This may be handled by the current model, so don't return early.
 			break
@@ -295,10 +322,11 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 
 		if msg.msg == "" {
 			return m, sendEvent(isAuthenticatedRequestedSend{
-				ctx: msg.ctx,
 				isAuthenticatedRequested: isAuthenticatedRequested{
-					item: &authd.IARequest_AuthenticationData_Secret{Secret: msg.password},
+					item:    &authd.IARequest_AuthenticationData_Secret{Secret: msg.password},
+					authGen: msg.authGen,
 				},
+				ctx: msg.ctx,
 			})
 		}
 
@@ -311,12 +339,23 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 		}
 
 		return m, sendEvent(isAuthenticatedResultReceived{
-			access: auth.Retry,
-			msg:    fmt.Sprintf(`{"message": %s}`, errMsg),
+			access:  auth.Retry,
+			msg:     fmt.Sprintf(`{"message": %s}`, errMsg),
+			authGen: msg.authGen,
 		})
 
 	case isAuthenticatedRequested:
 		safeMessageDebug(msg)
+		authGen := msg.authGen
+		if authGen == 0 {
+			authGen = m.authGen
+		}
+		if authGen != m.authGen {
+			log.Debugf(context.TODO(),
+				"Ignoring authentication request for stale challenge generation %d (current %d)",
+				authGen, m.authGen)
+			return m, nil
+		}
 
 		// Hide the input if we are in interactive terminal mode and the authentication request is for a secret (password).
 		if _, hasSecret := msg.item.(*authd.IARequest_AuthenticationData_Secret); hasSecret && m.clientType == InteractiveTerminal {
@@ -327,6 +366,7 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 		authTracker := m.authTracker
 
 		ctx, cancel := context.WithCancel(context.Background())
+		trackerGeneration := authTracker.currentGeneration()
 		cancelFunc := func() {
 			// Very very ugly, but we need to ensure that IsAuthenticated call has been delivered
 			// to the broker before calling broker's cancelIsAuthenticated or that cancel request may happen
@@ -347,33 +387,54 @@ func (m authenticationModel) Update(msg tea.Msg) (authModel authenticationModel,
 			// waitForSlot blocks until no other auth is in flight, then registers
 			// us as the active goroutine for this generation.  It returns false
 			// if we have been superseded by a cancelAndWait() call and must abort.
-			if !authTracker.waitForSlot(cancelFunc) {
+			if !authTracker.waitForSlot(cancelFunc, trackerGeneration) {
+				cancel()
 				return nil
 			}
 
 			secret, hasSecret := msg.item.(*authd.IARequest_AuthenticationData_Secret)
 			if hasSecret && clientType == Gdm && currentLayout == layouts.NewPassword {
-				return newPasswordCheck{ctx: ctx, password: secret.Secret}
+				return newPasswordCheck{
+					ctx:      ctx,
+					password: secret.Secret,
+					authGen:  authGen,
+				}
 			}
 
-			return isAuthenticatedRequestedSend{msg, ctx}
+			return isAuthenticatedRequestedSend{
+				isAuthenticatedRequested: isAuthenticatedRequested{
+					item:    msg.item,
+					authGen: authGen,
+				},
+				ctx: ctx,
+			}
 		}
 
 	case isAuthenticatedRequestedSend:
 		safeMessageDebug(msg)
+		if msg.authGen != m.authGen {
+			m.authTracker.finish()
+			return m, nil
+		}
 		// no password value, pass it as is
 		plainTextSecret, err := msg.encryptSecretIfPresent(m.encryptionKey)
 		if err != nil {
 			return m, sendEvent(pamError{status: pam.ErrSystem, msg: fmt.Sprintf("could not encrypt password payload: %v", err)})
 		}
 
-		return m, sendIsAuthenticated(msg.ctx, m.client, m.currentSessionID, &authd.IARequest_AuthenticationData{Item: msg.item}, plainTextSecret)
+		return m, sendIsAuthenticated(msg.ctx, m.client, m.currentSessionID,
+			&authd.IARequest_AuthenticationData{Item: msg.item}, plainTextSecret, msg.authGen)
 
 	case isAuthenticatedCancelled:
 		safeMessageDebug(msg)
 		return m, m.cancelIsAuthenticated()
 
 	case isAuthenticatedResultReceived:
+		if msg.authGen != m.authGen {
+			safeMessageDebug(msg, "ignoring stale result; current generation %d", m.authGen)
+			m.authTracker.finish()
+			return m, nil
+		}
 		if m.clientType == Gdm && msg.access == auth.DeniedMaxTries {
 			// GDM treats PAM_MAXTRIES as service unavailable until GNOME Shell
 			// handles the result correctly. Use its normal auth failure path.
@@ -606,9 +667,22 @@ func (m authenticationModel) View() string {
 	)
 }
 
-// Resets zeroes any internal state on the authenticationModel.
+// Reset clears the current challenge state.
 func (m *authenticationModel) Reset() tea.Cmd {
+	return m.reset(false)
+}
+
+// ResetForAuthModeSwitch invalidates the current result before clearing the
+// challenge state for a GDM-originated mode switch.
+func (m *authenticationModel) ResetForAuthModeSwitch() tea.Cmd {
+	return m.reset(true)
+}
+
+func (m *authenticationModel) reset(invalidateResult bool) tea.Cmd {
 	log.Debugf(context.TODO(), "%T: Reset", m)
+	if invalidateResult {
+		m.authGen++
+	}
 	m.inProgress = false
 	m.inputLocked = false
 	m.currentModel = nil
@@ -678,9 +752,14 @@ func (authData *isAuthenticatedRequestedSend) encryptSecretIfPresent(publicKey *
 // The generation counter is the key to correctness: cancelAndWait() bumps it
 // under the lock before signalling, so any goroutine that wakes up afterwards
 // will see a stale generation and abort — with no window for a race.
-func (at *authTracker) waitForSlot(cancelFunc func()) bool {
+func (at *authTracker) currentGeneration() uint64 {
 	at.mu.Lock()
-	gen := at.generation
+	defer at.mu.Unlock()
+	return at.generation
+}
+
+func (at *authTracker) waitForSlot(cancelFunc func(), expectedGeneration uint64) bool {
+	at.mu.Lock()
 	// Wait until the previous auth goroutine has finished.
 	for at.done != nil {
 		done := at.done
@@ -690,7 +769,7 @@ func (at *authTracker) waitForSlot(cancelFunc func()) bool {
 	}
 	// If cancelAndWait() was called while we were waiting (or before we even
 	// started), our generation is stale — abort without making any RPC.
-	if at.generation != gen {
+	if at.generation != expectedGeneration {
 		at.mu.Unlock()
 		return false
 	}
