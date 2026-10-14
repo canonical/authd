@@ -127,6 +127,15 @@ func TestKeepCachedGIDs(t *testing.T) {
 			cached: []info.Group{{Name: "engineering", UGID: "group-id", GID: &cachedGID}},
 			want:   []info.Group{{Name: "engineering", UGID: "group-id", GID: &freshGID}},
 		},
+		"First_cached_GID_of_the_same_group_wins": {
+			groups: []info.Group{{Name: "engineering", UGID: "group-id"}},
+			cached: []info.Group{
+				{Name: "engineering", UGID: "group-id"},
+				{Name: "engineering", UGID: "group-id", GID: &cachedGID},
+				{Name: "engineering", UGID: "group-id", GID: &freshGID},
+			},
+			want: []info.Group{{Name: "engineering", UGID: "group-id", GID: &cachedGID}},
+		},
 		"Local_groups_are_not_matched_by_name": {
 			groups: []info.Group{{Name: "sudo"}},
 			cached: []info.Group{{Name: "sudo", GID: &cachedGID}},
