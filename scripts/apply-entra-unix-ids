@@ -18,6 +18,8 @@ fail() {
 
 usage() {
 	cat <<'EOF'
+apply-entra-unix-ids - apply cached Microsoft Entra Unix IDs
+
 Usage: apply-entra-unix-ids --uid-attribute NAME --gid-attribute NAME
        [--client-id ID] [--apply] [--authctl PATH] TOKEN_JSON
 
@@ -31,6 +33,12 @@ attribute names differ from these names.
 
 Application is not transactional: a later authctl command can fail after
 earlier commands have succeeded.
+
+Environment: AUTHCTL sets the authctl command to run. The default is
+authctl.
+
+Exit status: 0 on success, including a dry run. 2 when a required argument
+is missing. 1 for any other error, including a failed authctl command.
 EOF
 }
 

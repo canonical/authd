@@ -344,10 +344,11 @@ login. Until then the script refuses the cache, because its attribute names
 differ from the configured names.
 
 Review a cache first. The `apply-entra-unix-ids` command is installed with the
-`authd` package and needs `jq`, which the package recommends. Pass the
-attribute names from the `[msentraid]` section of the broker configuration. An
-empty name means that the attribute is not configured. The command defaults to
-a dry run:
+`authd` package and needs `jq`, which the package recommends. See
+`man apply-entra-unix-ids` for all options, environment variables, and exit
+codes. Pass the attribute names from the `[msentraid]` section of the broker
+configuration. An empty name means that the attribute is not configured. The
+command defaults to a dry run:
 
 ```shell
 sudo apply-entra-unix-ids --uid-attribute extension_abc123_uidNumber \
