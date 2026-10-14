@@ -3610,11 +3610,12 @@ func (b *Broker) mustDenyUnixAttributeError(err error) bool {
 // Checks if the provided error is of type ForDisplayError. If it is, it returns the error message. Else, it returns
 // the provided fallback message.
 func errorMessageForDisplay(err error, fallback string) errorMessage {
+	// Each line is short, so terminals show it without wrapping it mid-word.
 	if errors.Is(err, info.ErrUnixUIDRequired) {
-		return errorMessage{Message: "Microsoft Entra ID did not provide a valid required Unix UID for your account. Please contact your administrator."}
+		return errorMessage{Message: "Microsoft Entra ID did not provide a valid required Unix UID\nfor your account.\nPlease contact your administrator."}
 	}
 	if errors.Is(err, info.ErrUnixGIDRequired) {
-		return errorMessage{Message: "Microsoft Entra ID did not provide a valid required Unix GID for one or more of your groups. Please contact your administrator."}
+		return errorMessage{Message: "Microsoft Entra ID did not provide a valid required Unix GID\nfor one or more of your groups.\nPlease contact your administrator."}
 	}
 	var forDisplayErr *providerErrors.ForDisplayError
 	if errors.As(err, &forDisplayErr) {
