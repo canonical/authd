@@ -222,26 +222,27 @@ if [[ "$apply" == true ]]; then
 else
 	printf 'Dry run; no changes will be made for %s:\n' "$username"
 fi
+# Entra names can start with '-'; '--' makes authctl read them as operands.
 if [[ -n "$uid" ]]; then
-	printf '  %q user set-uid %q %s\n' "$authctl_command" "$username" "$uid"
-	printf '  %q group set-gid %q %s\n' "$authctl_command" "$username" "$uid"
+	printf '  %q user set-uid -- %q %s\n' "$authctl_command" "$username" "$uid"
+	printf '  %q group set-gid -- %q %s\n' "$authctl_command" "$username" "$uid"
 fi
 for ((index = 0; index < ${#group_names[@]}; index++)); do
-	printf '  %q group set-gid %q %s  # Entra group %s\n' "$authctl_command" "${group_names[$index]}" "${group_gids[$index]}" "${group_ugids[$index]}"
+	printf '  %q group set-gid -- %q %s  # Entra group %s\n' "$authctl_command" "${group_names[$index]}" "${group_gids[$index]}" "${group_ugids[$index]}"
 done
 
 [[ "$apply" == true ]] || exit 0
 command -v "$authctl_command" >/dev/null 2>&1 || [[ -x "$authctl_command" ]] || fail "authctl command not found: $authctl_command"
 printf 'Application is not transactional; a later authctl command may fail after earlier commands have succeeded.\n' >&2
 
-if [[ -n "$uid" ]] && ! "$authctl_command" user set-uid "$username" "$uid"; then
+if [[ -n "$uid" ]] && ! "$authctl_command" user set-uid -- "$username" "$uid"; then
 	fail "authctl user set-uid failed; earlier changes, if any, were not rolled back"
 fi
-if [[ -n "$uid" ]] && ! "$authctl_command" group set-gid "$username" "$uid"; then
+if [[ -n "$uid" ]] && ! "$authctl_command" group set-gid -- "$username" "$uid"; then
 	fail "authctl group set-gid failed for private group $username; earlier changes were not rolled back"
 fi
 for ((index = 0; index < ${#group_names[@]}; index++)); do
-	if ! "$authctl_command" group set-gid "${group_names[$index]}" "${group_gids[$index]}"; then
+	if ! "$authctl_command" group set-gid -- "${group_names[$index]}" "${group_gids[$index]}"; then
 		fail "authctl group set-gid failed for ${group_names[$index]}; earlier changes were not rolled back"
 	fi
 done
