@@ -190,6 +190,16 @@ func TestApplyEntraUnixIDsRejectsPrivateGroupGIDConflictBeforeApplying(t *testin
 	require.Contains(t, output, "private group Alice GID must match cached UID 41001, but remote group alice is assigned GID 42001")
 }
 
+func TestApplyEntraUnixIDsRejectsPrivateGroupNameWithoutUIDBeforeApplying(t *testing.T) {
+	t.Parallel()
+
+	input := `{"UserInfo":{"name":"Alice","uid":null,"groups":[{"name":"ALICE","ugid":"private-group-id","gid":42001}]}}`
+	output, calls, err := runApplyEntraUnixIDs(t, input, true)
+	require.Error(t, err, output)
+	require.Empty(t, calls, "a remote group named like the private group must be rejected before invoking authctl")
+	require.Contains(t, output, "remote group alice would change the GID of private group Alice, but the cache has no UID")
+}
+
 func TestApplyEntraUnixIDsAllowsPrivateGroupGIDMatchingUID(t *testing.T) {
 	t.Parallel()
 

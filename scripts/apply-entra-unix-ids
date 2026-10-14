@@ -189,7 +189,11 @@ for group_row in "${group_rows[@]}"; do
 done
 
 private_group_name=${username,,}
-if [[ -n "$uid" && ${gid_by_name[$private_group_name]+set} ]]; then
+# A remote group with the user's name targets the same group as the private group.
+if [[ ${gid_by_name[$private_group_name]+set} ]]; then
+	if [[ -z "$uid" ]]; then
+		fail "remote group $private_group_name would change the GID of private group $username, but the cache has no UID"
+	fi
 	private_group_gid=${gid_by_name[$private_group_name]}
 	if [[ "$private_group_gid" != "$uid" ]]; then
 		fail "private group $username GID must match cached UID $uid, but remote group $private_group_name is assigned GID $private_group_gid"
