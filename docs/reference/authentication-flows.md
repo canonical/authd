@@ -81,7 +81,8 @@ device code flow verifies its ID token separately.
 Microsoft [recommends treating access tokens as opaque](https://learn.microsoft.com/en-us/entra/identity-platform/access-tokens);
 this check relies on the observed format of Microsoft first-party tokens. JWKS
 requests require HTTPS (except on loopback), use the Rust HTTP/TLS client with a
-four-second timeout, and refresh keys after 24 hours or on an unknown `kid`.
+four-second timeout, refresh keys after 24 hours, and throttle unknown-`kid`
+refreshes to once every five minutes per JWKS URL after a successful fetch.
 Failed or timed-out refreshes fall back to a cached key if one still verifies
 the token, and transport or deadline failures on returning logins can fall back
 to offline login unless `force_access_check_with_provider` is enabled.

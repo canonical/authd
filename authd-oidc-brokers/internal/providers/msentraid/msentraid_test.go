@@ -367,7 +367,7 @@ func TestVerifyAccessTokenJWKSFailures(t *testing.T) {
 	}
 }
 
-func TestVerifyAccessTokenRefreshesForUnknownKey(t *testing.T) {
+func TestVerifyAccessTokenThrottlesUnknownKeyRefresh(t *testing.T) {
 	t.Parallel()
 	var requests atomic.Int32
 	mockServer, cleanup := startMockMSServer(t, &mockMSServerConfig{
@@ -386,12 +386,17 @@ func TestVerifyAccessTokenRefreshesForUnknownKey(t *testing.T) {
 	require.Equal(t, int32(1), requests.Load())
 
 	unknown := signVerifyAccessToken(t, testutils.MockKey, "unknown-signing-key", tenant, expires)
-	for wantRequests := int32(2); wantRequests <= 3; wantRequests++ {
+	for range 2 {
 		err := p.VerifyAccessToken(context.Background(), issuerURL, unknown)
 		require.Error(t, err)
 		var networkErr net.Error
 		require.False(t, errors.As(err, &networkErr), "missing signing key must not enable offline fallback")
-		require.Equal(t, wantRequests, requests.Load(), "each independent unknown-key verification must refresh")
+		require.Equal(
+			t,
+			int32(1),
+			requests.Load(),
+			"a recent successful JWKS fetch must throttle unknown-kid refresh",
+		)
 	}
 }
 
