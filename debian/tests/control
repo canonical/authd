@@ -6,3 +6,7 @@ Depends: @builddeps@
 Test-Command: debian/tests/rename-authd-ppa-source.sh
 Features: test-name=ppa_source_rename
 Depends: authd
+
+Test-Command: debian/tests/sync-authd-apport-native-origin.sh
+Features: test-name=apport-native-origin
+Depends: authd

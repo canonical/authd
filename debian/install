@@ -9,6 +9,14 @@ usr/bin/authctl /usr/bin/
 # Install authd config file
 debian/authd-config/authd.yaml /etc/authd/
 
+# Keep apport's native origins in sync with enabled authd PPAs.
+debian/authd-native-origins /usr/lib/authd/
+debian/authd-candidate-native-origins /usr/lib/authd/
+debian/authd-edge-native-origins /usr/lib/authd/
+debian/authd-dev-native-origins /usr/lib/authd/
+debian/sync-authd-apport-native-origin.sh /usr/lib/authd/
+debian/authd-apport-native-origin.apt-hook => /etc/apt/apt.conf.d/99authd-apport-native-origin
+
 # Rename the authd PPA source after a release upgrade.
 debian/rename-authd-ppa-source.sh /usr/lib/authd/
 

@@ -35,6 +35,7 @@ if [ configure = "$action" ]; then
     pam-auth-update --package
     insert_nss_entry
     /usr/lib/authd/rename-authd-ppa-source.sh
+    /usr/lib/authd/sync-authd-apport-native-origin.sh
 
     # We installed /etc/authd with permissions 777 - umask in versions prior to 0.4.0
     if dpkg --compare-versions "$previous_version" lt-nl "0.4.0~"; then
