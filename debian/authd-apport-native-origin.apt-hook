@@ -1,0 +1,3 @@
+APT::Update::Pre-Invoke {
+    "/usr/lib/authd/sync-authd-apport-native-origin.sh || echo 'authd: unable to synchronize Apport native origins; continuing apt update' >&2";
+};

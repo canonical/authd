@@ -24,13 +24,26 @@ remove_nss_entry() {
     ' /etc/nsswitch.conf
 }
 
+remove_apport_native_origin() {
+    native_origin_entry=/etc/apport/native-origins.d/authd
+    native_origin_file=/usr/lib/authd/authd-native-origins
+    if [ -L "$native_origin_entry" ] &&
+       [ "$(readlink "$native_origin_entry")" = "$native_origin_file" ]; then
+        rm -- "$native_origin_entry"
+    fi
+}
+
 case "$1" in
     remove|purge)
         if [ "${DPKG_MAINTSCRIPT_PACKAGE_REFCOUNT:-1}" = 1 ]; then
             remove_nss_entry
+            remove_apport_native_origin
         fi
     ;;
-    upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+    disappear)
+        remove_apport_native_origin
+    ;;
+    upgrade|failed-upgrade|abort-install|abort-upgrade)
     ;;
 
     *)
