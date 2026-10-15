@@ -31,6 +31,7 @@ import "C"
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -121,11 +122,14 @@ func initTPM(tctiName string) (tpm *boxedDynTPM, err error) {
 	return tpm, nil
 }
 
-// brokerHTTPTimeoutSecs extends libhimmelblau's 3-second default, which is too
-// short for Entra device enrollment.
+// brokerHTTPTimeoutSecs extends libhimmelblau's default for authentication and enrollment.
 const brokerHTTPTimeoutSecs = 15
 
-func initBroker(authority, clientID string, transportKeyBytes, certKeyBytes []byte) (broker *brokerClientApplication, err error) {
+// Leave time for cached-key fallback and the C return before the broker's
+// five-second request deadline.
+const verifierHTTPTimeoutSecs = 4
+
+func initBroker(authority, clientID string, transportKeyBytes, certKeyBytes []byte, timeoutSecs uint64) (broker *brokerClientApplication, err error) {
 	cAuthority := C.CString(authority)
 	defer C.free(unsafe.Pointer(cAuthority))
 
@@ -161,7 +165,7 @@ func initBroker(authority, clientID string, transportKeyBytes, certKeyBytes []by
 		defer C.loadable_ms_device_enrollment_key_free(cCertKey)
 	}
 
-	cTimeoutSecs := C.uint64_t(brokerHTTPTimeoutSecs)
+	cTimeoutSecs := C.uint64_t(timeoutSecs)
 
 	msalErr := C.broker_init(
 		cAuthority,
@@ -527,6 +531,21 @@ func msalErrorMsg(msalErr *C.MSAL_ERROR) string {
 	return C.GoString(msalErr.msg)
 }
 
+// requestFailedError keeps transient JWKS transport errors visible to offline fallback.
+type requestFailedError struct{ error }
+
+func (*requestFailedError) Timeout() bool   { return false }
+func (*requestFailedError) Temporary() bool { return true }
+
+func msalErrorFromC(msalErr *C.MSAL_ERROR) error {
+	defer C.error_free(msalErr)
+	err := errors.New(C.GoString(msalErr.msg))
+	if msalErr.code == C.REQUEST_FAILED {
+		return &requestFailedError{err}
+	}
+	return err
+}
+
 // newMFAError builds an MFAError from an msalErr and frees it.
 func newMFAError(msalErr *C.MSAL_ERROR) *MFAError {
 	defer C.error_free(msalErr)
@@ -571,6 +590,22 @@ func initiateMFAFlowForEnrollment(broker *brokerClientApplication, username, pas
 	}
 
 	return newMFAFlowState(flow), nil
+}
+
+func verifyAccessToken(broker *brokerClientApplication, accessToken, tenantID string) error {
+	cToken := C.CString(accessToken)
+	defer C.free(unsafe.Pointer(cToken))
+	cTenant := C.CString(tenantID)
+	defer C.free(unsafe.Pointer(cTenant))
+
+	if msalErr := C.broker_verify_access_token(
+		(*C.BrokerClientApplication)(unsafe.Pointer(broker)),
+		cToken,
+		cTenant,
+	); msalErr != nil {
+		return msalErrorFromC(msalErr)
+	}
+	return nil
 }
 
 func acquireTokenByMFAFlow(broker *brokerClientApplication, username string, flow *MFAFlowState, authData string, pollAttempt int) (token *C.UserToken, cleanup func(), err error) {

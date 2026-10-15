@@ -28,6 +28,8 @@ var (
 
 	brokerClientApps   = make(map[brokerClientAppCacheKey]*brokerClientAppEntry)
 	brokerClientAppsMu sync.Mutex
+	verifierApps       = map[string]*brokerClientAppEntry{}
+	verifierAppsMu     sync.Mutex
 
 	authorityBaseURL   = "https://login.microsoftonline.com"
 	authorityBaseURLMu sync.RWMutex
@@ -113,7 +115,7 @@ func brokerClientAppFor(clientID, tenantID string, data *DeviceRegistrationData)
 	brokerClientAppsMu.Unlock()
 
 	entry.once.Do(func() {
-		entry.app, entry.err = initBroker(authority, clientID, transportKey, certKey)
+		entry.app, entry.err = initBroker(authority, clientID, transportKey, certKey, brokerHTTPTimeoutSecs)
 	})
 	if entry.err != nil {
 		// Do not cache failures: drop the entry so a later call can retry.
@@ -126,6 +128,63 @@ func brokerClientAppFor(clientID, tenantID string, data *DeviceRegistrationData)
 	}
 
 	return entry.app, nil
+}
+
+// VerifyAccessToken verifies an Entra token's signature, exp, optional nbf,
+// and tenant against the issuer's JWKS endpoint.
+func VerifyAccessToken(ctx context.Context, issuerURL, tenantID, accessToken string) error {
+	issuer, err := url.Parse(issuerURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse issuer URL: %w", err)
+	}
+	if issuer.Scheme == "" || issuer.Host == "" {
+		return fmt.Errorf("issuer URL %q must include a scheme and host", issuerURL)
+	}
+	issuerAuthority := (&url.URL{Scheme: issuer.Scheme, Host: issuer.Host}).String()
+	authority, err := url.JoinPath(issuerAuthority, tenantID)
+	if err != nil {
+		return fmt.Errorf("failed to construct authority URL: %w", err)
+	}
+
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	verifierAppsMu.Lock()
+	entry := verifierApps[authority]
+	if entry == nil {
+		entry = &brokerClientAppEntry{}
+		verifierApps[authority] = entry
+	}
+	verifierAppsMu.Unlock()
+
+	// Run C verification in a goroutine so ctx cancellation can return early.
+	done := make(chan error, 1)
+	go func() {
+		entry.once.Do(func() {
+			entry.app, entry.err = initBroker(authority, "", nil, nil, verifierHTTPTimeoutSecs)
+		})
+		if entry.err != nil {
+			verifierAppsMu.Lock()
+			if verifierApps[authority] == entry {
+				delete(verifierApps, authority)
+			}
+			verifierAppsMu.Unlock()
+			done <- entry.err
+			return
+		}
+		if err := ctx.Err(); err != nil {
+			done <- err
+			return
+		}
+		done <- verifyAccessToken(entry.app, accessToken, tenantID)
+	}()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func hashCacheKeyBytes(value []byte) string {

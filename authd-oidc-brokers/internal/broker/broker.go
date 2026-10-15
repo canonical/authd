@@ -166,16 +166,17 @@ func (s *session) loadAuthInfo(path string) (*token.AuthCachedInfo, error) {
 	return authInfo, nil
 }
 
-// verifyAndExtractEntraUserInfo verifies the Entra auth access token's RS256
-// signature against the tenant JWKS and extracts user info from that verified
-// access token. It does NOT cross-check the username against the session; first
-// login does that via userInfoFromTokenExtras.
+// verifyAndExtractEntraUserInfo verifies an Entra token's signature, time
+// claims, and tenant before extracting identity claims. First login also checks
+// the session username in userInfoFromTokenExtras.
 func (b *Broker) verifyAndExtractEntraUserInfo(ctx context.Context, token *oauth2.Token) (info.User, error) {
 	ep, ok := providers.ProviderAs[himmelblau.EntraAuthProvider](b.provider)
 	if !ok {
 		return info.User{}, errors.New("provider does not support Entra authentication")
 	}
-	if err := ep.VerifyAccessToken(ctx, b.cfg.issuerURL, token.AccessToken); err != nil {
+	verifyCtx, cancel := context.WithTimeout(ctx, maxRequestDuration)
+	defer cancel()
+	if err := ep.VerifyAccessToken(verifyCtx, b.cfg.issuerURL, token.AccessToken); err != nil {
 		return info.User{}, fmt.Errorf("access token verification failed: %w", err)
 	}
 
@@ -3091,6 +3092,7 @@ func (b *Broker) refreshEntraToken(ctx context.Context, session *session, oldTok
 	verifyCtx, verifyCancel := context.WithTimeout(ctx, maxRequestDuration)
 	defer verifyCancel()
 	if err := ep.VerifyAccessToken(verifyCtx, b.cfg.issuerURL, newTok.AccessToken); err != nil {
+		// Transport and deadline errors are net.Error (allowing offline fallback).
 		// Refresh-token rotation has already succeeded server-side. Preserve the
 		// rotated token even though this login is denied, otherwise a local issue
 		// such as clock skew can strand the cache with a dead refresh token.

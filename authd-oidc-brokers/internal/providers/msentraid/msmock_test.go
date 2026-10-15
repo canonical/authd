@@ -33,6 +33,8 @@ import (
 var mockMSServerForDeviceRegistration *mockMSServer
 var mockMSServerForDeviceRegistrationOnce sync.Once
 
+const mockSigningKeyID = "mock-signing-key"
+
 func ensureMockMSServerForDeviceRegistration(t *testing.T) {
 	mockMSServerForDeviceRegistrationOnce.Do(func() {
 		mockMSServerForDeviceRegistration, _ = startMockMSServer(t, &mockMSServerConfig{
@@ -62,6 +64,8 @@ type mockMSServerConfig struct {
 	// RefreshHandler overrides the refresh_token grant response. Defaults to a
 	// successful token; set it to simulate a disabled/revoked user (e.g. AADSTS50057).
 	RefreshHandler http.HandlerFunc
+	// JWKSHandler overrides the signing keys endpoint for verifier tests.
+	JWKSHandler http.HandlerFunc
 }
 
 func startMockMSServer(t *testing.T, config *mockMSServerConfig) (mockServer *mockMSServer, cleanup func()) {
@@ -103,6 +107,13 @@ func startMockMSServer(t *testing.T, config *mockMSServerConfig) (mockServer *mo
 		// ===== graph.microsoft.com =====
 		case r.Method == http.MethodGet && (strings.HasSuffix(r.URL.Path, "/me/transitiveMemberOf/graph.group") || strings.Contains(r.URL.Path, "/transitiveMemberOf/graph.group")):
 			config.GroupEndpointHandler(w, r)
+
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/discovery/v2.0/keys"):
+			if config.JWKSHandler != nil {
+				config.JWKSHandler(w, r)
+			} else {
+				m.handleJWKSRequest(t, w, r)
+			}
 
 		default:
 			require.Fail(t, "unexpected request", "path=%s, method=%s", r.URL.Path, r.Method)
@@ -304,6 +315,26 @@ func (m *mockMSServer) handleNonceRequest(t *testing.T, w http.ResponseWriter, _
 	w.Header().Set("Content-Type", "application/json")
 	err := json.NewEncoder(w).Encode(resp)
 	require.NoError(t, err, "failed to encode response")
+}
+
+func writeJWKSResponse(w http.ResponseWriter, key *rsa.PrivateKey, kid string) error {
+	resp := map[string]any{
+		"keys": []map[string]any{{
+			"kty":     "RSA",
+			"use":     "sig",
+			"key_ops": []string{"verify"},
+			"alg":     "RS256",
+			"kid":     kid,
+			"n":       base64.RawURLEncoding.EncodeToString(key.N.Bytes()),
+			"e":       base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.E)).Bytes()),
+		}},
+	}
+	w.Header().Set("Content-Type", "application/json")
+	return json.NewEncoder(w).Encode(resp)
+}
+
+func (m *mockMSServer) handleJWKSRequest(t *testing.T, w http.ResponseWriter, _ *http.Request) {
+	require.NoError(t, writeJWKSResponse(w, m.rsaPrivateKey, mockSigningKeyID), "failed to encode JWKS")
 }
 
 func (m *mockMSServer) handleRefreshTokenRequest(t *testing.T, w http.ResponseWriter, r *http.Request) {

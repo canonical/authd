@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -3237,7 +3238,7 @@ func advanceToEntraMFAWait(t *testing.T, b *broker.Broker, sessionID, key string
 }
 
 // TestIsAuthenticatedEntraAuthDeniesOnAccessTokenVerificationFailure verifies that
-// when the MFA access token fails signature verification (the TLS-MITM defense),
+// when the MFA access token fails the defense-in-depth signature check,
 // the login is denied rather than trusting the token's identity claims.
 func TestIsAuthenticatedEntraAuthDeniesOnAccessTokenVerificationFailure(t *testing.T) {
 	t.Parallel()
@@ -4204,6 +4205,41 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDeniesOnVerificationFailure(t *
 	require.NoError(t, err)
 	require.Equal(t, "new-refresh-token", cached.Token.RefreshToken,
 		"a local verification failure must not discard an already-rotated refresh token")
+}
+
+func TestIsAuthenticatedPasswordEntraTokenRefreshUsesOfflineOnTransientVerificationFailure(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]error{
+		"JWKS transport failure": &net.OpError{
+			Op:  "dial",
+			Net: "tcp",
+			Err: errors.New("connection refused"),
+		},
+		"verification deadline": context.DeadlineExceeded,
+	}
+	for name, verifyErr := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			provider := &mockEntraAuthProvider{
+				MockProvider: &testutils.MockProvider{GetGroupsFunc: func() ([]info.Group, error) {
+					return []info.Group{{Name: "remote-group"}}, nil
+				}},
+				refreshResult:        &oauth2.Token{AccessToken: "new-access-token", RefreshToken: "new-refresh-token"},
+				verifyAccessTokenErr: verifyErr,
+			}
+
+			b, sessionID, access := runReturningEntraAuthLogin(t, provider)
+			require.Equal(t, broker.AuthGranted, access)
+			offline, err := b.IsOffline(sessionID)
+			require.NoError(t, err)
+			require.True(t, offline, "a transient verification failure should preserve offline login")
+			cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+			require.NoError(t, err)
+			require.Equal(t, "new-refresh-token", cached.Token.RefreshToken)
+		})
+	}
 }
 
 // TestIsAuthenticatedPasswordEntraTokenRefreshVerificationHasOwnTimeout verifies

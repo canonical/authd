@@ -4,8 +4,14 @@ package msentraid_test
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -189,6 +195,274 @@ func TestRefreshEntraToken(t *testing.T) {
 			require.Nil(t, got.Extra("sub"), "refresh should not add redundant sub extras")
 			require.Nil(t, got.Extra("name"), "refresh should not add redundant name extras")
 		})
+	}
+}
+
+func signVerifyAccessToken(t *testing.T, key *rsa.PrivateKey, kid, tenant string, exp int64) string {
+	t.Helper()
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"tid": tenant,
+		"exp": exp,
+		"upn": "u@example.com",
+	})
+	token.Header["kid"] = kid
+	signed, err := token.SignedString(key)
+	require.NoError(t, err)
+	return signed
+}
+
+// signVerifyAccessTokenWithNonce signs a token whose served header carries the
+// plain nonce while the signature covers the SHA256 rewrite, as Entra serves
+// first-party access tokens.
+func signVerifyAccessTokenWithNonce(t *testing.T, key *rsa.PrivateKey, kid, tenant, nonce string, exp int64) string {
+	t.Helper()
+	nonceHash := sha256.Sum256([]byte(nonce))
+	hashedNonce := base64.RawURLEncoding.EncodeToString(nonceHash[:])
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"tid": tenant,
+		"exp": exp,
+		"upn": "u@example.com",
+	})
+	token.Header["typ"] = "nonce"
+	token.Header["nonce"] = hashedNonce
+	token.Header["kid"] = kid
+	signed, err := token.SignedString(key)
+	require.NoError(t, err)
+
+	// The served header differs from the signed one only in the nonce value,
+	// so swapping that value back keeps the signature valid.
+	parts := strings.Split(signed, ".")
+	require.Len(t, parts, 3)
+	signedHeader, err := base64.RawURLEncoding.DecodeString(parts[0])
+	require.NoError(t, err)
+	served := strings.Replace(string(signedHeader), hashedNonce, nonce, 1)
+	parts[0] = base64.RawURLEncoding.EncodeToString([]byte(served))
+	return strings.Join(parts, ".")
+}
+
+func TestVerifyAccessToken(t *testing.T) {
+	t.Parallel()
+	ensureMockMSServerForDeviceRegistration(t)
+	mockServer := mockMSServerForDeviceRegistration
+	const tenant = "11111111-2222-3333-4444-555555555555"
+	issuerURL := mockServer.URL + "/" + tenant + "/v2.0"
+	expires := time.Now().Add(time.Hour).Unix()
+	tests := []struct {
+		name      string
+		makeToken func(*testing.T) string
+		wantErr   bool
+	}{
+		{
+			name: "valid token",
+			makeToken: func(t *testing.T) string {
+				return signVerifyAccessToken(t, mockServer.rsaPrivateKey, mockSigningKeyID, tenant, expires)
+			},
+		},
+		{
+			name: "token with nonce header",
+			makeToken: func(t *testing.T) string {
+				return signVerifyAccessTokenWithNonce(t, mockServer.rsaPrivateKey, mockSigningKeyID, tenant, "client-nonce", expires)
+			},
+		},
+		{
+			name: "tampered payload",
+			makeToken: func(t *testing.T) string {
+				signed := signVerifyAccessToken(t, mockServer.rsaPrivateKey, mockSigningKeyID, tenant, expires)
+				parts := strings.Split(signed, ".")
+				require.Len(t, parts, 3)
+				payload, err := json.Marshal(jwt.MapClaims{
+					"tid": tenant,
+					"exp": expires,
+					"upn": "attacker@example.com",
+				})
+				require.NoError(t, err)
+				parts[1] = base64.RawURLEncoding.EncodeToString(payload)
+				return strings.Join(parts, ".")
+			},
+			wantErr: true,
+		},
+		{
+			name: "wrong signing key",
+			makeToken: func(t *testing.T) string {
+				key, err := rsa.GenerateKey(rand.Reader, 2048)
+				require.NoError(t, err)
+				return signVerifyAccessToken(t, key, mockSigningKeyID, tenant, expires)
+			},
+			wantErr: true,
+		},
+		{
+			name: "wrong tenant",
+			makeToken: func(t *testing.T) string {
+				return signVerifyAccessToken(t, mockServer.rsaPrivateKey, mockSigningKeyID, "66666666-2222-3333-4444-555555555555", expires)
+			},
+			wantErr: true,
+		},
+		{
+			name: "expired token",
+			makeToken: func(t *testing.T) string {
+				return signVerifyAccessToken(t, mockServer.rsaPrivateKey, mockSigningKeyID, tenant, time.Now().Add(-time.Hour).Unix())
+			},
+			wantErr: true,
+		},
+		{
+			name: "unknown signing key",
+			makeToken: func(t *testing.T) string {
+				return signVerifyAccessToken(t, mockServer.rsaPrivateKey, "unknown-signing-key", tenant, expires)
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := msentraid.New().VerifyAccessToken(context.Background(), issuerURL, tc.makeToken(t))
+			if tc.wantErr {
+				require.Error(t, err)
+				var networkErr net.Error
+				require.False(t, errors.As(err, &networkErr), "token rejection must not enable offline fallback")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestVerifyAccessTokenJWKSFailures(t *testing.T) {
+	t.Parallel()
+	tests := map[string]struct {
+		closeListener  bool
+		wantNetworkErr bool
+		wantRequests   int32
+	}{
+		"closed loopback listener": {closeListener: true, wantNetworkErr: true},
+		"HTTP 503":                 {wantRequests: 1},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var requests atomic.Int32
+			mockServer, cleanup := startMockMSServer(t, &mockMSServerConfig{
+				JWKSHandler: func(w http.ResponseWriter, _ *http.Request) {
+					requests.Add(1)
+					w.WriteHeader(http.StatusServiceUnavailable)
+				},
+			})
+			t.Cleanup(cleanup)
+			const tenant = "55555555-2222-3333-4444-555555555555"
+			issuerURL := mockServer.URL + "/" + tenant + "/v2.0"
+			accessToken := signVerifyAccessToken(t, mockServer.rsaPrivateKey,
+				mockSigningKeyID, tenant, time.Now().Add(time.Hour).Unix())
+			if tc.closeListener {
+				cleanup()
+			}
+
+			err := msentraid.New().VerifyAccessToken(context.Background(), issuerURL, accessToken)
+			require.Error(t, err)
+			var networkErr net.Error
+			require.Equal(t, tc.wantNetworkErr, errors.As(err, &networkErr))
+			require.Equal(t, tc.wantRequests, requests.Load())
+		})
+	}
+}
+
+func TestVerifyAccessTokenThrottlesUnknownKeyRefresh(t *testing.T) {
+	t.Parallel()
+	var requests atomic.Int32
+	mockServer, cleanup := startMockMSServer(t, &mockMSServerConfig{
+		JWKSHandler: func(w http.ResponseWriter, _ *http.Request) {
+			requests.Add(1)
+			require.NoError(t, writeJWKSResponse(w, testutils.MockKey, mockSigningKeyID))
+		},
+	})
+	t.Cleanup(cleanup)
+	const tenant = "77777777-2222-3333-4444-555555555555"
+	issuerURL := mockServer.URL + "/" + tenant + "/v2.0"
+	expires := time.Now().Add(time.Hour).Unix()
+	p := msentraid.New()
+	valid := signVerifyAccessToken(t, testutils.MockKey, mockSigningKeyID, tenant, expires)
+	require.NoError(t, p.VerifyAccessToken(context.Background(), issuerURL, valid))
+	require.Equal(t, int32(1), requests.Load())
+
+	unknown := signVerifyAccessToken(t, testutils.MockKey, "unknown-signing-key", tenant, expires)
+	for range 2 {
+		err := p.VerifyAccessToken(context.Background(), issuerURL, unknown)
+		require.Error(t, err)
+		var networkErr net.Error
+		require.False(t, errors.As(err, &networkErr), "missing signing key must not enable offline fallback")
+		require.Equal(
+			t,
+			int32(1),
+			requests.Load(),
+			"a recent successful JWKS fetch must throttle unknown-kid refresh",
+		)
+	}
+}
+
+// TestVerifyAccessTokenRejectsIssuerWithoutTenant checks that an issuer URL
+// without a tenant path fails with a clear error instead of reaching the
+// verifier.
+func TestVerifyAccessTokenRejectsIssuerWithoutTenant(t *testing.T) {
+	t.Parallel()
+
+	err := msentraid.New().VerifyAccessToken(context.Background(), "https://login.microsoftonline.com", "token")
+	require.ErrorContains(t, err, "invalid expected_tenant_id")
+}
+
+func TestVerifyAccessTokenCancelledContext(t *testing.T) {
+	t.Parallel()
+	ensureMockMSServerForDeviceRegistration(t)
+	mockServer := mockMSServerForDeviceRegistration
+	const tenant = "11111111-2222-3333-4444-555555555555"
+	issuerURL := mockServer.URL + "/" + tenant + "/v2.0"
+	valid := signVerifyAccessToken(t, mockServer.rsaPrivateKey,
+		mockSigningKeyID, tenant, time.Now().Add(time.Hour).Unix())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := msentraid.New().VerifyAccessToken(ctx, issuerURL, valid)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestVerifyAccessTokenReturnsOnInFlightCancellation(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+
+	mockServer, cleanup := startMockMSServer(t, &mockMSServerConfig{
+		JWKSHandler: func(w http.ResponseWriter, _ *http.Request) {
+			close(started)
+			<-release
+			_ = writeJWKSResponse(w, key, mockSigningKeyID)
+		},
+	})
+	t.Cleanup(cleanup)
+	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+
+	const tenant = "33333333-2222-3333-4444-555555555555"
+	issuerURL := mockServer.URL + "/" + tenant + "/v2.0"
+	accessToken := signVerifyAccessToken(t, key, mockSigningKeyID, tenant, time.Now().Add(time.Hour).Unix())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- msentraid.New().VerifyAccessToken(ctx, issuerURL, accessToken)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("JWKS request did not start")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(2 * time.Second):
+		t.Fatal("verification did not return after context cancellation")
 	}
 }
 
