@@ -354,10 +354,6 @@ Files: vendor/gorbe.io/*
 Copyright: 2021 Dániel Görbe
 License: Expat
 
-Files: vendor_rust/adler2/*
-Copyright: Jonas Schievink <jonasschievink@gmail.com>
-License: 0BSD or Apache-2.0 or Expat
-
 Files: vendor_rust/aho-corasick/*
 Copyright: 2015 Andrew Gallant
 License: Expat or Unlicense
@@ -375,10 +371,6 @@ License: Apache-2.0 or Expat
 Files: vendor_rust/atomic-waker/*
 Copyright: 2016 Alex Crichton
            2017 The Tokio Authors
-License: Apache-2.0 or Expat
-
-Files: vendor_rust/autocfg/*
-Copyright: 2018 Josh Stone
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/axum/*
@@ -413,24 +405,8 @@ Files: vendor_rust/cfg-if/*
 Copyright: 2014 Alex Crichton
 License: Apache-2.0 or Expat
 
-Files: vendor_rust/chrono/*
-Copyright: 2012-2014 The Rust Project Developers
-License: Apache-2.0 or Expat
-
-Files: vendor_rust/chrono/CITATION.cff
-Copyright: 2012-2014 The Rust Project Developers
-License: Apache-2.0
-
-Files: vendor_rust/chrono/src/format/*
-Copyright: 2015 John Nagle.
-License: Apache-2.0 or Expat
-
 Files: vendor_rust/colored/*
 License: MPL-2.0
-
-Files: vendor_rust/crc32fast/*
-Copyright: 2018 Sam Rijs, Alex Crichton and contributors
-License: Apache-2.0 or Expat
 
 Files: vendor_rust/ctor/*
 License: Apache-2.0 or Expat
@@ -474,14 +450,6 @@ License: Apache-2.0 or Expat
 
 Files: vendor_rust/fixedbitset/README.md
 License: Apache-2.0
-
-Files: vendor_rust/flate2/*
-Copyright: 2014-2026 Alex Crichton
-License: Apache-2.0 or Expat
-
-Files: vendor_rust/flate2/src/*
-Copyright: 2013 The Rust Project Developers
-License: Apache-2.0 or Expat
 
 Files: vendor_rust/fnv/*
 Copyright: 2017 Contributors
@@ -541,11 +509,6 @@ Files: vendor_rust/heck/*
 Copyright: 2015 The Rust Project Developers
 License: Apache-2.0 or Expat
 
-Files: vendor_rust/hex/*
-Copyright: 2013-2014 The Rust Project Developers.
-           2015-2020 The rust-hex Developers.
-License: Apache-2.0 or Expat
-
 Files: vendor_rust/hostname/*
 Copyright: 2016 fengcen
            2019 svartalf
@@ -586,10 +549,6 @@ License: Apache-2.0 or Expat
 Files: vendor_rust/hyper-util/*
 Copyright: 2023-2025 Sean McArthur
 License: Expat
-
-Files: vendor_rust/iana-time-zone/*
-Copyright: 2020 Andrew D. Straw
-License: Apache-2.0 or Expat
 
 Files: vendor_rust/indexmap/*
 License: Apache-2.0 or Expat
@@ -643,13 +602,6 @@ Files: vendor_rust/mime/*
 Copyright: 2014 Sean McArthur
 License: Apache-2.0 or Expat
 
-Files: vendor_rust/miniz_oxide/*
-Copyright: 2010-2014 Rich Geldreich and Tenacious Software LLC
-           2013-2014 RAD Game Tools and Valve Software
-           2017-2020 Frommi
-           2017-2024 oyvindln
-License: Apache-2.0 or Expat or Zlib
-
 Files: vendor_rust/mio/*
 Copyright: 2014 Carl Lerche and other MIO contributors
 License: Expat
@@ -660,10 +612,6 @@ License: Apache-2.0 or Expat
 
 Files: vendor_rust/num-conv/*
 Copyright: Jacob Pratt
-License: Apache-2.0 or Expat
-
-Files: vendor_rust/num-traits/*
-Copyright: 2013-2014 The Rust Project Developers
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/num_threads/*
@@ -703,16 +651,6 @@ Files: vendor_rust/prettyplease/*
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/proc-macro2/*
-License: Apache-2.0 or Expat
-
-Files: vendor_rust/procfs/*
-Copyright: 2015 The procfs Developers
-           2019 Andrew Chin, , and other contributors.
-License: Apache-2.0 or Expat
-
-Files: vendor_rust/procfs-core/*
-Copyright: 2015 The procfs Developers
-           2019 Andrew Chin, , and other contributors.
 License: Apache-2.0 or Expat
 
 Files: vendor_rust/prost/*
@@ -772,10 +710,6 @@ License: Apache-2.0 or Expat
 Files: vendor_rust/shlex/*
 Copyright: 2015 Nicholas Allegra (comex).
 License: Apache-2.0 or Expat
-
-Files: vendor_rust/simd-adler32/*
-Copyright: 2021 [] [Marvin Countryman]
-License: Expat
 
 Files: vendor_rust/simple_logger/*
 Copyright: 2015-2021 Sam Clements
@@ -912,10 +846,6 @@ License: Apache-2.0 or Expat or Unicode-DFS-2016
 Files: vendor_rust/want/*
 Copyright: 2018-2019 Sean McArthur
 License: Expat
-
-Files: vendor_rust/zlib-rs/*
-Copyright: 2024 Trifecta Tech Foundation
-License: Zlib
 
 # License texts
 
