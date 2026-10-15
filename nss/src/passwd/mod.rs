@@ -2,6 +2,8 @@ use crate::{info, REQUEST_TIMEOUT};
 use libc::uid_t;
 use libnss::interop::Response;
 use libnss::passwd::{Passwd, PasswdHooks};
+use rustix::fs::{openat, readlinkat, Mode, OFlags, CWD};
+use std::os::unix::ffi::OsStringExt;
 use std::path::PathBuf;
 use tonic::Request;
 
@@ -153,22 +155,25 @@ fn users_to_passwd_entries(entries: Vec<User>) -> Vec<Passwd> {
 static SSHD_BINARY_PATH: &str = "/usr/sbin/sshd";
 
 fn is_proc_matching(pid: u32, name: &str) -> bool {
-    let proc = procfs::process::Process::new(pid as i32);
-    if proc.is_err() {
+    let Ok(proc_dir) = openat(
+        CWD,
+        format!("/proc/{pid}"),
+        OFlags::PATH | OFlags::DIRECTORY | OFlags::CLOEXEC,
+        Mode::empty(),
+    ) else {
         return false;
-    }
+    };
 
-    let exe = proc.unwrap().exe();
-    if exe.is_err() {
+    let Ok(exe) = readlinkat(&proc_dir, "exe", Vec::new()) else {
         return false;
-    }
+    };
 
-    let unwrapped_exe = exe.unwrap();
+    let unwrapped_exe = PathBuf::from(std::ffi::OsString::from_vec(exe.into_bytes()));
 
     #[cfg(feature = "integration_tests")]
     info!("Pre-check test: process '{}'", unwrapped_exe.display());
 
-    matches!(unwrapped_exe, s if s == PathBuf::from(name))
+    unwrapped_exe == PathBuf::from(name)
 }
 
 /// should_pre_check returns true if the current process sshd or a child of sshd.
@@ -183,4 +188,32 @@ fn should_pre_check() -> bool {
     }
 
     is_proc_matching(std::os::unix::process::parent_id(), SSHD_BINARY_PATH)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_proc_matching;
+
+    #[test]
+    fn is_proc_matching_matches_current_executable() {
+        let exe = std::env::current_exe().expect("current executable path should be available");
+        let exe = exe
+            .to_str()
+            .expect("current executable path should be valid UTF-8");
+
+        assert!(is_proc_matching(std::process::id(), exe));
+    }
+
+    #[test]
+    fn is_proc_matching_returns_false_for_different_executable() {
+        assert!(!is_proc_matching(
+            std::process::id(),
+            "/not/the/current/executable"
+        ));
+    }
+
+    #[test]
+    fn is_proc_matching_returns_false_for_missing_process() {
+        assert!(!is_proc_matching(u32::MAX, "/usr/sbin/sshd"));
+    }
 }
