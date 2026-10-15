@@ -122,6 +122,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Compute VM image hash
+        id: vm-image-hash
+        uses: ./.github/actions/compute-e2e-vm-image-hash
+
       - uses: ./.github/actions/setup-oras
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -195,7 +199,7 @@ jobs:
         id: download-vm-image
         env:
           OCI_REPO: ghcr.io/${{ github.repository }}/e2e-runner
-          OCI_TAG: ${{ inputs.ubuntu-release }}
+          OCI_TAG: ${{ inputs.ubuntu-release }}-${{ steps.vm-image-hash.outputs.hash }}
           IMAGE_PATH: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-release }}.qcow2
         run: |
           set -euo pipefail
