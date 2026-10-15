@@ -6,7 +6,9 @@ on:
   workflow_dispatch:
 
 jobs:
+  # These cleanup jobs run only in canonical/authd, which owns the packages they delete.
   cleanup-broker-snap:
+    if: &upstream-only github.repository == 'canonical/authd'
     runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       packages: write
@@ -22,6 +24,7 @@ jobs:
           min-versions-to-keep: 10
 
   cleanup-deb:
+    if: *upstream-only
     runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       packages: write
@@ -44,6 +47,7 @@ jobs:
           min-versions-to-keep: 10
 
   cleanup-e2e-test-vm-image:
+    if: *upstream-only
     runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       packages: write
