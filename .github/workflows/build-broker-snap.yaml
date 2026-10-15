@@ -8,6 +8,9 @@ on:
         required: true
         type: string
 
+env:
+  OCI_REPOSITORY: ${{ case(github.repository == 'canonical/authd-private', 'canonical/authd', github.repository) }}
+
 jobs:
   build-broker-snap:
     name: Build broker snap (${{ inputs.broker }})
@@ -47,7 +50,7 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-          OCI_REPO=ghcr.io/${{ github.repository }}/${{ inputs.broker }}-snap
+          OCI_REPO=ghcr.io/${OCI_REPOSITORY}/${{ inputs.broker }}-snap
           OCI_TAG=${{ steps.files-hash.outputs.hash }}
           if oras pull "${OCI_REPO}:${OCI_TAG}"; then
             echo "cache-hit=true" >> "${GITHUB_OUTPUT}"
@@ -90,7 +93,7 @@ jobs:
           #   download the snap for this run.
           # - The hash of the files that affect the build. This allows us to
           #   use it as a cache key, avoiding unnecessary rebuilds.
-          OCI_REPO=ghcr.io/${{ github.repository }}/${{ inputs.broker }}-snap
+          OCI_REPO=ghcr.io/${OCI_REPOSITORY}/${{ inputs.broker }}-snap
           OCI_TAG=${{ steps.files-hash.outputs.hash }}
           oras push "${OCI_REPO}:${OCI_TAG}" \
             "${{ inputs.broker }}.snap" \
