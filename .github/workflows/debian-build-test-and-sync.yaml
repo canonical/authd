@@ -16,6 +16,9 @@ on:
         type: string
         required: true
 
+env:
+  OCI_REPOSITORY: ${{ github.repository == 'canonical/authd-private' && 'canonical/authd' || github.repository }}
+
 jobs:
   build-deb:
     uses: ./.github/workflows/debian-build.yaml
@@ -49,7 +52,7 @@ jobs:
 
       - name: Download the Debian sources
         env:
-          OCI_REPO: ghcr.io/${{ github.repository }}/authd-deb-sources-${{ inputs.ubuntu-version }}
+          OCI_REPO: ghcr.io/${{ env.OCI_REPOSITORY }}/authd-deb-sources-${{ inputs.ubuntu-version }}
           OCI_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail
@@ -91,7 +94,7 @@ jobs:
 
       - name: Download the Debian sources
         env:
-          OCI_REPO: ghcr.io/${{ github.repository }}/authd-deb-sources-${{ inputs.ubuntu-version }}
+          OCI_REPO: ghcr.io/${{ env.OCI_REPOSITORY }}/authd-deb-sources-${{ inputs.ubuntu-version }}
           OCI_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail

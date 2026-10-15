@@ -67,6 +67,7 @@ on:
 
 env:
   DEBIAN_FRONTEND: noninteractive
+  OCI_REPOSITORY: ${{ github.repository == 'canonical/authd-private' && 'canonical/authd' || github.repository }}
   VM_NAME_BASE: e2e-runner
   # Not /tmp: on 26.04 runners that is a tmpfs capped at half of RAM, which
   # the qcow2 image and the libvirt .mem snapshots overflow. See
@@ -130,7 +131,7 @@ jobs:
         id: restore-oci
         if: ${{ !inputs.force-fresh-image && steps.restore-cache.outputs.cache-hit != 'true' }}
         env:
-          OCI_REPO: ghcr.io/${{ github.repository }}/e2e-runner
+          OCI_REPO: ghcr.io/${{ env.OCI_REPOSITORY }}/e2e-runner
           OCI_TAG: ${{ inputs.ubuntu-release }}-${{ steps.vm-image-hash.outputs.hash }}
           IMAGE_PATH: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-release }}.qcow2
           GHCR_USERNAME: ${{ github.actor }}
@@ -236,7 +237,7 @@ jobs:
           steps.restore-oci.outputs.cache-hit == 'true'
         env:
           IMAGE_PATH: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-release }}.qcow2
-          OCI_REPO: ghcr.io/${{ github.repository }}/e2e-runner
+          OCI_REPO: ghcr.io/${{ env.OCI_REPOSITORY }}/e2e-runner
           OCI_TAG: ${{ inputs.ubuntu-release }}-${{ steps.vm-image-hash.outputs.hash }}
           GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
