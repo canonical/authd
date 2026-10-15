@@ -102,7 +102,7 @@ include testing and fixing documentation pages, updating outdated content, and
 restructuring large documents. We'll help you see those tasks through to
 completion.
 
-You can get involved the with the CODA community through:
+You can get involved with the CODA community through:
 
 * The [discussion forum](https://discourse.ubuntu.com/c/community/open-documentation-academy/166) on the Ubuntu Community Hub
 * The [Matrix channel](https://matrix.to/#/#documentation:ubuntu.com) for interactive chat
