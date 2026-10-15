@@ -3,6 +3,8 @@ set -e
 
 #DEBHELPER#
 
+authd_ppa_names='authd authd-candidate authd-edge authd-dev'
+
 # This code was taken from libnss-sss, which got it from libnss-myhostname, which got it from nss-mdns:
 
 log() {
@@ -25,11 +27,27 @@ remove_nss_entry() {
 }
 
 remove_apport_native_origin() {
-    native_origin_entry=/etc/apport/native-origins.d/authd
-    native_origin_file=/usr/lib/authd/authd-native-origins
+    ppa=$1
+    native_origin_entry="/etc/apport/native-origins.d/$ppa"
+    native_origin_file="/usr/lib/authd/$ppa-native-origins"
     if [ -L "$native_origin_entry" ] &&
        [ "$(readlink "$native_origin_entry")" = "$native_origin_file" ]; then
         rm -- "$native_origin_entry"
+    elif [ -f "$native_origin_entry" ] && [ ! -L "$native_origin_entry" ] &&
+         native_origin_file_matches_entry "$native_origin_entry" "$native_origin_file" "$ppa"; then
+        rm -- "$native_origin_entry"
+    fi
+}
+
+native_origin_file_matches_entry() {
+    native_origin_entry=$1
+    native_origin_file=$2
+    ppa=$3
+    if [ -f "$native_origin_file" ]; then
+        cmp -s "$native_origin_entry" "$native_origin_file"
+    else
+        printf 'LP-PPA-ubuntu-enterprise-desktop-%s\n' "$ppa" |
+            cmp -s - "$native_origin_entry"
     fi
 }
 
@@ -37,11 +55,15 @@ case "$1" in
     remove|purge)
         if [ "${DPKG_MAINTSCRIPT_PACKAGE_REFCOUNT:-1}" = 1 ]; then
             remove_nss_entry
-            remove_apport_native_origin
+            for ppa in $authd_ppa_names; do
+                remove_apport_native_origin "$ppa"
+            done
         fi
     ;;
     disappear)
-        remove_apport_native_origin
+        for ppa in $authd_ppa_names; do
+            remove_apport_native_origin "$ppa"
+        done
     ;;
     upgrade|failed-upgrade|abort-install|abort-upgrade)
     ;;
