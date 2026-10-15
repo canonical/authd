@@ -160,6 +160,11 @@ These come straight from patterns the existing suite relies on — reproduce the
 - **Prefer `regex:` matches** for anything variable. `Find Text` / `Match Text`
   accept `regex:<pattern>`; use it instead of brittle exact strings when the
   text contains values that vary or that OCR renders inconsistently.
+- **Match a multi-line message one line at a time.** `Match Text` compares the
+  text with each OCR text box separately, so it can't find a sentence that
+  spans several lines. Give each line its own plain `Match Text` call, as in
+  `tests/entra_unix_uid_gid_provisioning.robot`. Keep each product line short
+  (about 60 characters) so terminals don't wrap it in the middle of a word.
 - **Scope with a `region`** when a short string risks matching elsewhere on
   screen, or when OCR is unreliable over the full frame.
 - **Give realistic timeouts.** `Match Text` waits up to its timeout for text to

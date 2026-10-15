@@ -47,6 +47,7 @@ X-Cargo-Built-Using: ${cargo:X-Cargo-Built-Using},
 Depends: ${shlibs:Depends},
          ${misc:Depends},
 Recommends: ${misc:Recommends},
+            jq,
             libpam-modules,
 Breaks: ${authd:gnome-shell-breaks}
 Description: ${source:Synopsis}

@@ -37,14 +37,25 @@ class Browser:
     """Library for browser automation using a headless browser."""
 
     @keyword
-    def login(self, usercode: str, output_dir: str = "."):
-        """Perform device code flow with the given username, password and
-        usercode using a broker-specific browser automation script. The window
-        opened by the script is run off screen using Xvfb unless ``SHOW_WEBVIEW``
-        is set. Output is streamed to stderr in real time and also logged to the
-        Robot Framework log file after the process completes.
+    def login(
+        self,
+        usercode: str,
+        output_dir: str = ".",
+        username: str = "",
+        password_env: str = "E2E_PASSWORD",
+        totp_env: str = "TOTP_SECRET",
+    ):
+        """Perform device code flow with the given username and usercode using a
+        broker-specific browser automation script. The password and TOTP secret
+        are read from the environment variables named by ``password_env`` and
+        ``totp_env``, so they are never passed as Robot Framework arguments.
+        The window opened by the script is run off screen using Xvfb unless
+        ``SHOW_WEBVIEW`` is set. Output is streamed to stderr in real time and
+        also logged to the Robot Framework log file after the process completes.
         The ``BROKER`` environment variable selects which login script to use.
         """
+        password = os.environ.get(password_env, "")
+        totp_secret = os.environ.get(totp_env, "")
         broker = os.environ.get("BROKER")
         script = _BROKER_LOGIN_SCRIPTS.get(broker)
         if not script:
@@ -70,12 +81,21 @@ class Browser:
                 "--",
             ] + command
 
+        browser_env = os.environ.copy()
+        if username:
+            browser_env["E2E_USER"] = username
+        if password:
+            browser_env["E2E_PASSWORD"] = password
+        if totp_secret:
+            browser_env["TOTP_SECRET"] = totp_secret
+
         lines = []
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            env=browser_env,
         )
         stdout_thread = threading.Thread(
             target=_stream_to_stderr, args=(process.stdout, lines), daemon=True

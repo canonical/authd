@@ -74,6 +74,18 @@ client_id = client_id
 register_device = true
 `,
 
+	"valid+unix_attributes": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = abc-def
+
+[msentraid]
+unix_uid_attribute = uidNumber
+unix_gid_attribute = extension_abc_def_gidNumber
+unix_uid_required = true
+unix_gid_required = false
+`,
+
 	"valid+flows_disabled": `
 [oidc]
 issuer = https://issuer.url.com
@@ -121,6 +133,33 @@ client_id = client_id
 register_device = invalid
 `,
 
+	"invalid_unix_uid_required_value": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[msentraid]
+unix_uid_required = invalid
+`,
+
+	"required_unix_uid_without_attribute": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[msentraid]
+unix_uid_required = true
+`,
+
+	"required_unix_gid_without_attribute": `
+[oidc]
+issuer = https://issuer.url.com
+client_id = client_id
+
+[msentraid]
+unix_gid_required = true
+`,
+
 	"invalid-ini": `=invalid`,
 
 	"override_template": `
@@ -164,6 +203,7 @@ func TestParseConfig(t *testing.T) {
 		"Successfully_parse_config_file":                           {},
 		"Successfully_parse_config_file_with_optional_values":      {configType: "valid+optional"},
 		"Successfully_parse_config_file_with_register_device":      {configType: "valid+register_device"},
+		"Successfully_parse_config_file_with_unix_attributes":      {configType: "valid+unix_attributes"},
 		"Successfully_parse_config_file_with_flow_values":          {configType: "valid+one_flow_disabled", provider: &configTestProvider{MockProvider: &testutils.MockProvider{}}},
 		"Warns_and_uses_default_for_invalid_device_code_value":     {configType: "invalid_device_code_value", allowLegacyConfig: true},
 		"Warns_and_uses_default_for_invalid_entra_auth_flow_value": {configType: "invalid_entra_auth_value", allowLegacyConfig: true},
@@ -191,6 +231,9 @@ func TestParseConfig(t *testing.T) {
 		"Error_if_config_contains_invalid_device_code_value":                                {configType: "invalid_device_code_value", wantErr: true},
 		"Error_if_config_contains_invalid_entra_auth_value":                                 {configType: "invalid_entra_auth_value", wantErr: true},
 		"Error_if_config_contains_invalid_register_device_value":                            {configType: "invalid_register_device_value", wantErr: true},
+		"Error_if_config_contains_invalid_unix_uid_required_value":                          {configType: "invalid_unix_uid_required_value", wantErr: true},
+		"Error_if_required_unix_uid_attribute_is_empty":                                     {configType: "required_unix_uid_without_attribute", wantErr: true},
+		"Error_if_required_unix_gid_attribute_is_empty":                                     {configType: "required_unix_gid_without_attribute", wantErr: true},
 		"Error_if_drop_in_file_is_invalid":                                                  {dropInType: "invalid-ini", wantErr: true, wantErrContainsDropInConfigPath: true},
 		"Error_if_drop_in_file_is_not_updated":                                              {dropInType: "template", wantErr: true},
 		"Successfully_parse_config_when_drop_in_placeholder_is_overridden_by_later_drop_in": {dropInType: "override-template-later"},
@@ -299,6 +342,82 @@ func TestParseConfig(t *testing.T) {
 			require.NoError(t, err)
 
 			golden.CheckOrUpdateFileTree(t, outDir)
+		})
+	}
+}
+
+func TestParseConfigResolvesUnixAttributesFromConfiguredClientID(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "broker.conf")
+	require.NoError(t, os.WriteFile(configPath, []byte(configTypes["valid+unix_attributes"]), 0600))
+
+	cfg, err := parseConfigFromPath(configPath, &testutils.MockProvider{}, false, nil)
+	require.NoError(t, err)
+	require.Equal(t, "extension_abcdef_uidNumber", cfg.unixUIDAttribute)
+	require.Equal(t, "extension_abc_def_gidNumber", cfg.unixGIDAttribute)
+	require.True(t, cfg.unixUIDRequired)
+	require.False(t, cfg.unixGIDRequired)
+}
+
+func TestParseConfigAllowsDropInToOverrideUnixAttributes(t *testing.T) {
+	t.Parallel()
+
+	configPath := filepath.Join(t.TempDir(), "broker.conf")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+[oidc]
+issuer = https://issuer.url.com
+client_id = base-client-id
+
+[msentraid]
+unix_uid_attribute = uidNumber
+`), 0600))
+	dropInDir := GetDropInDir(configPath)
+	require.NoError(t, os.Mkdir(dropInDir, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(dropInDir, "00-unix.conf"), []byte(`
+[msentraid]
+unix_uid_attribute = extension_explicit_uidNumber
+`), 0600))
+
+	cfg, err := parseConfigFromPath(configPath, &testutils.MockProvider{}, false, nil)
+	require.NoError(t, err)
+	require.Equal(t, "extension_explicit_uidNumber", cfg.unixUIDAttribute)
+}
+
+func TestResolveUnixAttributeName(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		attributeName string
+		clientID      string
+		want          string
+		wantErr       bool
+	}{
+		"Empty_is_disabled":              {attributeName: "  ", clientID: "client-id"},
+		"Short_name_is_prefixed":         {attributeName: "uidNumber", clientID: "abc-123", want: "extension_abc123_uidNumber"},
+		"Full_name_is_unchanged":         {attributeName: "extension_abc123_uidNumber", clientID: "ignored", want: "extension_abc123_uidNumber"},
+		"Client_ID_hyphens_are_removed":  {attributeName: "gidNumber", clientID: "abc-def-123", want: "extension_abcdef123_gidNumber"},
+		"Whitespace_is_trimmed":          {attributeName: " uidNumber ", clientID: "abc123", want: "extension_abc123_uidNumber"},
+		"Empty_client_ID_for_short_name": {attributeName: "uidNumber", wantErr: true},
+		"Whitespace_in_name_is_rejected": {attributeName: "uid Number", clientID: "abc123", wantErr: true},
+		"Control_character_is_rejected":  {attributeName: "uid\nNumber", clientID: "abc123", wantErr: true},
+		"Dollar_sign_is_rejected":        {attributeName: "uid$Number", clientID: "abc123", wantErr: true},
+		"Quote_is_rejected":              {attributeName: `uid"Number`, clientID: "abc123", wantErr: true},
+		"Dot_is_rejected":                {attributeName: "uid.Number", clientID: "abc123", wantErr: true},
+		"Empty_full_prefix_is_rejected":  {attributeName: "extension_", clientID: "abc123", want: "extension_"},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := resolveUnixAttributeName(tc.attributeName, tc.clientID)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
 		})
 	}
 }

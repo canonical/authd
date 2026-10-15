@@ -48,14 +48,14 @@ def login(
     browser.wait_for_pattern("Enter password")
     browser.wait_for_stable_page()
     browser.capture_snapshot(screenshot_dir, "device-login-enter-password")
-    browser.send_text(password)
+    browser.send_text(password, secret=True)
     browser.send_key_taps([Gdk.KEY_Return])
 
     matches = browser.wait_for_pattern(r"(Enter code|Are you trying to sign in)")
     browser.wait_for_stable_page()
     if "Enter code" in matches:
         browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
-        browser.send_text(generate_totp(totp_secret))
+        browser.send_text(generate_totp(totp_secret), secret=True)
         browser.send_key_taps([Gdk.KEY_Return])
         browser.wait_for_pattern("Are you trying to sign in")
         browser.wait_for_stable_page()

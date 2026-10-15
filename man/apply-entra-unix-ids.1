@@ -1,0 +1,20 @@
+.\" Generated from the --help text of apply-entra-unix-ids
+.\" Do not edit manually
+.nh
+.TH "APPLY-ENTRA-UNIX-IDS" "1" "" "authd"
+.SH NAME
+apply\-entra\-unix\-ids \- apply cached Microsoft Entra Unix IDs
+.SH SYNOPSIS
+\fBapply\-entra\-unix\-ids\fP \-\-uid\-attribute \fINAME\fP \-\-gid\-attribute \fINAME\fP [\-\-client\-id \fIID\fP] [\-\-apply] [\-\-authctl \fIPATH\fP] \fITOKEN_JSON\fP
+.SH DESCRIPTION
+Read cached Microsoft Entra Unix IDs from one token.json file. Without \-\-apply, print the planned authctl commands without changing the system.
+.PP
+NAME is the attribute value from the [msentraid] section of broker.conf. An empty NAME means that the attribute is not configured. A short NAME also needs \-\-client\-id, which is the [oidc] client_id. The cache is refused when its attribute names differ from these names.
+.PP
+Application is not transactional: a later authctl command can fail after earlier commands have succeeded.
+.SH ENVIRONMENT
+AUTHCTL sets the authctl command to run. The default is authctl.
+.SH "EXIT STATUS"
+0 on success, including a dry run. 2 when a required argument is missing. 1 for any other error, including a failed authctl command.
+.SH "SEE ALSO"
+\fBauthctl\fP(1)

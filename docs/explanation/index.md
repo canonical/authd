@@ -44,6 +44,17 @@ traditional local Linux accounts.
 User management <user-management>
 ```
 
+## Microsoft Entra Unix IDs
+
+Learn how the broker discovers, caches, and applies Unix IDs from Microsoft
+Entra ID.
+
+```{toctree}
+:titlesonly:
+
+Microsoft Entra Unix ID flows <entra-unix-id-flows>
+```
+
 ## Documentation
 
 Information about the authd documentation itself.

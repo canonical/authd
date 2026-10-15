@@ -425,8 +425,17 @@ class BrowserWindow(Gtk.Window):
         GLib.timeout_add(timeout_ms, on_timeout)
         loop.run()
 
-    def send_text(self, text: str, retries: int = 2, timeout_ms: int = 5000) -> None:
-        """Type text and verify that it reached the focused input field."""
+    def send_text(
+        self,
+        text: str,
+        retries: int = 2,
+        timeout_ms: int = 5000,
+        secret: bool = False,
+    ) -> None:
+        """Type text and verify that it reached the focused input field.
+
+        When ``secret`` is true, the key presses are not logged.
+        """
         if retries < 0:
             raise ValueError("retries must not be negative")
 
@@ -434,7 +443,7 @@ class BrowserWindow(Gtk.Window):
         self.wait_for_focused_input(timeout_ms=timeout_ms)
 
         for attempt in range(retries + 1):
-            self.send_key_taps(key_taps)
+            self.send_key_taps(key_taps, silent=secret)
             value = self.wait_for_focused_input_value(text, timeout_ms=timeout_ms)
             if value == text:
                 return
@@ -443,7 +452,7 @@ class BrowserWindow(Gtk.Window):
 
             logger.warning("Typed text did not reach the focused input; retrying")
             clear_count = 2 * max(len(text), len(value or ""))
-            self.send_key_taps([Gdk.KEY_BackSpace] * clear_count)
+            self.send_key_taps([Gdk.KEY_BackSpace] * clear_count, silent=secret)
             self.wait_for_focused_input_value("", timeout_ms=timeout_ms)
 
         raise RuntimeError("Failed to type text into the focused input field")
@@ -491,8 +500,9 @@ class BrowserWindow(Gtk.Window):
         self.send_key(Gdk.EventType.KEY_PRESS, key, silent=True)
         self.send_key(Gdk.EventType.KEY_RELEASE, key, silent=True)
 
-    def send_key_taps(self, key_taps):
-        logger.info(f"Tapping keys: {[Gdk.keyval_name(key) for key in key_taps]}")
+    def send_key_taps(self, key_taps, silent=False):
+        if not silent:
+            logger.info(f"Tapping keys: {[Gdk.keyval_name(key) for key in key_taps]}")
         for kt in key_taps:
             self.send_key_tap(kt, silent=True)
 
@@ -636,8 +646,9 @@ class BrowserWindow(Gtk.Window):
 
 
 def ascii_string_to_key_events(string):
+    # The message must not include the string, because it may be a password.
     if len(string) != len(string.encode()):
-        raise TypeError(f"{string} is not an ascii string")
+        raise TypeError("text to type is not an ascii string")
     return [ord(ch) for ch in string]
 
 
