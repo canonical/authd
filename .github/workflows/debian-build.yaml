@@ -28,6 +28,7 @@ concurrency:
   queue: max
 
 env:
+  OCI_REPOSITORY: ${{ github.repository == 'canonical/authd-private' && 'canonical/authd' || github.repository }}
   # Keep this aligned with update-packaging-on-dependabot-pr.yaml.
   # Noble's Rust 1.75 supports cargo-vendor-filterer only up to 0.5.16.
   CARGO_VENDOR_FILTERER_NOBLE_VERSION: 0.5.16
@@ -66,8 +67,8 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-          OCI_DEB=ghcr.io/${{ github.repository }}/authd-deb-${{ inputs.ubuntu-version }}
-          OCI_SOURCES=ghcr.io/${{ github.repository }}/authd-deb-sources-${{ inputs.ubuntu-version }}
+          OCI_DEB=ghcr.io/${OCI_REPOSITORY}/authd-deb-${{ inputs.ubuntu-version }}
+          OCI_SOURCES=ghcr.io/${OCI_REPOSITORY}/authd-deb-sources-${{ inputs.ubuntu-version }}
           OCI_TAG=${{ inputs.files-hash }}
 
           try_restore() {
@@ -188,24 +189,30 @@ jobs:
           set -euo pipefail
           set -x
 
-          OCI_REPO=ghcr.io/${{ github.repository }}/authd-deb-${{ inputs.ubuntu-version }}
+          OCI_REPO=ghcr.io/${OCI_REPOSITORY}/authd-deb-${{ inputs.ubuntu-version }}
           OCI_TAG=${{ inputs.files-hash }}
           oras push "${OCI_REPO}:${OCI_TAG}" \
             "${{ env.PKG_DEB }}" \
             --artifact-type=application/vnd.debian.binary-package \
             --annotation "org.opencontainers.image.title=authd debian package" \
-            --annotation "org.opencontainers.image.version=${{ env.PKG_VERSION }}"
+            --annotation "org.opencontainers.image.version=${{ env.PKG_VERSION }}" \
+            --annotation "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --annotation "org.opencontainers.image.revision=${{ github.sha }}" \
+            --annotation "org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           oras tag "${OCI_REPO}:${OCI_TAG}" "${{ github.sha }}"
           rm "${{ env.PKG_DEB }}"
 
-          OCI_REPO=ghcr.io/${{ github.repository }}/authd-deb-sources-${{ inputs.ubuntu-version }}
+          OCI_REPO=ghcr.io/${OCI_REPOSITORY}/authd-deb-sources-${{ inputs.ubuntu-version }}
           oras push "${OCI_REPO}:${OCI_TAG}" \
             "${{ env.PKG_DSC }}" \
             "${{ env.PKG_SOURCE_CHANGES }}" \
             "${{ env.PKG_TARBALL }}" \
             --artifact-type=application/vnd.debian.source-package \
             --annotation "org.opencontainers.image.title=authd source debian package" \
-            --annotation "org.opencontainers.image.version=${{ env.PKG_VERSION }}"
+            --annotation "org.opencontainers.image.version=${{ env.PKG_VERSION }}" \
+            --annotation "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --annotation "org.opencontainers.image.revision=${{ github.sha }}" \
+            --annotation "org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           oras tag "${OCI_REPO}:${OCI_TAG}" "${{ github.sha }}"
           rm "${{ env.PKG_DSC }}" \
              "${{ env.PKG_SOURCE_CHANGES }}" \

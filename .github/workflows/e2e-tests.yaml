@@ -114,19 +114,23 @@ concurrency:
 jobs:
   prepare-e2e:
     name: Prepare E2E inputs
-    # Skip this job (and the provision-and-run job which depends on it) if the
-    # PR is from a fork, as we don't have the permission to upload the Debian
-    # package to the OCI registry in the provision-and-run workflow.
+    # Only these repositories have access to the shared E2E artifacts.
     if: >-
       (
-       github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository &&
-       contains(github.event.pull_request.labels.*.name, 'e2e-tests')
-      ) ||
-      github.event_name == 'push' ||
-      github.event_name == 'release' ||
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch'
+        github.repository == 'canonical/authd' ||
+        github.repository == 'canonical/authd-private'
+      ) &&
+      (
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          contains(github.event.pull_request.labels.*.name, 'e2e-tests')
+        ) ||
+        github.event_name == 'push' ||
+        github.event_name == 'release' ||
+        github.event_name == 'schedule' ||
+        github.event_name == 'workflow_dispatch'
+      )
     runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       contents: read
@@ -204,7 +208,7 @@ jobs:
       ubuntu-release: ${{ matrix.ubuntu-release }}
       ubuntu-releases: ${{ needs.prepare-e2e.outputs.ubuntu_releases }}
       files-hash: ${{ needs.prepare-e2e.outputs.files-hash }}
-      force-fresh-image: ${{ github.event_name == 'schedule' }}
+      force-fresh-image: ${{ github.event_name == 'schedule' && github.repository == 'canonical/authd' }}
       broker-snap-channel: ${{ inputs.broker-snap-channel || '' }}
       # PPA sources apply to every release; archive suites are filtered per job.
       apt-sources: ${{ needs.prepare-e2e.outputs.apt_sources }}
