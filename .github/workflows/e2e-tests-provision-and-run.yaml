@@ -108,6 +108,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Compute VM image hash
+        id: vm-image-hash
+        uses: ./.github/actions/compute-e2e-vm-image-hash
+
       - name: Restore cached VM image (if available)
         id: restore-cache
         if: ${{ !inputs.force-fresh-image }}
@@ -115,25 +119,62 @@ jobs:
         with:
           path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-release }}.qcow2
           key: >-
-            e2e-runner-vm-${{ inputs.ubuntu-release }}-${{ hashFiles(
-              'e2e-tests/vm/**',
-              '.github/actions/e2e-tests/set-up-ssh-keys/**',
-              '.github/workflows/e2e-tests-provision-and-run.yaml',
-              'debian/control',
-              'debian/rules'
-            ) }}
+            e2e-runner-vm-${{ inputs.ubuntu-release }}-${{ steps.vm-image-hash.outputs.hash }}
           fail-on-cache-miss: false
 
+      - uses: ./.github/actions/setup-oras
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Restore VM image from OCI registry
+        id: restore-oci
+        if: ${{ !inputs.force-fresh-image && steps.restore-cache.outputs.cache-hit != 'true' }}
+        env:
+          OCI_REPO: ghcr.io/${{ github.repository }}/e2e-runner
+          OCI_TAG: ${{ inputs.ubuntu-release }}-${{ steps.vm-image-hash.outputs.hash }}
+          IMAGE_PATH: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-release }}.qcow2
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p "$(dirname "$IMAGE_PATH")"
+
+          printf '%s' "$GHCR_TOKEN" \
+            | oras login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+
+          if pull_output=$(oras pull "${OCI_REPO}:${OCI_TAG}" -o "$(dirname "$IMAGE_PATH")" 2>&1); then
+            printf '%s\n' "$pull_output"
+            if [ ! -f "$IMAGE_PATH" ]; then
+              echo "Error: Expected image not found at $IMAGE_PATH after pull"
+              find "$(dirname "$IMAGE_PATH")" -type f -print
+              exit 1
+            fi
+            echo "cache-hit=true" >> "${GITHUB_OUTPUT}"
+          elif [[ "$pull_output" == *"MANIFEST_UNKNOWN"* ]]; then
+            echo "VM image not found in OCI registry; provisioning is required."
+            echo "cache-hit=false" >> "${GITHUB_OUTPUT}"
+          else
+            printf '%s\n' "$pull_output" >&2
+            echo "Error: Failed to pull VM image from OCI registry." >&2
+            exit 1
+          fi
+
       - uses: canonical/desktop-engineering/gh-actions/common/dpkg-install-speedup@main
-        if: steps.restore-cache.outputs.cache-hit != 'true' || inputs.force-fresh-image
+        if: &provision-required >-
+          inputs.force-fresh-image ||
+          (
+            steps.restore-cache.outputs.cache-hit != 'true' &&
+            steps.restore-oci.outputs.cache-hit != 'true'
+          )
 
       - name: Install APT dependencies for VM provisioning
-        if: steps.restore-cache.outputs.cache-hit != 'true' || inputs.force-fresh-image
+        if: *provision-required
         run: ./${{ env.E2E_TESTS_DIR }}/vm/install-provision-deps.sh
 
       - name: Set up SSH keys for the VM provisioning
         id: set-ssh-keys
-        if: steps.restore-cache.outputs.cache-hit != 'true' || inputs.force-fresh-image
+        if: *provision-required
         uses: ./.github/actions/e2e-tests/set-up-ssh-keys
         with:
           E2E_VM_SSH_PRIV_KEY: ${{ secrets.E2E_VM_SSH_PRIV_KEY }}
@@ -141,7 +182,7 @@ jobs:
 
       - name: Provision the VM
         id: provision-vm
-        if: steps.restore-cache.outputs.cache-hit != 'true' || inputs.force-fresh-image
+        if: *provision-required
         run: |
           set -eu
           export PATH="$(realpath "${{ env.E2E_TESTS_DIR }}/vm/helpers"):${PATH}"
@@ -159,38 +200,40 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -eu
-          gh cache delete e2e-runner-${{ inputs.ubuntu-release }} || true
+          gh cache delete "e2e-runner-vm-${{ inputs.ubuntu-release }}-${{ steps.vm-image-hash.outputs.hash }}" || true
           echo "Previous cache (if any) deleted"
 
       - name: Cache the VM image
         uses: actions/cache/save@v6
-        if: always() && steps.provision-vm.outcome == 'success'
+        if: >-
+          always() &&
+          (
+            steps.provision-vm.outcome == 'success' ||
+            steps.restore-oci.outputs.cache-hit == 'true'
+          )
         with:
           path: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-release }}.qcow2
           key: >-
-            e2e-runner-vm-${{ inputs.ubuntu-release }}-${{ hashFiles(
-              'e2e-tests/vm/**',
-              '.github/actions/e2e-tests/set-up-ssh-keys/**',
-              '.github/workflows/e2e-tests-provision-and-run.yaml',
-              'debian/control',
-              'debian/rules'
-            ) }}
+            e2e-runner-vm-${{ inputs.ubuntu-release }}-${{ steps.vm-image-hash.outputs.hash }}
 
-      - uses: ./.github/actions/setup-oras
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
+      # Re-upload cache hits to refresh updated_at so active images stay within
+      # the cleanup workflow's 14-day retention window.
       - name: Upload VM image as OCI artifact
-        if: steps.provision-vm.outcome == 'success' || steps.restore-cache.outputs.cache-hit == 'true'
+        if: >-
+          steps.provision-vm.outcome == 'success' ||
+          steps.restore-cache.outputs.cache-hit == 'true' ||
+          steps.restore-oci.outputs.cache-hit == 'true'
         env:
           IMAGE_PATH: ${{ env.ARTIFACTS_DIR }}/${{ env.VM_NAME_BASE }}-${{ inputs.ubuntu-release }}.qcow2
           OCI_REPO: ghcr.io/${{ github.repository }}/e2e-runner
-          OCI_TAG: ${{ inputs.ubuntu-release }}
+          OCI_TAG: ${{ inputs.ubuntu-release }}-${{ steps.vm-image-hash.outputs.hash }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
 
-          echo "${{ secrets.GITHUB_TOKEN }}" \
-            | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          printf '%s' "$GHCR_TOKEN" \
+            | oras login ghcr.io -u "$GHCR_USERNAME" --password-stdin
 
           # Push the qcow2 as a single layer. It used to be split into
           # many small chunks hoping unchanged chunks would be deduped

@@ -1,0 +1,23 @@
+name: Compute e2e VM image hash
+description: Compute the content hash used to identify e2e VM images.
+outputs:
+  hash:
+    description: Hash of the files that determine the e2e VM image.
+    value: ${{ steps.compute-hash.outputs.hash }}
+runs:
+  using: composite
+  steps:
+    - name: Compute VM image hash
+      id: compute-hash
+      shell: bash
+      env:
+        VM_IMAGE_HASH: >-
+          ${{ hashFiles(
+            'e2e-tests/vm/**',
+            '.github/actions/compute-e2e-vm-image-hash/action.yaml',
+            '.github/actions/e2e-tests/set-up-ssh-keys/**',
+            '.github/workflows/e2e-tests-provision-and-run.yaml',
+            'debian/control',
+            'debian/rules'
+          ) }}
+      run: echo "hash=${VM_IMAGE_HASH}" >> "${GITHUB_OUTPUT}"
