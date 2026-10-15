@@ -108,7 +108,7 @@ Test Teardown
 Find User Token Cache
     [Arguments]    ${user}
     ${path}=    SSH.Execute
-    ...    for f in $(find -L /var/snap/${BROKER_SNAP_NAME}/current -type f -name token.json); do python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("UserInfo",{}).get("name")==sys.argv[2] else 1)' "$f" "${user}" && { printf '%s\n' "$f"; break; }; done
+    ...    for f in $(find -L /var/snap/${BROKER_SNAP_NAME}/current -type f -name token.json); do python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("UserInfo",{}).get("name")==sys.argv[2] else 1)' "$f" "${user}" && { printf '%s\n' "$(readlink -f "$f")"; break; }; done
     Should Not Be Empty    ${path}
     RETURN    ${path}
 
