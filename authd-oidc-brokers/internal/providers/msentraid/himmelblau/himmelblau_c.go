@@ -208,7 +208,7 @@ func generateAuthValue() (authValue string, err error) {
 	if msalErr := C.auth_value_generate(&cAuthValue); msalErr != nil {
 		return "", fmt.Errorf("failed to generate auth value: %v", msalErrorMsg(msalErr))
 	}
-	defer C.free(unsafe.Pointer(cAuthValue))
+	defer C.string_free(cAuthValue)
 
 	return C.GoString(cAuthValue), nil
 }
