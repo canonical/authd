@@ -1,0 +1,38 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+    cat >&2 <<EOF
+Usage: workshop run -- lint [-- LINT_ARGS...]
+  Run the pinned golangci-lint wrapper. The first run compiles it (slow).
+Examples:
+  workshop run -- lint
+  workshop run -- lint -- -C authd-oidc-brokers run
+EOF
+}
+
+
+AUTHD_SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${AUTHD_SCRIPT_DIR}/../lib/env.sh"
+if [ -d /project ]; then
+    cd /project
+fi
+
+args=()
+after_separator=no
+for arg in "$@"; do
+    if [ "$after_separator" = yes ]; then
+        args+=("$arg")
+        continue
+    fi
+
+    case "$arg" in
+        -h|--help) usage; exit 0 ;;
+        --) after_separator=yes ;;
+        *) args+=("$arg") ;;
+    esac
+done
+
+[ "${#args[@]}" -gt 0 ] || args=(run)
+exec scripts/golangci-lint "${args[@]}"

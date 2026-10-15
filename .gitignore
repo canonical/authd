@@ -41,3 +41,9 @@ e2e-tests/e2e-tests.env
 
 # e2e tests python cache
 __pycache__/
+
+# Workshop dev environment lock file (binds the project to its launched workshop)
+.workshop.lock
+# Local OAuth credential used by the Workshop broker example.
+/.authd-client-secret
+

@@ -1,0 +1,23 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+    cat >&2 <<EOF
+Usage: workshop run -- validate
+  Check PAM, NSS, GDM, sshd and the socket, then print the report.
+Example:
+  workshop run -- validate
+EOF
+}
+
+for arg in "$@"; do
+    case "$arg" in
+        -h|--help) usage; exit 0 ;;
+        *) echo "Unknown option: $arg" >&2; usage; exit 2 ;;
+    esac
+done
+
+AUTHD_SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${AUTHD_SCRIPT_DIR}/../lib/health-checks.sh"
+authd_print_validate_report

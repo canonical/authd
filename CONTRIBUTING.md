@@ -17,6 +17,7 @@ These are mostly guidelines, not rules. Use your best judgment and feel free to 
     - [Issues](#issues)
     - [Pull requests](#pull-requests)
   - [Contributing to the code](#contributing-to-the-code)
+    - [Development environment (recommended)](#development-environment-recommended)
     - [Required dependencies](#required-dependencies)
     - [Building and running the binaries](#building-and-running-the-binaries)
       - [Building the Debian package from source](#building-the-debian-package-from-source)
@@ -87,6 +88,12 @@ against the `stable-docs` branch after your main PR has been merged, with the ch
 from your main PR.
 
 ## Contributing to the code
+
+### Development environment (recommended)
+
+The Workshop setup builds authd in a single Ubuntu 26.04 LXD VM with a real
+GDM greeter. See the [Workshop development environment guide](.workshop/README.md)
+for prerequisites, launch, build, broker setup, and validation.
 
 ### Required dependencies
 
