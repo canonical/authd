@@ -21,17 +21,14 @@ Change Password
     Hid.Keys Combo    Return
 
     Match Text    regex:Enter\\s*your\\s*(?:local\\s*)?password:    15
-    Builtin.Sleep    2
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
     Match Text    New password:    15
-    Builtin.Sleep    2
     Hid.Type String    ${new_password}
     Hid.Keys Combo    Return
 
     Match Text    Confirm password:    15
-    Builtin.Sleep    2
     Hid.Type String    ${new_password}
     Hid.Keys Combo    Return
 
