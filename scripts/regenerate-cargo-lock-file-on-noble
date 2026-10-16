@@ -1,0 +1,46 @@
+#!/bin/bash
+
+set -euo pipefail
+
+usage() {
+    cat << EOF
+Usage: $0
+
+Regenerate Cargo.lock with cargo from Noble (24.04) and commit the change. It
+uses an LXC container to run cargo from Noble.
+
+This should be run after updating any Rust dependencies. It's needed to keep the
+Cargo.lock file compatible with the version of cargo in Noble (the oldest Ubuntu
+release we support).
+EOF
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+if ! sudo lxc info u24 >/dev/null; then
+    sudo lxc launch ubuntu:24.04 u24
+fi
+
+sudo lxc config device remove u24 workdir
+sudo lxc config device add u24 workdir disk source="$PWD" path=/src
+
+if ! sudo lxc info u24 | grep -q "Status: RUNNING"; then
+    sudo lxc start u24
+fi
+sudo lxc exec --cwd /src u24 -- sh -c "cargo generate-lockfile"
+
+git add Cargo.lock
+git commit -m "Regenerate Cargo.lock with cargo from noble" Cargo.lock
