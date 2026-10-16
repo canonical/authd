@@ -157,5 +157,5 @@ The test suite must pass before merging the PR to our main branch. Any new featu
 
 ## Code style
 
-This project follow the Go code-style. For more detailed information about the code style in use, please check <https://google.github.io/styleguide/go/>.
+This project follows Google Go style conventions. For more detailed information about the code style in use, please check <https://google.github.io/styleguide/go/>.
 
