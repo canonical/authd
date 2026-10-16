@@ -16,8 +16,15 @@ ${local_password}    qwer1234
 
 
 *** Test Cases ***
-Test login with mixed case username
-    [Documentation]    Test login with mixed case username via CLI with device code flow and local password.
+Test login with mixed-case username
+    [Documentation]    A mixed-case username still logs in and resolves
+    ...    through NSS.
+    ...
+    ...    authd stores usernames in lowercase. The test title-cases
+    ...    ``E2E_USER`` before both login flows and checks that NSS returns
+    ...    the lowercase record.
+    ${username} =    String.Convert To Lower Case    ${username}
+    ${username} =    String.Convert To Title Case    ${username}
 
     # Log in with local user
     Log In

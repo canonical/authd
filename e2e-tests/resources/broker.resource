@@ -74,12 +74,6 @@ Continue Log In With Remote User: Authenticate In External Browser
     # The code can be rendered separately from its label, so wait until the
     # actual code is available before starting the browser login.
     ${user_code} =    Wait Until Keyword Succeeds    30s    1s    Extract Device Code
-    # The OCR sometimes reads spaces in the user code, even though there are none,
-    # so remove any spaces.
-    ${user_code} =    Remove String    ${user_code}    ${SPACE}
-    # The user code is all uppercase, but sometimes the OCR reads some letters as lowercase,
-    # so convert it to uppercase to handle that.
-    ${user_code} =    String.Convert To Upper Case    ${user_code}
 
     Browser.Login    ${user_code}    ${SUITE_OUTPUT_DIR}
 
@@ -87,6 +81,9 @@ Continue Log In With Remote User: Authenticate In External Browser
 Extract Device Code
     ${text} =    Read Text
     ${user_code} =    StringUtils.First Match    ${DEVICE_URL_REGEX}    ${text}
+    # OCR can add spaces or lowercase letters to the code.
+    ${user_code} =    Remove String    ${user_code}    ${SPACE}
+    ${user_code} =    String.Convert To Upper Case    ${user_code}
     RETURN    ${user_code}
 
 
@@ -106,7 +103,8 @@ Continue Log In With Remote User Through CLI: Define Local Password
     Hid.Keys Combo    Return
 
     # Wait for the login to complete
-    Wait For Shell Prompt After Login    ${username}@ubuntu
+    ${normalized_username} =    String.Convert To Lower Case    ${username}
+    Wait For Shell Prompt After Login    ${normalized_username}@ubuntu
 
 
 Wait For Shell Prompt After Login
@@ -153,7 +151,8 @@ Log In With Remote User Through CLI: Local Password
     Match Text    regex:Enter\\s*your\\s*(?:local\\s*)?password:    120
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
-    Wait For Shell Prompt After Login    ${username}@ubuntu:~$
+    ${normalized_username} =    String.Convert To Lower Case    ${username}
+    Wait For Shell Prompt After Login    ${normalized_username}@ubuntu:~$
 
 
 Check That su To Local User Goes To Local Broker
@@ -457,7 +456,8 @@ Log In With Remote User Through GDM: Local Password
 Check User Information
     [Arguments]    ${username}
     ${output} =    SSH.Execute    getent passwd ${username}
-    Should Contain    ${output}    ${username}:x:
+    ${normalized_username} =    String.Convert To Lower Case    ${username}
+    Should Contain    ${output}    ${normalized_username}:x:
 
 
 Check Configuration Value
@@ -504,7 +504,8 @@ Check If User Was Added Properly
 
 Check User Groups
     [Arguments]    ${username}    ${remote_group}
-    ${output} =    SSH.Execute    groups ${username}
+    ${normalized_username} =    String.Convert To Lower Case    ${username}
+    ${output} =    SSH.Execute    groups ${normalized_username}
     Should Contain    ${output}    sudo
     Should Contain    ${output}    ${remote_group}
 
