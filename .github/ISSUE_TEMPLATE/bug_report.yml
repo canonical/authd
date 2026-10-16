@@ -1,7 +1,7 @@
 name: Report an issue
 description: Create a bug report to fix an issue
 title: "Issue: "
-labels: ["bug"]
+type: bug
 body:
   - type: markdown
     attributes:
