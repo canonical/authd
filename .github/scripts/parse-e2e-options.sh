@@ -54,14 +54,14 @@ if ((${#brokers[@]} == 0)); then
     brokers=("${default_brokers[@]}")
 fi
 
-default_ubuntu_releases=(noble resolute devel)
+default_ubuntu_releases=(noble resolute stonking devel)
 ubuntu_releases=()
 declare -A seen_ubuntu_releases=()
 while IFS= read -r selected; do
     [[ -n "${selected}" ]] || continue
 
     case "${selected}" in
-        noble|resolute|devel)
+        noble|resolute|stonking|devel)
             ubuntu_release="${selected}"
             ;;
         *)

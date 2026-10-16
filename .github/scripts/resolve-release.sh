@@ -122,7 +122,29 @@ for source in "${authd_apt_source_candidates[@]}"; do
     fi
 done
 
+available=true
+if [[ "${RELEASE}" == "devel" ]]; then
+    if url_exists "https://cloud-images.ubuntu.com/${codename}/current/${codename}-server-cloudimg-amd64.img" "cloud image for '${codename}'"; then
+        for source in "${apt_sources[@]}" "${authd_apt_sources[@]}" "${AUTHD_APT_SOURCE_BASE}"; do
+            is_ppa_source "${source}" || continue
+            if ppa_has_suite "${source#ppa:}" "${codename}"; then
+                continue
+            else
+                [[ $? -eq 1 ]] || exit 1
+            fi
+            echo "::warning::Skipping devel E2E tests: ${source} does not publish '${codename}' yet."
+            available=false
+            break
+        done
+    else
+        [[ $? -eq 1 ]] || exit 1
+        echo "::warning::Skipping devel E2E tests: Ubuntu '${codename}' cloud image is not published yet."
+        available=false
+    fi
+fi
+
 {
+    printf 'available=%s\n' "${available}"
     printf 'codename=%s\n' "${codename}"
     printf 'apt_sources=%s\n' "$(json_array "${apt_sources[@]}")"
     printf 'authd_apt_sources=%s\n' "$(json_array "${authd_apt_sources[@]}")"

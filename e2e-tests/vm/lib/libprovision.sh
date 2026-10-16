@@ -122,42 +122,51 @@ function validate_apt_source_for_release() {
     return 1
 }
 
+function url_exists() {
+    # Return 0 if HTTP 200, 1 if 404, and 2 if the check failed.
+    local url="$1"
+    local label="$2"
+    local status
+
+    if ! status="$(
+        curl \
+            --silent \
+            --show-error \
+            --head \
+            --location \
+            --output /dev/null \
+            --write-out '%{http_code}' \
+            --connect-timeout 10 \
+            --max-time 30 \
+            "${url}"
+    )"; then
+        echo "Failed to check ${label}." >&2
+        return 2
+    fi
+
+    case "${status}" in
+        200) return 0 ;;
+        404) return 1 ;;
+        *)
+            echo "Unexpected HTTP status '${status}' checking ${label}." >&2
+            return 2
+            ;;
+    esac
+}
+
 function ppa_has_suite() {
     # Return 0 if published, 1 if missing, and 2 if the check failed.
     local ppa="$1"
     local suite="$2"
     local metadata
-    local status
     local url="https://ppa.launchpadcontent.net/${ppa}/ubuntu/dists/${suite}"
 
     for metadata in InRelease Release; do
-        if ! status="$(
-            curl \
-                --silent \
-                --show-error \
-                --head \
-                --location \
-                --output /dev/null \
-                --write-out '%{http_code}' \
-                --connect-timeout 10 \
-                --max-time 30 \
-                "${url}/${metadata}"
-        )"; then
-            echo "Failed to check PPA '${ppa}' for suite '${suite}'." >&2
-            return 2
+        if url_exists "${url}/${metadata}" "PPA '${ppa}' for suite '${suite}'"; then
+            return 0
+        else
+            [[ $? -eq 1 ]] || return 2
         fi
-
-        case "${status}" in
-            200)
-                return 0
-                ;;
-            404)
-                ;;
-            *)
-                echo "Unexpected HTTP status '${status}' checking PPA '${ppa}' for suite '${suite}'." >&2
-                return 2
-                ;;
-        esac
     done
 
     return 1

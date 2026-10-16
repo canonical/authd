@@ -79,6 +79,7 @@ jobs:
     name: Resolve Ubuntu release
     runs-on: ubuntu-26.04 # ubuntu-latest
     outputs:
+      available: ${{ steps.resolve.outputs.available }}
       codename: ${{ steps.resolve.outputs.codename }}
       apt_sources: ${{ steps.resolve.outputs.apt_sources }}
       authd_apt_sources: ${{ steps.resolve.outputs.authd_apt_sources }}
@@ -99,6 +100,7 @@ jobs:
   provision-vm:
     name: Provision VM
     needs: resolve_release
+    if: needs.resolve_release.outputs.available == 'true'
     runs-on: ubuntu-26.04 # ubuntu-latest
     permissions:
       # Needed by actions/checkout
@@ -209,7 +211,7 @@ jobs:
 
   build-deb:
     needs: resolve_release
-    if: needs.resolve_release.outputs.authd_apt_sources == '[]'
+    if: needs.resolve_release.outputs.available == 'true' && needs.resolve_release.outputs.authd_apt_sources == '[]'
     uses: ./.github/workflows/debian-build.yaml
     with:
       files-hash: ${{ inputs.files-hash }}

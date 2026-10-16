@@ -10,7 +10,7 @@ else ifeq ($(DEB_DISTRIBUTION),resolute)
 # Keep the patched PPA build as the lower bound until the PPA catches up with
 # the archive SRU. Newer archive versions are also compatible on Resolute.
 GNOME_SHELL_PATCHED_VERSION := 50.1-0ubuntu1.2+authd1~26.04.1
-else ifeq ($(DEB_DISTRIBUTION),stonking)
+else ifeq ($(DEB_DISTRIBUTION),$(filter $(DEB_DISTRIBUTION),stonking tenacious))
 GNOME_SHELL_PATCHED_VERSION := 51~beta-0ubuntu1
 else
 $(error Unsupported distribution "$(DEB_DISTRIBUTION)" for gnome-shell dependency)

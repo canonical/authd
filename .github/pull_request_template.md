@@ -28,7 +28,7 @@ e2e-authd-apt-source-base: authd
 
 The `e2e-ubuntu-releases` marker limits the Ubuntu releases tested by the
 workflow. It accepts a space- or comma-separated list of `noble`, `resolute`,
-and `devel`; leave it commented to test all supported releases.
+`stonking`, and `devel`; leave it commented to test all supported releases.
 
 The `e2e-tests` marker accepts space- or comma-separated suite filenames or
 shell-style glob patterns such as `login*.robot`. Leave the marker commented to

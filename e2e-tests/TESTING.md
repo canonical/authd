@@ -174,8 +174,9 @@ suites. Leave it unset for normal isolated and CI runs.
 ## Running in GitHub CI
 
 By default, GitHub CI runs the end-to-end tests against `authd-msentraid` on all
-supported Ubuntu releases (`noble`, `resolute`, and `devel`), using the complete
-test suite and the authd package and broker snap built from the current branch.
+supported Ubuntu releases (`noble`, `resolute`, `stonking`, and `devel`), using
+the complete test suite and the authd package and broker snap built from the
+current branch.
 The VM's default archive suites, the matching Ubuntu release's `-proposed`
 pocket, and the `authd-edge` PPA are enabled for system packages. APT installs
 the highest available package version from those sources.

@@ -69,6 +69,8 @@ on:
         required: false
       E2E_MSENTRA_TOTP_SECRET_RESOLUTE:
         required: false
+      E2E_MSENTRA_TOTP_SECRET_STONKING:
+        required: false
       E2E_MSENTRA_TOTP_SECRET_DEVEL:
         required: false
       E2E_GOOGLE_CLIENT_ID:
@@ -292,6 +294,7 @@ jobs:
             case "$RELEASE" in
               noble) export TOTP_SECRET="${{ secrets.E2E_MSENTRA_TOTP_SECRET_NOBLE }}" ;;
               resolute) export TOTP_SECRET="${{ secrets.E2E_MSENTRA_TOTP_SECRET_RESOLUTE }}" ;;
+              stonking) export TOTP_SECRET="${{ secrets.E2E_MSENTRA_TOTP_SECRET_STONKING }}" ;;
               devel) export TOTP_SECRET="${{ secrets.E2E_MSENTRA_TOTP_SECRET_DEVEL }}" ;;
               *) echo "Unsupported Entra E2E release: $RELEASE" >&2; exit 1 ;;
             esac
