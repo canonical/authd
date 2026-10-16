@@ -2,7 +2,7 @@
 myst:
   html_meta:
     "description lang=en":
-      "authd how-to guides covering installation, configuration, user management, login, network file systems, and contributing."
+      "authd how-to guides covering installation, configuration, user management, login, and network file systems."
 ---
 
 (howtos)=
@@ -81,15 +81,4 @@ version to try new features:
 :titlesonly:
 
 Changing authd versions <changing-versions>
-```
-
-## Contributing to authd
-
-Contribute to the development of authd and its brokers, in addition to the
-authd documentation:
-
-```{toctree}
-:titlesonly:
-
-Contributing to authd <contributing>
 ```

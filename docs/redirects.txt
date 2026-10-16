@@ -6,3 +6,5 @@
 # The old path must be a file that doesn't exist in the source. The current path must be
 # a file that does exist in the source. Redirecting to a specific section is not supported.
 
+"howto/contributing" "contributing/index"
+
