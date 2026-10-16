@@ -370,3 +370,121 @@ func TestGdmChallengeProtocolEventsAreOrdered(t *testing.T) {
 
 	require.Equal(t, []string{"layout", "stage", "start"}, protocolEvents)
 }
+
+func TestGdmModeSelectionWaitsForStageAcknowledgement(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "session"
+
+	var protocolEvents []string
+	mTx := pam_test.NewModuleTransactionDummy(gdm.DataConversationFunc(
+		func(data *gdm.Data) (*gdm.Data, error) {
+			switch data.Type {
+			case gdm.DataType_request:
+				protocolEvents = append(protocolEvents, "stage")
+				return &gdm.Data{
+					Type: gdm.DataType_response,
+					Response: &gdm.ResponseData{
+						Type: data.Request.Type,
+						Data: &gdm.ResponseData_Ack{},
+					},
+				}, nil
+			case gdm.DataType_event:
+				switch data.Event.Type {
+				case gdm.EventType_authModesReceived:
+					protocolEvents = append(protocolEvents, "modes")
+				case gdm.EventType_authModeSelected:
+					protocolEvents = append(protocolEvents, "selection")
+				}
+				return &gdm.Data{Type: gdm.DataType_eventAck}, nil
+			}
+			return &gdm.Data{Type: gdm.DataType_eventAck}, nil
+		},
+	))
+
+	client := pam_test.NewDummyClient(nil,
+		pam_test.WithIgnoreSessionIDChecks(),
+		pam_test.WithGetAuthenticationModesReturn([]*authd.GAMResponse_AuthenticationMode{
+			{Id: "password", Label: "Password"},
+		}, nil),
+	)
+	m := newUIModelForClients(mTx, Gdm, authd.SessionMode_LOGIN, client, nil, nil)
+	m.currentSession = &sessionInfo{brokerID: "broker", sessionID: sessionID}
+
+	updated, cmd := m.Update(GetAuthenticationModesRequested{})
+	m = convertTo[uiModel](updated)
+	getModesMessages := collectMessages(cmd)
+	require.Len(t, getModesMessages, 2)
+	modesReceived, ok := getModesMessages[0].(authModesReceived)
+	require.True(t, ok)
+	require.Equal(t, sessionID, modesReceived.sessionID)
+	changeStage, ok := getModesMessages[1].(ChangeStage)
+	require.True(t, ok)
+	require.Equal(t, proto.Stage_authModeSelection, changeStage.Stage)
+	require.Equal(t, sessionID, changeStage.authModesSessionID)
+
+	updated, cmd = m.Update(modesReceived)
+	m = convertTo[uiModel](updated)
+	require.Nil(t, cmd())
+	require.Equal(t, []string{"modes"}, protocolEvents)
+	require.Empty(t, m.authModeSelectionModel.availableAuthModes,
+		"the auth mode list must not be selectable before GDM acknowledges the stage change")
+
+	updated, cmd = m.Update(changeStage)
+	m = convertTo[uiModel](updated)
+	var stageReady gdmAuthModesStageReady
+	foundStageReady := false
+	for _, msg := range collectMessages(cmd) {
+		updated, nextCmd := m.Update(msg)
+		m = convertTo[uiModel](updated)
+		for _, nextMsg := range collectMessages(nextCmd) {
+			if ready, ok := nextMsg.(gdmAuthModesStageReady); ok {
+				stageReady = ready
+				foundStageReady = true
+			}
+		}
+	}
+	require.True(t, foundStageReady)
+	require.Equal(t, []string{"modes", "stage"}, protocolEvents)
+
+	updated, cmd = m.Update(stageReady)
+	m = convertTo[uiModel](updated)
+	modesReady, ok := cmd().(authModesReceived)
+	require.True(t, ok)
+	require.True(t, modesReady.stageReady)
+
+	updated, cmd = m.Update(modesReady)
+	m = convertTo[uiModel](updated)
+	require.Len(t, m.authModeSelectionModel.availableAuthModes, 1)
+
+	var selectedMode authModeSelected
+	foundSelectedMode := false
+	for _, msg := range collectMessages(cmd) {
+		if selected, ok := msg.(authModeSelected); ok {
+			selectedMode = selected
+			foundSelectedMode = true
+		}
+	}
+	require.True(t, foundSelectedMode)
+	require.Equal(t, []string{"modes", "stage"}, protocolEvents)
+
+	updated, cmd = m.Update(selectedMode)
+	m = convertTo[uiModel](updated)
+	var authModeSelectedEvent AuthModeSelected
+	foundAuthModeSelectedEvent := false
+	for _, msg := range collectMessages(cmd) {
+		if selected, ok := msg.(AuthModeSelected); ok {
+			authModeSelectedEvent = selected
+			foundAuthModeSelectedEvent = true
+		}
+	}
+	require.True(t, foundAuthModeSelectedEvent)
+
+	updated, cmd = m.Update(authModeSelectedEvent)
+	m = convertTo[uiModel](updated)
+	selectionCommands, ok := asCmdSlice(cmd())
+	require.True(t, ok)
+	require.Len(t, selectionCommands, 2)
+	require.Nil(t, selectionCommands[0]())
+	require.Equal(t, []string{"modes", "stage", "selection"}, protocolEvents)
+}
