@@ -6,6 +6,15 @@ myst:
 
 # Contributing to the code
 
+authd consists of multiple components. These are described in the [architecture
+overview](explanation::authd-architecture).
+
+For using and testing authd, one or more brokers need to be available, which
+run on the host to interface with remote identity providers.
+
+Steps for building the components, testing authd, and contributing to the code,
+are described on this page.
+
 ## Required dependencies
 
 This project has several build dependencies. You can install these dependencies from the top of the source tree using the `apt` command as follows:
