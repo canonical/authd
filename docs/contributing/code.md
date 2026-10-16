@@ -34,7 +34,7 @@ The project consists of the following binaries:
 * `pam_authd_exec.so`, `authd-pam`: A PAM module and its helper executable (used by other PAM applications).
 * `libnss_authd.so`: An NSS module.
 
-The project can be built as a Debian package. This process will compile all the binaries, run the test suite and produce the Debian packages.
+authd can be built as a Debian package. This process will compile all the binaries, run the test suite and produce the Debian packages.
 
 Alternatively, for development purposes, each binary can be built manually and separately.
 
