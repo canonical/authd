@@ -38,8 +38,13 @@ Test login with broker version under test
     Log Out From su Session
     Close Focused Window
 
+    ${broker_version_before_update}=    Get Installed Broker Version
+    Set Suite Metadata    Broker Version (Before Migration)    ${broker_version_before_update}
+
     # Install the broker version under test.
     Update Broker
+    ${broker_version_after_update}=    Get Installed Broker Version
+    Set Suite Metadata    Broker Version (After Migration)    ${broker_version_after_update}
 
     # Log in with remote user with local password after upgrading
     Open Terminal
