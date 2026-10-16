@@ -43,8 +43,16 @@ type gdmConvHandler struct {
 	stageChanges        []proto.Stage
 	lastNotifiedStage   *proto.Stage
 
-	startAuthRequested chan struct{}
-	authEvents         []*authd.IAResponse
+	// authStartedCond guards authStartedPending, the count of StartAuthentication
+	// events that have been received but not yet consumed by either
+	// waitForAuthenticationStarted or consumeAuthenticationStartedEvents.
+	// It must use the same mutex (h.mu) as the rest of the handler so that the
+	// counter is incremented synchronously while handling the event, with no
+	// window in which a later stopAuthentication can race ahead of it.
+	authStartedCond    *sync.Cond
+	authStartedPending int
+
+	authEvents []*authd.IAResponse
 }
 
 func (h *gdmConvHandler) checkAllEventsHaveBeenEmitted() bool {
@@ -247,10 +255,13 @@ func (h *gdmConvHandler) handleEvent(event *gdm.EventData) error {
 			"Authentication started when we're not in challenge phase but in %s",
 			h.currentStage)
 
-		go func() {
-			// Mark the events received after or while we're returning but not when locked.
-			h.startAuthRequested <- struct{}{}
-		}()
+		// Register the pending start synchronously (we're holding h.mu here, which
+		// is the same mutex backing authStartedCond). This guarantees that any
+		// stopAuthentication processed after this event observes the pending start,
+		// so consumeAuthenticationStartedEvents can reliably drop the spurious one
+		// instead of racing with an asynchronous producer.
+		h.authStartedPending++
+		h.authStartedCond.Broadcast()
 
 	case *gdm.EventData_AuthEvent:
 		h.authEvents = append(h.authEvents, ev.AuthEvent.Response)
@@ -288,16 +299,24 @@ func (h *gdmConvHandler) waitForStageChange(stage proto.Stage) func() {
 }
 
 func (h *gdmConvHandler) waitForAuthenticationStarted() {
-	<-h.startAuthRequested
+	h.authStartedCond.L.Lock()
+	defer h.authStartedCond.L.Unlock()
+
+	for h.authStartedPending == 0 {
+		h.authStartedCond.Wait()
+	}
+	h.authStartedPending--
 }
 
 func (h *gdmConvHandler) consumeAuthenticationStartedEvents() {
-	select {
-	case <-h.startAuthRequested:
-		h.t.Logf("Ignore pending authentication request")
-	default:
+	h.authStartedCond.L.Lock()
+	defer h.authStartedCond.L.Unlock()
+
+	if h.authStartedPending == 0 {
 		return
 	}
+	h.authStartedPending--
+	h.t.Logf("Ignore pending authentication request")
 }
 
 func (h *gdmConvHandler) appendPollResultEvents(events ...*gdm.EventData) {
