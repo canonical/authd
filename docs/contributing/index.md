@@ -27,7 +27,7 @@ We take our community seriously, holding ourselves and other contributors to hig
 Contributions are made to this project via Issues and Pull Requests (PRs). These are some general guidelines that cover both:
 
 * To report security vulnerabilities, use the advisories page of the repository and not a public bug report. Please use [launchpad private bugs](https://bugs.launchpad.net/ubuntu/+source/authd/+filebug), which is monitored by our security team. On an Ubuntu machine, it's best to use `ubuntu-bug authd` to collect relevant information.
-* General issues or feature requests should be reported to the [GitHub project](https://github.com/canonical/authd/issues)
+* General issues or feature requests should be reported on [GitHub](https://github.com/canonical/authd/issues)
 * Existing Issues and PRs should be searched for on the [project's repository](https://github.com/canonical/authd) before creating your own.
 * While we work hard to ensure that issues are handled in a timely manner, it can take time to investigate the root cause. A friendly ping in the comment thread to the submitter or a contributor can help draw attention if your issue is blocking.
 * If you've never contributed before, see [this post on ubuntu.com](https://ubuntu.com/community/contribute) for resources and tips on how to get started.
