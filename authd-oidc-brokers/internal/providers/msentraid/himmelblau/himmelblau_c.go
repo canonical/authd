@@ -271,11 +271,11 @@ func enrollDevice(broker *brokerClientApplication, refreshToken string, attrs *C
 	var certKey []byte
 	var cSerializedCertKey *C.char
 	var cSerializedCertKeyLen C.size_t
-	defer C.free(unsafe.Pointer(cSerializedCertKey))
 	msalErr = C.serialize_loadable_ms_device_enrolment_key(cCertKey, &cSerializedCertKey, &cSerializedCertKeyLen)
 	if msalErr != nil {
 		return nil, fmt.Errorf("failed to serialize device enrollment key: %v", msalErrorMsg(msalErr))
 	}
+	defer C.raw_serialized_free((*C.uint8_t)(unsafe.Pointer(cSerializedCertKey)), cSerializedCertKeyLen)
 	if cSerializedCertKeyLen > 0 {
 		certKey = C.GoBytes(unsafe.Pointer(cSerializedCertKey), C.int(cSerializedCertKeyLen))
 	}
@@ -283,11 +283,11 @@ func enrollDevice(broker *brokerClientApplication, refreshToken string, attrs *C
 	var transportKey []byte
 	var cSerializedTransportKey *C.char
 	var cSerializedTransportKeyLen C.size_t
-	defer C.free(unsafe.Pointer(cSerializedTransportKey))
 	msalErr = C.serialize_loadable_ms_oapxbc_rsa_key(cTransportKey, &cSerializedTransportKey, &cSerializedTransportKeyLen)
 	if msalErr != nil {
 		return nil, fmt.Errorf("failed to serialize transport key: %v", msalErrorMsg(msalErr))
 	}
+	defer C.raw_serialized_free((*C.uint8_t)(unsafe.Pointer(cSerializedTransportKey)), cSerializedTransportKeyLen)
 	if cSerializedTransportKeyLen > 0 {
 		transportKey = C.GoBytes(unsafe.Pointer(cSerializedTransportKey), C.int(cSerializedTransportKeyLen))
 	}
@@ -302,11 +302,11 @@ func enrollDevice(broker *brokerClientApplication, refreshToken string, attrs *C
 func serializeLoadableMachineKey(loadableMachineKey *C.LoadableMachineKey) (key []byte, err error) {
 	var cSerializedKey *C.char
 	var cSerializedKeyLen C.size_t
-	defer C.free(unsafe.Pointer(cSerializedKey))
 	msalErr := C.serialize_loadable_machine_key(loadableMachineKey, &cSerializedKey, &cSerializedKeyLen)
 	if msalErr != nil {
 		return nil, fmt.Errorf("failed to serialize loadable machine key: %v", msalErrorMsg(msalErr))
 	}
+	defer C.raw_serialized_free((*C.uint8_t)(unsafe.Pointer(cSerializedKey)), cSerializedKeyLen)
 	if cSerializedKeyLen > 0 {
 		key = C.GoBytes(unsafe.Pointer(cSerializedKey), C.int(cSerializedKeyLen))
 	}
