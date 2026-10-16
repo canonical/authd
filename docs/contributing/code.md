@@ -136,11 +136,13 @@ snap install --dangerous ./path/to/broker.snap
 
 ## About the test suite
 
-The project includes a comprehensive test suite made of unit and integration tests. All the tests must pass before the review is considered. If you have troubles with the test suite, feel free to mention it in your PR description.
+The project includes a comprehensive test suite made of unit, integration, and end-to-end tests. All the tests must pass before the review is considered. If you have trouble with the test suite, feel free to mention it in your PR description.
 
-You can run all tests with: `go test ./...` (add the `-race` flag for race detection).
+From the repository root, run authd's Go unit tests and the PAM and NSS integration tests with: `go test ./...` (add the `-race` flag for race detection).
 
 Every package has a suite of at least package-level tests. They may integrate more granular unit tests for complex functionalities. Integration tests are located in `./pam/integration-tests` for the PAM module and `./nss/integration-tests` for the NSS module.
+
+The end-to-end tests for authd and its brokers run in a provisioned Ubuntu VM. See the [end-to-end testing guide](https://github.com/canonical/authd/blob/main/e2e-tests/TESTING.md) for details.
 
 The test suite must pass before merging the PR to our main branch. Any new feature, change or fix must be covered by corresponding tests.
 
