@@ -30,12 +30,18 @@ Check Marker File Is Root Owned
 
 *** Test Cases ***
 Test polkit authentication as authd user via pkexec after initial GDM login
-    [Documentation]    Verify that pkexec authenticates the authd user through
-    ...    polkit using their local password.
+    [Documentation]    ``pkexec`` asks Polkit to authenticate the authd user with
+    ...    the local password.
     ...
-    ...    The authd user is also added to the sudo group so that polkit prompts
-    ...    for their own credentials rather than falling back to the local admin
-    ...    (ubuntu) user.
+    ...    The GNOME Polkit agent displays the PAM conversation. authd sends the
+    ...    prompts through PAM. This is a different caller from GDM, ``su`` and
+    ...    ``sudo``.
+    ...
+    ...    The test adds the authd user to the sudo group so Polkit asks for that
+    ...    user's credentials instead of the local admin (ubuntu).
+    ...
+    ...    It runs ``pkexec touch`` and checks over SSH that the marker exists and
+    ...    is owned by root.
 
     Log In With Remote User Through GDM: QR Code    ${username}    ${local_password}
     Check If User Was Added Properly    ${username}
@@ -67,12 +73,16 @@ Test polkit authentication as authd user via pkexec after initial GDM login
 Test polkit authentication as authd user via pkexec using Entra ID password and MFA after initial GDM login
     [Tags]    requires:msentraid
     [Setup]    Entra Polkit Test Setup
-    [Documentation]    Verify that pkexec authenticates the authd user through
-    ...    polkit using their Entra ID password + MFA flow.
+    [Documentation]    A user can authenticate with the Entra ID password and MFA
+    ...    through Polkit after the initial GDM login.
     ...
-    ...    The authd user is also added to the sudo group so that polkit prompts
-    ...    for their own credentials rather than falling back to the local admin
-    ...    (ubuntu) user.
+    ...    The broker lists local-password mode first, so authd selects it.
+    ...    The test cancels that prompt, returns to the flow menu, and selects
+    ...    Entra ID. This covers switching from local-password mode to another
+    ...    flow through the Polkit PAM conversation.
+    ...
+    ...    The Entra test account already belongs to sudo, so Polkit can ask for its
+    ...    credentials without the ``usermod`` step used above.
 
     Log In With Remote User Through GDM: Entra Password    ${username}
     Check If User Was Added Properly    ${username}    %{E2E_PASSWORD}

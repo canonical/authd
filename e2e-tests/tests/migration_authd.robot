@@ -17,8 +17,14 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login after updating authd to the version under test
-    [Documentation]    Test login via CLI with device code flow and local password
-    ...                after updating authd to the version under test.
+    [Documentation]    A user registered on stable authd can still log in after
+    ...    authd is upgraded to the version under test.
+    ...
+    ...    The ``-stable-installed`` snapshot has stable authd and broker. A
+    ...    device-code login registers the account and populates the broker cache.
+    ...    The test checks setup and logs in locally, upgrades authd and supported
+    ...    gnome-shell packages, then logs in again with the local password. That
+    ...    login checks the account, cache, home path and ownership.
 
     # Log in with local user
     Log In

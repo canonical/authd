@@ -18,7 +18,15 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test that owner is auto-updated in broker configuration
-    [Documentation]    This test verifies that when a local user logs in, the broker configuration is automatically updated to set the owner to the logged-in user.
+    [Documentation]    The first remote login registers that user as the broker
+    ...    owner.
+    ...
+    ...    The default ``allowed_users = OWNER`` policy starts with no owner. On
+    ...    the first remote login, the broker writes an ``owner`` entry to
+    ...    ``20-owner-autoregistration.conf``. Later users are denied until an
+    ...    administrator changes allowed_users.
+    ...
+    ...    Registration happens during login, so the test polls for the drop-in.
 
     # Log in with local user
     Log In

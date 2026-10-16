@@ -55,8 +55,16 @@ Test login with CLI using Entra auth and MFA
     Wait Until Keyword Succeeds    30s    3s    Check Home Directory    ${username}
 
 Test GDM login with Entra ID password and MFA
-    [Documentation]    Verify that a user can log in via GDM using the direct
-    ...    Entra ID password + MFA flow
+    [Documentation]    A user can log in through GDM with the Entra ID password and
+    ...    MFA.
+    ...
+    ...    With device-code flow disabled, the broker selects entra_auth after the
+    ...    user chooses the provider. The greeter then asks for the Entra ID
+    ...    password and MFA code. This covers the same broker setup as the CLI test
+    ...    through a different caller.
+    ...
+    ...    No separate local password is set. The Entra password is cached instead,
+    ...    so the setup check uses E2E_PASSWORD when testing sudo.
 
     Log In With Remote User Through GDM: Entra Password    ${username}
     Check If User Was Added Properly    ${username}

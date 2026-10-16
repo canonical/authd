@@ -106,9 +106,47 @@ sleep when there is genuinely no observable signal to poll on.
      detect a command finished without OCR-matching the command echo itself,
      append `&& echo Y21kLWZpbmlzaGVkCg== | base64 -d` and `Match Text
      cmd-finished`. Reuse this pattern for new terminal commands.
-3. **Develop any new OCR matches in the interactive console** (next section).
-4. **Run the test and read the live trace** (see "Running and reading results").
-5. Iterate.
+3. **Write the `[Documentation]` block** (see "Documenting tests").
+4. **Develop any new OCR matches in the interactive console** (see "Developing
+   OCR matches").
+5. **Run the test and read the live trace** (see "Running and reading results").
+6. Iterate.
+
+## Documenting tests
+
+Every test needs a `[Documentation]` block. It records why the test exists and
+appears beside failures in `log.html`. Write it for someone diagnosing the
+failure without prior context.
+
+`tests/allowed_users.robot` shows a block with several distinct scenarios. Each
+block should cover:
+
+1. A one-line summary on the `[Documentation]` line. State what behavior the
+   test checks, not which keywords it calls. "Verify ..." is one possible start.
+2. Why the behavior matters, when that is not clear from the summary. Name the
+   user-visible failure or regression the test covers.
+3. Scenario details only when they clarify distinct cases or a sequence that
+   is not clear from the keyword names. Skip obvious steps.
+4. Setup choices that need context, such as a config value, an account other
+   than `E2E_USER`, snapshot cleanup, or the issue/PR behind a regression test.
+
+Mechanics and conventions:
+
+- Put `...` at the test's indentation to continue documentation.
+  Robot Framework inserts newlines between rows but collapses single
+  newlines within a paragraph. Start lists with `- ` and indent wrapped
+  lines under the bullet.
+- Use a row containing only `...` between paragraphs.
+- Mark config keys, commands, and paths with double backticks. Single backticks
+  appear as literal characters.
+- Write plain, simple English and short sentences. Follow the repository's
+  [prose style guidance](../AGENTS.md#prose-style).
+- Keep `#` comments for details tied to a specific line, such as an OCR
+  workaround or a keystroke quirk. Documentation explains the test contract;
+  comments explain the mechanics.
+
+When you change what a test asserts, update its `[Documentation]` in the same
+commit.
 
 ## Developing OCR matches (the interactive console)
 

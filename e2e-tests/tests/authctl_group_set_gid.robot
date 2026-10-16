@@ -17,8 +17,19 @@ ${new_gid}    60500
 
 *** Test Cases ***
 Test authctl group set-gid
-    [Documentation]    Test that authctl group set-gid changes the GID of a remote group
-    ...    and updates the home directory ownership.
+    [Documentation]    Changing a remote user's primary-group GID updates matching
+    ...    ownership in that user's home directory.
+    ...
+    ...    Admins may need authd-managed group IDs to match IDs on a shared NFS
+    ...    server. ``authctl group set-gid`` changes the GID and re-owns old-GID
+    ...    files under the homes of users whose primary group changed. Files
+    ...    elsewhere need manual updates.
+    ...
+    ...    The test registers a remote user and creates a file in the home. It checks
+    ...    ownership only for that directory and file.
+    ...
+    ...    A later login guards against the primary-GID reset fixed in
+    ...    https://github.com/canonical/authd/pull/1422/.
 
     Log In
 

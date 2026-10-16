@@ -21,13 +21,24 @@ ${local_password}    qwer1234
 
 
 *** Test Cases ***
-Test that login is denied if user is not allowed to log in via SSH
-    [Documentation]    Test that login via SSH is denied when the user is not allowed by the ssh_allowed_suffixes_first_auth setting.
+Test SSH does not offer the broker for an unmatched username
+    [Documentation]    The username does not match
+    ...    ``ssh_allowed_suffixes_first_auth``, so the broker is not offered over
+    ...    SSH.
+    ...
+    ...    First SSH authentication creates an account. If the broker accepted any
+    ...    name, anyone who could reach SSH could start device-code login. It only
+    ...    handles names ending in a configured suffix. This test uses the full
+    ...    account name as the suffix, not an exact allowlist; longer names ending
+    ...    with it also match. ``other-user@<domain>`` does not.
+    ...
+    ...    authd passes the unmatched name to ``pam_unix``, which shows the plain
+    ...    ``Password:`` prompt instead of a provider menu.
 
     # Log in with local user
     Log In
 
-    # Try to log in with not allowed remote user with device code flow through SSH
+    # Try SSH login with a username outside the configured suffix.
     ${domain} =    Fetch From Right    %{E2E_USER}    @
     ${username} =    Set Variable    other-user@${domain}
     Open Terminal

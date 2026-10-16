@@ -23,7 +23,19 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login with SSH
-    [Documentation]    Test login via SSH with device code flow and local password.
+    [Documentation]    The first SSH login uses device code. Later logins use the
+    ...    cached local password.
+    ...
+    ...    On first login, the broker handles names matching
+    ...    ``ssh_allowed_suffixes_first_auth``. The test allows the E2E account.
+    ...
+    ...    The first login uses ``ssh <user>@localhost`` for device-code flow, sets
+    ...    a local password, and checks account setup. A later SSH login uses that
+    ...    password.
+    ...
+    ...    SSH uses keyboard-interactive PAM and prompts with "Choose your provider:",
+    ...    "Choose action:", and "Create a local password:". This differs from the
+    ...    CLI terminal UI, so SSH needs separate coverage.
 
     # Log in with local user
     Log In

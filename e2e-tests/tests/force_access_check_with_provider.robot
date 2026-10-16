@@ -16,8 +16,16 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test second login succeeds with force_access_check_with_provider enabled
-    [Documentation]    Verify that a registered user can log in with their local password
-    ...    when force_access_check_with_provider is enabled and the identity provider is reachable.
+    [Documentation]    A registered user can log in with a local password while the
+    ...    provider is reachable, even with ``force_access_check_with_provider`` set.
+    ...
+    ...    Local-password logins already check the provider when it is reachable. If
+    ...    it is not, the broker can use a cached token unless this option is enabled.
+    ...    The option disables that offline fallback; it does not add an online
+    ...    revocation check.
+    ...
+    ...    The test registers the user through device code before enabling the option,
+    ...    while the provider is reachable.
 
     Log In
 
@@ -33,9 +41,15 @@ Test second login succeeds with force_access_check_with_provider enabled
 
 
 Test second login fails with force_access_check_with_provider enabled offline
-    [Documentation]    Verify that a registered user cannot log in when
-    ...    force_access_check_with_provider is enabled and the identity provider is unreachable.
-
+    [Documentation]    An unreachable provider blocks login when
+    ...    ``force_access_check_with_provider`` is enabled.
+    ...
+    ...    The test blocks outbound HTTPS. Session creation then fails while the
+    ...    broker connects to the provider, before it offers an authentication mode.
+    ...    The test checks this connection error; it does not reach token refresh.
+    ...
+    ...    The test leaves the iptables rules in place. The next test restores the
+    ...    VM snapshot.
     Log In
 
     Open Terminal

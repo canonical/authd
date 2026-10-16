@@ -17,8 +17,18 @@ ${new_uid}    60500
 
 *** Test Cases ***
 Test authctl user set-uid
-    [Documentation]    Test that authctl user set-uid changes the UID of a remote user
-    ...    and updates the home directory ownership.
+    [Documentation]    A remote user's UID change re-owns matching files in the
+    ...    home directory.
+    ...
+    ...    Admins may need authd-managed UIDs to match IDs on shared NFS.
+    ...    ``authctl user set-uid`` changes ownership only inside the user's home;
+    ...    files elsewhere need manual updates.
+    ...
+    ...    The test registers the user, creates a home file and ends the session
+    ...    before changing the UID. The command refuses to run while processes use
+    ...    the old UID.
+    ...
+    ...    A later local-password login verifies that the new UID persists.
 
     Log In
 

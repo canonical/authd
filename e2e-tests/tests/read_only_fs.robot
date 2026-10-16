@@ -17,9 +17,18 @@ ${local_password}    qwer1234
 
 
 *** Test Cases ***
-Test login with GDM
-    [Documentation]    Test that a user can log in with a local password when the filesystem is read-only.
-
+Test login with local password on read-only filesystem
+    [Documentation]    An already registered remote user can log in with a local
+    ...    password while the root filesystem is read-only.
+    ...
+    ...    A normal login may update the user record or create the home directory.
+    ...    After some I/O errors, the kernel can remount the filesystem read-only.
+    ...    An existing user should still be able to log in and investigate.
+    ...
+    ...    The test registers the user while the filesystem is writable, then
+    ...    remounts root read-only with SysRq ``u``. It waits for ``findmnt`` to show
+    ...    the change, logs in with the local password, and uses ``machinectl login``
+    ...    and ``su`` rather than GDM.
     # Log in with local user
     Log In
 

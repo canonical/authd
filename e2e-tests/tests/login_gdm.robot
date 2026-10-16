@@ -18,7 +18,12 @@ ${local_password}    qwer1234
 
 *** Test Cases ***
 Test login with GDM
-    [Documentation]    Test login via GDM with device code flow and local password.
+    [Documentation]    A remote user can sign in to GNOME first through device code
+    ...    and later with the cached local password.
+    ...
+    ...    The GNOME keyring must unlock from ``PAM_AUTHTOK`` on both paths. Otherwise
+    ...    the session starts with a locked keyring and applications prompt for its
+    ...    password.
 
     # Log in with remote user with device code flow via GDM
     Log In With Remote User Through GDM: QR Code    ${username}    ${local_password}

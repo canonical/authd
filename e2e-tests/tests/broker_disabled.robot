@@ -15,15 +15,27 @@ ${username}    %{E2E_USER}
 
 
 *** Test Cases ***
-Test that disabling broker prevents remote logins
-    [Documentation]    This test verifies that when the broker is disabled, remote users cannot log in, while local users can still access the system.
+Test remote login falls back to local PAM when broker is unavailable
+    [Documentation]    With the broker unavailable, authd passes remote
+    ...    authentication to local PAM. Local users can still log in.
+    ...
+    ...    The test stops the broker snap and removes its authd config. With only
+    ...    the local broker available, authd returns ``PAM_IGNORE``. The next
+    ...    PAM module, ``pam_unix``, shows a plain ``Password:`` prompt. The test
+    ...    checks that prompt but does not submit a password.
+    ...
+    ...    The test checks these cases in order:
+    ...    - a remote GDM login shows the ``pam_unix`` password prompt
+    ...    - the local user can still log in through GDM
+    ...    - the local user can still become root with ``sudo``
+    ...    - a remote ``machinectl login`` shows the ``pam_unix`` password prompt
 
     # Disable broker
     Disable Broker And Purge Config
 
-    # Check that remote user is redirected to local broker when trying to log in through GDM
+    # Check that GDM falls back to the pam_unix prompt.
     Start Log In With Remote User Through GDM    ${username}
-    Check That User Is Redirected To Local Broker
+    Check That PAM Unix Prompt Is Shown
     Escape Back to GDM Login Screen
 
     # Check that local user can still log in
@@ -34,7 +46,7 @@ Test that disabling broker prevents remote logins
     Enter Sudo Mode In Terminal
     Close Terminal In Sudo Mode
 
-    # Check that remote user cannot log in
+    # Check that machinectl falls back to the pam_unix prompt.
     Open Terminal
     Try Log In With Remote User    ${username}
-    Check That User Is Redirected To Local Broker
+    Check That PAM Unix Prompt Is Shown
