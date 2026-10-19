@@ -126,3 +126,8 @@ func (p GenericProvider) ClassifyRefreshTokenError(err *oauth2.RetrieveError) pr
 		return providerErrors.RefreshTokenErrorUnknown
 	}
 }
+
+// IsUserDisabledError reports whether a Keycloak refresh error means the user is disabled.
+func (GenericProvider) IsUserDisabledError(err *oauth2.RetrieveError) bool {
+	return err != nil && err.ErrorCode == "invalid_grant" && strings.Contains(err.ErrorDescription, "User disabled")
+}

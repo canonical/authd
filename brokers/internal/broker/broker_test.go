@@ -4549,6 +4549,84 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshDetectsDisabledUser(t *testing.
 	require.True(t, cached.UserIsDisabled, "UserIsDisabled must be cached after an AADSTS50057 refresh rejection")
 }
 
+func TestIsAuthenticatedPasswordGenericProviderRefreshDetectsDisabledUser(t *testing.T) {
+	t.Parallel()
+
+	providersByName := map[string]providers.Provider{
+		"keycloak": genericprovider.New(),
+		"google":   google.New(),
+	}
+	for providerName, provider := range providersByName {
+		for _, forceAccessCheck := range []bool{false, true} {
+			name := fmt.Sprintf("%s/force_access_check_%t", providerName, forceAccessCheck)
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				const username = "test-user@email.com"
+				const correctPassword = "password"
+				dataDir := t.TempDir()
+				discoveryCalls := 0
+				issuerURL, cleanup := testutils.StartMockProviderServer("", nil,
+					testutils.WithHandler("/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
+						discoveryCalls++
+						if discoveryCalls > 1 {
+							w.WriteHeader(http.StatusServiceUnavailable)
+							return
+						}
+						testutils.DefaultOpenIDHandler("http://"+r.Host)(w, r)
+					}),
+					testutils.WithHandler("/token", testutils.ErrorResponseHandler(http.StatusBadRequest,
+						`{"error":"invalid_grant","error_description":"User disabled"}`)),
+				)
+				t.Cleanup(cleanup)
+				b := newBrokerForTests(t, &brokerForTestConfig{
+					Config:                       broker.Config{DataDir: dataDir},
+					issuerURL:                    issuerURL,
+					ownerAllowed:                 true,
+					firstUserBecomesOwner:        true,
+					forceAccessCheckWithProvider: forceAccessCheck,
+					provider:                     provider,
+				})
+
+				sessionID, key, err := b.NewSession(username, "lang", sessionmode.Login, "saved-user-id")
+				require.NoError(t, err)
+				generateAndStoreCachedInfo(t, tokenOptions{}, b.TokenPathForSession(sessionID))
+				require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+				updateAuthModes(t, b, sessionID, authmodes.Password)
+				authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+
+				access, data, err := b.IsAuthenticated(sessionID, authData)
+				require.NoError(t, err)
+				require.Equal(t, broker.AuthDenied, access)
+				var payload struct {
+					Message string `json:"message"`
+				}
+				require.NoError(t, json.Unmarshal([]byte(data), &payload))
+				require.Contains(t, payload.Message, "disabled")
+
+				cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+				require.NoError(t, err)
+				require.True(t, cached.UserIsDisabled)
+
+				offlineBroker := newBrokerForTests(t, &brokerForTestConfig{
+					Config:    broker.Config{DataDir: dataDir},
+					issuerURL: issuerURL,
+					provider:  provider,
+				})
+				offlineSessionID, offlineKey, err := offlineBroker.NewSession(username, "lang", sessionmode.Login, "saved-user-id")
+				require.NoError(t, err)
+				updateAuthModes(t, offlineBroker, offlineSessionID, authmodes.Password)
+				offlineAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, offlineKey))
+				access, data, err = offlineBroker.IsAuthenticated(offlineSessionID, offlineAuthData)
+				require.NoError(t, err)
+				require.Equal(t, broker.AuthDenied, access)
+				require.NoError(t, json.Unmarshal([]byte(data), &payload))
+				require.Contains(t, payload.Message, "disabled")
+			})
+		}
+	}
+}
+
 func TestIsAuthenticatedPasswordRefreshFallsBackOnTransientRetrieveError(t *testing.T) {
 	t.Parallel()
 

@@ -216,3 +216,32 @@ func TestClassifyRefreshTokenError(t *testing.T) {
 		})
 	}
 }
+
+func TestIsUserDisabledError(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		err  *oauth2.RetrieveError
+		want bool
+	}{
+		"Keycloak_user_disabled": {
+			err:  &oauth2.RetrieveError{ErrorCode: "invalid_grant", ErrorDescription: "User disabled"},
+			want: true,
+		},
+		"Other_invalid_grant": {
+			err: &oauth2.RetrieveError{ErrorCode: "invalid_grant", ErrorDescription: "Session not active"},
+		},
+		"Other_error_code": {
+			err: &oauth2.RetrieveError{ErrorCode: "access_denied", ErrorDescription: "User disabled"},
+		},
+		"Nil_error": {},
+	}
+
+	provider := genericprovider.New()
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, provider.IsUserDisabledError(tc.err))
+		})
+	}
+}

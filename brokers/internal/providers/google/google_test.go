@@ -134,3 +134,36 @@ func TestClassifyRefreshTokenError(t *testing.T) {
 		})
 	}
 }
+
+func TestIsUserDisabledError(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		err  *oauth2.RetrieveError
+		want bool
+	}{
+		"User_disabled": {
+			err: &oauth2.RetrieveError{
+				ErrorCode:        "invalid_grant",
+				ErrorDescription: "User disabled",
+			},
+			want: true,
+		},
+		"Other_invalid_grant_error": {
+			err: &oauth2.RetrieveError{
+				ErrorCode:        "invalid_grant",
+				ErrorDescription: "Token has been expired or revoked",
+			},
+			want: false,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			p := google.New()
+			require.Equal(t, tc.want, p.IsUserDisabledError(tc.err))
+		})
+	}
+}
