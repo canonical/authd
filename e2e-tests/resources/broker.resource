@@ -399,20 +399,21 @@ Continue Log In With Remote User Through GDM: Entra Password
 
 Log In With Remote User Through GDM: Local Password
     [Arguments]    ${username}    ${local_password}
-    Wait Until GDM Login Screen Ready
-    Move Pointer To Not listed
-    Left Button Click
-    # Enter the username. The field's placeholder text is lighter than normal
-    # text, and the blinking text cursor can fuse with it (OCR reads
-    # "IUsername"), so it often OCRs below the suite's global confidence
-    # threshold.
-    Match Text    Username    30    confidence=88
-    Hid.Type String    ${username}
-    Hid.Keys Combo    Return
+    Start Log In With Remote User Through GDM: Local Password    ${username}
+    Continue Log In With Remote User Through GDM: Local Password    ${local_password}
+
+
+Start Log In With Remote User Through GDM: Local Password
+    [Arguments]    ${username}
+    Start Log In With Remote User Through GDM    ${username}
 
     # Use a lower confidence threshold because the blinking text cursor can
     # merge with the prompt and lower OCR confidence
     Match Text    Enter your password    confidence=88
+
+
+Continue Log In With Remote User Through GDM: Local Password
+    [Arguments]    ${local_password}
     Hid.Type String    ${local_password}
     Hid.Keys Combo    Return
 
