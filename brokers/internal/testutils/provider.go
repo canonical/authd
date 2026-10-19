@@ -211,7 +211,8 @@ func DefaultDeviceAuthHandler() EndpointHandler {
 
 // TokenHandlerOptions contains options for the token handler.
 type TokenHandlerOptions struct {
-	Scopes []string
+	Scopes         []string
+	NoRefreshToken bool
 	// A list of custom claims to be added to the ID token. Each time the
 	// handler returns a token, the claims from the first element of the list
 	// will be added to the token, and then that element will be removed from
@@ -297,17 +298,24 @@ func TokenHandler(serverURL string, opts *TokenHandlerOptions) EndpointHandler {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 
-		response := fmt.Sprintf(`{
+		response := map[string]interface{}{
 			"access_token": "accesstoken",
-			"refresh_token": "refreshtoken",
-			"token_type": "Bearer",
-			"scope": "%s",
-			"expires_in": 3600,
-			"id_token": "%s"
-		}`, strings.Join(opts.Scopes, " "), rawToken)
+			"token_type":   "Bearer",
+			"scope":        strings.Join(opts.Scopes, " "),
+			"expires_in":   3600,
+			"id_token":     rawToken,
+		}
+		if !opts.NoRefreshToken {
+			response["refresh_token"] = "refreshtoken"
+		}
+		encodedResponse, err := json.Marshal(response)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 
 		w.Header().Add("Content-Type", "application/json")
-		if _, err := w.Write([]byte(response)); err != nil {
+		if _, err := w.Write(encodedResponse); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 	}

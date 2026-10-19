@@ -651,6 +651,133 @@ func TestNewSessionRecoversFromDanglingCacheSymlink(t *testing.T) {
 	})
 }
 
+func TestDeviceAuthCreatesProviderIDCacheForNewUser(t *testing.T) {
+	t.Parallel()
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		tokenHandlerOptions:   &testutils.TokenHandlerOptions{NoRefreshToken: true},
+	})
+
+	const (
+		username   = "test-user@email.com"
+		providerID = "test-user-id"
+	)
+	usernameDir, err := b.UserDataDir(username)
+	require.NoError(t, err)
+	providerIDDir, err := b.UserDataDir(providerID)
+	require.NoError(t, err)
+
+	sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+	require.Equal(t, usernameDir, b.UserDataDirForSession(sessionID))
+
+	deviceAccess, passwordAccess := runDeviceAuthAndNewPassword(t, b, sessionID, key, "brand-new-password")
+	require.Equal(t, broker.AuthNext, deviceAccess)
+	require.Equal(t, broker.AuthGranted, passwordAccess)
+	require.Equal(t, providerIDDir, b.UserDataDirForSession(sessionID))
+	require.FileExists(t, filepath.Join(providerIDDir, "token.json"))
+	require.FileExists(t, filepath.Join(providerIDDir, "password"))
+	cached, err := token.LoadAuthInfo(filepath.Join(providerIDDir, "token.json"))
+	require.NoError(t, err)
+	require.Empty(t, cached.Token.RefreshToken)
+
+	info, err := os.Lstat(usernameDir)
+	require.NoError(t, err)
+	require.NotZero(t, info.Mode()&os.ModeSymlink)
+	rawLink, err := os.Readlink(usernameDir)
+	require.NoError(t, err)
+	require.False(t, filepath.IsAbs(rawLink))
+	target, err := filepath.EvalSymlinks(usernameDir)
+	require.NoError(t, err)
+	require.Equal(t, providerIDDir, target)
+	requireIssuerCacheTree(t, filepath.Dir(providerIDDir), map[string]string{
+		"test-user-id":            "dir",
+		"test-user-id/token.json": "file",
+		"test-user-id/password":   "file",
+		"test-user@email.com":     "symlink -> test-user-id",
+	})
+}
+
+func TestDeviceAuthDeniesTokenWithoutIDToken(t *testing.T) {
+	t.Parallel()
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+		customHandlers: map[string]testutils.EndpointHandler{
+			"/token": func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"access_token":"access-token","refresh_token":"refresh-token","token_type":"Bearer","expires_in":3600}`))
+			},
+		},
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthDenied, access)
+	var payload struct {
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(data), &payload))
+	require.Contains(t, payload.Message, "token response does not contain an ID token")
+	require.NoFileExists(t, b.TokenPathForSession(sessionID))
+	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID))
+}
+
+func TestDeviceAuthDeniesWhenCachedAuthInfoIsUnreadable(t *testing.T) {
+	t.Parallel()
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		ownerAllowed:          true,
+		firstUserBecomesOwner: true,
+	})
+	sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	tokenPath := b.TokenPathForSession(sessionID)
+	require.NoError(t, os.MkdirAll(filepath.Dir(tokenPath), 0700))
+	require.NoError(t, os.WriteFile(tokenPath, []byte("not valid auth info"), 0600))
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthDenied, access)
+	var payload struct {
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(data), &payload))
+	require.Contains(t, payload.Message, "could not load stored token")
+	contents, err := os.ReadFile(tokenPath)
+	require.NoError(t, err)
+	require.Equal(t, []byte("not valid auth info"), contents)
+	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID))
+}
+
+func TestDeviceAuthDeniesWhenGroupFetchFails(t *testing.T) {
+	t.Parallel()
+
+	b := newBrokerForTests(t, &brokerForTestConfig{
+		getGroupsFails:         true,
+		ownerAllowed:           true,
+		supportsFetchingGroups: true,
+		firstUserBecomesOwner:  true,
+	})
+
+	sessionID, _ := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+	updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+
+	access, data, err := b.IsAuthenticated(sessionID, "{}")
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthDenied, access)
+	var payload struct {
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(data), &payload))
+	require.Contains(t, payload.Message, "Failed to retrieve groups from Microsoft Graph API")
+}
+
 func TestNewSessionWithProviderIDRepairsUsernameCompatibilityPath(t *testing.T) {
 	t.Parallel()
 
@@ -4682,6 +4809,92 @@ func TestIsAuthenticatedPasswordRefreshFallsBackOnExpiredRetrieveError(t *testin
 	offline, err := b.IsOffline(sessionID)
 	require.NoError(t, err)
 	require.True(t, offline, "an expired refresh token must mark the session offline")
+}
+
+func TestIsAuthenticatedPasswordRefreshOutcomesForKeycloakAndGoogleErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		provider                     providers.Provider
+		errorDescription             string
+		forceAccessCheckWithProvider bool
+		wantAccess                   string
+		wantOffline                  bool
+	}{
+		"keycloak_token_not_active_optional_check": {
+			provider:         genericprovider.New(),
+			errorDescription: "Token is not active",
+			wantAccess:       broker.AuthGranted,
+			wantOffline:      true,
+		},
+		"keycloak_token_not_active_forced_check": {
+			provider:                     genericprovider.New(),
+			errorDescription:             "Token is not active",
+			forceAccessCheckWithProvider: true,
+			wantAccess:                   broker.AuthNext,
+		},
+		"keycloak_offline_user_session_not_found_optional_check": {
+			provider:         genericprovider.New(),
+			errorDescription: "Offline user session not found",
+			wantAccess:       broker.AuthGranted,
+			wantOffline:      true,
+		},
+		"keycloak_offline_user_session_not_found_forced_check": {
+			provider:                     genericprovider.New(),
+			errorDescription:             "Offline user session not found",
+			forceAccessCheckWithProvider: true,
+			wantAccess:                   broker.AuthDenied,
+		},
+		"google_admin_policy_enforced_optional_check": {
+			provider:         google.New(),
+			errorDescription: "admin_policy_enforced",
+			wantAccess:       broker.AuthGranted,
+			wantOffline:      true,
+		},
+		"google_admin_policy_enforced_forced_check": {
+			provider:                     google.New(),
+			errorDescription:             "admin_policy_enforced",
+			forceAccessCheckWithProvider: true,
+			wantAccess:                   broker.AuthDenied,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			const correctPassword = "password"
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config:                       broker.Config{DataDir: t.TempDir()},
+				ownerAllowed:                 true,
+				firstUserBecomesOwner:        true,
+				forceAccessCheckWithProvider: tc.forceAccessCheckWithProvider,
+				provider:                     tc.provider,
+				customHandlers: map[string]testutils.EndpointHandler{
+					"/token": func(w http.ResponseWriter, _ *http.Request) {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusBadRequest)
+						fmt.Fprintf(w, `{"error":"invalid_grant","error_description":%q}`, tc.errorDescription)
+					},
+				},
+			})
+
+			sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+			seeded := generateCachedInfo(t, tokenOptions{})
+			require.NoError(t, token.CacheAuthInfo(b.TokenPathForSession(sessionID), seeded))
+			require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+			updateAuthModes(t, b, sessionID, authmodes.Password)
+			authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+			access, _, err := b.IsAuthenticated(sessionID, authData)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantAccess, access)
+
+			offline, err := b.IsOffline(sessionID)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantOffline, offline)
+		})
+	}
 }
 
 func TestIsAuthenticatedPasswordRefreshRequiresReauthenticationForAmbiguousExpiredOrRevokedErrors(t *testing.T) {

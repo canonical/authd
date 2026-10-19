@@ -191,6 +191,11 @@ func TestClassifyRefreshTokenError(t *testing.T) {
 			errorDescription: "Token is not active",
 			wantKind:         providerErrors.RefreshTokenErrorExpired,
 		},
+		"Keycloak_offline_user_session_not_found": {
+			errorCode:        "invalid_grant",
+			errorDescription: "Offline user session not found",
+			wantKind:         providerErrors.RefreshTokenErrorUnknown,
+		},
 		"Keycloak_stale_token": {
 			errorCode:        "invalid_grant",
 			errorDescription: "Stale token",
