@@ -4897,6 +4897,81 @@ func TestIsAuthenticatedPasswordRefreshOutcomesForKeycloakAndGoogleErrors(t *tes
 	}
 }
 
+func TestIsAuthenticatedPasswordRefreshDeniesUnverifiedEmail(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		tokenHandlerOptions *testutils.TokenHandlerOptions
+		userInfoHandler     testutils.EndpointHandler
+	}{
+		"email_verified_false": {
+			tokenHandlerOptions: &testutils.TokenHandlerOptions{
+				IDTokenClaims: []map[string]interface{}{{"email_verified": false}},
+			},
+		},
+		"email_verified_malformed": {
+			tokenHandlerOptions: &testutils.TokenHandlerOptions{
+				IDTokenClaims: []map[string]interface{}{{"email_verified": "true"}},
+			},
+		},
+		"email_verified_missing_from_token_and_userinfo": {
+			tokenHandlerOptions: &testutils.TokenHandlerOptions{
+				DeleteClaims: []string{"email_verified"},
+			},
+			userInfoHandler: testutils.UserInfoHandler(map[string]interface{}{
+				"sub": "test-user-id",
+			}),
+		},
+	}
+
+	for name, tc := range tests {
+		for _, forceAccessCheckWithProvider := range []bool{false, true} {
+			testName := fmt.Sprintf("%s/force_access_check_%t", name, forceAccessCheckWithProvider)
+			t.Run(testName, func(t *testing.T) {
+				t.Parallel()
+
+				tokenHandlerOptions := &testutils.TokenHandlerOptions{
+					Scopes:       slices.Clone(tc.tokenHandlerOptions.Scopes),
+					DeleteClaims: slices.Clone(tc.tokenHandlerOptions.DeleteClaims),
+					IDTokenClaims: append(
+						[]map[string]interface{}{},
+						tc.tokenHandlerOptions.IDTokenClaims...,
+					),
+				}
+				customHandlers := map[string]testutils.EndpointHandler{}
+				if tc.userInfoHandler != nil {
+					customHandlers["/userinfo"] = tc.userInfoHandler
+				}
+				b := newBrokerForTests(t, &brokerForTestConfig{
+					Config:                       broker.Config{DataDir: t.TempDir()},
+					ownerAllowed:                 true,
+					firstUserBecomesOwner:        true,
+					forceAccessCheckWithProvider: forceAccessCheckWithProvider,
+					provider:                     genericprovider.New(),
+					customHandlers:               customHandlers,
+					tokenHandlerOptions:          tokenHandlerOptions,
+				})
+
+				const correctPassword = "password"
+				sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+				generateAndStoreCachedInfo(t, tokenOptions{}, b.TokenPathForSession(sessionID))
+				require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+				updateAuthModes(t, b, sessionID, authmodes.Password)
+				authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+				access, data, err := b.IsAuthenticated(sessionID, authData)
+				require.NoError(t, err)
+				require.Equal(t, broker.AuthDenied, access)
+				require.Contains(t, data, "email not verified")
+
+				offline, err := b.IsOffline(sessionID)
+				require.NoError(t, err)
+				require.False(t, offline, "an invalid email_verified claim must not fall back to offline login")
+			})
+		}
+	}
+}
+
 func TestIsAuthenticatedPasswordRefreshRequiresReauthenticationForAmbiguousExpiredOrRevokedErrors(t *testing.T) {
 	t.Parallel()
 
