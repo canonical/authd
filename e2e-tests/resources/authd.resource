@@ -37,16 +37,15 @@ Change Password
     Match Text    passwd: password updated successfully    15
 
 Try Log In With Remote User
-    [Arguments]    ${username}    ${prompt_timeout}=120
-    Try machinectl login Prompt    ${prompt_timeout}
+    [Arguments]    ${username}
+    Try machinectl login Prompt
     Hid.Type String    ${username}
     Hid.Keys Combo    Return
 
 # Conditional checks
 
 Check That Remote User Has No Available Authentication Modes
-    [Arguments]    ${timeout}=120
-    Match Text    Error connecting to provider. Check your network connection.    ${timeout}
+    Match Text    Error connecting to provider. Check your network connection.    120
 
 Check That Log In Fails Because Authd Is Disabled
     Match Text    could not connect to unix:///run/authd.sock    120
