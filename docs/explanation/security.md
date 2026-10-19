@@ -109,16 +109,16 @@ The refresh result determines the authentication response as follows:
 
 | Refresh result | Provider check optional (`false`) | Provider check forced (`true`) |
 | --- | --- | --- |
-| User or device is disabled | `AuthDenied`; cache the disabled state | `AuthDenied` |
-| Refresh grant is confirmed revoked or the remote password changed | `AuthNext`; invalidate cached credentials and require re-authentication | `AuthNext`; invalidate cached credentials and require re-authentication |
-| Refresh token is known to be expired | `AuthGranted`; use cached credentials and mark the session offline | `AuthNext`; require re-authentication |
-| Refresh token may be expired or revoked, but the provider cannot distinguish the two | `AuthNext`; require re-authentication and keep cached credentials | `AuthNext`; require re-authentication and keep cached credentials |
-| Network or temporary provider error | `AuthGranted`; use cached credentials and mark the session offline | `AuthDenied` |
-| Broker client configuration error (e.g. a rejected or rotated client secret) | `AuthGranted`; use cached credentials and mark the session offline | `AuthDenied` |
-| Non-authoritative token verification or user-info failure | `AuthGranted`; use cached credentials and mark the session offline | `AuthDenied`; preserve a safe display message when available |
-| Unknown or unclassified refresh error | `AuthGranted`; treat the check as best effort and use cached credentials | `AuthDenied` |
-| Known authoritative identity error | `AuthDenied`; do not use cached credentials | `AuthDenied` |
-| No cached refresh token | `AuthNext`; require re-authentication | `AuthNext`; require re-authentication |
+| User or device is disabled | Deny login and save the disabled state | Deny login and save the disabled state |
+| Refresh grant is confirmed revoked or the remote password changed | Invalidate cached credentials and require re-authentication | Invalidate cached credentials and require re-authentication |
+| Refresh token is known to be expired | Use the cached password and mark the session offline | Require re-authentication |
+| Refresh token may be expired or revoked, but the provider cannot distinguish the two | Keep cached credentials and require re-authentication | Keep cached credentials and require re-authentication |
+| Network or temporary provider error | Use the cached password and mark the session offline | Deny login |
+| Broker client configuration error (e.g. a rejected or rotated client secret) | Use the cached password and mark the session offline | Deny login |
+| Unreadable token or user-info response | Use the cached password and mark the session offline | Deny login |
+| Unknown or unclassified refresh error | Use the cached password and mark the session offline | Deny login |
+| Known identity error showing the user or device is not allowed | Deny login | Deny login |
+| No cached refresh token | If the session is already offline, skip refresh and use the cached password; otherwise require re-authentication | Require re-authentication |
 
 To enforce verification with the identity provider even when it is unreachable,
 enable the [force_access_check_with_provider](ref::config-force-provider-auth)
