@@ -154,6 +154,26 @@ func TestUserInfoFromAccessToken(t *testing.T) {
 	require.Equal(t, info.NewUser("test-user@email.com", "", "saved-user-id", "", "test-user", nil), got)
 }
 
+func TestUserInfoFromAccessToken_MissingOID(t *testing.T) {
+	t.Parallel()
+
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"upn": "test-user@email.com",
+	})
+	accessTokenStr, err := accessToken.SignedString(testutils.MockKey)
+	require.NoError(t, err, "Failed to sign access token")
+
+	_, err = msentraid.New().UserInfoFromAccessToken(accessTokenStr)
+	require.Error(t, err, "UserInfoFromAccessToken should return an error without an oid claim")
+}
+
+func TestUserInfoFromAccessToken_MalformedToken(t *testing.T) {
+	t.Parallel()
+
+	_, err := msentraid.New().UserInfoFromAccessToken("not-a-jwt")
+	require.Error(t, err, "UserInfoFromAccessToken should return an error for a malformed access token")
+}
+
 func TestRefreshEntraToken(t *testing.T) {
 	t.Parallel()
 
