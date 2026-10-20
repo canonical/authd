@@ -43,42 +43,28 @@ func TestNew(t *testing.T) {
 func TestParseUnixID(t *testing.T) {
 	t.Parallel()
 
-	validInt64 := int64(1001)
 	validFloat64 := float64(1002)
-	validNumber := json.Number("1003")
-	valid := uint32(1001)
 
 	tests := map[string]struct {
 		value   any
 		want    *uint32
 		wantErr bool
 	}{
-		"Absent":                {value: nil},
-		"Int64":                 {value: int64(1001), want: &valid},
-		"Pointer_int64":         {value: &validInt64, want: &valid},
-		"Float64":               {value: float64(1002), want: func() *uint32 { v := uint32(1002); return &v }()},
-		"Pointer_float64":       {value: &validFloat64, want: func() *uint32 { v := uint32(1002); return &v }()},
-		"JSON_number":           {value: validNumber, want: func() *uint32 { v := uint32(1003); return &v }()},
-		"String_is_rejected":    {value: "1001", wantErr: true},
-		"Boolean_is_rejected":   {value: true, wantErr: true},
-		"Negative_is_rejected":  {value: int64(-1), wantErr: true},
-		"Zero_is_rejected":      {value: int64(0), wantErr: true},
-		"Fraction_is_rejected":  {value: float64(1001.5), wantErr: true},
-		"Too_large_is_rejected": {value: int64(2147483648), wantErr: true},
-		"Float64_too_large":     {value: float64(1e100), wantErr: true},
-		"Reserved_65534":        {value: int64(65534), wantErr: true},
-		"Reserved_65535":        {value: int64(65535), wantErr: true},
-		"Reserved_max_uint32":   {value: uint64(1<<32 - 1), wantErr: true},
-
-		"JSON_number_with_zero_fraction":              {value: json.Number("1000.0"), want: func() *uint32 { v := uint32(1000); return &v }()},
-		"JSON_number_with_exponent":                   {value: json.Number("1e3"), want: func() *uint32 { v := uint32(1000); return &v }()},
-		"JSON_number_fraction_is_rejected":            {value: json.Number("1001.5"), wantErr: true},
-		"JSON_number_rounding_to_integer_is_rejected": {value: json.Number("1.0000000000000000001"), wantErr: true},
-		"JSON_number_negative_fraction_is_rejected":   {value: json.Number("-1.0"), wantErr: true},
-		"JSON_number_too_large_is_rejected":           {value: json.Number("1e10"), wantErr: true},
-		"JSON_number_huge_exponent_is_rejected":       {value: json.Number("1e1000000001"), wantErr: true},
-		"JSON_number_hex_syntax_is_rejected":          {value: json.Number("0x10"), wantErr: true},
-		"JSON_number_fraction_syntax_is_rejected":     {value: json.Number("3/1"), wantErr: true},
+		"Absent":                            {value: nil},
+		"Int64_is_not_a_Graph_number_shape": {value: int64(1001), wantErr: true},
+		"Float64":                           {value: float64(1002), want: func() *uint32 { v := uint32(1002); return &v }()},
+		"Pointer_float64":                   {value: &validFloat64, want: func() *uint32 { v := uint32(1002); return &v }()},
+		"Nil_pointer_float64":               {value: (*float64)(nil)},
+		"JSON_number_is_not_a_Graph_number_shape": {value: json.Number("1003"), wantErr: true},
+		"String_is_rejected":                      {value: "1001", wantErr: true},
+		"Boolean_is_rejected":                     {value: true, wantErr: true},
+		"Negative_is_rejected":                    {value: float64(-1), wantErr: true},
+		"Zero_is_rejected":                        {value: float64(0), wantErr: true},
+		"Fraction_is_rejected":                    {value: float64(1001.5), wantErr: true},
+		"Too_large_is_rejected":                   {value: float64(2147483648), wantErr: true},
+		"Float64_too_large":                       {value: float64(1e100), wantErr: true},
+		"Reserved_65534":                          {value: float64(65534), wantErr: true},
+		"Reserved_65535":                          {value: float64(65535), wantErr: true},
 	}
 
 	for name, tc := range tests {
@@ -95,6 +81,14 @@ func TestParseUnixID(t *testing.T) {
 			require.Equal(t, tc.want, got)
 		})
 	}
+
+	var graphValue float64
+	require.NoError(t, json.Unmarshal([]byte("1.0000000000000000001"), &graphValue))
+
+	got, err := msentraid.ParseUnixID(&graphValue)
+	require.NoError(t, err)
+	expected := uint32(1)
+	require.Equal(t, &expected, got)
 }
 
 func TestProcessSecurityGroupsWithGID(t *testing.T) {
@@ -114,8 +108,8 @@ func TestProcessSecurityGroupsWithGID(t *testing.T) {
 		t.Parallel()
 
 		groups, err := msentraid.ProcessSecurityGroupsWithGID([]msgraphmodels.Groupable{
-			makeGroup("remote-id", "Engineering", int64(2001)),
-			makeGroup("local-id", "linux-sudo", int64(9999)),
+			makeGroup("remote-id", "Engineering", float64(2001)),
+			makeGroup("local-id", "linux-sudo", float64(9999)),
 		}, "extension_gidNumber")
 		require.NoError(t, err)
 		require.Len(t, groups, 2)
@@ -130,8 +124,8 @@ func TestProcessSecurityGroupsWithGID(t *testing.T) {
 		t.Parallel()
 
 		groups, err := msentraid.ProcessSecurityGroupsWithGID([]msgraphmodels.Groupable{
-			makeGroup("first", "Engineering", int64(2001)),
-			makeGroup("second", "engineering", int64(2002)),
+			makeGroup("first", "Engineering", float64(2001)),
+			makeGroup("second", "engineering", float64(2002)),
 		}, "extension_gidNumber")
 		require.NoError(t, err)
 		require.Len(t, groups, 1)
@@ -165,7 +159,7 @@ func TestProcessSecurityGroupsWithGID(t *testing.T) {
 
 		groups, err := msentraid.ProcessSecurityGroupsWithGID([]msgraphmodels.Groupable{
 			makeGroup("first", "Engineering", "not-a-number"),
-			makeGroup("second", "engineering", int64(2002)),
+			makeGroup("second", "engineering", float64(2002)),
 		}, "extension_gidNumber")
 		require.NoError(t, err)
 		require.Len(t, groups, 1)
@@ -498,6 +492,7 @@ func TestEnrichUserWithUnixAttributesRejectsUnavailableRequiredUID(t *testing.T)
 			require.ErrorIs(t, err, info.ErrUnixAttributePartial)
 			require.ErrorIs(t, err, info.ErrUnixAttributeRequired)
 			require.ErrorIs(t, err, info.ErrUnixUIDRequired)
+			require.ErrorIs(t, err, info.ErrUnixAttributeMissing)
 		})
 	}
 }
@@ -686,6 +681,7 @@ func TestEnrichUserWithUnixAttributesReportsMissingRequiredGIDAsPartial(t *testi
 	)
 	require.ErrorIs(t, err, info.ErrUnixAttributePartial)
 	require.ErrorIs(t, err, info.ErrUnixGIDRequired)
+	require.ErrorIs(t, err, info.ErrUnixAttributeMissing)
 	require.Len(t, got.Groups, 1)
 	require.Nil(t, got.Groups[0].GID)
 }

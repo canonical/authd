@@ -116,6 +116,10 @@ func (cfg *Config) ClientID() string {
 	return cfg.clientID
 }
 
+func (b *Broker) Z_ForTests_OIDCConfig() (string, string) {
+	return b.oidcCfg.ClientID, b.oidcClientSecret
+}
+
 func (cfg *Config) IssuerURL() string {
 	return cfg.issuerURL
 }

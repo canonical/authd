@@ -333,9 +333,6 @@ func (m gdmModel) Update(msg tea.Msg) (gdmModel, tea.Cmd) {
 		}
 
 		if access == auth.Denied {
-			if authMsg != "" {
-				return m, sendEvent(m.emitEventSync(event))
-			}
 			// Let GDM's normal PAM failure path handle authentication failures.
 			return m, nil
 		}

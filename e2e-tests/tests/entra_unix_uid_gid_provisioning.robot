@@ -144,6 +144,11 @@ Retry Entra Login
 Check Missing Unix GID Error
     Match Text    Microsoft Entra ID did not provide a valid required Unix GID    30    similarity=85
 
+Check Missing Unix GID Denial In Journal
+    ${denial}=    SSH.Execute
+    ...    journalctl -b --no-pager | grep -F 'IsAuthenticated result' | grep -F 'denied' | grep -F 'valid required Unix GID' || true
+    Should Not Be Empty    ${denial}
+
 Check Missing Unix UID Error
     Match Text    Microsoft Entra ID did not provide a valid required Unix UID    30    similarity=85
 
@@ -374,7 +379,7 @@ Test polkit authentication rejects missing group GID then succeeds when optional
     Match Text    2. Entra ID authentication    15
     Hid.Type String    2
     Hid.Keys Combo    Return
-    Enter Entra ID Password And MFA    Check Missing Unix GID Error
+    Enter Entra ID Password And MFA    Check Missing Unix GID Denial In Journal
     ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
     ${marker_exists}=    SSH.Execute    test -e /tmp/polkit-authd-test-no-gid && echo yes || true
     Should Be Empty    ${marker_exists}
@@ -448,14 +453,14 @@ Test Required Entra UID rejects users without a UID, optional UID allows login
 
 Test Required Entra group GID rejects groups without a GID, optional GID allows login
     [Documentation]    Verify the generic Entra account's test group without a GID is
-    ...    rejected when GID is required and can log in when GID is optional.
+    ...    rejected when GID is required even without a forced provider check, and can log in when GID is optional.
     [Setup]    Test Setup With Generic Entra Account
 
     Log In
     Open Terminal
     Change Broker Configuration    unix_uid_required    false
     Change Broker Configuration    unix_gid_required    true
-    Change Broker Configuration    force_access_check_with_provider    true
+    Change Broker Configuration    force_access_check_with_provider    false
     Start Entra Login
     Check Missing Unix GID Error
     Match Text    Login incorrect    30

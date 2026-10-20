@@ -4,7 +4,7 @@ myst:
     "description lang=en": "Configure and apply stable Unix IDs from Microsoft Entra ID."
 ---
 
-  (howto::configure-entra-unix-ids)=
+(howto::configure-entra-unix-ids)=
 # Configure stable Unix IDs from Entra ID
 
 The Microsoft Entra broker can read a Unix UID from the authenticated user and
@@ -23,10 +23,12 @@ and one on the `Group` object for the GID. The Graph API can create them with
 requests like these, using the application registration that is configured in
 the broker:
 
-```text
+```http
 POST https://graph.microsoft.com/v1.0/applications/{application-id}/extensionProperties
 Content-Type: application/json
+```
 
+```json
 {
   "name": "uidNumber",
   "dataType": "Integer",
@@ -34,10 +36,12 @@ Content-Type: application/json
 }
 ```
 
-```text
+```http
 POST https://graph.microsoft.com/v1.0/applications/{application-id}/extensionProperties
 Content-Type: application/json
+```
 
+```json
 {
   "name": "gidNumber",
   "dataType": "Integer",
@@ -47,9 +51,8 @@ Content-Type: application/json
 
 Record the full names returned by Graph. For an application client ID such as
 `abc-123`, a short name such as `uidNumber` resolves to
-`extension_abc123_uidNumber`. A value that already starts with `extension_` is
-used as a full name. Attribute names may contain only ASCII letters, digits,
-and underscores.
+`extension_abc123_uidNumber`. A full name such as
+`extension_abc123_uidNumber` is passed to Entra as written.
 
 ## Discover full property names
 
@@ -169,8 +172,11 @@ unix_uid_required = false
 unix_gid_required = false
 ```
 
-The `unix_uid_required` and `unix_gid_required` flags deny a login only when
-`force_access_check_with_provider = true`.
+On a successful refresh, a missing or invalid required value denies login in
+both modes. An unreadable required value and a refresh that cannot complete
+follow `force_access_check_with_provider`: the forced check denies login;
+without it, a returning login uses its cached snapshot. Offline login is denied
+when checks are forced and uses cached values when they are not.
 
 Use the full names when the properties were created by Entra Connect or Cloud
 Sync:
@@ -182,13 +188,17 @@ unix_gid_attribute = extension_abc123_gidNumber
 ```
 
 Set a required flag only when every applicable login must have the value. A
-required flag with an empty attribute is invalid configuration. The required
-flags are enforced only when `force_access_check_with_provider = true`. In that
-mode, a required value that is missing, null, malformed, fractional, negative,
-zero, out-of-range, reserved, or unreadable fails the login. Without the forced
-check, the login continues. A value that cannot be read keeps its cached value,
-and a successful response with an absent, null, or invalid value clears a
-previous cached value. Optional values behave the same way in both modes.
+required flag with an empty attribute is invalid configuration. A successful
+refresh that returns an absent, null, or invalid required value denies login in
+both modes and clears the value in the refreshed snapshot before denial. An
+unreadable required value denies with checks forced; without forced checks, the
+cached value is used, or the value remains empty if none is cached. A refresh
+that cannot complete denies with checks forced and uses the previous snapshot
+without them. Optional values never deny login.
+
+A required GID applies to every remote group. A remote group without a GID
+denies login in both modes. Local `linux-*` groups are skipped. An unforced GID
+requirement can therefore lock out users whose remote groups lack a GID.
 
 If you change `unix_uid_attribute` or `unix_gid_attribute`, the broker drops
 the cached IDs that came from the old attribute. It does this the next time it
@@ -216,9 +226,9 @@ When direct `entra_auth` is used without device registration, the existing
 app-only group fallback can read groups only when the configured OIDC
 application has `GroupMember.Read.All` application permission, admin consent,
 and a client secret. An app-only token cannot be used for `/me`, so UID lookup
-is best effort. An optional UID keeps its cached value, and `unix_uid_required =
-true` is enforced only with `force_access_check_with_provider = true`. The broker does not add a
-`User.Read.All` application-credential UID lookup.
+is unavailable. An optional UID keeps its cached value. A required UID denies
+login with checks forced and keeps its cached value without them. The broker
+does not add a `User.Read.All` application-credential UID lookup.
 
 The client secret is used only for the Graph app-only fallback. Entra
 public-client token refreshes do not send it, including when device
@@ -226,43 +236,27 @@ registration is disabled.
 
 ## Login and cache behavior
 
-On an initial online login, the broker reads the user and group attributes and
-caches one complete `UserInfo` snapshot. If enrichment fails as a whole, there is
-no previous snapshot and the login fails.
+On a first online login, a whole-refresh failure has no previous snapshot to
+fall back to, so login fails. Credentials and device-registration data may
+already be cached. Such a first-login entry has no completeness marker and may
+have no groups or UID. A later unforced login can use it as the previous
+snapshot when a refresh cannot complete, even if required IDs are missing. A
+successful refresh that returns a missing or invalid required value denies login
+in both modes. The next successful online login replaces the incomplete entry.
 
-The broker keeps the cached value of each Unix ID that it cannot read, with or
-without the forced check. A UID is kept when the token lacks `User.Read` or the
-UID request fails. A GID is kept when the GID attribute cannot be read; the
-cached GID of the same group, matched by `ugid`, is used. When the whole
-enrichment fails on a returning login, the existing authentication flow's
-fallback rules may use the previous complete snapshot. The device-code flow is
-the exception: with `force_access_check_with_provider = true`, it denies the
-login instead. With `force_access_check_with_provider = true`, a required value
-that is missing, invalid, or cannot be read denies the login, and so does a
-required value that the snapshot lacks when enrichment fails.
+On a returning login, a successful refresh that returns a missing or invalid
+required value denies login in both modes. The refreshed snapshot with the
+cleared value is saved before denial. An unreadable required value denies with
+checks forced; without them, the cached value is used, or left empty if none is
+cached. If the whole refresh cannot complete, checks forced deny login and
+checks not forced use the previous snapshot, even if it lacks a required ID. A
+GID that cannot be read uses the cached GID for the same group, matched by
+`ugid`. Refreshed credentials are retained even when enrichment denies login.
 
-Refreshed credentials and device-registration data are saved without replacing the
-previous directory snapshot until enrichment returns a snapshot. They are retained
-even if enrichment later denies login. On a returning login, a snapshot that clears
-a required ID is also saved, even when the forced check denies the login. On a
-first login, the forced check denies the login without saving that snapshot.
-Falling back to the previous `UserInfo` does not discard those credentials or mark
-an online session as offline.
-
-Known limitation: if a first login fails after device registration and before
-enrichment completes, `token.json` keeps the registration data but has no
-groups and no UID. The broker does not mark this entry as incomplete, so a
-later login can use it as the previous snapshot when a lookup fails
-completely. Such a login can succeed without remote groups or a UID. The
-device-code flow does this only when `force_access_check_with_provider` is
-`false`. Required flags stop such a login only with
-`force_access_check_with_provider = true`. The next successful online login
-replaces the entry with a complete snapshot.
-
-Offline login does not issue Graph requests. It uses the cached UID and GID
-values and grants the login even when some of them are missing; missing values
-stay empty. The required flags are enforced only with the forced check, which
-denies offline logins because the provider must be reachable.
+Offline login does not issue Graph requests. With checks forced, login is denied
+because the provider must be reachable. Without forced checks, the cached UID
+and GIDs are used even when some are missing. For the flow details, see the
+[explanation](../explanation/entra-unix-id-flows).
 
 The UID and GID fields are stored in the broker cache and are removed from the
 response sent to authd. Normal authd ID generation remains unchanged.
@@ -354,6 +348,9 @@ command defaults to a dry run:
 sudo apply-entra-unix-ids --uid-attribute extension_abc123_uidNumber \
   --gid-attribute extension_abc123_gidNumber /path/to/token.json
 ```
+
+From a source checkout, run `scripts/apply-entra-unix-ids` instead of the
+installed `apply-entra-unix-ids` command.
 
 If the configuration uses short names, also pass the `client_id` from the
 `[oidc]` section:

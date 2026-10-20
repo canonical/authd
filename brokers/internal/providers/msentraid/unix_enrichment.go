@@ -236,7 +236,7 @@ func (p *Provider) EnrichUserWithUnixAttributes(
 	if config.GIDAttribute != "" && config.GIDRequired {
 		for _, group := range enriched.Groups {
 			if group.UGID != "" && group.GID == nil {
-				unreadable = append(unreadable, fmt.Errorf("%w: Unix GID is missing for group %q", info.ErrUnixGIDRequired, group.Name))
+				unreadable = append(unreadable, fmt.Errorf("%w: %w: Unix GID is missing for group %q", info.ErrUnixGIDRequired, info.ErrUnixAttributeMissing, group.Name))
 				break
 			}
 		}
@@ -318,7 +318,7 @@ func parseConfiguredUnixID(additionalData map[string]any, attribute, object stri
 	value, ok := additionalData[attribute]
 	if !ok || value == nil {
 		if required {
-			return nil, fmt.Errorf("%w: Unix attribute %q is missing from %s", requiredUnixAttributeError(object), attribute, object)
+			return nil, fmt.Errorf("%w: %w: Unix attribute %q is missing from %s", requiredUnixAttributeError(object), info.ErrUnixAttributeMissing, attribute, object)
 		}
 		return nil, nil
 	}
@@ -327,7 +327,7 @@ func parseConfiguredUnixID(additionalData map[string]any, attribute, object stri
 	if err != nil {
 		log.Warningf(context.Background(), "Invalid Unix attribute %q in %s: %v", attribute, object, err)
 		if required {
-			return nil, fmt.Errorf("%w: invalid Unix attribute %q in %s: %w", requiredUnixAttributeError(object), attribute, object, err)
+			return nil, fmt.Errorf("%w: %w: invalid Unix attribute %q in %s: %w", requiredUnixAttributeError(object), info.ErrUnixAttributeMissing, attribute, object, err)
 		}
 		return nil, nil
 	}

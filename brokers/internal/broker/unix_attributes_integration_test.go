@@ -313,84 +313,84 @@ func TestUnixAttributeFailuresDenyOnlyWithForcedMandatoryID(t *testing.T) {
 	}
 }
 
-func TestUnixAttributeForcedPartialStoresClearedUID(t *testing.T) {
+func TestUnixAttributeMissingRequiredValueDeniesAndStoresClearedValue(t *testing.T) {
 	t.Parallel()
 
 	for _, flow := range []string{"device", "password", "entra"} {
-		for _, force := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/forced=%t", flow, force), func(t *testing.T) {
-				t.Parallel()
+		for _, attribute := range []string{"UID", "GID"} {
+			for _, force := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%s/forced=%t", attribute, flow, force), func(t *testing.T) {
+					t.Parallel()
 
-				const username = "test-user@email.com"
-				mfaInfo := generateCachedInfo(t, tokenOptions{username: username})
-				provider := &unixFallbackProvider{
-					mockEntraAuthProvider: &mockEntraAuthProvider{
-						MockProvider: &testutils.MockProvider{},
-						flowState:    &himmelblau.MFAFlowState{},
-						challengeInfo: &himmelblau.MFAChallengeInfo{
-							Message: "Approve sign-in", Method: "PhoneAppNotification",
-							PollingIntervalMs: 1, MaxPollAttempts: 1,
+					const username = "test-user@email.com"
+					mfaInfo := generateCachedInfo(t, tokenOptions{username: username})
+					provider := &unixFallbackProvider{
+						mockEntraAuthProvider: &mockEntraAuthProvider{
+							MockProvider: &testutils.MockProvider{},
+							flowState:    &himmelblau.MFAFlowState{},
+							challengeInfo: &himmelblau.MFAChallengeInfo{
+								Message: "Approve sign-in", Method: "PhoneAppNotification",
+								PollingIntervalMs: 1, MaxPollAttempts: 1,
+							},
+							mfaTokenResult: newMFATokenResult(mfaInfo.Token),
+							unixUID:        1001, unixGID: 2001,
 						},
-						mfaTokenResult: newMFATokenResult(mfaInfo.Token),
-						unixUID:        1001, unixGID: 2001,
-					},
-					clearUID: true,
-				}
-				b := newBrokerForTests(t, &brokerForTestConfig{
-					Config:          broker.Config{DataDir: t.TempDir()},
-					allUsersAllowed: true, provider: provider,
-					unixUIDAttribute: "extension_uidNumber", unixGIDAttribute: "extension_gidNumber",
-					unixUIDRequired:              true,
-					forceAccessCheckWithProvider: force,
-					tokenHandlerOptions: &testutils.TokenHandlerOptions{
-						IDTokenClaims: []map[string]interface{}{{"aud": "test-client-id"}, {"aud": "test-client-id"}},
-					},
-				})
-				sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
-				cached := generateCachedInfo(t, tokenOptions{username: username})
-				uid, gid := uint32(1001), uint32(2001)
-				cached.UserInfo.UID = &uid
-				cached.UserInfo.Groups = []info.Group{{Name: "engineering", UGID: "group-id", GID: &gid}}
-				cached.UnixAttributeNames = &token.UnixAttributeNames{UID: "extension_uidNumber", GID: "extension_gidNumber"}
-				require.NoError(t, token.CacheAuthInfo(b.TokenPathForSession(sessionID), cached))
-				require.NoError(t, password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID)))
+						clearUID: attribute == "UID",
+						clearGID: attribute == "GID",
+					}
+					b := newBrokerForTests(t, &brokerForTestConfig{
+						Config:          broker.Config{DataDir: t.TempDir()},
+						allUsersAllowed: true, provider: provider,
+						unixUIDAttribute: "extension_uidNumber", unixGIDAttribute: "extension_gidNumber",
+						unixUIDRequired:              attribute == "UID",
+						unixGIDRequired:              attribute == "GID",
+						forceAccessCheckWithProvider: force,
+						tokenHandlerOptions: &testutils.TokenHandlerOptions{
+							IDTokenClaims: []map[string]interface{}{{"aud": "test-client-id"}, {"aud": "test-client-id"}},
+						},
+					})
+					sessionID, key := newSessionForTests(t, b, username, sessionmode.Login)
+					cached := generateCachedInfo(t, tokenOptions{username: username})
+					uid, gid := uint32(1001), uint32(2001)
+					cached.UserInfo.UID = &uid
+					cached.UserInfo.Groups = []info.Group{{Name: "engineering", UGID: "group-id", GID: &gid}}
+					cached.UnixAttributeNames = &token.UnixAttributeNames{UID: "extension_uidNumber", GID: "extension_gidNumber"}
+					require.NoError(t, token.CacheAuthInfo(b.TokenPathForSession(sessionID), cached))
+					require.NoError(t, password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID)))
 
-				authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
-				var access, data string
-				var err error
-				switch flow {
-				case "device":
-					updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
-					access, data, err = b.IsAuthenticated(sessionID, "{}")
-					if !force {
+					authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, "password", key))
+					var access, data string
+					var err error
+					switch flow {
+					case "device":
+						updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+						access, data, err = b.IsAuthenticated(sessionID, "{}")
+					case "entra":
+						updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
+						access, _, err = b.IsAuthenticated(sessionID, authData)
 						require.NoError(t, err)
-						require.Equal(t, broker.AuthNext, access, data)
-						updateAuthModes(t, b, sessionID, authmodes.NewPassword)
+						require.Equal(t, broker.AuthNext, access)
+						updateAuthModes(t, b, sessionID, authmodes.EntraMFAWait)
+						access, data, err = b.IsAuthenticated(sessionID, "{}")
+					default:
+						updateAuthModes(t, b, sessionID, authmodes.Password)
 						access, data, err = b.IsAuthenticated(sessionID, authData)
 					}
-				case "entra":
-					updateAuthModes(t, b, sessionID, authmodes.EntraAuth)
-					access, _, err = b.IsAuthenticated(sessionID, authData)
 					require.NoError(t, err)
-					require.Equal(t, broker.AuthNext, access)
-					updateAuthModes(t, b, sessionID, authmodes.EntraMFAWait)
-					access, data, err = b.IsAuthenticated(sessionID, "{}")
-				default:
-					updateAuthModes(t, b, sessionID, authmodes.Password)
-					access, data, err = b.IsAuthenticated(sessionID, authData)
-				}
-				require.NoError(t, err)
-				if force {
 					require.Equal(t, broker.AuthDenied, access, data)
-				} else {
-					require.Equal(t, broker.AuthGranted, access, data)
-				}
 
-				stored, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
-				require.NoError(t, err)
-				require.Nil(t, stored.UserInfo.UID, "the provider reported the required UID as missing")
-				require.Equal(t, &token.UnixAttributeNames{UID: "extension_uidNumber", GID: "extension_gidNumber"}, stored.UnixAttributeNames)
-			})
+					stored, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+					require.NoError(t, err)
+					if attribute == "UID" {
+						require.Nil(t, stored.UserInfo.UID, "the provider reported the required UID as missing")
+						require.NotNil(t, stored.UserInfo.Groups[0].GID)
+					} else {
+						require.NotNil(t, stored.UserInfo.UID)
+						require.Nil(t, stored.UserInfo.Groups[0].GID, "the provider reported the required GID as missing")
+					}
+					require.Equal(t, &token.UnixAttributeNames{UID: "extension_uidNumber", GID: "extension_gidNumber"}, stored.UnixAttributeNames)
+				})
+			}
 		}
 	}
 }
@@ -690,6 +690,7 @@ type unixFallbackProvider struct {
 	partialErr       error
 	keepCached       bool
 	clearUID         bool
+	clearGID         bool
 	beforeEnrichment func()
 }
 
@@ -706,7 +707,11 @@ func (p *unixFallbackProvider) EnrichUserWithUnixAttributes(ctx context.Context,
 	}
 	if p.clearUID {
 		user.UID = nil
-		return user, fmt.Errorf("%w: %w", info.ErrUnixAttributePartial, info.ErrUnixUIDRequired)
+		return user, fmt.Errorf("%w: %w: %w", info.ErrUnixAttributePartial, info.ErrUnixUIDRequired, info.ErrUnixAttributeMissing)
+	}
+	if p.clearGID {
+		user.Groups[0].GID = nil
+		return user, fmt.Errorf("%w: %w: %w", info.ErrUnixAttributePartial, info.ErrUnixGIDRequired, info.ErrUnixAttributeMissing)
 	}
 	if p.keepCached {
 		return user, nil
