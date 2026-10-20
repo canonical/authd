@@ -4715,7 +4715,7 @@ func TestIsAuthenticatedPasswordGenericProviderRefreshDetectsDisabledUser(t *tes
 					provider:                     provider,
 				})
 
-				sessionID, key, err := b.NewSession(username, "lang", sessionmode.Login, "saved-user-id")
+				sessionID, key, err := b.NewSession(username, "lang", sessionmode.Login, "test-user-id")
 				require.NoError(t, err)
 				generateAndStoreCachedInfo(t, tokenOptions{}, b.TokenPathForSession(sessionID))
 				require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
@@ -4740,7 +4740,7 @@ func TestIsAuthenticatedPasswordGenericProviderRefreshDetectsDisabledUser(t *tes
 					issuerURL: issuerURL,
 					provider:  provider,
 				})
-				offlineSessionID, offlineKey, err := offlineBroker.NewSession(username, "lang", sessionmode.Login, "saved-user-id")
+				offlineSessionID, offlineKey, err := offlineBroker.NewSession(username, "lang", sessionmode.Login, "test-user-id")
 				require.NoError(t, err)
 				updateAuthModes(t, offlineBroker, offlineSessionID, authmodes.Password)
 				offlineAuthData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, offlineKey))
@@ -4780,7 +4780,7 @@ func TestIsAuthenticatedPasswordRefreshFallsBackOnTransientRetrieveError(t *test
 				refreshErr: refreshErr,
 			}
 
-			b, sessionID, access, _ := runReturningEntraAuthLogin(t, provider, false)
+			b, sessionID, access := runReturningEntraAuthLogin(t, provider, false)
 			require.Equal(t, broker.AuthGranted, access,
 				"a transient token endpoint failure must use cached credentials")
 
@@ -4802,7 +4802,7 @@ func TestIsAuthenticatedPasswordRefreshFallsBackOnExpiredRetrieveError(t *testin
 		},
 	}
 
-	b, sessionID, access, _ := runReturningEntraAuthLogin(t, provider, false)
+	b, sessionID, access := runReturningEntraAuthLogin(t, provider, false)
 	require.Equal(t, broker.AuthGranted, access,
 		"an expired refresh token must use cached credentials when provider access checks are optional")
 
@@ -5063,7 +5063,7 @@ func TestIsAuthenticatedPasswordRefreshHandlesUnknownRetrieveError(t *testing.T)
 				},
 			}
 
-			b, sessionID, access, _ := runReturningEntraAuthLogin(t, provider, tc.forceAccessCheckWithProvider)
+			b, sessionID, access := runReturningEntraAuthLogin(t, provider, tc.forceAccessCheckWithProvider)
 			require.Equal(t, tc.wantAccess, access)
 
 			offline, err := b.IsOffline(sessionID)
@@ -5092,7 +5092,7 @@ func TestIsAuthenticatedPasswordRefreshFallsBackOnConfigurationRetrieveError(t *
 				},
 			}
 
-			b, sessionID, access, _ := runReturningEntraAuthLogin(t, provider, forceAccessCheckWithProvider)
+			b, sessionID, access := runReturningEntraAuthLogin(t, provider, forceAccessCheckWithProvider)
 
 			if forceAccessCheckWithProvider {
 				require.Equal(t, broker.AuthDenied, access,
@@ -5257,7 +5257,7 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshUpdatesUserInfo(t *testing.T) {
 		"groups must be preserved from the cached token, not overwritten by the refresh")
 }
 
-func runReturningEntraAuthLogin(t *testing.T, provider *mockEntraAuthProvider, forceAccessCheckWithProvider bool) (*broker.Broker, string, string, string) {
+func runReturningEntraAuthLogin(t *testing.T, provider *mockEntraAuthProvider, forceAccessCheckWithProvider bool) (*broker.Broker, string, string) {
 	t.Helper()
 
 	const correctPassword = "password"
@@ -5276,10 +5276,10 @@ func runReturningEntraAuthLogin(t *testing.T, provider *mockEntraAuthProvider, f
 
 	updateAuthModes(t, b, sessionID, authmodes.Password)
 	authData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
-	access, data, err := b.IsAuthenticated(sessionID, authData)
+	access, _, err := b.IsAuthenticated(sessionID, authData)
 	require.NoError(t, err)
 
-	return b, sessionID, access, data
+	return b, sessionID, access
 }
 
 // TestIsAuthenticatedPasswordEntraTokenRefreshPreservesRotationOnUserInfoError
@@ -5297,7 +5297,7 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshPreservesRotationOnUserInfoErro
 		userInfoFromTokenErr: errors.New("missing preferred_username claim"),
 	}
 
-	b, sessionID, access, _ := runReturningEntraAuthLogin(t, provider, true)
+	b, sessionID, access := runReturningEntraAuthLogin(t, provider, true)
 	require.Equal(t, broker.AuthDenied, access,
 		"a forced provider check must deny when refreshed user info cannot be extracted")
 
@@ -5323,7 +5323,7 @@ func TestIsAuthenticatedPasswordEntraTokenRefreshFallsBackOnUserInfoError(t *tes
 		userInfoFromTokenErr: errors.New("missing preferred_username claim"),
 	}
 
-	b, sessionID, access, _ := runReturningEntraAuthLogin(t, provider, false)
+	b, sessionID, access := runReturningEntraAuthLogin(t, provider, false)
 	require.Equal(t, broker.AuthGranted, access,
 		"a local user-info failure must not block a returning login when provider access checks are optional")
 

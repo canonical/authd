@@ -1635,6 +1635,9 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 			var netErr net.Error
 			udc, isUserDisabledChecker := providers.ProviderAs[providers.UserDisabledChecker](b.provider)
 			switch {
+			case errors.Is(err, errProviderIDMismatch):
+				log.Error(context.Background(), err.Error())
+				return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
 			case refreshTokenErrorKind == providerErrors.RefreshTokenErrorRevoked:
 				log.Noticef(context.Background(), "Refresh token revoked for user %q", session.username)
 				b.invalidateCachedCredentials(session)
