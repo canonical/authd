@@ -2197,13 +2197,9 @@ func TestGdmModel(t *testing.T) {
 				gdm.EventType_authModesReceived,
 				gdm.EventType_authModeSelected,
 				gdm.EventType_uiLayoutReceived,
-				gdm.EventType_authEvent,
 			},
-			wantGdmAuthRes: []*authd.IAResponse{{
-				Access: auth.Denied,
-				Msg:    "you're not allowed!",
-			}},
-			wantStage: gdmTestIgnoreStage,
+			wantNoGdmEvents: []gdm.EventType{gdm.EventType_authEvent},
+			wantStage:       gdmTestIgnoreStage,
 			wantPAMReturnValue: pamError{
 				status: pam.ErrAuth,
 				msg:    "you're not allowed!",

@@ -46,9 +46,9 @@ const (
 	unixUIDAttributeKey = "unix_uid_attribute"
 	// unixGIDAttributeKey is the configured Entra extension attribute containing a group's Unix GID.
 	unixGIDAttributeKey = "unix_gid_attribute"
-	// unixUIDRequiredKey requires a usable UID for login. It is only enforced when force_access_check_with_provider is true.
+	// unixUIDRequiredKey requires a usable UID for login.
 	unixUIDRequiredKey = "unix_uid_required"
-	// unixGIDRequiredKey requires usable remote group GIDs for login. It is only enforced when force_access_check_with_provider is true.
+	// unixGIDRequiredKey requires usable remote group GIDs for login.
 	unixGIDRequiredKey = "unix_gid_required"
 
 	// usersSection is the section name in the config file for the users and broker specific configuration.
@@ -502,9 +502,6 @@ func resolveUnixAttributeName(attributeName, clientID string) (string, error) {
 	if attributeName == "" {
 		return "", nil
 	}
-	if !isASCIIIdentifier(attributeName) {
-		return "", fmt.Errorf("attribute name %q must contain only ASCII letters, digits, and underscores", attributeName)
-	}
 	if strings.HasPrefix(attributeName, "extension_") {
 		return attributeName, nil
 	}
@@ -514,20 +511,7 @@ func resolveUnixAttributeName(attributeName, clientID string) (string, error) {
 		return "", errors.New("a client ID is required to resolve a short attribute name")
 	}
 	resolved := "extension_" + clientID + "_" + attributeName
-	if !isASCIIIdentifier(resolved) {
-		return "", fmt.Errorf("resolved attribute name %q must contain only ASCII letters, digits, and underscores", resolved)
-	}
 	return resolved, nil
-}
-
-func isASCIIIdentifier(value string) bool {
-	for _, char := range []byte(value) {
-		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '_' {
-			continue
-		}
-		return false
-	}
-	return value != ""
 }
 
 func (uc *userConfig) userNameIsAllowed(userName string) bool {

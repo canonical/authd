@@ -24,6 +24,7 @@ import (
 	"github.com/canonical/authd/brokers/internal/consts"
 	"github.com/canonical/authd/brokers/internal/fido"
 	"github.com/canonical/authd/brokers/internal/password"
+	"github.com/canonical/authd/brokers/internal/providers"
 	providerErrors "github.com/canonical/authd/brokers/internal/providers/errors"
 	"github.com/canonical/authd/brokers/internal/providers/info"
 	"github.com/canonical/authd/brokers/internal/providers/msentraid/himmelblau"
@@ -490,6 +491,64 @@ func TestNew(t *testing.T) {
 			}
 			require.NoError(t, err, "New should not have returned an error")
 			require.NotNil(t, b, "New should have returned a non-nil broker")
+		})
+	}
+}
+
+func TestNewPreservesConfiguredOIDCSettings(t *testing.T) {
+	t.Parallel()
+
+	cfg := &broker.Config{DataDir: t.TempDir()}
+	cfg.Init()
+	cfg.SetIssuerURL(defaultIssuerURL)
+	cfg.SetClientID(consts.MicrosoftBrokerAppID)
+	cfg.SetClientSecret("configured-secret")
+
+	b, err := broker.New(*cfg, broker.LatestAPIVersion, broker.WithCustomProvider(&testutils.MockProvider{}))
+	require.NoError(t, err)
+
+	gotClientID, gotClientSecret := b.Z_ForTests_OIDCConfig()
+	require.Equal(t, consts.MicrosoftBrokerAppID, gotClientID)
+	require.Equal(t, "configured-secret", gotClientSecret)
+}
+
+func TestNewRejectsRequiredUnixAttributesWithoutEnricher(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		uidRequired      bool
+		gidRequired      bool
+		withEnricher     bool
+		wantErrorMessage string
+	}{
+		"Required_UID_without_enricher": {uidRequired: true, wantErrorMessage: "unix_uid_required"},
+		"Required_GID_without_enricher": {gidRequired: true, wantErrorMessage: "unix_gid_required"},
+		"Optional_IDs_without_enricher": {},
+		"Required_UID_with_enricher":    {uidRequired: true, withEnricher: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &broker.Config{DataDir: t.TempDir()}
+			cfg.Init()
+			cfg.SetIssuerURL(defaultIssuerURL)
+			cfg.SetClientID("test-client-id")
+			cfg.SetUnixAttributes("uidNumber", "gidNumber", tc.uidRequired, tc.gidRequired)
+
+			var provider providers.Provider = &testutils.MockProvider{}
+			if tc.withEnricher {
+				provider = &mockEntraAuthProvider{MockProvider: &testutils.MockProvider{}}
+			}
+			b, err := broker.New(*cfg, broker.LatestAPIVersion, broker.WithCustomProvider(provider))
+			if tc.wantErrorMessage != "" {
+				require.ErrorContains(t, err, tc.wantErrorMessage)
+				require.Nil(t, b)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, b)
 		})
 	}
 }

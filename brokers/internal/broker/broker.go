@@ -343,6 +343,14 @@ func newBroker(cfg Config, apiVersion uint, p providers.Provider, args ...Option
 	if cfg.clientID == "" {
 		err = errors.Join(err, errors.New("client ID is required and was not provided"))
 	}
+	if _, ok := providers.ProviderAs[info.UnixAttributeEnricher](opts.provider); !ok {
+		if cfg.unixUIDRequired {
+			err = errors.Join(err, fmt.Errorf("invalid configuration: %q requires a provider that supports Unix attribute enrichment", unixUIDRequiredKey))
+		}
+		if cfg.unixGIDRequired {
+			err = errors.Join(err, fmt.Errorf("invalid configuration: %q requires a provider that supports Unix attribute enrichment", unixGIDRequiredKey))
+		}
+	}
 	// The entra_auth flow can only retrieve groups from Microsoft Graph when
 	// device registration or a client secret is available (see the matching check
 	// in authModeIsAvailable). If neither is configured, the flow is unusable, so
@@ -372,13 +380,14 @@ func newBroker(cfg Config, apiVersion uint, p providers.Provider, args ...Option
 	}
 
 	clientID := cfg.clientID
-	if _, ok := providers.ProviderAs[providers.DeviceRegisterer](opts.provider); ok && cfg.registerDevice {
-		clientID = consts.MicrosoftBrokerAppID
-	}
-
 	oidcClientSecret := cfg.clientSecret
-	if _, ok := providers.ProviderAs[providers.DeviceRegisterer](opts.provider); ok || clientID == consts.MicrosoftBrokerAppID {
+	if _, ok := providers.ProviderAs[providers.DeviceRegisterer](opts.provider); ok {
+		// Entra device-code authentication uses a public OIDC client. The
+		// secret is reserved for the provider's app-only Graph fallback.
 		oidcClientSecret = ""
+		if cfg.registerDevice {
+			clientID = consts.MicrosoftBrokerAppID
+		}
 	}
 
 	b = &Broker{
@@ -3283,6 +3292,11 @@ func (b *Broker) unixAttributeEnrichmentEnabled() bool {
 	return b.cfg.unixUIDAttribute != "" || b.cfg.unixGIDAttribute != ""
 }
 
+func (b *Broker) mustDenyUnixAttributeError(err error) bool {
+	return errors.Is(err, info.ErrUnixAttributeMissing) ||
+		(b.cfg.forceAccessCheckWithProvider && errors.Is(err, info.ErrUnixAttributeRequired))
+}
+
 func (b *Broker) enrichUserInfo(ctx context.Context, session *session, authInfo *token.AuthCachedInfo, transientToken *oauth2.Token) error {
 	if session.isOffline {
 		return nil
@@ -3297,8 +3311,8 @@ func (b *Broker) enrichUserInfo(ctx context.Context, session *session, authInfo 
 			}
 			return fmt.Errorf("%w: %w", info.ErrGroupsUnavailable, err)
 		}
-		// Partial results only report mandatory attributes, and only the forced check denies them.
-		if b.cfg.forceAccessCheckWithProvider {
+		// Missing values are authoritative; unreadable values follow the force setting.
+		if b.cfg.forceAccessCheckWithProvider || errors.Is(err, info.ErrUnixAttributeMissing) {
 			// On a returning login, the caller stores this snapshot before denying the login.
 			authInfo.UserInfo = enriched
 			b.recordUnixAttributeNames(authInfo)
@@ -3600,11 +3614,6 @@ func (b *Broker) refreshGroupsAndHandle(ctx context.Context, session *session, a
 		return AuthDenied, errorMessageForDisplay(err, "Required Unix ID data is unavailable")
 	}
 	return b.handleGroupFetch(ctx, session, authInfo, cachedInfo, authInfo.UserInfo.Groups, err)
-}
-
-func (b *Broker) mustDenyUnixAttributeError(err error) bool {
-	return errors.Is(err, info.ErrUnixAttributeMissing) ||
-		(b.cfg.forceAccessCheckWithProvider && errors.Is(err, info.ErrUnixAttributeRequired))
 }
 
 // Checks if the provided error is of type ForDisplayError. If it is, it returns the error message. Else, it returns

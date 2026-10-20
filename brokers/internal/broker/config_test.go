@@ -393,18 +393,15 @@ func TestResolveUnixAttributeName(t *testing.T) {
 		want          string
 		wantErr       bool
 	}{
-		"Empty_is_disabled":              {attributeName: "  ", clientID: "client-id"},
-		"Short_name_is_prefixed":         {attributeName: "uidNumber", clientID: "abc-123", want: "extension_abc123_uidNumber"},
-		"Full_name_is_unchanged":         {attributeName: "extension_abc123_uidNumber", clientID: "ignored", want: "extension_abc123_uidNumber"},
-		"Client_ID_hyphens_are_removed":  {attributeName: "gidNumber", clientID: "abc-def-123", want: "extension_abcdef123_gidNumber"},
-		"Whitespace_is_trimmed":          {attributeName: " uidNumber ", clientID: "abc123", want: "extension_abc123_uidNumber"},
-		"Empty_client_ID_for_short_name": {attributeName: "uidNumber", wantErr: true},
-		"Whitespace_in_name_is_rejected": {attributeName: "uid Number", clientID: "abc123", wantErr: true},
-		"Control_character_is_rejected":  {attributeName: "uid\nNumber", clientID: "abc123", wantErr: true},
-		"Dollar_sign_is_rejected":        {attributeName: "uid$Number", clientID: "abc123", wantErr: true},
-		"Quote_is_rejected":              {attributeName: `uid"Number`, clientID: "abc123", wantErr: true},
-		"Dot_is_rejected":                {attributeName: "uid.Number", clientID: "abc123", wantErr: true},
-		"Empty_full_prefix_is_rejected":  {attributeName: "extension_", clientID: "abc123", want: "extension_"},
+		"Empty_is_disabled":                                    {attributeName: "  ", clientID: "client-id"},
+		"Short_name_is_prefixed":                               {attributeName: "uidNumber", clientID: "abc-123", want: "extension_abc123_uidNumber"},
+		"Full_name_is_unchanged":                               {attributeName: "extension_abc123_uidNumber", clientID: "ignored", want: "extension_abc123_uidNumber"},
+		"Client_ID_hyphens_are_removed":                        {attributeName: "gidNumber", clientID: "abc-def-123", want: "extension_abcdef123_gidNumber"},
+		"Whitespace_is_trimmed":                                {attributeName: " uidNumber ", clientID: "abc123", want: "extension_abc123_uidNumber"},
+		"Empty_client_ID_for_short_name":                       {attributeName: "uidNumber", wantErr: true},
+		"Special_characters_in_short_name_are_passed_to_Entra": {attributeName: "uid$ Number", clientID: "abc123", want: "extension_abc123_uid$ Number"},
+		"Special_characters_in_full_name_are_passed_unchanged": {attributeName: "extension_abc123:uid", clientID: "ignored", want: "extension_abc123:uid"},
+		"Empty_full_prefix_is_accepted":                        {attributeName: "extension_", clientID: "abc123", want: "extension_"},
 	}
 
 	for name, tc := range tests {

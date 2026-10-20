@@ -46,14 +46,13 @@ EOF
 resolve_attribute_name() {
 	local name=$1
 
-	[[ -z "$name" || "$name" =~ ^[A-Za-z0-9_]+$ ]] || fail "attribute name must contain only ASCII letters, digits, and underscores: $name"
+	# Entra validates the property name; do not constrain its characters here.
 	resolved_attribute_name=$name
 	if [[ -z "$name" || "$name" == extension_* ]]; then
 		return
 	fi
 	[[ -n "$client_id" ]] || fail "a short attribute name needs --client-id: $name"
 	resolved_attribute_name="extension_${client_id//-/}_$name"
-	[[ "$resolved_attribute_name" =~ ^[A-Za-z0-9_]+$ ]] || fail "resolved attribute name must contain only ASCII letters, digits, and underscores: $resolved_attribute_name"
 }
 
 while (($# > 0)); do
