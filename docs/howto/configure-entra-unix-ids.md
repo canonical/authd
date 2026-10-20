@@ -24,7 +24,8 @@ requests like these, using the application registration that is configured in
 the broker:
 
 ```http
-POST https://graph.microsoft.com/v1.0/applications/{application-id}/extensionProperties
+POST /v1.0/applications/{application-id}/extensionProperties HTTP/1.1
+Host: graph.microsoft.com
 Content-Type: application/json
 ```
 
@@ -37,7 +38,8 @@ Content-Type: application/json
 ```
 
 ```http
-POST https://graph.microsoft.com/v1.0/applications/{application-id}/extensionProperties
+POST /v1.0/applications/{application-id}/extensionProperties HTTP/1.1
+Host: graph.microsoft.com
 Content-Type: application/json
 ```
 

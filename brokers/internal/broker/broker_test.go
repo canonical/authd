@@ -507,7 +507,7 @@ func TestNewPreservesConfiguredOIDCSettings(t *testing.T) {
 	b, err := broker.New(*cfg, broker.LatestAPIVersion, broker.WithCustomProvider(&testutils.MockProvider{}))
 	require.NoError(t, err)
 
-	gotClientID, gotClientSecret := b.Z_ForTests_OIDCConfig()
+	gotClientID, gotClientSecret := b.OIDCConfigForTests()
 	require.Equal(t, consts.MicrosoftBrokerAppID, gotClientID)
 	require.Equal(t, "configured-secret", gotClientSecret)
 }
