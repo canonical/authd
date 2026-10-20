@@ -512,6 +512,38 @@ func TestNewPreservesConfiguredOIDCSettings(t *testing.T) {
 	require.Equal(t, "configured-secret", gotClientSecret)
 }
 
+func TestNewSetsOIDCClientForDeviceRegistration(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name           string
+		registerDevice bool
+		wantClientID   string
+	}{
+		{name: "device code keeps configured client ID", wantClientID: "configured-client-id"},
+		{name: "device registration uses Microsoft Broker App", registerDevice: true, wantClientID: consts.MicrosoftBrokerAppID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &broker.Config{DataDir: t.TempDir()}
+			cfg.Init()
+			cfg.SetIssuerURL(defaultIssuerURL)
+			cfg.SetClientID("configured-client-id")
+			cfg.SetClientSecret("configured-secret")
+			cfg.SetRegisterDevice(tc.registerDevice)
+
+			provider := &mockEntraAuthProvider{MockProvider: &testutils.MockProvider{}}
+			b, err := broker.New(*cfg, broker.LatestAPIVersion, broker.WithCustomProvider(provider))
+			require.NoError(t, err)
+
+			gotClientID, gotClientSecret := b.OIDCConfigForTests()
+			require.Equal(t, tc.wantClientID, gotClientID)
+			require.Empty(t, gotClientSecret)
+		})
+	}
+}
+
 func TestNewRejectsRequiredUnixAttributesWithoutEnricher(t *testing.T) {
 	t.Parallel()
 

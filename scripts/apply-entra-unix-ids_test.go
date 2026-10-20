@@ -459,3 +459,24 @@ func TestApplyEntraUnixIDsResolvesShortAttributeNames(t *testing.T) {
 		require.Empty(t, run.calls, "an unresolved name must not invoke authctl")
 	})
 }
+
+func TestApplyEntraUnixIDsAcceptsPunctuationBearingAttributeNames(t *testing.T) {
+	t.Parallel()
+
+	const input = `{"UserInfo":{"name":"alice","uid":41001,"groups":[{"name":"engineering","ugid":"group-id","gid":42001}]},"UnixAttributeNames":{"UID":"extension_abc123_uid$Number","GID":"extension_sync:gidNumber"}}`
+	args := []string{
+		"--uid-attribute", "uid$Number",
+		"--gid-attribute", "extension_sync:gidNumber",
+		"--client-id", "abc-123",
+	}
+	run := runApplyEntraUnixIDsWithArgs(t, input, true, args)
+
+	require.NoError(t, run.err, run.output)
+	require.Equal(t,
+		"user set-uid -- alice 41001\n"+
+			"group set-gid -- alice 41001\n"+
+			"group set-gid -- engineering 42001\n",
+		run.calls,
+	)
+	require.Equal(t, run.tokenPath+"\n", run.reads)
+}
