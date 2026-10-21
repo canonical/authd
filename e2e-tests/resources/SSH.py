@@ -111,14 +111,19 @@ class SSH:
     async def execute_as_current_user(
         self, command: str, timeout: int | None = 30
     ) -> str:
-        # Get the user that is currently logged in by checking which user the
-        # gnome-shell process runs as
-        stdout = await self.execute("ps -C gnome-shell -o user=")
-        users = stdout.strip().split("\n")
-        if len(users) == 0:
+        stdout = await self.execute("ps -C gnome-shell -o uid=")
+        uids = [uid.strip() for uid in stdout.splitlines() if uid.strip()]
+        if len(uids) == 0:
             raise RuntimeError("No user is currently logged in")
-        elif len(users) > 1:
-            raise RuntimeError(f"Multiple users are logged in: {users}")
-        user = users[0].strip()
+        elif len(uids) > 1:
+            raise RuntimeError(f"Multiple users are logged in: {uids}")
+        uid = uids[0]
+        if not uid.isdecimal():
+            raise RuntimeError(f"Invalid UID for logged-in user: {uid}")
+
+        passwd_entry = await self.execute(f"getent passwd {uid}")
+        if not passwd_entry:
+            raise RuntimeError(f"No account found for logged-in UID: {uid}")
+        user = passwd_entry.split(":", 1)[0]
         logger.info(f"Running command as user '{user}'")
         return await self.execute_as_user(user, command, timeout)
