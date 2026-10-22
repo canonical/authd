@@ -487,6 +487,51 @@ func TestResolveAuthenticatedIdentityBindsFirstProviderIDToStoredUsername(t *tes
 	}
 }
 
+func TestResolveAuthenticatedIdentityWithoutStoredProviderUsername(t *testing.T) {
+	t.Parallel()
+
+	dbDir := t.TempDir()
+	err := db.Z_ForTests_CreateDBFromYAMLReader(strings.NewReader(`
+schema_version: 4
+users:
+  - name: legacy-user
+    uid: 1111
+    gid: 1111
+    broker_id: broker-id
+    provider_username: ""
+groups:
+  - name: legacy-user
+    gid: 1111
+    ugid: legacy-user
+users_to_groups:
+  - uid: 1111
+    gid: 1111
+`), dbDir)
+	require.NoError(t, err)
+	m := newManagerForTests(t, dbDir)
+	t.Cleanup(func() { _ = m.Stop() })
+
+	_, err = m.ResolveAuthenticatedIdentity("legacy-user", "broker-id", "provider-id", "other-user", "other-user")
+	require.ErrorContains(t, err, "conflicts with the stored identity",
+		"an empty provider username must not allow another identity to claim the account")
+
+	identity, err := m.ResolveAuthenticatedIdentity("legacy-user", "broker-id", "provider-id", "legacy-user", "legacy-user")
+	require.NoError(t, err, "users created by an older daemon should authenticate with their Unix name")
+	require.Equal(t, uint32(1111), identity.UID)
+
+	require.NoError(t, m.UpdateAuthenticatedUser(types.UserInfo{
+		Name:             identity.Name,
+		ProviderUsername: "legacy-user",
+		BrokerID:         "broker-id",
+		ProviderID:       "provider-id",
+	}))
+	stored, err := userstestutils.DBManager(m).UserByName("legacy-user")
+	require.NoError(t, err)
+	require.Equal(t, "legacy-user", stored.ProviderUsername)
+	require.Equal(t, "provider-id", stored.ProviderID)
+	require.Equal(t, identity.UID, stored.UID)
+}
+
 func TestUpdateAuthenticatedUserRejectsAccountLockedAfterResolution(t *testing.T) {
 	t.Parallel()
 

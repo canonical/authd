@@ -1307,7 +1307,11 @@ func (m *Manager) ResolveAuthenticatedIdentity(sessionUsername, brokerID, provid
 	if selected.ProviderID != "" && providerID != "" && selected.ProviderID != providerID {
 		return types.LoginIdentity{}, fmt.Errorf("authenticated provider ID conflicts with the stored identity for user %q", selected.Name)
 	}
-	if selected.ProviderID == "" && selected.ProviderUsername != providerUsername {
+	storedProviderUsername := selected.ProviderUsername
+	if storedProviderUsername == "" {
+		storedProviderUsername = selected.Name
+	}
+	if selected.ProviderID == "" && storedProviderUsername != providerUsername {
 		return types.LoginIdentity{}, fmt.Errorf("authenticated provider username %q conflicts with the stored identity for user %q",
 			providerUsername, selected.Name)
 	}
