@@ -5031,6 +5031,43 @@ func (p *failFirstEnrollmentsProvider) MaybeRegisterDevice(ctx context.Context, 
 	return p.mockEntraAuthProvider.MaybeRegisterDevice(ctx, tok, username, issuerURL, oldData)
 }
 
+// cacheWriteFailureOnEnrollmentProvider enrolls a device, then makes the
+// broker's cache write fail.
+type cacheWriteFailureOnEnrollmentProvider struct {
+	*mockEntraAuthProvider
+	tokenPath string
+}
+
+func (p *cacheWriteFailureOnEnrollmentProvider) MaybeRegisterDevice(ctx context.Context, tok *oauth2.Token, username, issuerURL string, oldData []byte) ([]byte, func(), error) {
+	data, cleanup, err := p.mockEntraAuthProvider.MaybeRegisterDevice(ctx, tok, username, issuerURL, oldData)
+	if err != nil || len(oldData) > 0 {
+		return data, cleanup, err
+	}
+	if err := os.Remove(p.tokenPath); err != nil {
+		return nil, func() {}, err
+	}
+	if err := os.Mkdir(p.tokenPath, 0700); err != nil {
+		return nil, func() {}, err
+	}
+	return data, cleanup, nil
+}
+
+func TestPasswordAuthKeepsCacheWriteFailureDeniedDuringReenrollment(t *testing.T) {
+	t.Parallel()
+
+	provider := &cacheWriteFailureOnEnrollmentProvider{mockEntraAuthProvider: newDeviceAuthProviderForTests(nil)}
+	b, sessionID, key := newDeviceRecoveryBrokerForTests(t, provider)
+	provider.tokenPath = b.TokenPathForSession(sessionID)
+	storeInvalidatedCacheForTests(t, b, sessionID, true)
+
+	updateAuthModes(t, b, sessionID, authmodes.Password)
+	access, data, err := b.IsAuthenticated(sessionID, passwordAuthData(t, key))
+	require.NoError(t, err)
+	require.Equal(t, broker.AuthDenied, access)
+	require.Contains(t, data, "failed to store token")
+	require.Equal(t, 1, provider.registrationEnrollments)
+}
+
 // staleOnceGroups fails the first group lookup with a confirmed
 // device-authentication failure, as after an administrator deleted the device
 // in Entra, and returns groups afterwards.

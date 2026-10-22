@@ -1724,9 +1724,12 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		var data isAuthenticatedDataResponse
 		cleanup, access, data = b.maybeRegisterDevice(ctx, session, authInfo, authInfo.Token, authInfo.DeviceRegistrationData)
 		if access == AuthDenied && reenrolling {
-			log.Errorf(context.Background(), "Could not enroll the device again for user %q", session.username)
-			session.nextAuthModes = reauthModes
-			return AuthNext, data
+			registrationErr, isRegistrationFailure := data.(errorMessage)
+			if isRegistrationFailure && registrationErr == errDeviceRegistrationFailed {
+				log.Errorf(context.Background(), "Could not enroll the device again for user %q", session.username)
+				session.nextAuthModes = reauthModes
+				return AuthNext, data
+			}
 		}
 		return access, data
 	}
@@ -3332,7 +3335,7 @@ func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, auth
 			return func() {}, AuthCancelled, nil
 		}
 		log.Errorf(context.Background(), "error registering device: %s", err)
-		return func() {}, AuthDenied, errorMessage{Message: "Error registering device"}
+		return func() {}, AuthDenied, errDeviceRegistrationFailed
 	}
 
 	fresh := len(deviceRegistrationData) > 0 && !slices.Equal(deviceRegistrationData, existingData)
@@ -3355,6 +3358,10 @@ func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, auth
 
 	// Store the auth info before group lookup, so fresh registration data is not
 	// lost if the login fails after this point.
+	//
+	// shortcut: if this write fails after a fresh enrollment, the new
+	// registration is lost, so the next login may enroll the device again.
+	// Retry the write when tenant device limits matter.
 	if err := token.CacheAuthInfo(session.tokenPath, authInfo); err != nil {
 		log.Errorf(context.Background(), "Failed to store token: %s", err)
 		return cleanup, AuthDenied, unexpectedErrMsg("failed to store token")
