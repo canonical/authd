@@ -372,9 +372,8 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 	}
 	defer func() { err = errors.Join(err, unlockEntries()) }()
 
-	// Consume the provider-name pre-auth entry before uniqueness checks while
-	// holding the user-management lock. This removes the temporary NSS record
-	// that would look like a system user and lets a new account inherit its UID.
+	// Keep the provider-name pre-auth entry until the update finishes so its
+	// UID and private-group GID stay reserved while allocating other groups.
 	var providerPreAuthUID uint32
 	hasProviderPreAuth := false
 	if u.ProviderUsername != "" && u.ProviderUsername != u.Name {
@@ -385,7 +384,7 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 		if preAuthErr == nil {
 			providerPreAuthUID = uid
 			hasProviderPreAuth = true
-			cleanup()
+			defer cleanup()
 		}
 	}
 

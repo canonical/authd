@@ -291,9 +291,8 @@ func TestUpdateUserUsesProviderUsernamePreAuthUID(t *testing.T) {
 	suffix := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
 	unixUsername := "unix-" + suffix
 	providerUsername := "provider-" + suffix
-	m := newManagerForTests(t, t.TempDir(), users.WithIDGenerator(&users.IDGeneratorMock{
-		UIDsToGenerate: []uint32{12345, 23456},
-	}))
+	m := newManagerForTests(t, t.TempDir())
+	t.Cleanup(func() { _ = m.Stop() })
 
 	preAuthUID, err := m.RegisterUserPreAuth(providerUsername)
 	require.NoError(t, err, "RegisterUserPreAuth should succeed")
@@ -303,12 +302,20 @@ func TestUpdateUserUsesProviderUsernamePreAuthUID(t *testing.T) {
 		ProviderUsername: providerUsername,
 		BrokerID:         "broker-id",
 		ProviderID:       "provider-id",
+		Groups:           []types.GroupInfo{{Name: "remote-" + suffix, UGID: "remote-group-id"}},
 	})
 	require.NoError(t, err, "UpdateUser should persist the account")
 
 	user, err := m.UserByName(unixUsername)
 	require.NoError(t, err, "the Unix user should be persisted")
 	require.Equal(t, preAuthUID, user.UID, "the account should inherit the alias pre-auth UID")
+
+	privateGroup, err := m.GroupByID(user.GID)
+	require.NoError(t, err)
+	require.Equal(t, unixUsername, privateGroup.Name, "the private group must not be overwritten by a remote group")
+	remoteGroup, err := m.GroupByName("remote-" + suffix)
+	require.NoError(t, err)
+	require.NotEqual(t, user.GID, remoteGroup.GID, "the pre-auth GID must remain reserved during group allocation")
 
 	userByAlias, err := m.UserByLoginName(providerUsername)
 	require.NoError(t, err, "the provider username should resolve to the account")
