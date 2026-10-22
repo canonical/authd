@@ -983,6 +983,8 @@ func sshPtyProviderUsernameAlias(t *testing.T, args sshPtyArgs) {
 	sshPtyWaitForSSHConnection(t, c)
 	c.RequireSuccessfulExit(t)
 
+	// The preloader gives all fake users the same UID, so this only checks
+	// PAM_USER. ssh_login.robot covers sshd's UID check with the real NSS module.
 	unixUsername := providerAliasUnixUsername(args.user)
 	require.Contains(t, c.RawOutput(), fmt.Sprintf("finished for user '%s'", unixUsername),
 		"PAM_USER should be set to the Unix username after authenticating the provider alias")
