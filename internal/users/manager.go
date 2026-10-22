@@ -175,13 +175,23 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 	var pendingDiffs []string
 	var userPrivateGroup *types.GroupInfo
 	var resolvedIdentity types.LoginIdentity
+	var conflictingProviderUsernameOwner string
+	reportProviderUsernameConflict := func() {
+		if conflictingProviderUsernameOwner == "" {
+			return
+		}
+		log.Warningf(context.Background(),
+			"Not updating provider username for user %q to %q because it is already used by user %q; keeping %q",
+			u.Name, requestedProviderUsername, conflictingProviderUsernameOwner, u.ProviderUsername)
+	}
 	checkUserNeedsUpdate := func() (needsUpdate bool, err error) {
 		u.Name = requestedName
 		u.ProviderUsername = requestedProviderUsername
 		oldUserInfo = nil
 		pendingDiffs = nil
+		conflictingProviderUsernameOwner = ""
 
-		resolvedIdentity, _, err = m.resolveIdentity(
+		resolvedIdentity, conflictingProviderUsernameOwner, err = m.resolveIdentity(
 			requestedName, u.BrokerID, u.ProviderID, requestedProviderUsername, requestedName)
 		if err != nil {
 			return false, err
@@ -205,6 +215,12 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 			return true, nil
 		}
 		if u.ProviderUsername == "" {
+			u.ProviderUsername = oldUserInfo.ProviderUsername
+			if u.ProviderUsername == "" {
+				u.ProviderUsername = oldUserInfo.Name
+			}
+		}
+		if conflictingProviderUsernameOwner != "" {
 			u.ProviderUsername = oldUserInfo.ProviderUsername
 			if u.ProviderUsername == "" {
 				u.ProviderUsername = oldUserInfo.Name
@@ -247,6 +263,7 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 			return err
 		}
 		if !needsUpdate {
+			reportProviderUsernameConflict()
 			return nil
 		}
 	}
@@ -264,6 +281,7 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 	if rejectLocked && resolvedIdentity.Locked {
 		return fmt.Errorf("user %q is locked: %w", resolvedIdentity.Name, ErrUserLocked)
 	}
+	reportProviderUsernameConflict()
 	if !needsUpdate {
 		return nil
 	}
@@ -1135,7 +1153,8 @@ func (m *Manager) ResolveAuthenticatedIdentity(sessionUsername, brokerID, provid
 	return identity, err
 }
 
-// resolveIdentity is shared by authentication and account updates.
+// resolveIdentity also reports an alias collision that a bound session can
+// tolerate by keeping its stored provider username.
 func (m *Manager) resolveIdentity(sessionUsername, brokerID, providerID, providerUsername, newUnixName string) (types.LoginIdentity, string, error) {
 	sessionUsername = strings.ToLower(sessionUsername)
 	providerUsername = strings.ToLower(providerUsername)
@@ -1179,13 +1198,16 @@ func (m *Manager) resolveIdentity(sessionUsername, brokerID, providerID, provide
 
 	var selected types.LoginIdentity
 	hasSelected := false
+	providerIDMatchesSession := hasProviderID && hasSession && byProviderID.UID == bySession.UID
 	for _, candidate := range []struct {
 		identity types.LoginIdentity
 		found    bool
 	}{
 		{byProviderID, hasProviderID},
 		{bySession, hasSession},
-		{byProviderUsername, hasProviderUsername},
+		// A stable provider ID and matching session account identify the user
+		// even if the new provider username now belongs to another account.
+		{byProviderUsername, hasProviderUsername && !providerIDMatchesSession},
 	} {
 		if !candidate.found {
 			continue
@@ -1226,7 +1248,11 @@ func (m *Manager) resolveIdentity(sessionUsername, brokerID, providerID, provide
 			providerUsername, selected.Name)
 	}
 
-	return selected, "", nil
+	conflictingOwner := ""
+	if providerIDMatchesSession && hasProviderUsername && byProviderUsername.UID != selected.UID {
+		conflictingOwner = byProviderUsername.Name
+	}
+	return selected, conflictingOwner, nil
 }
 
 // UserByID returns the user information for the given user ID.
