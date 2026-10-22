@@ -340,6 +340,61 @@ func TestResolveAuthenticatedIdentityKeepsNewUnixName(t *testing.T) {
 		"the provider username should remain a separate login alias")
 }
 
+func TestResolveAuthenticatedIdentityAllowsProviderUsernameCollisionForMatchingSession(t *testing.T) {
+	t.Parallel()
+
+	m := newManagerForTests(t, t.TempDir())
+	t.Cleanup(func() { _ = m.Stop() })
+
+	prefix := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_"))
+	unixUsername := "unix-" + prefix + "@example.com"
+	conflictingUsername := "conflict-" + prefix + "@example.com"
+	conflictingAlias := "alias-" + prefix + "@example.com"
+	providerID := "providerid-" + prefix
+	for _, user := range []types.UserInfo{
+		{
+			Name:             unixUsername,
+			ProviderUsername: "old-" + prefix + "@example.com",
+			BrokerID:         "broker-id",
+			ProviderID:       providerID,
+			Dir:              "/home/" + unixUsername,
+			Shell:            "/bin/bash",
+		},
+		{
+			Name:             conflictingUsername,
+			ProviderUsername: conflictingAlias,
+			BrokerID:         "broker-id",
+			ProviderID:       "providerid-conflicting-" + prefix,
+			Dir:              "/home/" + conflictingUsername,
+			Shell:            "/bin/bash",
+		},
+	} {
+		require.NoError(t, m.UpdateUser(user), "Setup: could not create test account")
+	}
+
+	for _, tc := range []struct {
+		name             string
+		providerUsername string
+	}{
+		{name: "Unix_name_collision", providerUsername: conflictingUsername},
+		{name: "Provider_alias_collision", providerUsername: conflictingAlias},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			identity, err := m.ResolveAuthenticatedIdentity(
+				unixUsername, "broker-id", providerID, tc.providerUsername, tc.providerUsername)
+			require.NoError(t, err, "the stable ID and session should identify the account")
+			require.Equal(t, unixUsername, identity.Name)
+
+			_, err = m.ResolveAuthenticatedIdentity(
+				conflictingUsername, "broker-id", providerID, tc.providerUsername, tc.providerUsername)
+			require.ErrorContains(t, err, "conflicts with the selected account",
+				"a login selecting the account that owns the conflicting name must be denied")
+		})
+	}
+}
+
 func TestResolveAuthenticatedIdentityRejectsTakenNewUnixName(t *testing.T) {
 	t.Parallel()
 
@@ -583,7 +638,7 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		require.Equal(t, uint32(2222), newuser1.UID, "newuser1 keeps its UID")
 	})
 
-	t.Run("Reject_provider_username_already_used_by_different_user", func(t *testing.T) {
+	t.Run("Keep_stored_provider_username_when_new_alias_is_used_by_another_user", func(t *testing.T) {
 		m := newManagerForTests(t, t.TempDir())
 
 		nameOwner := newUser("name-owner", "providerid-name-owner")
@@ -596,8 +651,18 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 
 		incoming := newUser("name-owner", "providerid-name-owner")
 		incoming.ProviderUsername = "provider-username-alias"
-		err := m.UpdateUser(incoming)
-		require.ErrorContains(t, err, `provider username "provider-username-alias" is already used by a different user`)
+		require.NoError(t, m.UpdateAuthenticatedUser(incoming),
+			"a stable identity should not be blocked by a colliding new alias")
+
+		storedNameOwner, err := userstestutils.DBManager(m).UserByName("name-owner")
+		require.NoError(t, err)
+		require.Equal(t, "name-owner-alias", storedNameOwner.ProviderUsername,
+			"keep the existing login alias when the new one belongs to another user")
+
+		storedAliasOwner, err := userstestutils.DBManager(m).UserByName("provider-username-owner")
+		require.NoError(t, err)
+		require.Equal(t, "provider-username-alias", storedAliasOwner.ProviderUsername,
+			"the conflicting account must retain its username")
 	})
 
 	t.Run("Preserve_locked_state_across_providerid_rename", func(t *testing.T) {

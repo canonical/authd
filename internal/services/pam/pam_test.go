@@ -325,6 +325,55 @@ func TestProviderUsernameChangeWithStableIDResolvesCanonicalAccount(t *testing.T
 	require.NoError(t, err)
 }
 
+// The mock broker uses a fixed session ID for this fixture, so don't run this test in parallel.
+func TestProviderUsernameCollisionKeepsExistingAliasForMatchingIdentity(t *testing.T) {
+	unixUsername := "unix-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
+	oldProviderUsername := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_")) +
+		testutils.IDSeparator + "ia_info_mismatching_user_name@example.com"
+	providerID := "providerid-different_username@example.com"
+	m := newPamManagerWithUser(t, unixUsername, oldProviderUsername, providerID)
+
+	conflictingUsername := "different_username@example.com"
+	conflictingUser := db.UserRow{
+		Name:             conflictingUsername,
+		UID:              2222,
+		GID:              2222,
+		Dir:              "/home/" + conflictingUsername,
+		Shell:            "/bin/bash",
+		BrokerID:         mockBrokerGeneratedID,
+		ProviderID:       "providerid-former-employee",
+		ProviderUsername: conflictingUsername,
+	}
+	group := db.GroupRow{Name: conflictingUsername, GID: conflictingUser.GID, UGID: conflictingUsername}
+	require.NoError(t, userstestutils.DBManager(m).UpdateUserEntry(conflictingUser, []db.GroupRow{group}, nil))
+
+	client := newPamClient(t, m, globalBrokerManager)
+	sessionID := selectBrokerForTest(t, client, oldProviderUsername)
+	response, err := client.IsAuthenticated(context.Background(), &authd.IARequest{SessionId: sessionID})
+	require.NoError(t, err)
+	require.Equal(t, auth.Granted, response.GetAccess(),
+		"a matching stable identity and session should allow login despite an alias collision")
+	require.Equal(t, unixUsername, response.GetPamUser())
+	_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: sessionID})
+	require.NoError(t, err)
+
+	stored, err := userstestutils.DBManager(m).UserByName(unixUsername)
+	require.NoError(t, err)
+	require.Equal(t, oldProviderUsername, stored.ProviderUsername,
+		"keep the existing alias when the new provider username belongs to another account")
+	other, err := userstestutils.DBManager(m).UserByName(conflictingUsername)
+	require.NoError(t, err)
+	require.Equal(t, "providerid-former-employee", other.ProviderID,
+		"the account that owns the conflicting name must remain unchanged")
+
+	conflictingSession := selectBrokerForTest(t, client, conflictingUsername)
+	_, err = client.IsAuthenticated(context.Background(), &authd.IARequest{SessionId: conflictingSession})
+	require.ErrorContains(t, err, "conflicts with the selected account",
+		"a login using the conflicting account name must still be denied")
+	_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: conflictingSession})
+	require.NoError(t, err)
+}
+
 func TestProviderIDRenameRequiresRetryForPreAuthUIDMismatch(t *testing.T) {
 	t.Parallel()
 
