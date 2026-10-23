@@ -343,12 +343,25 @@ func newBroker(cfg Config, apiVersion uint, p providers.Provider, args ...Option
 	if cfg.clientID == "" {
 		err = errors.Join(err, errors.New("client ID is required and was not provided"))
 	}
+	unixAttributesConfigured := cfg.unixUIDAttribute != "" || cfg.unixGIDAttribute != "" ||
+		cfg.unixUIDRequired || cfg.unixGIDRequired
 	if _, ok := providers.ProviderAs[info.UnixAttributeEnricher](opts.provider); !ok {
+		if cfg.unixUIDAttribute != "" {
+			err = errors.Join(err, fmt.Errorf("invalid configuration: %q requires a provider that supports Unix attribute enrichment", unixUIDAttributeKey))
+		}
+		if cfg.unixGIDAttribute != "" {
+			err = errors.Join(err, fmt.Errorf("invalid configuration: %q requires a provider that supports Unix attribute enrichment", unixGIDAttributeKey))
+		}
 		if cfg.unixUIDRequired {
 			err = errors.Join(err, fmt.Errorf("invalid configuration: %q requires a provider that supports Unix attribute enrichment", unixUIDRequiredKey))
 		}
 		if cfg.unixGIDRequired {
 			err = errors.Join(err, fmt.Errorf("invalid configuration: %q requires a provider that supports Unix attribute enrichment", unixGIDRequiredKey))
+		}
+	}
+	if unixAttributesConfigured {
+		if _, ok := providers.ProviderAs[providers.GroupFetcher](opts.provider); !ok {
+			err = errors.Join(err, errors.New("invalid configuration: Unix attribute configuration requires a provider that supports group fetching"))
 		}
 	}
 	// The entra_auth flow can only retrieve groups from Microsoft Graph when
@@ -3302,7 +3315,16 @@ func (b *Broker) enrichUserInfo(ctx context.Context, session *session, authInfo 
 		return nil
 	}
 
-	enriched, err := b.fetchUnixAttributes(ctx, session, authInfo, transientToken)
+	groups, err := b.getGroups(ctx, session, authInfo)
+	if err != nil {
+		if b.cfg.forceAccessCheckWithProvider && (b.cfg.unixUIDRequired || b.cfg.unixGIDRequired) {
+			// A failed lookup leaves required IDs unread, even if the cache has them.
+			err = fmt.Errorf("%w: %w", info.ErrUnixAttributeRequired, err)
+		}
+		return fmt.Errorf("%w: %w", info.ErrGroupsUnavailable, err)
+	}
+
+	enriched, err := b.fetchUnixAttributes(ctx, authInfo, transientToken, groups)
 	if err != nil {
 		if !errors.Is(err, info.ErrUnixAttributePartial) {
 			if b.cfg.forceAccessCheckWithProvider && (b.cfg.unixUIDRequired || b.cfg.unixGIDRequired) {
@@ -3325,18 +3347,12 @@ func (b *Broker) enrichUserInfo(ctx context.Context, session *session, authInfo 
 	return nil
 }
 
-// fetchUnixAttributes returns the user with the Unix attributes read from the provider.
-func (b *Broker) fetchUnixAttributes(ctx context.Context, session *session, authInfo *token.AuthCachedInfo, transientToken *oauth2.Token) (info.User, error) {
+// fetchUnixAttributes enriches the user using the groups already fetched from the provider.
+func (b *Broker) fetchUnixAttributes(ctx context.Context, authInfo *token.AuthCachedInfo, transientToken *oauth2.Token, groups info.GroupFetchResult) (info.User, error) {
 	config := b.unixAttributeConfig()
 	enricher, ok := providers.ProviderAs[info.UnixAttributeEnricher](b.provider)
 	if !ok {
-		groups, err := b.getGroups(ctx, session, authInfo)
-		if err != nil {
-			return info.User{}, err
-		}
-		user := authInfo.UserInfo
-		user.Groups = groups
-		return user, nil
+		return info.User{}, errors.New("provider does not support Unix attribute enrichment")
 	}
 
 	graphToken := authInfo.Token
@@ -3346,6 +3362,7 @@ func (b *Broker) fetchUnixAttributes(ctx context.Context, session *session, auth
 	return enricher.EnrichUserWithUnixAttributes(
 		ctx,
 		authInfo.UserInfo,
+		groups,
 		b.cfg.clientID,
 		b.cfg.issuerURL,
 		graphToken,
@@ -3467,19 +3484,19 @@ func (b *Broker) refreshGroupsOrEnrich(ctx context.Context, session *session, au
 
 	groups, err := b.getGroups(ctx, session, authInfo)
 	if err == nil {
-		authInfo.UserInfo.Groups = groups
+		authInfo.UserInfo.Groups = groups.Groups
 	}
 	return err
 }
 
-func (b *Broker) getGroups(ctx context.Context, session *session, t *token.AuthCachedInfo) ([]info.Group, error) {
+func (b *Broker) getGroups(ctx context.Context, session *session, t *token.AuthCachedInfo) (info.GroupFetchResult, error) {
 	if session.isOffline {
-		return nil, errors.New("session is in offline mode")
+		return info.GroupFetchResult{}, errors.New("session is in offline mode")
 	}
 
 	gf, ok := providers.ProviderAs[providers.GroupFetcher](b.provider)
 	if !ok {
-		return nil, nil
+		return info.GroupFetchResult{}, nil
 	}
 	// A cached token that carries device-registration data has a PRT that must be
 	// exchanged for a Graph-scoped token (strategy 2). Derive this from the
@@ -3491,6 +3508,7 @@ func (b *Broker) getGroups(ctx context.Context, session *session, t *token.AuthC
 		t.ProviderMetadata,
 		t.DeviceRegistrationData,
 		len(t.DeviceRegistrationData) > 0,
+		b.cfg.unixGIDAttribute,
 	)
 }
 

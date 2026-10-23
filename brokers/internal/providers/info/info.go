@@ -30,6 +30,16 @@ type Group struct {
 	Name string  `json:"name"`
 	UGID string  `json:"ugid"`
 	GID  *uint32 `json:"gid,omitempty" yaml:"gid,omitempty"`
+	// AdditionalData is transient directory data used only during enrichment.
+	AdditionalData map[string]any `json:"-" yaml:"-"`
+}
+
+// GroupFetchResult contains freshly fetched groups and any non-fatal error
+// reading the configured Unix GID attribute. A GID attribute error means group
+// membership was fetched successfully, but the attribute was not available.
+type GroupFetchResult struct {
+	Groups            []Group
+	GIDAttributeError error
 }
 
 // User represents the user information obtained from the provider.
@@ -80,13 +90,14 @@ func KeepCachedGIDs(groups, cached []Group) {
 	}
 }
 
-// UnixAttributeEnricher is an optional provider capability that returns one
-// complete user snapshot with directory-backed Unix IDs.
+// UnixAttributeEnricher enriches a user and already-fetched groups with
+// directory-backed Unix IDs. It does not fetch group memberships.
 // Unreadable attributes keep cached values and are reported with ErrUnixAttributePartial.
 type UnixAttributeEnricher interface {
 	EnrichUserWithUnixAttributes(
 		ctx context.Context,
 		user User,
+		groups GroupFetchResult,
 		clientID string,
 		issuerURL string,
 		token *oauth2.Token,

@@ -28,11 +28,13 @@ type mockUnixAttributeProvider struct {
 	gid             uint32
 	enrichmentCalls int
 	attributeConfig info.UnixAttributeConfig
+	fetchedGroups   info.GroupFetchResult
 }
 
-func (p *mockUnixAttributeProvider) EnrichUserWithUnixAttributes(_ context.Context, user info.User, _ string, _ string, _ *oauth2.Token, _ map[string]interface{}, _ []byte, config info.UnixAttributeConfig) (info.User, error) {
+func (p *mockUnixAttributeProvider) EnrichUserWithUnixAttributes(_ context.Context, user info.User, groups info.GroupFetchResult, _ string, _ string, _ *oauth2.Token, _ map[string]interface{}, _ []byte, config info.UnixAttributeConfig) (info.User, error) {
 	p.enrichmentCalls++
 	p.attributeConfig = config
+	p.fetchedGroups = groups
 	uid := p.uid
 	gid := p.gid
 	user.UID = &uid
@@ -81,6 +83,13 @@ func TestDeviceAuthEnrichesAndCachesUnixAttributes(t *testing.T) {
 		uid:          1001,
 		gid:          2001,
 	}
+	provider.GetGroupsFunc = func() ([]info.Group, error) {
+		return []info.Group{{
+			Name:           "engineering",
+			UGID:           "group-id",
+			AdditionalData: map[string]any{"extension_gidNumber": float64(2001)},
+		}}, nil
+	}
 	b := newBrokerForTests(t, &brokerForTestConfig{
 		Config:                broker.Config{DataDir: t.TempDir()},
 		ownerAllowed:          true,
@@ -106,6 +115,11 @@ func TestDeviceAuthEnrichesAndCachesUnixAttributes(t *testing.T) {
 	require.Equal(t, broker.AuthGranted, access)
 	requireUnixAttributesHiddenFromResponse(t, data)
 	requireCachedUnixAttributes(t, b, sessionID, provider.enrichmentCalls, provider.attributeConfig)
+	require.Equal(t, []info.Group{{
+		Name:           "engineering",
+		UGID:           "group-id",
+		AdditionalData: map[string]any{"extension_gidNumber": float64(2001)},
+	}}, provider.fetchedGroups.Groups)
 }
 
 func TestPasswordAuthEnrichesAndCachesUnixAttributes(t *testing.T) {
@@ -694,7 +708,7 @@ type unixFallbackProvider struct {
 	beforeEnrichment func()
 }
 
-func (p *unixFallbackProvider) EnrichUserWithUnixAttributes(ctx context.Context, user info.User, clientID, issuerURL string, graphToken *oauth2.Token, metadata map[string]interface{}, registration []byte, config info.UnixAttributeConfig) (info.User, error) {
+func (p *unixFallbackProvider) EnrichUserWithUnixAttributes(ctx context.Context, user info.User, groups info.GroupFetchResult, clientID, issuerURL string, graphToken *oauth2.Token, metadata map[string]interface{}, registration []byte, config info.UnixAttributeConfig) (info.User, error) {
 	if p.beforeEnrichment != nil {
 		p.beforeEnrichment()
 	}
@@ -716,7 +730,7 @@ func (p *unixFallbackProvider) EnrichUserWithUnixAttributes(ctx context.Context,
 	if p.keepCached {
 		return user, nil
 	}
-	return p.mockEntraAuthProvider.EnrichUserWithUnixAttributes(ctx, user, clientID, issuerURL, graphToken, metadata, registration, config)
+	return p.mockEntraAuthProvider.EnrichUserWithUnixAttributes(ctx, user, groups, clientID, issuerURL, graphToken, metadata, registration, config)
 }
 
 func TestUnixAttributeFallbackPreservesCredentialsAndSnapshot(t *testing.T) {

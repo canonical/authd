@@ -87,6 +87,24 @@ type mockEntraAuthProvider struct {
 	unixAttributeConfig           info.UnixAttributeConfig
 }
 
+type mockUnixEnricherWithoutGroupFetcher struct {
+	providers.Provider
+}
+
+func (mockUnixEnricherWithoutGroupFetcher) EnrichUserWithUnixAttributes(
+	_ context.Context,
+	user info.User,
+	_ info.GroupFetchResult,
+	_ string,
+	_ string,
+	_ *oauth2.Token,
+	_ map[string]interface{},
+	_ []byte,
+	_ info.UnixAttributeConfig,
+) (info.User, error) {
+	return user, nil
+}
+
 type blockingMFAProvider struct {
 	*mockEntraAuthProvider
 	started  chan struct{}
@@ -184,7 +202,7 @@ func (p *mockEntraAuthProvider) MaybeRegisterDevice(_ context.Context, _ *oauth2
 	return mockDeviceRegistrationData, func() {}, nil
 }
 
-func (p *mockEntraAuthProvider) EnrichUserWithUnixAttributes(_ context.Context, user info.User, _ string, _ string, _ *oauth2.Token, _ map[string]interface{}, _ []byte, config info.UnixAttributeConfig) (info.User, error) {
+func (p *mockEntraAuthProvider) EnrichUserWithUnixAttributes(_ context.Context, user info.User, _ info.GroupFetchResult, _ string, _ string, _ *oauth2.Token, _ map[string]interface{}, _ []byte, config info.UnixAttributeConfig) (info.User, error) {
 	p.unixEnrichmentCalls++
 	p.unixAttributeConfig = config
 	uid := p.unixUID
@@ -544,7 +562,7 @@ func TestNewSetsOIDCClientForDeviceRegistration(t *testing.T) {
 	}
 }
 
-func TestNewRejectsRequiredUnixAttributesWithoutEnricher(t *testing.T) {
+func TestNewRejectsUnixAttributesWithoutEnricher(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
@@ -555,7 +573,7 @@ func TestNewRejectsRequiredUnixAttributesWithoutEnricher(t *testing.T) {
 	}{
 		"Required_UID_without_enricher": {uidRequired: true, wantErrorMessage: "unix_uid_required"},
 		"Required_GID_without_enricher": {gidRequired: true, wantErrorMessage: "unix_gid_required"},
-		"Optional_IDs_without_enricher": {},
+		"Optional_IDs_without_enricher": {wantErrorMessage: "unix_uid_attribute"},
 		"Required_UID_with_enricher":    {uidRequired: true, withEnricher: true},
 	}
 
@@ -583,6 +601,23 @@ func TestNewRejectsRequiredUnixAttributesWithoutEnricher(t *testing.T) {
 			require.NotNil(t, b)
 		})
 	}
+}
+
+func TestNewRejectsUnixAttributesWithoutGroupFetcher(t *testing.T) {
+	t.Parallel()
+
+	cfg := &broker.Config{DataDir: t.TempDir()}
+	cfg.Init()
+	cfg.SetIssuerURL(defaultIssuerURL)
+	cfg.SetClientID("test-client-id")
+	cfg.SetUnixAttributes("uidNumber", "gidNumber", false, false)
+
+	_, err := broker.New(
+		*cfg,
+		broker.LatestAPIVersion,
+		broker.WithCustomProvider(mockUnixEnricherWithoutGroupFetcher{}),
+	)
+	require.ErrorContains(t, err, "provider that supports group fetching")
 }
 
 // TestNewRejectsUnusableEntraAuthWithoutGroupSource verifies that New fails

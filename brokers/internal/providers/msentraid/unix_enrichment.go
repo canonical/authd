@@ -21,13 +21,8 @@ import (
 )
 
 type graphAccess struct {
-	client  *msgraphsdk.GraphServiceClient
-	token   *jwt.Token
-	appOnly bool
-	userOID string
-
-	// unavailable is set when the groups use a token without the Unix attribute scopes.
-	unavailable error
+	client *msgraphsdk.GraphServiceClient
+	token  *jwt.Token
 }
 
 // acquireAccessTokenForGraphAPI is a variable so that tests can replace it.
@@ -41,7 +36,6 @@ func (p *Provider) acquireGraphAccess(
 	providerMetadata map[string]interface{},
 	deviceRegistrationDataJSON []byte,
 	requiredScopes []string,
-	fallbackScopes []string,
 	needsAccessTokenForGraphAPI bool,
 ) (*graphAccess, error) {
 	if token == nil {
@@ -54,36 +48,8 @@ func (p *Provider) acquireGraphAccess(
 	if parseErr == nil {
 		accessTokenScopes, _ = p.getTokenScopes(accessToken)
 	}
-	accessTokenHasGroupScope := slices.Contains(accessTokenScopes, graphGroupMemberReadAllScope)
 	accessTokenHasRequiredScopes := missingGraphScope(accessTokenScopes, requiredScopes) == ""
 
-	if p.graphClientSecret != "" && !accessTokenHasGroupScope && !needsAccessTokenForGraphAPI {
-		if parseErr != nil {
-			return nil, fmt.Errorf("failed to parse access token for client credentials group lookup: %w", parseErr)
-		}
-		oid, oidErr := p.getOIDFromToken(accessToken)
-		if oidErr != nil {
-			log.Noticef(ctx, "Could not extract OID from access token for client credentials path, falling back: %v", oidErr)
-		} else {
-			host := resolveMSGraphHost(providerMetadata)
-			log.Infof(ctx, "Resolving groups for OID %s via app-only client credentials (delegated token lacks GroupMember.Read.All)", oid)
-			appTokenStr, err := acquireClientCredentialsToken(ctx, issuerURL, clientID, p.graphClientSecret, host)
-			if err != nil {
-				return nil, fmt.Errorf("failed to acquire client credentials token for Graph API: %w", err)
-			}
-			appToken, _, err := new(jwt.Parser).ParseUnverified(appTokenStr, jwt.MapClaims{})
-			if err != nil {
-				return nil, fmt.Errorf("failed to parse client credentials token: %w", err)
-			}
-			client, err := newGraphServiceClient(appToken, host)
-			if err != nil {
-				return nil, err
-			}
-			return &graphAccess{client: client, token: appToken, appOnly: true, userOID: oid}, nil
-		}
-	}
-
-	var unavailable error
 	if needsAccessTokenForGraphAPI && !accessTokenHasRequiredScopes {
 		var data himmelblau.DeviceRegistrationData
 		if err := json.Unmarshal(deviceRegistrationDataJSON, &data); err != nil {
@@ -94,18 +60,6 @@ func (p *Provider) acquireGraphAccess(
 		accessTokenStr, err := acquireGraphAccessTokenWithRetry(ctx, func() (string, error) {
 			return acquireAccessTokenForGraphAPI(ctx, clientID, tenantID(issuerURL), token, data, requiredScopes)
 		}, p.graphTokenAcquisitionRetryInterval, p.graphTokenAcquisitionRetryTimeout)
-		if err != nil && fallbackScopes != nil && !errors.Is(err, himmelblau.ErrDeviceDisabled) && !errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
-			log.Warningf(ctx, "Could not get a Graph token for the Unix attribute scopes, retrying for groups only: %v", err)
-			unavailable = graphTokenError(err)
-			accessTokenStr, err = acquireGraphAccessTokenWithRetry(ctx, func() (string, error) {
-				return acquireAccessTokenForGraphAPI(ctx, clientID, tenantID(issuerURL), token, data, fallbackScopes)
-			}, p.graphTokenAcquisitionRetryInterval, p.graphTokenAcquisitionRetryTimeout)
-			if err != nil {
-				log.Warningf(ctx, "Could not get a Graph token for groups: %v", err)
-				// The groups-only request blocked enrichment, so report its error.
-				return nil, graphTokenError(err)
-			}
-		}
 		if err != nil {
 			return nil, graphTokenError(err)
 		}
@@ -120,7 +74,7 @@ func (p *Provider) acquireGraphAccess(
 	if err != nil {
 		return nil, err
 	}
-	return &graphAccess{client: client, token: accessToken, unavailable: unavailable}, nil
+	return &graphAccess{client: client, token: accessToken}, nil
 }
 
 // graphTokenError maps a Graph token acquisition error to the error that the broker handles.
@@ -132,6 +86,7 @@ func graphTokenError(err error) error {
 func (p *Provider) EnrichUserWithUnixAttributes(
 	ctx context.Context,
 	user info.User,
+	groupFetchResult info.GroupFetchResult,
 	clientID string,
 	issuerURL string,
 	token *oauth2.Token,
@@ -139,107 +94,79 @@ func (p *Provider) EnrichUserWithUnixAttributes(
 	deviceRegistrationData []byte,
 	config info.UnixAttributeConfig,
 ) (info.User, error) {
-	requiredScopes := graphScopesForUnixAttributes(config)
-	var fallbackScopes []string
-	if config.UIDAttribute != "" {
-		fallbackScopes = []string{graphGroupMemberReadAllScope}
-	}
-	access, err := p.acquireGraphAccess(
-		ctx,
-		clientID,
-		issuerURL,
-		token,
-		providerMetadata,
-		deviceRegistrationData,
-		requiredScopes,
-		fallbackScopes,
-		len(deviceRegistrationData) > 0,
-	)
-	if err != nil {
-		return info.User{}, err
-	}
-
 	// Attributes that cannot be read keep their cached values. Only mandatory ones are reported as unreadable.
 	var unreadable []error
-	// abort stops the enrichment with err and keeps the mandatory failures found so far.
-	abort := func(err error) (info.User, error) {
-		return info.User{}, errors.Join(append(unreadable, err)...)
-	}
-	if access.unavailable != nil && config.UIDRequired {
-		unreadable = append(unreadable, markRequiredAttribute(access.unavailable))
-	}
 	enriched := user
 	if config.UIDAttribute == "" {
 		enriched.UID = nil
 	}
-	cachedGroups := user.Groups
-	enriched.Groups = nil
 
-	var tokenScopes []string
-	if !access.appOnly {
-		tokenScopes = p.tokenScopesForGraphAPI
-		if tokenScopes == nil {
-			tokenScopes, err = p.getTokenScopes(access.token)
-			if err != nil {
-				return abort(err)
-			}
-		}
-		if missingScope := missingGraphScope(tokenScopes, []string{graphGroupMemberReadAllScope}); missingScope != "" {
-			return abort(&providerErrors.ForDisplayError{
-				Message: fmt.Sprintf("Error: the Microsoft Entra ID app is missing the %s permission", missingScope),
-			})
-		}
-	}
-
-	if config.UIDAttribute != "" && access.unavailable == nil {
-		uid, read, err := lookupUnixUID(ctx, access, tokenScopes, config)
-		if read {
-			enriched.UID = uid
-		}
+	if config.UIDAttribute != "" {
+		access, err := p.acquireGraphAccess(
+			ctx,
+			clientID,
+			issuerURL,
+			token,
+			providerMetadata,
+			deviceRegistrationData,
+			graphScopesForUnixAttributes(config),
+			len(deviceRegistrationData) > 0,
+		)
 		if err != nil {
+			if errors.Is(err, providerErrors.ErrDeviceDisabled) || errors.Is(err, providerErrors.ErrInvalidRedirectURI) {
+				return info.User{}, err
+			}
 			if config.UIDRequired {
-				unreadable = append(unreadable, markRequiredAttribute(err))
+				unreadable = append(unreadable, markRequiredAttribute(fmt.Errorf("%w: could not acquire a Graph token for Unix UID attribute %q: %w", info.ErrUnixUIDRequired, config.UIDAttribute, err)))
 			} else {
-				log.Warningf(ctx, "Could not read Unix UID attribute %q, keeping the cached value: %v", config.UIDAttribute, err)
+				log.Warningf(ctx, "Could not acquire a Graph token for Unix UID attribute %q, keeping the cached value: %v", config.UIDAttribute, err)
 			}
-		}
-	}
-
-	fetchGroups := func(fields []string) ([]msgraphmodels.Groupable, error) {
-		if access.appOnly {
-			return getSecurityGroupsByUserIDWithSelect(ctx, access.client, access.userOID, fields)
-		}
-		return getSecurityGroupsWithSelect(ctx, access.client, fields)
-	}
-	gidsRead := true
-	graphGroups, err := fetchGroups(groupSelectFields(config.GIDAttribute))
-	if err != nil && config.GIDAttribute != "" {
-		if config.GIDRequired {
-			unreadable = append(unreadable, markRequiredAttribute(fmt.Errorf("could not read Unix GID attribute %q: %w", config.GIDAttribute, err)))
 		} else {
-			log.Warningf(ctx, "Could not read Unix GID attribute %q, keeping cached GIDs: %v", config.GIDAttribute, err)
-		}
-		gidsRead = false
-		graphGroups, err = fetchGroups(groupSelectFields(""))
-	}
-	if err != nil {
-		return abort(err)
-	}
+			tokenScopes := p.tokenScopesForGraphAPI
+			if tokenScopes == nil {
+				tokenScopes, err = p.getTokenScopes(access.token)
+				if err != nil {
+					return info.User{}, errors.Join(append(unreadable, err)...)
+				}
+			}
 
-	enriched.Groups, err = processSecurityGroupsWithGID(graphGroups, config.GIDAttribute)
-	if err != nil {
-		return abort(err)
-	}
-	if !gidsRead {
-		info.KeepCachedGIDs(enriched.Groups, cachedGroups)
-	}
-	if config.GIDAttribute != "" && config.GIDRequired {
-		for _, group := range enriched.Groups {
-			if group.UGID != "" && group.GID == nil {
-				unreadable = append(unreadable, fmt.Errorf("%w: %w: Unix GID is missing for group %q", info.ErrUnixGIDRequired, info.ErrUnixAttributeMissing, group.Name))
-				break
+			uid, read, err := lookupUnixUID(ctx, access, tokenScopes, config)
+			if read {
+				enriched.UID = uid
+			}
+			if err != nil {
+				if config.UIDRequired {
+					unreadable = append(unreadable, markRequiredAttribute(fmt.Errorf("%w: %w", info.ErrUnixUIDRequired, err)))
+				} else {
+					log.Warningf(ctx, "Could not read Unix UID attribute %q, keeping the cached value: %v", config.UIDAttribute, err)
+				}
 			}
 		}
+	}
+
+	enriched.Groups = slices.Clone(groupFetchResult.Groups)
+	if config.GIDAttribute != "" {
+		if groupFetchResult.GIDAttributeError != nil {
+			info.KeepCachedGIDs(enriched.Groups, user.Groups)
+			if config.GIDRequired {
+				unreadable = append(unreadable, markRequiredAttribute(fmt.Errorf("%w: could not read Unix GID attribute %q: %w", info.ErrUnixGIDRequired, config.GIDAttribute, groupFetchResult.GIDAttributeError)))
+			} else {
+				log.Warningf(ctx, "Could not read Unix GID attribute %q, keeping the cached value: %v", config.GIDAttribute, groupFetchResult.GIDAttributeError)
+			}
+		} else {
+			enriched.Groups = enrichSecurityGroupGIDs(enriched.Groups, config.GIDAttribute)
+		}
+		if config.GIDRequired && groupFetchResult.GIDAttributeError == nil {
+			for _, group := range enriched.Groups {
+				if group.UGID != "" && group.GID == nil {
+					unreadable = append(unreadable, fmt.Errorf("%w: %w: Unix GID is missing for group %q", info.ErrUnixGIDRequired, info.ErrUnixAttributeMissing, group.Name))
+					break
+				}
+			}
+		}
+	}
+	for i := range enriched.Groups {
+		enriched.Groups[i].AdditionalData = nil
 	}
 
 	if len(unreadable) > 0 {
@@ -250,13 +177,6 @@ func (p *Provider) EnrichUserWithUnixAttributes(
 
 // lookupUnixUID reads the UID attribute. read is false when the attribute could not be read, and then the cached UID is kept.
 func lookupUnixUID(ctx context.Context, access *graphAccess, tokenScopes []string, config info.UnixAttributeConfig) (uid *uint32, read bool, err error) {
-	if access.appOnly {
-		if config.UIDRequired {
-			return nil, false, fmt.Errorf("%w: Unix UID attribute %q is unavailable with an app-only Graph token", info.ErrUnixUIDRequired, config.UIDAttribute)
-		}
-		log.Warningf(ctx, "Unix UID attribute %q is unavailable with an app-only Graph token", config.UIDAttribute)
-		return nil, false, nil
-	}
 	if missingScope := missingGraphScope(tokenScopes, []string{graphUserReadScope}); missingScope != "" {
 		return nil, false, &providerErrors.ForDisplayError{
 			Message: fmt.Sprintf("Error: the Microsoft Entra ID app is missing the %s permission", missingScope),
@@ -271,11 +191,10 @@ func lookupUnixUID(ctx context.Context, access *graphAccess, tokenScopes []strin
 }
 
 func graphScopesForUnixAttributes(config info.UnixAttributeConfig) []string {
-	scopes := []string{graphGroupMemberReadAllScope}
 	if config.UIDAttribute != "" {
-		scopes = append(scopes, graphUserReadScope)
+		return []string{graphUserReadScope}
 	}
-	return scopes
+	return nil
 }
 
 func missingGraphScope(tokenScopes, requiredScopes []string) string {
