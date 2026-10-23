@@ -182,15 +182,15 @@ func TestGraphScopesForUnixAttributes(t *testing.T) {
 		want   []string
 	}{
 		"Groups_only": {
-			want: []string{"GroupMember.Read.All"},
+			want: nil,
 		},
 		"GID_only": {
 			config: info.UnixAttributeConfig{GIDAttribute: "extension_gidNumber"},
-			want:   []string{"GroupMember.Read.All"},
+			want:   nil,
 		},
 		"UID": {
 			config: info.UnixAttributeConfig{UIDAttribute: "extension_uidNumber"},
-			want:   []string{"GroupMember.Read.All", "User.Read"},
+			want:   []string{"User.Read"},
 		},
 	}
 	for name, tc := range tests {
@@ -243,6 +243,7 @@ func TestEnrichUserWithUnixAttributesRequiresUserReadForMandatoryUID(t *testing.
 	_, err = msentraid.New().EnrichUserWithUnixAttributes(
 		context.Background(),
 		info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
+		info.GroupFetchResult{},
 		"client-id",
 		"https://issuer.example/tenant/v2.0",
 		&oauth2.Token{AccessToken: accessTokenString},
@@ -253,7 +254,7 @@ func TestEnrichUserWithUnixAttributesRequiresUserReadForMandatoryUID(t *testing.
 	require.ErrorIs(t, err, info.ErrUnixAttributePartial)
 	require.ErrorContains(t, err, "missing the User.Read permission")
 	require.Zero(t, userRequests.Load())
-	require.Equal(t, int32(1), groupRequests.Load())
+	require.Zero(t, groupRequests.Load())
 }
 
 func TestEnrichUserWithUnixAttributesDoesNotLogDeviceRegistrationData(t *testing.T) {
@@ -266,15 +267,15 @@ func TestEnrichUserWithUnixAttributesDoesNotLogDeviceRegistrationData(t *testing
 		log.SetLevelHandler(log.NoticeLevel, nil)
 	})
 
-	_, err := msentraid.New().EnrichUserWithUnixAttributes(
+	_, err := msentraid.New().GetGroups(
 		context.Background(),
-		info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
 		"client-id",
 		"https://issuer.example/tenant/v2.0",
 		&oauth2.Token{AccessToken: "invalid-token"},
 		nil,
 		registrationData,
-		info.UnixAttributeConfig{},
+		true,
+		"",
 	)
 	require.Error(t, err)
 	require.Contains(t, loggedMessage, "Could not decode device registration data")
@@ -284,37 +285,33 @@ func TestEnrichUserWithUnixAttributesDoesNotLogDeviceRegistrationData(t *testing
 func TestEnrichUserWithUnixAttributesNeedsOnlyGroupScopeForGID(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/me/transitiveMemberOf/graph.group", r.URL.Path)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprint(w, `{"value":[]}`)
-	}))
-	t.Cleanup(server.Close)
-
-	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"scp": "GroupMember.Read.All",
-	})
-	accessTokenString, err := accessToken.SignedString(testutils.MockKey)
-	require.NoError(t, err)
-
 	got, err := msentraid.New().EnrichUserWithUnixAttributes(
 		context.Background(),
 		info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
+		info.GroupFetchResult{
+			Groups: []info.Group{{
+				Name:           "engineering",
+				UGID:           "group-id",
+				AdditionalData: map[string]any{"extension_gidNumber": float64(2001)},
+			}},
+		},
 		"client-id",
 		"https://issuer.example/tenant/v2.0",
-		&oauth2.Token{AccessToken: accessTokenString},
-		map[string]any{"msgraph_host": server.URL},
+		nil,
+		nil,
 		nil,
 		info.UnixAttributeConfig{GIDAttribute: "extension_gidNumber"},
 	)
 	require.NoError(t, err)
-	require.Empty(t, got.Groups)
+	require.Len(t, got.Groups, 1)
+	require.NotNil(t, got.Groups[0].GID)
+	require.Equal(t, uint32(2001), *got.Groups[0].GID)
 }
 
 func TestEnrichUserWithUnixAttributes(t *testing.T) {
 	t.Parallel()
 
-	var userRequests, groupRequests atomic.Int32
+	var userRequests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/me":
@@ -322,11 +319,6 @@ func TestEnrichUserWithUnixAttributes(t *testing.T) {
 			require.Equal(t, "extension_uidNumber", r.URL.Query().Get("$select"))
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = fmt.Fprint(w, `{"extension_uidNumber":1001}`)
-		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/me/transitiveMemberOf/graph.group"):
-			groupRequests.Add(1)
-			require.ElementsMatch(t, []string{"id", "displayName", "securityEnabled", "groupTypes", "extension_gidNumber"}, strings.Split(r.URL.Query().Get("$select"), ","))
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprint(w, `{"value":[{"id":"group-id","displayName":"Engineering","securityEnabled":true,"groupTypes":[],"extension_gidNumber":2001}]}`)
 		default:
 			t.Fatalf("unexpected Graph request: %s %s", r.Method, r.URL.String())
 		}
@@ -343,6 +335,11 @@ func TestEnrichUserWithUnixAttributes(t *testing.T) {
 	got, err := msentraid.New().EnrichUserWithUnixAttributes(
 		context.Background(),
 		info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
+		info.GroupFetchResult{Groups: []info.Group{{
+			Name:           "engineering",
+			UGID:           "group-id",
+			AdditionalData: map[string]any{"extension_gidNumber": float64(2001)},
+		}}},
 		"client-id",
 		"https://issuer.example/tenant/v2.0",
 		&oauth2.Token{AccessToken: accessTokenString},
@@ -359,56 +356,44 @@ func TestEnrichUserWithUnixAttributes(t *testing.T) {
 	require.Len(t, got.Groups, 1)
 	require.NotNil(t, got.Groups[0].GID)
 	require.Equal(t, uint32(2001), *got.Groups[0].GID)
+	require.Nil(t, got.Groups[0].AdditionalData)
 	require.Equal(t, int32(1), userRequests.Load())
-	require.Equal(t, int32(1), groupRequests.Load())
 }
 
-func TestEnrichUserWithUnixAttributesAppOnlyLeavesOptionalUIDUnavailable(t *testing.T) {
+func TestEnrichUserWithUnixAttributesUsesDelegatedTokenForOptionalUID(t *testing.T) {
 	t.Parallel()
 
-	mockServer, cleanup := startMockMSServer(t, nil)
-	t.Cleanup(cleanup)
-
-	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"oid": "user-id"})
-	accessTokenString, err := accessToken.SignedString(testutils.MockKey)
-	require.NoError(t, err)
-
+	cachedUID := uint32(1001)
 	provider := msentraid.New()
 	provider.SetGraphClientSecret("client-secret")
 	got, err := provider.EnrichUserWithUnixAttributes(
 		context.Background(),
-		info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
+		info.User{Name: "alice@example.com", UID: &cachedUID},
+		info.GroupFetchResult{Groups: []info.Group{{Name: "engineering", UGID: "group-id"}}},
 		"client-id",
-		mockServer.URL+"/tenant-id/v2.0",
-		&oauth2.Token{AccessToken: accessTokenString},
-		map[string]any{"msgraph_host": mockServer.URL},
+		"https://issuer.example/tenant/v2.0",
+		&oauth2.Token{AccessToken: unixEnrichmentTokenForTests(t, "GroupMember.Read.All")},
+		nil,
 		nil,
 		info.UnixAttributeConfig{UIDAttribute: "extension_uidNumber"},
 	)
 	require.NoError(t, err)
-	require.Nil(t, got.UID)
-	require.Len(t, got.Groups, 2)
+	require.NotNil(t, got.UID)
+	require.Equal(t, uint32(1001), *got.UID)
+	require.Equal(t, []info.Group{{Name: "engineering", UGID: "group-id"}}, got.Groups)
 }
 
-func TestEnrichUserWithUnixAttributesAppOnlyRejectsRequiredUID(t *testing.T) {
+func TestEnrichUserWithUnixAttributesRejectsRequiredUIDWithoutUserRead(t *testing.T) {
 	t.Parallel()
 
-	mockServer, cleanup := startMockMSServer(t, nil)
-	t.Cleanup(cleanup)
-
-	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"oid": "user-id"})
-	accessTokenString, err := accessToken.SignedString(testutils.MockKey)
-	require.NoError(t, err)
-
-	provider := msentraid.New()
-	provider.SetGraphClientSecret("client-secret")
-	_, err = provider.EnrichUserWithUnixAttributes(
+	_, err := msentraid.New().EnrichUserWithUnixAttributes(
 		context.Background(),
 		info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
+		info.GroupFetchResult{},
 		"client-id",
-		mockServer.URL+"/tenant-id/v2.0",
-		&oauth2.Token{AccessToken: accessTokenString},
-		map[string]any{"msgraph_host": mockServer.URL},
+		"https://issuer.example/tenant/v2.0",
+		&oauth2.Token{AccessToken: unixEnrichmentTokenForTests(t, "GroupMember.Read.All")},
+		nil,
 		nil,
 		info.UnixAttributeConfig{UIDAttribute: "extension_uidNumber", UIDRequired: true},
 	)
@@ -424,8 +409,6 @@ func TestEnrichUserWithUnixAttributesClearsNullUID(t *testing.T) {
 		switch r.URL.Path {
 		case "/me":
 			_, _ = fmt.Fprint(w, `{"extension_uidNumber":null}`)
-		case "/me/transitiveMemberOf/graph.group":
-			_, _ = fmt.Fprint(w, `{"value":[]}`)
 		default:
 			t.Fatalf("unexpected Graph request: %s", r.URL.Path)
 		}
@@ -439,6 +422,7 @@ func TestEnrichUserWithUnixAttributesClearsNullUID(t *testing.T) {
 	got, err := msentraid.New().EnrichUserWithUnixAttributes(
 		context.Background(),
 		info.User{Name: "alice@example.com", UID: &previousUID},
+		info.GroupFetchResult{},
 		"client-id",
 		"https://issuer.example/tenant/v2.0",
 		&oauth2.Token{AccessToken: accessTokenString},
@@ -464,11 +448,9 @@ func TestEnrichUserWithUnixAttributesRejectsUnavailableRequiredUID(t *testing.T)
 
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
-				switch {
-				case r.URL.Path == "/me":
+				switch r.URL.Path {
+				case "/me":
 					_, _ = fmt.Fprint(w, userResponse)
-				case strings.Contains(r.URL.Path, "/me/transitiveMemberOf/graph.group"):
-					_, _ = fmt.Fprint(w, `{"value":[]}`)
 				default:
 					t.Errorf("unexpected Graph request: %s", r.URL.Path)
 				}
@@ -482,6 +464,7 @@ func TestEnrichUserWithUnixAttributesRejectsUnavailableRequiredUID(t *testing.T)
 			_, err = msentraid.New().EnrichUserWithUnixAttributes(
 				context.Background(),
 				info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
+				info.GroupFetchResult{},
 				"client-id",
 				"https://issuer.example/tenant/v2.0",
 				&oauth2.Token{AccessToken: accessTokenString},
@@ -500,16 +483,6 @@ func TestEnrichUserWithUnixAttributesRejectsUnavailableRequiredUID(t *testing.T)
 func TestEnrichUserWithUnixAttributesClearsNullGID(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/me/transitiveMemberOf/graph.group", r.URL.Path)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprint(w, `{"value":[{"id":"group-id","displayName":"Engineering","securityEnabled":true,"groupTypes":[],"extension_gidNumber":null}]}`)
-	}))
-	t.Cleanup(server.Close)
-
-	accessToken := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"scp": "GroupMember.Read.All User.Read"})
-	accessTokenString, err := accessToken.SignedString(testutils.MockKey)
-	require.NoError(t, err)
 	previousGID := uint32(2001)
 	got, err := msentraid.New().EnrichUserWithUnixAttributes(
 		context.Background(),
@@ -517,10 +490,15 @@ func TestEnrichUserWithUnixAttributesClearsNullGID(t *testing.T) {
 			Name:   "alice@example.com",
 			Groups: []info.Group{{Name: "engineering", UGID: "group-id", GID: &previousGID}},
 		},
+		info.GroupFetchResult{Groups: []info.Group{{
+			Name:           "engineering",
+			UGID:           "group-id",
+			AdditionalData: map[string]any{"extension_gidNumber": nil},
+		}}},
 		"client-id",
 		"https://issuer.example/tenant/v2.0",
-		&oauth2.Token{AccessToken: accessTokenString},
-		map[string]any{"msgraph_host": server.URL},
+		nil,
+		nil,
 		nil,
 		info.UnixAttributeConfig{GIDAttribute: "extension_gidNumber"},
 	)
@@ -544,16 +522,13 @@ func unixEnrichmentTokenForTests(t *testing.T, scopes string) string {
 func TestEnrichUserWithUnixAttributesKeepsUIDWithoutUserRead(t *testing.T) {
 	t.Parallel()
 
-	var userRequests, groupRequests atomic.Int32
+	var userRequests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/me":
 			userRequests.Add(1)
 			_, _ = fmt.Fprint(w, `{"extension_uidNumber":3001}`)
-		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/me/transitiveMemberOf/graph.group"):
-			groupRequests.Add(1)
-			_, _ = fmt.Fprint(w, `{"value":[]}`)
 		default:
 			t.Errorf("unexpected Graph request: %s %s", r.Method, r.URL.String())
 		}
@@ -565,6 +540,7 @@ func TestEnrichUserWithUnixAttributesKeepsUIDWithoutUserRead(t *testing.T) {
 	got, err := msentraid.New().EnrichUserWithUnixAttributes(
 		context.Background(),
 		info.User{Name: "alice@example.com", UID: &cachedUID},
+		info.GroupFetchResult{},
 		"client-id",
 		"https://issuer.example/tenant/v2.0",
 		&oauth2.Token{AccessToken: unixEnrichmentTokenForTests(t, "GroupMember.Read.All")},
@@ -576,22 +552,17 @@ func TestEnrichUserWithUnixAttributesKeepsUIDWithoutUserRead(t *testing.T) {
 	require.NotNil(t, got.UID)
 	require.Equal(t, uint32(1001), *got.UID)
 	require.Zero(t, userRequests.Load())
-	require.Equal(t, int32(1), groupRequests.Load())
 }
 
 func TestEnrichUserWithUnixAttributesKeepsUIDWhenLookupFails(t *testing.T) {
 	t.Parallel()
 
-	var groupRequests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/me":
 			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = fmt.Fprint(w, `{"error":{"code":"InternalServerError","message":"temporary failure"}}`)
-		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/me/transitiveMemberOf/graph.group"):
-			groupRequests.Add(1)
-			_, _ = fmt.Fprint(w, `{"value":[]}`)
 		default:
 			t.Errorf("unexpected Graph request: %s %s", r.Method, r.URL.String())
 		}
@@ -602,6 +573,7 @@ func TestEnrichUserWithUnixAttributesKeepsUIDWhenLookupFails(t *testing.T) {
 	got, err := msentraid.New().EnrichUserWithUnixAttributes(
 		context.Background(),
 		info.User{Name: "alice@example.com", UID: &cachedUID},
+		info.GroupFetchResult{},
 		"client-id",
 		"https://issuer.example/tenant/v2.0",
 		&oauth2.Token{AccessToken: unixEnrichmentTokenForTests(t, "GroupMember.Read.All User.Read")},
@@ -612,26 +584,10 @@ func TestEnrichUserWithUnixAttributesKeepsUIDWhenLookupFails(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, got.UID)
 	require.Equal(t, uint32(1001), *got.UID)
-	require.Equal(t, int32(1), groupRequests.Load())
 }
 
 func TestEnrichUserWithUnixAttributesKeepsCachedGIDsWhenGIDLookupFails(t *testing.T) {
 	t.Parallel()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.Method != http.MethodGet || !strings.Contains(r.URL.Path, "/me/transitiveMemberOf/graph.group") {
-			t.Errorf("unexpected Graph request: %s %s", r.Method, r.URL.String())
-			return
-		}
-		if strings.Contains(r.URL.Query().Get("$select"), "extension_gidNumber") {
-			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = fmt.Fprint(w, `{"error":{"code":"InternalServerError","message":"temporary failure"}}`)
-			return
-		}
-		_, _ = fmt.Fprint(w, `{"value":[{"id":"group-id","displayName":"Engineering","securityEnabled":true,"groupTypes":[]},{"id":"new-group-id","displayName":"Ops","securityEnabled":true,"groupTypes":[]}]}`)
-	}))
-	t.Cleanup(server.Close)
 
 	cachedGID := uint32(2001)
 	got, err := msentraid.New().EnrichUserWithUnixAttributes(
@@ -640,10 +596,17 @@ func TestEnrichUserWithUnixAttributesKeepsCachedGIDsWhenGIDLookupFails(t *testin
 			Name:   "alice@example.com",
 			Groups: []info.Group{{Name: "engineering", UGID: "group-id", GID: &cachedGID}},
 		},
+		info.GroupFetchResult{
+			Groups: []info.Group{
+				{Name: "engineering", UGID: "group-id"},
+				{Name: "ops", UGID: "new-group-id"},
+			},
+			GIDAttributeError: errors.New("temporary failure"),
+		},
 		"client-id",
 		"https://issuer.example/tenant/v2.0",
 		&oauth2.Token{AccessToken: unixEnrichmentTokenForTests(t, "GroupMember.Read.All")},
-		map[string]any{"msgraph_host": server.URL},
+		nil,
 		nil,
 		info.UnixAttributeConfig{GIDAttribute: "extension_gidNumber"},
 	)
@@ -659,23 +622,18 @@ func TestEnrichUserWithUnixAttributesKeepsCachedGIDsWhenGIDLookupFails(t *testin
 func TestEnrichUserWithUnixAttributesReportsMissingRequiredGIDAsPartial(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.Method != http.MethodGet || !strings.Contains(r.URL.Path, "/me/transitiveMemberOf/graph.group") {
-			t.Errorf("unexpected Graph request: %s %s", r.Method, r.URL.String())
-			return
-		}
-		_, _ = fmt.Fprint(w, `{"value":[{"id":"group-id","displayName":"Engineering","securityEnabled":true,"groupTypes":[]}]}`)
-	}))
-	t.Cleanup(server.Close)
-
 	got, err := msentraid.New().EnrichUserWithUnixAttributes(
 		context.Background(),
 		info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
+		info.GroupFetchResult{Groups: []info.Group{{
+			Name:           "engineering",
+			UGID:           "group-id",
+			AdditionalData: map[string]any{},
+		}}},
 		"client-id",
 		"https://issuer.example/tenant/v2.0",
-		&oauth2.Token{AccessToken: unixEnrichmentTokenForTests(t, "GroupMember.Read.All")},
-		map[string]any{"msgraph_host": server.URL},
+		nil,
+		nil,
 		nil,
 		info.UnixAttributeConfig{GIDAttribute: "extension_gidNumber", GIDRequired: true},
 	)
@@ -695,8 +653,6 @@ func TestEnrichUserWithUnixAttributesReportsMandatoryUIDLookupFailureAsPartial(t
 		case r.Method == http.MethodGet && r.URL.Path == "/me":
 			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = fmt.Fprint(w, `{"error":{"code":"InternalServerError","message":"temporary failure"}}`)
-		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/me/transitiveMemberOf/graph.group"):
-			_, _ = fmt.Fprint(w, `{"value":[]}`)
 		default:
 			t.Errorf("unexpected Graph request: %s %s", r.Method, r.URL.String())
 		}
@@ -707,6 +663,7 @@ func TestEnrichUserWithUnixAttributesReportsMandatoryUIDLookupFailureAsPartial(t
 	got, err := msentraid.New().EnrichUserWithUnixAttributes(
 		context.Background(),
 		info.User{Name: "alice@example.com", UID: &cachedUID},
+		info.GroupFetchResult{},
 		"client-id",
 		"https://issuer.example/tenant/v2.0",
 		&oauth2.Token{AccessToken: unixEnrichmentTokenForTests(t, "GroupMember.Read.All User.Read")},
@@ -722,21 +679,6 @@ func TestEnrichUserWithUnixAttributesReportsMandatoryUIDLookupFailureAsPartial(t
 func TestEnrichUserWithUnixAttributesReportsMandatoryGIDLookupFailureAsPartial(t *testing.T) {
 	t.Parallel()
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.Method != http.MethodGet || !strings.Contains(r.URL.Path, "/me/transitiveMemberOf/graph.group") {
-			t.Errorf("unexpected Graph request: %s %s", r.Method, r.URL.String())
-			return
-		}
-		if strings.Contains(r.URL.Query().Get("$select"), "extension_gidNumber") {
-			w.WriteHeader(http.StatusInternalServerError)
-			_, _ = fmt.Fprint(w, `{"error":{"code":"InternalServerError","message":"temporary failure"}}`)
-			return
-		}
-		_, _ = fmt.Fprint(w, `{"value":[{"id":"group-id","displayName":"Engineering","securityEnabled":true,"groupTypes":[]}]}`)
-	}))
-	t.Cleanup(server.Close)
-
 	cachedGID := uint32(2001)
 	got, err := msentraid.New().EnrichUserWithUnixAttributes(
 		context.Background(),
@@ -744,10 +686,14 @@ func TestEnrichUserWithUnixAttributesReportsMandatoryGIDLookupFailureAsPartial(t
 			Name:   "alice@example.com",
 			Groups: []info.Group{{Name: "engineering", UGID: "group-id", GID: &cachedGID}},
 		},
+		info.GroupFetchResult{
+			Groups:            []info.Group{{Name: "engineering", UGID: "group-id"}},
+			GIDAttributeError: errors.New("temporary failure"),
+		},
 		"client-id",
 		"https://issuer.example/tenant/v2.0",
 		&oauth2.Token{AccessToken: unixEnrichmentTokenForTests(t, "GroupMember.Read.All")},
-		map[string]any{"msgraph_host": server.URL},
+		nil,
 		nil,
 		info.UnixAttributeConfig{GIDAttribute: "extension_gidNumber", GIDRequired: true},
 	)
@@ -757,68 +703,13 @@ func TestEnrichUserWithUnixAttributesReportsMandatoryGIDLookupFailureAsPartial(t
 	require.Equal(t, uint32(2001), *got.Groups[0].GID)
 }
 
-func TestEnrichUserWithUnixAttributesGroupFailureKeepsMandatoryError(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		config        info.UnixAttributeConfig
-		wantMandatory bool
-	}{
-		"mandatory UID": {config: info.UnixAttributeConfig{UIDAttribute: "extension_uidNumber", UIDRequired: true}, wantMandatory: true},
-		"optional UID":  {config: info.UnixAttributeConfig{UIDAttribute: "extension_uidNumber"}},
-		"mandatory GID": {config: info.UnixAttributeConfig{GIDAttribute: "extension_gidNumber", GIDRequired: true}, wantMandatory: true},
-		"optional GID":  {config: info.UnixAttributeConfig{GIDAttribute: "extension_gidNumber"}},
-	}
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusInternalServerError)
-				_, _ = fmt.Fprint(w, `{"error":{"code":"InternalServerError","message":"temporary failure"}}`)
-			}))
-			t.Cleanup(server.Close)
-
-			_, err := msentraid.New().EnrichUserWithUnixAttributes(
-				context.Background(),
-				info.User{Name: "alice@example.com"},
-				"client-id",
-				"https://issuer.example/tenant/v2.0",
-				&oauth2.Token{AccessToken: unixEnrichmentTokenForTests(t, "GroupMember.Read.All User.Read")},
-				map[string]any{"msgraph_host": server.URL},
-				nil,
-				tc.config,
-			)
-			require.Error(t, err)
-			require.NotErrorIs(t, err, info.ErrUnixAttributePartial)
-			if tc.wantMandatory {
-				require.ErrorIs(t, err, info.ErrUnixAttributeRequired)
-			} else {
-				require.NotErrorIs(t, err, info.ErrUnixAttributeRequired)
-			}
-		})
-	}
-}
-
 // The tests below replace the token acquisition, so they must not run in parallel.
 func TestEnrichUserWithUnixAttributesReportsMandatoryUIDTokenRefusalAsPartial(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.Method != http.MethodGet || !strings.Contains(r.URL.Path, "/me/transitiveMemberOf/graph.group") {
-			t.Errorf("unexpected Graph request: %s %s", r.Method, r.URL.String())
-			return
-		}
-		_, _ = fmt.Fprint(w, `{"value":[]}`)
-	}))
-	t.Cleanup(server.Close)
-
-	groupsOnlyToken := unixEnrichmentTokenForTests(t, "GroupMember.Read.All")
 	restore := msentraid.SetAcquireAccessTokenForGraphAPI(func(_ context.Context, _ string, _ string, _ *oauth2.Token, _ himmelblau.DeviceRegistrationData, scopes []string) (string, error) {
 		if slices.Contains(scopes, "User.Read") {
 			return "", errors.New("User.Read token acquisition refused")
 		}
-		return groupsOnlyToken, nil
+		return "", errors.New("unexpected scope request")
 	})
 	t.Cleanup(restore)
 
@@ -826,10 +717,11 @@ func TestEnrichUserWithUnixAttributesReportsMandatoryUIDTokenRefusalAsPartial(t 
 	got, err := msentraid.New().EnrichUserWithUnixAttributes(
 		context.Background(),
 		info.User{Name: "alice@example.com", UID: &cachedUID},
+		info.GroupFetchResult{},
 		"client-id",
 		"https://issuer.example/tenant/v2.0",
 		&oauth2.Token{AccessToken: unixEnrichmentTokenForTests(t, "GroupMember.Read.All")},
-		map[string]any{"msgraph_host": server.URL},
+		nil,
 		[]byte("{}"),
 		info.UnixAttributeConfig{UIDAttribute: "extension_uidNumber", UIDRequired: true},
 	)
@@ -841,31 +733,11 @@ func TestEnrichUserWithUnixAttributesReportsMandatoryUIDTokenRefusalAsPartial(t 
 }
 
 // The tests below replace the token acquisition, so they must not run in parallel.
-func TestEnrichUserWithUnixAttributesRetriesForGroupsOnly(t *testing.T) {
-	var userRequests, groupRequests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/me":
-			userRequests.Add(1)
-			w.WriteHeader(http.StatusForbidden)
-		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/me/transitiveMemberOf/graph.group"):
-			groupRequests.Add(1)
-			_, _ = fmt.Fprint(w, `{"value":[]}`)
-		default:
-			t.Errorf("unexpected Graph request: %s %s", r.Method, r.URL.String())
-		}
-	}))
-	t.Cleanup(server.Close)
-
-	groupsOnlyToken := unixEnrichmentTokenForTests(t, "GroupMember.Read.All")
+func TestEnrichUserWithUnixAttributesKeepsCachedUIDWhenUserReadTokenUnavailable(t *testing.T) {
 	var requestedScopes [][]string
 	restore := msentraid.SetAcquireAccessTokenForGraphAPI(func(_ context.Context, _ string, _ string, _ *oauth2.Token, _ himmelblau.DeviceRegistrationData, scopes []string) (string, error) {
 		requestedScopes = append(requestedScopes, scopes)
-		if slices.Contains(scopes, "User.Read") {
-			return "", errors.New("consent required for User.Read")
-		}
-		return groupsOnlyToken, nil
+		return "", errors.New("consent required for User.Read")
 	})
 	t.Cleanup(restore)
 
@@ -873,19 +745,18 @@ func TestEnrichUserWithUnixAttributesRetriesForGroupsOnly(t *testing.T) {
 	got, err := msentraid.New().EnrichUserWithUnixAttributes(
 		context.Background(),
 		info.User{Name: "alice@example.com", UID: &cachedUID},
+		info.GroupFetchResult{},
 		"client-id",
 		"https://issuer.example/tenant/v2.0",
 		&oauth2.Token{AccessToken: unixEnrichmentTokenForTests(t, "GroupMember.Read.All")},
-		map[string]any{"msgraph_host": server.URL},
+		nil,
 		[]byte("{}"),
 		info.UnixAttributeConfig{UIDAttribute: "extension_uidNumber"},
 	)
 	require.NoError(t, err)
-	require.Equal(t, [][]string{{"GroupMember.Read.All", "User.Read"}, {"GroupMember.Read.All"}}, requestedScopes)
+	require.Equal(t, [][]string{{"User.Read"}}, requestedScopes)
 	require.NotNil(t, got.UID)
 	require.Equal(t, uint32(1001), *got.UID)
-	require.Zero(t, userRequests.Load())
-	require.Equal(t, int32(1), groupRequests.Load())
 }
 
 // The tests below replace the token acquisition, so they must not run in parallel.
@@ -909,6 +780,7 @@ func TestEnrichUserWithUnixAttributesDoesNotRetryDisabledDeviceOrRedirect(t *tes
 			_, err := msentraid.New().EnrichUserWithUnixAttributes(
 				context.Background(),
 				info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
+				info.GroupFetchResult{},
 				"client-id",
 				"https://issuer.example/tenant/v2.0",
 				&oauth2.Token{AccessToken: unixEnrichmentTokenForTests(t, "GroupMember.Read.All")},
@@ -919,68 +791,6 @@ func TestEnrichUserWithUnixAttributesDoesNotRetryDisabledDeviceOrRedirect(t *tes
 			require.ErrorIs(t, err, tc.wantErr)
 			require.NotErrorIs(t, err, info.ErrUnixAttributePartial)
 			require.Equal(t, 1, calls, "a terminal error must not be retried with fewer scopes")
-		})
-	}
-}
-
-// The tests below replace the token acquisition, so they must not run in parallel.
-func TestEnrichUserWithUnixAttributesFailsWhenGroupsOnlyTokenIsRefused(t *testing.T) {
-	var calls int
-	restore := msentraid.SetAcquireAccessTokenForGraphAPI(func(_ context.Context, _ string, _ string, _ *oauth2.Token, _ himmelblau.DeviceRegistrationData, _ []string) (string, error) {
-		calls++
-		return "", errors.New("consent required for User.Read")
-	})
-	t.Cleanup(restore)
-
-	_, err := msentraid.New().EnrichUserWithUnixAttributes(
-		context.Background(),
-		info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
-		"client-id",
-		"https://issuer.example/tenant/v2.0",
-		&oauth2.Token{AccessToken: unixEnrichmentTokenForTests(t, "GroupMember.Read.All")},
-		nil,
-		[]byte("{}"),
-		info.UnixAttributeConfig{UIDAttribute: "extension_uidNumber"},
-	)
-	require.ErrorContains(t, err, "consent required for User.Read")
-	require.NotErrorIs(t, err, info.ErrUnixAttributePartial)
-	require.Equal(t, 2, calls)
-}
-
-// The tests below replace the token acquisition, so they must not run in parallel.
-func TestEnrichUserWithUnixAttributesReturnsGroupsOnlyTerminalError(t *testing.T) {
-	tests := map[string]struct {
-		groupsOnlyErr error
-		wantErr       error
-	}{
-		"Device_disabled":      {groupsOnlyErr: himmelblau.ErrDeviceDisabled, wantErr: providerErrors.ErrDeviceDisabled},
-		"Invalid_redirect_URI": {groupsOnlyErr: himmelblau.ErrInvalidRedirectURI, wantErr: providerErrors.ErrInvalidRedirectURI},
-	}
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			var calls int
-			restore := msentraid.SetAcquireAccessTokenForGraphAPI(func(_ context.Context, _ string, _ string, _ *oauth2.Token, _ himmelblau.DeviceRegistrationData, scopes []string) (string, error) {
-				calls++
-				if slices.Contains(scopes, "User.Read") {
-					return "", errors.New("User.Read token acquisition refused")
-				}
-				return "", tc.groupsOnlyErr
-			})
-			t.Cleanup(restore)
-
-			_, err := msentraid.New().EnrichUserWithUnixAttributes(
-				context.Background(),
-				info.NewUser("alice@example.com", "/home/alice", "user-id", "", "Alice", nil),
-				"client-id",
-				"https://issuer.example/tenant/v2.0",
-				&oauth2.Token{AccessToken: unixEnrichmentTokenForTests(t, "GroupMember.Read.All")},
-				nil,
-				[]byte("{}"),
-				info.UnixAttributeConfig{UIDAttribute: "extension_uidNumber"},
-			)
-			require.ErrorIs(t, err, tc.wantErr)
-			require.NotErrorIs(t, err, info.ErrUnixAttributePartial)
-			require.Equal(t, 2, calls)
 		})
 	}
 }
@@ -1210,6 +1020,7 @@ func TestGetGroups(t *testing.T) {
 				tc.providerMetadata,
 				deviceRegistrationData,
 				tc.acquireAccessToken,
+				"",
 			)
 			if tc.wantErr {
 				require.Error(t, err, "GetUserInfo should return an error")
@@ -1217,9 +1028,89 @@ func TestGetGroups(t *testing.T) {
 			}
 			require.NoError(t, err, "GetUserInfo should not return an error")
 
-			golden.CheckOrUpdateYAML(t, got)
+			golden.CheckOrUpdateYAML(t, got.Groups)
 		})
 	}
+}
+
+func TestGetGroupsFetchesUnixGIDDataForEnrichment(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/me/transitiveMemberOf/graph.group", r.URL.Path)
+		require.ElementsMatch(t,
+			[]string{"id", "displayName", "securityEnabled", "groupTypes", "extension_gidNumber"},
+			strings.Split(r.URL.Query().Get("$select"), ","),
+		)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"value":[{"id":"group-id","displayName":"Engineering","securityEnabled":true,"groupTypes":[],"extension_gidNumber":2001}]}`)
+	}))
+	t.Cleanup(server.Close)
+
+	provider := msentraid.New()
+	provider.SetTokenScopesForGraphAPI([]string{"GroupMember.Read.All"})
+	result, err := provider.GetGroups(
+		context.Background(),
+		"client-id",
+		"https://issuer.example/tenant/v2.0",
+		&oauth2.Token{AccessToken: unixEnrichmentTokenForTests(t, "GroupMember.Read.All")},
+		map[string]any{"msgraph_host": server.URL},
+		nil,
+		false,
+		"extension_gidNumber",
+	)
+	require.NoError(t, err)
+	require.NoError(t, result.GIDAttributeError)
+	require.Len(t, result.Groups, 1)
+	require.Equal(t, "engineering", result.Groups[0].Name)
+	require.Equal(t, "group-id", result.Groups[0].UGID)
+	require.Nil(t, result.Groups[0].GID)
+	gid, err := msentraid.ParseUnixID(result.Groups[0].AdditionalData["extension_gidNumber"])
+	require.NoError(t, err)
+	require.NotNil(t, gid)
+	require.Equal(t, uint32(2001), *gid)
+
+	serialized, err := json.Marshal(result.Groups)
+	require.NoError(t, err)
+	require.NotContains(t, string(serialized), "extension_gidNumber")
+}
+
+func TestGetGroupsFallsBackWhenUnixGIDAttributeCannotBeRead(t *testing.T) {
+	t.Parallel()
+
+	var selectedAttributeCalls atomic.Int32
+	var fallbackCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Query().Get("$select"), "extension_gidNumber") {
+			selectedAttributeCalls.Add(1)
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = fmt.Fprint(w, `{"error":{"code":"InternalServerError","message":"temporary failure"}}`)
+			return
+		}
+		fallbackCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(w, `{"value":[{"id":"group-id","displayName":"Engineering","securityEnabled":true,"groupTypes":[]}]}`)
+	}))
+	t.Cleanup(server.Close)
+
+	provider := msentraid.New()
+	provider.SetTokenScopesForGraphAPI([]string{"GroupMember.Read.All"})
+	result, err := provider.GetGroups(
+		context.Background(),
+		"client-id",
+		"https://issuer.example/tenant/v2.0",
+		&oauth2.Token{AccessToken: unixEnrichmentTokenForTests(t, "GroupMember.Read.All")},
+		map[string]any{"msgraph_host": server.URL},
+		nil,
+		false,
+		"extension_gidNumber",
+	)
+	require.NoError(t, err)
+	require.ErrorContains(t, result.GIDAttributeError, "extension_gidNumber")
+	require.Equal(t, int32(1), selectedAttributeCalls.Load())
+	require.Equal(t, int32(1), fallbackCalls.Load())
+	require.Len(t, result.Groups, 1)
+	require.Nil(t, result.Groups[0].AdditionalData)
 }
 
 func TestGetGroupsUsesCurrentTokenWhenAlreadyGraphCapable(t *testing.T) {
@@ -1250,12 +1141,13 @@ func TestGetGroupsUsesCurrentTokenWhenAlreadyGraphCapable(t *testing.T) {
 		map[string]any{"msgraph_host": mockServer.URL},
 		nil,
 		true,
+		"",
 	)
 	require.NoError(t, err, "GetGroups should use the current token when it already has Graph scopes")
 	require.ElementsMatch(t, []info.Group{
 		{Name: "group1", UGID: "id1"},
 		{Name: "group2", UGID: "id2"},
-	}, got)
+	}, got.Groups)
 }
 
 func TestGetGroupsUsesClientCredentialsFallback(t *testing.T) {
@@ -1287,12 +1179,13 @@ func TestGetGroupsUsesClientCredentialsFallback(t *testing.T) {
 		map[string]any{"msgraph_host": mockServer.URL},
 		nil,
 		false,
+		"",
 	)
 	require.NoError(t, err, "GetGroups should fall back to client credentials when the delegated token lacks Graph scope")
 	require.ElementsMatch(t, []info.Group{
 		{Name: "group1", UGID: "id1"},
 		{Name: "group2", UGID: "id2"},
-	}, got)
+	}, got.Groups)
 }
 
 func TestGetGroupsDeviceRegistrationTokenDoesNotUseClientCredentials(t *testing.T) {
@@ -1329,6 +1222,7 @@ func TestGetGroupsDeviceRegistrationTokenDoesNotUseClientCredentials(t *testing.
 		map[string]any{"msgraph_host": mockServer.URL},
 		nil,
 		true,
+		"",
 	)
 	require.Error(t, err, "GetGroups must not use client credentials for a device-registration token")
 	require.Contains(t, err.Error(), "device registration",
@@ -1354,6 +1248,7 @@ func TestGetGroupsInvalidTokenWithClientCredentialsReturnsError(t *testing.T) {
 		map[string]any{"msgraph_host": mockServer.URL},
 		nil,
 		false,
+		"",
 	)
 	require.Error(t, err, "GetGroups should return an error instead of panicking on invalid delegated tokens")
 }
@@ -1609,13 +1504,14 @@ func TestGetGroupsRetriesTransientDeviceAuthenticationFailure(t *testing.T) {
 		map[string]any{"msgraph_host": mockServer.URL},
 		deviceRegistrationData,
 		true,
+		"",
 	)
 	require.NoError(t, err, "GetGroups should retry transient device authentication failures")
 	require.Equal(t, int32(3), acquireCalls.Load(), "Graph token acquisition should be retried until it succeeds")
 	require.ElementsMatch(t, []info.Group{
 		{Name: "group1", UGID: "id1"},
 		{Name: "group2", UGID: "id2"},
-	}, got)
+	}, got.Groups)
 }
 
 func TestGetGroupsClientCredentialsUsesConfiguredIssuerAndGraphHosts(t *testing.T) {
@@ -1679,6 +1575,7 @@ func TestGetGroupsClientCredentialsUsesConfiguredIssuerAndGraphHosts(t *testing.
 		map[string]any{"msgraph_host": mockServer.URL + "/v1.0"},
 		nil,
 		false,
+		"",
 	)
 	require.NoError(t, err, "GetGroups should use client credentials against configured hosts")
 	require.True(t, tokenEndpointCalled.Load(), "client credentials token endpoint should have been called")
@@ -1686,7 +1583,7 @@ func TestGetGroupsClientCredentialsUsesConfiguredIssuerAndGraphHosts(t *testing.
 	require.ElementsMatch(t, []info.Group{
 		{Name: "group1", UGID: "id1"},
 		{Name: "group2", UGID: "id2"},
-	}, got)
+	}, got.Groups)
 }
 
 func TestIsTokenForDeviceRegistration(t *testing.T) {

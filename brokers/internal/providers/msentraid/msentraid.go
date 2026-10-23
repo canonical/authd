@@ -251,7 +251,8 @@ func (p *Provider) GetGroups(
 	providerMetadata map[string]interface{},
 	deviceRegistrationDataJSON []byte,
 	needsAccessTokenForGraphAPI bool,
-) ([]info.Group, error) {
+	unixGIDAttribute string,
+) (info.GroupFetchResult, error) {
 	accessTokenStr := token.AccessToken
 	accessTokenHasGraphScope := false
 	// Parse early to check whether the token already carries the required graph scope.
@@ -276,7 +277,7 @@ func (p *Provider) GetGroups(
 	// take the app-only path.
 	if p.graphClientSecret != "" && !accessTokenHasGraphScope && !needsAccessTokenForGraphAPI {
 		if parseErr != nil {
-			return nil, fmt.Errorf("failed to parse access token for client credentials group lookup: %w", parseErr)
+			return info.GroupFetchResult{}, fmt.Errorf("failed to parse access token for client credentials group lookup: %w", parseErr)
 		}
 		oid, oidErr := p.getOIDFromToken(accessToken)
 		if oidErr != nil {
@@ -288,7 +289,7 @@ func (p *Provider) GetGroups(
 			// delegated session, so per-user session/account-status revocation is
 			// not reflected here (see the GetGroups doc comment).
 			log.Infof(ctx, "Resolving groups for OID %s via app-only client credentials (delegated token lacks GroupMember.Read.All)", oid)
-			return p.fetchUserGroupsByClientCredentials(ctx, clientID, issuerURL, oid, host)
+			return p.fetchUserGroupsByClientCredentials(ctx, clientID, issuerURL, oid, host, unixGIDAttribute)
 		}
 	}
 
@@ -297,7 +298,7 @@ func (p *Provider) GetGroups(
 		err := json.Unmarshal(deviceRegistrationDataJSON, &data)
 		if err != nil {
 			log.Noticef(ctx, "Could not decode device registration data: %v", err)
-			return nil, fmt.Errorf("failed to unmarshal device registration data: %v", err)
+			return info.GroupFetchResult{}, fmt.Errorf("failed to unmarshal device registration data: %v", err)
 		}
 
 		tenantID := tenantID(issuerURL)
@@ -305,7 +306,7 @@ func (p *Provider) GetGroups(
 			return p.acquireGraphAccessToken(ctx, clientID, tenantID, token, data)
 		}, p.graphTokenAcquisitionRetryInterval, p.graphTokenAcquisitionRetryTimeout)
 		if err != nil {
-			return nil, classifyGraphTokenAcquisitionError(err)
+			return info.GroupFetchResult{}, classifyGraphTokenAcquisitionError(err)
 		}
 
 		// Re-parse the newly acquired token.
@@ -315,12 +316,12 @@ func (p *Provider) GetGroups(
 	// them for group lookup, not user identity; Microsoft Graph validates the
 	// bearer token when the request reaches the API.
 	if parseErr != nil {
-		return nil, fmt.Errorf("failed to parse access token: %w", parseErr)
+		return info.GroupFetchResult{}, fmt.Errorf("failed to parse access token: %w", parseErr)
 	}
 
 	msgraphHost := resolveMSGraphHost(providerMetadata)
 
-	return p.fetchUserGroups(accessToken, msgraphHost)
+	return p.fetchUserGroups(ctx, accessToken, msgraphHost, unixGIDAttribute)
 }
 
 func (p *Provider) acquireGraphAccessToken(
@@ -472,30 +473,27 @@ func newGraphServiceClient(token *jwt.Token, msgraphHost string) (*msgraphsdk.Gr
 // fetchUserGroupsByClientCredentials acquires an application-level Graph API token
 // via client credentials and fetches groups for the given user OID. It is used
 // when the delegated token lacks GroupMember.Read.All (e.g., native Entra MFA flow).
-func (p *Provider) fetchUserGroupsByClientCredentials(ctx context.Context, clientID, issuerURL, userOID, msgraphHost string) ([]info.Group, error) {
+func (p *Provider) fetchUserGroupsByClientCredentials(ctx context.Context, clientID, issuerURL, userOID, msgraphHost, unixGIDAttribute string) (info.GroupFetchResult, error) {
 	log.Debugf(ctx, "Getting user groups via client credentials for OID %s", userOID)
 
 	appTokenStr, err := acquireClientCredentialsToken(ctx, issuerURL, clientID, p.graphClientSecret, msgraphHost)
 	if err != nil {
-		return nil, fmt.Errorf("failed to acquire client credentials token for Graph API: %w", err)
+		return info.GroupFetchResult{}, fmt.Errorf("failed to acquire client credentials token for Graph API: %w", err)
 	}
 
 	appToken, _, err := new(jwt.Parser).ParseUnverified(appTokenStr, jwt.MapClaims{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse client credentials token: %w", err)
+		return info.GroupFetchResult{}, fmt.Errorf("failed to parse client credentials token: %w", err)
 	}
 
 	client, err := newGraphServiceClient(appToken, msgraphHost)
 	if err != nil {
-		return nil, err
+		return info.GroupFetchResult{}, err
 	}
 
-	graphGroups, err := getSecurityGroupsByUserID(client, userOID)
-	if err != nil {
-		return nil, err
-	}
-
-	return processSecurityGroups(graphGroups)
+	return fetchAndProcessSecurityGroups(unixGIDAttribute, func(fields []string) ([]msgraphmodels.Groupable, error) {
+		return getSecurityGroupsByUserIDWithSelect(ctx, client, userOID, fields)
+	})
 }
 
 // getOIDFromToken extracts the object ID (oid claim) from a parsed JWT token.
@@ -603,8 +601,8 @@ func graphDefaultScope(msgraphHost string) (string, error) {
 	return (&url.URL{Scheme: graphURL.Scheme, Host: graphURL.Host, Path: ".default"}).String(), nil
 }
 
-// fetchUserGroups access the Microsoft Graph API to get the groups the user is a member of.
-func (p *Provider) fetchUserGroups(token *jwt.Token, msgraphHost string) ([]info.Group, error) {
+// fetchUserGroups accesses the Microsoft Graph API to get the groups the user is a member of.
+func (p *Provider) fetchUserGroups(ctx context.Context, token *jwt.Token, msgraphHost, unixGIDAttribute string) (info.GroupFetchResult, error) {
 	log.Debug(context.Background(), "Getting user groups from Microsoft Graph API")
 
 	var err error
@@ -613,42 +611,88 @@ func (p *Provider) fetchUserGroups(token *jwt.Token, msgraphHost string) ([]info
 	if scopes == nil {
 		scopes, err = p.getTokenScopes(token)
 		if err != nil {
-			return nil, err
+			return info.GroupFetchResult{}, err
 		}
 	}
 
 	// Check if the token has the GroupMember.Read.All scope
 	if !slices.Contains(scopes, graphGroupMemberReadAllScope) {
 		msg := "Error: the Microsoft Entra ID app is missing the GroupMember.Read.All permission"
-		return nil, &providerErrors.ForDisplayError{Message: msg}
+		return info.GroupFetchResult{}, &providerErrors.ForDisplayError{Message: msg}
 	}
 
 	client, err := newGraphServiceClient(token, msgraphHost)
 	if err != nil {
-		return nil, err
+		return info.GroupFetchResult{}, err
 	}
 
-	// Get the groups (only the groups, not directory roles or administrative units, because that would require
-	// additional permissions) which the user is a member of.
-	graphGroups, err := getSecurityGroups(client)
+	return fetchAndProcessSecurityGroups(unixGIDAttribute, func(fields []string) ([]msgraphmodels.Groupable, error) {
+		return getSecurityGroupsWithSelect(ctx, client, fields)
+	})
+}
+
+func fetchAndProcessSecurityGroups(
+	unixGIDAttribute string,
+	fetch func(fields []string) ([]msgraphmodels.Groupable, error),
+) (info.GroupFetchResult, error) {
+	var fields []string
+	if unixGIDAttribute != "" {
+		fields = groupSelectFields(unixGIDAttribute)
+	}
+
+	graphGroups, err := fetch(fields)
+	if err != nil && unixGIDAttribute != "" {
+		gidAttributeErr := fmt.Errorf("could not read Unix GID attribute %q: %w", unixGIDAttribute, err)
+		graphGroups, err = fetch(nil)
+		if err != nil {
+			return info.GroupFetchResult{}, errors.Join(gidAttributeErr, err)
+		}
+
+		groups, processErr := processSecurityGroups(graphGroups)
+		if processErr != nil {
+			return info.GroupFetchResult{}, errors.Join(gidAttributeErr, processErr)
+		}
+		return info.GroupFetchResult{Groups: groups, GIDAttributeError: gidAttributeErr}, nil
+	}
+	if err != nil {
+		return info.GroupFetchResult{}, err
+	}
+
+	var groups []info.Group
+	if unixGIDAttribute == "" {
+		groups, err = processSecurityGroups(graphGroups)
+	} else {
+		groups, err = processSecurityGroupsForUnixAttributeEnrichment(graphGroups, unixGIDAttribute)
+	}
+	if err != nil {
+		return info.GroupFetchResult{}, err
+	}
+	return info.GroupFetchResult{Groups: groups}, nil
+}
+
+// processSecurityGroups converts Graph API groups into the internal
+// representation, deduplicating and normalising names.
+func processSecurityGroups(graphGroups []msgraphmodels.Groupable) ([]info.Group, error) {
+	groups, err := processSecurityGroupsForUnixAttributeEnrichment(graphGroups, "")
 	if err != nil {
 		return nil, err
 	}
-
-	return processSecurityGroups(graphGroups)
+	return deduplicateSecurityGroups(groups), nil
 }
 
-// processSecurityGroups converts a slice of Graph API group objects into the
-// internal info.Group representation, deduplicating and normalising names.
-func processSecurityGroups(graphGroups []msgraphmodels.Groupable) ([]info.Group, error) {
-	return processSecurityGroupsWithGID(graphGroups, "")
-}
-
-// processSecurityGroupsWithGID omits GIDs that are missing, malformed, or conflicting. The caller decides whether that matters.
+// processSecurityGroupsWithGID is used by tests to process Graph groups and their Unix GIDs.
 func processSecurityGroupsWithGID(graphGroups []msgraphmodels.Groupable, gidAttribute string) ([]info.Group, error) {
+	groups, err := processSecurityGroupsForUnixAttributeEnrichment(graphGroups, gidAttribute)
+	if err != nil {
+		return nil, err
+	}
+	return enrichSecurityGroupGIDs(groups, gidAttribute), nil
+}
+
+// processSecurityGroupsForUnixAttributeEnrichment normalises Graph groups and
+// keeps the requested extension data for the later enrichment step.
+func processSecurityGroupsForUnixAttributeEnrichment(graphGroups []msgraphmodels.Groupable, gidAttribute string) ([]info.Group, error) {
 	var groups []info.Group
-	groupIndexes := make(map[string]int)
-	groupDisplayNames := make(map[string]string)
 	for _, msGroup := range graphGroups {
 		var group info.Group
 
@@ -682,39 +726,61 @@ func processSecurityGroupsWithGID(graphGroups []msgraphmodels.Groupable, gidAttr
 		}
 
 		if !isLocalGroup && gidAttribute != "" {
-			gid, err := parseConfiguredUnixID(msGroup.GetAdditionalData(), gidAttribute, fmt.Sprintf("group %q", msGroupName), false)
-			if err != nil {
-				return nil, err
+			group.AdditionalData = msGroup.GetAdditionalData()
+			if group.AdditionalData == nil {
+				group.AdditionalData = map[string]any{}
 			}
-			group.GID = gid
 		}
-
-		duplicateKey := "remote:" + group.Name
-		if isLocalGroup {
-			duplicateKey = "local:" + group.Name
-		}
-		if previousIndex, ok := groupIndexes[duplicateKey]; ok {
-			previous := &groups[previousIndex]
-			if !isLocalGroup && previous.GID != nil && group.GID != nil && *previous.GID != *group.GID {
-				log.Warningf(context.Background(), "The Microsoft Graph API returned duplicate group name %q with conflicting GIDs %d and %d; omitting the GID", group.Name, *previous.GID, *group.GID)
-				previous.GID = nil
-			} else if !isLocalGroup && (previous.GID == nil) != (group.GID == nil) {
-				log.Warningf(context.Background(), "The Microsoft Graph API returned duplicate group name %q with inconsistent Unix GID data; omitting the GID", group.Name)
-				previous.GID = nil
-			} else if msGroupName == groupDisplayNames[duplicateKey] {
-				log.Warningf(context.Background(), "The Microsoft Graph API returned the group %q multiple times, ignoring the duplicate", msGroupName)
-			} else {
-				log.Warningf(context.Background(), "The Microsoft Graph API returned the group %q multiple times, but with different case, ignoring the duplicate", msGroupName)
-			}
-			continue
-		}
-
 		groups = append(groups, group)
-		groupIndexes[duplicateKey] = len(groups) - 1
-		groupDisplayNames[duplicateKey] = msGroupName
 	}
 
 	return groups, nil
+}
+
+func enrichSecurityGroupGIDs(groups []info.Group, gidAttribute string) []info.Group {
+	enriched := slices.Clone(groups)
+	for i := range enriched {
+		if gidAttribute == "" || enriched[i].UGID == "" {
+			enriched[i].AdditionalData = nil
+			continue
+		}
+		gid, err := parseConfiguredUnixID(enriched[i].AdditionalData, gidAttribute, fmt.Sprintf("group %q", enriched[i].Name), false)
+		if err != nil {
+			log.Warningf(context.Background(), "Could not parse Unix GID attribute %q for group %q: %v", gidAttribute, enriched[i].Name, err)
+			enriched[i].GID = nil
+		} else {
+			enriched[i].GID = gid
+		}
+		enriched[i].AdditionalData = nil
+	}
+	return deduplicateSecurityGroups(enriched)
+}
+
+func deduplicateSecurityGroups(groups []info.Group) []info.Group {
+	deduplicated := make([]info.Group, 0, len(groups))
+	groupIndexes := make(map[string]int)
+	for _, group := range groups {
+		duplicateKey := "remote:" + group.Name
+		if group.UGID == "" {
+			duplicateKey = "local:" + group.Name
+		}
+		if previousIndex, ok := groupIndexes[duplicateKey]; ok {
+			previous := &deduplicated[previousIndex]
+			if group.UGID != "" && previous.GID != nil && group.GID != nil && *previous.GID != *group.GID {
+				log.Warningf(context.Background(), "The Microsoft Graph API returned duplicate group name %q with conflicting GIDs %d and %d; omitting the GID", group.Name, *previous.GID, *group.GID)
+				previous.GID = nil
+			} else if group.UGID != "" && (previous.GID == nil) != (group.GID == nil) {
+				log.Warningf(context.Background(), "The Microsoft Graph API returned duplicate group name %q with inconsistent Unix GID data; omitting the GID", group.Name)
+				previous.GID = nil
+			} else {
+				log.Warningf(context.Background(), "The Microsoft Graph API returned the group %q multiple times, ignoring the duplicate", group.Name)
+			}
+			continue
+		}
+		deduplicated = append(deduplicated, group)
+		groupIndexes[duplicateKey] = len(deduplicated) - 1
+	}
+	return deduplicated
 }
 
 func groupSelectFields(gidAttribute string) []string {
@@ -783,10 +849,6 @@ func collectSecurityGroups(logContext string, getPage func(nextLink string) ([]m
 	return groups, nil
 }
 
-func getSecurityGroups(client *msgraphsdk.GraphServiceClient) ([]msgraphmodels.Groupable, error) {
-	return getSecurityGroupsWithSelect(context.Background(), client, nil)
-}
-
 func getSecurityGroupsWithSelect(ctx context.Context, client *msgraphsdk.GraphServiceClient, selectFields []string) ([]msgraphmodels.Groupable, error) {
 	requestBuilder := client.Me().TransitiveMemberOf().GraphGroup()
 	return collectSecurityGroups("", func(nextLink string) ([]msgraphmodels.Groupable, *string, error) {
@@ -809,13 +871,6 @@ func getSecurityGroupsWithSelect(ctx context.Context, client *msgraphsdk.GraphSe
 		}
 		return result.GetValue(), result.GetOdataNextLink(), nil
 	})
-}
-
-// getSecurityGroupsByUserID fetches security groups for a specific user OID using
-// the application-permission endpoint /users/{id}/transitiveMemberOf/microsoft.graph.group.
-// This requires GroupMember.Read.All Application permission and an app-only token.
-func getSecurityGroupsByUserID(client *msgraphsdk.GraphServiceClient, userID string) ([]msgraphmodels.Groupable, error) {
-	return getSecurityGroupsByUserIDWithSelect(context.Background(), client, userID, nil)
 }
 
 func getSecurityGroupsByUserIDWithSelect(ctx context.Context, client *msgraphsdk.GraphServiceClient, userID string, selectFields []string) ([]msgraphmodels.Groupable, error) {
