@@ -31,7 +31,7 @@ The broker can read three related values:
   GID. It identifies the group when cached values are reviewed or conflicts
   are reported.
 
-The settings are in the `[msentraid]` section of the broker configuration file:
+Related settings are in the `[msentraid]` section of the broker configuration file:
 
 ```ini
 unix_uid_attribute = uidNumber
@@ -40,22 +40,25 @@ unix_uid_required = false
 unix_gid_required = false
 ```
 
-The feature is disabled when both attribute names are empty. A short attribute
+The UID and GID feature is disabled when both attribute names are empty. A short attribute
 name is resolved using the configured `[oidc] client_id`. For example,
 `uidNumber` becomes `extension_<client-id-without-hyphens>_uidNumber`. A full
 name such as `extension_abc123_uidNumber` is passed to Entra as written. This
 supports attributes created by Entra Connect or Cloud Sync under a different
 app registration.
 
-A required flag without its matching attribute is invalid configuration. On a
-successful refresh, a missing or invalid required value denies login in both
+A required flag (unix_uid_required and/or unix_gid_required) without its matching 
+attribute is an invalid configuration. 
+On a successful refresh, a missing or invalid required value denies login in both
 modes. A required value that cannot be read follows
-`force_access_check_with_provider`: the forced check denies login; without it,
+`force_access_check_with_provider`. If it is set to true it denies the login; otherwise,
 the broker keeps the cached value, or leaves it empty if none is cached. If the
-whole refresh cannot complete, the forced check denies login and an unforced
-check uses the previous snapshot. Offline, a forced check denies login and an
-unforced check uses cached values even when some are missing. Optional values
-never deny login.
+token refresh cannot complete, when set to true it denies login. If set to false
+the broker uses the previous snapshot. 
+If no connection is available and it is set to true it denies login. Otherwise the broker 
+uses cached values even when some are missing. 
+Optional values (unix_uid_required and/or unix_gid_required set to false) never 
+drive decision to deny login.
 
 ## Authentication and Graph access matrix
 
@@ -73,7 +76,9 @@ usable for the Graph requests.
 | `entra_auth` | false | no | Invalid configuration | Not available | Not available |
 
 Therefore, `register_device=true` is not a universal requirement for Unix ID
-enrichment, the broker's lookup of configured UID and GID attributes. It is one
+enrichment. Here, enrichment means fetching the configured UID and GID
+attributes and the user's group membership from Microsoft Graph, then storing
+that data in the broker's cached user information. Device registration is one
 way to obtain a delegated Graph token. For the
 `entra_auth` flow, either device registration or a client secret is required
 because the native Entra authentication token cannot resolve group membership
