@@ -571,9 +571,9 @@ func TestNewRejectsUnixAttributesWithoutEnricher(t *testing.T) {
 		withEnricher     bool
 		wantErrorMessage string
 	}{
-		"Required_UID_without_enricher": {uidRequired: true, wantErrorMessage: "unix_uid_required"},
-		"Required_GID_without_enricher": {gidRequired: true, wantErrorMessage: "unix_gid_required"},
-		"Optional_IDs_without_enricher": {wantErrorMessage: "unix_uid_attribute"},
+		"Required_UID_without_enricher": {uidRequired: true, wantErrorMessage: "Unix attribute configuration requires a provider that supports Unix attribute enrichment"},
+		"Required_GID_without_enricher": {gidRequired: true, wantErrorMessage: "Unix attribute configuration requires a provider that supports Unix attribute enrichment"},
+		"Optional_IDs_without_enricher": {wantErrorMessage: "Unix attribute configuration requires a provider that supports Unix attribute enrichment"},
 		"Required_UID_with_enricher":    {uidRequired: true, withEnricher: true},
 	}
 
