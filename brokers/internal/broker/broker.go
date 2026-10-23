@@ -3336,9 +3336,6 @@ func (b *Broker) fetchUnixAttributes(ctx context.Context, session *session, auth
 		}
 		user := authInfo.UserInfo
 		user.Groups = groups
-		if config.UIDRequired || config.GIDRequired {
-			return user, fmt.Errorf("%w: %w: provider does not support Unix attribute enrichment", info.ErrUnixAttributePartial, info.ErrUnixAttributeRequired)
-		}
 		return user, nil
 	}
 
