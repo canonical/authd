@@ -343,23 +343,11 @@ func newBroker(cfg Config, apiVersion uint, p providers.Provider, args ...Option
 	if cfg.clientID == "" {
 		err = errors.Join(err, errors.New("client ID is required and was not provided"))
 	}
-	unixAttributesConfigured := cfg.unixUIDAttribute != "" || cfg.unixGIDAttribute != "" ||
-		cfg.unixUIDRequired || cfg.unixGIDRequired
-	if _, ok := providers.ProviderAs[info.UnixAttributeEnricher](opts.provider); !ok {
-		if cfg.unixUIDAttribute != "" {
-			err = errors.Join(err, fmt.Errorf("invalid configuration: %q requires a provider that supports Unix attribute enrichment", unixUIDAttributeKey))
-		}
-		if cfg.unixGIDAttribute != "" {
-			err = errors.Join(err, fmt.Errorf("invalid configuration: %q requires a provider that supports Unix attribute enrichment", unixGIDAttributeKey))
-		}
-		if cfg.unixUIDRequired {
-			err = errors.Join(err, fmt.Errorf("invalid configuration: %q requires a provider that supports Unix attribute enrichment", unixUIDRequiredKey))
-		}
-		if cfg.unixGIDRequired {
-			err = errors.Join(err, fmt.Errorf("invalid configuration: %q requires a provider that supports Unix attribute enrichment", unixGIDRequiredKey))
-		}
-	}
+	unixAttributesConfigured := cfg.unixUIDAttribute != "" || cfg.unixGIDAttribute != ""
 	if unixAttributesConfigured {
+		if _, ok := providers.ProviderAs[info.UnixAttributeEnricher](opts.provider); !ok {
+			err = errors.Join(err, errors.New("invalid configuration: Unix attribute configuration requires a provider that supports Unix attribute enrichment"))
+		}
 		if _, ok := providers.ProviderAs[providers.GroupFetcher](opts.provider); !ok {
 			err = errors.Join(err, errors.New("invalid configuration: Unix attribute configuration requires a provider that supports group fetching"))
 		}
