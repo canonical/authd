@@ -264,6 +264,10 @@ force_access_check_with_provider = true
 This check works by forcing a token refresh during login, which fails if the
 user does not have the necessary permissions in the identity provider.
 
+For Microsoft Entra ID, see [Configure stable Unix IDs from Entra ID](configure-entra-unix-ids)
+for details on how this setting affects fallback to cached Unix IDs and group
+data.
+
 ```{warning}
 In some cases, forcing the access check may prevent login, such as when there are network issues.
 ```
