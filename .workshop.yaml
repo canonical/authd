@@ -3,12 +3,12 @@
 # A single VM builds and installs authd's daemon, PAM and NSS modules from
 # source, with sshd for SSH login testing and a virtual console for GDM tests.
 # See .workshop/README.md for prerequisites, sizing, and validation.
-# Unknown keys are ignored silently, so a typo fails quietly. Check names
-# against the Workshop definition reference.
+# Workshop 0.9.9 rejects unknown keys, so check names against the Workshop
+# definition reference.
 name: authd-dev
 base: ubuntu@26.04
-# Workshop 0.9.7 syntax for experimental VM support; see .workshop/README.md.
-confinement: virtual-machine
+# Workshop 0.9.9 VM runtime (experimental); see .workshop/README.md.
+runtime: lxd-vm
 
 sdks:
   # latest/stable is the only channel the Store rust SDK offers, so this

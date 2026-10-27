@@ -3,8 +3,8 @@
 # Shared health checks for the authd Workshop environment.
 #
 # These helpers back the developer-facing `validate` action so the environment
-# has a single source of truth for what "healthy" means. (Workshop runs no SDK
-# health checks under VM confinement, so there is no check-health hook.)
+# has a single source of truth for what "healthy" means. There is no
+# check-health hook; `validate` is the only health entry point.
 
 # go/cargo/protoc and the NSS login-environment check all need the workshop
 # user's login shell, so they are run together in a single spawn instead of

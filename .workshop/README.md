@@ -9,7 +9,7 @@ Run all host commands from the repository root.
 
 ## What you get
 
-- One Ubuntu 26.04 VM (`confinement: virtual-machine`, experimental).
+- One Ubuntu 26.04 VM (`runtime: lxd-vm`, experimental).
 - authd, `authctl`, both PAM modules, and NSS built from `/project`.
 - GDM with the patched `gnome-shell`, sshd, and D-Bus wiring.
 - Go 1.26 from the pinned Workshop Store SDK and Cargo from its `latest/stable` channel.
@@ -36,16 +36,17 @@ Run `workshop run -- <action> --help` for full flags.
 
 ## Prerequisites
 
-Install [Workshop](https://ubuntu.com/workshop/docs/) 0.9.7 or later.
-VM support is experimental. It needs LXD `latest/edge` and one snap setting.
+Install [Workshop](https://ubuntu.com/workshop/docs/) 0.9.9 or later.
+VM support is experimental. It needs LXD `6/candidate` and one snap setting.
+The channel switch is host-wide, and LXD cannot move back to `6/stable`.
 If LXD is missing, the commands install it; otherwise they refresh it.
 The host must also provide hardware virtualization.
 
 ```shell
 if snap list lxd >/dev/null 2>&1; then
-  sudo snap refresh lxd --channel=latest/edge
+  sudo snap refresh lxd --channel=6/candidate
 else
-  sudo snap install lxd --channel=latest/edge
+  sudo snap install lxd --channel=6/candidate
 fi
 sudo snap set workshop workshop.experimental-vms=1
 sudo snap restart workshop.workshopd
@@ -57,9 +58,9 @@ GDM and PAM need a full system.
 
 ## VM size
 
-LXD boots this VM with about 1 GiB of RAM. That is too small for the cold
-Go and Rust builds `setup-project` runs. The Workshop definition cannot set
-VM memory or root disk size.
+LXD boots this VM with about 1 GiB of RAM. That is too small for the
+cold Go and Rust builds `setup-project` runs. As of Workshop 0.9.9, the
+definition cannot set VM memory or root disk size.
 
 For a fresh checkout, create the VM without the project SDK, resize it, then
 add the SDK so its first cold build runs at the larger size. Temporarily remove
