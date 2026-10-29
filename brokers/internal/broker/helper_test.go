@@ -40,6 +40,8 @@ type brokerForTestConfig struct {
 	owner                        string
 	extraGroups                  []string
 	ownerExtraGroups             []string
+	groupsClaim                  string
+	allowedProviderGroups        []string
 	homeBaseDir                  string
 	allowedSSHSuffixes           []string
 	provider                     providers.Provider
@@ -133,6 +135,12 @@ func newBrokerForTests(t *testing.T, cfg *brokerForTestConfig) (b *broker.Broker
 	}
 	if cfg.ownerExtraGroups != nil {
 		cfg.SetOwnerExtraGroups(cfg.ownerExtraGroups)
+	}
+	if cfg.groupsClaim != "" {
+		cfg.SetGroupsClaim(cfg.groupsClaim)
+	}
+	if cfg.allowedProviderGroups != nil {
+		cfg.SetAllowedProviderGroups(cfg.allowedProviderGroups)
 	}
 
 	provider := cfg.provider

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/canonical/authd/brokers/internal/providers"
 	providerErrors "github.com/canonical/authd/brokers/internal/providers/errors"
 	"github.com/canonical/authd/brokers/internal/providers/google"
 	"github.com/stretchr/testify/require"
@@ -17,6 +18,19 @@ func TestNew(t *testing.T) {
 	p := google.New()
 
 	require.Empty(t, p, "New should return the default provider implementation with no parameters")
+}
+
+func TestDoesNotReadGroupsFromIDTokenClaim(t *testing.T) {
+	t.Parallel()
+
+	// The Google provider embeds the generic provider by value, so it does not
+	// get the groups claim support of *genericprovider.GenericProvider.
+	var p providers.Provider = google.New()
+
+	_, ok := providers.ProviderAs[providers.GroupFetcher](p)
+	require.False(t, ok, "The Google provider should not fetch groups")
+	_, ok = providers.ProviderAs[providers.GroupsClaimConfigurer](p)
+	require.False(t, ok, "The Google provider should not accept a groups claim configuration")
 }
 
 func TestAdditionalScopes(t *testing.T) {

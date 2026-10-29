@@ -89,6 +89,14 @@ func (cfg *Config) SetOwnerExtraGroups(ownerExtraGroups []string) {
 	cfg.ownerExtraGroups = ownerExtraGroups
 }
 
+func (cfg *Config) SetGroupsClaim(groupsClaim string) {
+	cfg.groupsClaim = groupsClaim
+}
+
+func (cfg *Config) SetAllowedProviderGroups(allowedProviderGroups []string) {
+	cfg.allowedProviderGroups = allowedProviderGroups
+}
+
 func (cfg *Config) SetAllowedSSHSuffixes(allowedSSHSuffixes []string) {
 	cfg.allowedSSHSuffixes = allowedSSHSuffixes
 }

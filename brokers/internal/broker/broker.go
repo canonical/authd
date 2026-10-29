@@ -402,6 +402,19 @@ func newBroker(cfg Config, apiVersion uint, p providers.Provider, args ...Option
 		setter.SetGraphClientSecret(cfg.clientSecret)
 	}
 
+	// Groups from the ID token claim are only used when the administrator
+	// allows at least one local group.
+	if len(cfg.allowedProviderGroups) > 0 {
+		if configurer, ok := providers.ProviderAs[providers.GroupsClaimConfigurer](opts.provider); ok {
+			configurer.SetGroupsClaimConfig(cfg.groupsClaim, cfg.allowedProviderGroups)
+		} else {
+			log.Warningf(context.Background(), "Ignoring %q: %s does not support groups from an ID token claim",
+				allowedProviderGroupsKey, opts.provider.DisplayName())
+		}
+	} else if cfg.groupsClaim != "" {
+		log.Warningf(context.Background(), "Ignoring %q: %q is not set", groupsClaimKey, allowedProviderGroupsKey)
+	}
+
 	return b, nil
 }
 

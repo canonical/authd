@@ -75,6 +75,14 @@ type UserDisabledChecker interface {
 	IsUserDisabledError(err *oauth2.RetrieveError) bool
 }
 
+// GroupsClaimConfigurer is implemented by providers that can read group
+// memberships from a claim of the ID token. claim is the name of the claim
+// that holds the list of groups, and allowedGroups are the local groups that
+// the claim is allowed to add the user to.
+type GroupsClaimConfigurer interface {
+	SetGroupsClaimConfig(claim string, allowedGroups []string)
+}
+
 // GraphClientSecretSetter is implemented by providers that can use the OIDC
 // app's client secret for app-only (client credentials) group lookup as a
 // fallback when the delegated token cannot be used against the Graph API.

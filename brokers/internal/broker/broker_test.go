@@ -25,6 +25,7 @@ import (
 	"github.com/canonical/authd/brokers/internal/fido"
 	"github.com/canonical/authd/brokers/internal/password"
 	providerErrors "github.com/canonical/authd/brokers/internal/providers/errors"
+	"github.com/canonical/authd/brokers/internal/providers/genericprovider"
 	"github.com/canonical/authd/brokers/internal/providers/info"
 	"github.com/canonical/authd/brokers/internal/providers/msentraid/himmelblau"
 	"github.com/canonical/authd/brokers/internal/testutils"
@@ -7375,6 +7376,196 @@ func TestIsAuthenticatedEntraMFACodeMaxAttemptsLockout(t *testing.T) {
 	require.Len(t, provider.recordedChallengeData, broker.MaxAuthAttempts,
 		"each wrong code submission must reuse the same MFA flow")
 	require.NoFileExists(t, b.PasswordFilepathForSession(sessionID), "a max-tries lockout must not cache an offline password")
+}
+
+// groupsClaimSpyProvider wraps the generic provider and records the order in
+// which the broker calls it.
+type groupsClaimSpyProvider struct {
+	*genericprovider.GenericProvider
+
+	mu    sync.Mutex
+	calls []string
+}
+
+func (p *groupsClaimSpyProvider) record(call string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.calls = append(p.calls, call)
+}
+
+func (p *groupsClaimSpyProvider) recordedCalls() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.calls)
+}
+
+// GetUserInfo records the call. In these tests, the broker only calls it after
+// it has verified the ID token of the token response.
+func (p *groupsClaimSpyProvider) GetUserInfo(claimer info.Claimer, isRefresh bool) (info.User, error) {
+	p.record("GetUserInfo")
+	return p.GenericProvider.GetUserInfo(claimer, isRefresh)
+}
+
+// GetGroups records the call.
+func (p *groupsClaimSpyProvider) GetGroups(
+	ctx context.Context,
+	clientID string,
+	issuerURL string,
+	token *oauth2.Token,
+	providerMetadata map[string]interface{},
+	deviceRegistrationData []byte,
+	needsAccessTokenForGraphAPI bool,
+) ([]info.Group, error) {
+	p.record("GetGroups")
+	return p.GenericProvider.GetGroups(ctx, clientID, issuerURL, token, providerMetadata, deviceRegistrationData, needsAccessTokenForGraphAPI)
+}
+
+// TestIsAuthenticatedGroupsFromIDTokenClaim verifies that the generic provider
+// adds the user to the allowed local groups from the groups claim of the ID
+// token on a login with a working network connection. It also verifies that
+// the broker only reads the groups after it has verified the ID token, which
+// is what lets the provider read the claim without verifying the token again.
+func TestIsAuthenticatedGroupsFromIDTokenClaim(t *testing.T) {
+	t.Parallel()
+
+	savedGroups := []info.Group{{Name: "saved-local-group"}}
+	wrongAudienceClaims := map[string]interface{}{
+		"aud":    "another-client-id",
+		"groups": []string{"linux-devops"},
+	}
+
+	tests := map[string]struct {
+		deviceAuth            bool
+		groupsClaim           string
+		allowedProviderGroups []string
+		idTokenClaims         map[string]interface{}
+
+		wantAccess        string
+		wantGroups        []info.Group
+		wantNoGroupsFetch bool
+	}{
+		"Adds_the_allowed_local_groups_from_the_claim": {
+			allowedProviderGroups: []string{"devops", "docker"},
+			idTokenClaims: map[string]interface{}{
+				"groups": []string{"linux-devops", "LINUX-Docker", "linux-root", "offline_access", "default-roles-test"},
+			},
+			wantAccess: broker.AuthGranted,
+			wantGroups: []info.Group{{Name: "devops"}, {Name: "docker"}},
+		},
+		"Adds_the_allowed_local_groups_from_the_claim_on_device_auth": {
+			deviceAuth:            true,
+			allowedProviderGroups: []string{"devops"},
+			idTokenClaims:         map[string]interface{}{"groups": []string{"linux-devops", "linux-root"}},
+			wantAccess:            broker.AuthGranted,
+			wantGroups:            []info.Group{{Name: "devops"}},
+		},
+		"Reads_the_configured_claim": {
+			groupsClaim:           "roles",
+			allowedProviderGroups: []string{"devops", "docker"},
+			idTokenClaims: map[string]interface{}{
+				"groups": []string{"linux-docker"},
+				"roles":  []string{"linux-devops"},
+			},
+			wantAccess: broker.AuthGranted,
+			wantGroups: []info.Group{{Name: "devops"}},
+		},
+		"Removes_the_groups_when_the_claim_is_missing": {
+			allowedProviderGroups: []string{"devops"},
+			wantAccess:            broker.AuthGranted,
+			wantGroups:            []info.Group{},
+		},
+		// Without allowed groups, the generic provider returns no groups, which
+		// is what the broker did before it could read the groups claim.
+		"Removes_the_saved_groups_when_no_local_groups_are_allowed": {
+			idTokenClaims: map[string]interface{}{"groups": []string{"linux-devops"}},
+			wantAccess:    broker.AuthGranted,
+			wantGroups:    nil,
+		},
+		"Does_not_read_the_groups_when_the_ID_token_fails_verification": {
+			allowedProviderGroups: []string{"devops"},
+			idTokenClaims:         wrongAudienceClaims,
+			wantAccess:            broker.AuthDenied,
+			wantGroups:            savedGroups,
+			wantNoGroupsFetch:     true,
+		},
+		"Does_not_read_the_groups_when_the_ID_token_fails_verification_on_device_auth": {
+			deviceAuth:            true,
+			allowedProviderGroups: []string{"devops"},
+			idTokenClaims:         wrongAudienceClaims,
+			wantAccess:            broker.AuthDenied,
+			wantNoGroupsFetch:     true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			const correctPassword = "password"
+			genericProvider := genericprovider.New()
+			provider := &groupsClaimSpyProvider{GenericProvider: &genericProvider}
+
+			var idTokenClaims []map[string]interface{}
+			if tc.idTokenClaims != nil {
+				idTokenClaims = []map[string]interface{}{tc.idTokenClaims}
+			}
+
+			b := newBrokerForTests(t, &brokerForTestConfig{
+				Config:                broker.Config{DataDir: t.TempDir()},
+				ownerAllowed:          true,
+				firstUserBecomesOwner: true,
+				provider:              provider,
+				groupsClaim:           tc.groupsClaim,
+				allowedProviderGroups: tc.allowedProviderGroups,
+				tokenHandlerOptions:   &testutils.TokenHandlerOptions{IDTokenClaims: idTokenClaims},
+			})
+
+			sessionID, key := newSessionForTests(t, b, "test-user@email.com", sessionmode.Login)
+			passwordData := fmt.Sprintf(`{"%s":"%s"}`, broker.AuthDataSecret, encryptSecret(t, correctPassword, key))
+
+			var access string
+			var err error
+			if tc.deviceAuth {
+				updateAuthModes(t, b, sessionID, authmodes.DeviceQr)
+				access, _, err = b.IsAuthenticated(sessionID, "{}")
+				require.NoError(t, err)
+				if access == broker.AuthNext {
+					updateAuthModes(t, b, sessionID, authmodes.NewPassword)
+					access, _, err = b.IsAuthenticated(sessionID, passwordData)
+					require.NoError(t, err)
+				}
+			} else {
+				generateAndStoreCachedInfo(t, tokenOptions{groups: savedGroups}, b.TokenPathForSession(sessionID))
+				require.NoError(t, password.HashAndStorePassword(correctPassword, b.PasswordFilepathForSession(sessionID)))
+
+				updateAuthModes(t, b, sessionID, authmodes.Password)
+				access, _, err = b.IsAuthenticated(sessionID, passwordData)
+				require.NoError(t, err)
+			}
+			require.Equal(t, tc.wantAccess, access)
+
+			calls := provider.recordedCalls()
+			if tc.wantNoGroupsFetch {
+				require.NotContains(t, calls, "GetGroups", "the broker must not read the groups of an ID token that failed verification")
+			} else {
+				groupsCall := slices.Index(calls, "GetGroups")
+				require.NotEqual(t, -1, groupsCall, "the broker must fetch the groups")
+				require.Contains(t, calls[:groupsCall], "GetUserInfo", "the broker must verify the ID token before it reads the groups")
+			}
+
+			if tc.deviceAuth && tc.wantAccess != broker.AuthGranted {
+				// A denied first login does not store a token.
+				return
+			}
+			cached, err := token.LoadAuthInfo(b.TokenPathForSession(sessionID))
+			require.NoError(t, err)
+			if len(tc.wantGroups) == 0 {
+				require.Empty(t, cached.UserInfo.Groups, "the cached user must not have groups")
+				return
+			}
+			require.Equal(t, tc.wantGroups, cached.UserInfo.Groups, "unexpected groups for the cached user")
+		})
+	}
 }
 
 func TestMain(m *testing.M) {
