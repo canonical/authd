@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   update-cargo-c:
+    if: github.event_name != 'schedule' || github.repository == 'canonical/authd'
     runs-on: ubuntu-26.04 # ubuntu-latest
     steps:
       - uses: actions/checkout@v7

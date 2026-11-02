@@ -23,6 +23,7 @@ env:
 
 jobs:
   refresh-lxd-image-cache:
+    if: github.event_name != 'schedule' || github.repository == 'canonical/authd'
     name: Refresh LXD image cache
     # When updating the runner version, make sure that:
     # * the test case below targets a different Ubuntu version to ensure that

@@ -21,6 +21,7 @@ concurrency:
 
 jobs:
   documentation-checks:
+    if: github.event_name != 'schedule' || github.repository == 'canonical/authd'
     uses: canonical/documentation-workflows/.github/workflows/documentation-checks.yaml@main
     with:
       working-directory: "./docs"
