@@ -57,6 +57,9 @@ Once authd learns the alias, NSS resolves both names to the same Unix account.
 authd learns a changed provider username after the user authenticates. Users
 can log in with their stable Unix username to let authd learn the new alias.
 
+Before changing a provider username, make sure the user has logged in with
+authd 0.7.0 or later and broker 0.5.0 or later.
+
 Use the Unix username in name-based configuration such as `sudoers`,
 `/etc/group`, and `sshd`'s `AllowUsers`. These settings refer to the Unix
 account, not provider login aliases. `authctl user` commands accept either the
