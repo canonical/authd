@@ -144,17 +144,22 @@ func (m *Manager) Stop() error {
 }
 
 // UpdateUser updates the user information in the db.
+// It permits updates to locked accounts. Use UpdateAuthenticatedUser after authentication.
 func (m *Manager) UpdateUser(u types.UserInfo) error {
-	return m.updateUser(u, false)
+	return m.updateUser(&u, false)
 }
 
 // UpdateAuthenticatedUser updates user information after authentication and
 // verifies that the account is not locked while holding the user-management lock.
-func (m *Manager) UpdateAuthenticatedUser(u types.UserInfo) error {
-	return m.updateUser(u, true)
+// It returns the stored account UID.
+func (m *Manager) UpdateAuthenticatedUser(u types.UserInfo) (uint32, error) {
+	if err := m.updateUser(&u, true); err != nil {
+		return 0, err
+	}
+	return u.UID, nil
 }
 
-func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
+func (m *Manager) updateUser(u *types.UserInfo, rejectLocked bool) (err error) {
 	defer decorate.OnError(&err, "failed to update user %q", u.Name)
 
 	log.Debugf(context.TODO(), "Updating user %q", u.Name)
@@ -215,6 +220,7 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 			}
 			return true, nil
 		}
+		u.UID = oldUserInfo.UID
 		if u.ProviderUsername == "" {
 			u.ProviderUsername = oldUserInfo.ProviderUsername
 			if u.ProviderUsername == "" {
@@ -246,7 +252,7 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 			// First login after migration: persist provider ID in DB.
 			return true, nil
 		}
-		pendingDiffs = diffNormalizedUserInfo(u, *oldUserInfo)
+		pendingDiffs = diffNormalizedUserInfo(*u, *oldUserInfo)
 		if len(pendingDiffs) == 0 {
 			log.Debugf(context.TODO(), "User %q in database is up to date with current user info", u.Name)
 			return false, nil
@@ -944,16 +950,6 @@ func (m *Manager) SetHomeDir(name, home string) (resp *SetHomeDirResp, err error
 	return resp, nil
 }
 
-// BrokerForUser returns the broker ID for the given user.
-func (m *Manager) BrokerForUser(username string) (string, error) {
-	u, err := m.db.UserByName(username)
-	if err != nil {
-		return "", err
-	}
-
-	return u.BrokerID, nil
-}
-
 // UpdateBrokerForUser updates the broker ID for the given user.
 func (m *Manager) UpdateBrokerForUser(username, brokerID string) error {
 	if err := m.db.UpdateBrokerForUser(username, brokerID); err != nil {
@@ -1084,18 +1080,6 @@ func (m *Manager) DeleteGroup(groupname string) error {
 // IsUserLocked returns true if the user with the given user name is locked, false otherwise.
 func (m *Manager) IsUserLocked(username string) (bool, error) {
 	u, err := m.db.UserByLoginName(strings.ToLower(username))
-	if err != nil {
-		return false, err
-	}
-
-	return u.Locked, nil
-}
-
-// IsUserLockedByProviderID returns true if the user identified by the given broker-scoped provider ID
-// is locked. It resolves the user by their stable identity rather than their name, so a lock set before
-// an IdP-side username change is still honored. Returns a NoDataFoundError if no user matches.
-func (m *Manager) IsUserLockedByProviderID(brokerID, providerID string) (bool, error) {
-	u, err := m.db.UserByProviderID(brokerID, providerID)
 	if err != nil {
 		return false, err
 	}

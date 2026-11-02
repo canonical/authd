@@ -358,7 +358,8 @@ func TestBrokerUnixNameCannotClaimExistingAlias(t *testing.T) {
 						incoming.ProviderID, incoming.ProviderUsername, incoming.Name)
 					require.Error(t, err)
 				} else {
-					require.Error(t, m.UpdateAuthenticatedUser(incoming))
+					_, err = m.UpdateAuthenticatedUser(incoming)
+					require.Error(t, err)
 				}
 				after, err := userstestutils.DBManager(m).UserByName(original.Name)
 				require.NoError(t, err)
@@ -517,7 +518,7 @@ func TestResolveAuthenticatedIdentityBindsFirstProviderIDToStoredUsername(t *tes
 			if tc.wantErr != "" {
 				require.ErrorContains(t, err, tc.wantErr)
 
-				updateErr := m.UpdateAuthenticatedUser(types.UserInfo{
+				_, updateErr := m.UpdateAuthenticatedUser(types.UserInfo{
 					Name:             "user1@example.com",
 					BrokerID:         "broker-id",
 					ProviderID:       tc.providerID,
@@ -534,12 +535,14 @@ func TestResolveAuthenticatedIdentityBindsFirstProviderIDToStoredUsername(t *tes
 			require.NoError(t, err)
 			require.Equal(t, "user1@example.com", got.Name,
 				"an existing account should keep its Unix name")
-			require.NoError(t, m.UpdateAuthenticatedUser(types.UserInfo{
+			uid, err := m.UpdateAuthenticatedUser(types.UserInfo{
 				Name:             got.Name,
 				BrokerID:         "broker-id",
 				ProviderID:       tc.providerID,
 				ProviderUsername: tc.providerUsername,
-			}))
+			})
+			require.NoError(t, err)
+			require.Equal(t, got.UID, uid)
 			stored, err := userstestutils.DBManager(m).UserByName(got.Name)
 			require.NoError(t, err)
 			require.Equal(t, got.UID, stored.UID)
@@ -581,12 +584,16 @@ users_to_groups:
 	require.NoError(t, err, "users created by an older daemon should authenticate with their Unix name")
 	require.Equal(t, uint32(1111), identity.UID)
 
-	require.NoError(t, m.UpdateAuthenticatedUser(types.UserInfo{
-		Name:             identity.Name,
-		ProviderUsername: "legacy-user",
-		BrokerID:         "broker-id",
-		ProviderID:       "provider-id",
-	}))
+	for range 2 {
+		uid, err := m.UpdateAuthenticatedUser(types.UserInfo{
+			Name:             identity.Name,
+			ProviderUsername: "legacy-user",
+			BrokerID:         "broker-id",
+			ProviderID:       "provider-id",
+		})
+		require.NoError(t, err)
+		require.Equal(t, identity.UID, uid, "return the stored UID even when no update is needed")
+	}
 	stored, err := userstestutils.DBManager(m).UserByName("legacy-user")
 	require.NoError(t, err)
 	require.Equal(t, "legacy-user", stored.ProviderUsername)
@@ -621,7 +628,7 @@ func TestUpdateAuthenticatedUserRejectsAccountLockedAfterResolution(t *testing.T
 	require.False(t, identity.Locked, "the identity should be unlocked when first resolved")
 
 	require.NoError(t, m.LockUser(user.Name), "Setup: could not lock the user")
-	err = m.UpdateAuthenticatedUser(user)
+	_, err = m.UpdateAuthenticatedUser(user)
 	require.ErrorIs(t, err, users.ErrUserLocked,
 		"authentication must recheck the lock state under the user-management lock")
 }
@@ -765,7 +772,8 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 
 		incoming := newUser("name-owner", "providerid-name-owner")
 		incoming.ProviderUsername = "provider-username-alias"
-		require.NoError(t, m.UpdateAuthenticatedUser(incoming),
+		_, err := m.UpdateAuthenticatedUser(incoming)
+		require.NoError(t, err,
 			"a stable identity should not be blocked by a colliding new alias")
 
 		storedNameOwner, err := userstestutils.DBManager(m).UserByName("name-owner")
@@ -1419,43 +1427,6 @@ func TestUpdateWhenNoMoreIDsAreAvailable(t *testing.T) {
 					require.Error(t, err, "UpdateUser should have failed for %q", userName)
 				})
 			}
-		})
-	}
-}
-
-func TestBrokerForUser(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		username string
-		dbFile   string
-
-		wantBrokerID string
-		wantErr      bool
-		wantErrType  error
-	}{
-		"Successfully_get_broker_for_user":                     {username: "user1@example.com", dbFile: "multiple_users_and_groups", wantBrokerID: "broker-id"},
-		"Return_no_broker_but_in_db_if_user_has_no_broker_yet": {username: "userwithoutbroker@example.com", dbFile: "multiple_users_and_groups", wantBrokerID: ""},
-
-		"Error_if_user_does_not_exist": {username: "doesnotexist@example.com", dbFile: "multiple_users_and_groups", wantErrType: db.NoDataFoundError{}},
-	}
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			dbDir := t.TempDir()
-			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
-			require.NoError(t, err, "Setup: could not create database from testdata")
-			m := newManagerForTests(t, dbDir)
-
-			brokerID, err := m.BrokerForUser(tc.username)
-
-			requireErrorAssertions(t, err, tc.wantErrType, tc.wantErr)
-			if tc.wantErrType != nil || tc.wantErr {
-				return
-			}
-
-			require.Equal(t, tc.wantBrokerID, brokerID, "BrokerForUser should return the expected brokerID, but did not")
 		})
 	}
 }

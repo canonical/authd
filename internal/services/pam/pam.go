@@ -554,7 +554,8 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		}
 	}
 	// Update database and local groups on granted auth.
-	if err := s.userManager.UpdateAuthenticatedUser(uInfo); err != nil {
+	storedUID, err := s.userManager.UpdateAuthenticatedUser(uInfo)
+	if err != nil {
 		if errors.Is(err, users.ErrUserLocked) {
 			log.Noticef(ctx, "Authentication failure: user %q is locked", uInfo.Name)
 			return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("user %s is locked", uInfo.Name))
@@ -577,20 +578,13 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 	// changed PAM_USER only when its UID matches the pre-auth UID, which is not
 	// true here because the existing account has a different UID. Deny here
 	// with an actionable message so retrying uses the stored account UID.
-	if len(preAuthUIDs) > 0 {
-		storedIdentity, err := s.userManager.LoginIdentityByUnixName(uInfo.Name)
-		if err != nil {
-			log.Errorf(ctx, "IsAuthenticated: Could not look up updated user %q: %v", uInfo.Name, err)
-			return nil, fmt.Errorf("could not look up updated user %q: %w", uInfo.Name, err)
-		}
-		if slices.ContainsFunc(preAuthUIDs, func(uid uint32) bool { return uid != storedIdentity.UID }) {
-			log.Noticef(ctx, "Authentication for %q requires a retry because its pre-auth UID differs from the stored account UID", username)
-			s.failedAuths.recordSuccess(serviceName, username)
-			return &authd.IAResponse{
-				Access: auth.Denied,
-				Msg:    `{"message":"Your username has changed. Please log in again."}`,
-			}, nil
-		}
+	if slices.ContainsFunc(preAuthUIDs, func(uid uint32) bool { return uid != storedUID }) {
+		log.Noticef(ctx, "Authentication for %q requires a retry because its pre-auth UID differs from the stored account UID", username)
+		s.failedAuths.recordSuccess(serviceName, username)
+		return &authd.IAResponse{
+			Access: auth.Denied,
+			Msg:    `{"message":"Your username has changed. Please log in again."}`,
+		}, nil
 	}
 	// IAResponse.Msg carries a JSON {"message": ...} envelope (or an empty
 	// string when there is no message), matching the format expected by the
