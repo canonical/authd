@@ -106,6 +106,33 @@ VM_NAME_BASE="${VM_NAME_BASE:-e2e-runner}"
 
 assert_env_vars RELEASE
 
+DATA_DIR="${DATA_DIR_ARG:-${AUTHD_E2E_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/authd-e2e-tests}}"
+if [[ -n "${DATA_DIR_ARG}" || -n "${AUTHD_E2E_DATA_DIR:-}" ]]; then
+    ARTIFACTS_DIR="${DATA_DIR}/${RELEASE}"
+fi
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-${DATA_DIR}/${RELEASE}}"
+export VM_NAME="${VM_NAME:-${VM_NAME_BASE}-${RELEASE}}"
+export VM_NAME_BASE RELEASE
+
+if [[ -n "${AUTHD_E2E_HOOKS_DIR:-}" ]]; then
+    AUTHD_E2E_DATA_DIR="${DATA_DIR}" ARTIFACTS_DIR="${ARTIFACTS_DIR}" \
+        AUTHD_E2E_NO_SNAPSHOT="${NO_SNAPSHOT:-false}" \
+        "${AUTHD_E2E_HOOKS_DIR}/prepare-vm" "${VM_NAME}" "${RELEASE}" "${FORCE:-false}"
+    if [[ ! -f "${ARTIFACTS_DIR}/${VM_NAME}.qcow2" ||
+          ! -f "${ARTIFACTS_DIR}/${VM_NAME_BASE}.xml" ]]; then
+        echo "E2E backend did not create the VM disk and definition in ${ARTIFACTS_DIR}" >&2
+        exit 1
+    fi
+    virsh dominfo "${VM_NAME}" >/dev/null
+    if [[ -z "${NO_SNAPSHOT:-}" ]]; then
+        if ! has_snapshot initial-setup; then
+            echo "E2E backend did not provide the initial-setup snapshot for ${VM_NAME}" >&2
+            exit 1
+        fi
+    fi
+    exit 0
+fi
+
 if [ -z "${CI:-}" ]; then
     assert_env_vars SSH_PUBLIC_KEY_FILE
 
@@ -124,11 +151,6 @@ fi
 # shellcheck disable=SC2153 # RELEASE is not misspelled
 RELEASE_NAME=$(resolve_devel_release "${RELEASE}")
 
-DATA_DIR="${DATA_DIR_ARG:-${AUTHD_E2E_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/authd-e2e-tests}}"
-if [[ -n "${DATA_DIR_ARG}" || -n "${AUTHD_E2E_DATA_DIR:-}" ]]; then
-    ARTIFACTS_DIR="${DATA_DIR}/${RELEASE}"
-fi
-
 # Cache sudo password early unless we're run by an agent harness
 if [[ -z "${AGENTS:-}" && -z "${COPILOT_CLI:-}" && -z "${CLAUDECODE:-}" ]]; then
     sudo -v
@@ -137,12 +159,7 @@ fi
 # Installing all the packages can take some time, so we set the timeout to 15 minutes
 CLOUT_INIT_TIMEOUT=900
 
-ARTIFACTS_DIR="${ARTIFACTS_DIR:-${DATA_DIR}/${RELEASE}}"
 CLOUD_INIT_TEMPLATE="${SCRIPT_DIR}/cloud-init-template-${RELEASE_NAME}.yaml"
-
-if [ -z "${VM_NAME:-}" ]; then
-    export VM_NAME="${VM_NAME_BASE}-${RELEASE}"
-fi
 
 function cloud_init_finished() {
     local image=$1

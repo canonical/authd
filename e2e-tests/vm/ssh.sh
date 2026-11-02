@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+# shellcheck source=lib/libprovision.sh
+source "$(dirname "$(readlink -f "$0")")/lib/libprovision.sh"
+
 usage(){
     cat << EOF
 
@@ -51,6 +54,7 @@ fi
 SSH_USER=${SSH_USER:-"root"}
 
 VM_NAME=${VM_NAME:-"e2e-runner-${RELEASE}"}
+export VM_NAME RELEASE
 
 CID=$(virsh dumpxml "${VM_NAME}" | \
       xmllint --xpath 'string(//vsock/cid/@address)' -)

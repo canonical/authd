@@ -180,6 +180,7 @@ if ((${#AUTHD_APT_SOURCES[@]})) && [ -n "${AUTHD_DEB:-}" ]; then
 fi
 
 VM_NAME=${VM_NAME:-"e2e-runner-${RELEASE}"}
+export VM_NAME RELEASE
 
 # Restore the broker snapshot so the console starts from a known state, mirroring
 # what run-tests.sh does at the start of each test. If the VM is already running

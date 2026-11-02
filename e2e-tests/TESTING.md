@@ -56,6 +56,35 @@ you will need to run this again each time you start a new session:
 ssh-add /path/to/key
 ```
 
+#### Custom VM backend
+
+Sandboxed environments that cannot use the host libvirt can supply their own
+VM preparation and libvirt access. Set `AUTHD_E2E_HOOKS_DIR` to an absolute
+directory containing two executable scripts:
+
+- `prepare-vm <VM_NAME> <RELEASE> <FORCE>` prepares the VM. It receives
+  `AUTHD_E2E_DATA_DIR`, `ARTIFACTS_DIR`, `VM_NAME_BASE`, and
+  `AUTHD_E2E_NO_SNAPSHOT` (`true` with `--no-snapshot`, otherwise `false`).
+  It must create `${ARTIFACTS_DIR}/${VM_NAME}.qcow2` and
+  `${ARTIFACTS_DIR}/${VM_NAME_BASE}.xml`. Unless `AUTHD_E2E_NO_SNAPSHOT` is
+  `true`, it must also create a VM snapshot named `initial-setup`.
+- `virsh ...` replaces every `virsh` call made by the e2e scripts. It must
+  support the subcommands they use: `attach-disk`, `console`, `define`,
+  `destroy`, `detach-disk`, `domblklist`, `dominfo`, `domstate`, `domifaddr`,
+  `dumpxml`, `shutdown`, `snapshot-create-as`, `snapshot-delete`,
+  `snapshot-list --name`, `snapshot-revert`, `start`, `undefine`, and
+  `vncdisplay`.
+
+Call `/usr/bin/virsh` (or use the libvirt API) directly from the hook.
+Calling bare `virsh` re-enters the wrapper and is rejected. Hooks run without
+`sudo`; only the default path uses `sudo virsh`. Hook mode skips the
+`SSH_PUBLIC_KEY_FILE` checks, because the backend owns access to the VM.
+The scripts do not set `LIBVIRT_DEFAULT_URI` in hook mode. Unset it in the
+hook if it must not inherit the caller's URI.
+
+When `AUTHD_E2E_HOOKS_DIR` is unset, provisioning and the scripts behave as
+before.
+
 ### 3. Provision the VM
 
 ```bash
