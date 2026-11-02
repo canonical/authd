@@ -13,7 +13,9 @@ import (
 
 	"github.com/canonical/authd/brokers/internal/broker/authmodes"
 	"github.com/canonical/authd/brokers/internal/providers/google"
+	"github.com/canonical/authd/brokers/internal/providers/info"
 	"github.com/canonical/authd/brokers/internal/testutils"
+	"github.com/canonical/authd/brokers/internal/token"
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
@@ -670,6 +672,79 @@ func TestNewBrokersParsesConfigOnce(t *testing.T) {
 	require.NoError(t, brokers[0].cfg.registerOwner("", "first-user"))
 	require.Equal(t, "first-user", brokers[0].cfg.owner)
 	require.Empty(t, brokers[1].cfg.owner)
+}
+
+func TestRegisterOwnerIfNeeded(t *testing.T) {
+	t.Parallel()
+
+	for _, owner := range []string{"", "old-owner"} {
+		t.Run("Owner="+owner, func(t *testing.T) {
+			t.Parallel()
+
+			uc := userConfig{
+				owner:                 owner,
+				ownerAllowed:          true,
+				firstUserBecomesOwner: true,
+				ownerMutex:            &sync.RWMutex{},
+				provider:              &testutils.MockProvider{},
+			}
+			errs := make(chan error, 2)
+			for _, name := range []string{"first-user", "second-user"} {
+				go func() {
+					errs <- uc.registerOwnerIfNeeded("", name, owner)
+				}()
+			}
+			for range 2 {
+				require.NoError(t, <-errs)
+			}
+			require.Contains(t, []string{"first-user", "second-user"}, uc.owner)
+			registeredOwner := uc.owner
+
+			require.NoError(t, uc.registerOwnerIfNeeded("", "late-user", owner))
+			require.Equal(t, registeredOwner, uc.owner,
+				"a stale registration or rename must not replace the current owner")
+			require.NoError(t, uc.registerOwnerIfNeeded("", "renamed-owner", strings.ToUpper(registeredOwner)))
+			require.Equal(t, "renamed-owner", uc.owner,
+				"a rename must match the current owner using normalized names")
+		})
+	}
+}
+
+func TestFinishAuthConcurrentOwnerRename(t *testing.T) {
+	t.Parallel()
+
+	p := &testutils.MockProvider{}
+	b := Broker{
+		cfg: Config{userConfig: userConfig{
+			owner:                 "old-owner",
+			ownerAllowed:          true,
+			firstUserBecomesOwner: true,
+			ownerMutex:            &sync.RWMutex{},
+			provider:              p,
+		}},
+		provider: p,
+	}
+	start := make(chan struct{})
+	results := make(chan string, 16)
+	for range cap(results) {
+		go func() {
+			<-start
+			access, _ := b.finishAuth(&session{
+				username:           "old-owner",
+				expectedProviderID: "owner-id",
+				isOffline:          true,
+			}, &token.AuthCachedInfo{UserInfo: info.User{
+				Name:       "new-owner",
+				ProviderID: "owner-id",
+			}})
+			results <- access
+		}()
+	}
+	close(start)
+	for range cap(results) {
+		require.Equal(t, AuthGranted, <-results)
+	}
+	require.Equal(t, "new-owner", b.cfg.owner)
 }
 
 var testParseUserConfigTypes = map[string]string{

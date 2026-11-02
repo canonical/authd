@@ -480,11 +480,28 @@ func (uc *userConfig) shouldRegisterOwner() bool {
 }
 
 func (uc *userConfig) registerOwner(cfgPath, userName string) error {
-	// We need to lock here to avoid a race condition where two users log in at the same time, causing both to be
-	// considered the owner.
 	uc.ownerMutex.Lock()
 	defer uc.ownerMutex.Unlock()
 
+	return uc.registerOwnerLocked(cfgPath, userName)
+}
+
+func (uc *userConfig) registerOwnerIfNeeded(cfgPath, userName, previousOwner string) error {
+	uc.ownerMutex.Lock()
+	defer uc.ownerMutex.Unlock()
+
+	renameOwner := previousOwner != "" &&
+		uc.owner == uc.provider.NormalizeUsername(previousOwner) &&
+		uc.owner != uc.provider.NormalizeUsername(userName)
+	if !uc.shouldRegisterOwner() && !renameOwner {
+		return nil
+	}
+
+	return uc.registerOwnerLocked(cfgPath, userName)
+}
+
+// registerOwnerLocked requires ownerMutex to be locked.
+func (uc *userConfig) registerOwnerLocked(cfgPath, userName string) error {
 	// Reject any non-graphic characters in the username before writing it to
 	// the INI drop-in config. Control characters allow INI key injection, and
 	// other non-graphic runes are not valid content for a generated config
