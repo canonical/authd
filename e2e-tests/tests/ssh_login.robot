@@ -46,7 +46,6 @@ Test login with SSH
     Open Terminal
     Log In With Remote User Through SSH: Local Password    ${username}    ${local_password}
 
-
 Test SSH provider username keeps the Unix identity
     [Documentation]    SSH accepts a provider name that resolves to a different
     ...    stable Unix name through the real NSS module.
@@ -112,7 +111,6 @@ Test Setup
     utils.Test Setup    snapshot=%{BROKER}-installed
     Change Broker Configuration    ssh_allowed_suffixes_first_auth    %{E2E_USER}
 
-
 Give Account A Distinct Unix Username
     [Documentation]    Model an account whose provider name changed without
     ...    renaming the real IdP account. Keep its UID, home and provider binding.
@@ -120,7 +118,6 @@ Give Account A Distinct Unix Username
     SSH.Execute
     ...    python3 -c 'import sqlite3; db = sqlite3.connect("/var/lib/authd/authd.sqlite3"); cursor = db.execute("UPDATE users SET name = ? WHERE name = ? AND provider_username = ? AND provider_id != ?", ("${unix_username}", "${username.lower()}", "${username.lower()}", "")); assert cursor.rowcount == 1, "Expected one account bound to a provider ID"; db.commit()'
     SSH.Execute    systemctl start authd.socket authd.service
-
 
 Check SSH Session Identity
     [Arguments]    ${expected}
