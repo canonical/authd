@@ -1,9 +1,35 @@
+/*
+ *
+ * Copyright 2025 gRPC authors.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ */
+
 use super::compression::{
     CompressionEncoding, CompressionSettings, SingleMessageCompressionOverride, compress,
 };
 use super::{BufferSettings, DEFAULT_MAX_SEND_MESSAGE_SIZE, EncodeBuf, Encoder, HEADER_SIZE};
 use crate::Status;
 use bytes::{BufMut, Bytes, BytesMut};
+#[cfg(feature = "h2")]
+use h2::{Error as H2Error, Reason as H2Reason};
 use http::HeaderMap;
 use http_body::{Body, Frame};
 use pin_project::pin_project;
@@ -12,6 +38,7 @@ use std::{
     task::{Context, Poll, ready},
 };
 use tokio_stream::{Stream, StreamExt, adapters::Fuse};
+use tokio_util::sync::{CancellationToken, WaitForCancellationFutureOwned};
 
 /// Combinator for efficient encoding of messages into reasonably sized buffers.
 /// EncodedBytes encodes ready messages from its delegate stream into a BytesMut,
@@ -145,9 +172,7 @@ where
     let offset = buf.len();
 
     buf.reserve(HEADER_SIZE);
-    unsafe {
-        buf.advance_mut(HEADER_SIZE);
-    }
+    buf.put_slice(&[0u8; HEADER_SIZE]);
 
     if let Some(encoding) = compression_encoding {
         uncompression_buf.clear();
@@ -218,6 +243,8 @@ pub struct EncodeBody<T, U> {
     #[pin]
     inner: EncodedBytes<T, U>,
     state: EncodeState,
+    #[pin]
+    cancellation_fut: Option<WaitForCancellationFutureOwned>,
 }
 
 #[derive(Debug)]
@@ -236,6 +263,23 @@ impl<T: Encoder, U: Stream> EncodeBody<T, U> {
         compression_encoding: Option<CompressionEncoding>,
         max_message_size: Option<usize>,
     ) -> Self {
+        Self::new_client_with_cancellation(
+            encoder,
+            source,
+            compression_encoding,
+            max_message_size,
+            None,
+        )
+    }
+
+    pub(crate) fn new_client_with_cancellation(
+        encoder: T,
+        source: U,
+        compression_encoding: Option<CompressionEncoding>,
+        max_message_size: Option<usize>,
+        cancellation_token: Option<CancellationToken>,
+    ) -> Self {
+        let cancellation_fut = cancellation_token.map(|c| c.cancelled_owned());
         Self {
             inner: EncodedBytes::new(
                 encoder,
@@ -249,6 +293,7 @@ impl<T: Encoder, U: Stream> EncodeBody<T, U> {
                 role: Role::Client,
                 is_end_stream: false,
             },
+            cancellation_fut,
         }
     }
 
@@ -274,6 +319,7 @@ impl<T: Encoder, U: Stream> EncodeBody<T, U> {
                 role: Role::Server,
                 is_end_stream: false,
             },
+            cancellation_fut: None,
         }
     }
 }
@@ -316,6 +362,24 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         let self_proj = self.project();
+
+        if let Some(cancellation_fut) = self_proj.cancellation_fut.as_pin_mut()
+            && let Poll::Ready(()) = cancellation_fut.poll(cx)
+        {
+            #[cfg(feature = "h2")]
+            let status = {
+                let mut status = Status::cancelled("client cancelled");
+                // h2 inspects the error's source chain to determine the RST
+                // code, so we set it here.
+                status.set_source(std::sync::Arc::new(H2Error::from(H2Reason::CANCEL)));
+                status
+            };
+
+            #[cfg(not(feature = "h2"))]
+            let status = Status::cancelled("client cancelled");
+            return Poll::Ready(Some(Err(status)));
+        }
+
         match ready!(self_proj.inner.poll_next(cx)) {
             Some(Ok(d)) => Some(Ok(Frame::data(d))).into(),
             Some(Err(status)) => match self_proj.state.role {
@@ -331,5 +395,58 @@ where
                 .map(|t| t.map(Frame::trailers))
                 .into(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::panic::catch_unwind;
+
+    struct PanickingEncoder;
+
+    impl Encoder for PanickingEncoder {
+        type Item = String;
+        type Error = Status;
+
+        fn encode(
+            &mut self,
+            _item: Self::Item,
+            _dst: &mut EncodeBuf<'_>,
+        ) -> Result<(), Self::Error> {
+            panic!("encoder deliberate panic for testing exception safety");
+        }
+    }
+
+    #[test]
+    fn encode_item_exception_safety_on_panic() {
+        let mut encoder = PanickingEncoder;
+        let mut buf = BytesMut::new();
+        let mut uncompression_buf = BytesMut::new();
+
+        let result = catch_unwind(std::panic::AssertUnwindSafe(|| {
+            encode_item(
+                &mut encoder,
+                &mut buf,
+                &mut uncompression_buf,
+                None,
+                None,
+                BufferSettings::default(),
+                "test".to_string(),
+            )
+        }));
+
+        assert!(result.is_err(), "Encoder panic should unwind correctly.");
+        // Buffer must only contain initialized bytes (5 zero bytes written by put_slice).
+        assert_eq!(
+            buf.len(),
+            HEADER_SIZE,
+            "Buffer length should reflect reserved header bytes."
+        );
+        assert_eq!(
+            &buf[..],
+            &[0u8; HEADER_SIZE],
+            "Buffer must contain only initialized zero bytes."
+        );
     }
 }

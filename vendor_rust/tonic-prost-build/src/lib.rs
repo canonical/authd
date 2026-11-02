@@ -1,3 +1,27 @@
+/*
+ *
+ * Copyright 2025 gRPC authors.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ */
+
 //! Prost build integration for tonic.
 //!
 //! This crate provides code generation for gRPC services using protobuf definitions
@@ -27,7 +51,7 @@
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
 #![doc(html_root_url = "https://docs.rs/tonic-prost-build/0.14.0")]
-#![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
+#![doc(issue_tracker_base_url = "https://github.com/grpc/grpc-rust/issues/")]
 
 use proc_macro2::TokenStream;
 use prost_build::{Method, Service};
@@ -753,6 +777,7 @@ impl Builder {
         };
 
         config.out_dir(&out_dir);
+        config.type_attribute(".", "#[allow(clippy::all)]");
 
         for (proto_path, rust_path) in &self.extern_path {
             config.extern_path(proto_path, rust_path);
