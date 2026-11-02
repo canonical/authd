@@ -13,7 +13,7 @@
 edition = "2021"
 rust-version = "1.71.1"
 name = "pulldown-cmark"
-version = "0.13.4"
+version = "0.13.6"
 authors = [
     "Raph Levien <raph.levien@gmail.com>",
     "Marcus Klaas de Vries <mail@marcusklaas.nl>",

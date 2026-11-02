@@ -13,8 +13,8 @@
 edition = "2024"
 rust-version = "1.88"
 name = "tonic-build"
-version = "0.14.6"
-authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+version = "0.14.9"
+authors = ["gRPC authors"]
 build = false
 autolib = false
 autobins = false
@@ -24,7 +24,7 @@ autobenches = false
 description = """
 Codegen module of `tonic` gRPC implementation.
 """
-homepage = "https://github.com/hyperium/tonic"
+homepage = "https://github.com/grpc/grpc-rust"
 readme = "README.md"
 keywords = [
     "rpc",
@@ -38,7 +38,7 @@ categories = [
     "asynchronous",
 ]
 license = "MIT"
-repository = "https://github.com/hyperium/tonic"
+repository = "https://github.com/grpc/grpc-rust"
 resolver = "2"
 
 [package.metadata.docs.rs]

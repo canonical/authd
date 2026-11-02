@@ -2,7 +2,7 @@
 //!
 //! [`File`]: File
 
-use crate::fs::{asyncify, OpenOptions};
+use crate::fs::{asyncify, FileTimes, OpenOptions};
 use crate::io::blocking::{Buf, DEFAULT_MAX_BUF_SIZE};
 use crate::io::{AsyncRead, AsyncSeek, AsyncWrite, ReadBuf};
 use crate::sync::Mutex;
@@ -418,7 +418,14 @@ impl File {
 
         let (op, buf) = match inner.state {
             State::Idle(_) => unreachable!(),
-            State::Busy(ref mut rx) => rx.await?,
+            State::Busy(ref mut rx) => {
+                let res = rx.await;
+                if res.is_err() {
+                    // Restore a valid Idle state before returning the error.
+                    inner.state = State::Idle(Some(Buf::with_capacity(0)));
+                }
+                res?
+            }
         };
 
         inner.state = State::Idle(Some(buf));
@@ -559,10 +566,53 @@ impl File {
         asyncify(move || std.set_permissions(perm)).await
     }
 
+    /// Changes the timestamps on the underlying file.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the user lacks permission to change
+    /// timestamps on the underlying file. It may also return an error in other
+    /// os-specific unspecified cases.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tokio::fs::{File, FileTimes};
+    ///
+    /// # async fn dox() -> std::io::Result<()> {
+    /// let file = File::open("foo.txt").await?;
+    /// let times = FileTimes::new()
+    ///     .set_accessed(std::time::SystemTime::now())
+    ///     .set_modified(std::time::SystemTime::now());
+    /// file.set_times(times).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn set_times(&self, times: FileTimes) -> io::Result<()> {
+        // Wait for in-flight reads/writes like `sync_all` does, so they
+        // cannot complete after us and overwrite the timestamps.
+        self.inner.lock().await.complete_inflight().await;
+
+        let std = self.std.clone();
+        let std_times = times.into_std();
+        asyncify(move || std.set_times(std_times)).await
+    }
+
+    /// Changes the modification timestamp on the underlying file.
+    ///
+    /// This is equivalent to `set_times` with only the modification time set.
+    pub async fn set_modified(&self, time: std::time::SystemTime) -> io::Result<()> {
+        self.set_times(FileTimes::new().set_modified(time)).await
+    }
+
     /// Set the maximum buffer size for the underlying [`AsyncRead`] / [`AsyncWrite`] operation.
     ///
     /// Although Tokio uses a sensible default value for this buffer size, this function would be
     /// useful for changing that default depending on the situation.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if `max_buf_size` is 0.
     ///
     /// # Examples
     ///
@@ -583,7 +633,9 @@ impl File {
     /// # Ok(())
     /// # }
     /// ```
+    #[track_caller]
     pub fn set_max_buf_size(&mut self, max_buf_size: usize) {
+        assert!(max_buf_size > 0, "`max_buf_size` must be greater than 0");
         self.max_buf_size = max_buf_size;
     }
 
@@ -621,7 +673,12 @@ impl AsyncRead for File {
                     inner.state = State::Busy(Inner::poll_read_inner(std, buf, max_buf_size)?);
                 }
                 State::Busy(ref mut rx) => {
-                    let (op, mut buf) = ready!(Pin::new(rx).poll(cx))?;
+                    let res = ready!(Pin::new(rx).poll(cx));
+                    if res.is_err() {
+                        // Restore a valid Idle state before returning the error.
+                        inner.state = State::Idle(Some(Buf::with_capacity(0)));
+                    }
+                    let (op, mut buf) = res?;
 
                     match op {
                         Operation::Read(Ok(_)) => {
@@ -666,8 +723,7 @@ impl AsyncSeek for File {
         let inner = me.inner.get_mut();
 
         match inner.state {
-            State::Busy(_) => Err(io::Error::new(
-                io::ErrorKind::Other,
+            State::Busy(_) => Err(io::Error::other(
                 "other file operation is pending, call poll_complete before start_seek",
             )),
             State::Idle(ref mut buf_cell) => {
@@ -715,7 +771,12 @@ impl AsyncSeek for File {
             match inner.state {
                 State::Idle(_) => return Poll::Ready(Ok(inner.pos)),
                 State::Busy(ref mut rx) => {
-                    let (op, buf) = ready!(Pin::new(rx).poll(cx))?;
+                    let res = ready!(Pin::new(rx).poll(cx));
+                    if res.is_err() {
+                        // Restore a valid Idle state before returning the error.
+                        inner.state = State::Idle(Some(Buf::with_capacity(0)));
+                    }
+                    let (op, buf) = res?;
                     inner.state = State::Idle(Some(buf));
 
                     match op {
@@ -766,7 +827,7 @@ impl AsyncWrite for File {
                     let n = buf.copy_from(src, me.max_buf_size);
                     let std = me.std.clone();
 
-                    let blocking_task_join_handle = spawn_mandatory_blocking(move || {
+                    let res = spawn_mandatory_blocking(move || {
                         let res = if let Some(seek) = seek {
                             (&*std).seek(seek).and_then(|_| buf.write_to(&mut &*std))
                         } else {
@@ -775,16 +836,25 @@ impl AsyncWrite for File {
 
                         (Operation::Write(res), buf)
                     })
-                    .ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::Other, "background task failed")
-                    })?;
+                    .ok_or_else(|| io::Error::other("background task failed"));
+
+                    if res.is_err() {
+                        // Restore a valid Idle state before returning the error.
+                        inner.state = State::Idle(Some(Buf::with_capacity(0)));
+                    }
+                    let blocking_task_join_handle = res?;
 
                     inner.state = State::Busy(blocking_task_join_handle);
 
                     return Poll::Ready(Ok(n));
                 }
                 State::Busy(ref mut rx) => {
-                    let (op, buf) = ready!(Pin::new(rx).poll(cx))?;
+                    let res = ready!(Pin::new(rx).poll(cx));
+                    if res.is_err() {
+                        // Restore a valid Idle state before returning the error.
+                        inner.state = State::Idle(Some(Buf::with_capacity(0)));
+                    }
+                    let (op, buf) = res?;
                     inner.state = State::Idle(Some(buf));
 
                     match op {
@@ -837,7 +907,7 @@ impl AsyncWrite for File {
                     let n = buf.copy_from_bufs(bufs, me.max_buf_size);
                     let std = me.std.clone();
 
-                    let blocking_task_join_handle = spawn_mandatory_blocking(move || {
+                    let res = spawn_mandatory_blocking(move || {
                         let res = if let Some(seek) = seek {
                             (&*std).seek(seek).and_then(|_| buf.write_to(&mut &*std))
                         } else {
@@ -846,16 +916,25 @@ impl AsyncWrite for File {
 
                         (Operation::Write(res), buf)
                     })
-                    .ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::Other, "background task failed")
-                    })?;
+                    .ok_or_else(|| io::Error::other("background task failed"));
+
+                    if res.is_err() {
+                        // Restore a valid Idle state before returning the error.
+                        inner.state = State::Idle(Some(Buf::with_capacity(0)));
+                    }
+                    let blocking_task_join_handle = res?;
 
                     inner.state = State::Busy(blocking_task_join_handle);
 
                     return Poll::Ready(Ok(n));
                 }
                 State::Busy(ref mut rx) => {
-                    let (op, buf) = ready!(Pin::new(rx).poll(cx))?;
+                    let res = ready!(Pin::new(rx).poll(cx));
+                    if res.is_err() {
+                        // Restore a valid Idle state before returning the error.
+                        inner.state = State::Idle(Some(Buf::with_capacity(0)));
+                    }
+                    let (op, buf) = res?;
                     inner.state = State::Idle(Some(buf));
 
                     match op {
@@ -996,20 +1075,20 @@ impl Inner {
         ))]
         {
             if let Ok(handle) = crate::runtime::Handle::try_current() {
-                let driver_handle = handle.inner.driver().io();
+                if let Some(driver_handle) = handle.inner.driver().io.as_ref() {
+                    if driver_handle.is_uring_ready(io_uring::opcode::Read::CODE) {
+                        // Fast path: uring already initialized and Read supported.
+                        let fd: crate::io::uring::utils::ArcFd = std;
+                        return Ok(spawn(Self::uring_read(fd, buf, max_buf_size)));
+                    }
 
-                if driver_handle.is_uring_ready(io_uring::opcode::Read::CODE) {
-                    // Fast path: uring already initialized and Read supported.
-                    let fd: crate::io::uring::utils::ArcFd = std;
-                    return Ok(spawn(Self::uring_read(fd, buf, max_buf_size)));
+                    if !driver_handle.is_uring_probed() {
+                        // Not yet probed: lazy init inside an async task so
+                        // `File::from_std()` can still benefit from io-uring.
+                        return Ok(spawn(Self::lazy_init_read(std, buf, max_buf_size)));
+                    }
                 }
-
-                if !driver_handle.is_uring_probed() {
-                    // Not yet probed: lazy init inside an async task so
-                    // `File::from_std()` can still benefit from io-uring.
-                    return Ok(spawn(Self::lazy_init_read(std, buf, max_buf_size)));
-                }
-                // Probed but unsupported: fall through to spawn_blocking.
+                // No IO driver or probed but unsupported: fall through to spawn_blocking.
             }
         }
 
@@ -1069,23 +1148,25 @@ impl Inner {
         target_os = "linux",
     ))]
     async fn lazy_init_read(std: Arc<StdFile>, buf: Buf, max_buf_size: usize) -> (Operation, Buf) {
-        let handle = crate::runtime::Handle::current();
-        let driver_handle = handle.inner.driver().io();
-        if driver_handle
-            .check_and_init(io_uring::opcode::Read::CODE)
-            .await
-            .unwrap_or(false)
-        {
-            let fd: crate::io::uring::utils::ArcFd = std;
-            Self::uring_read(fd, buf, max_buf_size).await
-        } else {
-            match Self::spawn_blocking_read(buf, std, max_buf_size).await {
-                Ok(result) => result,
-                Err(e) => (
-                    Operation::Read(Err(io::Error::new(io::ErrorKind::Other, e))),
-                    Buf::with_capacity(0),
-                ),
+        if let Ok(handle) = crate::runtime::Handle::try_current() {
+            if let Some(driver_handle) = handle.inner.driver().io.as_ref() {
+                if driver_handle
+                    .check_and_init(io_uring::opcode::Read::CODE)
+                    .await
+                    .unwrap_or_default()
+                {
+                    let fd: crate::io::uring::utils::ArcFd = std;
+                    return Self::uring_read(fd, buf, max_buf_size).await;
+                }
             }
+        }
+
+        match Self::spawn_blocking_read(buf, std, max_buf_size).await {
+            Ok(result) => result,
+            Err(e) => (
+                Operation::Read(Err(io::Error::other(e))),
+                Buf::with_capacity(0),
+            ),
         }
     }
 
@@ -1129,7 +1210,14 @@ impl Inner {
 
         let (op, buf) = match self.state {
             State::Idle(_) => return Poll::Ready(Ok(())),
-            State::Busy(ref mut rx) => ready!(Pin::new(rx).poll(cx))?,
+            State::Busy(ref mut rx) => {
+                let res = ready!(Pin::new(rx).poll(cx));
+                if res.is_err() {
+                    // Restore a valid Idle state before returning the error.
+                    self.state = State::Idle(Some(Buf::with_capacity(0)));
+                }
+                res?
+            }
         };
 
         // The buffer is not used here

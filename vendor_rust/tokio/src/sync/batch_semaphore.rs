@@ -557,7 +557,7 @@ impl Semaphore {
             // Do we need to register the new waker?
             if waker
                 .as_ref()
-                .map_or(true, |waker| !waker.will_wake(cx.waker()))
+                .is_none_or(|waker| !waker.will_wake(cx.waker()))
             {
                 old_waker = waker.replace(cx.waker().clone());
             }
@@ -650,21 +650,21 @@ impl Future for Acquire<'_> {
 
         let (node, semaphore, needed, queued) = self.project();
 
-        // First, ensure the current task has enough budget to proceed.
-        #[cfg(all(tokio_unstable, feature = "tracing"))]
-        let coop = ready!(trace_poll_op!(
-            "poll_acquire",
-            crate::task::coop::poll_proceed(cx),
-        ));
-
-        #[cfg(not(all(tokio_unstable, feature = "tracing")))]
-        let coop = ready!(crate::task::coop::poll_proceed(cx));
-
         let result = match semaphore.poll_acquire(cx, needed, node, queued) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(r) => {
-                coop.made_progress();
                 r?;
+
+                #[cfg(all(tokio_unstable, feature = "tracing"))]
+                let coop = ready!(trace_poll_op!(
+                    "poll_acquire",
+                    crate::task::coop::poll_proceed(cx),
+                ));
+
+                #[cfg(not(all(tokio_unstable, feature = "tracing")))]
+                let coop = ready!(crate::task::coop::poll_proceed(cx));
+
+                coop.made_progress();
                 Poll::Ready(Ok(()))
             }
         };
