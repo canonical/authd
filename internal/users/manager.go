@@ -208,12 +208,18 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 
 		var nameMatch *db.UserRow
 		matchedLoginName := ""
-		loginNames := []string{requestedName}
-		if requestedProviderUsername != "" && requestedProviderUsername != requestedName {
-			loginNames = append(loginNames, requestedProviderUsername)
-		}
-		for _, name := range loginNames {
-			row, lookupErr := m.db.UserByLoginName(name)
+		for _, lookup := range []struct {
+			name string
+			find func(string) (db.UserRow, error)
+		}{
+			{requestedName, m.db.UserByName},
+			{requestedProviderUsername, m.db.UserByLoginName},
+		} {
+			name := lookup.name
+			if name == "" {
+				continue
+			}
+			row, lookupErr := lookup.find(name)
 			switch {
 			case errors.Is(lookupErr, db.NoDataFoundError{}):
 				continue
@@ -1285,7 +1291,7 @@ func (m *Manager) ResolveAuthenticatedIdentity(sessionUsername, brokerID, provid
 	}
 
 	if !hasSelected {
-		_, err := m.LoginIdentityByUnixName(newUnixName)
+		_, err := m.LoginIdentityByName(newUnixName)
 		switch {
 		case err == nil:
 			return types.LoginIdentity{}, fmt.Errorf("unix name %q is already used by an existing account", newUnixName)

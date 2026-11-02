@@ -327,6 +327,49 @@ func TestUpdateUserUsesProviderUsernamePreAuthUID(t *testing.T) {
 		"the persisted user should replace the temporary pre-auth record")
 }
 
+func TestBrokerUnixNameCannotClaimExistingAlias(t *testing.T) {
+	for _, providerID := range []string{"", "other-provider-id"} {
+		for _, resolveFirst := range []bool{false, true} {
+			t.Run(fmt.Sprintf("ProviderID=%s/ResolveFirst=%t", providerID, resolveFirst), func(t *testing.T) {
+				m := newManagerForTests(t, t.TempDir())
+				original := types.UserInfo{
+					Name:             "alice",
+					ProviderUsername: "alice@example.com",
+					BrokerID:         "broker-id",
+					ProviderID:       "alice-provider-id",
+					Dir:              "/home/alice",
+					Shell:            "/bin/bash",
+				}
+				require.NoError(t, m.UpdateUser(original))
+				before, err := userstestutils.DBManager(m).UserByName(original.Name)
+				require.NoError(t, err)
+
+				incoming := types.UserInfo{
+					Name:                               original.ProviderUsername,
+					ProviderUsername:                   "other@example.com",
+					BrokerID:                           original.BrokerID,
+					ProviderID:                         providerID,
+					RequireStableProviderIDForNewUsers: true,
+					Dir:                                "/home/other",
+					Shell:                              "/bin/bash",
+				}
+				if resolveFirst {
+					_, err = m.ResolveAuthenticatedIdentity(incoming.ProviderUsername, incoming.BrokerID,
+						incoming.ProviderID, incoming.ProviderUsername, incoming.Name)
+					require.Error(t, err)
+				} else {
+					require.Error(t, m.UpdateAuthenticatedUser(incoming))
+				}
+				after, err := userstestutils.DBManager(m).UserByName(original.Name)
+				require.NoError(t, err)
+				require.Equal(t, before, after, "a broker-returned Unix name must not claim another user's alias")
+				_, err = userstestutils.DBManager(m).UserByName(incoming.Name)
+				require.ErrorIs(t, err, db.NoDataFoundError{})
+			})
+		}
+	}
+}
+
 func TestResolveAuthenticatedIdentityKeepsNewUnixName(t *testing.T) {
 	t.Parallel()
 
