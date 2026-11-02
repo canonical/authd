@@ -81,16 +81,6 @@ updates:
   - package-ecosystem: "uv"
     directory: "/e2e-tests"
     labels: ["dependencies", "e2e-tests"]
-    # These dependencies have different locked versions across Python versions.
-    # Dependabot's single-version upgrades can fail or downgrade other deps.
-    # Update them with uv, preserving YARF's supported Python versions.
-    ignore:
-      - dependency-name: "attrs"
-      - dependency-name: "cattrs"
-      - dependency-name: "licensecheck"
-      - dependency-name: "markdown"
-      - dependency-name: "numpy"
-      - dependency-name: "onnxruntime"
     schedule:
       interval: "weekly"
       day: "thursday"

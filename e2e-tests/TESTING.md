@@ -115,8 +115,17 @@ This initializes the YARF git submodule and installs it into a Python virtual
 environment.
 
 `setup-yarf.sh` uses the combined `e2e-tests/uv.lock` and requires it to be up to
-date. After updating the YARF submodule checkout, run `cd e2e-tests && uv lock`
-and commit the refreshed `uv.lock` together with the submodule update.
+date. After updating the YARF submodule checkout, stage it with
+`git add e2e-tests/.yarf`, then run this from the repository root and commit
+`e2e-tests/uv.lock` together with the submodule update:
+
+```bash
+python3 e2e-tests/update_dependencies.py
+```
+
+Use the uv version pinned in `.github/workflows/e2e-dependencies.yaml` when
+refreshing the lock. Other versions can rewrite marker lines without changing
+package versions.
 
 ## Formatting and checking Robot Framework files
 

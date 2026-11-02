@@ -1,0 +1,41 @@
+name: E2E dependency lock
+
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - ".github/workflows/e2e-dependencies.yaml"
+      - "e2e-tests/pyproject.toml"
+      - "e2e-tests/uv.lock"
+      - "e2e-tests/.yarf"
+      - "e2e-tests/update_dependencies.py"
+      - "e2e-tests/test_update_dependencies.py"
+  pull_request:
+    paths: *paths
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-26.04 # ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Fetch YARF
+        run: git submodule update --init --depth=1 e2e-tests/.yarf
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: "0.12.21"
+          enable-cache: true
+          cache-dependency-glob: e2e-tests/uv.lock
+      - name: Test the lock helper
+        run: python -m unittest discover -s e2e-tests -p test_update_dependencies.py
+      - name: Check YARF runtime versions
+        run: python e2e-tests/update_dependencies.py --check
