@@ -782,11 +782,19 @@ Copyright: Tokio Contributors
 License: Expat
 
 Files: vendor_rust/tonic/*
-Copyright: 2025 Lucio Franco
+Copyright: 2019-2025 gRPC authors.
 License: Expat
 
 Files: vendor_rust/tonic-build/*
-Copyright: 2025 Lucio Franco
+Copyright: 2019-2025 gRPC authors.
+License: Expat
+
+Files: vendor_rust/tonic-prost/*
+Copyright: 2025 gRPC authors.
+License: Expat
+
+Files: vendor_rust/tonic-prost-build/*
+Copyright: 2025 gRPC authors.
 License: Expat
 
 Files: vendor_rust/tower/*

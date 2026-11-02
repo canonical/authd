@@ -482,7 +482,6 @@ mod utilities;
 use utilities::*;
 
 mod flags;
-use flags::*;
 
 /// Key of the flag support cache, next to the flag itself: everything else the
 /// probe `Build` in [`Build::is_flag_supported_inner`] is made from. Built by
@@ -3403,13 +3402,10 @@ impl Build {
         target: &TargetInfo<'_>,
         flag_support_key: &mut Option<CompilerFlag>,
     ) -> Result<(), Error> {
-        let Some(env_os) = self.get_cargo_env("CARGO_ENCODED_RUSTFLAGS") else {
+        let Some(codegen_flags) = self.env.inherited().rustc_codegen_flags()? else {
             // No encoded RUSTFLAGS -> nothing to do
             return Ok(());
         };
-
-        let env = env_os.to_string_lossy();
-        let codegen_flags = RustcCodegenFlags::parse(&env)?;
         codegen_flags.cc_flags(self, cmd, target, flag_support_key);
         Ok(())
     }
@@ -3697,17 +3693,27 @@ impl Build {
         let mut objs = objs
             .chain(self.objects.iter().map(core::ops::Deref::deref))
             .peekable();
-        let mut batch = Vec::new();
-        while objs.peek().is_some() {
-            let mut remaining_len = 4000;
-            while let Some(path) =
-                objs.next_if(|peek| batch.is_empty() || peek.as_os_str().len() <= remaining_len)
-            {
-                batch.push(path);
-                remaining_len = remaining_len.saturating_sub(path.as_os_str().len());
+
+        // libtool can't add to an existing library, so it gets every object
+        // in one call instead of in batches. See `assemble_libtool`.
+        let libtool = is_libtool(&self.try_get_archiver_and_flags()?.1);
+        let mut libtool_objs = Vec::new();
+        if libtool {
+            libtool_objs.extend(objs);
+            self.assemble_libtool(dst, &libtool_objs)?;
+        } else {
+            let mut batch = Vec::new();
+            while objs.peek().is_some() {
+                let mut remaining_len = 4000;
+                while let Some(path) =
+                    objs.next_if(|peek| batch.is_empty() || peek.as_os_str().len() <= remaining_len)
+                {
+                    batch.push(path);
+                    remaining_len = remaining_len.saturating_sub(path.as_os_str().len());
+                }
+                self.assemble_progressive(dst, &batch, &mut deterministic_ar)?;
+                batch.clear();
             }
-            self.assemble_progressive(dst, &batch, &mut deterministic_ar)?;
-            batch.clear();
         }
 
         if self.cuda && self.cuda_file_count() > 0 {
@@ -3719,7 +3725,13 @@ impl Build {
             let mut nvcc = self.get_compiler().to_command();
             nvcc.arg("--device-link").arg("-o").arg(&dlink).arg(dst);
             run(&mut nvcc, &self.cargo_output)?;
-            self.assemble_progressive(dst, &[dlink.as_path()], &mut deterministic_ar)?;
+            if libtool {
+                let mut objs: Vec<&Path> = libtool_objs.clone();
+                objs.push(&dlink);
+                self.assemble_libtool(dst, &objs)?;
+            } else {
+                self.assemble_progressive(dst, &[dlink.as_path()], &mut deterministic_ar)?;
+            }
         }
 
         let target = self.get_target()?;
@@ -3742,6 +3754,9 @@ impl Build {
                     ));
                 }
             };
+        } else if libtool {
+            // `libtool -static` always writes the symbol table itself, and it
+            // doesn't understand `ar`'s `s` mode.
         } else {
             // Non-msvc targets (those using `ar`) need a separate step to add
             // the symbol table to archives since our construction command of
@@ -3880,6 +3895,53 @@ impl Build {
         Ok(())
     }
 
+    /// Write the library `dst` with libtool, from all of `objs` at once.
+    ///
+    /// `ar` gets objects in batches to keep each command line short, adding
+    /// each batch to the library the previous ones wrote. libtool can't add to
+    /// an existing library, so instead it reads the objects from a file with
+    /// `-filelist`, one path per line, next to the library.
+    fn assemble_libtool(&self, dst: &Path, objs: &[&Path]) -> Result<(), Error> {
+        let mut list = Vec::new();
+        for obj in objs {
+            #[cfg(unix)]
+            list.extend_from_slice(std::os::unix::ffi::OsStrExt::as_bytes(obj.as_os_str()));
+            #[cfg(not(unix))]
+            list.extend_from_slice(
+                obj.to_str()
+                    .ok_or_else(|| {
+                        Error::new(
+                            ErrorKind::InvalidArgument,
+                            format!("libtool can't read the object path {}", obj.display()),
+                        )
+                    })?
+                    .as_bytes(),
+            );
+            list.push(b'\n');
+        }
+        let mut list_path = dst.as_os_str().to_owned();
+        list_path.push(".filelist");
+        let list_path = PathBuf::from(list_path);
+        fs::write(&list_path, list)?;
+
+        // NOTE: These are added even if flags were passed using
+        // $ARFLAGS/ar_flag, because they dictate the _mode_ libtool runs in,
+        // like `cq` does for `ar`.
+        // -static: create a static library.
+        // -D: zero out timestamps, UIDs, and GIDs, like `ar`'s `D` modifier.
+        // -o: the path of the library to write.
+        let mut filelist_arg = list_path.as_os_str().to_owned();
+        filelist_arg.push(",");
+        let mut cmd = self.try_get_archiver()?;
+        cmd.arg("-static")
+            .arg("-D")
+            .arg("-o")
+            .arg(dst)
+            .arg("-filelist")
+            .arg(filelist_arg);
+        run(&mut cmd, &self.cargo_output)
+    }
+
     fn apple_flags(&self, cmd: &mut Tool) -> Result<(), Error> {
         let target = self.get_target()?;
 
@@ -3965,14 +4027,12 @@ impl Build {
     /// Whether to look for `clang` (or `clang++`) first when no compiler is
     /// set, so that C and C++ code can take part in rustc's linker-plugin LTO.
     fn prefer_clang(&self) -> bool {
-        if let Some(env) = self.get_cargo_env("CARGO_ENCODED_RUSTFLAGS") {
-            // Flags that don't parse are left for rustc and
-            // `add_inherited_rustflags` to report.
-            RustcCodegenFlags::parse(&env.to_string_lossy())
-                .map_or(false, |flags| flags.linker_plugin_lto())
-        } else {
-            false
-        }
+        // Flags that don't parse are left for rustc and
+        // `add_inherited_rustflags` to report.
+        matches!(
+            self.env.inherited().rustc_codegen_flags(),
+            Ok(Some(flags)) if flags.linker_plugin_lto()
+        )
     }
 
     fn get_base_compiler(&self) -> Result<Tool, Error> {
@@ -5815,6 +5875,14 @@ fn is_llvm_mingw_wrapper(clang_path: &Path) -> bool {
     } else {
         false
     }
+}
+
+/// Whether the archiver is Apple's `libtool` or `llvm-libtool-darwin`, which
+/// take `-static -o <lib> <inputs>` instead of `ar`'s `cq <lib> <inputs>`.
+fn is_libtool(archiver: &Path) -> bool {
+    archiver.file_name().map_or(false, |name| {
+        name.to_string_lossy().contains_ignore_ascii_case("libtool")
+    })
 }
 
 // FIXME: Use parsed target.
