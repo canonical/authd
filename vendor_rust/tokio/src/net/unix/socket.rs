@@ -170,13 +170,13 @@ impl UnixSocket {
     /// [`new_datagram`]: `UnixSocket::new_datagram`
     pub fn listen(self, backlog: u32) -> io::Result<UnixListener> {
         if self.ty() == socket2::Type::DGRAM {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 "listen cannot be called on a datagram socket",
             ));
         }
 
-        self.inner.listen(backlog as i32)?;
+        self.inner
+            .listen(i32::try_from(backlog).unwrap_or(i32::MAX))?;
         let mio = {
             use std::os::unix::io::{FromRawFd, IntoRawFd};
 
@@ -200,8 +200,7 @@ impl UnixSocket {
     /// [`new_datagram`]: `UnixSocket::new_datagram`
     pub async fn connect(self, path: impl AsRef<Path>) -> io::Result<UnixStream> {
         if self.ty() == socket2::Type::DGRAM {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 "connect cannot be called on a datagram socket",
             ));
         }
@@ -229,8 +228,7 @@ impl UnixSocket {
     /// [`new_stream`]: `UnixSocket::new_stream`
     pub fn datagram(self) -> io::Result<UnixDatagram> {
         if self.ty() == socket2::Type::STREAM {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 "datagram cannot be called on a stream socket",
             ));
         }

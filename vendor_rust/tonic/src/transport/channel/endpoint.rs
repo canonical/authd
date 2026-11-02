@@ -1,3 +1,27 @@
+/*
+ *
+ * Copyright 2025 gRPC authors.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ */
+
 use super::Channel;
 #[cfg(feature = "_tls-any")]
 use super::ClientTlsConfig;
@@ -52,6 +76,9 @@ pub struct Endpoint {
     pub(crate) http2_keep_alive_while_idle: Option<bool>,
     pub(crate) http2_header_table_size: Option<u32>,
     pub(crate) http2_max_header_list_size: Option<u32>,
+    pub(crate) http2_max_concurrent_reset_streams: Option<usize>,
+    pub(crate) http2_reset_stream_duration: Option<Duration>,
+    pub(crate) http2_max_local_error_reset_streams: Option<Option<usize>>,
     pub(crate) connect_timeout: Option<Duration>,
     pub(crate) http2_adaptive_window: Option<bool>,
     pub(crate) local_address: Option<IpAddr>,
@@ -69,10 +96,11 @@ impl Endpoint {
     {
         let me = dst.try_into().map_err(|e| Error::from_source(e.into()))?;
         #[cfg(feature = "_tls-any")]
-        if let EndpointType::Uri(uri) = &me.uri {
-            if me.tls.is_none() && uri.scheme() == Some(&http::uri::Scheme::HTTPS) {
-                return me.tls_config(ClientTlsConfig::new().with_enabled_roots());
-            }
+        if let EndpointType::Uri(uri) = &me.uri
+            && me.tls.is_none()
+            && uri.scheme() == Some(&http::uri::Scheme::HTTPS)
+        {
+            return me.tls_config(ClientTlsConfig::new().with_enabled_roots());
         }
         Ok(me)
     }
@@ -101,6 +129,9 @@ impl Endpoint {
             http2_keep_alive_while_idle: None,
             http2_header_table_size: None,
             http2_max_header_list_size: None,
+            http2_max_concurrent_reset_streams: None,
+            http2_reset_stream_duration: None,
+            http2_max_local_error_reset_streams: None,
             connect_timeout: None,
             http2_adaptive_window: None,
             executor: SharedExec::tokio(),
@@ -132,6 +163,9 @@ impl Endpoint {
             http2_keep_alive_while_idle: None,
             http2_header_table_size: None,
             http2_max_header_list_size: None,
+            http2_max_concurrent_reset_streams: None,
+            http2_reset_stream_duration: None,
+            http2_max_local_error_reset_streams: None,
             connect_timeout: None,
             http2_adaptive_window: None,
             executor: SharedExec::tokio(),
@@ -483,6 +517,44 @@ impl Endpoint {
     pub fn http2_max_header_list_size(self, size: u32) -> Self {
         Endpoint {
             http2_max_header_list_size: Some(size),
+            ..self
+        }
+    }
+
+    /// Sets the maximum number of locally reset streams that HTTP2 remembers.
+    ///
+    /// HTTP2 ignores frames for a remembered reset stream. A frame for a forgotten one
+    /// counts toward [`Endpoint::http2_max_local_error_reset_streams`].
+    ///
+    /// Uses `hyper`'s default otherwise.
+    #[must_use]
+    pub fn http2_max_concurrent_reset_streams(self, max: usize) -> Self {
+        Endpoint {
+            http2_max_concurrent_reset_streams: Some(max),
+            ..self
+        }
+    }
+
+    /// Sets how long HTTP2 remembers a locally reset stream.
+    ///
+    /// See [`Endpoint::http2_max_concurrent_reset_streams`]. Uses `hyper`'s default otherwise.
+    #[must_use]
+    pub fn http2_reset_stream_duration(self, duration: Duration) -> Self {
+        Endpoint {
+            http2_reset_stream_duration: Some(duration),
+            ..self
+        }
+    }
+
+    /// Sets the maximum number of local error resets before HTTP2 closes the
+    /// connection with `GOAWAY(ENHANCE_YOUR_CALM)`.
+    ///
+    /// Pass `None` to disable the limit. The limit guards against a misbehaving
+    /// peer, so only disable it for trusted peers. Uses `hyper`'s default (1024) otherwise.
+    #[must_use]
+    pub fn http2_max_local_error_reset_streams(self, max: impl Into<Option<usize>>) -> Self {
+        Endpoint {
+            http2_max_local_error_reset_streams: Some(max.into()),
             ..self
         }
     }

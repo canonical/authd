@@ -8,7 +8,7 @@ use std::os::fd::AsRawFd;
 // Builds a driver whose io_uring context is initialized, or returns `None` when
 // io_uring is unavailable on the host.
 fn ready_handle() -> Option<(Driver, Handle)> {
-    let (driver, handle) = Driver::new(1024).ok()?;
+    let (driver, handle) = Driver::new(1024, None).ok()?;
 
     let mut probe = Probe::new();
     {
