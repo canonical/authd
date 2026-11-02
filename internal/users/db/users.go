@@ -109,7 +109,7 @@ func (m *Manager) UserByLoginName(name string) (UserRow, error) {
 
 	var u UserRow
 	err = m.db.QueryRow(
-		fmt.Sprintf(`SELECT %s FROM users WHERE provider_username = ?`, publicUserColumns), name,
+		fmt.Sprintf(`SELECT %s FROM users WHERE provider_username = ? AND provider_username != ''`, publicUserColumns), name,
 	).Scan(&u.Name, &u.UID, &u.GID, &u.Gecos, &u.Dir, &u.Shell, &u.BrokerID, &u.Locked, &u.ProviderID, &u.ProviderUsername)
 	if errors.Is(err, sql.ErrNoRows) {
 		return UserRow{}, NewUserNotFoundError(name)
@@ -126,7 +126,7 @@ func (m *Manager) UserByLoginName(name string) (UserRow, error) {
 func (m *Manager) UserLoginNameConflict(name string, uid uint32) (string, error) {
 	var existingName string
 	err := m.db.QueryRow(
-		`SELECT name FROM users WHERE uid != ? AND (name = ? OR provider_username = ?) LIMIT 1`,
+		`SELECT name FROM users WHERE uid != ? AND (name = ? OR (provider_username = ? AND provider_username != '')) LIMIT 1`,
 		uid, name, name,
 	).Scan(&existingName)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -145,7 +145,7 @@ func (m *Manager) UserByProviderID(brokerID, providerID string) (UserRow, error)
 }
 
 func userByProviderID(db queryable, brokerID, providerID string) (UserRow, error) {
-	query := fmt.Sprintf(`SELECT %s FROM users WHERE broker_id = ? AND provider_id = ?`, publicUserColumns)
+	query := fmt.Sprintf(`SELECT %s FROM users WHERE broker_id = ? AND provider_id = ? AND broker_id != '' AND provider_id != ''`, publicUserColumns)
 	row := db.QueryRow(query, brokerID, providerID)
 
 	var u UserRow

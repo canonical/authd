@@ -709,6 +709,42 @@ func TestUserByLoginName(t *testing.T) {
 	require.Equal(t, uint32(2222), got.UID)
 }
 
+func TestEmptyProviderIdentitiesDoNotMatchUsers(t *testing.T) {
+	t.Parallel()
+
+	m, err := db.New(t.TempDir())
+	require.NoError(t, err)
+	defer m.Close()
+
+	for i, identity := range []struct {
+		brokerID   string
+		providerID string
+	}{
+		{"", ""},
+		{"broker", ""},
+		{"", "provider"},
+	} {
+		uid := uint32(1111 + i)
+		name := "user-" + identity.brokerID + identity.providerID
+		require.NoError(t, m.UpdateUserEntry(db.UserRow{
+			Name:       name,
+			UID:        uid,
+			GID:        uid,
+			BrokerID:   identity.brokerID,
+			ProviderID: identity.providerID,
+		}, []db.GroupRow{{Name: name, GID: uid, UGID: name}}, nil))
+
+		_, err = m.UserByProviderID(identity.brokerID, identity.providerID)
+		require.ErrorIs(t, err, db.NoDataFoundError{})
+	}
+
+	_, err = m.UserByLoginName("")
+	require.ErrorIs(t, err, db.NoDataFoundError{})
+	conflict, err := m.UserLoginNameConflict("", 9999)
+	require.NoError(t, err)
+	require.Empty(t, conflict)
+}
+
 // TestProviderIDUniquenessEnforcedAfterMigration ensures that the partial unique index created by
 // the provider_id migration is actually active for rows inserted after the migration: it enforces
 // uniqueness on (broker_id, provider_id) when both are non-empty, while still allowing multiple
