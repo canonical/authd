@@ -258,6 +258,31 @@ func TestSelectBroker(t *testing.T) {
 	}
 }
 
+// The mock uses the same session ID for both ID-bearing and legacy accounts.
+func TestSelectBrokerPassesExistingUnixName(t *testing.T) {
+	const providerUsername = "ns_check_unix_name@example.com"
+	const unixUsername = "unix-" + providerUsername
+	for _, providerID := range []string{"provider-id", ""} {
+		t.Run("ProviderID="+providerID, func(t *testing.T) {
+			m := newPamManagerWithUser(t, unixUsername, providerUsername, providerID)
+			client := newPamClient(t, m, globalBrokerManager)
+			for _, loginName := range []string{unixUsername, providerUsername} {
+				sessionID := selectBrokerForTest(t, client, loginName)
+				require.Equal(t, unixUsername, globalBrokerManager.UsernameFromSessionID(sessionID))
+				_, err := client.EndSession(context.Background(), &authd.ESRequest{SessionId: sessionID})
+				require.NoError(t, err)
+			}
+		})
+	}
+	m, err := users.NewManager(users.DefaultConfig, t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Stop() })
+	client := newPamClient(t, m, globalBrokerManager)
+	sessionID := selectBrokerForTest(t, client, "ns_check_new_user@example.com")
+	_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: sessionID})
+	require.NoError(t, err)
+}
+
 func TestAuthenticationWithDistinctProviderUsername(t *testing.T) {
 	t.Parallel()
 

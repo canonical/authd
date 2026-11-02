@@ -13,7 +13,9 @@ import (
 
 	"github.com/canonical/authd/brokers/internal/broker/authmodes"
 	"github.com/canonical/authd/brokers/internal/providers/google"
+	"github.com/canonical/authd/brokers/internal/providers/info"
 	"github.com/canonical/authd/brokers/internal/testutils"
+	"github.com/canonical/authd/brokers/internal/token"
 	"github.com/canonical/authd/internal/testutils/golden"
 	"github.com/canonical/authd/log"
 	"github.com/stretchr/testify/require"
@@ -672,6 +674,218 @@ func TestNewBrokersParsesConfigOnce(t *testing.T) {
 	require.Empty(t, brokers[1].cfg.owner)
 }
 
+func TestRegisterOwnerIfNeeded(t *testing.T) {
+	t.Parallel()
+
+	for _, owner := range []string{"", "existing-owner"} {
+		t.Run("Owner="+owner, func(t *testing.T) {
+			t.Parallel()
+
+			uc := userConfig{
+				owner:                 owner,
+				ownerAllowed:          true,
+				firstUserBecomesOwner: true,
+				ownerMutex:            &sync.RWMutex{},
+				provider:              &testutils.MockProvider{},
+			}
+			errs := make(chan error, 2)
+			for _, name := range []string{"first-user", "second-user"} {
+				go func() {
+					errs <- uc.registerOwnerIfNeeded("", name)
+				}()
+			}
+			for range 2 {
+				require.NoError(t, <-errs)
+			}
+			if owner == "" {
+				require.Contains(t, []string{"first-user", "second-user"}, uc.owner)
+			} else {
+				require.Equal(t, owner, uc.owner)
+			}
+			registeredOwner := uc.owner
+
+			require.NoError(t, uc.registerOwnerIfNeeded("", "late-user"))
+			require.Equal(t, registeredOwner, uc.owner,
+				"a later registration must not replace the current owner")
+		})
+	}
+}
+
+func TestFinishAuthRenameDoesNotBypassExplicitAllowlist(t *testing.T) {
+	t.Parallel()
+
+	p := &testutils.MockProvider{}
+	b := Broker{
+		cfg: Config{userConfig: userConfig{
+			allowedUsers: map[string]struct{}{"old-user": {}},
+			ownerMutex:   &sync.RWMutex{},
+			provider:     p,
+		}},
+		provider: p,
+	}
+	s := &session{username: "old-user", expectedProviderID: "user-id", isOffline: true}
+	authInfo := &token.AuthCachedInfo{UserInfo: info.User{Name: "new-user", ProviderID: "user-id"}}
+	access, _ := b.finishAuth(s, authInfo)
+	require.Equal(t, AuthDenied, access, "a bound rename must not bypass the current provider-name allowlist")
+	b.cfg.allowedUsers = map[string]struct{}{"new-user": {}}
+	access, _ = b.finishAuth(s, authInfo)
+	require.Equal(t, AuthGranted, access, "the renamed user is admitted once the administrator updates the allowlist")
+}
+
+func TestFinishAuthConcurrentOwnerRename(t *testing.T) {
+	t.Parallel()
+
+	p := &testutils.MockProvider{}
+	b := Broker{
+		cfg: Config{userConfig: userConfig{
+			owner:                 "old-owner",
+			ownerAllowed:          true,
+			firstUserBecomesOwner: true,
+			ownerMutex:            &sync.RWMutex{},
+			provider:              p,
+		}},
+		provider: p,
+	}
+	start := make(chan struct{})
+	results := make(chan string, 16)
+	for range cap(results) {
+		go func() {
+			<-start
+			access, _ := b.finishAuth(&session{
+				username:           "old-owner",
+				unixUsername:       "old-owner",
+				expectedProviderID: "owner-id",
+				isOffline:          true,
+			}, &token.AuthCachedInfo{UserInfo: info.User{
+				Name:       "new-owner",
+				ProviderID: "owner-id",
+			}})
+			results <- access
+		}()
+	}
+	close(start)
+	for range cap(results) {
+		require.Equal(t, AuthGranted, <-results)
+	}
+	require.Equal(t, "old-owner", b.cfg.owner)
+}
+
+func TestOwnerRightsUseUnixName(t *testing.T) {
+	t.Parallel()
+
+	for _, allAllowed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("AllUsersAllowed=%t", allAllowed), func(t *testing.T) {
+			t.Parallel()
+
+			p := &testutils.MockProvider{}
+			b := Broker{
+				cfg: Config{userConfig: userConfig{
+					owner: "owner", ownerAllowed: true, allUsersAllowed: allAllowed,
+					ownerExtraGroups: []string{"sudo"}, ownerMutex: &sync.RWMutex{}, provider: p,
+				}},
+				provider: p,
+			}
+			for _, loginName := range []string{"other-user", "owner"} {
+				s := &session{
+					username: loginName, unixUsername: "other-user",
+					expectedProviderID: "other-id", isOffline: true,
+				}
+				authInfo := &token.AuthCachedInfo{UserInfo: info.User{Name: "owner", ProviderID: "other-id"}}
+				require.Equal(t, allAllowed, b.authenticatedUserIsAllowed(s, authInfo.UserInfo))
+				access, _ := b.finishAuth(s, authInfo)
+				if allAllowed {
+					require.Equal(t, AuthGranted, access)
+				} else {
+					require.Equal(t, AuthDenied, access)
+				}
+				require.Empty(t, authInfo.UserInfo.Groups, "adopting the owner's provider name must not grant owner groups")
+				require.Equal(t, "owner", b.cfg.owner)
+			}
+
+			for _, providerID := range []string{"owner-id", "other-id", ""} {
+				authInfo := &token.AuthCachedInfo{UserInfo: info.User{Name: "renamed-owner", ProviderID: providerID}}
+				access, _ := b.finishAuth(&session{
+					username: "owner", unixUsername: "owner", expectedProviderID: "owner-id", isOffline: true,
+				}, authInfo)
+				if providerID == "owner-id" {
+					require.Equal(t, AuthGranted, access)
+					require.Contains(t, authInfo.UserInfo.Groups, info.Group{Name: "sudo"})
+				} else {
+					require.Equal(t, AuthDenied, access, "the Unix name alone is not proof of identity")
+					require.Empty(t, authInfo.UserInfo.Groups)
+				}
+			}
+		})
+	}
+}
+
+func TestExplicitAllowedUsersFollowProviderName(t *testing.T) {
+	t.Parallel()
+
+	const unixName = "original-user@example.com"
+	const renamed = "renamed-user@example.com"
+	for name, tc := range map[string]struct {
+		providerName string
+		allowedName  string
+		wantAccess   string
+	}{
+		"Before_rename": {providerName: unixName, allowedName: unixName, wantAccess: AuthGranted},
+		"Stale_entry":   {providerName: renamed, allowedName: unixName, wantAccess: AuthDenied},
+		"Updated_entry": {providerName: renamed, allowedName: renamed, wantAccess: AuthGranted},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			p := &testutils.MockProvider{}
+			b := Broker{
+				cfg: Config{userConfig: userConfig{
+					allowedUsers: map[string]struct{}{tc.allowedName: {}},
+					owner:        "other-owner@example.com", ownerAllowed: true,
+					ownerMutex: &sync.RWMutex{}, provider: p,
+				}},
+				provider: p,
+			}
+			access, _ := b.finishAuth(&session{
+				username: unixName, unixUsername: unixName,
+				expectedProviderID: "saved-user-id", isOffline: true,
+			}, &token.AuthCachedInfo{UserInfo: info.User{
+				Name: tc.providerName, ProviderID: "saved-user-id",
+			}})
+			require.Equal(t, tc.wantAccess, access)
+		})
+	}
+}
+
+func TestOwnerRegistrationUsesAccountName(t *testing.T) {
+	t.Parallel()
+
+	for _, unixName := range []string{"", "existing-unix-name"} {
+		t.Run("UnixName="+unixName, func(t *testing.T) {
+			t.Parallel()
+
+			p := &testutils.MockProvider{}
+			b := Broker{
+				cfg: Config{userConfig: userConfig{
+					ownerAllowed: true, firstUserBecomesOwner: true,
+					ownerMutex: &sync.RWMutex{}, provider: p, ownerExtraGroups: []string{"sudo"},
+				}},
+				provider: p,
+			}
+			authInfo := &token.AuthCachedInfo{UserInfo: info.User{Name: "provider-name", ProviderID: "provider-id"}}
+			access, _ := b.finishAuth(&session{
+				username: "provider-name", unixUsername: unixName, expectedProviderID: "provider-id", isOffline: true,
+			}, authInfo)
+			require.Equal(t, AuthGranted, access)
+			wantOwner := unixName
+			if wantOwner == "" {
+				wantOwner = "provider-name"
+			}
+			require.Equal(t, wantOwner, b.cfg.owner)
+			require.Contains(t, authInfo.UserInfo.Groups, info.Group{Name: "sudo"})
+		})
+	}
+}
+
 var testParseUserConfigTypes = map[string]string{
 	"All_are_allowed": `
 [oidc]
@@ -898,6 +1112,43 @@ func TestRegisterOwnerSurvivesReload(t *testing.T) {
 			reloaded, err := parseConfigFromPath(cfgPath, uc.provider, false, nil)
 			require.NoError(t, err)
 			require.Equal(t, name, reloaded.owner)
+			require.False(t, reloaded.firstUserBecomesOwner)
+		})
+	}
+}
+
+func TestRegisterOwnerKeepsExistingConfigurationOnFailure(t *testing.T) {
+	t.Parallel()
+
+	for _, failure := range []string{"later-drop-in", "unwritable-directory"} {
+		t.Run(failure, func(t *testing.T) {
+			t.Parallel()
+			if failure == "unwritable-directory" && os.Geteuid() == 0 {
+				t.Skip("requires directory permissions to be enforced")
+			}
+			cfgPath := filepath.Join(t.TempDir(), "broker.conf")
+			require.NoError(t, os.WriteFile(cfgPath, []byte(configTypes["valid"]), 0600))
+			uc, err := parseConfigFromPath(cfgPath, &testutils.MockProvider{}, false, nil)
+			require.NoError(t, err)
+			require.NoError(t, uc.registerOwner(cfgPath, "old-owner"))
+			dropInDir := GetDropInDir(cfgPath)
+			ownerPath := filepath.Join(dropInDir, ownerAutoRegistrationConfigPath)
+			before, err := os.ReadFile(ownerPath)
+			require.NoError(t, err)
+			if failure == "later-drop-in" {
+				require.NoError(t, os.WriteFile(filepath.Join(dropInDir, "99-owner.conf"), []byte("[users]\nowner = old-owner\n"), 0600))
+			} else {
+				require.NoError(t, os.Chmod(dropInDir, 0500))       //nolint:gosec // Exercise a failed owner-file write.
+				t.Cleanup(func() { _ = os.Chmod(dropInDir, 0700) }) //nolint:gosec // Restore directory access for cleanup.
+			}
+			require.Error(t, uc.registerOwner(cfgPath, "new-owner"))
+			after, err := os.ReadFile(ownerPath)
+			require.NoError(t, err)
+			require.Equal(t, before, after)
+			require.Equal(t, "old-owner", uc.owner)
+			reloaded, err := parseConfigFromPath(cfgPath, uc.provider, false, nil)
+			require.NoError(t, err)
+			require.Equal(t, "old-owner", reloaded.owner)
 			require.False(t, reloaded.firstUserBecomesOwner)
 		})
 	}

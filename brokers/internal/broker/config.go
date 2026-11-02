@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"errors"
@@ -451,7 +452,7 @@ func parseConfigWithReporter(cfg configFile, dropInCfgs []configFile, p provider
 	return uc, nil
 }
 
-func (uc *userConfig) userNameIsAllowed(userName string) bool {
+func (uc *userConfig) userNameIsAllowed(userName, ownerName string) bool {
 	uc.ownerMutex.RLock()
 	defer uc.ownerMutex.RUnlock()
 
@@ -466,7 +467,7 @@ func (uc *userConfig) userNameIsAllowed(userName string) bool {
 	if _, ok := uc.allowedUsers[userName]; ok {
 		return true
 	}
-	if uc.ownerAllowed && uc.owner == userName {
+	if uc.ownerAllowed && uc.owner == ownerName {
 		return true
 	}
 
@@ -480,11 +481,25 @@ func (uc *userConfig) shouldRegisterOwner() bool {
 }
 
 func (uc *userConfig) registerOwner(cfgPath, userName string) error {
-	// We need to lock here to avoid a race condition where two users log in at the same time, causing both to be
-	// considered the owner.
 	uc.ownerMutex.Lock()
 	defer uc.ownerMutex.Unlock()
 
+	return uc.registerOwnerLocked(cfgPath, userName)
+}
+
+func (uc *userConfig) registerOwnerIfNeeded(cfgPath, userName string) error {
+	uc.ownerMutex.Lock()
+	defer uc.ownerMutex.Unlock()
+
+	if !uc.shouldRegisterOwner() {
+		return nil
+	}
+
+	return uc.registerOwnerLocked(cfgPath, userName)
+}
+
+// registerOwnerLocked requires ownerMutex to be locked.
+func (uc *userConfig) registerOwnerLocked(cfgPath, userName string) error {
 	// Reject any non-graphic characters in the username before writing it to
 	// the INI drop-in config. Control characters allow INI key injection, and
 	// other non-graphic runes are not valid content for a generated config
@@ -514,14 +529,54 @@ func (uc *userConfig) registerOwner(cfgPath, userName string) error {
 		return fmt.Errorf("failed to open autoregistration template: %v", err)
 	}
 
-	f, err := os.OpenFile(p, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	var content bytes.Buffer
+	if err := t.Execute(&content, templateEnv{Owner: userName}); err != nil {
+		return fmt.Errorf("failed to render owner registration file: %v", err)
+	}
+
+	mainConfig, err := os.ReadFile(cfgPath)
+	if err != nil {
+		return err
+	}
+	dropIns, err := readDropInFiles(cfgPath)
+	if err != nil {
+		return err
+	}
+	dropIns = slices.DeleteFunc(dropIns, func(c configFile) bool { return c.path == p })
+	dropIns = append(dropIns, configFile{path: p, content: content.Bytes()})
+	slices.SortFunc(dropIns, func(a, b configFile) int { return strings.Compare(a.path, b.path) })
+	effective, err := parseConfig(configFile{path: cfgPath, content: mainConfig}, dropIns, uc.provider, true)
+	if err != nil {
+		return fmt.Errorf("invalid owner registration configuration: %w", err)
+	}
+	if effective.owner != uc.provider.NormalizeUsername(userName) {
+		return errors.New("owner registration is overridden by another configuration file")
+	}
+
+	// Drop-in readers skip directories, so they cannot see an unfinished file.
+	stagingDir, err := os.MkdirTemp(dropInDir, ".owner-")
+	if err != nil {
+		return fmt.Errorf("failed to stage owner registration file: %w", err)
+	}
+	defer os.Remove(stagingDir)
+	f, err := os.CreateTemp(stagingDir, "owner")
 	if err != nil {
 		return fmt.Errorf("failed to create owner registration file: %v", err)
 	}
 	defer f.Close()
+	defer os.Remove(f.Name())
 
-	if err := t.Execute(f, templateEnv{Owner: userName}); err != nil {
+	if _, err := f.Write(content.Bytes()); err != nil {
 		return fmt.Errorf("failed to write owner registration file: %v", err)
+	}
+	if err := f.Sync(); err != nil {
+		return fmt.Errorf("failed to sync owner registration file: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("failed to close owner registration file: %w", err)
+	}
+	if err := os.Rename(f.Name(), p); err != nil {
+		return fmt.Errorf("failed to replace owner registration file: %w", err)
 	}
 
 	// We set the owner after we create the autoregistration file, so that in case of an error

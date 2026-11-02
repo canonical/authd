@@ -335,7 +335,7 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 		log.Errorf(ctx, "SelectBroker: Could not resolve user %q: %v", username, err)
 		return nil, status.Errorf(codes.FailedPrecondition, "could not resolve login name %q: %v", username, err)
 	}
-	storedBrokerID, userProviderID := "", ""
+	storedBrokerID, userProviderID, unixUsername := "", "", ""
 	if err == nil {
 		username = identity.Name
 		providerUsername = identity.ProviderUsername
@@ -344,6 +344,7 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 		}
 		storedBrokerID = identity.BrokerID
 		userProviderID = identity.ProviderID
+		unixUsername = identity.Name
 	}
 	if storedBrokerID != "" && storedBrokerID != brokerID {
 		log.Errorf(ctx, "SelectBroker: User %q is bound to broker %q and cannot authenticate with broker %q", username, storedBrokerID, brokerID)
@@ -353,10 +354,11 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 	// from the stored broker is not applicable.
 	if storedBrokerID != brokerID {
 		userProviderID = ""
+		unixUsername = ""
 	}
 
 	// Create a session and Memorize selected broker for it.
-	sessionID, encryptionKey, err := s.brokerManager.NewSessionForUser(brokerID, providerUsername, lang, mode, userProviderID, req.GetServiceName(), username)
+	sessionID, encryptionKey, err := s.brokerManager.NewSessionForUser(brokerID, providerUsername, lang, mode, userProviderID, req.GetServiceName(), unixUsername)
 	if err != nil {
 		log.Errorf(ctx, "SelectBroker: Could not create session for user %q with broker %q: %v", username, brokerID, err)
 		return nil, err

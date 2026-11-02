@@ -89,4 +89,8 @@ func TestNewSessionRejectsUntrustedProviderID(t *testing.T) {
 	_, _, dbusErr := iface.NewSession(dbus.Sender(conn.Names()[0]), "owner", "en", "login", "attacker-id")
 	require.NotNil(t, dbusErr)
 	require.Equal(t, dbusAccessDeniedErrorName, dbusErr.Name)
+	ifaceV4 := InterfaceV4{Interface: &iface}
+	_, _, dbusErr = ifaceV4.NewSession(dbus.Sender(conn.Names()[0]), "provider-name", "en", "login", "", "owner")
+	require.NotNil(t, dbusErr)
+	require.Equal(t, dbusAccessDeniedErrorName, dbusErr.Name, "even an ID-less Unix-name binding requires root")
 }

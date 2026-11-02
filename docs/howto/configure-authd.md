@@ -318,6 +318,10 @@ list of allowed users with the `allowed_users` option, while omitting the
 allowed_users = person1@email.com,person2@email.com
 ```
 
+Explicit usernames in `allowed_users` are provider usernames. Update these
+entries after a provider rename. The `OWNER` entry instead follows the stable
+Unix username and does not need to change.
+
 Alternatively, you can directly register someone as the owner by using the `owner`
 option:
 

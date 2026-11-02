@@ -157,7 +157,15 @@ entra_auth = false
 	}{
 		{
 			name: "v3 accepts provider ID only from root", method: "com.ubuntu.authd.Broker3.NewSession",
-			args: []any{username, "en", sessionmode.Login, providerID},
+			args: []any{"session-user@example.com", "en", sessionmode.Login, "session-provider-id"},
+		},
+		{
+			name: "v4 accepts Unix name only from root", method: "com.ubuntu.authd.Broker4.NewSession",
+			args: []any{"session-user@example.com", "en", sessionmode.Login, "session-provider-id", "unix-user"},
+		},
+		{
+			name: "v4 accepts ID-less Unix name only from root", method: "com.ubuntu.authd.Broker4.NewSession",
+			args: []any{"session-user@example.com", "en", sessionmode.Login, "", "unix-user"},
 		},
 		{
 			name: "v1 deletes username cache", method: "com.ubuntu.authd.Broker.DeleteUser",

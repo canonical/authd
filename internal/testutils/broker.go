@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	latestAPIVersion = 3
+	latestAPIVersion = 4
 
 	dbusInterface = "com.ubuntu.authd.Broker"
 	objectPathFmt = "/com/ubuntu/authd/%s"
@@ -128,8 +128,14 @@ func writeConfig(cfgDir, name string) (string, error) {
 }
 
 // NewSession returns default values to be used in tests or an error if requested.
-func (b *BrokerBusMock) NewSession(username, lang, mode, providerID string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
+func (b *BrokerBusMock) NewSession(username, lang, mode, providerID, unixUsername string) (sessionID, encryptionKey string, dbusErr *dbus.Error) {
 	parsedUsername := parseSessionID(username)
+	if parsedUsername == "ns_check_unix_name" && unixUsername != "unix-"+username {
+		return "", "", dbus.MakeFailedError(errors.New("wrong canonical Unix name"))
+	}
+	if parsedUsername == "ns_check_new_user" && unixUsername != "" {
+		return "", "", dbus.MakeFailedError(errors.New("new user must not have a canonical Unix name"))
+	}
 	if parsedUsername == "ns_error" {
 		return "", "", dbus.MakeFailedError(fmt.Errorf("broker %q: NewSession errored out", b.name))
 	}

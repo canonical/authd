@@ -267,7 +267,7 @@ func New(name string) (b *Broker, fullName, brandIcon string) {
 }
 
 // NewSession creates a new session for the specified user.
-func (b *Broker) NewSession(ctx context.Context, username, lang, mode, providerID string) (sessionID, encryptionKey string, err error) {
+func (b *Broker) NewSession(ctx context.Context, username, lang, mode, providerID, unixUsername string) (sessionID, encryptionKey string, err error) {
 	sessionID = uuid.New().String()
 	info := sessionInfo{
 		username:        username,
