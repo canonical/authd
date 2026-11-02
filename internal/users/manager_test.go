@@ -517,6 +517,14 @@ func TestResolveAuthenticatedIdentityBindsFirstProviderIDToStoredUsername(t *tes
 			if tc.wantErr != "" {
 				require.ErrorContains(t, err, tc.wantErr)
 
+				updateErr := m.UpdateAuthenticatedUser(types.UserInfo{
+					Name:             "user1@example.com",
+					BrokerID:         "broker-id",
+					ProviderID:       tc.providerID,
+					ProviderUsername: tc.providerUsername,
+				})
+				require.ErrorContains(t, updateErr, tc.wantErr,
+					"the locked update must enforce the same identity checks as resolution")
 				stored, err := userstestutils.DBManager(m).UserByName("user1@example.com")
 				require.NoError(t, err, "the existing account should remain readable")
 				require.Empty(t, stored.ProviderID, "a rejected login must not bind a provider ID")
@@ -526,6 +534,17 @@ func TestResolveAuthenticatedIdentityBindsFirstProviderIDToStoredUsername(t *tes
 			require.NoError(t, err)
 			require.Equal(t, "user1@example.com", got.Name,
 				"an existing account should keep its Unix name")
+			require.NoError(t, m.UpdateAuthenticatedUser(types.UserInfo{
+				Name:             got.Name,
+				BrokerID:         "broker-id",
+				ProviderID:       tc.providerID,
+				ProviderUsername: tc.providerUsername,
+			}))
+			stored, err := userstestutils.DBManager(m).UserByName(got.Name)
+			require.NoError(t, err)
+			require.Equal(t, got.UID, stored.UID)
+			require.Equal(t, tc.providerID, stored.ProviderID)
+			require.Equal(t, tc.providerUsername, stored.ProviderUsername)
 		})
 	}
 }
@@ -719,7 +738,7 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		// newuser1 (uid 2222, providerid-newuser1).
 		err = m.UpdateUser(newUser("newuser1@example.com", "providerid-user1"))
 		require.Error(t, err, "colliding with another account's login name must fail")
-		require.Contains(t, err.Error(), `login name "newuser1@example.com" is already used by a different user`,
+		require.Contains(t, err.Error(), `authenticated provider username "newuser1@example.com" conflicts with the selected account`,
 			"the failure must identify the conflicting login name")
 
 		// Both original users must survive intact (no partial corruption from the failed rename).
@@ -902,7 +921,7 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		require.False(t, oldUser.Locked)
 
 		err = m.UpdateUser(newUser(oldUser.Name, "replacement-account"))
-		require.ErrorContains(t, err, "already bound to a different provider ID")
+		require.ErrorContains(t, err, "conflicts with the stored identity")
 
 		gotUser, gotGroups, gotLocalGroups, err := dbManager.UserWithGroups(oldUser.Name)
 		require.NoError(t, err)

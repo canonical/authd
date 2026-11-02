@@ -174,7 +174,7 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 	var oldUserInfo *types.UserInfo
 	var pendingDiffs []string
 	var userPrivateGroup *types.GroupInfo
-	lookupName := requestedName
+	var resolvedIdentity types.LoginIdentity
 	var conflictingProviderUsernameOwner string
 	reportProviderUsernameConflict := func() {
 		if conflictingProviderUsernameOwner == "" {
@@ -187,75 +187,19 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 	checkUserNeedsUpdate := func() (needsUpdate bool, err error) {
 		u.Name = requestedName
 		u.ProviderUsername = requestedProviderUsername
-		lookupName = requestedName
 		oldUserInfo = nil
 		pendingDiffs = nil
 		conflictingProviderUsernameOwner = ""
 
-		// The stable provider identity is authoritative. The names remain
-		// useful for users that have not yet recorded a provider ID.
-		var providerIDMatch *db.UserRow
-		if u.BrokerID != "" && u.ProviderID != "" {
-			row, lookupErr := m.db.UserByProviderID(u.BrokerID, u.ProviderID)
-			switch {
-			case lookupErr == nil:
-				providerIDMatch = &row
-			case errors.Is(lookupErr, db.NoDataFoundError{}):
-			default:
-				return false, fmt.Errorf("failed to look up user by provider ID: %w", lookupErr)
-			}
+		resolvedIdentity, conflictingProviderUsernameOwner, err = m.resolveIdentity(
+			requestedName, u.BrokerID, u.ProviderID, requestedProviderUsername, requestedName)
+		if err != nil {
+			return false, err
 		}
-
-		var nameMatch *db.UserRow
-		matchedLoginName := ""
-		for _, lookup := range []struct {
-			name string
-			find func(string) (db.UserRow, error)
-		}{
-			{requestedName, m.db.UserByName},
-			{requestedProviderUsername, m.db.UserByLoginName},
-		} {
-			name := lookup.name
-			if name == "" {
-				continue
-			}
-			row, lookupErr := lookup.find(name)
-			switch {
-			case errors.Is(lookupErr, db.NoDataFoundError{}):
-				continue
-			case lookupErr != nil:
-				return false, lookupErr
-			}
-			if nameMatch != nil && nameMatch.UID != row.UID {
-				if name == requestedProviderUsername && providerIDMatch != nil &&
-					nameMatch.UID == providerIDMatch.UID {
-					// Keep the stored alias when the new provider username belongs to another account.
-					conflictingProviderUsernameOwner = row.Name
-					continue
-				}
-				return false, fmt.Errorf("provider username %q is already used by a different user", requestedProviderUsername)
-			}
-			nameMatch = &row
-			matchedLoginName = name
-		}
-
-		if providerIDMatch != nil && nameMatch != nil && providerIDMatch.UID != nameMatch.UID {
-			return false, fmt.Errorf("login name %q is already used by a different user", matchedLoginName)
-		}
-
-		var matchedRow *db.UserRow
-		if providerIDMatch != nil {
-			matchedRow = providerIDMatch
-		} else {
-			matchedRow = nameMatch
-		}
-		if matchedRow != nil {
-			lookupName = matchedRow.Name
-			u.Name = matchedRow.Name
-		}
+		u.Name = resolvedIdentity.Name
 
 		// Read the selected account by its Unix name.
-		oldUserInfo, err = m.getOldUserInfoFromDB(lookupName)
+		oldUserInfo, err = m.getOldUserInfoFromDB(u.Name)
 		if err != nil {
 			return false, err
 		}
@@ -286,25 +230,6 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 		u.Groups = append([]types.GroupInfo{{Name: u.Name, UGID: u.Name}}, brokerGroups...)
 		userPrivateGroup = &u.Groups[0]
 
-		if oldUserInfo.BrokerID != "" && u.BrokerID != "" && oldUserInfo.BrokerID != u.BrokerID {
-			// The broker ID scopes the stored provider ID and must not change once set: a user
-			// is bound to the broker they first authenticated with.
-			return false, fmt.Errorf("user %q is already bound to broker %q and cannot authenticate with broker %q",
-				u.Name, oldUserInfo.BrokerID, u.BrokerID)
-		}
-		if oldUserInfo.ProviderID != "" && u.ProviderID != "" && oldUserInfo.ProviderID != u.ProviderID {
-			return false, fmt.Errorf("user %q is already bound to a different provider ID; contact your administrator", u.Name)
-		}
-		if oldUserInfo.ProviderID == "" {
-			storedProviderUsername := oldUserInfo.ProviderUsername
-			if storedProviderUsername == "" {
-				storedProviderUsername = oldUserInfo.Name
-			}
-			if storedProviderUsername != u.ProviderUsername {
-				return false, fmt.Errorf("authenticated provider username %q conflicts with the stored identity for user %q",
-					u.ProviderUsername, oldUserInfo.Name)
-			}
-		}
 		if oldUserInfo.BrokerID != "" {
 			// The broker ID scopes the stored provider ID and should not change after it is set.
 			u.BrokerID = oldUserInfo.BrokerID
@@ -330,16 +255,18 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 		return true, nil
 	}
 
-	// Check first so ordinary updates for users already up to date can avoid
-	// waiting on user registration. Authenticated updates still take the lock
-	// below to recheck the current lock state.
-	needsUpdate, err := checkUserNeedsUpdate()
-	if err != nil {
-		return err
-	}
-	if !needsUpdate && !rejectLocked {
-		reportProviderUsernameConflict()
-		return nil
+	// Ordinary updates can avoid waiting on registration when nothing changed.
+	// Authenticated updates always resolve the identity under the lock.
+	var needsUpdate bool
+	if !rejectLocked {
+		needsUpdate, err = checkUserNeedsUpdate()
+		if err != nil {
+			return err
+		}
+		if !needsUpdate {
+			reportProviderUsernameConflict()
+			return nil
+		}
 	}
 
 	m.userManagementMu.Lock()
@@ -352,14 +279,8 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 	if err != nil {
 		return err
 	}
-	if rejectLocked && oldUserInfo != nil {
-		identity, err := m.LoginIdentityByUnixName(oldUserInfo.Name)
-		if err != nil {
-			return fmt.Errorf("failed to recheck lock state for user %q: %w", oldUserInfo.Name, err)
-		}
-		if identity.Locked {
-			return fmt.Errorf("user %q is locked: %w", oldUserInfo.Name, ErrUserLocked)
-		}
+	if rejectLocked && resolvedIdentity.Locked {
+		return fmt.Errorf("user %q is locked: %w", resolvedIdentity.Name, ErrUserLocked)
 	}
 	reportProviderUsernameConflict()
 	if !needsUpdate {
@@ -1225,12 +1146,19 @@ func (m *Manager) LoginIdentityByUnixName(username string) (types.LoginIdentity,
 // account and provider username support legacy users without a provider ID.
 // newUnixName is used only when no existing account matches.
 func (m *Manager) ResolveAuthenticatedIdentity(sessionUsername, brokerID, providerID, providerUsername, newUnixName string) (types.LoginIdentity, error) {
-	sessionUsername = strings.ToLower(sessionUsername)
-	providerUsername = strings.ToLower(providerUsername)
-	newUnixName = strings.ToLower(newUnixName)
 	if providerUsername == "" {
 		return types.LoginIdentity{}, errors.New("empty provider username")
 	}
+	identity, _, err := m.resolveIdentity(sessionUsername, brokerID, providerID, providerUsername, newUnixName)
+	return identity, err
+}
+
+// resolveIdentity also reports an alias collision that a bound session can
+// tolerate by keeping its stored provider username.
+func (m *Manager) resolveIdentity(sessionUsername, brokerID, providerID, providerUsername, newUnixName string) (types.LoginIdentity, string, error) {
+	sessionUsername = strings.ToLower(sessionUsername)
+	providerUsername = strings.ToLower(providerUsername)
+	newUnixName = strings.ToLower(newUnixName)
 
 	var byProviderID, bySession, byProviderUsername types.LoginIdentity
 	var hasProviderID, hasSession, hasProviderUsername bool
@@ -1242,7 +1170,7 @@ func (m *Manager) ResolveAuthenticatedIdentity(sessionUsername, brokerID, provid
 			byProviderID, hasProviderID = loginIdentityFromUserRow(row), true
 		case errors.Is(err, db.NoDataFoundError{}):
 		default:
-			return types.LoginIdentity{}, fmt.Errorf("failed to resolve user by provider ID: %w", err)
+			return types.LoginIdentity{}, "", fmt.Errorf("failed to resolve user by provider ID: %w", err)
 		}
 	}
 
@@ -1253,17 +1181,19 @@ func (m *Manager) ResolveAuthenticatedIdentity(sessionUsername, brokerID, provid
 			bySession, hasSession = identity, true
 		case errors.Is(err, db.NoDataFoundError{}):
 		default:
-			return types.LoginIdentity{}, fmt.Errorf("failed to resolve session user: %w", err)
+			return types.LoginIdentity{}, "", fmt.Errorf("failed to resolve session user: %w", err)
 		}
 	}
 
-	identity, err := m.LoginIdentityByName(providerUsername)
-	switch {
-	case err == nil:
-		byProviderUsername, hasProviderUsername = identity, true
-	case errors.Is(err, db.NoDataFoundError{}):
-	default:
-		return types.LoginIdentity{}, fmt.Errorf("failed to resolve provider username: %w", err)
+	if providerUsername != "" {
+		identity, err := m.LoginIdentityByName(providerUsername)
+		switch {
+		case err == nil:
+			byProviderUsername, hasProviderUsername = identity, true
+		case errors.Is(err, db.NoDataFoundError{}):
+		default:
+			return types.LoginIdentity{}, "", fmt.Errorf("failed to resolve provider username: %w", err)
+		}
 	}
 
 	var selected types.LoginIdentity
@@ -1283,7 +1213,7 @@ func (m *Manager) ResolveAuthenticatedIdentity(sessionUsername, brokerID, provid
 			continue
 		}
 		if hasSelected && selected.UID != candidate.identity.UID {
-			return types.LoginIdentity{}, fmt.Errorf("authenticated provider username %q conflicts with the selected account", providerUsername)
+			return types.LoginIdentity{}, "", fmt.Errorf("authenticated provider username %q conflicts with the selected account", providerUsername)
 		}
 		if !hasSelected {
 			selected, hasSelected = candidate.identity, true
@@ -1294,35 +1224,39 @@ func (m *Manager) ResolveAuthenticatedIdentity(sessionUsername, brokerID, provid
 		_, err := m.LoginIdentityByName(newUnixName)
 		switch {
 		case err == nil:
-			return types.LoginIdentity{}, fmt.Errorf("unix name %q is already used by an existing account", newUnixName)
+			return types.LoginIdentity{}, "", fmt.Errorf("unix name %q is already used by an existing account", newUnixName)
 		case errors.Is(err, db.NoDataFoundError{}):
 		default:
-			return types.LoginIdentity{}, fmt.Errorf("failed to check new Unix name %q: %w", newUnixName, err)
+			return types.LoginIdentity{}, "", fmt.Errorf("failed to check new Unix name %q: %w", newUnixName, err)
 		}
 		return types.LoginIdentity{
 			Name:             newUnixName,
 			ProviderUsername: providerUsername,
 			BrokerID:         brokerID,
 			ProviderID:       providerID,
-		}, nil
+		}, "", nil
 	}
-	if selected.BrokerID != "" && selected.BrokerID != brokerID {
-		return types.LoginIdentity{}, fmt.Errorf("user %q is already bound to broker %q and cannot authenticate with broker %q",
+	if selected.BrokerID != "" && brokerID != "" && selected.BrokerID != brokerID {
+		return types.LoginIdentity{}, "", fmt.Errorf("user %q is already bound to broker %q and cannot authenticate with broker %q",
 			selected.Name, selected.BrokerID, brokerID)
 	}
 	if selected.ProviderID != "" && providerID != "" && selected.ProviderID != providerID {
-		return types.LoginIdentity{}, fmt.Errorf("authenticated provider ID conflicts with the stored identity for user %q", selected.Name)
+		return types.LoginIdentity{}, "", fmt.Errorf("authenticated provider ID conflicts with the stored identity for user %q", selected.Name)
 	}
 	storedProviderUsername := selected.ProviderUsername
 	if storedProviderUsername == "" {
 		storedProviderUsername = selected.Name
 	}
-	if selected.ProviderID == "" && storedProviderUsername != providerUsername {
-		return types.LoginIdentity{}, fmt.Errorf("authenticated provider username %q conflicts with the stored identity for user %q",
+	if selected.ProviderID == "" && providerUsername != "" && storedProviderUsername != providerUsername {
+		return types.LoginIdentity{}, "", fmt.Errorf("authenticated provider username %q conflicts with the stored identity for user %q",
 			providerUsername, selected.Name)
 	}
 
-	return selected, nil
+	conflictingOwner := ""
+	if providerIDMatchesSession && hasProviderUsername && byProviderUsername.UID != selected.UID {
+		conflictingOwner = byProviderUsername.Name
+	}
+	return selected, conflictingOwner, nil
 }
 
 // UserByID returns the user information for the given user ID.
