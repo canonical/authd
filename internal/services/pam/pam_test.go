@@ -420,6 +420,33 @@ func TestProviderIDRenameRequiresRetryForPreAuthUIDMismatch(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestProviderIDRenameRequiresRetryForBrokerNamePreAuthUID(t *testing.T) {
+	unixUsername := "unix-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
+	oldProviderUsername := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_")) +
+		testutils.IDSeparator + "ia_info_mismatching_user_name@example.com"
+	const brokerUsername = "different_username@example.com"
+	m := newPamManagerWithUser(t, unixUsername, oldProviderUsername, "providerid-"+brokerUsername)
+
+	preAuthUID, err := m.RegisterUserPreAuth(brokerUsername)
+	require.NoError(t, err)
+
+	client := newPamClient(t, m, globalBrokerManager)
+	sessionID := selectBrokerForTest(t, client, oldProviderUsername)
+	response, err := client.IsAuthenticated(context.Background(), &authd.IARequest{SessionId: sessionID})
+	require.NoError(t, err)
+	require.Equal(t, auth.Denied, response.GetAccess(),
+		"the broker-returned pre-auth name must not hide a temporary UID mismatch")
+	require.JSONEq(t, `{"message":"Your username has changed. Please log in again."}`, response.GetMsg())
+
+	stored, err := userstestutils.DBManager(m).UserByName(unixUsername)
+	require.NoError(t, err)
+	require.Equal(t, brokerUsername, stored.ProviderUsername)
+	_, err = m.UserByID(preAuthUID)
+	require.Error(t, err, "the broker-name pre-auth record must be removed")
+	_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: sessionID})
+	require.NoError(t, err)
+}
+
 func TestNewUserAuthenticationKeepsPreAuthUID(t *testing.T) {
 	t.Parallel()
 

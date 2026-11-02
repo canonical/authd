@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -537,11 +538,20 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		log.Noticef(ctx, "Authentication failure: user %q is locked", uInfo.Name)
 		return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("user %s is locked", uInfo.Name))
 	}
-	preAuthUID, preAuthErr := s.userManager.PreAuthUIDByLoginName(username)
-	hasPreAuthUID := preAuthErr == nil
-	if preAuthErr != nil && !errors.Is(preAuthErr, users.NoDataFoundError{}) {
-		log.Errorf(ctx, "IsAuthenticated: Could not look up pre-auth UID for user %q: %v", username, preAuthErr)
-		return nil, fmt.Errorf("could not look up pre-auth UID for user %q: %w", username, preAuthErr)
+	var preAuthUIDs []uint32
+	for _, name := range []string{username, preAuthUsername} {
+		if name == "" {
+			continue
+		}
+		uid, preAuthErr := s.userManager.PreAuthUIDByLoginName(name)
+		switch {
+		case preAuthErr == nil:
+			preAuthUIDs = append(preAuthUIDs, uid)
+		case errors.Is(preAuthErr, users.NoDataFoundError{}):
+		default:
+			log.Errorf(ctx, "IsAuthenticated: Could not look up pre-auth UID for user %q: %v", name, preAuthErr)
+			return nil, fmt.Errorf("could not look up pre-auth UID for user %q: %w", name, preAuthErr)
+		}
 	}
 	// Update database and local groups on granted auth.
 	if err := s.userManager.UpdateAuthenticatedUser(uInfo); err != nil {
@@ -567,13 +577,13 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 	// changed PAM_USER only when its UID matches the pre-auth UID, which is not
 	// true here because the existing account has a different UID. Deny here
 	// with an actionable message so retrying uses the stored account UID.
-	if hasPreAuthUID {
+	if len(preAuthUIDs) > 0 {
 		storedIdentity, err := s.userManager.LoginIdentityByUnixName(uInfo.Name)
 		if err != nil {
 			log.Errorf(ctx, "IsAuthenticated: Could not look up updated user %q: %v", uInfo.Name, err)
 			return nil, fmt.Errorf("could not look up updated user %q: %w", uInfo.Name, err)
 		}
-		if storedIdentity.UID != preAuthUID {
+		if slices.ContainsFunc(preAuthUIDs, func(uid uint32) bool { return uid != storedIdentity.UID }) {
 			log.Noticef(ctx, "Authentication for %q requires a retry because its pre-auth UID differs from the stored account UID", username)
 			s.failedAuths.recordSuccess(serviceName, username)
 			return &authd.IAResponse{
