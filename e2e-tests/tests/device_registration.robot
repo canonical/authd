@@ -1,18 +1,18 @@
 *** Settings ***
-Resource        resources/utils.resource
-Resource        resources/authd.resource
-Resource        resources/broker.resource
+Resource            resources/utils.resource
+Resource            resources/authd.resource
+Resource            resources/broker.resource
 
-# Test Tags       robot:exit-on-failure
-Test Tags         requires:msentraid
+Test Setup          utils.Test Setup    snapshot=%{BROKER}-installed
+Test Teardown       utils.Test Teardown
 
-Test Setup    utils.Test Setup    snapshot=%{BROKER}-installed
-Test Teardown   utils.Test Teardown
+# Test Tags    robot:exit-on-failure
+Test Tags           requires:msentraid
 
 
 *** Variables ***
-${username}    %{E2E_USER}
-${local_password}    qwer1234
+${username}             %{E2E_USER}
+${local_password}       qwer1234
 
 
 *** Test Cases ***

@@ -1,31 +1,16 @@
 *** Settings ***
-Resource        resources/utils.resource
-Resource        resources/authd.resource
-Resource        resources/broker.resource
+Resource            resources/utils.resource
+Resource            resources/authd.resource
+Resource            resources/broker.resource
 
-# Test Tags       robot:exit-on-failure
-
-Test Setup    utils.Test Setup    snapshot=%{BROKER}-installed
-Test Teardown   utils.Test Teardown
+# Test Tags    robot:exit-on-failure
+Test Setup          utils.Test Setup    snapshot=%{BROKER}-installed
+Test Teardown       utils.Test Teardown
 
 
 *** Variables ***
-${username}    %{E2E_USER}
-${local_password}    qwer1234
-
-
-*** Keywords ***
-Entra Polkit Test Setup
-    utils.Test Setup    snapshot=%{BROKER}-installed
-    Change Broker Configuration    register_device    true
-    Change Broker Configuration    entra_auth    true
-    Change Broker Configuration    device_code    false
-
-
-Check Marker File Is Root Owned
-    [Arguments]    ${marker_file}
-    ${owner} =    SSH.Execute    stat -c %u ${marker_file}
-    Should Be Equal As Integers    ${owner}    0
+${username}             %{E2E_USER}
+${local_password}       qwer1234
 
 
 *** Test Cases ***
@@ -71,8 +56,6 @@ Test polkit authentication as authd user via pkexec after initial GDM login
     Log Out
 
 Test polkit authentication as authd user via pkexec using Entra ID password and MFA after initial GDM login
-    [Tags]    requires:msentraid
-    [Setup]    Entra Polkit Test Setup
     [Documentation]    A user can authenticate with the Entra ID password and MFA
     ...    through Polkit after the initial GDM login.
     ...
@@ -83,6 +66,8 @@ Test polkit authentication as authd user via pkexec using Entra ID password and 
     ...
     ...    The Entra test account already belongs to sudo, so Polkit can ask for its
     ...    credentials without the ``usermod`` step used above.
+    [Tags]    requires:msentraid
+    [Setup]    Entra Polkit Test Setup
 
     Log In With Remote User Through GDM: Entra Password    ${username}
     Check If User Was Added Properly    ${username}    %{E2E_PASSWORD}
@@ -101,3 +86,16 @@ Test polkit authentication as authd user via pkexec using Entra ID password and 
     Wait Until Keyword Succeeds    30s    5s
     ...    Check Marker File Is Root Owned    /tmp/polkit-authd-test-entra
     Log Out
+
+
+*** Keywords ***
+Entra Polkit Test Setup
+    utils.Test Setup    snapshot=%{BROKER}-installed
+    Change Broker Configuration    register_device    true
+    Change Broker Configuration    entra_auth    true
+    Change Broker Configuration    device_code    false
+
+Check Marker File Is Root Owned
+    [Arguments]    ${marker_file}
+    ${owner} =    SSH.Execute    stat -c %u ${marker_file}
+    Should Be Equal As Integers    ${owner}    0
