@@ -258,7 +258,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			ubuntuVersion: "24.04",
 			userPrefix:    examplebroker.UserIntegrationProviderAliasPrefix,
 			providerAlias: true,
-			test:          sshPtyProviderUsernameAlias,
+			test:          sshPtyProviderUsernameAliasDenied,
 		},
 		"Authenticate_with_provider_alias_and_canonical_name_on_ubuntu_26.04": {
 			ubuntuVersion: "26.04",
@@ -994,6 +994,30 @@ func sshPtyProviderUsernameAlias(t *testing.T, args sshPtyArgs) {
 	c2.SendLine(t, "goodpass")
 	sshPtyWaitForSSHConnection(t, c2)
 	c2.RequireSuccessfulExit(t)
+}
+
+func sshPtyProviderUsernameAliasDenied(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	unixUsername := providerAliasUnixUsername(args.user)
+	for attempt := range 2 {
+		c := startSSHForPty(t, args)
+		if attempt == 0 {
+			sshPtySelectBroker(t, c)
+		}
+		c.WaitFor(t, `Gimme your password`)
+		c.SendLine(t, "goodpass")
+		c.WaitFor(t, regexp.QuoteMeta(fmt.Sprintf(
+			"Log in with your Unix username %q on Ubuntu 24.04.", unixUsername)))
+		c.RequireExitCode(t, 255)
+		require.NotContains(t, c.RawOutput(), "Inside SSH")
+	}
+
+	c := startSSHForPtyWithUser(t, args, unixUsername)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+	sshPtyWaitForSSHConnection(t, c)
+	c.RequireSuccessfulExit(t)
 }
 
 func sshPtyAuthWithShell(t *testing.T, args sshPtyArgs) {

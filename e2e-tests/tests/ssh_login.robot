@@ -11,7 +11,7 @@ Test Teardown       utils.Test Teardown
 *** Variables ***
 ${username}             %{E2E_USER}
 ${local_password}       qwer1234
-${unix_username}        authd-e2e-unix
+${unix_username}        authd-e2e-unix@example.com
 ${session_file}         /tmp/authd-ssh-provider-username
 
 
@@ -47,8 +47,8 @@ Test login with SSH
     Log In With Remote User Through SSH: Local Password    ${username}    ${local_password}
 
 Test SSH provider username keeps the Unix identity
-    [Documentation]    SSH accepts a provider name that resolves to a different
-    ...    stable Unix name through the real NSS module.
+    [Documentation]    SSH keeps the stable Unix identity when the provider name
+    ...    differs, using the real NSS module and OpenSSH server.
     ...
     ...    The preloaded PAM integration tests give every fake user the same UID.
     ...    They cannot check Ubuntu sshd's UID check when PAM changes ``PAM_USER``.
@@ -59,8 +59,13 @@ Test SSH provider username keeps the Unix identity
     ...    Register the real IdP account, then change only its stored Unix name
     ...    while authd is stopped. This models a provider username change without
     ...    changing the shared IdP account. The provider ID, UID and home stay
-    ...    unchanged. Both names must resolve to the same NSS entry. An SSH login
-    ...    with the provider name must run as the Unix user with that UID and home.
+    ...    unchanged. Both names must resolve to the same NSS entry.
+    ...
+    ...    Ubuntu 24.04 must deny provider aliases, including retries on the same
+    ...    connection. A fresh login with the Unix name must still work. Newer
+    ...    releases accept the provider alias. Successful sessions must use the
+    ...    stored Unix name, UID and home, and create files owned by that UID.
+    ...    The fixture Unix name matches the VM's email-style SSH user rule.
 
     ${versions}=    SSH.Execute    dpkg-query -W authd openssh-server
     Log    ${versions}
@@ -93,10 +98,16 @@ Test SSH provider username keeps the Unix identity
     Should Be Equal    ${reverse_entry}    ${unix_entry}
 
     SSH.Execute    test ! -e ${session_file}
+    ${release}=    SSH.Execute    . /etc/os-release && printf '%s' "$VERSION_ID"
+    IF    $release == '24.04'
+        Check SSH Provider Alias Is Denied
+        ${login_name}=    Set Variable    ${unix_username}
+    ELSE
+        ${login_name}=    Set Variable    ${username}
+    END
     Open Terminal
-    # The provider name must open a session as the differently named Unix user.
     Log In With Remote User Through SSH: Local Password
-    ...    ${username}    ${local_password}    expected_username=${unix_username}
+    ...    ${login_name}    ${local_password}    expected_username=${unix_username}
 
     # Check the session identity and file owner.
     Hid.Type String    umask 077; { id -un; id -u; printf '%s\\n' "$HOME"; } > ${session_file}
@@ -125,3 +136,25 @@ Check SSH Session Identity
     Should Be Equal    ${actual}    ${expected}
     ${owner}=    SSH.Execute    stat -c %u ${session_file}
     Should Be Equal    ${owner}    ${uid}
+
+Check SSH Provider Alias Is Denied
+    ${auth_dir}=    SSH.Execute    mktemp -d
+    TRY
+        SSH.Execute
+        ...    printf '%s\\n' '#!/bin/sh' 'printf "%s\\n" "${local_password}"' > ${auth_dir}/askpass && chmod 700 ${auth_dir}/askpass
+        FOR    ${attempts}    IN    1    2
+            ${cursor}=    SSH.Execute
+            ...    journalctl -u authd.service -n 0 --show-cursor | sed -n 's/^-- cursor: //p'
+            Should Not Be Empty    ${cursor}
+            ${stdout}    ${stderr}    ${status}=    SSH.Execute With Status
+            ...    env SSH_ASKPASS=${auth_dir}/askpass SSH_ASKPASS_REQUIRE=force DISPLAY=:0 setsid ssh -o StrictHostKeyChecking=accept-new -o PreferredAuthentications=keyboard-interactive -o NumberOfPasswordPrompts=${attempts} '${username}@localhost' 'exit 99' </dev/null
+            ...    timeout=120
+            Should Be Equal As Integers    ${status}    255
+            ${journal}=    SSH.Execute
+            ...    journalctl --sync && journalctl -u authd.service --after-cursor='${cursor}' -o cat --no-pager
+            ${granted}=    Get Count    ${journal}    Authentication result: granted
+            Should Be Equal As Integers    ${granted}    ${attempts}
+        END
+    FINALLY
+        SSH.Execute    rm -f ${auth_dir}/askpass && rmdir ${auth_dir}
+    END

@@ -866,7 +866,7 @@ func (b *Broker) handleIsAuthenticated(ctx context.Context, sessionInfo sessionI
 		}
 	}
 
-	return auth.Granted, fmt.Sprintf(`{"userinfo": %s}`, userInfoFromName(sessionInfo.username))
+	return auth.Granted, fmt.Sprintf(`{"userinfo": %s}`, userInfoFromName(sessionInfo.username, false))
 }
 
 // decodeRawSecret extract the base64 secret and try to decrypt it with the private key.
@@ -928,7 +928,7 @@ func (b *Broker) cancelIsAuthenticatedUnlocked(_ context.Context, sessionID stri
 func (b *Broker) UserPreCheck(ctx context.Context, username string) (string, error) {
 	if strings.HasPrefix(username, "user-") && strings.Contains(username, "integration") &&
 		strings.Contains(username, fmt.Sprintf("-%s-", UserIntegrationPreCheckValue)) {
-		return userInfoFromName(username), nil
+		return userInfoFromName(username, true), nil
 	}
 
 	exampleUsersMu.Lock()
@@ -937,7 +937,7 @@ func (b *Broker) UserPreCheck(ctx context.Context, username string) (string, err
 		// The username does not match any of the allowed suffixes.
 		return "", nil
 	}
-	return userInfoFromName(username), nil
+	return userInfoFromName(username, true), nil
 }
 
 // DeleteUser removes any broker side data associated with the user.
@@ -1023,7 +1023,7 @@ func (b *Broker) updateSession(sessionID string, info sessionInfo) error {
 }
 
 // userInfoFromName transform a given name to the strinfigy userinfo string.
-func userInfoFromName(name string) string {
+func userInfoFromName(name string, preCheck bool) string {
 	type groupJSONInfo struct {
 		Name string
 		UGID string
@@ -1056,6 +1056,9 @@ func userInfoFromName(name string) string {
 		Shell:            "/bin/sh",
 		Groups:           []groupJSONInfo{{Name: "group-" + unixName, UGID: "ugid-" + unixName}},
 		Gecos:            "gecos for " + unixName,
+	}
+	if preCheck {
+		user.Name = name
 	}
 
 	switch unixName {
