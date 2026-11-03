@@ -8,6 +8,8 @@ readonly UBUNTU_ARCHIVE="${LAUNCHPAD_API}/ubuntu/+archive/primary"
 # The currently published Noble Security source predates this watcher.
 readonly NOBLE_SECURITY_BASELINE="2024-08-15T13:46:21.864748+00:00"
 
+# Only Noble needs a patched GNOME Shell in the authd PPA. Resolute (26.04)
+# and later releases include the authd patches in Ubuntu's archive.
 declare -A UBUNTU_SALSA_BRANCHES=(
     [noble]="ubuntu/noble"
 )
@@ -82,19 +84,11 @@ A new Ubuntu \`gnome-shell\` source has been published to the **${series}-${pock
 
 ### Expected action
 
-1. Review the Ubuntu source changes and identify what must be carried into the
-   \`${series}\` authd PPA package.
-2. Apply the required changes on the authd PPA branch
-   [\`${ppa_salsa_branch}\`](https://salsa.debian.org/gnome-team/gnome-shell/-/tree/${ppa_salsa_branch}),
-   update the Debian changelog, and open the related merge request(s).
-3. Build and test the updated package in the
-   [\`authd-dev\` PPA](https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-dev),
-   following the test steps in the [GNOME Shell release checklist](https://github.com/canonical/authd/blob/main/RELEASE.md#release-the-gnome-shell-authd-integration).
-   After merging, publish it to [\`authd-edge\`](https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge),
-   validate it there, then copy it to the [stable \`authd\` PPA](https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd).
+1. Review the Ubuntu source changes and identify what must be carried into the \`${series}\` authd PPA package.
+2. Apply the required changes on the authd PPA branch [\`${ppa_salsa_branch}\`](https://salsa.debian.org/gnome-team/gnome-shell/-/tree/${ppa_salsa_branch}), update the Debian changelog, and open the related merge request(s).
+3. Build and test the updated package in the [\`authd-dev\` PPA](https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-dev), following the test steps in the [GNOME Shell release checklist](https://github.com/canonical/authd/blob/main/RELEASE.md#release-the-gnome-shell-authd-integration). After merging, publish it to [\`authd-edge\`](https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd-edge), validate it there, then copy it to the [stable \`authd\` PPA](https://launchpad.net/~ubuntu-enterprise-desktop/+archive/ubuntu/authd).
 
-Close this issue after reviewing this upload and either carrying any required
-changes into the stable \`authd\` PPA or confirming that no changes are needed.
+Close this issue after reviewing this upload and either carrying any required changes into the stable \`authd\` PPA or confirming that no changes are needed.
 EOF
 }
 
