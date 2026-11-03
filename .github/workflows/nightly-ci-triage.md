@@ -134,14 +134,19 @@ exhaustive duplicate search. Inspect matching bodies and relevant comments.
 Check whether a closed issue's fix was already present in the failing SHA.  Do
 not treat every new occurrence after a fix as proof of the same root cause.
 
-For a known issue, use `update_issue` with `operation: append` to edit its
-description, not a comment. Append a concise dated occurrence list with the
-failed attempt and job links and any new evidence. Preserve the original body,
-title, labels, and open/closed state. Read the current body before queuing the
-update and omit links already recorded. Batch all new occurrences for the same
-issue into one update. Never replace a maintainer's description or reopen an
-issue. Known issues do not need another fix PR, except to finish missing
-follow-up work from an earlier incomplete triage run.
+For a known issue, use `update_issue` with `operation: replace-island` to keep a
+bounded occurrence list in its description, not a comment. The first update adds
+a marked island; later updates replace only that island. Keep the 20 most recent
+occurrences inside it, each with the failed attempt and job links and any new
+evidence, and drop older entries. Copy the occurrences you keep from the current
+island into the replacement. Always include `operation: replace-island`; the
+handler appends when the field is missing. Never use `replace`, `prepend`, or
+`append`: the island is the only part of the description you may change.
+Preserve the title, labels, and open/closed state; do not reopen the issue. Read
+the current body before queuing the update and omit links already recorded.
+Batch all new occurrences for the same issue into one update. Known issues do
+not need another fix PR, except to finish missing follow-up work from an
+earlier incomplete triage run.
 
 For a new issue, inspect relevant open and closed CI issues to match their
 title and body style. Prefer the existing `ci: <specific symptom>` style when
