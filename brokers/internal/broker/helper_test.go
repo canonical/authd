@@ -15,6 +15,7 @@ import (
 	"github.com/canonical/authd/brokers/internal/broker"
 	"github.com/canonical/authd/brokers/internal/broker/sessionmode"
 	"github.com/canonical/authd/brokers/internal/consts"
+	"github.com/canonical/authd/brokers/internal/password"
 	"github.com/canonical/authd/brokers/internal/providers"
 	"github.com/canonical/authd/brokers/internal/providers/info"
 	"github.com/canonical/authd/brokers/internal/providers/msentraid/himmelblau"
@@ -244,6 +245,30 @@ func newDeviceAuthBrokerForTests(t *testing.T, provider *mockEntraAuthProvider) 
 	b = newRegisteringBrokerForTests(t, provider)
 	sessionID, _ = newSessionForTests(t, b, "", "")
 	return b, sessionID
+}
+
+// newDeviceRecoveryBrokerForTests returns a registering broker plus a login
+// session for a user who already has a local password.
+func newDeviceRecoveryBrokerForTests(t *testing.T, provider providers.Provider) (b *broker.Broker, sessionID, key string) {
+	t.Helper()
+
+	b = newRegisteringBrokerForTests(t, provider)
+	sessionID, key = newSessionForTests(t, b, "", "")
+	require.NoError(t, password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID)))
+	return b, sessionID, key
+}
+
+// storeInvalidatedCacheForTests caches a token whose device registration was
+// discarded and marked invalidated.
+func storeInvalidatedCacheForTests(t *testing.T, b *broker.Broker, sessionID string) {
+	t.Helper()
+
+	cached := generateCachedInfo(t, tokenOptions{
+		obtainedViaEntraAuth: true,
+		groups:               []info.Group{{Name: "cached-group", UGID: "cached-id"}},
+	})
+	cached.DeviceRegistrationDataInvalidated = true
+	require.NoError(t, token.CacheAuthInfo(b.TokenPathForSession(sessionID), cached))
 }
 
 // newEntraMFABrokerForTests returns a broker whose group lookup is provided by

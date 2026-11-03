@@ -25,8 +25,13 @@ type AuthCachedInfo struct {
 	// device-authentication failure inside the replication window keeps the data
 	// instead of discarding it.
 	DeviceRegistrationDataObtainedAt int64 `json:",omitempty"`
-	DeviceIsDisabled                 bool
-	UserIsDisabled                   bool
+	// DeviceRegistrationDataInvalidated is set when the provider confirmed that
+	// the cached registration is stale and it was discarded. It keeps local
+	// password authentication available while the next online login enrolls the
+	// device again. Omitting false keeps the existing on-disk token format.
+	DeviceRegistrationDataInvalidated bool `json:",omitempty"`
+	DeviceIsDisabled                  bool
+	UserIsDisabled                    bool
 	// ObtainedViaEntraAuth is set when the token was obtained through the
 	// entra_auth flow. On a returning login it selects the refresh path:
 	// these tokens are refreshed as the Microsoft Broker App (public client, no

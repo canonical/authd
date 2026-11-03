@@ -114,10 +114,11 @@ type session struct {
 	lang               string
 	mode               string
 
-	selectedMode    string
-	authModes       []string
-	attemptsPerMode map[string]int
-	nextAuthModes   []string
+	selectedMode               string
+	authModes                  []string
+	attemptsPerMode            map[string]int
+	nextAuthModes              []string
+	localPasswordAuthenticated bool
 
 	oidcServer              *oidc.Provider
 	oauth2Config            oauth2.Config
@@ -1081,7 +1082,9 @@ func (b *Broker) authModeIsAvailable(session session, authMode string) bool {
 
 		isTokenForDeviceRegistration := dr.IsTokenForDeviceRegistration(authInfo)
 
-		if b.cfg.registerDevice && !isTokenForDeviceRegistration {
+		// An invalidated registration is re-enrolled by the next password login,
+		// so local password authentication stays available.
+		if b.cfg.registerDevice && !isTokenForDeviceRegistration && !authInfo.DeviceRegistrationDataInvalidated {
 			// TODO: We might want to display a message to the user in this case
 			log.Noticef(context.Background(), "Token exists for user %q, but it cannot be used for device registration, so local password authentication is not available", session.username)
 			return false
@@ -1527,11 +1530,14 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	// registration time: the cache is written before the group lookup and must
 	// not lose them.
 	var deviceRegistrationData []byte
+	recoveringDevice := false
 	oldAuthInfo, err := session.loadAuthInfo(session.tokenPath)
 	if err == nil {
 		deviceRegistrationData = oldAuthInfo.DeviceRegistrationData
+		recoveringDevice = oldAuthInfo.DeviceRegistrationDataInvalidated && b.cfg.registerDevice
 		authInfo.UserInfo.Groups = slices.Clone(oldAuthInfo.UserInfo.Groups)
 		authInfo.DeviceRegistrationDataObtainedAt = oldAuthInfo.DeviceRegistrationDataObtainedAt
+		authInfo.DeviceRegistrationDataInvalidated = oldAuthInfo.DeviceRegistrationDataInvalidated
 	} else if errors.Is(err, errProviderIDMismatch) {
 		log.Error(context.Background(), err.Error())
 		return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
@@ -1564,6 +1570,17 @@ func (b *Broker) deviceAuth(ctx context.Context, session *session) (string, isAu
 	// Store the auth info in the session so that we can use it when handling the
 	// next IsAuthenticated call for the new password mode.
 	session.authInfo = authInfo
+	if recoveringDevice {
+		// The user already has a local password for this device, so there is no
+		// new one to set.
+		if session.localPasswordAuthenticated {
+			return b.finishAuth(session, authInfo)
+		}
+		if passwordFileExists(*session) {
+			session.nextAuthModes = []string{authmodes.Password}
+			return AuthNext, nil
+		}
+	}
 	session.nextAuthModes = []string{authmodes.NewPassword}
 
 	return AuthNext, nil
@@ -1579,6 +1596,7 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		log.Noticef(context.Background(), "Authentication failure: incorrect local password for user %q", session.username)
 		return AuthRetry, errorMessage{Message: "Incorrect password, please try again."}
 	}
+	session.localPasswordAuthenticated = true
 
 	authInfo, err := session.loadAuthInfo(session.tokenPath)
 	if err != nil {
@@ -1679,6 +1697,27 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 		return AuthDenied, errorMessage{Message: fmt.Sprintf("This device is disabled in %s. Please contact your administrator or try again with a working network connection.", b.provider.DisplayName())}
 	}
 
+	cleanup := func() {}
+	defer func() { cleanup() }()
+	// register enrolls the device when needed. A failed enrollment of a device
+	// that had no usable registration offers the interactive flows instead of
+	// denying the login: the cached refresh token could not enroll it again.
+	register := func() (string, isAuthenticatedDataResponse) {
+		reenrolling := authInfo.DeviceRegistrationDataInvalidated
+		var access string
+		var data isAuthenticatedDataResponse
+		cleanup, access, data = b.maybeRegisterDevice(ctx, session, authInfo, authInfo.Token, authInfo.DeviceRegistrationData)
+		if access == AuthDenied && reenrolling {
+			registrationErr, isRegistrationFailure := data.(errorMessage)
+			if isRegistrationFailure && registrationErr.Message == "Error registering device" {
+				log.Errorf(context.Background(), "Could not enroll the device again for user %q", session.username)
+				session.nextAuthModes = reauthModes
+				return AuthNext, data
+			}
+		}
+		return access, data
+	}
+
 	// If device registration is enabled, ensure that the device is registered.
 	// Skipped when offline: registration requires a live provider connection.
 	if !session.isOffline {
@@ -1688,15 +1727,32 @@ func (b *Broker) passwordAuth(ctx context.Context, session *session, secret stri
 				return AuthDenied, errorMessage{Message: accountIdentityChangedMessage}
 			}
 		}
-		cleanup, access, data := b.maybeRegisterDevice(ctx, session, authInfo, authInfo.Token, authInfo.DeviceRegistrationData)
-		defer cleanup()
-		if access != "" {
+		if access, data := register(); access != "" {
 			return access, data
 		}
 	}
 
 	// Try to refresh the groups
 	groups, err := b.getGroups(ctx, session, authInfo)
+	_, canRegisterDevice := providers.ProviderAs[providers.DeviceRegisterer](b.provider)
+	if registrationIsStale(authInfo, err) && canRegisterDevice && b.cfg.registerDevice && ctx.Err() == nil {
+		// The registration is stale, but the cached refresh token can still enroll
+		// a replacement. Try that once and look up the groups again before asking
+		// the user to authenticate another way.
+		log.Warningf(context.Background(), "Token acquisition failed: %s. Enrolling the device again with the cached refresh token.", err)
+		// The first registration may hold provider state that the new one replaces.
+		cleanup()
+		cleanup = func() {}
+		invalidateDeviceRegistration(authInfo)
+		if cacheErr := token.CacheAuthInfo(session.tokenPath, authInfo); cacheErr != nil {
+			log.Errorf(context.Background(), "Failed to store token: %s", cacheErr)
+			return AuthDenied, unexpectedErrMsg("failed to store token")
+		}
+		if access, data := register(); access != "" {
+			return access, data
+		}
+		groups, err = b.getGroups(ctx, session, authInfo)
+	}
 	if access, data := b.handleGroupFetch(ctx, session, authInfo, authInfo, groups, err); access != "" {
 		return access, data
 	}
@@ -2475,6 +2531,7 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 		authInfo.UserInfo.Groups = slices.Clone(oldAuthInfo.UserInfo.Groups)
 		authInfo.DeviceRegistrationData = oldAuthInfo.DeviceRegistrationData
 		authInfo.DeviceRegistrationDataObtainedAt = oldAuthInfo.DeviceRegistrationDataObtainedAt
+		authInfo.DeviceRegistrationDataInvalidated = oldAuthInfo.DeviceRegistrationDataInvalidated
 	}
 
 	var deviceRegistrationData []byte
@@ -3108,6 +3165,7 @@ func (b *Broker) refreshToken(ctx context.Context, session *session, oldToken *t
 	t.ProviderMetadata = oldToken.ProviderMetadata
 	t.DeviceRegistrationData = oldToken.DeviceRegistrationData
 	t.DeviceRegistrationDataObtainedAt = oldToken.DeviceRegistrationDataObtainedAt
+	t.DeviceRegistrationDataInvalidated = oldToken.DeviceRegistrationDataInvalidated
 
 	t.UserInfo, err = b.getUserInfo(ctx, session, oauthToken, rawIDToken, true)
 	if err != nil {
@@ -3232,6 +3290,11 @@ func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, auth
 		return cleanup, AuthCancelled, nil
 	}
 
+	// An invalidated cache has no usable registration: enroll the device again.
+	if authInfo.DeviceRegistrationDataInvalidated {
+		existingData = nil
+	}
+
 	// The provider must not modify existingData (see providers.DeviceRegisterer),
 	// so comparing the returned data against it detects a fresh registration.
 	deviceRegistrationData, cleanup, err := dr.MaybeRegisterDevice(ctx, regToken,
@@ -3257,6 +3320,9 @@ func (b *Broker) maybeRegisterDevice(ctx context.Context, session *session, auth
 		return cleanup, AuthCancelled, nil
 	}
 	authInfo.DeviceRegistrationData = deviceRegistrationData
+	if len(deviceRegistrationData) > 0 {
+		authInfo.DeviceRegistrationDataInvalidated = false
+	}
 	if fresh {
 		// Fresh registration data: record when it was obtained so a confirmed
 		// device-authentication failure inside the replication window keeps it.
@@ -3307,6 +3373,15 @@ func registrationIsStale(authInfo *token.AuthCachedInfo, err error) bool {
 	var retryWithDeviceAuthErr *providerErrors.RetryWithDeviceAuthError
 	return errors.As(err, &retryWithDeviceAuthErr) &&
 		time.Since(time.Unix(authInfo.DeviceRegistrationDataObtainedAt, 0)) >= deviceRegistrationReplicationWindow
+}
+
+// invalidateDeviceRegistration discards the cached registration. The flag keeps
+// local password authentication available, so the next password login can
+// enroll the device again without asking for another authentication method.
+func invalidateDeviceRegistration(authInfo *token.AuthCachedInfo) {
+	authInfo.DeviceRegistrationData = nil
+	authInfo.DeviceRegistrationDataObtainedAt = 0
+	authInfo.DeviceRegistrationDataInvalidated = true
 }
 
 // handleGroupFetch processes the result of the group lookup of a live
@@ -3361,8 +3436,7 @@ func (b *Broker) handleGroupFetch(ctx context.Context, session *session, authInf
 		// the data is older than the replication window, so it is stale: discard
 		// it and let the user register the device again.
 		log.Errorf(context.Background(), "Token acquisition failed: %s. Clearing stale device registration data and retrying authentication.", err)
-		authInfo.DeviceRegistrationData = nil
-		authInfo.DeviceRegistrationDataObtainedAt = 0
+		invalidateDeviceRegistration(authInfo)
 		if cacheErr := token.CacheAuthInfo(session.tokenPath, authInfo); cacheErr != nil {
 			log.Errorf(context.Background(), "Failed to store token: %s", cacheErr)
 			return AuthDenied, unexpectedErrMsg("failed to store token")
