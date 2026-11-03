@@ -180,11 +180,13 @@ output will actually be retained when the failing command exits nonzero, and
 does not change the test's exit status or production behavior.
 
 Use only the built-in GitHub Actions token. Do not modify files under
-`.github/workflows/`. Prefer diagnostics in tests, source code, or existing
-scripts. If a useful fix or diagnostic change requires editing a workflow file,
-describe the exact proposed changes and their purpose in the issue for a
-maintainer to apply. Treat that documented handoff as a completed triage
-outcome, not a reason to retry the same window forever.
+`.github/workflows/`, `.github/scripts/collect_ci_failures.py`, or
+`.github/scripts/test_collect_ci_failures.py`; safe-output PRs exclude them.
+Prefer diagnostics in tests, source code, or existing scripts. If a useful fix
+or diagnostic change requires editing one of those files, describe the exact
+proposed changes and their purpose in the issue for a maintainer to apply.
+Treat that documented handoff as a completed triage outcome, not a reason to
+retry the same window forever.
 
 If a fix is not feasible for a reason other than missing logs (for example an
 upstream outage requiring no useful code change), explain the blocker and next
