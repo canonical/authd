@@ -3,20 +3,49 @@
 
 import json
 import os
+import re
 import subprocess
+import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
 FAILURES = {"failure", "timed_out", "action_required", "startup_failure", "stale"}
 COMPLETION_STEP = "Require complete triage before advancing the checkpoint"
+RETRY_DELAYS = (1, 3)
 
 
 def timestamp(value):
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+def retryable(error):
+    if isinstance(error, subprocess.TimeoutExpired):
+        return True
+    status = re.search(r"HTTP (\d{3})", error.stderr or "")
+    if status is None:
+        return True
+    code = int(status.group(1))
+    return code == 429 or code >= 500
+
+
 def api(endpoint):
-    return json.loads(subprocess.check_output(["gh", "api", endpoint], text=True))
+    for delay in (*RETRY_DELAYS, None):
+        try:
+            return json.loads(
+                subprocess.check_output(
+                    ["gh", "api", endpoint],
+                    text=True,
+                    stderr=subprocess.PIPE,
+                    timeout=60,
+                )
+            )
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            if delay is None or not retryable(error):
+                if getattr(error, "stderr", None):
+                    print(error.stderr, file=sys.stderr)
+                raise
+            time.sleep(delay)
 
 
 def pages(endpoint, key):
@@ -27,6 +56,36 @@ def pages(endpoint, key):
         if len(items) < 100:
             return
         page += 1
+
+
+def completion_start(run, number, get_jobs):
+    for job in get_jobs(run["id"], number):
+        started = job.get("started_at")
+        if not started:
+            continue
+        if any(
+            step["name"] == COMPLETION_STEP and step["conclusion"] == "success"
+            for step in job.get("steps", [])
+        ):
+            return timestamp(started)
+    return None
+
+
+def checkpoint(run, get_attempt, get_jobs):
+    """Return the start of the attempt whose agent job ran the completion step."""
+    started = completion_start(run, run["run_attempt"], get_jobs)
+    # A skipped agent leaves no completion step, so the retry produced no safe
+    # outputs to apply; do not fall back to an earlier attempt.
+    if started is None:
+        return None
+    if started >= timestamp(run["run_started_at"]):
+        return timestamp(run["run_started_at"])
+    # A retried run can reuse the successful agent job from an earlier attempt.
+    for number in range(run["run_attempt"] - 1, 0, -1):
+        start = timestamp(get_attempt(run["id"], number)["run_started_at"])
+        if start <= started:
+            return start
+    return None
 
 
 def collect(runs, current, branch, get_attempt, get_jobs):
@@ -51,12 +110,8 @@ def collect(runs, current, branch, get_attempt, get_jobs):
     )
     since = None
     for run in successful:
-        if any(
-            step["name"] == COMPLETION_STEP and step["conclusion"] == "success"
-            for job in get_jobs(run["id"], run["run_attempt"])
-            for step in job.get("steps", [])
-        ):
-            since = timestamp(run["run_started_at"])
+        since = checkpoint(run, get_attempt, get_jobs)
+        if since is not None:
             break
     bootstrap = since is None
     if bootstrap:
