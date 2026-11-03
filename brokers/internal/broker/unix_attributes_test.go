@@ -327,12 +327,12 @@ func TestErrorMessageForDisplayReportsRequiredUID(t *testing.T) {
 	t.Parallel()
 
 	got := errorMessageForDisplay(info.ErrUnixUIDRequired, "fallback")
-	require.Equal(t, "Microsoft Entra ID did not provide a valid required Unix UID\nfor your account.\nPlease contact your administrator.", got.Message)
+	require.Equal(t, "Authentication failure: Microsoft Entra ID did not provide a valid required Unix UID for your account.\nPlease contact your administrator.", got.Message)
 }
 
 func TestErrorMessageForDisplayReportsRequiredGID(t *testing.T) {
 	t.Parallel()
 
 	got := errorMessageForDisplay(info.ErrUnixGIDRequired, "fallback")
-	require.Equal(t, "Microsoft Entra ID did not provide a valid required Unix GID\nfor one or more of your groups.\nPlease contact your administrator.", got.Message)
+	require.Equal(t, "Authentication failure: Microsoft Entra ID did not provide a valid required Unix GID for one or more of your groups. Please contact your administrator.", got.Message)
 }
