@@ -8,6 +8,8 @@ readonly UBUNTU_ARCHIVE="${LAUNCHPAD_API}/ubuntu/+archive/primary"
 # The currently published Noble Security source predates this watcher.
 readonly NOBLE_SECURITY_BASELINE="2024-08-15T13:46:21.864748+00:00"
 
+# Only Noble needs a patched GNOME Shell in the authd PPA. Resolute (26.04)
+# and later releases include the authd patches in Ubuntu's archive.
 declare -A UBUNTU_SALSA_BRANCHES=(
     [noble]="ubuntu/noble"
 )
