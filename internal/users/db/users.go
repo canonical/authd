@@ -124,8 +124,12 @@ func (m *Manager) UserByLoginName(name string) (UserRow, error) {
 // UserLoginNameConflict returns the name of a different user that already
 // owns name as either its Unix name or provider username.
 func (m *Manager) UserLoginNameConflict(name string, uid uint32) (string, error) {
+	return userLoginNameConflict(m.db, name, uid)
+}
+
+func userLoginNameConflict(db queryable, name string, uid uint32) (string, error) {
 	var existingName string
-	err := m.db.QueryRow(
+	err := db.QueryRow(
 		`SELECT name FROM users WHERE uid != ? AND (name = ? OR (provider_username = ? AND provider_username != '')) LIMIT 1`,
 		uid, name, name,
 	).Scan(&existingName)
@@ -194,7 +198,13 @@ func allUsers(db queryable) ([]UserRow, error) {
 // insertOrUpdateUserByID inserts or, if a user with the same name or UID already exists, updates the user in the database.
 func insertOrUpdateUserByID(db queryable, u UserRow) error {
 	if u.ProviderUsername == "" {
-		u.ProviderUsername = u.Name
+		conflict, err := userLoginNameConflict(db, u.Name, u.UID)
+		if err != nil {
+			return err
+		}
+		if conflict == "" {
+			u.ProviderUsername = u.Name
+		}
 	}
 
 	exists, err := userExists(db, u)

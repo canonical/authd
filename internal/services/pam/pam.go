@@ -540,7 +540,8 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("user %s is locked", uInfo.Name))
 	}
 	// Update database and local groups on granted auth.
-	if err := s.userManager.UpdateAuthenticatedUser(uInfo); err != nil {
+	updatedInfo, err := s.userManager.UpdateAuthenticatedUser(uInfo)
+	if err != nil {
 		if errors.Is(err, users.ErrUserLocked) {
 			log.Noticef(ctx, "Authentication failure: user %q is locked", uInfo.Name)
 			return nil, status.Error(codes.PermissionDenied, fmt.Sprintf("user %s is locked", uInfo.Name))
@@ -548,6 +549,7 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		log.Errorf(ctx, "IsAuthenticated: Could not update user %q in database: %v", uInfo.Name, err)
 		return nil, err
 	}
+	uInfo = updatedInfo
 	for _, name := range []string{preAuthUsername, username} {
 		if name == "" {
 			continue

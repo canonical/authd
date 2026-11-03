@@ -35,6 +35,7 @@
         <arg type="s" direction="in" name="sessionID"/>
     </method>
     <method name="UserPreCheck">
+        <!-- The returned user name must match username (ignoring case). -->
         <arg type="s" direction="in" name="username"/>
         <arg type="s" direction="out" name="userInfo"/>
   </method>

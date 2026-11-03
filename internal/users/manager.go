@@ -144,17 +144,22 @@ func (m *Manager) Stop() error {
 }
 
 // UpdateUser updates the user information in the db.
+// It permits updates to locked accounts. Use UpdateAuthenticatedUser after authentication.
 func (m *Manager) UpdateUser(u types.UserInfo) error {
-	return m.updateUser(u, false)
+	return m.updateUser(&u, false)
 }
 
 // UpdateAuthenticatedUser updates user information after authentication and
 // verifies that the account is not locked while holding the user-management lock.
-func (m *Manager) UpdateAuthenticatedUser(u types.UserInfo) error {
-	return m.updateUser(u, true)
+// It returns the account selected while holding the user-management lock.
+func (m *Manager) UpdateAuthenticatedUser(u types.UserInfo) (types.UserInfo, error) {
+	if err := m.updateUser(&u, true); err != nil {
+		return types.UserInfo{}, err
+	}
+	return u, nil
 }
 
-func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
+func (m *Manager) updateUser(u *types.UserInfo, rejectLocked bool) (err error) {
 	defer decorate.OnError(&err, "failed to update user %q", u.Name)
 
 	log.Debugf(context.TODO(), "Updating user %q", u.Name)
@@ -214,6 +219,7 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 			}
 			return true, nil
 		}
+		u.UID = oldUserInfo.UID
 		if u.ProviderUsername == "" {
 			u.ProviderUsername = oldUserInfo.ProviderUsername
 			if u.ProviderUsername == "" {
@@ -224,6 +230,17 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 			u.ProviderUsername = oldUserInfo.ProviderUsername
 			if u.ProviderUsername == "" {
 				u.ProviderUsername = oldUserInfo.Name
+			}
+		}
+		// An older daemon can create an exact Unix name that shadows another
+		// account's alias. Keep both identities without trying to claim it.
+		if u.ProviderUsername == u.Name {
+			conflict, err := m.db.UserLoginNameConflict(u.Name, u.UID)
+			if err != nil {
+				return false, err
+			}
+			if conflict != "" {
+				u.ProviderUsername = oldUserInfo.ProviderUsername
 			}
 		}
 		u.Groups = append([]types.GroupInfo{{Name: u.Name, UGID: u.Name}}, brokerGroups...)
@@ -245,7 +262,7 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 			// First login after migration: persist provider ID in DB.
 			return true, nil
 		}
-		pendingDiffs = diffNormalizedUserInfo(u, *oldUserInfo)
+		pendingDiffs = diffNormalizedUserInfo(*u, *oldUserInfo)
 		if len(pendingDiffs) == 0 {
 			log.Debugf(context.TODO(), "User %q in database is up to date with current user info", u.Name)
 			return false, nil
@@ -350,10 +367,11 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 		}
 	}
 
-	loginNames := []string{u.Name}
-	if u.ProviderUsername != u.Name {
-		loginNames = append(loginNames, u.ProviderUsername)
+	var loginNames []string
+	if oldUserInfo == nil {
+		loginNames = append(loginNames, u.Name)
 	}
+	loginNames = append(loginNames, u.ProviderUsername)
 	for _, name := range loginNames {
 		if name == "" {
 			continue
@@ -366,7 +384,7 @@ func (m *Manager) updateUser(u types.UserInfo, rejectLocked bool) (err error) {
 			return fmt.Errorf("login name %q is already in use by user %q", name, conflict)
 		}
 	}
-	if u.ProviderUsername != u.Name &&
+	if u.ProviderUsername != "" && u.ProviderUsername != u.Name &&
 		(oldUserInfo == nil || oldUserInfo.ProviderUsername != u.ProviderUsername) {
 		unique, err := lockedEntries.IsUniqueUserName(u.ProviderUsername)
 		if err != nil {
@@ -943,16 +961,6 @@ func (m *Manager) SetHomeDir(name, home string) (resp *SetHomeDirResp, err error
 	return resp, nil
 }
 
-// BrokerForUser returns the broker ID for the given user.
-func (m *Manager) BrokerForUser(username string) (string, error) {
-	u, err := m.db.UserByName(username)
-	if err != nil {
-		return "", err
-	}
-
-	return u.BrokerID, nil
-}
-
 // UpdateBrokerForUser updates the broker ID for the given user.
 func (m *Manager) UpdateBrokerForUser(username, brokerID string) error {
 	if err := m.db.UpdateBrokerForUser(username, brokerID); err != nil {
@@ -1083,18 +1091,6 @@ func (m *Manager) DeleteGroup(groupname string) error {
 // IsUserLocked returns true if the user with the given user name is locked, false otherwise.
 func (m *Manager) IsUserLocked(username string) (bool, error) {
 	u, err := m.db.UserByLoginName(strings.ToLower(username))
-	if err != nil {
-		return false, err
-	}
-
-	return u.Locked, nil
-}
-
-// IsUserLockedByProviderID returns true if the user identified by the given broker-scoped provider ID
-// is locked. It resolves the user by their stable identity rather than their name, so a lock set before
-// an IdP-side username change is still honored. Returns a NoDataFoundError if no user matches.
-func (m *Manager) IsUserLockedByProviderID(brokerID, providerID string) (bool, error) {
-	u, err := m.db.UserByProviderID(brokerID, providerID)
 	if err != nil {
 		return false, err
 	}
@@ -1408,60 +1404,65 @@ func (m *Manager) AllShadows() ([]types.ShadowEntry, error) {
 // The temporary user record is removed when UpdateUser is called with a user
 // whose canonical or provider username matches the registered name.
 func (m *Manager) RegisterUserPreAuth(name string) (uid uint32, err error) {
-	defer decorate.OnError(&err, "failed to register pre-auth user %q", name)
+	entry, err := m.RegisterUserPreAuthEntry(name, types.UserEntry{Name: name})
+	return entry.UID, err
+}
 
-	// Do a first check without the lock, so that if the user is already there
-	// we don't have to go through actual locking.
-	if userRow, err := m.db.UserByName(name); err == nil {
-		log.Debugf(context.Background(), "user %q already exists on the system", name)
-		return userRow.UID, nil
-	}
-
+// RegisterUserPreAuthEntry returns the stored account if the requested login
+// name now exists. Otherwise it gives the broker's pre-check entry a temporary UID.
+func (m *Manager) RegisterUserPreAuthEntry(loginName string, entry types.UserEntry) (_ types.UserEntry, err error) {
+	defer decorate.OnError(&err, "failed to register pre-auth user %q", loginName)
 	m.userManagementMu.Lock()
 	defer m.userManagementMu.Unlock()
 
-	// Repeat the check once locked, so that we are really sure that the user
-	// has not been registered meanwhile.
-	if userRow, err := m.db.UserByName(name); err == nil {
-		log.Debugf(context.Background(), "user %q already exists on the system", name)
-		return userRow.UID, nil
+	if stored, err := m.UserByLoginName(loginName); err == nil {
+		return stored, nil
+	} else if !errors.Is(err, db.NoDataFoundError{}) {
+		return types.UserEntry{}, err
 	}
 
+	name := strings.ToLower(entry.Name)
+	if name != strings.ToLower(loginName) {
+		return types.UserEntry{}, fmt.Errorf("broker pre-check name %q does not match requested login name %q", entry.Name, loginName)
+	}
+	entry.Name = name
 	user, err := m.preAuthRecords.UserByLogin(name)
 	if err == nil {
 		log.Debugf(context.Background(), "user %q already pre-authenticated", name)
-		return user.UID, nil
+		entry.UID, entry.GID = user.UID, user.GID
+		return entry, nil
 	}
 	if err != nil && !errors.Is(err, tempentries.NoDataFoundError{}) {
-		return 0, err
+		return types.UserEntry{}, err
 	}
 
 	lockedEntries, unlockEntries, err := localentries.WithUserDBLock()
 	if err != nil {
-		return 0, err
+		return types.UserEntry{}, err
 	}
 	defer func() { err = errors.Join(err, unlockEntries()) }()
 
 	unique, err := lockedEntries.IsUniqueUserName(name)
 	if err != nil {
-		return 0, err
+		return types.UserEntry{}, err
 	}
 	if !unique {
-		return 0, fmt.Errorf("another system user exists with %q name", name)
+		return types.UserEntry{}, fmt.Errorf("another system user exists with %q name", name)
 	}
 
 	uid, cleanupUID, err := m.idGenerator.GenerateUID(lockedEntries, m)
 	if err != nil {
-		return 0, err
+		return types.UserEntry{}, err
 	}
 	defer cleanupUID()
 
 	if err := m.preAuthRecords.RegisterPreAuthUser(name, uid); err != nil {
-		return 0, err
+		return types.UserEntry{}, err
 	}
 
 	log.Debugf(context.Background(), "Using new UID %d for temporary user %q", uid, name)
-	return uid, nil
+	entry.UID, entry.GID = uid, uid
+	return entry, nil
 }
 
 // CompleteUserPreAuth removes a temporary user record after its account has
