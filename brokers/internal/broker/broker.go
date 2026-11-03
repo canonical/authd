@@ -3622,12 +3622,12 @@ func (b *Broker) refreshGroupsAndHandle(ctx context.Context, session *session, a
 // Checks if the provided error is of type ForDisplayError. If it is, it returns the error message. Else, it returns
 // the provided fallback message.
 func errorMessageForDisplay(err error, fallback string) errorMessage {
-	// Each line is short, so terminals show it without wrapping it mid-word.
+	// PAM clients display these messages verbatim, so keep the explanation on one line.
 	if errors.Is(err, info.ErrUnixUIDRequired) {
-		return errorMessage{Message: "Microsoft Entra ID did not provide a valid required Unix UID\nfor your account.\nPlease contact your administrator."}
+		return errorMessage{Message: "Authentication failure: required Unix UID for your account not provided."}
 	}
 	if errors.Is(err, info.ErrUnixGIDRequired) {
-		return errorMessage{Message: "Microsoft Entra ID did not provide a valid required Unix GID\nfor one or more of your groups.\nPlease contact your administrator."}
+		return errorMessage{Message: "Authentication failure: required Unix GID for one or more of your groups not provided."}
 	}
 	var forDisplayErr *providerErrors.ForDisplayError
 	if errors.As(err, &forDisplayErr) {

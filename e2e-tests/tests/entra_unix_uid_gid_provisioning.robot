@@ -142,15 +142,15 @@ Retry Entra Login
     ...    ${entra_user}    ${entra_password_env}    ${entra_totp_env}
 
 Check Missing Unix GID Error
-    Match Text    Microsoft Entra ID did not provide a valid required Unix GID    30    similarity=85
+    Match Text    Authentication failure: required Unix GID for one or more of your groups not provided.    30    similarity=85
 
 Check Missing Unix GID Denial In Journal
     ${denial}=    SSH.Execute
-    ...    journalctl -b --no-pager | grep -F 'IsAuthenticated result' | grep -F 'denied' | grep -F 'valid required Unix GID' || true
+    ...    journalctl -b --no-pager | grep -F 'IsAuthenticated result' | grep -F 'denied' | grep -F 'required Unix GID for one or more of your groups not provided.' || true
     Should Not Be Empty    ${denial}
 
 Check Missing Unix UID Error
-    Match Text    Microsoft Entra ID did not provide a valid required Unix UID    30    similarity=85
+    Match Text    Authentication failure: required Unix UID for your account not provided.    30    similarity=85
 
 *** Test Cases ***
 Test Entra Unix IDs are cached and can be applied
