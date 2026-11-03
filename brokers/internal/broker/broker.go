@@ -2569,8 +2569,15 @@ func (b *Broker) finishEntraAuth(ctx context.Context, session *session, mfaToken
 	// Fetch groups. The MFA flow just authenticated with the provider, so a
 	// group-fetch failure is not a liveness signal: fall back to cached groups
 	// on a returning auth, and only deny first-time logins that have no cached groups.
+	// A pending registration or empty group list is not proof of a successful
+	// lookup. ponytail: empty groups fail closed; persist a resolution marker if
+	// zero-group users need fallback during Graph outages.
+	fallback := oldAuthInfo
+	if fallback != nil && (fallback.DeviceRegistrationDataObtainedAt != 0 || len(fallback.UserInfo.Groups) == 0) {
+		fallback = nil
+	}
 	groups, err := b.getGroups(ctx, session, authInfo)
-	if access, data := b.handleGroupFetch(ctx, session, authInfo, oldAuthInfo, groups, err); access != "" {
+	if access, data := b.handleGroupFetch(ctx, session, authInfo, fallback, groups, err); access != "" {
 		return access, data
 	}
 

@@ -4428,10 +4428,11 @@ func TestFinishEntraAuthFirstLoginPersistsFreshRegistrationTimestamp(t *testing.
 	require.NotZero(t, cached.DeviceRegistrationDataObtainedAt,
 		"the fresh registration must be timestamped before the first login is denied")
 
-	// Whether this second login is granted does not matter here: a returning
-	// MFA login keeps its cached-group fallback. What matters is that the
-	// retry reuses the cached registration.
-	secondSessionID, _ := authenticate()
+	// The first attempt left a cache whose groups were never fetched, so the
+	// retry must not log in on them. It still reuses the cached registration.
+	secondSessionID, access := authenticate()
+	require.Equal(t, broker.AuthDenied, access,
+		"a cache whose groups were never fetched must not be a fallback")
 	require.Equal(t, 1, provider.registrationEnrollments,
 		"retrying after the first denial must not enroll another device")
 
@@ -4439,6 +4440,26 @@ func TestFinishEntraAuthFirstLoginPersistsFreshRegistrationTimestamp(t *testing.
 	require.NoError(t, err)
 	require.NotEmpty(t, cached.DeviceRegistrationData)
 	require.NotZero(t, cached.DeviceRegistrationDataObtainedAt)
+}
+
+func TestFinishEntraAuthDeniesEmptyGroupsFromInvalidatedCache(t *testing.T) {
+	t.Parallel()
+
+	provider := newEntraMFAProviderForTests(t, errors.New("temporary Graph failure"))
+	b, sessionID, key := newEntraMFABrokerForTests(t, provider, true)
+	cached := generateCachedInfo(t, tokenOptions{
+		username:             "test-user@email.com",
+		issuer:               defaultIssuerURL,
+		obtainedViaEntraAuth: true,
+	})
+	cached.UserInfo.Groups = nil
+	cached.DeviceRegistrationDataInvalidated = true
+	require.NoError(t, token.CacheAuthInfo(b.TokenPathForSession(sessionID), cached))
+	require.NoError(t, password.HashAndStorePassword("password", b.PasswordFilepathForSession(sessionID)))
+
+	advanceToEntraMFACode(t, b, sessionID, key)
+	access, _ := submitEntraMFACode(t, b, sessionID, key)
+	require.Equal(t, broker.AuthDenied, access, "invalidated caches with no resolved groups must not grant login")
 }
 
 // TestFinishEntraAuthRejectsTerminalGroupErrors verifies that terminal
