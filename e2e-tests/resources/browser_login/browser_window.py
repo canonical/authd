@@ -238,12 +238,14 @@ class BrowserWindow(Gtk.Window):
         timeout_id = 0
         found = None
 
-        # Use json.dumps / JSON.parse to safely escape the text into a JS string literal.
+        # json.dumps returns a valid JS string literal, so the pattern is embedded
+        # directly. A template literal would consume the JSON backslash escapes
+        # before JSON.parse saw them, so patterns such as r"\s+" never matched.
         # Use the global flag to collect all matches; return a JSON-encoded array so
         # multiple results can be transferred as a single JS string.
         js = """(function(){
                         try {
-                            var pattern = JSON.parse(`%s`);
+                            var pattern = %s;
                             var re = new RegExp(pattern, 'g');
                             var body = document && document.body && document.body.innerText ? document.body.innerText : '';
                             var m = body.match(re);
