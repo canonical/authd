@@ -2,6 +2,7 @@
 """Browser-based device-code login flow for Microsoft Entra ID."""
 
 import os
+import re
 import sys
 
 import gi  # noqa: E402
@@ -17,6 +18,40 @@ from base import (
     logger,
     run_browser_login,
 )
+
+# innerText can put a line break or a non-breaking space inside the heading.
+APPROVE_PAGE_PATTERN = r"Approve\s+sign\s*-\s*in\s+on\s+another\s+device"
+
+
+def page_text(matches: list[str]) -> str:
+    """Collapse the whitespace that innerText inserts at line breaks."""
+    return " ".join(" ".join(matches).split())
+
+
+def click_approve(browser) -> None:
+    """Activate the Approve button on the "Approve sign-in on another device" page.
+
+    Pressing Return is unsafe there: the focused button is "This wasn't me",
+    which declines the sign-in.
+    """
+    result = browser.run_javascript_sync(
+        """(function() {
+            var nodes = document.querySelectorAll(
+                'button, input[type=button], input[type=submit], [role=button], a'
+            );
+            for (var i = 0; i < nodes.length; i++) {
+                var label = (nodes[i].innerText || nodes[i].value || '').trim();
+                if (label === 'Approve') {
+                    nodes[i].click();
+                    return 'clicked Approve';
+                }
+            }
+            return 'Approve button not found';
+        })()"""
+    )
+    logger.info(result)
+    if result != "clicked Approve":
+        raise RuntimeError(result)
 
 
 def login(
@@ -51,17 +86,31 @@ def login(
     browser.send_text(password)
     browser.send_key_taps([Gdk.KEY_Return])
 
-    matches = browser.wait_for_pattern(r"(Enter code|Are you trying to sign in)")
+    # Entra can show a TOTP prompt and then either the old confirmation page or
+    # the newer approval page.
+    matches = browser.wait_for_pattern(
+        rf"(Enter code|Are you trying to sign in|{APPROVE_PAGE_PATTERN})",
+        timeout_ms=30000,
+    )
     browser.wait_for_stable_page()
-    if "Enter code" in matches:
+    pages = page_text(matches)
+    if "Enter code" in pages:
         browser.capture_snapshot(screenshot_dir, "device-login-enter-totp-code")
         browser.send_text(generate_totp(totp_secret))
         browser.send_key_taps([Gdk.KEY_Return])
-        browser.wait_for_pattern("Are you trying to sign in")
+        matches = browser.wait_for_pattern(
+            rf"(Are you trying to sign in|{APPROVE_PAGE_PATTERN})",
+            timeout_ms=30000,
+        )
         browser.wait_for_stable_page()
+        pages = page_text(matches)
 
-    browser.capture_snapshot(screenshot_dir, "device-login-confirm-signin")
-    browser.send_key_taps([Gdk.KEY_Return])
+    if re.search(APPROVE_PAGE_PATTERN, pages):
+        browser.capture_snapshot(screenshot_dir, "device-login-approve-signin")
+        click_approve(browser)
+    else:
+        browser.capture_snapshot(screenshot_dir, "device-login-confirm-signin")
+        browser.send_key_taps([Gdk.KEY_Return])
 
     browser.wait_for_pattern("You have signed in")
     browser.wait_for_stable_page()
