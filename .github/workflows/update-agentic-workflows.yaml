@@ -1,0 +1,82 @@
+name: Update agentic workflows
+
+on:
+  schedule:
+    # Every Monday at 02:00 UTC.
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-agentic-workflows
+
+jobs:
+  update-agentic-workflows:
+    runs-on: ubuntu-26.04 # ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Check update credentials
+        env:
+          WORKFLOW_UPDATE_TOKEN: ${{ secrets.AGENTIC_WORKFLOW_UPDATE_TOKEN }}
+        shell: bash
+        run: |
+          if [[ -z "${WORKFLOW_UPDATE_TOKEN}" ]]; then
+            echo "::error::Configure AGENTIC_WORKFLOW_UPDATE_TOKEN with Contents, Pull requests, and Workflows write access"
+            exit 1
+          fi
+
+      - name: Upgrade agentic workflows
+        id: update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          gh extension install github/gh-aw
+          gh aw upgrade
+          # Upgrade can report compilation failures as warnings.
+          gh aw compile
+
+          if [[ -z "$(git status --porcelain)" ]]; then
+            echo "No agentic workflow update is needed"
+          else
+            echo "modified=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Check CI triage safeguards
+        if: steps.update.outputs.modified == 'true'
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+
+      - name: Prepare pull request description
+        if: steps.update.outputs.modified == 'true'
+        run: |
+          {
+            cat <<'EOF'
+          Updates gh-aw, its runtime Actions, and generated workflow locks together.
+
+          Validation:
+          - `gh aw compile`: passed.
+          - `python3 -m unittest discover -s .github/scripts -p 'test_*.py'`: passed.
+
+          EOF
+            cat .github/pull_request_template.md
+          } > "${RUNNER_TEMP}/agentic-workflows-update.md"
+
+      - name: Create pull request
+        if: steps.update.outputs.modified == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.AGENTIC_WORKFLOW_UPDATE_TOKEN }}
+          branch: auto-update-agentic-workflows
+          delete-branch: true
+          sign-commits: true
+          draft: true
+          commit-message: "deps(ci): keep the agentic runtime and compiler in sync"
+          title: "deps(ci): update agentic workflows"
+          body-path: ${{ runner.temp }}/agentic-workflows-update.md

@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths: &paths
       - ".github/workflows/python-sanity.yaml"
+      - ".github/workflows/nightly-ci-triage.lock.yml"
       - ".ruff.toml"
       - ".ruff-requirements.txt"
       - "**/*.py"
@@ -33,3 +34,5 @@ jobs:
         run: ruff check --config .ruff.toml --output-format=github .
       - name: Check Ruff formatting
         run: ruff format --check --config .ruff.toml .
+      - name: Run Python tests
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
