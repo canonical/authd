@@ -1,7 +1,7 @@
 name: Request a feature
 description: Suggest new functionality or improvements for this project
 title: "Feature: "
-labels: ["feature"]
+type: feature
 body:
   - type: markdown
     attributes:
