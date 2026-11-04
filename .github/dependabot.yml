@@ -9,6 +9,9 @@ updates:
     # Workflow files stored in the
     # default location of `.github/workflows`
     directory: "/"
+    # Updated with the compiler by update-agentic-workflows.yaml.
+    ignore:
+      - dependency-name: "github/gh-aw-actions/*" # Managed by gh aw compile. Version-locked to the gh-aw compiler; do not bump.
     schedule:
       interval: "weekly"
       day: "monday"
