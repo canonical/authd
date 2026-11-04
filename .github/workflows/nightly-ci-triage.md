@@ -121,6 +121,8 @@ jobs:
   verify_triage_writes:
     needs: [agent, safe_outputs]
     if: always()
+    # This job only reads safe-output results, even when detection warns.
+    detection-gate: status-only
     runs-on: ubuntu-slim
     permissions: {}
     steps:
