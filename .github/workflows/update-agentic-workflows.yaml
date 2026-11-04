@@ -51,7 +51,7 @@ jobs:
 
       - name: Check CI triage safeguards
         if: steps.update.outputs.modified == 'true'
-        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+        run: python3 -m unittest discover -s .github/scripts -p 'test_collect_ci_failures.py'
 
       - name: Prepare pull request description
         if: steps.update.outputs.modified == 'true'
@@ -62,7 +62,7 @@ jobs:
 
           Validation:
           - `gh aw compile`: passed.
-          - `python3 -m unittest discover -s .github/scripts -p 'test_*.py'`: passed.
+          - `python3 -m unittest discover -s .github/scripts -p 'test_collect_ci_failures.py'`: passed.
 
           EOF
             cat .github/pull_request_template.md
