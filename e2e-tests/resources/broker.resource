@@ -55,7 +55,6 @@ Select Provider
     Match Text    2. ${PROVIDER_DISPLAY_NAME}
 
     Hid.Type String    2
-    Builtin.Sleep    2
 
 Regenerate QR Code
     Match Text    Request new code    120
