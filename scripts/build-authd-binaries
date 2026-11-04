@@ -1,0 +1,62 @@
+#!/bin/bash
+
+set -euo pipefail
+
+usage(){
+    cat << EOF
+Usage: $0 [--version <version>] [-h|--help]
+
+Build the authd binaries.
+
+Important: Don't trust the PAM module binary built by this script, it behaves
+differently from the one built by the deb package. If you encounter any issues
+with the PAM module, build and install the deb package instead.
+
+Options:
+  --version <version>  Version to set in the binary.
+  -h, --help           Show this help message and exit.
+EOF
+}
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --version)
+            VERSION="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+set -x
+
+if [ -n "${VERSION:=}" ]; then
+    export GOFLAGS="-ldflags=-X=github.com/canonical/authd/internal/consts.Version=${VERSION} --mod=vendor -buildmode=pie"
+fi
+
+go mod vendor
+
+go generate -C internal/proto/authd
+go generate -C pam/internal/gdm
+
+go build -v -o authd ./cmd/authd
+
+go generate -C pam -x -tags pam_debug
+
+go build -C pam -v .
+
+if [ -d ./cmd/authctl ]; then
+    go build -v -o authctl ./cmd/authctl
+fi
+
+# Some protobuf files get updated but the change depends on the locally installed
+# version of protoc (I think) so I don't want to commit it
+git checkout "*.pb.go"
