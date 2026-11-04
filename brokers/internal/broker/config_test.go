@@ -884,6 +884,25 @@ func TestRegisterOwner(t *testing.T) {
 	}
 }
 
+func TestRegisterOwnerSurvivesReload(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"owner#name", "owner;name", `owner"""name`, "owner`name", `owner\`} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			cfgPath := filepath.Join(t.TempDir(), "broker.conf")
+			require.NoError(t, os.WriteFile(cfgPath, []byte(configTypes["valid"]), 0600))
+			uc, err := parseConfigFromPath(cfgPath, &testutils.MockProvider{}, false, nil)
+			require.NoError(t, err)
+			require.NoError(t, uc.registerOwner(cfgPath, name))
+			reloaded, err := parseConfigFromPath(cfgPath, uc.provider, false, nil)
+			require.NoError(t, err)
+			require.Equal(t, name, reloaded.owner)
+			require.False(t, reloaded.firstUserBecomesOwner)
+		})
+	}
+}
+
 func TestRegisterOwnerRejectsInvalidChars(t *testing.T) {
 	t.Parallel()
 
