@@ -1839,6 +1839,16 @@ func (b *Broker) entraAuth(ctx context.Context, session *session, userPassword s
 	}
 
 	flow, challengeInfo, err := initiate(authOpts)
+	var mfaErr *himmelblau.MFAError
+	if errors.As(err, &mfaErr) && mfaErr.IsMFAUserNotFound() && ctx.Err() == nil &&
+		session.expectedProviderID != "" && session.unixUsername != "" &&
+		b.provider.NormalizeUsername(session.username) != b.provider.NormalizeUsername(session.unixUsername) {
+		// A provider rename back to the Unix name can leave the stored alias stale.
+		// Keep the expected provider ID so the fallback cannot change accounts.
+		log.Noticef(context.Background(), "Provider username %q was not found; retrying the bound account's Unix name %q", session.username, session.unixUsername)
+		session.username = session.unixUsername
+		flow, challengeInfo, err = initiate(authOpts)
+	}
 	if err != nil && !passwordSubmitted && b.fido != nil {
 		var mfaErr *himmelblau.MFAError
 		if errors.As(err, &mfaErr) && (mfaErr.IsMFAPasswordRequired() || mfaErr.IsMFADAGFallbackDisabled()) && ctx.Err() == nil {
