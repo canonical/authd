@@ -319,6 +319,28 @@ class CollectTests(unittest.TestCase):
                     True,
                     None,
                 ),
+                (
+                    json.dumps({"items": [create, {**bug_type, "suggest": False}]}),
+                    True,
+                    None,
+                ),
+                (
+                    json.dumps(
+                        {
+                            "items": [
+                                {**create, "temporary_id": "123"},
+                                {**bug_type, "issue_number": "123"},
+                            ]
+                        }
+                    ),
+                    True,
+                    invalid_type,
+                ),
+                (
+                    json.dumps({"items": [create, {**bug_type, "suggest": True}]}),
+                    True,
+                    invalid_type,
+                ),
                 (json.dumps({"items": [create]}), True, invalid_type),
                 (json.dumps({"items": [bug_type, create]}), True, invalid_type),
                 (

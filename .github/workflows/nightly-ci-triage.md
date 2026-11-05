@@ -54,16 +54,21 @@ safe-outputs:
         fi
         if ! jq -e '
           def temp_id:
-            if type == "string" then ltrimstr("#") | ascii_downcase else null end;
+            if type == "string" then
+              (ltrimstr("#") | ascii_downcase) as $id
+              | if ($id | test("^aw_[a-z0-9_]{3,12}$")) then $id else null end
+            else null end;
           .items as $items
           | [range(0; $items | length) | select($items[.].type == "create_issue")] as $creates
           | [$creates[] as $i | [($items[$i].temporary_id | temp_id), $i]] as $created
           | [range(0; $items | length) | select($items[.].type == "set_issue_type")] as $types
           | [$types[] as $i | [($items[$i].issue_number | temp_id), $i]] as $typed
           | (($created | map(.[0]) | sort) == ($typed | map(.[0]) | sort))
+            and all($created[]; .[0] != null)
             and (($created | map(.[0]) | unique | length) == ($created | length))
             and all($typed[]; . as $t | any($created[]; .[0] == $t[0] and .[1] < $t[1]))
-            and all($types[]; ($items[.].issue_type | ascii_downcase) == "bug")
+            and all($types[]; ($items[.].issue_type | ascii_downcase) == "bug"
+                 and (($items[.].suggest // false) == false))
         ' "$GH_AW_AGENT_OUTPUT" > /dev/null; then
           echo "::error::Each created issue needs one Bug type call after it"
           exit 1
