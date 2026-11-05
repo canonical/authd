@@ -123,7 +123,7 @@ date. After updating the YARF submodule checkout, stage it with
 python3 e2e-tests/update_dependencies.py
 ```
 
-Use the uv version pinned in `.github/workflows/e2e-dependencies.yaml` when
+Use the uv version pinned in `.github/uv-requirements.txt` when
 refreshing the lock. Other versions can rewrite marker lines without changing
 package versions.
 

@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths: &paths
       - ".github/workflows/e2e-dependencies.yaml"
+      - ".github/workflows/update-uv.yaml"
+      - ".github/uv-requirements.txt"
       - "e2e-tests/pyproject.toml"
       - "e2e-tests/uv.lock"
       - "e2e-tests/.yarf"
@@ -32,7 +34,7 @@ jobs:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v10.2.0
         with:
-          version: "0.12.21"
+          version-file: .github/uv-requirements.txt
           enable-cache: true
           cache-dependency-glob: e2e-tests/uv.lock
       - name: Test the lock helper
