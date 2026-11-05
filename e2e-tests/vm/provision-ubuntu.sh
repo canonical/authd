@@ -229,11 +229,14 @@ if [ ! -f "${CLOUD_INIT_ISO}" ]; then
         SSH_PUBLIC_KEY=$(cat "${SSH_PUBLIC_KEY_FILE}")
     fi
 
+    # Substitute host values only so cloud-init can expand its own variables.
+    # shellcheck disable=SC2016
     SSH_PUBLIC_KEY="${SSH_PUBLIC_KEY}" \
       SOCAT_ADDRESS="${SOCAT_ADDRESS}" \
       CI_ROOT_SSHD_CONFIG="${CI_ROOT_SSHD_CONFIG}" \
       CI_ROOT_PASSWD_CMD="${CI_ROOT_PASSWD_CMD}" \
-      envsubst < "${CLOUD_INIT_TEMPLATE}" > "${CLOUD_INIT_DIR}/cloud-config.yaml"
+      envsubst '${SSH_PUBLIC_KEY} ${SOCAT_ADDRESS} ${CI_ROOT_SSHD_CONFIG} ${CI_ROOT_PASSWD_CMD}' \
+        < "${CLOUD_INIT_TEMPLATE}" > "${CLOUD_INIT_DIR}/cloud-config.yaml"
 
     # MIME script parts run in filename order after cloud-init installs packages.
     cloud_init_scripts_dir="${SCRIPT_DIR}/cloud-init-scripts"
