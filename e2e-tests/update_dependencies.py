@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Refresh or check the E2E lock against YARF's locked runtime dependencies."""
+"""Refresh, upgrade, or check the E2E lock against YARF's locked runtime dependencies."""
 
 import argparse
 import difflib
@@ -102,7 +102,7 @@ def check_runtime(project: Path, expected: list[str], expected_python: str) -> b
     return False
 
 
-def update_dependencies(project: Path, *, check: bool) -> bool:
+def update_dependencies(project: Path, *, check: bool, upgrade: bool = False) -> bool:
     expected = runtime_requirements(
         project / ".yarf", project / ".yarf" / "pyproject.toml"
     )
@@ -126,7 +126,10 @@ def update_dependencies(project: Path, *, check: bool) -> bool:
             + json.dumps(expected)
             + "\n"
         )
-        subprocess.run(["uv", "lock", "--project", str(candidate)], check=True)
+        command = ["uv", "lock", "--project", str(candidate)]
+        if upgrade:
+            command.append("--upgrade")
+        subprocess.run(command, check=True)
         # Drop the temporary constraint metadata while keeping the resolved pins.
         (candidate / "pyproject.toml").write_text(manifest)
         subprocess.run(["uv", "lock", "--project", str(candidate)], check=True)
@@ -144,12 +147,24 @@ def update_dependencies(project: Path, *, check: bool) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--check", action="store_true", help="Check the lock without changing it"
+    )
+    mode.add_argument(
+        "--upgrade",
+        action="store_true",
+        help="Upgrade E2E dependencies while keeping YARF's runtime pins",
     )
     args = parser.parse_args()
     try:
-        return 0 if update_dependencies(Path(__file__).parent, check=args.check) else 1
+        return (
+            0
+            if update_dependencies(
+                Path(__file__).parent, check=args.check, upgrade=args.upgrade
+            )
+            else 1
+        )
     except subprocess.CalledProcessError as error:
         if error.stderr:
             print(error.stderr, file=sys.stderr, end="")

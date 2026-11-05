@@ -58,7 +58,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 robocop = [
     { name = "click", specifier = ">=8.0.0" },
-    { name = "robotframework-robocop", specifier = "==9.1.2" },
+    { name = "robotframework-robocop", specifier = ">=9.1.2,<10" },
 ]
 
 [[package]]
