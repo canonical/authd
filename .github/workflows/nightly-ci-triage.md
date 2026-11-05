@@ -52,10 +52,35 @@ safe-outputs:
           echo "::error::Only append issue body updates are allowed"
           exit 1
         fi
+        if ! jq -e '
+          def temp_id:
+            if type == "string" then
+              (ltrimstr("#") | ascii_downcase) as $id
+              | if ($id | test("^aw_[a-z0-9_]{3,12}$")) then $id else null end
+            else null end;
+          .items as $items
+          | [range(0; $items | length) | select($items[.].type == "create_issue")] as $creates
+          | [$creates[] as $i | [($items[$i].temporary_id | temp_id), $i]] as $created
+          | [range(0; $items | length) | select($items[.].type == "set_issue_type")] as $types
+          | [$types[] as $i | [($items[$i].issue_number | temp_id), $i]] as $typed
+          | (($created | map(.[0]) | sort) == ($typed | map(.[0]) | sort))
+            and all($created[]; .[0] != null)
+            and (($created | map(.[0]) | unique | length) == ($created | length))
+            and all($typed[]; . as $t | any($created[]; .[0] == $t[0] and .[1] < $t[1]))
+            and all($types[]; ($items[.].issue_type | ascii_downcase) == "bug"
+                 and (($items[.].suggest // false) == false))
+        ' "$GH_AW_AGENT_OUTPUT" > /dev/null; then
+          echo "::error::Each created issue needs one Bug type call after it"
+          exit 1
+        fi
   create-issue:
     max: 20
-    labels: [bug]
+    require-temporary-id: true
     deduplicate-by-title: false
+  set-issue-type:
+    allowed: [Bug]
+    max: 20
+    target: "*" # shortcut: the target is not checked for provenance; only new issues should be typed.
   update-issue:
     target: "*"
     body: true
@@ -206,8 +231,9 @@ budget, leave the original description unchanged. Never truncate or remove
 existing content to make room.
 
 Store the new occurrences in continuation issues titled
-`ci: Occurrences for #<original issue number> (part <N>)`. Each body must link
-to the original issue and contain the exact marker
+`ci: Occurrences for #<original issue number> (part <N>)`. Create each
+continuation with a `temporary_id` and set its type to `Bug`, as for a new
+issue. Each body must link to the original issue and contain the exact marker
 `ci-triage-overflow: OWNER/REPO#NUMBER`, with this repository and the original
 issue number substituted. Write the marker as a visible plain-text line, not
 an HTML comment, so body sanitization preserves it. Before creating or updating
@@ -226,20 +252,25 @@ Do not queue an append that exceeds the budget.
 
 Continuation issues are occurrence records for a known problem, not new
 problems requiring another fix or diagnostics PR. They still consume the
-20-create and 50-update limits. Include the original issue and each destination
-reference in the completion summary. If any occurrence cannot be recorded
-within those limits, report the blocker and leave the window for retry; do not
-mark that occurrence handled or write the completion file.
+20-create, 20-type, and 50-update limits. Include the original issue and each
+destination reference in the completion summary. If any occurrence cannot be
+recorded within those limits, report the blocker and leave the window for
+retry; do not mark that occurrence handled or write the completion file.
 
 ### New issues
 
 For a new issue, inspect relevant open and closed CI issues to match their
 title and body style. Prefer the existing `ci: <specific symptom>` style when
 it fits. Don't use `.github/ISSUE_TEMPLATE/bug_report.yml`. Create one issue
-per distinct problem, not per run. Include the observable failure, affected
-workflow/job/test, failed attempt and job links, commit SHA, an error excerpt,
-and available reproduction details. Clearly separate facts, hypotheses, and
-missing evidence.  Include every occurrence in this window.  Never file a
+per distinct problem, not per run. Give each new issue a unique `temporary_id`
+and queue `set_issue_type` with `issue_type: Bug` and that ID as `issue_number`
+after the `create_issue` call. Set types only on issues you create. Do not use
+`suggest: true`.
+
+Include the observable failure, affected workflow/job/test, failed attempt and
+job links, commit SHA, an error excerpt, and available reproduction details.
+Clearly separate facts, hypotheses, and missing evidence.  Include every
+occurrence in this window.  Never file a
 speculative root cause as established fact or publicly disclose a suspected
 security vulnerability.  In each new issue, state the planned follow-up: a fix
 PR, a diagnostics PR, or the specific reason no code change is useful. This
@@ -295,10 +326,11 @@ manifest. This file is mandatory even when the manifest is empty (`{}`).
 
 If logs or tools are unavailable, record that uncertainty and add useful
 diagnostics where feasible. If investigation cannot be completed, an output
-limit is reached (20 new issues, 50 updates, 5 PRs), or a required PR cannot be
-prepared, report the blocker and do not write the completion file. The post-step
-will fail the run, leaving the window for the next nightly run. Already-created
-issues, links, and PRs must be reused on retry, not created again.
+limit is reached (20 new issues, 20 type changes, 50 updates, 5 PRs), or a
+required PR cannot be prepared, report the blocker and do not write the
+completion file. The post-step will fail the run, leaving the window for the
+next nightly run. Already-created issues, links, and PRs must be reused on
+retry, not created again.
 
 If no writes are needed, call `noop` with a short reason. End with a concise
 summary of the window, issue updates, new issues, PRs, and any blockers.
