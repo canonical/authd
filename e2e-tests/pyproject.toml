@@ -1,6 +1,7 @@
 [project]
 name = "authd-e2e-tests"
 version = "0.0.0"
+requires-python = ">=3.10.12,<3.15,!=3.11.0,!=3.11.1,!=3.11.2,!=3.11.3"
 dependencies = [
     "yarf",
     # Used by the browser-based authentication tests.
@@ -10,10 +11,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-yarf = { workspace = true }
-
-[tool.uv.workspace]
-members = [".yarf"]
+yarf = { path = ".yarf" }
 
 [dependency-groups]
 robocop = [
