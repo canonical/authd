@@ -21,7 +21,12 @@ def set_death_signal():
 
 def find_unused_display() -> int:
     used = set()
-    for name in os.listdir("/tmp/.X11-unix"):
+    try:
+        sockets = os.listdir("/tmp/.X11-unix")
+    except FileNotFoundError:
+        # On headless runners, Xvfb creates this directory on its first start.
+        sockets = []
+    for name in sockets:
         if name.startswith("X"):
             try:
                 used.add(int(name[1:]))
