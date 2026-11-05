@@ -9,12 +9,19 @@ myst:
 
 The Microsoft Entra broker can read a Unix UID from the authenticated user and
 Unix GIDs from the user's remote groups. It stores the values in the broker's
-`token.json` cache. The broker does not apply these values to the authd database
-during login. Apply them explicitly with `authctl` or the provisioning script
-after checking the cached values.
+`token.json` cache.
 
+The broker does not apply these values to the authd database
+during login. After reviewing the cached values, you can apply them individually
+with `authctl` or use the [provisioning helper](#apply-the-cached-values) to
+prepare the user's UID and remote-group GID updates from one cache for review.
+The helper is installed with the `authd` package; from a source checkout, run
+`scripts/apply-entra-unix-ids`.
+
+```{note}
 This feature is disabled unless `unix_uid_attribute` or
 `unix_gid_attribute` is configured.
+```
 
 ## Register extension properties
 
@@ -31,13 +38,15 @@ full name, in the form `extension_<APP_ID_WITHOUT_HYPHENS>_<PROPERTY_NAME>`.
 The app ID in the prefix belongs to the application that owns the extension.
 Use the full name returned by Graph when configuring an extension owned by a
 different application. See Microsoft's
-[extension naming guidance](https://learn.microsoft.com/en-us/graph/extensibility-overview#directory-microsoft-entra-id-extensions).
+[extension naming guidance](https://learn.microsoft.com/en-us/graph/extensibility-overview#directory-microsoft-entra-id-extensions)
+for more information.
 
 ## Discover full property names
 
 Microsoft Entra Connect can register extensions under a separate
-`Tenant Schema Extension App`; see Microsoft's
-[directory extensions guidance](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-sync-feature-directory-extensions#configuration-changes-in-microsoft-entra-id-made-by-the-wizard).
+`Tenant Schema Extension App`. Microsoft's
+[directory extensions guidance](https://learn.microsoft.com/en-us/entra/identity/hybrid/connect/how-to-connect-sync-feature-directory-extensions#configuration-changes-in-microsoft-entra-id-made-by-the-wizard)
+describes this in more detail.
 If Cloud Sync created the property, verify its actual owner rather than
 assuming it is the application configured in the broker.
 
@@ -99,9 +108,10 @@ Microsoft's
 [extension permissions guidance](https://learn.microsoft.com/en-us/graph/extensibility-overview#permissions-and-privileges)
 explains the Graph permissions and Entra roles for extension writes. User
 extension updates require delegated `User.ReadWrite.All` and a supported
-administrator role, such as `User Administrator`; see the
-[built-in role reference](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#user-administrator).
-For group updates, see the
+administrator role, such as `User Administrator`. The
+[built-in role reference](https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference#user-administrator)
+lists the role's permissions.
+For group updates, check the
 [Update group API](https://learn.microsoft.com/en-us/graph/api/group-update?view=graph-rest-1.0)
 and the [Group.ReadWrite.All permission](https://learn.microsoft.com/en-us/graph/permissions-reference#groupreadwriteall)
 for permission and ownership details. Microsoft marks these write permissions
@@ -115,29 +125,27 @@ permissions are active:
 Get-MgContext | Select-Object Account, TenantId, Scopes
 ```
 
-See the
+The
 [Get-MgContext reference](https://learn.microsoft.com/en-us/powershell/module/microsoft.graph.authentication/get-mgcontext)
-for the available context fields. The scopes shown here do not prove that the
+lists the available context fields. The scopes shown here do not prove that the
 signed-in user has the required Entra role. A `403` can therefore persist even
 when the expected scope is present; see Microsoft's
 [extension permissions guidance](https://learn.microsoft.com/en-us/graph/extensibility-overview#permissions-and-privileges).
 
 Replace `<USER_UPN>` with the user's Entra sign-in name or object ID, and
-`<GROUP_OBJECT_ID>` with the group's object ID. See the
-[Update-MgUser](https://learn.microsoft.com/en-us/powershell/module/microsoft.graph.users/update-mguser)
-and
-[Update-MgGroup](https://learn.microsoft.com/en-us/powershell/module/microsoft.graph.groups/update-mggroup)
-references for the supported parameter values.
+`<GROUP_OBJECT_ID>` with the group's object ID.
 
-Avoid giving an Entra group the same name as a user. authd already creates a
-private group for each user, named after that user. An Entra group with the same
-name collides with that private group. If the cache has no UID, the script
-refuses to apply the cache, because applying the group's GID would change the
-private group's GID. If the cache has a UID, the group's GID must match that UID.
-Avoid other name collisions too. For example, two Entra groups whose names are
-the same in lowercase conflict, and the script refuses them. Also avoid names
-that match local groups. `authctl` is the final check for local and authd
-database conflicts.
+### Naming conventions
+
+An Entra group with the same name as the user collides with the private group
+automatically created by authd.
+If the cache has no UID, the [script](#apply-the-cached-values) refuses to apply
+the cache, because applying the group's GID would change the private group's
+GID.
+If the cache has a UID, the group's GID must match that UID.
+Entra groups whose names are the same in lowercase conflict, and the script
+refuses them. Also avoid names that match local groups. `authctl` is the final
+check for local and authd database conflicts.
 
 Use the full property names returned when the properties were created. For
 example, an attribute created by Entra Connect or Cloud Sync may use
@@ -170,11 +178,13 @@ unix_gid_required = false
 The tenant-scoped issuer URL above follows Microsoft's
 [OIDC endpoint guidance](https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc#oidc-endpoint-overview).
 
-On a successful refresh, a missing or invalid required value denies login in
-both modes. An unreadable required value and a refresh that cannot complete
-follow `force_access_check_with_provider`: the forced check denies login;
-without it, a returning login uses its cached snapshot. Offline login is denied
-when checks are forced and uses cached values when they are not.
+With `force_access_check_with_provider = true`, login requires a provider
+check; with it set to `false`, returning or offline logins can use cached IDs.
+A successful refresh that returns a missing or invalid required ID denies login
+with either setting. To configure this option, see
+[Force remote access check with the identity provider](ref::config-force-provider-auth).
+For behavior by login type, consult the
+[Entra Unix ID flow explanation](../explanation/entra-unix-id-flows).
 
 Use the full names when the properties were created by Entra Connect or Cloud
 Sync:
@@ -185,93 +195,38 @@ unix_uid_attribute = extension_abc123_uidNumber
 unix_gid_attribute = extension_abc123_gidNumber
 ```
 
-Set a required flag only when every applicable login must have the value. A
-required flag with an empty attribute is invalid configuration. A successful
-refresh that returns an absent, null, or invalid required value denies login in
-both modes and clears the value in the refreshed snapshot before denial. An
-unreadable required value denies with checks forced; without forced checks, the
-cached value is used, or the value remains empty if none is cached. A refresh
-that cannot complete denies with checks forced and uses the previous snapshot
-without them. Optional values never deny login.
+Set a required flag only when every applicable user or group should have a
+value from the provider. A required flag with an empty attribute is invalid
+configuration.
+Optional values do not deny login.
 
-A required GID applies to every remote group. A remote group without a GID
-denies login in both modes. Entra groups prefixed with `linux-` map to local
-Linux groups; for example, `linux-sudo` adds the user to the local `sudo` group.
-These mappings have no remote GID and are exempt from required-GID checks. See
-the [group and privilege management reference](reference::group-management) for
-details. An unforced GID requirement can therefore lock out users whose remote
-groups lack a GID.
+A required GID applies to every remote group. Groups prefixed with `linux-` map
+to local Linux groups and have no remote GID, so they are exempt. For details
+on local group mappings, consult the
+[group and privilege management reference](reference::group-management).
 
-If you change `unix_uid_attribute` or `unix_gid_attribute`, the broker drops
-the cached IDs that came from the old attribute. It does this the next time it
-reads that user's cache during a login, and it rewrites `token.json` without
-those IDs. The next login continues with the ID empty until an online login reads
-the new attribute. With `force_access_check_with_provider = true`, the broker
-never uses a cached snapshot for an offline login. A required ID that is still
-missing after the online lookup denies the login.
-
-If the broker cannot rewrite `token.json`, for example on a full or read-only
-disk, the login is denied when `force_access_check_with_provider` is `true` and
-`unix_uid_required` or `unix_gid_required` is `true`. In other cases the login
-continues, and `apply-entra-unix-ids` refuses the cache until a later login
-rewrites it.
+Changing an attribute name invalidates cached IDs read under the old name on
+the next login. Log in again with the updated configuration before applying
+values from the cache. For cache invalidation and provider-failure behavior,
+refer to the [flow explanation](../explanation/entra-unix-id-flows).
 
 Restart the broker after changing the configuration. See
 [Configure authd](ref::config) for the service-specific restart command.
 
 ### Graph permissions and direct Entra authentication
 
-The broker's delegated enrichment uses `User.Read` and
-`GroupMember.Read.All`. See Microsoft's
+The broker's delegated enrichment needs `User.Read` and `GroupMember.Read.All`;
+the latter requires admin consent. See Microsoft's
 [User.Read](https://learn.microsoft.com/en-us/graph/permissions-reference#userread)
 and
 [GroupMember.Read.All](https://learn.microsoft.com/en-us/graph/permissions-reference#groupmemberreadall)
-permission entries for consent and permission details. Microsoft marks
-`GroupMember.Read.All` as requiring admin consent.
+permission references.
 
-When direct `entra_auth` is used without device registration, the existing
-app-only group fallback can read groups only when the configured OIDC
-application has `GroupMember.Read.All` application permission, admin consent,
-and a client secret. This is the OAuth
-[client credentials flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-client-creds-grant-flow).
-Microsoft documents that `/me` requires a signed-in user and delegated
-permission in the [Update user API](https://learn.microsoft.com/en-us/graph/api/user-update?view=graph-rest-1.0);
-application permissions are not supported for `/me`, so UID lookup is
-unavailable on this path. An optional UID keeps its cached value. A required
-UID denies login with checks forced and keeps its cached value without them.
-The broker does not add a `User.Read.All` application-credential UID lookup.
-
-The client secret is used only for the Graph app-only fallback. The
-client-credentials flow is separate from Entra's public-client token refresh;
-the broker does not send the secret during public-client refresh, including
-when device registration is disabled.
-
-## Login and cache behavior
-
-On a first online login, a whole-refresh failure has no previous snapshot to
-fall back to, so login fails. Credentials and device-registration data may
-already be cached. Such a first-login entry has no completeness marker and may
-have no groups or UID. A later unforced login can use it as the previous
-snapshot when a refresh cannot complete, even if required IDs are missing. A
-successful refresh that returns a missing or invalid required value denies login
-in both modes. The next successful online login replaces the incomplete entry.
-
-On a returning login, a successful refresh that returns a missing or invalid
-required value denies login in both modes. The refreshed snapshot with the
-cleared value is saved before denial. An unreadable required value denies with
-checks forced; without them, the cached value is used, or left empty if none is
-cached. If the whole refresh cannot complete, checks forced deny login and
-checks not forced use the previous snapshot, even if it lacks a required ID. A
-GID that cannot be read uses the cached GID for the same group, matched by
-`ugid`. Refreshed credentials are retained even when enrichment denies login.
-
-Offline login does not issue Graph requests. With checks forced, login is denied
-because the provider must be reachable. Without forced checks, the cached UID
-and GIDs are used even when some are missing. For the flow details, see the
-[explanation](../explanation/entra-unix-id-flows).
-
-The UID and GID fields are stored in the broker cache and are removed from the
-response sent to authd. Normal authd ID generation remains unchanged.
+For direct `entra_auth` without device registration, group lookup needs a
+client secret and `GroupMember.Read.All` as an application permission with
+admin consent. This path cannot read the UID. The
+[Entra Unix ID flow explanation](../explanation/entra-unix-id-flows) describes
+the Graph paths and their login behavior.
 
 ## Locate and inspect `token.json`
 
@@ -313,9 +268,10 @@ The provider ID is the stable identity used by the broker for the user. A
 username compatibility path may be a symlink left by cache migration;
 provider-ID directories are authoritative after migration.
 
-The file contains refresh credentials and must normally be readable only by
-root or the broker service. The cache directory uses mode `0700` and
-`token.json` uses mode `0600`.
+The file contains refresh credentials. Do not copy or share the complete file.
+Keep it accessible only to root or the broker service, and inspect only the
+fields needed for provisioning. For cache ownership and file modes, refer to
+the [flow explanation](../explanation/entra-unix-id-flows).
 
 The top-level JSON key is capitalized because it is the Go field name:
 
@@ -338,23 +294,17 @@ used when reviewing assignments or reporting conflicts. A group with an empty
 `ugid` is a local mapping and should not be applied with `authctl`. Groups with
 no cached `gid` should also be skipped.
 
-Because `token.json` contains refresh credentials, do not copy or share the
-complete file. Inspect only the fields needed for provisioning and keep the
-file accessible only to root or the broker service.
-
 ## Apply the cached values
 
 After you change the attribute configuration, log in as the user before you
 apply the values. The broker drops IDs from the old attribute only during a
-login. Until then the script refuses the cache, because its attribute names
-differ from the configured names.
+login.
 
-Review a cache first. The `apply-entra-unix-ids` command is installed with the
+Review the cache first. The `apply-entra-unix-ids` command is installed with the
 `authd` package and needs `jq`, which the package recommends. See
 `man apply-entra-unix-ids` for all options, environment variables, and exit
 codes. Pass the attribute names from the `[msentraid]` section of the broker
-configuration. An empty name means that the attribute is not configured. The
-command defaults to a dry run:
+configuration:
 
 ```shell
 sudo apply-entra-unix-ids --uid-attribute extension_abc123_uidNumber \
@@ -364,8 +314,7 @@ sudo apply-entra-unix-ids --uid-attribute extension_abc123_uidNumber \
 From a source checkout, run `scripts/apply-entra-unix-ids` instead of the
 installed `apply-entra-unix-ids` command.
 
-If the configuration uses short names, also pass the `client_id` from the
-`[oidc]` section:
+For short attribute names, use the `client_id` from the `[oidc]` section:
 
 ```shell
 sudo apply-entra-unix-ids --uid-attribute uidNumber --gid-attribute gidNumber \
@@ -379,26 +328,16 @@ sudo apply-entra-unix-ids --apply --uid-attribute extension_abc123_uidNumber \
   --gid-attribute extension_abc123_gidNumber /path/to/token.json
 ```
 
-The script refuses a cache that holds Unix IDs when its attribute names differ
-from the names you pass, or when the names are missing. Log in again with the
-current configuration to refresh the cache, then review it again.
+If the command refuses the cache because its attribute names do not match the
+current configuration, log in again with that configuration to refresh the
+cache, then review it again.
 
-The script reads the cache once and builds the entire plan from that captured
-JSON document. It rejects malformed input or multiple JSON documents before
-running any command. It validates numeric values, skips local groups and groups without a
-cached GID, uses `ugid` for conflict reporting, and passes the normalized group
-name to `authctl`. It aborts before any command when the input contains
-conflicting UID/GID assignments. Application is not transactional: a later
-`authctl` command may fail after earlier commands have succeeded.
+When the cache contains a UID, applying it also sets the GID of the user's
+private group to that UID. Details about local groups and conflict handling are
+in the
+[flow explanation](../explanation/entra-unix-id-flows).
 
-When the cache contains a UID, the script first sets the user's UID, then sets
-the GID of the user's private group (named after the user) to the same value.
-It then applies remote group GIDs. Without a cached UID, it leaves the private
-group unchanged. If a remote group has the same name as the user and the cache
-has no UID, the script aborts before running any command, because applying that
-group would change the private group's GID.
-
-The underlying commands remain available for individual changes:
+For individual changes, use:
 
 ```shell
 sudo authctl user set-uid <user> <uid>

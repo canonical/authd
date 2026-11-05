@@ -22,7 +22,7 @@ The feature:
 
 ## Values and configuration
 
-The broker can read three related values:
+The broker handles three related values:
 
 - **UID**: the numeric Unix user ID from an attribute on the Entra user object.
 - **GID**: the numeric Unix group ID from an attribute on each remote Entra
@@ -31,7 +31,8 @@ The broker can read three related values:
   GID. It identifies the group when cached values are reviewed or conflicts
   are reported.
 
-Related settings are in the `[msentraid]` section of the broker configuration file:
+Related settings are in the `[msentraid]` section of the broker configuration
+file:
 
 ```ini
 unix_uid_attribute = uidNumber
@@ -40,25 +41,27 @@ unix_uid_required = false
 unix_gid_required = false
 ```
 
-The UID and GID feature is disabled when both attribute names are empty. A short attribute
-name is resolved using the configured `[oidc] client_id`. For example,
+The UID and GID feature is disabled when both attribute names are empty. A short
+attribute name is resolved using the configured `[oidc] client_id`. For example,
 `uidNumber` becomes `extension_<client-id-without-hyphens>_uidNumber`. A full
 name such as `extension_abc123_uidNumber` is passed to Entra as written. This
 supports attributes created by Entra Connect or Cloud Sync under a different
 app registration.
 
-A required flag (unix_uid_required and/or unix_gid_required) without its matching 
-attribute is an invalid configuration. 
-On a successful refresh, a missing or invalid required value denies login in both
-modes. A required value that cannot be read follows
-`force_access_check_with_provider`. If it is set to true it denies the login; otherwise,
-the broker keeps the cached value, or leaves it empty if none is cached. If the
-token refresh cannot complete, when set to true it denies login. If set to false
-the broker uses the previous snapshot. 
-If no connection is available and it is set to true it denies login. Otherwise the broker 
-uses cached values even when some are missing. 
-Optional values (unix_uid_required and/or unix_gid_required set to false) never 
-drive decision to deny login.
+A required flag without its matching attribute is invalid configuration. On a
+successful refresh, a missing or invalid required value denies login regardless
+of `force_access_check_with_provider`.
+
+When a required value cannot be read or a refresh cannot complete,
+`force_access_check_with_provider = true` denies login. When it is `false`, a
+returning login keeps the cached value if reading the required value fails; if
+none is cached, it remains empty. If the entire refresh fails, the returning
+login uses the previous snapshot.
+If the provider is unreachable during login, setting
+`force_access_check_with_provider = true` denies offline login. With it set to
+`false`, offline login uses cached values, even if required IDs are missing. A
+missing or unreadable optional ID does not, by itself, deny login; unrelated
+authentication or provider failures can still do so.
 
 ## Authentication and Graph access matrix
 
@@ -117,11 +120,9 @@ The Microsoft Entra provider selects a Graph access path in this order:
 
 If the exchange in step 2 fails for `User.Read`, the broker retries it for
 `GroupMember.Read.All` only, so group requests can still succeed. Device-disabled
-and invalid-redirect-URI errors are not retried. The UID is unreadable, so an
-optional UID keeps its cached value. A required UID denies login with the forced
-check and keeps its cached value without it. If the retry for groups also fails,
-the refresh cannot complete: the forced check denies login, while an unforced
-check uses the previous snapshot.
+and invalid-redirect-URI errors are not retried. This retry can retrieve groups
+and GIDs, but cannot refresh the UID. For how unreadable IDs or a failed group
+lookup affect login, see [Returning online login](#returning-online-login).
 
 ## UID and group requests
 
@@ -189,8 +190,9 @@ choose one based on response order. It omits the ambiguous GID. With
    groups.
 5. If it lacks `GroupMember.Read.All` and a client secret is configured, the
    broker can use the app-only fallback for groups. An optional UID keeps its
-   cached value, because an app-only token cannot read it. A required UID denies
-   login with the forced check and keeps its cached value without it.
+   cached value if available, because an app-only token cannot read it. A
+   required UID denies login with the forced check and uses its cached value, if
+   available, without it.
 6. If no usable Graph path exists, the refresh cannot complete. The forced
    check denies login; without it, a returning login uses its previous snapshot.
 
@@ -234,10 +236,11 @@ its state is needed by the token exchange.
 3. The broker uses client credentials to obtain an app-only Graph token when
    the native token lacks `GroupMember.Read.All`.
 4. The broker fetches groups through the user's object ID.
-5. The broker can cache group GIDs and one GUID for each group.
+5. The broker can cache group GIDs and each group's Graph object ID (`ugid`).
 6. The UID lookup is unavailable through the app-only token, so an optional UID
-   keeps its cached value. With the forced check, `unix_uid_required = true`
-   denies login; without it, the cached UID is used.
+   uses its cached value if available and otherwise remains empty. With the
+   forced check, `unix_uid_required = true` denies login; without it, the cached
+   UID is used if available.
 
 The broker allows this flow only when the client secret is configured. If both
 registration and the client secret are absent while `entra_auth` is enabled,
@@ -325,37 +328,18 @@ normal local ID allocation unchanged.
 
 ## Applying cached values
 
-After reviewing `token.json`, an administrator can apply the values manually:
+To apply cached values manually, use `authctl`. Unlike the helper, these
+commands do not check which attribute names produced the cached values. See the
+[configuration how-to](../howto/configure-entra-unix-ids) for the commands and
+safe application procedure.
 
-```shell
-authctl user set-uid <user> <uid>
-authctl group set-gid <user> <uid>
-authctl group set-gid <normalized-group-name> <gid>
-```
-
-These commands skip the attribute-name check that `apply-entra-unix-ids` runs.
-Before you apply values by hand, check the names that the cache was read with:
-
-```shell
-sudo jq '.UnixAttributeNames' /path/to/token.json
-```
-
-The output must match the configured attribute names. A short name resolves to
-`extension_<client-id-without-hyphens>_<name>`. If the output is `null` or the
-names differ, do not apply values from that cache. Log in again with the current
-configuration, then check again. A failed cache rewrite can leave IDs from the
-old attribute in `token.json`.
-
-The `apply-entra-unix-ids` command reads one
-explicit `token.json` file. It defaults to a dry run and requires `--apply` for
-mutations. It also requires the configured attribute names and refuses a cache
-whose names differ. When a cached UID is present, it sets the user's UID and
-then the GID of the user's private group to that same value before applying
-remote group
-GIDs. It skips local groups and groups without a cached GID, uses `ugid`
-for conflict reporting, and aborts before mutation if the input contains
-conflicting assignments. The operation is not transactional; `authctl` remains
-the final check for local and authd database conflicts.
+See `man apply-entra-unix-ids` for the command's options, dry-run behavior, and
+attribute-name checks. When a cached UID is present, the helper sets the user's
+UID and then the GID of the user's private group to that same value before
+applying remote group GIDs. It skips local groups and groups without a cached
+GID, uses `ugid` for conflict reporting, and aborts before mutation if the input
+contains conflicting assignments. `authctl` remains the final check for local
+and authd database conflicts.
 
 ## Limitations
 
