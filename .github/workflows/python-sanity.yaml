@@ -8,6 +8,7 @@ on:
       - ".github/workflows/nightly-ci-triage.lock.yml"
       - ".ruff.toml"
       - ".ruff-requirements.txt"
+      - ".github/uv-requirements.txt"
       - "**/*.py"
   pull_request:
     paths: *paths
@@ -30,9 +31,14 @@ jobs:
           python-version: "3.10"
       - name: Install Ruff
         run: python -m pip install -r .ruff-requirements.txt
+      - name: Install Python test dependencies
+        run: python -m pip install -r .github/uv-requirements.txt robotframework==7.4.2
       - name: Run Ruff lint
         run: ruff check --config .ruff.toml --output-format=github .
       - name: Check Ruff formatting
         run: ruff format --check --config .ruff.toml .
       - name: Run Python tests
-        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+        run: |-
+          python3 -m unittest discover -s .github/scripts -p 'test_*.py'
+          python3 -m unittest discover -s e2e-tests -p 'test_*.py'
+          python3 -m unittest discover -s e2e-tests/resources -p 'test_*.py'
