@@ -84,6 +84,9 @@ updates:
   - package-ecosystem: "uv"
     directory: "/e2e-tests"
     labels: ["dependencies", "e2e-tests"]
+    # YARF's runtime pins are maintained upstream and checked in CI.
+    allow:
+      - dependency-type: "direct"
     schedule:
       interval: "weekly"
       day: "thursday"
