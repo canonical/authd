@@ -297,6 +297,65 @@ class CollectTests(unittest.TestCase):
                 missing_output,
             ),
         ]
+        invalid_type = "::error::Each created issue needs one Bug type call after it"
+        create = {"type": "create_issue", "temporary_id": "aw_bug1"}
+        bug_type = {
+            "type": "set_issue_type",
+            "issue_number": "aw_bug1",
+            "issue_type": "Bug",
+        }
+        cases.extend(
+            [
+                (json.dumps({"items": [create, bug_type]}), True, None),
+                (
+                    json.dumps(
+                        {
+                            "items": [
+                                {**create, "temporary_id": "#aw_bug1"},
+                                {**bug_type, "issue_number": "AW_BUG1"},
+                            ]
+                        }
+                    ),
+                    True,
+                    None,
+                ),
+                (json.dumps({"items": [create]}), True, invalid_type),
+                (json.dumps({"items": [bug_type, create]}), True, invalid_type),
+                (
+                    json.dumps({"items": [create, bug_type, bug_type]}),
+                    True,
+                    invalid_type,
+                ),
+                (
+                    json.dumps(
+                        {"items": [{**create, "temporary_id": "aw_bug2"}, bug_type]}
+                    ),
+                    True,
+                    invalid_type,
+                ),
+                (
+                    json.dumps({"items": [{**bug_type, "issue_type": ""}]}),
+                    True,
+                    invalid_type,
+                ),
+                (
+                    json.dumps({"items": [{**bug_type, "issue_type": "Feature"}]}),
+                    True,
+                    invalid_type,
+                ),
+                (
+                    json.dumps(
+                        {
+                            "items": [
+                                {"type": "set_issue_type", "issue_number": "aw_bug1"}
+                            ]
+                        }
+                    ),
+                    True,
+                    invalid_type,
+                ),
+            ]
+        )
         for field in ("status", "state", "title", "labels", "assignees", "milestone"):
             for value in ("closed", None, False, [], ""):
                 for operation in ({}, {"operation": "append"}):
