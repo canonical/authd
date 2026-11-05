@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from collect_ci_failures import COMPLETION_STEP, collect, pages
+from collect_ci_failures import COMPLETION_STEP, collect, issue_index, pages
 
 
 def run(run_id=1, **overrides):
@@ -420,6 +420,41 @@ class CollectTests(unittest.TestCase):
         self.assertEqual(
             api.call_args.args[0], "repos/o/r/actions/runs?per_page=100&page=2"
         )
+
+    @patch("collect_ci_failures.api")
+    def test_issue_index_includes_older_issues_without_test_name_or_ci_label(self, api):
+        issue = {
+            "number": 2063,
+            "title": (
+                "GDM sometimes not showing local password entry "
+                "after device code flow or Entra MFA flow"
+            ),
+            "state": "open",
+            "html_url": "https://github.com/canonical/authd/issues/2063",
+            "labels": [{"name": "e2e-tests"}],
+        }
+        api.side_effect = [
+            [{**issue, "number": number, "pull_request": {}} for number in range(100)],
+            [issue, {**issue, "number": 1424, "state": "closed"}],
+        ]
+        result = issue_index(pages("repos/o/r/issues?state=all"))
+        self.assertEqual([item["number"] for item in result], [2063, 1424])
+        self.assertEqual(result[0]["title"], issue["title"])
+        self.assertEqual(result[0]["labels"], ["e2e-tests"])
+        self.assertEqual(result[1]["state"], "closed")
+        self.assertEqual(
+            [call.args[0] for call in api.call_args_list],
+            [
+                "repos/o/r/issues?state=all&per_page=100&page=1",
+                "repos/o/r/issues?state=all&per_page=100&page=2",
+            ],
+        )
+
+    @patch("collect_ci_failures.api")
+    def test_issue_inventory_api_failure_is_not_an_empty_search(self, api):
+        api.side_effect = subprocess.CalledProcessError(1, ["gh", "api"])
+        with self.assertRaises(subprocess.CalledProcessError):
+            issue_index(pages("repos/o/r/issues?state=all"))
 
 
 if __name__ == "__main__":

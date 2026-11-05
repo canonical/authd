@@ -179,13 +179,26 @@ Do not match solely on workflow names, generic exit codes, or similar titles.
 Keep run attempt and job links so reruns remain distinguishable. Distinguish
 transient infrastructure failures from code regressions, but track both.
 
+For UI or authentication timeouts, inspect the failed test's screenshot or
+recording and guest journal, not just the artifact upload messages.
+If a hosted report is inaccessible, download the Actions artifact instead.
+
 ## Match existing issues before creating anything
 
-Search both open and closed issues and linked PRs using relevant error and
-test-name searches. Paginate results; do not treat a small recent sample as an
-exhaustive duplicate search. Inspect matching bodies and relevant comments.
-Check whether a closed issue's fix was already present in the failing SHA.  Do
-not treat every new occurrence after a fix as proof of the same root cause.
+Read the collector's `issues.json`, a complete inventory of open and closed
+issue titles, states, and labels, for candidates in each affected component.
+Include issues without CI titles or labels.
+
+Search both open and closed issues and linked PRs by error and test name, then
+by component and observable symptom without requiring the same test or prompt.
+Paginate results and read candidate bodies and relevant comments, following
+duplicate and successor references. Do not truncate results or treat a small
+recent sample as exhaustive. A failed search is not an empty search: retry
+with `gh api` or report incomplete investigation without advancing the checkpoint.
+
+Check whether a closed issue's fix was already present in the failing SHA,
+including the affected release's package version for upstream fixes. Do not
+treat every new occurrence after a fix as proof of the same root cause.
 
 For a known issue, use `update_issue` with `operation: append` to edit its
 description, not a comment. Append a concise dated occurrence list with the

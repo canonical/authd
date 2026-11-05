@@ -19,14 +19,30 @@ def api(endpoint):
     return json.loads(subprocess.check_output(["gh", "api", endpoint], text=True))
 
 
-def pages(endpoint, key):
+def pages(endpoint, key=None):
     page = 1
+    separator = "&" if "?" in endpoint else "?"
     while True:
-        items = api(f"{endpoint}?per_page=100&page={page}")[key]
+        response = api(f"{endpoint}{separator}per_page=100&page={page}")
+        items = response[key] if key is not None else response
         yield from items
         if len(items) < 100:
             return
         page += 1
+
+
+def issue_index(issues):
+    return [
+        {
+            "number": issue["number"],
+            "title": issue["title"],
+            "state": issue["state"],
+            "url": issue["html_url"],
+            "labels": [label["name"] for label in issue["labels"]],
+        }
+        for issue in issues
+        if "pull_request" not in issue
+    ]
 
 
 def collect(runs, current, branch, get_attempt, get_jobs):
@@ -152,8 +168,14 @@ def main():
             f"{base}/runs/{run_id}/attempts/{attempt}/jobs", "jobs"
         ),
     )
+    issues = (
+        issue_index(pages(f"repos/{repo}/issues?state=all&sort=created&direction=asc"))
+        if manifest["failures"]
+        else []
+    )
     output = Path("/tmp/gh-aw/ci-triage")
     output.mkdir(parents=True, exist_ok=True)
+    (output / "issues.json").write_text(json.dumps(issues, indent=2) + "\n")
     (output / "failures.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print(
         f"Found {len(manifest['failures'])} failed attempts "
