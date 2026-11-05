@@ -88,12 +88,8 @@ func (p GenericProvider) NormalizeUsername(username string) string {
 	return username
 }
 
-// VerifyUsername checks if the requested username matches the authenticated user.
-func (p GenericProvider) VerifyUsername(requestedUsername, username string) error {
-	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(username) {
-		msg := fmt.Sprintf("Authentication failure: requested username %q does not match the authenticated user %q", requestedUsername, username)
-		return &providerErrors.ForDisplayError{Message: msg}
-	}
+// ValidateUsername applies no extra constraints for generic OIDC providers.
+func (GenericProvider) ValidateUsername(string) error {
 	return nil
 }
 

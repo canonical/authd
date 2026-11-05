@@ -1,3 +1,13 @@
+authd (0.8.0) UNRELEASED; urgency=medium
+
+  * Keep Unix usernames stable when provider usernames change. Resolve the
+    new provider username as a login alias once authd learns it. Name-based
+    system configuration must use the Unix name. `authctl user` commands
+    accept either name. Before changing a provider username, make sure the
+    user has logged in with authd 0.7.0 or later and broker 0.5.0 or later.
+
+ -- Adrian Dombeck <adrian.dombeck@canonical.com>  Thu, 22 Oct 2026 09:50:36 +0200
+
 authd (0.7.1) stonking; urgency=medium
 
   * CVE-2026-102631: Prevent recycled usernames from inheriting existing

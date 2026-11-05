@@ -48,15 +48,15 @@ func TestSetHomeDirCommand(t *testing.T) {
 			expectedExitCode: int(codes.NotFound),
 		},
 		"Error_when_path_is_not_absolute": {
-			args:             []string{"set-home", "user1@example.com", "relative/path"},
+			args:             []string{"set-home", "user1", "relative/path"},
 			expectedExitCode: int(codes.Unknown),
 		},
 		"Error_when_destination_already_exists": {
-			args:             []string{"set-home", "user1@example.com", "/etc"},
+			args:             []string{"set-home", "user1", "/etc"},
 			expectedExitCode: int(codes.Unknown),
 		},
 		"Error_when_authd_is_unavailable": {
-			args:             []string{"set-home", "user1@example.com", newHome},
+			args:             []string{"set-home", "user1", newHome},
 			authdUnavailable: true,
 			expectedExitCode: int(codes.Unavailable),
 		},
@@ -131,7 +131,7 @@ func TestSetHomeDirCommand(t *testing.T) {
 		}
 
 		//nolint:gosec // G204 it's safe to use exec.Command with a variable here
-		cmd := exec.Command(authctlPath, "user", "set-home", "user1@example.com", warnNewHome)
+		cmd := exec.Command(authctlPath, "user", "set-home", "user1", warnNewHome)
 		cmd.Env = warnEnv
 
 		output := &testutils.SyncBuffer{}
@@ -163,7 +163,7 @@ func TestSetHomeDirCommand(t *testing.T) {
 	})
 
 	t.Run("Completion_second_arg_offers_dirs", func(t *testing.T) {
-		cmd := exec.Command(authctlPath, "__complete", "user", "set-home", "user1@example.com", "")
+		cmd := exec.Command(authctlPath, "__complete", "user", "set-home", "user1", "")
 		cmd.Env = authctlEnv
 
 		output := &testutils.SyncBuffer{}
@@ -177,7 +177,7 @@ func TestSetHomeDirCommand(t *testing.T) {
 }
 
 // startAuthdWithUserHome starts a daemon whose database contains a single user
-// (user1@example.com) whose home directory is set to the given path.
+// (user1) whose home directory is set to the given path.
 func startAuthdWithUserHome(t *testing.T, home string) (socketPath string) {
 	t.Helper()
 
@@ -188,13 +188,14 @@ func startAuthdWithUserHome(t *testing.T, home string) (socketPath string) {
 	require.NoError(t, os.MkdirAll(dbDir, 0700), "Setup: could not create database directory")
 
 	dbYAML := fmt.Sprintf(`users:
-    - name: user1@example.com
+    - name: user1
       uid: 1111
       gid: 11111
       gecos: User1
       dir: %s
       shell: /bin/bash
       broker_id: broker-id
+      provider_username: user1@example.com
 groups:
     - name: group1
       gid: 11111

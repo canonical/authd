@@ -285,6 +285,354 @@ func TestUpdateUser(t *testing.T) {
 	}
 }
 
+func TestUpdateUserUsesProviderUsernamePreAuthUID(t *testing.T) {
+	t.Parallel()
+
+	suffix := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
+	unixUsername := "unix-" + suffix
+	providerUsername := "provider-" + suffix
+	m := newManagerForTests(t, t.TempDir())
+	t.Cleanup(func() { _ = m.Stop() })
+
+	preAuthUID, err := m.RegisterUserPreAuth(providerUsername)
+	require.NoError(t, err, "RegisterUserPreAuth should succeed")
+
+	err = m.UpdateUser(types.UserInfo{
+		Name:             unixUsername,
+		ProviderUsername: providerUsername,
+		BrokerID:         "broker-id",
+		ProviderID:       "provider-id",
+		Groups:           []types.GroupInfo{{Name: "remote-" + suffix, UGID: "remote-group-id"}},
+	})
+	require.NoError(t, err, "UpdateUser should persist the account")
+
+	user, err := m.UserByName(unixUsername)
+	require.NoError(t, err, "the Unix user should be persisted")
+	require.Equal(t, preAuthUID, user.UID, "the account should inherit the alias pre-auth UID")
+
+	privateGroup, err := m.GroupByID(user.GID)
+	require.NoError(t, err)
+	require.Equal(t, unixUsername, privateGroup.Name, "the private group must not be overwritten by a remote group")
+	remoteGroup, err := m.GroupByName("remote-" + suffix)
+	require.NoError(t, err)
+	require.NotEqual(t, user.GID, remoteGroup.GID, "the pre-auth GID must remain reserved during group allocation")
+
+	userByAlias, err := m.UserByLoginName(providerUsername)
+	require.NoError(t, err, "the provider username should resolve to the account")
+	require.Equal(t, unixUsername, userByAlias.Name, "the alias should resolve to the Unix user")
+
+	userByID, err := m.UserByID(preAuthUID)
+	require.NoError(t, err, "the pre-auth UID should resolve after persistence")
+	require.Equal(t, unixUsername, userByID.Name,
+		"the persisted user should replace the temporary pre-auth record")
+}
+
+func TestBrokerUnixNameCannotClaimExistingAlias(t *testing.T) {
+	for _, providerID := range []string{"", "other-provider-id"} {
+		for _, resolveFirst := range []bool{false, true} {
+			t.Run(fmt.Sprintf("ProviderID=%s/ResolveFirst=%t", providerID, resolveFirst), func(t *testing.T) {
+				m := newManagerForTests(t, t.TempDir())
+				original := types.UserInfo{
+					Name:             "alice",
+					ProviderUsername: "alice@example.com",
+					BrokerID:         "broker-id",
+					ProviderID:       "alice-provider-id",
+					Dir:              "/home/alice",
+					Shell:            "/bin/bash",
+				}
+				require.NoError(t, m.UpdateUser(original))
+				before, err := userstestutils.DBManager(m).UserByName(original.Name)
+				require.NoError(t, err)
+
+				incoming := types.UserInfo{
+					Name:                               original.ProviderUsername,
+					ProviderUsername:                   "other@example.com",
+					BrokerID:                           original.BrokerID,
+					ProviderID:                         providerID,
+					RequireStableProviderIDForNewUsers: true,
+					Dir:                                "/home/other",
+					Shell:                              "/bin/bash",
+				}
+				if resolveFirst {
+					_, err = m.ResolveAuthenticatedIdentity(incoming.ProviderUsername, incoming.BrokerID,
+						incoming.ProviderID, incoming.ProviderUsername, incoming.Name)
+					require.Error(t, err)
+				} else {
+					_, err = m.UpdateAuthenticatedUser(incoming)
+					require.Error(t, err)
+				}
+				after, err := userstestutils.DBManager(m).UserByName(original.Name)
+				require.NoError(t, err)
+				require.Equal(t, before, after, "a broker-returned Unix name must not claim another user's alias")
+				_, err = userstestutils.DBManager(m).UserByName(incoming.Name)
+				require.ErrorIs(t, err, db.NoDataFoundError{})
+			})
+		}
+	}
+}
+
+func TestResolveAuthenticatedIdentityKeepsNewUnixName(t *testing.T) {
+	t.Parallel()
+
+	m, err := users.NewManager(users.DefaultConfig, t.TempDir())
+	require.NoError(t, err, "Setup: could not create user manager")
+	t.Cleanup(func() { _ = m.Stop() })
+
+	got, err := m.ResolveAuthenticatedIdentity(
+		"provider-user@example.com",
+		"broker-id",
+		"provider-id",
+		"provider-user@example.com",
+		"unix-account")
+	require.NoError(t, err)
+	require.Equal(t, "unix-account", got.Name,
+		"a new account should use the broker's Unix name")
+	require.Equal(t, "provider-user@example.com", got.ProviderUsername,
+		"the provider username should remain a separate login alias")
+}
+
+func TestResolveAuthenticatedIdentityAllowsProviderUsernameCollisionForMatchingSession(t *testing.T) {
+	t.Parallel()
+
+	m := newManagerForTests(t, t.TempDir())
+	t.Cleanup(func() { _ = m.Stop() })
+
+	prefix := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_"))
+	unixUsername := "unix-" + prefix + "@example.com"
+	conflictingUsername := "conflict-" + prefix + "@example.com"
+	conflictingAlias := "alias-" + prefix + "@example.com"
+	providerID := "providerid-" + prefix
+	for _, user := range []types.UserInfo{
+		{
+			Name:             unixUsername,
+			ProviderUsername: "old-" + prefix + "@example.com",
+			BrokerID:         "broker-id",
+			ProviderID:       providerID,
+			Dir:              "/home/" + unixUsername,
+			Shell:            "/bin/bash",
+		},
+		{
+			Name:             conflictingUsername,
+			ProviderUsername: conflictingAlias,
+			BrokerID:         "broker-id",
+			ProviderID:       "providerid-conflicting-" + prefix,
+			Dir:              "/home/" + conflictingUsername,
+			Shell:            "/bin/bash",
+		},
+	} {
+		require.NoError(t, m.UpdateUser(user), "Setup: could not create test account")
+	}
+
+	for _, tc := range []struct {
+		name             string
+		providerUsername string
+	}{
+		{name: "Unix_name_collision", providerUsername: conflictingUsername},
+		{name: "Provider_alias_collision", providerUsername: conflictingAlias},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			identity, err := m.ResolveAuthenticatedIdentity(
+				unixUsername, "broker-id", providerID, tc.providerUsername, tc.providerUsername)
+			require.NoError(t, err, "the stable ID and session should identify the account")
+			require.Equal(t, unixUsername, identity.Name)
+
+			_, err = m.ResolveAuthenticatedIdentity(
+				conflictingUsername, "broker-id", providerID, tc.providerUsername, tc.providerUsername)
+			require.ErrorContains(t, err, "conflicts with the selected account",
+				"a login selecting the account that owns the conflicting name must be denied")
+		})
+	}
+}
+
+func TestResolveAuthenticatedIdentityRejectsTakenNewUnixName(t *testing.T) {
+	t.Parallel()
+
+	dbDir := t.TempDir()
+	err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_and_group.db.yaml"), dbDir)
+	require.NoError(t, err, "Setup: could not create database from testdata")
+
+	m := newManagerForTests(t, dbDir)
+	t.Cleanup(func() { _ = m.Stop() })
+
+	_, err = m.ResolveAuthenticatedIdentity(
+		"other@example.com",
+		"broker-id",
+		"other-provider-id",
+		"other@example.com",
+		"user1@example.com")
+	require.ErrorContains(t, err, `unix name "user1@example.com" is already used`,
+		"a new identity must not claim an existing Unix name")
+
+	stored, err := userstestutils.DBManager(m).UserByName("user1@example.com")
+	require.NoError(t, err, "the existing account should remain readable")
+	require.Empty(t, stored.ProviderID, "a rejected identity must not be bound to the existing account")
+}
+
+func TestResolveAuthenticatedIdentityBindsFirstProviderIDToStoredUsername(t *testing.T) {
+	tests := []struct {
+		name             string
+		dbFixture        string
+		providerID       string
+		providerUsername string
+		wantErr          string
+	}{
+		{
+			name:             "Reject_different_username_before_first_provider_ID",
+			dbFixture:        "one_user_and_group.db.yaml",
+			providerID:       "attacker-provider-id",
+			providerUsername: "attacker@example.com",
+			wantErr:          "conflicts with the stored identity",
+		},
+		{
+			name:             "Accept_first_provider_ID_for_matching_username",
+			dbFixture:        "one_user_and_group.db.yaml",
+			providerID:       "providerid-user1",
+			providerUsername: "user1@example.com",
+		},
+		{
+			name:             "Allow_username_change_for_stable_provider_ID",
+			dbFixture:        "one_user_and_group_with_providerid.db.yaml",
+			providerID:       "providerid-user1",
+			providerUsername: "newuser1@example.com",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dbDir := t.TempDir()
+			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFixture), dbDir)
+			require.NoError(t, err, "Setup: could not create database from testdata")
+
+			m := newManagerForTests(t, dbDir)
+			t.Cleanup(func() { _ = m.Stop() })
+
+			got, err := m.ResolveAuthenticatedIdentity(
+				"user1@example.com",
+				"broker-id",
+				tc.providerID,
+				tc.providerUsername,
+				tc.providerUsername,
+			)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+
+				_, updateErr := m.UpdateAuthenticatedUser(types.UserInfo{
+					Name:             "user1@example.com",
+					BrokerID:         "broker-id",
+					ProviderID:       tc.providerID,
+					ProviderUsername: tc.providerUsername,
+				})
+				require.ErrorContains(t, updateErr, tc.wantErr,
+					"the locked update must enforce the same identity checks as resolution")
+				stored, err := userstestutils.DBManager(m).UserByName("user1@example.com")
+				require.NoError(t, err, "the existing account should remain readable")
+				require.Empty(t, stored.ProviderID, "a rejected login must not bind a provider ID")
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, "user1@example.com", got.Name,
+				"an existing account should keep its Unix name")
+			uid, err := m.UpdateAuthenticatedUser(types.UserInfo{
+				Name:             got.Name,
+				BrokerID:         "broker-id",
+				ProviderID:       tc.providerID,
+				ProviderUsername: tc.providerUsername,
+			})
+			require.NoError(t, err)
+			require.Equal(t, got.UID, uid)
+			stored, err := userstestutils.DBManager(m).UserByName(got.Name)
+			require.NoError(t, err)
+			require.Equal(t, got.UID, stored.UID)
+			require.Equal(t, tc.providerID, stored.ProviderID)
+			require.Equal(t, tc.providerUsername, stored.ProviderUsername)
+		})
+	}
+}
+
+func TestResolveAuthenticatedIdentityWithoutStoredProviderUsername(t *testing.T) {
+	t.Parallel()
+
+	dbDir := t.TempDir()
+	err := db.Z_ForTests_CreateDBFromYAMLReader(strings.NewReader(`
+schema_version: 4
+users:
+  - name: legacy-user
+    uid: 1111
+    gid: 1111
+    broker_id: broker-id
+    provider_username: ""
+groups:
+  - name: legacy-user
+    gid: 1111
+    ugid: legacy-user
+users_to_groups:
+  - uid: 1111
+    gid: 1111
+`), dbDir)
+	require.NoError(t, err)
+	m := newManagerForTests(t, dbDir)
+	t.Cleanup(func() { _ = m.Stop() })
+
+	_, err = m.ResolveAuthenticatedIdentity("legacy-user", "broker-id", "provider-id", "other-user", "other-user")
+	require.ErrorContains(t, err, "conflicts with the stored identity",
+		"an empty provider username must not allow another identity to claim the account")
+
+	identity, err := m.ResolveAuthenticatedIdentity("legacy-user", "broker-id", "provider-id", "legacy-user", "legacy-user")
+	require.NoError(t, err, "users created by an older daemon should authenticate with their Unix name")
+	require.Equal(t, uint32(1111), identity.UID)
+
+	for range 2 {
+		uid, err := m.UpdateAuthenticatedUser(types.UserInfo{
+			Name:             identity.Name,
+			ProviderUsername: "legacy-user",
+			BrokerID:         "broker-id",
+			ProviderID:       "provider-id",
+		})
+		require.NoError(t, err)
+		require.Equal(t, identity.UID, uid, "return the stored UID even when no update is needed")
+	}
+	stored, err := userstestutils.DBManager(m).UserByName("legacy-user")
+	require.NoError(t, err)
+	require.Equal(t, "legacy-user", stored.ProviderUsername)
+	require.Equal(t, "provider-id", stored.ProviderID)
+	require.Equal(t, identity.UID, stored.UID)
+}
+
+func TestUpdateAuthenticatedUserRejectsAccountLockedAfterResolution(t *testing.T) {
+	t.Parallel()
+
+	m := newManagerForTests(t, t.TempDir())
+	t.Cleanup(func() { _ = m.Stop() })
+
+	user := types.UserInfo{
+		Name:             "authenticated-user",
+		ProviderUsername: "authenticated-user",
+		BrokerID:         "broker-id",
+		ProviderID:       "provider-id",
+		Gecos:            "Authenticated user",
+		Dir:              "/home/authenticated-user",
+		Shell:            "/bin/bash",
+	}
+	require.NoError(t, m.UpdateUser(user), "Setup: could not create the user")
+
+	identity, err := m.ResolveAuthenticatedIdentity(
+		user.Name,
+		user.BrokerID,
+		user.ProviderID,
+		user.ProviderUsername,
+		user.Name)
+	require.NoError(t, err, "Setup: could not resolve the user identity")
+	require.False(t, identity.Locked, "the identity should be unlocked when first resolved")
+
+	require.NoError(t, m.LockUser(user.Name), "Setup: could not lock the user")
+	_, err = m.UpdateAuthenticatedUser(user)
+	require.ErrorIs(t, err, users.ErrUserLocked,
+		"authentication must recheck the lock state under the user-management lock")
+}
+
 func TestUpdateUserProviderIDHandling(t *testing.T) {
 	// This test and its subtests are intentionally not parallel: some subtests use SetupGroupMock,
 	// which mutates the process-global localentries options. Running concurrently with other tests
@@ -292,13 +640,15 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 
 	newUser := func(name, providerID string, groups ...types.GroupInfo) types.UserInfo {
 		return types.UserInfo{
-			Name:       name,
-			Gecos:      "gecos for " + name,
-			Dir:        "/home/" + name,
-			Shell:      "/bin/bash",
-			BrokerID:   "broker-id",
-			ProviderID: providerID,
-			Groups:     groups,
+			Name:                               name,
+			ProviderUsername:                   name,
+			Gecos:                              "gecos for " + name,
+			Dir:                                "/home/" + name,
+			Shell:                              "/bin/bash",
+			BrokerID:                           "broker-id",
+			ProviderID:                         providerID,
+			RequireStableProviderIDForNewUsers: true,
+			Groups:                             groups,
 		}
 	}
 
@@ -317,7 +667,40 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		require.Equal(t, "providerid-user1", got.ProviderID, "provider ID should be persisted")
 	})
 
-	t.Run("Resolve_existing_user_by_providerid_and_rename", func(t *testing.T) {
+	t.Run("Reject_mismatched_provider_username_when_binding_legacy_account", func(t *testing.T) {
+		dbDir := t.TempDir()
+		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_and_group.db.yaml"), dbDir)
+		require.NoError(t, err, "Setup: could not create database from testdata")
+
+		m := newManagerForTests(t, dbDir)
+
+		user := newUser("user1@example.com", "unexpected-provider-id")
+		user.ProviderUsername = "other@example.com"
+		err = m.UpdateUser(user)
+		require.ErrorContains(t, err, "conflicts with the stored identity",
+			"a first provider ID must match the legacy provider username")
+
+		stored, err := userstestutils.DBManager(m).UserByName("user1@example.com")
+		require.NoError(t, err, "the legacy account should remain readable")
+		require.Empty(t, stored.ProviderID, "a rejected identity must not be bound to the legacy account")
+	})
+
+	t.Run("Allow_first_login_from_v2_broker_without_provider_id", func(t *testing.T) {
+		m := newManagerForTests(t, t.TempDir())
+		username := "legacy-user@example.com"
+
+		user := newUser(username, "")
+		user.RequireStableProviderIDForNewUsers = false
+		err := m.UpdateUser(user)
+		require.NoError(t, err, "a legacy API v2 broker may not provide a stable provider ID")
+
+		got, err := userstestutils.DBManager(m).UserByName(username)
+		require.NoError(t, err, "the legacy broker user should be persisted")
+		require.Equal(t, "broker-id", got.BrokerID, "the account should remain bound to its broker")
+		require.Empty(t, got.ProviderID, "legacy API v2 users do not have stable provider IDs")
+	})
+
+	t.Run("Preserve_unix_name_when_provider_username_changes", func(t *testing.T) {
 		destGroupFile := localgroupstestutils.SetupGroupMock(t,
 			filepath.Join("testdata", "groups", "single_localgroup_user1.group"))
 
@@ -333,40 +716,37 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		err = m.UpdateUser(newUser("newuser1@example.com", "providerid-user1", types.GroupInfo{Name: "localgroup1", UGID: ""}))
 		require.NoError(t, err, "UpdateUser should not return an error, but did")
 
-		_, err = m.UserByName("user1@example.com")
-		require.Error(t, err, "old username should no longer exist")
+		updated, err := userstestutils.DBManager(m).UserByName("user1@example.com")
+		require.NoError(t, err, "Unix username should remain unchanged")
+		require.Equal(t, oldUser.UID, updated.UID, "UID should be preserved")
+		require.Equal(t, "providerid-user1", updated.ProviderID, "provider ID should be preserved")
+		require.Equal(t, "newuser1@example.com", updated.ProviderUsername, "provider username should be updated")
+		_, err = m.UserByName("newuser1@example.com")
+		require.Error(t, err, "provider username should not become the Unix username")
 
-		renamed, err := userstestutils.DBManager(m).UserByName("newuser1@example.com")
-		require.NoError(t, err, "new username should exist")
-		require.Equal(t, oldUser.UID, renamed.UID, "UID should be preserved when renaming by provider ID")
-		require.Equal(t, "providerid-user1", renamed.ProviderID, "provider ID should be preserved when renaming by provider ID")
-
-		groupContent, err := os.ReadFile(destGroupFile)
-		require.NoError(t, err, "could not read mocked group file")
-		require.Equal(t, "localgroup1:x:41:newuser1@example.com\n", string(groupContent),
-			"local group membership should be rewritten to the renamed user")
+		_, _, localGroups, err := userstestutils.DBManager(m).UserWithGroups("user1@example.com")
+		require.NoError(t, err, "could not read the user's local groups")
+		require.Equal(t, []string{"localgroup1"}, localGroups,
+			"local group membership should remain tied to the Unix username")
+		require.NoFileExists(t, destGroupFile,
+			"an unchanged local membership should not trigger a group-file rewrite")
 	})
 
 	t.Run("Rename_onto_an_existing_different_username_fails_gracefully", func(t *testing.T) {
-		// An IdP-side email change can land on a username that already belongs to a *different* user.
-		// The provider-ID match authorises the rename and bypasses the "UID already in use" guard, so
-		// without an explicit collision check the UPDATE hits the raw UNIQUE(name) constraint and
-		// surfaces an opaque SQLite error. The rename must instead fail with a clear message and leave
-		// both existing users intact.
+		// An IdP-side email change can land on a login name that already belongs to a different
+		// account. The provider ID must not cause that alias to be attached to another user.
 		dbDir := t.TempDir()
 		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "two_users_with_providerid_and_local_group.db.yaml"), dbDir)
 		require.NoError(t, err, "Setup: could not create database from testdata")
 
 		m := newManagerForTests(t, dbDir)
 
-		// user1 (matched by providerid-user1) "renames" to newuser1@example.com, which is a different
-		// existing user (uid 2222, providerid-newuser1).
+		// user1 (matched by providerid-user1) changes its provider username to one owned by
+		// newuser1 (uid 2222, providerid-newuser1).
 		err = m.UpdateUser(newUser("newuser1@example.com", "providerid-user1"))
-		require.Error(t, err, "renaming onto an existing different username must fail")
-		require.Contains(t, err.Error(), "already in use by a different user",
-			"the failure must be a clear message")
-		require.NotContains(t, err.Error(), "UNIQUE constraint failed",
-			"the raw SQLite constraint error must not leak to the caller")
+		require.Error(t, err, "colliding with another account's login name must fail")
+		require.Contains(t, err.Error(), `authenticated provider username "newuser1@example.com" conflicts with the selected account`,
+			"the failure must identify the conflicting login name")
 
 		// Both original users must survive intact (no partial corruption from the failed rename).
 		user1, err := userstestutils.DBManager(m).UserByName("user1@example.com")
@@ -377,6 +757,34 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		newuser1, err := userstestutils.DBManager(m).UserByName("newuser1@example.com")
 		require.NoError(t, err, "the colliding newuser1 must still exist")
 		require.Equal(t, uint32(2222), newuser1.UID, "newuser1 keeps its UID")
+	})
+
+	t.Run("Keep_stored_provider_username_when_new_alias_is_used_by_another_user", func(t *testing.T) {
+		m := newManagerForTests(t, t.TempDir())
+
+		nameOwner := newUser("name-owner", "providerid-name-owner")
+		nameOwner.ProviderUsername = "name-owner-alias"
+		require.NoError(t, m.UpdateUser(nameOwner))
+
+		providerUsernameOwner := newUser("provider-username-owner", "providerid-provider-username-owner")
+		providerUsernameOwner.ProviderUsername = "provider-username-alias"
+		require.NoError(t, m.UpdateUser(providerUsernameOwner))
+
+		incoming := newUser("name-owner", "providerid-name-owner")
+		incoming.ProviderUsername = "provider-username-alias"
+		_, err := m.UpdateAuthenticatedUser(incoming)
+		require.NoError(t, err,
+			"a stable identity should not be blocked by a colliding new alias")
+
+		storedNameOwner, err := userstestutils.DBManager(m).UserByName("name-owner")
+		require.NoError(t, err)
+		require.Equal(t, "name-owner-alias", storedNameOwner.ProviderUsername,
+			"keep the existing login alias when the new one belongs to another user")
+
+		storedAliasOwner, err := userstestutils.DBManager(m).UserByName("provider-username-owner")
+		require.NoError(t, err)
+		require.Equal(t, "provider-username-alias", storedAliasOwner.ProviderUsername,
+			"the conflicting account must retain its username")
 	})
 
 	t.Run("Preserve_locked_state_across_providerid_rename", func(t *testing.T) {
@@ -391,19 +799,39 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		require.NoError(t, err, "Setup: LockUser should not return an error")
 
 		// The user's email changes at the IdP and they log in under the new name. The provider ID still
-		// matches, so authd renames the existing (locked) row instead of creating a new user.
+		// matches, so authd updates the alias on the existing locked row.
 		err = m.UpdateUser(newUser("newuser1@example.com", "providerid-user1"))
 		require.NoError(t, err, "UpdateUser should not return an error, but did")
 
 		// The lock must survive the rename: a disabled account must not be silently re-enabled by an
 		// IdP-side username change.
-		renamed, err := userstestutils.DBManager(m).UserByName("newuser1@example.com")
-		require.NoError(t, err, "new username should exist")
-		require.True(t, renamed.Locked, "locked state must be preserved across a provider-ID rename")
+		updated, err := userstestutils.DBManager(m).UserByName("user1@example.com")
+		require.NoError(t, err, "Unix username should remain")
+		require.Equal(t, "newuser1@example.com", updated.ProviderUsername)
+		require.True(t, updated.Locked, "locked state must be preserved across a provider username change")
 
 		stillLocked, err := m.IsUserLocked("newuser1@example.com")
 		require.NoError(t, err, "IsUserLocked should not return an error")
-		require.True(t, stillLocked, "renamed user must remain locked")
+		require.True(t, stillLocked, "the provider username must resolve to the locked account")
+	})
+
+	t.Run("Reject_provider_username_used_by_a_system_account", func(t *testing.T) {
+		dbDir := t.TempDir()
+		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_and_group_with_providerid.db.yaml"), dbDir)
+		require.NoError(t, err, "Setup: could not create database from testdata")
+
+		m := newManagerForTests(t, dbDir)
+
+		u := newUser("user1@example.com", "providerid-user1")
+		u.ProviderUsername = "root"
+		err = m.UpdateUser(u)
+		require.ErrorContains(t, err, "already used by a system user",
+			"a provider alias must not shadow a local system account")
+
+		stored, err := userstestutils.DBManager(m).UserByName("user1@example.com")
+		require.NoError(t, err)
+		require.Equal(t, "user1@example.com", stored.ProviderUsername,
+			"a rejected alias must not change the stored identity")
 	})
 
 	t.Run("Keep_old_username_in_local_groups_when_rename_fails", func(t *testing.T) {
@@ -416,10 +844,8 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 
 		m := newManagerForTests(t, dbDir)
 
-		// Renaming user1@example.com (matched by providerid-user1) to newuser1@example.com must fail,
-		// because newuser1@example.com already exists as a different user. The DB update fails and
-		// is rolled back, so the post-update cleanup must not strip the still-existing old user from
-		// its local groups.
+		// Changing the provider username to newuser1@example.com must fail because that login name
+		// already belongs to a different account. The existing local group membership must remain.
 		err = m.UpdateUser(newUser("newuser1@example.com", "providerid-user1", types.GroupInfo{Name: "localgroup1", UGID: ""}))
 		require.Error(t, err, "UpdateUser should return an error when the rename collides with an existing user")
 
@@ -503,7 +929,7 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		require.False(t, oldUser.Locked)
 
 		err = m.UpdateUser(newUser(oldUser.Name, "replacement-account"))
-		require.ErrorContains(t, err, "already bound to a different provider ID")
+		require.ErrorContains(t, err, "conflicts with the stored identity")
 
 		gotUser, gotGroups, gotLocalGroups, err := dbManager.UserWithGroups(oldUser.Name)
 		require.NoError(t, err)
@@ -532,11 +958,8 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 	})
 
 	t.Run("Rename_user_whose_private_group_has_ugid_equal_to_name", func(t *testing.T) {
-		// When authd creates a user it prepends a private group {Name: username, UGID: username}.
-		// On an IdP-side email rename the new private group arrives with {Name: newname, UGID: newname},
-		// but the existing DB row has {UGID: oldname} under the same GID.  Without the fix in
-		// handleGroupsUpdate this triggers a spurious "GID already in use" error because the UGID
-		// change looks like a hijack.
+		// The private group is keyed by the Unix name and must not change when the
+		// provider username changes.
 		dbDir := t.TempDir()
 		err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", "one_user_with_private_group_ugid_equals_name.db.yaml"), dbDir)
 		require.NoError(t, err, "Setup: could not create database from testdata")
@@ -544,16 +967,17 @@ func TestUpdateUserProviderIDHandling(t *testing.T) {
 		m := newManagerForTests(t, dbDir)
 
 		err = m.UpdateUser(newUser("newuser1@example.com", "providerid-user1"))
-		require.NoError(t, err, "UpdateUser should succeed when renaming a user whose private group has UGID == Name")
+		require.NoError(t, err, "UpdateUser should preserve the canonical private group")
 
-		_, err = m.UserByName("user1@example.com")
-		require.Error(t, err, "old username should no longer exist after rename")
+		user, err := userstestutils.DBManager(m).UserByName("user1@example.com")
+		require.NoError(t, err, "canonical username should remain after the provider rename")
+		require.Equal(t, "newuser1@example.com", user.ProviderUsername)
 
 		_, err = m.UserByName("newuser1@example.com")
-		require.NoError(t, err, "new username should exist after rename")
+		require.Error(t, err, "provider username must not replace the Unix name")
 	})
 
-	t.Run("Reject_new_user_without_provider_ID", func(t *testing.T) {
+	t.Run("Reject_new_API_v3_user_without_provider_ID", func(t *testing.T) {
 		dbDir := t.TempDir()
 		m := newManagerForTests(t, dbDir)
 
@@ -1003,43 +1427,6 @@ func TestUpdateWhenNoMoreIDsAreAvailable(t *testing.T) {
 					require.Error(t, err, "UpdateUser should have failed for %q", userName)
 				})
 			}
-		})
-	}
-}
-
-func TestBrokerForUser(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		username string
-		dbFile   string
-
-		wantBrokerID string
-		wantErr      bool
-		wantErrType  error
-	}{
-		"Successfully_get_broker_for_user":                     {username: "user1@example.com", dbFile: "multiple_users_and_groups", wantBrokerID: "broker-id"},
-		"Return_no_broker_but_in_db_if_user_has_no_broker_yet": {username: "userwithoutbroker@example.com", dbFile: "multiple_users_and_groups", wantBrokerID: ""},
-
-		"Error_if_user_does_not_exist": {username: "doesnotexist@example.com", dbFile: "multiple_users_and_groups", wantErrType: db.NoDataFoundError{}},
-	}
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			dbDir := t.TempDir()
-			err := db.Z_ForTests_CreateDBFromYAML(filepath.Join("testdata", "db", tc.dbFile+".db.yaml"), dbDir)
-			require.NoError(t, err, "Setup: could not create database from testdata")
-			m := newManagerForTests(t, dbDir)
-
-			brokerID, err := m.BrokerForUser(tc.username)
-
-			requireErrorAssertions(t, err, tc.wantErrType, tc.wantErr)
-			if tc.wantErrType != nil || tc.wantErr {
-				return
-			}
-
-			require.Equal(t, tc.wantBrokerID, brokerID, "BrokerForUser should return the expected brokerID, but did not")
 		})
 	}
 }

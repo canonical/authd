@@ -22,7 +22,8 @@ const (
 	DbusBaseInterface string = "com.ubuntu.authd.Broker"
 
 	// LatestAPIVersion is the latest API version supported by authd.
-	LatestAPIVersion = 3
+	LatestAPIVersion     = 3
+	providerIDAPIVersion = 3
 )
 
 type dbusInterface struct {
@@ -334,6 +335,14 @@ func (b *dbusBroker) resolveInterface() (dbusInterface, error) {
 	}
 	b.iface = iface
 	return iface, nil
+}
+
+func (b *dbusBroker) requiresStableProviderIDForNewUsers() (bool, error) {
+	iface, err := b.resolveInterface()
+	if err != nil {
+		return false, fmt.Errorf("could not determine broker API version: %w", err)
+	}
+	return iface.version >= providerIDAPIVersion, nil
 }
 
 // call is an abstraction over dbus calls to ensure we wrap the returned error to an ErrorToDisplay.
