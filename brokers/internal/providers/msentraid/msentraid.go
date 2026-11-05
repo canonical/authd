@@ -390,7 +390,12 @@ func classifyGraphTokenAcquisitionError(err error) error {
 	}
 	if errors.Is(err, himmelblau.ErrInvalidRedirectURI) {
 		msg := "Token acquisition failed: The app is misconfigured in Microsoft Entra (the redirect URI is missing or invalid). Please contact your administrator."
-		return &providerErrors.ForDisplayError{Message: msg, Err: fmt.Errorf("%w: %w", providerErrors.ErrInvalidRedirectURI, err)}
+		return &providerErrors.ForDisplayError{
+			Message: msg,
+			Err: &providerErrors.AuthoritativeError{
+				Err: fmt.Errorf("%w: %w", providerErrors.ErrInvalidRedirectURI, err),
+			},
+		}
 	}
 	wrapped := fmt.Errorf("failed to acquire access token for Microsoft Graph API: %w", err)
 	if errors.Is(err, himmelblau.ErrDeviceAuthenticationFailed) {
@@ -617,6 +622,8 @@ func (p *Provider) fetchUserGroups(token *jwt.Token, msgraphHost string) ([]info
 	// Check if the token has the GroupMember.Read.All scope
 	if !slices.Contains(scopes, "GroupMember.Read.All") {
 		msg := "Error: the Microsoft Entra ID app is missing the GroupMember.Read.All permission"
+		// Returning logins may use cached groups when group lookup fails, so this
+		// message is displayable but is not an authoritative authentication result.
 		return nil, &providerErrors.ForDisplayError{Message: msg}
 	}
 
@@ -919,7 +926,10 @@ func (p *Provider) RefreshEntraToken(ctx context.Context, issuerURL, refreshToke
 func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername string) error {
 	if p.NormalizeUsername(requestedUsername) != p.NormalizeUsername(authenticatedUsername) {
 		msg := fmt.Sprintf("Authentication failure: requested username %q does not match the authenticated username %q", requestedUsername, authenticatedUsername)
-		return &providerErrors.ForDisplayError{Message: msg}
+		return &providerErrors.ForDisplayError{
+			Message: msg,
+			Err:     &providerErrors.AuthoritativeError{},
+		}
 	}
 
 	// Check that the usernames only contain the characters allowed by the Microsoft Entra username policy
@@ -929,11 +939,17 @@ func (p *Provider) VerifyUsername(requestedUsername, authenticatedUsername strin
 		// If this error occurs, we should investigate and probably relax the username policy, so we ask the user
 		// explicitly to report this error.
 		msg := fmt.Sprintf("Authentication failure: the authenticated username %q contains invalid characters. Please report this error on https://github.com/canonical/authd/issues", authenticatedUsername)
-		return &providerErrors.ForDisplayError{Message: msg}
+		return &providerErrors.ForDisplayError{
+			Message: msg,
+			Err:     &providerErrors.AuthoritativeError{},
+		}
 	}
 	if !usernameRegexp.MatchString(requestedUsername) {
 		msg := fmt.Sprintf("Authentication failure: requested username %q contains invalid characters", requestedUsername)
-		return &providerErrors.ForDisplayError{Message: msg}
+		return &providerErrors.ForDisplayError{
+			Message: msg,
+			Err:     &providerErrors.AuthoritativeError{},
+		}
 	}
 
 	return nil
@@ -1030,24 +1046,29 @@ func (c azureTokenCredential) GetToken(_ context.Context, _ policy.TokenRequestO
 	}, nil
 }
 
-// IsTokenExpiredError returns true if the reason for the error is that the refresh token is expired.
-func (p *Provider) IsTokenExpiredError(err *oauth2.RetrieveError) bool {
-	if err.ErrorCode != "invalid_grant" {
-		return false
+// ClassifyRefreshTokenError classifies known errors from the token endpoint.
+func (p *Provider) ClassifyRefreshTokenError(err *oauth2.RetrieveError) providerErrors.RefreshTokenErrorKind {
+	if err == nil || err.ErrorCode != "invalid_grant" {
+		return providerErrors.RefreshTokenErrorUnknown
 	}
 
-	expiredPrefixes := []string{
+	switch {
+	case strings.HasPrefix(err.ErrorDescription, "AADSTS50173:"):
+		return providerErrors.RefreshTokenErrorRevoked
+	case strings.HasPrefix(err.ErrorDescription, "AADSTS50089:"):
+		return providerErrors.RefreshTokenErrorExpiredOrRevoked
+	case slices.ContainsFunc([]string{
 		"AADSTS50078:",  // MFA session expired due to sign-in frequency (Conditional Access)
-		"AADSTS50089:",  // refresh token expired or revoked by user or admin
-		"AADSTS50173:",  // grant revoked (password change/reset)
 		"AADSTS70008:",  // refresh token expired due to inactivity (legacy code for AADSTS700082)
 		"AADSTS70043:",  // refresh token expired due to sign-in frequency (Conditional Access)
 		"AADSTS700082:", // refresh token expired due to inactivity
-	}
-
-	return slices.ContainsFunc(expiredPrefixes, func(prefix string) bool {
+	}, func(prefix string) bool {
 		return strings.HasPrefix(err.ErrorDescription, prefix)
-	})
+	}):
+		return providerErrors.RefreshTokenErrorExpired
+	default:
+		return providerErrors.RefreshTokenErrorUnknown
+	}
 }
 
 // IsUserDisabledError returns true if the reason for the error is that the user is disabled.

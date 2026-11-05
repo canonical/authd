@@ -90,12 +90,35 @@ See [Authentication flows](/reference/authentication-flows/) for details.
 
 If the identity provider is reachable during login, authd verifies that the user
 is still allowed to authenticate with the identity provider. If the user's
-account has been disabled or removed, login is denied.
+account has been disabled or removed, login is denied. If the check fails for a
+non-authoritative reason, such as a network error, token verification error, or
+a broker client configuration problem, authd continues with the local password
+by default. If the provider says a refresh token may be expired or revoked but
+cannot distinguish the two, authd requires re-authentication rather than using
+the local password. A confirmed revocation also invalidates cached credentials.
+Only a known authoritative identity error, one that confirms the user or device
+is no longer allowed to authenticate, denies login unconditionally. When forced
+provider authentication is enabled, other non-authoritative failures also deny
+login.
 
-By default, if the identity provider cannot be reached (for example, due to
-network issues), users can still log in with their local password. This is to
-prevent accidental lockouts, but it also allows users whose access has been
-revoked at the identity provider to log in while the provider is unreachable.
+By default, this prevents accidental lockouts, but it also allows users whose
+access has been revoked at the identity provider to log in while the provider
+cannot confirm that revocation.
+
+The refresh result determines the authentication response as follows:
+
+| Refresh result | Provider check optional (`false`) | Provider check forced (`true`) |
+| --- | --- | --- |
+| User or device is disabled | Deny login and save the disabled state | Deny login and save the disabled state |
+| Refresh grant is confirmed revoked or the remote password changed | Invalidate cached credentials and require re-authentication | Invalidate cached credentials and require re-authentication |
+| Refresh token is known to be expired | Use the cached password and mark the session offline | Require re-authentication |
+| Refresh token may be expired or revoked, but the provider cannot distinguish the two | Keep cached credentials and require re-authentication | Keep cached credentials and require re-authentication |
+| Network or temporary provider error | Use the cached password and mark the session offline | Deny login |
+| Broker client configuration error (e.g. a rejected or rotated client secret) | Use the cached password and mark the session offline | Deny login |
+| Unreadable token or user-info response | Use the cached password and mark the session offline | Deny login |
+| Unknown or unclassified refresh error | Use the cached password and mark the session offline | Deny login |
+| Known identity error showing the user or device is not allowed | Deny login | Deny login |
+| No cached refresh token | If the session is already offline, skip refresh and use the cached password; otherwise require re-authentication | Require re-authentication |
 
 To enforce verification with the identity provider even when it is unreachable,
 enable the [force_access_check_with_provider](ref::config-force-provider-auth)

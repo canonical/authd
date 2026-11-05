@@ -22,6 +22,7 @@ ${SUITE_OUTPUT_DIR}             ${OUTPUT_DIR}/${SUITE_NAME.rsplit('.')[-1]}
 ${YARF_IMAGE_DIR}               ${SUITE_OUTPUT_DIR}/screenshots
 ${OCR_CONFIDENCE_THRESHOLD}     92
 ${OCR_SIMILARITY_THRESHOLD}     92
+${guest_clock_changed}          ${False}
 
 
 *** Keywords ***
@@ -86,11 +87,20 @@ Check Session Is Locked
 
 Unlock Screen With Password
     [Arguments]    ${password}
+    Start Unlock Screen With Password
+    Continue Unlock Screen With Password    ${password}
+
+
+Start Unlock Screen With Password
     # Locking the session can leave the display asleep until it receives input.
     Hid.Keys Combo    Return
     # Use a lower confidence threshold because the blinking text cursor can
     # merge with the prompt and lower OCR confidence
     Match Text    Enter your password    confidence=88
+
+
+Continue Unlock Screen With Password
+    [Arguments]    ${password}
     Hid.Type String    ${password}
     Hid.Keys Combo    Return
     Wait Until Desktop Ready
@@ -432,6 +442,27 @@ Sync System Time
 Wait Until System Time Synced
     Wait Until Keyword Succeeds    1 min    1 sec
     ...    Sync System Time
+
+Set Guest Clock In Future
+    [Documentation]    Stops guest time synchronization and moves the guest clock one day ahead.
+    Set Test Variable    ${guest_clock_changed}    ${True}
+    ${change_guest_clock_command}=    Catenate    SEPARATOR=&&
+    ...    timedatectl set-ntp false
+    ...    (systemctl stop systemd-timesyncd.service 2>/dev/null || true)
+    ...    timedatectl set-time "$(date -d '+1 day' '+%Y-%m-%d %H:%M:%S')"
+    ...    date --iso-8601=seconds
+    ${clock}=    SSH.Execute    ${change_guest_clock_command}
+    Log    Guest clock is ${clock}
+
+
+Restore Guest Clock
+    [Documentation]    Re-enables guest time synchronization and waits for it to catch up.
+    ${restore_guest_clock_command}=    Catenate    SEPARATOR=&&
+    ...    (systemctl reset-failed systemd-timesyncd.service 2>/dev/null || true)
+    ...    timedatectl set-ntp true
+    SSH.Execute    ${restore_guest_clock_command}
+    Wait Until System Time Synced
+
 
 Try machinectl login Prompt
     VAR    ${tries}=    3
