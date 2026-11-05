@@ -66,26 +66,9 @@ Test SSH provider username keeps the Unix identity
     ...    releases accept the provider alias. Successful sessions must use the
     ...    stored Unix name, UID and home, and create files owned by that UID.
     ...    The fixture Unix name matches the VM's email-style SSH user rule.
+    ...    ``allowed_users = ALL`` isolates these checks from owner-name policy.
 
-    ${versions}=    SSH.Execute    dpkg-query -W authd openssh-server
-    Log    ${versions}
-    # Register through SSH so localhost's host key is trusted for the later login.
-    Log In
-    Open Terminal
-    Log In With Remote User Through SSH: QR Code    ${username}    ${local_password}
-    Check If User Was Added Properly    ${username}
-    Log Out From SSH Session
-    Close Focused Window
-
-    # Keep the original UID and home as expectations after the stored name changes.
-    ${uid}=    SSH.Execute    id -u ${username}
-    Set Test Variable    ${uid}
-    ${home}=    SSH.Execute    getent passwd ${username} | cut -d: -f6
-    Should Not Be Empty    ${home}
-    # End all user processes before changing the stored Unix name offline.
-    SSH.Execute    loginctl terminate-user ${username}
-    Wait Until Keyword Succeeds    30s    1s    SSH.Execute    test -z "$(pgrep -u ${uid})"
-    Give Account A Distinct Unix Username
+    Prepare SSH User With A Distinct Unix Username
 
     # Check that both names and the UID resolve to the same NSS record.
     ${provider_entry}=    SSH.Execute    getent passwd ${username}
@@ -116,11 +99,64 @@ Test SSH provider username keeps the Unix identity
     Wait Until Keyword Succeeds    30s    1s    Check SSH Session Identity    ${expected}
     Log Out From SSH Session
 
+Test SSH stale connections cannot change the Unix identity
+    [Documentation]    Overlapping SSH connections must not use a temporary UID
+    ...    after authentication selects an existing Unix account.
+    ...
+    ...    Register a real IdP account and give it a distinct Unix name. Clear
+    ...    only its stored alias to model a provider rename that authd has not
+    ...    learned yet. Two real SSH clients reach their password prompts before
+    ...    either authenticates, so both retain the same temporary NSS identity.
+    ...    Completing the first login must not let the second use that stale UID,
+    ...    including a retry on the second connection.
+    ...
+    ...    Repeat with an authd restart while a stale connection is waiting and
+    ...    a correctly authenticated Unix-name session remains open. Check the
+    ...    live session's UID, GID, home, groups and file owner after the restart.
+    ...    Fresh Unix-name logins must still work. Fresh known-alias logins follow
+    ...    the release policy: denied on 24.04 and allowed on newer releases.
+    ...
+    ...    The helper uses sockets to hold password prompts, not fixed sleeps.
+    ...    All identities come from the real NSS module, PAM and OpenSSH server.
+    ...    ``allowed_users = ALL`` isolates these checks from owner-name policy.
+    ...    First-time Unix accounts need separate restart/UID-lifetime coverage.
+
+    Prepare SSH User With A Distinct Unix Username
+    ${driver_dir}=    SSH.Execute    mktemp -d
+    TRY
+        SSH.Copy To VM    ${CURDIR}/../resources/ssh_pre_auth.py    ${driver_dir}/ssh_pre_auth.py
+        ${result}=    SSH.Execute
+        ...    python3 ${driver_dir}/ssh_pre_auth.py '${username}' '${unix_username}' '${local_password}'
+        ...    timeout=300
+        Log    ${result}
+    FINALLY
+        SSH.Execute    rm -f ${driver_dir}/ssh_pre_auth.py && rmdir ${driver_dir}
+    END
+
 
 *** Keywords ***
 Test Setup
     utils.Test Setup    snapshot=%{BROKER}-installed
     Change Broker Configuration    ssh_allowed_suffixes_first_auth    %{E2E_USER}
+
+Prepare SSH User With A Distinct Unix Username
+    ${versions}=    SSH.Execute    dpkg-query -W authd openssh-server
+    Log    ${versions}
+    Log In
+    Open Terminal
+    Log In With Remote User Through SSH: QR Code    ${username}    ${local_password}
+    Check If User Was Added Properly    ${username}
+    Log Out From SSH Session
+    Close Focused Window
+    ${uid}=    SSH.Execute    id -u ${username}
+    Set Test Variable    ${uid}
+    ${home}=    SSH.Execute    getent passwd ${username} | cut -d: -f6
+    Should Not Be Empty    ${home}
+    Set Test Variable    ${home}
+    SSH.Execute    loginctl terminate-user ${username} || test -z "$(pgrep -u ${uid})"
+    Wait Until Keyword Succeeds    30s    1s    SSH.Execute    test -z "$(pgrep -u ${uid})"
+    Change Broker Configuration    allowed_users    ALL
+    Give Account A Distinct Unix Username
 
 Give Account A Distinct Unix Username
     [Documentation]    Model an account whose provider name changed without
