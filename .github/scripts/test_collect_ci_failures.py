@@ -41,6 +41,10 @@ CURRENT = run(
 class CollectTests(unittest.TestCase):
     def collect(self, runs, attempts=None, jobs=None, checkpoints=(), current=CURRENT):
         starts = {run["id"]: run["run_started_at"] for run in runs}
+        attempts = {
+            **{(run["id"], run["run_attempt"]): run for run in runs},
+            **(attempts or {}),
+        }
         return collect(
             runs,
             current,
@@ -376,6 +380,36 @@ class CollectTests(unittest.TestCase):
         failed_attempt = run(2, updated_at="2026-10-20T15:00:00Z")
         result = self.collect([rerun], {(2, 1): failed_attempt})
         self.assertEqual([item["key"] for item in result["failures"]], ["2:1"])
+
+    def test_metadata_update_does_not_make_an_old_failure_recent(self):
+        old_attempt = run(
+            2,
+            created_at="2025-10-20T02:02:32Z",
+            run_started_at="2025-10-20T02:02:32Z",
+            updated_at="2025-10-20T02:03:54Z",
+        )
+        metadata_update = {
+            **old_attempt,
+            "updated_at": "2026-10-21T02:00:00Z",
+        }
+        result = self.collect([metadata_update], {(2, 1): old_attempt})
+        self.assertEqual(result["failures"], [])
+
+    def test_recent_failed_rerun_of_an_old_run_is_included(self):
+        old_attempt = run(
+            2,
+            created_at="2025-10-20T02:02:32Z",
+            run_started_at="2025-10-20T02:02:32Z",
+            updated_at="2025-10-20T02:03:54Z",
+        )
+        rerun = {
+            **old_attempt,
+            "run_attempt": 2,
+            "run_started_at": "2026-10-21T01:00:00Z",
+            "updated_at": "2026-10-21T02:00:00Z",
+        }
+        result = self.collect([rerun], {(2, 1): old_attempt})
+        self.assertEqual([item["key"] for item in result["failures"]], ["2:2"])
 
     def test_completion_window_and_default_branch_scope(self):
         runs = [

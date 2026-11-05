@@ -82,9 +82,9 @@ def collect(runs, current, branch, get_attempt, get_jobs):
         ):
             continue
         for number in range(1, run["run_attempt"] + 1):
-            attempt = (
-                run if number == run["run_attempt"] else get_attempt(run["id"], number)
-            )
+            # Run metadata can change long after completion, without a rerun.
+            # Even the latest attempt needs its own timestamps.
+            attempt = get_attempt(run["id"], number)
             if attempt["status"] != "completed" or not (
                 since <= timestamp(attempt["updated_at"]) < until
             ):
