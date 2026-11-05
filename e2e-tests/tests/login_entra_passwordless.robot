@@ -1,19 +1,19 @@
 *** Settings ***
-Resource            resources/utils.resource
-Resource            resources/authd.resource
-Resource            resources/broker.resource
+Resource         resources/utils.resource
+Resource         resources/authd.resource
+Resource         resources/broker.resource
 
-Test Setup          Test Setup
-Test Teardown       Test Teardown
+Test Setup       Test Setup
+Test Teardown    Test Teardown
 
-Test Tags           requires:msentraid
+Test Tags        requires:msentraid
 
 
 *** Variables ***
-${username}             ${EMPTY}
+${username}          ${EMPTY}
 # local_password is the password the user sets at the newpassword step.
 # It becomes the credential for subsequent offline/local-password logins.
-${local_password}       qwer1234
+${local_password}    qwer1234
 
 
 *** Test Cases ***

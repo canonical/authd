@@ -1,17 +1,17 @@
 *** Settings ***
-Resource            resources/utils.resource
-Resource            resources/authd.resource
-Resource            resources/broker.resource
+Resource         resources/utils.resource
+Resource         resources/authd.resource
+Resource         resources/broker.resource
 
-Test Setup          utils.Test Setup    snapshot=${snapshot}
-Test Teardown       utils.Test Teardown
+Test Setup       utils.Test Setup    snapshot=${snapshot}
+Test Teardown    utils.Test Teardown
 
 
 *** Variables ***
-${snapshot}             %{BROKER}-installed
-${username}             %{E2E_USER}
-${local_password}       qwer1234
-${sudo_output_file}     /tmp/authd-pam-tty-background-sudo.out
+${snapshot}            %{BROKER}-installed
+${username}            %{E2E_USER}
+${local_password}      qwer1234
+${sudo_output_file}    /tmp/authd-pam-tty-background-sudo.out
 
 
 *** Test Cases ***

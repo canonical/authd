@@ -16,5 +16,5 @@ yarf = { path = ".yarf" }
 [dependency-groups]
 robocop = [
     "click>=8.0.0",
-    "robotframework-robocop==8.2.4",
+    "robotframework-robocop==9.1.2",
 ]
