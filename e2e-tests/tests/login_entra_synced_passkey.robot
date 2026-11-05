@@ -1,17 +1,17 @@
 *** Settings ***
-Resource            resources/utils.resource
-Resource            resources/authd.resource
-Resource            resources/broker.resource
+Resource         resources/utils.resource
+Resource         resources/authd.resource
+Resource         resources/broker.resource
 
-Test Setup          Test Setup
-Test Teardown       utils.Test Teardown
+Test Setup       Test Setup
+Test Teardown    utils.Test Teardown
 
-Test Tags           requires:msentraid
+Test Tags        requires:msentraid
 
 
 *** Variables ***
-${username}             ${EMPTY}
-${local_password}       qwer1234
+${username}          ${EMPTY}
+${local_password}    qwer1234
 
 
 *** Test Cases ***

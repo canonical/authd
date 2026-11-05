@@ -1,20 +1,20 @@
 *** Settings ***
-Resource            resources/utils.resource
-Resource            resources/authd.resource
-Resource            resources/broker.resource
+Resource         resources/utils.resource
+Resource         resources/authd.resource
+Resource         resources/broker.resource
 
-Test Setup          Test Setup
-Test Teardown       utils.Test Teardown
+Test Setup       Test Setup
+Test Teardown    utils.Test Teardown
 
 # Test Tags    robot:exit-on-failure
-Test Tags           requires:msentraid
+Test Tags        requires:msentraid
 
 
 *** Variables ***
-${username}             %{E2E_USER}
+${username}          %{E2E_USER}
 # Check If User Was Added Properly uses this cached local password when it
 # verifies that sudo prompts for, and accepts, the post-login local password.
-${local_password}       %{E2E_PASSWORD}
+${local_password}    %{E2E_PASSWORD}
 
 
 *** Test Cases ***

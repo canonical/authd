@@ -1,27 +1,27 @@
 *** Settings ***
-Documentation       authd test resources
+Documentation    authd test resources
 
-Resource            kvm.resource
-Library             ./Journal.py    AS    Journal
-Library             ./StringUtils.py    AS    StringUtils
-Library             ./VideoLogger.py    AS    VideoLogger
-Library             ./VNCRecorder.py    AS    VNCRecorder
-Library             ./Snapshot.py    AS    Snapshot
-Library             ./SSH.py    AS    SSH
-Library             Collections
-Library             Process
-Library             OperatingSystem
-Library             String
+Resource         kvm.resource
+Library          ./Journal.py    AS    Journal
+Library          ./StringUtils.py    AS    StringUtils
+Library          ./VideoLogger.py    AS    VideoLogger
+Library          ./VNCRecorder.py    AS    VNCRecorder
+Library          ./Snapshot.py    AS    Snapshot
+Library          ./SSH.py    AS    SSH
+Library          Collections
+Library          Process
+Library          OperatingSystem
+Library          String
 
 
 *** Variables ***
-${SUITE_OUTPUT_DIR}             ${OUTPUT_DIR}/${SUITE_NAME.rsplit('.')[-1]}
+${SUITE_OUTPUT_DIR}            ${OUTPUT_DIR}/${SUITE_NAME.rsplit('.')[-1]}
 # Save yarf debug screenshots as files in the suite output directory so that
 # they are referenced by relative URLs in log.html instead of being embedded
 # as base64. Set to an empty string to fall back to inline base64 embedding.
-${YARF_IMAGE_DIR}               ${SUITE_OUTPUT_DIR}/screenshots
-${OCR_CONFIDENCE_THRESHOLD}     92
-${OCR_SIMILARITY_THRESHOLD}     92
+${YARF_IMAGE_DIR}              ${SUITE_OUTPUT_DIR}/screenshots
+${OCR_CONFIDENCE_THRESHOLD}    92
+${OCR_SIMILARITY_THRESHOLD}    92
 
 
 *** Keywords ***

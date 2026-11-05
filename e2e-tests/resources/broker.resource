@@ -1,20 +1,20 @@
 *** Settings ***
-Documentation       Broker resource for the e2e tests.
+Documentation    Broker resource for the e2e tests.
 ...
-...                 This is the single broker resource file. It defines all
-...                 broker-specific variables (loaded from broker_vars.py based
-...                 on the BROKER environment variable) and all broker keywords.
+...              This is the single broker resource file. It defines all
+...              broker-specific variables (loaded from broker_vars.py based
+...              on the BROKER environment variable) and all broker keywords.
 
-Resource            kvm.resource
-Resource            resources/utils.resource
-Resource            resources/authd.resource
-Library             ./Browser.py    AS    Browser
-Library             ./TOTP.py    AS    TOTP
-Library             ./EntraTAP.py    AS    EntraTAP
-Library             Hid.py    AS    Hid
-Library             OperatingSystem
-Library             String
-Variables           ./broker_vars.py
+Resource         kvm.resource
+Resource         resources/utils.resource
+Resource         resources/authd.resource
+Library          ./Browser.py    AS    Browser
+Library          ./TOTP.py    AS    TOTP
+Library          ./EntraTAP.py    AS    EntraTAP
+Library          Hid.py    AS    Hid
+Library          OperatingSystem
+Library          String
+Variables        ./broker_vars.py
 
 
 *** Keywords ***
