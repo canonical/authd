@@ -261,12 +261,6 @@ jobs:
             ${{ inputs.authd-apt-source-base && format('--authd-apt-source-base {0}', inputs.authd-apt-source-base) || '' }} \
             --broker-snap "${{ steps.download-broker-snap-from-store.outputs.snap || steps.download-broker-snap-from-oci.outputs.snap }}"
 
-      - name: Checkout YARF repo
-        uses: actions/checkout@v7
-        with:
-          repository: adombeck/yarf
-          path: ${{ env.E2E_TESTS_DIR }}/.yarf
-
       - name: Install APT dependencies for running the E2E tests
         run: ${{ env.E2E_TESTS_DIR }}/install-deps.sh
 
