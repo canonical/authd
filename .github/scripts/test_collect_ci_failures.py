@@ -78,6 +78,39 @@ class CollectTests(unittest.TestCase):
         self.assertEqual(result["since"], "2026-10-18T03:00:00+00:00")
         self.assertEqual([item["key"] for item in result["failures"]], ["2:1"])
 
+    def test_checkpoint_metadata_update_does_not_widen_window(self):
+        previous = run(
+            90,
+            workflow_id=20,
+            event="schedule",
+            conclusion="success",
+            created_at="2026-10-19T03:00:00Z",
+            run_started_at="2026-10-19T03:00:00Z",
+            updated_at="2026-10-19T04:00:00Z",
+        )
+        latest = run(
+            95,
+            workflow_id=20,
+            event="schedule",
+            conclusion="success",
+            created_at="2026-10-20T03:00:00Z",
+            run_started_at="2026-10-20T03:00:00Z",
+        )
+        failure = run(2, updated_at="2026-10-19T14:00:00Z")
+        for updated_at in (
+            CURRENT["run_started_at"],
+            "2026-10-21T04:00:00Z",
+            "2027-10-21T04:00:00Z",
+        ):
+            with self.subTest(updated_at=updated_at):
+                result = self.collect(
+                    [previous, {**latest, "updated_at": updated_at}, failure],
+                    checkpoints=(90, 95),
+                )
+                self.assertFalse(result["bootstrap"])
+                self.assertEqual(result["since"], "2026-10-20T03:00:00+00:00")
+                self.assertEqual(result["failures"], [])
+
     def test_checkpoint_retry_requires_completion_job_from_current_attempt(self):
         previous = run(
             90,

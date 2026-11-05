@@ -44,7 +44,10 @@ def collect(runs, current, branch, get_attempt, get_jobs):
         (
             run
             for run in triage_runs
-            if run["conclusion"] == "success" and timestamp(run["updated_at"]) < until
+            if (
+                run["conclusion"] == "success"
+                and timestamp(run["run_started_at"]) < until
+            )
         ),
         key=lambda run: timestamp(run["run_started_at"]),
         reverse=True,
