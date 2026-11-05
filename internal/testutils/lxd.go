@@ -99,6 +99,19 @@ func RunningInLXD() bool {
 //   - Otherwise: skips the test, returns true
 func RunTestInLXD(t *testing.T, ubuntuVersion string) bool {
 	t.Helper()
+	return runTestInLXD(t, ubuntuVersion, false)
+}
+
+// RunTestInLXDOnly is like RunTestInLXD, but it never runs the test on the
+// host, even if the host version matches, and runs it as root in the container.
+// Use it for tests that change system state, such as adding local accounts.
+func RunTestInLXDOnly(t *testing.T, ubuntuVersion string) bool {
+	t.Helper()
+	return runTestInLXD(t, ubuntuVersion, true)
+}
+
+func runTestInLXD(t *testing.T, ubuntuVersion string, always bool) bool {
+	t.Helper()
 
 	// Already inside an LXD container — run the test normally.
 	if RunningInLXD() {
@@ -106,7 +119,7 @@ func RunTestInLXD(t *testing.T, ubuntuVersion string) bool {
 	}
 
 	// Host version matches — run the test normally.
-	if getHostUbuntuVersion(t) == ubuntuVersion {
+	if !always && getHostUbuntuVersion(t) == ubuntuVersion {
 		return false
 	}
 
@@ -152,6 +165,9 @@ func RunTestInLXD(t *testing.T, ubuntuVersion string) bool {
 	goTestArgs = append(goTestArgs, ".")
 
 	ubuntuID := fmt.Sprintf("%d", LXDUbuntuUserID)
+	if always {
+		ubuntuID = "0"
+	}
 	args := []string{"exec", containerName, "--cwd", cwd, "--user", ubuntuID, "--group", ubuntuID, "--", "env"}
 	args = append(args, env...)
 	args = append(args, goTestArgs...)

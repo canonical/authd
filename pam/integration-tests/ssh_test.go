@@ -224,6 +224,10 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 		interactiveShell bool
 		ubuntuVersion    string
 		providerAlias    bool
+		lxdOnly          bool
+		// The name resolves to a local account, so authd's records can't be
+		// compared with what NSS returns for it.
+		skipUserChecks bool
 
 		wantUserAlreadyExist  bool
 		wantUserNotInDatabase bool
@@ -265,6 +269,14 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			userPrefix:    examplebroker.UserIntegrationProviderAliasPrefix,
 			providerAlias: true,
 			test:          sshPtyProviderUsernameAlias,
+		},
+		"Reject_provider_alias_acquired_by_a_local_account_later_on_ubuntu_26.04": {
+			ubuntuVersion:  "26.04",
+			lxdOnly:        true,
+			skipUserChecks: true,
+			userPrefix:     examplebroker.UserIntegrationProviderAliasPrefix,
+			providerAlias:  true,
+			test:           sshPtyProviderUsernameAliasLaterLocalCollision,
 		},
 		"Authenticate_user_with_mfa": {
 			userPrefix: examplebroker.UserIntegrationMfaPrefix,
@@ -411,8 +423,14 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 			t.Parallel()
 
 			// If this test is version-specific, delegate to LXD if needed.
-			if tc.ubuntuVersion != "" && testutils.RunTestInLXD(t, tc.ubuntuVersion) {
-				return
+			if tc.ubuntuVersion != "" {
+				runInLXD := testutils.RunTestInLXD
+				if tc.lxdOnly {
+					runInLXD = testutils.RunTestInLXDOnly
+				}
+				if runInLXD(t, tc.ubuntuVersion) {
+					return
+				}
 			}
 
 			if !sshTestsPrepared.Load() {
@@ -549,7 +567,7 @@ func testSSHAuthenticate(t *testing.T, sharedSSHD bool) {
 				if nssLibrary != "" {
 					requireGetEntExists(t, nssLibrary, socketPath, user, tc.isLocalUser)
 				}
-			} else {
+			} else if !tc.skipUserChecks {
 				if userClient != nil {
 					var authdUser *authd.User
 					if tc.providerAlias {
@@ -994,6 +1012,37 @@ func sshPtyProviderUsernameAlias(t *testing.T, args sshPtyArgs) {
 	c2.SendLine(t, "goodpass")
 	sshPtyWaitForSSHConnection(t, c2)
 	c2.RequireSuccessfulExit(t)
+}
+
+// sshPtyProviderUsernameAliasLaterLocalCollision creates a local account with
+// the name of a stored provider alias. sshd then resolves the alias to the
+// local UID, so authd must not authenticate the login as its own account.
+// It runs as root in the LXD container so it can run useradd.
+func sshPtyProviderUsernameAliasLaterLocalCollision(t *testing.T, args sshPtyArgs) {
+	t.Helper()
+
+	c := startSSHForPty(t, args)
+	sshPtySelectBroker(t, c)
+	c.WaitFor(t, `Gimme your password`)
+	c.SendLine(t, "goodpass")
+	sshPtyWaitForSSHConnection(t, c)
+	c.RequireSuccessfulExit(t)
+
+	alias := strings.ToLower(args.user)
+	out, err := exec.Command("useradd", "--badname", "-M",
+		"-s", "/usr/sbin/nologin", alias).CombinedOutput()
+	require.NoError(t, err, "Setup: could not create the colliding local account: %s", out)
+	t.Cleanup(func() {
+		_ = exec.Command("userdel", alias).Run()
+	})
+
+	c = startSSHForPty(t, args)
+	require.Error(t, c.WaitForExit(t), "the login must fail")
+	output := c.RawOutput()
+	require.Contains(t, output, fmt.Sprintf("log in with the Unix username %q",
+		providerAliasUnixUsername(args.user)))
+	require.NotContains(t, output, "Inside SSH",
+		"a login that sshd resolves to the local account must not succeed through authd")
 }
 
 func sshPtyProviderUsernameAliasDenied(t *testing.T, args sshPtyArgs) {

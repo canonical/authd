@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -32,6 +33,10 @@ var _ authd.PAMServer = Service{}
 // authFailMaxTracked is the maximum number of distinct (service, username) pairs tracked
 // simultaneously to bound memory usage.
 var authFailMaxTracked = 10000
+
+// lookupUserByName resolves a name through all NSS sources. It is a variable
+// so that tests can simulate other NSS sources.
+var lookupUserByName = user.Lookup
 
 // BruteForceMitigationConfig holds brute-force mitigation parameters for one PAM service context.
 type BruteForceMitigationConfig struct {
@@ -335,6 +340,12 @@ func (s Service) SelectBroker(ctx context.Context, req *authd.SBRequest) (resp *
 		log.Errorf(ctx, "SelectBroker: Could not resolve user %q: %v", username, err)
 		return nil, status.Errorf(codes.FailedPrecondition, "could not resolve login name %q: %v", username, err)
 	}
+	if err == nil {
+		if err := rejectForeignNSSAccount(username, identity); err != nil {
+			log.Errorf(ctx, "SelectBroker: %v", err)
+			return nil, status.Error(codes.PermissionDenied, err.Error())
+		}
+	}
 	storedBrokerID, userProviderID, unixUsername := "", "", ""
 	if err == nil {
 		username = identity.Name
@@ -593,6 +604,31 @@ func (s Service) IsAuthenticated(ctx context.Context, req *authd.IARequest) (res
 		Msg:     msg,
 		PamUser: uInfo.Name,
 	}, nil
+}
+
+// rejectForeignNSSAccount denies a login that used a name other than the
+// canonical Unix name when NSS resolves that name to a different account.
+// This happens when another NSS source gains a name after authd stored it as a
+// provider alias. sshd would then use the other account's UID while PAM
+// authenticated the authd account.
+func rejectForeignNSSAccount(loginName string, identity types.LoginIdentity) error {
+	loginName = strings.ToLower(loginName)
+	if loginName == "" || loginName == identity.Name {
+		return nil
+	}
+	usr, err := lookupUserByName(loginName)
+	if err != nil {
+		var unknown user.UnknownUserError
+		if errors.As(err, &unknown) {
+			return nil
+		}
+		return fmt.Errorf("could not check name %q in NSS: %w", loginName, err)
+	}
+	if usr.Uid != strconv.FormatUint(uint64(identity.UID), 10) {
+		return fmt.Errorf("name %q resolves to another account (UID %s) in NSS; log in with the Unix username %q",
+			loginName, usr.Uid, identity.Name)
+	}
+	return nil
 }
 
 // EndSession asks the broker associated with the sessionID to end the session.

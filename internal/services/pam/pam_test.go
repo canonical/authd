@@ -376,6 +376,40 @@ func TestProviderUsernameChangeWithStableIDResolvesCanonicalAccount(t *testing.T
 }
 
 // The mock broker uses a fixed session ID for this fixture, so don't run this test in parallel.
+func TestProviderAliasCollidingWithAnotherNSSAccountIsDenied(t *testing.T) {
+	unixUsername := "unix-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
+	alias := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_")) + "@example.com"
+	m := newPamManagerWithUser(t, unixUsername, alias, "providerid-"+alias)
+	client := newPamClient(t, m, globalBrokerManager)
+
+	for name, uid := range map[string]string{
+		"Another_NSS_source_owns_the_alias": "5000",
+		"NSS_resolves_alias_to_authd_user":  "1111",
+	} {
+		t.Run(name, func(t *testing.T) {
+			restore := pam.SetLookupUserByName(func(n string) (*user.User, error) {
+				require.Equal(t, alias, n)
+				return &user.User{Username: n, Uid: uid}, nil
+			})
+			t.Cleanup(restore)
+
+			response, err := client.SelectBroker(context.Background(), &authd.SBRequest{
+				BrokerId: mockBrokerGeneratedID,
+				Username: alias,
+				Mode:     authd.SessionMode_LOGIN,
+			})
+			if uid == "1111" {
+				require.NoError(t, err)
+				_, err = client.EndSession(context.Background(), &authd.ESRequest{SessionId: response.GetSessionId()})
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, "resolves to another account")
+		})
+	}
+}
+
+// The mock broker uses a fixed session ID for this fixture, so don't run this test in parallel.
 func TestProviderUsernameCollisionKeepsExistingAliasForMatchingIdentity(t *testing.T) {
 	unixUsername := "unix-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
 	oldProviderUsername := strings.ToLower(strings.ReplaceAll(t.Name(), "/", "_")) +
