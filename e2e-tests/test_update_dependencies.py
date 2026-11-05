@@ -170,12 +170,16 @@ class UpdateDependenciesTest(unittest.TestCase):
                 self.upstream / "uv.lock",
             ]
             before = [path.read_bytes() for path in paths]
-            for check in (True, False):
+            for check, upgrade in ((True, False), (False, False), (False, True)):
                 with (
-                    self.subTest(python_range=python_range, check=check),
+                    self.subTest(
+                        python_range=python_range, check=check, upgrade=upgrade
+                    ),
                     redirect_stderr(io.StringIO()) as errors,
                 ):
-                    self.assertFalse(update_dependencies(self.project, check=check))
+                    self.assertFalse(
+                        update_dependencies(self.project, check=check, upgrade=upgrade)
+                    )
                     self.assertIn("E2E requires-python", errors.getvalue())
                     self.assertIn("differs from YARF", errors.getvalue())
                     self.assertIn("e2e-tests/pyproject.toml", errors.getvalue())
@@ -239,6 +243,31 @@ class UpdateDependenciesTest(unittest.TestCase):
         with redirect_stderr(io.StringIO()) as errors:
             self.assertFalse(update_dependencies(self.project, check=True))
         self.assertIn("YARF runtime dependencies differ", errors.getvalue())
+
+    def test_upgrade_updates_authd_and_dev_tools_without_changing_yarf_runtime(self):
+        self.write_wheel(Path(os.environ["UV_FIND_LINKS"]), "authd-extra", "1.5")
+        manifest_path = self.project / "pyproject.toml"
+        manifest_path.write_text(
+            manifest_path.read_text()
+            + '\n[dependency-groups]\ndev = ["devtool>=1,<3"]\n'
+        )
+        self.lock_with_constraints(
+            self.project, [*self.runtime_pins, "authd-extra==1.0", "devtool==1.0"]
+        )
+        paths = [
+            manifest_path,
+            self.upstream / "pyproject.toml",
+            self.upstream / "uv.lock",
+        ]
+        before = [path.read_bytes() for path in paths]
+
+        self.assertTrue(update_dependencies(self.project, check=False, upgrade=True))
+        self.assertTrue(update_dependencies(self.project, check=True))
+        lock = (self.project / "uv.lock").read_text()
+        # Version 2.0 conflicts with YARF on newer Python versions.
+        self.assertIn('name = "authd-extra"\nversion = "1.5"', lock)
+        self.assertIn('name = "devtool"\nversion = "2.0"', lock)
+        self.assertEqual([path.read_bytes() for path in paths], before)
 
     def test_conflict_does_not_change_the_lock_or_manifests(self):
         manifest_path = self.project / "pyproject.toml"

@@ -83,16 +83,15 @@ updates:
   ## E2E Python dependencies
   - package-ecosystem: "uv"
     directory: "/e2e-tests"
-    labels: ["dependencies", "e2e-tests"]
+    # update-e2e-dependencies.yaml maintains this lock under YARF's pins.
+    # Ignore all Dependabot version and security PRs here. Repository
+    # settings also auto-dismiss Dependabot alerts for this lockfile.
+    ignore:
+      - dependency-name: "*"
     schedule:
       interval: "weekly"
       day: "thursday"
       time: "09:00"
-    groups:
-      e2e-python:
-        patterns: ["*"]
-    commit-message:
-      prefix: "deps(e2e)"
 
   ## git submodules
   - package-ecosystem: "gitsubmodule"

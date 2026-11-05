@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths: &paths
       - ".github/workflows/e2e-dependencies.yaml"
+      - ".github/workflows/update-e2e-dependencies.yaml"
       - ".github/workflows/update-uv.yaml"
       - ".github/uv-requirements.txt"
       - "e2e-tests/pyproject.toml"

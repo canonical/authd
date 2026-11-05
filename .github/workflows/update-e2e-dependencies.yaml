@@ -1,0 +1,73 @@
+name: Update E2E Python dependencies
+
+on:
+  schedule:
+    # Match the former Dependabot schedule.
+    - cron: '0 9 * * 4'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-e2e-dependencies
+
+jobs:
+  update:
+    if: github.event_name != 'schedule' || github.repository == 'canonical/authd'
+    runs-on: ubuntu-26.04 # ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Fetch YARF
+        run: git submodule update --init --depth=1 e2e-tests/.yarf
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version-file: .github/uv-requirements.txt
+          enable-cache: true
+          cache-dependency-glob: e2e-tests/uv.lock
+
+      - name: Test the lock helper
+        run: python -m unittest discover -s e2e-tests -p test_update_dependencies.py
+
+      - name: Upgrade E2E dependencies under YARF runtime constraints
+        run: python e2e-tests/update_dependencies.py --upgrade
+
+      - name: Prepare pull request body
+        run: |
+          {
+            cat <<'EOF'
+          Updates E2E Python dependencies within their manifest requirements,
+          keeping YARF's locked runtime versions unchanged. YARF runtime fixes
+          must arrive through an upstream update and a submodule bump.
+
+          Validation in the updater workflow:
+          - `python -m unittest discover -s e2e-tests -p test_update_dependencies.py` (passed).
+          - `python e2e-tests/update_dependencies.py --upgrade` (passed).
+
+          PRs created with GITHUB_TOKEN do not trigger normal PR CI.
+          Close and reopen the PR to run those checks and the E2E workflow.
+          EOF
+            cat .github/pull_request_template.md
+          } > "${RUNNER_TEMP}/e2e-dependencies-pr-body.md"
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          branch: auto-update-e2e-dependencies
+          delete-branch: true
+          sign-commits: true
+          add-paths: e2e-tests/uv.lock
+          labels: dependencies,e2e-tests
+          commit-message: "deps(e2e): refresh dependencies under YARF runtime pins"
+          title: "deps(e2e): refresh dependencies under YARF runtime pins"
+          body-path: ${{ runner.temp }}/e2e-dependencies-pr-body.md
