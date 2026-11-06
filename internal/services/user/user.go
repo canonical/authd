@@ -167,7 +167,9 @@ func (s Service) GetGroupByName(ctx context.Context, req *authd.GetGroupByNameRe
 		return nil, status.Error(codes.InvalidArgument, "no group name provided")
 	}
 
+	log.Debugf(ctx, "GetGroupByName: starting group lookup")
 	g, err := s.userManager.GroupByName(name)
+	log.Debugf(ctx, "GetGroupByName: group lookup returned")
 	if errors.Is(err, users.NoDataFoundError{}) {
 		// Only log this at debug level, see GetUserByName for details
 		log.Debugf(context.Background(), "GetGroupByName: %v", err)
