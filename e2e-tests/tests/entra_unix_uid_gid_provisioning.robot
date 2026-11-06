@@ -1,29 +1,391 @@
 *** Settings ***
-Resource        resources/utils.resource
-Resource        resources/authd.resource
-Resource        resources/broker.resource
+Resource         resources/utils.resource
+Resource         resources/authd.resource
+Resource         resources/broker.resource
 
-Test Tags         requires:msentraid
+Test Setup       Test Setup
+Test Teardown    Test Teardown
 
-Test Setup    Test Setup
-Test Teardown   Test Teardown
+Test Tags        requires:msentraid
 
 
 *** Variables ***
-${username}        ${EMPTY}
-${entra_password_env}    E2E_PASSWORD
-${entra_totp_env}    TOTP_SECRET
-${uid_attribute}    %{E2E_UNIX_IDS_UID_ATTRIBUTE=${EMPTY}}
-${gid_attribute}    %{E2E_UNIX_IDS_GID_ATTRIBUTE=${EMPTY}}
+${username}               ${EMPTY}
+${entra_password_env}     E2E_PASSWORD
+${entra_totp_env}         TOTP_SECRET
+${uid_attribute}          %{E2E_UNIX_IDS_UID_ATTRIBUTE=${EMPTY}}
+${gid_attribute}          %{E2E_UNIX_IDS_GID_ATTRIBUTE=${EMPTY}}
 ${uid_short_attribute}    %{E2E_UNIX_IDS_UID_SHORT_ATTRIBUTE=Linux_UID}
 ${gid_short_attribute}    %{E2E_UNIX_IDS_GID_SHORT_ATTRIBUTE=Linux_GID}
-${expected_uid}    %{E2E_UNIX_IDS_EXPECTED_UID=${EMPTY}}
-${expected_gid}    %{E2E_UNIX_IDS_EXPECTED_GID=${EMPTY}}
-${configured_group}    %{E2E_UNIX_IDS_GROUP=${EMPTY}}
-${generic_test_group}    %{E2E_UNIX_IDS_GENERIC_GROUP=${EMPTY}}
-${expected_ugid}    %{E2E_UNIX_IDS_EXPECTED_UGID=${EMPTY}}
+${expected_uid}           %{E2E_UNIX_IDS_EXPECTED_UID=${EMPTY}}
+${expected_gid}           %{E2E_UNIX_IDS_EXPECTED_GID=${EMPTY}}
+${configured_group}       %{E2E_UNIX_IDS_GROUP=${EMPTY}}
+${generic_test_group}     %{E2E_UNIX_IDS_GENERIC_GROUP=${EMPTY}}
+${expected_ugid}          %{E2E_UNIX_IDS_EXPECTED_UGID=${EMPTY}}
 ${no_gid_expected_uid}    %{E2E_UNIX_IDS_NO_GID_EXPECTED_UID=${EMPTY}}
-${fixture_started}    ${False}
+${fixture_started}        ${False}
+
+
+*** Test Cases ***
+Test Entra Unix IDs are cached and can be applied
+    [Documentation]    Verify the admin workflow for pre-provisioned Entra UID and GID extension attributes.
+    ...    The test authenticates the real Entra user, reads the authoritative token.json cache,
+    ...    verifies the cache-only UID/GID values, and applies them explicitly with authctl.
+
+    Log In
+
+    Open Terminal
+    Log In With Remote User Through CLI: QR Code
+    ...    ${username}    ${local_password}    ${username}    ${entra_password_env}    ${entra_totp_env}
+    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
+
+    Wait Until Keyword Succeeds    30s    2s    Find User Token Cache    ${username}
+    ${token_path}=    Find User Token Cache    ${username}
+
+    ${cache_mode}=    SSH.Execute    stat -c %a "$(dirname "${token_path}")"
+    Should Be Equal As Strings    ${cache_mode}    700
+    ${file_mode}=    SSH.Execute    stat -c %a "${token_path}"
+    Should Be Equal As Strings    ${file_mode}    600
+
+    ${cached_uid}=    Read Cached UID    ${token_path}
+    Should Be Equal As Strings    ${cached_uid}    ${expected_uid}
+
+    ${cached_gid}=    Read Cached Group Field    ${token_path}    ${configured_group}    gid
+    Should Be Equal As Strings    ${cached_gid}    ${expected_gid}
+
+    ${cached_ugid}=    Read Cached Group Field    ${token_path}    ${configured_group}    ugid
+    Should Not Be Empty    ${cached_ugid}
+    IF    $expected_ugid != ''
+        Should Be Equal As Strings    ${cached_ugid}    ${expected_ugid}
+    END
+
+    # Apply the cached values explicitly after inspecting them.
+    Log Out From Terminal Session
+    Close Focused Window
+    SSH.Execute    loginctl terminate-user ${username} || true
+    Wait Until Keyword Succeeds    30s    1s    SSH.Execute    test -z "$(pgrep -u ${username} || true)"
+
+    ${uid_output}=    SSH.Execute    authctl user set-uid '${username}' ${expected_uid} 2>&1
+    Should Contain    ${uid_output}    UID of user '${username}' set to ${expected_uid}.
+
+    ${private_gid_output}=    SSH.Execute    authctl group set-gid '${username}' ${expected_uid} 2>&1
+    Should Contain    ${private_gid_output}    GID of group '${username}' set to ${expected_uid}.
+
+    ${gid_output}=    SSH.Execute    authctl group set-gid '${configured_group}' ${expected_gid} 2>&1
+    Should Contain    ${gid_output}    GID of group '${configured_group}' set to ${expected_gid}.
+
+    ${actual_uid}=    SSH.Execute    getent passwd '${username}' | cut -d: -f3
+    Should Be Equal As Strings    ${actual_uid}    ${expected_uid}
+    ${actual_gid}=    SSH.Execute    getent group '${configured_group}' | cut -d: -f3
+    Should Be Equal As Strings    ${actual_gid}    ${expected_gid}
+
+    Check Private Group Matches UID    ${username}    ${expected_uid}
+
+Test Entra Unix IDs can be applied with the bridge script
+    [Documentation]    Verify that apply-entra-unix-ids reads cached Entra UID/GID values,
+    ...    shows the planned authctl commands, and applies them when --apply is specified.
+    ...    The private group and primary GID must match the UID, including after a repeat application.
+
+    Log In
+
+    Open Terminal
+    Log In With Remote User Through CLI: QR Code
+    ...    ${username}    ${local_password}    ${username}    ${entra_password_env}    ${entra_totp_env}
+    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
+
+    Wait Until Keyword Succeeds    30s    2s    Find User Token Cache    ${username}
+    ${token_path}=    Find User Token Cache    ${username}
+
+    ${cached_uid}=    Read Cached UID    ${token_path}
+    Should Be Equal As Strings    ${cached_uid}    ${expected_uid}
+    ${cached_gid}=    Read Cached Group Field    ${token_path}    ${configured_group}    gid
+    Should Be Equal As Strings    ${cached_gid}    ${expected_gid}
+
+    Log Out From Terminal Session
+    Close Focused Window
+    SSH.Execute    loginctl terminate-user ${username} || true
+    Wait Until Keyword Succeeds    30s    1s    SSH.Execute    test -z "$(pgrep -u ${username} || true)"
+
+    ${apply_command}=    Set Variable    apply-entra-unix-ids
+    ${installed_path}=    SSH.Execute    command -v ${apply_command}
+    Should Be Equal As Strings    ${installed_path}    /usr/bin/apply-entra-unix-ids
+
+    ${attribute_args}=    Set Variable    --uid-attribute ${uid_attribute} --gid-attribute ${gid_attribute}
+    ${dry_run_output}=    SSH.Execute    ${apply_command} ${attribute_args} --authctl authctl ${token_path}
+    Should Contain    ${dry_run_output}    authctl user set-uid -- ${username} ${expected_uid}
+    Should Contain    ${dry_run_output}    authctl group set-gid -- ${username} ${expected_uid}
+    Should Contain    ${dry_run_output}    authctl group set-gid -- ${configured_group} ${expected_gid}
+
+    ${apply_output}=    SSH.Execute    ${apply_command} --apply ${attribute_args} --authctl authctl ${token_path} 2>&1
+    Should Contain    ${apply_output}    Applying cached assignments for ${username}:
+    Should Contain    ${apply_output}    UID of user '${username}' set to ${expected_uid}.
+    Should Contain    ${apply_output}    GID of group '${username}' set to ${expected_uid}.
+    Should Contain    ${apply_output}    GID of group '${configured_group}' set to ${expected_gid}.
+
+    ${actual_uid}=    SSH.Execute    getent passwd '${username}' | cut -d: -f3
+    Should Be Equal As Strings    ${actual_uid}    ${expected_uid}
+    ${actual_gid}=    SSH.Execute    getent group '${configured_group}' | cut -d: -f3
+    Should Be Equal As Strings    ${actual_gid}    ${expected_gid}
+
+    Check Private Group Matches UID    ${username}    ${expected_uid}
+
+    ${repeat_output}=    SSH.Execute    ${apply_command} --apply ${attribute_args} --authctl authctl ${token_path} 2>&1
+    Should Contain    ${repeat_output}    User '${username}' already has UID ${expected_uid}.
+    Should Contain    ${repeat_output}    Group '${username}' already has GID ${expected_uid}.
+    Check Private Group Matches UID    ${username}    ${expected_uid}
+
+Test Offline Login Uses Complete Cached Unix IDs Unless Provider Check Is Forced
+    [Documentation]    Verify complete cached required UID/GID values allow offline login when
+    ...    force_access_check_with_provider is false, but do not bypass a forced provider check.
+
+    Log In
+    Change Broker Configuration    unix_gid_required    true
+    Change Broker Configuration    force_access_check_with_provider    false
+
+    Open Terminal
+    Log In With Remote User Through CLI: QR Code
+    ...    ${username}    ${local_password}    ${username}    ${entra_password_env}    ${entra_totp_env}
+    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
+
+    ${token_path}=    Find User Token Cache    ${username}
+    ${cached_uid}=    Read Cached UID    ${token_path}
+    Should Be Equal As Strings    ${cached_uid}    ${expected_uid}
+    ${cached_gid}=    Read Cached Group Field    ${token_path}    ${configured_group}    gid
+    Should Be Equal As Strings    ${cached_gid}    ${expected_gid}
+
+    Log Out From Terminal Session
+    Close Focused Window
+    Block Network Access To Identity Provider
+
+    Open Terminal
+    Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
+    ${offline_token_path}=    Find User Token Cache    ${username}
+    ${offline_uid}=    Read Cached UID    ${offline_token_path}
+    Should Be Equal As Strings    ${offline_uid}    ${expected_uid}
+    ${offline_gid}=    Read Cached Group Field    ${offline_token_path}    ${configured_group}    gid
+    Should Be Equal As Strings    ${offline_gid}    ${expected_gid}
+
+    Log Out From Terminal Session
+    Close Focused Window
+    Change Broker Configuration    force_access_check_with_provider    true
+
+    Open Terminal
+    Try Log In With Remote User    ${username}
+    Check That Remote User Has No Available Authentication Modes
+
+Test User with Entra UID and at least one group without a GID
+    [Documentation]    Verify that a user with a valid Entra UID but at least one group without a GID
+    ...    will be rejected when GID is required and can log in when GID is optional.
+    [Setup]    Test Setup With No GID Entra Account
+
+    Log In
+    Open Terminal
+    Change Broker Configuration    unix_gid_required    true
+    Change Broker Configuration    force_access_check_with_provider    true
+    Start Entra Login
+    Check Missing Unix GID Error
+    Match Text    Login incorrect    30
+
+    Change Broker Configuration    unix_gid_required    false
+    Retry Entra Login
+    Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
+    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
+
+    Wait Until Keyword Succeeds    30s    2s    Find User Token Cache    ${username}
+    ${token_path}=    Find User Token Cache    ${username}
+    ${cached_uid}=    Read Cached UID    ${token_path}
+    Should Be Equal As Strings    ${cached_uid}    ${no_gid_expected_uid}
+    ${cached_gid}=    Read Cached Group Field    ${token_path}    ${configured_group}    gid
+    Should Be Empty    ${cached_gid}
+
+Test GDM login rejects missing group GID then succeeds when optional
+    [Documentation]    Verify GDM rejects the ext2 user when a group GID is required,
+    ...    then provisions the user when group GIDs are optional.
+    [Setup]    Test Setup With No GID Entra Account
+
+    Change Broker Configuration    entra_auth    true
+    Change Broker Configuration    device_code    false
+    Change Broker Configuration    unix_gid_required    true
+    Change Broker Configuration    force_access_check_with_provider    true
+    Start Log In With Remote User Through GDM    ${username}
+    Select Broker Through GDM
+    Enter Entra ID Password And MFA    Match Text    Select the broker    30
+    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
+    Match Text    Select the broker    30
+    ${sessions}=    SSH.Execute    loginctl list-sessions --no-legend | awk '$3 == "${username}" {print}'
+    Should Be Empty    ${sessions}
+
+    Change Broker Configuration    unix_gid_required    false
+    Select Broker Through GDM
+    Continue Log In With Remote User Through GDM: Entra Password    ${entra_password_env}    ${entra_totp_env}
+    Check If User Was Added Properly    ${username}    %{${entra_password_env}}    ${configured_group}
+
+Test polkit authentication rejects missing group GID then succeeds when optional
+    [Documentation]    Verify polkit rejects the ext2 user's Entra authentication when a
+    ...    group GID is required, then authorizes pkexec when group GIDs are optional.
+    [Setup]    Test Setup With No GID Entra Account
+
+    Start Log In With Remote User Through GDM    ${username}
+    Select Broker Through GDM
+    Continue Log In With Remote User: Authenticate In External Browser
+    ...    ${username}    ${entra_password_env}    ${entra_totp_env}
+    Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
+    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
+    SSH.Execute    sudo usermod -aG sudo ${username}
+
+    SSH.Execute    rm -f /tmp/polkit-authd-test-no-gid
+    Open Terminal
+    Change Broker Configuration    entra_auth    true
+    Change Broker Configuration    device_code    false
+    Change Broker Configuration    unix_gid_required    true
+    Change Broker Configuration    force_access_check_with_provider    true
+    Hid.Type String    pkexec touch /tmp/polkit-authd-test-no-gid
+    Hid.Keys Combo    Return
+    Match Text    Enter your password    60
+    Hid.Type String    r
+    Hid.Keys Combo    Return
+    Match Text    Choose your authentication flow    30
+    Match Text    2. Entra ID authentication    15
+    Hid.Type String    2
+    Hid.Keys Combo    Return
+    Enter Entra ID Password And MFA    Check Missing Unix GID Denial In Journal
+    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
+    ${marker_exists}=    SSH.Execute    test -e /tmp/polkit-authd-test-no-gid && echo yes || true
+    Should Be Empty    ${marker_exists}
+
+    Move Pointer To Cancel
+    Left Button Click
+    Change Broker Configuration    unix_gid_required    false
+    Hid.Type String    pkexec touch /tmp/polkit-authd-test-no-gid
+    Hid.Keys Combo    Return
+    Log In With Remote User Through Polkit: Entra Password    ${username}
+    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
+    Wait Until Keyword Succeeds    30s    5s
+    ...    Check Marker File Is Root Owned    /tmp/polkit-authd-test-no-gid
+
+Test Entra MFA login rejects missing group GID then succeeds when optional
+    [Documentation]    Verify direct Entra password plus MFA authentication rejects the
+    ...    ext2 user when a group GID is required, then succeeds when group GIDs are optional.
+    [Setup]    Test Setup With No GID Entra Account
+
+    Change Broker Configuration    entra_auth    true
+    Change Broker Configuration    device_code    false
+    Change Broker Configuration    unix_gid_required    true
+    Change Broker Configuration    force_access_check_with_provider    true
+    Log In
+    Open Terminal
+    Try machinectl login Prompt
+    Hid.Type String    ${username}
+    Hid.Keys Combo    Return
+    Match Text    Select your provider:    15
+    Match Text    2. ${PROVIDER_DISPLAY_NAME}
+    Hid.Type String    2
+    Hid.Keys Combo    Return
+    Enter Entra ID Password And MFA    Check Missing Unix GID Error
+    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
+    Match Text    Login incorrect    30
+
+    Change Broker Configuration    unix_gid_required    false
+    Hid.Type String    ${username}
+    Hid.Keys Combo    Return
+    Match Text    Select your provider:    15
+    Match Text    2. ${PROVIDER_DISPLAY_NAME}
+    Hid.Type String    2
+    Hid.Keys Combo    Return
+    Enter Entra ID Password And MFA    Match Text    ${username}@ubuntu:~$    30
+    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
+    Check If User Was Added Properly    ${username}    %{${entra_password_env}}    ${configured_group}
+
+Test Required Entra UID rejects users without a UID, optional UID allows login
+    [Documentation]    Verify the generic Entra account without a UID is rejected when
+    ...    UID is required and can log in when UID is optional.
+    [Setup]    Test Setup With Generic Entra Account
+
+    Log In
+    Open Terminal
+    Change Broker Configuration    force_access_check_with_provider    true
+    Start Entra Login
+    Check Missing Unix UID Error
+    Match Text    Login incorrect    30
+
+    Change Broker Configuration    unix_uid_required    false
+    Retry Entra Login
+    Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
+    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
+
+    Wait Until Keyword Succeeds    30s    2s    Find User Token Cache    ${username}
+    ${token_path}=    Find User Token Cache    ${username}
+    ${cached_uid}=    Read Cached UID    ${token_path}
+    Should Be Empty    ${cached_uid}
+
+Test Required Entra group GID rejects groups without a GID, optional GID allows login
+    [Documentation]    Verify the generic Entra account's test group without a GID is
+    ...    rejected when GID is required even without a forced provider check, and can log in when GID is optional.
+    [Setup]    Test Setup With Generic Entra Account
+
+    Log In
+    Open Terminal
+    Change Broker Configuration    unix_uid_required    false
+    Change Broker Configuration    unix_gid_required    true
+    Change Broker Configuration    force_access_check_with_provider    false
+    Start Entra Login
+    Check Missing Unix GID Error
+    Match Text    Login incorrect    30
+
+    Change Broker Configuration    unix_gid_required    false
+    Retry Entra Login
+    Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
+    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
+
+    Wait Until Keyword Succeeds    30s    2s    Find User Token Cache    ${username}
+    ${token_path}=    Find User Token Cache    ${username}
+    ${cached_gid}=    Read Cached Group Field    ${token_path}    ${configured_group}    gid
+    Should Be Empty    ${cached_gid}
+
+Test Entra Unix ID short attribute names resolve correctly
+    [Documentation]    Verify short attribute names are resolved against the configured
+    ...    Entra application client ID and populate the cached user and group IDs.
+
+    Log In
+    Change Broker Configuration    unix_uid_attribute    ${uid_short_attribute}
+    Change Broker Configuration    unix_gid_attribute    ${gid_short_attribute}
+    Open Terminal
+    Log In With Remote User Through CLI: QR Code
+    ...    ${username}    ${local_password}    ${username}    ${entra_password_env}    ${entra_totp_env}
+    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
+
+    Wait Until Keyword Succeeds    30s    2s    Find User Token Cache    ${username}
+    ${token_path}=    Find User Token Cache    ${username}
+    ${cached_uid}=    Read Cached UID    ${token_path}
+    Should Be Equal As Strings    ${cached_uid}    ${expected_uid}
+    ${cached_gid}=    Read Cached Group Field    ${token_path}    ${configured_group}    gid
+    Should Be Equal As Strings    ${cached_gid}    ${expected_gid}
+
+Test Wrong Entra Unix UID extension name is treated as missing
+    [Documentation]    Verify a misspelled required extension name follows the missing-UID
+    ...    failure flow instead of silently assigning an incorrect ID.
+    [Setup]    Test Setup With Generic Entra Account
+
+    Log In
+    Open Terminal
+    Change Broker Configuration    unix_uid_attribute    ${uid_short_attribute}_typo
+    Change Broker Configuration    force_access_check_with_provider    true
+    Start Entra Login
+    Check Missing Unix UID Error
+
+Test Wrong Entra Unix GID extension name is treated as missing
+    [Documentation]    Verify a misspelled required group extension name follows the missing-GID
+    ...    failure flow instead of silently assigning an incorrect ID.
+    [Setup]    Test Setup With Generic Entra Account
+
+    Log In
+    Open Terminal
+    Change Broker Configuration    unix_uid_required    false
+    Change Broker Configuration    unix_gid_attribute    ${gid_short_attribute}_typo
+    Change Broker Configuration    unix_gid_required    true
+    Change Broker Configuration    force_access_check_with_provider    true
+    Start Entra Login
+    Check Missing Unix GID Error
 
 
 *** Keywords ***
@@ -101,9 +463,7 @@ Check Private Group Matches UID
     Should Be Equal As Strings    ${primary_gid}    ${uid}
 
 Test Teardown
-    IF    $fixture_started
-        utils.Test Teardown
-    END
+    IF    $fixture_started    utils.Test Teardown
 
 Find User Token Cache
     [Arguments]    ${user}
@@ -112,19 +472,17 @@ Find User Token Cache
     Should Not Be Empty    ${path}
     RETURN    ${path}
 
-
 Read Cached UID
     [Arguments]    ${token_path}
-    ${output}=    SSH.Execute    python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["UserInfo"].get("uid", ""))' "${token_path}"
+    ${output}=    SSH.Execute
+    ...    python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["UserInfo"].get("uid", ""))' "${token_path}"
     RETURN    ${output}
-
 
 Read Cached Group Field
     [Arguments]    ${token_path}    ${group_name}    ${field}
     ${output}=    SSH.Execute
     ...    python3 -c 'import json,sys; groups=[g for g in json.load(open(sys.argv[1]))["UserInfo"].get("groups",[]) if g.get("name","").lower()==sys.argv[2].lower()]; assert len(groups)==1, groups; print(groups[0].get(sys.argv[3], ""))' "${token_path}" "${group_name}" "${field}"
     RETURN    ${output}
-
 
 Start Entra Login
     [Arguments]    ${entra_user}=${username}
@@ -142,7 +500,10 @@ Retry Entra Login
     ...    ${entra_user}    ${entra_password_env}    ${entra_totp_env}
 
 Check Missing Unix GID Error
-    Match Text    Authentication failure: required Unix GID for one or more of your groups not provided.    30    similarity=85
+    Match Text
+    ...    Authentication failure: required Unix GID for one or more of your groups not provided.
+    ...    30
+    ...    similarity=85
 
 Check Missing Unix GID Denial In Journal
     ${denial}=    SSH.Execute
@@ -151,376 +512,3 @@ Check Missing Unix GID Denial In Journal
 
 Check Missing Unix UID Error
     Match Text    Authentication failure: required Unix UID for your account not provided.    30    similarity=85
-
-*** Test Cases ***
-Test Entra Unix IDs are cached and can be applied
-    [Documentation]    Verify the admin workflow for pre-provisioned Entra UID and GID extension attributes.
-    ...    The test authenticates the real Entra user, reads the authoritative token.json cache,
-    ...    verifies the cache-only UID/GID values, and applies them explicitly with authctl.
-
-    Log In
-
-    Open Terminal
-    Log In With Remote User Through CLI: QR Code
-    ...    ${username}    ${local_password}    ${username}    ${entra_password_env}    ${entra_totp_env}
-    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
-
-    Wait Until Keyword Succeeds    30s    2s    Find User Token Cache    ${username}
-    ${token_path}=    Find User Token Cache    ${username}
-
-    ${cache_mode}=    SSH.Execute    stat -c %a "$(dirname "${token_path}")"
-    Should Be Equal As Strings    ${cache_mode}    700
-    ${file_mode}=    SSH.Execute    stat -c %a "${token_path}"
-    Should Be Equal As Strings    ${file_mode}    600
-
-    ${cached_uid}=    Read Cached UID    ${token_path}
-    Should Be Equal As Strings    ${cached_uid}    ${expected_uid}
-
-    ${cached_gid}=    Read Cached Group Field    ${token_path}    ${configured_group}    gid
-    Should Be Equal As Strings    ${cached_gid}    ${expected_gid}
-
-    ${cached_ugid}=    Read Cached Group Field    ${token_path}    ${configured_group}    ugid
-    Should Not Be Empty    ${cached_ugid}
-    IF    $expected_ugid != ''
-        Should Be Equal As Strings    ${cached_ugid}    ${expected_ugid}
-    END
-
-    # Apply the cached values explicitly after inspecting them.
-    Log Out From Terminal Session
-    Close Focused Window
-    SSH.Execute    loginctl terminate-user ${username} || true
-    Wait Until Keyword Succeeds    30s    1s    SSH.Execute    test -z "$(pgrep -u ${username} || true)"
-
-    ${uid_output}=    SSH.Execute    authctl user set-uid '${username}' ${expected_uid} 2>&1
-    Should Contain    ${uid_output}    UID of user '${username}' set to ${expected_uid}.
-
-    ${private_gid_output}=    SSH.Execute    authctl group set-gid '${username}' ${expected_uid} 2>&1
-    Should Contain    ${private_gid_output}    GID of group '${username}' set to ${expected_uid}.
-
-    ${gid_output}=    SSH.Execute    authctl group set-gid '${configured_group}' ${expected_gid} 2>&1
-    Should Contain    ${gid_output}    GID of group '${configured_group}' set to ${expected_gid}.
-
-    ${actual_uid}=    SSH.Execute    getent passwd '${username}' | cut -d: -f3
-    Should Be Equal As Strings    ${actual_uid}    ${expected_uid}
-    ${actual_gid}=    SSH.Execute    getent group '${configured_group}' | cut -d: -f3
-    Should Be Equal As Strings    ${actual_gid}    ${expected_gid}
-
-    Check Private Group Matches UID    ${username}    ${expected_uid}
-
-
-Test Entra Unix IDs can be applied with the bridge script
-    [Documentation]    Verify that apply-entra-unix-ids reads cached Entra UID/GID values,
-    ...    shows the planned authctl commands, and applies them when --apply is specified.
-    ...    The private group and primary GID must match the UID, including after a repeat application.
-
-    Log In
-
-    Open Terminal
-    Log In With Remote User Through CLI: QR Code
-    ...    ${username}    ${local_password}    ${username}    ${entra_password_env}    ${entra_totp_env}
-    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
-
-    Wait Until Keyword Succeeds    30s    2s    Find User Token Cache    ${username}
-    ${token_path}=    Find User Token Cache    ${username}
-
-    ${cached_uid}=    Read Cached UID    ${token_path}
-    Should Be Equal As Strings    ${cached_uid}    ${expected_uid}
-    ${cached_gid}=    Read Cached Group Field    ${token_path}    ${configured_group}    gid
-    Should Be Equal As Strings    ${cached_gid}    ${expected_gid}
-
-    Log Out From Terminal Session
-    Close Focused Window
-    SSH.Execute    loginctl terminate-user ${username} || true
-    Wait Until Keyword Succeeds    30s    1s    SSH.Execute    test -z "$(pgrep -u ${username} || true)"
-
-    ${apply_command}=    Set Variable    apply-entra-unix-ids
-    ${installed_path}=    SSH.Execute    command -v ${apply_command}
-    Should Be Equal As Strings    ${installed_path}    /usr/bin/apply-entra-unix-ids
-
-    ${attribute_args}=    Set Variable    --uid-attribute ${uid_attribute} --gid-attribute ${gid_attribute}
-    ${dry_run_output}=    SSH.Execute    ${apply_command} ${attribute_args} --authctl authctl ${token_path}
-    Should Contain    ${dry_run_output}    authctl user set-uid -- ${username} ${expected_uid}
-    Should Contain    ${dry_run_output}    authctl group set-gid -- ${username} ${expected_uid}
-    Should Contain    ${dry_run_output}    authctl group set-gid -- ${configured_group} ${expected_gid}
-
-    ${apply_output}=    SSH.Execute    ${apply_command} --apply ${attribute_args} --authctl authctl ${token_path} 2>&1
-    Should Contain    ${apply_output}    Applying cached assignments for ${username}:
-    Should Contain    ${apply_output}    UID of user '${username}' set to ${expected_uid}.
-    Should Contain    ${apply_output}    GID of group '${username}' set to ${expected_uid}.
-    Should Contain    ${apply_output}    GID of group '${configured_group}' set to ${expected_gid}.
-
-    ${actual_uid}=    SSH.Execute    getent passwd '${username}' | cut -d: -f3
-    Should Be Equal As Strings    ${actual_uid}    ${expected_uid}
-    ${actual_gid}=    SSH.Execute    getent group '${configured_group}' | cut -d: -f3
-    Should Be Equal As Strings    ${actual_gid}    ${expected_gid}
-
-    Check Private Group Matches UID    ${username}    ${expected_uid}
-
-    ${repeat_output}=    SSH.Execute    ${apply_command} --apply ${attribute_args} --authctl authctl ${token_path} 2>&1
-    Should Contain    ${repeat_output}    User '${username}' already has UID ${expected_uid}.
-    Should Contain    ${repeat_output}    Group '${username}' already has GID ${expected_uid}.
-    Check Private Group Matches UID    ${username}    ${expected_uid}
-
-
-Test Offline Login Uses Complete Cached Unix IDs Unless Provider Check Is Forced
-    [Documentation]    Verify complete cached required UID/GID values allow offline login when
-    ...    force_access_check_with_provider is false, but do not bypass a forced provider check.
-
-    Log In
-    Change Broker Configuration    unix_gid_required    true
-    Change Broker Configuration    force_access_check_with_provider    false
-
-    Open Terminal
-    Log In With Remote User Through CLI: QR Code
-    ...    ${username}    ${local_password}    ${username}    ${entra_password_env}    ${entra_totp_env}
-    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
-
-    ${token_path}=    Find User Token Cache    ${username}
-    ${cached_uid}=    Read Cached UID    ${token_path}
-    Should Be Equal As Strings    ${cached_uid}    ${expected_uid}
-    ${cached_gid}=    Read Cached Group Field    ${token_path}    ${configured_group}    gid
-    Should Be Equal As Strings    ${cached_gid}    ${expected_gid}
-
-    Log Out From Terminal Session
-    Close Focused Window
-    Block Network Access To Identity Provider
-
-    Open Terminal
-    Log In With Remote User Through CLI: Local Password    ${username}    ${local_password}
-    ${offline_token_path}=    Find User Token Cache    ${username}
-    ${offline_uid}=    Read Cached UID    ${offline_token_path}
-    Should Be Equal As Strings    ${offline_uid}    ${expected_uid}
-    ${offline_gid}=    Read Cached Group Field    ${offline_token_path}    ${configured_group}    gid
-    Should Be Equal As Strings    ${offline_gid}    ${expected_gid}
-
-    Log Out From Terminal Session
-    Close Focused Window
-    Change Broker Configuration    force_access_check_with_provider    true
-
-    Open Terminal
-    Try Log In With Remote User    ${username}
-    Check That Remote User Has No Available Authentication Modes
-
-
-Test User with Entra UID and at least one group without a GID
-    [Documentation]    Verify that a user with a valid Entra UID but at least one group without a GID
-    ...    will be rejected when GID is required and can log in when GID is optional.
-    [Setup]    Test Setup With No GID Entra Account
-
-    Log In
-    Open Terminal
-    Change Broker Configuration    unix_gid_required    true
-    Change Broker Configuration    force_access_check_with_provider    true
-    Start Entra Login
-    Check Missing Unix GID Error
-    Match Text    Login incorrect    30
-
-    Change Broker Configuration    unix_gid_required    false
-    Retry Entra Login
-    Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
-    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
-
-    Wait Until Keyword Succeeds    30s    2s    Find User Token Cache    ${username}
-    ${token_path}=    Find User Token Cache    ${username}
-    ${cached_uid}=    Read Cached UID    ${token_path}
-    Should Be Equal As Strings    ${cached_uid}    ${no_gid_expected_uid}
-    ${cached_gid}=    Read Cached Group Field    ${token_path}    ${configured_group}    gid
-    Should Be Empty    ${cached_gid}
-
-
-Test GDM login rejects missing group GID then succeeds when optional
-    [Documentation]    Verify GDM rejects the ext2 user when a group GID is required,
-    ...    then provisions the user when group GIDs are optional.
-    [Setup]    Test Setup With No GID Entra Account
-
-    Change Broker Configuration    entra_auth    true
-    Change Broker Configuration    device_code    false
-    Change Broker Configuration    unix_gid_required    true
-    Change Broker Configuration    force_access_check_with_provider    true
-    Start Log In With Remote User Through GDM    ${username}
-    Select Broker Through GDM
-    Enter Entra ID Password And MFA    Match Text    Select the broker    30
-    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
-    Match Text    Select the broker    30
-    ${sessions}=    SSH.Execute    loginctl list-sessions --no-legend | awk '$3 == "${username}" {print}'
-    Should Be Empty    ${sessions}
-
-    Change Broker Configuration    unix_gid_required    false
-    Select Broker Through GDM
-    Continue Log In With Remote User Through GDM: Entra Password    ${entra_password_env}    ${entra_totp_env}
-    Check If User Was Added Properly    ${username}    %{${entra_password_env}}    ${configured_group}
-
-
-Test polkit authentication rejects missing group GID then succeeds when optional
-    [Documentation]    Verify polkit rejects the ext2 user's Entra authentication when a
-    ...    group GID is required, then authorizes pkexec when group GIDs are optional.
-    [Setup]    Test Setup With No GID Entra Account
-
-    Start Log In With Remote User Through GDM    ${username}
-    Select Broker Through GDM
-    Continue Log In With Remote User: Authenticate In External Browser
-    ...    ${username}    ${entra_password_env}    ${entra_totp_env}
-    Continue Log In With Remote User Through GDM: Define Local Password    ${local_password}
-    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
-    SSH.Execute    sudo usermod -aG sudo ${username}
-
-    SSH.Execute    rm -f /tmp/polkit-authd-test-no-gid
-    Open Terminal
-    Change Broker Configuration    entra_auth    true
-    Change Broker Configuration    device_code    false
-    Change Broker Configuration    unix_gid_required    true
-    Change Broker Configuration    force_access_check_with_provider    true
-    Hid.Type String    pkexec touch /tmp/polkit-authd-test-no-gid
-    Hid.Keys Combo    Return
-    Match Text    Enter your password    60
-    Hid.Type String    r
-    Hid.Keys Combo    Return
-    Match Text    Choose your authentication flow    30
-    Match Text    2. Entra ID authentication    15
-    Hid.Type String    2
-    Hid.Keys Combo    Return
-    Enter Entra ID Password And MFA    Check Missing Unix GID Denial In Journal
-    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
-    ${marker_exists}=    SSH.Execute    test -e /tmp/polkit-authd-test-no-gid && echo yes || true
-    Should Be Empty    ${marker_exists}
-
-    Move Pointer To Cancel
-    Left Button Click
-    Change Broker Configuration    unix_gid_required    false
-    Hid.Type String    pkexec touch /tmp/polkit-authd-test-no-gid
-    Hid.Keys Combo    Return
-    Log In With Remote User Through Polkit: Entra Password    ${username}
-    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
-    Wait Until Keyword Succeeds    30s    5s
-    ...    Check Marker File Is Root Owned    /tmp/polkit-authd-test-no-gid
-
-
-Test Entra MFA login rejects missing group GID then succeeds when optional
-    [Documentation]    Verify direct Entra password plus MFA authentication rejects the
-    ...    ext2 user when a group GID is required, then succeeds when group GIDs are optional.
-    [Setup]    Test Setup With No GID Entra Account
-
-    Change Broker Configuration    entra_auth    true
-    Change Broker Configuration    device_code    false
-    Change Broker Configuration    unix_gid_required    true
-    Change Broker Configuration    force_access_check_with_provider    true
-    Log In
-    Open Terminal
-    Try machinectl login Prompt
-    Hid.Type String    ${username}
-    Hid.Keys Combo    Return
-    Match Text    Select your provider:    15
-    Match Text    2. ${PROVIDER_DISPLAY_NAME}
-    Hid.Type String    2
-    Hid.Keys Combo    Return
-    Enter Entra ID Password And MFA    Check Missing Unix GID Error
-    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
-    Match Text    Login incorrect    30
-
-    Change Broker Configuration    unix_gid_required    false
-    Hid.Type String    ${username}
-    Hid.Keys Combo    Return
-    Match Text    Select your provider:    15
-    Match Text    2. ${PROVIDER_DISPLAY_NAME}
-    Hid.Type String    2
-    Hid.Keys Combo    Return
-    Enter Entra ID Password And MFA    Match Text    ${username}@ubuntu:~$    30
-    ...    entra_password_env=${entra_password_env}    entra_totp_env=${entra_totp_env}
-    Check If User Was Added Properly    ${username}    %{${entra_password_env}}    ${configured_group}
-
-Test Required Entra UID rejects users without a UID, optional UID allows login
-    [Documentation]    Verify the generic Entra account without a UID is rejected when
-    ...    UID is required and can log in when UID is optional.
-    [Setup]    Test Setup With Generic Entra Account
-
-    Log In
-    Open Terminal
-    Change Broker Configuration    force_access_check_with_provider    true
-    Start Entra Login
-    Check Missing Unix UID Error
-    Match Text    Login incorrect    30
-
-    Change Broker Configuration    unix_uid_required    false
-    Retry Entra Login
-    Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
-    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
-
-    Wait Until Keyword Succeeds    30s    2s    Find User Token Cache    ${username}
-    ${token_path}=    Find User Token Cache    ${username}
-    ${cached_uid}=    Read Cached UID    ${token_path}
-    Should Be Empty    ${cached_uid}
-
-
-Test Required Entra group GID rejects groups without a GID, optional GID allows login
-    [Documentation]    Verify the generic Entra account's test group without a GID is
-    ...    rejected when GID is required even without a forced provider check, and can log in when GID is optional.
-    [Setup]    Test Setup With Generic Entra Account
-
-    Log In
-    Open Terminal
-    Change Broker Configuration    unix_uid_required    false
-    Change Broker Configuration    unix_gid_required    true
-    Change Broker Configuration    force_access_check_with_provider    false
-    Start Entra Login
-    Check Missing Unix GID Error
-    Match Text    Login incorrect    30
-
-    Change Broker Configuration    unix_gid_required    false
-    Retry Entra Login
-    Continue Log In With Remote User Through CLI: Define Local Password    ${username}    ${local_password}
-    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
-
-    Wait Until Keyword Succeeds    30s    2s    Find User Token Cache    ${username}
-    ${token_path}=    Find User Token Cache    ${username}
-    ${cached_gid}=    Read Cached Group Field    ${token_path}    ${configured_group}    gid
-    Should Be Empty    ${cached_gid}
-
-
-Test Entra Unix ID short attribute names resolve correctly
-    [Documentation]    Verify short attribute names are resolved against the configured
-    ...    Entra application client ID and populate the cached user and group IDs.
-
-    Log In
-    Change Broker Configuration    unix_uid_attribute    ${uid_short_attribute}
-    Change Broker Configuration    unix_gid_attribute    ${gid_short_attribute}
-    Open Terminal
-    Log In With Remote User Through CLI: QR Code
-    ...    ${username}    ${local_password}    ${username}    ${entra_password_env}    ${entra_totp_env}
-    Check If User Was Added Properly    ${username}    ${local_password}    ${configured_group}
-
-    Wait Until Keyword Succeeds    30s    2s    Find User Token Cache    ${username}
-    ${token_path}=    Find User Token Cache    ${username}
-    ${cached_uid}=    Read Cached UID    ${token_path}
-    Should Be Equal As Strings    ${cached_uid}    ${expected_uid}
-    ${cached_gid}=    Read Cached Group Field    ${token_path}    ${configured_group}    gid
-    Should Be Equal As Strings    ${cached_gid}    ${expected_gid}
-
-
-Test Wrong Entra Unix UID extension name is treated as missing
-    [Documentation]    Verify a misspelled required extension name follows the missing-UID
-    ...    failure flow instead of silently assigning an incorrect ID.
-
-    [Setup]    Test Setup With Generic Entra Account
-
-    Log In
-    Open Terminal
-    Change Broker Configuration    unix_uid_attribute    ${uid_short_attribute}_typo
-    Change Broker Configuration    force_access_check_with_provider    true
-    Start Entra Login
-    Check Missing Unix UID Error
-
-
-Test Wrong Entra Unix GID extension name is treated as missing
-    [Documentation]    Verify a misspelled required group extension name follows the missing-GID
-    ...    failure flow instead of silently assigning an incorrect ID.
-
-    [Setup]    Test Setup With Generic Entra Account
-
-    Log In
-    Open Terminal
-    Change Broker Configuration    unix_uid_required    false
-    Change Broker Configuration    unix_gid_attribute    ${gid_short_attribute}_typo
-    Change Broker Configuration    unix_gid_required    true
-    Change Broker Configuration    force_access_check_with_provider    true
-    Start Entra Login
-    Check Missing Unix GID Error
