@@ -635,6 +635,57 @@ func (c *Console) WaitFor(t *testing.T, pattern string) string {
 	return c.WaitForTimeout(t, pattern, c.opts.timeout)
 }
 
+// WaitForEchoDisabled blocks until the PTY stops echoing input or the default
+// timeout expires.
+func (c *Console) WaitForEchoDisabled(t *testing.T) {
+	t.Helper()
+
+	timeout := c.opts.timeout
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+
+	t.Logf("ptytest: WaitForEchoDisabled(timeout=%s)", timeout)
+
+	for {
+		c.mu.RLock()
+		closed := c.closed
+		fd := -1
+		if !closed {
+			fd = int(c.ptmx.Fd())
+		}
+		c.mu.RUnlock()
+		if closed {
+			require.FailNow(t, "ptytest: WaitForEchoDisabled called after PTY closed", "")
+		}
+
+		termios, err := unix.IoctlGetTermios(fd, unix.TCGETS)
+		require.NoError(t, err, "ptytest: unable to read PTY terminal settings")
+		if termios.Lflag&unix.ECHO == 0 {
+			t.Logf("ptytest: PTY echo disabled")
+			return
+		}
+
+		select {
+		case exitErr := <-c.done:
+			c.done <- exitErr
+			<-c.copyDone
+			content, rawSinceLastMatch := c.diagnosticContent()
+			require.FailNow(t,
+				fmt.Sprintf("ptytest: command exited before PTY echo was disabled: %v", exitErr),
+				c.formatDiagnostics(content, rawSinceLastMatch))
+		case <-timer.C:
+			content, rawSinceLastMatch := c.diagnosticContent()
+			require.FailNow(t,
+				colorBoldRed(fmt.Sprintf("ptytest: WaitForEchoDisabled timed out after %s", timeout)),
+				c.formatDiagnostics(content, rawSinceLastMatch))
+		case <-ticker.C:
+		}
+	}
+}
+
 // WaitForTimeout is like WaitFor but with an explicit timeout.
 func (c *Console) WaitForTimeout(t *testing.T, pattern string, timeout time.Duration) string {
 	t.Helper()
