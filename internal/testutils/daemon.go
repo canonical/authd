@@ -10,12 +10,14 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/canonical/authd/internal/grpcutils"
 	"github.com/canonical/authd/internal/services/errmessages"
+	"github.com/canonical/authd/internal/systemd"
 	"github.com/canonical/authd/internal/testlog"
 	"github.com/canonical/authd/internal/users/db"
 	"github.com/canonical/authd/internal/users/localentries"
@@ -23,6 +25,23 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+var daemonDescriptorStores sync.Map
+
+type daemonStoreTB struct {
+	testing.TB
+	cleanups []func()
+}
+
+func (tb *daemonStoreTB) Cleanup(cleanup func()) {
+	tb.cleanups = append(tb.cleanups, cleanup)
+}
+
+func (tb *daemonStoreTB) cleanup() {
+	for _, cleanup := range slices.Backward(tb.cleanups) {
+		cleanup()
+	}
+}
 
 type daemonOptions struct {
 	dbPath                   string
@@ -146,6 +165,23 @@ func StartAuthdWithCancel(t *testing.T, execPath string, args ...DaemonOption) (
 	if opts.dbPath == "" {
 		opts.dbPath = filepath.Join(tempDir, "db")
 	}
+	storeDir, err := os.MkdirTemp("", "authd-store4tests")
+	require.NoError(t, err)
+	storeTB := &daemonStoreTB{TB: t}
+	storeTB.Cleanup(func() { _ = os.RemoveAll(storeDir) })
+	storeSocket := filepath.Join(storeDir, "store.socket")
+	value, loaded := daemonDescriptorStores.LoadOrStore(opts.dbPath, storeSocket)
+	if !loaded {
+		store := systemd.Z_ForTests_NewDescriptorStore(storeTB)
+		store.Serve(storeTB, storeSocket)
+		storeTB.Cleanup(func() { daemonDescriptorStores.Delete(opts.dbPath) })
+	}
+	if !opts.shared {
+		t.Cleanup(storeTB.cleanup)
+	}
+	storeSocket, ok := value.(string)
+	require.True(t, ok)
+	opts.env = append(opts.env, "AUTHD_INTEGRATIONTESTS_DESCRIPTOR_STORE="+storeSocket)
 
 	if opts.existentDB != "" {
 		require.NoError(t, os.MkdirAll(opts.dbPath, 0700), "Setup: failed to create database dir")
@@ -175,7 +211,11 @@ paths:
 	stopped := make(chan struct{})
 	ctx, cancel := context.WithCancelCause(context.Background())
 	cancelFunc = func() {
-		t.Log("Stopping authd...")
+		if opts.shared {
+			fmt.Fprintln(os.Stderr, "Stopping authd...")
+		} else {
+			t.Log("Stopping authd...")
+		}
 		cancel(nil)
 		<-stopped
 	}
@@ -196,6 +236,9 @@ paths:
 	processPid := make(chan int)
 	go func() {
 		defer close(stopped)
+		if opts.shared {
+			defer storeTB.cleanup()
+		}
 
 		// For shared authd instances, we can't redirect the output to the test log,
 		// because the instance could still be running after the test finishes.

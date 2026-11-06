@@ -171,7 +171,7 @@ func TestPreAuthUser(t *testing.T) {
 				preauthUID, cleanup, err := records.MaybeCompletePreauthUser(loginName)
 				require.NoError(t, err, "MaybeCompletePreauthUser should not fail but it did")
 				require.Equal(t, removeUID, preauthUID, "MaybeCompletePreauthUser UID is not matching")
-				cleanup()
+				require.NoError(t, cleanup())
 				require.Len(t, records.GetUsers(), wantRegistered,
 					"Number of pre-auth users should be %d", wantRegistered)
 

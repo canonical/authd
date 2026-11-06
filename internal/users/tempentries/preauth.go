@@ -6,16 +6,19 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 
+	"github.com/canonical/authd/internal/systemd"
 	"github.com/canonical/authd/internal/users/db"
+	"github.com/canonical/authd/internal/users/proc"
 	"github.com/canonical/authd/internal/users/types"
 	"github.com/canonical/authd/log"
 )
 
 const (
 	// MaxPreAuthUsers is the maximum number of pre-auth users that can be registered. If this limit is reached,
-	// RegisterPreAuthUser will return an error and disable login for new users via SSH until authd is restarted.
+	// RegisterPreAuthUser will return an error until an existing reservation is released.
 	//
 	// This value must be significantly smaller (less than half) than the number of UIDs which can be generated (as
 	// defined by UID_MIN and UID_MAX in the config file), otherwise finding a unique UID by trial and error can take
@@ -38,15 +41,19 @@ type preAuthUser struct {
 	// loginName is the name of the user who the pre-auth user record is created for.
 	loginName string
 	uid       uint32
+	owners    []reservationOwner
+	completed bool
+	pins      int
 }
 
-// PreAuthUserRecords is a structure holding in memory all the temporary users
-// that have done a pre-auth request.
+// PreAuthUserRecords tracks temporary users that have done a pre-auth request.
 type PreAuthUserRecords struct {
-	rwMu       sync.RWMutex
-	users      map[uint32]preAuthUser
-	uidByName  map[string]uint32
-	uidByLogin map[string]uint32
+	rwMu         sync.RWMutex
+	users        map[uint32]preAuthUser
+	uidByName    map[string]uint32
+	uidByLogin   map[string]uint32
+	store        systemd.DescriptorStore
+	requireStore bool
 }
 
 // NewPreAuthUserRecords creates a new instance of [preAuthUserRecords] that
@@ -61,23 +68,23 @@ func NewPreAuthUserRecords() *PreAuthUserRecords {
 
 // MaybeCompletePreauthUser tries to complete a pre-auth user registration.
 //
-// Returns the generated UID if the user was found in the pre-auth list or an, and a cleanup function that should be called to
-// remove the temporary user once the user is added to the database.
-func (r *PreAuthUserRecords) MaybeCompletePreauthUser(name string) (uid uint32, cleanup func(), err error) {
+// Returns the reserved UID and a function to release the reservation after
+// the account is saved.
+func (r *PreAuthUserRecords) MaybeCompletePreauthUser(name string) (uid uint32, cleanup func() error, err error) {
 	r.rwMu.Lock()
 	defer r.rwMu.Unlock()
 
+	if err := r.prune(); err != nil {
+		return 0, nil, err
+	}
 	// Check if there is already a pre-auth user for that name
 	uid, ok := r.uidByLogin[name]
 	if !ok {
 		return 0, nil, NoDataFoundError{}
 	}
 
-	return uid, func() {
-		r.rwMu.Lock()
-		defer r.rwMu.Unlock()
-
-		r.deletePreAuthUser(uid)
+	return uid, func() error {
+		return r.MarkCompleted(uid)
 	}, nil
 }
 
@@ -108,8 +115,12 @@ func (r *PreAuthUserRecords) GroupByID(gid uint32) (types.GroupEntry, error) {
 
 // AllUsers returns all pre-auth users as a slice of UserEntry.
 func (r *PreAuthUserRecords) AllUsers() ([]types.UserEntry, error) {
-	r.rwMu.RLock()
-	defer r.rwMu.RUnlock()
+	r.rwMu.Lock()
+	defer r.rwMu.Unlock()
+
+	if err := r.prune(); err != nil {
+		return nil, err
+	}
 
 	if len(r.users) == 0 {
 		return nil, nil
@@ -117,25 +128,27 @@ func (r *PreAuthUserRecords) AllUsers() ([]types.UserEntry, error) {
 
 	users := make([]types.UserEntry, 0, len(r.users))
 	for _, user := range r.users {
+		if user.completed {
+			continue
+		}
 		users = append(users, preAuthUserEntry(user))
 	}
 
 	return users, nil
 }
 
-// RegisterPreAuthUser registers a temporary user with a unique UID in our NSS
-// handler (in memory, not in the database).
+// RegisterPreAuthUser reserves a unique UID in our NSS handler. If a store is
+// configured, the reservation is saved before this method returns.
 //
-// The temporary user record is removed when [MaybeCompletePreauthUser] is called with the
-// same username.
+// The temporary user record is removed by the cleanup function returned by
+// [MaybeCompletePreauthUser], after the account is saved in the database.
 //
 // This method is called when a user logs in for the first time via SSH, in
 // which case sshd checks if the user exists on the system (before
 // authentication), and denies the login if the user does not exist.
 // We pretend that the user exists by creating this temporary user record,
-// which is converted into a permanent user record when [RegisterUser] is called
-// after the user authenticated successfully.
-func (r *PreAuthUserRecords) RegisterPreAuthUser(loginName string, uid uint32) (err error) {
+// which is converted into a permanent user record after successful authentication.
+func (r *PreAuthUserRecords) RegisterPreAuthUser(loginName string, uid uint32, owners ...*proc.Process) (err error) {
 	if loginName == "" {
 		return fmt.Errorf("empty username")
 	}
@@ -150,9 +163,18 @@ func (r *PreAuthUserRecords) RegisterPreAuthUser(loginName string, uid uint32) (
 	r.rwMu.Lock()
 	defer r.rwMu.Unlock()
 
+	if r.requireStore && r.store == nil {
+		return errors.New("first-time SSH login requires systemd's descriptor store")
+	}
+	if len(owners) > 1 {
+		return errors.New("expected one initial pre-auth process owner")
+	}
+	if err := r.prune(); err != nil {
+		return err
+	}
 	// To mitigate DoS attacks, we limit the pre-auth users to [MaxPreAuthUsers].
 	if len(r.users) >= MaxPreAuthUsers {
-		return errors.New("maximum number of pre-auth users reached, login for new users via SSH is disabled until authd is restarted")
+		return errors.New("maximum number of pre-auth users reached, waiting for existing connections to exit")
 	}
 
 	if _, ok := r.uidByLogin[loginName]; ok {
@@ -168,20 +190,44 @@ func (r *PreAuthUserRecords) RegisterPreAuthUser(loginName string, uid uint32) (
 		return fmt.Errorf("could not add pre-auth user record: %w", err)
 	}
 
+	if r.store != nil && len(owners) == 0 {
+		owner, err := proc.OpenProcess(os.Getpid())
+		if err != nil {
+			r.deletePreAuthUser(uid)
+			return err
+		}
+		defer owner.Close()
+		owners = []*proc.Process{owner}
+	}
+	user := r.users[uid]
+	for _, owner := range owners {
+		ref, err := r.captureOwner(user, owner)
+		if err != nil {
+			r.deletePreAuthUser(uid)
+			return err
+		}
+		user.owners = append(user.owners, ref)
+	}
+	r.users[uid] = user
+
 	return nil
 }
 
 // UserByID returns the user information for the given user ID.
 func (r *PreAuthUserRecords) userByID(uid uint32) (types.UserEntry, error) {
-	r.rwMu.RLock()
-	defer r.rwMu.RUnlock()
+	r.rwMu.Lock()
+	defer r.rwMu.Unlock()
+
+	if err := r.prune(); err != nil {
+		return types.UserEntry{}, err
+	}
 
 	return r.userByIDWithoutLock(uid)
 }
 
 func (r *PreAuthUserRecords) userByIDWithoutLock(uid uint32) (types.UserEntry, error) {
 	user, ok := r.users[uid]
-	if !ok {
+	if !ok || user.completed {
 		return types.UserEntry{}, db.NewUIDNotFoundError(uid)
 	}
 
@@ -189,8 +235,12 @@ func (r *PreAuthUserRecords) userByIDWithoutLock(uid uint32) (types.UserEntry, e
 }
 
 func (r *PreAuthUserRecords) userByLogin(loginName string) (types.UserEntry, error) {
-	r.rwMu.RLock()
-	defer r.rwMu.RUnlock()
+	r.rwMu.Lock()
+	defer r.rwMu.Unlock()
+
+	if err := r.prune(); err != nil {
+		return types.UserEntry{}, err
+	}
 
 	uid, ok := r.uidByLogin[loginName]
 	if !ok {
@@ -216,7 +266,7 @@ func preAuthUserEntry(user preAuthUser) types.UserEntry {
 // creating user records with attacker-controlled names.
 func (r *PreAuthUserRecords) addPreAuthUser(uid uint32, loginName string) (err error) {
 	if len(r.users) >= MaxPreAuthUsers {
-		return errors.New("maximum number of pre-auth users reached, login for new users via SSH is disabled until authd is restarted")
+		return errors.New("maximum number of pre-auth users reached, waiting for existing connections to exit")
 	}
 
 	var name string
