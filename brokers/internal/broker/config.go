@@ -37,6 +37,8 @@ const (
 	clientSecret = "client_secret"
 	// extraScopesKey is the key in the config file for extra OIDC scopes.
 	extraScopesKey = "extra_scopes"
+	// groupsClaimKey is the key in the config file for the ID token claim that holds the groups.
+	groupsClaimKey = "groups_claim"
 
 	// entraIDSection is the section name in the config file for Microsoft Entra ID specific configuration.
 	entraIDSection = "msentraid"
@@ -59,6 +61,9 @@ const (
 	extraGroupsKey = "extra_groups"
 	// ownerExtraGroupsKey is the key in the config file for the extra groups to add to the owner.
 	ownerExtraGroupsKey = "owner_extra_groups"
+	// allowedProviderGroupsKey is the key in the config file for the local groups that the groups claim may add
+	// users to.
+	allowedProviderGroupsKey = "allowed_provider_groups"
 	// allUsersKeyword is the keyword for the `allowed_users` key that allows access to all users.
 	allUsersKeyword = "ALL"
 	// ownerUserKeyword is the keyword for the `allowed_users` key that allows access to the owner.
@@ -87,6 +92,7 @@ var (
 			clientIDKey:                        {},
 			clientSecret:                       {},
 			extraScopesKey:                     {},
+			groupsClaimKey:                     {},
 			forceAccessCheckWithProviderKey:    {},
 			forceAccessCheckWithProviderKeyOld: {},
 		},
@@ -94,13 +100,14 @@ var (
 			registerDeviceKey: {},
 		},
 		usersSection: {
-			allowedUsersKey:     {},
-			ownerKey:            {},
-			homeDirKey:          {},
-			sshSuffixesKey:      {},
-			sshSuffixesKeyOld:   {},
-			extraGroupsKey:      {},
-			ownerExtraGroupsKey: {},
+			allowedUsersKey:          {},
+			ownerKey:                 {},
+			homeDirKey:               {},
+			sshSuffixesKey:           {},
+			sshSuffixesKeyOld:        {},
+			extraGroupsKey:           {},
+			ownerExtraGroupsKey:      {},
+			allowedProviderGroupsKey: {},
 		},
 		flowsSection: {
 			flowsDeviceAuthKey: {},
@@ -143,6 +150,8 @@ type userConfig struct {
 	extraGroups           []string
 	ownerExtraGroups      []string
 	extraScopes           []string
+	groupsClaim           string
+	allowedProviderGroups []string
 
 	flows flowsConfig
 
@@ -252,6 +261,7 @@ func (uc *userConfig) populateUsersConfig(users *ini.Section) {
 
 	uc.extraGroups = users.Key(extraGroupsKey).Strings(",")
 	uc.ownerExtraGroups = users.Key(ownerExtraGroupsKey).Strings(",")
+	uc.allowedProviderGroups = users.Key(allowedProviderGroupsKey).Strings(",")
 }
 
 // parseConfigFromPath parses the config file and returns a map with the configuration keys and values.
@@ -279,6 +289,7 @@ func cloneUserConfig(uc userConfig) userConfig {
 	uc.extraGroups = slices.Clone(uc.extraGroups)
 	uc.ownerExtraGroups = slices.Clone(uc.ownerExtraGroups)
 	uc.extraScopes = slices.Clone(uc.extraScopes)
+	uc.allowedProviderGroups = slices.Clone(uc.allowedProviderGroups)
 
 	return uc
 }
@@ -430,6 +441,7 @@ func parseConfigWithReporter(cfg configFile, dropInCfgs []configFile, p provider
 		uc.clientID = oidc.Key(clientIDKey).String()
 		uc.clientSecret = strings.TrimSpace(oidc.Key(clientSecret).String())
 		uc.extraScopes = oidc.Key(extraScopesKey).Strings(",")
+		uc.groupsClaim = strings.TrimSpace(oidc.Key(groupsClaimKey).String())
 
 		forceAccessCheckKey := forceAccessCheckWithProviderKey
 		// If we don't have the new key, we should try reading the old one instead.

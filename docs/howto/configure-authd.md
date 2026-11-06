@@ -408,6 +408,12 @@ Group membership can be used to manage user privileges, including **sudo** and
 
 > See the [group management reference](reference::group-management) for more details.
 
+The generic OIDC broker (`authd-oidc`) can add users to local groups based on a
+claim of the ID token, with the `groups_claim` and `allowed_provider_groups`
+options. This is off by default. See the
+[generic OIDC broker](reference::group-management-oidc) section of the group
+management reference.
+
 In addition, you can configure extra groups for authd users.
 On login, the users are added to these groups automatically.
 Specify any extra groups in the `users` section of the broker
