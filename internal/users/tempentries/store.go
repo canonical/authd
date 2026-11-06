@@ -26,6 +26,7 @@ type storedUser struct {
 type reservationOwner struct {
 	process *proc.Process
 	name    string
+	token   int32
 }
 
 const (
@@ -141,6 +142,9 @@ func newStoredRecords(store systemd.DescriptorStore, guardPath string) (r *PreAu
 	if err := r.prune(); err != nil {
 		return r, err
 	}
+	if err := r.startMonitor(); err != nil {
+		return r, err
+	}
 	return r, nil
 }
 
@@ -253,9 +257,17 @@ func (r *PreAuthUserRecords) captureOwner(u preAuthUser, process *proc.Process) 
 		// Each owner adds this name twice to LISTEN_FDNAMES. Keep the environment
 		// string below Linux's 128 KiB limit even at the maximum owner count.
 		name := systemd.StorePrefix + rand.Text()[:10]
-		if err := r.store.Put(name, metadata, cloned.File()); err == nil {
-			return reservationOwner{process: cloned, name: name}, nil
-		} else if !errors.Is(err, systemd.ErrDescriptorNameExists) {
+		ref := reservationOwner{process: cloned, name: name}
+		if err := r.monitorOwner(u.uid, &ref); err != nil {
+			cloned.Close()
+			return reservationOwner{}, err
+		}
+		err := r.store.Put(name, metadata, cloned.File())
+		if err == nil {
+			return ref, nil
+		}
+		r.unmonitorOwner(ref)
+		if !errors.Is(err, systemd.ErrDescriptorNameExists) {
 			cloned.Close()
 			return reservationOwner{}, err
 		}
@@ -266,7 +278,7 @@ func (r *PreAuthUserRecords) captureOwner(u preAuthUser, process *proc.Process) 
 }
 
 // prune releases references after account creation or when their processes exit.
-// The caller holds rwMu. Errors retain reservations and block new allocation.
+// This runs only during startup, before the monitor and request handlers start.
 func (r *PreAuthUserRecords) prune() error {
 	if r.store == nil {
 		return nil
@@ -324,21 +336,42 @@ func (r *PreAuthUserRecords) MarkCompleted(uid uint32) error {
 		}
 		u.completed = true
 		r.users[uid] = u
+		for _, owner := range u.owners {
+			r.monitor.ready[owner.token] = watchedOwner{uid: uid, name: owner.name}
+		}
 	}
-	return r.prune()
+	r.wakeMonitor()
+	return nil
 }
 
 // Close releases runtime copies without removing systemd's stored references.
 func (r *PreAuthUserRecords) Close() error {
-	r.rwMu.Lock()
-	defer r.rwMu.Unlock()
-	for _, u := range r.users {
-		for _, owner := range u.owners {
-			owner.process.Close()
+	r.closeOnce.Do(func() {
+		r.rwMu.Lock()
+		if r.monitor != nil {
+			r.monitor.stopped = true
+			r.wakeMonitor()
 		}
-	}
-	if r.store != nil {
-		return r.store.Close()
-	}
-	return nil
+		r.rwMu.Unlock()
+		if r.monitor != nil {
+			<-r.monitor.done
+		}
+		r.storeMu.Lock()
+		defer r.storeMu.Unlock()
+		r.rwMu.Lock()
+		defer r.rwMu.Unlock()
+		for _, u := range r.users {
+			for _, owner := range u.owners {
+				owner.process.Close()
+			}
+		}
+		if r.monitor != nil {
+			unix.Close(r.monitor.epoll)
+			unix.Close(r.monitor.wake)
+		}
+		if r.store != nil {
+			r.closeErr = r.store.Close()
+		}
+	})
+	return r.closeErr
 }

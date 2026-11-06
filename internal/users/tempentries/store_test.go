@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/canonical/authd/internal/systemd"
 	"github.com/canonical/authd/internal/users/proc"
@@ -48,13 +50,13 @@ func TestReservationDescriptorNameCollisions(t *testing.T) {
 			err = r.RegisterPreAuthUser("bob", 10001, owner)
 			if tc.wantErr != nil {
 				require.ErrorIs(t, err, tc.wantErr)
-				_, err = r.UserByLogin("bob")
+				_, err = r.UserByID(10001)
 				require.ErrorIs(t, err, NoDataFoundError{}, "failed attempts must not expose a reservation")
 			} else {
 				require.NoError(t, err)
-				bob, err := r.UserByLogin("bob")
+				bob, err := r.UserByID(10001)
 				require.NoError(t, err)
-				require.Equal(t, uint32(10001), bob.UID)
+				require.Equal(t, "bob", bob.Gecos)
 			}
 			require.Len(t, store.names, tc.wantAttempts)
 			seen := make(map[string]bool)
@@ -65,6 +67,14 @@ func TestReservationDescriptorNameCollisions(t *testing.T) {
 			unchanged, err := r.UserByID(10000)
 			require.NoError(t, err)
 			require.Equal(t, alice, unchanged, "collisions must not alter existing reservations")
+			wantOwners := 1
+			if tc.wantErr == nil {
+				wantOwners++
+			}
+			r.rwMu.RLock()
+			monitored := len(r.monitor.owners)
+			r.rwMu.RUnlock()
+			require.Equal(t, wantOwners, monitored, "failed attempts must not leave monitored owners")
 		})
 	}
 }
@@ -98,7 +108,7 @@ func TestStoredReservationsSurviveRestart(t *testing.T) {
 	require.Equal(t, uint32(10000), uid)
 	_, err = r.AddOwner("alice", second)
 	require.NoError(t, err)
-	require.Len(t, r.users[uid].owners, 2)
+	waitForOwners(t, r, uid, 2)
 	user, err := r.UserByID(uid)
 	require.NoError(t, err)
 	require.NoError(t, r.Close())
@@ -109,10 +119,10 @@ func TestStoredReservationsSurviveRestart(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, user, restored)
 	exitFirst()
+	waitForOwners(t, r, uid, 1)
 	ids, err := r.ReservedIDs()
 	require.NoError(t, err)
 	require.Contains(t, ids, uid, "the overlapping owner still holds the reservation")
-	require.Len(t, r.users[uid].owners, 1)
 	require.NoError(t, r.Close())
 
 	r, err = NewStoredPreAuthUserRecords(store)
@@ -122,6 +132,7 @@ func TestStoredReservationsSurviveRestart(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, ids, uid)
 	exitSecond()
+	waitForOwners(t, r, uid, 0)
 	ids, err = r.ReservedIDs()
 	require.NoError(t, err)
 	require.Empty(t, ids)
@@ -138,13 +149,12 @@ func TestCompletedReservationReleasedWithLiveOwners(t *testing.T) {
 	require.NoError(t, r.RegisterPreAuthUser("alice", 10000, first))
 	_, err = r.AddOwner("alice", second)
 	require.NoError(t, err)
-	uid, cleanup, err := r.MaybeCompletePreauthUser("alice")
-	require.NoError(t, err)
-	release, err := r.HoldIDs(uid)
+	uid, release, cleanup, err := r.HoldUser("alice")
 	require.NoError(t, err)
 	require.NoError(t, cleanup())
 	release()
 	require.NoError(t, cleanup(), "repeated completion must be harmless")
+	waitForOwners(t, r, uid, 0)
 	ids, err := r.ReservedIDs()
 	require.NoError(t, err)
 	require.Empty(t, ids)
@@ -164,19 +174,25 @@ func TestCompletedReservationReleasedWithLiveOwners(t *testing.T) {
 func TestCompletedReservationRemovalRetried(t *testing.T) {
 	t.Parallel()
 	store := systemd.Z_ForTests_NewDescriptorStore(t)
+	observed := &observedStore{DescriptorStore: store}
 	owner, _ := testOwner(t)
-	r, err := NewStoredPreAuthUserRecords(store)
+	r, err := NewStoredPreAuthUserRecords(observed)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = r.Close() })
 	require.NoError(t, r.RegisterPreAuthUser("alice", 10000, owner))
-	_, cleanup, err := r.MaybeCompletePreauthUser("alice")
+	_, release, cleanup, err := r.HoldUser("alice")
 	require.NoError(t, err)
 
-	store.FailRemove = true
-	require.Error(t, cleanup())
-	require.Contains(t, r.users, uint32(10000), "failed removal must retain the reservation")
-	store.FailRemove = false
+	store.SetFailRemove(true)
+	require.NoError(t, cleanup())
+	release()
+	require.Eventually(t, func() bool { return observed.attempts.Load() > 0 }, 3*time.Second, time.Millisecond)
 	ids, err := r.ReservedIDs()
+	require.NoError(t, err, "cleanup errors must not fail lookups")
+	require.Contains(t, ids, uint32(10000), "failed removal must retain the reservation")
+	store.SetFailRemove(false)
+	waitForOwners(t, r, 10000, 0)
+	ids, err = r.ReservedIDs()
 	require.NoError(t, err)
 	require.Empty(t, ids, "removal must be retried without waiting for the owner to exit")
 }
@@ -202,27 +218,30 @@ func TestDeadPidfdReclaimedOnRestore(t *testing.T) {
 func TestStoreFailuresDoNotExposeOrReleaseIDs(t *testing.T) {
 	t.Parallel()
 	store := systemd.Z_ForTests_NewDescriptorStore(t)
+	observed := &observedStore{DescriptorStore: store}
 	first, exit := testOwner(t)
 	second, _ := testOwner(t)
-	r, err := NewStoredPreAuthUserRecords(store)
+	r, err := NewStoredPreAuthUserRecords(observed)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = r.Close() })
 	require.NoError(t, r.RegisterPreAuthUser("alice", 10000, first))
 	store.FailPut = true
 	require.Error(t, r.RegisterPreAuthUser("bob", 10001, second))
-	_, err = r.UserByLogin("bob")
+	_, err = r.UserByID(10001)
 	require.ErrorIs(t, err, NoDataFoundError{})
 	_, err = r.AddOwner("alice", second)
 	require.Error(t, err)
-	require.Len(t, r.users[10000].owners, 1, "an owner is exposed only after it has been stored")
+	waitForOwners(t, r, 10000, 1)
 	store.FailPut = false
-	store.FailRemove = true
+	store.SetFailRemove(true)
 	exit()
-	_, err = r.ReservedIDs()
-	require.Error(t, err, "failed removal must block allocations")
-	require.Contains(t, r.users, uint32(10000))
-	store.FailRemove = false
+	require.Eventually(t, func() bool { return observed.attempts.Load() > 0 }, 3*time.Second, time.Millisecond)
 	ids, err := r.ReservedIDs()
+	require.NoError(t, err)
+	require.Contains(t, ids, uint32(10000), "failed removal must not make IDs available")
+	store.SetFailRemove(false)
+	waitForOwners(t, r, 10000, 0)
+	ids, err = r.ReservedIDs()
 	require.NoError(t, err)
 	require.Empty(t, ids)
 }
@@ -235,16 +254,116 @@ func TestPendingAccountCreationKeepsPidfd(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = r.Close() })
 	require.NoError(t, r.RegisterPreAuthUser("alice", 10000, owner))
-	release, err := r.HoldIDs(10000)
+	uid, release, _, err := r.HoldUser("alice")
 	require.NoError(t, err)
+	require.Equal(t, uint32(10000), uid)
+	_, _, _, err = r.HoldUser("unknown")
+	require.ErrorIs(t, err, NoDataFoundError{})
 	exit()
+	require.Eventually(t, func() bool {
+		r.rwMu.RLock()
+		defer r.rwMu.RUnlock()
+		return len(r.monitor.ready) == 1
+	}, 3*time.Second, time.Millisecond)
 	ids, err := r.ReservedIDs()
 	require.NoError(t, err)
 	require.Contains(t, ids, uint32(10000))
 	release()
+	waitForOwners(t, r, 10000, 0)
 	ids, err = r.ReservedIDs()
 	require.NoError(t, err)
 	require.Empty(t, ids)
+}
+
+func TestLookupsDoNotWaitForReservationCleanup(t *testing.T) {
+	t.Parallel()
+	store := &blockingRemovalStore{
+		DescriptorStore: systemd.Z_ForTests_NewDescriptorStore(t),
+		started:         make(chan struct{}),
+		resume:          make(chan struct{}),
+	}
+	owner, exit := testOwner(t)
+	liveOwner, _ := testOwner(t)
+	r, err := NewStoredPreAuthUserRecords(store)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = r.Close() })
+	var resume sync.Once
+	unblock := func() { resume.Do(func() { close(store.resume) }) }
+	t.Cleanup(unblock)
+	require.NoError(t, r.RegisterPreAuthUser("alice", 10000, owner))
+	require.NoError(t, r.RegisterPreAuthUser("bob", 10001, liveOwner))
+	exit()
+	select {
+	case <-store.started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("owner exit did not start background cleanup")
+	}
+
+	type lookupResults struct {
+		ids     []uint32
+		errors  []error
+		missing error
+	}
+	done := make(chan lookupResults, 1)
+	go func() {
+		ids, err := r.ReservedIDs()
+		result := lookupResults{ids: ids, errors: []error{err}}
+		_, err = r.UserByID(10001)
+		result.errors = append(result.errors, err)
+		_, err = r.GroupByID(10001)
+		result.errors = append(result.errors, err)
+		_, result.missing = r.UserByID(10002)
+		result.errors = append(result.errors, r.MarkCompleted(10001))
+		done <- result
+	}()
+	select {
+	case result := <-done:
+		for _, err := range result.errors {
+			require.NoError(t, err)
+		}
+		require.Contains(t, result.ids, uint32(10000), "IDs remain reserved until removal is confirmed")
+		require.ErrorIs(t, result.missing, NoDataFoundError{})
+	case <-time.After(3 * time.Second):
+		t.Fatal("lookups blocked on descriptor-store cleanup")
+	}
+	unblock()
+	waitForOwners(t, r, 10000, 0)
+	waitForOwners(t, r, 10001, 0)
+	require.NoError(t, r.Close())
+	require.NoError(t, r.Close(), "closing the monitor twice must be harmless")
+}
+
+type blockingRemovalStore struct {
+	systemd.DescriptorStore
+	started     chan struct{}
+	startedOnce sync.Once
+	resume      chan struct{}
+}
+
+func (s *blockingRemovalStore) Remove(names ...string) error {
+	s.startedOnce.Do(func() { close(s.started) })
+	<-s.resume
+	return s.DescriptorStore.Remove(names...)
+}
+
+type observedStore struct {
+	systemd.DescriptorStore
+	attempts atomic.Uint32
+}
+
+func (s *observedStore) Remove(names ...string) error {
+	err := s.DescriptorStore.Remove(names...)
+	s.attempts.Add(1)
+	return err
+}
+
+func waitForOwners(t *testing.T, r *PreAuthUserRecords, uid uint32, count int) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		r.rwMu.RLock()
+		defer r.rwMu.RUnlock()
+		return len(r.users[uid].owners) == count
+	}, 3*time.Second, time.Millisecond)
 }
 
 func TestDescriptorStoreGeneration(t *testing.T) {
